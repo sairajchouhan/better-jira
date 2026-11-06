@@ -1,0 +1,6 @@
+.env
+cache.db*
+node_modules
+dist
+
+!/AGENTS.md
