@@ -3,9 +3,10 @@ import { Command } from "cmdk";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Adf, adfToText } from "./adf";
 import { RichEditor } from "./rich-editor-loader";
+import {MediaView} from './media-loader';
 import { normalizeDocument } from "./document";
 import { Icon, PriorityIcon } from "./icons";
-import { actions, addLocalFile, beginCreate, boardOf, changePreferences, get, issueURL, isLocalIssue, ME, navigate, openSavedView, preferencesFor, saveView, set, ui, useStore, type Board, type Issue, type IssueDraft } from "./store";
+import { actions, addLocalFiles, beginCreate, boardOf, changePreferences, get, issueURL, isLocalIssue, ME, navigate, openSavedView, preferencesFor, saveView, set, ui, useStore, type Board, type Issue, type IssueDraft } from "./store";
 import { buckets, newId, priorityRank, type Field, type Grouping } from "./view-model";
 
 const INPUT="w-full rounded-md border border-line-2 bg-card px-3 py-2 text-fg outline-none focus:border-accent";
@@ -67,7 +68,7 @@ export function CreateIssue() {
         <PillSelect label="Assignee" value={draft.assignee?.id??""} options={[["","Unassigned"],...users.map(u=>[u.id,u.name] as const)]} onChange={id=>setDraft({...draft,assignee:users.find(u=>u.id===id)??null})}/>
         <PillSelect label="Project" value={draft.project===null?"":draft.project?.key??projects[0]?.key??""} options={[["","No project"],...projects.map(p=>[p.key,p.name] as const)]} onChange={key=>setDraft({...draft,project:projects.find(p=>p.key===key)??null,milestones:[]})}/>
         <PillSelect label="Milestone" value={draft.milestones?.[0]?.id??""} options={[["","No milestone"],...milestones.map(m=>[m.id,m.name] as const)]} onChange={id=>setDraft({...draft,milestones:milestones.filter(m=>m.id===id)})}/>
-        <details className="w-full text-[12px] text-fg-3"><summary className="cursor-pointer py-1">Due date{draft.due?`: ${draft.due}`:""}</summary><Suspense fallback={<p>Loading dates…</p>}><DateInput value={draft.due??""} onChange={due=>setDraft({...draft,due:due||null})} onValidity={setDateValid}/></Suspense></details>
+        <details className="w-full text-[12px] text-fg-3"><summary className="cursor-default py-1">Due date{draft.due?`: ${draft.due}`:""}</summary><Suspense fallback={<p>Loading dates…</p>}><DateInput value={draft.due??""} onChange={due=>setDraft({...draft,due:due||null})} onValidity={setDateValid}/></Suspense></details>
       </div>
       <input aria-label="Labels, comma separated" value={labels} onChange={e=>setLabels(e.target.value)} placeholder="Labels, separated by commas" className={`${INPUT} mt-3 text-[12px]`}/>
       <Attachments attachments={attachments} onChange={setAttachments} onBusy={setFilesBusy}/>
@@ -104,7 +105,7 @@ export function PropertyPicker({issue,field}:{issue:Issue;field:"priority"|"labe
       <Command.Input autoFocus aria-label={label} placeholder={`${label}…`} value={query} onValueChange={setQuery} className={`${INPUT} mb-2`}/>
       <Command.List className="max-h-[45vh] overflow-y-auto [&_[data-selected=true]]:bg-sel">
         <Command.Empty className="p-2 text-fg-3">No matches</Command.Empty>
-        {choices.map(c=><Command.Item key={c.id} value={c.name} onSelect={()=>choose(c)} className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2">{field==="priority"&&<PriorityIcon name={c.id||undefined}/>}<span className="flex-1">{c.name}</span>{selected(c.id)&&<Icon name="check"/>}</Command.Item>)}
+        {choices.map(c=><Command.Item key={c.id} value={c.name} onSelect={()=>choose(c)} className="flex cursor-default items-center gap-2 rounded-md px-3 py-2">{field==="priority"&&<PriorityIcon name={c.id||undefined}/>}<span className="flex-1">{c.name}</span>{selected(c.id)&&<Icon name="check"/>}</Command.Item>)}
         {multi&&query.trim()&&!choices.some(c=>c.id.toLowerCase()===query.trim().toLowerCase())&&<Command.Item value={`Create ${query}`} onSelect={()=>choose({id:query.trim(),name:query.trim()})} className={BUTTON}>Create label "{query.trim()}"</Command.Item>}
       </Command.List>
       {multi&&<div className="mt-3 flex justify-end"><button className={BUTTON} onClick={close}>Done</button></div>}
@@ -147,7 +148,7 @@ export function IssueOptions({issue}:{issue:Issue}) {
     try{await navigator.clipboard.writeText(issueCopy(kind,issue,full,issueURL(issue),status,ME.name));set({perf:`Copied ${kind}`});}catch{set({perf:"Could not access the clipboard"});}close();
   };
   const actionKeys:Record<string,string>={"Set due date":"due","Add link":"link","Add sub-issue":"sub-issue","Delete issue locally":"delete","Copy ID":"copy-id","Copy URL":"copy-url","Copy title":"copy-title","Copy everything as Markdown":"copy-markdown","Copy git branch name":"copy-branch"};
-  const item=(label:string,run:()=>void)=><Command.Item key={label} aria-label={label} value={label} onSelect={run} className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 data-[selected=true]:bg-sel"><span className="flex-1">{label}</span>{actionKeys[label]&&<kbd className="text-[11px] text-fg-3">{shortcutLabel(actionKeys[label]!)}</kbd>}</Command.Item>;
+  const item=(label:string,run:()=>void)=><Command.Item key={label} aria-label={label} value={label} onSelect={run} className="flex cursor-default items-center gap-3 rounded-md px-3 py-2 data-[selected=true]:bg-sel"><span className="flex-1">{label}</span>{actionKeys[label]&&<kbd className="text-[11px] text-fg-3">{shortcutLabel(actionKeys[label]!)}</kbd>}</Command.Item>;
   if(historyOpen)return <Modal label="Description history" close={close}><h3 className="mb-3 font-medium">Description history</h3><p className="mb-3 text-[12px] text-fg-3">Your locally saved description revisions.</p>{[...(issue.descriptionHistory??[])].reverse().map((entry,index)=><div key={index} className="mb-3 rounded-md border border-line-2 p-3"><div className="mb-2 text-[11px] text-fg-3">{new Date(entry.at).toLocaleString()}</div><div>{entry.document?<Adf node={entry.document}/>:<p className="whitespace-pre-wrap">{entry.text||"Empty description"}</p>}</div><button className={`${BUTTON} mt-2`} onClick={()=>{actions.description(issue.key,entry.document??entry.text);close();}}>Restore this description</button></div>)}{!issue.descriptionHistory?.length&&<p>No local description changes yet.</p>}<button onClick={close} className={`${BUTTON} mt-3`}>Close</button></Modal>;
   if(linkOpen)return <Modal label="Add link" close={close}><form onSubmit={e=>{e.preventDefault();try{const url=new URL(link);if(!["http:","https:"].includes(url.protocol))throw new Error();actions.patch(issue.key,{links:[...new Set([...(issue.links??[]),url.href])]});close();}catch{setLinkError("Enter an http or https URL");}}}><input autoFocus aria-label="Link URL" type="url" required value={link} onChange={e=>setLink(e.target.value)} className={INPUT}/>{linkError&&<p role="alert" className="mt-2 text-[12px]">{linkError}</p>}<div className="mt-3 flex justify-end"><button className={BUTTON}>Add link</button></div></form></Modal>;
   if(copyOpen)return <Modal label="Copy issue" close={()=>setCopyOpen(false)} anchorId="issue-options" width={300}><div onKeyDown={e=>{if(e.key==="ArrowLeft"){e.preventDefault();setCopyOpen(false);}}}><Command loop><Command.Input aria-label="Find copy action" placeholder="Copy…" className={`${INPUT} mb-2`}/><Command.List>{item("Back to issue options",()=>setCopyOpen(false))}{copyKinds.map(kind=>item(`Copy ${kind}`,()=>void copy(kind)))}</Command.List></Command></div></Modal>;
@@ -165,41 +166,51 @@ export function IssueOptions({issue}:{issue:Issue}) {
   </Command.List></Command></Modal>;
 }
 
-export function Attachments({attachments=[],onChange,onBusy}:{attachments:Issue["attachments"];onChange:(files:NonNullable<Issue["attachments"]>)=>void;onBusy?:(busy:boolean)=>void}) {
+export function Attachments({attachments=[],onChange,onBusy,choose,issueKey,hideChooser=false}:{attachments:Issue["attachments"];onChange:(files:NonNullable<Issue["attachments"]>)=>void;onBusy?:(busy:boolean)=>void;choose?:(files:File[])=>void;issueKey?:string;hideChooser?:boolean}) {
   const file=useRef<HTMLInputElement>(null);
   const [busy,setBusy]=useState(false),[error,setError]=useState("");
   return <div className="mt-3 text-[12px]">
     <input ref={file} type="file" multiple aria-label="Choose attachments" className="hidden" onChange={async e=>{
       const input=e.currentTarget,selected=[...(input.files??[])];
+      if(choose){choose(selected);input.value="";return;}
       setBusy(true);onBusy?.(true);setError("");
-      try {const files=await Promise.all(selected.map(addLocalFile));onChange([...attachments,...files]);}
+      try {const files=await addLocalFiles(selected);onChange([...attachments,...files]);}
       catch(error){setError(error instanceof Error?error.message:"Could not save this file locally");}
       finally{input.value="";setBusy(false);onBusy?.(false);}
     }}/>
-    <button type="button" disabled={busy} aria-label="Attach images, files, or videos" onClick={()=>file.current?.click()} className="text-fg-3 hover:text-fg disabled:opacity-40">{busy?"Saving file…":"+ Attach file"}</button>
+    {!hideChooser&&<button type="button" disabled={busy} aria-label="Attach images, files, or videos" onClick={()=>file.current?.click()} className="text-fg-3 hover:text-fg disabled:opacity-40">{busy?"Saving file…":"+ Attach file"}</button>}
     {error&&<p role="alert" className="mt-2 text-fg-3">{error}</p>}
-    {attachments.map(a=><div key={a.id} className="mt-2 flex items-center gap-2 rounded-md border border-line-2 px-2 py-1.5">
-      {a.missing?<span className="min-w-0 flex-1 truncate text-fg-3">{a.name} · file unavailable</span>:<a className="min-w-0 flex-1 truncate text-accent" href={a.url} download={a.name}>{a.name}</a>}
-      <span className="text-fg-3">{Math.ceil(a.size/1024)} KB</span><button type="button" aria-label={`Remove attachment ${a.name}`} onClick={()=>onChange(attachments.filter(f=>f.id!==a.id))}><Icon name="close"/></button>
+    {attachments.map(a=><div key={a.id} className="relative mt-2">
+      <MediaView node={{type:'media',attrs:{id:a.id,type:'file'}}} issueKey={issueKey} attachments={attachments}/>
+      <button type="button" aria-label={`Remove attachment ${a.name}`} className="absolute right-1 -top-2 z-10 rounded bg-card p-1" onClick={()=>onChange(attachments.filter(f=>f.id!==a.id))}><Icon name="close"/></button>
     </div>)}
   </div>;
 }
 
 export function PersonalIssueDetails({issue}:{issue:Issue}) {
   const [reactionAnchor,setReactionAnchor]=useState<HTMLElement|null>(null);
-  const subscribed=issue.watchers?.some(u=>u.id===ME.id);
   const toggleReaction=(emoji:string)=>actions.patch(issue.key,{reactions:issue.reactions?.includes(emoji)?issue.reactions.filter(r=>r!==emoji):[...(issue.reactions??[]),emoji]});
+  const full=useStore(s=>s.full.get(issue.key));
+  const embedded=new Set<string>();
+  const mediaIds=(node:any)=>{if(!node||typeof node!=='object')return;if(['media','mediaInline'].includes(node.type)&&node.attrs?.id)embedded.add(String(node.attrs.id));for(const child of node.content??[])mediaIds(child);};
+  mediaIds(full?.fields.description);for(const comment of full?.fields.comment?.comments??[])mediaIds(comment.body);
   const all=useStore(s=>s.issues),children=[...all.values()].filter(i=>i.parent===issue.key);
   return <div className="mt-4 space-y-3 text-[12px]">
-    <div className="flex flex-wrap items-center gap-2">{issue.reactions?.map(emoji=><button key={emoji} aria-label={`Remove ${emoji} reaction`} onClick={()=>toggleReaction(emoji)} className="rounded-md bg-sel px-2 py-1">{emoji} 1</button>)}<button aria-label="Add reaction" onClick={e=>setReactionAnchor(e.currentTarget)} className="text-fg-3 hover:text-fg">Add reaction</button><button onClick={()=>actions.patch(issue.key,{watchers:subscribed?(issue.watchers??[]).filter(u=>u.id!==ME.id):[...(issue.watchers??[]),ME]})} className="ml-auto text-fg-3 hover:text-fg">{subscribed?"Unsubscribe":"Subscribe"}</button></div>
+    <div className="flex flex-wrap items-center gap-1">{issue.reactions?.map(emoji=><button key={emoji} aria-label={`Remove ${emoji} reaction`} onClick={()=>toggleReaction(emoji)} className="mr-1 rounded-md bg-sel px-2 py-1">{emoji} 1</button>)}<button aria-label="Add reaction" title="Add reaction" onClick={e=>setReactionAnchor(e.currentTarget)} className="grid size-7 place-items-center rounded text-fg-3 hover:bg-hover hover:text-fg"><Icon name="smile"/></button><button type="button" aria-label="Attach images, files, or videos" title="Attach images, files, or videos" className="grid size-7 place-items-center rounded text-fg-3 hover:bg-hover hover:text-fg" onClick={()=>document.getElementById('description')?.closest('.rich-editor')?.querySelector<HTMLInputElement>('input[type=file]')?.click()}><Icon name="paperclip"/></button></div>
     {reactionAnchor&&<ReactionPicker anchor={reactionAnchor} close={()=>setReactionAnchor(null)} choose={toggleReaction}/>}
-    <Attachments attachments={issue.attachments} onChange={attachments=>actions.patch(issue.key,{attachments})}/>
+    <Attachments hideChooser issueKey={issue.key} attachments={issue.attachments?.filter(a=>!embedded.has(a.id))} onChange={attachments=>actions.patch(issue.key,{attachments:[...(issue.attachments??[]).filter(a=>embedded.has(a.id)),...attachments]})}/>
     {issue.links?.map(url=><div key={url} className="flex items-center gap-2"><a href={url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-accent">{url}</a><button aria-label={`Remove link ${url}`} onClick={()=>actions.patch(issue.key,{links:issue.links?.filter(l=>l!==url)})}><Icon name="close"/></button></div>)}
     {issue.parent&&<div className="flex items-center gap-2 text-fg-3">Parent <button className="text-accent" onClick={()=>{const parent=all.get(issue.parent!);if(parent)navigate({board:parent.board,selected:parent.key,panel:true});}}>{issue.parent}</button><button aria-label="Remove parent" onClick={()=>actions.patch(issue.key,{parent:undefined})}><Icon name="close"/></button></div>}
     {issue.relations?.map(r=><div key={`${r.kind}:${r.key}`} className="flex items-center gap-2"><span className="text-fg-3">{({related:"Related to",blocked:"Blocked by",blocking:"Blocking",duplicate:"Duplicate of"} as Record<string,string>)[r.kind]??r.kind}</span><button className="text-accent" onClick={()=>{const target=all.get(r.key);if(target)navigate({board:target.board,selected:target.key,panel:true});}}>{r.key}</button><button aria-label={`Remove ${r.kind} relation ${r.key}`} onClick={()=>actions.relate(issue.key,r.key,r.kind,true)}><Icon name="close"/></button></div>)}
     {children.map(child=><button key={child.key} onClick={()=>navigate({selected:child.key,panel:true})} className="flex w-full gap-2 rounded-md border border-line-2 px-3 py-2 text-left"><span className="text-fg-3">{child.key}</span><span className="truncate">{child.summary}</span></button>)}
     <button onClick={()=>beginCreate({parent:issue.key,project:issue.project})} className="text-fg-3 hover:text-fg">+ Add sub-issues</button>
   </div>;
+}
+
+export function Subscribers({issue}:{issue:Issue}) {
+ const issues=useStore(s=>s.issues);
+ const people=[...new Map([ME,...(issue.watchers??[]),...[...issues.values()].flatMap(i=>[i.assignee,i.creator,...(i.watchers??[])].filter((u):u is NonNullable<typeof u>=>!!u))].map(user=>[user.id,user])).values()];
+ return <Modal label="Change subscribers" anchorId="issue-subscribers" width={300} close={()=>ui.send({type:'overlay.close'})}><Command loop><Command.Input autoFocus aria-label="Change subscribers" placeholder="Change subscribers…" className={`${INPUT} mb-2`}/><Command.List className="max-h-[40vh] overflow-y-auto"><Command.Empty className="p-2">No people found</Command.Empty>{people.map(user=><Command.Item key={user.id} value={`${user.name} ${user.id}`} onSelect={()=>actions.patch(issue.key,{watchers:issue.watchers?.some(u=>u.id===user.id)?issue.watchers.filter(u=>u.id!==user.id):[...(issue.watchers??[]),user]})} className="flex items-center gap-2 rounded px-2 py-2 data-[selected=true]:bg-sel"><span aria-hidden className="grid size-4 place-items-center rounded border border-line-2">{issue.watchers?.some(u=>u.id===user.id)&&<Icon name="check" size={12}/>}</span><span>{user.name}</span>{issue.assignee?.id===user.id&&<span className="ml-auto text-[11px] text-fg-3">Assignee</span>}</Command.Item>)}</Command.List></Command></Modal>;
 }
 
 export function Relations({issue}:{issue:Issue}) {

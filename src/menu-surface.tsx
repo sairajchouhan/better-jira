@@ -1,5 +1,9 @@
 import {useLayoutEffect,useRef,useState,type CSSProperties,type ReactNode} from "react";
 
+export const MENU_POPUP = "view-popup rounded-xl border border-line-2 bg-card text-fg-2 shadow-[0_12px_40px_rgb(0_0_0/0.35)]";
+export const MENU_ITEM = "flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] hover:bg-hover";
+export const MENU_INPUT = "h-9 w-full border-b border-line-2 bg-transparent px-3 text-[13px] outline-none placeholder:text-fg-3";
+
 /** A shared focus trap with measured placement and a centered small-screen fallback. */
 export function MenuSurface({label,children,close,anchorId,anchor,width=640}:{label:string;children:ReactNode;close:()=>void;anchorId?:string;anchor?:HTMLElement|null;width?:number}) {
   const ref=useRef<HTMLDivElement>(null),previous=useRef(document.activeElement as HTMLElement|null);

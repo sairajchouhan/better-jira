@@ -125,6 +125,22 @@ test("R4: autosaved description edits within a minute make one history entry",as
   expect(get().issues.get(key)!.descriptionHistory?.length).toBe(1);
 });
 
+test("image crops and comment counts undo and redo without changing the description",async()=>{
+  const {actions,get,undoEdit,redoEdit}=await import('./store');
+  const {commentCount}=await import('./media-edits');
+  const key=actions.create('Image edits',{description:'Original description'})!;
+  const original=get().full.get(key)?.fields.description;
+  const crop={x:.1,y:.1,width:.8,height:.8};
+  actions.mediaEdit(key,'media-id',{crop});
+  const comments=[{id:'review',text:'Image review',author:'Me',at:'2026-11-07T00:00:00Z'}];
+  actions.mediaEdit(key,'media-id',{crop,comments});
+  expect(commentCount(get().issues.get(key)!)).toBe(1);
+  undoEdit();expect(get().issues.get(key)?.mediaEdits?.['media-id']).toEqual({crop});expect(get().issues.get(key)?.comments).toBe(0);
+  undoEdit();expect(get().issues.get(key)?.mediaEdits).toBeUndefined();
+  redoEdit();redoEdit();expect(get().issues.get(key)?.mediaEdits?.['media-id']).toEqual({crop,comments});expect(commentCount(get().issues.get(key)!)).toBe(1);expect(get().issues.get(key)?.comments).toBe(0);
+  expect(get().full.get(key)?.fields.description).toEqual(original);
+});
+
 test("B5: creating stays on the board with a toast; duplicating opens the copy",async()=>{
   const {actions,get,navigate,ui}=await import("./store");
   navigate({panel:false,selected:null});ui.send({type:"toast.dismiss"});

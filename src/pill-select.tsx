@@ -15,7 +15,7 @@ export function PillSelect({ label, value, options, onChange, className = PILL_S
         <Command.Input autoFocus aria-label={`${label}…`} placeholder={`${label}…`} className="mb-1 w-full rounded-md border border-line-2 bg-card px-2 py-1.5 text-[12px] outline-none focus:border-accent" />
         <Command.List className="max-h-[300px] overflow-y-auto [&_[data-selected=true]]:bg-sel">
           <Command.Empty className="p-2 text-fg-3">No matches</Command.Empty>
-          {options.map(([v, l]) => <Command.Item key={v} value={`${l} ${v}`} onSelect={() => { onChange(v); setAnchor(null); }} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[12px]"><span className="flex-1 truncate">{l}</span>{v === value && <Icon name="check" />}</Command.Item>)}
+          {options.map(([v, l]) => <Command.Item key={v} value={`${l} ${v}`} onSelect={() => { onChange(v); setAnchor(null); }} className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-[12px]"><span className="flex-1 truncate">{l}</span>{v === value && <Icon name="check" />}</Command.Item>)}
         </Command.List>
       </Command>
     </MenuSurface>}

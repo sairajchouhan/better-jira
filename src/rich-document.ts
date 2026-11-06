@@ -1,3 +1,4 @@
+import {mediaCaretDocument} from './media-caret';
 import { Schema, type MarkSpec, type Node as EditorNode, type NodeSpec } from "prosemirror-model";
 import { tableNodes } from "prosemirror-tables";
 
@@ -15,12 +16,13 @@ function tableNode(name:keyof typeof table,role:string):NodeSpec {
 }
 
 const mark=(tag:string):MarkSpec=>({attrs,toDOM:()=>[tag,0],parseDOM:[{tag}]});
+const MEDIA_TYPES=new Set(["mediaSingle","mediaGroup","media","mediaInline"]);
 const opaque=(inline:boolean):NodeSpec=>({group:inline?"inline":"block",inline,atom:true,isolating:true,attrs:{raw:{default:null}},toDOM:node=>[inline?"span":"div",{contenteditable:"false",class:"rich-preserved"},`[${node.attrs.raw?.type??"Jira content"}]`]});
 
 export const richSchema=new Schema({
   nodes:{
     doc:{content:"block+",marks:"_",attrs},
-    paragraph:{...block("p","inline*"),group:"block"},
+    paragraph:{...block("p","inline*"),group:"block",attrs:{...attrs,mediaBoundary:{default:false}},toDOM:node=>["p",node.attrs.mediaBoundary?{"data-media-caret":"true"}:{},0]},
     text:{group:"inline"},
     hardBreak:{inline:true,group:"inline",selectable:false,attrs,toDOM:()=>["br"],parseDOM:[{tag:"br"}]},
     heading:{...block("h2","inline*"),attrs:{...attrs,level:{default:2}},defining:true,toDOM:node=>[`h${Math.max(1,Math.min(6,node.attrs.level))}`,0],parseDOM:[1,2,3,4,5,6].map(level=>({tag:`h${level}`,attrs:{level}}))},
@@ -37,6 +39,7 @@ export const richSchema=new Schema({
     inlineCard:{...inlineAtom("link"),toDOM:node=>["span",{contenteditable:"false",class:"rich-token"},String(node.attrs.original?.data.attrs?.url??"Link")]},
     blockCard:{group:"block",atom:true,attrs,toDOM:node=>["div",{contenteditable:"false",class:"rich-preserved"},String(node.attrs.original?.data.attrs?.url??"Link")]},
     table:tableNode("table","table"),tableRow:tableNode("table_row","row"),tableCell:tableNode("table_cell","cell"),tableHeader:tableNode("table_header","header_cell"),
+    mediaSingle:opaque(false),mediaGroup:opaque(false),media:opaque(false),mediaInline:opaque(true),
     opaqueBlock:opaque(false),opaqueInline:opaque(true),
   },
   marks:{
@@ -58,6 +61,7 @@ function editorMarks(marks:AdfMark[]=[]) {
   return [...marks.filter(m=>richSchema.marks[m.type]&&!['opaqueMark','textMetadata'].includes(m.type)).map(m=>richSchema.marks[m.type]!.create({original:structuredClone(m),...(m.attrs??{})})),...(opaqueMarks.length?[richSchema.marks.opaqueMark!.create({raw:structuredClone(opaqueMarks)})]:[])];
 }
 function nodeToEditor(node:AdfNode,inline=false):EditorNode {
+  if(MEDIA_TYPES.has(node.type))return richSchema.nodes[node.type]!.create({raw:structuredClone(node)});
   if(node.type==="text"&&node.text) {
     const {type,text,marks,...metadata}=node;
     return richSchema.text(text,[...editorMarks(marks),...(Object.keys(metadata).length||marks?.length?[richSchema.marks.textMetadata!.create({raw:{data:metadata,order:marks?.map(m=>m.type)??[]}})]:[])]);
@@ -75,7 +79,7 @@ function nodeToEditor(node:AdfNode,inline=false):EditorNode {
 }
 export function toEditorDocument(value:unknown):EditorNode {
   const doc=normalizeDocument(value);
-  return richSchema.nodes.doc!.create({original:originalOf(doc)},doc.content?.length?doc.content.map(n=>nodeToEditor(n)):richSchema.nodes.paragraph!.create());
+  return mediaCaretDocument(richSchema.nodes.doc!.create({original:originalOf(doc)},doc.content?.length?doc.content.map(n=>nodeToEditor(n)):richSchema.nodes.paragraph!.create()));
 }
 function exportedAttrs(base:Record<string,unknown>|undefined,values:Record<string,unknown>,defaults:Record<string,unknown>={}) {
   const result={...(base??{})};
@@ -83,7 +87,7 @@ function exportedAttrs(base:Record<string,unknown>|undefined,values:Record<strin
   return Object.keys(result).length?result:undefined;
 }
 function fromEditorNode(node:EditorNode):AdfNode {
-  if(node.type.name==="opaqueBlock"||node.type.name==="opaqueInline")return structuredClone(node.attrs.raw);
+  if(MEDIA_TYPES.has(node.type.name)||node.type.name==="opaqueBlock"||node.type.name==="opaqueInline")return structuredClone(node.attrs.raw);
   const original=node.attrs.original as Original|null;
   const data:AdfNode={...(original?.data??{}),type:node.type.name};
   const extra=node.marks.find(m=>m.type.name==="textMetadata")?.attrs.raw;
@@ -93,7 +97,7 @@ function fromEditorNode(node:EditorNode):AdfNode {
     if(original?.data.type!==node.type.name)for(const key of Object.keys(fields[String(original?.data.type)]??{}))delete baseAttrs[key];
     const attrs=exportedAttrs(baseAttrs,node.attrs,fields[node.type.name]);
     if(attrs)data.attrs=attrs;else delete data.attrs;
-    if(node.childCount||original?.hadContent){data.content=[];node.forEach(child=>data.content!.push(fromEditorNode(child)));}
+    if(node.childCount||original?.hadContent){data.content=[];node.forEach(child=>{if(!(child.type.name==="paragraph"&&child.attrs.mediaBoundary&&!child.content.size))data.content!.push(fromEditorNode(child));});}
   }
   const marks=node.marks.flatMap(mark=>{
     if(mark.type.name==="textMetadata")return [];

@@ -1,4 +1,5 @@
-import { serve } from "bun";
+import { serve, type BunRequest } from "bun";
+import { localMediaRequest } from "./attachment-media";
 import { watch } from "node:fs";
 import index from "./index.html";
 import * as mirror from "./mirror";
@@ -7,16 +8,18 @@ import { serverConfiguration } from "./server-config";
 
 const json = (body: string) => new Response(body, { headers: { "Content-Type": "application/json" } });
 
+const localOnly=<T extends Request>(handler:(req:T)=>Response|Promise<Response>)=>(req:T)=>localMediaRequest(req)?handler(req):new Response("Forbidden",{status:403});
+
 const server = serve({
   hostname:"127.0.0.1",port:serverConfiguration().port,
   routes: {
     "/*": index,
-    "/api/boards": () => Response.json(mirror.boards()),
-    "/api/client": async()=>{try{return Response.json(await mirror.clientInfo());}catch{return Response.json({error:"Could not read your Jira account. Check setup and retry."},{status:503});}},
-    "/api/properties": () => Response.json(mirror.properties()),
-    "/api/view-defaults": () => Response.json(mirror.viewDefaults()),
+    "/api/boards": localOnly(() => Response.json(mirror.boards())),
+    "/api/client": localOnly(async()=>{try{return Response.json(await mirror.clientInfo());}catch{return Response.json({error:"Could not read your Jira account. Check setup and retry."},{status:503});}}),
+    "/api/properties": localOnly(() => Response.json(mirror.properties())),
+    "/api/view-defaults": localOnly(() => Response.json(mirror.viewDefaults())),
     "/api/view-defaults/:board": {
-      PUT: async (req) => {
+      PUT: localOnly(async (req:BunRequest<"/api/view-defaults/:board">) => {
         if (req.headers.get("origin") && req.headers.get("origin") !== new URL(req.url).origin) return new Response("Forbidden", {status:403});
         const id = Number(req.params.board);
         if (!mirror.BOARDS.includes(id)) return new Response("Unknown board", {status:404});
@@ -25,15 +28,24 @@ const server = serve({
           mirror.saveViewDefault(id, display);
           return Response.json(display);
         } catch { return Response.json({error:"Invalid display settings"},{status:400}); }
-      },
+      }),
     },
-    "/api/issues": () => json(mirror.issues()),
-    "/api/issues/:key": async(req) => {
+    "/api/issues": localOnly(() => json(mirror.issues())),
+    "/api/issues/:key": localOnly(async(req:BunRequest<"/api/issues/:key">) => {
       try {
         const full = await mirror.issue(req.params.key);
         return full ? json(full) : Response.json({ error: "not found" }, { status: 404 });
       }catch{return Response.json({error:"Could not read Jira issue details. Retry the request."},{status:503});}
-    },
+    }),
+    "/api/issues/:key/media/:mediaId": localOnly(async(req:BunRequest<"/api/issues/:key/media/:mediaId">)=>{
+      if(req.method!=="GET")return new Response("Method not allowed",{status:405,headers:{Allow:"GET"}});
+      try {const attachment=await mirror.media.resolve(req.params.key,req.params.mediaId);return attachment?Response.json(attachment,{headers:{"Cache-Control":"private, no-store"}}):Response.json({error:"Media not found"},{status:404});}
+      catch {return Response.json({error:"Could not resolve media. Retry the request."},{status:503});}
+    }),
+    "/api/issues/:key/attachments/:id": localOnly(async(req:BunRequest<"/api/issues/:key/attachments/:id">)=>{
+      try {return await mirror.media.content(req,req.params.key,req.params.id);}
+      catch {return Response.json({error:"Could not load attachment. Retry the request."},{status:503});}
+    }),
   },
   development: process.env.NODE_ENV !== "production" && { hmr: true, console: true },
 });

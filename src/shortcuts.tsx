@@ -142,7 +142,7 @@ async function copy(kind: CopyKind) {
           ?.columns.flatMap((c) => c.statuses)
           .find((s) => s.id === issue.status)?.name ?? issue.status;
     await navigator.clipboard.writeText(
-      issueCopy(kind, issue, full, issueURL(issue), status),
+      issueCopy(kind, issue, full, issueURL(issue), status, ME.name),
     );
     set({ perf: `Copied ${kind}` });
   } catch {
@@ -429,6 +429,17 @@ export const shortcuts: Shortcut[] = [
     hotkey: "Mod+Backspace",
     issue: true,
     run: issueAction((i) => actions.remove(i.key)),
+  },
+  {
+    id: "subscribers",
+    name: "Change subscribers",
+    group: "Issues",
+    hotkey: "Mod+Shift+S",
+    issue: true,
+    run: issueAction(() => {
+      navigate({panel:true});
+      requestAnimationFrame(()=>{document.getElementById('issue-subscribers')?.focus();overlay('subscribers')();});
+    }),
   },
   {
     id: "subscribe",
@@ -719,7 +730,10 @@ export function useLinearHotkeys(getColumns: () => Issue[][]) {
       (entry) =>
         ({
           hotkey: entry.hotkey,
-          callback: () => runShortcut(entry.id),
+          callback: (event:KeyboardEvent) => {
+            if(event.target instanceof Element&&event.target.closest("[data-media-interactive]")&&!((event.metaKey||event.ctrlKey)&&(entry.id==="commands"||entry.id==="shortcuts")))return;
+            runShortcut(entry.id);
+          },
           options: {
             enabled:
               state.boards.length > 0 &&

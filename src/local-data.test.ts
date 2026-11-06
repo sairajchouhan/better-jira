@@ -8,12 +8,15 @@ const full:Full={key:issue.key,fields:{description:{type:"doc",version:1,content
 test("local files, rich descriptions, comments and undo/redo survive a database close/reopen",async()=>{
   const factory=new IDBFactory();let db=await LocalDatabase.open("account-one",factory);
   const file=await db.addFile(new File(["durable file content"],"fixture.txt",{type:"text/plain"}));
-  const savedIssue={...issue,attachments:[file]};
+  const mediaEdits={fixture:{crop:{x:.1,y:.1,width:.7,height:.8},comments:[{id:'review',text:'Keep this crop',author:'Me',at:'2026-11-07T00:00:00Z'}]}};
+  const savedIssue={...issue,attachments:[file],mediaEdits};
   const state:LocalState={version:1,sequence:2,changes:[{key:issue.key,issue:savedIssue,full,issueFields:["summary","attachments"],fullFields:["description","comment"],created:true}],undo:[{keys:[issue.key],label:"create",before:[{}],after:[{issue:savedIssue,full}]}],redo:[]};
   await db.save(state);const oldURL=file.url;db.close();
   db=await LocalDatabase.open("account-one",factory);const loaded=await db.load();
   expect(loaded.recovered).toBe(false);expect(loaded.state.sequence).toBe(2);expect(loaded.state.changes[0]?.full).toEqual(full);
   expect(loaded.state.undo[0]?.after[0]?.full).toEqual(full);
+  expect(loaded.state.changes[0]?.issue?.mediaEdits).toEqual(mediaEdits);
+  expect(loaded.state.undo[0]?.after[0]?.issue?.mediaEdits).toEqual(mediaEdits);
   const url=loaded.state.changes[0]?.issue?.attachments?.[0]?.url!;
   expect(url).not.toBe(oldURL);expect(await(await fetch(url)).text()).toBe("durable file content");
   expect(loaded.state.undo[0]?.after[0]?.issue?.attachments?.[0]?.url).toBe(url);
@@ -42,4 +45,18 @@ test("corrupt raw data is backed up and an unknown schema remains protected",asy
   await put({version:99,privateData:"keep me"});current=await LocalDatabase.open("corrupt",factory);
   expect((await current.load()).readOnly).toBe(true);await expect(current.save(emptyLocalState())).rejects.toThrow("unsupported version");
   expect((await current.recoveryCopies()).some((copy:any)=>copy.version===99&&copy.privateData==="keep me")).toBe(true);current.close();raw.close();
+});
+
+test('active local files keep their metadata but their blob URLs cannot render HTML or SVG',async()=>{
+ const factory=new IDBFactory();let db=await LocalDatabase.open('safe-files',factory);
+ for(const type of ['text/html','image/svg+xml']){
+  const payload='<script>document.title="EXECUTED"</script>';
+  const original=new File([payload],type==='text/html'?'active.html':'active.svg',{type});
+  const file=await db.addFile(original);
+  expect(file.type).toBe(original.type);expect(await(await fetch(file.url)).text()).toBe(payload);
+  expect((await fetch(file.url)).headers.get('content-type')).toBe('application/octet-stream');
+  db.close();db=await LocalDatabase.open('safe-files',factory);
+  expect((await fetch((await db.fileURL(file.id))!)).headers.get('content-type')).toBe('application/octet-stream');
+ }
+ db.close();
 });

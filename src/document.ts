@@ -15,3 +15,10 @@ export function normalizeDocument(value:unknown):AdfDocument {
   if(value&&typeof value==="object"&&(value as AdfNode).type==="doc"&&Array.isArray((value as AdfNode).content))return structuredClone(value) as AdfDocument;
   return plainDocument("");
 }
+
+export function documentHasMedia(node:unknown,depth=0):boolean{
+ if(!node||typeof node!=='object'||depth>100)return false;
+ const value=node as AdfNode;
+ if((value.type==='media'||value.type==='mediaInline')&&(typeof value.attrs?.id==='string'||typeof value.attrs?.url==='string'))return true;
+ return Array.isArray(value.content)&&value.content.some(child=>documentHasMedia(child,depth+1));
+}

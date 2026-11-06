@@ -46,13 +46,14 @@ test("I16: a favourited issue's star turns yellow", async () => {
   } finally { await page.close(); }
 });
 
-test("I18: the side panel has previous/next arrows and no n / total count", async () => {
+test("I18: issue navigation shows its position and next before previous", async () => {
   const page = await open();
   try {
     await openIssue(page, "TEST-1");
     const summary = `(document.getElementById("summary").value??document.getElementById("summary").textContent)`;
     expect(await page.eval(summary)).toBe("Rich browser fixture");
-    expect(await page.eval(`document.body.innerText.match(/\\b\\d+ \\/ \\d+\\b/)`)).toBeNull();
+    expect(await page.eval(`document.querySelector('[aria-label="Issue position"]').textContent`)).toBe('1 / 6');
+    expect(await page.eval(`[...document.querySelector('[aria-label="Issue position"]').parentElement.querySelectorAll('button')].map(b=>b.title)`)).toEqual(['Next (J / ↓)','Previous (K / ↑)']);
     await page.click('[title="Next (J / ↓)"]');
     expect(await page.waitFor<string>(`${summary}!=="Rich browser fixture"&&${summary}`)).toMatch(/^Browser fixture \d$/);
   } finally { await page.close(); }

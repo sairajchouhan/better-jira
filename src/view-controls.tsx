@@ -1,47 +1,18 @@
 import {useHotkey} from "@tanstack/react-hotkeys";
-import { Command } from "cmdk";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { MenuSurface } from "./menu-surface";
+import { MenuSurface, MENU_POPUP as POPUP, MENU_ITEM as ITEM } from "./menu-surface";
+import { filterChoices, PropertyFilter } from "./property-filter";
 import { PillSelect } from "./pill-select";
-import { Icon, PriorityIcon, StatusIcon } from "./icons";
-import { changeDisplay, changePreferences, get, ME, preferencesFor, saveDefault, timed, ui, usePreferences, useStore, type Issue, type Board } from "./store";
-import { defaultDisplay, defaultPreferences, filterCount, FIELDS, GROUPINGS, isDate, isNumeric, matchesFilters, matchesRule, newId, operatorsFor, ORDERINGS, PROPERTIES, selectIssues, updateFilter, type Display, type Field, type FilterGroup, type Rule } from "./view-model";
+import { Icon } from "./icons";
+import { changeDisplay, changePreferences, ME, preferencesFor, saveDefault, timed, ui, usePreferences, useStore, type Issue, type Board } from "./store";
+import { defaultDisplay, defaultPreferences, filterCount, FIELDS, GROUPINGS, isDate, isNumeric, matchesFilters, newId, operatorsFor, ORDERINGS, PROPERTIES, selectIssues, updateFilter, type Display, type Field, type FilterGroup, type Rule } from "./view-model";
 
-export const POPUP = "view-popup rounded-xl border border-line-2 bg-card text-fg-2 shadow-[0_12px_40px_rgb(0_0_0/0.35)]";
-const ITEM = "flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] hover:bg-hover";
-const INPUT = "h-9 w-full border-b border-line-2 bg-transparent px-3 text-[13px] outline-none placeholder:text-fg-3";
+const loadFilterMenu = () => import("./filter-menu");
+const FilterMenu = lazy(loadFilterMenu);
+
+export { MENU_POPUP as POPUP } from "./menu-surface";
 const CIRCLE = "relative grid size-7 shrink-0 place-items-center rounded-full bg-btn text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg";
-
-type Choice = { value: string; label: string; count?: number; icon?: ReactNode };
-export function filterChoices(field: Field, board: Board, issues: Issue[]): Choice[] {
-  const opts = new Map<string, Choice>();
-  const add = (value: string, label: string, icon?: ReactNode) => opts.set(value,{value,label,icon,count:0});
-  if (["assignee","creator","watchers"].includes(field)) { add("$none",field === "watchers"?"No subscribers":field === "assignee" ? "No assignee":"No creator"); add("$me","Current user"); }
-  if(field === "milestone")add("$none","No milestone");
-  if(field === "projectLead"){add("$none","No project lead");add("$me","Current user");}
-  if (field === "labels") add("$none","No labels");
-  if (field === "priority") add("$none","No priority");
-  if (field === "project") add("$none","No project");
-  if (field === "parent") add("$none","No parent");
-  if (field === "status") board.columns.flatMap(c=>c.statuses).forEach(s=>add(s.id,s.name,<StatusIcon status={s}/>));
-  if (field === "relations") return [["parent","Parent issues"],["child","Sub-issues"],["blocked","Blocked issues"],["blocking","Blocking issues"],["related","Issues with relations"],["duplicate","Duplicates"]].map(([value,label])=>({value:value!,label:label!}));
-  for (const i of issues) {
-    if (field === "assignee" || field === "creator") { const u = i[field]; if (u) add(u.id,u.name); }
-    if (field === "labels") for (const l of i.labels) add(l,l);
-    if (field === "priority" && i.priority) add(i.priority,i.priority,<PriorityIcon name={i.priority}/>);
-    if (field === "project" && i.project) add(i.project.key,i.project.name);
-    if (field === "type" && i.type) add(i.type,i.type);
-    if (field === "parent" && i.parent) add(i.parent,i.parent);
-    if(field === "milestone")for(const version of i.milestones??[])add(version.id,version.name);
-    if(field === "watchers")for(const user of i.watchers??[])add(user.id,user.name);
-    if(field === "projectLead"&&i.projectLead)add(i.projectLead.id,i.projectLead.name);
-  }
-  const out = [...opts.values()];
-  if (field !== "status") out.sort((a,b)=>a.value.startsWith("$") ? b.value.startsWith("$") ? a.label.localeCompare(b.label) : -1 : b.value.startsWith("$") ? 1 : a.label.localeCompare(b.label));
-  for (const o of out) o.count = issues.filter(i=>matchesRule(i,{id:"count",field,op:"is",values:[o.value]},issues,ME.id)).length;
-  return out;
-}
 
 export function BoardControls({ board }: {board:Board}) {
   const toolbar = useStore(s=>s.toolbar);
@@ -64,7 +35,7 @@ export function BoardControls({ board }: {board:Board}) {
     return ()=>{cancelAnimationFrame(focusFrame);document.removeEventListener("pointerdown",outside);window.removeEventListener("resize",position);};
   },[toolbar,board.id]);
   return <>
-    <button ref={filterRef} aria-label="Add filter" title="Filter (F)" aria-expanded={toolbar === "filter" || toolbar === "advanced"} onClick={()=>ui.send({type:"toolbar.toggle",toolbar:"filter"})} className={CIRCLE}>
+    <button ref={filterRef} aria-label="Add filter" title="Filter (F)" aria-expanded={toolbar === "filter" || toolbar === "advanced"} onPointerEnter={()=>void loadFilterMenu()} onFocus={()=>void loadFilterMenu()} onClick={()=>ui.send({type:"toolbar.toggle",toolbar:"filter"})} className={CIRCLE}>
       <Icon name="filter"/>{count>0 && <span className="absolute -top-1 -right-1 grid size-3.5 place-items-center rounded-full bg-accent text-[9px] text-white">{count}</span>}
     </button>
     <button ref={displayRef} aria-label="Display options" title="Display options (Shift+V)" aria-expanded={toolbar === "display"} onClick={()=>ui.send({type:"toolbar.toggle",toolbar:"display"})} className={CIRCLE}>
@@ -80,7 +51,7 @@ export function BoardControls({ board }: {board:Board}) {
         else if(!e.shiftKey&&document.activeElement === last){e.preventDefault();first?.focus();}
       }
     }}>
-      {toolbar === "display" ? <DisplayMenu board={board}/> : toolbar === "advanced" ? <AdvancedMenu board={board}/> : <FilterMenu key={board.id} board={board}/>}
+      {toolbar === "display" ? <DisplayMenu board={board}/> : toolbar === "advanced" ? <AdvancedMenu board={board}/> : <Suspense fallback={<div role="status" className={`${POPUP} w-[248px] p-3`}>Opening filters…</div>}><FilterMenu key={board.id} board={board} container={popup} footer={<PropertySyncNotice/>}/></Suspense>}
     </div>,document.body)}
   </>;
 }
@@ -91,7 +62,7 @@ function Select({label,value,options,onChange,children}:{label:string;value:stri
   </div>;
 }
 function Toggle({label,value,onChange}:{label:string;value:boolean;onChange:()=>void}) {
-  return <label className="flex min-h-8 cursor-pointer items-center justify-between gap-4 text-[12px] text-fg-3"><span>{label}</span><input type="checkbox" role="switch" aria-label={label} checked={value} onChange={onChange} className="view-toggle"/></label>;
+  return <label className="flex min-h-8 cursor-default items-center justify-between gap-4 text-[12px] text-fg-3"><span>{label}</span><input type="checkbox" role="switch" aria-label={label} checked={value} onChange={onChange} className="view-toggle"/></label>;
 }
 function DisplayMenu({board}:{board:Board}) {
   const {display:d} = usePreferences(board.id);
@@ -126,89 +97,6 @@ function DisplayMenu({board}:{board:Board}) {
       <button title="Reset to the saved default for this board" onClick={()=>changeDisplay(board.id,defaults[board.id] ?? defaultDisplay())}>Reset</button>
       <button className="text-accent disabled:opacity-50" disabled={saving} title="Save your display default in this browser" onClick={async()=>{setSaving(true);await saveDefault(board.id);setSaving(false);}}>{saving?"Saving…":"Save my default"}</button>
     </div>
-  </div>;
-}
-
-const UNAVAILABLE = "This field belongs to Linear and is not available on mirrored Jira issues.";
-const CATEGORIES: {name:string;field?:Field;group?:string;icon:Parameters<typeof Icon>[0]["name"];reason?:string}[] = [
-  {name:"Advanced filter",group:"advanced",icon:"filter"},
-  {name:"Status",field:"status",icon:"layers"}, {name:"Assignee",field:"assignee",icon:"user"},
-  {name:"Creator",field:"creator",icon:"user"}, {name:"Priority",field:"priority",icon:"layers"},
-  {name:"Labels",field:"labels",icon:"label"},{name:"Relations",field:"relations",icon:"layers"},
-  {name:"Dates",group:"dates",icon:"calendar"},
-  {name:"Project",field:"project",icon:"layers"},{name:"Project properties",group:"project",icon:"layers"},
-  {name:"Subscribers",field:"watchers",icon:"user"},
-  {name:"External source",icon:"external",reason:UNAVAILABLE},{name:"Auto-closed",icon:"close",reason:UNAVAILABLE},
-  {name:"Content",field:"content",icon:"pencil"},{name:"Links",field:"links",icon:"external"},
-  {name:"Issue type",field:"type",icon:"layers"}, {name:"Parent issue",field:"parent",icon:"layers"},
-  {name:"Pull requests",field:"pullRequests",icon:"external"},
-  {name:"Estimate",field:"estimate",icon:"layers"},
-];
-type Submenu = {field?:Field;group?:string;name:string};
-const DATES: [Field,string][] = [["due","Due date"],["created","Created date"],["updated","Updated date"],["started","Started date"],["resolved","Completed date"],["statusAge","Time in current status"]];
-function FilterMenu({board}:{board:Board}) {
-  const [submenu,setSubmenu] = useState<Submenu|null>(null);
-  const [info,setInfo] = useState("");
-  return <div className="flex flex-row-reverse items-start gap-1.5 max-[700px]:flex-col">
-    {/* One level at a time, like Linear: a category replaces the root list, and Esc anywhere closes the menu. */}
-    {!submenu&&<Command loop className={`${POPUP} filter-command w-[248px] max-h-[calc(100vh-140px)] overflow-y-auto`}>
-      <Command.Input autoFocus aria-label="Add Filter…" placeholder="Add Filter…" className={INPUT}/>
-      <Command.List className="p-1"><Command.Empty className="p-3 text-fg-3">No filters found</Command.Empty>
-        {CATEGORIES.map(c=><Command.Item key={c.name} value={c.name} onSelect={()=>{if(c.reason){setInfo(c.reason);setSubmenu(null);}else if(c.group === "advanced"){ui.send({type:"toolbar.open",toolbar:"advanced"});}else {setInfo("");setSubmenu(c);}}} className={`${ITEM} ${c.reason?"text-fg-4":""}`}>
-          <Icon name={c.icon}/><span className="flex-1">{c.name}</span>{c.group!=="advanced"&&<Icon name="chevron" size={11}/>}
-        </Command.Item>)}
-      </Command.List>
-      <PropertySyncNotice/>
-      {info&&<div role="status" className="border-t border-line-2 px-3 py-2 text-[12px] leading-5 text-fg-3">{info}</div>}
-    </Command>}
-    {submenu && (submenu.group === "project" ? <Command loop className={`${POPUP} filter-command w-[240px]`}><BackTo name={submenu.name} back={()=>setSubmenu(null)}/><Command.Input autoFocus placeholder="Filter…" className={INPUT}/><Command.List className="p-1"><Command.Item className={ITEM} onSelect={()=>setSubmenu({field:"projectLead",name:"Project lead"})}>Project lead <Icon name="chevron" size={11}/></Command.Item><Command.Item className={ITEM} onSelect={()=>setSubmenu({field:"milestone",name:"Milestone"})}>Milestone name <Icon name="chevron" size={11}/></Command.Item></Command.List><div className="px-3 pb-2 text-[11px] text-fg-3">Milestones use Jira fix versions.</div></Command> : submenu.group === "dates" ? <Command loop className={`${POPUP} filter-command w-[240px]`}>
-      <BackTo name={submenu.name} back={()=>setSubmenu(null)}/><Command.Input autoFocus placeholder="Filter…" className={INPUT}/><Command.List className="p-1">{DATES.map(([field,name])=><Command.Item key={field} className={ITEM} onSelect={()=>setSubmenu({field,name})}><Icon name="calendar"/><span className="flex-1">{name}</span><Icon name="chevron" size={11}/></Command.Item>)}
-      {["Auto-closed date","Triaged date"].map(name=><Command.Item key={name} className={`${ITEM} text-fg-4`} onSelect={()=>setInfo(`${name} is not available in the mirrored Jira data.`)}>{name}</Command.Item>)}
-      </Command.List></Command> : submenu.field && <PropertyFilter key={submenu.field} field={submenu.field} name={submenu.name} board={board} onBack={()=>setSubmenu(null)}/>)}
-  </div>;
-}
-
-const BackTo=({name,back}:{name:string;back:()=>void})=><button onClick={back} className="flex h-8 w-full items-center gap-2 px-3 text-[12px] text-fg-3"><span>‹</span>{name}</button>;
-
-/** `inline`: opened from a filter chip, with the operator as pills and no back button. */
-function PropertyFilter({field,name,board,onBack,inline=false}:{field:Field;name:string;board:Board;onBack:()=>void;inline?:boolean}) {
-  const issuesMap = useStore(s=>s.issues);
-  const prefs = usePreferences(board.id);
-  const mine = useStore(s=>s.mine);
-  const query = useStore(s=>s.query);
-  const issues = useMemo(()=>{
-    const candidates=[...issuesMap.values()];
-    const base={...prefs,filters:{...prefs.filters,children:prefs.filters.children.filter(c=>"children" in c || c.field !== field)}};
-    return selectIssues(candidates,board,base,mine,query,ME.id);
-  },[issuesMap,board,mine,query,prefs,field]);
-  const rule = prefs.filters.children.find((c):c is Rule=>!("children" in c)&&c.field === field);
-  const [value,setValue] = useState(rule?.values[0] ?? "");
-  const [op,setOp] = useState<Rule["op"]>(rule?.op??(field === "content" || field === "links"?"contains":"is"));
-  const choices = useMemo(()=>filterChoices(field,board,issues),[field,board,issues]);
-  function apply(values:string[], operator = rule?.op??"is") {
-    const next:Rule = {id:rule?.id??newId(),field,op:operator,values};
-    changePreferences(board.id,{filters:{...prefs.filters,children:rule ? prefs.filters.children.map(c=>c.id===rule.id?next:c) : [...prefs.filters.children,next]}});
-  }
-  const toggle = (v:string) => {
-    const vals = rule?.values ?? [];
-    const next = vals.includes(v)?vals.filter(x=>x!==v):[...vals,v];
-    if (!next.length && rule) changePreferences(board.id,{filters:updateFilter(prefs.filters,rule.id,null)});
-    else timed("filter",()=>apply(next));
-  };
-  const date = isDate(field);
-  const numeric=isNumeric(field);
-  const input = date || numeric || field === "content" || field === "links";
-  return <div className={inline?"":`${POPUP} w-[270px] max-h-[calc(100vh-140px)] overflow-y-auto`}>
-    {!inline?<BackTo name={name} back={onBack}/>:!input&&rule&&<div role="group" aria-label={`${name} operator`} className="flex flex-wrap gap-1 pb-2">{operatorsFor(field).map(([v,l])=><button key={v} aria-pressed={rule.op===v} onClick={()=>apply(rule.values,v)} className={`rounded-full px-2 py-0.5 text-[11px] ${rule.op===v?"bg-tab-on text-fg":"bg-tab text-fg-3 hover:text-fg-2"}`}>{l}</button>)}</div>}
-    {input ? <form onSubmit={e=>{e.preventDefault();if(value.trim()||op === "empty"||op === "notEmpty") {apply(value?[value]:[],op);ui.send({type:"toolbar.close"});if(inline)onBack();}}} className="space-y-2 p-3 pt-0">
-      <select aria-label={`${name} operator`} value={op} onChange={e=>setOp(e.target.value as Rule["op"])} className="view-select w-full">{operatorsFor(field).map(([v,l])=><option value={v} key={v}>{l}</option>)}</select>
-      {!["empty","notEmpty"].includes(op)&&<input autoFocus aria-label={name} required value={value} onChange={e=>setValue(e.target.value)} type={numeric?"number":date ? ["within","next"].includes(op)?"number":"date":"text"} min={numeric||op === "within"||op === "next"?0:undefined} step={numeric?"any":undefined} className="view-select w-full" placeholder={field === "statusAge"?"Days in current status…":"Text to match…"}/>}
-      {field === "statusAge"&&<div className="text-[11px] text-fg-3">Duration in days, including fractions.</div>}
-      <button type="submit" className="h-7 w-full rounded-md bg-accent text-[12px] text-white">Apply filter</button>
-      {date&&<div className="border-t border-line-2 pt-1">{(field === "due" ? [["Overdue","before",new Date().toLocaleDateString("en-CA")],["1 day from now","next","1"],["3 days from now","next","3"],["1 week from now","next","7"],["1 month from now","next","30"],["3 months from now","next","90"],["No due date","empty",""]] : [["Last 24 hours","within","1"],["Last 7 days","within","7"],["Last 30 days","within","30"],["No date","empty",""]]).map(([label,operator,v])=><button key={label} type="button" onClick={()=>{apply(v?[v]:[],operator as Rule["op"]);ui.send({type:"toolbar.close"});}} className={ITEM}>{label}</button>)}</div>}
-    </form> : <Command loop className="filter-command"><Command.Input autoFocus placeholder="Filter…" aria-label={`Filter ${name}`} className={INPUT}/><Command.List className="max-h-[360px] overflow-y-auto p-1"><Command.Empty className="p-3 text-fg-3">No values found</Command.Empty>{choices.map(c=><Command.Item key={c.value} aria-checked={rule?.values.includes(c.value)??false} value={`${c.label} ${c.value}`} onSelect={()=>toggle(c.value)} className={ITEM}>
-      <span aria-hidden className={`grid size-3.5 shrink-0 place-items-center rounded border ${rule?.values.includes(c.value)?"border-accent bg-accent text-white":"border-line-3"}`}>{rule?.values.includes(c.value)&&<Icon name="check" size={11}/>}</span>{c.icon}<span className="min-w-0 flex-1 truncate">{c.label}</span>{!!c.count&&<span className="text-[11px] text-fg-3">{c.count}</span>}
-    </Command.Item>)}</Command.List></Command>}
   </div>;
 }
 

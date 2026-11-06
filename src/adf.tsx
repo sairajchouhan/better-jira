@@ -1,14 +1,16 @@
 import type { ReactNode } from "react";
+import {MediaView} from "./media-loader";
+import type {Attachment} from "./attachment-media";
 import { safeLink } from "./document";
 
 /** Renders Jira's ADF (Atlassian Document Format). Unknown nodes fall through to their children. */
-export function Adf({ node }: { node: any }): ReactNode {
+export function Adf({ node,issueKey,attachments }: { node: any;issueKey?:string;attachments?:Attachment[] }): ReactNode {
   if (!node) return null;
   if(typeof node==="string")return <div className="whitespace-pre-wrap">{node}</div>;
-  const kids = node.content?.map((c: any, i: number) => <Adf key={i} node={c} />);
+  const kids = node.content?.map((c: any, i: number) => <Adf key={i} node={c} issueKey={issueKey} attachments={attachments}/>);
   const a = node.attrs ?? {};
   switch (node.type) {
-    case "doc": return <div className="space-y-2 leading-relaxed">{kids}</div>;
+    case "doc": return <div className="flow-root space-y-2 leading-relaxed">{kids}</div>;
     case "paragraph": return <p>{kids}</p>;
     case "text": return (node.marks ?? []).reduce(mark, (node.marks ?? []).some((m: any) => m.type === "link" || m.type === "code") ? node.text : linkify(node.text));
     case "hardBreak": return <br />;
@@ -34,7 +36,8 @@ export function Adf({ node }: { node: any }): ReactNode {
     case "tableCell": return <td colSpan={Number(a.colspan)||1} rowSpan={Number(a.rowspan)||1} className="border border-line-2 p-1 align-top">{kids}</td>;
     case "mediaSingle":
     case "mediaGroup":
-    case "media": return <span className="block italic text-fg-3">[attachment]</span>;
+    case "media":
+    case "mediaInline": return <MediaView node={node} issueKey={issueKey} attachments={attachments}/>;
     default: return kids?.length?<>{kids}</>:<span className="text-fg-3">[{node.type} content preserved]</span>;
   }
 }

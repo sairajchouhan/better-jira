@@ -1,3 +1,5 @@
+import {localFileBlob} from './media-types';
+import {validMediaEdits} from "./media-edits";
 import type { Full, Issue } from "./store";
 
 export type Snapshot={issue?:Issue;full?:Full;issueFields?:string[];fullFields?:string[]};
@@ -7,7 +9,7 @@ export type LocalState={version:1;sequence:number;changes:LocalChange[];undo:Loc
 export type LocalLoad={state:LocalState;recovered:boolean;readOnly:boolean;missingFiles:number};
 const object=(value:unknown):value is Record<string,any>=>!!value&&typeof value==="object"&&!Array.isArray(value);
 const strings=(value:unknown):value is string[]=>Array.isArray(value)&&value.every(v=>typeof v==="string");
-const issueFields=new Set(["key","board","summary","status","type","priority","assignee","labels","parent","rank","comments","updated","resolved","created","creator","due","project","description","links","relations","milestones","prCount","statusSince","started","watchers","watchersComplete","estimate","projectLead","attachments","reactions","descriptionHistory"]);
+const issueFields=new Set(["key","board","summary","status","type","priority","assignee","labels","parent","rank","comments","updated","resolved","created","creator","due","project","description","links","relations","milestones","prCount","statusSince","started","watchers","watchersComplete","estimate","projectLead","attachments","reactions","mediaEdits","descriptionHistory"]);
 const user=(v:unknown)=>v===null||object(v)&&typeof v.id==="string"&&typeof v.name==="string";
 const optionalArray=(value:unknown,valid:(v:any)=>boolean)=>value===undefined||Array.isArray(value)&&value.every(valid);
 function document(value:unknown,depth=0):boolean {
@@ -16,6 +18,7 @@ function document(value:unknown,depth=0):boolean {
 }
 const isIssue=(v:unknown,key:string):v is Issue=>object(v)&&v.key===key&&Number.isFinite(v.board)&&typeof v.summary==="string"&&typeof v.status==="string"&&strings(v.labels)&&typeof v.updated==="string"&&Number.isFinite(v.comments)&&user(v.assignee)
   &&["type","priority","parent","rank","description","created","statusSince","started"].every(k=>v[k]===undefined||typeof v[k]==="string")
+  &&validMediaEdits(v.mediaEdits)
   &&optionalArray(v.reactions,r=>typeof r==="string")&&optionalArray(v.links,r=>typeof r==="string")
   &&optionalArray(v.attachments,a=>object(a)&&typeof a.id==="string"&&typeof a.name==="string"&&typeof a.type==="string"&&Number.isFinite(a.size))
   &&optionalArray(v.relations,r=>object(r)&&typeof r.key==="string"&&typeof r.kind==="string")
@@ -87,25 +90,25 @@ export class LocalDatabase {
       store.put({...state,revision:revision+1},"workspace");await done;this.revision=revision+1;
     }catch(error){try{tx.abort();}catch{}await done.catch(()=>{});throw error;}
   }
-  async addFile(file:File):Promise<NonNullable<Issue["attachments"]>[number]> {
-    const id=crypto.randomUUID(),tx=this.db.transaction("files","readwrite"),done=completed(tx);
-    tx.objectStore("files").put(file,id);await done;
-    const url=URL.createObjectURL(file);this.urls.set(id,url);
-    return {id,name:file.name,url,type:file.type,size:file.size};
+  async addFiles(files:File[]):Promise<NonNullable<Issue["attachments"]>> {
+    if(!this.writable)throw new Error("Local storage is read-only");
+    const entries=files.map(file=>({file,id:crypto.randomUUID()})),tx=this.db.transaction("files","readwrite"),done=completed(tx);
+    try{for(const {file,id} of entries)tx.objectStore("files").put(file,id);await done;}
+    catch(error){try{tx.abort();}catch{}await done.catch(()=>{});throw error;}
+    return entries.map(({file,id})=>{const url=URL.createObjectURL(localFileBlob(file));this.urls.set(id,url);return {id,name:file.name,url,type:file.type,size:file.size};});
   }
+  async addFile(file:File):Promise<NonNullable<Issue["attachments"]>[number]> {return (await this.addFiles([file]))[0]!;}
   async fileURL(id:string):Promise<string|undefined> {
     const cached=this.urls.get(id);if(cached)return cached;
     const tx=this.db.transaction("files","readonly"),done=completed(tx),[file]=await Promise.all([request(tx.objectStore("files").get(id)),done]);
     if(!(file instanceof Blob))return;
-    const url=URL.createObjectURL(file);this.urls.set(id,url);return url;
+    const url=URL.createObjectURL(localFileBlob(file));this.urls.set(id,url);return url;
   }
   async recoveryCopies():Promise<unknown[]> {const tx=this.db.transaction("recovery","readonly"),done=completed(tx),[rows]=await Promise.all([request(tx.objectStore("recovery").getAll()),done]);return rows;}
-  async exportFiles():Promise<{id:string;type:string;data:string}[]> {
+  async fileBlobs():Promise<{id:string;blob:Blob}[]> {
     const tx=this.db.transaction("files","readonly"),done=completed(tx),store=tx.objectStore("files");
     const [keys,files]=await Promise.all([request(store.getAllKeys()),request(store.getAll()),done]);
-    const out:{id:string;type:string;data:string}[]=[];
-    for(let i=0;i<files.length;i++)if(files[i] instanceof Blob){const blob=files[i] as Blob,bytes=new Uint8Array(await blob.arrayBuffer());let text="";for(let j=0;j<bytes.length;j+=32768)text+=String.fromCharCode(...bytes.subarray(j,j+32768));out.push({id:String(keys[i]),type:blob.type,data:btoa(text)});}
-    return out;
+    return files.flatMap((blob,index)=>blob instanceof Blob?[{id:String(keys[index]),blob}]:[]);
   }
   close(){for(const url of this.urls.values())URL.revokeObjectURL(url);this.urls.clear();this.db.close();}
 }

@@ -39,7 +39,7 @@ async function start() {
 }
 export function stop() { started = undefined; ws?.close(); browser?.kill(); server?.kill(); try { rmSync(profile, { recursive: true, force: true }); } catch {} }
 
-const KEYS: Record<string, [string, number, string?]> = { Enter: ["Enter", 13, "\r"], Escape: ["Escape", 27], Tab: ["Tab", 9], Backspace: ["Backspace", 8], ArrowUp: ["ArrowUp", 38], ArrowDown: ["ArrowDown", 40], ArrowLeft: ["ArrowLeft", 37], ArrowRight: ["ArrowRight", 39], End: ["End", 35], Home: ["Home", 36], " ": ["Space", 32, " "] };
+const KEYS: Record<string, [string, number, string?]> = { Enter: ["Enter", 13, "\r"], Escape: ["Escape", 27], Tab: ["Tab", 9], Backspace: ["Backspace", 8], Delete: ["Delete", 46], ArrowUp: ["ArrowUp", 38], ArrowDown: ["ArrowDown", 40], ArrowLeft: ["ArrowLeft", 37], ArrowRight: ["ArrowRight", 39], End: ["End", 35], Home: ["Home", 36], " ": ["Space", 32, " "] };
 const MODS: Record<string, number> = { alt: 1, ctrl: 2, meta: 4, shift: 8 };
 
 export type Page = Awaited<ReturnType<typeof open>>;
@@ -65,12 +65,14 @@ export async function open(path = "", { width = 1440, height = 900, setup = "" }
     throw new Error(`Timed out waiting for: ${expression} (last: ${last instanceof Error ? last.message : JSON.stringify(last)})`);
   };
   const center = async (selector: string) => {
-    const r = await waitFor<{ x: number; y: number }>(`(()=>{const n=${q(selector)};if(!n)return null;n.scrollIntoView({block:"nearest",inline:"nearest"});const r=n.getBoundingClientRect();return r.width?{x:r.x+r.width/2,y:r.y+r.height/2}:null})()`);
+    const r = await waitFor<{ x: number; y: number }>(`(()=>{const n=${q(selector)};if(!n)return null;n.scrollIntoView({block:"center",inline:"nearest"});const r=n.getBoundingClientRect();return r.width?{x:r.x+r.width/2,y:r.y+r.height/2}:null})()`);
     return r;
   };
   const mouse = (type: string, x: number, y: number, extra: object = {}) => cmd("Input.dispatchMouseEvent", { type, x, y, button: "left", buttons: type === "mouseReleased" ? 0 : 1, clickCount: 1, ...extra });
+  const ownedEvents:((message:any)=>void)[]=[];
   const page = {
-    eval: evaluate, waitFor, cmd,
+    onEvent(method:string,listener:(params:any)=>void){const listen=(message:any)=>{if(message.sessionId===sessionId&&message.method===method)listener(message.params);};events.push(listen);ownedEvents.push(listen);return()=>{const i=events.indexOf(listen);if(i>=0)events.splice(i,1);};},
+    browserContextId, eval: evaluate, waitFor, cmd,
     async goto(p = path) {
       await cmd("Page.navigate", { url: APP + p.replace(/^\//, "") });
       await waitFor(`document.readyState==="complete"&&!!document.querySelector("[data-key], [role=alert]")`, 15000);
@@ -80,7 +82,7 @@ export async function open(path = "", { width = 1440, height = 900, setup = "" }
       const modifiers = mods.reduce((m, k) => m | (MODS[k] ?? 0), 0);
       const [code, vk, named] = KEYS[key] ?? [/^\d$/.test(key) ? `Digit${key}` : `Key${key.toUpperCase()}`, key.toUpperCase().charCodeAt(0)];
       const text = modifiers & (MODS.meta! | MODS.ctrl!) ? undefined : named ?? (key.length === 1 ? (modifiers & MODS.shift! ? key.toUpperCase() : key) : undefined);
-      await cmd("Input.dispatchKeyEvent", { type: text ? "keyDown" : "rawKeyDown", key, code, windowsVirtualKeyCode: vk, modifiers, text, unmodifiedText: text });
+      await cmd("Input.dispatchKeyEvent", { type: text ? "keyDown" : "rawKeyDown", key, code, windowsVirtualKeyCode: vk, modifiers, text, unmodifiedText: text, ...(modifiers & MODS.meta! && key.toLowerCase()==="a" ? {commands:["selectAll"]} : {}) });
       await cmd("Input.dispatchKeyEvent", { type: "keyUp", key, code, windowsVirtualKeyCode: vk, modifiers });
       await Bun.sleep(60);
     },
@@ -90,7 +92,11 @@ export async function open(path = "", { width = 1440, height = 900, setup = "" }
       await cmd("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
       await mouse("mousePressed", x, y); await mouse("mouseReleased", x, y); await Bun.sleep(80);
     },
-    async click(selector: string) { const { x, y } = await center(selector); await page.clickAt(x, y); },
+    async click(selector: string) {
+      const first=await center(selector);await cmd("Input.dispatchMouseEvent",{type:"mouseMoved",...first});
+      const {x,y}=await waitFor<{x:number;y:number}>(`(async()=>{const n=${q(selector)};if(!n)return null;n.scrollIntoView({block:"center",inline:"nearest"});const a=n.getBoundingClientRect();await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);const b=n.getBoundingClientRect(),x=b.x+b.width/2,y=b.y+b.height/2,hit=document.elementFromPoint(x,y);return b.width&&Math.abs(a.x-b.x)<.5&&Math.abs(a.y-b.y)<.5&&n.contains(hit)?{x,y}:null})()`);
+      await page.clickAt(x,y);
+    },
     async hover(selector: string) { const { x, y } = await center(selector); await cmd("Input.dispatchMouseEvent", { type: "mouseMoved", x, y }); await Bun.sleep(60); },
     async drag(selector: string, x: number, y: number) {
       const from = await center(selector);
@@ -110,7 +116,7 @@ export async function open(path = "", { width = 1440, height = 900, setup = "" }
     },
     rect: (selector: string) => waitFor<DOMRect>(`(()=>{const n=${q(selector)};return n&&n.getBoundingClientRect().toJSON()})()`),
     active: () => evaluate<string>(`(()=>{const a=document.activeElement;return a?(a.getAttribute("aria-label")??a.getAttribute("placeholder")??(a.id||a.tagName)):""})()`),
-    close: () => send("Target.disposeBrowserContext", { browserContextId }),
+    close: () => {for(const listen of ownedEvents){const i=events.indexOf(listen);if(i>=0)events.splice(i,1);}return send("Target.disposeBrowserContext", { browserContextId });},
   };
   await page.goto(path);
   return page;

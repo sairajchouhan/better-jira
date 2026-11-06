@@ -1,10 +1,12 @@
 import { useSyncExternalStore } from "react";
 import { adfToText, textToAdf } from "./adf";
 import { defaultPreferences, parsePreferences, type Display, type Grouping, type Preferences } from "./view-model";
-import { normalizeDocument, type AdfDocument } from "./document";
+import { documentHasMedia, normalizeDocument, type AdfDocument } from "./document";
 import { emptyLocalState,LocalDatabase,type LocalState,type Snapshot,type LocalEdit } from "./local-data";
 import { createActor, fromPromise, waitFor } from "xstate";
 import { appMachine, detailMachine, inspector, storageMachine, syncMachine, uiMachine, type UiContext } from "./machines";
+
+import type {MediaEdit} from "./media-edits";
 
 export type User = { id: string; name: string; avatar?: string };
 export type Issue = {
@@ -38,6 +40,7 @@ export type Issue = {
   projectLead?: User | null;
   attachments?: {id:string;name:string;url:string;type:string;size:number;missing?:boolean}[];
   reactions?: string[];
+  mediaEdits?:Record<string,MediaEdit>;
   descriptionHistory?: {text:string;document?:AdfDocument;at:string}[];
 };
 export type Status = { id: string; name: string; category: string };
@@ -45,7 +48,7 @@ export type Column = { name: string; statuses: Status[] };
 export type Board = { id: number; name: string; columns: Column[] };
 /** Raw Jira issue: { key, fields: { description, comment, reporter, created, ... } } */
 export type Full = { key: string; fields: any };
-export type Overlay = null | "palette" | "assign" | "status" | "create" | "priority" | "labels" | "project" | "milestone" | "due" | "options" | "relations" | "shortcuts" | "help" | "search" | "favorites" | "views" | "boards";
+export type Overlay = null | "palette" | "assign" | "status" | "create" | "priority" | "labels" | "project" | "milestone" | "due" | "options" | "relations" | "shortcuts" | "help" | "search" | "favorites" | "views" | "boards" | "subscribers";
 export type IssueDraft = Partial<Pick<Issue,"status"|"assignee"|"priority"|"labels"|"project"|"milestones"|"due"|"parent"|"type"|"attachments">> & {description?:string;descriptionDoc?:AdfDocument};
 export type View = "side" | "page";
 export type SavedView={id:string;board:number;name:string;preferences:Preferences;mine:boolean};
@@ -344,11 +347,19 @@ export async function retryLocalStorage() {
   if(storage.getSnapshot().matches("blocked")){app.send({type:"reload"});await waitFor(app,settled);}
   else{queueSave();await flushLocalChanges();}
 }
-export async function addLocalFile(file:File) {if(!database||!state.canEdit)throw new Error("Local file storage is unavailable. Retry local storage first.");return database.addFile(file);}
+export async function addLocalFiles(files:File[]) {if(!database||!state.canEdit)throw new Error("Local file storage is unavailable. Retry local storage first.");return database.addFiles(files);}
+export async function addLocalFile(file:File) {return (await addLocalFiles([file]))[0]!;}
+export async function addIssueFiles(key:string,files:File[]) {
+  if(!database||!state.canEdit)throw new Error("Local file storage is unavailable. Retry local storage first.");
+  const saved=await database.addFiles(files),issue=state.issues.get(key);
+  if(issue)record(key,`attached files to ${key}`,()=>patchIssue(key,{attachments:[...(issue.attachments??[]),...saved]}));
+  return saved;
+}
 export async function downloadLocalBackup() {
   try {
-    const data={version:1,namespace:state.namespace,state:localSnapshot(),recovery:await database?.recoveryCopies(),files:await database?.exportFiles()};
-    const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"})),a=document.createElement("a");a.href=url;a.download="better-jira-local-backup.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    const {backupArchive}=await import('./backup-archive');
+    const data={version:2,namespace:state.namespace,state:localSnapshot(),recovery:await database?.recoveryCopies()};
+    const url=URL.createObjectURL(backupArchive(data,await database?.fileBlobs()??[])),a=document.createElement("a");a.href=url;a.download="better-jira-local-backup.tar";a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);
   }catch{set({perf:"Could not export the local backup"});}
 }
 export function jiraIssueURL(key:string) {return `${state.site}/browse/${encodeURIComponent(key)}`;}
@@ -508,6 +519,9 @@ export const actions = {
     if (summary.trim() && summary !== state.issues.get(key)?.summary)
       timed(`edit ${key} summary`, () => record(key,`rename ${key}`,()=>patchIssue(key, { summary: summary.trim() })));
   },
+  mediaEdit(key:string,id:string,edit:MediaEdit){
+    const issue=state.issues.get(key);if(issue)record(key,`image edit on ${key}`,()=>patchIssue(key,{mediaEdits:{...issue.mediaEdits,[id]:edit}}));
+  },
   description(key: string, value: string|AdfDocument) {
     const previous=normalizeDocument(state.full.get(key)?.fields.description);
     const document=normalizeDocument(value);
@@ -522,7 +536,7 @@ export const actions = {
   },
   comment(key: string, value: string|AdfDocument):boolean {
     const body=typeof value==="string"?textToAdf(value):normalizeDocument(value);
-    if (!adfToText(body).trim()||!state.full.has(key)||!state.canEdit) return false;
+    if ((!adfToText(body).trim()&&!documentHasMedia(body))||!state.full.has(key)||!state.canEdit) return false;
     timed(`comment on ${key}`, () => record(key,`comment on ${key}`,() => {
       const c = {
         id: `local-${++localSeq}`,
@@ -538,7 +552,7 @@ export const actions = {
   /** Only local comments can change: Jira writes are disabled, so remote ones are read-only. */
   editComment(key:string,id:string,value:AdfDocument) {
     const body=normalizeDocument(value);
-    if(!id.startsWith("local-")||!adfToText(body).trim())return;
+    if(!id.startsWith("local-")||(!adfToText(body).trim()&&!documentHasMedia(body)))return;
     record(key,`edit comment on ${key}`,()=>patchFields(key,f=>({comment:{...f.comment,comments:f.comment.comments.map((c:any)=>c.id===id?{...c,body,updated:now()}:c)}})));
   },
   deleteComment(key:string,id:string) {

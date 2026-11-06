@@ -128,9 +128,9 @@ test("Linear preview, open, layout, sidebar and display shortcuts preserve focus
     await p.key("b", "meta");
     await p.waitFor(`!!document.querySelector('[data-layout=board]')`);
     await p.key("[");
-    await p.waitFor(`!document.querySelector('nav')`);
+    await p.waitFor(`!document.querySelector('nav[aria-label="Main navigation"]')`);
     await p.key("[");
-    await p.waitFor(`!!document.querySelector('nav')`);
+    await p.waitFor(`!!document.querySelector('nav[aria-label="Main navigation"]')`);
     await p.key("v", "shift");
     await p.waitFor(`!!document.querySelector('${dialog("Display options")}')`);
     await p.key("Escape");

@@ -5,15 +5,16 @@ import { Command } from "cmdk";
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Adf, adfToText } from "./adf";
 import { normalizeDocument, type AdfDocument } from "./document";
+import {commentCount} from './media-edits';
 import { Icon, Label, PriorityIcon, StatusIcon, TypeDot } from "./icons";
 import {
-  ME, actions, boardOf, get, load, loadFull, navigate, set, timed, ui, useStore, dismissRecoveryNotice,
+  ME, actions, addIssueFiles, boardOf, get, load, loadFull, navigate, set, timed, ui, useStore, dismissRecoveryNotice,
   openSavedView, beginCreate, changeDisplay, changePreferences, downloadLocalBackup, flushLocalChanges, issueURL, isLocalIssue, retryLocalStorage, toggleFavorite, undoEdit, redoEdit, usePreferences, type Board, type Column, type Issue, type User,
 } from "./store";
 
 import { BoardControls, FilterChips } from "./view-controls";
 import { buckets, columnInScope, draftForGroup, rankBetween, listRows, navigationIssues, selectIssues, statusDuration, type Bucket, type Display, type Grouping, type Property } from "./view-model";
-import { BoardDetails, CreateIssue, Favorites, GroupMenu, IssueOptions, Modal, PersonalIssueDetails, PropertyPicker, Relations, SavedViews, SaveViewButton } from "./personal-controls";
+import { BoardDetails, CreateIssue, Favorites, GroupMenu, IssueOptions, Modal, PersonalIssueDetails, PropertyPicker, Relations, SavedViews, SaveViewButton, Subscribers } from "./personal-controls";
 import { RichEditor } from "./rich-editor-loader";
 import {HelpMenu,ShortcutHelp,runShortcut,shortcutLabel,shortcuts,useLinearHotkeys} from "./shortcuts";
 import { issueAnchor } from "./menu-surface";
@@ -70,6 +71,7 @@ export function App() {
       {current && (overlay === "priority" || overlay === "labels" || overlay === "project" || overlay === "milestone" || overlay === "due") && <PropertyPicker issue={current} field={overlay}/>}
       {open && overlay === "options" && <IssueOptions issue={open}/>}
       {current && overlay === "relations" && <Relations issue={current}/>}
+      {current && overlay === "subscribers" && <Subscribers issue={current}/>}
     </div>
   );
 }
@@ -127,7 +129,7 @@ function BoardView({ board, active, shown, selected }: { board: Board; active: b
         </div>
       </div>)}
     </div>{d.rows==="none"&&hidden.length>0&&<HiddenColumns columns={hidden} open={hiddenOpen} toggle={()=>setHiddenOpen(!hiddenOpen)} reveal={reveal}/>}</div>}
-    {hidden.length>0&&d.layout==="board"&&d.rows==="none"?null:hidden.length>0&&<details open className="shrink-0 border-t border-line px-4 py-2 text-[12px] text-fg-3"><summary className="cursor-pointer">Hidden {d.layout==="board"?"columns":"groups"}</summary><div className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-y-auto">{hidden.map(c=><button key={c.id} aria-label={`Show ${c.name}`} className="flex h-8 items-center gap-2 rounded-lg bg-card px-3 text-fg-2 hover:bg-hover" onClick={()=>reveal(c.id)}>{c.status&&<StatusIcon status={c.status}/>}<span>{c.name}</span><span className="text-fg-3">{c.issues.length}</span></button>)}</div></details>}
+    {hidden.length>0&&d.layout==="board"&&d.rows==="none"?null:hidden.length>0&&<details open className="shrink-0 border-t border-line px-4 py-2 text-[12px] text-fg-3"><summary className="cursor-default">Hidden {d.layout==="board"?"columns":"groups"}</summary><div className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-y-auto">{hidden.map(c=><button key={c.id} aria-label={`Show ${c.name}`} className="flex h-8 items-center gap-2 rounded-lg bg-card px-3 text-fg-2 hover:bg-hover" onClick={()=>reveal(c.id)}>{c.status&&<StatusIcon status={c.status}/>}<span>{c.name}</span><span className="text-fg-3">{c.issues.length}</span></button>)}</div></details>}
   </div>{active&&shown&&details&&!panel&&<BoardDetails board={board} issues={visible}/>}</div>;
 }
 
@@ -198,7 +200,7 @@ function Sidebar({ boards }: { boards: Board[] }) {
   const hidden=useStore(s=>s.sidebarHidden);
   if(hidden)return null;
   return (
-    <nav className="flex w-[244px] shrink-0 flex-col gap-px overflow-y-auto p-2 font-medium max-md:hidden">
+    <nav aria-label="Main navigation" className="flex w-[244px] shrink-0 flex-col gap-px overflow-y-auto p-2 font-medium max-md:hidden">
       <div className="mb-1 flex h-11 items-center gap-2 px-2 text-fg">
         <span className="grid size-[18px] place-items-center rounded-[5px] bg-accent text-[10px] font-semibold text-white">bj</span>
         better-jira
@@ -269,6 +271,29 @@ const SideItem = ({ active, onClick, children }: { active?: boolean; onClick: ()
 const PILL = "flex h-7 shrink-0 items-center gap-1.5 rounded-full border-[0.5px] border-transparent px-2.5 text-[12px] font-medium";
 const CIRCLE = "flex h-7 min-w-7 shrink-0 items-center rounded-full bg-btn text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2";
 
+function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue }) {
+  const openAllIssues = () => {
+    ui.send({type:"mine.set",mine:false});
+    ui.send({type:"query.set",query:""});
+    set({details:false,findInView:false});
+    changePreferences(board.id,{scope:"all"});
+    navigate({board:board.id,selected:null,panel:false});
+  };
+  const crumb = "flex h-7 min-w-0 items-center gap-2 rounded px-1 hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-accent";
+  return <nav aria-label="Breadcrumb" className="flex min-w-0 items-center text-[13px] font-medium text-fg-2">
+    <button aria-label={board.name} title={board.name} onClick={openAllIssues} className={crumb}>
+      <span aria-hidden="true" className="grid size-4 shrink-0 place-items-center rounded-[4px] bg-accent text-[9px] font-semibold text-white">{board.name[0]}</span>
+      <span className="truncate">{board.name}</span>
+    </button>
+    <span aria-hidden="true" className="mx-1 text-fg-3">›</span>
+    <button aria-label="Issues" aria-current={issue?undefined:"page"} onClick={openAllIssues} className={`${crumb} shrink-0`}>Issues</button>
+    {issue && <>
+      <span aria-hidden="true" className="mx-1 text-fg-3">›</span>
+      <a aria-current="page" className={`${crumb} shrink-0 tracking-[-0.24px]`} href={issueURL(issue)} target="_blank" rel="noreferrer"><TypeDot type={issue.type}/>{issue.key}</a>
+    </>}
+  </nav>;
+}
+
 function BoardHeader() {
   const board = useStore((s) => s.boards.find((b) => b.id === s.board));
   const query = useStore((s) => s.query);
@@ -281,11 +306,8 @@ function BoardHeader() {
   return (
     <header className="shrink-0">
       <div className="flex h-11 items-center justify-between border-b-[0.5px] border-frame px-2">
-        <div className="flex items-center px-2 text-[13px] font-medium text-fg-2">
-          <span className="mr-2.5 grid size-4 place-items-center rounded-[4px] bg-accent text-[9px] font-semibold text-white">{board?.name[0]}</span>
-          <span className="truncate">{board?.name}</span>
-          <span className="mx-2 -mt-0.5 text-fg-3">›</span>
-          <span>Issues</span>
+        <div className="flex min-w-0 items-center px-1 text-[13px] font-medium text-fg-2">
+          <BoardBreadcrumbs board={board!}/>
           <button role="switch" aria-label={favorite?"Remove from favorites":"Add to favorites"} aria-checked={favorite} onClick={()=>toggleFavorite(favoriteId)} className={`ml-2 grid size-7 place-items-center rounded-full hover:bg-hover ${favorite?"text-[#f2c94c]":"text-fg-3 hover:text-fg-2"}`}><Icon name={favorite?"starred":"star"} size={16}/></button>
         </div>
         <button aria-label="Search issues" onClick={()=>runShortcut("search")} className={`${COL_BTN} ml-auto md:hidden`}><Icon name="search"/></button>
@@ -354,7 +376,7 @@ const Card = memo(function Card({issue,selected,display:d,list=false,depth=0}:{i
     {show("project")&&issue.project&&<span title={issue.project.name} className={CHIP}><Icon name="layers"/><span className="ml-1.5 truncate">{issue.project.name}</span></span>}
     {show("labels")&&issue.labels.slice(0,list?1:2).map(l=><Label key={l} name={l}/>)}
     {show("labels")&&issue.labels.length>(list?1:2)&&<span title={issue.labels.join(", ")} className={CHIP}>+{issue.labels.length-(list?1:2)}</span>}
-    {show("comments")&&issue.comments>0&&<span className={CHIP}><Icon name="comment"/><span className="ml-1.5">{issue.comments}</span></span>}
+    {show("comments")&&commentCount(issue)>0&&<span className={CHIP} aria-label={`${commentCount(issue)} comments`}><Icon name="comment"/><span className="ml-1.5">{commentCount(issue)}</span></span>}
     {show("links")&&!!issue.links?.length&&<span title={issue.links.join("\n")} className={CHIP}><Icon name="external"/><span className="ml-1.5">{issue.links.length}</span></span>}
     {show("creator")&&issue.creator&&<span title={`Created by ${issue.creator.name}`}><Avatar user={issue.creator} size={18}/></span>}
     {show("due")&&issue.due&&<span className={CHIP}><Icon name="calendar"/><span className="ml-1.5">{issue.due}</span></span>}
@@ -368,7 +390,7 @@ const Card = memo(function Card({issue,selected,display:d,list=false,depth=0}:{i
       onDragStart={e=>e.dataTransfer.setData("text/plain",issue.key)}
       onKeyDown={e=>{if(e.key === "Enter"||e.key === " "){e.preventDefault();e.stopPropagation();navigate({selected:issue.key,panel:true,view:e.key==="Enter"?"page":"side"});}}}
       onClick={()=>timed(`open ${issue.key}`,()=>navigate({selected:issue.key,panel:true}))}
-      className={list?`flex min-h-11 cursor-pointer items-center gap-3 border-b border-line px-5 outline-none focus-visible:ring-1 focus-visible:ring-accent ${selected?"bg-hover shadow-[inset_2px_0_0_var(--accent)]":"hover:bg-hover"}`:`relative flex min-h-[42px] cursor-pointer flex-col rounded-lg p-2 shadow-(--card-shadow) outline-none focus-visible:ring-1 focus-visible:ring-accent ${selected?"bg-card-hover ring-1 ring-accent":"bg-card hover:bg-card-hover"}`}
+      className={list?`flex min-h-11 cursor-default items-center gap-3 border-b border-line px-5 outline-none focus-visible:ring-1 focus-visible:ring-accent ${selected?"bg-hover shadow-[inset_2px_0_0_var(--accent)]":"hover:bg-hover"}`:`relative flex min-h-[42px] cursor-default flex-col rounded-lg p-2 shadow-(--card-shadow) outline-none focus-visible:ring-1 focus-visible:ring-accent ${selected?"bg-card-hover ring-1 ring-accent":"bg-card hover:bg-card-hover"}`}
       style={list&&depth?{paddingLeft:20+depth*20}:undefined}>
       {list?<>
         {show("id")&&<span className="w-[85px] shrink-0 text-[12px] text-fg-3 tabular-nums">{depth>0&&"↳ "}{issue.key}</span>}
@@ -420,14 +442,15 @@ function IssueView({ issue, page }: { issue: Issue; page: boolean }) {
   const favorite=useStore(s=>s.favorites.includes(issue.key));
   const propertiesHidden=useStore(s=>s.issuePropertiesHidden);
   const bar = (
-    <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-3 text-[12px] text-fg-3">
-      <TypeDot type={issue.type} />
-      {page && <span className="truncate">{boardOf(issue.key)?.name} ›</span>}
-      <a className="tracking-[-0.24px] text-fg-2 hover:text-fg" href={issueURL(issue)} target="_blank" rel="noreferrer">{issue.key}</a>
+    <div className="issue-detail-header flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-3 text-[12px] text-fg-3">
+      {page ? <BoardBreadcrumbs board={boardOf(issue.key)!} issue={issue}/> : <>
+        <TypeDot type={issue.type} />
+        <a className="tracking-[-0.24px] text-fg-2 hover:text-fg" href={issueURL(issue)} target="_blank" rel="noreferrer">{issue.key}</a>
+      </>}
       {issue.parent && <span className="truncate">· parent {issue.parent}</span>}
-      <span className="flex-1" />
       <button role="switch" aria-label={favorite?"Remove issue from favorites":"Add issue to favorites"} aria-checked={favorite} onClick={()=>toggleFavorite(issue.key)} className={`${ICON_BTN} ${favorite?"text-[#f2c94c]!":""}`}><Icon name={favorite?"starred":"star"} size={16}/></button>
       <button id="issue-options" aria-label="Issue options" onClick={()=>ui.send({type:"overlay.open",overlay:"options"})} className={ICON_BTN}><Icon name="dots"/></button>
+      <span className="flex-1" />
       <Stepper issueKey={issue.key} />
       <button title={page ? "Open in side panel" : "Open as full page"} onClick={() => navigate({ view: page ? "side" : "page" })} className={ICON_BTN}>
         <Icon name={page ? "side" : "expand"} />
@@ -436,38 +459,20 @@ function IssueView({ issue, page }: { issue: Issue; page: boolean }) {
     </div>
   );
 
-  if (!page)
-    return (
-      <aside className="flex w-[520px] max-w-full shrink-0 flex-col border-l border-line bg-panel max-md:absolute max-md:inset-0 max-md:z-20 max-md:w-full">
-        {bar}
-        <div className="flex-1 overflow-y-auto px-5 py-4">
-          <Title issue={issue} className="text-[17px]" />
-          {!propertiesHidden&&<div className="mt-3"><Properties issue={issue} /></div>}
-          <Description issue={issue} f={f} />
-          <PersonalIssueDetails issue={issue}/>
-          <Activity issue={issue} f={f} />
-        </div>
-      </aside>
-    );
-  return (
-    <div className="flex min-w-0 flex-1 flex-col">
-      {bar}
-      <div className="flex min-h-0 flex-1 max-md:flex-col max-md:overflow-y-auto">
-        <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-[760px] px-10 py-8">
-            <Title issue={issue} className="text-[24px]" />
-            <Description issue={issue} f={f} />
-            <PersonalIssueDetails issue={issue}/>
-            <Activity issue={issue} f={f} />
-          </div>
-        </div>
-        {!propertiesHidden&&<div className="w-[300px] shrink-0 overflow-y-auto border-l border-line p-3 max-md:w-full"><Properties issue={issue} /></div>}
-      </div>
+  const body=<>{bar}<div className="issue-detail-body">
+    <div role="toolbar" aria-label="Copy issue" className="issue-copy-toolbar">
+      {([['copy-url','Copy issue URL','link'],['copy-id','Copy issue ID','copy'],['copy-branch','Copy git branch name','branch']] as const).map(([action,label,icon])=><button key={action} aria-label={label} title={`${label} (${shortcutLabel(action)})`} onClick={()=>runShortcut(action)} className={ICON_BTN}><Icon name={icon}/></button>)}
     </div>
-  );
+    <div className="issue-detail-grid" data-properties-hidden={propertiesHidden||undefined}>
+      <div className="issue-detail-title"><Title issue={issue} className="text-[24px]" /></div>
+      {!propertiesHidden&&<div className="issue-detail-properties"><Properties issue={issue}/></div>}
+      <div className="issue-detail-content"><Description issue={issue} f={f}/><PersonalIssueDetails issue={issue}/><Activity issue={issue} f={f}/></div>
+    </div>
+  </div></>;
+  return page?<div className="issue-detail flex min-w-0 flex-1 flex-col" data-mode="page">{body}</div>:<aside className="issue-detail flex w-[520px] max-w-full shrink-0 flex-col border-l border-line bg-panel max-md:absolute max-md:inset-0 max-md:z-20 max-md:w-full" data-mode="side">{body}</aside>;
 }
 
-/** ↑ ↓ (or j / k) step through the board's visible issues without leaving the issue, like Linear (no "n / total"). */
+/** Linear shows position, then next and previous, within the current visible view. */
 function Stepper({ issueKey }: { issueKey: string }) {
   useStore((s) => s.issues); // re-render when the list changes; nav.cols is rebuilt by the board in the same render
   useStore((s) => s.mine);
@@ -477,8 +482,9 @@ function Stepper({ issueKey }: { issueKey: string }) {
   const i = flat.findIndex((x) => x.key === issueKey);
   return (
     <div className="mr-1 flex items-center gap-0.5">
-      <button disabled={i<=0} title="Previous (K / ↑)" onClick={() => runShortcut("up")} className={`${ICON_BTN} disabled:opacity-30`}><Icon name="up" /></button>
+      {i>=0&&<span aria-label="Issue position" className="mr-2 whitespace-nowrap tabular-nums">{i+1} / {flat.length}</span>}
       <button disabled={i<0||i>=flat.length-1} title="Next (J / ↓)" onClick={() => runShortcut("down")} className={`${ICON_BTN} disabled:opacity-30`}><Icon name="down" /></button>
+      <button disabled={i<=0} title="Previous (K / ↑)" onClick={() => runShortcut("up")} className={`${ICON_BTN} disabled:opacity-30`}><Icon name="up" /></button>
     </div>
   );
 }
@@ -556,7 +562,7 @@ function Description({ issue, f }: { issue: Issue; f: any }) {
   return (
     <section className="mt-5 leading-[1.6] text-fg-2">
       {!f ? <p role="status" className="text-fg-4">{error?<>{error}. <button onClick={()=>void loadFull(issue.key)} className="text-accent">Retry</button></>:"Loading…"}</p>
-        : <RichEditor key={revision} id="description" inline initial={f.description} placeholder="Add description…"
+        : <RichEditor key={revision} id="description" inline initial={f.description} onFiles={files=>addIssueFiles(issue.key,files)} issueKey={issue.key} attachments={issue.attachments} placeholder="Add description…"
             onChange={doc=>autosave.send({type:"change",doc})}
             onBlur={()=>autosave.send({type:"flush"})}/>}
     </section>
@@ -565,32 +571,37 @@ function Description({ issue, f }: { issue: Issue; f: any }) {
 
 function Activity({ issue, f }: { issue: Issue; f: any }) {
   const [composer,setComposer]=useState(0),[editing,setEditing]=useState<string|null>(null);
+  const subscribed=issue.watchers?.some(u=>u.id===ME.id);
+  const draftKey=`better-jira:comment-draft:${get().namespace}:${issue.key}`;
+  const [draft]=useState(()=>{try{return normalizeDocument(JSON.parse(localStorage.getItem(draftKey)??'""'));}catch{return normalizeDocument('');}});
+  const timestamp=(date:string,id:string)=>{const url=new URL(location.href);url.hash=id;return <a href={url.href} title={new Date(date).toLocaleString()} className="hover:text-fg-2"><time dateTime={date}>{ago(date)}</time></a>;};
   if (!f) return null;
   return (
-    <section className="mt-8 border-t border-line pt-5">
-      <h3 className="mb-3 font-medium text-fg">Activity</h3>
+    <section className="issue-activity mt-8 border-t border-line pt-5">
+      <div className="mb-6 flex items-center gap-3"><h3 className="mr-auto text-[15px] font-semibold text-fg">Activity</h3><button aria-label={subscribed?'Unsubscribe from issue':'Subscribe to issue'} title={`${subscribed?'Unsubscribe':'Subscribe'} (${shortcutLabel('subscribe')})`} onClick={()=>runShortcut('subscribe')} className="text-[13px] text-fg-3 hover:text-fg">{subscribed?'Unsubscribe':'Subscribe'}</button><button id="issue-subscribers" aria-label="Change subscribers" title={`Change subscribers (${shortcutLabel('subscribers')})`} onClick={()=>ui.send({type:'overlay.open',overlay:'subscribers'})} className="flex min-w-6 items-center -space-x-1 rounded-full">{issue.watchers?.length?issue.watchers.slice(0,3).map(user=><Avatar key={user.id} user={user} size={20}/>):<Icon name="user"/>}</button></div>
       <ol className="space-y-3">
-        <li className="flex items-center gap-2 px-1 text-[12px] text-fg-3">
+        <li id="issue-created" className="flex flex-wrap items-center gap-1.5 px-1 text-[12px] text-fg-3">
           <Avatar user={author(f.reporter)} size={16} />
-          <span className="text-fg-2">{f.reporter?.displayName}</span> created the issue · {ago(f.created)}
+          <span>{f.reporter?.displayName} created ·</span> {timestamp(f.created,'issue-created')}
         </li>
+        {Object.entries(issue.mediaEdits??{}).flatMap(([mediaId,edit])=>(edit.comments??[]).map(c=><li key={c.id} id={`image-comment-${c.id}`} className="rounded-lg border border-line-2 bg-card px-3 py-2.5"><div className="text-[12px] text-fg-3">{c.author} · image comment · {ago(c.at)}</div><p className="mt-1.5">{c.text}</p><button className="mt-1 text-[12px] text-accent" onClick={()=>{const frame=document.querySelector<HTMLElement>(`[data-media-id="${CSS.escape(mediaId)}"]`);frame?.scrollIntoView({block:'center'});frame?.dispatchEvent(new Event('show-image-comments'));}}>View image</button></li>))}
         {f.comment.comments.map((c: any) => (
-          <li key={c.id} data-comment={c.id} className="rounded-lg border border-line-2 bg-card px-3 py-2.5">
+          <li key={c.id} id={`comment-${c.id}`} data-comment={c.id} className="rounded-lg border border-line-2 bg-card px-3 py-2.5">
             <div className="flex items-center gap-2 text-[12px]">
               <Avatar user={author(c.author)} size={18} />
               <span className="font-medium text-fg">{c.author?.displayName}</span>
-              <span className="text-fg-3">{ago(c.created)}{c.updated&&" · edited"}</span>
+              <span className="text-fg-3">{timestamp(c.created,`comment-${c.id}`)}{c.updated&&" · edited"}</span>
               {String(c.id).startsWith("local-")&&editing!==c.id&&<span className="ml-auto flex gap-1"><button aria-label="Edit comment" onClick={()=>setEditing(c.id)} className="rounded px-1.5 text-fg-3 hover:bg-hover hover:text-fg">Edit</button><button aria-label="Delete comment" onClick={()=>actions.deleteComment(issue.key,c.id)} className="rounded px-1.5 text-fg-3 hover:bg-hover hover:text-fg">Delete</button></span>}
             </div>
             <div className="mt-1.5 leading-[1.6] text-fg-2">{editing===c.id
-              ?<RichEditor id={`edit-${c.id}`} label="Edit comment" autoFocus initial={c.body} saveLabel="Save comment" onSave={doc=>{actions.editComment(issue.key,c.id,doc);setEditing(null);}} onCancel={()=>setEditing(null)}/>
-              :<Adf node={c.body} />}</div>
+              ?<RichEditor id={`edit-${c.id}`} onFiles={files=>addIssueFiles(issue.key,files)} issueKey={issue.key} attachments={issue.attachments} label="Edit comment" autoFocus initial={c.body} saveLabel="Save comment" onSave={doc=>{actions.editComment(issue.key,c.id,doc);setEditing(null);}} onCancel={()=>setEditing(null)}/>
+              :<Adf node={c.body} issueKey={issue.key} attachments={issue.attachments}/>}</div>
           </li>
         ))}
       </ol>
       <div className="mt-3">
         {/* A new key clears the box after sending; autoFocus keeps the caret in it. */}
-        <RichEditor key={composer} initial="" id="comment" label="Leave a comment…" placeholder="Leave a comment…" autoFocus={composer>0} saveLabel="Submit comment" hint="⌘↵ send" onSave={doc=>{if(actions.comment(issue.key,doc))setComposer(n=>n+1);}}/>
+        <RichEditor key={composer} initial={composer?'':draft} variant="comment" id="comment" issueKey={issue.key} attachments={issue.attachments} onFiles={files=>addIssueFiles(issue.key,files)} label="Leave a comment…" placeholder="Leave a comment…" autoFocus={composer>0} saveLabel="Submit comment" onChange={doc=>{try{localStorage.setItem(draftKey,JSON.stringify(doc));}catch{/* The open composer still retains its draft. */}}} onSave={doc=>{if(actions.comment(issue.key,doc)){try{localStorage.removeItem(draftKey);}catch{}setComposer(n=>n+1);}}}/>
       </div>
     </section>
   );
@@ -601,7 +612,7 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
 const MENU =
   "overflow-hidden rounded-xl border border-line-2 bg-card text-fg-2 shadow-[0_12px_40px_rgb(0_0_0/0.35)] " +
   "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[12px] [&_[cmdk-group-heading]]:text-fg-3 " +
-  "[&_[cmdk-item]]:flex [&_[cmdk-item]]:h-9 [&_[cmdk-item]]:cursor-pointer [&_[cmdk-item]]:items-center [&_[cmdk-item]]:gap-2.5 [&_[cmdk-item]]:rounded-md [&_[cmdk-item]]:px-2 " +
+  "[&_[cmdk-item]]:flex [&_[cmdk-item]]:h-9 [&_[cmdk-item]]:cursor-default [&_[cmdk-item]]:items-center [&_[cmdk-item]]:gap-2.5 [&_[cmdk-item]]:rounded-md [&_[cmdk-item]]:px-2 " +
   "[&_[cmdk-item][data-selected=true]]:bg-sel [&_[cmdk-item][data-selected=true]]:text-fg";
 const MENU_INPUT = "h-11 w-full border-b border-line bg-transparent px-3.5 text-fg outline-none placeholder:text-fg-4";
 const close = (e: React.MouseEvent) => e.target === e.currentTarget && ui.send({type:"overlay.close"});

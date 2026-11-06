@@ -1,5 +1,8 @@
 import { Database } from "bun:sqlite";
 import { jira } from "./jira";
+import {detailCache} from "./detail-cache";
+import { attachmentGateway, jiraAttachmentReader } from "./attachment-media";
+import { serverAuth } from "./server-config";
 import { pullRequestCount, statusDates, type History } from "./issue-properties";
 import { serverConfiguration } from "./server-config";
 
@@ -19,6 +22,8 @@ db.run(`CREATE TABLE IF NOT EXISTS issues (
 db.run("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)");
 db.run("CREATE TABLE IF NOT EXISTS issue_properties (key TEXT PRIMARY KEY, source_updated TEXT NOT NULL, synced INTEGER NOT NULL, data TEXT NOT NULL)");
 db.run("CREATE TABLE IF NOT EXISTS issue_details (key TEXT PRIMARY KEY, source_updated TEXT NOT NULL, data TEXT NOT NULL)");
+
+db.run("CREATE TABLE IF NOT EXISTS attachment_media (id TEXT PRIMARY KEY, media_id TEXT NOT NULL)");
 
 const getMeta = (k: string) => db.query<{ v: string }, [string]>("SELECT v FROM meta WHERE k = ?").get(k)?.v;
 const setMeta = (k: string, v: string) => db.query("INSERT OR REPLACE INTO meta VALUES (?, ?)").run(k, v);
@@ -168,29 +173,25 @@ export const boards = () => BOARDS.map((b) => JSON.parse(getMeta(`config:${b}`) 
 export const issues = () =>
   `[${db.query<{ slim: string }, []>("SELECT slim FROM issues").all().map((r) => r.slim).join(",")}]`;
 
-const pendingDetails=new Map<string,Promise<string|undefined>>();
-export function issue(key:string):Promise<string|undefined> {
-  const pending=pendingDetails.get(key);if(pending)return pending;
-  const request=readDetails(key).finally(()=>pendingDetails.delete(key));pendingDetails.set(key,request);return request;
-}
-async function readDetails(key:string):Promise<string|undefined> {
-  const base=db.query<{full:string;slim:string},[string]>("SELECT full, slim FROM issues WHERE key = ?").get(key);
-  if(!base)return;
-  const updated=JSON.parse(base.slim).updated;
-  const cached=db.query<{source_updated:string;data:string},[string]>("SELECT source_updated,data FROM issue_details WHERE key = ?").get(key);
-  if(cached&&cached.source_updated===updated)return cached.data;
+const details=detailCache(db,async key=>{
   // The Agile endpoint returns legacy strings. API v3 preserves Jira's rich ADF tree.
-  const detail=await jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=description,comment,reporter,created,updated`);
+  const detail=await jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=description,comment,reporter,created,updated,attachment`);
+  detail.fields.attachment??=[];
   const comments=detail.fields.comment;
   if(comments&&comments.total>comments.comments.length) {
     const complete:any[]=[];
     for(let start=0;start<comments.total;start+=100){const page=await jira(`/rest/api/3/issue/${encodeURIComponent(key)}/comment?startAt=${start}&maxResults=100`);complete.push(...page.comments);if(!page.comments.length)break;}
     detail.fields.comment={...comments,comments:complete};
   }
-  const data=JSON.stringify({...JSON.parse(base.full),...detail,fields:{...JSON.parse(base.full).fields,...detail.fields}});
-  db.query("INSERT OR REPLACE INTO issue_details VALUES (?,?,?)").run(key,updated,data);
-  return data;
-}
+  return detail;
+});
+export const issue=details.read;
+export const media=attachmentGateway({
+  readIssue:details.readParsed,
+  read:jiraAttachmentReader(serverAuth()),
+  lookup:id=>db.query<{media_id:string},[string]>("SELECT media_id FROM attachment_media WHERE id = ?").get(id)?.media_id,
+  remember:(id,mediaId)=>{db.query("INSERT OR REPLACE INTO attachment_media VALUES (?,?)").run(id,mediaId);},
+});
 let profileRequest:Promise<{id:string;name:string;avatar?:string}>|undefined;
 async function profile() {
   try {

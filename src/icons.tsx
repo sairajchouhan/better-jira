@@ -75,6 +75,13 @@ export const Label = ({ name }: { name: string }) => (
 );
 
 const PATHS = {
+  branch: "M4 4v8M4 4a2 2 0 1 0 0 .01M4 12a2 2 0 1 0 0 .01M12 12a2 2 0 1 0 0 .01M12 10V8c0-3-8-1-8-4",
+  paperclip: "M5 9l5-5a2 2 0 0 1 3 3l-6 6a3 3 0 0 1-4-4l6-6M5 9l5-5",
+  smile: "M14 8A6 6 0 1 1 8 2M5 9c1 3 5 3 6 0M5 6h.01M10 6h.01M13 1v4M11 3h4",
+  file: "M3 1.5h6l4 4v9H3zM9 1.5v4h4",
+  copy: "M6 2h7v9H6zM3 5H2v9h8v-1",
+  crop: "M5 1v10h10M1 5h10v10",
+  link: "M6 10l4-4M5 7 3 9a3 3 0 0 0 4 4l2-2M7 5l2-2a3 3 0 0 1 4 4l-2 2",
   list: "M5 4h9M5 8h9M5 12h9M2 4h.1M2 8h.1M2 12h.1",
   board: "M2 3h3v10H2zM7 3h3v10H7zM12 3h2v10h-2z",
   chevron: "m6 4 4 4-4 4",
