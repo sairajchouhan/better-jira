@@ -3,13 +3,16 @@ import { watch } from "node:fs";
 import index from "./index.html";
 import * as mirror from "./mirror";
 import { parsePreferences } from "./view-model";
+import { serverConfiguration } from "./server-config";
 
 const json = (body: string) => new Response(body, { headers: { "Content-Type": "application/json" } });
 
 const server = serve({
+  hostname:"127.0.0.1",port:serverConfiguration().port,
   routes: {
     "/*": index,
     "/api/boards": () => Response.json(mirror.boards()),
+    "/api/client": async()=>{try{return Response.json(await mirror.clientInfo());}catch{return Response.json({error:"Could not read your Jira account. Check setup and retry."},{status:503});}},
     "/api/properties": () => Response.json(mirror.properties()),
     "/api/view-defaults": () => Response.json(mirror.viewDefaults()),
     "/api/view-defaults/:board": {
@@ -25,9 +28,11 @@ const server = serve({
       },
     },
     "/api/issues": () => json(mirror.issues()),
-    "/api/issues/:key": (req) => {
-      const full = mirror.issue(req.params.key);
-      return full ? json(full) : Response.json({ error: "not found" }, { status: 404 });
+    "/api/issues/:key": async(req) => {
+      try {
+        const full = await mirror.issue(req.params.key);
+        return full ? json(full) : Response.json({ error: "not found" }, { status: 404 });
+      }catch{return Response.json({error:"Could not read Jira issue details. Retry the request."},{status:503});}
     },
   },
   development: process.env.NODE_ENV !== "production" && { hmr: true, console: true },

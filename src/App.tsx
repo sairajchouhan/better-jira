@@ -6,13 +6,13 @@ import { Adf, adfToText } from "./adf";
 import { Icon, Label, PriorityIcon, StatusIcon, TypeDot } from "./icons";
 import {
   ME, actions, boardOf, get, load, loadFull, set, timed, useStore,
-  beginCreate, changeDisplay, changePreferences, toggleFavorite, undoEdit, redoEdit, usePreferences, type Board, type Column, type Issue, type User,
+  beginCreate, changeDisplay, changePreferences, downloadLocalBackup, issueURL, isLocalIssue, retryLocalStorage, toggleFavorite, undoEdit, redoEdit, usePreferences, type Board, type Column, type Issue, type User,
 } from "./store";
 
-const JIRA = "https://contentstack.atlassian.net";
 import { BoardControls, FilterChips } from "./view-controls";
 import { buckets, draftForGroup, listRows, navigationIssues, selectIssues, statusDuration, type Bucket, type Display, type Grouping, type Property } from "./view-model";
 import { BoardDetails, CreateIssue, Favorites, GroupMenu, IssueOptions, Modal, PersonalIssueDetails, PropertyPicker, Relations, SavedViews, SaveViewButton } from "./personal-controls";
+import { RichEditor } from "./rich-editor-loader";
 
 /** The active board's visible columns, for keyboard navigation and the issue page's ↑ ↓ stepping. */
 const nav = { cols: [] as Issue[][] };
@@ -28,11 +28,13 @@ export function App() {
   const view = useStore((s) => s.view);
   const overlay = useStore((s) => s.overlay);
   const open = useStore((s) => (s.panel && s.selected ? s.issues.get(s.selected) : undefined));
+  const loadError=useStore(s=>s.loadError);
+  const visited=useRef(new Set<number>());visited.current.add(boardId);
 
   useEffect(() => void load(), []);
   useEffect(() => (window.addEventListener("keydown", onKey), () => window.removeEventListener("keydown", onKey)), []);
 
-  if (!boards.length) return <div className="p-6 text-fg-3">Loading…</div>;
+  if (!boards.length) return <div className="p-6 text-fg-3">{loadError?<div role="alert"><p>{loadError}</p><button className="mt-3 rounded bg-sel px-3 py-2 text-fg" onClick={()=>void load()}>Retry loading</button></div>:"Loading your Jira mirror…"}</div>;
   const page = !!open && view === "page";
 
   return (
@@ -42,15 +44,15 @@ export function App() {
       <main className="relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border-[0.5px] border-frame bg-panel shadow-(--frame-shadow)">
         {!page && <BoardHeader />}
         <div className="flex min-h-0 flex-1">
-          {/* Both boards stay mounted (hidden behind the issue page too), so switching back is a display toggle. */}
-          {boards.map((b) => (
+          {/* Retain visited boards for scroll restoration; do not render unopened boards. */}
+          {boards.filter(b=>visited.current.has(b.id)).map((b) => (
             <BoardView key={b.id} board={b} active={b.id === boardId} shown={!page && b.id === boardId} selected={selected} />
           ))}
           {open && <IssueView key={open.key} issue={open} page={page} />}
         </div>
       </main>
       </div>
-      <StatusBar />
+      <StorageNotice/><StatusBar />
       {overlay === "palette" && <Palette />}
       {overlay === "assign" && selected && <AssignPicker issueKey={selected} />}
       {overlay === "status" && selected && <StatusPicker issueKey={selected} />}
@@ -85,7 +87,7 @@ function BoardView({ board, active, shown, selected }: { board: Board; active: b
   useEffect(()=>setExpanded([]),[d.emptyGroups,d.columns]);
   useEffect(() => {
     if (!active || !selected) return;
-    loadFull(selected);
+    if(!get().fullErrors.get(selected))loadFull(selected);
     const flat = navColumns.flat();
     const i = flat.findIndex((x) => x.key === selected);
     if (i >= 0) for (const offset of [-2, -1, 1, 2]) flat[i+offset] && loadFull(flat[i+offset]!.key);
@@ -128,6 +130,7 @@ function IssueList({issues,universe,display,selected}:{issues:Issue[];universe:I
 // --- keyboard ---
 
 function onKey(e: KeyboardEvent) {
+  if(e.defaultPrevented)return;
   const s = get();
   const t = e.target as HTMLElement;
   const typing=!!t.closest("input, textarea, select, [contenteditable=true], [role=dialog]");
@@ -239,14 +242,23 @@ function Sidebar({ boards }: { boards: Board[] }) {
 function StatusBar() {
   const perf = useStore((s) => s.perf);
   const undo=useStore(s=>s.undoCount),redo=useStore(s=>s.redoCount);
+  const storage=useStore(s=>s.storage);
   return (
     <footer className="flex h-7 shrink-0 items-center gap-4 px-4 text-[11px]">
-      <span title="Issue edits reset on reload. View preferences are saved in this browser." className="flex items-center gap-1.5 text-amber-500"><span className="size-1.5 rounded-full bg-amber-500" />Local only: nothing is sent to Jira</span>
+      <span title="Issue changes, files, and view preferences are saved in this browser." className="flex items-center gap-1.5 text-amber-500"><span className="size-1.5 rounded-full bg-amber-500" />Local only: nothing is sent to Jira</span>
+      <span role="status" aria-label="Local save status" data-storage-status={storage.status} className="text-fg-3">{storage.status==="saving"?"Saving…":storage.status==="saved"?"Saved locally":storage.status==="loading"?"Opening local data…":"Not saved"}</span>
       <button disabled={!undo} onClick={undoEdit} title="Undo (⌘Z)" className="text-fg-3 disabled:opacity-30">Undo</button>
       <button disabled={!redo} onClick={redoEdit} title="Redo (⌘⇧Z)" className="text-fg-3 disabled:opacity-30">Redo</button>
+      <button title="Download your local changes and files" onClick={()=>void downloadLocalBackup()} className="text-fg-3">Backup</button>
       <span className="ml-auto truncate font-mono text-emerald-500">{perf}</span>
     </footer>
   );
+}
+
+function StorageNotice() {
+  const storage=useStore(s=>s.storage);
+  if(storage.status!=="error"&&!storage.recovered)return null;
+  return <div role={storage.status==="error"?"alert":"status"} className="flex shrink-0 flex-wrap items-center gap-3 border-t border-line px-4 py-2 text-[12px] text-fg-2"><span className="mr-auto">{storage.message}</span>{storage.status==="error"&&<button onClick={()=>void retryLocalStorage()} className="text-accent">Retry local storage</button>}<button onClick={()=>void downloadLocalBackup()} className="text-accent">Download local backup</button>{storage.recovered&&storage.status!=="error"&&<button aria-label="Dismiss local recovery notice" onClick={()=>set({storage:{...storage,recovered:false}})}><Icon name="close"/></button>}</div>;
 }
 
 const SideItem = ({ active, onClick, children }: { active?: boolean; onClick: () => void; children: ReactNode }) => (
@@ -413,11 +425,11 @@ function IssueView({ issue, page }: { issue: Issue; page: boolean }) {
     <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-3 text-[12px] text-fg-3">
       <TypeDot type={issue.type} />
       {page && <span className="truncate">{boardOf(issue.key)?.name} ›</span>}
-      <a className="tracking-[-0.24px] text-fg-2 hover:text-fg" href={`${JIRA}/browse/${issue.key}`} target="_blank">{issue.key}</a>
+      <a className="tracking-[-0.24px] text-fg-2 hover:text-fg" href={issueURL(issue)} target="_blank" rel="noreferrer">{issue.key}</a>
       {issue.parent && <span className="truncate">· parent {issue.parent}</span>}
       <span className="flex-1" />
       <button role="switch" aria-label={favorite?"Remove issue from favorites":"Add issue to favorites"} aria-checked={favorite} onClick={()=>toggleFavorite(issue.key)} className={ICON_BTN}>{favorite?"★":"☆"}</button>
-      <button aria-label="Issue options" onClick={()=>set({overlay:"options"})} className={ICON_BTN}><Icon name="dots"/></button>
+      <button id="issue-options" aria-label="Issue options" onClick={()=>set({overlay:"options"})} className={ICON_BTN}><Icon name="dots"/></button>
       {page && <Stepper issueKey={issue.key} />}
       <button title={page ? "Open in side panel (v)" : "Open as full page (v)"} onClick={() => set({ view: page ? "side" : "page" })} className={ICON_BTN}>
         <Icon name={page ? "side" : "expand"} />
@@ -531,14 +543,12 @@ function Description({ issue, f }: { issue: Issue; f: any }) {
       {!f ? (
         <p role="status" className="text-fg-4">{error?<>{error}. <button onClick={()=>void loadFull(issue.key)} className="text-accent">Retry</button></>:"Loading…"}</p>
       ) : editDesc ? (
-        <TextBox
+        <RichEditor
           id="description"
-          initial={adfToText(f.description)}
-          rows={12}
+          initial={f.description}
           autoFocus
-          onSubmit={(t) => actions.description(issue.key, t)}
+          onSave={(doc) => actions.description(issue.key, doc)}
           onCancel={() => set({ editDesc: false })}
-          hint="⌘↵ save · esc cancel"
         />
       ) : (
         <div className="group relative leading-[1.6] text-fg-2">
@@ -620,24 +630,7 @@ function Overlay({ children }: { children: ReactNode }) {
 
 /** Opens under the property in the issue view, else under the selected card, else centered. */
 function Popover({ issueKey, prop, children }: { issueKey: string; prop: string; children: ReactNode }) {
-  const ref=useRef<HTMLDivElement>(null);
-  const previous=useRef(document.activeElement as HTMLElement|null);
-  useEffect(()=>()=>{previous.current?.isConnected&&previous.current.focus();},[]);
-  const el = document.getElementById(`prop-${prop}`) ?? document.querySelector(`[data-key="${issueKey}"]`);
-  const r = el?.getBoundingClientRect();
-  const style = r?.width
-    ? { left: Math.max(8, Math.min(r.left, innerWidth - 328)), top: Math.max(8, Math.min(r.bottom + 4, innerHeight - 400)) }
-    : { left: "50%", top: "14vh", translate: "-50% 0" };
-  return (
-    <div className="fixed inset-0 z-50" onMouseDown={close}>
-      <div ref={ref} role="dialog" aria-modal="true" aria-label={prop === "status"?"Change status":"Assign issue"} className="absolute w-[320px] max-w-[calc(100vw-16px)]" style={style} onKeyDown={e=>{
-        if(e.key!=="Tab")return;
-        const nodes=[...(ref.current?.querySelectorAll<HTMLElement>('input, button:not(:disabled), [tabindex="0"]')??[])].filter(n=>n.getClientRects().length);
-        if(e.shiftKey&&document.activeElement===nodes[0]){e.preventDefault();nodes.at(-1)?.focus();}
-        else if(!e.shiftKey&&document.activeElement===nodes.at(-1)){e.preventDefault();nodes[0]?.focus();}
-      }}>{children}</div>
-    </div>
-  );
+  return <Modal label={prop==="status"?"Change status":"Assign issue"} close={()=>set({overlay:null})} anchorId={`prop-${prop}`} width={340}>{children}</Modal>;
 }
 
 function StatusPicker({ issueKey }: { issueKey: string }) {
@@ -736,7 +729,7 @@ function Palette() {
         viaKey("Edit description", "d", <Icon name="pencil" />),
         {name:"Add comment",icon:<Icon name="comment"/>,run:()=>{set({overlay:null,panel:true});requestAnimationFrame(()=>document.getElementById("comment")?.focus());}},
         { name: "Open issue", hint: "↵", icon: <Icon name="expand" />, run: () => set({ panel: true, overlay: null }) },
-        { name: "Open in Jira", icon: <Icon name="external" />, run: () => (window.open(`${JIRA}/browse/${scoped.key}`), set({ overlay: null })) },
+        { name: isLocalIssue(scoped.key)?"Open local issue in new tab":"Open in Jira", icon: <Icon name="external" />, run: () => (window.open(issueURL(scoped),"_blank","noopener"), set({ overlay: null })) },
         ...(boardOf(scoped.key)?.columns ?? []).map((c, i): Cmd => ({
           name: `Move to ${c.name}`, hint: String(i + 1), icon: <StatusIcon status={colLook(c)} />,
           run: () => (set({ overlay: null }), actions.move(scoped.key, i)),

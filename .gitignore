@@ -1,5 +1,7 @@
 .env
 cache.db*
+cache-*.db*
+.better-jira.local.json
 node_modules
 dist
 

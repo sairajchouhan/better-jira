@@ -1,8 +1,10 @@
 import { Database } from "bun:sqlite";
 import { jira } from "./jira";
 import { pullRequestCount, statusDates, type History } from "./issue-properties";
+import { serverConfiguration } from "./server-config";
 
-export const BOARDS = [4142, 1344];
+const configuration=serverConfiguration();
+export const BOARDS = configuration.boards;
 const FIELDS =
   "summary,status,issuetype,priority,assignee,reporter,creator,created,updated,resolutiondate,duedate,project,issuelinks,labels,parent,description,comment,fixVersions,watches,customfield_10000,customfield_10022,customfield_10023,customfield_10016";
 const POLL_MS = 15_000;
@@ -10,15 +12,19 @@ const FULL_SYNC_EVERY_MS = 6 * 3600_000; // full sync also sweeps out issues tha
 const PAGE = 100;
 const PARALLEL = 4;
 
-const db = new Database("cache.db", { create: true, strict: true });
+const db = new Database(configuration.cachePath, { create: true, strict: true });
 db.run("PRAGMA journal_mode = WAL");
 db.run(`CREATE TABLE IF NOT EXISTS issues (
   key TEXT PRIMARY KEY, board INTEGER NOT NULL, seen INTEGER NOT NULL, slim TEXT NOT NULL, full TEXT NOT NULL)`);
 db.run("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)");
 db.run("CREATE TABLE IF NOT EXISTS issue_properties (key TEXT PRIMARY KEY, source_updated TEXT NOT NULL, synced INTEGER NOT NULL, data TEXT NOT NULL)");
+db.run("CREATE TABLE IF NOT EXISTS issue_details (key TEXT PRIMARY KEY, source_updated TEXT NOT NULL, data TEXT NOT NULL)");
 
 const getMeta = (k: string) => db.query<{ v: string }, [string]>("SELECT v FROM meta WHERE k = ?").get(k)?.v;
 const setMeta = (k: string, v: string) => db.query("INSERT OR REPLACE INTO meta VALUES (?, ?)").run(k, v);
+const source=JSON.stringify({site:configuration.site,email:configuration.email});
+if(getMeta("source")&&getMeta("source")!==source)throw new Error("This cache belongs to another Jira site or account. Choose a different JIRA_CACHE or rerun setup.");
+setMeta("source",source);
 const upsert = db.query(
   "INSERT OR REPLACE INTO issues (key, board, seen, slim, full) VALUES ($key, $board, $seen, $slim, $full)",
 );
@@ -162,8 +168,42 @@ export const boards = () => BOARDS.map((b) => JSON.parse(getMeta(`config:${b}`) 
 export const issues = () =>
   `[${db.query<{ slim: string }, []>("SELECT slim FROM issues").all().map((r) => r.slim).join(",")}]`;
 
-export const issue = (key: string) =>
-  db.query<{ full: string }, [string]>("SELECT full FROM issues WHERE key = ?").get(key)?.full;
+const pendingDetails=new Map<string,Promise<string|undefined>>();
+export function issue(key:string):Promise<string|undefined> {
+  const pending=pendingDetails.get(key);if(pending)return pending;
+  const request=readDetails(key).finally(()=>pendingDetails.delete(key));pendingDetails.set(key,request);return request;
+}
+async function readDetails(key:string):Promise<string|undefined> {
+  const base=db.query<{full:string;slim:string},[string]>("SELECT full, slim FROM issues WHERE key = ?").get(key);
+  if(!base)return;
+  const updated=JSON.parse(base.slim).updated;
+  const cached=db.query<{source_updated:string;data:string},[string]>("SELECT source_updated,data FROM issue_details WHERE key = ?").get(key);
+  if(cached&&cached.source_updated===updated)return cached.data;
+  // The Agile endpoint returns legacy strings. API v3 preserves Jira's rich ADF tree.
+  const detail=await jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=description,comment,reporter,created,updated`);
+  const comments=detail.fields.comment;
+  if(comments&&comments.total>comments.comments.length) {
+    const complete:any[]=[];
+    for(let start=0;start<comments.total;start+=100){const page=await jira(`/rest/api/3/issue/${encodeURIComponent(key)}/comment?startAt=${start}&maxResults=100`);complete.push(...page.comments);if(!page.comments.length)break;}
+    detail.fields.comment={...comments,comments:complete};
+  }
+  const data=JSON.stringify({...JSON.parse(base.full),...detail,fields:{...JSON.parse(base.full).fields,...detail.fields}});
+  db.query("INSERT OR REPLACE INTO issue_details VALUES (?,?,?)").run(key,updated,data);
+  return data;
+}
+let profileRequest:Promise<{id:string;name:string;avatar?:string}>|undefined;
+async function profile() {
+  try {
+    const user=await jira("/rest/api/3/myself");
+    const profile={id:user.accountId,name:user.displayName,avatar:user.avatarUrls?.["24x24"]};
+    if(!profile.id)throw new Error("Jira did not return an account ID");
+    setMeta("profile",JSON.stringify(profile));return profile;
+  }catch(error){const cached=getMeta("profile");if(cached)return JSON.parse(cached);throw error;}
+}
+export async function clientInfo() {
+  const user=await (profileRequest??=profile().catch(error=>{profileRequest=undefined;throw error;}));
+  return {site:configuration.site,user,namespace:`${configuration.site}/${user.id}`};
+}
 
 export const viewDefaults = () => Object.fromEntries(BOARDS.flatMap(id => {
   const value = getMeta(`view-default:${id}`);

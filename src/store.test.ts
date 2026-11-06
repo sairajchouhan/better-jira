@@ -1,12 +1,15 @@
 import { expect, test } from "bun:test";
 import type { Board } from "./store";
+import { IDBFactory } from "fake-indexeddb";
 
 const storage=new Map<string,string>();
 Object.defineProperty(globalThis,"localStorage",{configurable:true,value:{getItem:(key:string)=>storage.get(key)??null,setItem:(key:string,value:string)=>storage.set(key,value)}});
 Object.defineProperty(globalThis,"requestAnimationFrame",{configurable:true,value:(callback:FrameRequestCallback)=>setTimeout(()=>callback(0),0)});
+Object.defineProperty(globalThis,"indexedDB",{configurable:true,value:new IDBFactory()});
 
 test("personal issue edits, comments, creation and deletion undo without losing issue details",async()=>{
   const {actions,get,set,undoEdit,redoEdit,ME}=await import("./store");
+  Object.assign(ME,{id:"me",name:"Me"});
   const board:Board={id:1,name:"Personal",columns:[{name:"Todo",statuses:[{id:"todo",name:"Todo",category:"new"}]},{name:"Done",statuses:[{id:"done",name:"Done",category:"done"}]}]};
   set({boards:[board],board:1,issues:new Map(),full:new Map()});
   const key=actions.create("Personal test",{status:"done",description:"Description",assignee:ME,priority:"High",labels:["test"],due:"2026-12-01"})!;
@@ -48,8 +51,8 @@ test("personal issue edits, comments, creation and deletion undo without losing 
 
 test("failed issue details expose an error and can be retried",async()=>{
   const {get,set,loadFull}=await import("./store");
-  const key= [...get().issues.keys()][0]!;
-  const full=new Map(get().full);full.delete(key);set({full});
+  const key="REMOTE-1",template=[...get().issues.values()][0]!;
+  const full=new Map(get().full);full.delete(key);set({full,issues:new Map(get().issues).set(key,{...template,key})});
   const original=globalThis.fetch;
   try {
     globalThis.fetch=Object.assign(async()=>new Response("unavailable",{status:503}),original);
@@ -75,7 +78,7 @@ test("browser history restores issue selection without pushing another navigatio
       replaceState:(_state:unknown,_title:string,url:URL)=>{entries[index]=String(url);page.href=String(url);},
     }});
     Object.defineProperty(globalThis,"window",{configurable:true,value:{addEventListener:(name:string,listener:()=>void)=>{if(name==="popstate")popstate=listener;}}});
-    globalThis.fetch=Object.assign(async(input:string|URL|Request)=>Response.json(String(input)==="/api/boards"?boards:String(input)==="/api/issues"?issues:{entries:{},progress:{total:0,pending:0,completed:0,errors:0}}),originalFetch);
+    globalThis.fetch=Object.assign(async(input:string|URL|Request)=>Response.json(String(input)==="/api/client"?{site:"https://example.atlassian.net",user:{id:"me",name:"Me"}}:String(input)==="/api/boards"?boards:String(input)==="/api/issues"?issues:{entries:{},progress:{total:0,pending:0,completed:0,errors:0}}),originalFetch);
     await load();
     set({selected:first!.key,panel:true,view:"page"});set({selected:second!.key});
     expect(entries).toHaveLength(3);

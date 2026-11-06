@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
+import { safeLink } from "./document";
 
 /** Renders Jira's ADF (Atlassian Document Format). Unknown nodes fall through to their children. */
 export function Adf({ node }: { node: any }): ReactNode {
   if (!node) return null;
+  if(typeof node==="string")return <div className="whitespace-pre-wrap">{node}</div>;
   const kids = node.content?.map((c: any, i: number) => <Adf key={i} node={c} />);
   const a = node.attrs ?? {};
   switch (node.type) {
@@ -12,7 +14,7 @@ export function Adf({ node }: { node: any }): ReactNode {
     case "hardBreak": return <br />;
     case "heading": return <p className="font-semibold text-[15px] text-fg pt-1">{kids}</p>;
     case "bulletList": return <ul className="list-disc pl-5 space-y-1">{kids}</ul>;
-    case "orderedList": return <ol className="list-decimal pl-5 space-y-1">{kids}</ol>;
+    case "orderedList": return <ol start={Number(a.order)||1} className="list-decimal pl-5 space-y-1">{kids}</ol>;
     case "taskList": return <ul className="space-y-1">{kids}</ul>;
     case "taskItem": return <li>{a.state === "DONE" ? "☑" : "☐"} {kids}</li>;
     case "listItem": return <li>{kids}</li>;
@@ -25,15 +27,15 @@ export function Adf({ node }: { node: any }): ReactNode {
     case "status": return <span className="rounded bg-sel px-1 text-xs font-semibold uppercase">{a.text}</span>;
     case "date": return <>{new Date(Number(a.timestamp)).toLocaleDateString()}</>;
     case "inlineCard":
-    case "blockCard": return <a className="text-accent underline" href={a.url} target="_blank">{a.url}</a>;
+    case "blockCard": return <a className="text-accent underline" href={safeLink(a.url)??undefined} target="_blank" rel="noreferrer">{a.url}</a>;
     case "table": return <table className="w-full border-collapse text-xs"><tbody>{kids}</tbody></table>;
     case "tableRow": return <tr>{kids}</tr>;
-    case "tableHeader": return <th className="border border-line-2 p-1 text-left">{kids}</th>;
-    case "tableCell": return <td className="border border-line-2 p-1 align-top">{kids}</td>;
+    case "tableHeader": return <th colSpan={Number(a.colspan)||1} rowSpan={Number(a.rowspan)||1} className="border border-line-2 p-1 text-left">{kids}</th>;
+    case "tableCell": return <td colSpan={Number(a.colspan)||1} rowSpan={Number(a.rowspan)||1} className="border border-line-2 p-1 align-top">{kids}</td>;
     case "mediaSingle":
     case "mediaGroup":
     case "media": return <span className="block italic text-fg-3">[attachment]</span>;
-    default: return <>{kids}</>;
+    default: return kids?.length?<>{kids}</>:<span className="text-fg-3">[{node.type} content preserved]</span>;
   }
 }
 
@@ -44,7 +46,10 @@ function mark(inner: ReactNode, m: any): ReactNode {
     case "strike": return <s>{inner}</s>;
     case "underline": return <u>{inner}</u>;
     case "code": return <code className="rounded bg-sel px-1 text-[0.9em]">{inner}</code>;
-    case "link": return <a className="text-accent underline" href={m.attrs?.href} target="_blank">{inner}</a>;
+    case "link": return <a className="text-accent underline" href={safeLink(m.attrs?.href)??undefined} target="_blank" rel="noreferrer">{inner}</a>;
+    case "subsup": return m.attrs?.type==="sup"?<sup>{inner}</sup>:<sub>{inner}</sub>;
+    case "textColor": return <span style={{color:/^#[\da-f]{3,8}$/i.test(m.attrs?.color??"")?m.attrs.color:undefined}}>{inner}</span>;
+    case "backgroundColor": return <span style={{backgroundColor:/^#[\da-f]{3,8}$/i.test(m.attrs?.color??"")?m.attrs.color:undefined}}>{inner}</span>;
     default: return inner;
   }
 }
@@ -64,9 +69,10 @@ export function textToAdf(text: string) {
   };
 }
 
-// ponytail: lossy (formatting, images, tables flatten to text). Swap for a rich editor if editing descriptions matters.
+/** Text projection for search and previews. Rich editing retains the original document. */
 export function adfToText(node: any): string {
   if (!node) return "";
+  if(typeof node==="string")return node;
   if (node.type === "text") return node.text;
   if (node.type === "hardBreak") return "\n";
   if (node.attrs?.text) return node.attrs.text;

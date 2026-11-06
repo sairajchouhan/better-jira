@@ -1,8 +1,4 @@
-const { JIRA_EMAIL, JIRA_TOKEN } = process.env;
-if (!JIRA_EMAIL || !JIRA_TOKEN) throw new Error("Set JIRA_EMAIL and JIRA_TOKEN in .env");
-
-export const SITE = "https://contentstack.atlassian.net";
-const AUTH = "Basic " + btoa(`${JIRA_EMAIL}:${JIRA_TOKEN}`);
+import { serverAuth } from "./server-config";
 
 /** Jira REST call. Waits and retries on 429 (rate limit), throws on any other non-2xx. */
 export async function jira<T = any>(path: string, init: RequestInit = {}): Promise<T> {
@@ -10,10 +6,12 @@ export async function jira<T = any>(path: string, init: RequestInit = {}): Promi
   if(method!=="GET" && !(method==="POST" && path==="/rest/api/3/changelog/bulkfetch")) {
     throw new Error("Jira writes are disabled. Only reads and the bulk changelog read are allowed.");
   }
+  const {site,email,token}=serverAuth();
+  if(!path.startsWith("/")||path.startsWith("//"))throw new Error("Jira paths must be relative to the configured site.");
   for (let attempt = 0; ; attempt++) {
-    const res = await fetch(SITE + path, {
+    const res = await fetch(site + path, {
       ...init,
-      headers: { Authorization: AUTH, Accept: "application/json", "Content-Type": "application/json", ...init.headers },
+      headers: { Authorization: "Basic "+btoa(`${email}:${token}`), Accept: "application/json", "Content-Type": "application/json", ...init.headers },
     });
     if (res.status === 429 && attempt < 5) {
       await Bun.sleep(Number(res.headers.get("Retry-After") ?? 2 ** attempt) * 1000);

@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from "react";
 import { adfToText, textToAdf } from "./adf";
 import { defaultPreferences, parsePreferences, type Display, type Grouping, type Preferences } from "./view-model";
+import { normalizeDocument, type AdfDocument } from "./document";
+import { emptyLocalState,LocalDatabase,type LocalState,type Snapshot,type LocalEdit } from "./local-data";
 
 export type User = { id: string; name: string; avatar?: string };
 export type Issue = {
@@ -32,9 +34,9 @@ export type Issue = {
   watchersComplete?: boolean;
   estimate?: number;
   projectLead?: User | null;
-  attachments?: {id:string;name:string;url:string;type:string;size:number}[];
+  attachments?: {id:string;name:string;url:string;type:string;size:number;missing?:boolean}[];
   reactions?: string[];
-  descriptionHistory?: {text:string;at:string}[];
+  descriptionHistory?: {text:string;document?:AdfDocument;at:string}[];
 };
 export type Status = { id: string; name: string; category: string };
 export type Column = { name: string; statuses: Status[] };
@@ -42,11 +44,11 @@ export type Board = { id: number; name: string; columns: Column[] };
 /** Raw Jira issue: { key, fields: { description, comment, reporter, created, ... } } */
 export type Full = { key: string; fields: any };
 type Overlay = null | "palette" | "assign" | "status" | "create" | "priority" | "labels" | "project" | "milestone" | "due" | "options" | "relations";
-export type IssueDraft = Partial<Pick<Issue,"status"|"assignee"|"priority"|"labels"|"project"|"milestones"|"due"|"parent"|"type"|"attachments">> & {description?:string};
+export type IssueDraft = Partial<Pick<Issue,"status"|"assignee"|"priority"|"labels"|"project"|"milestones"|"due"|"parent"|"type"|"attachments">> & {description?:string;descriptionDoc?:AdfDocument};
 export type View = "side" | "page";
 export type SavedView={id:string;board:number;name:string;preferences:Preferences;mine:boolean};
 
-export const ME: User = { id: "63d764b982eeee78a4cd2b56", name: "Sairaj Chouhan" };
+export const ME: User = { id: "", name: "Me" };
 
 type State = {
   boards: Board[];
@@ -74,12 +76,20 @@ type State = {
   fullErrors: Map<string,string>;
   savedViews:SavedView[];
   favorites:string[];
+  site:string;
+  namespace:string;
+  loadError:string;
+  canEdit:boolean;
+  storage:{status:"loading"|"saving"|"saved"|"error";message?:string;recovered?:boolean};
 };
 
 const PREF_KEY = "better-jira:views:v1";
+let preferenceNamespace="";
+const preferenceKey=(key:string)=>preferenceNamespace?`${key}:${preferenceNamespace}`:key;
+function savedValue(key:string):string|null {try{return localStorage.getItem(preferenceKey(key));}catch{return null;}}
 function readPreferences(): Record<number, Preferences> {
   try {
-    const saved = JSON.parse(localStorage.getItem(PREF_KEY) ?? "{}");
+    const saved = JSON.parse(savedValue(PREF_KEY) ?? "{}");
     return Object.fromEntries(Object.entries(saved).map(([id, p]) => [id, parsePreferences(p)]));
   } catch { return {}; }
 }
@@ -88,10 +98,10 @@ let state: State = {
   boards: [],
   issues: new Map(),
   full: new Map(),
-  board: Number(localStorage.getItem("board")) || 4142,
+  board: Number(savedValue("board")) || 0,
   selected: null,
   panel: false,
-  view: localStorage.getItem("view") === "page" ? "page" : "side",
+  view: savedValue("view") === "page" ? "page" : "side",
   mine: false,
   query: "",
   overlay: null,
@@ -105,6 +115,7 @@ let state: State = {
   details:false, draft:{}, undoCount:0, redoCount:0, fullErrors:new Map(),
   savedViews:readSavedViews(),
   favorites:readFavorites(),
+  site:"",namespace:"",loadError:"",canEdit:true,storage:{status:"loading"},
 };
 
 const listeners = new Set<() => void>();
@@ -126,14 +137,13 @@ export function set(patch: Partial<State>) {
     patch.preferences = { ...(patch.preferences ?? state.preferences), [id]: { ...prefs, display: { ...prefs.display, openIn: patch.view } } };
   }
   state = { ...state, ...patch };
-  if (patch.board) localStorage.setItem("board", String(patch.board));
-  if (patch.view) localStorage.setItem("view", patch.view);
+  try {if (patch.board) localStorage.setItem(preferenceKey("board"), String(patch.board));if (patch.view) localStorage.setItem(preferenceKey("view"), patch.view);}catch{/* Preference failure is separate from durable issue storage. */}
   if (patch.preferences) {
-    try { localStorage.setItem(PREF_KEY, JSON.stringify(patch.preferences)); }
+    try { localStorage.setItem(preferenceKey(PREF_KEY), JSON.stringify(patch.preferences)); }
     catch { state = {...state, perf: "Could not save view preferences in this browser"}; }
   }
-  if(patch.savedViews)try{localStorage.setItem("better-jira:saved-views:v1",JSON.stringify(patch.savedViews));}catch{state={...state,perf:"Could not save views in this browser"};}
-  if(patch.favorites)try{localStorage.setItem("better-jira:favorites:v1",JSON.stringify(patch.favorites));}catch{state={...state,perf:"Could not save favorites in this browser"};}
+  if(patch.savedViews)try{localStorage.setItem(preferenceKey("better-jira:saved-views:v1"),JSON.stringify(patch.savedViews));}catch{state={...state,perf:"Could not save views in this browser"};}
+  if(patch.favorites)try{localStorage.setItem(preferenceKey("better-jira:favorites:v1"),JSON.stringify(patch.favorites));}catch{state={...state,perf:"Could not save favorites in this browser"};}
   if(navigationReady&&!restoringNavigation&&(patch.board!==undefined||patch.selected!==undefined||patch.panel!==undefined||patch.view!==undefined))syncNavigation();
   listeners.forEach((l) => l());
 }
@@ -157,29 +167,65 @@ export async function saveDefault(board: number) {
   const display = preferencesFor(board).display;
   try {
     const defaults={...state.defaults,[board]:structuredClone(display)};
-    localStorage.setItem("better-jira:defaults:v1",JSON.stringify(defaults));
+    localStorage.setItem(preferenceKey("better-jira:defaults:v1"),JSON.stringify(defaults));
     set({defaults,perf:"Saved your default in this browser"});
   } catch { set({perf:"Could not save your default in this browser"}); }
 }
 
-export async function load() {
-  const [boards, issues, defaults]: [Board[], Issue[], Record<number, Display>] = await Promise.all([
-    fetch("/api/boards").then((r) => r.json()),
-    fetch("/api/issues").then((r) => r.json()),
-    Promise.resolve().then(()=>{try{const saved=JSON.parse(localStorage.getItem("better-jira:defaults:v1")??"{}");return saved&&typeof saved==="object"&&!Array.isArray(saved)?Object.fromEntries(Object.entries(saved).map(([id,display])=>[id,parsePreferences({display}).display])):{};}catch{return {};}}),
-  ]);
-  ME.avatar = issues.find((i) => i.assignee?.id === ME.id)?.assignee?.avatar;
-  const preferences = {...state.preferences};
+let loading:Promise<void>|undefined,loaded=false;
+export function load():Promise<void> {if(loaded)return Promise.resolve();return loading??=loadApplication().finally(()=>{loading=undefined;});}
+async function json<T>(path:string):Promise<T> {const response=await fetch(path);if(!response.ok)throw new Error(`Could not load ${path}`);return response.json();}
+function migratePreferences(namespace:string) {
+  preferenceNamespace=namespace;
+  try {
+    const owner=localStorage.getItem("better-jira:preferences-owner");
+    if(!owner)localStorage.setItem("better-jira:preferences-owner",namespace);
+    if(!owner||owner===namespace)for(const key of [PREF_KEY,"board","view","better-jira:saved-views:v1","better-jira:favorites:v1","better-jira:defaults:v1"]){const old=localStorage.getItem(key);if(old!==null&&localStorage.getItem(preferenceKey(key))===null)localStorage.setItem(preferenceKey(key),old);}
+  }catch{/* The mirror can still load if browser preferences are unavailable. */}
+}
+async function loadApplication() {
+  set({loadError:""});
+  try {
+  const client=await json<{site:string;user:User}>("/api/client");
+  if(!client.site||!client.user?.id||!client.user.name)throw new Error("Jira account setup is incomplete");
+  Object.assign(ME,client.user);
+  const namespace=`${client.site}/${client.user.id}`;
+  migratePreferences(namespace);
+  const [boards, remote]=await Promise.all([json<Board[]>("/api/boards"),json<Issue[]>("/api/issues")]);
+  if(!boards.length)throw new Error("The Jira mirror is still syncing your boards. Retry in a moment.");
+  let local=emptyLocalState(),storage:State["storage"]={status:"saved"},canEdit=true;
+  try {
+    database?.close();database=await LocalDatabase.open(namespace);
+    const result=await database.load();local=result.state;canEdit=!result.readOnly;
+    storage=result.readOnly?{status:"error",message:"Saved data uses an unsupported version. Local editing is paused; existing data has been preserved."}:{status:"saved",recovered:result.recovered||result.missingFiles>0,message:result.recovered?"Some local records needed recovery. A copy of the original data was kept.":result.missingFiles?"Some saved files could not be restored.":undefined};
+  }catch {canEdit=false;storage={status:"error",message:"Could not read saved local data. Local editing is paused. Retry local storage; existing data has not been deleted."};}
+  const defaults:Record<number,Display>=(()=>{try{const saved=JSON.parse(savedValue("better-jira:defaults:v1")??"{}");return saved&&typeof saved==="object"&&!Array.isArray(saved)?Object.fromEntries(Object.entries(saved).map(([id,display])=>[id,parsePreferences({display}).display])):{};}catch{return {};}})();
+  const preferences=readPreferences();
   for (const b of boards) if (!preferences[b.id]) {
     const display = parsePreferences({display:defaults[b.id]}).display;
-    if (!defaults[b.id]) display.openIn = state.view;
+    if (!defaults[b.id]) display.openIn = savedValue("view")==="page"?"page":"side";
     preferences[b.id] = {...defaultPreferences(), display};
   }
-  const board=boards.some(b=>b.id===state.board)?state.board:boards[0]?.id??state.board;
-  set({ boards, board, issues: new Map(issues.map((i) => [i.key, i])), defaults, preferences, view:preferences[board]?.display.openIn ?? "side" });
+  const savedBoard=Number(savedValue("board"));
+  const board=boards.some(b=>b.id===savedBoard)?savedBoard:boards[0]!.id;
+  const issues=new Map(remote.map(i=>[i.key,i])),full=new Map<string,Full>();
+  changedKeys.clear();createdKeys.clear();localFields.clear();fullFields.clear();needsFullRefresh.clear();
+  for(const change of local.changes) {
+    changedKeys.add(change.key);if(change.created)createdKeys.add(change.key);
+    localFields.set(change.key,new Set(change.issueFields));fullFields.set(change.key,new Set(change.fullFields));
+    if(change.issue===null)issues.delete(change.key);
+    else if(change.created||!issues.has(change.key))issues.set(change.key,change.issue);
+    else {const base=issues.get(change.key)!;const patch=Object.fromEntries(change.issueFields.map(field=>[field,(change.issue as any)[field]]));if(change.fullFields.includes("comment"))patch.comments=base.comments+(change.full?.fields.comment?.comments??[]).filter((c:any)=>String(c.id).startsWith("local-")).length;issues.set(change.key,{...base,...patch});}
+    if(change.full){full.set(change.key,change.full);if(!change.created)needsFullRefresh.add(change.key);}
+  }
+  undo.splice(0,undo.length,...local.undo);redo.splice(0,redo.length,...local.redo);localSeq=local.sequence;
+  set({boards,board,site:client.site,namespace,issues,full,defaults,preferences,view:preferences[board]?.display.openIn??"side",savedViews:readSavedViews(),favorites:readFavorites(),canEdit,storage,undoCount:undo.length,redoCount:redo.length});
   if(!navigationReady){restoreNavigation();navigationReady=true;syncNavigation(true);window.addEventListener("popstate",restoreNavigation);}
+  if(!loaded)window.addEventListener("beforeunload",event=>{if(unsaved){event.preventDefault();event.returnValue="";}});
   void loadProperties();
   clockTimer??=setInterval(()=>set({clock:Date.now()}),60000);
+  loaded=true;
+  }catch(error){set({loadError:error instanceof Error?error.message:"Could not load the Jira mirror. Retry."});}
 }
 
 let clockTimer: ReturnType<typeof setInterval> | undefined;
@@ -212,15 +258,22 @@ async function loadProperties() {
 }
 
 const pendingFull=new Set<string>();
-export async function loadFull(key: string) {
-  if (state.full.has(key)||pendingFull.has(key)) return;
+export async function loadFull(key: string,force=false) {
+  if (createdKeys.has(key)||state.full.has(key)&&!needsFullRefresh.has(key)&&!force||pendingFull.has(key)) return;
   pendingFull.add(key);
   set({fullErrors:new Map(state.fullErrors).set(key,"")});
   try {
     const res = await fetch(`/api/issues/${encodeURIComponent(key)}`);
     if (!res.ok) throw new Error("Could not load issue details");
-    const full = await res.json();
-    if (!state.full.has(key)&&state.issues.has(key)) set({ full: new Map(state.full).set(key, full) });
+    let full = await res.json();
+    const local=state.full.get(key);
+    if(local)for(const field of fullFields.get(key)??[]){
+      if(field==="comment") {const comments=[...(full.fields.comment?.comments??[]),...(local.fields.comment?.comments??[]).filter((c:any)=>String(c.id).startsWith("local-"))];full={...full,fields:{...full.fields,comment:{...full.fields.comment,comments,total:comments.length}}};}
+      else full={...full,fields:{...full.fields,[field]:local.fields[field]}};
+    }
+    needsFullRefresh.delete(key);
+    const issue=state.issues.get(key);
+    if(issue)set({full:new Map(state.full).set(key,full),issues:new Map(state.issues).set(key,{...issue,...(full.fields.comment?{comments:full.fields.comment.total}:{}),...(!localFields.get(key)?.has("description")?{description:adfToText(full.fields.description)}:{})})});
   } catch { set({fullErrors:new Map(state.fullErrors).set(key,"Could not load issue details")}); }
   finally {pendingFull.delete(key);}
 }
@@ -246,13 +299,43 @@ function restoreNavigation() {
   set({...(state.boards.some(b=>b.id===board)?{board}:{}),selected:issue?.key??null,panel:!!issue,...(params.get("view")==="page"||params.get("view")==="side"?{view:params.get("view") as View}:{})});
   restoringNavigation=false;
 }
-const localFields=new Map<string,Set<string>>();
-type Snapshot={issue?:Issue;full?:Full};
-type Edit={keys:string[];label:string;before:Snapshot[];after:Snapshot[]};
-const undo:Edit[]=[],redo:Edit[]=[];
-const snapshot=(key:string):Snapshot=>({issue:state.issues.get(key),full:state.full.get(key)});
+const localFields=new Map<string,Set<string>>(),fullFields=new Map<string,Set<string>>();
+const changedKeys=new Set<string>(),createdKeys=new Set<string>(),needsFullRefresh=new Set<string>();
+const undo:LocalEdit[]=[],redo:LocalEdit[]=[];
+let database:LocalDatabase|undefined,pendingSave:LocalState|undefined,saving:Promise<void>|undefined,unsaved=false;
+function localSnapshot():LocalState {
+  return {version:1,sequence:localSeq,changes:[...changedKeys].filter(key=>createdKeys.has(key)||!state.issues.has(key)||localFields.get(key)?.size||fullFields.get(key)?.size).map(key=>({key,issue:state.issues.get(key)??null,full:state.full.get(key),issueFields:[...(localFields.get(key)??[])],fullFields:[...(fullFields.get(key)??[])],created:createdKeys.has(key)})),undo:[...undo],redo:[...redo]};
+}
+function queueSave() {
+  if(!database||!loaded||!state.canEdit)return;
+  pendingSave=localSnapshot();unsaved=true;
+  set({storage:{...state.storage,status:"saving"}});
+  saving??=flushSaves().finally(()=>{saving=undefined;});
+}
+async function flushSaves() {
+  try {
+    while(pendingSave){const snapshot=pendingSave;pendingSave=undefined;await database!.save(snapshot);}
+    unsaved=false;set({storage:{...state.storage,status:"saved",message:state.storage.recovered?state.storage.message:undefined}});
+  }catch(error){set({storage:{status:"error",message:error instanceof Error?error.message:"Local changes could not be saved. Keep this tab open and retry."}});}
+}
+export async function flushLocalChanges() {await saving;}
+export async function retryLocalStorage() {
+  if(!state.canEdit){loaded=false;await load();}else{queueSave();await saving;}
+}
+export async function addLocalFile(file:File) {if(!database||!state.canEdit)throw new Error("Local file storage is unavailable. Retry local storage first.");return database.addFile(file);}
+export async function downloadLocalBackup() {
+  try {
+    const data={version:1,namespace:state.namespace,state:localSnapshot(),recovery:await database?.recoveryCopies(),files:await database?.exportFiles()};
+    const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"})),a=document.createElement("a");a.href=url;a.download="better-jira-local-backup.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }catch{set({perf:"Could not export the local backup"});}
+}
+export function jiraIssueURL(key:string) {return `${state.site}/browse/${encodeURIComponent(key)}`;}
+export function issueURL(issue:Issue) {if(createdKeys.has(issue.key)&&typeof location!=="undefined"){const url=new URL(location.origin);url.searchParams.set("board",String(issue.board));url.searchParams.set("issue",issue.key);return url.href;}return jiraIssueURL(issue.key);}
+export const isLocalIssue=(key:string)=>createdKeys.has(key);
+const snapshot=(key:string):Snapshot=>({issue:state.issues.get(key),full:state.full.get(key),issueFields:[...(localFields.get(key)??[])],fullFields:[...(fullFields.get(key)??[])]});
 let transaction:{label:string;before:Map<string,Snapshot>}|null=null;
 function record(key:string|string[],label:string,fn:()=>void) {
+  if(!state.canEdit){set({perf:"Local editing is paused until saved data is available"});return;}
   const keys=typeof key==="string"?[key]:key;
   const nested=transaction!==null;
   transaction??={label,before:new Map()};
@@ -262,18 +345,23 @@ function record(key:string|string[],label:string,fn:()=>void) {
     fn();
     const changed=[...transaction.before.keys()].filter(key=>{const before=transaction!.before.get(key)!,after=snapshot(key);return before.issue!==after.issue||before.full!==after.full;});
     if(!changed.length)return;
+    for(const key of changed)changedKeys.add(key);
     undo.push({keys:changed,label,before:changed.map(key=>transaction!.before.get(key)!),after:changed.map(snapshot)});
     if(undo.length>100)undo.shift();
     redo.length=0;
     set({undoCount:undo.length,redoCount:0});
+    queueSave();
   } finally {transaction=null;}
 }
-function restore(edit:Edit,snapshots:Snapshot[]) {
+function restore(edit:LocalEdit,snapshots:Snapshot[]) {
   const issues=new Map(state.issues),full=new Map(state.full);
   edit.keys.forEach((key,index)=>{
     const snapshot=snapshots[index]!;
     if(snapshot.issue)issues.set(key,snapshot.issue);else issues.delete(key);
     if(snapshot.full)full.set(key,snapshot.full);else full.delete(key);
+    if(snapshot.issueFields)localFields.set(key,new Set(snapshot.issueFields));
+    if(snapshot.fullFields)fullFields.set(key,new Set(snapshot.fullFields));
+    if(snapshot.issue&&!createdKeys.has(key))needsFullRefresh.add(key);
   });
   set({issues,full,overlay:null,...(state.selected&&!issues.has(state.selected)?{selected:null,panel:false}:{})});
 }
@@ -281,24 +369,27 @@ export function undoEdit() {
   const edit=undo.pop();if(!edit)return;
   restore(edit,edit.before);redo.push(edit);
   set({undoCount:undo.length,redoCount:redo.length,perf:`Undid ${edit.label}`});
+  queueSave();
 }
 export function redoEdit() {
   const edit=redo.pop();if(!edit)return;
   restore(edit,edit.after);undo.push(edit);
   set({undoCount:undo.length,redoCount:redo.length,perf:`Redid ${edit.label}`});
+  queueSave();
 }
 export function beginCreate(draft:IssueDraft={}) {
+  if(!state.canEdit){set({perf:"Retry local storage before creating an issue"});return;}
   const prefs=preferencesFor(state.board),board=state.boards.find(b=>b.id===state.board);
   const status=prefs.scope==="active"?board?.columns.find(c=>!/backlog/i.test(c.name)&&c.statuses.some(s=>s.category!=="done"))?.statuses.find(s=>s.category!=="done")?.id:undefined;
   set({draft:{...(status?{status}:{}),...(state.mine?{assignee:ME}:{}),...draft},overlay:"create"});
 }
 function readSavedViews():SavedView[] {
   try {
-    const items=JSON.parse(localStorage.getItem("better-jira:saved-views:v1")??"[]");
+    const items=JSON.parse(savedValue("better-jira:saved-views:v1")??"[]");
     return Array.isArray(items)?items.filter(v=>v&&typeof v.id==="string"&&typeof v.name==="string"&&v.name.trim()&&typeof v.board==="number").map(v=>({...v,preferences:parsePreferences(v.preferences),mine:v.mine===true})):[];
   }catch{return [];}
 }
-function readFavorites():string[] {try{const values=JSON.parse(localStorage.getItem("better-jira:favorites:v1")??"[]");return Array.isArray(values)?values.filter(v=>typeof v==="string"):[];}catch{return [];}}
+function readFavorites():string[] {try{const values=JSON.parse(savedValue("better-jira:favorites:v1")??"[]");return Array.isArray(values)?values.filter(v=>typeof v==="string"):[];}catch{return [];}}
 export function toggleFavorite(id:string) {set({favorites:state.favorites.includes(id)?state.favorites.filter(v=>v!==id):[...state.favorites,id]});}
 export function saveView(name:string) {
   if(!name.trim())return;
@@ -313,22 +404,33 @@ export function openSavedView(view:SavedView) {
 function patchIssue(key: string, patch: Partial<Issue>) {
   const i = state.issues.get(key);
   if (i) {
-    localFields.set(key,new Set([...(localFields.get(key)??[]),...Object.keys(patch)]));
+    localFields.set(key,new Set([...(localFields.get(key)??[]),...Object.keys(patch),"updated"]));
     set({ issues: new Map(state.issues).set(key, { ...i, ...patch, updated: now() }) });
   }
 }
 
 function patchFields(key: string, fn: (fields: any) => object) {
   const f = state.full.get(key);
-  if (f) set({ full: new Map(state.full).set(key, { ...f, fields: { ...f.fields, ...fn(f.fields) } }) });
+  if (f) {const patch=fn(f.fields);fullFields.set(key,new Set([...(fullFields.get(key)??[]),...Object.keys(patch)]));set({full:new Map(state.full).set(key,{...f,fields:{...f.fields,...patch}})});}
 }
 
 export const boardOf = (key: string) => state.boards.find((b) => b.id === state.issues.get(key)?.board);
 
 let localSeq = 0;
 
-// Issue edits stay in this browser session and reset on reload.
+// Local overrides are saved separately from the read-only Jira mirror.
 export const actions = {
+  async restoreJira(key:string) {
+    if(createdKeys.has(key)||!state.canEdit)return;
+    try {
+      const [remote,full]=await Promise.all([json<Issue[]>("/api/issues"),json<Full>(`/api/issues/${encodeURIComponent(key)}`)]);
+      const issue=remote.find(i=>i.key===key);if(!issue)throw new Error("Issue is no longer in the Jira mirror");
+      record(key,`restore Jira version of ${key}`,()=>{
+        localFields.set(key,new Set());fullFields.set(key,new Set());needsFullRefresh.delete(key);
+        set({issues:new Map(state.issues).set(key,issue),full:new Map(state.full).set(key,full),overlay:null,perf:`Restored mirrored Jira version of ${key}`});
+      });
+    }catch{set({perf:"Could not read the Jira version. Your local changes are still here."});}
+  },
   patch(key: string, patch: IssueDraft & Partial<Pick<Issue,"links"|"relations"|"reactions"|"watchers"|"watchersComplete">>) {
     timed(`edit ${key}`,()=>record(key,`edit ${key}`,()=>patchIssue(key,patch)));
   },
@@ -379,12 +481,13 @@ export const actions = {
     if (summary.trim() && summary !== state.issues.get(key)?.summary)
       timed(`edit ${key} summary`, () => record(key,`rename ${key}`,()=>patchIssue(key, { summary: summary.trim() })));
   },
-  description(key: string, text: string) {
-    const previous=adfToText(state.full.get(key)?.fields.description);
-    if(text.trim()===previous.trim()){set({editDesc:false});return;}
+  description(key: string, value: string|AdfDocument) {
+    const previous=normalizeDocument(state.full.get(key)?.fields.description);
+    const document=normalizeDocument(value);
+    if(JSON.stringify(document)===JSON.stringify(previous)){set({editDesc:false});return;}
     timed(`edit ${key} description`, () => record(key,`description on ${key}`,() => {
-      patchFields(key, () => ({ description: text.trim() ? textToAdf(text) : null }));
-      patchIssue(key, {description:text.trim(),descriptionHistory:[...(state.issues.get(key)?.descriptionHistory??[]),{text:previous,at:now()}]});
+      patchFields(key, () => ({ description:document }));
+      patchIssue(key, {description:adfToText(document),descriptionHistory:[...(state.issues.get(key)?.descriptionHistory??[]),{text:adfToText(previous),document:previous,at:now()}]});
       set({ editDesc: false });
     }));
   },
@@ -403,23 +506,27 @@ export const actions = {
     }));
   },
   create(summary: string, draft:IssueDraft={}, more=false) {
+    if(!state.canEdit)return;
     const board = state.boards.find((b) => b.id === state.board);
     const statuses=board?.columns.flatMap(c=>c.statuses)??[];
     const status = statuses.find(s=>s.id===draft.status)??statuses[0];
     if (!board || !status || !summary.trim()) return;
     const prefix = [...state.issues.values()].find((i) => i.board === board.id)?.key.split("-")[0]??"LOCAL";
     const key = `${prefix}-NEW${++localSeq}`;
+    createdKeys.add(key);
+    const {descriptionDoc,...fields}=draft;
+    const document=normalizeDocument(descriptionDoc??draft.description??"");
     timed(`create ${key}`, () => record(key,`create ${key}`,() => {
       const issue: Issue = {
         key, board: board.id, summary: summary.trim(), type: "Task", priority: "Normal",
         assignee: null, labels: [], rank: "0", comments: 0, updated: now(),
         created: now(), statusSince:now(), creator: ME, milestones:[],prCount:0,watchers:[],watchersComplete:true, project: [...state.issues.values()].find(i=>i.board === board.id)?.project,
-        ...draft, status:status.id, resolved:status.category==="done"?now():null,
+        ...fields,description:adfToText(document),status:status.id, resolved:status.category==="done"?now():null,
       };
       const full: Full = {
         key,
         fields: {
-          description: draft.description?.trim()?textToAdf(draft.description):null, created: now(), comment: { comments: [], total: 0 },
+          description: document, created: now(), comment: { comments: [], total: 0 },
           reporter: { accountId: ME.id, displayName: ME.name, avatarUrls: { "24x24": ME.avatar } },
         },
       };
@@ -442,7 +549,7 @@ export const actions = {
   duplicate(key:string) {
     const issue=state.issues.get(key);if(!issue)return;
     set({board:issue.board});
-    return actions.create(`${issue.summary} (copy)`,{status:issue.status,assignee:issue.assignee,priority:issue.priority,labels:[...issue.labels],project:issue.project,milestones:issue.milestones,due:issue.due,parent:issue.parent,type:issue.type,description:issue.description??adfToText(state.full.get(key)?.fields.description)});
+    return actions.create(`${issue.summary} (copy)`,{status:issue.status,assignee:issue.assignee,priority:issue.priority,labels:[...issue.labels],project:issue.project,milestones:issue.milestones,due:issue.due,parent:issue.parent,type:issue.type,descriptionDoc:normalizeDocument(state.full.get(key)?.fields.description??issue.description)});
   },
   relate(key:string,target:string,kind:string,remove=false) {
     if(key===target)return;
