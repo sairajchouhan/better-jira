@@ -3,16 +3,20 @@ import "./index.css";
 import { Command } from "cmdk";
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Adf, adfToText } from "./adf";
+import { normalizeDocument, type AdfDocument } from "./document";
 import { Icon, Label, PriorityIcon, StatusIcon, TypeDot } from "./icons";
 import {
-  ME, actions, boardOf, get, load, loadFull, set, timed, useStore,
-  beginCreate, changeDisplay, changePreferences, downloadLocalBackup, issueURL, isLocalIssue, retryLocalStorage, toggleFavorite, undoEdit, redoEdit, usePreferences, type Board, type Column, type Issue, type User,
+  ME, actions, boardOf, get, load, loadFull, navigate, set, timed, ui, useStore, dismissRecoveryNotice,
+  beginCreate, changeDisplay, changePreferences, downloadLocalBackup, flushLocalChanges, issueURL, isLocalIssue, retryLocalStorage, toggleFavorite, undoEdit, redoEdit, usePreferences, type Board, type Column, type Issue, type User,
 } from "./store";
 
 import { BoardControls, FilterChips } from "./view-controls";
-import { buckets, draftForGroup, listRows, navigationIssues, selectIssues, statusDuration, type Bucket, type Display, type Grouping, type Property } from "./view-model";
+import { buckets, columnInScope, draftForGroup, rankBetween, listRows, navigationIssues, selectIssues, statusDuration, type Bucket, type Display, type Grouping, type Property } from "./view-model";
 import { BoardDetails, CreateIssue, Favorites, GroupMenu, IssueOptions, Modal, PersonalIssueDetails, PropertyPicker, Relations, SavedViews, SaveViewButton } from "./personal-controls";
 import { RichEditor } from "./rich-editor-loader";
+import { issueAnchor } from "./menu-surface";
+import { createActor } from "xstate";
+import { autosaveMachine, inspector } from "./machines";
 
 /** The active board's visible columns, for keyboard navigation and the issue page's ↑ ↓ stepping. */
 const nav = { cols: [] as Issue[][] };
@@ -28,6 +32,7 @@ export function App() {
   const view = useStore((s) => s.view);
   const overlay = useStore((s) => s.overlay);
   const open = useStore((s) => (s.panel && s.selected ? s.issues.get(s.selected) : undefined));
+  const current = useStore((s) => (s.selected ? s.issues.get(s.selected) : undefined));
   const loadError=useStore(s=>s.loadError);
   const visited=useRef(new Set<number>());visited.current.add(boardId);
 
@@ -52,12 +57,12 @@ export function App() {
         </div>
       </main>
       </div>
-      <StorageNotice/><StatusBar />
+      <StorageNotice/><StatusBar /><Toast/>
       {overlay === "palette" && <Palette />}
       {overlay === "assign" && selected && <AssignPicker issueKey={selected} />}
       {overlay === "status" && selected && <StatusPicker issueKey={selected} />}
       {overlay === "create" && <CreateIssue />}
-      {open && (overlay === "priority" || overlay === "labels" || overlay === "project" || overlay === "milestone" || overlay === "due") && <PropertyPicker issue={open} field={overlay}/>}
+      {current && (overlay === "priority" || overlay === "labels" || overlay === "project" || overlay === "milestone" || overlay === "due") && <PropertyPicker issue={current} field={overlay}/>}
       {open && overlay === "options" && <IssueOptions issue={open}/>}
       {open && overlay === "relations" && <Relations issue={open}/>}
     </div>
@@ -73,10 +78,11 @@ function BoardView({ board, active, shown, selected }: { board: Board; active: b
   const prefs = usePreferences(board.id);
   const d = prefs.display;
   const [expanded,setExpanded] = useState<string[]>([]);
+  const [hiddenOpen,setHiddenOpen] = useState(true);
   const all = useMemo(()=>[...issues.values()],[issues]);
   const visible = useMemo(()=>selectIssues(all,board,prefs,mine,query,ME.id),[all,board,prefs,mine,query]);
   const universe = useMemo(()=>all.filter(i=>i.board===board.id),[all,board]);
-  const columns = useMemo(()=>buckets(visible,d.columns,board,universe,d.groupDescending),[visible,d,board,universe]);
+  const columns = useMemo(()=>buckets(visible,d.columns,board,universe,d.groupDescending).filter(c=>d.columns!=="status"||columnInScope(board.columns.find(x=>x.name===c.id),prefs.scope)),[visible,d,board,universe,prefs.scope]);
   const hiddenIds=prefs.hidden[d.columns]??[];
   const collapsed=prefs.collapsed[d.columns]??[];
   const hidden = columns.filter(c=>hiddenIds.includes(c.id)||!d.emptyGroups&&!c.issues.length&&!expanded.includes(c.id));
@@ -98,7 +104,7 @@ function BoardView({ board, active, shown, selected }: { board: Board; active: b
   const collapse=(id:string)=>changePreferences(board.id,{collapsed:{...prefs.collapsed,[d.columns]:collapsed.includes(id)?collapsed.filter(x=>x!==id):[...collapsed,id]}});
   const createIn=(bucket:Bucket,row?:Bucket)=>beginCreate({...draftForGroup(d.columns,bucket.id,board,universe,prefs.scope),...(row?draftForGroup(d.rows,row.id,board,universe,prefs.scope):{})});
   return <div className={`${shown?"flex":"hidden"} min-w-0 min-h-0 flex-1`}><div className="flex min-w-0 min-h-0 flex-1 flex-col" data-layout={d.layout}>
-    {!visible.length&&<div role="status" className="flex shrink-0 items-center justify-center gap-3 py-8 text-fg-3">No issues match this view.<button onClick={()=>set({toolbar:"filter"})} className="text-fg-2">Edit filters</button></div>}
+    {!visible.length&&<div role="status" className="flex shrink-0 items-center justify-center gap-3 py-8 text-fg-3">No issues match this view.<button onClick={()=>ui.send({type:"toolbar.open",toolbar:"filter"})} className="text-fg-2">Edit filters</button></div>}
     {d.layout === "list" ? <div className="flex-1 overflow-auto py-1">
       {show.map(c=><section key={c.id} className="mb-2">
         <GroupHeading bucket={c} collapsed={collapsed.includes(c.id)} toggle={()=>collapse(c.id)} create={()=>createIn(c)}/>
@@ -107,16 +113,38 @@ function BoardView({ board, active, shown, selected }: { board: Board; active: b
           <IssueList issues={r.issues} universe={universe} display={d} selected={selected}/>
         </div>)}
       </section>)}
-    </div> : <div className="min-h-0 flex-1 overflow-auto px-2 pt-1">
+    </div> : <div className="flex min-h-0 flex-1"><div className="min-h-0 min-w-0 flex-1 overflow-auto px-2 pt-1">
+      {d.rows!=="none"&&<div className="sticky top-0 z-10 flex w-max gap-4 bg-panel">{show.map(col=><div key={col.id} className="w-[340px] shrink-0 rounded-t-[5px] bg-(--col-top)"><ColumnHeading bucket={col} count={col.issues.length} display={d} hide={()=>hide(col.id)} create={()=>createIn(col)}/></div>)}</div>}
       {rows.filter(r=>d.rows==="none"||r.issues.length).map(row=><div key={row.id} className={d.rows === "none"?"flex h-full min-h-0 gap-4":"mb-4"}>
         {d.rows!=="none"&&<div className="sticky left-0 mb-2 flex items-center gap-2 px-2 py-2 text-fg-3"><span>{row.name}</span><span>{row.issues.length}</span></div>}
         <div className={d.rows === "none"?"contents":"flex gap-4"}>
-          {show.map(col=><ColumnView key={col.id} bucket={col} issues={d.rows==="none"?col.issues:col.issues.filter(i=>row.issues.includes(i))} selected={selected} display={d} scroll={d.rows==="none"} hide={()=>hide(col.id)} create={()=>createIn(col,d.rows==="none"?undefined:row)} onDrop={key=>actions.drop(key,board.id,[{by:d.columns,id:col.id},...(d.rows!=="none"?[{by:d.rows,id:row.id}]:[])])}/>)}
+          {show.map(col=><ColumnView key={col.id} bucket={col} issues={d.rows==="none"?col.issues:col.issues.filter(i=>row.issues.includes(i))} selected={selected} display={d} scroll={d.rows==="none"} header={d.rows==="none"} hide={()=>hide(col.id)} create={()=>createIn(col,d.rows==="none"?undefined:row)} onDrop={(key,before)=>actions.drop(key,board.id,[{by:d.columns,id:col.id},...(d.rows!=="none"?[{by:d.rows,id:row.id}]:[])],d.ordering==="manual"?dropRank((d.rows==="none"?col.issues:col.issues.filter(i=>row.issues.includes(i))).filter(i=>i.key!==key),before,d.descending):undefined)}/>)}
         </div>
       </div>)}
-    </div>}
-    {hidden.length>0&&<details open className="shrink-0 border-t border-line px-4 py-2 text-[12px] text-fg-3"><summary className="cursor-pointer">Hidden {d.layout==="board"?"columns":"groups"}</summary><div className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-y-auto">{hidden.map(c=><button key={c.id} aria-label={`Show ${c.name}`} className="flex h-8 items-center gap-2 rounded-lg bg-card px-3 text-fg-2 hover:bg-hover" onClick={()=>reveal(c.id)}>{c.status&&<StatusIcon status={c.status}/>}<span>{c.name}</span><span className="text-fg-3">{c.issues.length}</span></button>)}</div></details>}
+    </div>{d.rows==="none"&&hidden.length>0&&<HiddenColumns columns={hidden} open={hiddenOpen} toggle={()=>setHiddenOpen(!hiddenOpen)} reveal={reveal}/>}</div>}
+    {hidden.length>0&&d.layout==="board"&&d.rows==="none"?null:hidden.length>0&&<details open className="shrink-0 border-t border-line px-4 py-2 text-[12px] text-fg-3"><summary className="cursor-pointer">Hidden {d.layout==="board"?"columns":"groups"}</summary><div className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-y-auto">{hidden.map(c=><button key={c.id} aria-label={`Show ${c.name}`} className="flex h-8 items-center gap-2 rounded-lg bg-card px-3 text-fg-2 hover:bg-hover" onClick={()=>reveal(c.id)}>{c.status&&<StatusIcon status={c.status}/>}<span>{c.name}</span><span className="text-fg-3">{c.issues.length}</span></button>)}</div></details>}
   </div>{active&&shown&&details&&!panel&&<BoardDetails board={board} issues={visible}/>}</div>;
+}
+
+/** The rank for a card dropped before `before` (or at the end) in a column shown in `list` order. */
+function dropRank(list:Issue[],before:string|undefined,descending:boolean) {
+  const i=list.findIndex(x=>x.key===before),at=i<0?list.length:i,prev=list[at-1]?.rank,next=list[at]?.rank;
+  return descending?rankBetween(next,prev):rankBetween(prev,next);
+}
+
+/** Linear's "Hidden columns" list: pinned right, 338px, 50px header on the panel colour, 37px rows 10px apart. */
+function HiddenColumns({columns,open,toggle,reveal}:{columns:Bucket[];open:boolean;toggle:()=>void;reveal:(id:string)=>void}) {
+  return <aside aria-label="Hidden columns" className="mr-3 w-[338px] shrink-0 overflow-y-auto border-l border-line pl-3">
+    <div className="flex h-[50px] items-center">
+      <button aria-expanded={open} onClick={toggle} className="ml-px flex h-6 items-center gap-1 rounded-full border-[0.5px] border-transparent pr-2 pl-1 text-[12px] font-medium text-fg-2 hover:bg-hover">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" className={`text-fg-3 transition-transform ${open?"rotate-90":""}`}><path d="M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z"/></svg>
+        Hidden columns
+      </button>
+    </div>
+    {open&&<div className="flex flex-col gap-2.5 pb-12">{columns.map(c=><button key={c.id} aria-label={`Show ${c.name}`} onClick={()=>reveal(c.id)} className="flex h-[37px] shrink-0 items-center gap-3.5 rounded-lg border-[0.5px] border-hidden-line bg-card px-3 text-left text-[13px] font-medium text-fg shadow-(--hidden-shadow) hover:bg-card-hover">
+      {c.status?<StatusIcon status={c.status}/>:<Icon name="layers"/>}<span className="flex-1 truncate">{c.name}</span><span className="font-[450] text-card-fg-3">{c.issues.length}</span>
+    </button>)}</div>}
+  </aside>;
 }
 
 function GroupHeading({bucket,collapsed,toggle,create}:{bucket:Bucket;collapsed:boolean;toggle:()=>void;create:()=>void}) {
@@ -137,9 +165,9 @@ function onKey(e: KeyboardEvent) {
   if(!typing&&(e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="z") {e.preventDefault();return e.shiftKey?redoEdit():undoEdit();}
   if ((e.metaKey || e.ctrlKey) && e.key === "k") {
     e.preventDefault();
-    return set({ overlay: s.overlay === "palette" ? null : "palette" });
+    return ui.send({ type: "palette.toggle" });
   }
-  if (s.overlay) return e.key === "Escape" && set({ overlay: null });
+  if (s.overlay) return e.key === "Escape" && ui.send({ type: "overlay.close" });
   if (s.toolbar) return;
   if (t.closest("input, textarea, select, [contenteditable=true], [role=dialog]")) return e.key === "Escape" && t.blur();
   if((e.key==="Enter"||e.key===" ")&&t.closest("button, a, summary, [role=button]"))return;
@@ -153,7 +181,7 @@ function press(key: string): boolean {
   const sel = s.selected;
   const cols = nav.cols;
   const page = s.panel && s.view === "page" && !!sel;
-  const select = (k?: string) => k && timed(`select ${k}`, () => set({ selected: k }));
+  const select = (k?: string) => k && timed(`select ${k}`, () => navigate({ selected: k }));
   const focus = (id: string) => requestAnimationFrame(() => document.getElementById(id)?.focus());
   const down = key === "j" || key === "ArrowDown";
   const up = key === "k" || key === "ArrowUp";
@@ -181,26 +209,26 @@ function press(key: string): boolean {
     case "ArrowRight": sideways(1); break;
     case "Enter": case "o":
       if (!sel) return false;
-      timed(s.panel ? "close issue" : `open ${sel}`, () => set({ panel: !s.panel }));
+      timed(s.panel ? "close issue" : `open ${sel}`, () => navigate({ panel: !s.panel }));
       break;
-    case "Escape": s.panel ? set({ panel: false }) : s.query ? set({ query: "" }) : set({ selected: null }); break;
-    case "f": set({toolbar:"filter"}); break;
-    case "/": set({overlay:"palette"}); break;
-    case "m": timed("only mine", () => set({ mine: !s.mine })); break;
-    case "v": timed("issue view", () => set({ view: s.view === "page" ? "side" : "page" })); break;
+    case "Escape": ui.send({ type: "escape" }); break;
+    case "f": ui.send({type:"toolbar.open",toolbar:"filter"}); break;
+    case "/": ui.send({type:"overlay.open",overlay:"palette"}); break;
+    case "m": timed("only mine", () => ui.send({ type: "mine.set", mine: !s.mine })); break;
+    case "v": timed("issue view", () => navigate({ view: s.view === "page" ? "side" : "page" })); break;
     case "b": {
       const i = s.boards.findIndex((b) => b.id === s.board);
-      timed("switch board", () => set({ board: s.boards[(i + 1) % s.boards.length]!.id, selected: null, panel: false }));
+      timed("switch board", () => navigate({ board: s.boards[(i + 1) % s.boards.length]!.id, selected: null, panel: false }));
       break;
     }
     case "n": case "c": beginCreate(); break;
-    case "s": if (!sel) return false; set({ overlay: "status" }); break;
-    case "a": if (!sel) return false; set({ overlay: "assign" }); break;
-    case "p": if (!sel) return false; set({overlay:"priority",panel:true}); break;
-    case "l": if (!sel) return false; set({overlay:"labels",panel:true}); break;
+    case "s": if (!sel) return false; ui.send({ type: "overlay.open", overlay: "status" }); break;
+    case "a": if (!sel) return false; ui.send({ type: "overlay.open", overlay: "assign" }); break;
+    case "p": if (!sel) return false; ui.send({type:"overlay.open",overlay:"priority"}); break;
+    case "l": if (!sel) return false; ui.send({type:"overlay.open",overlay:"labels"}); break;
     case "i": if (!sel) return false; actions.assign(sel, s.issues.get(sel)?.assignee?.id === ME.id ? null : ME); break;
-    case "e": if (!sel) return false; set({ panel: true }); focus("summary"); break;
-    case "d": if (!sel) return false; set({ panel: true, editDesc: true }); break;
+    case "e": if (!sel) return false; navigate({ panel: true }); focus("summary"); break;
+    case "d": if (!sel) return false; ui.send({ type: "description.edit" }); break;
     default:
       if (/^[1-9]$/.test(key) && sel) actions.move(sel, Number(key) - 1);
       else return false;
@@ -212,22 +240,27 @@ function press(key: string): boolean {
 
 function Sidebar({ boards }: { boards: Board[] }) {
   const boardId = useStore((s) => s.board);
+  const mine = useStore((s) => s.mine);
   return (
     <nav className="flex w-[244px] shrink-0 flex-col gap-px overflow-y-auto p-2 font-medium max-md:hidden">
       <div className="mb-1 flex h-11 items-center gap-2 px-2 text-fg">
         <span className="grid size-[18px] place-items-center rounded-[5px] bg-accent text-[10px] font-semibold text-white">bj</span>
         better-jira
       </div>
-      <SideItem onClick={() => set({ overlay: "palette" })}>
+      <SideItem onClick={() => ui.send({ type: "overlay.open", overlay: "palette" })}>
         <Icon name="search" /> Search <kbd className="ml-auto">⌘K</kbd>
       </SideItem>
       <SideItem onClick={() => beginCreate()}>
         <Icon name="plus" /> New issue <kbd className="ml-auto">C</kbd>
       </SideItem>
+      {/* Like Linear, My issues is a sidebar view rather than a tab beside Active/Backlog/All. */}
+      <SideItem active={mine} onClick={() => timed("only mine", () => ui.send({ type: "mine.set", mine: !mine }))}>
+        <Icon name="user" /> My issues <kbd className="ml-auto">M</kbd>
+      </SideItem>
 
       <div className="mt-5 mb-1 px-2 text-[12px] text-fg-3">Boards</div>
       {boards.map((b) => (
-        <SideItem key={b.id} active={b.id === boardId} onClick={() => timed("switch board", () => set({ board: b.id, selected: null, panel: false }))}>
+        <SideItem key={b.id} active={b.id === boardId} onClick={() => timed("switch board", () => navigate({ board: b.id, selected: null, panel: false }))}>
           <span className="grid size-4 shrink-0 place-items-center rounded-[4px] bg-sel text-[9px] font-semibold text-fg-2">{b.name[0]}</span>
           <span className="truncate">{b.name}</span>
         </SideItem>
@@ -239,17 +272,25 @@ function Sidebar({ boards }: { boards: Board[] }) {
 }
 
 /** Linear's 28px bottom bar under the sidebar and panel; ours carries the perf readout and the local-only note. */
+function Toast() {
+  const toast=useStore(s=>s.toast);
+  if(!toast)return null;
+  return <div aria-live="polite" data-toast className="fixed right-4 bottom-10 z-50 flex items-center gap-3 rounded-lg border border-line-2 bg-card px-3 py-2 text-[13px] text-fg shadow-lg">{toast.text}{toast.key&&<button onClick={()=>(ui.send({type:"toast.dismiss"}),navigate({selected:toast.key,panel:true}))} className="text-accent hover:underline">View issue</button>}</div>;
+}
+
 function StatusBar() {
   const perf = useStore((s) => s.perf);
   const undo=useStore(s=>s.undoCount),redo=useStore(s=>s.redoCount);
   const storage=useStore(s=>s.storage);
   return (
-    <footer className="flex h-7 shrink-0 items-center gap-4 px-4 text-[11px]">
-      <span title="Issue changes, files, and view preferences are saved in this browser." className="flex items-center gap-1.5 text-amber-500"><span className="size-1.5 rounded-full bg-amber-500" />Local only: nothing is sent to Jira</span>
+    <footer className="flex h-7 shrink-0 items-center gap-4 px-4 pb-2 text-[11px] whitespace-nowrap">
+      <span title="Issue changes, files, and view preferences are saved in this browser." className="flex min-w-0 items-center gap-1.5 text-amber-500"><span className="size-1.5 shrink-0 rounded-full bg-amber-500" /><span className="truncate">Local only: nothing is sent to Jira</span></span>
       <span role="status" aria-label="Local save status" data-storage-status={storage.status} className="text-fg-3">{storage.status==="saving"?"Saving…":storage.status==="saved"?"Saved locally":storage.status==="loading"?"Opening local data…":"Not saved"}</span>
-      <button disabled={!undo} onClick={undoEdit} title="Undo (⌘Z)" className="text-fg-3 disabled:opacity-30">Undo</button>
-      <button disabled={!redo} onClick={redoEdit} title="Redo (⌘⇧Z)" className="text-fg-3 disabled:opacity-30">Redo</button>
-      <button title="Download your local changes and files" onClick={()=>void downloadLocalBackup()} className="text-fg-3">Backup</button>
+      <span className="-ml-2 flex">
+        <button aria-label="Undo" disabled={!undo} onClick={undoEdit} title="Undo (⌘Z)" className={FOOT_BTN}><Icon name="undo"/></button>
+        <button aria-label="Redo" disabled={!redo} onClick={redoEdit} title="Redo (⌘⇧Z)" className={FOOT_BTN}><Icon name="redo"/></button>
+        <button aria-label="Download backup" title="Download your local changes and files" onClick={()=>void downloadLocalBackup()} className={FOOT_BTN}><Icon name="download"/></button>
+      </span>
       <span className="ml-auto truncate font-mono text-emerald-500">{perf}</span>
     </footer>
   );
@@ -258,36 +299,26 @@ function StatusBar() {
 function StorageNotice() {
   const storage=useStore(s=>s.storage);
   if(storage.status!=="error"&&!storage.recovered)return null;
-  return <div role={storage.status==="error"?"alert":"status"} className="flex shrink-0 flex-wrap items-center gap-3 border-t border-line px-4 py-2 text-[12px] text-fg-2"><span className="mr-auto">{storage.message}</span>{storage.status==="error"&&<button onClick={()=>void retryLocalStorage()} className="text-accent">Retry local storage</button>}<button onClick={()=>void downloadLocalBackup()} className="text-accent">Download local backup</button>{storage.recovered&&storage.status!=="error"&&<button aria-label="Dismiss local recovery notice" onClick={()=>set({storage:{...storage,recovered:false}})}><Icon name="close"/></button>}</div>;
+  return <div role={storage.status==="error"?"alert":"status"} className="flex shrink-0 flex-wrap items-center gap-3 border-t border-line px-4 py-2 text-[12px] text-fg-2"><span className="mr-auto">{storage.message}</span>{storage.status==="error"&&<button onClick={()=>void retryLocalStorage()} className="text-accent">Retry local storage</button>}<button onClick={()=>void downloadLocalBackup()} className="text-accent">Download local backup</button>{storage.recovered&&storage.status!=="error"&&<button aria-label="Dismiss local recovery notice" onClick={dismissRecoveryNotice}><Icon name="close"/></button>}</div>;
 }
 
 const SideItem = ({ active, onClick, children }: { active?: boolean; onClick: () => void; children: ReactNode }) => (
-  <button onClick={onClick} className={`flex h-7 items-center gap-2 rounded-lg pr-[9px] pl-2 text-left ${active ? "bg-sel text-fg" : "text-fg-2 hover:bg-hover"}`}>
+  <button onClick={onClick} aria-current={active||undefined} className={`flex h-7 items-center gap-2 rounded-lg pr-[9px] pl-2 text-left ${active ? "bg-sel text-fg" : "text-fg-2 hover:bg-hover"}`}>
     {children}
   </button>
 );
 
 // Linear's pill button: 28px, 0.5px ring drawn as a shadow, 12px/500.
-const PILL = "flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium";
+const PILL = "flex h-7 shrink-0 items-center gap-1.5 rounded-full border-[0.5px] border-transparent px-2.5 text-[12px] font-medium";
 const CIRCLE = "flex h-7 min-w-7 shrink-0 items-center rounded-full bg-btn text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2";
 
 function BoardHeader() {
   const board = useStore((s) => s.boards.find((b) => b.id === s.board));
   const query = useStore((s) => s.query);
-  const mine = useStore((s) => s.mine);
   const details=useStore(s=>s.details);
   const prefs=usePreferences(board!.id);
-  const favoriteId=`board:${board!.id}:${prefs.scope}`;
+  const favoriteId=`board:${board!.id}`;
   const favorite=useStore(s=>s.favorites.includes(favoriteId));
-  const tab = (on: boolean, label: ReactNode, title?: string) => (
-    <button
-      title={title}
-      onClick={() => timed("only mine", () => set({ mine: !mine }))}
-      className={`${PILL} ${mine === on ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2"}`}
-    >
-      {label}
-    </button>
-  );
   return (
     <header className="shrink-0">
       <div className="flex h-11 items-center justify-between border-b-[0.5px] border-frame px-2">
@@ -296,19 +327,18 @@ function BoardHeader() {
           <span className="truncate">{board?.name}</span>
           <span className="mx-2 -mt-0.5 text-fg-3">›</span>
           <span>Issues</span>
-          <button role="switch" aria-label={favorite?"Remove from favorites":"Add to favorites"} aria-checked={favorite} onClick={()=>toggleFavorite(favoriteId)} className="ml-3 text-fg-3 hover:text-fg">{favorite?"★":"☆"}</button>
+          <button role="switch" aria-label={favorite?"Remove from favorites":"Add to favorites"} aria-checked={favorite} onClick={()=>toggleFavorite(favoriteId)} className={`ml-2 grid size-7 place-items-center rounded-full hover:bg-hover ${favorite?"text-[#f2c94c]":"text-fg-3 hover:text-fg-2"}`}><Icon name={favorite?"starred":"star"} size={16}/></button>
         </div>
-        <button aria-label="Search issues" onClick={()=>set({overlay:"palette"})} className={`${COL_BTN} ml-auto md:hidden`}><Icon name="search"/></button>
+        <button aria-label="Search issues" onClick={()=>ui.send({type:"overlay.open",overlay:"palette"})} className={`${COL_BTN} ml-auto md:hidden`}><Icon name="search"/></button>
         <button onClick={() => beginCreate()} className={`${PILL} pr-2.5 pl-2 text-fg-3 hover:bg-hover hover:text-fg-2`}>
           <Icon name="plus" /> New issue
         </button>
       </div>
       <div className="flex min-h-[43.5px] flex-wrap items-center gap-1 px-2 py-1">
-        {(["active","backlog","all"] as const).map(scope=><button key={scope} aria-pressed={prefs.scope===scope} onClick={()=>changePreferences(board!.id,{scope})} className={`${PILL} ${prefs.scope===scope?"bg-tab-on text-fg shadow-(--tab-on-shadow)":"bg-tab text-fg-3 hover:bg-hover"}`}>{scope==="active"?"Active":scope==="backlog"?"Backlog":"All issues"}</button>)}
-        {tab(true, "My issues", "My issues (m)")}
+        {(["active","backlog","all"] as const).map(scope=><button key={scope} aria-pressed={prefs.scope===scope} onClick={()=>changePreferences(board!.id,{scope})} className={`${PILL} ${prefs.scope===scope?"bg-tab-on text-fg shadow-(--tab-on-shadow)":"bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2"}`}>{scope==="active"?"Active":scope==="backlog"?"Backlog":"All issues"}</button>)}
         <SaveViewButton/>
         <div className="ml-auto flex items-center gap-1"><BoardControls board={board!}/></div>
-        <button aria-label={details?"Close details":"Open details"} aria-expanded={details} title="Board details" onClick={() => set({details:!details,panel:false})} className={`${CIRCLE} justify-center`}>
+        <button aria-label={details?"Close details":"Open details"} aria-expanded={details} title="Board details" onClick={() => (set({details:!details}),navigate({panel:false}))} className={`${CIRCLE} justify-center`}>
           <Icon name="side" />
         </button>
       </div>
@@ -319,22 +349,29 @@ function BoardHeader() {
 
 // --- board ---
 
+// Linear's bottom-bar button: 28px, radius 8, fg-3.
+const FOOT_BTN = "grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg-2 disabled:opacity-30 disabled:hover:bg-transparent";
 const COL_BTN = "grid size-6 place-items-center rounded-full text-fg-3 hover:bg-hover hover:text-fg";
 
-function ColumnView({ bucket, issues, selected, display, scroll, onDrop,hide,create }: { bucket:Bucket; issues:Issue[]; selected:string|null; display:Display; scroll:boolean; onDrop:(key:string)=>void;hide:()=>void;create:()=>void }) {
+function ColumnHeading({bucket,count,display,hide,create}:{bucket:Bucket;count:number;display:Display;hide:()=>void;create:()=>void}) {
+  return <h2 className="flex h-[46px] shrink-0 items-center gap-2 pr-2 pl-3.5 text-[13px]">
+    {bucket.status?<StatusIcon status={bucket.status}/>:display.columns === "priority"?<PriorityIcon name={bucket.name}/>:<Icon name="layers"/>}
+    <span className="ml-0.5 truncate font-medium text-fg-2">{bucket.name}</span><span className="text-fg-3">{count}</span>
+    <GroupMenu name={bucket.name} hide={hide}/>
+    <button aria-label={`New issue in ${bucket.name}`} onClick={create} className={`-ml-1.5 ${COL_BTN}`}><Icon name="plus"/></button>
+  </h2>;
+}
+
+/** `header={false}` in swimlanes: Linear shows one sticky header row above all lanes. */
+function ColumnView({ bucket, issues, selected, display, scroll, onDrop,hide,create,header=true }: { bucket:Bucket; issues:Issue[]; selected:string|null; display:Display; scroll:boolean; onDrop:(key:string,before?:string)=>void;hide:()=>void;create:()=>void;header?:boolean }) {
   const [over,setOver] = useState(false);
   return <section
     onDragOver={e=>{e.preventDefault();setOver(true);}}
     onDragLeave={e=>!e.currentTarget.contains(e.relatedTarget as Node)&&setOver(false)}
-    onDrop={e=>{e.preventDefault();setOver(false);onDrop(e.dataTransfer.getData("text/plain"));}}
+    onDrop={e=>{e.preventDefault();setOver(false);const key=e.dataTransfer.getData("text/plain");onDrop(key,[...e.currentTarget.querySelectorAll<HTMLElement>("[data-key]")].find(c=>{const r=c.getBoundingClientRect();return c.dataset.key!==key&&r.top+r.height/2>e.clientY;})?.dataset.key);}}
     className={`flex w-[340px] shrink-0 flex-col rounded-t-[5px] bg-[linear-gradient(var(--col-top),var(--col-top)_46px,var(--col-bottom))] ${over?"ring-1 ring-accent":""}`}
   >
-    <h2 className="flex h-[46px] shrink-0 items-center gap-2 pr-2 pl-3.5 text-[13px]">
-      {bucket.status?<StatusIcon status={bucket.status}/>:display.columns === "priority"?<PriorityIcon name={bucket.name}/>:<Icon name="layers"/>}
-      <span className="ml-0.5 truncate font-medium text-fg-2">{bucket.name}</span><span className="text-fg-3">{issues.length}</span>
-      <GroupMenu name={bucket.name} hide={hide}/>
-      <button aria-label={`New issue in ${bucket.name}`} onClick={create} className={`-ml-1.5 ${COL_BTN}`}><Icon name="plus"/></button>
-    </h2>
+    {header&&<ColumnHeading bucket={bucket} count={issues.length} display={display} hide={hide} create={create}/>}
     <div className={`flex-1 px-[9px] pt-[9px] ${scroll?"overflow-y-auto":""}`}>
       {issues.map(i=><Card key={i.key} issue={i} selected={i.key===selected} display={display}/>)}
     </div>
@@ -367,11 +404,11 @@ const Card = memo(function Card({issue,selected,display:d,list=false,depth=0}:{i
   </>;
   const dates = <>{show("created")&&issue.created&&<span title={`Created ${issue.created}`}>Created {MONTH.format(new Date(issue.created))}</span>}{show("updated")&&<span title={`Updated ${issue.updated}`}>{list?"":"Updated "}{MONTH.format(new Date(issue.updated))}</span>}</>;
   return <div className={list?"[content-visibility:auto] [contain-intrinsic-size:auto_44px]":"pb-2 [contain-intrinsic-size:auto_124px] [content-visibility:auto] [overflow-clip-margin:4px]"}>
-    <div ref={ref} data-key={issue.key} role="button" aria-label={`${issue.key} ${issue.summary}`} tabIndex={0} draggable
+    <div ref={ref} data-key={issue.key} data-selected={selected||undefined} role="button" aria-label={`${issue.key} ${issue.summary}`} tabIndex={0} draggable
       onDragStart={e=>e.dataTransfer.setData("text/plain",issue.key)}
-      onKeyDown={e=>{if(e.key === "Enter"||e.key === " "){e.preventDefault();e.stopPropagation();set({selected:issue.key,panel:true});}}}
-      onClick={()=>timed(`open ${issue.key}`,()=>set({selected:issue.key,panel:true}))}
-      className={list?`flex min-h-11 cursor-pointer items-center gap-3 border-b border-line px-5 outline-none focus-visible:ring-1 focus-visible:ring-accent ${selected?"bg-hover":"hover:bg-hover"}`:`relative flex min-h-[42px] cursor-pointer flex-col rounded-lg p-2 shadow-(--card-shadow) outline-none focus-visible:ring-1 focus-visible:ring-accent ${selected?"bg-card-hover":"bg-card hover:bg-card-hover"}`}
+      onKeyDown={e=>{if(e.key === "Enter"||e.key === " "){e.preventDefault();e.stopPropagation();navigate({selected:issue.key,panel:true});}}}
+      onClick={()=>timed(`open ${issue.key}`,()=>navigate({selected:issue.key,panel:true}))}
+      className={list?`flex min-h-11 cursor-pointer items-center gap-3 border-b border-line px-5 outline-none focus-visible:ring-1 focus-visible:ring-accent ${selected?"bg-hover shadow-[inset_2px_0_0_var(--accent)]":"hover:bg-hover"}`:`relative flex min-h-[42px] cursor-pointer flex-col rounded-lg p-2 shadow-(--card-shadow) outline-none focus-visible:ring-1 focus-visible:ring-accent ${selected?"bg-card-hover ring-1 ring-accent":"bg-card hover:bg-card-hover"}`}
       style={list&&depth?{paddingLeft:20+depth*20}:undefined}>
       {list?<>
         {show("id")&&<span className="w-[85px] shrink-0 text-[12px] text-fg-3 tabular-nums">{depth>0&&"↳ "}{issue.key}</span>}
@@ -382,7 +419,7 @@ const Card = memo(function Card({issue,selected,display:d,list=false,depth=0}:{i
         <span className="flex shrink-0 gap-2 text-[11px] text-fg-3">{dates}</span>
       </>:<>
         <div className="flex flex-col gap-1.5 pr-[34px] pl-1">
-          {show("id")&&<span className="truncate text-[12px] font-[450] tracking-[-0.24px] text-card-fg-3 tabular-nums">{issue.key}</span>}
+          {show("id")&&<span className="truncate text-[12px] leading-[normal] font-[450] tracking-[-0.24px] text-card-fg-3 tabular-nums">{issue.key}</span>}
           <div className="flex items-start gap-1.5">{show("status")&&status&&<span className="mt-px" title={status.name}><StatusIcon status={status}/></span>}<span className="line-clamp-2 text-[13px] leading-4 font-medium [overflow-wrap:anywhere]">{issue.summary}</span></div>
         </div>
         {show("assignee")&&<span className="absolute top-2 right-2"><Avatar user={issue.assignee} size={18}/></span>}
@@ -428,13 +465,13 @@ function IssueView({ issue, page }: { issue: Issue; page: boolean }) {
       <a className="tracking-[-0.24px] text-fg-2 hover:text-fg" href={issueURL(issue)} target="_blank" rel="noreferrer">{issue.key}</a>
       {issue.parent && <span className="truncate">· parent {issue.parent}</span>}
       <span className="flex-1" />
-      <button role="switch" aria-label={favorite?"Remove issue from favorites":"Add issue to favorites"} aria-checked={favorite} onClick={()=>toggleFavorite(issue.key)} className={ICON_BTN}>{favorite?"★":"☆"}</button>
-      <button id="issue-options" aria-label="Issue options" onClick={()=>set({overlay:"options"})} className={ICON_BTN}><Icon name="dots"/></button>
-      {page && <Stepper issueKey={issue.key} />}
-      <button title={page ? "Open in side panel (v)" : "Open as full page (v)"} onClick={() => set({ view: page ? "side" : "page" })} className={ICON_BTN}>
+      <button role="switch" aria-label={favorite?"Remove issue from favorites":"Add issue to favorites"} aria-checked={favorite} onClick={()=>toggleFavorite(issue.key)} className={`${ICON_BTN} ${favorite?"text-[#f2c94c]!":""}`}><Icon name={favorite?"starred":"star"} size={16}/></button>
+      <button id="issue-options" aria-label="Issue options" onClick={()=>ui.send({type:"overlay.open",overlay:"options"})} className={ICON_BTN}><Icon name="dots"/></button>
+      <Stepper issueKey={issue.key} />
+      <button title={page ? "Open in side panel (v)" : "Open as full page (v)"} onClick={() => navigate({ view: page ? "side" : "page" })} className={ICON_BTN}>
         <Icon name={page ? "side" : "expand"} />
       </button>
-      <button title="Close (esc)" onClick={() => set({ panel: false })} className={ICON_BTN}><Icon name="close" /></button>
+      <button title="Close (esc)" onClick={() => navigate({ panel: false })} className={ICON_BTN}><Icon name="close" /></button>
     </div>
   );
 
@@ -444,7 +481,7 @@ function IssueView({ issue, page }: { issue: Issue; page: boolean }) {
         {bar}
         <div className="flex-1 overflow-y-auto px-5 py-4">
           <Title issue={issue} className="text-[17px]" />
-          <div className="mt-3 rounded-lg border border-line-2 p-1"><Properties issue={issue} f={f} /></div>
+          <div className="mt-3"><Properties issue={issue} /></div>
           <Description issue={issue} f={f} />
           <PersonalIssueDetails issue={issue}/>
           <Activity issue={issue} f={f} />
@@ -457,19 +494,19 @@ function IssueView({ issue, page }: { issue: Issue; page: boolean }) {
       <div className="flex min-h-0 flex-1 max-md:flex-col max-md:overflow-y-auto">
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-[760px] px-10 py-8">
-            <Title issue={issue} className="text-[22px]" />
+            <Title issue={issue} className="text-[24px]" />
             <Description issue={issue} f={f} />
             <PersonalIssueDetails issue={issue}/>
             <Activity issue={issue} f={f} />
           </div>
         </div>
-        <div className="w-[300px] shrink-0 overflow-y-auto border-l border-line p-3 max-md:w-full"><Properties issue={issue} f={f} /></div>
+        <div className="w-[300px] shrink-0 overflow-y-auto border-l border-line p-3 max-md:w-full"><Properties issue={issue} /></div>
       </div>
     </div>
   );
 }
 
-/** "n / total" over the board's visible issues, with ↑ ↓ (or j / k) to step without leaving the page. */
+/** ↑ ↓ (or j / k) step through the board's visible issues without leaving the issue, like Linear (no "n / total"). */
 function Stepper({ issueKey }: { issueKey: string }) {
   useStore((s) => s.issues); // re-render when the list changes; nav.cols is rebuilt by the board in the same render
   useStore((s) => s.mine);
@@ -479,7 +516,6 @@ function Stepper({ issueKey }: { issueKey: string }) {
   const i = flat.findIndex((x) => x.key === issueKey);
   return (
     <div className="mr-1 flex items-center gap-0.5">
-      <span className="mr-1 tabular-nums">{i < 0 ? "–" : i + 1} / {flat.length}</span>
       <button disabled={i<=0} title="Previous (k)" onClick={() => press("k")} className={`${ICON_BTN} disabled:opacity-30`}><Icon name="up" /></button>
       <button disabled={i<0||i>=flat.length-1} title="Next (j)" onClick={() => press("j")} className={`${ICON_BTN} disabled:opacity-30`}><Icon name="down" /></button>
     </div>
@@ -504,65 +540,70 @@ function Title({ issue, className }: { issue: Issue; className: string }) {
   );
 }
 
-function Properties({ issue, f }: { issue: Issue; f: any }) {
+/** Linear's property list: unlabelled 13px/500 rows under section headings, no box and no Reporter/Created/Updated rows. */
+function Properties({ issue }: { issue: Issue }) {
   const status = statusOf(issue);
-  const row = (label: string, value: ReactNode) => (
-    <>
-      <dt className="flex h-8 items-center px-2 text-fg-3">{label}</dt>
-      <dd className="min-w-0">{value}</dd>
-    </>
-  );
-  const btn = (id: string, hint: string, overlay: "status" | "assign" | "priority" | "labels" | "project" | "milestone" | "due", body: ReactNode) => (
-    <button id={id} onClick={() => set({ overlay })} className="group flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-fg-2 hover:bg-hover hover:text-fg">
+  const btn = (id: string, hint: string, overlay: "status" | "assign" | "priority" | "labels" | "project" | "milestone" | "due", label: string, body: ReactNode) => (
+    <button id={id} title={label} onClick={() => ui.send({ type: "overlay.open", overlay })} className="group flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-left text-fg-2 hover:bg-hover hover:text-fg">
       {body}
       <kbd className="ml-auto opacity-0 group-hover:opacity-100">{hint}</kbd>
     </button>
   );
-  const plain = (body: ReactNode) => <div className="flex h-8 items-center gap-2 px-2 text-fg-2">{body}</div>;
+  const section = (name: string, rows: ReactNode) => <section className="mb-3"><h3 className="flex h-7 items-center px-2 text-[12px] font-medium text-fg-3">{name}</h3>{rows}</section>;
   return (
-    <dl className="grid grid-cols-[84px_1fr] text-[12px] font-[450]">
-      {row("Status", btn("prop-status", "S", "status", <>{status && <StatusIcon status={status} />}<span className="truncate">{status?.name}</span></>))}
-      {row("Assignee", btn("prop-assignee", "A", "assign", <><Avatar user={issue.assignee} size={18} /><span className="truncate">{issue.assignee?.name ?? "Unassigned"}</span></>))}
-      {row("Priority",btn("prop-priority","P","priority",<><PriorityIcon name={issue.priority}/>{issue.priority??"No priority"}</>))}
-      {row("Labels",btn("prop-labels","L","labels",<span className="truncate">{issue.labels.join(", ")||"Add labels"}</span>))}
-      {row("Project",btn("prop-project","","project",<span className="truncate">{issue.project?.name??"No project"}</span>))}
-      {row("Milestone",btn("prop-milestone","","milestone",<span className="truncate">{issue.milestones?.map(m=>m.name).join(", ")||"Set milestone"}</span>))}
-      {row("Due date",btn("prop-due","","due",<span>{issue.due??"Set due date"}</span>))}
-      {row("Reporter", plain(f && <><Avatar user={author(f.reporter)} size={18} /><span className="truncate">{f.reporter?.displayName}</span></>))}
-      {row("Created", plain(f && ago(f.created)))}
-      {row("Updated", plain(ago(issue.updated)))}
-    </dl>
+    <div data-properties className="text-[13px] font-medium">
+      {section("Properties", <>
+        {btn("prop-status", "S", "status", "Status", <>{status && <StatusIcon status={status} />}<span className="truncate">{status?.name}</span></>)}
+        {btn("prop-priority", "P", "priority", "Priority", <><PriorityIcon name={issue.priority}/>{issue.priority ?? "No priority"}</>)}
+        {btn("prop-assignee", "A", "assign", "Assignee", <><Avatar user={issue.assignee} size={18} /><span className="truncate">{issue.assignee?.name ?? "Unassigned"}</span></>)}
+        {btn("prop-due", "", "due", "Due date", <><Icon name="calendar"/><span className={issue.due ? "" : "text-fg-3"}>{issue.due ?? "Set due date"}</span></>)}
+      </>)}
+      {section("Labels", btn("prop-labels", "L", "labels", "Labels", <><Icon name="label"/><span className={`truncate ${issue.labels.length ? "" : "text-fg-3"}`}>{issue.labels.join(", ") || "Add label"}</span></>))}
+      {section("Project", <>
+        {btn("prop-project", "", "project", "Project", <><Icon name="layers"/><span className="truncate">{issue.project?.name ?? "Add to project"}</span></>)}
+        {btn("prop-milestone", "", "milestone", "Milestone", <><Icon name="calendar"/><span className={`truncate ${issue.milestones?.length ? "" : "text-fg-3"}`}>{issue.milestones?.map(m => m.name).join(", ") || "Set milestone"}</span></>)}
+      </>)}
+    </div>
   );
 }
 
+/** Edited in place like Linear: changes save 600ms after typing stops and on blur, so a reload never loses them. */
 function Description({ issue, f }: { issue: Issue; f: any }) {
-  const editDesc = useStore((s) => s.editDesc);
+  const focus = useStore((s) => s.editDesc);
   const error=useStore(s=>s.fullErrors.get(issue.key));
+  const stored=f?JSON.stringify(normalizeDocument(f.description??"")):"";
+  const shown=useRef(stored);
+  const [revision,setRevision]=useState(0);
+  const draftKey=`better-jira:description-draft:${get().namespace}:${issue.key}`;
+  const [autosave]=useState(()=>createActor(autosaveMachine.provide({actions:{
+    keepDraft:(_,doc)=>{try{localStorage.setItem(draftKey,JSON.stringify(doc));}catch{/* autosave still runs */}},
+    commit:(_,doc)=>{
+      if(!doc)return;
+      shown.current=JSON.stringify(normalizeDocument(doc));actions.description(issue.key,doc);
+      void flushLocalChanges().then(()=>{try{if(autosave.getSnapshot().matches("clean"))localStorage.removeItem(draftKey);}catch{/* best effort */}});
+    },
+  }}),{inspect:inspector(`autosave ${issue.key}`)}).start());
+  // Undo, redo or a restored revision replaces the document under the editor, so show the stored version.
+  useEffect(()=>{if(stored&&stored!==shown.current){shown.current=stored;setRevision(r=>r+1);}},[stored]);
+  // A reload in the autosave window leaves the typed draft in localStorage; save it now.
+  useEffect(()=>{if(!f)return;try{const draft=localStorage.getItem(draftKey);if(draft){autosave.send({type:"change",doc:JSON.parse(draft)});autosave.send({type:"flush"});setRevision(r=>r+1);}}catch{/* ignore a broken draft */}},[!!f]);
+  useEffect(()=>()=>autosave.send({type:"flush"}),[]);
+  useEffect(()=>{
+    if(!focus||!f)return;ui.send({type:"description.editDone"});
+    let tries=0;const go=()=>{const editor=document.getElementById("description");if(editor)editor.focus();else if(tries++<60)requestAnimationFrame(go);};go();
+  },[focus,!!f]);
   return (
-    <section className="mt-5">
-      {!f ? (
-        <p role="status" className="text-fg-4">{error?<>{error}. <button onClick={()=>void loadFull(issue.key)} className="text-accent">Retry</button></>:"Loading…"}</p>
-      ) : editDesc ? (
-        <RichEditor
-          id="description"
-          initial={f.description}
-          autoFocus
-          onSave={(doc) => actions.description(issue.key, doc)}
-          onCancel={() => set({ editDesc: false })}
-        />
-      ) : (
-        <div className="group relative leading-[1.6] text-fg-2">
-          {f.description ? <Adf node={f.description} /> : <p className="text-fg-4">No description</p>}
-          <button title="Edit description (d)" onClick={() => set({ editDesc: true })} className={`absolute -top-1 right-0 opacity-0 group-hover:opacity-100 ${ICON_BTN}`}>
-            <Icon name="pencil" />
-          </button>
-        </div>
-      )}
+    <section className="mt-5 leading-[1.6] text-fg-2">
+      {!f ? <p role="status" className="text-fg-4">{error?<>{error}. <button onClick={()=>void loadFull(issue.key)} className="text-accent">Retry</button></>:"Loading…"}</p>
+        : <RichEditor key={revision} id="description" inline initial={f.description} placeholder="Add description…"
+            onChange={doc=>autosave.send({type:"change",doc})}
+            onBlur={()=>autosave.send({type:"flush"})}/>}
     </section>
   );
 }
 
 function Activity({ issue, f }: { issue: Issue; f: any }) {
+  const [composer,setComposer]=useState(0),[editing,setEditing]=useState<string|null>(null);
   if (!f) return null;
   return (
     <section className="mt-8 border-t border-line pt-5">
@@ -573,44 +614,24 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
           <span className="text-fg-2">{f.reporter?.displayName}</span> created the issue · {ago(f.created)}
         </li>
         {f.comment.comments.map((c: any) => (
-          <li key={c.id} className="rounded-lg border border-line-2 bg-card px-3 py-2.5">
+          <li key={c.id} data-comment={c.id} className="rounded-lg border border-line-2 bg-card px-3 py-2.5">
             <div className="flex items-center gap-2 text-[12px]">
               <Avatar user={author(c.author)} size={18} />
               <span className="font-medium text-fg">{c.author?.displayName}</span>
-              <span className="text-fg-3">{ago(c.created)}</span>
+              <span className="text-fg-3">{ago(c.created)}{c.updated&&" · edited"}</span>
+              {String(c.id).startsWith("local-")&&editing!==c.id&&<span className="ml-auto flex gap-1"><button aria-label="Edit comment" onClick={()=>setEditing(c.id)} className="rounded px-1.5 text-fg-3 hover:bg-hover hover:text-fg">Edit</button><button aria-label="Delete comment" onClick={()=>actions.deleteComment(issue.key,c.id)} className="rounded px-1.5 text-fg-3 hover:bg-hover hover:text-fg">Delete</button></span>}
             </div>
-            <div className="mt-1.5 leading-[1.6] text-fg-2"><Adf node={c.body} /></div>
+            <div className="mt-1.5 leading-[1.6] text-fg-2">{editing===c.id
+              ?<RichEditor id={`edit-${c.id}`} label="Edit comment" autoFocus initial={c.body} saveLabel="Save comment" onSave={doc=>{actions.editComment(issue.key,c.id,doc);setEditing(null);}} onCancel={()=>setEditing(null)}/>
+              :<Adf node={c.body} />}</div>
           </li>
         ))}
       </ol>
       <div className="mt-3">
-        <TextBox key={f.comment.total} id="comment" rows={3} placeholder="Leave a comment…" onSubmit={(t) => actions.comment(issue.key, t)} hint="⌘↵ send" />
+        {/* A new key clears the box after sending; autoFocus keeps the caret in it. */}
+        <RichEditor key={composer} initial="" id="comment" label="Leave a comment…" placeholder="Leave a comment…" autoFocus={composer>0} saveLabel="Submit comment" hint="⌘↵ send" onSave={doc=>{if(actions.comment(issue.key,doc))setComposer(n=>n+1);}}/>
       </div>
     </section>
-  );
-}
-
-function TextBox(props: {
-  id: string; initial?: string; rows: number; placeholder?: string; autoFocus?: boolean; hint: string;
-  onSubmit: (text: string) => void; onCancel?: () => void;
-}) {
-  return (
-    <div>
-      <textarea
-        id={props.id}
-        aria-label={props.id === "description"?"Issue description":props.placeholder??props.id}
-        defaultValue={props.initial}
-        rows={props.rows}
-        autoFocus={props.autoFocus}
-        placeholder={props.placeholder}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) props.onSubmit(e.currentTarget.value);
-          if (e.key === "Escape") props.onCancel?.();
-        }}
-        className="w-full resize-y rounded-lg border border-line-2 bg-card px-3 py-2.5 leading-[1.6] outline-none placeholder:text-fg-4 focus:border-line-3"
-      />
-      <div className="mt-1 flex items-center justify-end gap-3 text-[11px] text-fg-4"><span>{props.hint}</span>{props.onCancel&&<button onClick={props.onCancel} className="text-fg-2">Cancel</button>}<button className="rounded-md bg-sel px-2 py-1 text-fg-2" onClick={()=>props.onSubmit((document.getElementById(props.id) as HTMLTextAreaElement).value)}>{props.onCancel?"Save description":"Submit comment"}</button></div>
-    </div>
   );
 }
 
@@ -622,15 +643,15 @@ const MENU =
   "[&_[cmdk-item]]:flex [&_[cmdk-item]]:h-9 [&_[cmdk-item]]:cursor-pointer [&_[cmdk-item]]:items-center [&_[cmdk-item]]:gap-2.5 [&_[cmdk-item]]:rounded-md [&_[cmdk-item]]:px-2 " +
   "[&_[cmdk-item][data-selected=true]]:bg-sel [&_[cmdk-item][data-selected=true]]:text-fg";
 const MENU_INPUT = "h-11 w-full border-b border-line bg-transparent px-3.5 text-fg outline-none placeholder:text-fg-4";
-const close = (e: React.MouseEvent) => e.target === e.currentTarget && set({ overlay: null });
+const close = (e: React.MouseEvent) => e.target === e.currentTarget && ui.send({type:"overlay.close"});
 
 function Overlay({ children }: { children: ReactNode }) {
-  return <Modal label="Search issues and commands" close={()=>set({overlay:null})}>{children}</Modal>;
+  return <Modal label="Search issues and commands" close={()=>ui.send({type:"overlay.close"})}>{children}</Modal>;
 }
 
 /** Opens under the property in the issue view, else under the selected card, else centered. */
 function Popover({ issueKey, prop, children }: { issueKey: string; prop: string; children: ReactNode }) {
-  return <Modal label={prop==="status"?"Change status":"Assign issue"} close={()=>set({overlay:null})} anchorId={`prop-${prop}`} width={340}>{children}</Modal>;
+  return <Modal label={prop==="status"?"Change status":"Assign issue"} close={()=>ui.send({type:"overlay.close"})} anchor={issueAnchor(`prop-${prop}`,issueKey)} width={340}>{children}</Modal>;
 }
 
 function StatusPicker({ issueKey }: { issueKey: string }) {
@@ -698,7 +719,7 @@ function AssignPicker({ issueKey }: { issueKey: string }) {
 type Cmd = { name: string; hint?: string; icon?: ReactNode; run: () => void };
 /** A palette command that runs a shortcut, so the hint shown is the key that does the same thing. */
 const viaKey = (name: string, key: string, icon?: ReactNode): Cmd => ({
-  name, hint: key.toUpperCase(), icon, run: () => (set({ overlay: null }), press(key)),
+  name, hint: key.toUpperCase(), icon, run: () => (ui.send({type:"overlay.close"}), press(key)),
 });
 
 function Palette() {
@@ -727,12 +748,12 @@ function Palette() {
         viaKey(scoped.assignee?.id === ME.id ? "Unassign me" : "Assign to me", "i"),
         viaKey("Edit title", "e", <Icon name="pencil" />),
         viaKey("Edit description", "d", <Icon name="pencil" />),
-        {name:"Add comment",icon:<Icon name="comment"/>,run:()=>{set({overlay:null,panel:true});requestAnimationFrame(()=>document.getElementById("comment")?.focus());}},
-        { name: "Open issue", hint: "↵", icon: <Icon name="expand" />, run: () => set({ panel: true, overlay: null }) },
-        { name: isLocalIssue(scoped.key)?"Open local issue in new tab":"Open in Jira", icon: <Icon name="external" />, run: () => (window.open(issueURL(scoped),"_blank","noopener"), set({ overlay: null })) },
+        {name:"Add comment",icon:<Icon name="comment"/>,run:()=>{(ui.send({type:"overlay.close"}),navigate({panel:true}));requestAnimationFrame(()=>document.getElementById("comment")?.focus());}},
+        { name: "Open issue", hint: "↵", icon: <Icon name="expand" />, run: () => (ui.send({type:"overlay.close"}),navigate({panel:true})) },
+        { name: isLocalIssue(scoped.key)?"Open local issue in new tab":"Open in Jira", icon: <Icon name="external" />, run: () => (window.open(issueURL(scoped),"_blank","noopener"), ui.send({type:"overlay.close"})) },
         ...(boardOf(scoped.key)?.columns ?? []).map((c, i): Cmd => ({
           name: `Move to ${c.name}`, hint: String(i + 1), icon: <StatusIcon status={colLook(c)} />,
-          run: () => (set({ overlay: null }), actions.move(scoped.key, i)),
+          run: () => (ui.send({type:"overlay.close"}), actions.move(scoped.key, i)),
         })),
       ]
     : [];
@@ -779,7 +800,7 @@ function Palette() {
                 <Command.Item
                   key={i.key}
                   value={i.key}
-                  onSelect={() => timed(`open ${i.key}`, () => set({ board: i.board, selected: i.key, panel: true, overlay: null, query: "" }))}
+                  onSelect={() => timed(`open ${i.key}`, () => (ui.send({type:"overlay.close"}),navigate({ board: i.board, selected: i.key, panel: true }),ui.send({type:"query.set",query:""})))}
                 >
                   {(() => { const s = statusOf(i); return s ? <StatusIcon status={s} /> : <TypeDot type={i.type} />; })()}
                   <span className="w-[88px] shrink-0 text-[12px] tracking-[-0.24px] text-fg-3">{i.key}</span>

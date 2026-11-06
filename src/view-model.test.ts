@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buckets, defaultPreferences, draftForGroup, listRows, matchesFilters, matchesRule, navigationIssues, parsePreferences, selectIssues, statusDuration, updateFilter, type FilterGroup, type Rule } from "./view-model";
+import { buckets, defaultPreferences, rankBetween, draftForGroup, listRows, matchesFilters, matchesRule, navigationIssues, parsePreferences, selectIssues, statusDuration, updateFilter, type FilterGroup, type Rule } from "./view-model";
 import type { Board, Issue } from "./store";
 
 const board: Board = {id:1,name:"Board",columns:[{name:"Todo",statuses:[{id:"todo",name:"Todo",category:"new"}]},{name:"Doing",statuses:[{id:"doing",name:"In Progress",category:"indeterminate"}]},{name:"Done",statuses:[{id:"done",name:"Done",category:"done"}]}]};
@@ -131,4 +131,17 @@ describe("view selection",()=>{
       expect(matchesRule(rich,rule(field,[other],op),[...all,rich],"me",now)).toBe(false);
     }
   });
+});
+
+test("B2: rankBetween lands strictly between its neighbours in code-unit order", () => {
+  const ranks = ["0|i00000:", "0|i00001:", "0|i0000a:", "0|i0000b:"];
+  for (let i = 0; i <= ranks.length; i++) {
+    const r = rankBetween(ranks[i - 1], ranks[i]);
+    if (i > 0) expect(r > ranks[i - 1]!).toBe(true);
+    if (i < ranks.length) expect(r < ranks[i]!).toBe(true);
+  }
+  const ranked = [issue("R-1", { rank: "a" }), issue("R-2", { rank: "B" }), issue("R-3", { rank: "_" })];
+  expect(selectIssues(ranked, board, defaultPreferences(), false, "", "me").map(i => i.key)).toEqual(["R-2", "R-3", "R-1"]);
+  let low = "0|i00000:", high = "0|i00001:";
+  for (let n = 0; n < 50; n++) { const mid = rankBetween(low, high); expect(mid > low && mid < high).toBe(true); high = mid; }
 });

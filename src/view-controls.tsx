@@ -1,8 +1,10 @@
 import { Command } from "cmdk";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { MenuSurface } from "./menu-surface";
+import { PillSelect } from "./pill-select";
 import { Icon, PriorityIcon, StatusIcon } from "./icons";
-import { changeDisplay, changePreferences, get, ME, preferencesFor, saveDefault, set, timed, usePreferences, useStore, type Issue, type Board } from "./store";
+import { changeDisplay, changePreferences, get, ME, preferencesFor, saveDefault, timed, ui, usePreferences, useStore, type Issue, type Board } from "./store";
 import { defaultDisplay, defaultPreferences, filterCount, FIELDS, GROUPINGS, isDate, isNumeric, matchesFilters, matchesRule, newId, operatorsFor, ORDERINGS, PROPERTIES, selectIssues, updateFilter, type Display, type Field, type FilterGroup, type Rule } from "./view-model";
 
 export const POPUP = "view-popup rounded-xl border border-line-2 bg-card text-fg-2 shadow-[0_12px_40px_rgb(0_0_0/0.35)]";
@@ -54,23 +56,23 @@ export function BoardControls({ board }: {board:Board}) {
     const position = () => { const r = ref.current?.getBoundingClientRect(); if (r) setRect({top:r.bottom+6,right:innerWidth-r.right}); };
     position();
     const focusFrame=requestAnimationFrame(()=>popup.current?.querySelector<HTMLElement>("input, [role=tab][aria-selected=true], button")?.focus());
-    const outside = (e:PointerEvent) => { if (!popup.current?.contains(e.target as Node) && !filterRef.current?.contains(e.target as Node) && !displayRef.current?.contains(e.target as Node)) set({toolbar:null}); };
-    const key = (e:KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); set({toolbar:null}); ref.current?.focus(); } };
+    const outside = (e:PointerEvent) => { if (!popup.current?.contains(e.target as Node) && !filterRef.current?.contains(e.target as Node) && !displayRef.current?.contains(e.target as Node)) ui.send({type:"toolbar.close"}); };
+    const key = (e:KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); ui.send({type:"toolbar.close"}); ref.current?.focus(); } };
     document.addEventListener("pointerdown",outside);
     window.addEventListener("keydown",key);
     window.addEventListener("resize",position);
     return ()=>{cancelAnimationFrame(focusFrame);document.removeEventListener("pointerdown",outside);window.removeEventListener("keydown",key);window.removeEventListener("resize",position);};
   },[toolbar,board.id]);
   return <>
-    <button ref={filterRef} aria-label="Add filter" title="Filter (F)" aria-expanded={toolbar === "filter" || toolbar === "advanced"} onClick={()=>set({toolbar:toolbar === "filter" ? null:"filter"})} className={CIRCLE}>
+    <button ref={filterRef} aria-label="Add filter" title="Filter (F)" aria-expanded={toolbar === "filter" || toolbar === "advanced"} onClick={()=>ui.send({type:"toolbar.toggle",toolbar:"filter"})} className={CIRCLE}>
       <Icon name="filter"/>{count>0 && <span className="absolute -top-1 -right-1 grid size-3.5 place-items-center rounded-full bg-accent text-[9px] text-white">{count}</span>}
     </button>
-    <button ref={displayRef} aria-label="Display options" title="Display options" aria-expanded={toolbar === "display"} onClick={()=>set({toolbar:toolbar === "display" ? null:"display"})} className={CIRCLE}>
+    <button ref={displayRef} aria-label="Display options" title="Display options" aria-expanded={toolbar === "display"} onClick={()=>ui.send({type:"toolbar.toggle",toolbar:"display"})} className={CIRCLE}>
       <Icon name="display"/>{JSON.stringify(preferences.display)!==JSON.stringify(defaultDisplay())&&<span className="absolute top-0 right-0 size-1.5 rounded-full bg-accent"/>}
     </button>
     {toolbar && createPortal(<div ref={popup} className="fixed z-40 max-w-[calc(100vw-24px)]" style={{top:rect.top,right:rect.right}} onKeyDown={e=>{
       e.stopPropagation();
-      if(e.key === "Escape"){set({toolbar:null});ref.current?.focus();}
+      if(e.key === "Escape"){ui.send({type:"toolbar.close"});ref.current?.focus();}
       if(e.key === "Tab") {
         const nodes=[...(popup.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input, select, [tabindex="0"]')??[])].filter(n=>n.getClientRects().length);
         const first=nodes[0],last=nodes.at(-1);
@@ -84,9 +86,9 @@ export function BoardControls({ board }: {board:Board}) {
 }
 
 function Select({label,value,options,onChange,children}:{label:string;value:string;options:readonly (readonly [string,string])[];onChange:(value:string)=>void;children?:ReactNode}) {
-  return <label className="flex min-h-8 items-center justify-between gap-2 text-[12px] text-fg-3">
-    <span>{label}</span><span className="flex w-[170px] items-center gap-2">{children}<select aria-label={label} value={value} onChange={e=>onChange(e.target.value)} className="h-6 min-w-0 flex-1 rounded-md border border-line-2 bg-tab px-2 text-[12px] text-fg-2 outline-none focus:border-accent">{options.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></span>
-  </label>;
+  return <div className="flex min-h-8 items-center justify-between gap-2 text-[12px] text-fg-3">
+    <span>{label}</span><span className="flex w-[170px] items-center gap-2">{children}<PillSelect label={label} value={value} options={options} onChange={onChange} className="flex h-6 min-w-0 flex-1 items-center rounded-md border border-line-2 bg-tab px-2 text-left text-[12px] text-fg-2 hover:bg-hover"/></span>
+  </div>;
 }
 function Toggle({label,value,onChange}:{label:string;value:boolean;onChange:()=>void}) {
   return <label className="flex min-h-8 cursor-pointer items-center justify-between gap-4 text-[12px] text-fg-3"><span>{label}</span><input type="checkbox" role="switch" aria-label={label} checked={value} onChange={onChange} className="view-toggle"/></label>;
@@ -148,24 +150,28 @@ function FilterMenu({board}:{board:Board}) {
   const [submenu,setSubmenu] = useState<Submenu|null>(null);
   const [info,setInfo] = useState("");
   return <div className="flex flex-row-reverse items-start gap-1.5 max-[700px]:flex-col">
-    <Command loop className={`${POPUP} filter-command w-[248px] max-h-[calc(100vh-140px)] overflow-y-auto`}>
+    {/* One level at a time, like Linear: a category replaces the root list, and Esc anywhere closes the menu. */}
+    {!submenu&&<Command loop className={`${POPUP} filter-command w-[248px] max-h-[calc(100vh-140px)] overflow-y-auto`}>
       <Command.Input autoFocus aria-label="Add Filter…" placeholder="Add Filter…" className={INPUT}/>
       <Command.List className="p-1"><Command.Empty className="p-3 text-fg-3">No filters found</Command.Empty>
-        {CATEGORIES.map(c=><Command.Item key={c.name} value={c.name} onSelect={()=>{if(c.reason){setInfo(c.reason);setSubmenu(null);}else if(c.group === "advanced"){set({toolbar:"advanced"});}else {setInfo("");setSubmenu(c);}}} className={`${ITEM} ${c.reason?"text-fg-4":""}`}>
+        {CATEGORIES.map(c=><Command.Item key={c.name} value={c.name} onSelect={()=>{if(c.reason){setInfo(c.reason);setSubmenu(null);}else if(c.group === "advanced"){ui.send({type:"toolbar.open",toolbar:"advanced"});}else {setInfo("");setSubmenu(c);}}} className={`${ITEM} ${c.reason?"text-fg-4":""}`}>
           <Icon name={c.icon}/><span className="flex-1">{c.name}</span>{c.group!=="advanced"&&<Icon name="chevron" size={11}/>}
         </Command.Item>)}
       </Command.List>
       <PropertySyncNotice/>
       {info&&<div role="status" className="border-t border-line-2 px-3 py-2 text-[12px] leading-5 text-fg-3">{info}</div>}
-    </Command>
-    {submenu && (submenu.group === "project" ? <Command loop className={`${POPUP} filter-command w-[240px]`}><Command.Input autoFocus placeholder="Filter…" className={INPUT}/><Command.List className="p-1"><Command.Item className={ITEM} onSelect={()=>setSubmenu({field:"projectLead",name:"Project lead"})}>Project lead <Icon name="chevron" size={11}/></Command.Item><Command.Item className={ITEM} onSelect={()=>setSubmenu({field:"milestone",name:"Milestone"})}>Milestone name <Icon name="chevron" size={11}/></Command.Item></Command.List><div className="px-3 pb-2 text-[11px] text-fg-3">Milestones use Jira fix versions.</div></Command> : submenu.group === "dates" ? <Command loop className={`${POPUP} filter-command w-[240px]`}>
-      <Command.Input autoFocus placeholder="Filter…" className={INPUT}/><Command.List className="p-1">{DATES.map(([field,name])=><Command.Item key={field} className={ITEM} onSelect={()=>setSubmenu({field,name})}><Icon name="calendar"/><span className="flex-1">{name}</span><Icon name="chevron" size={11}/></Command.Item>)}
+    </Command>}
+    {submenu && (submenu.group === "project" ? <Command loop className={`${POPUP} filter-command w-[240px]`}><BackTo name={submenu.name} back={()=>setSubmenu(null)}/><Command.Input autoFocus placeholder="Filter…" className={INPUT}/><Command.List className="p-1"><Command.Item className={ITEM} onSelect={()=>setSubmenu({field:"projectLead",name:"Project lead"})}>Project lead <Icon name="chevron" size={11}/></Command.Item><Command.Item className={ITEM} onSelect={()=>setSubmenu({field:"milestone",name:"Milestone"})}>Milestone name <Icon name="chevron" size={11}/></Command.Item></Command.List><div className="px-3 pb-2 text-[11px] text-fg-3">Milestones use Jira fix versions.</div></Command> : submenu.group === "dates" ? <Command loop className={`${POPUP} filter-command w-[240px]`}>
+      <BackTo name={submenu.name} back={()=>setSubmenu(null)}/><Command.Input autoFocus placeholder="Filter…" className={INPUT}/><Command.List className="p-1">{DATES.map(([field,name])=><Command.Item key={field} className={ITEM} onSelect={()=>setSubmenu({field,name})}><Icon name="calendar"/><span className="flex-1">{name}</span><Icon name="chevron" size={11}/></Command.Item>)}
       {["Auto-closed date","Triaged date"].map(name=><Command.Item key={name} className={`${ITEM} text-fg-4`} onSelect={()=>setInfo(`${name} is not available in the mirrored Jira data.`)}>{name}</Command.Item>)}
       </Command.List></Command> : submenu.field && <PropertyFilter key={submenu.field} field={submenu.field} name={submenu.name} board={board} onBack={()=>setSubmenu(null)}/>)}
   </div>;
 }
 
-function PropertyFilter({field,name,board,onBack}:{field:Field;name:string;board:Board;onBack:()=>void}) {
+const BackTo=({name,back}:{name:string;back:()=>void})=><button onClick={back} className="flex h-8 w-full items-center gap-2 px-3 text-[12px] text-fg-3"><span>‹</span>{name}</button>;
+
+/** `inline`: opened from a filter chip, with the operator as pills and no back button. */
+function PropertyFilter({field,name,board,onBack,inline=false}:{field:Field;name:string;board:Board;onBack:()=>void;inline?:boolean}) {
   const issuesMap = useStore(s=>s.issues);
   const prefs = usePreferences(board.id);
   const mine = useStore(s=>s.mine);
@@ -192,14 +198,14 @@ function PropertyFilter({field,name,board,onBack}:{field:Field;name:string;board
   const date = isDate(field);
   const numeric=isNumeric(field);
   const input = date || numeric || field === "content" || field === "links";
-  return <div className={`${POPUP} w-[270px] max-h-[calc(100vh-140px)] overflow-y-auto`} onKeyDown={e=>{if(e.key === "Escape"){e.stopPropagation();onBack();}}}>
-    <button onClick={onBack} className="flex h-8 w-full items-center gap-2 px-3 text-[12px] text-fg-3"><span>‹</span>{name}</button>
-    {input ? <form onSubmit={e=>{e.preventDefault();if(value.trim()||op === "empty"||op === "notEmpty") {apply(value?[value]:[],op);set({toolbar:null});}}} className="space-y-2 p-3 pt-0">
+  return <div className={inline?"":`${POPUP} w-[270px] max-h-[calc(100vh-140px)] overflow-y-auto`}>
+    {!inline?<BackTo name={name} back={onBack}/>:!input&&rule&&<div role="group" aria-label={`${name} operator`} className="flex flex-wrap gap-1 pb-2">{operatorsFor(field).map(([v,l])=><button key={v} aria-pressed={rule.op===v} onClick={()=>apply(rule.values,v)} className={`rounded-full px-2 py-0.5 text-[11px] ${rule.op===v?"bg-tab-on text-fg":"bg-tab text-fg-3 hover:text-fg-2"}`}>{l}</button>)}</div>}
+    {input ? <form onSubmit={e=>{e.preventDefault();if(value.trim()||op === "empty"||op === "notEmpty") {apply(value?[value]:[],op);ui.send({type:"toolbar.close"});if(inline)onBack();}}} className="space-y-2 p-3 pt-0">
       <select aria-label={`${name} operator`} value={op} onChange={e=>setOp(e.target.value as Rule["op"])} className="view-select w-full">{operatorsFor(field).map(([v,l])=><option value={v} key={v}>{l}</option>)}</select>
       {!["empty","notEmpty"].includes(op)&&<input autoFocus aria-label={name} required value={value} onChange={e=>setValue(e.target.value)} type={numeric?"number":date ? ["within","next"].includes(op)?"number":"date":"text"} min={numeric||op === "within"||op === "next"?0:undefined} step={numeric?"any":undefined} className="view-select w-full" placeholder={field === "statusAge"?"Days in current status…":"Text to match…"}/>}
       {field === "statusAge"&&<div className="text-[11px] text-fg-3">Duration in days, including fractions.</div>}
       <button type="submit" className="h-7 w-full rounded-md bg-accent text-[12px] text-white">Apply filter</button>
-      {date&&<div className="border-t border-line-2 pt-1">{(field === "due" ? [["Overdue","before",new Date().toLocaleDateString("en-CA")],["1 day from now","next","1"],["3 days from now","next","3"],["1 week from now","next","7"],["1 month from now","next","30"],["3 months from now","next","90"],["No due date","empty",""]] : [["Last 24 hours","within","1"],["Last 7 days","within","7"],["Last 30 days","within","30"],["No date","empty",""]]).map(([label,operator,v])=><button key={label} type="button" onClick={()=>{apply(v?[v]:[],operator as Rule["op"]);set({toolbar:null});}} className={ITEM}>{label}</button>)}</div>}
+      {date&&<div className="border-t border-line-2 pt-1">{(field === "due" ? [["Overdue","before",new Date().toLocaleDateString("en-CA")],["1 day from now","next","1"],["3 days from now","next","3"],["1 week from now","next","7"],["1 month from now","next","30"],["3 months from now","next","90"],["No due date","empty",""]] : [["Last 24 hours","within","1"],["Last 7 days","within","7"],["Last 30 days","within","30"],["No date","empty",""]]).map(([label,operator,v])=><button key={label} type="button" onClick={()=>{apply(v?[v]:[],operator as Rule["op"]);ui.send({type:"toolbar.close"});}} className={ITEM}>{label}</button>)}</div>}
     </form> : <Command loop className="filter-command"><Command.Input autoFocus placeholder="Filter…" aria-label={`Filter ${name}`} className={INPUT}/><Command.List className="max-h-[360px] overflow-y-auto p-1"><Command.Empty className="p-3 text-fg-3">No values found</Command.Empty>{choices.map(c=><Command.Item key={c.value} aria-checked={rule?.values.includes(c.value)??false} value={`${c.label} ${c.value}`} onSelect={()=>toggle(c.value)} className={ITEM}>
       <span aria-hidden className={`grid size-3.5 shrink-0 place-items-center rounded border ${rule?.values.includes(c.value)?"border-accent bg-accent text-white":"border-line-3"}`}>{rule?.values.includes(c.value)&&<Icon name="check" size={11}/>}</span>{c.icon}<span className="min-w-0 flex-1 truncate">{c.label}</span>{!!c.count&&<span className="text-[11px] text-fg-3">{c.count}</span>}
     </Command.Item>)}</Command.List></Command>}
@@ -222,13 +228,17 @@ export function FilterChips({board}:{board:Board}) {
     if(field === "relations")return ({parent:"Parent issues",child:"Sub-issues",blocked:"Blocked issues",blocking:"Blocking issues",related:"Issues with relations",duplicate:"Duplicates"} as Record<string,string>)[value]??value;
     return value;
   };
+  const [edit,setEdit]=useState<{id:string;anchor:HTMLElement}|null>(null);
+  const editing=filters.children.find((c):c is Rule=>!("children" in c)&&c.id===edit?.id);
   if (!filters.children.length) return null;
   return <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-1.5 border-t border-line px-3 py-1.5 text-[12px]">
+    {/* Like Linear, a chip edits its own rule in a small picker under it; groups still open the advanced editor. */}
+    {edit&&editing&&<MenuSurface label={`Edit ${FIELDS.find(([f])=>f===editing.field)?.[1]} filter`} anchor={edit.anchor} width={280} close={()=>setEdit(null)}><PropertyFilter inline field={editing.field} name={FIELDS.find(([f])=>f===editing.field)?.[1]??editing.field} board={board} onBack={()=>setEdit(null)}/></MenuSurface>}
     {filters.children.map(c=><div key={c.id} className="flex h-6 max-w-[320px] items-center overflow-hidden rounded-md border border-line-2 bg-tab">
-      <button className="truncate px-2" onClick={()=>set({toolbar:"advanced"})}>{"children" in c?`${c.join.toUpperCase()} group · ${filterCount(c)} rules`:`${FIELDS.find(([f])=>f===c.field)?.[1]} ${operatorsFor(c.field).find(([op])=>op===c.op)?.[1]} ${c.values.map(v=>labelFor(c.field,v)).join(", ")}`}</button>
+      <button className="truncate px-2" onClick={e=>"children" in c?ui.send({type:"toolbar.open",toolbar:"advanced"}):setEdit({id:c.id,anchor:e.currentTarget.parentElement!})}>{"children" in c?`${c.join.toUpperCase()} group · ${filterCount(c)} rules`:`${FIELDS.find(([f])=>f===c.field)?.[1]} ${operatorsFor(c.field).find(([op])=>op===c.op)?.[1]} ${c.values.map(v=>labelFor(c.field,v)).join(", ")}`}</button>
       <button className="mr-1 rounded hover:bg-hover" aria-label={`Remove ${"children" in c?"filter group":c.field} filter`} onClick={()=>changePreferences(board.id,{filters:updateFilter(filters,c.id,null)})}><Icon name="close" size={12}/></button>
     </div>)}
-    <button onClick={()=>set({toolbar:"filter"})} className="grid size-6 place-items-center rounded hover:bg-hover" aria-label="Add another filter"><Icon name="plus"/></button>
+    <button onClick={()=>ui.send({type:"toolbar.open",toolbar:"filter"})} className="grid size-6 place-items-center rounded hover:bg-hover" aria-label="Add another filter"><Icon name="plus"/></button>
     <button className="ml-1 text-fg-3" onClick={()=>changePreferences(board.id,{filters:{...filters,children:[]}})}>Clear</button>
   </div>;
 }
@@ -243,10 +253,10 @@ function AdvancedMenu({board}:{board:Board}) {
   const all = useMemo(()=>selectIssues(universe,board,{...preferences,filters:defaultPreferences().filters},mine,query,ME.id),[universe,board,preferences,mine,query]);
   const patch = (id:string,change:Parameters<typeof updateFilter>[2]) => timed("filter",()=>changePreferences(board.id,{filters:updateFilter(preferencesFor(board.id).filters,id,change)}));
   return <div role="dialog" aria-label="Advanced filter" className={`${POPUP} w-[640px] max-w-[calc(100vw-24px)] max-h-[calc(100vh-140px)] overflow-y-auto p-3`}>
-    <div className="mb-3 flex items-center justify-between"><span className="font-medium">Advanced filter</span><button aria-label="Close advanced filter" onClick={()=>set({toolbar:null})}><Icon name="close"/></button></div>
+    <div className="mb-3 flex items-center justify-between"><span className="font-medium">Advanced filter</span><button aria-label="Close advanced filter" onClick={()=>ui.send({type:"toolbar.close"})}><Icon name="close"/></button></div>
     <FilterGroupEditor group={filters} board={board} issues={all} patch={patch} depth={0}/>
     <PropertySyncNotice/>
-    <div className="mt-3 flex justify-between border-t border-line-2 pt-3 text-[12px] text-fg-3"><span>{all.filter(i=>matchesFilters(i,filters,universe,ME.id)).length} matching issues in this view</span><button onClick={()=>set({toolbar:null})} className="rounded-md bg-accent px-3 py-1 text-white">Done</button></div>
+    <div className="mt-3 flex justify-between border-t border-line-2 pt-3 text-[12px] text-fg-3"><span>{all.filter(i=>matchesFilters(i,filters,universe,ME.id)).length} matching issues in this view</span><button onClick={()=>ui.send({type:"toolbar.close"})} className="rounded-md bg-accent px-3 py-1 text-white">Done</button></div>
   </div>;
 }
 function FilterGroupEditor({group,board,issues,patch,depth}:{group:FilterGroup;board:Board;issues:Issue[];patch:(id:string,p:Parameters<typeof updateFilter>[2])=>void;depth:number}) {

@@ -11,3 +11,9 @@ test("clipboard projections retain rich formatting, tables and exact IDs/URLs",(
   const bold={type:"paragraph",content:[{type:"text",text:"Rich",marks:[{type:"strong"}]}]};
   expect(adfToMarkdown({type:"doc",content:[bold,table]})).toBe("**Rich**\n\n| A\\|B |\n| --- |");
 });
+
+test("I18: the git branch name starts with the user's name, like Linear",()=>{
+  const issue:Issue={key:"DRFT-53",board:1,summary:"Fix the menu!",status:"todo",assignee:null,labels:[],updated:"",resolved:null,comments:0};
+  expect(issueCopy("git branch name",issue,undefined,"","Todo","Sairaj Chouhan")).toBe("sairaj/drft-53-fix-the-menu");
+  expect(issueCopy("git branch name",issue,undefined,"","Todo")).toBe("drft-53-fix-the-menu");
+});

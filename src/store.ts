@@ -3,6 +3,8 @@ import { adfToText, textToAdf } from "./adf";
 import { defaultPreferences, parsePreferences, type Display, type Grouping, type Preferences } from "./view-model";
 import { normalizeDocument, type AdfDocument } from "./document";
 import { emptyLocalState,LocalDatabase,type LocalState,type Snapshot,type LocalEdit } from "./local-data";
+import { createActor, fromPromise, waitFor } from "xstate";
+import { appMachine, detailMachine, inspector, storageMachine, syncMachine, uiMachine, type UiContext } from "./machines";
 
 export type User = { id: string; name: string; avatar?: string };
 export type Issue = {
@@ -43,7 +45,7 @@ export type Column = { name: string; statuses: Status[] };
 export type Board = { id: number; name: string; columns: Column[] };
 /** Raw Jira issue: { key, fields: { description, comment, reporter, created, ... } } */
 export type Full = { key: string; fields: any };
-type Overlay = null | "palette" | "assign" | "status" | "create" | "priority" | "labels" | "project" | "milestone" | "due" | "options" | "relations";
+export type Overlay = null | "palette" | "assign" | "status" | "create" | "priority" | "labels" | "project" | "milestone" | "due" | "options" | "relations";
 export type IssueDraft = Partial<Pick<Issue,"status"|"assignee"|"priority"|"labels"|"project"|"milestones"|"due"|"parent"|"type"|"attachments">> & {description?:string;descriptionDoc?:AdfDocument};
 export type View = "side" | "page";
 export type SavedView={id:string;board:number;name:string;preferences:Preferences;mine:boolean};
@@ -64,6 +66,8 @@ type State = {
   overlay: Overlay;
   editDesc: boolean;
   perf: string;
+  /** A transient confirmation, e.g. after creating an issue. */
+  toast: {text:string;key?:string}|null;
   preferences: Record<number, Preferences>;
   defaults: Record<number, Display>;
   toolbar: "display" | "filter" | "advanced" | null;
@@ -107,6 +111,7 @@ let state: State = {
   overlay: null,
   editDesc: false,
   perf: "",
+  toast: null,
   preferences: readPreferences(),
   defaults: {},
   toolbar: null,
@@ -121,21 +126,10 @@ let state: State = {
 const listeners = new Set<() => void>();
 const subscribe = (l: () => void) => (listeners.add(l), () => void listeners.delete(l));
 export const get = () => state;
-export function set(patch: Partial<State>) {
-  if (patch.overlay || ((patch.view ?? state.view) === "page" && (patch.panel ?? state.panel))) patch.toolbar=null;
-  if (patch.board && patch.board !== state.board) {
-    patch.toolbar = null;
-    patch.query = "";
-    patch.mine = false;
-    patch.draft = {};
-    const prefs = state.preferences[patch.board];
-    patch.view = prefs?.display.openIn ?? state.defaults[patch.board]?.openIn ?? "side";
-  }
-  if (patch.view && patch.view !== state.view) {
-    const id = patch.board ?? state.board;
-    const prefs = patch.preferences?.[id] ?? state.preferences[id] ?? defaultPreferences();
-    patch.preferences = { ...(patch.preferences ?? state.preferences), [id]: { ...prefs, display: { ...prefs.display, openIn: patch.view } } };
-  }
+type UiKey = keyof UiContext;
+/** Data changes. Screen state (board, issue, overlay, toolbar…) changes only through `ui.send`; see machines.ts. */
+export function set(patch: Partial<Omit<State, UiKey|"loadError"|"storage"|"canEdit">>) {commit(patch);}
+function commit(patch: Partial<State>) {
   state = { ...state, ...patch };
   try {if (patch.board) localStorage.setItem(preferenceKey("board"), String(patch.board));if (patch.view) localStorage.setItem(preferenceKey("view"), patch.view);}catch{/* Preference failure is separate from durable issue storage. */}
   if (patch.preferences) {
@@ -150,12 +144,42 @@ export function set(patch: Partial<State>) {
 /** Selector must return a stable reference (a state field or a Map entry), never a fresh object. */
 export const useStore = <T>(sel: (s: State) => T) => useSyncExternalStore(subscribe, () => sel(state));
 
+// The running machines. Each mirrors its state onto `state` so components read it with useStore.
+export const ui = createActor(uiMachine, { input: { board: state.board, view: state.view }, inspect: inspector("ui") }).start();
+ui.subscribe(({ context }) => {
+  const patch: Partial<State> = {};
+  for (const key of Object.keys(context) as UiKey[]) if (context[key] !== state[key]) Object.assign(patch, { [key]: context[key] });
+  if (!Object.keys(patch).length) return;
+  if (patch.view) { // Each board remembers how its issues open.
+    const id = context.board, prefs = state.preferences[id] ?? defaultPreferences();
+    patch.preferences = { ...state.preferences, [id]: { ...prefs, display: { ...prefs.display, openIn: patch.view } } };
+  }
+  commit(patch);
+});
+/** Sends `navigate`, filling in a new board's remembered issue view. */
+export function navigate(to: { board?: number; view?: View; selected?: string | null; panel?: boolean }) {
+  const view = to.view ?? (to.board !== undefined && to.board !== state.board ? state.preferences[to.board]?.display.openIn ?? state.defaults[to.board]?.openIn ?? "side" : undefined);
+  ui.send({ type: "navigate", ...to, ...(view ? { view } : {}) });
+}
+const app = createActor(appMachine.provide({ actors: { load: fromPromise(loadApplication) } }), { inspect: inspector("app") }).start();
+app.subscribe(({ context }) => { if (context.error !== state.loadError) commit({ loadError: context.error }); });
+const storage = createActor(storageMachine.provide({ actors: { save: fromPromise(async () => database!.save(localSnapshot())) } }), { inspect: inspector("storage") }).start();
+storage.subscribe(s => {
+  const status = s.matches("failed") || s.matches("blocked") ? "error" : s.value as "loading" | "saving" | "saved";
+  commit({ canEdit: !s.matches("blocked"), storage: { status, ...(s.context.message ? { message: s.context.message } : {}), ...(s.context.recovered ? { recovered: true } : {}) } });
+});
+const sync = createActor(syncMachine.provide({ actors: { fetch: fromPromise(fetchProperties) } }), { inspect: inspector("sync") }).start();
+const details = new Map<string, ReturnType<typeof createActor<typeof detailMachine>>>();
+const detailLoader = detailMachine.provide({ actors: { fetch: fromPromise<void, { key: string }>(({ input }) => fetchFull(input.key)) } });
+if (typeof window !== "undefined") Object.assign(window, { machines: { ui, app, storage, sync, details } });
+
 const fallbackPreferences = defaultPreferences();
 export const preferencesFor = (board: number) => state.preferences[board] ?? fallbackPreferences;
 export const usePreferences = (board: number) => useStore(s => s.preferences[board] ?? fallbackPreferences);
 export function changePreferences(board: number, patch: Partial<Preferences>) {
   const prefs = { ...preferencesFor(board), ...patch };
-  set({ preferences: {...state.preferences, [board]:prefs}, ...(board === state.board ? {view:prefs.display.openIn} : {}) });
+  set({ preferences: {...state.preferences, [board]:prefs} });
+  if (board === state.board) navigate({ view: prefs.display.openIn });
 }
 export function changeDisplay(board: number, patch: Partial<Display>) {
   const display={...preferencesFor(board).display,...patch};
@@ -172,8 +196,8 @@ export async function saveDefault(board: number) {
   } catch { set({perf:"Could not save your default in this browser"}); }
 }
 
-let loading:Promise<void>|undefined,loaded=false;
-export function load():Promise<void> {if(loaded)return Promise.resolve();return loading??=loadApplication().finally(()=>{loading=undefined;});}
+const settled = (s: ReturnType<typeof app.getSnapshot>) => s.matches("ready") || s.matches("failed");
+export async function load() {app.send({type:"load"});await waitFor(app,settled);}
 async function json<T>(path:string):Promise<T> {const response=await fetch(path);if(!response.ok)throw new Error(`Could not load ${path}`);return response.json();}
 function migratePreferences(namespace:string) {
   preferenceNamespace=namespace;
@@ -184,8 +208,6 @@ function migratePreferences(namespace:string) {
   }catch{/* The mirror can still load if browser preferences are unavailable. */}
 }
 async function loadApplication() {
-  set({loadError:""});
-  try {
   const client=await json<{site:string;user:User}>("/api/client");
   if(!client.site||!client.user?.id||!client.user.name)throw new Error("Jira account setup is incomplete");
   Object.assign(ME,client.user);
@@ -193,12 +215,12 @@ async function loadApplication() {
   migratePreferences(namespace);
   const [boards, remote]=await Promise.all([json<Board[]>("/api/boards"),json<Issue[]>("/api/issues")]);
   if(!boards.length)throw new Error("The Jira mirror is still syncing your boards. Retry in a moment.");
-  let local=emptyLocalState(),storage:State["storage"]={status:"saved"},canEdit=true;
+  let local=emptyLocalState(),opened:{type:"opened";message?:string;recovered?:boolean}|{type:"blocked";message:string};
   try {
     database?.close();database=await LocalDatabase.open(namespace);
-    const result=await database.load();local=result.state;canEdit=!result.readOnly;
-    storage=result.readOnly?{status:"error",message:"Saved data uses an unsupported version. Local editing is paused; existing data has been preserved."}:{status:"saved",recovered:result.recovered||result.missingFiles>0,message:result.recovered?"Some local records needed recovery. A copy of the original data was kept.":result.missingFiles?"Some saved files could not be restored.":undefined};
-  }catch {canEdit=false;storage={status:"error",message:"Could not read saved local data. Local editing is paused. Retry local storage; existing data has not been deleted."};}
+    const result=await database.load();local=result.state;
+    opened=result.readOnly?{type:"blocked",message:"Saved data uses an unsupported version. Local editing is paused; existing data has been preserved."}:{type:"opened",recovered:result.recovered||result.missingFiles>0,message:result.recovered?"Some local records needed recovery. A copy of the original data was kept.":result.missingFiles?"Some saved files could not be restored.":undefined};
+  }catch {opened={type:"blocked",message:"Could not read saved local data. Local editing is paused. Retry local storage; existing data has not been deleted."};}
   const defaults:Record<number,Display>=(()=>{try{const saved=JSON.parse(savedValue("better-jira:defaults:v1")??"{}");return saved&&typeof saved==="object"&&!Array.isArray(saved)?Object.fromEntries(Object.entries(saved).map(([id,display])=>[id,parsePreferences({display}).display])):{};}catch{return {};}})();
   const preferences=readPreferences();
   for (const b of boards) if (!preferences[b.id]) {
@@ -219,21 +241,21 @@ async function loadApplication() {
     if(change.full){full.set(change.key,change.full);if(!change.created)needsFullRefresh.add(change.key);}
   }
   undo.splice(0,undo.length,...local.undo);redo.splice(0,redo.length,...local.redo);localSeq=local.sequence;
-  set({boards,board,site:client.site,namespace,issues,full,defaults,preferences,view:preferences[board]?.display.openIn??"side",savedViews:readSavedViews(),favorites:readFavorites(),canEdit,storage,undoCount:undo.length,redoCount:redo.length});
-  if(!navigationReady){restoreNavigation();navigationReady=true;syncNavigation(true);window.addEventListener("popstate",restoreNavigation);}
-  if(!loaded)window.addEventListener("beforeunload",event=>{if(unsaved){event.preventDefault();event.returnValue="";}});
-  void loadProperties();
+  set({boards,site:client.site,namespace,issues,full,defaults,preferences,savedViews:readSavedViews(),favorites:readFavorites(),undoCount:undo.length,redoCount:redo.length});
+  navigate({board,view:preferences[board]?.display.openIn??"side"});
+  storage.send(opened);
+  if(!navigationReady){
+    restoreNavigation();navigationReady=true;syncNavigation(true);window.addEventListener("popstate",restoreNavigation);
+    window.addEventListener("beforeunload",event=>{const s=storage.getSnapshot();if(s.matches("saving")||s.matches("failed")){event.preventDefault();event.returnValue="";}});
+  }
+  sync.send({type:"start"});
   clockTimer??=setInterval(()=>set({clock:Date.now()}),60000);
-  loaded=true;
-  }catch(error){set({loadError:error instanceof Error?error.message:"Could not load the Jira mirror. Retry."});}
 }
 
 let clockTimer: ReturnType<typeof setInterval> | undefined;
-let propertyTimer: ReturnType<typeof setTimeout> | undefined;
 const lastProperties=new Map<string,string>();
-async function loadProperties() {
-  clearTimeout(propertyTimer);
-  try {
+/** One poll of the sync machine; it schedules the next. */
+async function fetchProperties():Promise<{pending:number}> {
     const res=await fetch("/api/properties");
     if(!res.ok)throw new Error("Properties unavailable");
     const data=await res.json();
@@ -250,19 +272,22 @@ async function loadProperties() {
       issues.set(key,{...issue,...extra});changed=true;
     }
     set({propertySync:data.progress,...(changed?{issues}:{})});
-    // Continue lightweight refreshes after warm-up so updated Jira histories are picked up too.
-    propertyTimer=setTimeout(()=>void loadProperties(),data.progress.pending?3000:30000);
-  } catch {
-    propertyTimer=setTimeout(()=>void loadProperties(),10000);
-  }
+    return data.progress;
 }
 
-const pendingFull=new Set<string>();
 export async function loadFull(key: string,force=false) {
-  if (createdKeys.has(key)||state.full.has(key)&&!needsFullRefresh.has(key)&&!force||pendingFull.has(key)) return;
-  pendingFull.add(key);
-  set({fullErrors:new Map(state.fullErrors).set(key,"")});
-  try {
+  if (createdKeys.has(key)||state.full.has(key)&&!needsFullRefresh.has(key)&&!force) return;
+  let detail=details.get(key);
+  if(!detail){
+    detail=createActor(detailLoader,{input:{key},inspect:inspector(`detail ${key}`)}).start();
+    detail.subscribe(({context})=>{if(state.fullErrors.get(key)!==context.error)set({fullErrors:new Map(state.fullErrors).set(key,context.error)});});
+    details.set(key,detail);
+  }
+  detail.send({type:"load"});
+  await waitFor(detail,s=>!s.matches("loading"));
+}
+/** The detail machine's fetch: loads the Jira record and keeps local field edits on top. */
+async function fetchFull(key:string) {
     const res = await fetch(`/api/issues/${encodeURIComponent(key)}`);
     if (!res.ok) throw new Error("Could not load issue details");
     let full = await res.json();
@@ -274,8 +299,6 @@ export async function loadFull(key: string,force=false) {
     needsFullRefresh.delete(key);
     const issue=state.issues.get(key);
     if(issue)set({full:new Map(state.full).set(key,full),issues:new Map(state.issues).set(key,{...issue,...(full.fields.comment?{comments:full.fields.comment.total}:{}),...(!localFields.get(key)?.has("description")?{description:adfToText(full.fields.description)}:{})})});
-  } catch { set({fullErrors:new Map(state.fullErrors).set(key,"Could not load issue details")}); }
-  finally {pendingFull.delete(key);}
 }
 
 /** Time from the action to the next painted frame, shown in the header. */
@@ -293,34 +316,27 @@ function syncNavigation(replace=false) {
   if(url.href!==location.href)history[replace?"replaceState":"pushState"]({},"",url);
 }
 function restoreNavigation() {
-  const params=new URL(location.href).searchParams,issue=state.issues.get(params.get("issue")??"");
+  const params=new URL(location.href).searchParams,wanted=params.get("issue"),issue=state.issues.get(wanted??"");
   const board=issue?.board??Number(params.get("board"));
   restoringNavigation=true;
-  set({...(state.boards.some(b=>b.id===board)?{board}:{}),selected:issue?.key??null,panel:!!issue,...(params.get("view")==="page"||params.get("view")==="side"?{view:params.get("view") as View}:{})});
+  navigate({...(state.boards.some(b=>b.id===board)?{board}:{}),selected:issue?.key??null,panel:!!issue,...(params.get("view")==="page"||params.get("view")==="side"?{view:params.get("view") as View}:{})});
   restoringNavigation=false;
+  if(wanted&&!issue)ui.send({type:"toast.show",text:`Issue ${wanted} not found`});
 }
 const localFields=new Map<string,Set<string>>(),fullFields=new Map<string,Set<string>>();
 const changedKeys=new Set<string>(),createdKeys=new Set<string>(),needsFullRefresh=new Set<string>();
 const undo:LocalEdit[]=[],redo:LocalEdit[]=[];
-let database:LocalDatabase|undefined,pendingSave:LocalState|undefined,saving:Promise<void>|undefined,unsaved=false;
+let database:LocalDatabase|undefined;
 function localSnapshot():LocalState {
   return {version:1,sequence:localSeq,changes:[...changedKeys].filter(key=>createdKeys.has(key)||!state.issues.has(key)||localFields.get(key)?.size||fullFields.get(key)?.size).map(key=>({key,issue:state.issues.get(key)??null,full:state.full.get(key),issueFields:[...(localFields.get(key)??[])],fullFields:[...(fullFields.get(key)??[])],created:createdKeys.has(key)})),undo:[...undo],redo:[...redo]};
 }
-function queueSave() {
-  if(!database||!loaded||!state.canEdit)return;
-  pendingSave=localSnapshot();unsaved=true;
-  set({storage:{...state.storage,status:"saving"}});
-  saving??=flushSaves().finally(()=>{saving=undefined;});
-}
-async function flushSaves() {
-  try {
-    while(pendingSave){const snapshot=pendingSave;pendingSave=undefined;await database!.save(snapshot);}
-    unsaved=false;set({storage:{...state.storage,status:"saved",message:state.storage.recovered?state.storage.message:undefined}});
-  }catch(error){set({storage:{status:"error",message:error instanceof Error?error.message:"Local changes could not be saved. Keep this tab open and retry."}});}
-}
-export async function flushLocalChanges() {await saving;}
+/** Ignored until storage has opened, and while it is blocked; see storageMachine. */
+const queueSave=()=>storage.send({type:"change"});
+export const dismissRecoveryNotice=()=>storage.send({type:"dismiss"});
+export async function flushLocalChanges() {await waitFor(storage,s=>!s.matches("saving"));}
 export async function retryLocalStorage() {
-  if(!state.canEdit){loaded=false;await load();}else{queueSave();await saving;}
+  if(storage.getSnapshot().matches("blocked")){app.send({type:"reload"});await waitFor(app,settled);}
+  else{queueSave();await flushLocalChanges();}
 }
 export async function addLocalFile(file:File) {if(!database||!state.canEdit)throw new Error("Local file storage is unavailable. Retry local storage first.");return database.addFile(file);}
 export async function downloadLocalBackup() {
@@ -363,7 +379,8 @@ function restore(edit:LocalEdit,snapshots:Snapshot[]) {
     if(snapshot.fullFields)fullFields.set(key,new Set(snapshot.fullFields));
     if(snapshot.issue&&!createdKeys.has(key))needsFullRefresh.add(key);
   });
-  set({issues,full,overlay:null,...(state.selected&&!issues.has(state.selected)?{selected:null,panel:false}:{})});
+  set({issues,full});ui.send({type:"overlay.close"});
+  if(state.selected&&!issues.has(state.selected))navigate({selected:null,panel:false});
 }
 export function undoEdit() {
   const edit=undo.pop();if(!edit)return;
@@ -381,7 +398,7 @@ export function beginCreate(draft:IssueDraft={}) {
   if(!state.canEdit){set({perf:"Retry local storage before creating an issue"});return;}
   const prefs=preferencesFor(state.board),board=state.boards.find(b=>b.id===state.board);
   const status=prefs.scope==="active"?board?.columns.find(c=>!/backlog/i.test(c.name)&&c.statuses.some(s=>s.category!=="done"))?.statuses.find(s=>s.category!=="done")?.id:undefined;
-  set({draft:{...(status?{status}:{}),...(state.mine?{assignee:ME}:{}),...draft},overlay:"create"});
+  ui.send({type:"overlay.open",overlay:"create",draft:{...(status?{status}:{}),...(state.mine?{assignee:ME}:{}),...draft}});
 }
 function readSavedViews():SavedView[] {
   try {
@@ -389,7 +406,8 @@ function readSavedViews():SavedView[] {
     return Array.isArray(items)?items.filter(v=>v&&typeof v.id==="string"&&typeof v.name==="string"&&v.name.trim()&&typeof v.board==="number").map(v=>({...v,preferences:parsePreferences(v.preferences),mine:v.mine===true})):[];
   }catch{return [];}
 }
-function readFavorites():string[] {try{const values=JSON.parse(savedValue("better-jira:favorites:v1")??"[]");return Array.isArray(values)?values.filter(v=>typeof v==="string"):[];}catch{return [];}}
+/** Boards are favourited once, not per tab; older `board:<id>:<tab>` entries collapse into `board:<id>`. */
+function readFavorites():string[] {try{const values=JSON.parse(savedValue("better-jira:favorites:v1")??"[]");return Array.isArray(values)?[...new Set(values.filter(v=>typeof v==="string").map(v=>v.replace(/^(board:\d+):.*$/,"$1")))]:[];}catch{return [];}}
 export function toggleFavorite(id:string) {set({favorites:state.favorites.includes(id)?state.favorites.filter(v=>v!==id):[...state.favorites,id]});}
 export function saveView(name:string) {
   if(!name.trim())return;
@@ -397,8 +415,9 @@ export function saveView(name:string) {
   set({savedViews:[...state.savedViews,view],perf:`Saved view ${view.name}`});
 }
 export function openSavedView(view:SavedView) {
-  set({board:view.board,preferences:{...state.preferences,[view.board]:structuredClone(view.preferences)},selected:null,panel:false,toolbar:null});
-  set({mine:view.mine,view:view.preferences.display.openIn});
+  set({preferences:{...state.preferences,[view.board]:structuredClone(view.preferences)}});
+  navigate({board:view.board,selected:null,panel:false,view:view.preferences.display.openIn});
+  ui.send({type:"toolbar.close"});ui.send({type:"mine.set",mine:view.mine});
 }
 
 function patchIssue(key: string, patch: Partial<Issue>) {
@@ -427,18 +446,20 @@ export const actions = {
       const issue=remote.find(i=>i.key===key);if(!issue)throw new Error("Issue is no longer in the Jira mirror");
       record(key,`restore Jira version of ${key}`,()=>{
         localFields.set(key,new Set());fullFields.set(key,new Set());needsFullRefresh.delete(key);
-        set({issues:new Map(state.issues).set(key,issue),full:new Map(state.full).set(key,full),overlay:null,perf:`Restored mirrored Jira version of ${key}`});
+        set({issues:new Map(state.issues).set(key,issue),full:new Map(state.full).set(key,full),perf:`Restored mirrored Jira version of ${key}`});ui.send({type:"overlay.close"});
       });
     }catch{set({perf:"Could not read the Jira version. Your local changes are still here."});}
   },
   patch(key: string, patch: IssueDraft & Partial<Pick<Issue,"links"|"relations"|"reactions"|"watchers"|"watchersComplete">>) {
     timed(`edit ${key}`,()=>record(key,`edit ${key}`,()=>patchIssue(key,patch)));
   },
-  drop(key:string,boardId:number,groups:{by:Grouping;id:string}[]) {
+  /** `rank` places the card where it was dropped (manual ordering). */
+  drop(key:string,boardId:number,groups:{by:Grouping;id:string}[],rank?:string) {
     const issue=state.issues.get(key),board=state.boards.find(b=>b.id===boardId);
     if(!issue||!board||issue.board!==boardId)return;
     // One drag, including its column and row changes, is one undoable edit.
     record(key,`move ${key}`,()=>{
+      if(rank!==undefined)patchIssue(key,{rank});
       for(const {by,id} of groups) {
         const current=state.issues.get(key)!;
         if(by==="status") {
@@ -465,7 +486,7 @@ export const actions = {
   status(key: string, id: string) {
     const i = state.issues.get(key);
     const s = boardOf(key)?.columns.flatMap((c) => c.statuses).find((x) => x.id === id);
-    set({ overlay: null });
+    ui.send({ type: "overlay.close" });
     if (!i || !s || i.status === id) return;
     timed(`move ${key} → ${s.name}`, () =>
       record(key,`move ${key}`,()=>patchIssue(key, { status: s.id, statusSince:now(), started:i.started??(s.category === "indeterminate"?now():undefined), resolved: s.category === "done" ? (i.resolved ?? now()) : null })),
@@ -474,7 +495,7 @@ export const actions = {
   assign(key: string, user: User | null) {
     timed(`assign ${key} → ${user?.name ?? "Unassigned"}`, () => {
       record(key,`assign ${key}`,()=>patchIssue(key, { assignee: user }));
-      set({ overlay: null });
+      ui.send({ type: "overlay.close" });
     });
   },
   summary(key: string, summary: string) {
@@ -484,28 +505,45 @@ export const actions = {
   description(key: string, value: string|AdfDocument) {
     const previous=normalizeDocument(state.full.get(key)?.fields.description);
     const document=normalizeDocument(value);
-    if(JSON.stringify(document)===JSON.stringify(previous)){set({editDesc:false});return;}
+    if(JSON.stringify(document)===JSON.stringify(previous)){ui.send({type:"description.editDone"});return;}
     timed(`edit ${key} description`, () => record(key,`description on ${key}`,() => {
       patchFields(key, () => ({ description:document }));
-      patchIssue(key, {description:adfToText(document),descriptionHistory:[...(state.issues.get(key)?.descriptionHistory??[]),{text:adfToText(previous),document:previous,at:now()}]});
-      set({ editDesc: false });
+      // Autosave writes often; one history entry per minute of editing keeps the revision list readable.
+      const history=state.issues.get(key)?.descriptionHistory??[],last=history.at(-1),recent=!!last&&Date.now()-Date.parse(last.at)<60_000;
+      patchIssue(key, {description:adfToText(document),descriptionHistory:recent?history:[...history,{text:adfToText(previous),document:previous,at:now()}]});
+      ui.send({ type: "description.editDone" });
     }));
   },
-  comment(key: string, text: string) {
-    if (!text.trim()) return;
-    if(!state.full.has(key))return;
+  comment(key: string, value: string|AdfDocument):boolean {
+    const body=typeof value==="string"?textToAdf(value):normalizeDocument(value);
+    if (!adfToText(body).trim()||!state.full.has(key)||!state.canEdit) return false;
     timed(`comment on ${key}`, () => record(key,`comment on ${key}`,() => {
       const c = {
         id: `local-${++localSeq}`,
         author: { accountId: ME.id, displayName: ME.name, avatarUrls: { "24x24": ME.avatar } },
-        body: textToAdf(text),
+        body,
         created: now(),
       };
       patchFields(key, (f) => ({ comment: { ...f.comment, comments: [...f.comment.comments, c], total: f.comment.total + 1 } }));
       patchIssue(key, { comments: (state.issues.get(key)?.comments ?? 0) + 1 });
     }));
+    return true;
   },
-  create(summary: string, draft:IssueDraft={}, more=false) {
+  /** Only local comments can change: Jira writes are disabled, so remote ones are read-only. */
+  editComment(key:string,id:string,value:AdfDocument) {
+    const body=normalizeDocument(value);
+    if(!id.startsWith("local-")||!adfToText(body).trim())return;
+    record(key,`edit comment on ${key}`,()=>patchFields(key,f=>({comment:{...f.comment,comments:f.comment.comments.map((c:any)=>c.id===id?{...c,body,updated:now()}:c)}})));
+  },
+  deleteComment(key:string,id:string) {
+    if(!id.startsWith("local-"))return;
+    record(key,`delete comment on ${key}`,()=>{
+      patchFields(key,f=>({comment:{...f.comment,comments:f.comment.comments.filter((c:any)=>c.id!==id),total:Math.max(0,f.comment.total-1)}}));
+      patchIssue(key,{comments:Math.max(0,(state.issues.get(key)?.comments??1)-1)});
+    });
+  },
+  /** Like Linear, creating from the composer stays on the board and confirms with a toast; `open` shows the new issue instead. */
+  create(summary: string, draft:IssueDraft={}, more=false, open=false) {
     if(!state.canEdit)return;
     const board = state.boards.find((b) => b.id === state.board);
     const statuses=board?.columns.flatMap(c=>c.statuses)??[];
@@ -530,11 +568,9 @@ export const actions = {
           reporter: { accountId: ME.id, displayName: ME.name, avatarUrls: { "24x24": ME.avatar } },
         },
       };
-      set({
-        issues: new Map(state.issues).set(key, issue),
-        full: new Map(state.full).set(key, full),
-        ...(more?{perf:`Created ${key}`,overlay:"create" as const}:{selected: key, panel: true, overlay: null}),
-      });
+      set({ issues: new Map(state.issues).set(key, issue), full: new Map(state.full).set(key, full), ...(more?{perf:`Created ${key}`}:{}) });
+      // "Create more" keeps the composer open; otherwise open the issue, or stay on the board with a toast.
+      if(!more){navigate(open?{selected:key,panel:true}:{selected:key});ui.send({type:"overlay.close"});if(!open)ui.send({type:"toast.show",text:`Created ${key}`,key});}
     }));
     return key;
   },
@@ -543,13 +579,13 @@ export const actions = {
     record([key,...related.map(i=>i.key)],`delete ${key}`,()=> {
       for(const issue of related)patchIssue(issue.key,{...(issue.parent===key?{parent:undefined}:{}),relations:issue.relations?.filter(r=>r.key!==key)});
       const issues=new Map(state.issues),full=new Map(state.full);issues.delete(key);full.delete(key);
-      set({issues,full,selected:null,panel:false,overlay:null,perf:`Deleted ${key}. Undo to restore.`});
+      set({issues,full,perf:`Deleted ${key}. Undo to restore.`});navigate({selected:null,panel:false});ui.send({type:"overlay.close"});
     });
   },
   duplicate(key:string) {
     const issue=state.issues.get(key);if(!issue)return;
-    set({board:issue.board});
-    return actions.create(`${issue.summary} (copy)`,{status:issue.status,assignee:issue.assignee,priority:issue.priority,labels:[...issue.labels],project:issue.project,milestones:issue.milestones,due:issue.due,parent:issue.parent,type:issue.type,descriptionDoc:normalizeDocument(state.full.get(key)?.fields.description??issue.description)});
+    navigate({board:issue.board});
+    return actions.create(`${issue.summary} (copy)`,{status:issue.status,assignee:issue.assignee,priority:issue.priority,labels:[...issue.labels],project:issue.project,milestones:issue.milestones,due:issue.due,parent:issue.parent,type:issue.type,descriptionDoc:normalizeDocument(state.full.get(key)?.fields.description??issue.description)},false,true);
   },
   relate(key:string,target:string,kind:string,remove=false) {
     if(key===target)return;

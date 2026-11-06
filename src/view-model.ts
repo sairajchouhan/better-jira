@@ -38,7 +38,7 @@ OPERATORS.push(["gt","greater than"],["lt","less than"]);
 export const isNumeric = (field:Field) => field === "statusAge" || field === "pullRequests" || field === "estimate";
 export const operatorsFor = (field: Field) => OPERATORS.filter(([op]) => isNumeric(field) ? ["is","isNot","gt","lt"].includes(op) : ["gt","lt"].includes(op) ? false : isDate(field) || field === "started" ? !["contains", "notContains"].includes(op) : !["before", "after", "within", "next"].includes(op));
 export const newId = () => crypto.randomUUID();
-export const defaultDisplay = (): Display => ({ layout: "board", columns: "status", rows: "none", ordering: "manual", descending: false, groupDescending: false, completedRecency: false, subIssues: true, emptyGroups: true, nested: "matching", properties: ["id", "status", "assignee", "priority", "type", "labels", "comments", "updated"], openIn: "side" });
+export const defaultDisplay = (): Display => ({ layout: "board", columns: "status", rows: "none", ordering: "manual", descending: false, groupDescending: false, completedRecency: false, subIssues: true, emptyGroups: false, nested: "matching", properties: ["id", "status", "assignee", "priority", "type", "labels", "comments", "updated"], openIn: "side" });
 export const defaultPreferences = (): Preferences => ({ display: defaultDisplay(), filters: { id: "root", join: "and", children: [] }, scope:"all", hidden:{}, collapsed:{} });
 
 /** Treat saved settings as versioned input. Invalid or stale values fall back independently. */
@@ -176,6 +176,20 @@ export function buckets(items: Issue[], by: Grouping, board: Board, universe = i
   return reverse ? result.reverse() : result;
 }
 
+/** A rank that sorts (by code unit) after `a` and before `b`; no `b` means "at the end". */
+// ponytail: ranks grow a character when dropped repeatedly into the same gap; rebalance if that ever matters.
+export function rankBetween(a = "", b?: string): string {
+  let out = "";
+  for (let i = 0; ; i++) {
+    const lo = i < a.length ? a.charCodeAt(i) : 31, hi = b === undefined || i >= b.length ? 127 : b.charCodeAt(i);
+    const mid = (lo + hi) >> 1;
+    if (mid > lo && mid > 32) return out + String.fromCharCode(mid); // never end on " ", or nothing could go before it
+    const c = Math.max(lo, 32);
+    out += String.fromCharCode(c);
+    if (c < hi) b = undefined;
+  }
+}
+
 export function selectIssues(all: Issue[], board: Board, prefs: Preferences, mine: boolean, query: string, me: string, now = Date.now()): Issue[] {
   const d = prefs.display;
   const q = query.trim().toLowerCase();
@@ -188,7 +202,7 @@ export function selectIssues(all: Issue[], board: Board, prefs: Preferences, min
     if (d.completedRecency && statusFor(a,board)?.category === "done" && statusFor(b,board)?.category === "done") return (b.resolved ?? "").localeCompare(a.resolved ?? "");
     let cmp = 0;
     switch (d.ordering) {
-      case "manual": cmp = (a.rank ?? "").localeCompare(b.rank ?? ""); break;
+      case "manual": { const x = a.rank ?? "", y = b.rank ?? ""; cmp = x < y ? -1 : x > y ? 1 : 0; break; } // ranks compare by code unit, like Jira's LexoRank
       case "title": cmp = a.summary.localeCompare(b.summary); break;
       case "status": cmp = colOrder(a)-colOrder(b); break;
       case "priority": cmp = priorityRank(a.priority)-priorityRank(b.priority); break;
@@ -205,6 +219,12 @@ export function selectIssues(all: Issue[], board: Board, prefs: Preferences, min
   return items;
 }
 
+/** Whether a status column can hold issues in this tab: Active never lists Backlog or Done columns, even as hidden. */
+export function columnInScope(column: Board["columns"][number] | undefined, scope: Scope): boolean {
+  if (!column || scope === "all") return true;
+  const backlog = /backlog/i.test(column.name) || !!column.statuses.length && column.statuses.every(s => /backlog/i.test(s.name));
+  return scope === "backlog" ? backlog : !backlog && column.statuses.some(s => s.category !== "done");
+}
 export function isBacklog(issue: Issue, board: Board): boolean {
   return board.columns.some(c=>/backlog/i.test(c.name)&&c.statuses.some(s=>s.id===issue.status)) || /backlog/i.test(statusFor(issue,board)?.name??"");
 }

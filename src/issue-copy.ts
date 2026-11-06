@@ -33,14 +33,16 @@ export function adfToMarkdown(node:AdfNode|string|null|undefined):string {
 }
 export const copyKinds=["ID","URL","title","title as link","issue as Markdown","everything as Markdown","git branch name"] as const;
 export type CopyKind=typeof copyKinds[number];
-export function issueCopy(kind:CopyKind,issue:Issue,full:Full|undefined,url:string,status:string):string {
+const slug=(text:string)=>text.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+/** `user` prefixes the git branch name like Linear's `raj/drft-53-title`. */
+export function issueCopy(kind:CopyKind,issue:Issue,full:Full|undefined,url:string,status:string,user=""):string {
   const title=`${issue.key} ${issue.summary}`;
   switch(kind){
     case "ID":return issue.key;
     case "URL":return url;
     case "title":return issue.summary;
     case "title as link":return `[${escape(title)}](${destination(url)})`;
-    case "git branch name":return `${issue.key.toLowerCase()}-${issue.summary.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")}`;
+    case "git branch name":{const owner=slug(user.split(/\s+/)[0]??"");return `${owner?`${owner}/`:""}${issue.key.toLowerCase()}-${slug(issue.summary)}`;}
     default:{
       const description=adfToMarkdown(full?.fields.description??issue.description);
       const base=`# ${escape(title)}\n\n${description}`;

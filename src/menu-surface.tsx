@@ -7,22 +7,25 @@ export function MenuSurface({label,children,close,anchorId,anchor,width=340}:{la
   const anchored=!!anchorId||!!anchor;
   useLayoutEffect(()=>{
     const place=()=>{
-      const node=ref.current,trigger=anchor??(anchorId?document.getElementById(anchorId):null)??previous.current;
+      // The previously focused element is only a useful anchor when it is a real control, not <body> after keyboard navigation.
+      const node=ref.current,last=previous.current,trigger=anchor??(anchorId?document.getElementById(anchorId):null)??(last&&last!==document.body?last:null);
       if(!node)return;
       const r=trigger?.getBoundingClientRect(),w=Math.min(width,innerWidth-24),h=Math.min(node.scrollHeight,innerHeight-24);
       if(anchored&&r?.width&&innerWidth>=600){
         const below=innerHeight-r.bottom-12,above=r.top-12;
-        setStyle({position:"fixed",width:w,left:Math.max(12,Math.min(r.left,innerWidth-w-12)),top:Math.max(12,below>=h||below>=above?r.bottom+5:r.top-h-5),maxHeight:Math.max(100,Math.min(h,Math.max(below,above)))});
-      }else setStyle({position:"fixed",width:Math.min(anchored?width:640,innerWidth-24),left:"50%",transform:"translateX(-50%)",top:"12vh",maxHeight:"80vh"});
+        const maxHeight=Math.max(100,Math.min(h,Math.max(below,above)));
+        setStyle({position:"fixed",width:w,left:Math.max(12,Math.min(r.left,innerWidth-w-12)),top:Math.max(12,Math.min(innerHeight-maxHeight-12,below>=h||below>=above?r.bottom+5:r.top-h-5)),maxHeight});
+      }else{const w=Math.min(anchored?width:640,innerWidth-24);setStyle({position:"fixed",width:w,left:(innerWidth-w)/2,top:"12vh",maxHeight:"80vh"});} // no transform: it would re-anchor nested fixed menus
     };
     place();const observer=new ResizeObserver(place);ref.current&&observer.observe(ref.current);
     window.addEventListener("resize",place);window.addEventListener("scroll",place,true);
-    const frame=requestAnimationFrame(()=>ref.current?.querySelector<HTMLElement>('input:not([type="file"]),textarea,[contenteditable="true"],button,[tabindex="0"]')?.focus());
+    // Keep focus a child already took (autoFocus); else prefer a text field over the first button in DOM order.
+    const frame=requestAnimationFrame(()=>{const node=ref.current;if(!node||node.contains(document.activeElement))return;for(const selector of ["[data-autofocus]",'input:not([type="file"]):not([type="checkbox"]),textarea,[contenteditable="true"]','button,[tabindex="0"]']){const target=node.querySelector<HTMLElement>(selector);if(target){target.focus();return;}}});
     return()=>{cancelAnimationFrame(frame);observer.disconnect();window.removeEventListener("resize",place);window.removeEventListener("scroll",place,true);if(previous.current?.isConnected)previous.current.focus();};
   },[anchorId,anchor,anchored,width,label]);
   return <div className={`fixed inset-0 z-50 ${anchored?"":"bg-black/40"}`} onMouseDown={e=>{if(e.target===e.currentTarget)close();}}>
     <div ref={ref} style={style} role="dialog" aria-modal="true" aria-label={label} className="overflow-y-auto rounded-xl border border-line-2 bg-card p-3 text-fg-2 shadow-2xl" onKeyDown={e=>{
-      e.stopPropagation();
+      if(!((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"))e.stopPropagation(); // ⌘K reaches the app so it can toggle the command menu
       if(e.key==="Escape"){e.preventDefault();close();}
       if(e.key==="Tab"){
         const nodes=[...ref.current!.querySelectorAll<HTMLElement>('button:not(:disabled),input:not([type="file"]),textarea,select,[contenteditable="true"],[tabindex="0"]')].filter(n=>n.getClientRects().length);
@@ -32,4 +35,9 @@ export function MenuSurface({label,children,close,anchorId,anchor,width=340}:{la
       }
     }}>{children}</div>
   </div>;
+}
+
+/** A property row in the open issue, else the issue's visible card, so pickers open beside what they change. */
+export function issueAnchor(id:string,key:string):HTMLElement|null {
+  return document.getElementById(id)??[...document.querySelectorAll<HTMLElement>(`[data-key="${CSS.escape(key)}"]`)].find(n=>n.getClientRects().length)??null;
 }

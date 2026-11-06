@@ -10,9 +10,9 @@ export function Adf({ node }: { node: any }): ReactNode {
   switch (node.type) {
     case "doc": return <div className="space-y-2 leading-relaxed">{kids}</div>;
     case "paragraph": return <p>{kids}</p>;
-    case "text": return (node.marks ?? []).reduce(mark, node.text);
+    case "text": return (node.marks ?? []).reduce(mark, (node.marks ?? []).some((m: any) => m.type === "link" || m.type === "code") ? node.text : linkify(node.text));
     case "hardBreak": return <br />;
-    case "heading": return <p className="font-semibold text-[15px] text-fg pt-1">{kids}</p>;
+    case "heading": { const level = Math.max(1, Math.min(6, Number(a.level) || 2)), H = `h${level}` as "h1"; return <H className={HEADING[level]}>{kids}</H>; }
     case "bulletList": return <ul className="list-disc pl-5 space-y-1">{kids}</ul>;
     case "orderedList": return <ol start={Number(a.order)||1} className="list-decimal pl-5 space-y-1">{kids}</ol>;
     case "taskList": return <ul className="space-y-1">{kids}</ul>;
@@ -37,6 +37,14 @@ export function Adf({ node }: { node: any }): ReactNode {
     case "media": return <span className="block italic text-fg-3">[attachment]</span>;
     default: return kids?.length?<>{kids}</>:<span className="text-fg-3">[{node.type} content preserved]</span>;
   }
+}
+
+const HEADING = ["", "pt-2 text-[20px] leading-7 font-semibold text-fg", "pt-1.5 text-[17px] leading-6 font-semibold text-fg", "pt-1 text-[15px] font-semibold text-fg", "text-[14px] font-semibold text-fg", "text-[13px] font-semibold text-fg", "text-[13px] font-medium text-fg-2"];
+
+/** Bare URLs in plain text become links, as Linear shows them. */
+function linkify(text: string): ReactNode {
+  const parts = text.split(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g);
+  return parts.length === 1 ? text : parts.map((part, i) => i % 2 ? <a key={i} className="text-accent underline" href={safeLink(part) ?? undefined} target="_blank" rel="noreferrer">{part}</a> : part);
 }
 
 function mark(inner: ReactNode, m: any): ReactNode {

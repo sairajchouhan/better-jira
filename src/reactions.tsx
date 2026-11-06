@@ -23,7 +23,7 @@ export function ReactionPicker({anchor,close,choose}:{anchor:HTMLElement|null;cl
   const select=(emoji:string)=>{try{localStorage.setItem(storageKey,JSON.stringify([emoji,...recent.filter(r=>r!==emoji)].slice(0,18)));}catch{}choose(emoji);close();};
   const matching=options.filter(option=>`${option.name} ${option.group} ${option.emoji}`.toLowerCase().includes(query.toLowerCase()));
   return <MenuSurface label="Choose reaction" anchor={anchor} width={340} close={close}>
-    <input aria-label="Search emoji" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search emoji or paste one…" className="mb-2 w-full rounded-md border border-line-2 bg-card px-3 py-2 outline-none focus:border-accent"/>
+    <input aria-label="Search emoji" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{const q=query.trim(),first=matching[0],pick=isSingleEmoji(q)?q:q&&first?withTone(first.emoji,tone):"";if(e.key==="Enter"&&pick){e.preventDefault();select(pick);}}} placeholder="Search emoji or paste one…" className="mb-2 w-full rounded-md border border-line-2 bg-card px-3 py-2 outline-none focus:border-accent"/>
     <div role="group" aria-label="Skin tone" className="mb-2 flex gap-1">{tones.map((t,i)=><button key={i} aria-label={i?`Skin tone ${i}`:"Default skin tone"} aria-pressed={tone===t} onClick={()=>setTone(t)} className={`rounded p-1 ${tone===t?"bg-sel":"hover:bg-hover"}`}>{withTone("👍",t)}</button>)}</div>
     <div ref={grid} className="max-h-[300px] overflow-y-auto" onKeyDown={e=>{
       const buttons=[...grid.current!.querySelectorAll<HTMLButtonElement>('button')],index=buttons.indexOf(document.activeElement as HTMLButtonElement);

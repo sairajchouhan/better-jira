@@ -25,6 +25,7 @@
   --color-card-hover: var(--card-hover);
   --color-card-fg-3: var(--card-fg-3);
   --color-chip-line: var(--chip-line);
+  --color-hidden-line: var(--hidden-line);
   --color-tab: var(--tab);
   --color-tab-on: var(--tab-on);
   --color-btn: var(--btn);
@@ -60,6 +61,8 @@
   --btn: lch(99.997% 0.5 282);
   --tab-shadow: lch(0 0 0 / 0.09) 0 0 0 0.5px, lch(0 0 0 / 0.02) 0 3px 6px -2px, lch(0 0 0 / 0.04) 0 1px 1px 0;
   --tab-on-shadow: lch(0 0 0 / 0.09) 0 0 0 0.5px;
+  --hidden-line: lch(91.9% 0 282); /* "Hidden columns" row */
+  --hidden-shadow: lch(0 0 0 / 0.02) 0 3px 6px -2px, lch(0 0 0 / 0.04) 0 1px 1px 0;
   /* Workflow-state colors from Linear's status SVGs. canceled/qa/hold are not in this workspace: Linear's
      default canceled grey, and our own teal/orange for Jira-only states. */
   --st-backlog: lch(67.969% 3.577 260.65);
@@ -102,6 +105,8 @@
     --btn: lch(10.149% 0.689 272);
     --tab-shadow: lch(100 0 0 / 0.137) 0 0 0 0.5px, lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
     --tab-on-shadow: lch(100 0 0 / 0.137) 0 0 0 0.5px;
+    --hidden-line: lch(16.793% 1.93 272);
+    --hidden-shadow: lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
     --st-backlog: #bec2c8;
     --st-todo: #e2e2e2;
     --st-review: lch(60% 64.37 141.95);
@@ -130,6 +135,9 @@
 
 .rich-content { min-height: 120px; padding: 12px; outline: none; line-height: 1.6; overflow-wrap: anywhere; }
 .rich-editor[data-expanded] .rich-content { min-height: 300px; }
+.rich-editor[data-inline] .rich-content { min-height: 32px; padding: 2px 0; }
+.rich-placeholder { top: 12px; left: 12px; }
+.rich-editor[data-inline] .rich-placeholder { top: 2px; left: 0; }
 .rich-content > * + * { margin-top: .6em; }
 .rich-content h1 { font-size: 1.5em; font-weight: 650; }
 .rich-content h2 { font-size: 1.25em; font-weight: 650; }
