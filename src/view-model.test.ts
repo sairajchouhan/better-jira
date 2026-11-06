@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buckets, defaultPreferences, listRows, matchesFilters, matchesRule, parsePreferences, selectIssues, statusDuration, updateFilter, type FilterGroup, type Rule } from "./view-model";
+import { buckets, defaultPreferences, draftForGroup, listRows, matchesFilters, matchesRule, navigationIssues, parsePreferences, selectIssues, statusDuration, updateFilter, type FilterGroup, type Rule } from "./view-model";
 import type { Board, Issue } from "./store";
 
 const board: Board = {id:1,name:"Board",columns:[{name:"Todo",statuses:[{id:"todo",name:"Todo",category:"new"}]},{name:"Doing",statuses:[{id:"doing",name:"In Progress",category:"indeterminate"}]},{name:"Done",statuses:[{id:"done",name:"Done",category:"done"}]}]};
@@ -13,12 +13,20 @@ const all = [
 ];
 const rule = (field:Rule["field"],values:string[],op:Rule["op"]="is"):Rule => ({id:field,field,op,values});
 describe("view selection",()=>{
-  test("preserves board and recent-completion scope before applying mine and search",()=>{
+  test("All issues includes older completions and still respects board, mine, and search",()=>{
     const prefs=defaultPreferences();
-    expect(selectIssues([...all,issue("B-1",{board:2})],board,prefs,false,"","me",now).map(i=>i.key)).toEqual(["A-2","A-3","A-1"]);
+    expect(selectIssues([...all,issue("B-1",{board:2})],board,prefs,false,"","me",now).map(i=>i.key)).toEqual(["A-4","A-2","A-3","A-1"]);
     expect(selectIssues(all,board,prefs,true,"A-1","me",now).map(i=>i.key)).toEqual(["A-1"]);
     prefs.display.subIssues=false;
     expect(selectIssues(all,board,prefs,false,"","me",now).some(i=>i.key==="A-2")).toBe(false);
+  });
+  test("Active and Backlog use Jira workflow columns rather than treating every new status as backlog",()=>{
+    const backlogBoard={...board,columns:[{name:"Backlog",statuses:[{id:"backlog",name:"Backlog",category:"new"}]},...board.columns]};
+    const issues=[...all,issue("A-5",{status:"backlog"})];
+    const prefs=defaultPreferences();prefs.scope="active";
+    expect(selectIssues(issues,backlogBoard,prefs,false,"","me",now).map(i=>i.key)).toEqual(["A-2","A-1"]);
+    prefs.scope="backlog";
+    expect(selectIssues(issues,backlogBoard,prefs,false,"","me",now).map(i=>i.key)).toEqual(["A-5"]);
   });
   test("combines multi-value OR within a property and nested AND/OR across properties",()=>{
     const group:FilterGroup={id:"root",join:"and",children:[rule("labels",["bug","ui"]),{id:"or",join:"or",children:[rule("assignee",["$me"]),rule("priority",["Low"])]}]};
@@ -58,7 +66,7 @@ describe("view selection",()=>{
     expect(selectIssues(all,board,p,false,"","me",now)[0]?.key).toBe("A-2");
   });
   test("saved preferences round-trip and malformed settings fall back without crashing",()=>{
-    const p=defaultPreferences();p.display.layout="list";p.display.properties=[];p.filters.children=[rule("assignee",["$me"])];
+    const p=defaultPreferences();p.display.layout="list";p.display.properties=[];p.filters.children=[rule("assignee",["$me"])];p.scope="active";p.hidden={status:["Done"]};p.collapsed={assignee:["me"]};
     expect(parsePreferences(JSON.parse(JSON.stringify(p)))).toEqual(p);
     const invalid=parsePreferences({display:{layout:"bad",columns:"bad",subIssues:false},filters:{children:[null,{field:"token",values:[]}]}});
     expect(invalid.display.layout).toBe("board");expect(invalid.display.subIssues).toBe(false);expect(invalid.filters.children).toEqual([]);
@@ -72,6 +80,18 @@ describe("view selection",()=>{
     expect(listRows([all[0]!],all,"all").map(r=>r.issue.key)).toEqual(["A-1","A-2"]);
     const cycle=[issue("C-1",{parent:"C-2"}),issue("C-2",{parent:"C-1"})];
     expect(listRows(cycle,cycle,"matching")).toHaveLength(2);
+  });
+  test("issue-page navigation skips repeated cards in overlapping label groups",()=>{
+    const groups=buckets([all[0]!,all[1]!],"label",board,all).map(g=>g.issues);
+    expect(groups.flat().filter(i=>i.key==="A-1")).toHaveLength(2);
+    expect(navigationIssues(groups).map(i=>i.key)).toEqual(["A-1","A-2"]);
+  });
+  test("column and row creation carries type, priority and assignee defaults into the draft",()=>{
+    expect(draftForGroup("type","Bug",board,all,"active")).toEqual({type:"Bug"});
+    expect(draftForGroup("priority","$none",board,all,"active")).toEqual({priority:""});
+    expect({...draftForGroup("status","Doing",board,all,"active"),...draftForGroup("assignee","me",board,all,"active")}).toEqual({status:"doing",assignee:{id:"me",name:"Me"}});
+    const withBacklog={...board,columns:[{name:"Backlog",statuses:[{id:"backlog",name:"Backlog",category:"new"}]},...board.columns]};
+    expect(draftForGroup("category","new",withBacklog,all,"active")).toEqual({status:"todo"});
   });
   test("filters watcher lists only when complete and supports milestone and numeric status duration",()=>{
     const item=issue("A-5",{watchers:[{id:"me",name:"Me"}],watchersComplete:true,milestones:[{id:"release",name:"Release"}],prCount:0,statusSince:"2026-10-30T12:00:00Z"});
@@ -92,5 +112,23 @@ describe("view selection",()=>{
     expect(statusDuration("2026-11-06T13:00:00Z",now)).toBe("<1m");
     expect(statusDuration("2026-11-06T11:00:00Z",now)).toBe("1h");
     expect(statusDuration("2026-11-04T12:00:00Z",now)).toBe("2d");
+  });
+  test("every supported filter property distinguishes a match from a nonmatch",()=>{
+    const rich=issue("A-5",{summary:"Personal draft",description:"A description",assignee:{id:"me",name:"Me"},creator:{id:"me",name:"Me"},priority:"High",labels:["ui"],project:{key:"P",name:"Project"},type:"Bug",parent:"A-0",relations:[{key:"A-1",kind:"blocking"}],links:["https://example.com"],created:"2026-11-01",updated:"2026-11-05",due:"2026-11-07",resolved:"2026-11-05",started:"2026-11-02",statusSince:"2026-11-05",milestones:[{id:"m1",name:"Release"}],watchers:[{id:"me",name:"Me"}],watchersComplete:true,projectLead:{id:"me",name:"Me"},prCount:2,estimate:3});
+    const cases:[Rule["field"],Rule["op"],string,string][]=[
+      ["status","is","todo","doing"],["assignee","is","$me","other"],["creator","is","$me","other"],
+      ["priority","is","High","Low"],["labels","is","ui","api"],["relations","is","blocking","blocked"],
+      ["project","is","P","other"],["type","is","Bug","Task"],["parent","is","A-0","A-99"],
+      ["milestone","is","m1","other"],["watchers","is","$me","other"],["projectLead","is","$me","other"],
+      ["content","contains","personal","absent"],["links","contains","example.com","absent"],
+      ["created","after","2026-10-01","2026-12-01"],["updated","after","2026-10-01","2026-12-01"],
+      ["due","before","2026-12-01","2026-10-01"],["resolved","before","2026-12-01","2026-10-01"],
+      ["started","after","2026-10-01","2026-12-01"],["statusAge","gt","0.5","10"],
+      ["pullRequests","gt","1","3"],["estimate","gt","2","4"],
+    ];
+    for(const [field,op,matching,other] of cases) {
+      expect(matchesRule(rich,rule(field,[matching],op),[...all,rich],"me",now)).toBe(true);
+      expect(matchesRule(rich,rule(field,[other],op),[...all,rich],"me",now)).toBe(false);
+    }
   });
 });

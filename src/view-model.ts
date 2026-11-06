@@ -1,4 +1,4 @@
-import type { Board, Issue } from "./store";
+import type { Board, Issue, IssueDraft } from "./store";
 
 export type Grouping = "none" | "status" | "category" | "assignee" | "project" | "priority" | "label" | "parent" | "type";
 export type Ordering = "manual" | "title" | "status" | "priority" | "assignee" | "updated" | "created" | "due" | "links" | "statusAge" | "estimate";
@@ -21,7 +21,8 @@ export type Display = {
   properties: Property[];
   openIn: "side" | "page";
 };
-export type Preferences = { display: Display; filters: FilterGroup };
+export type Scope = "all" | "active" | "backlog";
+export type Preferences = { display: Display; filters: FilterGroup; scope: Scope; hidden: Record<string,string[]>; collapsed: Record<string,string[]> };
 export const GROUPINGS: [Grouping, string][] = [["none", "No grouping"], ["status", "Status"], ["category", "Status type"], ["assignee", "Assignee"], ["project", "Project"], ["priority", "Priority"], ["label", "Label"], ["parent", "Parent issue"], ["type", "Issue type"]];
 export const ORDERINGS: [Ordering, string][] = [["manual", "Manual"], ["title", "Title"], ["status", "Status"], ["priority", "Priority"], ["assignee", "Assignee"], ["updated", "Updated"], ["created", "Created"], ["due", "Due date"], ["links", "Link count"], ["statusAge","Time in status"]];
 export const PROPERTIES: [Property, string][] = [["id", "ID"], ["status", "Status"], ["assignee", "Assignee"], ["creator", "Creator"], ["priority", "Priority"], ["project", "Project"], ["due", "Due date"], ["labels", "Labels"], ["links", "Links"], ["created", "Created"], ["updated", "Updated"], ["type", "Issue type"], ["comments", "Comments"]];
@@ -38,12 +39,17 @@ export const isNumeric = (field:Field) => field === "statusAge" || field === "pu
 export const operatorsFor = (field: Field) => OPERATORS.filter(([op]) => isNumeric(field) ? ["is","isNot","gt","lt"].includes(op) : ["gt","lt"].includes(op) ? false : isDate(field) || field === "started" ? !["contains", "notContains"].includes(op) : !["before", "after", "within", "next"].includes(op));
 export const newId = () => crypto.randomUUID();
 export const defaultDisplay = (): Display => ({ layout: "board", columns: "status", rows: "none", ordering: "manual", descending: false, groupDescending: false, completedRecency: false, subIssues: true, emptyGroups: true, nested: "matching", properties: ["id", "status", "assignee", "priority", "type", "labels", "comments", "updated"], openIn: "side" });
-export const defaultPreferences = (): Preferences => ({ display: defaultDisplay(), filters: { id: "root", join: "and", children: [] } });
+export const defaultPreferences = (): Preferences => ({ display: defaultDisplay(), filters: { id: "root", join: "and", children: [] }, scope:"all", hidden:{}, collapsed:{} });
 
 /** Treat saved settings as versioned input. Invalid or stale values fall back independently. */
 export function parsePreferences(value: unknown): Preferences {
   const base = defaultPreferences();
   if (!value || typeof value !== "object") return base;
+  if (["all","active","backlog"].includes((value as Preferences).scope)) base.scope=(value as Preferences).scope;
+  for(const key of ["hidden","collapsed"] as const) {
+    const saved=(value as Preferences)[key];
+    if(saved&&typeof saved === "object") base[key]=Object.fromEntries(Object.entries(saved).filter(([g,v])=>GROUPINGS.some(([id])=>id===g)&&Array.isArray(v)).map(([g,v])=>[g,v.filter(id=>typeof id === "string")]));
+  }
   const d = (value as Preferences).display;
   if (d && typeof d === "object") {
     for (const key of ["completedRecency", "subIssues", "emptyGroups", "descending", "groupDescending"] as const)
@@ -174,7 +180,7 @@ export function selectIssues(all: Issue[], board: Board, prefs: Preferences, min
   const d = prefs.display;
   const q = query.trim().toLowerCase();
   const items = all.filter(i => i.board === board.id && (d.subIssues || !i.parent)
-    && (statusFor(i,board)?.category !== "done" || !!i.resolved && Date.parse(i.resolved) >= now - 7*864e5)
+    && (prefs.scope === "all" || (prefs.scope === "backlog" ? isBacklog(i,board) : !isBacklog(i,board) && statusFor(i,board)?.category !== "done"))
     && (!mine || i.assignee?.id === me) && (!q || `${i.key} ${i.summary}`.toLowerCase().includes(q))
     && matchesFilters(i, prefs.filters, all, me, now));
   const colOrder = (i: Issue) => board.columns.findIndex(c=>c.statuses.some(s=>s.id===i.status));
@@ -199,11 +205,35 @@ export function selectIssues(all: Issue[], board: Board, prefs: Preferences, min
   return items;
 }
 
+export function isBacklog(issue: Issue, board: Board): boolean {
+  return board.columns.some(c=>/backlog/i.test(c.name)&&c.statuses.some(s=>s.id===issue.status)) || /backlog/i.test(statusFor(issue,board)?.name??"");
+}
+
 export function updateFilter(group: FilterGroup, id: string, patch: Partial<Rule & FilterGroup> | null): FilterGroup {
   if (group.id === id) return patch ? { ...group, ...patch } : {...group,children:[]};
   return { ...group, children: group.children.flatMap(c => c.id === id ? patch ? [{...c,...patch} as Rule | FilterGroup] : [] : ["children" in c ? updateFilter(c,id,patch) : c]) };
 }
 export const filterCount = (g: FilterGroup): number => g.children.reduce((n,c)=>n+("children" in c?filterCount(c):1),0);
+
+/** Label groups can repeat a card; issue-page stepping visits each issue once. */
+export const navigationIssues=(columns:Issue[][]):Issue[]=>[...new Map(columns.flat().map(i=>[i.key,i])).values()];
+
+export function draftForGroup(by:Grouping,id:string,board:Board,issues:Issue[],scope:Scope):IssueDraft {
+  switch(by) {
+    case "status":return {status:board.columns.find(c=>c.name===id)?.statuses[0]?.id};
+    case "category": {
+      const status=board.columns.filter(c=>scope!=="active"||!/backlog/i.test(c.name)).flatMap(c=>c.statuses).find(s=>s.category===id&&(scope!=="active"||!/backlog/i.test(s.name)));
+      return status?{status:status.id}:{};
+    }
+    case "assignee":return {assignee:issues.find(i=>i.assignee?.id===id)?.assignee??null};
+    case "priority":return {priority:id==="$none"?"":id};
+    case "project":return {project:issues.find(i=>i.project?.key===id)?.project??null};
+    case "label":return {labels:id==="$none"?[]:[id]};
+    case "parent":return {parent:id==="$none"?undefined:id};
+    case "type":return {type:id==="$none"?undefined:id};
+    case "none":return {};
+  }
+}
 
 export function statusDuration(since:string,now=Date.now()):string {
   const minutes=Math.max(0,Math.floor((now-Date.parse(since))/60000));

@@ -122,7 +122,7 @@ function DisplayMenu({board}:{board:Board}) {
     <Select label="Open issues in" value={d.openIn} options={[["side","Side panel"],["page","Full page"]]} onChange={v=>patch({openIn:v as Display["openIn"]})}/>
     <div className="mt-3 flex justify-end gap-3 border-t border-line-2 pt-2 text-[11px]">
       <button title="Reset to the saved default for this board" onClick={()=>changeDisplay(board.id,defaults[board.id] ?? defaultDisplay())}>Reset</button>
-      <button className="text-accent disabled:opacity-50" disabled={saving} title="Save a default for everyone using this local BetterJira server" onClick={async()=>{setSaving(true);await saveDefault(board.id);setSaving(false);}}>{saving?"Saving…":"Set default for everyone"}</button>
+      <button className="text-accent disabled:opacity-50" disabled={saving} title="Save your display default in this browser" onClick={async()=>{setSaving(true);await saveDefault(board.id);setSaving(false);}}>{saving?"Saving…":"Save my default"}</button>
     </div>
   </div>;
 }

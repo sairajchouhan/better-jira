@@ -6,15 +6,17 @@ import { Adf, adfToText } from "./adf";
 import { Icon, Label, PriorityIcon, StatusIcon, TypeDot } from "./icons";
 import {
   ME, actions, boardOf, get, load, loadFull, set, timed, useStore,
-  changeDisplay, usePreferences, type Board, type Column, type Issue, type User,
+  beginCreate, changeDisplay, changePreferences, toggleFavorite, undoEdit, redoEdit, usePreferences, type Board, type Column, type Issue, type User,
 } from "./store";
 
 const JIRA = "https://contentstack.atlassian.net";
 import { BoardControls, FilterChips } from "./view-controls";
-import { buckets, listRows, selectIssues, statusDuration, type Bucket, type Display, type Grouping, type Property } from "./view-model";
+import { buckets, draftForGroup, listRows, navigationIssues, selectIssues, statusDuration, type Bucket, type Display, type Grouping, type Property } from "./view-model";
+import { BoardDetails, CreateIssue, Favorites, GroupMenu, IssueOptions, Modal, PersonalIssueDetails, PropertyPicker, Relations, SavedViews, SaveViewButton } from "./personal-controls";
 
 /** The active board's visible columns, for keyboard navigation and the issue page's ↑ ↓ stepping. */
 const nav = { cols: [] as Issue[][] };
+const flatNav=()=>navigationIssues(nav.cols);
 
 const statusOf = (i: Issue) => boardOf(i.key)?.columns.flatMap((c) => c.statuses).find((s) => s.id === i.status);
 const colLook = (c: Column) => ({ name: c.name, category: c.statuses[0]?.category ?? "new" });
@@ -37,7 +39,7 @@ export function App() {
     <div className="flex h-screen flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1">
       <Sidebar boards={boards} />
-      <main className="my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border-[0.5px] border-frame bg-panel shadow-(--frame-shadow)">
+      <main className="relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border-[0.5px] border-frame bg-panel shadow-(--frame-shadow)">
         {!page && <BoardHeader />}
         <div className="flex min-h-0 flex-1">
           {/* Both boards stay mounted (hidden behind the issue page too), so switching back is a display toggle. */}
@@ -52,7 +54,10 @@ export function App() {
       {overlay === "palette" && <Palette />}
       {overlay === "assign" && selected && <AssignPicker issueKey={selected} />}
       {overlay === "status" && selected && <StatusPicker issueKey={selected} />}
-      {overlay === "create" && <CreateDialog />}
+      {overlay === "create" && <CreateIssue />}
+      {open && (overlay === "priority" || overlay === "labels" || overlay === "project" || overlay === "milestone" || overlay === "due") && <PropertyPicker issue={open} field={overlay}/>}
+      {open && overlay === "options" && <IssueOptions issue={open}/>}
+      {open && overlay === "relations" && <Relations issue={open}/>}
     </div>
   );
 }
@@ -61,6 +66,8 @@ function BoardView({ board, active, shown, selected }: { board: Board; active: b
   const issues = useStore(s=>s.issues);
   const mine = useStore(s=>s.mine);
   const query = useStore(s=>s.query);
+  const details=useStore(s=>s.details);
+  const panel=useStore(s=>s.panel);
   const prefs = usePreferences(board.id);
   const d = prefs.display;
   const [expanded,setExpanded] = useState<string[]>([]);
@@ -68,8 +75,12 @@ function BoardView({ board, active, shown, selected }: { board: Board; active: b
   const visible = useMemo(()=>selectIssues(all,board,prefs,mine,query,ME.id),[all,board,prefs,mine,query]);
   const universe = useMemo(()=>all.filter(i=>i.board===board.id),[all,board]);
   const columns = useMemo(()=>buckets(visible,d.columns,board,universe,d.groupDescending),[visible,d,board,universe]);
+  const hiddenIds=prefs.hidden[d.columns]??[];
+  const collapsed=prefs.collapsed[d.columns]??[];
+  const hidden = columns.filter(c=>hiddenIds.includes(c.id)||!d.emptyGroups&&!c.issues.length&&!expanded.includes(c.id));
+  const show = columns.filter(c=>!hidden.includes(c));
   const rows = useMemo(()=>buckets(visible,d.rows,board,visible),[visible,d.rows,board]);
-  const navColumns = d.layout === "list" ? [columns.flatMap(c=>buckets(c.issues,d.rows,board,c.issues).flatMap(r=>listRows(r.issues,universe,d.subIssues?d.nested:"none").map(row=>row.issue)))] : columns.map(c=>rows.flatMap(r=>c.issues.filter(i=>r.issues.includes(i))));
+  const navColumns = d.layout === "list" ? [show.filter(c=>!collapsed.includes(c.id)).flatMap(c=>buckets(c.issues,d.rows,board,c.issues).flatMap(r=>listRows(r.issues,universe,d.subIssues?d.nested:"none").map(row=>row.issue)))] : show.map(c=>rows.flatMap(r=>c.issues.filter(i=>r.issues.includes(i))));
   if (active) nav.cols = navColumns.map(c=>[...new Map(c.map(i=>[i.key,i])).values()]);
   useEffect(()=>setExpanded([]),[d.emptyGroups,d.columns]);
   useEffect(() => {
@@ -80,33 +91,16 @@ function BoardView({ board, active, shown, selected }: { board: Board; active: b
     if (i >= 0) for (const offset of [-2, -1, 1, 2]) flat[i+offset] && loadFull(flat[i+offset]!.key);
   }, [active, selected, visible]);
 
-  const hidden = columns.filter(c=>!d.emptyGroups&&!c.issues.length&&!expanded.includes(c.id));
-  const show = columns.filter(c=>!hidden.includes(c));
-  const drop = (key:string,by:Grouping,id:string) => {
-    const issue = get().issues.get(key);
-    if (!issue || issue.board !== board.id) return;
-    if (by === "status") {
-      const index = board.columns.findIndex(c=>c.name===id);
-      if(index>=0) actions.move(key,index);
-    } else if (by === "category") {
-      const status = board.columns.flatMap(c=>c.statuses).find(s=>s.category===id);
-      if(status) actions.status(key,status.id);
-    } else if (by === "assignee") actions.assign(key,id === "$none" ? null : universe.find(i=>i.assignee?.id === id)?.assignee ?? null);
-    else if (by === "priority" || by === "type") actions.patch(key,{[by]:id === "$none" ? undefined:id});
-    else if (by === "label") actions.patch(key,{labels:id === "$none" ? []:[...new Set([...issue.labels,id])]});
-    else if (by === "parent" && id !== key) {
-      let ancestor = id;
-      const seen = new Set<string>([key]);
-      while (ancestor && ancestor !== "$none") { if (seen.has(ancestor)) return; seen.add(ancestor); ancestor=get().issues.get(ancestor)?.parent??""; }
-      actions.patch(key,{parent:id === "$none" ? undefined:id});
-    }
-  };
-  return <div className={`${shown?"flex":"hidden"} min-w-0 min-h-0 flex-1 flex-col`} data-layout={d.layout}>
+  const hide=(id:string)=>changePreferences(board.id,{hidden:{...prefs.hidden,[d.columns]:[...hiddenIds,id]}});
+  const reveal=(id:string)=>{changePreferences(board.id,{hidden:{...prefs.hidden,[d.columns]:hiddenIds.filter(x=>x!==id)}});setExpanded([...expanded,id]);};
+  const collapse=(id:string)=>changePreferences(board.id,{collapsed:{...prefs.collapsed,[d.columns]:collapsed.includes(id)?collapsed.filter(x=>x!==id):[...collapsed,id]}});
+  const createIn=(bucket:Bucket,row?:Bucket)=>beginCreate({...draftForGroup(d.columns,bucket.id,board,universe,prefs.scope),...(row?draftForGroup(d.rows,row.id,board,universe,prefs.scope):{})});
+  return <div className={`${shown?"flex":"hidden"} min-w-0 min-h-0 flex-1`}><div className="flex min-w-0 min-h-0 flex-1 flex-col" data-layout={d.layout}>
     {!visible.length&&<div role="status" className="flex shrink-0 items-center justify-center gap-3 py-8 text-fg-3">No issues match this view.<button onClick={()=>set({toolbar:"filter"})} className="text-fg-2">Edit filters</button></div>}
     {d.layout === "list" ? <div className="flex-1 overflow-auto py-1">
       {show.map(c=><section key={c.id} className="mb-2">
-        <GroupHeading bucket={c}/>
-        {buckets(c.issues,d.rows,board,c.issues).filter(r=>r.issues.length).map(r=><div key={r.id}>
+        <GroupHeading bucket={c} collapsed={collapsed.includes(c.id)} toggle={()=>collapse(c.id)} create={()=>createIn(c)}/>
+        {!collapsed.includes(c.id)&&buckets(c.issues,d.rows,board,c.issues).filter(r=>r.issues.length).map(r=><div key={r.id}>
           {d.rows!=="none"&&<div className="border-b border-line bg-col px-8 py-2 text-[12px] text-fg-3">{r.name} <span className="ml-2">{r.issues.length}</span></div>}
           <IssueList issues={r.issues} universe={universe} display={d} selected={selected}/>
         </div>)}
@@ -115,16 +109,16 @@ function BoardView({ board, active, shown, selected }: { board: Board; active: b
       {rows.filter(r=>d.rows==="none"||r.issues.length).map(row=><div key={row.id} className={d.rows === "none"?"flex h-full min-h-0 gap-4":"mb-4"}>
         {d.rows!=="none"&&<div className="sticky left-0 mb-2 flex items-center gap-2 px-2 py-2 text-fg-3"><span>{row.name}</span><span>{row.issues.length}</span></div>}
         <div className={d.rows === "none"?"contents":"flex gap-4"}>
-          {show.map(col=><ColumnView key={col.id} bucket={col} issues={d.rows==="none"?col.issues:col.issues.filter(i=>row.issues.includes(i))} selected={selected} display={d} scroll={d.rows==="none"} onDrop={key=>{drop(key,d.columns,col.id);if(d.rows!=="none")drop(key,d.rows,row.id);}}/>)}
-          {d.rows==="none"&&hidden.length>0&&<div className="w-[260px] shrink-0 px-2 pt-3 text-fg-3"><div className="mb-3 text-[12px]">⌄ Hidden columns</div>{hidden.map(c=><button key={c.id} className="mb-2 flex h-9 w-full items-center gap-2 rounded-lg bg-card px-3 text-left text-fg-2" onClick={()=>setExpanded([...expanded,c.id])}>{c.status&&<StatusIcon status={c.status}/>}<span className="flex-1">{c.name}</span><span className="text-fg-3">0</span></button>)}</div>}
+          {show.map(col=><ColumnView key={col.id} bucket={col} issues={d.rows==="none"?col.issues:col.issues.filter(i=>row.issues.includes(i))} selected={selected} display={d} scroll={d.rows==="none"} hide={()=>hide(col.id)} create={()=>createIn(col,d.rows==="none"?undefined:row)} onDrop={key=>actions.drop(key,board.id,[{by:d.columns,id:col.id},...(d.rows!=="none"?[{by:d.rows,id:row.id}]:[])])}/>)}
         </div>
       </div>)}
     </div>}
-  </div>;
+    {hidden.length>0&&<details open className="shrink-0 border-t border-line px-4 py-2 text-[12px] text-fg-3"><summary className="cursor-pointer">Hidden {d.layout==="board"?"columns":"groups"}</summary><div className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-y-auto">{hidden.map(c=><button key={c.id} aria-label={`Show ${c.name}`} className="flex h-8 items-center gap-2 rounded-lg bg-card px-3 text-fg-2 hover:bg-hover" onClick={()=>reveal(c.id)}>{c.status&&<StatusIcon status={c.status}/>}<span>{c.name}</span><span className="text-fg-3">{c.issues.length}</span></button>)}</div></details>}
+  </div>{active&&shown&&details&&!panel&&<BoardDetails board={board} issues={visible}/>}</div>;
 }
 
-function GroupHeading({bucket}:{bucket:Bucket}) {
-  return <div className="flex h-10 items-center gap-2 border-y border-line bg-col px-5 text-[12px] font-medium text-fg-2">{bucket.status&&<StatusIcon status={bucket.status}/>}<span>{bucket.name}</span><span className="text-fg-3">{bucket.issues.length}</span></div>;
+function GroupHeading({bucket,collapsed,toggle,create}:{bucket:Bucket;collapsed:boolean;toggle:()=>void;create:()=>void}) {
+  return <div className="flex h-10 items-center gap-2 border-y border-line bg-col px-5 text-[12px] font-medium text-fg-2"><button aria-label={`${collapsed?"Expand":"Collapse"} ${bucket.name}`} aria-expanded={!collapsed} onClick={toggle} className="flex flex-1 items-center gap-2 text-left"><Icon name={collapsed?"chevron":"down"}/>{bucket.status&&<StatusIcon status={bucket.status}/>}<span>{bucket.name}</span><span className="text-fg-3">{bucket.issues.length}</span></button><button aria-label={`New issue in ${bucket.name}`} onClick={create} className={COL_BTN}><Icon name="plus"/></button></div>;
 }
 
 function IssueList({issues,universe,display,selected}:{issues:Issue[];universe:Issue[];display:Display;selected:string|null}) {
@@ -135,14 +129,17 @@ function IssueList({issues,universe,display,selected}:{issues:Issue[];universe:I
 
 function onKey(e: KeyboardEvent) {
   const s = get();
+  const t = e.target as HTMLElement;
+  const typing=!!t.closest("input, textarea, select, [contenteditable=true], [role=dialog]");
+  if(!typing&&(e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="z") {e.preventDefault();return e.shiftKey?redoEdit():undoEdit();}
   if ((e.metaKey || e.ctrlKey) && e.key === "k") {
     e.preventDefault();
     return set({ overlay: s.overlay === "palette" ? null : "palette" });
   }
   if (s.overlay) return e.key === "Escape" && set({ overlay: null });
   if (s.toolbar) return;
-  const t = e.target as HTMLElement;
   if (t.closest("input, textarea, select, [contenteditable=true], [role=dialog]")) return e.key === "Escape" && t.blur();
+  if((e.key==="Enter"||e.key===" ")&&t.closest("button, a, summary, [role=button]"))return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (press(e.key)) e.preventDefault();
 }
@@ -157,10 +154,10 @@ function press(key: string): boolean {
   const focus = (id: string) => requestAnimationFrame(() => document.getElementById(id)?.focus());
   const down = key === "j" || key === "ArrowDown";
   const up = key === "k" || key === "ArrowUp";
-  const side = key === "h" || key === "l" || key === "ArrowLeft" || key === "ArrowRight";
+  const side = key === "h" || key === "ArrowLeft" || key === "ArrowRight";
 
   if (page && (down || up)) {
-    const flat = cols.flat();
+    const flat = flatNav();
     const i = flat.findIndex((x) => x.key === sel);
     select(flat[i < 0 ? 0 : i + (down ? 1 : -1)]?.key);
     return true;
@@ -171,20 +168,21 @@ function press(key: string): boolean {
   if (ci < 0 && (down || up || side)) return select(cols.find((c) => c.length)?.[0]?.key), true;
   const sideways = (dir: number) => {
     for (let c = ci + dir; c >= 0 && c < cols.length; c += dir)
-      if (cols[c]!.length) return select(cols[c]![Math.min(ii, cols[c]!.length - 1)]!.key);
+      if (cols[c]!.some(i=>i.key!==sel)) {const candidates=cols[c]!.filter(i=>i.key!==sel);return select(candidates[Math.min(ii,candidates.length-1)]!.key);}
   };
 
   switch (key) {
     case "j": case "ArrowDown": select(cols[ci]?.[ii + 1]?.key); break;
     case "k": case "ArrowUp": select(cols[ci]?.[ii - 1]?.key); break;
     case "h": case "ArrowLeft": sideways(-1); break;
-    case "l": case "ArrowRight": sideways(1); break;
+    case "ArrowRight": sideways(1); break;
     case "Enter": case "o":
       if (!sel) return false;
       timed(s.panel ? "close issue" : `open ${sel}`, () => set({ panel: !s.panel }));
       break;
     case "Escape": s.panel ? set({ panel: false }) : s.query ? set({ query: "" }) : set({ selected: null }); break;
-    case "/": case "f": set({toolbar:"filter"}); break;
+    case "f": set({toolbar:"filter"}); break;
+    case "/": set({overlay:"palette"}); break;
     case "m": timed("only mine", () => set({ mine: !s.mine })); break;
     case "v": timed("issue view", () => set({ view: s.view === "page" ? "side" : "page" })); break;
     case "b": {
@@ -192,11 +190,12 @@ function press(key: string): boolean {
       timed("switch board", () => set({ board: s.boards[(i + 1) % s.boards.length]!.id, selected: null, panel: false }));
       break;
     }
-    case "n": set({ overlay: "create" }); break;
+    case "n": case "c": beginCreate(); break;
     case "s": if (!sel) return false; set({ overlay: "status" }); break;
     case "a": if (!sel) return false; set({ overlay: "assign" }); break;
+    case "p": if (!sel) return false; set({overlay:"priority",panel:true}); break;
+    case "l": if (!sel) return false; set({overlay:"labels",panel:true}); break;
     case "i": if (!sel) return false; actions.assign(sel, s.issues.get(sel)?.assignee?.id === ME.id ? null : ME); break;
-    case "c": if (!sel) return false; set({ panel: true }); focus("comment"); break;
     case "e": if (!sel) return false; set({ panel: true }); focus("summary"); break;
     case "d": if (!sel) return false; set({ panel: true, editDesc: true }); break;
     default:
@@ -211,7 +210,7 @@ function press(key: string): boolean {
 function Sidebar({ boards }: { boards: Board[] }) {
   const boardId = useStore((s) => s.board);
   return (
-    <nav className="flex w-[244px] shrink-0 flex-col gap-px p-2 font-medium">
+    <nav className="flex w-[244px] shrink-0 flex-col gap-px overflow-y-auto p-2 font-medium max-md:hidden">
       <div className="mb-1 flex h-11 items-center gap-2 px-2 text-fg">
         <span className="grid size-[18px] place-items-center rounded-[5px] bg-accent text-[10px] font-semibold text-white">bj</span>
         better-jira
@@ -219,8 +218,8 @@ function Sidebar({ boards }: { boards: Board[] }) {
       <SideItem onClick={() => set({ overlay: "palette" })}>
         <Icon name="search" /> Search <kbd className="ml-auto">⌘K</kbd>
       </SideItem>
-      <SideItem onClick={() => set({ overlay: "create" })}>
-        <Icon name="plus" /> New issue <kbd className="ml-auto">N</kbd>
+      <SideItem onClick={() => beginCreate()}>
+        <Icon name="plus" /> New issue <kbd className="ml-auto">C</kbd>
       </SideItem>
 
       <div className="mt-5 mb-1 px-2 text-[12px] text-fg-3">Boards</div>
@@ -230,7 +229,8 @@ function Sidebar({ boards }: { boards: Board[] }) {
           <span className="truncate">{b.name}</span>
         </SideItem>
       ))}
-
+      <SavedViews/>
+      <Favorites/>
     </nav>
   );
 }
@@ -238,9 +238,12 @@ function Sidebar({ boards }: { boards: Board[] }) {
 /** Linear's 28px bottom bar under the sidebar and panel; ours carries the perf readout and the local-only note. */
 function StatusBar() {
   const perf = useStore((s) => s.perf);
+  const undo=useStore(s=>s.undoCount),redo=useStore(s=>s.redoCount);
   return (
     <footer className="flex h-7 shrink-0 items-center gap-4 px-4 text-[11px]">
-      <span className="flex items-center gap-1.5 text-amber-500"><span className="size-1.5 rounded-full bg-amber-500" />Local only: nothing is sent to Jira</span>
+      <span title="Issue edits reset on reload. View preferences are saved in this browser." className="flex items-center gap-1.5 text-amber-500"><span className="size-1.5 rounded-full bg-amber-500" />Local only: nothing is sent to Jira</span>
+      <button disabled={!undo} onClick={undoEdit} title="Undo (⌘Z)" className="text-fg-3 disabled:opacity-30">Undo</button>
+      <button disabled={!redo} onClick={redoEdit} title="Redo (⌘⇧Z)" className="text-fg-3 disabled:opacity-30">Redo</button>
       <span className="ml-auto truncate font-mono text-emerald-500">{perf}</span>
     </footer>
   );
@@ -260,11 +263,14 @@ function BoardHeader() {
   const board = useStore((s) => s.boards.find((b) => b.id === s.board));
   const query = useStore((s) => s.query);
   const mine = useStore((s) => s.mine);
-  const view = useStore((s) => s.view);
+  const details=useStore(s=>s.details);
+  const prefs=usePreferences(board!.id);
+  const favoriteId=`board:${board!.id}:${prefs.scope}`;
+  const favorite=useStore(s=>s.favorites.includes(favoriteId));
   const tab = (on: boolean, label: ReactNode, title?: string) => (
     <button
       title={title}
-      onClick={() => mine !== on && timed("only mine", () => set({ mine: on }))}
+      onClick={() => timed("only mine", () => set({ mine: !mine }))}
       className={`${PILL} ${mine === on ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2"}`}
     >
       {label}
@@ -278,17 +284,20 @@ function BoardHeader() {
           <span className="truncate">{board?.name}</span>
           <span className="mx-2 -mt-0.5 text-fg-3">›</span>
           <span>Issues</span>
+          <button role="switch" aria-label={favorite?"Remove from favorites":"Add to favorites"} aria-checked={favorite} onClick={()=>toggleFavorite(favoriteId)} className="ml-3 text-fg-3 hover:text-fg">{favorite?"★":"☆"}</button>
         </div>
-        <button onClick={() => set({ overlay: "create" })} className={`${PILL} pr-2.5 pl-2 text-fg-3 hover:bg-hover hover:text-fg-2`}>
+        <button aria-label="Search issues" onClick={()=>set({overlay:"palette"})} className={`${COL_BTN} ml-auto md:hidden`}><Icon name="search"/></button>
+        <button onClick={() => beginCreate()} className={`${PILL} pr-2.5 pl-2 text-fg-3 hover:bg-hover hover:text-fg-2`}>
           <Icon name="plus" /> New issue
         </button>
       </div>
-      <div className="flex h-[43.5px] items-center gap-1 px-2">
-        {tab(false, "All issues")}
+      <div className="flex min-h-[43.5px] flex-wrap items-center gap-1 px-2 py-1">
+        {(["active","backlog","all"] as const).map(scope=><button key={scope} aria-pressed={prefs.scope===scope} onClick={()=>changePreferences(board!.id,{scope})} className={`${PILL} ${prefs.scope===scope?"bg-tab-on text-fg shadow-(--tab-on-shadow)":"bg-tab text-fg-3 hover:bg-hover"}`}>{scope==="active"?"Active":scope==="backlog"?"Backlog":"All issues"}</button>)}
         {tab(true, "My issues", "My issues (m)")}
+        <SaveViewButton/>
         <div className="ml-auto flex items-center gap-1"><BoardControls board={board!}/></div>
-        <button title={`Open issues in ${view === "side" ? "full page" : "side panel"} (v)`} onClick={() => set({ view: view === "side" ? "page" : "side" })} className={`${CIRCLE} justify-center`}>
-          <Icon name={view === "side" ? "side" : "expand"} />
+        <button aria-label={details?"Close details":"Open details"} aria-expanded={details} title="Board details" onClick={() => set({details:!details,panel:false})} className={`${CIRCLE} justify-center`}>
+          <Icon name="side" />
         </button>
       </div>
       {board&&<FilterChips board={board}/>}
@@ -300,7 +309,7 @@ function BoardHeader() {
 
 const COL_BTN = "grid size-6 place-items-center rounded-full text-fg-3 hover:bg-hover hover:text-fg";
 
-function ColumnView({ bucket, issues, selected, display, scroll, onDrop }: { bucket:Bucket; issues:Issue[]; selected:string|null; display:Display; scroll:boolean; onDrop:(key:string)=>void }) {
+function ColumnView({ bucket, issues, selected, display, scroll, onDrop,hide,create }: { bucket:Bucket; issues:Issue[]; selected:string|null; display:Display; scroll:boolean; onDrop:(key:string)=>void;hide:()=>void;create:()=>void }) {
   const [over,setOver] = useState(false);
   return <section
     onDragOver={e=>{e.preventDefault();setOver(true);}}
@@ -311,8 +320,8 @@ function ColumnView({ bucket, issues, selected, display, scroll, onDrop }: { buc
     <h2 className="flex h-[46px] shrink-0 items-center gap-2 pr-2 pl-3.5 text-[13px]">
       {bucket.status?<StatusIcon status={bucket.status}/>:display.columns === "priority"?<PriorityIcon name={bucket.name}/>:<Icon name="layers"/>}
       <span className="ml-0.5 truncate font-medium text-fg-2">{bucket.name}</span><span className="text-fg-3">{issues.length}</span>
-      <button title={`Options for ${bucket.name}`} onClick={()=>set({toolbar:"display"})} className={`ml-auto ${COL_BTN}`}><Icon name="dots"/></button>
-      <button title="New issue (n)" onClick={()=>set({overlay:"create"})} className={`-ml-1.5 ${COL_BTN}`}><Icon name="plus"/></button>
+      <GroupMenu name={bucket.name} hide={hide}/>
+      <button aria-label={`New issue in ${bucket.name}`} onClick={create} className={`-ml-1.5 ${COL_BTN}`}><Icon name="plus"/></button>
     </h2>
     <div className={`flex-1 px-[9px] pt-[9px] ${scroll?"overflow-y-auto":""}`}>
       {issues.map(i=><Card key={i.key} issue={i} selected={i.key===selected} display={display}/>)}
@@ -374,6 +383,7 @@ const Card = memo(function Card({issue,selected,display:d,list=false,depth=0}:{i
 
 function Avatar({ user, size = 20 }: { user: User | null; size?: number }) {
   const [broken, setBroken] = useState(false); // Jira's default avatars need a Jira login, so they fail here
+  useEffect(()=>setBroken(false),[user?.avatar]);
   const box = { width: size, height: size };
   if (!user) return <span title="Unassigned" className="inline-block shrink-0 rounded-full border border-dashed border-fg-4" style={box} />;
   if (!user.avatar || broken)
@@ -398,6 +408,7 @@ const ICON_BTN = "grid size-7 shrink-0 place-items-center rounded-md text-fg-3 h
 
 function IssueView({ issue, page }: { issue: Issue; page: boolean }) {
   const f = useStore((s) => s.full.get(issue.key))?.fields;
+  const favorite=useStore(s=>s.favorites.includes(issue.key));
   const bar = (
     <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-3 text-[12px] text-fg-3">
       <TypeDot type={issue.type} />
@@ -405,6 +416,8 @@ function IssueView({ issue, page }: { issue: Issue; page: boolean }) {
       <a className="tracking-[-0.24px] text-fg-2 hover:text-fg" href={`${JIRA}/browse/${issue.key}`} target="_blank">{issue.key}</a>
       {issue.parent && <span className="truncate">· parent {issue.parent}</span>}
       <span className="flex-1" />
+      <button role="switch" aria-label={favorite?"Remove issue from favorites":"Add issue to favorites"} aria-checked={favorite} onClick={()=>toggleFavorite(issue.key)} className={ICON_BTN}>{favorite?"★":"☆"}</button>
+      <button aria-label="Issue options" onClick={()=>set({overlay:"options"})} className={ICON_BTN}><Icon name="dots"/></button>
       {page && <Stepper issueKey={issue.key} />}
       <button title={page ? "Open in side panel (v)" : "Open as full page (v)"} onClick={() => set({ view: page ? "side" : "page" })} className={ICON_BTN}>
         <Icon name={page ? "side" : "expand"} />
@@ -415,12 +428,13 @@ function IssueView({ issue, page }: { issue: Issue; page: boolean }) {
 
   if (!page)
     return (
-      <aside className="flex w-[520px] shrink-0 flex-col border-l border-line">
+      <aside className="flex w-[520px] max-w-full shrink-0 flex-col border-l border-line bg-panel max-md:absolute max-md:inset-0 max-md:z-20 max-md:w-full">
         {bar}
         <div className="flex-1 overflow-y-auto px-5 py-4">
           <Title issue={issue} className="text-[17px]" />
           <div className="mt-3 rounded-lg border border-line-2 p-1"><Properties issue={issue} f={f} /></div>
           <Description issue={issue} f={f} />
+          <PersonalIssueDetails issue={issue}/>
           <Activity issue={issue} f={f} />
         </div>
       </aside>
@@ -428,15 +442,16 @@ function IssueView({ issue, page }: { issue: Issue; page: boolean }) {
   return (
     <div className="flex min-w-0 flex-1 flex-col">
       {bar}
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 max-md:flex-col max-md:overflow-y-auto">
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-[760px] px-10 py-8">
             <Title issue={issue} className="text-[22px]" />
             <Description issue={issue} f={f} />
+            <PersonalIssueDetails issue={issue}/>
             <Activity issue={issue} f={f} />
           </div>
         </div>
-        <div className="w-[300px] shrink-0 overflow-y-auto border-l border-line p-3"><Properties issue={issue} f={f} /></div>
+        <div className="w-[300px] shrink-0 overflow-y-auto border-l border-line p-3 max-md:w-full"><Properties issue={issue} f={f} /></div>
       </div>
     </div>
   );
@@ -448,13 +463,13 @@ function Stepper({ issueKey }: { issueKey: string }) {
   useStore((s) => s.mine);
   useStore((s) => s.query);
   useStore((s) => s.preferences);
-  const flat = nav.cols.flat();
+  const flat = flatNav();
   const i = flat.findIndex((x) => x.key === issueKey);
   return (
     <div className="mr-1 flex items-center gap-0.5">
       <span className="mr-1 tabular-nums">{i < 0 ? "–" : i + 1} / {flat.length}</span>
-      <button title="Previous (k)" onClick={() => press("k")} className={ICON_BTN}><Icon name="up" /></button>
-      <button title="Next (j)" onClick={() => press("j")} className={ICON_BTN}><Icon name="down" /></button>
+      <button disabled={i<=0} title="Previous (k)" onClick={() => press("k")} className={`${ICON_BTN} disabled:opacity-30`}><Icon name="up" /></button>
+      <button disabled={i<0||i>=flat.length-1} title="Next (j)" onClick={() => press("j")} className={`${ICON_BTN} disabled:opacity-30`}><Icon name="down" /></button>
     </div>
   );
 }
@@ -463,6 +478,7 @@ function Title({ issue, className }: { issue: Issue; className: string }) {
   return (
     <textarea
       id="summary"
+      aria-label="Issue title"
       key={issue.summary}
       defaultValue={issue.summary}
       rows={1}
@@ -484,7 +500,7 @@ function Properties({ issue, f }: { issue: Issue; f: any }) {
       <dd className="min-w-0">{value}</dd>
     </>
   );
-  const btn = (id: string, hint: string, overlay: "status" | "assign", body: ReactNode) => (
+  const btn = (id: string, hint: string, overlay: "status" | "assign" | "priority" | "labels" | "project" | "milestone" | "due", body: ReactNode) => (
     <button id={id} onClick={() => set({ overlay })} className="group flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-fg-2 hover:bg-hover hover:text-fg">
       {body}
       <kbd className="ml-auto opacity-0 group-hover:opacity-100">{hint}</kbd>
@@ -495,8 +511,11 @@ function Properties({ issue, f }: { issue: Issue; f: any }) {
     <dl className="grid grid-cols-[84px_1fr] text-[12px] font-[450]">
       {row("Status", btn("prop-status", "S", "status", <>{status && <StatusIcon status={status} />}<span className="truncate">{status?.name}</span></>))}
       {row("Assignee", btn("prop-assignee", "A", "assign", <><Avatar user={issue.assignee} size={18} /><span className="truncate">{issue.assignee?.name ?? "Unassigned"}</span></>))}
-      {row("Priority", plain(<><PriorityIcon name={issue.priority} />{issue.priority ?? "None"}</>))}
-      {issue.labels.length > 0 && row("Labels", <div className="flex flex-wrap gap-1 px-2 py-1.5">{issue.labels.map((l) => <Label key={l} name={l} />)}</div>)}
+      {row("Priority",btn("prop-priority","P","priority",<><PriorityIcon name={issue.priority}/>{issue.priority??"No priority"}</>))}
+      {row("Labels",btn("prop-labels","L","labels",<span className="truncate">{issue.labels.join(", ")||"Add labels"}</span>))}
+      {row("Project",btn("prop-project","","project",<span className="truncate">{issue.project?.name??"No project"}</span>))}
+      {row("Milestone",btn("prop-milestone","","milestone",<span className="truncate">{issue.milestones?.map(m=>m.name).join(", ")||"Set milestone"}</span>))}
+      {row("Due date",btn("prop-due","","due",<span>{issue.due??"Set due date"}</span>))}
       {row("Reporter", plain(f && <><Avatar user={author(f.reporter)} size={18} /><span className="truncate">{f.reporter?.displayName}</span></>))}
       {row("Created", plain(f && ago(f.created)))}
       {row("Updated", plain(ago(issue.updated)))}
@@ -506,10 +525,11 @@ function Properties({ issue, f }: { issue: Issue; f: any }) {
 
 function Description({ issue, f }: { issue: Issue; f: any }) {
   const editDesc = useStore((s) => s.editDesc);
+  const error=useStore(s=>s.fullErrors.get(issue.key));
   return (
     <section className="mt-5">
       {!f ? (
-        <p className="text-fg-4">Loading…</p>
+        <p role="status" className="text-fg-4">{error?<>{error}. <button onClick={()=>void loadFull(issue.key)} className="text-accent">Retry</button></>:"Loading…"}</p>
       ) : editDesc ? (
         <TextBox
           id="description"
@@ -554,7 +574,7 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
         ))}
       </ol>
       <div className="mt-3">
-        <TextBox key={f.comment.total} id="comment" rows={3} placeholder="Leave a comment…" onSubmit={(t) => actions.comment(issue.key, t)} hint="⌘↵ send · C to focus" />
+        <TextBox key={f.comment.total} id="comment" rows={3} placeholder="Leave a comment…" onSubmit={(t) => actions.comment(issue.key, t)} hint="⌘↵ send" />
       </div>
     </section>
   );
@@ -568,6 +588,7 @@ function TextBox(props: {
     <div>
       <textarea
         id={props.id}
+        aria-label={props.id === "description"?"Issue description":props.placeholder??props.id}
         defaultValue={props.initial}
         rows={props.rows}
         autoFocus={props.autoFocus}
@@ -578,7 +599,7 @@ function TextBox(props: {
         }}
         className="w-full resize-y rounded-lg border border-line-2 bg-card px-3 py-2.5 leading-[1.6] outline-none placeholder:text-fg-4 focus:border-line-3"
       />
-      <div className="mt-0.5 text-right text-[11px] text-fg-4">{props.hint}</div>
+      <div className="mt-1 flex items-center justify-end gap-3 text-[11px] text-fg-4"><span>{props.hint}</span>{props.onCancel&&<button onClick={props.onCancel} className="text-fg-2">Cancel</button>}<button className="rounded-md bg-sel px-2 py-1 text-fg-2" onClick={()=>props.onSubmit((document.getElementById(props.id) as HTMLTextAreaElement).value)}>{props.onCancel?"Save description":"Submit comment"}</button></div>
     </div>
   );
 }
@@ -594,15 +615,14 @@ const MENU_INPUT = "h-11 w-full border-b border-line bg-transparent px-3.5 text-
 const close = (e: React.MouseEvent) => e.target === e.currentTarget && set({ overlay: null });
 
 function Overlay({ children }: { children: ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 pt-[14vh]" onMouseDown={close}>
-      {children}
-    </div>
-  );
+  return <Modal label="Search issues and commands" close={()=>set({overlay:null})}>{children}</Modal>;
 }
 
 /** Opens under the property in the issue view, else under the selected card, else centered. */
 function Popover({ issueKey, prop, children }: { issueKey: string; prop: string; children: ReactNode }) {
+  const ref=useRef<HTMLDivElement>(null);
+  const previous=useRef(document.activeElement as HTMLElement|null);
+  useEffect(()=>()=>{previous.current?.isConnected&&previous.current.focus();},[]);
   const el = document.getElementById(`prop-${prop}`) ?? document.querySelector(`[data-key="${issueKey}"]`);
   const r = el?.getBoundingClientRect();
   const style = r?.width
@@ -610,7 +630,12 @@ function Popover({ issueKey, prop, children }: { issueKey: string; prop: string;
     : { left: "50%", top: "14vh", translate: "-50% 0" };
   return (
     <div className="fixed inset-0 z-50" onMouseDown={close}>
-      <div className="absolute w-[320px]" style={style}>{children}</div>
+      <div ref={ref} role="dialog" aria-modal="true" aria-label={prop === "status"?"Change status":"Assign issue"} className="absolute w-[320px] max-w-[calc(100vw-16px)]" style={style} onKeyDown={e=>{
+        if(e.key!=="Tab")return;
+        const nodes=[...(ref.current?.querySelectorAll<HTMLElement>('input, button:not(:disabled), [tabindex="0"]')??[])].filter(n=>n.getClientRects().length);
+        if(e.shiftKey&&document.activeElement===nodes[0]){e.preventDefault();nodes.at(-1)?.focus();}
+        else if(!e.shiftKey&&document.activeElement===nodes.at(-1)){e.preventDefault();nodes[0]?.focus();}
+      }}>{children}</div>
     </div>
   );
 }
@@ -625,12 +650,6 @@ function StatusPicker({ issueKey }: { issueKey: string }) {
         loop
         defaultValue={statusOf(issue)?.name}
         className={MENU}
-        onKeyDown={(e) => {
-          if (!/^[1-9]$/.test(e.key)) return;
-          e.preventDefault();
-          actions.move(issueKey, Number(e.key) - 1);
-          set({ overlay: null });
-        }}
       >
         <Command.Input autoFocus placeholder="Change status…" className={MENU_INPUT} />
         <Command.List className="max-h-[340px] overflow-y-auto p-1">
@@ -715,7 +734,7 @@ function Palette() {
         viaKey(scoped.assignee?.id === ME.id ? "Unassign me" : "Assign to me", "i"),
         viaKey("Edit title", "e", <Icon name="pencil" />),
         viaKey("Edit description", "d", <Icon name="pencil" />),
-        viaKey("Add comment", "c", <Icon name="comment" />),
+        {name:"Add comment",icon:<Icon name="comment"/>,run:()=>{set({overlay:null,panel:true});requestAnimationFrame(()=>document.getElementById("comment")?.focus());}},
         { name: "Open issue", hint: "↵", icon: <Icon name="expand" />, run: () => set({ panel: true, overlay: null }) },
         { name: "Open in Jira", icon: <Icon name="external" />, run: () => (window.open(`${JIRA}/browse/${scoped.key}`), set({ overlay: null })) },
         ...(boardOf(scoped.key)?.columns ?? []).map((c, i): Cmd => ({
@@ -725,7 +744,7 @@ function Palette() {
       ]
     : [];
   const general: Cmd[] = [
-    viaKey("New issue", "n", <Icon name="plus" />),
+    viaKey("New issue", "c", <Icon name="plus" />),
     viaKey(mine ? "Show all issues" : "Show only my issues", "m"),
     viaKey(view === "page" ? "Open issues in a side panel" : "Open issues as a full page", "v", <Icon name={view === "page" ? "side" : "expand"} />),
     ...boards.filter((b) => b.id !== boardId).map((b) => viaKey(`Switch to ${b.name}`, "b")),
@@ -741,7 +760,7 @@ function Palette() {
 
   return (
     <Overlay>
-      <Command shouldFilter={false} loop className={`w-[640px] ${MENU}`}>
+      <Command shouldFilter={false} loop className={`w-full ${MENU}`}>
         <div className="flex items-center gap-2 border-b border-line px-3.5">
           {scoped && (
             <span className="flex h-6 shrink-0 items-center gap-1.5 rounded-md bg-sel px-2 text-[12px] text-fg-2">
@@ -783,22 +802,5 @@ function Palette() {
   );
 }
 
-function CreateDialog() {
-  const board = useStore((s) => s.boards.find((b) => b.id === s.board));
-  return (
-    <Overlay>
-      <form
-        className={`w-[640px] ${MENU}`}
-        onSubmit={(e) => {
-          e.preventDefault();
-          actions.create(new FormData(e.currentTarget).get("summary") as string);
-        }}
-      >
-        <div className="px-3.5 pt-3 text-[12px] text-fg-3">New issue in {board?.name}</div>
-        <input name="summary" autoFocus placeholder="Issue title, then ↵" className="h-12 w-full bg-transparent px-3.5 text-[15px] text-fg outline-none placeholder:text-fg-4" />
-      </form>
-    </Overlay>
-  );
-}
 
 export default App;
