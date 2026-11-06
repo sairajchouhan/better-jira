@@ -1,3 +1,5 @@
+import {useHotkeys,useHotkey,formatForDisplay} from "@tanstack/react-hotkeys";
+import {editorBindings} from "./editor-bindings";
 import { useEffect, useRef, useState } from "react";
 import { EditorState, type Command } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
@@ -22,11 +24,6 @@ export function RichEditor(props:RichEditorProps) {
   useEffect(()=>{
     const editor=new EditorView(host.current!,{
       state:EditorState.create({schema:richSchema,doc:toEditorDocument(latest.current.initial),plugins:[markdownRules,history(),keymap({
-        "Mod-z":undo,"Mod-Shift-z":redo,"Mod-y":redo,
-        "Mod-b":toggleMark(richSchema.marks.strong!),"Mod-i":toggleMark(richSchema.marks.em!),"Mod-u":toggleMark(richSchema.marks.underline!),
-        "Mod-k":()=>{setLinkOpen(true);return true;},
-        "Mod-Enter":()=>{if(!latest.current.onSave)return false;save();return true;},
-        "Escape":()=>{if(!latest.current.onCancel)return false;latest.current.onCancel();return true;},
         "Enter":chainCommands(codeEnter,splitListItem(richSchema.nodes.listItem!),baseKeymap.Enter!),
         "ArrowDown":codeDown,
         "Tab":tab,
@@ -53,6 +50,18 @@ export function RichEditor(props:RichEditorProps) {
     for(let d=state.selection.$from.depth;d>0;d--)if(state.selection.$from.node(d).type.name===name)return liftListItem(richSchema.nodes.listItem!)(state,dispatch,editor);
     return wrapInList(richSchema.nodes[name]!)(state,dispatch,editor);
   });
+  useHotkey("Escape",()=>{if(latest.current.onCancel)latest.current.onCancel();else view.current?.dom.blur();},{target:host,capture:true,ignoreInputs:false,enabled:!!props.inline||!!props.onCancel});
+  useHotkeys(editorBindings.map(binding=>({hotkey:binding.hotkey,callback:()=>{
+    const id=binding.id;
+    if(["strong","em","underline","strike","code"].includes(id))run(toggleMark(richSchema.marks[id]!));
+    else if(id==="link")setLinkOpen(true);
+    else if(id.startsWith("heading-")){const level=Number(id.split("-")[1]);changeBlock(level?"heading":"paragraph",level?{level}:{});}
+    else if(id==="quote")run(wrapIn(richSchema.nodes.blockquote!));
+    else if(id==="bullet"||id==="ordered")list(id==="bullet"?"bulletList":"orderedList");
+    else if(id==="code-block")changeBlock("codeBlock");
+    else if(id==="undo")run(undo);else if(id==="redo")run(redo);else if(id==="save")save();
+    else if(id==="attach"){const scope=host.current?.closest('[role="dialog"]')??document.querySelector("main");scope?.querySelector<HTMLInputElement>('input[type="file"]')?.click();}
+  },options:{enabled:binding.id!=="save"||!!props.onSave,meta:{name:binding.name,group:"Editor"}}})),{target:host,capture:true,ignoreInputs:false,ignoreDefaultPrevented:true});
   const addLink=()=>{
     const href=safeLink(url);
     if(!href){setLinkError("Enter an http, https, or mailto link.");return;}
@@ -63,8 +72,8 @@ export function RichEditor(props:RichEditorProps) {
   const level=view.current?.state.selection.$from.parent.type.name==="heading"?Number(view.current.state.selection.$from.parent.attrs.level):0;
   return <div className={`rich-editor group/editor relative ${props.inline?"":"mb-3 rounded-lg border border-line-2 bg-card"}`} data-inline={props.inline||undefined} data-expanded={props.expanded||undefined}>
     <div role="toolbar" aria-label="Description formatting" className="absolute right-0 bottom-full z-10 mb-1 hidden max-w-full flex-nowrap items-center gap-0.5 overflow-x-auto rounded-lg border border-line-2 bg-card p-1 shadow-lg group-focus-within/editor:flex" onMouseDown={e=>{if((e.target as HTMLElement).closest("button"))e.preventDefault();}}>
-      {[["strong","Bold","B"],["em","Italic","I"],["underline","Underline","U"],["strike","Strikethrough","S"],["code","Inline code","<>"]].map(([name,label,text])=><button key={name} type="button" aria-label={label} title={label} aria-pressed={marked(name!)} className={BUTTON} onClick={()=>run(toggleMark(richSchema.marks[name!]!))}>{text}</button>)}
-      {[0,1,2,3].map(n=><button key={n} type="button" aria-label={n?`Heading ${n}`:"Text"} title={n?`Heading ${n}`:"Text"} aria-pressed={level===n} className={`${BUTTON} shrink-0`} onClick={()=>changeBlock(n?"heading":"paragraph",n?{level:n}:{})}>{n?`H${n}`:"T"}</button>)}
+      {[["strong","Bold","B"],["em","Italic","I"],["underline","Underline","U"],["strike","Strikethrough","S"],["code","Inline code","<>"]].map(([name,label,text])=><button key={name} type="button" aria-label={label} title={`${label} (${formatForDisplay(editorBindings.find(b=>b.id===name)!.hotkey)})`} aria-pressed={marked(name!)} className={BUTTON} onClick={()=>run(toggleMark(richSchema.marks[name!]!))}>{text}</button>)}
+      {[0,1,2,3,4].map(n=><button key={n} type="button" aria-label={n?`Heading ${n}`:"Text"} title={n?`Heading ${n}`:"Text"} aria-pressed={level===n} className={`${BUTTON} shrink-0`} onClick={()=>changeBlock(n?"heading":"paragraph",n?{level:n}:{})}>{n?`H${n}`:"T"}</button>)}
       <button type="button" aria-label="Bulleted list" className={BUTTON} onClick={()=>list("bulletList")}>• List</button>
       <button type="button" aria-label="Numbered list" className={BUTTON} onClick={()=>list("orderedList")}>1. List</button>
       <button type="button" aria-label="Block quote" className={BUTTON} onClick={()=>run(wrapIn(richSchema.nodes.blockquote!))}>Quote</button>

@@ -53,7 +53,7 @@ test("I18: the side panel has previous/next arrows and no n / total count", asyn
     const summary = `(document.getElementById("summary").value??document.getElementById("summary").textContent)`;
     expect(await page.eval(summary)).toBe("Rich browser fixture");
     expect(await page.eval(`document.body.innerText.match(/\\b\\d+ \\/ \\d+\\b/)`)).toBeNull();
-    await page.click('[title="Next (j)"]');
+    await page.click('[title="Next (J / ↓)"]');
     expect(await page.waitFor<string>(`${summary}!=="Rich browser fixture"&&${summary}`)).toMatch(/^Browser fixture \d$/);
   } finally { await page.close(); }
 });
@@ -64,7 +64,7 @@ test("I17/R7: properties are unlabelled 13px/500 rows under section headings, wi
     await openIssue(page);
     const props = `document.querySelector("[data-properties]")`;
     expect(await page.eval(`getComputedStyle(${props}.parentElement).borderTopWidth`)).toBe("0px");
-    await page.key("v");
+    await page.click('[title="Open as full page"]');
     await page.waitFor(`getComputedStyle(document.getElementById("summary")).fontSize==="24px"`);
     expect(await page.eval(`getComputedStyle(document.getElementById("summary")).fontWeight`)).toBe("600");
     expect(await page.eval(`[...${props}.querySelectorAll("h3")].map(h=>h.textContent)`)).toEqual(["Properties", "Labels", "Project"]);

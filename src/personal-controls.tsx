@@ -1,3 +1,4 @@
+import {useHotkey} from "@tanstack/react-hotkeys";
 import { Command } from "cmdk";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Adf, adfToText } from "./adf";
@@ -17,6 +18,7 @@ import { lazy,Suspense } from "react";
 const DateInput=lazy(()=>import("./date-input").then(module=>({default:module.DateInput})));
 import { ReactionPicker } from "./reactions";
 import { PillSelect } from "./pill-select";
+import {shortcutLabel} from "./shortcuts";
 import { copyKinds,issueCopy,type CopyKind } from "./issue-copy";
 
 /** Linear keeps an unsent title and description when the composer closes; the next C brings them back. */
@@ -32,11 +34,13 @@ export function CreateIssue() {
   const [draftIndex,setDraftIndex]=useState(0);
   const [labels,setLabels]=useState(initial.labels?.join(", ")??"");
   const [more,setMore]=useState(false);
-  const [expanded,setExpanded]=useState(false);
+  const [expanded,setExpanded]=useState(get().createExpanded);
+  useEffect(()=>{set({createExpanded:false});},[]);
   const [attachments,setAttachments]=useState<Issue["attachments"]>([]);
   const [filesBusy,setFilesBusy]=useState(false);
   const [dateValid,setDateValid]=useState(true);
   const titleRef=useRef<HTMLInputElement>(null);
+  const formRef=useRef<HTMLFormElement>(null);
   const issues=[...all.values()].filter(i=>i.board===board.id);
   const users=[...new Map([[ME.id,ME] as const,...issues.flatMap(i=>i.assignee?[[i.assignee.id,i.assignee] as const]:[])]).values()];
   const projects=[...new Map(issues.flatMap(i=>i.project?[[i.project.key,i.project] as const]:[])).values()];
@@ -50,8 +54,9 @@ export function CreateIssue() {
     if(key){unsent.title="";unsent.description=normalizeDocument("");}
     if(key&&more){setTitle("");setDescription(normalizeDocument(""));setDraftIndex(n=>n+1);setAttachments([]);titleRef.current?.focus();}
   };
-  return <Modal label="Create issue" close={close}>
-    <form onSubmit={e=>{e.preventDefault();submit();}} onKeyDown={e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)){e.preventDefault();submit();}}}>
+  useHotkey("Mod+Enter",()=>submit(),{target:formRef,capture:true,ignoreInputs:false});
+  return <Modal label="Create issue" close={close} width={expanded?Math.max(640,window.innerWidth-48):640}>
+    <form ref={formRef} onSubmit={e=>{e.preventDefault();submit();}}>
       <div className="mb-3 flex items-center gap-2 text-[12px] text-fg-3"><span className="flex-1 truncate">{board.name} › {initial.parent?`Sub-issue of ${initial.parent}`:"New issue"}</span><button type="button" aria-label={expanded?"Collapse editor":"Expand editor"} onClick={()=>setExpanded(!expanded)} className={BUTTON}><Icon name="expand"/></button><button type="button" aria-label="Close" onClick={close} className={BUTTON}><Icon name="close"/></button></div>
       <input ref={titleRef} autoFocus aria-label="Issue title" value={title} onChange={e=>setTitle(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.metaKey&&!e.ctrlKey&&!e.nativeEvent.isComposing){e.preventDefault();document.getElementById("create-description")?.focus();}}} placeholder="Issue title" className="mb-2 w-full bg-transparent py-1 text-[18px] font-medium text-fg outline-none"/>
       <RichEditor key={draftIndex} id="create-description" initial={description} onChange={setDescription} expanded={expanded}/>
@@ -133,14 +138,16 @@ export function IssueOptions({issue}:{issue:Issue}) {
   const description=issue.description??adfToText(full?.fields.description);
   const close=()=>ui.send({type:"overlay.close"});
   const [historyOpen,setHistoryOpen]=useState(false);
-  const [linkOpen,setLinkOpen]=useState(false),[link,setLink]=useState("");
+  const [linkOpen,setLinkOpen]=useState(get().issueOptionsStart==="link"),[link,setLink]=useState("");
   const [linkError,setLinkError]=useState("");
+  useEffect(()=>{set({issueOptionsStart:null});},[]);
   const [copyOpen,setCopyOpen]=useState(false);
   const copy=async(kind:CopyKind)=> {
     const status=boardOf(issue.key)?.columns.flatMap(c=>c.statuses).find(s=>s.id===issue.status)?.name??issue.status;
     try{await navigator.clipboard.writeText(issueCopy(kind,issue,full,issueURL(issue),status,ME.name));set({perf:`Copied ${kind}`});}catch{set({perf:"Could not access the clipboard"});}close();
   };
-  const item=(label:string,run:()=>void)=><Command.Item key={label} value={label} onSelect={run} className="cursor-pointer rounded-md px-3 py-2 data-[selected=true]:bg-sel">{label}</Command.Item>;
+  const actionKeys:Record<string,string>={"Set due date":"due","Add link":"link","Add sub-issue":"sub-issue","Delete issue locally":"delete","Copy ID":"copy-id","Copy URL":"copy-url","Copy title":"copy-title","Copy everything as Markdown":"copy-markdown","Copy git branch name":"copy-branch"};
+  const item=(label:string,run:()=>void)=><Command.Item key={label} aria-label={label} value={label} onSelect={run} className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 data-[selected=true]:bg-sel"><span className="flex-1">{label}</span>{actionKeys[label]&&<kbd className="text-[11px] text-fg-3">{shortcutLabel(actionKeys[label]!)}</kbd>}</Command.Item>;
   if(historyOpen)return <Modal label="Description history" close={close}><h3 className="mb-3 font-medium">Description history</h3><p className="mb-3 text-[12px] text-fg-3">Your locally saved description revisions.</p>{[...(issue.descriptionHistory??[])].reverse().map((entry,index)=><div key={index} className="mb-3 rounded-md border border-line-2 p-3"><div className="mb-2 text-[11px] text-fg-3">{new Date(entry.at).toLocaleString()}</div><div>{entry.document?<Adf node={entry.document}/>:<p className="whitespace-pre-wrap">{entry.text||"Empty description"}</p>}</div><button className={`${BUTTON} mt-2`} onClick={()=>{actions.description(issue.key,entry.document??entry.text);close();}}>Restore this description</button></div>)}{!issue.descriptionHistory?.length&&<p>No local description changes yet.</p>}<button onClick={close} className={`${BUTTON} mt-3`}>Close</button></Modal>;
   if(linkOpen)return <Modal label="Add link" close={close}><form onSubmit={e=>{e.preventDefault();try{const url=new URL(link);if(!["http:","https:"].includes(url.protocol))throw new Error();actions.patch(issue.key,{links:[...new Set([...(issue.links??[]),url.href])]});close();}catch{setLinkError("Enter an http or https URL");}}}><input autoFocus aria-label="Link URL" type="url" required value={link} onChange={e=>setLink(e.target.value)} className={INPUT}/>{linkError&&<p role="alert" className="mt-2 text-[12px]">{linkError}</p>}<div className="mt-3 flex justify-end"><button className={BUTTON}>Add link</button></div></form></Modal>;
   if(copyOpen)return <Modal label="Copy issue" close={()=>setCopyOpen(false)} anchorId="issue-options" width={300}><div onKeyDown={e=>{if(e.key==="ArrowLeft"){e.preventDefault();setCopyOpen(false);}}}><Command loop><Command.Input aria-label="Find copy action" placeholder="Copy…" className={`${INPUT} mb-2`}/><Command.List>{item("Back to issue options",()=>setCopyOpen(false))}{copyKinds.map(kind=>item(`Copy ${kind}`,()=>void copy(kind)))}</Command.List></Command></div></Modal>;
@@ -196,7 +203,7 @@ export function PersonalIssueDetails({issue}:{issue:Issue}) {
 }
 
 export function Relations({issue}:{issue:Issue}) {
-  const all=useStore(s=>s.issues);const [query,setQuery]=useState("");const [kind,setKind]=useState("related");const close=()=>ui.send({type:"overlay.close"});
+  const all=useStore(s=>s.issues);const [query,setQuery]=useState("");const [kind,setKind]=useState(get().relationKind);const close=()=>ui.send({type:"overlay.close"});
   const candidates=useMemo(()=>[...all.values()].filter(i=>i.key!==issue.key&&`${i.key} ${i.summary}`.toLowerCase().includes(query.toLowerCase())).slice(0,40),[all,issue.key,query]);
   const add=(target:Issue)=> {
     if(kind==="parent") {

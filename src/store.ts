@@ -45,7 +45,7 @@ export type Column = { name: string; statuses: Status[] };
 export type Board = { id: number; name: string; columns: Column[] };
 /** Raw Jira issue: { key, fields: { description, comment, reporter, created, ... } } */
 export type Full = { key: string; fields: any };
-export type Overlay = null | "palette" | "assign" | "status" | "create" | "priority" | "labels" | "project" | "milestone" | "due" | "options" | "relations";
+export type Overlay = null | "palette" | "assign" | "status" | "create" | "priority" | "labels" | "project" | "milestone" | "due" | "options" | "relations" | "shortcuts" | "help" | "search" | "favorites" | "views" | "boards";
 export type IssueDraft = Partial<Pick<Issue,"status"|"assignee"|"priority"|"labels"|"project"|"milestones"|"due"|"parent"|"type"|"attachments">> & {description?:string;descriptionDoc?:AdfDocument};
 export type View = "side" | "page";
 export type SavedView={id:string;board:number;name:string;preferences:Preferences;mine:boolean};
@@ -74,6 +74,12 @@ type State = {
   propertySync: {total:number;pending:number;completed:number;errors:number};
   clock: number;
   details: boolean;
+  issuePropertiesHidden:boolean;
+  findInView:boolean;
+  sidebarHidden:boolean;
+  relationKind:string;
+  issueOptionsStart:"link"|null;
+  createExpanded:boolean;
   draft: IssueDraft;
   undoCount: number;
   redoCount: number;
@@ -117,7 +123,7 @@ let state: State = {
   toolbar: null,
   propertySync: {total:0,pending:0,completed:0,errors:0},
   clock: Date.now(),
-  details:false, draft:{}, undoCount:0, redoCount:0, fullErrors:new Map(),
+  details:false,issuePropertiesHidden:false,findInView:false,sidebarHidden:false,relationKind:"related",issueOptionsStart:null,createExpanded:false, draft:{}, undoCount:0, redoCount:0, fullErrors:new Map(),
   savedViews:readSavedViews(),
   favorites:readFavorites(),
   site:"",namespace:"",loadError:"",canEdit:true,storage:{status:"loading"},

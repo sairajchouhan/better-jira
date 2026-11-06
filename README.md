@@ -48,6 +48,29 @@ Jira issue writes are disabled in the client itself. The only permitted Jira POS
 
 Credentials stay on the server. Do not expose this personal server to an untrusted network. The ignored SQLite cache and local backup contain private issue data.
 
+## Keyboard shortcuts
+
+Press **Cmd+/** on macOS or **Ctrl+/** on Windows/Linux for the searchable shortcut reference. **?** opens Help. These are separate actions, matching Linear's live Help menu.
+
+The app uses TanStack Hotkeys for chords, multi-key sequences, platform modifiers, and scoped editor shortcuts. The reference and command/menu badges use the same binding definitions as execution.
+
+| Action | Shortcut |
+| --- | --- |
+| Command menu | Cmd/Ctrl+K |
+| Search issues | / or O then I |
+| Active, Backlog, All issues | G then A, G then B, G then E |
+| My issues | G then M |
+| Create issue | C; V for expanded creation |
+| Status, assignee, priority, labels | S, A, P, L |
+| Rename selected issue | Shift+R |
+| Focus description | Control+Shift+I |
+| Set due date | Shift+D |
+| Focus comment | Control+M |
+| Peek / open focused issue | Space / Enter |
+| Toggle board/list | Cmd/Ctrl+B |
+
+Letter shortcuts do not run while typing. Issue actions need a selected issue. Editor shortcuts apply only inside the editor, so Cmd/Ctrl+B formats text there and switches layout outside it. Reordering uses Manual ordering. Unsupported Linear features such as AI, bulk actions, cycles, and project management have no advertised bindings.
+
 ## Development and verification
 
 ```sh

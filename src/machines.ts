@@ -28,6 +28,7 @@ export type UiContext = {
   /** The selected issue is open, beside the board or as a page. */
   panel: boolean;
   mine: boolean;
+  sidebarHidden:boolean;
   query: string;
   overlay: Overlay;
   toolbar: Toolbar | null;
@@ -41,6 +42,7 @@ export type UiEvent =
   | { type: "navigate"; board?: number; view?: View; selected?: string | null; panel?: boolean }
   /** Escape with nothing on top: close the issue, else clear the search, else drop the selection. */
   | { type: "escape" }
+  | {type:"sidebar.toggle"}
   | { type: "mine.set"; mine: boolean }
   | { type: "query.set"; query: string }
   | { type: "overlay.open"; overlay: NonNullable<Overlay>; draft?: IssueDraft }
@@ -68,7 +70,7 @@ export const uiMachine = setup({
 }).createMachine({
   id: "ui",
   type: "parallel",
-  context: ({ input }) => ({ board: input.board, view: input.view, selected: null, panel: false, mine: false, query: "", overlay: null, toolbar: null, draft: {}, editDesc: false, toast: null }),
+  context: ({ input }) => ({ board: input.board, view: input.view, selected: null, panel: false, mine: false, sidebarHidden:false, query: "", overlay: null, toolbar: null, draft: {}, editDesc: false, toast: null }),
   on: {
     navigate: {
       actions: enqueueActions(({ context, event, enqueue }) => {
@@ -87,6 +89,7 @@ export const uiMachine = setup({
       { guard: "hasQuery", actions: assign({ query: "" }) },
       { actions: assign({ selected: null }) },
     ],
+    "sidebar.toggle":{actions:assign({sidebarHidden:({context})=>!context.sidebarHidden})},
     "mine.set": { actions: assign({ mine: ({ event }) => event.mine }) },
     "query.set": { actions: assign({ query: ({ event }) => event.query }) },
     "description.edit": { actions: assign({ panel: true, editDesc: true }) },

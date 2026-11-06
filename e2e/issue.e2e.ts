@@ -13,7 +13,7 @@ test("R4/I8: the description is edited in place and autosaves, so a reload keeps
   const page = await open();
   try {
     await openIssue(page);
-    await page.key("d");
+    await page.key("i", "ctrl", "shift");
     await page.waitFor(`document.activeElement===${editor("description")}`);
     await page.click("#description h2"); await page.key("End");
     await page.type(" edited");
@@ -29,7 +29,7 @@ test("I2: Tab inside a description code block indents and keeps focus in the edi
   const page = await open();
   try {
     await openIssue(page);
-    await page.key("d");
+    await page.key("i", "ctrl", "shift");
     await page.waitFor(`!!${editor("description")}`);
     await page.click("#description pre"); await page.key("End");
     await page.key("Tab");
@@ -42,7 +42,7 @@ test("I9: the formatting toolbar stays one row when the caret enters a table", a
   const page = await open();
   try {
     await openIssue(page);
-    await page.key("d");
+    await page.key("i", "ctrl", "shift");
     await page.waitFor(`!!${editor("description")}`);
     await page.click("#description h2");
     const toolbar = `document.querySelector('[role=toolbar][aria-label="Description formatting"]').getBoundingClientRect().height`;

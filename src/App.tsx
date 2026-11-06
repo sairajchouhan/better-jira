@@ -1,5 +1,6 @@
 import "@fontsource-variable/inter";
 import "./index.css";
+import {useHotkey} from "@tanstack/react-hotkeys";
 import { Command } from "cmdk";
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Adf, adfToText } from "./adf";
@@ -7,13 +8,14 @@ import { normalizeDocument, type AdfDocument } from "./document";
 import { Icon, Label, PriorityIcon, StatusIcon, TypeDot } from "./icons";
 import {
   ME, actions, boardOf, get, load, loadFull, navigate, set, timed, ui, useStore, dismissRecoveryNotice,
-  beginCreate, changeDisplay, changePreferences, downloadLocalBackup, flushLocalChanges, issueURL, isLocalIssue, retryLocalStorage, toggleFavorite, undoEdit, redoEdit, usePreferences, type Board, type Column, type Issue, type User,
+  openSavedView, beginCreate, changeDisplay, changePreferences, downloadLocalBackup, flushLocalChanges, issueURL, isLocalIssue, retryLocalStorage, toggleFavorite, undoEdit, redoEdit, usePreferences, type Board, type Column, type Issue, type User,
 } from "./store";
 
 import { BoardControls, FilterChips } from "./view-controls";
 import { buckets, columnInScope, draftForGroup, rankBetween, listRows, navigationIssues, selectIssues, statusDuration, type Bucket, type Display, type Grouping, type Property } from "./view-model";
 import { BoardDetails, CreateIssue, Favorites, GroupMenu, IssueOptions, Modal, PersonalIssueDetails, PropertyPicker, Relations, SavedViews, SaveViewButton } from "./personal-controls";
 import { RichEditor } from "./rich-editor-loader";
+import {HelpMenu,ShortcutHelp,runShortcut,shortcutLabel,shortcuts,useLinearHotkeys} from "./shortcuts";
 import { issueAnchor } from "./menu-surface";
 import { createActor } from "xstate";
 import { autosaveMachine, inspector } from "./machines";
@@ -37,7 +39,7 @@ export function App() {
   const visited=useRef(new Set<number>());visited.current.add(boardId);
 
   useEffect(() => void load(), []);
-  useEffect(() => (window.addEventListener("keydown", onKey), () => window.removeEventListener("keydown", onKey)), []);
+  useLinearHotkeys(()=>nav.cols);
 
   if (!boards.length) return <div className="p-6 text-fg-3">{loadError?<div role="alert"><p>{loadError}</p><button className="mt-3 rounded bg-sel px-3 py-2 text-fg" onClick={()=>void load()}>Retry loading</button></div>:"Loading your Jira mirror…"}</div>;
   const page = !!open && view === "page";
@@ -58,13 +60,16 @@ export function App() {
       </main>
       </div>
       <StorageNotice/><StatusBar /><Toast/>
-      {overlay === "palette" && <Palette />}
+      {(overlay === "palette"||overlay==="search") && <Palette searchOnly={overlay==="search"}/> }
+      {overlay==="shortcuts"&&<ShortcutHelp/>}
+      {overlay==="help"&&<HelpMenu/>}
+      {(overlay==="favorites"||overlay==="views"||overlay==="boards")&&<QuickNavigation kind={overlay}/>}
       {overlay === "assign" && selected && <AssignPicker issueKey={selected} />}
       {overlay === "status" && selected && <StatusPicker issueKey={selected} />}
       {overlay === "create" && <CreateIssue />}
       {current && (overlay === "priority" || overlay === "labels" || overlay === "project" || overlay === "milestone" || overlay === "due") && <PropertyPicker issue={current} field={overlay}/>}
       {open && overlay === "options" && <IssueOptions issue={open}/>}
-      {open && overlay === "relations" && <Relations issue={open}/>}
+      {current && overlay === "relations" && <Relations issue={current}/>}
     </div>
   );
 }
@@ -157,83 +162,32 @@ function IssueList({issues,universe,display,selected}:{issues:Issue[];universe:I
 
 // --- keyboard ---
 
-function onKey(e: KeyboardEvent) {
-  if(e.defaultPrevented)return;
-  const s = get();
-  const t = e.target as HTMLElement;
-  const typing=!!t.closest("input, textarea, select, [contenteditable=true], [role=dialog]");
-  if(!typing&&(e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="z") {e.preventDefault();return e.shiftKey?redoEdit():undoEdit();}
-  if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-    e.preventDefault();
-    return ui.send({ type: "palette.toggle" });
-  }
-  if (s.overlay) return e.key === "Escape" && ui.send({ type: "overlay.close" });
-  if (s.toolbar) return;
-  if (t.closest("input, textarea, select, [contenteditable=true], [role=dialog]")) return e.key === "Escape" && t.blur();
-  if((e.key==="Enter"||e.key===" ")&&t.closest("button, a, summary, [role=button]"))return;
-  if (e.metaKey || e.ctrlKey || e.altKey) return;
-  if (press(e.key)) e.preventDefault();
-}
-
-/** Runs one shortcut. The palette calls this too, so each command's hint is the real key. */
-function press(key: string): boolean {
-  const s = get();
-  const sel = s.selected;
-  const cols = nav.cols;
-  const page = s.panel && s.view === "page" && !!sel;
-  const select = (k?: string) => k && timed(`select ${k}`, () => navigate({ selected: k }));
-  const focus = (id: string) => requestAnimationFrame(() => document.getElementById(id)?.focus());
-  const down = key === "j" || key === "ArrowDown";
-  const up = key === "k" || key === "ArrowUp";
-  const side = key === "h" || key === "ArrowLeft" || key === "ArrowRight";
-
-  if (page && (down || up)) {
-    const flat = flatNav();
-    const i = flat.findIndex((x) => x.key === sel);
-    select(flat[i < 0 ? 0 : i + (down ? 1 : -1)]?.key);
-    return true;
-  }
-  if (page && side) return false;
-  const ci = cols.findIndex((c) => c.some((i) => i.key === sel));
-  const ii = ci >= 0 ? cols[ci]!.findIndex((i) => i.key === sel) : -1;
-  if (ci < 0 && (down || up || side)) return select(cols.find((c) => c.length)?.[0]?.key), true;
-  const sideways = (dir: number) => {
-    for (let c = ci + dir; c >= 0 && c < cols.length; c += dir)
-      if (cols[c]!.some(i=>i.key!==sel)) {const candidates=cols[c]!.filter(i=>i.key!==sel);return select(candidates[Math.min(ii,candidates.length-1)]!.key);}
-  };
-
-  switch (key) {
-    case "j": case "ArrowDown": select(cols[ci]?.[ii + 1]?.key); break;
-    case "k": case "ArrowUp": select(cols[ci]?.[ii - 1]?.key); break;
-    case "h": case "ArrowLeft": sideways(-1); break;
-    case "ArrowRight": sideways(1); break;
-    case "Enter": case "o":
-      if (!sel) return false;
-      timed(s.panel ? "close issue" : `open ${sel}`, () => navigate({ panel: !s.panel }));
-      break;
-    case "Escape": ui.send({ type: "escape" }); break;
-    case "f": ui.send({type:"toolbar.open",toolbar:"filter"}); break;
-    case "/": ui.send({type:"overlay.open",overlay:"palette"}); break;
-    case "m": timed("only mine", () => ui.send({ type: "mine.set", mine: !s.mine })); break;
-    case "v": timed("issue view", () => navigate({ view: s.view === "page" ? "side" : "page" })); break;
-    case "b": {
-      const i = s.boards.findIndex((b) => b.id === s.board);
-      timed("switch board", () => navigate({ board: s.boards[(i + 1) % s.boards.length]!.id, selected: null, panel: false }));
-      break;
-    }
-    case "n": case "c": beginCreate(); break;
-    case "s": if (!sel) return false; ui.send({ type: "overlay.open", overlay: "status" }); break;
-    case "a": if (!sel) return false; ui.send({ type: "overlay.open", overlay: "assign" }); break;
-    case "p": if (!sel) return false; ui.send({type:"overlay.open",overlay:"priority"}); break;
-    case "l": if (!sel) return false; ui.send({type:"overlay.open",overlay:"labels"}); break;
-    case "i": if (!sel) return false; actions.assign(sel, s.issues.get(sel)?.assignee?.id === ME.id ? null : ME); break;
-    case "e": if (!sel) return false; navigate({ panel: true }); focus("summary"); break;
-    case "d": if (!sel) return false; ui.send({ type: "description.edit" }); break;
-    default:
-      if (/^[1-9]$/.test(key) && sel) actions.move(sel, Number(key) - 1);
-      else return false;
-  }
-  return true;
+function QuickNavigation({kind}:{kind:"favorites"|"views"|"boards"}) {
+  const state=useStore(s=>s);
+  const close=()=>ui.send({type:"overlay.close"});
+  const title=kind==="views"?"Open view":kind==="boards"?"Open a team / board":"Open a favorite";
+  const choices=kind==="boards"
+    ?state.boards.map(board=>({id:String(board.id),name:board.name,run:()=>navigate({board:board.id,selected:null,panel:false})}))
+    :kind==="views"
+      ?state.savedViews.map(view=>({id:view.id,name:view.name,run:()=>openSavedView(view)}))
+      :state.favorites.flatMap(id=>{
+        const issue=state.issues.get(id),[,boardId,scope]=id.split(":"),board=state.boards.find(b=>b.id===Number(boardId));
+        if(issue)return [{id,name:`${id} ${issue.summary}`,run:()=>navigate({board:issue.board,selected:issue.key,panel:true})}];
+        if(!board)return [];
+        return [{id,name:`${board.name}${scope?` · ${scope}`:""}`,run:()=>{
+          navigate({board:board.id,selected:null,panel:false});
+          if(scope)changePreferences(board.id,{scope:scope==="active"?"active":scope==="backlog"?"backlog":"all"});
+        }}];
+      });
+  return <Modal label={title} close={close}>
+    <Command loop>
+      <Command.Input autoFocus aria-label="Find view or favorite" placeholder="Search…" className="w-full bg-transparent p-3 outline-none"/>
+      <Command.List>
+        <Command.Empty className="p-3 text-fg-3">No saved {kind}</Command.Empty>
+        {choices.map(choice=><Command.Item key={choice.id} value={choice.name} onSelect={()=>{close();choice.run();}} className="p-2 data-[selected=true]:bg-sel">{choice.name}</Command.Item>)}
+      </Command.List>
+    </Command>
+  </Modal>;
 }
 
 // --- chrome ---
@@ -241,21 +195,23 @@ function press(key: string): boolean {
 function Sidebar({ boards }: { boards: Board[] }) {
   const boardId = useStore((s) => s.board);
   const mine = useStore((s) => s.mine);
+  const hidden=useStore(s=>s.sidebarHidden);
+  if(hidden)return null;
   return (
     <nav className="flex w-[244px] shrink-0 flex-col gap-px overflow-y-auto p-2 font-medium max-md:hidden">
       <div className="mb-1 flex h-11 items-center gap-2 px-2 text-fg">
         <span className="grid size-[18px] place-items-center rounded-[5px] bg-accent text-[10px] font-semibold text-white">bj</span>
         better-jira
       </div>
-      <SideItem onClick={() => ui.send({ type: "overlay.open", overlay: "palette" })}>
-        <Icon name="search" /> Search <kbd className="ml-auto">⌘K</kbd>
+      <SideItem onClick={() => runShortcut("search")}>
+        <Icon name="search" /> Search <kbd className="ml-auto">/</kbd>
       </SideItem>
       <SideItem onClick={() => beginCreate()}>
         <Icon name="plus" /> New issue <kbd className="ml-auto">C</kbd>
       </SideItem>
       {/* Like Linear, My issues is a sidebar view rather than a tab beside Active/Backlog/All. */}
       <SideItem active={mine} onClick={() => timed("only mine", () => ui.send({ type: "mine.set", mine: !mine }))}>
-        <Icon name="user" /> My issues <kbd className="ml-auto">M</kbd>
+        <Icon name="user" /> My issues <kbd className="ml-auto">{shortcutLabel("mine")}</kbd>
       </SideItem>
 
       <div className="mt-5 mb-1 px-2 text-[12px] text-fg-3">Boards</div>
@@ -267,6 +223,7 @@ function Sidebar({ boards }: { boards: Board[] }) {
       ))}
       <SavedViews/>
       <Favorites/>
+      <button id="help-menu" aria-label="Open Help menu" onClick={()=>runShortcut("help")} className="mt-auto flex items-center justify-between rounded-lg px-2 py-2 text-fg-3 hover:bg-hover">Help <kbd>?</kbd></button>
     </nav>
   );
 }
@@ -317,6 +274,8 @@ function BoardHeader() {
   const query = useStore((s) => s.query);
   const details=useStore(s=>s.details);
   const prefs=usePreferences(board!.id);
+  const finding=useStore(s=>s.findInView);const findRef=useRef<HTMLInputElement>(null);
+  useHotkey("Escape",()=>{set({findInView:false});ui.send({type:"query.set",query:""});findRef.current?.blur();},{target:findRef,ignoreInputs:false});
   const favoriteId=`board:${board!.id}`;
   const favorite=useStore(s=>s.favorites.includes(favoriteId));
   return (
@@ -329,7 +288,7 @@ function BoardHeader() {
           <span>Issues</span>
           <button role="switch" aria-label={favorite?"Remove from favorites":"Add to favorites"} aria-checked={favorite} onClick={()=>toggleFavorite(favoriteId)} className={`ml-2 grid size-7 place-items-center rounded-full hover:bg-hover ${favorite?"text-[#f2c94c]":"text-fg-3 hover:text-fg-2"}`}><Icon name={favorite?"starred":"star"} size={16}/></button>
         </div>
-        <button aria-label="Search issues" onClick={()=>ui.send({type:"overlay.open",overlay:"palette"})} className={`${COL_BTN} ml-auto md:hidden`}><Icon name="search"/></button>
+        <button aria-label="Search issues" onClick={()=>runShortcut("search")} className={`${COL_BTN} ml-auto md:hidden`}><Icon name="search"/></button>
         <button onClick={() => beginCreate()} className={`${PILL} pr-2.5 pl-2 text-fg-3 hover:bg-hover hover:text-fg-2`}>
           <Icon name="plus" /> New issue
         </button>
@@ -342,6 +301,7 @@ function BoardHeader() {
           <Icon name="side" />
         </button>
       </div>
+      {finding&&<input id="find-in-view" ref={findRef} aria-label="Find in view" autoFocus value={query} onChange={e=>ui.send({type:"query.set",query:e.target.value})} placeholder="Find in view…" className="mx-3 mb-2 rounded border border-line-2 bg-card px-3 py-1.5 outline-none"/>}
       {board&&<FilterChips board={board}/>}
     </header>
   );
@@ -406,7 +366,7 @@ const Card = memo(function Card({issue,selected,display:d,list=false,depth=0}:{i
   return <div className={list?"[content-visibility:auto] [contain-intrinsic-size:auto_44px]":"pb-2 [contain-intrinsic-size:auto_124px] [content-visibility:auto] [overflow-clip-margin:4px]"}>
     <div ref={ref} data-key={issue.key} data-selected={selected||undefined} role="button" aria-label={`${issue.key} ${issue.summary}`} tabIndex={0} draggable
       onDragStart={e=>e.dataTransfer.setData("text/plain",issue.key)}
-      onKeyDown={e=>{if(e.key === "Enter"||e.key === " "){e.preventDefault();e.stopPropagation();navigate({selected:issue.key,panel:true});}}}
+      onKeyDown={e=>{if(e.key === "Enter"||e.key === " "){e.preventDefault();e.stopPropagation();navigate({selected:issue.key,panel:true,view:e.key==="Enter"?"page":"side"});}}}
       onClick={()=>timed(`open ${issue.key}`,()=>navigate({selected:issue.key,panel:true}))}
       className={list?`flex min-h-11 cursor-pointer items-center gap-3 border-b border-line px-5 outline-none focus-visible:ring-1 focus-visible:ring-accent ${selected?"bg-hover shadow-[inset_2px_0_0_var(--accent)]":"hover:bg-hover"}`:`relative flex min-h-[42px] cursor-pointer flex-col rounded-lg p-2 shadow-(--card-shadow) outline-none focus-visible:ring-1 focus-visible:ring-accent ${selected?"bg-card-hover ring-1 ring-accent":"bg-card hover:bg-card-hover"}`}
       style={list&&depth?{paddingLeft:20+depth*20}:undefined}>
@@ -458,6 +418,7 @@ const ICON_BTN = "grid size-7 shrink-0 place-items-center rounded-md text-fg-3 h
 function IssueView({ issue, page }: { issue: Issue; page: boolean }) {
   const f = useStore((s) => s.full.get(issue.key))?.fields;
   const favorite=useStore(s=>s.favorites.includes(issue.key));
+  const propertiesHidden=useStore(s=>s.issuePropertiesHidden);
   const bar = (
     <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-3 text-[12px] text-fg-3">
       <TypeDot type={issue.type} />
@@ -468,7 +429,7 @@ function IssueView({ issue, page }: { issue: Issue; page: boolean }) {
       <button role="switch" aria-label={favorite?"Remove issue from favorites":"Add issue to favorites"} aria-checked={favorite} onClick={()=>toggleFavorite(issue.key)} className={`${ICON_BTN} ${favorite?"text-[#f2c94c]!":""}`}><Icon name={favorite?"starred":"star"} size={16}/></button>
       <button id="issue-options" aria-label="Issue options" onClick={()=>ui.send({type:"overlay.open",overlay:"options"})} className={ICON_BTN}><Icon name="dots"/></button>
       <Stepper issueKey={issue.key} />
-      <button title={page ? "Open in side panel (v)" : "Open as full page (v)"} onClick={() => navigate({ view: page ? "side" : "page" })} className={ICON_BTN}>
+      <button title={page ? "Open in side panel" : "Open as full page"} onClick={() => navigate({ view: page ? "side" : "page" })} className={ICON_BTN}>
         <Icon name={page ? "side" : "expand"} />
       </button>
       <button title="Close (esc)" onClick={() => navigate({ panel: false })} className={ICON_BTN}><Icon name="close" /></button>
@@ -481,7 +442,7 @@ function IssueView({ issue, page }: { issue: Issue; page: boolean }) {
         {bar}
         <div className="flex-1 overflow-y-auto px-5 py-4">
           <Title issue={issue} className="text-[17px]" />
-          <div className="mt-3"><Properties issue={issue} /></div>
+          {!propertiesHidden&&<div className="mt-3"><Properties issue={issue} /></div>}
           <Description issue={issue} f={f} />
           <PersonalIssueDetails issue={issue}/>
           <Activity issue={issue} f={f} />
@@ -500,7 +461,7 @@ function IssueView({ issue, page }: { issue: Issue; page: boolean }) {
             <Activity issue={issue} f={f} />
           </div>
         </div>
-        <div className="w-[300px] shrink-0 overflow-y-auto border-l border-line p-3 max-md:w-full"><Properties issue={issue} /></div>
+        {!propertiesHidden&&<div className="w-[300px] shrink-0 overflow-y-auto border-l border-line p-3 max-md:w-full"><Properties issue={issue} /></div>}
       </div>
     </div>
   );
@@ -516,8 +477,8 @@ function Stepper({ issueKey }: { issueKey: string }) {
   const i = flat.findIndex((x) => x.key === issueKey);
   return (
     <div className="mr-1 flex items-center gap-0.5">
-      <button disabled={i<=0} title="Previous (k)" onClick={() => press("k")} className={`${ICON_BTN} disabled:opacity-30`}><Icon name="up" /></button>
-      <button disabled={i<0||i>=flat.length-1} title="Next (j)" onClick={() => press("j")} className={`${ICON_BTN} disabled:opacity-30`}><Icon name="down" /></button>
+      <button disabled={i<=0} title="Previous (K / ↑)" onClick={() => runShortcut("up")} className={`${ICON_BTN} disabled:opacity-30`}><Icon name="up" /></button>
+      <button disabled={i<0||i>=flat.length-1} title="Next (J / ↓)" onClick={() => runShortcut("down")} className={`${ICON_BTN} disabled:opacity-30`}><Icon name="down" /></button>
     </div>
   );
 }
@@ -533,7 +494,7 @@ function Title({ issue, className }: { issue: Issue; className: string }) {
       onBlur={(e) => actions.summary(issue.key, e.target.value)}
       onKeyDown={(e) => {
         if (e.key === "Enter") (e.preventDefault(), e.currentTarget.blur());
-        if (e.key === "Escape") e.currentTarget.value = issue.summary;
+        if (e.key === "Escape") {e.currentTarget.value = issue.summary;e.currentTarget.blur();}
       }}
       className={`w-full resize-none rounded-md bg-transparent font-semibold leading-snug text-fg outline-none [field-sizing:content] focus:bg-hover ${className}`}
     />
@@ -544,7 +505,7 @@ function Title({ issue, className }: { issue: Issue; className: string }) {
 function Properties({ issue }: { issue: Issue }) {
   const status = statusOf(issue);
   const btn = (id: string, hint: string, overlay: "status" | "assign" | "priority" | "labels" | "project" | "milestone" | "due", label: string, body: ReactNode) => (
-    <button id={id} title={label} onClick={() => ui.send({ type: "overlay.open", overlay })} className="group flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-left text-fg-2 hover:bg-hover hover:text-fg">
+    <button id={id} title={`${label}${({status:"status",assign:"assign",priority:"priority",labels:"labels",project:"project",milestone:"milestone",due:"due"} as Record<string,string>)[overlay]?` (${shortcutLabel(overlay==="assign"?"assign":overlay)})`:""}`} onClick={() => ui.send({ type: "overlay.open", overlay })} className="group flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-left text-fg-2 hover:bg-hover hover:text-fg">
       {body}
       <kbd className="ml-auto opacity-0 group-hover:opacity-100">{hint}</kbd>
     </button>
@@ -645,8 +606,8 @@ const MENU =
 const MENU_INPUT = "h-11 w-full border-b border-line bg-transparent px-3.5 text-fg outline-none placeholder:text-fg-4";
 const close = (e: React.MouseEvent) => e.target === e.currentTarget && ui.send({type:"overlay.close"});
 
-function Overlay({ children }: { children: ReactNode }) {
-  return <Modal label="Search issues and commands" close={()=>ui.send({type:"overlay.close"})}>{children}</Modal>;
+function Overlay({ children,label="Search issues and commands" }: { children: ReactNode;label?:string }) {
+  return <Modal label={label} close={()=>ui.send({type:"overlay.close"})}>{children}</Modal>;
 }
 
 /** Opens under the property in the issue view, else under the selected card, else centered. */
@@ -718,51 +679,29 @@ function AssignPicker({ issueKey }: { issueKey: string }) {
 
 type Cmd = { name: string; hint?: string; icon?: ReactNode; run: () => void };
 /** A palette command that runs a shortcut, so the hint shown is the key that does the same thing. */
-const viaKey = (name: string, key: string, icon?: ReactNode): Cmd => ({
-  name, hint: key.toUpperCase(), icon, run: () => (ui.send({type:"overlay.close"}), press(key)),
-});
 
-function Palette() {
+function Palette({searchOnly=false}:{searchOnly?:boolean}) {
   const issues = useStore((s) => s.issues);
   const boards = useStore((s) => s.boards);
   const boardId = useStore((s) => s.board);
   const mine = useStore((s) => s.mine);
   const view = useStore((s) => s.view);
-  const [scope, setScope] = useState(get().selected); // ⌘K acts on the selected issue; Backspace drops it
+  const [scope, setScope] = useState(searchOnly?null:get().selected); // ⌘K acts on the selected issue; Backspace drops it
   const [q, setQ] = useState("");
   const scoped = scope ? issues.get(scope) : undefined;
 
   const results = useMemo(() => {
     const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-    if (!words.length) return [];
+    if (!words.length) return searchOnly?[...issues.values()].sort((a,b)=>b.updated.localeCompare(a.updated)).slice(0,20):[];
     const exact = q.trim().toUpperCase();
     const hits = [...issues.values()].filter((i) => words.every((w) => `${i.key} ${i.summary}`.toLowerCase().includes(w)));
     hits.sort((a, b) => Number(b.key === exact) - Number(a.key === exact) || (a.updated < b.updated ? 1 : -1));
     return hits.slice(0, 50);
-  }, [q, issues]);
+  }, [q, issues, searchOnly]);
 
-  const issueCmds: Cmd[] = scoped
-    ? [
-        viaKey("Change status…", "s", <StatusIcon status={statusOf(scoped) ?? { name: "", category: "new" }} />),
-        viaKey("Assign to…", "a", <Avatar user={scoped.assignee} size={14} />),
-        viaKey(scoped.assignee?.id === ME.id ? "Unassign me" : "Assign to me", "i"),
-        viaKey("Edit title", "e", <Icon name="pencil" />),
-        viaKey("Edit description", "d", <Icon name="pencil" />),
-        {name:"Add comment",icon:<Icon name="comment"/>,run:()=>{(ui.send({type:"overlay.close"}),navigate({panel:true}));requestAnimationFrame(()=>document.getElementById("comment")?.focus());}},
-        { name: "Open issue", hint: "↵", icon: <Icon name="expand" />, run: () => (ui.send({type:"overlay.close"}),navigate({panel:true})) },
-        { name: isLocalIssue(scoped.key)?"Open local issue in new tab":"Open in Jira", icon: <Icon name="external" />, run: () => (window.open(issueURL(scoped),"_blank","noopener"), ui.send({type:"overlay.close"})) },
-        ...(boardOf(scoped.key)?.columns ?? []).map((c, i): Cmd => ({
-          name: `Move to ${c.name}`, hint: String(i + 1), icon: <StatusIcon status={colLook(c)} />,
-          run: () => (ui.send({type:"overlay.close"}), actions.move(scoped.key, i)),
-        })),
-      ]
-    : [];
-  const general: Cmd[] = [
-    viaKey("New issue", "c", <Icon name="plus" />),
-    viaKey(mine ? "Show all issues" : "Show only my issues", "m"),
-    viaKey(view === "page" ? "Open issues in a side panel" : "Open issues as a full page", "v", <Icon name={view === "page" ? "side" : "expand"} />),
-    ...boards.filter((b) => b.id !== boardId).map((b) => viaKey(`Switch to ${b.name}`, "b")),
-  ];
+  const command=(entry:typeof shortcuts[number]):Cmd=>({name:entry.name,hint:shortcutLabel(entry.id),run:()=>{ui.send({type:"overlay.close"});runShortcut(entry.id);}});
+  const issueCmds:Cmd[]=scoped?shortcuts.filter(s=>s.issue).map(command):[];
+  const general:Cmd[]=searchOnly?[]:[...shortcuts.filter((s,i,a)=>!s.issue&&s.id!=="commands"&&a.findIndex(other=>other.name===s.name)===i).map(command),...boards.filter(b=>b.id!==boardId).map((b):Cmd=>({name:`Switch to ${b.name}`,run:()=>{ui.send({type:"overlay.close"});navigate({board:b.id,selected:null,panel:false});}}))];
   const match = (c: Cmd) => c.name.toLowerCase().includes(q.trim().toLowerCase());
   const item = (c: Cmd) => (
     <Command.Item key={c.name} value={`cmd:${c.name}`} onSelect={c.run}>
@@ -773,7 +712,7 @@ function Palette() {
   );
 
   return (
-    <Overlay>
+    <Overlay label={searchOnly?"Search issues":"Search issues and commands"}>
       <Command shouldFilter={false} loop className={`w-full ${MENU}`}>
         <div className="flex items-center gap-2 border-b border-line px-3.5">
           {scoped && (

@@ -1,3 +1,4 @@
+import {useHotkey} from "@tanstack/react-hotkeys";
 import { Command } from "cmdk";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -51,23 +52,22 @@ export function BoardControls({ board }: {board:Board}) {
   const [rect, setRect] = useState({top:100,right:16});
   const ref = toolbar === "display" ? displayRef : filterRef;
   const count = filterCount(preferences.filters);
+  useHotkey("Escape",()=>{ui.send({type:"toolbar.close"});ref.current?.focus();},{target:popup,enabled:!!toolbar,ignoreInputs:false,capture:true});
   useEffect(()=> {
     if (!toolbar) return;
     const position = () => { const r = ref.current?.getBoundingClientRect(); if (r) setRect({top:r.bottom+6,right:innerWidth-r.right}); };
     position();
     const focusFrame=requestAnimationFrame(()=>popup.current?.querySelector<HTMLElement>("input, [role=tab][aria-selected=true], button")?.focus());
     const outside = (e:PointerEvent) => { if (!popup.current?.contains(e.target as Node) && !filterRef.current?.contains(e.target as Node) && !displayRef.current?.contains(e.target as Node)) ui.send({type:"toolbar.close"}); };
-    const key = (e:KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); ui.send({type:"toolbar.close"}); ref.current?.focus(); } };
     document.addEventListener("pointerdown",outside);
-    window.addEventListener("keydown",key);
     window.addEventListener("resize",position);
-    return ()=>{cancelAnimationFrame(focusFrame);document.removeEventListener("pointerdown",outside);window.removeEventListener("keydown",key);window.removeEventListener("resize",position);};
+    return ()=>{cancelAnimationFrame(focusFrame);document.removeEventListener("pointerdown",outside);window.removeEventListener("resize",position);};
   },[toolbar,board.id]);
   return <>
     <button ref={filterRef} aria-label="Add filter" title="Filter (F)" aria-expanded={toolbar === "filter" || toolbar === "advanced"} onClick={()=>ui.send({type:"toolbar.toggle",toolbar:"filter"})} className={CIRCLE}>
       <Icon name="filter"/>{count>0 && <span className="absolute -top-1 -right-1 grid size-3.5 place-items-center rounded-full bg-accent text-[9px] text-white">{count}</span>}
     </button>
-    <button ref={displayRef} aria-label="Display options" title="Display options" aria-expanded={toolbar === "display"} onClick={()=>ui.send({type:"toolbar.toggle",toolbar:"display"})} className={CIRCLE}>
+    <button ref={displayRef} aria-label="Display options" title="Display options (Shift+V)" aria-expanded={toolbar === "display"} onClick={()=>ui.send({type:"toolbar.toggle",toolbar:"display"})} className={CIRCLE}>
       <Icon name="display"/>{JSON.stringify(preferences.display)!==JSON.stringify(defaultDisplay())&&<span className="absolute top-0 right-0 size-1.5 rounded-full bg-accent"/>}
     </button>
     {toolbar && createPortal(<div ref={popup} className="fixed z-40 max-w-[calc(100vw-24px)]" style={{top:rect.top,right:rect.right}} onKeyDown={e=>{

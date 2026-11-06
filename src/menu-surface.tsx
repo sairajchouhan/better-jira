@@ -1,7 +1,7 @@
 import {useLayoutEffect,useRef,useState,type CSSProperties,type ReactNode} from "react";
 
 /** A shared focus trap with measured placement and a centered small-screen fallback. */
-export function MenuSurface({label,children,close,anchorId,anchor,width=340}:{label:string;children:ReactNode;close:()=>void;anchorId?:string;anchor?:HTMLElement|null;width?:number}) {
+export function MenuSurface({label,children,close,anchorId,anchor,width=640}:{label:string;children:ReactNode;close:()=>void;anchorId?:string;anchor?:HTMLElement|null;width?:number}) {
   const ref=useRef<HTMLDivElement>(null),previous=useRef(document.activeElement as HTMLElement|null);
   const [style,setStyle]=useState<CSSProperties>();
   const anchored=!!anchorId||!!anchor;
@@ -15,7 +15,7 @@ export function MenuSurface({label,children,close,anchorId,anchor,width=340}:{la
         const below=innerHeight-r.bottom-12,above=r.top-12;
         const maxHeight=Math.max(100,Math.min(h,Math.max(below,above)));
         setStyle({position:"fixed",width:w,left:Math.max(12,Math.min(r.left,innerWidth-w-12)),top:Math.max(12,Math.min(innerHeight-maxHeight-12,below>=h||below>=above?r.bottom+5:r.top-h-5)),maxHeight});
-      }else{const w=Math.min(anchored?width:640,innerWidth-24);setStyle({position:"fixed",width:w,left:(innerWidth-w)/2,top:"12vh",maxHeight:"80vh"});} // no transform: it would re-anchor nested fixed menus
+      }else{const w=Math.min(width,innerWidth-24);setStyle({position:"fixed",width:w,left:(innerWidth-w)/2,top:"12vh",maxHeight:"80vh"});} // no transform: it would re-anchor nested fixed menus
     };
     place();const observer=new ResizeObserver(place);ref.current&&observer.observe(ref.current);
     window.addEventListener("resize",place);window.addEventListener("scroll",place,true);
@@ -25,7 +25,7 @@ export function MenuSurface({label,children,close,anchorId,anchor,width=340}:{la
   },[anchorId,anchor,anchored,width,label]);
   return <div className={`fixed inset-0 z-50 ${anchored?"":"bg-black/40"}`} onMouseDown={e=>{if(e.target===e.currentTarget)close();}}>
     <div ref={ref} style={style} role="dialog" aria-modal="true" aria-label={label} className="overflow-y-auto rounded-xl border border-line-2 bg-card p-3 text-fg-2 shadow-2xl" onKeyDown={e=>{
-      if(!((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"))e.stopPropagation(); // ⌘K reaches the app so it can toggle the command menu
+      if(!((e.metaKey||e.ctrlKey)&&["k","/"].includes(e.key.toLowerCase())))e.stopPropagation(); // ⌘K reaches the app so it can toggle the command menu
       if(e.key==="Escape"){e.preventDefault();close();}
       if(e.key==="Tab"){
         const nodes=[...ref.current!.querySelectorAll<HTMLElement>('button:not(:disabled),input:not([type="file"]),textarea,select,[contenteditable="true"],[tabindex="0"]')].filter(n=>n.getClientRects().length);

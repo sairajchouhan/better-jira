@@ -80,7 +80,7 @@ const markRule = (pattern: RegExp, mark: string) => new InputRule(pattern, (stat
 });
 /** Markdown shortcuts while typing (Linear supports the same), and bare URLs become links when a space follows. */
 export const markdownRules = inputRules({ rules: [
-  textblockTypeInputRule(/^(#{1,3})\s$/, richSchema.nodes.heading!, match => ({ level: match[1]!.length })),
+  textblockTypeInputRule(/^(#{1,4})\s$/, richSchema.nodes.heading!, match => ({ level: match[1]!.length })),
   wrappingInputRule(/^\s*[-+*]\s$/, richSchema.nodes.bulletList!),
   wrappingInputRule(/^(\d+)\.\s$/, richSchema.nodes.orderedList!, match => ({ order: Number(match[1]) }), (match, node) => node.childCount + node.attrs.order === Number(match[1])),
   wrappingInputRule(/^\s*>\s$/, richSchema.nodes.blockquote!),
@@ -89,6 +89,8 @@ export const markdownRules = inputRules({ rules: [
   markRule(/(?<![*\w])\*([^*\s][^*]*)\*$/, "em"),
   markRule(/`([^`\s][^`]*)`$/, "code"),
   markRule(/~~([^~\s][^~]*)~~$/, "strike"),
+  markRule(/(?<![~\w])~([^~\s][^~]*)~$/, "strike"),
+  markRule(/(?<![_\w])_([^_\s][^_]*)_$/, "em"),
   new InputRule(/(?:^|\s)(https?:\/\/[^\s]+[^\s.,;:!?)])\s$/, (state, match, start, end) => {
     const url = match[1]!, from = end - url.length, link = richSchema.marks.link!;
     if (state.doc.rangeHasMark(from, end, link)) return null;
