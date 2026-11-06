@@ -6,6 +6,10 @@ const AUTH = "Basic " + btoa(`${JIRA_EMAIL}:${JIRA_TOKEN}`);
 
 /** Jira REST call. Waits and retries on 429 (rate limit), throws on any other non-2xx. */
 export async function jira<T = any>(path: string, init: RequestInit = {}): Promise<T> {
+  const method=(init.method??"GET").toUpperCase();
+  if(method!=="GET" && !(method==="POST" && path==="/rest/api/3/changelog/bulkfetch")) {
+    throw new Error("Jira writes are disabled. Only reads and the bulk changelog read are allowed.");
+  }
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(SITE + path, {
       ...init,

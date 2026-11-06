@@ -116,3 +116,14 @@
     @apply inline-grid h-4 min-w-4 place-items-center rounded-[4px] border border-line-2 px-1 font-sans text-[11px] text-fg-3;
   }
 }
+
+.view-popup .filter-command [cmdk-item][data-selected=true],
+.filter-command [cmdk-item][data-selected=true] { background: var(--sel); color: var(--fg); }
+.filter-command [cmdk-item] { cursor: pointer; }
+.view-select { height: 28px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--tab); padding: 0 7px; color: var(--fg-2); font-size: 12px; outline: none; }
+.view-select:focus-visible { border-color: var(--accent); }
+.view-toggle { appearance: none; width: 22px; height: 13px; border-radius: 20px; background: var(--fg-4); cursor: pointer; position: relative; flex-shrink: 0; }
+.view-toggle::after { content: ""; width: 9px; height: 9px; background: white; border-radius: 50%; position: absolute; left: 2px; top: 2px; }
+.view-toggle:checked { background: var(--accent); }
+.view-toggle:checked::after { left: 11px; }
+.view-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

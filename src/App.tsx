@@ -6,43 +6,18 @@ import { Adf, adfToText } from "./adf";
 import { Icon, Label, PriorityIcon, StatusIcon, TypeDot } from "./icons";
 import {
   ME, actions, boardOf, get, load, loadFull, set, timed, useStore,
-  type Board, type Column, type Issue, type User,
+  changeDisplay, usePreferences, type Board, type Column, type Issue, type User,
 } from "./store";
 
 const JIRA = "https://contentstack.atlassian.net";
-const WEEK = 7 * 864e5;
+import { BoardControls, FilterChips } from "./view-controls";
+import { buckets, listRows, selectIssues, statusDuration, type Bucket, type Display, type Grouping, type Property } from "./view-model";
 
 /** The active board's visible columns, for keyboard navigation and the issue page's ↑ ↓ stepping. */
 const nav = { cols: [] as Issue[][] };
 
 const statusOf = (i: Issue) => boardOf(i.key)?.columns.flatMap((c) => c.statuses).find((s) => s.id === i.status);
 const colLook = (c: Column) => ({ name: c.name, category: c.statuses[0]?.category ?? "new" });
-
-/** The visible cards per column, like Jira's Kanban: done issues only for 7 days after resolution. */
-function useColumns(board: Board | undefined): Issue[][] {
-  const issues = useStore((s) => s.issues);
-  const mine = useStore((s) => s.mine);
-  const query = useStore((s) => s.query);
-  return useMemo(() => {
-    if (!board) return [];
-    const colOf = new Map<string, [number, string]>();
-    board.columns.forEach((c, i) => c.statuses.forEach((s) => colOf.set(s.id, [i, s.category])));
-    const cutoff = Date.now() - WEEK;
-    const q = query.trim().toLowerCase();
-    const cols: Issue[][] = board.columns.map(() => []);
-    for (const i of issues.values()) {
-      if (i.board !== board.id) continue;
-      const c = colOf.get(i.status);
-      if (!c) continue;
-      if (c[1] === "done" && !(i.resolved && Date.parse(i.resolved) >= cutoff)) continue;
-      if (mine && i.assignee?.id !== ME.id) continue;
-      if (q && !`${i.key} ${i.summary}`.toLowerCase().includes(q)) continue;
-      cols[c[0]]!.push(i);
-    }
-    for (const c of cols) c.sort((a, b) => ((a.rank ?? "") < (b.rank ?? "") ? -1 : 1));
-    return cols;
-  }, [issues, board, mine, query]);
-}
 
 export function App() {
   const boards = useStore((s) => s.boards);
@@ -83,25 +58,77 @@ export function App() {
 }
 
 function BoardView({ board, active, shown, selected }: { board: Board; active: boolean; shown: boolean; selected: string | null }) {
-  const columns = useColumns(board);
-  if (active) nav.cols = columns;
-
-  // Prefetch the selected issue and the two on each side, so opening or stepping to them is instant.
+  const issues = useStore(s=>s.issues);
+  const mine = useStore(s=>s.mine);
+  const query = useStore(s=>s.query);
+  const prefs = usePreferences(board.id);
+  const d = prefs.display;
+  const [expanded,setExpanded] = useState<string[]>([]);
+  const all = useMemo(()=>[...issues.values()],[issues]);
+  const visible = useMemo(()=>selectIssues(all,board,prefs,mine,query,ME.id),[all,board,prefs,mine,query]);
+  const universe = useMemo(()=>all.filter(i=>i.board===board.id),[all,board]);
+  const columns = useMemo(()=>buckets(visible,d.columns,board,universe,d.groupDescending),[visible,d,board,universe]);
+  const rows = useMemo(()=>buckets(visible,d.rows,board,visible),[visible,d.rows,board]);
+  const navColumns = d.layout === "list" ? [columns.flatMap(c=>buckets(c.issues,d.rows,board,c.issues).flatMap(r=>listRows(r.issues,universe,d.subIssues?d.nested:"none").map(row=>row.issue)))] : columns.map(c=>rows.flatMap(r=>c.issues.filter(i=>r.issues.includes(i))));
+  if (active) nav.cols = navColumns.map(c=>[...new Map(c.map(i=>[i.key,i])).values()]);
+  useEffect(()=>setExpanded([]),[d.emptyGroups,d.columns]);
   useEffect(() => {
     if (!active || !selected) return;
     loadFull(selected);
-    const flat = columns.flat();
+    const flat = navColumns.flat();
     const i = flat.findIndex((x) => x.key === selected);
-    if (i >= 0) for (const d of [-2, -1, 1, 2]) flat[i + d] && loadFull(flat[i + d]!.key);
-  }, [active, selected, columns]);
+    if (i >= 0) for (const offset of [-2, -1, 1, 2]) flat[i+offset] && loadFull(flat[i+offset]!.key);
+  }, [active, selected, visible]);
 
-  return (
-    <div className={`${shown ? "flex" : "hidden"} min-w-0 flex-1 gap-4 overflow-x-auto px-2 pt-1`}>
-      {board.columns.map((col, i) => (
-        <ColumnView key={col.name} col={col} index={i} issues={columns[i] ?? []} selected={selected} />
-      ))}
-    </div>
-  );
+  const hidden = columns.filter(c=>!d.emptyGroups&&!c.issues.length&&!expanded.includes(c.id));
+  const show = columns.filter(c=>!hidden.includes(c));
+  const drop = (key:string,by:Grouping,id:string) => {
+    const issue = get().issues.get(key);
+    if (!issue || issue.board !== board.id) return;
+    if (by === "status") {
+      const index = board.columns.findIndex(c=>c.name===id);
+      if(index>=0) actions.move(key,index);
+    } else if (by === "category") {
+      const status = board.columns.flatMap(c=>c.statuses).find(s=>s.category===id);
+      if(status) actions.status(key,status.id);
+    } else if (by === "assignee") actions.assign(key,id === "$none" ? null : universe.find(i=>i.assignee?.id === id)?.assignee ?? null);
+    else if (by === "priority" || by === "type") actions.patch(key,{[by]:id === "$none" ? undefined:id});
+    else if (by === "label") actions.patch(key,{labels:id === "$none" ? []:[...new Set([...issue.labels,id])]});
+    else if (by === "parent" && id !== key) {
+      let ancestor = id;
+      const seen = new Set<string>([key]);
+      while (ancestor && ancestor !== "$none") { if (seen.has(ancestor)) return; seen.add(ancestor); ancestor=get().issues.get(ancestor)?.parent??""; }
+      actions.patch(key,{parent:id === "$none" ? undefined:id});
+    }
+  };
+  return <div className={`${shown?"flex":"hidden"} min-w-0 min-h-0 flex-1 flex-col`} data-layout={d.layout}>
+    {!visible.length&&<div role="status" className="flex shrink-0 items-center justify-center gap-3 py-8 text-fg-3">No issues match this view.<button onClick={()=>set({toolbar:"filter"})} className="text-fg-2">Edit filters</button></div>}
+    {d.layout === "list" ? <div className="flex-1 overflow-auto py-1">
+      {show.map(c=><section key={c.id} className="mb-2">
+        <GroupHeading bucket={c}/>
+        {buckets(c.issues,d.rows,board,c.issues).filter(r=>r.issues.length).map(r=><div key={r.id}>
+          {d.rows!=="none"&&<div className="border-b border-line bg-col px-8 py-2 text-[12px] text-fg-3">{r.name} <span className="ml-2">{r.issues.length}</span></div>}
+          <IssueList issues={r.issues} universe={universe} display={d} selected={selected}/>
+        </div>)}
+      </section>)}
+    </div> : <div className="min-h-0 flex-1 overflow-auto px-2 pt-1">
+      {rows.filter(r=>d.rows==="none"||r.issues.length).map(row=><div key={row.id} className={d.rows === "none"?"flex h-full min-h-0 gap-4":"mb-4"}>
+        {d.rows!=="none"&&<div className="sticky left-0 mb-2 flex items-center gap-2 px-2 py-2 text-fg-3"><span>{row.name}</span><span>{row.issues.length}</span></div>}
+        <div className={d.rows === "none"?"contents":"flex gap-4"}>
+          {show.map(col=><ColumnView key={col.id} bucket={col} issues={d.rows==="none"?col.issues:col.issues.filter(i=>row.issues.includes(i))} selected={selected} display={d} scroll={d.rows==="none"} onDrop={key=>{drop(key,d.columns,col.id);if(d.rows!=="none")drop(key,d.rows,row.id);}}/>)}
+          {d.rows==="none"&&hidden.length>0&&<div className="w-[260px] shrink-0 px-2 pt-3 text-fg-3"><div className="mb-3 text-[12px]">⌄ Hidden columns</div>{hidden.map(c=><button key={c.id} className="mb-2 flex h-9 w-full items-center gap-2 rounded-lg bg-card px-3 text-left text-fg-2" onClick={()=>setExpanded([...expanded,c.id])}>{c.status&&<StatusIcon status={c.status}/>}<span className="flex-1">{c.name}</span><span className="text-fg-3">0</span></button>)}</div>}
+        </div>
+      </div>)}
+    </div>}
+  </div>;
+}
+
+function GroupHeading({bucket}:{bucket:Bucket}) {
+  return <div className="flex h-10 items-center gap-2 border-y border-line bg-col px-5 text-[12px] font-medium text-fg-2">{bucket.status&&<StatusIcon status={bucket.status}/>}<span>{bucket.name}</span><span className="text-fg-3">{bucket.issues.length}</span></div>;
+}
+
+function IssueList({issues,universe,display,selected}:{issues:Issue[];universe:Issue[];display:Display;selected:string|null}) {
+  return listRows(issues,universe,display.subIssues?display.nested:"none").map(({issue,depth})=><Card key={issue.key} issue={issue} selected={selected === issue.key} display={display} list depth={depth}/>);
 }
 
 // --- keyboard ---
@@ -113,8 +140,9 @@ function onKey(e: KeyboardEvent) {
     return set({ overlay: s.overlay === "palette" ? null : "palette" });
   }
   if (s.overlay) return e.key === "Escape" && set({ overlay: null });
+  if (s.toolbar) return;
   const t = e.target as HTMLElement;
-  if (t.matches("input, textarea")) return e.key === "Escape" && t.blur();
+  if (t.closest("input, textarea, select, [contenteditable=true], [role=dialog]")) return e.key === "Escape" && t.blur();
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (press(e.key)) e.preventDefault();
 }
@@ -147,8 +175,8 @@ function press(key: string): boolean {
   };
 
   switch (key) {
-    case "j": case "ArrowDown": select(cols[ci]![ii + 1]?.key); break;
-    case "k": case "ArrowUp": select(cols[ci]![ii - 1]?.key); break;
+    case "j": case "ArrowDown": select(cols[ci]?.[ii + 1]?.key); break;
+    case "k": case "ArrowUp": select(cols[ci]?.[ii - 1]?.key); break;
     case "h": case "ArrowLeft": sideways(-1); break;
     case "l": case "ArrowRight": sideways(1); break;
     case "Enter": case "o":
@@ -156,7 +184,7 @@ function press(key: string): boolean {
       timed(s.panel ? "close issue" : `open ${sel}`, () => set({ panel: !s.panel }));
       break;
     case "Escape": s.panel ? set({ panel: false }) : s.query ? set({ query: "" }) : set({ selected: null }); break;
-    case "/": focus("search"); break;
+    case "/": case "f": set({toolbar:"filter"}); break;
     case "m": timed("only mine", () => set({ mine: !s.mine })); break;
     case "v": timed("issue view", () => set({ view: s.view === "page" ? "side" : "page" })); break;
     case "b": {
@@ -182,7 +210,6 @@ function press(key: string): boolean {
 
 function Sidebar({ boards }: { boards: Board[] }) {
   const boardId = useStore((s) => s.board);
-  const view = useStore((s) => s.view);
   return (
     <nav className="flex w-[244px] shrink-0 flex-col gap-px p-2 font-medium">
       <div className="mb-1 flex h-11 items-center gap-2 px-2 text-fg">
@@ -203,15 +230,6 @@ function Sidebar({ boards }: { boards: Board[] }) {
           <span className="truncate">{b.name}</span>
         </SideItem>
       ))}
-
-      <div className="mt-5 mb-1.5 flex items-center px-2 text-[12px] text-fg-3">Open issues in <kbd className="ml-auto">V</kbd></div>
-      <div className="mx-1 grid grid-cols-2 rounded-lg border border-line-2 p-0.5 text-[12px]">
-        {(["side", "page"] as const).map((v) => (
-          <button key={v} onClick={() => set({ view: v })} className={`h-6 rounded-md ${view === v ? "bg-sel text-fg" : "text-fg-3 hover:text-fg-2"}`}>
-            {v === "side" ? "Side panel" : "Full page"}
-          </button>
-        ))}
-      </div>
 
     </nav>
   );
@@ -268,22 +286,12 @@ function BoardHeader() {
       <div className="flex h-[43.5px] items-center gap-1 px-2">
         {tab(false, "All issues")}
         {tab(true, "My issues", "My issues (m)")}
-        {/* Linear's 28px icon circles; the filter one opens into an input on focus (/) or while filtering. */}
-        <label title="Filter (/)" className={`${CIRCLE} ml-auto cursor-text overflow-hidden ${query ? "w-56" : "w-7 focus-within:w-56"}`}>
-          <span className="grid size-7 shrink-0 place-items-center"><Icon name="filter" /></span>
-          <input
-            id="search"
-            value={query}
-            onChange={(e) => set({ query: e.target.value })}
-            onKeyDown={(e) => e.key === "Escape" && (set({ query: "" }), e.currentTarget.blur())}
-            placeholder="Filter…"
-            className="min-w-0 flex-1 bg-transparent pr-2.5 text-[12px] font-medium text-fg-2 outline-none placeholder:text-fg-3"
-          />
-        </label>
+        <div className="ml-auto flex items-center gap-1"><BoardControls board={board!}/></div>
         <button title={`Open issues in ${view === "side" ? "full page" : "side panel"} (v)`} onClick={() => set({ view: view === "side" ? "page" : "side" })} className={`${CIRCLE} justify-center`}>
           <Icon name={view === "side" ? "side" : "expand"} />
         </button>
       </div>
+      {board&&<FilterChips board={board}/>}
     </header>
   );
 }
@@ -292,71 +300,76 @@ function BoardHeader() {
 
 const COL_BTN = "grid size-6 place-items-center rounded-full text-fg-3 hover:bg-hover hover:text-fg";
 
-function ColumnView({ col, index, issues, selected }: { col: Column; index: number; issues: Issue[]; selected: string | null }) {
-  const [over, setOver] = useState(false);
-  return (
-    <section
-      onDragOver={(e) => (e.preventDefault(), setOver(true))}
-      onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setOver(false)}
-      onDrop={(e) => (setOver(false), actions.move(e.dataTransfer.getData("text/plain"), index))}
-      // Linear: a 340px strip, solid sidebar-color/0.4 behind the header, fading to /0.1 down the column
-      className={`flex w-[340px] shrink-0 flex-col rounded-t-[5px] bg-[linear-gradient(var(--col-top),var(--col-top)_46px,var(--col-bottom))] ${over ? "ring-1 ring-accent" : ""}`}
-    >
-      <h2 className="flex h-[46px] shrink-0 items-center gap-2 pr-2 pl-3.5 text-[13px]">
-        <StatusIcon status={colLook(col)} />
-        <span className="ml-0.5 truncate font-medium text-fg-2">{col.name}</span>
-        <span className="font-[450] text-fg-3">{issues.length}</span>
-        <button title={`Commands (⌘K) · press ${index + 1} to move the selected issue here`} onClick={() => set({ overlay: "palette" })} className={`ml-auto ${COL_BTN}`}>
-          <Icon name="dots" />
-        </button>
-        <button title="New issue (n)" onClick={() => set({ overlay: "create" })} className={`-ml-1.5 ${COL_BTN}`}>
-          <Icon name="plus" />
-        </button>
-      </h2>
-      <div className="flex-1 overflow-y-auto px-[9px] pt-[9px]">
-        {issues.map((i) => <Card key={i.key} issue={i} selected={i.key === selected} />)}
-      </div>
-    </section>
-  );
+function ColumnView({ bucket, issues, selected, display, scroll, onDrop }: { bucket:Bucket; issues:Issue[]; selected:string|null; display:Display; scroll:boolean; onDrop:(key:string)=>void }) {
+  const [over,setOver] = useState(false);
+  return <section
+    onDragOver={e=>{e.preventDefault();setOver(true);}}
+    onDragLeave={e=>!e.currentTarget.contains(e.relatedTarget as Node)&&setOver(false)}
+    onDrop={e=>{e.preventDefault();setOver(false);onDrop(e.dataTransfer.getData("text/plain"));}}
+    className={`flex w-[340px] shrink-0 flex-col rounded-t-[5px] bg-[linear-gradient(var(--col-top),var(--col-top)_46px,var(--col-bottom))] ${over?"ring-1 ring-accent":""}`}
+  >
+    <h2 className="flex h-[46px] shrink-0 items-center gap-2 pr-2 pl-3.5 text-[13px]">
+      {bucket.status?<StatusIcon status={bucket.status}/>:display.columns === "priority"?<PriorityIcon name={bucket.name}/>:<Icon name="layers"/>}
+      <span className="ml-0.5 truncate font-medium text-fg-2">{bucket.name}</span><span className="text-fg-3">{issues.length}</span>
+      <button title={`Options for ${bucket.name}`} onClick={()=>set({toolbar:"display"})} className={`ml-auto ${COL_BTN}`}><Icon name="dots"/></button>
+      <button title="New issue (n)" onClick={()=>set({overlay:"create"})} className={`-ml-1.5 ${COL_BTN}`}><Icon name="plus"/></button>
+    </h2>
+    <div className={`flex-1 px-[9px] pt-[9px] ${scroll?"overflow-y-auto":""}`}>
+      {issues.map(i=><Card key={i.key} issue={i} selected={i.key===selected} display={display}/>)}
+    </div>
+  </section>;
 }
 
 const MONTH = new Intl.DateTimeFormat("en", { month: "short", year: "numeric" });
 // Linear's card chip: 24px pill, 0.5px border, 12px/450 muted text after a 14px icon.
 const CHIP = "flex h-6 max-w-[224px] shrink-0 items-center rounded-full border-[0.5px] border-chip-line bg-card px-2 text-[12px] font-[450] text-card-fg-3";
 
-const Card = memo(function Card({ issue, selected }: { issue: Issue; selected: boolean }) {
+const Card = memo(function Card({issue,selected,display:d,list=false,depth=0}:{issue:Issue;selected:boolean;display:Display;list?:boolean;depth?:number}) {
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => void (selected && ref.current?.scrollIntoView({ block: "nearest" })), [selected]);
+  useEffect(()=>void(selected&&ref.current?.scrollIntoView({block:"nearest"})),[selected]);
+  const show = (p:Property) => d.properties.includes(p);
+  const clock=useStore(s=>d.properties.includes("statusAge")?s.clock:0);
   const status = statusOf(issue);
-  return (
-    <div className="pb-2 [contain-intrinsic-size:auto_124px] [content-visibility:auto] [overflow-clip-margin:4px]">
-      <div
-        ref={ref}
-        data-key={issue.key}
-        draggable
-        onDragStart={(e) => e.dataTransfer.setData("text/plain", issue.key)}
-        onClick={() => timed(`open ${issue.key}`, () => set({ selected: issue.key, panel: true }))}
-        className={`relative flex min-h-[42px] cursor-pointer flex-col rounded-lg p-2 shadow-(--card-shadow) ${selected ? "bg-card-hover" : "bg-card hover:bg-card-hover"}`}
-      >
+  const properties = <>
+    {show("priority")&&<span title={issue.priority??"No priority"} className={list?"text-fg-3":`${CHIP} px-[4.5px]`}><PriorityIcon name={issue.priority}/></span>}
+    {show("type")&&issue.type&&<span className={CHIP}><TypeDot type={issue.type}/><span className="ml-1.5">{issue.type}</span></span>}
+    {show("project")&&issue.project&&<span title={issue.project.name} className={CHIP}><Icon name="layers"/><span className="ml-1.5 truncate">{issue.project.name}</span></span>}
+    {show("labels")&&issue.labels.slice(0,list?1:2).map(l=><Label key={l} name={l}/>)}
+    {show("labels")&&issue.labels.length>(list?1:2)&&<span title={issue.labels.join(", ")} className={CHIP}>+{issue.labels.length-(list?1:2)}</span>}
+    {show("comments")&&issue.comments>0&&<span className={CHIP}><Icon name="comment"/><span className="ml-1.5">{issue.comments}</span></span>}
+    {show("links")&&!!issue.links?.length&&<span title={issue.links.join("\n")} className={CHIP}><Icon name="external"/><span className="ml-1.5">{issue.links.length}</span></span>}
+    {show("creator")&&issue.creator&&<span title={`Created by ${issue.creator.name}`}><Avatar user={issue.creator} size={18}/></span>}
+    {show("due")&&issue.due&&<span className={CHIP}><Icon name="calendar"/><span className="ml-1.5">{issue.due}</span></span>}
+    {show("milestone")&&issue.milestones?.map(v=><span key={v.id} title={`Jira fix version: ${v.name}`} className={CHIP}><Icon name="layers"/><span className="ml-1.5 truncate">{v.name}</span></span>)}
+    {show("statusAge")&&issue.statusSince&&<span className={CHIP} title={`In current status since ${new Date(issue.statusSince).toLocaleString()}`}><Icon name="calendar"/><span className="ml-1.5">{statusDuration(issue.statusSince,Math.max(clock,Date.now()))} in status</span></span>}
+    {show("pullRequests")&&<span className={CHIP} title={issue.prCount === undefined?"Pull-request counts have not been shared by Jira":"Pull requests reported by Jira's development summary"}><Icon name="external"/><span className="ml-1.5">{issue.prCount??"—"} PRs</span></span>}
+  </>;
+  const dates = <>{show("created")&&issue.created&&<span title={`Created ${issue.created}`}>Created {MONTH.format(new Date(issue.created))}</span>}{show("updated")&&<span title={`Updated ${issue.updated}`}>{list?"":"Updated "}{MONTH.format(new Date(issue.updated))}</span>}</>;
+  return <div className={list?"[content-visibility:auto] [contain-intrinsic-size:auto_44px]":"pb-2 [contain-intrinsic-size:auto_124px] [content-visibility:auto] [overflow-clip-margin:4px]"}>
+    <div ref={ref} data-key={issue.key} role="button" aria-label={`${issue.key} ${issue.summary}`} tabIndex={0} draggable
+      onDragStart={e=>e.dataTransfer.setData("text/plain",issue.key)}
+      onKeyDown={e=>{if(e.key === "Enter"||e.key === " "){e.preventDefault();e.stopPropagation();set({selected:issue.key,panel:true});}}}
+      onClick={()=>timed(`open ${issue.key}`,()=>set({selected:issue.key,panel:true}))}
+      className={list?`flex min-h-11 cursor-pointer items-center gap-3 border-b border-line px-5 outline-none focus-visible:ring-1 focus-visible:ring-accent ${selected?"bg-hover":"hover:bg-hover"}`:`relative flex min-h-[42px] cursor-pointer flex-col rounded-lg p-2 shadow-(--card-shadow) outline-none focus-visible:ring-1 focus-visible:ring-accent ${selected?"bg-card-hover":"bg-card hover:bg-card-hover"}`}
+      style={list&&depth?{paddingLeft:20+depth*20}:undefined}>
+      {list?<>
+        {show("id")&&<span className="w-[85px] shrink-0 text-[12px] text-fg-3 tabular-nums">{depth>0&&"↳ "}{issue.key}</span>}
+        {show("status")&&status&&<span title={status.name}><StatusIcon status={status}/></span>}
+        <span className="min-w-32 flex-1 truncate font-medium">{issue.summary}</span>
+        <span className="flex max-w-[45%] shrink-0 items-center gap-2 overflow-hidden">{properties}</span>
+        {show("assignee")&&<Avatar user={issue.assignee} size={18}/>}
+        <span className="flex shrink-0 gap-2 text-[11px] text-fg-3">{dates}</span>
+      </>:<>
         <div className="flex flex-col gap-1.5 pr-[34px] pl-1">
-          <span className="truncate text-[12px] leading-[normal] font-[450] tracking-[-0.24px] text-card-fg-3 tabular-nums">{issue.key}</span>
-          <div className="flex items-start gap-1.5">
-            {status && <span className="mt-px"><StatusIcon status={status} /></span>}
-            <span className="line-clamp-2 text-[13px] leading-4 font-medium [overflow-wrap:anywhere] text-fg">{issue.summary}</span>
-          </div>
+          {show("id")&&<span className="truncate text-[12px] font-[450] tracking-[-0.24px] text-card-fg-3 tabular-nums">{issue.key}</span>}
+          <div className="flex items-start gap-1.5">{show("status")&&status&&<span className="mt-px" title={status.name}><StatusIcon status={status}/></span>}<span className="line-clamp-2 text-[13px] leading-4 font-medium [overflow-wrap:anywhere]">{issue.summary}</span></div>
         </div>
-        <span className="absolute top-2 right-2"><Avatar user={issue.assignee} size={18} /></span>
-        <div className="mt-2.5 flex flex-wrap items-center gap-1 overflow-hidden">
-          <span title={issue.priority} className={`${CHIP} px-[4.5px]`}><PriorityIcon name={issue.priority} /></span>
-          {issue.type && <span className={CHIP}><span className="grid size-3.5 place-items-center"><TypeDot type={issue.type} /></span><span className="mr-px ml-1.5 truncate">{issue.type}</span></span>}
-          {issue.labels.slice(0, 2).map((l) => <Label key={l} name={l} />)}
-          {issue.labels.length > 2 && <span className={CHIP}>+{issue.labels.length - 2}</span>}
-          {issue.comments > 0 && <span className={CHIP}><Icon name="comment" /><span className="mr-px ml-1.5">{issue.comments}</span></span>}
-        </div>
-        <div className="mt-1.5 flex h-6 items-center pl-px text-[12px] font-[450] text-card-fg-3">Updated {MONTH.format(new Date(issue.updated))}</div>
-      </div>
+        {show("assignee")&&<span className="absolute top-2 right-2"><Avatar user={issue.assignee} size={18}/></span>}
+        <div className="mt-2.5 flex flex-wrap items-center gap-1 overflow-hidden">{properties}</div>
+        {(show("updated")||show("created"))&&<div className="mt-1.5 flex min-h-6 flex-wrap items-center gap-x-3 pl-px text-[12px] font-[450] text-card-fg-3">{dates}</div>}
+      </>}
     </div>
-  );
+  </div>;
 });
 
 function Avatar({ user, size = 20 }: { user: User | null; size?: number }) {
@@ -434,6 +447,7 @@ function Stepper({ issueKey }: { issueKey: string }) {
   useStore((s) => s.issues); // re-render when the list changes; nav.cols is rebuilt by the board in the same render
   useStore((s) => s.mine);
   useStore((s) => s.query);
+  useStore((s) => s.preferences);
   const flat = nav.cols.flat();
   const i = flat.findIndex((x) => x.key === issueKey);
   return (
