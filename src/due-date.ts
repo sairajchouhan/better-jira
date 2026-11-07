@@ -3,6 +3,11 @@ import { casual } from "chrono-node/en";
 export function dateOnly(date:Date):string {
   return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
 }
+/** Linear's Due date presets, with their short date. */
+export function duePresets(reference=new Date()){
+  const day=(days:number)=>{const date=new Date(reference);date.setDate(date.getDate()+days);return date;};
+  return ([["Tomorrow",day(1)],["End of this week",day((5-reference.getDay()+7)%7)],["In one week",day(7)]] as const).map(([name,date])=>({name,due:dateOnly(date),label:date.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"})}));
+}
 /** Date-only values use the browser's local calendar, never a UTC conversion. */
 export function parseDueDate(input:string,reference=new Date()):string|null {
   const text=input.trim();if(!text)return null;

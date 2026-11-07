@@ -3,6 +3,7 @@ import index from "../src/index.html";
 import editorMediaFixture from "./editor-media-fixture.html";
 import tailwind from "bun-plugin-tailwind";
 import {attachmentGateway} from "../src/attachment-media";
+import {previewFrom} from "../src/link-preview";
 const rich={type:"doc",version:1,content:[
   {type:"heading",attrs:{level:2,localId:"heading-id"},content:[{type:"text",text:"Rich fixture heading"}]},
   {type:"paragraph",content:[{type:"text",text:"Formatted fixture",marks:[{type:"strong"},{type:"link",attrs:{href:"https://example.test/reference"}}]}]},
@@ -71,7 +72,7 @@ async function handle(req:Request){
   if(req.method!=="GET"){status=405;body={error:"Fixture API is read-only"};}
   else if(path==="/api/client"){if(clientFailures-->0){status=503;body={error:"Test unavailable"};}else body={site:"https://example.atlassian.net",user};}
   else if(path==="/api/boards")body=[board];
-  else if(path==="/api/issues")body=issues;
+  else if(path==="/api/issues")body=issues.map(issue=>({...issue,comments:mediaInComment?1:0})); // the mirror list counts the same Jira comments the detail returns
   else if(path==="/api/view-defaults")body={};
   else if(path==="/api/properties")body={entries:{},progress:{total:0,pending:0,completed:0,errors:0}};
   else if(path.match(/^\/api\/issues\/[^/]+\/media\/[^/]+$/)){
@@ -83,6 +84,8 @@ async function handle(req:Request){
     const [,key,id]=path.match(/^\/api\/issues\/([^/]+)\/attachments\/([^/]+)$/)!;
     const response=await gateway.content(req,key!,id!);requests.push({method:req.method,path,status:response.status});return response;
   }
+  // Link previews: example.com unfurls from a canned copy of its page (no network); anything else has none.
+  else if(path==="/api/link-preview"){const target=url.searchParams.get("url")??"";body=/^https?:\/\/(www\.)?example\.com(\/|$)/.test(target)?await previewFrom(`<html><head><title>Example Domain</title><link rel="icon" href="${url.origin}/__link-icon.svg"></head><body><div><h1>Example Domain</h1><p>This domain is for use in documentation examples without needing permission.</p></div></body></html>`,target):null;}
   else if(path.startsWith("/api/issues/")){if(detailFailures-->0){status=503;body={error:"Test unavailable"};}else body=full(decodeURIComponent(path.split("/").at(-1)!));}
   else {status=404;body={error:"Unknown fixture route"};}
   requests.push({method:req.method,path,status});return Response.json(body,{status});
@@ -101,5 +104,5 @@ async function splitFixture(req:Request){
   const file=name==='index.html'?[...files.entries()].find(([name])=>name.endsWith('.html'))?.[1]:files.get(name);
   return file?new Response(file,{headers:{'Content-Type':file.type}}):new Response(null,{status:404});
 }
-const server=Bun.serve({hostname:"127.0.0.1",port:Number(process.env.FIXTURE_PORT??3001),routes:{"/*":index,"/__editor-media-fixture":editorMediaFixture,"/__split-media-assets/*":splitFixture,"/api/*":handle,"/__fixture":handle}});
+const server=Bun.serve({hostname:"127.0.0.1",port:Number(process.env.FIXTURE_PORT??3001),routes:{"/*":index,"/__editor-media-fixture":editorMediaFixture,"/__split-media-assets/*":splitFixture,"/api/*":handle,"/__fixture":handle,"/__link-icon.svg":()=>new Response('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="#fff"/></svg>',{headers:{"Content-Type":"image/svg+xml"}})}});
 console.log(`Disposable browser fixture on ${server.url}`);

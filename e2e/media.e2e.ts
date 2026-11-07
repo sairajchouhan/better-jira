@@ -161,6 +161,8 @@ test("the pending media renderer chunk reserves the same height as the loaded ed
     await page.cmd('Fetch.enable',{patterns:[{urlPattern:'*',resourceType:'Script',requestStage:'Request'}]});
     await page.goto('/__split-media-assets/index.html');
     await page.waitFor(`!!document.querySelector('#context-editor [data-media-loading]')`);
+    // The paused-request event can arrive after the placeholder renders when the machine is busy.
+    for(let i=0;i<100&&!held;i++)await Bun.sleep(20);
     expect(held).toBeDefined();
     const before=await page.eval<number>(`document.getElementById('context-editor').getBoundingClientRect().height`);
     expect(await page.eval(`!!document.querySelector('#context-editor [data-media-interactive]')`)).toBe(false);

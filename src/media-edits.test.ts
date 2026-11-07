@@ -7,6 +7,7 @@ test('crop movement and resizing stay inside the source and retain a nonempty se
  expect(validCrop({x:.5,y:0,width:1,height:1})).toBe(false);
  expect(validMediaEdits({id:{crop,comments:[{id:'1',text:'Review',author:'Me',at:'2026-11-07'}]}})).toBe(true);
  expect(validMediaEdits({id:{crop:{...crop,width:Infinity}}})).toBe(false);
+ expect(validMediaEdits({id:{src:'/api/issues/TEST-2/attachments/1'}})).toBe(true);expect(validMediaEdits({id:{src:5}})).toBe(false);
 });
 test('image identity hides URL tokens and comment badges derive independent totals',()=>{
  const url='https://example.test/picture.png?token=private';

@@ -41,7 +41,7 @@ export function ImageMedia({file,external,issueKey,onSize,onError,onSelect}:{onS
    <button ref={trigger} aria-label="Full screen" onClick={()=>{setMode('preview');setOpen(true);}}><Icon name="expand"/></button>
    {issueKey&&<button ref={commentTrigger} aria-label={thread?'Hide image comments':'Add image comment'} onClick={()=>{setSelected(true);setThread(value=>!value);}}><Icon name="comment"/></button>}
   </div>
-  {thread&&issueKey&&<ImageThread draft={threadDraft} setDraft={setThreadDraft} comments={edit?.comments??[]} author={ME.name} save={comments=>actions.mediaEdit(issueKey,id,{...edit,comments})} close={()=>{setSelected(true);setThread(false);}}/>}
+  {thread&&issueKey&&<ImageThread draft={threadDraft} setDraft={setThreadDraft} comments={edit?.comments??[]} author={ME.name} save={comments=>actions.mediaEdit(issueKey,id,{...edit,comments,...(file.url.startsWith('blob:')?{}:{src:file.url})})} close={()=>{setSelected(true);setThread(false);}}/>}
   {notice&&<span role="status" className="image-notice">{notice}</span>}
   {open&&<Suspense fallback={<div role="status">Opening preview…</div>}><Viewer issueKey={issueKey} editable={editable} readReason={readReason} file={displayFile} original={file} crop={edit?.crop} startCrop={mode==='crop'} onCrop={issueKey&&editable?async crop=>{await imageBlob(file.url,crop);actions.mediaEdit(issueKey,id,{...edit,crop});}:undefined} external={external} close={()=>{setSelected(true);setOpen(false);requestAnimationFrame(()=>{if(!document.querySelector('[cmdk-input]'))trigger.current?.focus();});}}/></Suspense>}
  </div>;

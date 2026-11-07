@@ -1,9 +1,11 @@
 import {useHotkeys,useHotkey,formatForDisplay} from "@tanstack/react-hotkeys";
+import {adfToText} from './adf';
+import {discardLateMedia,documentHasMedia,lateMediaDiscarded} from './document';
 import {Icon} from './icons';
 import {mediaCaretPlugin} from './media-caret';
-import {mediaUploads} from './editor-media-upload';
+import {mediaUploads,mergeLateMedia,type LateMedia} from './editor-media-upload';
 import {editorBindings} from "./editor-bindings";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { EditorState, NodeSelection, type Command } from "prosemirror-state";
 import {mediaNodeView,type MediaNodeView} from "./media-node-view";
 import type {Attachment} from "./attachment-media";
@@ -18,19 +20,22 @@ import { codeDown, codeEnter, insertLink, insertTable, markdownRules, shiftTab, 
 import { fromEditorDocument, richSchema, safeLink, toEditorDocument, type AdfDocument } from "./rich-document";
 
 /** inline: no frame, like Linear's description; every editor shows its formatting toolbar floating above it only while focused. */
-export type RichEditorProps={initial:unknown;onFiles?:(files:File[])=>Promise<Attachment[]>;issueKey?:string;attachments?:Attachment[];label?:string;id?:string;autoFocus?:boolean;expanded?:boolean;inline?:boolean;variant?:'comment';placeholder?:string;saveLabel?:string;hint?:string;onChange?:(doc:AdfDocument)=>void;onBlur?:(doc:AdfDocument)=>void;onSave?:(doc:AdfDocument)=>void;onCancel?:()=>void};
+export type RichEditorProps={initial:unknown;onFiles?:(files:File[])=>Promise<Attachment[]>;issueKey?:string;attachments?:Attachment[];label?:string;id?:string;autoFocus?:boolean;expanded?:boolean;inline?:boolean;variant?:'comment';placeholder?:string;saveLabel?:string;cancelLabel?:string;hint?:string;onChange?:(doc:AdfDocument)=>void;onBlur?:(doc:AdfDocument)=>void;onSave?:(doc:AdfDocument)=>void;onCancel?:()=>void;/** Identifies the content (issue description, a document) so media that finishes uploading after this editor closed reaches the editor showing it now, or onLateMedia when none is open. */scope?:string;/** Receives a function that applies the late media to the content as it is now. */onLateMedia?:(merge:(current:unknown)=>AdfDocument)=>void;/** Like Linear's documents: no toolbar on focus, a floating one above a text selection. */selectionToolbar?:boolean};
 const BUTTON="shrink-0 whitespace-nowrap rounded px-2 py-1 text-[12px] text-fg-2 hover:bg-hover disabled:opacity-30 aria-pressed:bg-sel";
 
 export function RichEditor(props:RichEditorProps) {
   const host=useRef<HTMLDivElement>(null),view=useRef<EditorView|null>(null),latest=useRef(props);latest.current=props;
   const mediaViews=useRef(new Set<MediaNodeView>()),fileInput=useRef<HTMLInputElement>(null),staged=useRef<Attachment[]>([]);
-  const upload=useRef<ReturnType<typeof mediaUploads>|null>(null);
+  const upload=useRef<ReturnType<typeof mediaUploads>|null>(null),toolbar=useRef<HTMLDivElement>(null);
   const mediaContext=()=>({issueKey:latest.current.issueKey,attachments:[...new Map([...(latest.current.attachments??[]),...staged.current].map(file=>[file.id,file])).values()]});
   const [,refresh]=useState(0),[linkOpen,setLinkOpen]=useState(false),[url,setURL]=useState("");
   const [linkError,setLinkError]=useState(""),[uploadBusy,setUploadBusy]=useState(false),[uploadNotice,setUploadNotice]=useState('');
-  const save=()=>{if(upload.current?.busy())return;if(view.current)latest.current.onSave?.(fromEditorDocument(view.current.state.doc));};
+  // Linear sends while a pasted file is still uploading; locally we send once the save finishes. A failed file still blocks until Retry.
+  // A deferred send consumes this editor's late media (Opus review 4): its files went out with the post, so they never return to a draft.
+  const save=(deferred=false):void=>{const uploads=upload.current;if(uploads?.busy()){void uploads.idle().then(()=>{if(!uploads.busy())save(true);});return;}if(view.current){if(deferred&&latest.current.scope)discardLateMedia(latest.current.scope);latest.current.onSave?.(fromEditorDocument(view.current.state.doc));}};
   useEffect(()=>{
-    const uploads=mediaUploads(()=>view.current,async files=>{if(!latest.current.onFiles)throw new Error('File uploads are unavailable here');const saved=await latest.current.onFiles(files);staged.current.push(...saved);return saved;},setUploadBusy,setUploadNotice);upload.current=uploads;
+    let mine:EditorView|null=null,detached=false;
+    const uploads=mediaUploads(()=>mine,async files=>{if(!latest.current.onFiles)throw new Error('File uploads are unavailable here');const saved=await latest.current.onFiles(files);staged.current.push(...saved);return saved;},setUploadBusy,setUploadNotice);upload.current=uploads;
     const editor=new EditorView(host.current!,{
       state:EditorState.create({schema:richSchema,doc:toEditorDocument(latest.current.initial),plugins:[mediaCaretPlugin(),uploads.plugin,markdownRules,history(),keymap({
         "Enter":chainCommands(codeEnter,splitListItem(richSchema.nodes.listItem!),baseKeymap.Enter!),
@@ -39,19 +44,27 @@ export function RichEditor(props:RichEditorProps) {
         "Shift-Tab":shiftTab,
       }),keymap(baseKeymap),tableEditing()]}),
       nodeViews:Object.fromEntries(["mediaSingle","mediaGroup","media","mediaInline"].map(type=>[type,(node,editor,getPos)=>{const media=mediaNodeView(node,()=>({...mediaContext(),onSelect:()=>{const pos=getPos();if(pos!==undefined){editor.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc,pos)));editor.focus();}}}),()=>mediaViews.current.delete(media));mediaViews.current.add(media);return media;}])),
-      attributes:{role:"textbox","aria-label":props.label??"Issue description","aria-multiline":"true",id:props.id??"",class:"rich-content"},
+      attributes:{...(props.scope?{'data-scope':props.scope}:{}),role:"textbox","aria-label":props.label??"Issue description","aria-multiline":"true",id:props.id??"",class:"rich-content"},
       handlePaste(_editor,event){const files=[...(event.clipboardData?.files??[])];if(!files.length||!latest.current.onFiles)return false;event.preventDefault();uploads.enqueue(files);return true;},
       handleDrop(editor,event){const files=[...(event.dataTransfer?.files??[])];if(!files.length||!latest.current.onFiles)return false;event.preventDefault();uploads.enqueue(files,editor.posAtCoords({left:event.clientX,top:event.clientY})?.pos);return true;},
-      handleDOMEvents:{blur:editor=>{latest.current.onBlur?.(fromEditorDocument(editor.state.doc));return false;}},
-      dispatchTransaction(tr){const next=editor.state.apply(tr);editor.updateState(next);refresh(n=>n+1);if(tr.docChanged)latest.current.onChange?.(fromEditorDocument(next.doc));},
+      handleDOMEvents:{blur:editor=>{latest.current.onBlur?.(fromEditorDocument(editor.state.doc));refresh(n=>n+1);return false;},focus:()=>{refresh(n=>n+1);return false;}},
+      dispatchTransaction(tr){const next=editor.state.apply(tr);editor.updateState(next);refresh(n=>n+1);if(tr.docChanged&&!detached)latest.current.onChange?.(fromEditorDocument(next.doc));},
     });
-    view.current=editor;
+    view.current=mine=editor;
+    const mountedAt=performance.now();
     if(props.autoFocus)editor.focus();
     const input=(event:Event)=>uploads.enqueue((event as CustomEvent<File[]>).detail);
-    editor.dom.addEventListener('attach-files',input);
-    return()=>{uploads.dispose();editor.dom.removeEventListener('attach-files',input);editor.destroy();view.current=null;};
+    const late=(event:Event)=>{const merged=mergeLateMedia(fromEditorDocument(editor.state.doc),(event as CustomEvent<LateMedia>).detail),doc=toEditorDocument(merged);if(!doc.eq(editor.state.doc))editor.dispatch(editor.state.tr.replaceWith(0,editor.state.doc.content.size,doc.content));};
+    editor.dom.addEventListener('attach-files',input);editor.dom.addEventListener('late-media',late);
+    // A file still saving when the editor unmounts (paste, then Back) is placed in the detached editor. Its old copy of the content is never saved wholesale:
+    // only the new media goes to the editor now showing this content (reopened and maybe edited), or to onLateMedia. Unscoped editors keep reporting through onBlur.
+    return()=>{detached=true;editor.dom.removeEventListener('attach-files',input);editor.dom.removeEventListener('late-media',late);const left=editor.state.doc;void uploads.idle().then(()=>{
+      if(!editor.state.doc.eq(left)&&!lateMediaDiscarded(latest.current.scope,mountedAt)){const detail={before:fromEditorDocument(left),after:fromEditorDocument(editor.state.doc)},scope=latest.current.scope,live=scope?[...document.querySelectorAll<HTMLElement>('[data-scope]')].find(node=>node.dataset.scope===scope&&node!==editor.dom):undefined;
+        if(live)live.dispatchEvent(new CustomEvent('late-media',{detail}));else if(scope)latest.current.onLateMedia?.(current=>mergeLateMedia(current,detail));else{latest.current.onChange?.(detail.after);latest.current.onBlur?.(detail.after);}}
+      uploads.dispose();editor.destroy();if(view.current===editor)view.current=null;});};
   },[]);
   useEffect(()=>{for(const media of mediaViews.current)media.updateContext();},[props.issueKey,props.attachments]);
+  useEffect(()=>{if(!props.selectionToolbar)return;const move=()=>refresh(n=>n+1);addEventListener('scroll',move,true);addEventListener('resize',move);return()=>{removeEventListener('scroll',move,true);removeEventListener('resize',move);};},[props.selectionToolbar]);
   const run=(command:Command)=>{const editor=view.current;if(editor){command(editor.state,editor.dispatch,editor);editor.focus();}};
   const marked=(name:string)=>{const state=view.current?.state;return !!state&&(state.storedMarks??state.selection.$from.marks()).some(m=>m.type.name===name);};
   const changeBlock=(type:string,attributes:Record<string,unknown>={})=>run((state,dispatch)=>{
@@ -85,11 +98,17 @@ export function RichEditor(props:RichEditorProps) {
     run(insertLink(href));setLinkOpen(false);setURL("");setLinkError("");
   };
   const inTable=!!view.current&&isInTable(view.current.state);
-  const doc=view.current?.state.doc,empty=!doc||doc.childCount===1&&doc.firstChild!.isTextblock&&!doc.firstChild!.content.size;
+  const doc=view.current?.state.doc;
+  const empty=useMemo(()=>{if(!doc)return true;const value=fromEditorDocument(doc);return !adfToText(value).trim()&&!documentHasMedia(value);},[doc]);
   const level=view.current?.state.selection.$from.parent.type.name==="heading"?Number(view.current.state.selection.$from.parent.attrs.level):0;
+  const selection=view.current?.state.selection;
+  // Above the selection; below it when the editor has too little room above, so it never covers the title or header. Either way both edges stay inside the viewport (a long selection can start above and end below it).
+  const floating=props.selectionToolbar&&view.current?.hasFocus()&&selection&&!selection.empty&&!(selection instanceof NodeSelection)?(()=>{const start=view.current!.coordsAtPos(selection.from),end=view.current!.coordsAtPos(selection.to),width=Math.min(toolbar.current?.offsetWidth??560,innerWidth-24),height=toolbar.current?.offsetHeight??40,room=start.top-Math.max(0,view.current!.dom.getBoundingClientRect().top),top=room>=120?start.top-8-height:end.bottom+8;return {top:Math.max(8,Math.min(top,innerHeight-8-height)),left:Math.max(12,Math.min(start.left,innerWidth-12-width)),maxWidth:innerWidth-24};})():undefined;
+  // The first placement guesses the size; re-place once the toolbar is measured.
+  const placed=useRef('');useLayoutEffect(()=>{const size=`${toolbar.current?.offsetWidth}x${toolbar.current?.offsetHeight}`;if(floating&&size!==placed.current){placed.current=size;refresh(n=>n+1);}});
   return <div className={`rich-editor group/editor relative ${props.inline?"":"mb-3 rounded-lg border border-line-2 bg-card"}`} data-variant={props.variant} data-inline={props.inline||undefined} data-expanded={props.expanded||undefined}>
     {props.onFiles&&<input ref={fileInput} type="file" multiple className="hidden" aria-label={`Attach files to ${props.label??'description'}`} onChange={event=>{upload.current?.enqueue([...(event.currentTarget.files??[])]);event.currentTarget.value='';}}/>}
-    <div role="toolbar" aria-label="Description formatting" className="absolute right-0 bottom-full z-10 mb-1 hidden max-w-full flex-nowrap items-center gap-0.5 overflow-x-auto rounded-lg border border-line-2 bg-card p-1 shadow-lg group-focus-within/editor:flex" onMouseDown={e=>{if((e.target as HTMLElement).closest("button"))e.preventDefault();}}>
+    {(!props.selectionToolbar||floating)&&<div ref={toolbar} role="toolbar" aria-label="Description formatting" style={floating} className={`z-10 items-center gap-0.5 rounded-lg border border-line-2 bg-card p-1 shadow-lg ${floating?'fixed flex flex-nowrap overflow-x-auto':'absolute right-0 bottom-full mb-1 hidden max-w-full flex-nowrap overflow-x-auto group-focus-within/editor:flex'}`} onMouseDown={e=>{if((e.target as HTMLElement).closest("button"))e.preventDefault();}}>
       {[["strong","Bold","B"],["em","Italic","I"],["underline","Underline","U"],["strike","Strikethrough","S"],["code","Inline code","<>"]].map(([name,label,text])=><button key={name} type="button" aria-label={label} title={`${label} (${formatForDisplay(editorBindings.find(b=>b.id===name)!.hotkey)})`} aria-pressed={marked(name!)} className={BUTTON} onClick={()=>run(toggleMark(richSchema.marks[name!]!))}>{text}</button>)}
       {[0,1,2,3,4].map(n=><button key={n} type="button" aria-label={n?`Heading ${n}`:"Text"} title={n?`Heading ${n}`:"Text"} aria-pressed={level===n} className={`${BUTTON} shrink-0`} onClick={()=>changeBlock(n?"heading":"paragraph",n?{level:n}:{})}>{n?`H${n}`:"T"}</button>)}
       <button type="button" aria-label="Bulleted list" className={BUTTON} onClick={()=>list("bulletList")}>• List</button>
@@ -101,10 +120,10 @@ export function RichEditor(props:RichEditorProps) {
       <button type="button" aria-label="Insert table" className={BUTTON} onClick={()=>run(insertTable)}>Table</button>
       {inTable&&<><button type="button" aria-label="Add table row" className={BUTTON} onClick={()=>run(addRowAfter)}>+ Row</button><button type="button" aria-label="Add table column" className={BUTTON} onClick={()=>run(addColumnAfter)}>+ Column</button><button type="button" aria-label="Remove table" className={BUTTON} onClick={()=>run(deleteTable)}>Remove table</button></>}
       <button type="button" aria-label="Undo description edit" className={BUTTON} onClick={()=>run(undo)}>Undo</button><button type="button" aria-label="Redo description edit" className={BUTTON} onClick={()=>run(redo)}>Redo</button>
-    </div>
+    </div>}
     {linkOpen&&<div className="flex flex-wrap items-center gap-2 border-b border-line-2 p-2"><input autoFocus aria-label="Text link URL" value={url} onChange={e=>setURL(e.target.value)} className="min-w-0 flex-1 rounded border border-line-2 px-2 py-1 outline-none" onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.stopPropagation();addLink();}if(e.key==="Escape"){e.preventDefault();e.stopPropagation();setLinkOpen(false);view.current?.focus();}}}/><button type="button" className={BUTTON} onClick={addLink}>Apply link</button>{linkError&&<span role="alert" className="w-full text-[12px] text-fg-3">{linkError}</span>}</div>}
     <div className="relative">{empty&&props.placeholder&&<p aria-hidden className="rich-placeholder pointer-events-none absolute text-fg-4">{props.placeholder}</p>}<div ref={host}/></div>
     {uploadNotice&&<p role="status" className="text-[12px] text-fg-3">{uploadNotice}</p>}
-    {(props.onSave||props.onCancel)&&<div className="rich-editor-actions flex items-center justify-end gap-2 border-t border-line-2 p-2 text-[12px]">{props.variant!=='comment'&&<span className="mr-auto text-fg-3">{props.hint??"⌘↵ save · Esc cancel"}</span>}{props.onCancel&&<button type="button" className={BUTTON} onClick={props.onCancel}>Cancel</button>}{props.onFiles&&<button type="button" aria-label="Attach images, files, or videos" title="Attach images, files, or videos" className={BUTTON} onClick={()=>fileInput.current?.click()}><Icon name="paperclip"/></button>}{props.onSave&&<button type="button" aria-label={props.saveLabel??'Save description'} disabled={uploadBusy||props.variant==='comment'&&empty} title={uploadBusy?"Finish or discard attachments before sending":props.variant==='comment'?'Submit comment (⌘↵)':undefined} className="rich-editor-submit disabled:opacity-40 rounded bg-accent px-3 py-1 text-white" onClick={save}>{props.variant==='comment'?<><Icon name="up"/><span className="sr-only">{props.saveLabel}</span></>:props.saveLabel??"Save description"}</button>}</div>}
+    {(props.onSave||props.onCancel)&&<div className="rich-editor-actions flex items-center justify-end gap-2 border-t border-line-2 p-2 text-[12px]">{props.variant!=='comment'&&<span className="mr-auto text-fg-3">{props.hint??"⌘↵ save · Esc cancel"}</span>}{props.onCancel&&<button type="button" className={BUTTON} aria-label={props.cancelLabel} onClick={props.onCancel}>{props.cancelLabel??'Cancel'}</button>}{props.onFiles&&<button type="button" aria-label="Attach images, files, or videos" title="Attach images, files, or videos" className={BUTTON} onClick={()=>fileInput.current?.click()}><Icon name="paperclip"/></button>}{props.onSave&&<button type="button" aria-label={props.saveLabel??'Save description'} disabled={uploadBusy||props.variant==='comment'&&empty} title={uploadBusy?"Finish or discard attachments before sending":props.variant==='comment'?'Submit comment (⌘↵)':undefined} className="rich-editor-submit disabled:opacity-40 rounded bg-accent px-3 py-1 text-white" onClick={()=>save()}>{props.variant==='comment'?<><Icon name="up"/><span className="sr-only">{props.saveLabel}</span></>:props.saveLabel??"Save description"}</button>}</div>}
   </div>;
 }

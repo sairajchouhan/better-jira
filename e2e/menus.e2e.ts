@@ -34,7 +34,7 @@ test("I13: the due-date picker focuses the date text field, not the first preset
   const page = await open();
   try {
     await page.key("j"); await page.key("Enter");
-    await page.click("#prop-due");
+    await page.key("d","shift");
     await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Due date"`, 3000);
     await Bun.sleep(300);
     expect(await page.active()).toBe("Due date");
@@ -76,5 +76,34 @@ test("R6: the keyboard-selected card is drawn differently from a hovered card", 
     await Bun.sleep(150);
     const look = (key: string) => page.eval<string>(`(()=>{const s=getComputedStyle(document.querySelector('[data-key="${key}"]'));return s.backgroundColor+"|"+s.boxShadow+"|"+s.outlineStyle})()`);
     expect(await look(selected)).not.toBe(await look(other));
+  } finally { await page.close(); }
+});
+
+test("an open menu keeps its trigger highlighted, and action rows use Linear's label, key and ▶ arrow colours (Opus review 4)", async () => {
+  const page = await open('?issue=TEST-2&view=page',{width:1272,height:902});
+  try {
+    await page.waitFor(`!!document.getElementById('summary')`);
+    const away=async()=>{await page.cmd('Input.dispatchMouseEvent',{type:'mouseMoved',x:1260,y:890});await Bun.sleep(150);};
+    const bg=(sel:string)=>page.eval<string>(`getComputedStyle(document.querySelector('${sel}')).backgroundColor`);
+    await away();const rest=await bg('#prop-status');
+    await page.click('#prop-status');await page.waitFor(`!!document.querySelector('[role=dialog]')`);await away();
+    expect(await page.eval(`document.querySelector('#prop-status').getAttribute('aria-expanded')`)).toBe('true');expect(await bg('#prop-status')).not.toBe(rest);
+    await page.key('Escape');await page.waitFor(`!document.querySelector('[role=dialog]')`);await away();expect(await bg('#prop-status')).toBe(rest);
+    await page.click('#issue-options');await page.waitFor(`!!document.querySelector('[role=dialog] [cmdk-item]')`);await away();
+    expect(await bg('#issue-options')).not.toBe(rest);
+    const row=`[...document.querySelectorAll('[role=dialog] [cmdk-item]')].find(n=>n.querySelector('[data-submenu-arrow]')&&n.querySelector('.ml-4'))`;
+    expect(await page.eval(`(()=>{const r=${row};const label=[...r.querySelectorAll('span')].find(s=>!s.children.length&&s.textContent===r.textContent.replace(r.querySelector('.ml-4').textContent,'').trim());return [getComputedStyle(label).color,getComputedStyle(r.querySelector('.ml-4')).color,getComputedStyle(r.querySelector('[data-submenu-arrow]')).color,getComputedStyle(r.querySelector('[data-submenu-arrow]'),'::before').content]})()`)).toEqual(['lch(91.178 1.425 272)','lch(64.714 1.425 272)','lch(41.778 1.425 272)','"▶"']);
+  } finally { await page.close(); }
+});
+
+test("a submenu is as wide as its widest row, never a fixed width (Opus review 4: S1)", async () => {
+  const page = await open('?issue=TEST-2&view=page',{width:1272,height:902});
+  try {
+    await page.waitFor(`!!document.getElementById('summary')`);
+    await page.click('#issue-options');await page.waitFor(`!!document.querySelector('[cmdk-item][data-value="Copy"]')`);await page.click('[cmdk-item][data-value="Copy"]');
+    await page.waitFor(`!!document.querySelector('[role=dialog][aria-label="Copy"] [cmdk-item]')`);
+    // Its width equals its own max-content width (rows stretch, so they cannot be summed).
+    const [menu,content]=await page.eval<[number,number]>(`(()=>{const root=document.querySelector('[role=dialog][aria-label="Copy"] [cmdk-root]'),actual=root.getBoundingClientRect().width,old=root.style.width;root.style.width='max-content';const fit=root.getBoundingClientRect().width;root.style.width=old;return [actual,Math.max(174,fit)]})()`);
+    expect(menu).toBeCloseTo(content,0);expect(menu).toBeLessThan(360);
   } finally { await page.close(); }
 });

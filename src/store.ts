@@ -6,8 +6,12 @@ import { emptyLocalState,LocalDatabase,type LocalState,type Snapshot,type LocalE
 import { createActor, fromPromise, waitFor } from "xstate";
 import { appMachine, detailMachine, inspector, storageMachine, syncMachine, uiMachine, type UiContext } from "./machines";
 
+import {reminderTime} from './reminder-display';
+import {canReplyTo,visibleCommentTotal,type CommentState} from "./comment-thread";
 import type {MediaEdit} from "./media-edits";
 
+import {resourceMediaIds,type DocumentProperties,type IssueResource,type LinkPreview} from './issue-resource';
+import {recordActivity,recordRelation,type PropertyActivity} from './issue-activity';
 export type User = { id: string; name: string; avatar?: string };
 export type Issue = {
   key: string;
@@ -29,6 +33,10 @@ export type Issue = {
   project?: { key: string; name: string } | null;
   description?: string;
   links?: string[];
+  resources?: IssueResource[];
+  commentStates?:Record<string,CommentState>;
+  reminder?:{at:string;delivered?:boolean}|null;
+  activity?:PropertyActivity[];
   relations?: { key: string; kind: string }[];
   milestones?: { id: string; name: string }[];
   prCount?: number;
@@ -48,8 +56,8 @@ export type Column = { name: string; statuses: Status[] };
 export type Board = { id: number; name: string; columns: Column[] };
 /** Raw Jira issue: { key, fields: { description, comment, reporter, created, ... } } */
 export type Full = { key: string; fields: any };
-export type Overlay = null | "palette" | "assign" | "status" | "create" | "priority" | "labels" | "project" | "milestone" | "due" | "options" | "relations" | "shortcuts" | "help" | "search" | "favorites" | "views" | "boards" | "subscribers";
-export type IssueDraft = Partial<Pick<Issue,"status"|"assignee"|"priority"|"labels"|"project"|"milestones"|"due"|"parent"|"type"|"attachments">> & {description?:string;descriptionDoc?:AdfDocument};
+export type Overlay = null | "palette" | "assign" | "status" | "create" | "priority" | "labels" | "project" | "milestone" | "due" | "options" | "relations" | "shortcuts" | "help" | "search" | "favorites" | "views" | "boards" | "subscribers" | "reminder";
+export type IssueDraft = Partial<Pick<Issue,"status"|"assignee"|"priority"|"labels"|"project"|"milestones"|"due"|"parent"|"type"|"rank"|"attachments">> & {description?:string;descriptionDoc?:AdfDocument;/** Linear "Create related": link the new issue to this one in the same undo step. */related?:{key:string;kind:"related"|"blocked"|"blocking"|"parent"}};
 export type View = "side" | "page";
 export type SavedView={id:string;board:number;name:string;preferences:Preferences;mine:boolean};
 
@@ -62,6 +70,7 @@ type State = {
   board: number;
   selected: string | null;
   panel: boolean;
+  document: string|null;
   /** Open issues in a side panel or as a full page. */
   view: View;
   mine: boolean;
@@ -70,7 +79,7 @@ type State = {
   editDesc: boolean;
   perf: string;
   /** A transient confirmation, e.g. after creating an issue. */
-  toast: {text:string;key?:string}|null;
+  toast: {text:string;key?:string;undo?:boolean;detail?:string}|null;
   preferences: Record<number, Preferences>;
   defaults: Record<number, Display>;
   toolbar: "display" | "filter" | "advanced" | null;
@@ -81,7 +90,7 @@ type State = {
   findInView:boolean;
   sidebarHidden:boolean;
   relationKind:string;
-  issueOptionsStart:"link"|null;
+  issueOptionsStart:"link"|"pull-request"|"history"|"reminder"|null;
   createExpanded:boolean;
   draft: IssueDraft;
   undoCount: number;
@@ -114,6 +123,7 @@ let state: State = {
   board: Number(savedValue("board")) || 0,
   selected: null,
   panel: false,
+  document: null,
   view: savedValue("view") === "page" ? "page" : "side",
   mine: false,
   query: "",
@@ -147,7 +157,7 @@ function commit(patch: Partial<State>) {
   }
   if(patch.savedViews)try{localStorage.setItem(preferenceKey("better-jira:saved-views:v1"),JSON.stringify(patch.savedViews));}catch{state={...state,perf:"Could not save views in this browser"};}
   if(patch.favorites)try{localStorage.setItem(preferenceKey("better-jira:favorites:v1"),JSON.stringify(patch.favorites));}catch{state={...state,perf:"Could not save favorites in this browser"};}
-  if(navigationReady&&!restoringNavigation&&(patch.board!==undefined||patch.selected!==undefined||patch.panel!==undefined||patch.view!==undefined))syncNavigation();
+  if(navigationReady&&!restoringNavigation&&(patch.board!==undefined||patch.selected!==undefined||patch.panel!==undefined||patch.view!==undefined||patch.document!==undefined))syncNavigation();
   listeners.forEach((l) => l());
 }
 /** Selector must return a stable reference (a state field or a Map entry), never a fresh object. */
@@ -166,7 +176,7 @@ ui.subscribe(({ context }) => {
   commit(patch);
 });
 /** Sends `navigate`, filling in a new board's remembered issue view. */
-export function navigate(to: { board?: number; view?: View; selected?: string | null; panel?: boolean }) {
+export function navigate(to: { board?: number; view?: View; selected?: string | null; panel?: boolean; document?:string|null }) {
   const view = to.view ?? (to.board !== undefined && to.board !== state.board ? state.preferences[to.board]?.display.openIn ?? state.defaults[to.board]?.openIn ?? "side" : undefined);
   ui.send({ type: "navigate", ...to, ...(view ? { view } : {}) });
 }
@@ -246,7 +256,7 @@ async function loadApplication() {
     localFields.set(change.key,new Set(change.issueFields));fullFields.set(change.key,new Set(change.fullFields));
     if(change.issue===null)issues.delete(change.key);
     else if(change.created||!issues.has(change.key))issues.set(change.key,change.issue);
-    else {const base=issues.get(change.key)!;const patch=Object.fromEntries(change.issueFields.map(field=>[field,(change.issue as any)[field]]));if(change.fullFields.includes("comment"))patch.comments=base.comments+(change.full?.fields.comment?.comments??[]).filter((c:any)=>String(c.id).startsWith("local-")).length;issues.set(change.key,{...base,...patch});}
+    else {const base=issues.get(change.key)!;const patch=Object.fromEntries(change.issueFields.map(field=>[field,(change.issue as any)[field]]));if(change.full?.fields.comment&&(change.fullFields.includes("comment")||change.issue.commentStates))patch.comments=visibleCommentTotal(base.comments+(change.full?.fields.comment?.comments??[]).filter((c:any)=>String(c.id).startsWith("local-")).length,change.full?.fields.comment?.comments??[],change.issue.commentStates);issues.set(change.key,{...base,...patch});}
     if(change.full){full.set(change.key,change.full);if(!change.created)needsFullRefresh.add(change.key);}
   }
   undo.splice(0,undo.length,...local.undo);redo.splice(0,redo.length,...local.redo);localSeq=local.sequence;
@@ -307,7 +317,7 @@ async function fetchFull(key:string) {
     }
     needsFullRefresh.delete(key);
     const issue=state.issues.get(key);
-    if(issue)set({full:new Map(state.full).set(key,full),issues:new Map(state.issues).set(key,{...issue,...(full.fields.comment?{comments:full.fields.comment.total}:{}),...(!localFields.get(key)?.has("description")?{description:adfToText(full.fields.description)}:{})})});
+    if(issue)set({full:new Map(state.full).set(key,full),issues:new Map(state.issues).set(key,{...issue,...(full.fields.comment?{comments:visibleCommentTotal(full.fields.comment.total,full.fields.comment.comments??[],issue.commentStates)}:{}),...(!localFields.get(key)?.has("description")?{description:adfToText(full.fields.description)}:{})})});
 }
 
 /** Time from the action to the next painted frame, shown in the header. */
@@ -320,15 +330,16 @@ export function timed(label: string, fn: () => void) {
 const now = () => new Date().toISOString();
 let navigationReady=false,restoringNavigation=false;
 function syncNavigation(replace=false) {
-  const url=new URL(location.href);url.searchParams.set("board",String(state.board));
+  const url=new URL(location.href);if(url.searchParams.get("issue")!==(state.panel?state.selected:null)||url.searchParams.get("document")!==state.document)url.hash="";url.searchParams.set("board",String(state.board));
   if(state.panel&&state.selected){url.searchParams.set("issue",state.selected);url.searchParams.set("view",state.view);}else{url.searchParams.delete("issue");url.searchParams.delete("view");}
+  if(state.document&&state.panel)url.searchParams.set("document",state.document);else url.searchParams.delete("document");
   if(url.href!==location.href)history[replace?"replaceState":"pushState"]({},"",url);
 }
 function restoreNavigation() {
   const params=new URL(location.href).searchParams,wanted=params.get("issue"),issue=state.issues.get(wanted??"");
   const board=issue?.board??Number(params.get("board"));
   restoringNavigation=true;
-  navigate({...(state.boards.some(b=>b.id===board)?{board}:{}),selected:issue?.key??null,panel:!!issue,...(params.get("view")==="page"||params.get("view")==="side"?{view:params.get("view") as View}:{})});
+  navigate({...(state.boards.some(b=>b.id===board)?{board}:{}),selected:issue?.key??null,panel:!!issue,document:issue?params.get("document"):null,...(params.get("view")==="page"||params.get("view")==="side"?{view:params.get("view") as View}:{})});
   restoringNavigation=false;
   if(wanted&&!issue)ui.send({type:"toast.show",text:`Issue ${wanted} not found`});
 }
@@ -349,6 +360,9 @@ export async function retryLocalStorage() {
 }
 export async function addLocalFiles(files:File[]) {if(!database||!state.canEdit)throw new Error("Local file storage is unavailable. Retry local storage first.");return database.addFiles(files);}
 export async function addLocalFile(file:File) {return (await addLocalFiles([file]))[0]!;}
+export async function restoreLocalFiles(files:NonNullable<Issue['attachments']>) {
+ return Promise.all(files.map(async file=>{const url=await database?.fileURL(file.id);return {...file,url:url??'',missing:!url};}));
+}
 export async function addIssueFiles(key:string,files:File[]) {
   if(!database||!state.canEdit)throw new Error("Local file storage is unavailable. Retry local storage first.");
   const saved=await database.addFiles(files),issue=state.issues.get(key);
@@ -366,8 +380,9 @@ export function jiraIssueURL(key:string) {return `${state.site}/browse/${encodeU
 export function issueURL(issue:Issue) {if(createdKeys.has(issue.key)&&typeof location!=="undefined"){const url=new URL(location.origin);url.searchParams.set("board",String(issue.board));url.searchParams.set("issue",issue.key);return url.href;}return jiraIssueURL(issue.key);}
 export const isLocalIssue=(key:string)=>createdKeys.has(key);
 const snapshot=(key:string):Snapshot=>({issue:state.issues.get(key),full:state.full.get(key),issueFields:[...(localFields.get(key)??[])],fullFields:[...(fullFields.get(key)??[])]});
+let lastEditGroup:string|undefined;
 let transaction:{label:string;before:Map<string,Snapshot>}|null=null;
-function record(key:string|string[],label:string,fn:()=>void) {
+function record(key:string|string[],label:string,fn:()=>void,group?:string) {
   if(!state.canEdit){set({perf:"Local editing is paused until saved data is available"});return;}
   const keys=typeof key==="string"?[key]:key;
   const nested=transaction!==null;
@@ -379,7 +394,10 @@ function record(key:string|string[],label:string,fn:()=>void) {
     const changed=[...transaction.before.keys()].filter(key=>{const before=transaction!.before.get(key)!,after=snapshot(key);return before.issue!==after.issue||before.full!==after.full;});
     if(!changed.length)return;
     for(const key of changed)changedKeys.add(key);
-    undo.push({keys:changed,label,before:changed.map(key=>transaction!.before.get(key)!),after:changed.map(snapshot)});
+    const previous=undo.at(-1);
+    if(group&&group===lastEditGroup&&previous&&JSON.stringify(previous.keys)===JSON.stringify(changed))previous.after=changed.map(snapshot);
+    else undo.push({keys:changed,label,before:changed.map(key=>transaction!.before.get(key)!),after:changed.map(snapshot)});
+    lastEditGroup=group;
     if(undo.length>100)undo.shift();
     redo.length=0;
     set({undoCount:undo.length,redoCount:0});
@@ -387,6 +405,8 @@ function record(key:string|string[],label:string,fn:()=>void) {
   } finally {transaction=null;}
 }
 function restore(edit:LocalEdit,snapshots:Snapshot[]) {
+  lastEditGroup=undefined;
+  for(const key of edit.keys)try{const prefix=`better-jira:resource-draft:${state.namespace}:${key}:`;for(const name of Object.keys(localStorage))if(name.startsWith(prefix))localStorage.removeItem(name);}catch{}
   const issues=new Map(state.issues),full=new Map(state.full);
   edit.keys.forEach((key,index)=>{
     const snapshot=snapshots[index]!;
@@ -440,6 +460,8 @@ export function openSavedView(view:SavedView) {
 function patchIssue(key: string, patch: Partial<Issue>) {
   const i = state.issues.get(key);
   if (i) {
+    const prior=i.activity??[],activity=recordActivity(prior,i,patch,ME,now(),()=>crypto.randomUUID());
+    if(activity!==prior)patch={...patch,activity:[...activity]};
     localFields.set(key,new Set([...(localFields.get(key)??[]),...Object.keys(patch),"updated"]));
     set({ issues: new Map(state.issues).set(key, { ...i, ...patch, updated: now() }) });
   }
@@ -456,6 +478,57 @@ let localSeq = 0;
 
 // Local overrides are saved separately from the read-only Jira mirror.
 export const actions = {
+  /** `document` targets one of the issue's documents, as Linear's document Remind me does. */
+  remind(key:string,at:string|null,document?:string) {
+    if(at!==null&&(!Number.isFinite(Date.parse(at))||Date.parse(at)<=Date.now()))return;
+    const reminder=at?{at}:null,issue=state.issues.get(key);
+    record(key,`${at?'set':'cancel'} reminder on ${key}`,()=>patchIssue(key,document?{resources:issue?.resources?.map(r=>r.id===document?{...r,reminder}:r)}:{reminder}));
+    ui.send({type:'toast.show',text:at?'Reminder set':'Reminder canceled',...(at?{detail:`You will receive a reminder on ${reminderTime(at)}`}:{})});
+  },
+  deliverReminder(key:string,document?:string) {
+    const issue=state.issues.get(key),target=document?issue?.resources?.find(r=>r.id===document):issue;
+    if(!state.canEdit||!issue||!target?.reminder||target.reminder.delivered||Date.parse(target.reminder.at)>Date.now())return;
+    // Delivery is a fact, not a user edit. Preserve it in historical snapshots without adding an undo step.
+    const deliver=<T extends {reminder?:{at:string;delivered?:boolean}|null}>(item:T):T=>item.reminder&&Date.parse(item.reminder.at)<=Date.now()?{...item,reminder:{...item.reminder,delivered:true}}:item;
+    const delivered=(item:Issue):Issue=>document?{...item,resources:item.resources?.map(r=>r.id===document?deliver(r):r)}:deliver(item);
+    for(const edit of [...undo,...redo])for(const entry of [...edit.before,...edit.after])if(entry.issue?.key===key)entry.issue=delivered(entry.issue);
+    const next=delivered(issue);patchIssue(key,document?{resources:next.resources}:{reminder:next.reminder});changedKeys.add(key);queueSave();
+    ui.send({type:'toast.show',text:`Reminder: ${document?(target as IssueResource).title||'New document':issue.summary}`,key});
+  },
+  resource(key:string,resource:IssueResource) {
+    const issue=state.issues.get(key);if(!issue)return;
+    if(resource.url&&(issue.resources?.some(r=>r.url===resource.url)||issue.links?.includes(resource.url)))return;
+    record(key,`${resource.kind==='document'?'create document':'add resource'} on ${key}`,()=>patchIssue(key,{resources:[...(issue.resources??[]).filter(r=>r.id!==resource.id),resource]}));
+  },
+  /** A link's fetched preview is a fact, not a user edit: no undo step, and kept in undo/redo snapshots. */
+  linkPreview(key:string,id:string,preview:LinkPreview) {
+    const issue=state.issues.get(key);if(!issue?.resources?.some(r=>r.id===id&&r.kind!=='document'))return;
+    const add=(item:Issue):Issue=>({...item,resources:item.resources?.map(r=>r.id===id?{...r,preview}:r)});
+    for(const edit of [...undo,...redo])for(const entry of [...edit.before,...edit.after])if(entry.issue?.key===key)entry.issue=add(entry.issue);
+    patchIssue(key,{resources:add(issue).resources});changedKeys.add(key);queueSave();
+  },
+  removeResource(key:string,id:string) {
+    const issue=state.issues.get(key),resource=issue?.resources?.find(r=>r.id===id);if(!issue||!resource)return;
+    const resources=issue.resources?.filter(r=>r.id!==id),removed=resourceMediaIds(resource),retained=resourceMediaIds(state.full.get(key)?.fields.description);
+    for(const other of resources??[])resourceMediaIds(other,retained);
+    for(const comment of state.full.get(key)?.fields.comment?.comments??[])resourceMediaIds(comment.body,retained);
+    record(key,`${resource.kind==='document'?'delete document':'remove resource'} ${resource.title||'New document'} on ${key}`,()=>patchIssue(key,{resources,attachments:issue.attachments?.filter(a=>!removed.has(a.id)||retained.has(a.id))}));
+  },
+  /** `restore` always keeps the replaced version, however recent the last edit was. */
+  editResource(key:string,id:string,patch:Partial<Pick<IssueResource,'title'|'body'>>,session?:string,restore=false) {
+    const issue=state.issues.get(key),resource=issue?.resources?.find(r=>r.id===id);if(!issue||!resource)return;
+    if(Object.entries(patch).every(([key,value])=>JSON.stringify(resource[key as keyof IssueResource])===JSON.stringify(value)))return;
+    const at=now(),history=resource.history??[];
+    // Keep the version before a new editing session after a minute of inactivity.
+    const replaced={title:resource.title,body:normalizeDocument(resource.body)},last=history.at(-1);
+    const checkpoint=(restore||Date.parse(at)-Date.parse(resource.updated)>=60000)&&!!(resource.title||documentHasMedia(resource.body)||adfToText(resource.body))&&!(last&&last.title===replaced.title&&JSON.stringify(normalizeDocument(last.body))===JSON.stringify(replaced.body));
+    const revisions=checkpoint?[...history,{...replaced,at:resource.updated,author:resource.editedBy??resource.owner??{...ME}}].slice(-100):history;
+    record(key,`edit document on ${key}`,()=>patchIssue(key,{resources:issue.resources?.map(r=>r.id===id?{...r,...patch,updated:at,editedBy:{...ME},history:revisions}:r)}),session);
+  },
+  documentProperties(key:string,id:string,patch:Omit<DocumentProperties,'editedBy'|'history'>) {
+    const issue=state.issues.get(key);if(!issue?.resources?.some(r=>r.id===id&&r.kind==='document'))return;
+    record(key,`change document settings on ${key}`,()=>patchIssue(key,{resources:issue.resources?.map(r=>r.id===id?{...r,...patch}:r)}));
+  },
   async restoreJira(key:string) {
     if(createdKeys.has(key)||!state.canEdit)return;
     try {
@@ -467,7 +540,7 @@ export const actions = {
       });
     }catch{set({perf:"Could not read the Jira version. Your local changes are still here."});}
   },
-  patch(key: string, patch: IssueDraft & Partial<Pick<Issue,"links"|"relations"|"reactions"|"watchers"|"watchersComplete">>) {
+  patch(key: string, patch: IssueDraft & Partial<Pick<Issue,"links"|"resources"|"relations"|"reactions"|"watchers"|"watchersComplete">>) {
     timed(`edit ${key}`,()=>record(key,`edit ${key}`,()=>patchIssue(key,patch)));
   },
   /** `rank` places the card where it was dropped (manual ordering). */
@@ -522,7 +595,8 @@ export const actions = {
   mediaEdit(key:string,id:string,edit:MediaEdit){
     const issue=state.issues.get(key);if(issue)record(key,`image edit on ${key}`,()=>patchIssue(key,{mediaEdits:{...issue.mediaEdits,[id]:edit}}));
   },
-  description(key: string, value: string|AdfDocument) {
+  /** restore: always keep the version being replaced (unless it is already the newest entry), even inside the one-minute window. */
+  description(key: string, value: string|AdfDocument,restore=false) {
     const previous=normalizeDocument(state.full.get(key)?.fields.description);
     const document=normalizeDocument(value);
     if(JSON.stringify(document)===JSON.stringify(previous)){ui.send({type:"description.editDone"});return;}
@@ -530,16 +604,19 @@ export const actions = {
       patchFields(key, () => ({ description:document }));
       // Autosave writes often; one history entry per minute of editing keeps the revision list readable.
       const history=state.issues.get(key)?.descriptionHistory??[],last=history.at(-1),recent=!!last&&Date.now()-Date.parse(last.at)<60_000;
-      patchIssue(key, {description:adfToText(document),descriptionHistory:recent?history:[...history,{text:adfToText(previous),document:previous,at:now()}]});
+      const keep=restore?!(last&&JSON.stringify(normalizeDocument(last.document??last.text))===JSON.stringify(previous)):!recent;
+      patchIssue(key, {description:adfToText(document),descriptionHistory:keep?[...history,{text:adfToText(previous),document:previous,at:now()}]:history});
       ui.send({ type: "description.editDone" });
     }));
   },
-  comment(key: string, value: string|AdfDocument):boolean {
+  comment(key: string, value: string|AdfDocument,parentId?:string):boolean {
     const body=typeof value==="string"?textToAdf(value):normalizeDocument(value);
+    if(parentId&&!canReplyTo(state.full.get(key)?.fields.comment?.comments??[],parentId,state.issues.get(key)?.commentStates))return false;
     if ((!adfToText(body).trim()&&!documentHasMedia(body))||!state.full.has(key)||!state.canEdit) return false;
     timed(`comment on ${key}`, () => record(key,`comment on ${key}`,() => {
       const c = {
         id: `local-${++localSeq}`,
+        ...(parentId?{parentId}:{}),
         author: { accountId: ME.id, displayName: ME.name, avatarUrls: { "24x24": ME.avatar } },
         body,
         created: now(),
@@ -549,18 +626,20 @@ export const actions = {
     }));
     return true;
   },
-  /** Only local comments can change: Jira writes are disabled, so remote ones are read-only. */
+  commentState(key:string,id:string,patch:CommentState) {
+    const issue=state.issues.get(key),full=state.full.get(key);if(!issue||!full)return;
+    const comments=full.fields.comment?.comments??[];if(!comments.some((c:any)=>c.id===id))return;
+    record(key,`update comment on ${key}`,()=>{const commentStates={...issue.commentStates,[id]:{...issue.commentStates?.[id],...patch}};patchIssue(key,{commentStates,comments:visibleCommentTotal(full.fields.comment?.total??comments.length,comments,commentStates)});});
+  },
   editComment(key:string,id:string,value:AdfDocument) {
-    const body=normalizeDocument(value);
-    if(!id.startsWith("local-")||(!adfToText(body).trim()&&!documentHasMedia(body)))return;
-    record(key,`edit comment on ${key}`,()=>patchFields(key,f=>({comment:{...f.comment,comments:f.comment.comments.map((c:any)=>c.id===id?{...c,body,updated:now()}:c)}})));
+    const comment=state.full.get(key)?.fields.comment?.comments?.find((c:any)=>c.id===id),body=normalizeDocument(value);
+    if(!comment||comment.author?.accountId!==ME.id||(!adfToText(body).trim()&&!documentHasMedia(body)))return;
+    actions.commentState(key,id,{body,updated:now()});
   },
   deleteComment(key:string,id:string) {
-    if(!id.startsWith("local-"))return;
-    record(key,`delete comment on ${key}`,()=>{
-      patchFields(key,f=>({comment:{...f.comment,comments:f.comment.comments.filter((c:any)=>c.id!==id),total:Math.max(0,f.comment.total-1)}}));
-      patchIssue(key,{comments:Math.max(0,(state.issues.get(key)?.comments??1)-1)});
-    });
+    const comment=state.full.get(key)?.fields.comment?.comments?.find((c:any)=>c.id===id);
+    // Linear confirms first and shows no toast; local undo history still covers it.
+    if(comment?.author?.accountId===ME.id)actions.commentState(key,id,{deleted:true});
   },
   /** Like Linear, creating from the composer stays on the board and confirms with a toast; `open` shows the new issue instead. */
   create(summary: string, draft:IssueDraft={}, more=false, open=false) {
@@ -572,7 +651,7 @@ export const actions = {
     const prefix = [...state.issues.values()].find((i) => i.board === board.id)?.key.split("-")[0]??"LOCAL";
     const key = `${prefix}-NEW${++localSeq}`;
     createdKeys.add(key);
-    const {descriptionDoc,...fields}=draft;
+    const {descriptionDoc,related,...fields}=draft;
     const document=normalizeDocument(descriptionDoc??draft.description??"");
     timed(`create ${key}`, () => record(key,`create ${key}`,() => {
       const issue: Issue = {
@@ -589,6 +668,7 @@ export const actions = {
         },
       };
       set({ issues: new Map(state.issues).set(key, issue), full: new Map(state.full).set(key, full), ...(more?{perf:`Created ${key}`}:{}) });
+      if(related&&state.issues.has(related.key)){if(related.kind==="parent")actions.patch(related.key,{parent:key});else actions.relate(key,related.key,related.kind);}
       // "Create more" keeps the composer open; otherwise open the issue, or stay on the board with a toast.
       if(!more){navigate(open?{selected:key,panel:true}:{selected:key});ui.send({type:"overlay.close"});if(!open)ui.send({type:"toast.show",text:`Created ${key}`,key});}
     }));
@@ -612,10 +692,10 @@ export const actions = {
     const inverse=kind==="blocked"?"blocking":kind==="blocking"?"blocked":kind;
     record([key,target],`${remove?"remove":"add"} relation`,()=>{
       for(const [from,to,relation] of [[key,target,kind],[target,key,inverse]] as const) {
-        const issue=state.issues.get(from);if(!issue)continue;
+        const issue=state.issues.get(from);if(!issue||(issue.relations??[]).some(r=>r.key===to&&r.kind===relation)!==remove)continue;
         const relations=(issue.relations??[]).filter(r=>r.key!==to||r.kind!==relation);
         if(!remove)relations.push({key:to,kind:relation});
-        patchIssue(from,{relations});
+        patchIssue(from,{relations,activity:[...recordRelation(issue.activity??[],{key:to,kind:relation},remove,ME,now(),()=>crypto.randomUUID())]});
       }
     });
   },

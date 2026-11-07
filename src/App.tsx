@@ -1,12 +1,20 @@
-import "@fontsource-variable/inter";
+import "@fontsource-variable/inter/opsz.css";
 import "./index.css";
 import {useHotkey} from "@tanstack/react-hotkeys";
 import { Command } from "cmdk";
-import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, lazy, memo, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type {Attachment} from "./attachment-media";
+const ImageViewer=lazy(()=>import("./image-viewer").then(module=>({default:module.ImageViewer})));
+import {ReminderPicker,ReminderControl,ReminderDelivery} from './reminders';
+import {CommentThreads} from './comment-threads';
+import {ImageCommentCard} from './image-thread';
+import {IssueDocument} from './issue-resources';
+import {findIssueDocument,linkTitle} from './issue-resource';
+import {RELATION_ISSUE,activityRows,type ActivityRow,type PropertyActivity,type Relation} from './issue-activity';
 import { Adf, adfToText } from "./adf";
 import { normalizeDocument, type AdfDocument } from "./document";
 import {commentCount} from './media-edits';
-import { Icon, Label, PriorityIcon, StatusIcon, TypeDot } from "./icons";
+import { Icon, Label, PriorityIcon, RelationIcon, StatusIcon, TypeDot, hue } from "./icons";
 import {
   ME, actions, addIssueFiles, boardOf, get, load, loadFull, navigate, set, timed, ui, useStore, dismissRecoveryNotice,
   openSavedView, beginCreate, changeDisplay, changePreferences, downloadLocalBackup, flushLocalChanges, issueURL, isLocalIssue, retryLocalStorage, toggleFavorite, undoEdit, redoEdit, usePreferences, type Board, type Column, type Issue, type User,
@@ -15,9 +23,12 @@ import {
 import { BoardControls, FilterChips } from "./view-controls";
 import { buckets, columnInScope, draftForGroup, rankBetween, listRows, navigationIssues, selectIssues, statusDuration, type Bucket, type Display, type Grouping, type Property } from "./view-model";
 import { BoardDetails, CreateIssue, Favorites, GroupMenu, IssueOptions, Modal, PersonalIssueDetails, PropertyPicker, Relations, SavedViews, SaveViewButton, Subscribers } from "./personal-controls";
+import {SubIssueOf} from './sub-issues';
+import {Tooltips} from './tooltip';
 import { RichEditor } from "./rich-editor-loader";
 import {HelpMenu,ShortcutHelp,runShortcut,shortcutLabel,shortcuts,useLinearHotkeys} from "./shortcuts";
 import { issueAnchor } from "./menu-surface";
+import { PickerRow, PropertyMenu } from "./property-menu";
 import { createActor } from "xstate";
 import { autosaveMachine, inspector } from "./machines";
 
@@ -25,6 +36,41 @@ import { autosaveMachine, inspector } from "./machines";
 const nav = { cols: [] as Issue[][] };
 const flatNav=()=>navigationIssues(nav.cols);
 
+const openRelated=(target:Issue)=>navigate({board:target.board,selected:target.key,panel:true,view:get().view});
+
+/** Linear's wording (RAJ-52). `then` is the shorter form after ", then": "set to Medium", "moved to Done". Labels carry their 4px dot. */
+function describeActivity(event:PropertyActivity,issue:Issue,then=false):ReactNode{
+  const name=(value:unknown)=>value&&typeof value==="object"&&"name" in value?String((value as {name:unknown}).name):String(value);
+  const status=(id:unknown)=>boardOf(issue.key)?.columns.flatMap(c=>c.statuses).find(s=>s.id===id)?.name??String(id);
+  const date=(value:unknown)=>new Date(`${value}T00:00`).toLocaleDateString("en",{month:"short",day:"numeric"});
+  const {field,before,after}=event;
+  if(field==="relation"){
+    const relation=(after??before) as Relation,target=get().issues.get(relation.key);
+    const verb=after?{related:"added related issue",blocked:"marked this issue as blocked by",blocking:"marked this issue as blocking",duplicate:"marked this issue as a duplicate of"}[relation.kind]??"added related issue":`removed ${RELATION_ISSUE[relation.kind]??"related"} issue`;
+    return <>{verb} {target?<a href={issueURL(target)} onClick={e=>{if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();openRelated(target);}} className="hover:text-fg"><b className="font-medium">{relation.key}</b> {target.summary}</a>:<b className="font-medium">{relation.key}</b>}</>;
+  }
+  if(field==="status")return then?`moved to ${status(after)}`:`moved from ${status(before)} to ${status(after)}`;
+  if(field==="labels"){
+    const was=new Set(before as string[]??[]),now=new Set(after as string[]??[]),added=[...now].filter(l=>!was.has(l)),removed=[...was].filter(l=>!now.has(l));
+    const list=(names:string[])=>names.map((l,i)=><span key={l}>{i?", ":""}<span className="mr-1 inline-block size-1 rounded-full align-middle" style={{background:hue(l)}}/>{l}</span>);
+    return <>{added.length>0&&<>added label{added.length>1?"s":""} {list(added)}</>}{added.length>0&&removed.length>0&&" and "}{removed.length>0&&<>removed label{removed.length>1?"s":""} {list(removed)}</>}</>;
+  }
+  const label={priority:"priority",assignee:"assignee",due:"due date",parent:"parent issue"}[field];
+  if(after===null||after==="")return `removed ${label}`;
+  if(field==="assignee")return then?`assigned to ${name(after)}`:`assigned the issue to ${name(after)}`;
+  return then?`set to ${field==="due"?date(after):name(after)}`:`set ${label} to ${field==="due"?date(after):name(after)}`;
+}
+/** The row's icon in Linear (RAJ-52): the new status or priority, the label glyph, the assignee; a row of several changes shows the actor. */
+function ActivityIcon({row,issue}:{row:ActivityRow;issue:Issue}){
+  const last=row.chain.at(-1)??row.events[0]!;
+  if(row.field==="relation")return <RelationIcon kind={((last.after??last.before) as Relation).kind}/>;
+  if(row.field==="status"){const status=boardOf(issue.key)?.columns.flatMap(c=>c.statuses).find(s=>s.id===last.after);if(status)return <StatusIcon status={status}/>;}
+  if(row.field==="priority")return <PriorityIcon name={(last.after as string|null)??undefined}/>;
+  if(row.field==="labels")return <Icon name="label"/>;
+  if(row.field==="due")return <Icon name="calendar"/>;
+  if(row.field==="assignee")return <Avatar user={last.after as User|null} size={14}/>;
+  return <Avatar user={row.actor} size={14}/>;
+}
 const statusOf = (i: Issue) => boardOf(i.key)?.columns.flatMap((c) => c.statuses).find((s) => s.id === i.status);
 const colLook = (c: Column) => ({ name: c.name, category: c.statuses[0]?.category ?? "new" });
 
@@ -33,6 +79,7 @@ export function App() {
   const boardId = useStore((s) => s.board);
   const selected = useStore((s) => s.selected);
   const view = useStore((s) => s.view);
+  const document = useStore(s=>s.document);
   const overlay = useStore((s) => s.overlay);
   const open = useStore((s) => (s.panel && s.selected ? s.issues.get(s.selected) : undefined));
   const current = useStore((s) => (s.selected ? s.issues.get(s.selected) : undefined));
@@ -43,13 +90,14 @@ export function App() {
   useLinearHotkeys(()=>nav.cols);
 
   if (!boards.length) return <div className="p-6 text-fg-3">{loadError?<div role="alert"><p>{loadError}</p><button className="mt-3 rounded bg-sel px-3 py-2 text-fg" onClick={()=>void load()}>Retry loading</button></div>:"Loading your Jira mirror…"}</div>;
-  const page = !!open && view === "page";
+  const page = !!open && (view === "page" || !!document);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1">
       <Sidebar boards={boards} />
-      <main className="relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border-[0.5px] border-frame bg-panel shadow-(--frame-shadow)">
+      <Tooltips />
+      <main tabIndex={-1} className="relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border-[0.5px] border-frame bg-panel shadow-(--frame-shadow)">
         {!page && <BoardHeader />}
         <div className="flex min-h-0 flex-1">
           {/* Retain visited boards for scroll restoration; do not render unopened boards. */}
@@ -60,7 +108,7 @@ export function App() {
         </div>
       </main>
       </div>
-      <StorageNotice/><StatusBar /><Toast/>
+      <ReminderDelivery/><StorageNotice/><StatusBar /><Toast/>
       {(overlay === "palette"||overlay==="search") && <Palette searchOnly={overlay==="search"}/> }
       {overlay==="shortcuts"&&<ShortcutHelp/>}
       {overlay==="help"&&<HelpMenu/>}
@@ -70,6 +118,7 @@ export function App() {
       {overlay === "create" && <CreateIssue />}
       {current && (overlay === "priority" || overlay === "labels" || overlay === "project" || overlay === "milestone" || overlay === "due") && <PropertyPicker issue={current} field={overlay}/>}
       {open && overlay === "options" && <IssueOptions issue={open}/>}
+      {current && overlay === "reminder" && <ReminderPicker issue={current}/>}
       {current && overlay === "relations" && <Relations issue={current}/>}
       {current && overlay === "subscribers" && <Subscribers issue={current}/>}
     </div>
@@ -173,6 +222,8 @@ function QuickNavigation({kind}:{kind:"favorites"|"views"|"boards"}) {
     :kind==="views"
       ?state.savedViews.map(view=>({id:view.id,name:view.name,run:()=>openSavedView(view)}))
       :state.favorites.flatMap(id=>{
+        const document=id.startsWith('document:')?findIssueDocument(state.issues.values(),id.slice(9)):undefined;
+        if(document)return [{id,name:document.resource.title||'New document',run:()=>navigate({board:document.issue.board,selected:document.issue.key,panel:true,document:document.resource.id})}];
         const issue=state.issues.get(id),[,boardId,scope]=id.split(":"),board=state.boards.find(b=>b.id===Number(boardId));
         if(issue)return [{id,name:`${id} ${issue.summary}`,run:()=>navigate({board:issue.board,selected:issue.key,panel:true})}];
         if(!board)return [];
@@ -234,7 +285,7 @@ function Sidebar({ boards }: { boards: Board[] }) {
 function Toast() {
   const toast=useStore(s=>s.toast);
   if(!toast)return null;
-  return <div aria-live="polite" data-toast className="fixed right-4 bottom-10 z-50 flex items-center gap-3 rounded-lg border border-line-2 bg-card px-3 py-2 text-[13px] text-fg shadow-lg">{toast.text}{toast.key&&<button onClick={()=>(ui.send({type:"toast.dismiss"}),navigate({selected:toast.key,panel:true}))} className="text-accent hover:underline">View issue</button>}</div>;
+  return <div aria-live="polite" data-toast className="fixed right-4 bottom-10 z-50 flex items-center gap-3 rounded-lg border border-line-2 bg-card px-3 py-2 text-[13px] text-fg shadow-lg"><div>{toast.text}{toast.detail&&<p className="mt-1 text-[12px] text-fg-3">{toast.detail}</p>}</div>{toast.undo&&<button className="text-accent hover:underline" onClick={()=>{undoEdit();ui.send({type:"toast.dismiss"});}}>Undo</button>}{toast.key&&<button onClick={()=>(ui.send({type:"toast.dismiss"}),navigate({selected:toast.key,panel:true}))} className="text-accent hover:underline">View issue</button>}</div>;
 }
 
 function StatusBar() {
@@ -285,11 +336,12 @@ function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue }) {
       <span aria-hidden="true" className="grid size-4 shrink-0 place-items-center rounded-[4px] bg-accent text-[9px] font-semibold text-white">{board.name[0]}</span>
       <span className="truncate">{board.name}</span>
     </button>
-    <span aria-hidden="true" className="mx-1 text-fg-3">›</span>
-    <button aria-label="Issues" aria-current={issue?undefined:"page"} onClick={openAllIssues} className={`${crumb} shrink-0`}>Issues</button>
+    <span aria-hidden="true" className={`mx-1 text-fg-3 ${issue?"max-sm:hidden":""}`}>›</span>
+    <button aria-label="Issues" aria-current={issue?undefined:"page"} onClick={openAllIssues} className={`${crumb} shrink-0 ${issue?"max-sm:hidden":""}`}>Issues</button>
     {issue && <>
       <span aria-hidden="true" className="mx-1 text-fg-3">›</span>
-      <a aria-current="page" className={`${crumb} shrink-0 tracking-[-0.24px]`} href={issueURL(issue)} target="_blank" rel="noreferrer"><TypeDot type={issue.type}/>{issue.key}</a>
+      {/* The key never truncates (Opus review 4: at 390px it vanished): the title truncates, and below 640px the Issues crumb gives way. */}
+      <a aria-current="page" className={crumb} href={issueURL(issue)} target="_blank" rel="noreferrer"><TypeDot type={issue.type}/><span data-crumb-issue className="flex min-w-0"><span className="mr-[5.6px] shrink-0 tracking-[-0.24px]">{issue.key}</span><span className="truncate">{issue.summary}</span></span></a>
     </>}
   </nav>;
 }
@@ -422,13 +474,16 @@ function Avatar({ user, size = 20 }: { user: User | null; size?: number }) {
   return <img src={user.avatar} onError={() => setBroken(true)} title={user.name} alt="" width={size} height={size} className="inline-block shrink-0 rounded-full" />;
 }
 
-const ago = (iso: string) => {
-  const m = (Date.parse(iso) - Date.now()) / 60_000;
-  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
-  if (m > -60) return rtf.format(Math.round(m), "minute");
-  if (m > -1440) return rtf.format(Math.round(m / 60), "hour");
-  if (m > -43200) return rtf.format(Math.round(m / 1440), "day");
-  return new Date(iso).toLocaleDateString();
+/** Linear's compact Activity times: "just now", "6min ago", "11h ago", "1d ago", then the date. */
+// Linear's exact-time label: "Sat Nov 7, 2026, 07:49:03" (24-hour, with seconds).
+const fullTime = (iso: string) => { const d = new Date(iso); return `${d.toLocaleDateString("en-US", { weekday: "short" })} ${d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })}`; };
+const ago = (iso: string, now = Date.now()) => {
+  const m = Math.floor((now - Date.parse(iso)) / 60_000), date = new Date(iso);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}min ago`;
+  if (m < 1440) return `${Math.floor(m / 60)}h ago`;
+  if (m < 43200) return `${Math.floor(m / 1440)}d ago`;
+  return date.toLocaleDateString("en", { month: "short", day: "numeric", ...(date.getFullYear() !== new Date(now).getFullYear() ? { year: "numeric" } : {}) });
 };
 
 const author = (a: any): User | null => a && { id: a.accountId, name: a.displayName, avatar: a.avatarUrls?.["24x24"] };
@@ -439,18 +494,19 @@ const ICON_BTN = "grid size-7 shrink-0 place-items-center rounded-md text-fg-3 h
 
 function IssueView({ issue, page }: { issue: Issue; page: boolean }) {
   const f = useStore((s) => s.full.get(issue.key))?.fields;
-  const favorite=useStore(s=>s.favorites.includes(issue.key));
+  const favorite=useStore(s=>s.favorites.includes(issue.key)),optionsOpen=useStore(s=>s.overlay==="options");
   const propertiesHidden=useStore(s=>s.issuePropertiesHidden);
+  const document=useStore(s=>s.document);
+  if(document)return <IssueDocument issue={issue} id={document}/>;
   const bar = (
     <div className="issue-detail-header flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-3 text-[12px] text-fg-3">
       {page ? <BoardBreadcrumbs board={boardOf(issue.key)!} issue={issue}/> : <>
         <TypeDot type={issue.type} />
         <a className="tracking-[-0.24px] text-fg-2 hover:text-fg" href={issueURL(issue)} target="_blank" rel="noreferrer">{issue.key}</a>
       </>}
-      {issue.parent && <span className="truncate">· parent {issue.parent}</span>}
       <button role="switch" aria-label={favorite?"Remove issue from favorites":"Add issue to favorites"} aria-checked={favorite} onClick={()=>toggleFavorite(issue.key)} className={`${ICON_BTN} ${favorite?"text-[#f2c94c]!":""}`}><Icon name={favorite?"starred":"star"} size={16}/></button>
-      <button id="issue-options" aria-label="Issue options" onClick={()=>ui.send({type:"overlay.open",overlay:"options"})} className={ICON_BTN}><Icon name="dots"/></button>
-      <span className="flex-1" />
+      <button id="issue-options" aria-label="Issue options" aria-expanded={optionsOpen} onClick={()=>ui.send({type:"overlay.open",overlay:"options"})} className={`${ICON_BTN} aria-expanded:bg-hover aria-expanded:text-fg`}><Icon name="dots"/></button>
+      <ReminderControl issue={issue}/><span className="flex-1" />
       <Stepper issueKey={issue.key} />
       <button title={page ? "Open in side panel" : "Open as full page"} onClick={() => navigate({ view: page ? "side" : "page" })} className={ICON_BTN}>
         <Icon name={page ? "side" : "expand"} />
@@ -464,7 +520,7 @@ function IssueView({ issue, page }: { issue: Issue; page: boolean }) {
       {([['copy-url','Copy issue URL','link'],['copy-id','Copy issue ID','copy'],['copy-branch','Copy git branch name','branch']] as const).map(([action,label,icon])=><button key={action} aria-label={label} title={`${label} (${shortcutLabel(action)})`} onClick={()=>runShortcut(action)} className={ICON_BTN}><Icon name={icon}/></button>)}
     </div>
     <div className="issue-detail-grid" data-properties-hidden={propertiesHidden||undefined}>
-      <div className="issue-detail-title"><Title issue={issue} className="text-[24px]" /></div>
+      <div className="issue-detail-title"><Title issue={issue} className="text-[24px] !leading-[32px] tracking-[-0.16px] [font-variation-settings:'opsz'_32]" /><SubIssueOf issue={issue}/></div>
       {!propertiesHidden&&<div className="issue-detail-properties"><Properties issue={issue}/></div>}
       <div className="issue-detail-content"><Description issue={issue} f={f}/><PersonalIssueDetails issue={issue}/><Activity issue={issue} f={f}/></div>
     </div>
@@ -482,7 +538,7 @@ function Stepper({ issueKey }: { issueKey: string }) {
   const i = flat.findIndex((x) => x.key === issueKey);
   return (
     <div className="mr-1 flex items-center gap-0.5">
-      {i>=0&&<span aria-label="Issue position" className="mr-2 whitespace-nowrap tabular-nums">{i+1} / {flat.length}</span>}
+      {i>=0&&<span aria-label="Issue position" className="mr-2 whitespace-nowrap tabular-nums text-fg-3 max-sm:hidden">{i+1}<span className="text-fg-4"> / {flat.length}</span></span>}
       <button disabled={i<0||i>=flat.length-1} title="Next (J / ↓)" onClick={() => runShortcut("down")} className={`${ICON_BTN} disabled:opacity-30`}><Icon name="down" /></button>
       <button disabled={i<=0} title="Previous (K / ↑)" onClick={() => runShortcut("up")} className={`${ICON_BTN} disabled:opacity-30`}><Icon name="up" /></button>
     </div>
@@ -502,34 +558,47 @@ function Title({ issue, className }: { issue: Issue; className: string }) {
         if (e.key === "Enter") (e.preventDefault(), e.currentTarget.blur());
         if (e.key === "Escape") {e.currentTarget.value = issue.summary;e.currentTarget.blur();}
       }}
-      className={`w-full resize-none rounded-md bg-transparent font-semibold leading-snug text-fg outline-none [field-sizing:content] focus:bg-hover ${className}`}
+      className={`block w-full resize-none rounded-md bg-transparent font-semibold leading-snug text-fg outline-none [field-sizing:content] focus:bg-hover ${className}`}
     />
   );
 }
 
 /** Linear's property list: unlabelled 13px/500 rows under section headings, no box and no Reporter/Created/Updated rows. */
+const RELATION_SECTIONS=[["blocked","Blocked by"],["blocking","Blocking"],["related","Related"],["duplicate","Duplicate of"]] as const;
 function Properties({ issue }: { issue: Issue }) {
   const status = statusOf(issue);
-  const btn = (id: string, hint: string, overlay: "status" | "assign" | "priority" | "labels" | "project" | "milestone" | "due", label: string, body: ReactNode) => (
-    <button id={id} title={`${label}${({status:"status",assign:"assign",priority:"priority",labels:"labels",project:"project",milestone:"milestone",due:"due"} as Record<string,string>)[overlay]?` (${shortcutLabel(overlay==="assign"?"assign":overlay)})`:""}`} onClick={() => ui.send({ type: "overlay.open", overlay })} className="group flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-left text-fg-2 hover:bg-hover hover:text-fg">
+  const issues = useStore((s) => s.issues);
+  // Like Linear, a pill stays highlighted while its menu is open (Opus review 4).
+  const open = useStore((s) => s.overlay);
+  // Linear: content-width 28px pills 4px apart, icon in a 16px box 6px in, and a tooltip naming the action and its key (no project tooltip).
+  const btn = (id: string, overlay: "status" | "assign" | "priority" | "labels" | "project" | "milestone" | "due", tip: string, body: ReactNode) => (
+    <button id={id} aria-expanded={open === overlay} title={tip ? `${tip} (${shortcutLabel(overlay)})` : undefined} onClick={() => ui.send({ type: "overlay.open", overlay })} className="ml-px flex h-7 max-w-full items-center gap-1.5 rounded-full pr-2.5 pl-1.5 text-left text-fg-2 hover:bg-hover hover:text-fg aria-expanded:bg-hover aria-expanded:text-fg [&>svg]:shrink-0 [&>:first-child]:grid [&>:first-child]:size-4 [&>:first-child]:place-items-center">
       {body}
-      <kbd className="ml-auto opacity-0 group-hover:opacity-100">{hint}</kbd>
     </button>
   );
-  const section = (name: string, rows: ReactNode) => <section className="mb-3"><h3 className="flex h-7 items-center px-2 text-[12px] font-medium text-fg-3">{name}</h3>{rows}</section>;
+  const section = (name: string, rows: ReactNode) => <section className="flex flex-col items-start gap-1 [&+section]:mt-[33px]"><h3 className="mb-1.5 px-2 text-[13px] leading-[normal] font-medium text-fg-3">{name}</h3>{rows}</section>;
   return (
     <div data-properties className="text-[13px] font-medium">
       {section("Properties", <>
-        {btn("prop-status", "S", "status", "Status", <>{status && <StatusIcon status={status} />}<span className="truncate">{status?.name}</span></>)}
-        {btn("prop-priority", "P", "priority", "Priority", <><PriorityIcon name={issue.priority}/>{issue.priority ?? "No priority"}</>)}
-        {btn("prop-assignee", "A", "assign", "Assignee", <><Avatar user={issue.assignee} size={18} /><span className="truncate">{issue.assignee?.name ?? "Unassigned"}</span></>)}
-        {btn("prop-due", "", "due", "Due date", <><Icon name="calendar"/><span className={issue.due ? "" : "text-fg-3"}>{issue.due ?? "Set due date"}</span></>)}
+        {btn("prop-status", "status", "Change status", <><span>{status && <StatusIcon status={status} />}</span><span className="truncate">{status?.name}</span></>)}
+        {btn("prop-priority", "priority", issue.priority ? "Change priority" : "Set priority", <><span><PriorityIcon name={issue.priority}/></span>{issue.priority ?? <><span className="property-wide">Set priority</span><span className="property-short">Priority</span></>}</>)}
+        {btn("prop-assignee", "assign", "Assign to", <><span><Avatar user={issue.assignee} size={16} /></span><span className="truncate">{issue.assignee?.name ?? "Unassigned"}</span></>)}
+        {issue.due&&btn("prop-due", "due", "Change due date", <><span><Icon name="calendar"/></span><span className={issue.due ? "" : "text-fg-3"}>{issue.due ?? "Set due date"}</span></>)}
       </>)}
-      {section("Labels", btn("prop-labels", "L", "labels", "Labels", <><Icon name="label"/><span className={`truncate ${issue.labels.length ? "" : "text-fg-3"}`}>{issue.labels.join(", ") || "Add label"}</span></>))}
+      {/* Linear (RAJ-52): one 25px chip per label, its dot and name, then a round + button; clicking either opens the label menu beside it. */}
+      {section("Labels", issue.labels.length ? <div className="flex min-h-7 max-w-full flex-wrap gap-1.5 pt-0.5 pl-[1.5px]">
+        {issue.labels.map((label) => <button key={label} data-label-chip onClick={() => ui.send({ type: "overlay.open", overlay: "labels" })} className="label-chip"><span className="size-[9px] shrink-0 rounded-full" style={{ background: hue(label) }} /><span className="truncate">{label}</span></button>)}
+        <button id="prop-labels" aria-label="Add label" onClick={() => ui.send({ type: "overlay.open", overlay: "labels" })} className="label-add"><Icon name="plus" size={14} /></button>
+      </div> : btn("prop-labels", "labels", "Add labels", <><span><Icon name="label"/></span><span className="truncate text-fg-3"><span className="property-wide">Add label</span><span className="property-short">Labels</span></span></>))}
       {section("Project", <>
-        {btn("prop-project", "", "project", "Project", <><Icon name="layers"/><span className="truncate">{issue.project?.name ?? "Add to project"}</span></>)}
-        {btn("prop-milestone", "", "milestone", "Milestone", <><Icon name="calendar"/><span className={`truncate ${issue.milestones?.length ? "" : "text-fg-3"}`}>{issue.milestones?.map(m => m.name).join(", ") || "Set milestone"}</span></>)}
+        {btn("prop-project", "project", "", <><span><Icon name="layers"/></span><span className="truncate">{issue.project?.name ?? <><span className="property-wide">Add to project</span><span className="property-short">Project</span></>}</span></>)}
+        {issue.milestones?.length?btn("prop-milestone", "milestone", "", <><span><Icon name="calendar"/></span><span className={`truncate ${issue.milestones?.length ? "" : "text-fg-3"}`}>{issue.milestones?.map(m => m.name).join(", ") || "Set milestone"}</span></>):null}
       </>)}
+      {/* Linear (RAJ-52): a section per relation kind after Project, each related issue a 28px pill (its status and title) with a round remove button on hover. */}
+      {RELATION_SECTIONS.map(([kind,heading])=>{const rows=(issue.relations??[]).filter(r=>r.kind===kind);return rows.length?<Fragment key={kind}>{section(heading,rows.map(r=>{const target=issues.get(r.key),status=target&&statusOf(target);return <div key={r.key} data-relation={`${kind}:${r.key}`} className="group/relation flex max-w-full items-center gap-2">
+        {target?<a href={issueURL(target)} onClick={e=>{if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();openRelated(target);}} className="relation-pill"><span>{status&&<StatusIcon status={status}/>}</span><span className="truncate">{target.summary}</span></a>:<span className="relation-pill"><span/><span className="truncate">{r.key}</span></span>}
+        <button aria-label="Remove relation" onClick={()=>actions.relate(issue.key,r.key,kind,true)} className="relation-remove"><Icon name="close" size={14}/></button>
+      </div>;}))}</Fragment>:null;})}
     </div>
   );
 }
@@ -560,9 +629,9 @@ function Description({ issue, f }: { issue: Issue; f: any }) {
     let tries=0;const go=()=>{const editor=document.getElementById("description");if(editor)editor.focus();else if(tries++<60)requestAnimationFrame(go);};go();
   },[focus,!!f]);
   return (
-    <section className="mt-5 leading-[1.6] text-fg-2">
+    <section className="mt-[22px] leading-[1.6] text-fg-2">
       {!f ? <p role="status" className="text-fg-4">{error?<>{error}. <button onClick={()=>void loadFull(issue.key)} className="text-accent">Retry</button></>:"Loading…"}</p>
-        : <RichEditor key={revision} id="description" inline initial={f.description} onFiles={files=>addIssueFiles(issue.key,files)} issueKey={issue.key} attachments={issue.attachments} placeholder="Add description…"
+        : <RichEditor key={revision} id="description" inline selectionToolbar scope={`${issue.key}:description`} onLateMedia={merge=>actions.description(issue.key,merge(get().full.get(issue.key)?.fields.description))} initial={f.description} onFiles={files=>addIssueFiles(issue.key,files)} issueKey={issue.key} attachments={issue.attachments} placeholder="Add description…"
             onChange={doc=>autosave.send({type:"change",doc})}
             onBlur={()=>autosave.send({type:"flush"})}/>}
     </section>
@@ -570,38 +639,37 @@ function Description({ issue, f }: { issue: Issue; f: any }) {
 }
 
 function Activity({ issue, f }: { issue: Issue; f: any }) {
-  const [composer,setComposer]=useState(0),[editing,setEditing]=useState<string|null>(null);
+  const [composer,setComposer]=useState(0);
+  const followedAnchor=useRef<HTMLElement|null>(null);
+  useEffect(()=>{
+    if(!f||!location.hash)return;
+    let id:string;try{id=decodeURIComponent(location.hash.slice(1));}catch{return;}
+    const frame=requestAnimationFrame(()=>{const target=document.getElementById(id);if(target&&target!==followedAnchor.current){target.scrollIntoView({block:'center'});followedAnchor.current=target;}});
+    return()=>cancelAnimationFrame(frame);
+  },[f]);
   const subscribed=issue.watchers?.some(u=>u.id===ME.id);
+  /** An image comment whose image was removed from the description opens the image on its own. */
+  const [viewing,setViewing]=useState<{file:Attachment;external:boolean}>();
   const draftKey=`better-jira:comment-draft:${get().namespace}:${issue.key}`;
   const [draft]=useState(()=>{try{return normalizeDocument(JSON.parse(localStorage.getItem(draftKey)??'""'));}catch{return normalizeDocument('');}});
-  const timestamp=(date:string,id:string)=>{const url=new URL(location.href);url.hash=id;return <a href={url.href} title={new Date(date).toLocaleString()} className="hover:text-fg-2"><time dateTime={date}>{ago(date)}</time></a>;};
+  const timestamp=(date:string,id:string)=>{const url=new URL(location.href);url.hash=id;return <a href={url.href} title={fullTime(date)} aria-label={fullTime(date)} data-tip="above" className="hover:text-fg-2 focus-visible:outline-offset-[-1px]"><time dateTime={date}>{ago(date)}</time></a>;};
   if (!f) return null;
   return (
-    <section className="issue-activity mt-8 border-t border-line pt-5">
-      <div className="mb-6 flex items-center gap-3"><h3 className="mr-auto text-[15px] font-semibold text-fg">Activity</h3><button aria-label={subscribed?'Unsubscribe from issue':'Subscribe to issue'} title={`${subscribed?'Unsubscribe':'Subscribe'} (${shortcutLabel('subscribe')})`} onClick={()=>runShortcut('subscribe')} className="text-[13px] text-fg-3 hover:text-fg">{subscribed?'Unsubscribe':'Subscribe'}</button><button id="issue-subscribers" aria-label="Change subscribers" title={`Change subscribers (${shortcutLabel('subscribers')})`} onClick={()=>ui.send({type:'overlay.open',overlay:'subscribers'})} className="flex min-w-6 items-center -space-x-1 rounded-full">{issue.watchers?.length?issue.watchers.slice(0,3).map(user=><Avatar key={user.id} user={user} size={20}/>):<Icon name="user"/>}</button></div>
+    <section className="issue-activity mt-4 border-t border-line pt-[18px]">
+      {viewing&&<Suspense fallback={null}><ImageViewer file={viewing.file} original={viewing.file} external={viewing.external} editable readReason="" issueKey={issue.key} close={()=>setViewing(undefined)}/></Suspense>}
+      <div className="mb-[14px] flex h-8 items-center gap-3"><h3 className="mr-auto text-[15px] leading-[23px] font-semibold text-fg">Activity</h3><button aria-label={subscribed?'Unsubscribe from issue':'Subscribe to issue'} title={`${subscribed?'Unsubscribe':'Subscribe'} (${shortcutLabel('subscribe')})`} onClick={()=>runShortcut('subscribe')} className="text-[13px] text-fg-3 hover:text-fg">{subscribed?'Unsubscribe':'Subscribe'}</button><button id="issue-subscribers" aria-label="Change subscribers" title={`Change subscribers (${shortcutLabel('subscribers')})`} onClick={()=>ui.send({type:'overlay.open',overlay:'subscribers'})} className="flex min-w-6 items-center -space-x-1 rounded-full">{issue.watchers?.length?issue.watchers.slice(0,3).map(user=><Avatar key={user.id} user={user} size={20}/>):<Icon name="user"/>}</button></div>
       <ol className="space-y-3">
-        <li id="issue-created" className="flex flex-wrap items-center gap-1.5 px-1 text-[12px] text-fg-3">
-          <Avatar user={author(f.reporter)} size={16} />
-          <span>{f.reporter?.displayName} created ·</span> {timestamp(f.created,'issue-created')}
+        <li id="issue-created" className="activity-event">
+          <Avatar user={author(f.reporter)} size={14} />
+          <span><span className="font-medium">{f.reporter?.displayName}</span> created ·</span> {timestamp(f.created,'issue-created')}
         </li>
-        {Object.entries(issue.mediaEdits??{}).flatMap(([mediaId,edit])=>(edit.comments??[]).map(c=><li key={c.id} id={`image-comment-${c.id}`} className="rounded-lg border border-line-2 bg-card px-3 py-2.5"><div className="text-[12px] text-fg-3">{c.author} · image comment · {ago(c.at)}</div><p className="mt-1.5">{c.text}</p><button className="mt-1 text-[12px] text-accent" onClick={()=>{const frame=document.querySelector<HTMLElement>(`[data-media-id="${CSS.escape(mediaId)}"]`);frame?.scrollIntoView({block:'center'});frame?.dispatchEvent(new Event('show-image-comments'));}}>View image</button></li>))}
-        {f.comment.comments.map((c: any) => (
-          <li key={c.id} id={`comment-${c.id}`} data-comment={c.id} className="rounded-lg border border-line-2 bg-card px-3 py-2.5">
-            <div className="flex items-center gap-2 text-[12px]">
-              <Avatar user={author(c.author)} size={18} />
-              <span className="font-medium text-fg">{c.author?.displayName}</span>
-              <span className="text-fg-3">{timestamp(c.created,`comment-${c.id}`)}{c.updated&&" · edited"}</span>
-              {String(c.id).startsWith("local-")&&editing!==c.id&&<span className="ml-auto flex gap-1"><button aria-label="Edit comment" onClick={()=>setEditing(c.id)} className="rounded px-1.5 text-fg-3 hover:bg-hover hover:text-fg">Edit</button><button aria-label="Delete comment" onClick={()=>actions.deleteComment(issue.key,c.id)} className="rounded px-1.5 text-fg-3 hover:bg-hover hover:text-fg">Delete</button></span>}
-            </div>
-            <div className="mt-1.5 leading-[1.6] text-fg-2">{editing===c.id
-              ?<RichEditor id={`edit-${c.id}`} onFiles={files=>addIssueFiles(issue.key,files)} issueKey={issue.key} attachments={issue.attachments} label="Edit comment" autoFocus initial={c.body} saveLabel="Save comment" onSave={doc=>{actions.editComment(issue.key,c.id,doc);setEditing(null);}} onCancel={()=>setEditing(null)}/>
-              :<Adf node={c.body} issueKey={issue.key} attachments={issue.attachments}/>}</div>
-          </li>
-        ))}
+        <CommentThreads issue={issue} comments={f.comment.comments} avatar={c=><Avatar user={author(c.author)} size={18}/>} me={<Avatar user={ME} size={18}/>} timestamp={timestamp} events={[...Object.entries(issue.mediaEdits??{}).filter(([,edit])=>edit.comments?.length).map(([mediaId,edit])=>({at:edit.comments![0]!.at,node:<ImageCommentCard key={mediaId} comments={edit.comments!} src={issue.attachments?.find(file=>file.id===mediaId)?.url||edit.src} author={ME.name} me={<Avatar user={ME} size={18}/>} head={c=><><Avatar user={ME} size={18}/><span className="font-medium text-fg">{c.author}</span>{timestamp(c.at,`image-comment-${c.id}`)}</>} save={comments=>actions.mediaEdit(issue.key,mediaId,{...edit,comments})} view={()=>{const frame=document.querySelector<HTMLElement>(`[data-media-id="${CSS.escape(mediaId)}"]`);if(!frame){const file=issue.attachments?.find(file=>file.id===mediaId);const url=file?.url||edit.src;if(url)setViewing({file:file??{id:mediaId,name:'Image',type:'image/png',size:0,url},external:!file});return;}frame.scrollIntoView({block:'center'});frame.dispatchEvent(new Event('show-image-comments'));}}/>})),...activityRows(issue.activity??[]).map(row=>({at:row.at,node:<li key={row.id} id={`activity-${row.id}`} data-activity={row.field} className="activity-event"><span className="grid size-[14px] place-items-center"><ActivityIcon row={row} issue={issue}/></span><span><span className="font-medium">{row.actor.name}</span> {row.events.map((event,i)=><span key={event.id}>{i?" and ":""}{describeActivity(event,issue)}</span>)}{row.chain.map(event=><span key={event.id}>, then {describeActivity(event,issue,true)}</span>)} ·</span> {timestamp(row.at,`activity-${row.id}`)}</li>})),
+          // Linear lists a link while it is attached and drops the row once it is removed (RAJ-52, 2026-11-07).
+          ...(issue.resources??[]).filter(resource=>resource.kind==='link'&&resource.created).map(resource=>({at:resource.created!,node:<li key={resource.id} id={`activity-${resource.id}`} data-activity="link" className="activity-event"><Avatar user={ME} size={14}/><span><span className="font-medium">{ME.name}</span> linked <span className="inline-flex align-[-2px]"><Icon name="link" size={12}/></span> <a href={resource.url} target="_blank" rel="noreferrer" className="font-medium">{linkTitle(resource)}</a> ·</span> {timestamp(resource.created!,`activity-${resource.id}`)}</li>}))]}/>
       </ol>
-      <div className="mt-3">
+      <div className="mt-[14px]">
         {/* A new key clears the box after sending; autoFocus keeps the caret in it. */}
-        <RichEditor key={composer} initial={composer?'':draft} variant="comment" id="comment" issueKey={issue.key} attachments={issue.attachments} onFiles={files=>addIssueFiles(issue.key,files)} label="Leave a comment…" placeholder="Leave a comment…" autoFocus={composer>0} saveLabel="Submit comment" onChange={doc=>{try{localStorage.setItem(draftKey,JSON.stringify(doc));}catch{/* The open composer still retains its draft. */}}} onSave={doc=>{if(actions.comment(issue.key,doc)){try{localStorage.removeItem(draftKey);}catch{}setComposer(n=>n+1);}}}/>
+        <RichEditor key={composer} initial={composer?'':draft} variant="comment" id="comment" scope={`${issue.key}:comment`} onLateMedia={merge=>{try{localStorage.setItem(draftKey,JSON.stringify(merge(JSON.parse(localStorage.getItem(draftKey)??'""'))));}catch{/* the file stays in the issue attachments */}}} issueKey={issue.key} attachments={issue.attachments} onFiles={files=>addIssueFiles(issue.key,files)} label="Leave a comment…" placeholder="Leave a comment…" autoFocus={composer>0} saveLabel="Submit comment" onChange={doc=>{try{localStorage.setItem(draftKey,JSON.stringify(doc));}catch{/* The open composer still retains its draft. */}}} onSave={doc=>{if(actions.comment(issue.key,doc)){try{localStorage.removeItem(draftKey);}catch{}setComposer(n=>n+1);}}}/>
       </div>
     </section>
   );
@@ -610,7 +678,7 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
 // --- overlays: palette, pickers next to their property, create ---
 
 const MENU =
-  "overflow-hidden rounded-xl border border-line-2 bg-card text-fg-2 shadow-[0_12px_40px_rgb(0_0_0/0.35)] " +
+  "overflow-hidden rounded-xl border border-[var(--menu-line)] bg-[var(--menu)] text-fg-2 shadow-[var(--menu-shadow)] " +
   "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[12px] [&_[cmdk-group-heading]]:text-fg-3 " +
   "[&_[cmdk-item]]:flex [&_[cmdk-item]]:h-9 [&_[cmdk-item]]:cursor-default [&_[cmdk-item]]:items-center [&_[cmdk-item]]:gap-2.5 [&_[cmdk-item]]:rounded-md [&_[cmdk-item]]:px-2 " +
   "[&_[cmdk-item][data-selected=true]]:bg-sel [&_[cmdk-item][data-selected=true]]:text-fg";
@@ -621,38 +689,16 @@ function Overlay({ children,label="Search issues and commands" }: { children: Re
   return <Modal label={label} close={()=>ui.send({type:"overlay.close"})}>{children}</Modal>;
 }
 
-/** Opens under the property in the issue view, else under the selected card, else centered. */
-function Popover({ issueKey, prop, children }: { issueKey: string; prop: string; children: ReactNode }) {
-  return <Modal label={prop==="status"?"Change status":"Assign issue"} close={()=>ui.send({type:"overlay.close"})} anchor={issueAnchor(`prop-${prop}`,issueKey)} width={340}>{children}</Modal>;
-}
-
+/** Linear's status and assignee menus (RAJ-52): under the property in the issue view, else under the selected card. */
 function StatusPicker({ issueKey }: { issueKey: string }) {
   const issue = useStore((s) => s.issues.get(issueKey));
   const board = boardOf(issueKey);
   if (!issue || !board) return null;
+  const statuses = board.columns.flatMap((c) => c.statuses.map((s) => ({ ...s, column: c.name })));
   return (
-    <Popover issueKey={issueKey} prop="status">
-      <Command
-        loop
-        defaultValue={statusOf(issue)?.name}
-        className={MENU}
-      >
-        <Command.Input autoFocus placeholder="Change status…" className={MENU_INPUT} />
-        <Command.List className="max-h-[340px] overflow-y-auto p-1">
-          <Command.Empty className="p-3 text-fg-3">No status</Command.Empty>
-          {board.columns.map((c, ci) =>
-            c.statuses.map((s, si) => (
-              <Command.Item key={s.id} value={s.name} keywords={[c.name]} onSelect={() => actions.status(issueKey, s.id)}>
-                <StatusIcon status={s} />
-                <span className="flex-1 truncate">{s.name}</span>
-                {s.id === issue.status && <Icon name="check" />}
-                <kbd className={si ? "invisible" : ""}>{ci + 1}</kbd>
-              </Command.Item>
-            )),
-          )}
-        </Command.List>
-      </Command>
-    </Popover>
+    <PropertyMenu label="Change status" placeholder="Change status…" hotkey="S" anchor={issueAnchor("prop-status", issueKey)} close={() => ui.send({ type: "overlay.close" })} current={statusOf(issue)?.name}>
+      {statuses.map((s, i) => <PickerRow key={s.id} value={s.name} keywords={[s.column]} icon={<StatusIcon status={s} />} current={s.id === issue.status} number={i < 9 ? i + 1 : undefined} onSelect={() => actions.status(issueKey, s.id)}>{s.name}</PickerRow>)}
+    </PropertyMenu>
   );
 }
 
@@ -666,25 +712,10 @@ function AssignPicker({ issueKey }: { issueKey: string }) {
   }, [issues]);
   const value = (u: User) => `${u.name} ${u.id}`;
   return (
-    <Popover issueKey={issueKey} prop="assignee">
-      <Command loop defaultValue={current ? value(current) : "Unassigned"} className={MENU}>
-        <Command.Input autoFocus placeholder="Assign to…" className={MENU_INPUT} />
-        <Command.List className="max-h-[340px] overflow-y-auto p-1">
-          <Command.Empty className="p-3 text-fg-3">No one found</Command.Empty>
-          <Command.Item value="Unassigned" onSelect={() => actions.assign(issueKey, null)}>
-            <Avatar user={null} size={18} /><span className="flex-1">Unassigned</span>{!current && <Icon name="check" />}
-          </Command.Item>
-          {users.map((u) => (
-            <Command.Item key={u.id} value={value(u)} onSelect={() => actions.assign(issueKey, u)}>
-              <Avatar user={u} size={18} />
-              <span className="flex-1 truncate">{u.name}{u.id === ME.id && <span className="text-fg-3"> (me)</span>}</span>
-              {current?.id === u.id && <Icon name="check" />}
-              {u.id === ME.id && <kbd>I</kbd>}
-            </Command.Item>
-          ))}
-        </Command.List>
-      </Command>
-    </Popover>
+    <PropertyMenu label="Assign issue" placeholder="Assign to…" hotkey="A" anchor={issueAnchor("prop-assignee", issueKey)} close={() => ui.send({ type: "overlay.close" })} current={current ? value(current) : "No assignee"}>
+      <PickerRow value="No assignee" icon={<Avatar user={null} size={16} />} current={!current} number={0} onSelect={() => actions.assign(issueKey, null)}>No assignee</PickerRow>
+      {users.map((u, i) => <PickerRow key={u.id} value={value(u)} icon={<Avatar user={u} size={16} />} current={current?.id === u.id} number={i < 9 ? i + 1 : undefined} onSelect={() => actions.assign(issueKey, u)}>{u.name}</PickerRow>)}
+    </PropertyMenu>
   );
 }
 
@@ -697,7 +728,7 @@ function Palette({searchOnly=false}:{searchOnly?:boolean}) {
   const boardId = useStore((s) => s.board);
   const mine = useStore((s) => s.mine);
   const view = useStore((s) => s.view);
-  const [scope, setScope] = useState(searchOnly?null:get().selected); // ⌘K acts on the selected issue; Backspace drops it
+  const [scope, setScope] = useState(searchOnly||get().document?null:get().selected); // ⌘K acts on the selected issue; Backspace drops it
   const [q, setQ] = useState("");
   const scoped = scope ? issues.get(scope) : undefined;
 
@@ -712,7 +743,7 @@ function Palette({searchOnly=false}:{searchOnly?:boolean}) {
 
   const command=(entry:typeof shortcuts[number]):Cmd=>({name:entry.name,hint:shortcutLabel(entry.id),run:()=>{ui.send({type:"overlay.close"});runShortcut(entry.id);}});
   const issueCmds:Cmd[]=scoped?shortcuts.filter(s=>s.issue).map(command):[];
-  const general:Cmd[]=searchOnly?[]:[...shortcuts.filter((s,i,a)=>!s.issue&&s.id!=="commands"&&a.findIndex(other=>other.name===s.name)===i).map(command),...boards.filter(b=>b.id!==boardId).map((b):Cmd=>({name:`Switch to ${b.name}`,run:()=>{ui.send({type:"overlay.close"});navigate({board:b.id,selected:null,panel:false});}}))];
+  const general:Cmd[]=searchOnly?[]:[...shortcuts.filter((s,i,a)=>!s.issue&&(!s.when||s.when())&&s.id!=="commands"&&a.findIndex(other=>other.name===s.name)===i).map(command),...boards.filter(b=>b.id!==boardId).map((b):Cmd=>({name:`Switch to ${b.name}`,run:()=>{ui.send({type:"overlay.close"});navigate({board:b.id,selected:null,panel:false});}}))];
   const match = (c: Cmd) => c.name.toLowerCase().includes(q.trim().toLowerCase());
   const item = (c: Cmd) => (
     <Command.Item key={c.name} value={`cmd:${c.name}`} onSelect={c.run}>

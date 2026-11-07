@@ -37,12 +37,13 @@ type Shortcut = {
   group: string;
   hotkey: Hotkey;
   issue?: boolean;
+  document?:boolean;
   run: () => void;
   when?: () => boolean;
 };
 let columns: () => Issue[][] = () => [];
 const selected = () =>
-  get().selected ? get().issues.get(get().selected!) : undefined;
+  !get().document && get().selected ? get().issues.get(get().selected!) : undefined;
 const issueAction = (fn: (issue: Issue) => void) => () => {
   const issue = selected();
   if (issue) fn(issue);
@@ -184,6 +185,18 @@ function collapse(all = false) {
 
 /** Live Linear Chrome reference, 6 Nov 2026. Only existing personal workflows are included. */
 export const shortcuts: Shortcut[] = [
+  ...([
+    {id:'rename',name:'Rename document',hotkey:'Shift+R'},
+    {id:'favorite',name:'Favorite document',hotkey:'Alt+F'},
+    {id:'authors',name:'Show document author names',hotkey:'Shift+A'},
+    {id:'remind',name:'Remind me about document',hotkey:'Shift+H'},
+    {id:'subscribers',name:'Change document subscribers',hotkey:'Mod+Shift+S'},
+    {id:'copy-url',name:'Copy document URL',hotkey:'Mod+Shift+,'},
+    {id:'copy-title',name:'Copy document title',hotkey:"Mod+Shift+'"},
+    // Outside text fields only; a page text selection keeps the browser's own copy.
+    {id:'copy-link',name:'Copy document title as link',hotkey:'Mod+C'},
+    {id:'copy-markdown',name:'Copy document content as Markdown',hotkey:'Mod+Alt+C'},
+  ] as const).map(entry=>({...entry,id:`document-${entry.id}`,document:true,group:'Documents',when:()=>!!get().document&&(entry.id!=='copy-link'||!!getSelection()?.isCollapsed),run:()=>document.querySelector('[data-document]')?.dispatchEvent(new CustomEvent('document-action',{detail:entry.id}))})),
   {
     id: "commands",
     name: "Open command menu",
@@ -371,6 +384,7 @@ export const shortcuts: Shortcut[] = [
       ["priority", "Change priority", "P", "priority"],
       ["labels", "Change labels", "L", "labels"],
       ["due", "Set due date", "Shift+D", "due"],
+      ["remind", "Remind me", "Shift+H", "reminder"],
       ["project", "Add to project", "Shift+P", "project"],
       ["milestone", "Add to project milestone", "Shift+M", "milestone"],
     ] as const
@@ -488,7 +502,10 @@ export const shortcuts: Shortcut[] = [
     group: "Issues",
     hotkey: "Mod+Shift+O",
     issue: true,
-    run: issueAction((i) => beginCreate({ parent: i.key, project: i.project })),
+    run: issueAction((i) => {
+      const inline=document.querySelector<HTMLElement>(`[data-sub-issues="${CSS.escape(i.key)}"] [data-create-child]`);
+      if(inline){inline.click();}else beginCreate({parent:i.key,project:i.project});
+    }),
   },
   {
     id: "parent-set",
@@ -511,6 +528,14 @@ export const shortcuts: Shortcut[] = [
     }),
   },
   {
+    id: "sub-issues-of-parent",
+    name: "Open sub-issues of parent",
+    group: "Issues",
+    hotkey: "Mod+Shift+ArrowRight",
+    issue: true,
+    run: () => document.querySelector<HTMLElement>("[data-parent-progress]")?.click(),
+  },
+  {
     id: "child-open",
     name: "Open sub-issue",
     group: "Issues",
@@ -528,6 +553,7 @@ export const shortcuts: Shortcut[] = [
       ["copy-branch", "Copy git branch name", "Mod+Shift+.", "git branch name"],
       ["copy-url", "Copy issue URL", "Mod+Shift+,", "URL"],
       ["copy-title", "Copy issue title", "Mod+Shift+'", "title"],
+      ["copy-link", "Copy issue title as link", "Mod+C", "title as link"],
       [
         "copy-markdown",
         "Copy everything as Markdown",
@@ -541,6 +567,8 @@ export const shortcuts: Shortcut[] = [
     hotkey,
     group: "Issues",
     issue: true,
+    // ⌘C keeps its native copy whenever text is selected.
+    ...(id === "copy-link" ? { when: () => !!getSelection()?.isCollapsed } : {}),
     run: () => void copy(kind),
   })),
   {
@@ -669,7 +697,7 @@ export const shortcuts: Shortcut[] = [
     name: "Find in view",
     group: "Filters",
     hotkey: "Mod+F",
-    when: () => !get().panel || get().view !== "page",
+    when: boardVisible,
     run: () => {
       set({ findInView: true });
       requestAnimationFrame(() =>
@@ -682,6 +710,7 @@ export const shortcuts: Shortcut[] = [
     name: "Add filter",
     group: "Filters",
     hotkey: "F",
+    when: boardVisible,
     run: () => ui.send({ type: "toolbar.open", toolbar: "filter" }),
   },
   {
@@ -689,6 +718,7 @@ export const shortcuts: Shortcut[] = [
     name: "Clear all filters",
     group: "Filters",
     hotkey: "Alt+Shift+F",
+    when: boardVisible,
     run: () => {
       const p = preferencesFor(get().board);
       changePreferences(get().board, {
@@ -701,6 +731,7 @@ export const shortcuts: Shortcut[] = [
     name: "Clear last issue filter",
     group: "Filters",
     hotkey: "Shift+F",
+    when: boardVisible,
     run: () => {
       const p = preferencesFor(get().board);
       changePreferences(get().board, {
@@ -709,6 +740,10 @@ export const shortcuts: Shortcut[] = [
     },
   },
 ];
+/** Board filters act only while the board is on screen, not behind a full-page issue or document. */
+function boardVisible() {
+  return !get().panel || get().view !== "page";
+}
 export function shortcutLabel(id: string) {
   const entry = shortcuts.find((s) => s.id === id);
   return entry
@@ -719,6 +754,7 @@ export function shortcutLabel(id: string) {
 }
 export function runShortcut(id: string) {
   const entry = shortcuts.find((s) => s.id === id);
+  if(get().document&&(entry?.issue||entry?.group==="List / Board"))return;
   if (entry && (!entry.issue || selected()) && (!entry.when || entry.when()))
     entry.run();
 }
@@ -737,13 +773,14 @@ export function useLinearHotkeys(getColumns: () => Issue[][]) {
           options: {
             enabled:
               state.boards.length > 0 &&
+              (!state.document || !entry.issue && entry.group!=="List / Board") &&
               ((!state.overlay && !state.toolbar) ||
                 (entry.id === "commands" && state.overlay === "palette") ||
                 (entry.id === "shortcuts" && state.overlay === "shortcuts")) &&
               (!entry.issue || !!selected()) &&
               (!entry.when || entry.when()),
             ignoreInputs:
-              entry.id === "shortcuts" || entry.id === "commands"
+              entry.id === "shortcuts" || entry.id === "commands" || entry.id === "sub-issue"
                 ? false
                 : true,
             meta: { name: entry.name, group: entry.group },

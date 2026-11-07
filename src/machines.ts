@@ -19,7 +19,7 @@ import type { AdfDocument } from "./document";
 import type { IssueDraft, Overlay, View } from "./store";
 
 export type Toolbar = "display" | "filter" | "advanced";
-export type Toast = { text: string; key?: string };
+export type Toast = { text: string; key?: string; undo?:boolean; detail?:string };
 /** The screen state; store.ts copies it onto `get()` so components keep reading it with `useStore`. */
 export type UiContext = {
   board: number;
@@ -27,6 +27,7 @@ export type UiContext = {
   selected: string | null;
   /** The selected issue is open, beside the board or as a page. */
   panel: boolean;
+  document: string|null;
   mine: boolean;
   sidebarHidden:boolean;
   query: string;
@@ -39,7 +40,7 @@ export type UiContext = {
 };
 export type UiEvent =
   /** Changes where you are. A new board resets its search, "only mine" and draft, and closes the toolbar. */
-  | { type: "navigate"; board?: number; view?: View; selected?: string | null; panel?: boolean }
+  | { type: "navigate"; board?: number; view?: View; selected?: string | null; panel?: boolean; document?:string|null }
   /** Escape with nothing on top: close the issue, else clear the search, else drop the selection. */
   | { type: "escape" }
   | {type:"sidebar.toggle"}
@@ -54,12 +55,13 @@ export type UiEvent =
   | { type: "toolbar.close" }
   | { type: "description.edit" }
   | { type: "description.editDone" }
-  | { type: "toast.show"; text: string; key?: string }
+  | { type: "toast.show"; text: string; key?: string; undo?:boolean; detail?:string }
   | { type: "toast.dismiss" };
 
 export const uiMachine = setup({
   types: {} as { context: UiContext; events: UiEvent; input: { board: number; view: View } },
   guards: {
+    documentOpen: ({context}) => !!context.document,
     panelOpen: ({ context }) => context.panel,
     hasQuery: ({ context }) => !!context.query,
     paletteOpen: ({ context }) => context.overlay === "palette",
@@ -70,7 +72,7 @@ export const uiMachine = setup({
 }).createMachine({
   id: "ui",
   type: "parallel",
-  context: ({ input }) => ({ board: input.board, view: input.view, selected: null, panel: false, mine: false, sidebarHidden:false, query: "", overlay: null, toolbar: null, draft: {}, editDesc: false, toast: null }),
+  context: ({ input }) => ({ board: input.board, view: input.view, selected: null, panel: false, document:null, mine: false, sidebarHidden:false, query: "", overlay: null, toolbar: null, draft: {}, editDesc: false, toast: null }),
   on: {
     navigate: {
       actions: enqueueActions(({ context, event, enqueue }) => {
@@ -80,11 +82,13 @@ export const uiMachine = setup({
           ...(event.view ? { view: event.view } : {}),
           ...(event.selected !== undefined ? { selected: event.selected } : {}),
           ...(event.panel !== undefined ? { panel: event.panel } : {}),
+          document:!(event.panel??context.panel)||!(event.selected!==undefined?event.selected:context.selected)?null:event.document!==undefined?event.document:(changed||event.selected!==undefined&&event.selected!==context.selected?null:context.document),
         });
         if (changed) enqueue.raise({ type: "toolbar.close" });
       }),
     },
     escape: [
+      { guard: "documentOpen", actions: assign({ document:null }) },
       { guard: "panelOpen", actions: assign({ panel: false }) },
       { guard: "hasQuery", actions: assign({ query: "" }) },
       { actions: assign({ selected: null }) },
@@ -136,11 +140,11 @@ export const uiMachine = setup({
     toast: {
       initial: "hidden",
       states: {
-        hidden: { on: { "toast.show": { target: "shown", actions: assign({ toast: ({ event }) => ({ text: event.text, ...(event.key ? { key: event.key } : {}) }) }) } } },
+        hidden: { on: { "toast.show": { target: "shown", actions: assign({ toast: ({ event }) => ({ text: event.text, ...(event.key ? { key: event.key } : {}),...(event.undo?{undo:true}:{}),...(event.detail?{detail:event.detail}:{}) }) }) } } },
         shown: {
           after: { 5000: { target: "hidden", actions: assign({ toast: null }) } },
           on: {
-            "toast.show": { target: "shown", reenter: true, actions: assign({ toast: ({ event }) => ({ text: event.text, ...(event.key ? { key: event.key } : {}) }) }) },
+            "toast.show": { target: "shown", reenter: true, actions: assign({ toast: ({ event }) => ({ text: event.text, ...(event.key ? { key: event.key } : {}),...(event.undo?{undo:true}:{}),...(event.detail?{detail:event.detail}:{}) }) }) },
             "toast.dismiss": { target: "hidden", actions: assign({ toast: null }) },
           },
         },

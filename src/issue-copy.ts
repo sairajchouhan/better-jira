@@ -33,6 +33,9 @@ export function adfToMarkdown(node:AdfNode|string|null|undefined):string {
 }
 export const copyKinds=["ID","URL","title","title as link","issue as Markdown","everything as Markdown","git branch name"] as const;
 export type CopyKind=typeof copyKinds[number];
+/** Linear's Copy submenu icon and shortcut per kind, shared by the issue and sub-issue row menus. */
+export const copyIcons={ID:"copy",URL:"link",title:"pencil","title as link":"link","issue as Markdown":"file","everything as Markdown":"file","git branch name":"branch"} as const;
+export const copyShortcuts:Partial<Record<CopyKind,string>>={ID:"copy-id",URL:"copy-url",title:"copy-title","title as link":"copy-link","everything as Markdown":"copy-markdown","git branch name":"copy-branch"};
 const slug=(text:string)=>text.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
 /** `user` prefixes the git branch name like Linear's `raj/drft-53-title`. */
 export function issueCopy(kind:CopyKind,issue:Issue,full:Full|undefined,url:string,status:string,user=""):string {

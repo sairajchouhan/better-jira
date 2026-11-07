@@ -5,6 +5,7 @@ import index from "./index.html";
 import * as mirror from "./mirror";
 import { parsePreferences } from "./view-model";
 import { serverConfiguration } from "./server-config";
+import { fetchPreview } from "./link-preview";
 
 const json = (body: string) => new Response(body, { headers: { "Content-Type": "application/json" } });
 
@@ -31,6 +32,7 @@ const server = serve({
       }),
     },
     "/api/issues": localOnly(() => json(mirror.issues())),
+    "/api/link-preview": localOnly(async req => Response.json(await fetchPreview(new URL(req.url).searchParams.get("url") ?? ""))),
     "/api/issues/:key": localOnly(async(req:BunRequest<"/api/issues/:key">) => {
       try {
         const full = await mirror.issue(req.params.key);

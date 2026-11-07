@@ -1,7 +1,14 @@
 import {expect,test} from 'bun:test';
 import {EditorState} from 'prosemirror-state';
+import {history,undo} from 'prosemirror-history';
 import {mediaCaretPlugin} from './media-caret';
 import {richSchema,toEditorDocument,fromEditorDocument} from './rich-document';
+test('typing beside media then undo restores the exact exported document',()=>{
+ const doc=toEditorDocument({type:'doc',version:1,content:[{type:'mediaSingle',content:[{type:'media',attrs:{id:'one',type:'file'}}]}]});
+ let state=EditorState.create({schema:richSchema,doc,plugins:[mediaCaretPlugin(),history()]});
+ const before=fromEditorDocument(state.doc);state=state.applyTransaction(state.tr.insertText('x',1)).state;
+ undo(state,tr=>{state=state.applyTransaction(tr).state;});expect(fromEditorDocument(state.doc)).toEqual(before);
+});
 test('caret paragraphs around adjacent media are editor-only until the user types in one',()=>{
  const doc={type:'doc' as const,version:1 as const,content:[{type:'mediaSingle',content:[{type:'media',attrs:{id:'one',type:'file'}}]},{type:'mediaSingle',content:[{type:'media',attrs:{id:'two',type:'file'}}]}]};
  const editor=toEditorDocument(doc);expect(editor.childCount).toBe(5);expect(fromEditorDocument(editor)).toEqual(doc);

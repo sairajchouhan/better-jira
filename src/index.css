@@ -41,7 +41,9 @@
   --panel: lch(97.94% 0.5 282);  /* --color-bg-primary */
   --col: lch(92.44% 0.5 282);    /* --color-bg-secondary */
   --card: lch(100% 0 282);       /* elevated theme bgBase (menus, popovers) */
-  --hover: lch(90.94% 0.5 282);  /* --color-bg-tertiary (bgShadeHover) */
+  --hover: lch(90.94% 0.5 282);
+  --row-hover: var(--hover);
+  --card-pressed: var(--card-hover);  /* --color-bg-tertiary (bgShadeHover) */
   --sel: lch(91.354% 0.157 282); /* sidebar theme controlSecondarySelected (main area's 94.854 vanishes on the sidebar) */
   --line: lch(95.24% 0 282);     /* --color-border-primary */
   --line-2: lch(88.49% 0 282);   /* --color-border-secondary */
@@ -53,7 +55,15 @@
   --card-shadow: lch(0 0 0 / 0.088) 0 0 0 0.5px, lch(0 0 0 / 0.02) 0 3px 6px -2px, lch(0 0 0 / 0.04) 0 1px 1px 0;
   --card-hover: lch(96.5% 0 282);   /* card bg when hovered / active */
   --card-fg-3: lch(40% 1 282);      /* ID, chip text, footer inside a card */
+  --menu: var(--card);
+  --menu-line: var(--line-2);
+  --menu-sel: var(--sel);
+  --menu-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
   --chip-line: lch(86.5% 0 282);
+  --add-hover: var(--hover);
+  --menu-fg: var(--fg); --menu-fg-3: var(--fg-3); --menu-placeholder: var(--fg-4);
+  --reaction: color-mix(in lch, var(--accent) 12%, var(--panel)); --reaction-line: color-mix(in lch, var(--accent) 30%, var(--panel)); --reaction-hover: color-mix(in lch, var(--accent) 18%, var(--panel));
+  --key-line: var(--line-3);
   --col-top: lch(94.44% 0.5 282 / 0.4); /* column strip: gradient of the sidebar color */
   --col-bottom: lch(94.44% 0.5 282 / 0.1);
   --tab: lch(99.997% 0.5 282);
@@ -63,6 +73,7 @@
   --tab-on-shadow: lch(0 0 0 / 0.09) 0 0 0 0.5px;
   --hidden-line: lch(91.9% 0 282); /* "Hidden columns" row */
   --hidden-shadow: lch(0 0 0 / 0.02) 0 3px 6px -2px, lch(0 0 0 / 0.04) 0 1px 1px 0;
+  --comment-fg: var(--fg-2); --reply-ph: var(--fg-4); --send: var(--hover);
   /* Workflow-state colors from Linear's status SVGs. canceled/qa/hold are not in this workspace: Linear's
      default canceled grey, and our own teal/orange for Jira-only states. */
   --st-backlog: lch(67.969% 3.577 260.65);
@@ -87,6 +98,8 @@
     --col: lch(7.32% 0.85 272);
     --card: lch(9.232% 0.85 272);
     --hover: lch(8.22% 1.3 272);
+    --row-hover: lch(9.345% 0.85 272);  /* --color-bg-quaternary: resource rows (RAJ-52) */
+    --card-pressed: lch(22.347% 1.525 272); /* a comment's ⋯ while its menu is open (RAJ-52) */
     --sel: lch(18.634% 1.075 272);
     --line: lch(9.84% 1.48 272);
     --line-2: lch(14.16% 1.48 272);
@@ -97,7 +110,16 @@
     --card-shadow: lch(100 0 0 / 0.083) 0 0 0 0.5px, lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
     --card-hover: lch(13.058% 1.3 272);
     --card-fg-3: lch(63.304% 1.425 272);
+    /* Linear's menu surface (RAJ-52 document options) */
+    --menu: lch(12.72% 0.85 272);
+    --menu-line: lch(21.36% 1.93 272);
+    --menu-sel: lch(20.82% 1.3 272);
+    --menu-shadow: lch(0 0 0 / 0.125) 0 3px 8px, lch(0 0 0 / 0.125) 0 2px 5px, lch(0 0 0 / 0.125) 0 1px 1px;
     --chip-line: lch(20.032% 1.93 272);
+    --add-hover: lch(14.006% 0.593 272);
+    --menu-fg: lch(91.178% 1.425 272); --menu-fg-3: lch(64.714% 1.425 272); --menu-placeholder: lch(41.778% 1.425 272); /* Linear's command-menu text, keys and placeholder */
+    --reaction: lch(14.391% 19.592 286.445); --reaction-line: lch(19.701% 19.952 286.445); --reaction-hover: lch(12.141% 17.792 286.445);
+    --key-line: lch(17.04% 1.93 272);
     --col-top: lch(2.595% 0.4 272 / 0.4);
     --col-bottom: lch(2.595% 0.4 272 / 0.1);
     --tab: lch(10.149% 0.593 272);
@@ -107,6 +129,7 @@
     --tab-on-shadow: lch(100 0 0 / 0.137) 0 0 0 0.5px;
     --hidden-line: lch(16.793% 1.93 272);
     --hidden-shadow: lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
+    --comment-fg: lch(90.826% 1.425 272); --reply-ph: lch(39.452% 1.425 272); --send: lch(13.861% 1.139 272); /* RAJ-52 comment body, reply placeholder, send button */
     --st-backlog: #bec2c8;
     --st-todo: #e2e2e2;
     --st-review: lch(60% 64.37 141.95);
@@ -119,6 +142,9 @@
     cursor: default;
   }
   a { cursor: inherit; }
+  /* Linear's keyboard ring: 1px accent outline on controls, 1px off links; zero specificity so a control's own focus style wins. */
+  :where(button, a[href], [role=button], [tabindex]:not([tabindex="-1"])):focus-visible { outline: 1px solid var(--accent); outline-offset: 0; }
+  :where(a[href]):focus-visible { outline-offset: 1px; }
   [contenteditable="true"] { cursor: text; }
   [data-media-interactive] { cursor: default; }
   kbd {
@@ -185,6 +211,10 @@
 .video-controls select { flex: 0 0 48px; width: 48px; height: 28px; padding: 0 2px; color: inherit; border: 0; border-radius: 6px; background: transparent; appearance: none; text-align: center; outline: none; font: inherit; }
 .video-controls select option { color: #eee; background: #242426; }
 .video-rate { position: relative; flex: 0 0 48px; height: 28px; }
+/* Linear's tooltip (RAJ-52 property hover): menu surface, 5px 8px, 12px/450, bordered key caps. */
+.app-tooltip { position: fixed; z-index: 60; display: flex; align-items: center; gap: 8px; width: max-content; max-width: min(320px, calc(100vw - 16px)); padding: 5px 8px; border: 1px solid var(--menu-line); border-radius: 8px; background: var(--menu); box-shadow: lch(0 0 0 / 0.3) 0 0.5px 1px 1px; color: var(--fg-2); font-size: 12px; font-weight: 450; line-height: 18px; pointer-events: none; }
+.app-tooltip kbd { height: 19px; min-width: 18px; padding: 0 2px; border-color: var(--line-3); font-size: 12px; color: var(--fg-3); }
+.app-tooltip kbd + kbd { margin-left: -4px; }
 .video-tooltip { position: absolute; z-index: 5; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; width: max-content; max-width: calc(100vw - 24px); border: 1px solid rgb(255 255 255 / .15); border-radius: 8px; background: #262627; color: #ddd; padding: 4px 8px; font: 12px/20px Inter, sans-serif; box-shadow: 0 2px 6px rgb(0 0 0 / .3); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 100ms, visibility 100ms; }
 .video-tooltip kbd { display: inline-flex; align-items: center; align-self: center; height: 20px; padding: 0 4px; border: 1px solid rgb(255 255 255 / .08); border-radius: 3px; color: #999; font: inherit; }
 .video-controls button:hover > .video-tooltip, .video-controls a:hover > .video-tooltip, .video-rate:hover > .video-tooltip { opacity: 1; visibility: visible; transition-delay: 400ms; }
@@ -285,24 +315,134 @@
 .issue-detail-body { position: relative; flex: 1; min-height: 0; overflow-y: auto; }
 .issue-copy-toolbar { position: sticky; top: 8px; z-index: 5; display: flex; justify-content: flex-end; gap: 6px; height: 0; padding-right: 12px; }
 .issue-copy-toolbar button { border: 1px solid var(--line-2); border-radius: 50%; background: var(--panel); }
-.issue-detail-grid { display: grid; grid-template-columns: 1fr minmax(0,80ch) minmax(0,clamp(280px,26.087cqw + 66.087px,400px)) 1fr; column-gap: clamp(16px,8.696cqw - 55.304px,56px); align-content: start; padding-block: 64px 80px; font-size: 16px; }
+.issue-detail-grid { display: grid; grid-template-columns: 1fr minmax(0,80ch) minmax(0,clamp(280px,26.087cqw + 66.087px,400px)) 1fr; column-gap: clamp(16px,8.696cqw - 55.304px,56px); align-content: start; padding-block: 59.5px 80px; font-size: 16px; } /* title at y 112.5 like Linear (RAJ-52, 1272x846) */
 .issue-detail-title { grid-column: 2; grid-row: 1; min-width: 0; padding-left: 14px; }
 .issue-detail-content { grid-column: 2; grid-row: 2; min-width: 0; padding-left: 14px; font-size: 15px; }
-.issue-detail-properties { grid-column: 3; grid-row: 1 / span 2; min-width: 0; align-self: start; position: sticky; top: 64px; }
+.issue-detail-properties { grid-column: 3; grid-row: 1 / span 2; min-width: 0; align-self: start; position: sticky; top: 59.5px; padding: 15.3px 0 0 4px; }
 .issue-detail-properties [data-properties] { max-width: 280px; }
+.property-short { display: none; }
 .issue-detail-grid[data-properties-hidden] { grid-template-columns: 1fr minmax(0,80ch) 1fr; }
-@container issue-detail (max-width: 900px) {
- .issue-detail-grid { display: flex; flex-direction: column; padding: 56px 24px 48px; }
+@container issue-detail (width < 820px) {
+ .issue-detail-grid { display: flex; flex-direction: column; padding: 56px 14px 48px; }
  .issue-detail-title, .issue-detail-content { padding-left: 0; }
- .issue-detail-properties { margin-top: 12px; position: static; }
+ .issue-detail-properties { margin-top: 12px; padding: 0 6px; position: static; }
  .issue-detail-properties [data-properties] { display: flex; flex-wrap: wrap; gap: 6px; max-width: none; }
  .issue-detail-properties section { display: contents; }
  .issue-detail-properties h3 { display: none; }
- .issue-detail-properties section > button { width: auto; max-width: 100%; border: 1px solid var(--line-2); border-radius: 20px; padding-inline: 10px; height: 28px; font-size: 12px; }
+ .issue-detail-properties section > button { width: auto; max-width: 100%; margin-left: 0; border: 1px solid var(--line-2); border-radius: 20px; padding-inline: 10px; height: 28px; font-size: 12px; }
  .issue-detail-properties kbd { display: none; }
+ .issue-detail-properties .property-wide { display: none; }
+ .issue-detail-properties .property-short { display: inline; }
+ #prop-status { order: 0; } #prop-priority { order: 1; } #prop-assignee { order: 2; }
+ #prop-project { order: 3; } #prop-labels { order: 4; } #prop-due { order: 5; } #prop-milestone { order: 6; }
 }
-.rich-editor[data-variant="comment"] .rich-content { min-height: 80px; padding: 12px 14px 42px; }
-.rich-editor[data-variant="comment"] .rich-placeholder { top: 12px; left: 14px; font-size: 14px; }
-.rich-editor[data-variant="comment"] > .rich-editor-actions { position: absolute; bottom: 8px; right: 10px; border: 0; padding: 0; }
-.rich-editor[data-variant="comment"] .rich-editor-submit { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border-radius: 50%; background: var(--hover); color: var(--fg); }
-.issue-activity:target, .issue-activity li:target { scroll-margin-top: 24px; }
+/* RAJ-52 composer: 84px with its border, 15px/24px text 16px in, 24px buttons 12px apart 14px from the bottom and 18px from the right. */
+.rich-editor[data-variant="comment"] .rich-content { min-height: 82px; padding: 12px 16px 46px; font-size: 15px; line-height: 24px; }
+.rich-editor[data-variant="comment"] .rich-placeholder { top: 12px; left: 16px; font-size: 15px; line-height: 24px; }
+.rich-editor[data-variant="comment"] > .rich-editor-actions { position: absolute; bottom: 14px; right: 18px; gap: 12px; border: 0; padding: 0; }
+.rich-editor[data-variant="comment"] > .rich-editor-actions > button:not(.rich-editor-submit) { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; }
+.rich-editor[data-variant="comment"] .rich-editor-submit { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border-radius: 50%; background: var(--send); color: var(--card-fg-3); }
+.issue-activity:target, .issue-activity li:target, .issue-activity [data-comment]:target { scroll-margin-top: 24px; }
+
+.issue-activity [data-thread], .issue-activity > div:last-child { margin-inline: -8px; }
+/* RAJ-52/53 event rows (created, property, link): 24.8px tall, 4px apart, a 14px avatar 11px in and the name 36px in. */
+.activity-event { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 24.8px; padding: 0 4px 0 11px; font-size: 12px; color: var(--fg-3); }
+.activity-event > :first-child { margin-right: 5px; }
+.activity-event:has(+ .activity-event) { margin-bottom: 4px; }
+.issue-activity > div:first-child > button { font-size: 12px; }
+
+.issue-resources { margin-top: 24px; }
+/* Linear's resource row (RAJ-52): 36px, inset 8px left and 10px right, 1px apart, 11px under the header toggle; ⋯ 4px after the time stays lit while its menu is open. */
+.issue-resources { font-size: 13px; }
+.resource-row { display: flex; height: 36px; margin-left: -6px; align-items: center; gap: 8px; padding: 0 10px 0 8px; border-radius: 8px; }
+.resource-row:hover, .resource-row[data-open] { background: var(--row-hover); }
+.issue-resources > div:first-child + .resource-row { margin-top: 9px; }
+.resource-row + .resource-row { margin-top: 1px; }
+.resource-options { display: grid; flex-shrink: 0; place-items: center; width: 24px; height: 24px; margin-left: -4px; border-radius: 9999px; color: var(--fg-2); opacity: 0; }
+.resource-row:hover .resource-options, .resource-options:focus, .resource-options[aria-expanded="true"] { opacity: 1; }
+.resource-options:hover, .resource-options[aria-expanded="true"] { background: var(--sel); }
+
+/* RAJ-52 comment card: a 0.5px line and shadow, 16px padding (replies 14px 16px), an 18px header of 13px text, then 15px/24px body 6px below.
+   The resting reply row is 46px under a 0.5px line: your avatar, "Leave a reply…", and 24px attach and send buttons 12px apart, 18px from the right. */
+.comment-thread { border: 0.5px solid var(--hidden-line); box-shadow: var(--hidden-shadow); }
+.comment-message { padding: 16px; }
+.comment-reply { padding: 14px 16px; border-top: 0.5px solid var(--hidden-line); }
+.comment-head { display: flex; height: 18px; align-items: center; gap: 8px; font-size: 13px; line-height: normal; font-weight: 450; color: var(--card-fg-3); }
+.comment-head > :first-child { margin-right: 1px; }
+.comment-body { margin-top: 6px; font-size: 15px; line-height: 24px; font-weight: 450; color: var(--comment-fg); }
+.comment-body :where(p, li) { line-height: 24px; }
+.comment-reply-composer { border-top: 0.5px solid var(--hidden-line); }
+.comment-reply-row { display: flex; height: 46px; align-items: center; gap: 9px; padding: 0 18px 0 16px; }
+.comment-reply-open { flex: 1; height: 24px; text-align: left; font-size: 15px; line-height: 24px; font-weight: 450; color: var(--reply-ph); cursor: text; }
+.comment-reply-attach, .comment-reply-send { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 9999px; color: var(--fg-3); }
+.comment-reply-attach { margin-right: 3px; }
+.comment-reply-attach:hover { background: var(--hover); }
+.comment-reply-send { background: var(--send); color: var(--card-fg-3); }
+.comment-hover-action { display: grid; place-items: center; width: 28px; height: 28px; margin: -5px 0; border-radius: 6px; opacity: 0; }
+.comment-head > span:last-child { margin-right: -5px; }
+.comment-message:hover .comment-hover-action, .comment-message:focus-within .comment-hover-action, .comment-message:has(> .comment-head [aria-expanded="true"]) .comment-hover-action { opacity: 1; }
+.comment-hover-action[aria-expanded="true"] { background: var(--card-pressed); }
+.comment-hover-action:hover:not([aria-expanded="true"]) { background: var(--hover); }
+.comment-reply-composer .rich-editor { border: 0; background: transparent; }
+/* Comment formatting stays inside its composer so it cannot cover the preceding reply row. */
+.rich-editor[data-variant="comment"] > [role="toolbar"] { bottom: 4px; left: 8px; right: 42px; margin-bottom: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+
+/* Keep inline formatting beside the composer actions, clear of the title. */
+.sub-issue-composer .rich-editor > [role="toolbar"] { bottom: 4px; left: 8px; right: 245px; margin-bottom: 0; border: 0; box-shadow: none; background: var(--card); }
+.sub-issue-composer .rich-editor:focus-within .rich-editor-actions > span { visibility: hidden; }
+.sub-issue-composer .rich-content { font-size: 15px; line-height: 24px; }
+@media (max-width: 700px) {
+ .document-history-grid { grid-template-columns: minmax(0, 1fr); }
+ .document-history-grid > [aria-label="Document versions"] { border-left: 0; border-top: 1px solid var(--line-2); padding-left: 0; padding-top: 12px; }
+}
+
+/* Download as PDF prints only the open document, like Linear's export. */
+@media print {
+  :where(body:has([data-document])) * { visibility: hidden; }
+  [data-document], [data-document] * { visibility: visible; }
+  [data-document] { position: absolute; inset: 0 auto auto 0; width: 100%; }
+  [data-document] button { display: none; }
+  [data-document] .overflow-y-auto { overflow: visible; }
+}
+
+/* Linear's property menu (RAJ-52): 206px inside a 1px border; rows 32px, inset 6px, radius 8, 13px/450; the active row brightens. */
+.property-menu { width: 206px; }
+.property-menu-key { height: 19px; min-width: 18px; padding: 0 3px; border-color: var(--key-line); font-size: 12px; color: var(--fg-3); }
+.picker-item { display: flex; height: 32px; margin: 0 6px; align-items: center; gap: 8px; border-radius: 8px; padding: 0 12px 0 8px; font-size: 13px; font-weight: 450; color: var(--fg-2); cursor: default; }
+.picker-item[data-selected=true] { background: var(--menu-sel); color: var(--fg); }
+.picker-item > .picker-number { height: auto; min-width: 0; margin-left: 1px; border: 0; padding: 0; font-size: 12px; font-weight: 500; color: var(--fg-3); }
+.property-menu [cmdk-group-heading] { display: flex; height: 30px; align-items: center; padding-left: 14px; font-size: 12px; font-weight: 500; color: var(--fg-3); }
+.property-menu [cmdk-separator] { height: 1px; margin: 5.5px 0; background: var(--line-2); }
+/* Linear's label checkbox: shown when checked or on the active row; 14px, radius 3, accent when checked. */
+.label-check { appearance: none; display: grid; place-content: center; width: 14px; height: 14px; margin: 0; border: 1px solid var(--fg-4); border-radius: 3px; opacity: 0; }
+.label-row[data-checked=true] .label-check, .label-row[data-selected=true] .label-check { opacity: 1; }
+.label-check:checked { border-color: var(--accent); background: var(--accent); }
+.label-check:checked::after { content: ""; width: 8px; height: 5px; margin-top: -2px; border: solid #fff; border-width: 0 0 1.5px 1.5px; transform: rotate(-45deg); }
+/* Linear's label chip in the issue sidebar (RAJ-52): 25px, 1px border, panel fill, 9px dot 9px in, name 6px after it, 13px/500. */
+.label-chip { display: flex; height: 25px; max-width: 100%; align-items: center; gap: 6px; border: 1px solid var(--line-2); border-radius: 9999px; background: var(--panel); padding: 0 8px; font-size: 13px; font-weight: 500; color: var(--fg-2); }
+.label-chip:hover { background: var(--tab-on); }
+.label-add { display: grid; width: 25px; height: 25px; place-items: center; border: 1px solid transparent; border-radius: 9999px; color: var(--fg-2); }
+.label-add:hover { background: var(--add-hover); }
+.relation-pill { display: flex; height: 28px; max-width: 100%; min-width: 0; margin-left: 1px; align-items: center; gap: 6px; border-radius: 9999px; padding: 0 10px 0 6px; color: var(--fg-2); }
+.relation-pill > :first-child { display: grid; width: 16px; height: 16px; flex-shrink: 0; place-items: center; }
+.relation-pill:hover { background: var(--add-hover); }
+.relation-remove { display: grid; width: 24px; height: 24px; flex-shrink: 0; place-items: center; border-radius: 9999px; color: var(--fg-2); opacity: 0; }
+.group\/relation:hover .relation-remove, .relation-remove:focus-visible { opacity: 1; }
+.relation-remove:hover { background: var(--add-hover); color: var(--fg); }
+.reaction-pill { display: flex; height: 28px; align-items: center; border: 1px solid var(--reaction-line); border-radius: 9999px; background: var(--reaction); padding: 0 8px; font-size: 12px; font-weight: 500; color: var(--fg-3); }
+.reaction-pill:hover { background: var(--reaction-hover); }
+.reaction-pill > :first-child { display: grid; width: 14px; height: 14px; place-items: center; font-size: 11px; line-height: 1; }
+.reaction-pill > :last-child { padding-left: 5px; color: var(--fg); }
+.round-action { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 9999px; color: var(--fg-2); }
+.round-action:hover { background: var(--hover); color: var(--fg); }
+/* Linear's "Mark as" command menu (RAJ-52): 30px 12px/500 headings, 46px rows whose 42px highlight is inset 2px, and a 35px hint footer. */
+.mark-list [cmdk-group-heading] { display: flex; height: 30px; align-items: center; padding-left: 12px; font-size: 12px; font-weight: 500; color: var(--menu-fg-3); }
+.mark-row { position: relative; display: flex; height: 46px; align-items: center; gap: 8px; padding: 0 12px; font-size: 13px; color: var(--fg-2); }
+.mark-row[data-selected="true"]::before { content: ""; position: absolute; inset: 2px 0; z-index: -1; border-radius: 8px; background: var(--menu-sel); }
+.mark-row kbd { font-size: 12px; color: var(--menu-fg-3); }
+.mark-footer { display: flex; height: 35px; flex-shrink: 0; align-items: center; border-top: 1px solid var(--menu-line); padding: 0 4px; }
+.mark-footer > span { display: flex; height: 24px; align-items: center; gap: 6px; border-radius: 9999px; padding: 0 8px; font-size: 12px; font-weight: 500; color: var(--menu-fg); }
+.mark-footer kbd { display: grid; width: 18px; height: 19.2px; place-items: center; padding: 2px; border: 1px solid var(--key-line); border-radius: 4px; color: var(--menu-fg-3); font-size: 12px; font-weight: 500; }
+
+/* An action menu that has not been navigated yet shows no highlighted row (Linear). */
+[cmdk-root][data-pristine] [cmdk-item][data-selected="true"]:not(:hover){background:transparent}

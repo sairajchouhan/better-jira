@@ -9,7 +9,7 @@ const PORT = Number(process.env.E2E_PORT ?? 3011);
 export const APP = `http://127.0.0.1:${PORT}/`;
 setDefaultTimeout(60_000);
 
-let server: ReturnType<typeof Bun.spawn>, browser: ReturnType<typeof Bun.spawn>, profile: string, ws: WebSocket;
+let server: ReturnType<typeof Bun.spawn>, browser: ReturnType<typeof Bun.spawn>, watchdog: ReturnType<typeof Bun.spawn>, profile: string, ws: WebSocket;
 let seq = 0;
 const pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
 const events: ((m: any) => void)[] = [];
@@ -19,14 +19,25 @@ function send(method: string, params: object = {}, sessionId?: string): Promise<
   return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
 }
 
-/** Started on first use; each test file calls afterAll(stop) (hooks in a shared module attach only to the first file). */
+/** Started on first use and shared by every test file in the run; each file calls afterAll(stop) (hooks in a shared module attach only to the first file). */
 let started: Promise<void> | undefined;
 async function start() {
+  if(server)await server.exited;
+  // Never accept another run's fixture: it may serve a stale bundle and give a false result.
+  try {
+    const reservation=Bun.serve({hostname:"127.0.0.1",port:PORT,fetch:()=>new Response(null,{status:503})});
+    await reservation.stop(true);
+  }catch(error){throw new Error(`E2E fixture port ${PORT} is already in use`,{cause:error});}
   server = Bun.spawn(["bun", "scripts/fixture-server.ts"], { env: { ...process.env, FIXTURE_PORT: String(PORT) }, stdout: "ignore", stderr: "inherit" });
   profile = mkdtempSync(join(tmpdir(), "better-jira-e2e-"));
   browser = Bun.spawn([BROWSER, "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-extensions", "about:blank"], { stdout: "ignore", stderr: "ignore" });
+  // bun test can exit, or be killed by a timeout, without an exit event: this stops the server and browser once this process is gone.
+  // It watches for being reparented, because an exited but unreaped test process still passes `kill -0`.
+  watchdog = Bun.spawn(["sh", "-c", `while [ "$(ps -o ppid= -p $$ | tr -d ' ')" = "${process.pid}" ]; do sleep 1; done; kill ${server.pid} ${browser.pid} 2>/dev/null; rm -rf '${profile}'`], { stdout: "ignore", stderr: "ignore" });
+  watchdog.unref();
   let url = "";
   for (let i = 0; i < 100 && !url; i++) {
+    if(server.exitCode!==null)throw new Error(`E2E fixture exited before startup: ${server.exitCode}`);
     await Bun.sleep(100);
     try { const [port, path] = readFileSync(join(profile, "DevToolsActivePort"), "utf8").split("\n"); if (port && path) url = `ws://127.0.0.1:${port}${path}`; } catch {}
   }
@@ -37,7 +48,12 @@ async function start() {
   for (let i = 0; i < 100; i++) { try { if ((await fetch(`${APP}api/boards`)).ok) break; } catch {} await Bun.sleep(100); }
   await fetch(APP); // warm the HTML bundle
 }
-export function stop() { started = undefined; ws?.close(); browser?.kill(); server?.kill(); try { rmSync(profile, { recursive: true, force: true }); } catch {} }
+function shutdown() { clearTimeout(idle); started = undefined; ws?.close(); watchdog?.kill(); browser?.kill(); server?.kill(); try { rmSync(profile, { recursive: true, force: true }); } catch {} }
+process.on("exit", shutdown);
+let idle: ReturnType<typeof setTimeout> | undefined;
+/** Each file's afterAll: reset the fixture but keep the server and browser for the next file in this run (every page already gets a fresh
+ *  browser context), instead of rebundling and relaunching per file. They stop after 5s unused, or when the process exits. */
+export async function stop() { if (!started) return; clearTimeout(idle); await fetch(`${APP}__fixture`, { method: "POST", body: "{}" }).catch(() => {}); idle = setTimeout(shutdown, 5000); }
 
 const KEYS: Record<string, [string, number, string?]> = { Enter: ["Enter", 13, "\r"], Escape: ["Escape", 27], Tab: ["Tab", 9], Backspace: ["Backspace", 8], Delete: ["Delete", 46], ArrowUp: ["ArrowUp", 38], ArrowDown: ["ArrowDown", 40], ArrowLeft: ["ArrowLeft", 37], ArrowRight: ["ArrowRight", 39], End: ["End", 35], Home: ["Home", 36], " ": ["Space", 32, " "] };
 const MODS: Record<string, number> = { alt: 1, ctrl: 2, meta: 4, shift: 8 };
@@ -45,6 +61,7 @@ const MODS: Record<string, number> = { alt: 1, ctrl: 2, meta: 4, shift: 8 };
 export type Page = Awaited<ReturnType<typeof open>>;
 /** A fresh browser context per page, so local data never leaks between tests. */
 export async function open(path = "", { width = 1440, height = 900, setup = "" } = {}) {
+  clearTimeout(idle);
   await (started ??= start());
   const { browserContextId } = await send("Target.createBrowserContext");
   const { targetId } = await send("Target.createTarget", { url: "about:blank", browserContextId });
@@ -97,6 +114,9 @@ export async function open(path = "", { width = 1440, height = 900, setup = "" }
       const {x,y}=await waitFor<{x:number;y:number}>(`(async()=>{const n=${q(selector)};if(!n)return null;n.scrollIntoView({block:"center",inline:"nearest"});const a=n.getBoundingClientRect();await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);const b=n.getBoundingClientRect(),x=b.x+b.width/2,y=b.y+b.height/2,hit=document.elementFromPoint(x,y);return b.width&&Math.abs(a.x-b.x)<.5&&Math.abs(a.y-b.y)<.5&&n.contains(hit)?{x,y}:null})()`);
       await page.clickAt(x,y);
     },
+    /** A left-button pointer drag from one point to another, for pan and slider gestures (not HTML drag and drop). */
+    async pointerDrag(x: number, y: number, toX: number, toY: number) { await cmd("Input.dispatchMouseEvent", { type: "mouseMoved", x, y }); await mouse("mousePressed", x, y); for (let i = 1; i <= 6; i++) { await mouse("mouseMoved", x + ((toX - x) * i) / 6, y + ((toY - y) * i) / 6); await Bun.sleep(16); } await mouse("mouseReleased", toX, toY); await Bun.sleep(60); },
+    async wheel(x: number, y: number, deltaX: number, deltaY: number) { await cmd("Input.dispatchMouseEvent", { type: "mouseWheel", x, y, deltaX, deltaY }); await Bun.sleep(80); },
     async hover(selector: string) { const { x, y } = await center(selector); await cmd("Input.dispatchMouseEvent", { type: "mouseMoved", x, y }); await Bun.sleep(60); },
     async drag(selector: string, x: number, y: number) {
       const from = await center(selector);
@@ -125,7 +145,8 @@ export async function open(path = "", { width = 1440, height = 900, setup = "" }
 /** A DOM lookup expression: CSS selector, or `text=Label` for the first button or link with that accessible text. */
 export function q(selector: string) {
   if (selector.startsWith("text=")) return `[...document.querySelectorAll("button,a,[role=button],[cmdk-item],[role=option]")].find(n=>(n.getAttribute("aria-label")??n.textContent??"").trim()===${JSON.stringify(selector.slice(5))})`;
-  return `document.querySelector(${JSON.stringify(selector)})`;
+  // A hovered control's title is parked in data-title while the app tooltip shows it.
+  return `(document.querySelector(${JSON.stringify(selector)})??document.querySelector(${JSON.stringify(selector.replaceAll("[title=", "[data-title="))}))`;
 }
 
 /** The localStorage key the app uses for the fixture account's view preferences. */

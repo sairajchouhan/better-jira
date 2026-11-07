@@ -22,3 +22,8 @@ export function documentHasMedia(node:unknown,depth=0):boolean{
  if((value.type==='media'||value.type==='mediaInline')&&(typeof value.attrs?.id==='string'||typeof value.attrs?.url==='string'))return true;
  return Array.isArray(value.content)&&value.content.some(child=>documentHasMedia(child,depth+1));
 }
+
+const discarded=new Map<string,number>();
+/** The owner threw this content away (a discarded draft): media still uploading from editors mounted before now is dropped, not added to the next draft. */
+export const discardLateMedia=(scope:string)=>{discarded.set(scope,performance.now());};
+export const lateMediaDiscarded=(scope:string|undefined,since:number)=>!!scope&&(discarded.get(scope)??-Infinity)>=since;

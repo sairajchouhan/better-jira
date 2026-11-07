@@ -1,3 +1,6 @@
+import {validCommentStates} from './comment-thread';
+import {resourceURL,validDocumentProperties,validLinkPreview} from './issue-resource';
+import {activityFields} from './issue-activity';
 import {localFileBlob} from './media-types';
 import {validMediaEdits} from "./media-edits";
 import type { Full, Issue } from "./store";
@@ -9,7 +12,7 @@ export type LocalState={version:1;sequence:number;changes:LocalChange[];undo:Loc
 export type LocalLoad={state:LocalState;recovered:boolean;readOnly:boolean;missingFiles:number};
 const object=(value:unknown):value is Record<string,any>=>!!value&&typeof value==="object"&&!Array.isArray(value);
 const strings=(value:unknown):value is string[]=>Array.isArray(value)&&value.every(v=>typeof v==="string");
-const issueFields=new Set(["key","board","summary","status","type","priority","assignee","labels","parent","rank","comments","updated","resolved","created","creator","due","project","description","links","relations","milestones","prCount","statusSince","started","watchers","watchersComplete","estimate","projectLead","attachments","reactions","mediaEdits","descriptionHistory"]);
+const issueFields=new Set(["key","board","summary","status","type","priority","assignee","labels","parent","rank","comments","updated","resolved","created","creator","due","project","description","links","resources","commentStates","reminder","relations","milestones","prCount","statusSince","started","watchers","watchersComplete","estimate","projectLead","attachments","reactions","mediaEdits","descriptionHistory","activity"]);
 const user=(v:unknown)=>v===null||object(v)&&typeof v.id==="string"&&typeof v.name==="string";
 const optionalArray=(value:unknown,valid:(v:any)=>boolean)=>value===undefined||Array.isArray(value)&&value.every(valid);
 function document(value:unknown,depth=0):boolean {
@@ -18,14 +21,16 @@ function document(value:unknown,depth=0):boolean {
 }
 const isIssue=(v:unknown,key:string):v is Issue=>object(v)&&v.key===key&&Number.isFinite(v.board)&&typeof v.summary==="string"&&typeof v.status==="string"&&strings(v.labels)&&typeof v.updated==="string"&&Number.isFinite(v.comments)&&user(v.assignee)
   &&["type","priority","parent","rank","description","created","statusSince","started"].every(k=>v[k]===undefined||typeof v[k]==="string")
-  &&validMediaEdits(v.mediaEdits)
+  &&(v.reminder===undefined||v.reminder===null||object(v.reminder)&&typeof v.reminder.at==='string'&&Number.isFinite(Date.parse(v.reminder.at))&&(v.reminder.delivered===undefined||typeof v.reminder.delivered==='boolean'))
+  &&validMediaEdits(v.mediaEdits)&&validCommentStates(v.commentStates,document)
   &&optionalArray(v.reactions,r=>typeof r==="string")&&optionalArray(v.links,r=>typeof r==="string")
+  &&optionalArray(v.resources,r=>object(r)&&typeof r.id==='string'&&['link','pull-request','document'].includes(r.kind)&&typeof r.title==='string'&&typeof r.updated==='string'&&(r.created===undefined||typeof r.created==='string')&&(r.kind==='document'?document(r.body)&&validDocumentProperties(r,document):typeof r.url==='string'&&resourceURL(r.url)!==null&&validLinkPreview(r.preview)))
   &&optionalArray(v.attachments,a=>object(a)&&typeof a.id==="string"&&typeof a.name==="string"&&typeof a.type==="string"&&Number.isFinite(a.size))
   &&optionalArray(v.relations,r=>object(r)&&typeof r.key==="string"&&typeof r.kind==="string")
   &&optionalArray(v.milestones,m=>object(m)&&typeof m.id==="string"&&typeof m.name==="string")
-  &&optionalArray(v.watchers,user)&&optionalArray(v.descriptionHistory,h=>object(h)&&typeof h.text==="string"&&typeof h.at==="string"&&(h.document===undefined||document(h.document)));
+  &&optionalArray(v.activity,e=>object(e)&&typeof e.id==="string"&&(activityFields.includes(e.field)||e.field==="relation")&&typeof e.at==="string"&&(e.updated===undefined||typeof e.updated==="string")&&object(e.actor)&&user(e.actor))&&optionalArray(v.watchers,user)&&optionalArray(v.descriptionHistory,h=>object(h)&&typeof h.text==="string"&&typeof h.at==="string"&&(h.document===undefined||document(h.document)));
 const isFull=(v:unknown,key:string):v is Full=>object(v)&&v.key===key&&object(v.fields)&&(v.fields.description===undefined||document(v.fields.description))
-  &&(v.fields.comment===undefined||object(v.fields.comment)&&Array.isArray(v.fields.comment.comments)&&v.fields.comment.comments.every((c:any)=>object(c)&&typeof c.id==="string"&&document(c.body)));
+  &&(v.fields.comment===undefined||object(v.fields.comment)&&Array.isArray(v.fields.comment.comments)&&v.fields.comment.comments.every((c:any)=>object(c)&&typeof c.id==="string"&&(c.parentId===undefined||typeof c.parentId==='string')&&document(c.body)));
 const isSnapshot=(v:unknown,key:string):v is Snapshot=>object(v)&&(v.issue===undefined||isIssue(v.issue,key))&&(v.full===undefined||isFull(v.full,key))&&(v.issueFields===undefined||strings(v.issueFields)&&v.issueFields.every(f=>issueFields.has(f)))&&(v.fullFields===undefined||strings(v.fullFields)&&v.fullFields.every(f=>["description","comment"].includes(f)));
 function isEdit(v:unknown):v is LocalEdit {
   return object(v)&&strings(v.keys)&&typeof v.label==="string"&&Array.isArray(v.before)&&Array.isArray(v.after)&&v.before.length===v.keys.length&&v.after.length===v.keys.length&&v.keys.every((key,i)=>isSnapshot(v.before[i],key)&&isSnapshot(v.after[i],key));

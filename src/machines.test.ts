@@ -150,3 +150,15 @@ test("autosave: keeps every draft, commits 600ms after the last change, and flus
   autosave.send({ type: "flush" });
   expect(commits).toEqual([doc("ab"), doc("abc")]);
 });
+
+test('ui: a document requires an open issue and clears with its issue context', () => {
+ const ui=createActor(uiMachine,{input:{board:1,view:'side'}}).start();
+ ui.send({type:'navigate',document:'orphan'});
+ expect(ui.getSnapshot().context.document).toBeNull();
+ ui.send({type:'navigate',selected:'A-1',panel:true,document:'doc'});
+ expect(ui.getSnapshot().context.document).toBe('doc');
+ ui.send({type:'navigate',panel:false,document:'doc'});
+ expect(ui.getSnapshot().context.document).toBeNull();
+ ui.send({type:'navigate',selected:null,panel:true,document:'doc'});
+ expect(ui.getSnapshot().context.document).toBeNull();
+});

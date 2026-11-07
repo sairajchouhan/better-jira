@@ -44,14 +44,33 @@ test("I9: the formatting toolbar stays one row when the caret enters a table", a
     await openIssue(page);
     await page.key("i", "ctrl", "shift");
     await page.waitFor(`!!${editor("description")}`);
+    // Like Linear, a focused description shows no toolbar; selecting text shows the floating one.
     await page.click("#description h2");
-    const toolbar = `document.querySelector('[role=toolbar][aria-label="Description formatting"]').getBoundingClientRect().height`;
+    expect(await page.eval(`!!document.getElementById('description').closest('.rich-editor').querySelector('[role=toolbar]')`)).toBe(false);
+    const select = (node: string) => page.eval(`(()=>{const n=document.querySelector('${node}'),r=document.createRange();r.selectNodeContents(n.querySelector('p')??n);const s=getSelection();s.removeAllRanges();s.addRange(r);})()`);
+    const toolbar = `document.getElementById('description').closest('.rich-editor').querySelector('[role=toolbar]')?.getBoundingClientRect().height`;
+    await select("#description h2");await page.waitFor(`${toolbar}>0`);
     const before = await page.eval<number>(toolbar);
-    await page.click("#description td");
+    await select("#description td");
     await page.waitFor(`!!document.querySelector('[aria-label="Add table row"]')`);
     expect(await page.eval<number>(toolbar)).toBe(before);
     expect(before).toBeLessThan(40);
   } finally { await page.close(); }
+});
+
+test("I9b: the floating toolbar sits 8px above the selection, on one row inside a narrow window", async () => {
+  for (const width of [1272, 420]) {
+    const page = await open("?issue=TEST-2&view=page", { width, height: 800 });
+    try {
+      await page.waitFor(`!!document.getElementById('comment')`);await page.click("#description");await page.waitFor(`!!${editor("description")}`);
+      // A block at least 150px down, so the toolbar goes above it (its measured height decides the gap).
+      await page.eval(`(()=>{const d=document.getElementById('description'),top=d.getBoundingClientRect().top,n=[...d.querySelectorAll('p')].find(n=>n.getBoundingClientRect().top-top>=150&&n.textContent.length>3),r=document.createRange();r.selectNodeContents(n);const s=getSelection();s.removeAllRanges();s.addRange(r);})()`);
+      const toolbar = `document.getElementById('description').closest('.rich-editor').querySelector('[role=toolbar]')`;
+      await page.waitFor(`!!${toolbar}`);await Bun.sleep(150);
+      const [gap, height, left, right] = await page.eval<[number,number,number,number]>(`(()=>{const t=${toolbar}.getBoundingClientRect(),s=getSelection().getRangeAt(0).getClientRects()[0];return [s.top-t.bottom,t.height,t.left,innerWidth-t.right]})()`);
+      expect(Math.abs(gap - 8)).toBeLessThan(1);expect(height).toBeLessThan(40);expect(left).toBeGreaterThan(11);expect(right).toBeGreaterThan(11);
+    } finally { await page.close(); }
+  }
 });
 
 test("I7: a sent comment keeps focus in the comment box, renders Markdown, and can be edited and deleted", async () => {
@@ -65,12 +84,12 @@ test("I7: a sent comment keeps focus in the comment box, renders Markdown, and c
     await Bun.sleep(150);
     expect(await page.eval(`document.activeElement?.id`)).toBe("comment");
     expect(await page.eval(`document.querySelector("[data-comment] strong")?.textContent`)).toBe("bold");
-    await page.click('[data-comment] [aria-label="Edit comment"]');
+    await page.hover('[data-comment]');await page.click('[data-comment] [aria-label="Comment options"]');await page.click('text=Edit');
     await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Edit comment"`);
     await page.key("End"); await page.type(" again");
     await page.click("text=Save comment");
     await page.waitFor(`document.querySelector("[data-comment]")?.textContent.includes("first again")`);
-    await page.click('[data-comment] [aria-label="Delete comment"]');
+    await page.hover('[data-comment]');await page.click('[data-comment] [aria-label="Comment options"]');await page.click('text=Delete');await page.click('[aria-label="Delete this comment?"] button[data-autofocus]');
     await page.waitFor(`document.querySelectorAll("[data-comment]").length===0`);
   } finally { await page.close(); }
 });
@@ -83,6 +102,6 @@ test("I6: a line break typed in a comment shows as a line break", async () => {
     await page.type("line one"); await page.key("Enter"); await page.type("line two");
     await page.key("Enter", "meta");
     await page.waitFor(`document.querySelectorAll("[data-comment]").length===1`);
-    expect(await page.eval(`document.querySelector("[data-comment] .leading-\\\\[1\\\\.6\\\\]").innerText.trim()`)).toMatch(/^line one\n+line two$/);
+    expect(await page.eval(`document.querySelector("[data-comment] .comment-body").innerText.trim()`)).toMatch(/^line one\n+line two$/);
   } finally { await page.close(); }
 });

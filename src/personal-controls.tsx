@@ -1,3 +1,5 @@
+import {SubIssues,statusOf} from './sub-issues';
+import {findIssueDocument,resourceMediaIds} from './issue-resource';
 import {useHotkey} from "@tanstack/react-hotkeys";
 import { Command } from "cmdk";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -5,22 +7,27 @@ import { Adf, adfToText } from "./adf";
 import { RichEditor } from "./rich-editor-loader";
 import {MediaView} from './media-loader';
 import { normalizeDocument } from "./document";
-import { Icon, PriorityIcon } from "./icons";
-import { actions, addLocalFiles, beginCreate, boardOf, changePreferences, get, issueURL, isLocalIssue, ME, navigate, openSavedView, preferencesFor, saveView, set, ui, useStore, type Board, type Issue, type IssueDraft } from "./store";
+import { Icon, PriorityIcon, StatusIcon, hue } from "./icons";
+import { PICKER_ITEM, PickerRow, PropertyMenu } from "./property-menu";
+import { actions, addLocalFiles, beginCreate, boardOf, changePreferences, get, issueURL, isLocalIssue, ME, navigate, openSavedView, preferencesFor, saveView, set, toggleFavorite, ui, useStore, type Board, type Issue, type IssueDraft } from "./store";
+import {RELATION_ISSUE} from "./issue-activity";
 import { buckets, newId, priorityRank, type Field, type Grouping } from "./view-model";
 
 const INPUT="w-full rounded-md border border-line-2 bg-card px-3 py-2 text-fg outline-none focus:border-accent";
 const BUTTON="rounded-md px-3 py-1.5 text-fg-2 hover:bg-hover disabled:opacity-40";
-const SELECT="min-w-0 rounded-md border border-line-2 bg-card px-2 py-1.5 text-[12px] text-fg-2 outline-none focus:border-accent";
 
 export { MenuSurface as Modal } from "./menu-surface";
 import { MenuSurface as Modal, issueAnchor } from "./menu-surface";
 import { lazy,Suspense } from "react";
 const DateInput=lazy(()=>import("./date-input").then(module=>({default:module.DateInput})));
-import { ReactionPicker } from "./reactions";
+import {IssueResources,ResourceForm,createIssueDocument} from './issue-resources';
+import { ReactionPicker, shortcode } from "./reactions";
 import { PillSelect } from "./pill-select";
-import {shortcutLabel} from "./shortcuts";
-import { copyKinds,issueCopy,type CopyKind } from "./issue-copy";
+import {shortcutLabel,runShortcut} from "./shortcuts";
+import { copyIcons,copyKinds,copyShortcuts,issueCopy,type CopyKind } from "./issue-copy";
+import {ActionMenu,type ActionEntry} from "./action-menu";
+import {reminderPresets,reminderTime} from "./reminder-display";
+import {duePresets} from "./due-date";
 
 /** Linear keeps an unsent title and description when the composer closes; the next C brings them back. */
 const unsent={title:"",description:normalizeDocument("")};
@@ -30,14 +37,14 @@ export function CreateIssue() {
   const initial=useStore(s=>s.draft);
   const [draft,setDraft]=useState<IssueDraft>(initial);
   const [title,setTitle]=useState(unsent.title);
-  const [description,setDescription]=useState(unsent.description);
+  const [description,setDescription]=useState(()=>normalizeDocument(initial.descriptionDoc??unsent.description));
   useEffect(()=>{unsent.title=title;unsent.description=description;},[title,description]);
   const [draftIndex,setDraftIndex]=useState(0);
   const [labels,setLabels]=useState(initial.labels?.join(", ")??"");
   const [more,setMore]=useState(false);
   const [expanded,setExpanded]=useState(get().createExpanded);
   useEffect(()=>{set({createExpanded:false});},[]);
-  const [attachments,setAttachments]=useState<Issue["attachments"]>([]);
+  const [attachments,setAttachments]=useState<Issue["attachments"]>(initial.attachments??[]);
   const [filesBusy,setFilesBusy]=useState(false);
   const [dateValid,setDateValid]=useState(true);
   const titleRef=useRef<HTMLInputElement>(null);
@@ -84,33 +91,44 @@ export function PropertyPicker({issue,field}:{issue:Issue;field:"priority"|"labe
   const [query,setQuery]=useState("");
   const [date,setDate]=useState(issue.due??"");
   const [dateValid,setDateValid]=useState(true);
+  // Linear lists the issue's labels first, then the rest after a divider; the order holds while the menu is open.
+  const [order]=useState(()=>{const rest=[...new Set(issues.flatMap(i=>i.labels))].filter(l=>!issue.labels.includes(l));return {checked:[...issue.labels],rest};});
+  // The label menu opens beside the chip or button that was clicked, else beside the add button (Linear, RAJ-52).
+  const [trigger]=useState(()=>document.activeElement instanceof HTMLElement&&document.activeElement.closest("[data-properties]")?document.activeElement:issueAnchor("prop-labels",issue.key));
   const close=()=>ui.send({type:"overlay.close"});
-  const multi=field==="labels";
   const label={priority:"Set priority",labels:"Change labels",project:"Change project",milestone:"Set milestone",due:"Due date"}[field];
+  if(field==="due")return <Modal label={label} close={close} anchor={issueAnchor("prop-due",issue.key)} width={360}><form onSubmit={e=>{e.preventDefault();if(!dateValid)return;actions.patch(issue.key,{due:date||null});close();}}><div className="mb-3"><Suspense fallback={<p>Loading dates…</p>}><DateInput autoFocus value={date} onChange={setDate} onValidity={setDateValid}/></Suspense></div><div className="flex justify-end gap-2"><button type="button" className={BUTTON} onClick={()=>{actions.patch(issue.key,{due:null});close();}}>Remove due date</button><button className={BUTTON} type="submit" disabled={!dateValid}>Save</button></div></form></Modal>;
+  if(field==="labels"){
+    // Linear (RAJ-52): a row click or Enter toggles the label and closes; Space or the row's checkbox toggles and keeps the menu open.
+    const toggle=(name:string)=>{const now=get().issues.get(issue.key)?.labels??[];actions.patch(issue.key,{labels:now.includes(name)?now.filter(l=>l!==name):[...now,name]});};
+    const row=(name:string)=>{const on=issue.labels.includes(name);return <Command.Item key={name} value={name} data-label={name} data-checked={on} onSelect={()=>{toggle(name);close();}} className={`${PICKER_ITEM} label-row`}>
+      <span className="grid size-4 shrink-0 place-items-center"><input type="checkbox" tabIndex={-1} aria-label={`${on?"Remove":"Add"} label ${name}`} checked={on} onChange={()=>toggle(name)} onClick={e=>e.stopPropagation()} className="label-check"/></span>
+      <span className="-ml-0.5 grid size-4 shrink-0 place-items-center"><span className="size-[9px] rounded-full" style={{background:hue(name)}}/></span>
+      <span className="min-w-0 flex-1 truncate">{name}</span>
+    </Command.Item>;};
+    const exact=[...order.checked,...order.rest].some(l=>l.toLowerCase()===query.trim().toLowerCase());
+    return <PropertyMenu label={label} placeholder={issue.labels.length?"Change or add labels…":"Add labels…"} hotkey="L" anchor={trigger} side={trigger?.closest("[data-properties]")?"left":undefined} close={close} query={query} onQuery={setQuery}
+      onKeyDown={event=>{if(event.key!==" "||query)return;const name=event.currentTarget.querySelector<HTMLElement>("[cmdk-item][data-selected=true]")?.dataset.label;if(name){event.preventDefault();toggle(name);}}}>
+      {order.checked.map(row)}
+      {order.checked.length>0&&order.rest.length>0&&<Command.Separator/>}
+      {order.checked.length>0&&order.rest.length>0?<Command.Group heading="Workspace labels">{order.rest.map(row)}</Command.Group>:order.rest.map(row)}
+      {query.trim()&&!exact&&<Command.Item value={`Create ${query}`} onSelect={()=>{toggle(query.trim());setQuery("");}} className={PICKER_ITEM}><span className="grid size-4 place-items-center"><Icon name="plus" size={14}/></span><span className="flex-1 truncate">Create new label: "{query.trim()}"</span></Command.Item>}
+    </PropertyMenu>;
+  }
   let choices:Choice[]=[];
   if(field==="priority")choices=[{id:"",name:"No priority"},...[...new Set(issues.flatMap(i=>i.priority?[i.priority]:[]))].sort((a,b)=>priorityRank(a)-priorityRank(b)).map(p=>({id:p,name:p}))];
-  if(field==="labels")choices=[...new Set(issues.flatMap(i=>i.labels))].map(l=>({id:l,name:l}));
   if(field==="project")choices=[{id:"",name:"No project"},...[...new Map(issues.flatMap(i=>i.project?[[i.project.key,{id:i.project.key,name:i.project.name}] as const]:[])).values()]];
   if(field==="milestone")choices=[{id:"",name:"No milestone"},...[...new Map(issues.filter(i=>i.project?.key===issue.project?.key).flatMap(i=>(i.milestones??[]).map(m=>[m.id,m] as const))).values()]];
-  const selected=(id:string)=>field==="labels"?issue.labels.includes(id):field==="priority"?(issue.priority??"")===id:field==="project"?(issue.project?.key??"")===id:(issue.milestones?.[0]?.id??"")===id;
+  const selected=(id:string)=>field==="priority"?(issue.priority??"")===id:field==="project"?(issue.project?.key??"")===id:(issue.milestones?.[0]?.id??"")===id;
   const choose=(c:Choice)=> {
-    if(field==="labels")actions.patch(issue.key,{labels:selected(c.id)?issue.labels.filter(l=>l!==c.id):[...issue.labels,c.id]});
     if(field==="priority")actions.patch(issue.key,{priority:c.id||undefined});
     if(field==="project")actions.patch(issue.key,{project:issues.find(i=>i.project?.key===c.id)?.project??null,milestones:[]});
     if(field==="milestone")actions.patch(issue.key,{milestones:c.id?[c]:[]});
-    if(!multi)close();else setQuery("");
+    close();
   };
-  return <Modal label={label} close={close} anchor={issueAnchor(`prop-${field}`,issue.key)} width={360}>
-    {field==="due"?<form onSubmit={e=>{e.preventDefault();if(!dateValid)return;actions.patch(issue.key,{due:date||null});close();}}><div className="mb-3"><Suspense fallback={<p>Loading dates…</p>}><DateInput autoFocus value={date} onChange={setDate} onValidity={setDateValid}/></Suspense></div><div className="flex justify-end gap-2"><button type="button" className={BUTTON} onClick={()=>{actions.patch(issue.key,{due:null});close();}}>Remove due date</button><button className={BUTTON} type="submit" disabled={!dateValid}>Save</button></div></form>:<Command loop>
-      <Command.Input autoFocus aria-label={label} placeholder={`${label}…`} value={query} onValueChange={setQuery} className={`${INPUT} mb-2`}/>
-      <Command.List className="max-h-[45vh] overflow-y-auto [&_[data-selected=true]]:bg-sel">
-        <Command.Empty className="p-2 text-fg-3">No matches</Command.Empty>
-        {choices.map(c=><Command.Item key={c.id} value={c.name} onSelect={()=>choose(c)} className="flex cursor-default items-center gap-2 rounded-md px-3 py-2">{field==="priority"&&<PriorityIcon name={c.id||undefined}/>}<span className="flex-1">{c.name}</span>{selected(c.id)&&<Icon name="check"/>}</Command.Item>)}
-        {multi&&query.trim()&&!choices.some(c=>c.id.toLowerCase()===query.trim().toLowerCase())&&<Command.Item value={`Create ${query}`} onSelect={()=>choose({id:query.trim(),name:query.trim()})} className={BUTTON}>Create label "{query.trim()}"</Command.Item>}
-      </Command.List>
-      {multi&&<div className="mt-3 flex justify-end"><button className={BUTTON} onClick={close}>Done</button></div>}
-    </Command>}
-  </Modal>;
+  return <PropertyMenu label={label} placeholder={field==="priority"?"Change priority to…":`${label}…`} hotkey={field==="priority"?"P":undefined} anchor={issueAnchor(`prop-${field}`,issue.key)} close={close} current={choices.find(c=>selected(c.id))?.name}>
+    {choices.map((c,i)=><PickerRow key={c.id} value={c.name} icon={field==="priority"?<PriorityIcon name={c.id||undefined}/>:field==="project"?<Icon name="layers"/>:<Icon name="calendar"/>} current={selected(c.id)} number={field==="priority"?i:undefined} onSelect={()=>choose(c)}>{c.name}</PickerRow>)}
+  </PropertyMenu>;
 }
 
 export function BoardDetails({board,issues}:{board:Board;issues:Issue[]}) {
@@ -135,35 +153,44 @@ export function GroupMenu({name,hide}:{name:string;hide:()=>void}) {
 }
 
 export function IssueOptions({issue}:{issue:Issue}) {
-  const full=useStore(s=>s.full.get(issue.key));
+  const full=useStore(s=>s.full.get(issue.key)),parent=useStore(s=>issue.parent?s.issues.get(issue.parent):undefined);
   const description=issue.description??adfToText(full?.fields.description);
   const close=()=>ui.send({type:"overlay.close"});
-  const [historyOpen,setHistoryOpen]=useState(false);
-  const [linkOpen,setLinkOpen]=useState(get().issueOptionsStart==="link"),[link,setLink]=useState("");
-  const [linkError,setLinkError]=useState("");
-  useEffect(()=>{set({issueOptionsStart:null});},[]);
-  const [copyOpen,setCopyOpen]=useState(false);
+  const start=useStore(s=>s.issueOptionsStart),[view,setView]=useState(start);
+  useEffect(()=>{if(start&&start!=="reminder"){setView(start);set({issueOptionsStart:null});}},[start]);
+  const historyOpen=view==="history";
+  const linkOpen=view==="link"||view==="pull-request";
+  const resourceKind=view==="pull-request"?"pull-request":"link";
   const copy=async(kind:CopyKind)=> {
     const status=boardOf(issue.key)?.columns.flatMap(c=>c.statuses).find(s=>s.id===issue.status)?.name??issue.status;
     try{await navigator.clipboard.writeText(issueCopy(kind,issue,full,issueURL(issue),status,ME.name));set({perf:`Copied ${kind}`});}catch{set({perf:"Could not access the clipboard"});}close();
   };
-  const actionKeys:Record<string,string>={"Set due date":"due","Add link":"link","Add sub-issue":"sub-issue","Delete issue locally":"delete","Copy ID":"copy-id","Copy URL":"copy-url","Copy title":"copy-title","Copy everything as Markdown":"copy-markdown","Copy git branch name":"copy-branch"};
-  const item=(label:string,run:()=>void)=><Command.Item key={label} aria-label={label} value={label} onSelect={run} className="flex cursor-default items-center gap-3 rounded-md px-3 py-2 data-[selected=true]:bg-sel"><span className="flex-1">{label}</span>{actionKeys[label]&&<kbd className="text-[11px] text-fg-3">{shortcutLabel(actionKeys[label]!)}</kbd>}</Command.Item>;
-  if(historyOpen)return <Modal label="Description history" close={close}><h3 className="mb-3 font-medium">Description history</h3><p className="mb-3 text-[12px] text-fg-3">Your locally saved description revisions.</p>{[...(issue.descriptionHistory??[])].reverse().map((entry,index)=><div key={index} className="mb-3 rounded-md border border-line-2 p-3"><div className="mb-2 text-[11px] text-fg-3">{new Date(entry.at).toLocaleString()}</div><div>{entry.document?<Adf node={entry.document}/>:<p className="whitespace-pre-wrap">{entry.text||"Empty description"}</p>}</div><button className={`${BUTTON} mt-2`} onClick={()=>{actions.description(issue.key,entry.document??entry.text);close();}}>Restore this description</button></div>)}{!issue.descriptionHistory?.length&&<p>No local description changes yet.</p>}<button onClick={close} className={`${BUTTON} mt-3`}>Close</button></Modal>;
-  if(linkOpen)return <Modal label="Add link" close={close}><form onSubmit={e=>{e.preventDefault();try{const url=new URL(link);if(!["http:","https:"].includes(url.protocol))throw new Error();actions.patch(issue.key,{links:[...new Set([...(issue.links??[]),url.href])]});close();}catch{setLinkError("Enter an http or https URL");}}}><input autoFocus aria-label="Link URL" type="url" required value={link} onChange={e=>setLink(e.target.value)} className={INPUT}/>{linkError&&<p role="alert" className="mt-2 text-[12px]">{linkError}</p>}<div className="mt-3 flex justify-end"><button className={BUTTON}>Add link</button></div></form></Modal>;
-  if(copyOpen)return <Modal label="Copy issue" close={()=>setCopyOpen(false)} anchorId="issue-options" width={300}><div onKeyDown={e=>{if(e.key==="ArrowLeft"){e.preventDefault();setCopyOpen(false);}}}><Command loop><Command.Input aria-label="Find copy action" placeholder="Copy…" className={`${INPUT} mb-2`}/><Command.List>{item("Back to issue options",()=>setCopyOpen(false))}{copyKinds.map(kind=>item(`Copy ${kind}`,()=>void copy(kind)))}</Command.List></Command></div></Modal>;
-  return <Modal label="Issue options" close={close} anchorId="issue-options" width={300}><Command loop onKeyDown={e=>{if(e.key==="ArrowRight"&&document.querySelector("[cmdk-item][data-selected=true]")?.getAttribute("data-value")==="Copy…"){e.preventDefault();setCopyOpen(true);}}}><Command.Input aria-label="Find action" placeholder="Find action…" className={`${INPUT} mb-2`}/><Command.List className="max-h-[55vh] overflow-y-auto">
-    <Command.Empty>No action found</Command.Empty>
-    {item("Set due date",()=>ui.send({type:"overlay.open",overlay:"due"}))}
-    {item("Change relations",()=>ui.send({type:"overlay.open",overlay:"relations"}))}
-    {item("Add link",()=>setLinkOpen(true))}
-    {item("Show description history",()=>setHistoryOpen(true))}
-    {item("Add sub-issue",()=>beginCreate({parent:issue.key,project:issue.project}))}
-    {item("Make a copy",()=>actions.duplicate(issue.key))}
-    {item("Copy…",()=>setCopyOpen(true))}
-    {!isLocalIssue(issue.key)&&item("Restore mirrored Jira version",()=>void actions.restoreJira(issue.key))}
-    {item("Delete issue locally",()=>actions.remove(issue.key))}
-  </Command.List></Command></Modal>;
+  if(historyOpen)return <Modal label="Description history" close={close}><h3 className="mb-3 font-medium">Description history</h3><p className="mb-3 text-[12px] text-fg-3">Your locally saved description revisions.</p>{[...(issue.descriptionHistory??[])].reverse().map((entry,index)=><div key={index} className="mb-3 rounded-md border border-line-2 p-3"><div className="mb-2 text-[11px] text-fg-3">{new Date(entry.at).toLocaleString()}</div><div>{entry.document?<Adf node={entry.document}/>:<p className="whitespace-pre-wrap">{entry.text||"Empty description"}</p>}</div><button className={`${BUTTON} mt-2`} onClick={()=>{actions.description(issue.key,entry.document??entry.text,true);close();}}>Restore this description</button></div>)}{!issue.descriptionHistory?.length&&<p>No local description changes yet.</p>}<button onClick={close} className={`${BUTTON} mt-3`}>Close</button></Modal>;
+  if(linkOpen)return <ResourceForm issue={issue} kind={resourceKind} close={close}/>;
+  const favorite=get().favorites.includes(issue.key),keys=(id:string)=>shortcutLabel(id)||undefined;
+  const open=(overlay:"due"|"reminder"|"relations")=>ui.send({type:"overlay.open",overlay});
+  const related=(kind:NonNullable<IssueDraft["related"]>["kind"])=>{close();beginCreate({related:{key:issue.key,kind},project:issue.project});};
+  const mark=(kind:string)=>{set({relationKind:kind});open("relations");};
+  const reopen=(view:"link"|"pull-request"|"history")=>{set({issueOptionsStart:view});ui.send({type:"overlay.open",overlay:"options"});};
+  const entries:ActionEntry[]=[
+    {name:"Due date",icon:"calendar",shortcut:keys("due"),children:[{name:"Custom…",run:()=>open("due")},...duePresets().map(preset=>({name:preset.name,shortcut:preset.label,run:()=>{actions.patch(issue.key,{due:preset.due});close();}}))]},
+    {name:"Add link…",icon:"link",shortcut:keys("link"),run:()=>reopen("link")},
+    {name:"Add pull request…",icon:"branch",run:()=>reopen("pull-request")},
+    {name:"Add document…",icon:"file",run:()=>createIssueDocument(issue)},
+    {name:"Create related",icon:"square-plus",divider:true,children:[{name:"Issue…",run:()=>related("related")},{name:"Sub-issue…",shortcut:keys("sub-issue"),run:()=>{close();requestAnimationFrame(()=>runShortcut("sub-issue"));}},{name:"Parent issue…",run:()=>related("parent")},{name:"Blocked issue…",run:()=>related("blocked")},{name:"Blocking issue…",run:()=>related("blocking")}]},
+    {name:"Mark as",icon:"flag",children:[{name:"Parent of…",run:()=>mark("child")},{name:"Sub-issue of…",shortcut:keys("parent-set"),run:()=>mark("parent")},{name:"Related to…",shortcut:keys("related"),run:()=>mark("related")},{name:"Blocked by…",shortcut:keys("blocked"),run:()=>mark("blocked")},{name:"Blocking…",shortcut:keys("blocking"),run:()=>mark("blocking")},{name:"Duplicate of…",shortcut:keys("duplicate"),run:()=>mark("duplicate")}]},
+    // Linear (RAJ-52): Remove lists the parent and every relation, named by the other issue's role ("Blocking issue RAJ-54 …").
+    ...(parent||issue.relations?.length?[{name:"Remove",icon:"flag-x" as const,children:[...parent?[{name:`Parent issue ${parent.key} ${parent.summary}`,run:()=>{actions.patch(issue.key,{parent:undefined});close();}}]:[],
+      ...(issue.relations??[]).map(r=>{const role=RELATION_ISSUE[r.kind]??"related";return {name:`${role[0]!.toUpperCase()}${role.slice(1)} issue ${r.key} ${get().issues.get(r.key)?.summary??""}`.trim(),run:()=>{actions.relate(issue.key,r.key,r.kind,true);close();}};})]}]:[]),
+    {name:"Copy",icon:"clipboard",divider:true,children:copyKinds.map(kind=>({name:`Copy ${kind}`,icon:copyIcons[kind],shortcut:keys(copyShortcuts[kind]??""),run:()=>void copy(kind)}))},
+    {name:"Make a copy…",icon:"copy",run:()=>actions.duplicate(issue.key)},
+    {name:favorite?"Remove from favorites":"Favorite",icon:favorite?"starred":"star",divider:true,shortcut:keys("favorite"),run:()=>{toggleFavorite(issue.key);close();}},
+    {name:"Remind me",icon:"clock",shortcut:keys("remind"),children:[...reminderPresets().map(preset=>({name:preset.label,shortcut:reminderTime(preset.at),run:()=>{actions.remind(issue.key,preset.at);close();}})),{name:"Custom…",run:()=>{set({issueOptionsStart:"reminder"});open("reminder");}}]},
+    {name:"Show description history",icon:"undo",divider:true,run:()=>reopen("history")},
+    ...(!isLocalIssue(issue.key)?[{name:"Restore mirrored Jira version",icon:"redo" as const,run:()=>void actions.restoreJira(issue.key)}]:[]),
+    {name:"Delete",icon:"trash",shortcut:keys("delete"),danger:true,run:()=>actions.remove(issue.key)},
+  ];
+  return <ActionMenu anchor={document.getElementById("issue-options")} entries={entries} label="Issue options" close={close}/>;
 }
 
 export function Attachments({attachments=[],onChange,onBusy,choose,issueKey,hideChooser=false}:{attachments:Issue["attachments"];onChange:(files:NonNullable<Issue["attachments"]>)=>void;onBusy?:(busy:boolean)=>void;choose?:(files:File[])=>void;issueKey?:string;hideChooser?:boolean}) {
@@ -193,40 +220,71 @@ export function PersonalIssueDetails({issue}:{issue:Issue}) {
   const full=useStore(s=>s.full.get(issue.key));
   const embedded=new Set<string>();
   const mediaIds=(node:any)=>{if(!node||typeof node!=='object')return;if(['media','mediaInline'].includes(node.type)&&node.attrs?.id)embedded.add(String(node.attrs.id));for(const child of node.content??[])mediaIds(child);};
+  for(const resource of issue.resources??[])resourceMediaIds(resource,embedded);
   mediaIds(full?.fields.description);for(const comment of full?.fields.comment?.comments??[])mediaIds(comment.body);
-  const all=useStore(s=>s.issues),children=[...all.values()].filter(i=>i.parent===issue.key);
-  return <div className="mt-4 space-y-3 text-[12px]">
-    <div className="flex flex-wrap items-center gap-1">{issue.reactions?.map(emoji=><button key={emoji} aria-label={`Remove ${emoji} reaction`} onClick={()=>toggleReaction(emoji)} className="mr-1 rounded-md bg-sel px-2 py-1">{emoji} 1</button>)}<button aria-label="Add reaction" title="Add reaction" onClick={e=>setReactionAnchor(e.currentTarget)} className="grid size-7 place-items-center rounded text-fg-3 hover:bg-hover hover:text-fg"><Icon name="smile"/></button><button type="button" aria-label="Attach images, files, or videos" title="Attach images, files, or videos" className="grid size-7 place-items-center rounded text-fg-3 hover:bg-hover hover:text-fg" onClick={()=>document.getElementById('description')?.closest('.rich-editor')?.querySelector<HTMLInputElement>('input[type=file]')?.click()}><Icon name="paperclip"/></button></div>
+  const all=useStore(s=>s.issues);
+  return <div className="mt-5 space-y-3 text-[12px]">
+    {/* Linear (RAJ-52): 26px below the last paragraph, 6px left of the text and 16px above the sub-issues header, reaction pills 8px apart, then the round add-reaction and attach buttons. */}
+    <div data-reactions className="-ml-1.5 flex flex-wrap items-center"><div className="flex flex-wrap items-center gap-2 empty:hidden [&:not(:empty)]:mr-2">{issue.reactions?.map(emoji=><button key={emoji} aria-label={`Remove ${emoji} reaction`} aria-pressed="true" title={`You reacted with :${shortcode(emoji)}:`} onClick={()=>toggleReaction(emoji)} className="reaction-pill"><span>{emoji}</span><span>1</span></button>)}</div><button aria-label="Add reaction" title="Add reaction" onClick={e=>setReactionAnchor(e.currentTarget)} className="round-action"><Icon name="smile" size={14}/></button><button type="button" aria-label="Attach images, files, or videos" title="Attach images, files, or videos" className="round-action" onClick={()=>document.getElementById('description')?.closest('.rich-editor')?.querySelector<HTMLInputElement>('input[type=file]')?.click()}><Icon name="paperclip" size={14}/></button></div>
     {reactionAnchor&&<ReactionPicker anchor={reactionAnchor} close={()=>setReactionAnchor(null)} choose={toggleReaction}/>}
     <Attachments hideChooser issueKey={issue.key} attachments={issue.attachments?.filter(a=>!embedded.has(a.id))} onChange={attachments=>actions.patch(issue.key,{attachments:[...(issue.attachments??[]).filter(a=>embedded.has(a.id)),...attachments]})}/>
-    {issue.links?.map(url=><div key={url} className="flex items-center gap-2"><a href={url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-accent">{url}</a><button aria-label={`Remove link ${url}`} onClick={()=>actions.patch(issue.key,{links:issue.links?.filter(l=>l!==url)})}><Icon name="close"/></button></div>)}
-    {issue.parent&&<div className="flex items-center gap-2 text-fg-3">Parent <button className="text-accent" onClick={()=>{const parent=all.get(issue.parent!);if(parent)navigate({board:parent.board,selected:parent.key,panel:true});}}>{issue.parent}</button><button aria-label="Remove parent" onClick={()=>actions.patch(issue.key,{parent:undefined})}><Icon name="close"/></button></div>}
-    {issue.relations?.map(r=><div key={`${r.kind}:${r.key}`} className="flex items-center gap-2"><span className="text-fg-3">{({related:"Related to",blocked:"Blocked by",blocking:"Blocking",duplicate:"Duplicate of"} as Record<string,string>)[r.kind]??r.kind}</span><button className="text-accent" onClick={()=>{const target=all.get(r.key);if(target)navigate({board:target.board,selected:target.key,panel:true});}}>{r.key}</button><button aria-label={`Remove ${r.kind} relation ${r.key}`} onClick={()=>actions.relate(issue.key,r.key,r.kind,true)}><Icon name="close"/></button></div>)}
-    {children.map(child=><button key={child.key} onClick={()=>navigate({selected:child.key,panel:true})} className="flex w-full gap-2 rounded-md border border-line-2 px-3 py-2 text-left"><span className="text-fg-3">{child.key}</span><span className="truncate">{child.summary}</span></button>)}
-    <button onClick={()=>beginCreate({parent:issue.key,project:issue.project})} className="text-fg-3 hover:text-fg">+ Add sub-issues</button>
+
+    <SubIssues key={issue.key} issue={issue}/>
+    <IssueResources issue={issue}/>
   </div>;
 }
 
 export function Subscribers({issue}:{issue:Issue}) {
  const issues=useStore(s=>s.issues);
  const people=[...new Map([ME,...(issue.watchers??[]),...[...issues.values()].flatMap(i=>[i.assignee,i.creator,...(i.watchers??[])].filter((u):u is NonNullable<typeof u>=>!!u))].map(user=>[user.id,user])).values()];
- return <Modal label="Change subscribers" anchorId="issue-subscribers" width={300} close={()=>ui.send({type:'overlay.close'})}><Command loop><Command.Input autoFocus aria-label="Change subscribers" placeholder="Change subscribers…" className={`${INPUT} mb-2`}/><Command.List className="max-h-[40vh] overflow-y-auto"><Command.Empty className="p-2">No people found</Command.Empty>{people.map(user=><Command.Item key={user.id} value={`${user.name} ${user.id}`} onSelect={()=>actions.patch(issue.key,{watchers:issue.watchers?.some(u=>u.id===user.id)?issue.watchers.filter(u=>u.id!==user.id):[...(issue.watchers??[]),user]})} className="flex items-center gap-2 rounded px-2 py-2 data-[selected=true]:bg-sel"><span aria-hidden className="grid size-4 place-items-center rounded border border-line-2">{issue.watchers?.some(u=>u.id===user.id)&&<Icon name="check" size={12}/>}</span><span>{user.name}</span>{issue.assignee?.id===user.id&&<span className="ml-auto text-[11px] text-fg-3">Assignee</span>}</Command.Item>)}</Command.List></Command></Modal>;
+ return <Modal label="Change subscribers" anchorId="issue-subscribers" width={300} close={()=>ui.send({type:'overlay.close'})}><Command loop><Command.Input autoFocus aria-label="Change subscribers" placeholder="Change subscribers…" className={`${INPUT} mb-2`}/><Command.List className="max-h-[40vh] overflow-y-auto"><Command.Empty className="p-2">No people found</Command.Empty>{people.map(user=><Command.Item key={user.id} aria-checked={!!issue.watchers?.some(u=>u.id===user.id)} value={`${user.name} ${user.id}`} onSelect={()=>actions.patch(issue.key,{watchers:issue.watchers?.some(u=>u.id===user.id)?issue.watchers.filter(u=>u.id!==user.id):[...(issue.watchers??[]),user]})} className="flex items-center gap-2 rounded px-2 py-2 data-[selected=true]:bg-sel"><span aria-hidden className="grid size-4 place-items-center rounded border border-line-2">{issue.watchers?.some(u=>u.id===user.id)&&<Icon name="check" size={12}/>}</span><span>{user.name}</span>{issue.assignee?.id===user.id&&<span className="ml-auto text-[11px] text-fg-3">Assignee</span>}</Command.Item>)}</Command.List></Command></Modal>;
 }
 
-export function Relations({issue}:{issue:Issue}) {
-  const all=useStore(s=>s.issues);const [query,setQuery]=useState("");const [kind,setKind]=useState(get().relationKind);const close=()=>ui.send({type:"overlay.close"});
-  const candidates=useMemo(()=>[...all.values()].filter(i=>i.key!==issue.key&&`${i.key} ${i.summary}`.toLowerCase().includes(query.toLowerCase())).slice(0,40),[all,issue.key,query]);
+/** `close` lets a row menu open this for another issue (a sub-issue) without the global overlay. */
+/** Linear's "Mark as" command menu (RAJ-52): the kind comes from the menu item, so there is no type picker; its placeholder, Create row and Enter hint follow the kind. */
+const MARK:Record<string,{placeholder:string;enter:string;create?:string;draft?:"related"|"blocked"|"blocking"}>={
+  related:{placeholder:"Search for issue to reference…",enter:"Mark as related",create:"Create new issue related to",draft:"related"},
+  blocked:{placeholder:"Search for issue to mark blocked by…",enter:"Mark as blocked by",create:"Create new issue blocking",draft:"blocking"},
+  blocking:{placeholder:"Search for issue to mark as blocked by {key}…",enter:"Mark as blocking",create:"Create new issue blocked by",draft:"blocked"},
+  duplicate:{placeholder:"Search for issue to mark as duplicate of…",enter:"Select"},
+  parent:{placeholder:"Search for issue to set as a parent…",enter:"Set as parent"},
+  child:{placeholder:"Search for issue to add as a sub-issue…",enter:"Add as sub-issue"},
+};
+const INVERSE:Record<string,string>={blocked:"blocking",blocking:"blocked"};
+export function Relations({issue,close:done}:{issue:Issue;close?:()=>void}) {
+  const all=useStore(s=>s.issues),boards=useStore(s=>s.boards);const [query,setQuery]=useState(""),[selected,setSelected]=useState("");const kind=get().relationKind;const close=done??(()=>ui.send({type:"overlay.close"}));
+  const mark=MARK[kind]??MARK.related!;
+  // Linear leaves out issues the new link would repeat or contradict; "Related issues" offers this issue's related ones first.
+  // ponytail: "Recent" is most recently updated; Linear uses recently viewed. "More actions" (⌥↵) and "Quick look" (→) are not built.
+  const linked=new Set((issue.relations??[]).filter(r=>kind==="related"||r.kind===kind||r.kind===INVERSE[kind]).map(r=>r.key));
+  if(kind==="parent"||kind==="child")for(const i of all.values())if(i.parent===issue.key||i.key===issue.parent)linked.add(i.key);
+  const words=query.toLowerCase().split(/\s+/).filter(Boolean),fits=(i:Issue)=>i.key!==issue.key&&!linked.has(i.key)&&words.every(w=>`${i.key} ${i.summary}`.toLowerCase().includes(w));
+  const relatedIssues=["blocked","blocking","duplicate"].includes(kind)?(issue.relations??[]).filter(r=>r.kind==="related").map(r=>all.get(r.key)).filter((i):i is Issue=>!!i&&fits(i)):[];
+  const recent=useMemo(()=>[...all.values()].filter(fits).sort((a,b)=>b.updated.localeCompare(a.updated)).slice(0,query?40:8),[all,query,kind]);
   const add=(target:Issue)=> {
     if(kind==="parent") {
       let ancestor:Issue|undefined=target;const seen=new Set([issue.key]);
       while(ancestor){if(seen.has(ancestor.key)){set({perf:"A parent cannot be its own descendant"});return;}seen.add(ancestor.key);ancestor=ancestor.parent?all.get(ancestor.parent):undefined;}
       actions.patch(issue.key,{parent:target.key});
+    }else if(kind==="child") {
+      for(let ancestor:Issue|undefined=issue;ancestor;ancestor=ancestor.parent?all.get(ancestor.parent):undefined)if(ancestor.key===target.key){set({perf:"A parent cannot be its own descendant"});return;}
+      actions.patch(target.key,{parent:issue.key});
     }else actions.relate(issue.key,target.key,kind);
     close();
   };
-  return <Modal label="Issue relations" close={close}><select aria-label="Relation" className={`${SELECT} mb-3`} value={kind} onChange={e=>setKind(e.target.value)}>{[["related","Related to"],["blocked","Blocked by"],["blocking","Blocking"],["duplicate","Duplicate of"],["parent","Sub-issue of"]].map(([id,name])=><option key={id} value={id}>{name}</option>)}</select>
-    <input aria-label="Find related issue" placeholder="Search issues…" className={`${INPUT} mb-2`} value={query} onChange={e=>setQuery(e.target.value)}/>
-    <div className="max-h-[40vh] overflow-y-auto">{candidates.map(i=><button key={i.key} onClick={()=>add(i)} className="flex w-full gap-3 rounded-md px-2 py-2 text-left hover:bg-hover"><span className="shrink-0 text-fg-3">{i.key}</span><span className="truncate">{i.summary}</span></button>)}{!candidates.length&&<p>No matching issues</p>}</div>
+  const create=mark.create&&!query?()=>{close();beginCreate({related:{key:issue.key,kind:mark.draft!},project:issue.project});}:kind==="child"&&!query?()=>{close();requestAnimationFrame(()=>runShortcut("sub-issue"));}:null;
+  const row=(i:Issue,group:string)=><Command.Item key={`${group}${i.key}`} value={group==="related"?`related:${i.key}`:i.key} onSelect={()=>add(i)} className="mark-row"><span className="grid size-4 place-items-center"><StatusIcon status={statusOf(boards,i)}/></span><span className="text-[var(--menu-fg-3)]">{i.key}</span><span className="truncate text-[var(--menu-fg)]">{i.summary}</span></Command.Item>;
+  return <Modal label="Issue relations" close={close} command width={720}>
+    <Command shouldFilter={false} loop value={selected} onValueChange={setSelected} data-kind={kind} className="flex min-h-0 flex-col">
+      <div className="px-1.5 pt-1.5"><Command.Input autoFocus aria-label="Find related issue" placeholder={mark.placeholder.replace("{key}",issue.key)} className="h-10 w-full rounded-xl bg-transparent px-3 text-[13px] text-[var(--menu-fg)] outline-none placeholder:text-[var(--menu-placeholder)]" value={query} onValueChange={setQuery}/></div>
+      <Command.List className="mark-list min-h-0 flex-1 overflow-y-auto p-1.5">
+        {relatedIssues.length>0&&<Command.Group heading="Related issues">{relatedIssues.map(i=>row(i,"related"))}</Command.Group>}
+        {recent.length>0&&(kind==="parent"&&!query?recent.map(i=>row(i,"recent")):<Command.Group heading={query?"Issues":"Recent"}>{recent.map(i=>row(i,"recent"))}</Command.Group>)}
+        {create&&<Command.Group heading="Create"><Command.Item value="create" onSelect={create} className="mark-row"><Icon name="plus" size={16}/><span className="flex-1 truncate text-[var(--menu-fg)]">{kind==="child"?"Add sub-issue…":`${mark.create} ${issue.key}…`}</span>{kind==="child"&&<kbd>{shortcutLabel("sub-issue")}</kbd>}</Command.Item></Command.Group>}
+        <Command.Empty className="px-3 py-3 text-[13px] text-fg-3">No matching issues</Command.Empty>
+      </Command.List>
+      <div className="mark-footer"><span><kbd>↵</kbd>{selected==="create"?"Select":mark.enter}</span></div>
+    </Command>
   </Modal>;
 }
 
@@ -246,6 +304,8 @@ export function Favorites() {
   const favorites=useStore(s=>s.favorites),boards=useStore(s=>s.boards),issues=useStore(s=>s.issues);
   if(!favorites.length)return null;
   return <div className="mt-5"><div className="mb-1 px-2 text-[12px] text-fg-3">Favorites</div>{favorites.map(id=> {
+    const document=id.startsWith('document:')?findIssueDocument(issues.values(),id.slice(9)):undefined;
+    if(document)return <button key={id} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-fg-2 hover:bg-hover" onClick={()=>navigate({board:document.issue.board,selected:document.issue.key,panel:true,document:document.resource.id})}><Icon name="file"/><span className="truncate">{document.resource.title||'New document'}</span></button>;
     const [,boardId]=id.split(":"),board=boards.find(b=>b.id===Number(boardId)),issue=issues.get(id);
     if(!board&&!issue)return null;
     return <button key={id} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-fg-2 hover:bg-hover" onClick={()=>{if(issue)navigate({board:issue.board,selected:issue.key,panel:true});else if(board)navigate({board:board.id,panel:false,selected:null});}}><span className="text-fg-3">☆</span><span className="truncate">{issue?`${issue.key} ${issue.summary}`:board!.name}</span></button>;

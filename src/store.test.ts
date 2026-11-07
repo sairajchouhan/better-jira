@@ -39,6 +39,8 @@ test("personal issue edits, comments, creation and deletion undo without losing 
   redoEdit();actions.relate(key,target,"blocked",true);
   expect(get().issues.get(key)?.relations).toEqual([]);expect(get().issues.get(target)?.relations).toEqual([]);
   actions.patch(target,{parent:key});actions.relate(key,target,"related");
+  // Marking an existing relation again changes nothing and logs nothing.
+  const logged=get().issues.get(key)?.activity?.length;actions.relate(key,target,"related");expect(get().issues.get(key)?.relations).toEqual([{key:target,kind:"related"}]);expect(get().issues.get(key)?.activity?.length).toBe(logged);
   actions.remove(key);expect(get().issues.get(target)?.parent).toBeUndefined();expect(get().issues.get(target)?.relations).toEqual([]);
   undoEdit();expect(get().issues.get(target)?.parent).toBe(key);expect(get().issues.get(target)?.relations).toEqual([{key,kind:"related"}]);
   actions.patch(target,{parent:undefined});
@@ -95,7 +97,7 @@ test("browser history restores issue selection without pushing another navigatio
   }
 });
 
-test("I7: local comments can be rich, edited and deleted, each step undoable; Jira comments stay read-only",async()=>{
+test("I7: local comments can be rich, edited and deleted, each step undoable; other authors remain read-only",async()=>{
   const {actions,get,set,navigate,undoEdit,ME}=await import("./store");
   const board:Board={id:7,name:"Comments",columns:[{name:"Todo",statuses:[{id:"todo",name:"Todo",category:"new"}]}]};
   set({boards:[...get().boards,board]});navigate({board:7});
@@ -104,16 +106,25 @@ test("I7: local comments can be rich, edited and deleted, each step undoable; Ji
   expect(actions.comment(key,doc("  "))).toBe(false);
   expect(actions.comment(key,doc("First"))).toBe(true);
   const id=get().full.get(key)!.fields.comment.comments[0].id;
+  const {visibleComments}=await import('./comment-thread');
+  const comments=()=>visibleComments(get().full.get(key)!.fields.comment.comments,get().issues.get(key)?.commentStates);
   expect(get().full.get(key)!.fields.comment.comments[0].body.content[0].content[0].marks).toEqual([{type:"strong"}]);
   actions.editComment(key,id,doc("Edited"));
-  expect(get().full.get(key)!.fields.comment.comments[0].body.content[0].content[0].text).toBe("Edited");
-  undoEdit();expect(get().full.get(key)!.fields.comment.comments[0].body.content[0].content[0].text).toBe("First");
+  expect(comments()[0]!.body.content![0]!.content![0]!.text).toBe("Edited");
+  undoEdit();expect(comments()[0]!.body.content![0]!.content![0]!.text).toBe("First");
   actions.deleteComment(key,id);
-  expect(get().full.get(key)!.fields.comment.total).toBe(0);expect(get().issues.get(key)!.comments).toBe(0);
-  undoEdit();expect(get().full.get(key)!.fields.comment.comments.map((c:any)=>c.id)).toEqual([id]);
+  expect(comments()).toHaveLength(0);expect(get().issues.get(key)!.comments).toBe(0);
+  undoEdit();expect(comments().map(c=>c.id)).toEqual([id]);
   const full=get().full.get(key)!;set({full:new Map(get().full).set(key,{...full,fields:{...full.fields,comment:{comments:[...full.fields.comment.comments,{id:"10001",body:doc("Jira")}],total:2}}})});
   actions.editComment(key,"10001",doc("Changed"));actions.deleteComment(key,"10001");
   expect(get().full.get(key)!.fields.comment.comments.at(-1).body.content[0].content[0].text).toBe("Jira");
+  expect(get().issues.get(key)?.commentStates?.['10001']).toBeUndefined();
+  expect(comments().some(c=>c.id==='10001')).toBe(true);
+  expect(comments().find(c=>c.id==='10001')?.body).toEqual(doc('Jira'));
+  expect(actions.comment(key,doc('Reply'),id)).toBe(true);
+  const replyId=get().full.get(key)!.fields.comment.comments.at(-1).id;
+  expect(actions.comment(key,doc('Nested reply'),replyId)).toBe(false);
+  actions.deleteComment(key,id);expect(actions.comment(key,doc('Reply to deleted root'),id)).toBe(false);
   void ME;
 });
 
@@ -123,6 +134,61 @@ test("R4: autosaved description edits within a minute make one history entry",as
   for(const text of ["one","two","three"])actions.description(key,text);
   expect(get().issues.get(key)!.description).toBe("three");
   expect(get().issues.get(key)!.descriptionHistory?.length).toBe(1);
+});
+
+test('restoring a description keeps the version it replaces, without duplicating the newest entry',async()=>{
+  const {actions,get}=await import("./store");
+  const key=actions.create("Restored")!,texts=()=>get().issues.get(key)!.descriptionHistory!.map(e=>e.text);
+  actions.description(key,"one");actions.description(key,"two");expect(texts()).toEqual([""]);
+  actions.description(key,"one",true);expect(texts()).toEqual(["","two"]);expect(get().issues.get(key)!.description).toBe("one");
+  actions.description(key,"two",true);expect(texts()).toEqual(["","two","one"]);
+  actions.description(key,"one",true);expect(texts()).toEqual(["","two","one","two"]);
+  actions.description(key,"three");actions.description(key,"three-b",true);expect(texts()).toEqual(["","two","one","two","three"]);
+  // Edited back to the newest saved version: restoring away from it adds no duplicate.
+  actions.description(key,"three");actions.description(key,"one",true);expect(texts()).toEqual(["","two","one","two","three"]);
+});
+
+test('undoing a reschedule cannot deliver an older reminder again',async()=>{
+ const {actions,get,undoEdit}=await import('./store');
+ const key=actions.create('Reminder history')!,now=Date.now;
+ try{
+  const first=new Date(now()+3600000).toISOString(),second=new Date(now()+7200000).toISOString();
+  actions.remind(key,first);actions.remind(key,second);Date.now=()=>Date.parse(second)+1;actions.deliverReminder(key);
+  undoEdit();expect(get().issues.get(key)?.reminder).toEqual({at:first,delivered:true});
+ }finally{Date.now=now;}
+});
+
+test('document version checkpoints and personal settings undo independently',async()=>{
+ const {actions,get,ME,undoEdit,redoEdit}=await import('./store');
+ const key=actions.create('Document versions')!,body=(text:string)=>({type:'doc' as const,version:1 as const,content:[{type:'paragraph',content:[{type:'text',text}]}]});
+ actions.resource(key,{id:'document-version-test',kind:'document',title:'First title',body:body('First body'),updated:'2000-01-01T00:00:00Z',owner:ME,editedBy:ME});
+ actions.editResource(key,'document-version-test',{title:'Second title',body:body('Second body')},'session');
+ const read=()=>get().issues.get(key)!.resources![0]!;
+ expect(read().history).toEqual([{title:'First title',body:body('First body'),at:'2000-01-01T00:00:00Z',author:ME}]);
+ actions.editResource(key,'document-version-test',{body:body('Second body continued')},'session');expect(read().history).toHaveLength(1);
+ const updated=read().updated;
+ actions.documentProperties(key,'document-version-test',{owner:{id:'alex',name:'Alex'},showAuthors:true,subscribers:[ME],icon:{name:'calendar',color:'#2d9cdb'}});
+ expect(read()).toMatchObject({owner:{name:'Alex'},showAuthors:true,updated});undoEdit();expect(read().owner).toEqual(ME);expect(read().title).toBe('Second title');redoEdit();expect(read().owner?.name).toBe('Alex');
+});
+
+test('restoring a document version keeps the replaced version even inside the one-minute window, without duplicates',async()=>{
+ const {actions,get,ME}=await import('./store');
+ const key=actions.create('Document restore')!,body=(text:string)=>({type:'doc' as const,version:1 as const,content:[{type:'paragraph',content:[{type:'text',text}]}]});
+ actions.resource(key,{id:'document-restore-test',kind:'document',title:'Doc',body:body('v1'),updated:'2000-01-01T00:00:00Z',owner:ME,editedBy:ME});
+ const read=()=>get().issues.get(key)!.resources![0]!,texts=()=>read().history!.map(v=>JSON.stringify(v.body).match(/"text":"([^"]*)"/)?.[1]);
+ actions.editResource(key,'document-restore-test',{body:body('v1 v2')},'session');expect(texts()).toEqual(['v1']);
+ actions.editResource(key,'document-restore-test',{title:'Doc',body:body('v1')},undefined,true);expect(texts()).toEqual(['v1','v1 v2']);expect(JSON.stringify(read().body)).toContain('"v1"');
+ actions.editResource(key,'document-restore-test',{title:'Doc',body:body('v1 v2')},undefined,true);expect(texts()).toEqual(['v1','v1 v2','v1']);
+ actions.editResource(key,'document-restore-test',{title:'Doc',body:body('v1')},undefined,true);expect(texts()).toEqual(['v1','v1 v2','v1','v1 v2']);
+});
+
+test('a restore never adds a version identical to the newest saved one',async()=>{
+ const {actions,get,ME}=await import('./store');
+ const key=actions.create('Document restore dedupe')!,body=(text:string)=>({type:'doc' as const,version:1 as const,content:[{type:'paragraph',content:[{type:'text',text}]}]});
+ actions.resource(key,{id:'document-dedupe-test',kind:'document',title:'Doc',body:body('v1'),updated:'2000-01-01T00:00:00Z',owner:ME,editedBy:ME});
+ const read=()=>get().issues.get(key)!.resources![0]!;
+ actions.editResource(key,'document-dedupe-test',{body:body('draft')},'s');actions.editResource(key,'document-dedupe-test',{body:body('v1')},'s');expect(read().history).toHaveLength(1);
+ actions.editResource(key,'document-dedupe-test',{title:'Doc',body:body('other')},undefined,true);expect(read().history).toHaveLength(1);
 });
 
 test("image crops and comment counts undo and redo without changing the description",async()=>{
@@ -148,4 +214,12 @@ test("B5: creating stays on the board with a toast; duplicating opens the copy",
   expect(get().panel).toBe(false);expect(get().selected).toBe(key);expect(get().toast).toEqual({text:`Created ${key}`,key});
   const copy=actions.duplicate(key)!;
   expect(get().panel).toBe(true);expect(get().selected).toBe(copy);
+});
+test('deleting a document keeps attachments that another document still shows',async()=>{
+ const {actions,get,set,ME}=await import('./store');
+ const key=actions.create('Shared media')!,media=(id:string)=>({type:'doc' as const,version:1 as const,content:[{type:'mediaSingle',content:[{type:'media',attrs:{id,type:'file'}}]}]});
+ set({issues:new Map(get().issues).set(key,{...get().issues.get(key)!,attachments:[{id:'shared',name:'shared.png',type:'image/png',size:1,url:''},{id:'own',name:'own.png',type:'image/png',size:1,url:''}]})});
+ actions.resource(key,{id:'original',kind:'document',title:'Original',body:{...media('shared'),content:[...media('shared').content,...media('own').content]},updated:'2000-01-01T00:00:00Z',owner:ME});
+ actions.resource(key,{id:'copy',kind:'document',title:'Copy',body:media('shared'),updated:'2000-01-01T00:00:00Z',owner:ME});
+ actions.removeResource(key,'original');expect(get().issues.get(key)!.attachments!.map(a=>a.id)).toEqual(['shared']);
 });

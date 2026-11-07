@@ -60,3 +60,32 @@ test('active local files keep their metadata but their blob URLs cannot render H
  }
  db.close();
 });
+
+test('resource documents and named links survive durable storage and invalid schemes are rejected',async()=>{
+ const resources:NonNullable<Issue['resources']>=[{id:'doc',kind:'document',title:'Investigation',body:{type:'doc',version:1,content:[{type:'paragraph',content:[{type:'text',text:'Rich notes',marks:[{type:'strong'}]}]}]},updated:'2026-11-07T00:00:00Z'},{id:'url',kind:'link',title:'Design',url:'https://example.com/design',updated:'2026-11-07T00:00:00Z'}];
+ const state:LocalState={...emptyLocalState(),changes:[{key:issue.key,issue:{...issue,resources},issueFields:['resources'],fullFields:[],created:false}]};
+ const factory=new IDBFactory();let db=await LocalDatabase.open('resources',factory);await db.load();await db.save(state);db.close();db=await LocalDatabase.open('resources',factory);
+ expect((await db.load()).state.changes[0]?.issue?.resources).toEqual(resources);db.close();
+ const invalid={...state,changes:[{...state.changes[0]!,issue:{...issue,resources:[{...resources[1],url:'javascript:alert(1)'}]}}]};expect(parseLocalState(invalid).recovered).toBe(true);expect(parseLocalState(invalid).state.changes).toEqual([]);
+ const reminded=(reminder:unknown)=>parseLocalState({...state,changes:[{...state.changes[0]!,issue:{...issue,resources:[{...resources[0]!,reminder} as never]}}]}).recovered;
+ expect(reminded({at:'2026-11-09T09:00:00.000Z'})).toBe(false);expect(reminded({at:'soon'})).toBe(true);expect(reminded({at:'2026-11-09T09:00:00.000Z',delivered:'yes'})).toBe(true);
+});
+
+test('document metadata and version media survive storage while malformed settings are isolated',async()=>{
+ const owner={id:'me',name:'Me'},body={type:'doc' as const,version:1 as const,content:[]};
+ const resource={id:'history',kind:'document' as const,title:'Versioned',updated:'2026-11-08T00:00:00Z',body,owner,editedBy:owner,subscribers:[owner],showAuthors:true,icon:{name:'emoji:📝',color:'#2d9cdb'},history:[{title:'Old title',at:'2026-11-07T00:00:00Z',author:owner,body:{...body,content:[{type:'mediaSingle',content:[{type:'media',attrs:{id:'historical-file',type:'file'}}]}]}}]};
+ const state:LocalState={...emptyLocalState(),changes:[{key:issue.key,issue:{...issue,resources:[resource]},issueFields:['resources'],fullFields:[],created:false}]};
+ const db=await LocalDatabase.open('document-history',new IDBFactory());await db.load();await db.save(state);expect((await db.load()).state.changes[0]?.issue?.resources).toEqual([resource]);db.close();
+ const {resourceMediaIds}=await import('./issue-resource');expect([...resourceMediaIds(resource)]).toEqual(['historical-file']);
+ for(const invalid of [{showAuthors:'yes'},{owner:{name:'No id'}},{subscribers:[null]},{icon:{name:'file',color:'url(javascript:bad)'}},{history:[{body:'bad'}]}]){
+  const corrupt={...state,changes:[{...state.changes[0]!,issue:{...issue,resources:[{...resource,...invalid}]}}]};expect(parseLocalState(corrupt).recovered).toBe(true);expect(parseLocalState(corrupt).state.changes).toHaveLength(0);
+ }
+});
+test('thread overrides, reply parents and reminder delivery persist with undo snapshots',async()=>{
+ const factory=new IDBFactory();let db=await LocalDatabase.open('thread-state',factory);
+ const savedIssue={...issue,commentStates:{'jira-1':{resolved:true,subscribed:false,reactions:['💙'],body:full.fields.description}},reminder:{at:'2026-11-10T10:00:00Z',delivered:true}};
+ const reply={id:'local-3',parentId:'jira-1',body:full.fields.description,created:'2026-11-07T10:00:00Z'};
+ const savedFull={...full,fields:{...full.fields,comment:{total:1,comments:[reply]}}};
+ const state:LocalState={...emptyLocalState(),changes:[{key:issue.key,issue:savedIssue,full:savedFull,issueFields:['commentStates','reminder'],fullFields:['comment'],created:false}],undo:[{keys:[issue.key],label:'thread',before:[{issue}],after:[{issue:savedIssue,full:savedFull}]}]};
+ await db.save(state);db.close();db=await LocalDatabase.open('thread-state',factory);const loaded=await db.load();expect(loaded.recovered).toBe(false);expect(loaded.state.changes[0]?.issue?.commentStates).toEqual(savedIssue.commentStates);expect(loaded.state.changes[0]?.full?.fields.comment.comments[0].parentId).toBe('jira-1');expect(loaded.state.undo[0]?.after[0]?.issue?.reminder).toEqual(savedIssue.reminder);db.close();
+});

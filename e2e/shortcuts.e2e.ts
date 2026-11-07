@@ -98,7 +98,7 @@ test("Linear issue commands, relation sequences and copy chords work on a select
     await p.waitFor(`!!document.querySelector('${dialog("Issue relations")}')`);
     expect(
       await p.eval(
-        `document.querySelector('select[aria-label="Relation"]').value`,
+        `document.querySelector('[role="dialog"][aria-label="Issue relations"] [data-kind]').dataset.kind`,
       ),
     ).toBe("blocked");
     await p.key("Escape");
@@ -114,6 +114,15 @@ test("Linear issue commands, relation sequences and copy chords work on a select
     expect(await p.eval("window.copied[1]")).toContain(
       "https://example.atlassian.net/browse/TEST-",
     );
+    // ⌘C copies the issue title as a link, as in Linear, but leaves a text selection to the browser.
+    await p.key("c", "meta");
+    await p.waitFor(`window.copied.length===3`);
+    expect(await p.eval("window.copied[2]")).toMatch(/^\[TEST-\d+ .+\]\(https:\/\/example\.atlassian\.net\/browse\/TEST-\d+\)$/);
+    await p.eval(`(()=>{const walker=document.createTreeWalker(document.querySelector('main')??document.body,NodeFilter.SHOW_TEXT,{acceptNode:n=>n.textContent.trim().length>3&&!n.parentElement.closest('[contenteditable],input,textarea')?1:3});const node=walker.nextNode();const range=document.createRange();range.selectNodeContents(node);getSelection().removeAllRanges();getSelection().addRange(range);})()`);
+    await p.key("c", "meta");
+    await Bun.sleep(200);
+    expect(await p.eval("window.copied.length")).toBe(3);
+    await p.eval("getSelection().removeAllRanges()");
     await p.key("r", "shift");
     await p.waitFor(`document.activeElement?.id==='summary'`);
   } finally {
@@ -216,7 +225,7 @@ test("Find in view, due dates, self-assignment, subscription and keyboard deleti
     await p.waitFor(`!document.querySelector('input[aria-label="Due date"]')`);
     await p.key("d", "meta", "shift");
     await p.waitFor(
-      `document.getElementById('prop-due').textContent.includes('Set due date')`,
+      `!document.getElementById('prop-due')`,
     );
     await p.key("s", "shift");
     await p.waitFor(

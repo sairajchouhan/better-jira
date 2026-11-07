@@ -1,7 +1,7 @@
 import {expect,test} from 'bun:test';
 import {EditorState,TextSelection} from 'prosemirror-state';
 import type {EditorView} from 'prosemirror-view';
-import {mediaUploads} from './editor-media-upload';
+import {mediaUploads,mergeLateMedia} from './editor-media-upload';
 import {fromEditorDocument,richSchema,toEditorDocument} from './rich-document';
 import type {Attachment} from './attachment-media';
 test('a pending local upload follows typing and inserts at its mapped position',async()=>{
@@ -49,4 +49,14 @@ test('a removed insertion point clears a successful upload job and reports where
  state=EditorState.create({schema:richSchema,doc:toEditorDocument('hello world'),plugins:[uploads.plugin]});uploads.enqueue([new File(['note'],'note.txt')],4);view.dispatch(state.tr.delete(0,state.doc.content.size));
  finish([{id:'note',name:'note.txt',url:'blob:note',type:'text/plain',size:4}]);await new Promise(resolve=>setTimeout(resolve,0));
  expect(uploads.busy()).toBe(false);expect(busy.at(-1)).toBe(false);expect(notices.join(' ')).toContain('Files saved to issue attachments');uploads.dispose();
+});
+const p=(text:string)=>({type:'paragraph',content:[{type:'text',text}]}),m=(id:string)=>({type:'mediaSingle',attrs:{layout:'center'},content:[{type:'media',attrs:{id,type:'file',collection:'local'}}]});
+const doc=(...content:unknown[])=>({type:'doc' as const,version:1 as const,content:content as any});
+test('late media keeps its paste position when nothing changed, and is appended without stale content when edited since',()=>{
+ const before=doc(p('a'),p('b')),after=doc(p('a'),m('late'),p('b'));
+ expect(mergeLateMedia(before,{before,after})).toEqual(after);
+ expect(mergeLateMedia(doc(p('a'),p('b edited')),{before,after})).toEqual(doc(p('a'),p('b edited'),m('late')));
+ // Media already in the document before is not duplicated.
+ const had=doc(m('old'),p('a')),grew=doc(m('old'),p('a'),m('late'));
+ expect(mergeLateMedia(doc(m('old'),p('a!')),{before:had,after:grew})).toEqual(doc(m('old'),p('a!'),m('late')));
 });

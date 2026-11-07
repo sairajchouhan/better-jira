@@ -13,8 +13,10 @@ test("I12: the priority picker lists priorities ranked Urgent to Low, each with 
     await page.key("j");
     await page.key("p");
     await page.waitFor(`document.querySelectorAll("[cmdk-item]").length>1`);
-    expect(await page.eval(`[...document.querySelectorAll("[cmdk-item]")].map(i=>i.textContent)`)).toEqual(["No priority", "Urgent", "High", "Normal", "Low"]);
+    expect(await page.eval(`[...document.querySelectorAll("[cmdk-item]")].map(i=>i.textContent.replace(/[0-9]$/,""))`)).toEqual(["No priority", "Urgent", "High", "Normal", "Low"]);
     expect(await page.eval(`[...document.querySelectorAll("[cmdk-item]")].every(i=>i.querySelector("svg"))`)).toBe(true);
+    // Jira's "Urgent" takes Linear's urgent icon (the filled square with "!"), not the no-priority dashes.
+    expect(await page.eval(`[...document.querySelectorAll("[cmdk-item]")].map(i=>!!i.querySelector("svg rect[rx='3']"))`)).toEqual([false, true, false, false, false]);
   } finally { await page.close(); }
 });
 

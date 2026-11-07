@@ -151,3 +151,65 @@ test('an unfinished image comment draft survives closing and reopening its threa
   await page.click('#description [aria-label="Hide image comments"]');await page.click('#description [aria-label="Add image comment"]');expect(await page.eval(`document.querySelector('[aria-label="Image comment"]').value`)).toBe('Unfinished image review');
  }finally{await fetch(`${APP}__fixture`,{method:'POST',body:'{}'});await page.close();}
 });
+test('an image comment keeps its image thumbnail in Activity after the image is deleted from the description, like Linear',async()=>{
+ const page=await open();try{
+  await fetch(`${APP}__fixture`,{method:'POST',body:JSON.stringify({includeMedia:true})});await page.goto('?issue=TEST-2&view=page');
+  await page.waitFor(`document.querySelector('#description img')?.naturalWidth===320`,15000);
+  await page.click('#comment');await page.type('Earlier ordinary comment');await page.key('Enter','meta');await page.waitFor(`document.querySelector('[data-comment]')?.textContent.includes('Earlier ordinary comment')`);await Bun.sleep(20);
+  await page.hover('#description img');await page.click('#description [aria-label="Add image comment"]');await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Image comment'`);await page.type('Review before removal');await page.click('[aria-label="Submit image comment"]');
+  await page.waitFor(`document.querySelector('[data-image-comment-thumbnail]')?.naturalWidth===320`);
+  await page.click('#description img');await Bun.sleep(200);await page.key('Backspace');await page.waitFor(`!document.querySelector('#description img')`);
+  await page.waitFor(`document.querySelector('[aria-label="Local save status"]')?.textContent.includes('Saved')`);await page.reload();
+  await page.waitFor(`document.querySelector('[data-image-comment-thumbnail]')?.naturalWidth===320`,15000);expect(await page.eval(`!!document.querySelector('#description img')`)).toBe(false);
+  expect(await page.eval(`document.querySelector('[data-image-comment-thumbnail]').closest('li').textContent`)).toContain('Review before removal');
+  // With the image gone from the description, View image opens it on its own; Escape closes it.
+  await page.click('text=View image');await page.waitFor(`document.querySelector('[role="dialog"][aria-label="Preview"] img')?.naturalWidth===320`,8000);
+  await page.key('Escape');await page.waitFor(`!document.querySelector('[role="dialog"][aria-label="Preview"]')`);
+  // Activity runs in time order (Sol review 4), and the orphaned comment keeps Edit and Delete.
+  expect(await page.eval(`[...document.querySelectorAll('.issue-activity [data-thread], .issue-activity [id^="image-comment-"]')].map(n=>n.textContent.includes('Earlier ordinary comment')?'ordinary':'image')`)).toEqual(['ordinary','image']);
+  const card=`[id^="image-comment-"]`;
+  await page.click(`${card} [aria-label="Comment options"]`);await page.click('text=Edit');await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Edit image comment'`);
+  await page.key('a','meta');await page.type('Edited after removal');await page.click(`${card} form button:not([type])`);
+  await page.waitFor(`document.querySelector('${card}').textContent.includes('Edited after removal')&&document.activeElement?.getAttribute('aria-label')==='Comment options'`);
+  await page.waitFor(`document.querySelector('[aria-label="Local save status"]')?.textContent.includes('Saved')`);await page.reload();
+  await page.waitFor(`document.querySelector('${card}')?.textContent.includes('Edited after removal')`,15000);
+  await page.click('[aria-label="Reply to image thread"]');await page.type('Reply after removal');await page.key('Enter','meta');
+  await page.waitFor(`document.querySelectorAll('[data-image-thread] ${card}').length===2`);
+  await page.waitFor(`document.querySelector('[aria-label="Local save status"]')?.textContent.includes('Saved')`);await page.reload();
+  await page.waitFor(`document.querySelector('[data-image-thread]')?.textContent.includes('Reply after removal')&&document.querySelectorAll('[data-image-thread]').length===1`,15000);
+  await page.click(`${card} [aria-label="Comment options"]`);await page.click('text=Delete');await page.click('[aria-label="Delete this comment?"] button[data-autofocus]');
+  await page.waitFor(`document.querySelectorAll('${card}').length===1`);
+  await page.waitFor(`document.querySelector('[aria-label="Local save status"]')?.textContent.includes('Saved')`);await page.reload();
+  await page.waitFor(`document.querySelector('[data-comment]')?.textContent.includes('Earlier ordinary comment')`,15000);expect(await page.eval(`[...document.querySelectorAll('${card}')].map(n=>n.querySelector('p').textContent)`)).toEqual(['Reply after removal']);
+ }finally{await page.close();await fetch(`${APP}__fixture`,{method:'POST',body:JSON.stringify({includeMedia:false})});}
+});
+test('Escape after a mouse Submit closes only the image comment thread, not the issue (Sol review 4)',async()=>{
+ const page=await open();try{
+  await fetch(`${APP}__fixture`,{method:'POST',body:JSON.stringify({includeMedia:true})});await page.goto('?issue=TEST-2&view=page');
+  await page.waitFor(`document.querySelector('#description img')?.naturalWidth===320`,15000);
+  await page.hover('#description img');await page.click('#description [aria-label="Add image comment"]');await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Image comment'`);
+  await page.type('Mouse submitted');await page.click('[aria-label="Submit image comment"]');await page.waitFor(`!!document.querySelector('[data-image-comment-thumbnail]')`);
+  await page.key('Escape');await page.waitFor(`!document.querySelector('.image-comment-thread')`);
+  expect(await page.active()).toBe('Add image comment');expect(new URL(await page.eval('location.href')).searchParams.get('issue')).toBe('TEST-2');
+  expect(await page.eval(`document.querySelector('[id^="image-comment-"]').textContent`)).toContain('Mouse submitted');
+ }finally{await page.close();await fetch(`${APP}__fixture`,{method:'POST',body:JSON.stringify({includeMedia:false})});}
+});
+
+test('a zoomed image pans by dragging and by the wheel, stays within its edges, and Escape un-zooms it to the centre',async()=>{
+ const page=await open();try{
+  await fetch(`${APP}__fixture`,{method:'POST',body:JSON.stringify({includeMedia:true})});await page.click('[data-key="TEST-2"]');
+  await page.waitFor(`document.querySelector('#description img')?.naturalWidth===320`,15000);
+  await page.click('#description img');await page.click('#description [aria-label="Full screen"]');await page.waitFor(`document.querySelector('[aria-label="Preview"] img')?.naturalWidth===320`);
+  const pan=`document.querySelector('[aria-label="Preview"] img').style.transform`;
+  expect(await page.eval(pan)).toBe('translate(0px, 0px)');
+  // Not zoomed: dragging does nothing.
+  const [x,y]=await page.eval<[number,number]>(`(()=>{const b=document.querySelector('.image-preview-stage img').getBoundingClientRect();return [b.x+b.width/2,b.y+b.height/2]})()`);
+  await page.pointerDrag(x,y,x+60,y+40);expect(await page.eval(pan)).toBe('translate(0px, 0px)');
+  const fit=await page.eval<string>(`document.querySelector('[aria-label="Toggle image zoom"]').textContent`);await page.click('[aria-label="Toggle image zoom"]');await page.waitFor(`document.querySelector('[aria-label="Toggle image zoom"]').textContent!==${JSON.stringify(fit)}`);
+  await page.pointerDrag(x,y,x+20,y+12);expect(await page.eval(pan)).toBe('translate(20px, 12px)');
+  await page.wheel(x,y,10,-6);await page.waitFor(`${pan}==='translate(10px, 18px)'`);
+  // A long drag stops at the edge allowance instead of throwing the image off screen.
+  await page.pointerDrag(x,y,x+900,y);const [px]=await page.eval<[number]>(`[parseFloat(${pan}.slice(10))]`);expect(px).toBeLessThan(900);expect(px).toBeGreaterThan(20);
+  await page.key('Escape');await page.waitFor(`${pan}==='translate(0px, 0px)'&&!!document.querySelector('[aria-label="Preview"]')`);
+ }finally{await page.close();}
+});

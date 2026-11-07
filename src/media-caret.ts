@@ -40,5 +40,5 @@ export function mediaCaretPlugin(){
  };
  inspect(state.doc,-1);state.doc.descendants(inspect);
  for(const pos of [...gaps].sort((a,b)=>b-a))tr.insert(pos,state.schema.nodes.paragraph!.create({mediaBoundary:true}));
- return tr.docChanged?tr.setMeta('addToHistory',false):null;
+ return tr.docChanged?(gaps.size?tr.setMeta('addToHistory',false):tr):null;
 }});}
