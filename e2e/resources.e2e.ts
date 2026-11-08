@@ -444,6 +444,7 @@ test("resource rows and open-menu triggers follow Linear (RAJ-52): 36px rows 1px
       ),
     ).toEqual([
       ["Add reaction", "1", "rgba(0, 0, 0, 0)"],
+      ["Reply to comment", "1", "rgba(0, 0, 0, 0)"],
       ["Comment options", "1", "lch(22.347 1.525 272)"],
     ]);
     await page.key("Escape");
