@@ -61,3 +61,22 @@ export function activityRows(events:readonly PropertyActivity[]):ActivityRow[]{
  }
  return rows;
 }
+
+/** Jira rejected a write and the issue rolled back from `local` to `jira`: the actor's events for the rejected changes are undone,
+ *  so Activity never shows a change Jira doesn't have. A property event takes Jira's value (and drops out when that is its `before`). */
+export function rollbackActivity(events:readonly PropertyActivity[],local:Record<string,unknown>,jira:Record<string,unknown>,actor:string):readonly PropertyActivity[]{
+ let next=[...events];
+ for(const field of activityFields){
+  if(sameValue(local[field],jira[field]))continue;
+  const index=next.findLastIndex(event=>event.field===field&&event.actor.id===actor&&sameValue(event.after,local[field]));
+  if(index<0)continue;
+  const event={...next[index]!,after:structuredClone(jira[field]??null)};
+  next=sameValue(event.before,event.after)?next.toSpliced(index,1):next.with(index,event);
+ }
+ const relations=(value:unknown)=>(value as Relation[]|undefined)??[],has=(list:Relation[],r:Relation)=>list.some(x=>x.key===r.key&&x.kind===r.kind);
+ const same=(value:unknown,r:Relation)=>!!value&&(value as Relation).key===r.key&&(value as Relation).kind===r.kind;
+ const drop=(match:(event:PropertyActivity)=>boolean)=>{const index=next.findLastIndex(event=>event.field==='relation'&&event.actor.id===actor&&match(event));if(index>=0)next=next.toSpliced(index,1);};
+ for(const r of relations(local.relations))if(!has(relations(jira.relations),r))drop(event=>event.before===null&&same(event.after,r));
+ for(const r of relations(jira.relations))if(!has(relations(local.relations),r))drop(event=>event.after===null&&same(event.before,r));
+ return next.length===events.length&&next.every((event,i)=>event===events[i])?events:next;
+}

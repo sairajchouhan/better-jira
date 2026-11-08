@@ -56,7 +56,9 @@ export type UiEvent =
   | { type: "description.edit" }
   | { type: "description.editDone" }
   | { type: "toast.show"; text: string; key?: string; undo?:boolean; detail?:string }
-  | { type: "toast.dismiss" };
+  | { type: "toast.dismiss" }
+  /** Jira gave an issue created here its real key: the toast names and opens the new key, without restarting its timer. */
+  | { type: "toast.rekey"; from: string; to: string };
 
 export const uiMachine = setup({
   types: {} as { context: UiContext; events: UiEvent; input: { board: number; view: View } },
@@ -146,6 +148,7 @@ export const uiMachine = setup({
           on: {
             "toast.show": { target: "shown", reenter: true, actions: assign({ toast: ({ event }) => ({ text: event.text, ...(event.key ? { key: event.key } : {}),...(event.undo?{undo:true}:{}),...(event.detail?{detail:event.detail}:{}) }) }) },
             "toast.dismiss": { target: "hidden", actions: assign({ toast: null }) },
+            "toast.rekey": { actions: assign({ toast: ({ context, event }) => context.toast?.key === event.from ? { ...context.toast, key: event.to, text: context.toast.text.replace(new RegExp(`${event.from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\d)`, "g"), event.to) } : context.toast }) },
           },
         },
       },

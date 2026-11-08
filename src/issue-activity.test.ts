@@ -1,5 +1,5 @@
 import {expect,test} from 'bun:test';
-import {GROUP_MS,activityRows,recordActivity,recordRelation,visibleActivity,type PropertyActivity} from './issue-activity';
+import {GROUP_MS,activityRows,recordActivity,recordRelation,rollbackActivity,visibleActivity,type PropertyActivity} from './issue-activity';
 const me={id:'me',name:'Me'},start=Date.parse('2026-11-08T09:00:00Z');
 let n=0;const id=()=>`e${++n}`,at=(ms=0)=>new Date(start+ms).toISOString();
 const change=(events:readonly PropertyActivity[],before:Record<string,unknown>,patch:Record<string,unknown>,ms=0)=>recordActivity(events,before,patch,me,at(ms),id);
@@ -66,4 +66,17 @@ test('each relation change is its own row, never joined to the property group, a
  // Two relations recorded in the same instant are still two rows.
  const same=recordRelation(recordRelation([],{key:'A',kind:'related'},false,me,at(),id),{key:'B',kind:'related'},false,me,at(),id);
  expect(activityRows(same).map(row=>row.events.length)).toEqual([1,1]);
+});
+
+test('a write Jira rejected takes its Activity entries with it; earlier saved changes in the group stay',()=>{
+ // Defect 4/5: "set parent to SAM1-29" stayed after Jira's pid error rolled the parent back.
+ const parent=change([],{parent:null},{parent:'SAM1-29'});
+ expect(rollbackActivity(parent,{parent:'SAM1-29'},{parent:undefined},me.id)).toEqual([]);
+ // Low was saved, then High was rejected: the group goes back to "set priority to Low".
+ const priority=change(change([],{priority:null},{priority:'Low'}),{priority:'Low'},{priority:'High'},60_000);
+ expect(rollbackActivity(priority,{priority:'High'},{priority:'Low'},me.id)).toMatchObject([{field:'priority',before:null,after:'Low'}]);
+ // A rejected link removes its relation row; another actor's events and unchanged fields are untouched.
+ const other={id:'other',name:'Other'},events=[...recordRelation([],{key:'A-2',kind:'blocked'},false,me,at(),id),...recordActivity([],{status:'todo'},{status:'done'},other,at(),id)];
+ expect(rollbackActivity(events,{relations:[{key:'A-2',kind:'blocked'}],status:'done'},{relations:[],status:'done'},me.id).map(e=>e.field)).toEqual(['status']);
+ expect(rollbackActivity(events,{status:'done'},{status:'done'},me.id)).toBe(events);
 });

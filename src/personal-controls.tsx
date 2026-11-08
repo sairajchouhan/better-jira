@@ -54,12 +54,18 @@ export function CreateIssue() {
   const projects=[...new Map(issues.flatMap(i=>i.project?[[i.project.key,i.project] as const]:[])).values()];
   const options=useStore(s=>s.options),writable=useStore(s=>s.writable);
   const priorities=[...new Set([...(writable?[]:["Normal"]),...options.priorities.map(p=>p.name),...issues.flatMap(i=>i.priority?[i.priority]:[])])];
-  const types=[...new Set(["Task",...issues.flatMap(i=>i.type?[i.type]:[])])];
+  // Create related › Parent issue: only a type one level above the source's in Jira's hierarchy can be its parent (a Task's is an Epic).
+  const source=draft.related?.kind==="parent"?all.get(draft.related.key):undefined,jiraTypes=options.types?.[draft.project?.key??projects[0]?.key??""];
+  const sourceLevel=jiraTypes?.find(t=>t.name===source?.type)?.hierarchyLevel;
+  const parentTypes=source&&sourceLevel!==undefined?jiraTypes!.filter(t=>t.hierarchyLevel===sourceLevel+1).map(t=>t.name):undefined;
+  const noParentType=parentTypes?.length===0?`Jira has no issue type above ${source!.type}, so ${source!.key} can't have a parent.`:"";
+  const types=parentTypes??[...new Set(["Task",...issues.flatMap(i=>i.type?[i.type]:[])])];
+  const type=draft.type&&types.includes(draft.type)?draft.type:types[0]??"Task";
   const milestones=[...new Map([...(options.versions[draft.project?.key??projects[0]?.key??""]??[]).map(m=>[m.id,m] as const),...issues.filter(i=>i.project?.key===(draft.project?.key??projects[0]?.key)).flatMap(i=>(i.milestones??[]).map(m=>[m.id,m] as const))]).values()];
   const close=()=>ui.send({type:"overlay.close"});
   const submit=()=> {
-    if(!title.trim()||filesBusy||!dateValid)return;
-    const key=actions.create(title,{...draft,...(draft.priority===""?{priority:undefined}:{}),descriptionDoc:description,attachments,labels:[...new Set(labels.split(",").map(l=>l.trim()).filter(Boolean))]},more);
+    if(!title.trim()||filesBusy||!dateValid||noParentType)return;
+    const key=actions.create(title,{...draft,type,...(draft.priority===""?{priority:undefined}:{}),descriptionDoc:description,attachments,labels:[...new Set(labels.split(",").map(l=>l.trim()).filter(Boolean))]},more);
     if(key){unsent.title="";unsent.description=normalizeDocument("");}
     if(key&&more){setTitle("");setDescription(normalizeDocument(""));setDraftIndex(n=>n+1);setAttachments([]);titleRef.current?.focus();}
   };
@@ -70,7 +76,7 @@ export function CreateIssue() {
       <input ref={titleRef} autoFocus aria-label="Issue title" value={title} onChange={e=>setTitle(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.metaKey&&!e.ctrlKey&&!e.nativeEvent.isComposing){e.preventDefault();document.getElementById("create-description")?.focus();}}} placeholder="Issue title" className="mb-2 w-full bg-transparent py-1 text-[18px] font-medium text-fg outline-none"/>
       <RichEditor key={draftIndex} id="create-description" initial={description} onChange={setDescription} expanded={expanded}/>
       <div className="flex flex-wrap gap-2">
-        <PillSelect label="Issue type" value={draft.type??"Task"} options={types.map(t=>[t,t] as const)} onChange={type=>setDraft({...draft,type})}/>
+        <PillSelect label="Issue type" value={type} options={types.map(t=>[t,t] as const)} onChange={type=>setDraft({...draft,type})}/>
         <PillSelect label="Status" value={draft.status??board.columns[0]?.statuses[0]?.id??""} options={board.columns.flatMap(c=>c.statuses).map(st=>[st.id,st.name] as const)} onChange={status=>setDraft({...draft,status})}/>
         <PillSelect label="Priority" value={draft.priority??(writable?"":"Normal")} options={[["",writable?"Default priority":"No priority"],...[...priorities].sort((a,b)=>priorityRank(a)-priorityRank(b)).map(p=>[p,p] as const)]} onChange={priority=>setDraft({...draft,priority})}/>
         <PillSelect label="Assignee" value={draft.assignee?.id??""} options={[["","Unassigned"],...users.map(u=>[u.id,u.name] as const)]} onChange={id=>setDraft({...draft,assignee:users.find(u=>u.id===id)??null})}/>
@@ -79,8 +85,9 @@ export function CreateIssue() {
         <details className="w-full text-[12px] text-fg-3"><summary className="cursor-default py-1">Due date{draft.due?`: ${draft.due}`:""}</summary><Suspense fallback={<p>Loading dates…</p>}><DateInput value={draft.due??""} onChange={due=>setDraft({...draft,due:due||null})} onValidity={setDateValid}/></Suspense></details>
       </div>
       <input aria-label="Labels, comma separated" value={labels} onChange={e=>setLabels(e.target.value)} placeholder="Labels, separated by commas" className={`${INPUT} mt-3 text-[12px]`}/>
+      {noParentType&&<p role="alert" className="mt-3 text-[12px] text-danger">{noParentType}</p>}
       <Attachments attachments={attachments} onChange={setAttachments} onBusy={setFilesBusy}/>
-      <div className="mt-4 flex items-center gap-2 border-t border-line pt-3"><label className="mr-auto flex items-center gap-2 text-[12px]"><input type="checkbox" checked={more} onChange={e=>setMore(e.target.checked)}/>Create more</label><button type="button" onClick={close} className={BUTTON}>Cancel</button><button type="submit" disabled={!title.trim()||filesBusy||!dateValid} className="rounded-md bg-accent px-3 py-1.5 text-white disabled:opacity-40">Create issue</button></div>
+      <div className="mt-4 flex items-center gap-2 border-t border-line pt-3"><label className="mr-auto flex items-center gap-2 text-[12px]"><input type="checkbox" checked={more} onChange={e=>setMore(e.target.checked)}/>Create more</label><button type="button" onClick={close} className={BUTTON}>Cancel</button><button type="submit" disabled={!title.trim()||filesBusy||!dateValid||!!noParentType} className="rounded-md bg-accent px-3 py-1.5 text-white disabled:opacity-40">Create issue</button></div>
     </form>
   </Modal>;
 }

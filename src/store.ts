@@ -13,7 +13,7 @@ import {canReplyTo,visibleCommentTotal,type CommentState} from "./comment-thread
 import type {MediaEdit} from "./media-edits";
 
 import {resourceMediaIds,type DocumentProperties,type IssueResource,type LinkPreview} from './issue-resource';
-import {RELATION_ISSUE,recordActivity,recordRelation,type PropertyActivity} from './issue-activity';
+import {RELATION_ISSUE,recordActivity,recordRelation,rollbackActivity,type PropertyActivity} from './issue-activity';
 import {prepareOps,uploadedAttachments,aliasAttachments,settleUploads,withoutLocalMedia} from "./jira-media";
 import {JIRA_ISSUE_FIELDS,mergeOps,opsFor,renameCommentIds,renameIds,type Op,type Side} from "./jira-ops";
 export type User = { id: string; name: string; avatar?: string };
@@ -63,7 +63,7 @@ export type Full = { key: string; fields: any; /** Jira remote links, read with 
 export type Overlay = null | "palette" | "assign" | "status" | "create" | "priority" | "labels" | "project" | "milestone" | "due" | "options" | "relations" | "shortcuts" | "help" | "search" | "favorites" | "views" | "boards" | "subscribers" | "reminder";
 export type IssueDraft = Partial<Pick<Issue,"status"|"assignee"|"priority"|"labels"|"project"|"milestones"|"due"|"parent"|"type"|"rank"|"attachments">> & {description?:string;descriptionDoc?:AdfDocument;/** Linear "Create related": link the new issue to this one in the same undo step. */related?:{key:string;kind:"related"|"blocked"|"blocking"|"parent"}};
 export type View = "side" | "page";
-export type JiraOptions={priorities:{id:string;name:string}[];users:User[];labels:string[];versions:Record<string,{id:string;name:string}[]>};
+export type JiraOptions={priorities:{id:string;name:string}[];users:User[];labels:string[];versions:Record<string,{id:string;name:string}[]>;types?:Record<string,{name:string;hierarchyLevel:number}[]>};
 export type SavedView={id:string;board:number;name:string;preferences:Preferences;mine:boolean};
 
 export const ME: User = { id: "", name: "Me" };
@@ -493,9 +493,11 @@ async function flush() {
       // New comment ids too, so undo and redo address the comment Jira now has.
       const comments=new Map([...created].filter(([from])=>from!==job.key));
       if(comments.size)for(const list of [undo,redo])list.splice(0,list.length,...renameCommentIds(list,comments));
-      if(result!.error)ui.send({type:"toast.show",text:`Jira did not save the change to ${result!.key??job.key}`,detail:result!.error});
+      // A rejected link or parent naming an issue created here leaves that issue in Jira on its own: say which.
+      const orphans=first?.op==="create"?[]:[...new Set(jiraKeys.values())].filter(created=>JSON.stringify(job.ops).includes(`"${created}"`));
+      if(result!.error)ui.send({type:"toast.show",text:`Jira did not save the change to ${result!.key??job.key}`,detail:`${result!.error}${orphans.length?` ${orphans.join(", ")} was created in Jira, but not linked.`:""}`});
       adopt(result!.key??job.key,result!,!!result!.error,created);
-      for(const other of result!.others??[])adopt(other.key,{issue:other},false,created);
+      for(const other of result!.others??[])adopt(other.key,{issue:other,error:result!.error},false,created);
       set({pendingWrites:outbox.length});
     }
   }finally{flushing=false;}
@@ -513,6 +515,7 @@ function rekey(from:string,to:string) {
   for(const list of [undo,redo])list.splice(0,list.length,...list.map(edit=>mentions(edit)?{...renameIds(edit,ids),label:edit.label.replace(label,to)}:edit));
   for(const job of outbox){job.key=ids.get(job.key)??job.key;job.ops=renameIds(job.ops,ids);}
   set({issues,full});
+  ui.send({type:"toast.rekey",from,to});
   if(state.selected===from)navigate({selected:to});
 }
 /** Takes Jira's copy of what Jira owns, once no later write for the issue waits. `force` rolls a failed write back. */
@@ -531,6 +534,8 @@ function adopt(key:string,result:WriteResult,force:boolean,created=new Map<strin
   for(const field of JIRA_ISSUE_FIELDS){if(field in result.issue)fields[field]=(result.issue as any)[field];else if(!["statusSince","started"].includes(field))fields[field]=undefined;local.delete(field);}
   localFields.set(key,local);
   const next:Issue={...issue,...fields} as Issue;
+  // A rejected write's Activity entries go with it.
+  if(result.error&&issue.activity){const activity=rollbackActivity(issue.activity,issue,fields,ME.id);if(activity!==issue.activity)next.activity=[...activity];}
   const full=state.full.get(key),patch:{issues:Map<string,Issue>;full?:Map<string,Full>}={issues:new Map(state.issues)};
   if(result.full?.remotelinks)next.resources=withJiraLinks(issue.resources,result.full.remotelinks,true);
   if(full&&result.full) {

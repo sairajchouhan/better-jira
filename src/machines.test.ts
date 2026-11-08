@@ -56,6 +56,19 @@ test("ui: toggles open and close the same palette or toolbar menu", () => {
   expect(ui.getSnapshot().context.toolbar).toBeNull();
 });
 
+test("ui: a created-issue toast takes the key Jira assigns, keeping its timer", () => {
+  const clock = new SimulatedClock();
+  const ui = createActor(uiMachine, { input: { board: 1, view: "side" }, clock }).start();
+  ui.send({ type: "toast.show", text: "Created A-NEW2", key: "A-NEW2" });
+  ui.send({ type: "toast.rekey", from: "A-NEW21", to: "A-40" });
+  expect(ui.getSnapshot().context.toast).toEqual({ text: "Created A-NEW2", key: "A-NEW2" });
+  clock.increment(4000);
+  ui.send({ type: "toast.rekey", from: "A-NEW2", to: "A-37" });
+  expect(ui.getSnapshot().context.toast).toEqual({ text: "Created A-37", key: "A-37" });
+  clock.increment(1000);
+  expect(ui.getSnapshot().context.toast).toBeNull();
+});
+
 test("ui: a toast hides after five seconds, and a new toast restarts the timer", () => {
   const clock = new SimulatedClock();
   const ui = createActor(uiMachine, { input: { board: 1, view: "side" }, clock }).start();

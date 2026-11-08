@@ -385,13 +385,15 @@ export function options() {
   const value=(async()=>{
     const projects=db.query<{key:string},[]>("SELECT DISTINCT json_extract(slim,'$.project.key') AS key FROM issues").all().map(r=>r.key).filter(Boolean);
     const user=(u:any)=>({id:u.accountId,name:u.displayName,avatar:u.avatarUrls?.["24x24"]});
-    const [priorities,users,labels,versions]=await Promise.all([
+    const [priorities,users,labels,versions,types]=await Promise.all([
       jira<any[]>("/rest/api/3/priority"),
       projects.length?jira<any[]>(`/rest/api/3/user/assignable/multiProjectSearch?${new URLSearchParams({projectKeys:projects.join(","),maxResults:"1000"})}`):[],
       jira<{values:string[]}>("/rest/api/3/label?maxResults=1000").then(r=>r.values,()=>[]),
       Promise.all(projects.map(async key=>[key,(await jira<any[]>(`/rest/api/3/project/${encodeURIComponent(key)}/versions`).catch(()=>[])).filter(v=>!v.archived).map(v=>({id:v.id,name:v.name}))] as const)),
+      // Each project's issue types and where they sit in Jira's hierarchy (Epic 1, Task 0, Subtask -1), so a new parent gets a type Jira accepts.
+      Promise.all(projects.map(async key=>[key,(await jira<{issueTypes:any[]}>(`/rest/api/3/issue/createmeta/${encodeURIComponent(key)}/issuetypes`).catch(()=>({issueTypes:[]}))).issueTypes.map(t=>({name:t.name,hierarchyLevel:t.hierarchyLevel}))] as const)),
     ]);
-    return {priorities:priorities.map(p=>({id:p.id,name:p.name})),users:users.filter(u=>u.accountType==="atlassian"&&u.active!==false).map(user),labels,versions:Object.fromEntries(versions)};
+    return {priorities:priorities.map(p=>({id:p.id,name:p.name})),users:users.filter(u=>u.accountType==="atlassian"&&u.active!==false).map(user),labels,versions:Object.fromEntries(versions),types:Object.fromEntries(types)};
   })();
   optionCache={at:Date.now(),value:value.catch(e=>{optionCache=undefined;throw e;})};
   return optionCache.value;

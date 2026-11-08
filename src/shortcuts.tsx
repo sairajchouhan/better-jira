@@ -11,6 +11,7 @@ import {
   boardOf,
   changeDisplay,
   changePreferences,
+  currentKey,
   get,
   issueURL,
   loadFull,
@@ -348,7 +349,8 @@ export const shortcuts: Shortcut[] = [
     hotkey: "Mod+Alt+O",
     when: () => !!get().toast?.key,
     run: () => {
-      const issue = get().issues.get(get().toast?.key ?? "");
+      // Like the toast's View issue: a key Jira has since replaced still finds the issue.
+      const issue = get().issues.get(currentKey(get().toast?.key ?? ""));
       if (issue)
         navigate({ board: issue.board, selected: issue.key, panel: true });
     },
