@@ -32,6 +32,8 @@ import {
   markdownRules,
   setBlock,
   shiftTab,
+  shiftTabInside,
+  tabInside,
   tab,
   toggleList,
   toggleQuote,
@@ -73,6 +75,7 @@ export type RichEditorProps = {
     merge: (current: unknown) => AdfDocument,
   ) => void;
   /** Like Linear's documents: no toolbar on focus, a floating one above a text selection. */ selectionToolbar?: boolean;
+  /** Tab outside a list, table or code block moves focus on (Linear's create composer) instead of staying in the editor. */ tabLeaves?: boolean;
 };
 const BUTTON =
   "shrink-0 whitespace-nowrap rounded px-2 py-1 text-[12px] text-fg-2 hover:bg-hover disabled:opacity-30 aria-pressed:bg-sel";
@@ -156,8 +159,9 @@ export function RichEditor(props: RichEditorProps) {
               baseKeymap.Enter!,
             ),
             ArrowDown: codeDown,
-            Tab: tab,
-            "Shift-Tab": shiftTab,
+            Tab: (...args) => (latest.current.tabLeaves ? tabInside(...args) : tab(...args)),
+            "Shift-Tab": (...args) =>
+              latest.current.tabLeaves ? shiftTabInside(...args) : shiftTab(...args),
           }),
           keymap(baseKeymap),
           tableEditing(),

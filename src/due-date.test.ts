@@ -23,3 +23,11 @@ test("natural dates use a reference and local calendar, including future weekday
   ])
     expect(parseDueDate(text, friday)).toBeNull();
 });
+test("due dates, presets and reminder times share one short date format", async () => {
+  const { dueLabel, duePresets } = await import("./due-date");
+  const { reminderTime } = await import("./reminder-display");
+  expect(dueLabel("2026-11-09", friday)).toBe("Nov 9");
+  expect(dueLabel("2027-02-09", friday)).toBe("Feb 9, 2027");
+  expect(duePresets(friday).map((p) => p.label)).toEqual(["Nov 7", "Nov 6", "Nov 13"]);
+  expect(reminderTime(new Date(2026, 10, 8, 19, 4).toISOString())).toBe("Nov 8, 7:04 PM");
+});

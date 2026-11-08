@@ -73,7 +73,7 @@ test("the existing Linear shortcut opens inline creation and both submit shortcu
     expect(await page.eval(`document.querySelector('[aria-label="Sub-issue title"]').value`)).toBe(
       "",
     );
-    await page.click("text=Discard sub-issue");
+    await page.click(`[aria-label="Create sub-issue"] .rich-editor-actions button`);
     await page.click('[aria-label="Sub-issue display options"]');
     await page.click("text=Priority");
     await page.key("Escape");
@@ -155,7 +155,7 @@ test("editing the description leaves the inline title clickable and saves both v
     await page.waitFor(
       `document.querySelector('[data-sub-issues]').textContent.includes('Description then title')`,
     );
-    await page.click("text=Discard sub-issue");
+    await page.click(`[aria-label="Create sub-issue"] .rich-editor-actions button`);
     await page.click("text=Description then title");
     await page.waitFor(
       `document.getElementById('description')?.textContent.includes('Keep this rich child description')`,
@@ -188,7 +188,7 @@ test("description submit appends after siblings, clears rich content and files, 
     expect(
       await page.eval(`[...document.querySelectorAll('[data-sub-issue]')].at(-1)?.textContent`),
     ).toContain("Child with a file");
-    await page.click("text=Discard sub-issue");
+    await page.click(`[aria-label="Create sub-issue"] .rich-editor-actions button`);
     await page.click("text=Child with a file");
     await page.waitFor(
       `document.getElementById('description')?.textContent.includes('child-note.txt')`,
@@ -274,14 +274,14 @@ test("Escape follows Linear: field, then composer, then a discard confirmation; 
     await page.click('[aria-label="Sub-issue description"]');
     await page.key("o", "meta", "shift");
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Sub-issue title'`);
-    await page.click("text=Discard sub-issue");
+    await page.click(`[aria-label="Create sub-issue"] .rich-editor-actions button`);
     await page.waitFor(`!!${confirmOpen}`);
-    await page.click("text=Cancel");
+    await page.click('[role="dialog"][aria-label="Discard this draft?"] button');
     await page.waitFor(`!${confirmOpen}`);
     expect(await page.eval(`document.querySelector('[aria-label="Sub-issue title"]').value`)).toBe(
       "Unfinished child",
     );
-    await page.click("text=Discard sub-issue");
+    await page.click(`[aria-label="Create sub-issue"] .rich-editor-actions button`);
     await page.waitFor(`!!${confirmOpen}`);
     await page.click("text=Discard");
     await page.waitFor(
@@ -419,7 +419,7 @@ test("Escape on an empty sub-issue composer closes it without confirmation and r
     );
     expect(await page.eval(`!!document.querySelector('[role="dialog"]')`)).toBe(false);
     await page.click("[data-create-child]");
-    await page.click("text=Discard sub-issue");
+    await page.click(`[aria-label="Create sub-issue"] .rich-editor-actions button`);
     await page.waitFor(`!document.querySelector('[aria-label="Create sub-issue"]')`);
     expect(await page.eval(`!!document.querySelector('[role="dialog"]')`)).toBe(false);
   } finally {
@@ -521,7 +521,7 @@ test("right-clicking a sub-issue row opens Linear's row actions, which act on th
     await page.key("Escape");
     // Due date › Tomorrow and Remind me › An hour from now act on the child, not the open issue.
     const tomorrow = await page.eval<string>(
-      `(()=>{const d=new Date();d.setDate(d.getDate()+1);return d.toLocaleDateString('en-CA')})()`,
+      `(()=>{const d=new Date();d.setDate(d.getDate()+1);return d.toLocaleDateString('en',{month:'short',day:'numeric'})})()`,
     );
     await menu("TEST-4");
     await page.type("tomorrow");
@@ -593,7 +593,7 @@ test("a sub-issue upload that finishes after leaving keeps newer draft edits, an
     await page.click('[aria-label="Sub-issue description"]');
     await paste("discarded.png");
     await page.waitFor(`typeof window.releaseBitmap==='function'`);
-    await page.click("text=Discard sub-issue");
+    await page.click(`[aria-label="Create sub-issue"] .rich-editor-actions button`);
     await page.waitFor(
       `!!document.querySelector('[role="dialog"][aria-label="Discard this draft?"] [data-autofocus]')`,
     );
@@ -656,7 +656,7 @@ test("a sub-issue file save that finishes after leaving adds the file to the cur
     await page.click('[aria-label="Sub-issue description"]');
     await paste("dropped-file.png");
     await page.waitFor(`typeof window.releaseFiles==='function'`);
-    await page.click("text=Discard sub-issue");
+    await page.click(`[aria-label="Create sub-issue"] .rich-editor-actions button`);
     await page.waitFor(
       `!!document.querySelector('[role="dialog"][aria-label="Discard this draft?"] [data-autofocus]')`,
     );

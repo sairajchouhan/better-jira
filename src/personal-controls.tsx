@@ -60,7 +60,7 @@ import { shortcutLabel, runShortcut } from "./shortcuts";
 import { copyIcons, copyKinds, copyShortcuts, issueCopy, type CopyKind } from "./issue-copy";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { reminderPresets, reminderTime } from "./reminder-display";
-import { duePresets } from "./due-date";
+import { dueLabel, duePresets, parseDueDate } from "./due-date";
 
 /** Linear keeps an unsent title and description when the composer closes; the next C brings them back. */
 const unsent = { title: "", description: normalizeDocument("") };
@@ -69,11 +69,13 @@ export function CreateIssue() {
   const all = useStore((s) => s.issues);
   const initial = useStore((s) => s.draft);
   const [draft, setDraft] = useState<IssueDraft>(initial);
-  const [title, setTitle] = useState(unsent.title);
+  const [title, setTitle] = useState(initial.title ?? unsent.title);
   const [description, setDescription] = useState(() =>
     normalizeDocument(initial.descriptionDoc ?? unsent.description),
   );
   useEffect(() => {
+    // A copy isn't a draft of your own: cancelling it leaves the next composer as it was.
+    if (initial.copy) return;
     unsent.title = title;
     unsent.description = description;
   }, [title, description]);
@@ -229,6 +231,7 @@ export function CreateIssue() {
           initial={description}
           onChange={setDescription}
           expanded={expanded}
+          tabLeaves
         />
         <div className="flex flex-wrap gap-2">
           <PillSelect
@@ -327,7 +330,7 @@ export function CreateIssue() {
             disabled={!title.trim() || filesBusy || !dateValid || !!noParentType}
             className="rounded-md bg-accent px-3 py-1.5 text-white disabled:opacity-40"
           >
-            Create issue
+            {initial.copy ? "Save copy" : "Create issue"}
           </button>
         </div>
       </form>
@@ -355,6 +358,11 @@ export function PropertyPicker({
   const [query, setQuery] = useState("");
   const [date, setDate] = useState(issue.due ?? "");
   const [dateValid, setDateValid] = useState(true);
+  // Issue options › Due date › Custom… opens the date form; Shift+D opens Linear's due menu first.
+  const [custom, setCustom] = useState(() => get().issueOptionsStart === "due");
+  useEffect(() => {
+    if (get().issueOptionsStart === "due") set({ issueOptionsStart: null });
+  }, []);
   // Linear lists the issue's labels first, then the rest after a divider; the order holds while the menu is open.
   const options = useStore((s) => s.options),
     writable = useStore((s) => s.writable);
@@ -380,6 +388,65 @@ export function PropertyPicker({
     milestone: "Set milestone",
     due: "Due date",
   }[field];
+  if (field === "due" && !custom) {
+    // Linear (RAJ-61): a click or Enter applies at once; typed text like "24h" or "Feb 9" offers that date.
+    const parsed = parseDueDate(query),
+      apply = (due: string | null) => {
+        actions.patch(issue.key, { due });
+        close();
+      };
+    const dated = (name: string, due: string) => (
+      <span className="flex gap-2">
+        <span className="flex-1 truncate">{name}</span>
+        <span className="text-fg-3">{dueLabel(due)}</span>
+      </span>
+    );
+    return (
+      <PropertyMenu
+        label={label}
+        placeholder="Try: 24h, 7 days, Feb 9"
+        hotkey={shortcutLabel("due")}
+        anchor={issueAnchor("prop-due", issue.key)}
+        close={close}
+        query={query}
+        onQuery={setQuery}
+      >
+        {parsed && (
+          <PickerRow
+            value={`Due ${query}`}
+            keywords={[query]}
+            icon={<Icon name="calendar" />}
+            onSelect={() => apply(parsed)}
+          >
+            {dated("Due", parsed)}
+          </PickerRow>
+        )}
+        <PickerRow value="Custom…" icon={<Icon name="calendar" />} onSelect={() => setCustom(true)}>
+          Custom…
+        </PickerRow>
+        {duePresets().map((preset) => (
+          <PickerRow
+            key={preset.name}
+            value={preset.name}
+            icon={<Icon name="calendar" />}
+            current={issue.due === preset.due}
+            onSelect={() => apply(preset.due)}
+          >
+            {dated(preset.name, preset.due)}
+          </PickerRow>
+        ))}
+        {issue.due && (
+          <PickerRow
+            value="Remove due date"
+            icon={<Icon name="close" />}
+            onSelect={() => apply(null)}
+          >
+            Remove due date
+          </PickerRow>
+        )}
+      </PropertyMenu>
+    );
+  }
   if (field === "due")
     return (
       <Modal label={label} close={close} anchor={issueAnchor("prop-due", issue.key)} width={360}>
@@ -488,9 +555,10 @@ export function PropertyPicker({
         {query.trim() && !exact && (
           <Command.Item
             value={`Create ${query}`}
+            // Like Enter on an existing label: apply it and close, so the menu never shows a list without it.
             onSelect={() => {
               toggle(query.trim());
-              setQuery("");
+              close();
             }}
             className={PICKER_ITEM}
           >
@@ -697,7 +765,7 @@ export function IssueOptions({ issue }: { issue: Issue }) {
   const start = useStore((s) => s.issueOptionsStart),
     [view, setView] = useState(start);
   useEffect(() => {
-    if (start && start !== "reminder") {
+    if (start && start !== "reminder" && start !== "due") {
       setView(start);
       set({ issueOptionsStart: null });
     }
@@ -775,7 +843,13 @@ export function IssueOptions({ issue }: { issue: Issue }) {
       icon: "calendar",
       shortcut: keys("due"),
       children: [
-        { name: "Custom…", run: () => open("due") },
+        {
+          name: "Custom…",
+          run: () => {
+            set({ issueOptionsStart: "due" });
+            open("due");
+          },
+        },
         ...duePresets().map((preset) => ({
           name: preset.name,
           shortcut: preset.label,
@@ -1016,7 +1090,16 @@ export function Attachments({
             type="button"
             aria-label={`Remove attachment ${a.name}`}
             className="absolute right-1 -top-2 z-10 rounded bg-card p-1"
-            onClick={() => onChange(attachments.filter((f) => f.id !== a.id))}
+            onClick={(e) => {
+              const scope = e.currentTarget.closest('[role="dialog"]') ?? document;
+              onChange(attachments.filter((f) => f.id !== a.id));
+              // Focus returns to the attach button, as after removing a resource, not to <body>.
+              requestAnimationFrame(() =>
+                scope
+                  .querySelector<HTMLElement>('[aria-label="Attach images, files, or videos"]')
+                  ?.focus(),
+              );
+            }}
           >
             <Icon name="close" />
           </button>

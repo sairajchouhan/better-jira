@@ -80,8 +80,19 @@ test("personal issue edits, comments, creation and deletion undo without losing 
   undoEdit();
   expect(get().issues.get(key)?.summary).toBe("Personal test");
   expect(get().full.get(key)?.fields.comment.total).toBe(1);
-  const copy = actions.duplicate(key)!;
+  // Make a copy opens the composer prefilled; the copy exists only once it is saved.
+  const count = get().issues.size;
+  actions.duplicate(key);
+  expect(get().issues.size).toBe(count);
+  expect(get().overlay).toBe("create");
+  expect(get().draft).toMatchObject({
+    title: "Personal test (copy)",
+    copy: true,
+    labels: ["test"],
+  });
+  const copy = actions.create(get().draft.title!, get().draft)!;
   expect(get().issues.get(copy)?.summary).toBe("Personal test (copy)");
+  expect(get().issues.get(copy)).not.toHaveProperty("copy");
   expect(get().issues.get(copy)?.labels).toEqual(["test"]);
   expect(get().full.get(copy)?.fields.comment.total).toBe(0);
   undoEdit();
@@ -514,17 +525,45 @@ test("image crops and comment counts undo and redo without changing the descript
   expect(get().full.get(key)?.fields.description).toEqual(original);
 });
 
-test("B5: creating stays on the board with a toast; duplicating opens the copy", async () => {
-  const { actions, get, navigate, ui } = await import("./store");
+test("B5: creating stays on the board with a toast, Create more toasts too, and undoing the create closes it", async () => {
+  const { actions, get, navigate, ui, undoEdit } = await import("./store");
   navigate({ panel: false, selected: null });
   ui.send({ type: "toast.dismiss" });
   const key = actions.create("Toasted")!;
   expect(get().panel).toBe(false);
   expect(get().selected).toBe(key);
   expect(get().toast).toEqual({ text: `Created ${key}`, key });
-  const copy = actions.duplicate(key)!;
+  ui.send({ type: "toast.dismiss" });
+  const more = actions.create("Created with more", {}, true)!;
+  expect(get().toast).toEqual({ text: `Created ${more}`, key: more });
+  undoEdit();
+  expect(get().issues.has(more)).toBe(false);
+  expect(get().toast).toBeNull();
+});
+test("deleting a sub-issue keeps its open parent; with Jira writes it asks in the app first", async () => {
+  const { actions, get, navigate, set } = await import("./store");
+  const parent = actions.create("Parent")!,
+    child = actions.create("Child", { parent })!;
+  navigate({ selected: parent, panel: true });
+  const realFetch = globalThis.fetch;
+  // The confirmed delete is sent; answer it here so no real request is left in flight for later tests.
+  globalThis.fetch = (async () =>
+    Response.json({ created: {}, others: [], issue: null })) as unknown as typeof fetch;
+  set({ writable: true });
+  try {
+    actions.remove(child);
+    expect(get().deleting).toBe(child);
+    expect(get().issues.has(child)).toBe(true);
+    set({ deleting: null });
+    actions.remove(child, true);
+    for (let i = 0; i < 50 && get().pendingWrites; i++) await Bun.sleep(10);
+  } finally {
+    set({ writable: false });
+    globalThis.fetch = realFetch;
+  }
+  expect(get().issues.has(child)).toBe(false);
+  expect(get().selected).toBe(parent);
   expect(get().panel).toBe(true);
-  expect(get().selected).toBe(copy);
 });
 test("deleting a document keeps attachments that another document still shows", async () => {
   const { actions, get, set, ME } = await import("./store");
@@ -643,8 +682,6 @@ test("R1-D101: deleting an issue sends no link removals for the issues it was li
       issue: ops[0]?.op === "delete" ? null : get().issues.get(key),
     });
   }) as typeof fetch;
-  const confirm = (globalThis as any).confirm;
-  (globalThis as any).confirm = () => true;
   try {
     const issue = (key: string, related: string) => ({
       key,
@@ -664,12 +701,11 @@ test("R1-D101: deleting an issue sends no link removals for the issues it was li
         .set("DEL-1", issue("DEL-1", "DEL-2"))
         .set("DEL-2", issue("DEL-2", "DEL-1")),
     });
-    actions.remove("DEL-1");
+    actions.remove("DEL-1", true);
     for (let i = 0; i < 50 && get().pendingWrites; i++) await Bun.sleep(10);
     expect(sent).toEqual([{ key: "DEL-1", ops: [{ op: "delete" }] }]);
   } finally {
     set({ writable: false });
     globalThis.fetch = realFetch;
-    (globalThis as any).confirm = confirm;
   }
 });

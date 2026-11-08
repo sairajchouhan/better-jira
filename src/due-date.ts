@@ -3,6 +3,16 @@ import { casual } from "chrono-node/en";
 export function dateOnly(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
+/** The one short date the app shows for due dates and reminders: "Nov 9", with the year only when it isn't this year. */
+export function dueLabel(date: string, reference = new Date()) {
+  const [year, month, day] = date.split("-").map(Number),
+    value = new Date(year!, month! - 1, day!);
+  return value.toLocaleDateString("en", {
+    month: "short",
+    day: "numeric",
+    ...(year === reference.getFullYear() ? {} : { year: "numeric" }),
+  });
+}
 /** Linear's Due date presets, with their short date. */
 export function duePresets(reference = new Date()) {
   const day = (days: number) => {
@@ -19,7 +29,7 @@ export function duePresets(reference = new Date()) {
   ).map(([name, date]) => ({
     name,
     due: dateOnly(date),
-    label: date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }),
+    label: dueLabel(dateOnly(date), reference),
   }));
 }
 /** Date-only values use the browser's local calendar, never a UTC conversion. */

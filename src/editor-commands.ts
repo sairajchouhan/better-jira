@@ -32,18 +32,19 @@ const indentCode: Command = (state, dispatch) =>
   inCode(state) && (dispatch?.(state.tr.insertText("  ").scrollIntoView()), true);
 /** Tab never leaves the editor: a stray Tab used to move focus to a button, so the next ⌘Z undid board edits. */
 const keepFocus: Command = () => true;
-export const tab: Command = chainCommands(
+/** Tab inside a table, list or code block; anywhere else it does nothing, so the browser moves focus on (the create composer, like Linear). */
+export const tabInside: Command = chainCommands(
   goToNextCell(1),
   addRowAtEnd,
   sinkListItem(richSchema.nodes.listItem!),
   indentCode,
-  keepFocus,
 );
-export const shiftTab: Command = chainCommands(
+export const shiftTabInside: Command = chainCommands(
   goToNextCell(-1),
   liftListItem(richSchema.nodes.listItem!),
-  keepFocus,
 );
+export const tab: Command = chainCommands(tabInside, keepFocus);
+export const shiftTab: Command = chainCommands(shiftTabInside, keepFocus);
 
 const atCodeEnd = (state: Parameters<Command>[0]) => {
   const { $head, empty } = state.selection;

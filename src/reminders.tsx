@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Command } from "cmdk";
-import { reminderDistance } from "./reminder-display";
+import { reminderDistance, reminderTime } from "./reminder-display";
 import { Icon } from "./icons";
 import { MenuSurface, MENU_ITEM, MENU_INPUT } from "./menu-surface";
 import { actions, get, set, ui, useStore, type Issue } from "./store";
@@ -71,7 +71,15 @@ export function ReminderPicker({ issue }: { issue: Issue }) {
             />
           </label>
           <div className="flex justify-end gap-2 p-2">
-            <button type="button" className={MENU_ITEM} onClick={() => setCustom(false)}>
+            <button
+              type="button"
+              className={MENU_ITEM}
+              // The custom time isn't a typed query: Back shows the presets again, not that time.
+              onClick={() => {
+                setParsed(null);
+                setCustom(false);
+              }}
+            >
               Back
             </button>
             <button disabled={!parsed} className={`${MENU_ITEM} disabled:opacity-40`}>
@@ -102,7 +110,7 @@ export function ReminderPicker({ issue }: { issue: Issue }) {
           <Command.List className="p-1">
             {parsed ? (
               <Command.Item value={parsed} className={MENU_ITEM} onSelect={() => choose(parsed)}>
-                {new Date(parsed).toLocaleString()}
+                {reminderTime(parsed)}
               </Command.Item>
             ) : (
               presets
@@ -116,10 +124,7 @@ export function ReminderPicker({ issue }: { issue: Issue }) {
                   >
                     <span className="flex-1">{p.label}</span>
                     <time dateTime={p.at} className="text-[11px] text-fg-3">
-                      {new Date(p.at).toLocaleTimeString([], {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
+                      {reminderTime(p.at)}
                     </time>
                   </Command.Item>
                 ))

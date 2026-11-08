@@ -62,12 +62,22 @@ type Shortcut = {
 let columns: () => Issue[][] = () => [];
 const selected = () =>
   !get().document && get().selected ? get().issues.get(get().selected!) : undefined;
+/** Linear: an issue shortcut acts on the sub-issue row under the pointer or keyboard focus, as its row menu's hints promise. */
+const hoveredRow = () => {
+  const key = document.querySelector<HTMLElement>(
+    "[data-sub-issue]:hover, [data-sub-issue]:focus-within",
+  )?.dataset.subIssue;
+  return key ? get().issues.get(key) : undefined;
+};
+const target = () => (selected() ? (hoveredRow() ?? selected()) : undefined);
 const issueAction = (fn: (issue: Issue) => void) => () => {
-  const issue = selected();
+  const issue = target();
   if (issue) fn(issue);
 };
-const overlay = (value: NonNullable<Overlay>) => () =>
+const overlay = (value: NonNullable<Overlay>) => () => {
+  set({ target: selected() ? (hoveredRow()?.key ?? null) : null });
   ui.send({ type: "overlay.open", overlay: value });
+};
 const focus = (id: string) =>
   issueAction((issue) => {
     navigate({ selected: issue.key, panel: true });
@@ -141,7 +151,7 @@ function scope(value: "active" | "backlog" | "all", mine = false) {
   changePreferences(get().board, { scope: value });
 }
 async function copy(kind: CopyKind) {
-  const issue = selected();
+  const issue = target();
   if (!issue) return;
   try {
     if (kind === "everything as Markdown" && !get().full.has(issue.key)) {
@@ -162,7 +172,7 @@ async function copy(kind: CopyKind) {
   }
 }
 function relation(kind: string) {
-  set({ relationKind: kind });
+  set({ relationKind: kind, target: hoveredRow()?.key ?? null });
   ui.send({ type: "overlay.open", overlay: "relations" });
 }
 function collapse(all = false) {

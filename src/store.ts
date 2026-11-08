@@ -157,6 +157,9 @@ export type IssueDraft = Partial<
 > & {
   description?: string;
   descriptionDoc?: AdfDocument;
+  /** Make a copy: the composer starts with this title and saves with "Save copy". */
+  title?: string;
+  copy?: boolean;
   /** Linear "Create related": link the new issue to this one in the same undo step. */ related?: {
     key: string;
     kind: "related" | "blocked" | "blocking" | "parent";
@@ -210,8 +213,12 @@ type State = {
   /** Below 768px the sidebar is hidden; Menu or [ opens it over the page. */
   sidebarOpen: boolean;
   relationKind: string;
-  issueOptionsStart: "link" | "pull-request" | "history" | "reminder" | null;
+  issueOptionsStart: "link" | "pull-request" | "history" | "reminder" | "due" | null;
   createExpanded: boolean;
+  /** The sub-issue row an issue shortcut opened the open menu for; null means the selected issue. */
+  target: string | null;
+  /** The issue waiting for the in-app delete confirmation. */
+  deleting: string | null;
   draft: IssueDraft;
   undoCount: number;
   redoCount: number;
@@ -286,6 +293,8 @@ let state: State = {
   relationKind: "related",
   issueOptionsStart: null,
   createExpanded: false,
+  target: null,
+  deleting: null,
   draft: {},
   undoCount: 0,
   redoCount: 0,
@@ -375,6 +384,7 @@ ui.subscribe(({ context }) => {
   for (const key of Object.keys(context) as UiKey[])
     if (context[key] !== state[key]) Object.assign(patch, { [key]: context[key] });
   if (!Object.keys(patch).length) return;
+  if (patch.overlay === null) patch.target = null;
   if (patch.view) {
     // Each board remembers how its issues open.
     const id = context.board,
@@ -1556,14 +1566,17 @@ export async function downloadLocalBackup() {
 export function jiraIssueURL(key: string) {
   return `${state.site}/browse/${encodeURIComponent(key)}`;
 }
+/** The issue in this app, for links that open here (and in a new tab with ⌘-click). */
+export function appURL(issue: Issue) {
+  const url = new URL(location.origin);
+  url.searchParams.set("board", String(issue.board));
+  url.searchParams.set("issue", issue.key);
+  return url.href;
+}
 export function issueURL(issue: Issue) {
-  if (createdKeys.has(issue.key) && typeof location !== "undefined") {
-    const url = new URL(location.origin);
-    url.searchParams.set("board", String(issue.board));
-    url.searchParams.set("issue", issue.key);
-    return url.href;
-  }
-  return jiraIssueURL(issue.key);
+  return createdKeys.has(issue.key) && typeof location !== "undefined"
+    ? appURL(issue)
+    : jiraIssueURL(issue.key);
 }
 export const isLocalIssue = (key: string) => createdKeys.has(key);
 const snapshot = (key: string): Snapshot => ({
@@ -1713,6 +1726,9 @@ export function undoEdit() {
   restore(edit, edit.before);
   redo.push(edit);
   set({ undoCount: undo.length, redoCount: redo.length, perf: `Undid ${edit.label}` });
+  // Undoing a create removes the issue its toast offers to open.
+  if (state.toast?.key && !state.issues.has(currentKey(state.toast.key)))
+    ui.send({ type: "toast.dismiss" });
   queueSave();
 }
 export function redoEdit() {
@@ -1721,7 +1737,7 @@ export function redoEdit() {
   if (revivesJiraIssue(edit, edit.after)) {
     set({
       redoCount: redo.length,
-      perf: `Can't redo ${edit.label}: Jira can't restore deleted issues.`,
+      perf: `Can't redo ${edit.label}: Jira can't restore a deleted issue; create it again to get a new key.`,
     });
     queueSave();
     return;
@@ -2302,7 +2318,7 @@ export const actions = {
       [...state.issues.values()].find((i) => i.board === board.id)?.key.split("-")[0] ?? "LOCAL";
     const key = `${prefix}-NEW${++localSeq}`;
     createdKeys.add(key);
-    const { descriptionDoc, related, ...fields } = draft;
+    const { descriptionDoc, related, title: _title, copy: _copy, ...fields } = draft;
     const document = normalizeDocument(descriptionDoc ?? draft.description ?? "");
     timed(`create ${key}`, () =>
       record(key, `create ${key}`, () => {
@@ -2346,7 +2362,6 @@ export const actions = {
         set({
           issues: new Map(state.issues).set(key, issue),
           full: new Map(state.full).set(key, full),
-          ...(more ? { perf: `Created ${key}` } : {}),
         });
         if (related && state.issues.has(related.key)) {
           if (related.kind === "parent") actions.patch(related.key, { parent: key });
@@ -2356,21 +2371,20 @@ export const actions = {
         if (!more) {
           navigate(open ? { selected: key, panel: true } : { selected: key });
           ui.send({ type: "overlay.close" });
-          if (!open) ui.send({ type: "toast.show", text: `Created ${key}`, key });
         }
+        // "Create more" keeps the composer open, so the toast is its only confirmation (Linear).
+        if (more || !open) ui.send({ type: "toast.show", text: `Created ${key}`, key });
       }),
     );
     return key;
   },
-  remove(key: string) {
+  /** With Jira writes this only asks first (DeleteConfirm); the dialog calls back with `confirmed`. */
+  remove(key: string, confirmed = false) {
     // Jira cannot restore a deleted issue; undo would only create a copy under a new key, re-posting comments as you.
-    if (
-      state.writable &&
-      !confirm(
-        `Delete ${key} in Jira?\n\nJira can't restore deleted issues, so this can't be undone.`,
-      )
-    )
+    if (state.writable && !confirmed) {
+      set({ deleting: key });
       return;
+    }
     const related = [...state.issues.values()].filter(
       (i) => i.parent === key || i.relations?.some((r) => r.key === key),
     );
@@ -2389,7 +2403,8 @@ export const actions = {
         full,
         perf: state.writable ? `Deleted ${key} in Jira.` : `Deleted ${key}. Undo to restore.`,
       });
-      navigate({ selected: null, panel: false });
+      // A sub-issue row's delete keeps its parent open.
+      if (state.selected === key) navigate({ selected: null, panel: false });
       ui.send({ type: "overlay.close" });
     });
     if (state.writable && undo.at(-1)?.label === `delete ${key}`) {
@@ -2398,29 +2413,27 @@ export const actions = {
       queueSave();
     }
   },
+  /** Linear's Make a copy: the composer, prefilled, saves the copy; nothing is created until then. */
   duplicate(key: string) {
     const issue = state.issues.get(key);
     if (!issue) return;
     navigate({ board: issue.board });
-    return actions.create(
-      `${issue.summary} (copy)`,
-      {
-        status: issue.status,
-        assignee: issue.assignee,
-        priority: issue.priority,
-        labels: [...issue.labels],
-        project: issue.project,
-        milestones: issue.milestones,
-        due: issue.due,
-        parent: issue.parent,
-        type: issue.type,
-        descriptionDoc: normalizeDocument(
-          state.full.get(key)?.fields.description ?? issue.description,
-        ),
-      },
-      false,
-      true,
-    );
+    beginCreate({
+      title: `${issue.summary} (copy)`,
+      copy: true,
+      status: issue.status,
+      assignee: issue.assignee,
+      priority: issue.priority,
+      labels: [...issue.labels],
+      project: issue.project,
+      milestones: issue.milestones,
+      due: issue.due,
+      parent: issue.parent,
+      type: issue.type,
+      descriptionDoc: normalizeDocument(
+        state.full.get(key)?.fields.description ?? issue.description,
+      ),
+    });
   },
   relate(key: string, target: string, kind: string, remove = false) {
     if (key === target) return;

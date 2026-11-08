@@ -205,9 +205,10 @@ export function MenuSurface({
   );
 }
 
-/** A property row in the open issue, else the issue's visible card, so pickers open beside what they change. */
+/** The issue's sub-issue row (a shortcut over a row), else a property row in the open issue, else the issue's visible card, so pickers open beside what they change. */
 export function issueAnchor(id: string, key: string): HTMLElement | null {
   return (
+    document.querySelector<HTMLElement>(`[data-sub-issue="${CSS.escape(key)}"]`) ??
     document.getElementById(id) ??
     [...document.querySelectorAll<HTMLElement>(`[data-key="${CSS.escape(key)}"]`)].find(
       (n) => n.getClientRects().length,

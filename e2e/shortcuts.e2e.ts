@@ -201,10 +201,10 @@ test("Find in view, due dates, self-assignment, subscription and keyboard deleti
     await p.key("i");
     await p.waitFor(`document.getElementById('prop-assignee').textContent.includes('Audit user')`);
     await p.key("d", "shift");
-    await p.waitFor(`!!document.querySelector('input[aria-label="Due date"]')`);
-    await p.click("text=Tomorrow");
-    await p.click("text=Save");
-    await p.waitFor(`!document.querySelector('input[aria-label="Due date"]')`);
+    // Linear's due menu: a click on a preset applies it at once.
+    await p.click('[role="dialog"][aria-label="Due date"] [cmdk-item][data-value="Tomorrow"]');
+    await p.waitFor(`!document.querySelector('[role="dialog"][aria-label="Due date"]')`);
+    await p.waitFor(`!!document.getElementById('prop-due')`);
     await p.key("d", "meta", "shift");
     await p.waitFor(`!document.getElementById('prop-due')`);
     await p.key("s", "shift");

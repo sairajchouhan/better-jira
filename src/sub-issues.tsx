@@ -209,7 +209,22 @@ export function SubIssues({ issue }: { issue: Issue }) {
     kind: "link" | "pull-request" | "rename" | "relation";
     key: string;
   } | null>(null);
-  const [collapsed, setCollapsed] = useState(false),
+  // Linear keeps each issue's section collapsed across reloads.
+  const collapseKey = `better-jira:sub-issues-collapsed:v1:${namespace}:${issue.key}`;
+  const [collapsed, setCollapsedState] = useState(() => {
+      try {
+        return localStorage.getItem(collapseKey) === "1";
+      } catch {
+        return false;
+      }
+    }),
+    setCollapsed = (value: boolean) => {
+      setCollapsedState(value);
+      try {
+        if (value) localStorage.setItem(collapseKey, "1");
+        else localStorage.removeItem(collapseKey);
+      } catch {}
+    },
     [reveal, setReveal] = useState(false),
     [creating, setCreating] = useState(false),
     [settings, setSettings] = useState<HTMLElement | null>(null),
@@ -389,7 +404,8 @@ export function SubIssues({ issue }: { issue: Issue }) {
       true,
     );
     if (!key) return;
-    update({ title: "", description: normalizeDocument(""), files: [] });
+    // Linear starts the next sub-issue from the defaults, not the last one's properties.
+    update({ title: "", description: normalizeDocument(""), files: [], properties: initial() });
     setEditor((n) => n + 1);
     requestAnimationFrame(() => titleInput.current?.focus());
   };
@@ -668,9 +684,14 @@ export function SubIssues({ issue }: { issue: Issue }) {
         icon: copyIcons[kind],
         shortcut: shortcutLabel(copyShortcuts[kind] ?? "") || undefined,
         run: () =>
-          void navigator.clipboard.writeText(
-            issueCopy(kind, child, undefined, issueURL(child), status(child).name, ME.name),
-          ),
+          void navigator.clipboard
+            .writeText(
+              issueCopy(kind, child, undefined, issueURL(child), status(child).name, ME.name),
+            )
+            .then(
+              () => set({ perf: `Copied ${kind}` }),
+              () => set({ perf: "Could not access the clipboard" }),
+            ),
       })),
     },
     { name: "Make a copy…", icon: "copy", run: () => actions.duplicate(child.key) },
@@ -955,7 +976,6 @@ export function SubIssues({ issue }: { issue: Issue }) {
             onSave={submit}
             saveLabel="Create"
             hint="⌘↵ create · Esc close"
-            cancelLabel="Discard sub-issue"
             onCancel={cancel}
           />
           <div className="flex gap-1">
@@ -972,11 +992,21 @@ export function SubIssues({ issue }: { issue: Issue }) {
                 className={button}
                 onClick={(e) => setPicker({ anchor: e.currentTarget, field })}
               >
-                {field === "priority" ? (
-                  <PriorityIcon name={draft.priority} />
-                ) : (
-                  <Icon name={field === "labels" ? "label" : "user"} size={14} />
-                )}
+                <span className="flex items-center gap-1.5">
+                  {field === "priority" ? (
+                    <PriorityIcon name={draft.priority} />
+                  ) : (
+                    <Icon name={field === "labels" ? "label" : "user"} size={14} />
+                  )}
+                  {/* Linear names the value on each chip: "Priority", the assignee, "Labels". */}
+                  {field === "priority"
+                    ? (draft.priority ?? "Priority")
+                    : field === "assignee"
+                      ? (draft.assignee?.name ?? "Assignee")
+                      : draft.labels?.length
+                        ? draft.labels.join(", ")
+                        : "Labels"}
+                </span>
               </button>
             ))}
           </div>
@@ -1095,7 +1125,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
           close={() => setPicker(null)}
           width={280}
         >
-          <Command loop>
+          <Command loop defaultValue={choices.find((c) => selected(c.id))?.name}>
             <Command.Input
               autoFocus
               aria-label={`Find sub-issue ${picker.field}`}
@@ -1114,6 +1144,19 @@ export function SubIssues({ issue }: { issue: Issue }) {
                   aria-checked={!!selected(choice.id)}
                   onSelect={() => select(picker.field, choice.id)}
                 >
+                  {picker.field === "priority" && <PriorityIcon name={choice.id || undefined} />}
+                  {picker.field === "status" && (
+                    <StatusIcon
+                      status={
+                        board.columns
+                          .flatMap((c) => c.statuses)
+                          .find((st) => st.id === choice.id) ?? {
+                          name: choice.name,
+                          category: "new",
+                        }
+                      }
+                    />
+                  )}
                   <span className="flex-1">{choice.name}</span>
                   {selected(choice.id) && <Icon name="check" size={13} />}
                 </Command.Item>

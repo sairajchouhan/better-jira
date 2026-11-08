@@ -48,9 +48,10 @@ test("I13: the due-date picker focuses the date text field, not the first preset
     await page.key("j");
     await page.key("Enter");
     await page.key("d", "shift");
-    await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Due date"`, 3000);
+    // Linear's due menu (R1-D45): its "Try: …" date field, not the first preset.
+    await page.waitFor(`document.activeElement?.placeholder==="Try: 24h, 7 days, Feb 9"`, 3000);
     await Bun.sleep(300);
-    expect(await page.active()).toBe("Due date");
+    expect(await page.active()).toBe("Try: 24h, 7 days, Feb 9");
   } finally {
     await page.close();
   }

@@ -52,6 +52,7 @@ import {
   downloadLocalBackup,
   flushLocalChanges,
   issueURL,
+  appURL,
   retryLocalStorage,
   dismissWriteError,
   toggleFavorite,
@@ -106,7 +107,8 @@ import {
   shortcuts,
   useLinearHotkeys,
 } from "./shortcuts";
-import { issueAnchor } from "./menu-surface";
+import { Confirm, issueAnchor } from "./menu-surface";
+import { dueLabel } from "./due-date";
 import { InboxIssueActions, InboxList, InboxPane, undoInboxToast, useInboxBadge } from "./inbox";
 import { PickerRow, PropertyMenu } from "./property-menu";
 import { createActor } from "xstate";
@@ -149,7 +151,7 @@ function describeActivity(event: PropertyActivity, issue: Issue, then = false): 
         {verb}{" "}
         {target ? (
           <a
-            href={issueURL(target)}
+            href={appURL(target)}
             onClick={(e) => {
               if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
               e.preventDefault();
@@ -250,7 +252,9 @@ export function App() {
   const document = useStore((s) => s.document);
   const overlay = useStore((s) => s.overlay);
   const open = useStore((s) => (s.panel && s.selected ? s.issues.get(s.selected) : undefined));
-  const current = useStore((s) => (s.selected ? s.issues.get(s.selected) : undefined));
+  // A menu opened by a shortcut over a sub-issue row changes that row's issue.
+  const target = useStore((s) => s.target ?? s.selected);
+  const current = useStore((s) => (target ? s.issues.get(target) : undefined));
   const loadError = useStore((s) => s.loadError);
   const inbox = useStore((s) => s.inbox);
   const visited = useRef(new Set<number>());
@@ -320,8 +324,8 @@ export function App() {
       {(overlay === "favorites" || overlay === "views" || overlay === "boards") && (
         <QuickNavigation kind={overlay} />
       )}
-      {overlay === "assign" && selected && <AssignPicker issueKey={selected} />}
-      {overlay === "status" && selected && <StatusPicker issueKey={selected} />}
+      {overlay === "assign" && target && <AssignPicker issueKey={target} />}
+      {overlay === "status" && target && <StatusPicker issueKey={target} />}
       {overlay === "create" && <CreateIssue />}
       {current &&
         (overlay === "priority" ||
@@ -330,10 +334,11 @@ export function App() {
           overlay === "project" ||
           overlay === "milestone" ||
           overlay === "due") && <PropertyPicker issue={current} field={overlay} />}
-      {open && overlay === "options" && <IssueOptions issue={open} />}
+      {open && overlay === "options" && <IssueOptions issue={current ?? open} />}
       {current && overlay === "reminder" && <ReminderPicker issue={current} />}
       {current && overlay === "relations" && <Relations issue={current} />}
       {current && overlay === "subscribers" && <Subscribers issue={current} />}
+      <DeleteConfirm />
     </div>
   );
 }
@@ -899,6 +904,37 @@ function Sidebar({ boards }: { boards: Board[] }) {
 }
 
 /** Linear's 28px bottom bar under the sidebar and panel; ours carries the perf readout and the local-only note. */
+/** Linear's delete dialog instead of a native confirm. Jira deletes the issue's subtasks with it (deleteSubtasks=true), so it names them. */
+function DeleteConfirm() {
+  const key = useStore((s) => s.deleting),
+    issue = useStore((s) => (s.deleting ? s.issues.get(s.deleting) : undefined)),
+    issues = useStore((s) => s.issues),
+    types = useStore((s) => s.options.types);
+  if (!key || !issue) return null;
+  const levels = types?.[issue.project?.key ?? ""];
+  // Subtasks go with the issue; an epic's own children (level 0 and up) stay in Jira, unparented.
+  const subtasks = [...issues.values()].filter(
+    (i) => i.parent === key && (levels?.find((t) => t.name === i.type)?.hierarchyLevel ?? -1) < 0,
+  );
+  const close = () => set({ deleting: null });
+  return (
+    <Confirm
+      title={`Delete "${key} ‒ ${issue.summary}"?`}
+      detail={`${
+        subtasks.length
+          ? `This also deletes its ${subtasks.length} sub-issue${subtasks.length === 1 ? "" : "s"} (${subtasks.map((i) => i.key).join(", ")}). `
+          : ""
+      }Jira can't restore deleted issues, so this can't be undone.`}
+      action={subtasks.length ? `Delete ${subtasks.length + 1} issues` : "Delete"}
+      onConfirm={() => {
+        close();
+        actions.remove(key, true);
+      }}
+      close={close}
+    />
+  );
+}
+
 function Toast() {
   const toast = useStore((s) => s.toast);
   if (!toast) return null;
@@ -1810,22 +1846,35 @@ function Stepper({ issueKey }: { issueKey: string }) {
   );
 }
 
+/** A Jira-side rename shows at once unless the title is being edited (Linear keeps a focused draft); leaving it saves only typed text. */
 function Title({ issue, className }: { issue: Issue; className: string }) {
+  const ref = useRef<HTMLTextAreaElement>(null),
+    start = useRef("");
+  useEffect(() => {
+    if (ref.current && document.activeElement !== ref.current) ref.current.value = issue.summary;
+  }, [issue.summary]);
   return (
     <textarea
+      ref={ref}
       id="summary"
       aria-label="Issue title"
-      key={issue.summary}
+      key={issue.key}
       defaultValue={issue.summary}
       rows={1}
-      onBlur={(e) => actions.summary(issue.key, e.target.value)}
+      onFocus={(e) => (start.current = e.target.value)}
+      onBlur={(e) => {
+        // Only an edit saves: an unchanged field never writes back a title Jira has since replaced.
+        if (e.target.value !== start.current) actions.summary(issue.key, e.target.value);
+        // An empty title isn't saved: show the current one again.
+        e.target.value = get().issues.get(issue.key)?.summary ?? issue.summary;
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           e.preventDefault();
           e.currentTarget.blur();
         }
         if (e.key === "Escape") {
-          e.currentTarget.value = issue.summary;
+          e.currentTarget.value = start.current;
           e.currentTarget.blur();
         }
       }}
@@ -1933,7 +1982,9 @@ function Properties({ issue }: { issue: Issue }) {
                 <span>
                   <Icon name="calendar" />
                 </span>
-                <span className={issue.due ? "" : "text-fg-3"}>{issue.due ?? "Set due date"}</span>
+                <span className={issue.due ? "" : "text-fg-3"}>
+                  {issue.due ? dueLabel(issue.due) : "Set due date"}
+                </span>
               </>,
             )}
         </>,
@@ -2039,7 +2090,7 @@ function Properties({ issue }: { issue: Issue }) {
                   >
                     {target ? (
                       <a
-                        href={issueURL(target)}
+                        href={appURL(target)}
                         onClick={(e) => {
                           if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
                           e.preventDefault();
@@ -2058,7 +2109,16 @@ function Properties({ issue }: { issue: Issue }) {
                     )}
                     <button
                       aria-label="Remove relation"
-                      onClick={() => actions.relate(issue.key, r.key, kind, true)}
+                      onClick={() => {
+                        actions.relate(issue.key, r.key, kind, true);
+                        // Focus stays in the issue, as after removing a resource: the next relation, else Issue options.
+                        requestAnimationFrame(() =>
+                          (
+                            document.querySelector<HTMLElement>("[data-relation] a") ??
+                            document.getElementById("issue-options")
+                          )?.focus(),
+                        );
+                      }}
                       className="relation-remove"
                     >
                       <Icon name="close" size={14} />

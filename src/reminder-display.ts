@@ -1,3 +1,4 @@
+import { dateOnly, dueLabel } from "./due-date";
 export function reminderDistance(at: string, now = Date.now()) {
   const minutes = Math.max(1, Math.round((Date.parse(at) - now) / 60000));
   const amount =
@@ -5,14 +6,11 @@ export function reminderDistance(at: string, now = Date.now()) {
   const unit = minutes < 60 ? "minute" : minutes < 1440 ? "hour" : "day";
   return `${amount} ${unit}${amount === 1 ? "" : "s"} from now`;
 }
-export const reminderTime = (at: string) =>
-  new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(at));
+/** Every reminder time reads like "Nov 8, 7:11 PM": the due-date format (dueLabel) plus the time. */
+export const reminderTime = (at: string) => {
+  const date = new Date(at);
+  return `${dueLabel(dateOnly(date))}, ${date.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })}`;
+};
 
 export function reminderPresets(reference = new Date()) {
   const day = (days: number, hour = 9) => {
