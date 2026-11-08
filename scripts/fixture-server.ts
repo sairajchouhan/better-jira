@@ -4,6 +4,7 @@ import editorMediaFixture from "./editor-media-fixture.html";
 import tailwind from "bun-plugin-tailwind";
 import { attachmentGateway } from "../src/attachment-media";
 import { previewFrom } from "../src/link-preview";
+import { mapFeed } from "../src/inbox-model";
 const rich = {
   type: "doc",
   version: 1,
@@ -178,6 +179,165 @@ function applyOps(key: string, ops: any[]) {
     others: [],
     issue: listed().find((i) => i.key === key),
   });
+}
+// Jira's bell feed in the gateway's own shape (from a live cloudsairaj dump), so the fixture runs the real mapping.
+const notification = (
+  n: number,
+  key: string,
+  title: string,
+  type: string,
+  message: string,
+  category: "direct" | "watching",
+  read: boolean,
+  minutesAgo: number,
+  comment?: string,
+) => ({
+  groupId: `ari:cloud:jira:fixture:issue/${n}`,
+  groupSize: 1,
+  readStates: [read ? "read" : "unread"],
+  headNotification: {
+    notificationId: `fixture-${n}-${minutesAgo}`,
+    timestamp: new Date(Date.now() - minutesAgo * 60_000).toISOString(),
+    readState: read ? "read" : "unread",
+    category,
+    content: {
+      type,
+      message,
+      url: `https://example.atlassian.net/browse/${key}`,
+      actor: { displayName: message.split(" ")[0], avatarURL: null },
+      entity: {
+        title,
+        url: `https://example.atlassian.net/browse/${key}?focusedCommentId=1`,
+        status: "",
+      },
+      path: [{ title: key, url: `https://example.atlassian.net/browse/${key}` }],
+      bodyItems: comment
+        ? [
+            {
+              document: {
+                format: "ADF",
+                data: JSON.stringify({
+                  type: "doc",
+                  version: 1,
+                  content: [{ type: "paragraph", content: [{ type: "text", text: comment }] }],
+                }),
+              },
+            },
+          ]
+        : [],
+    },
+  },
+});
+const freshInbox = () => ({
+  unseen: 4,
+  nodes: [
+    notification(
+      2,
+      "TEST-2",
+      "Browser fixture 2",
+      "updated",
+      "Alex assigned a task to you",
+      "direct",
+      false,
+      5,
+    ),
+    notification(
+      1,
+      "TEST-1",
+      "Rich browser fixture",
+      "mentioned",
+      "Alex mentioned you in a comment",
+      "direct",
+      false,
+      30,
+      "Can you check this?",
+    ),
+    notification(
+      3,
+      "TEST-3",
+      "Browser fixture 3",
+      "updated",
+      "Sam changed a task from Doing to Done",
+      "watching",
+      false,
+      120,
+    ),
+    notification(
+      4,
+      "TEST-4",
+      "Browser fixture 4",
+      "updated",
+      "Sam commented on a task",
+      "watching",
+      true,
+      60 * 26,
+      "Looks good to me",
+    ),
+    notification(
+      5,
+      "TEST-5",
+      "Browser fixture 5",
+      "updated",
+      "Alex reacted to your comment",
+      "direct",
+      true,
+      60 * 24 * 3,
+    ),
+    notification(
+      6,
+      "TEST-6",
+      "Browser fixture 6",
+      "created",
+      "Sam created a task",
+      "watching",
+      false,
+      60 * 24 * 9,
+    ),
+    notification(
+      9,
+      "OUT-9",
+      "Outside the mirror",
+      "updated",
+      "Sam updated a task",
+      "watching",
+      false,
+      60 * 24 * 400,
+    ),
+  ],
+});
+let inbox = freshInbox();
+async function inboxRoute(req: Request, url: URL) {
+  let status = 200,
+    body: unknown = { ok: true };
+  if (req.method === "GET") {
+    const category = url.searchParams.get("category");
+    body = {
+      unseen: inbox.unseen,
+      items: mapFeed(
+        inbox.nodes.filter((n) => !category || n.headNotification.category === category),
+      ),
+      more: false,
+      writable: true,
+    };
+  } else {
+    const { action, groups = [] } = await req.json();
+    const marks = (node: (typeof inbox.nodes)[number], read: boolean) => {
+      node.readStates = [read ? "read" : "unread"];
+      node.headNotification.readState = read ? "read" : "unread";
+    };
+    if (action === "read" || action === "unread")
+      inbox.nodes
+        .filter((n) => groups.includes(n.groupId))
+        .forEach((n) => marks(n, action === "read"));
+    else if (action === "read-all") inbox.nodes.forEach((n) => marks(n, true));
+    else if (action === "seen") inbox.unseen = 0;
+    else {
+      status = 400;
+      body = { error: "Unknown inbox action" };
+    }
+  }
+  requests.push({ method: req.method, path: url.pathname, status });
+  return Response.json(body, { status });
 }
 const mediaAssets = [
   {
@@ -463,6 +623,7 @@ async function handle(req: Request) {
     mediaVariant = settings.mediaVariant ?? "";
     writable = settings.writable ?? false;
     subtask = settings.subtask ?? false;
+    inbox = freshInbox();
     requests.length = 0;
     writes.length = 0;
     types.clear();
@@ -470,6 +631,7 @@ async function handle(req: Request) {
   }
   if (path === "/__fixture" && req.method === "GET")
     return Response.json({ requests, rich, writes });
+  if (path === "/api/inbox") return inboxRoute(req, url);
   let status = 200,
     body: unknown;
   const ops = path.match(/^\/api\/issues\/([^/]+)\/ops$/);

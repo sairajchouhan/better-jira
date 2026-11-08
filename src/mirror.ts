@@ -6,6 +6,7 @@ import { serverAuth } from "./server-config";
 import { threadParent } from "./jira-ops";
 import { pullRequestCount, statusDates, type History } from "./issue-properties";
 import { serverConfiguration } from "./server-config";
+import { unseenChanged } from "./notifications";
 
 const configuration = serverConfiguration();
 export const BOARDS = configuration.boards;
@@ -250,7 +251,7 @@ async function syncBoard(board: number) {
 
 // `bun --hot` re-runs this module on every edit; the loops and the open tabs live on globalThis so they survive it.
 const g = globalThis as { syncing?: boolean; live?: { clients: Set<Client>; wake: () => void } };
-type Client = { issue?: string; send: () => void };
+type Client = { issue?: string; send: (kind?: "changed" | "inbox") => void };
 const live = (g.live ??= { clients: new Set(), wake: () => {} });
 /** An open, visible tab, and the issue it shows. Jira is polled fast while one is connected; the first one syncs at once. Returns the disconnect. */
 export function watch(client: Client) {
@@ -259,8 +260,8 @@ export function watch(client: Client) {
   return () => void live.clients.delete(client);
 }
 /** Tells every open tab the mirror changed, so it refetches now instead of on its timer. */
-const notify = () => {
-  for (const client of live.clients) client.send();
+const notify = (kind?: "inbox") => {
+  for (const client of live.clients) client.send(kind);
 };
 
 async function loop() {
@@ -271,6 +272,11 @@ async function loop() {
       ),
     );
     if (changed.includes(true)) notify();
+    if (live.clients.size)
+      void unseenChanged().then(
+        (moved) => moved && notify("inbox"),
+        (e) => console.error("[inbox]", String(e).slice(0, 200)),
+      );
     await enrichProjects();
     void enrichProperties().catch((e) => console.error("[properties]", String(e).slice(0, 200)));
     await new Promise<void>((resolve) => {

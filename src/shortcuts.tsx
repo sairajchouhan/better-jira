@@ -31,6 +31,15 @@ import { buckets, columnInScope, rankBetween } from "./view-model";
 import { issueCopy, type CopyKind } from "./issue-copy";
 import { editorBindings } from "./editor-bindings";
 import { MenuSurface } from "./menu-surface";
+import {
+  deleteAll,
+  deleteRow,
+  hasSelectedRow,
+  markAllRead,
+  moveRow,
+  openRow,
+  toggleRead,
+} from "./inbox";
 
 type Shortcut = {
   id: string;
@@ -64,6 +73,7 @@ const focus = (id: string) =>
     requestAnimationFrame(attempt);
   });
 function move(direction: number, horizontal = false) {
+  if (get().inbox && !horizontal) return moveRow(direction);
   const s = get(),
     cols = columns(),
     flat = [...new Map(cols.flat().map((i) => [i.key, i])).values()];
@@ -232,7 +242,10 @@ export const shortcuts: Shortcut[] = [
     name: "Back / clear selection",
     group: "General",
     hotkey: "Escape",
-    run: () => ui.send({ type: "escape" }),
+    run: () =>
+      get().inbox && get().panel && get().view === "page" && !get().document
+        ? navigate({ view: "side" })
+        : ui.send({ type: "escape" }),
   },
   {
     id: "undo",
@@ -293,6 +306,41 @@ export const shortcuts: Shortcut[] = [
     hotkey: ["G", "E"],
     run: () => scope("all"),
   },
+  {
+    id: "inbox",
+    name: "Go to inbox",
+    group: "Navigation",
+    hotkey: ["G", "I"],
+    run: () => navigate({ inbox: true, selected: null, panel: false }),
+  },
+  ...(
+    [
+      ["inbox-read", "Mark as read / unread", "U", toggleRead, true],
+      [
+        "inbox-read-all",
+        "Mark all notifications as read",
+        "Alt+U",
+        () => void markAllRead(),
+        false,
+      ],
+      ["inbox-delete", "Delete notification", "E", deleteRow, true],
+      [
+        "inbox-delete-read",
+        "Delete all read notifications",
+        "Shift+Backspace",
+        () => deleteAll("read"),
+        false,
+      ],
+      ["inbox-snooze", "Snooze notification…", "H", overlay("snooze"), true],
+    ] as const
+  ).map(([id, name, hotkey, run, row]): Shortcut => ({
+    id,
+    name,
+    hotkey,
+    group: "Inbox",
+    run,
+    when: () => get().inbox && (!row || hasSelectedRow()),
+  })),
   {
     id: "mine",
     name: "Go to my issues",
@@ -593,7 +641,7 @@ export const shortcuts: Shortcut[] = [
     group: "List / Board",
     hotkey: "Enter",
     issue: true,
-    run: () => navigate({ panel: true, view: "page" }),
+    run: () => (get().inbox ? openRow() : navigate({ panel: true, view: "page" })),
   },
   {
     id: "layout",

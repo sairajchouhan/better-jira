@@ -104,6 +104,7 @@ import {
   useLinearHotkeys,
 } from "./shortcuts";
 import { issueAnchor } from "./menu-surface";
+import { InboxList, InboxPane, useInboxBadge } from "./inbox";
 import { PickerRow, PropertyMenu } from "./property-menu";
 import { createActor } from "xstate";
 import { autosaveMachine, inspector } from "./machines";
@@ -243,6 +244,7 @@ export function App() {
   const open = useStore((s) => (s.panel && s.selected ? s.issues.get(s.selected) : undefined));
   const current = useStore((s) => (s.selected ? s.issues.get(s.selected) : undefined));
   const loadError = useStore((s) => s.loadError);
+  const inbox = useStore((s) => s.inbox);
   const visited = useRef(new Set<number>());
   visited.current.add(boardId);
 
@@ -275,7 +277,7 @@ export function App() {
           tabIndex={-1}
           className="relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border-[0.5px] border-frame bg-panel shadow-(--frame-shadow)"
         >
-          {!page && <BoardHeader />}
+          {!page && !inbox && <BoardHeader />}
           <div className="flex min-h-0 flex-1">
             {/* Retain visited boards for scroll restoration; do not render unopened boards. */}
             {boards
@@ -285,11 +287,16 @@ export function App() {
                   key={b.id}
                   board={b}
                   active={b.id === boardId}
-                  shown={!page && b.id === boardId}
+                  shown={!page && !inbox && b.id === boardId}
                   selected={selected}
                 />
               ))}
-            {open && <IssueView key={firstKey(open.key)} issue={open} page={page} />}
+            {inbox && !page && <InboxList />}
+            {open ? (
+              <IssueView key={firstKey(open.key)} issue={open} page={page} fill={inbox} />
+            ) : (
+              inbox && <InboxPane />
+            )}
           </div>
         </main>
       </div>
@@ -803,6 +810,8 @@ function Sidebar({ boards }: { boards: Board[] }) {
   const boardId = useStore((s) => s.board);
   const mine = useStore((s) => s.mine);
   const hidden = useStore((s) => s.sidebarHidden);
+  const inbox = useStore((s) => s.inbox);
+  const badge = useInboxBadge();
   if (hidden) return null;
   return (
     <nav
@@ -815,6 +824,14 @@ function Sidebar({ boards }: { boards: Board[] }) {
         </span>
         better-jira
       </div>
+      <SideItem active={inbox} onClick={() => timed("open inbox", () => runShortcut("inbox"))}>
+        <Icon name="inbox" /> Inbox
+        {badge > 0 && (
+          <span data-inbox-badge className="ml-auto text-[12px] text-fg-2">
+            {badge}
+          </span>
+        )}
+      </SideItem>
       <SideItem onClick={() => runShortcut("search")}>
         <Icon name="search" /> Search <kbd className="ml-auto">/</kbd>
       </SideItem>
@@ -823,7 +840,7 @@ function Sidebar({ boards }: { boards: Board[] }) {
       </SideItem>
       {/* Like Linear, My issues is a sidebar view rather than a tab beside Active/Backlog/All. */}
       <SideItem
-        active={mine}
+        active={mine && !inbox}
         onClick={() => timed("only mine", () => ui.send({ type: "mine.set", mine: !mine }))}
       >
         <Icon name="user" /> My issues <kbd className="ml-auto">{shortcutLabel("mine")}</kbd>
@@ -833,7 +850,7 @@ function Sidebar({ boards }: { boards: Board[] }) {
       {boards.map((b) => (
         <SideItem
           key={b.id}
-          active={b.id === boardId}
+          active={!inbox && b.id === boardId}
           onClick={() =>
             timed("switch board", () => navigate({ board: b.id, selected: null, panel: false }))
           }
@@ -1572,7 +1589,7 @@ const author = (a: any): User | null =>
 const ICON_BTN =
   "grid size-7 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg";
 
-function IssueView({ issue, page }: { issue: Issue; page: boolean }) {
+function IssueView({ issue, page, fill }: { issue: Issue; page: boolean; fill?: boolean }) {
   const f = useStore((s) => s.full.get(issue.key))?.fields;
   const favorite = useStore((s) => s.favorites.includes(issue.key)),
     optionsOpen = useStore((s) => s.overlay === "options");
@@ -1681,7 +1698,7 @@ function IssueView({ issue, page }: { issue: Issue; page: boolean }) {
     </div>
   ) : (
     <aside
-      className="issue-detail flex w-[520px] max-w-full shrink-0 flex-col border-l border-line bg-panel max-md:absolute max-md:inset-0 max-md:z-20 max-md:w-full"
+      className={`issue-detail flex ${fill ? "min-w-0 flex-1" : "w-[520px] max-w-full shrink-0 border-l border-line"} flex-col bg-panel max-md:absolute max-md:inset-0 max-md:z-20 max-md:w-full`}
       data-mode="side"
     >
       {body}

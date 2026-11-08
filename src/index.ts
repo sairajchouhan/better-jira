@@ -8,6 +8,7 @@ import { serverConfiguration } from "./server-config";
 import { fetchPreview } from "./link-preview";
 import { applyOps } from "./jira-writes";
 import { jira, JiraError, canWrite } from "./jira";
+import * as inbox from "./notifications";
 
 const json = (body: string) =>
   new Response(body, { headers: { "Content-Type": "application/json" } });
@@ -35,9 +36,9 @@ const server = serve({
             stream.enqueue(bytes.encode(": open\n\n"));
             stop = mirror.watch({
               issue,
-              send: () => {
+              send: (kind = "changed") => {
                 try {
-                  stream.enqueue(bytes.encode("data: changed\n\n"));
+                  stream.enqueue(bytes.encode(`data: ${kind}\n\n`));
                 } catch {
                   stop();
                 }
@@ -63,6 +64,51 @@ const server = serve({
         );
       }
     }),
+    "/api/inbox": {
+      GET: localOnly(async (req) => {
+        const category = new URL(req.url).searchParams.get("category");
+        try {
+          return Response.json({
+            ...(await inbox.feed(
+              category === "direct" || category === "watching" ? category : undefined,
+            )),
+            writable: canWrite(serverConfiguration().site),
+          });
+        } catch (e) {
+          console.error("[inbox]", String(e).slice(0, 300));
+          return Response.json({ error: "Could not read Jira notifications." }, { status: 503 });
+        }
+      }),
+      POST: localOnly(async (req) => {
+        if (req.headers.get("origin") && req.headers.get("origin") !== new URL(req.url).origin)
+          return new Response("Forbidden", { status: 403 });
+        if (!canWrite(serverConfiguration().site))
+          return Response.json(
+            { error: "Jira writes are disabled for this site." },
+            { status: 403 },
+          );
+        let body: { action?: unknown; groups?: unknown };
+        try {
+          body = await req.json();
+        } catch {
+          return Response.json({ error: "Invalid request" }, { status: 400 });
+        }
+        const groups = Array.isArray(body.groups)
+          ? body.groups.filter((g): g is string => typeof g === "string").slice(0, 50)
+          : [];
+        try {
+          if ((body.action === "read" || body.action === "unread") && groups.length)
+            await inbox.mark(groups, body.action === "read");
+          else if (body.action === "read-all") await inbox.markAllRead();
+          else if (body.action === "seen") await inbox.clearUnseen();
+          else return Response.json({ error: "Invalid request" }, { status: 400 });
+          return Response.json({ ok: true });
+        } catch (e) {
+          console.error("[inbox]", String(e).slice(0, 300));
+          return Response.json({ error: "Jira did not update the notification." }, { status: 502 });
+        }
+      }),
+    },
     "/api/properties": localOnly(() => Response.json(mirror.properties())),
     "/api/options": localOnly(async () => {
       try {

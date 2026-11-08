@@ -29,6 +29,8 @@ export type UiContext = {
   panel: boolean;
   document: string | null;
   mine: boolean;
+  /** The Inbox is the main view instead of the board. */
+  inbox: boolean;
   sidebarHidden: boolean;
   query: string;
   overlay: Overlay;
@@ -47,6 +49,8 @@ export type UiEvent =
       selected?: string | null;
       panel?: boolean;
       document?: string | null;
+      /** Opens or leaves the Inbox; picking a board leaves it. */
+      inbox?: boolean;
     }
   /** Escape with nothing on top: close the issue, else clear the search, else drop the selection. */
   | { type: "escape" }
@@ -90,6 +94,7 @@ export const uiMachine = setup({
     panel: false,
     document: null,
     mine: false,
+    inbox: false,
     sidebarHidden: false,
     query: "",
     overlay: null,
@@ -105,6 +110,11 @@ export const uiMachine = setup({
         enqueue.assign({
           ...(changed ? { board: event.board, query: "", mine: false, draft: {} } : {}),
           ...(event.view ? { view: event.view } : {}),
+          ...(event.inbox !== undefined
+            ? { inbox: event.inbox }
+            : event.board !== undefined
+              ? { inbox: false }
+              : {}),
           ...(event.selected !== undefined ? { selected: event.selected } : {}),
           ...(event.panel !== undefined ? { panel: event.panel } : {}),
           document:
@@ -129,7 +139,7 @@ export const uiMachine = setup({
     "sidebar.toggle": {
       actions: assign({ sidebarHidden: ({ context }) => !context.sidebarHidden }),
     },
-    "mine.set": { actions: assign({ mine: ({ event }) => event.mine }) },
+    "mine.set": { actions: assign({ mine: ({ event }) => event.mine, inbox: false }) },
     "query.set": { actions: assign({ query: ({ event }) => event.query }) },
     "description.edit": { actions: assign({ panel: true, editDesc: true }) },
     "description.editDone": { actions: assign({ editDesc: false }) },

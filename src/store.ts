@@ -133,7 +133,11 @@ export type Overlay =
   | "views"
   | "boards"
   | "subscribers"
-  | "reminder";
+  | "reminder"
+  | "inbox-actions"
+  | "inbox-filter"
+  | "inbox-display"
+  | "snooze";
 export type IssueDraft = Partial<
   Pick<
     Issue,
@@ -186,6 +190,7 @@ type State = {
   /** Open issues in a side panel or as a full page. */
   view: View;
   mine: boolean;
+  inbox: boolean;
   query: string;
   overlay: Overlay;
   editDesc: boolean;
@@ -256,6 +261,7 @@ let state: State = {
   document: null,
   view: savedValue("view") === "page" ? "page" : "side",
   mine: false,
+  inbox: false,
   query: "",
   overlay: null,
   editDesc: false,
@@ -337,6 +343,7 @@ function commit(patch: Partial<State>) {
       patch.selected !== undefined ||
       patch.panel !== undefined ||
       patch.view !== undefined ||
+      patch.inbox !== undefined ||
       patch.document !== undefined)
   )
     syncNavigation();
@@ -374,6 +381,7 @@ export function navigate(to: {
   selected?: string | null;
   panel?: boolean;
   document?: string | null;
+  inbox?: boolean;
 }) {
   if (to.selected) to = { ...to, selected: currentKey(to.selected) };
   const view =
@@ -445,7 +453,11 @@ function listen() {
   eventsFor = wanted;
   if (wanted === undefined) return;
   events = new EventSource(`/api/events${wanted ? `?issue=${encodeURIComponent(wanted)}` : ""}`);
-  events.onmessage = () => void poll.refetch();
+  // "inbox": Jira's bell count moved; anything else is a mirror change.
+  events.onmessage = (e) =>
+    void (e.data === "inbox"
+      ? queryClient.invalidateQueries({ queryKey: ["inbox"] })
+      : poll.refetch());
 }
 /** A JSON endpoint as a query; `staleTime` lets a recent answer stand in for a new request. */
 const fetchJson = <T>(path: string, staleTime = 0) =>
@@ -929,6 +941,8 @@ function syncNavigation(replace = false) {
   }
   if (state.document && state.panel) url.searchParams.set("document", state.document);
   else url.searchParams.delete("document");
+  if (state.inbox) url.searchParams.set("inbox", "1");
+  else url.searchParams.delete("inbox");
   if (url.href !== location.href) history[replace ? "replaceState" : "pushState"]({}, "", url);
 }
 function restoreNavigation() {
@@ -942,6 +956,7 @@ function restoreNavigation() {
     selected: issue?.key ?? null,
     panel: !!issue,
     document: issue ? params.get("document") : null,
+    inbox: params.has("inbox"),
     ...(params.get("view") === "page" || params.get("view") === "side"
       ? { view: params.get("view") as View }
       : {}),

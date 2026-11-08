@@ -26,7 +26,10 @@ test("Linear's observed bindings replace invented single-letter shortcuts", () =
   expect(keys.rename).toBe("Shift+R");
   expect(keys.description).toBe("Control+Shift+I");
   expect(keys["new-full"]).toBe("V");
+  // E and H are Linear's own inbox keys (delete, snooze); elsewhere they stay unbound.
   for (const invented of ["B", "D", "E", "H", "M", "N"])
-    expect(shortcuts.some((s) => s.hotkey === invented)).toBe(false);
+    expect(shortcuts.some((s) => s.hotkey === invented && s.group !== "Inbox")).toBe(false);
+  expect(keys.inbox).toEqual(["G", "I"]);
+  expect([keys["inbox-read"], keys["inbox-delete"], keys["inbox-snooze"]]).toEqual(["U", "E", "H"]);
   expect(editorBindings.find((b) => b.id === "strike")?.hotkey).toBe("Mod+Shift+X");
 });
