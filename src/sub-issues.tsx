@@ -927,6 +927,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
             key={editor}
             inline
             id={`sub-issue-description-${issue.key}`}
+            mentionIssue={issue.key}
             scope={scope}
             onLateMedia={(merge) => late((draft) => ({ description: merge(draft.description) }))}
             initial={description}

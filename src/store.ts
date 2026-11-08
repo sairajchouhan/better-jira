@@ -21,6 +21,7 @@ import { QueryClient, QueryObserver } from "@tanstack/query-core";
 import { asyncRetry } from "@tanstack/pacer";
 
 import { reminderTime } from "./reminder-display";
+import { typeChoices } from "./issue-properties";
 import { replyParent, visibleCommentTotal, type CommentState } from "./comment-thread";
 import { jiraCommentId, type ImageCrop, type MediaEdit } from "./media-edits";
 
@@ -1901,6 +1902,16 @@ export const actions = {
     const issue = state.issues.get(key),
       board = state.boards.find((b) => b.id === boardId);
     if (!issue || !board || issue.board !== boardId) return;
+    // Jira only changes a type within its hierarchy level (no Subtask ↔ Task), like the type menu: a drop onto another level is ignored.
+    const types = state.options.types?.[issue.project?.key ?? ""];
+    if (
+      types &&
+      groups.some(
+        ({ by, id }) =>
+          by === "type" && id !== issue.type && !typeChoices(issue.type, types, []).includes(id),
+      )
+    )
+      return;
     // One drag, including its column and row changes, is one undoable edit.
     record(key, `move ${key}`, () => {
       if (rank !== undefined) patchIssue(key, { rank });

@@ -652,7 +652,11 @@ async function handle(req: Request) {
   else if (path === "/api/view-defaults") body = {};
   else if (path === "/api/users") {
     const query = (url.searchParams.get("query") ?? "").toLowerCase();
-    body = people.filter((person) => person.name.toLowerCase().includes(query));
+    // Like Jira: an issue's search (viewissue/assignable) never finds someone who can't see it; the site-wide search does.
+    body = [
+      ...people,
+      ...(url.searchParams.get("issue") ? [] : [{ id: "sam", name: "Sam Outsider" }]),
+    ].filter((person) => person.name.toLowerCase().includes(query));
   } else if (path === "/api/properties")
     body = { entries: {}, progress: { total: 0, pending: 0, completed: 0, errors: 0 } };
   else if (path.match(/^\/api\/issues\/[^/]+\/media\/[^/]+$/)) {

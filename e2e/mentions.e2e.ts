@@ -56,3 +56,21 @@ test("@ works in the comment composer too", async () => {
     await page.close();
   }
 });
+
+test("@ in a new sub-issue's description suggests the parent issue's people, not the whole site", async () => {
+  const page = await open("?issue=TEST-2&view=page");
+  try {
+    await page.waitFor(`!!document.getElementById('summary')`);
+    await page.eval("document.activeElement?.blur()");
+    await page.key("o", "meta", "shift");
+    await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Sub-issue title'`);
+    await page.click('[aria-label="Sub-issue description"]');
+    await page.type("@");
+    // Sam Outsider is only in the site-wide search; the parent's people search leaves them out.
+    expect(await page.waitFor<string>(`${options}.split('|').length >= 3 && ${options}`)).toBe(
+      "*Audit user|Alex|Priya Raman",
+    );
+  } finally {
+    await page.close();
+  }
+});

@@ -49,6 +49,8 @@ export type RichEditorProps = {
   initial: unknown;
   onFiles?: (files: File[]) => Promise<Attachment[]>;
   issueKey?: string;
+  /** The issue whose people @mentions suggest, when it differs from `issueKey` (a sub-issue draft suggests its parent's). */
+  mentionIssue?: string;
   attachments?: Attachment[];
   label?: string;
   id?: string;
@@ -641,7 +643,7 @@ export function RichEditor(props: RichEditorProps) {
       {mention && (
         <MentionMenu
           query={mention.query}
-          issueKey={props.issueKey}
+          issueKey={props.mentionIssue ?? props.issueKey}
           at={view.current!.coordsAtPos(mention.from)}
           keys={mentionKeys}
           pick={(person) => {
