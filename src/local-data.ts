@@ -19,6 +19,8 @@ export type LocalChange = {
   issueFields: string[];
   fullFields: string[];
   created: boolean;
+  /** The tab that sends this change to Jira; a change whose tab has closed is replayed by the next tab to load. */
+  tab?: string;
 };
 export type LocalState = {
   version: 1;
@@ -222,7 +224,8 @@ export function parseLocalState(raw: unknown): {
     v.issueFields.every((f) => issueFields.has(f)) &&
     strings(v.fullFields) &&
     v.fullFields.every((f) => ["description", "comment"].includes(f)) &&
-    typeof v.created === "boolean";
+    typeof v.created === "boolean" &&
+    (v.tab === undefined || typeof v.tab === "string");
   const changes = Array.isArray(raw.changes) ? raw.changes.filter(valid) : [];
   const undo = Array.isArray(raw.undo) ? raw.undo.filter(isEdit).slice(-100) : [];
   const redo = Array.isArray(raw.redo) ? raw.redo.filter(isEdit).slice(-100) : [];
@@ -257,6 +260,8 @@ export class LocalDatabase {
   private urls = new Map<string, string>();
   private writable = true;
   private revision = 0;
+  /** Change keys as of this tab's last load or save, to tell a change another tab dropped from one this tab added. */
+  private keys = new Set<string>();
   private constructor(private db: IDBDatabase) {}
   static async open(
     namespace: string,
@@ -284,6 +289,7 @@ export class LocalDatabase {
     const parsed = parseLocalState(raw);
     this.writable = !parsed.readOnly;
     this.revision = object(raw) && Number.isSafeInteger(raw.revision) ? raw.revision : 0;
+    this.keys = new Set(parsed.state.changes.map((c) => c.key));
     if (parsed.recovered) {
       const tx = this.db.transaction("recovery", "readwrite"),
         done = completed(tx);
@@ -310,7 +316,8 @@ export class LocalDatabase {
       for (const snapshot of [...edit.before, ...edit.after]) await restore(snapshot.issue);
     return { ...parsed, missingFiles };
   }
-  async save(state: LocalState): Promise<void> {
+  /** Writes `state`. When another tab saved since, its changes to issues this tab hasn't edited (`dirty`) are kept, and this tab's undo history wins. Returns the sequence written. */
+  async save(state: LocalState, dirty: ReadonlySet<string> = new Set()): Promise<number> {
     if (!this.writable)
       throw new Error(
         "This local database uses an unsupported version. Existing data has been preserved.",
@@ -322,13 +329,30 @@ export class LocalDatabase {
         current = await request(store.get("workspace"));
       const revision =
         object(current) && Number.isSafeInteger(current.revision) ? current.revision : 0;
-      if (revision !== this.revision)
-        throw new Error(
-          "Another tab saved newer local changes. Keep this tab open and export your unsaved changes before reloading.",
-        );
-      store.put({ ...state, revision: revision + 1 }, "workspace");
+      let next = state;
+      if (revision !== this.revision) {
+        const theirs = parseLocalState(current);
+        if (theirs.readOnly)
+          throw new Error(
+            "Another tab saved local data in a newer version. Reload to keep editing; existing data has been preserved.",
+          );
+        const stored = new Set(theirs.state.changes.map((c) => c.key));
+        next = {
+          ...state,
+          sequence: Math.max(state.sequence, theirs.state.sequence),
+          changes: [
+            ...theirs.state.changes.filter((c) => !dirty.has(c.key)),
+            ...state.changes.filter(
+              (c) => dirty.has(c.key) || (!stored.has(c.key) && !this.keys.has(c.key)),
+            ),
+          ],
+        };
+      }
+      store.put({ ...next, revision: revision + 1 }, "workspace");
       await done;
       this.revision = revision + 1;
+      this.keys = new Set(next.changes.map((c) => c.key));
+      return next.sequence;
     } catch (error) {
       try {
         tx.abort();
@@ -336,6 +360,31 @@ export class LocalDatabase {
       await done.catch(() => {});
       throw error;
     }
+  }
+  /** Takes over changes whose tab is no longer open (`live` lists the open ones), so exactly one tab replays each. Returns their keys. */
+  async claim(tab: string, live: ReadonlySet<string>): Promise<Set<string>> {
+    const tx = this.db.transaction("state", "readwrite"),
+      done = completed(tx),
+      store = tx.objectStore("state"),
+      current = await request(store.get("workspace")),
+      claimed = new Set<string>();
+    if (object(current) && current.version === 1 && Array.isArray(current.changes)) {
+      for (const change of current.changes)
+        if (object(change) && (typeof change.tab !== "string" || !live.has(change.tab))) {
+          change.tab = tab;
+          claimed.add(change.key);
+        }
+      if (claimed.size)
+        store.put(
+          {
+            ...current,
+            revision: (Number.isSafeInteger(current.revision) ? current.revision : 0) + 1,
+          },
+          "workspace",
+        );
+    }
+    await done;
+    return claimed;
   }
   async addFiles(files: File[]): Promise<NonNullable<Issue["attachments"]>> {
     if (!this.writable) throw new Error("Local storage is read-only");

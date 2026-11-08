@@ -126,7 +126,7 @@ function linkOps(
 type Resources = Issue["resources"];
 function webLinkOps(a: Resources = [], b: Resources = []): Op[] {
   const urls = (list: NonNullable<Resources>) =>
-    new Map(list.filter((r) => r.kind === "link" && r.url).map((r) => [r.url!, r]));
+    new Map(list.filter((r) => r.kind !== "document" && r.url).map((r) => [r.url!, r]));
   const before = urls(a),
     after = urls(b);
   return [

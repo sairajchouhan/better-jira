@@ -603,3 +603,73 @@ test("Jira's remote links become link resources: a writable site takes Jira's se
   ]);
   expect(withJiraLinks(local, undefined, true)).toBe(local);
 });
+
+test("R1-D71: adding a URL the issue already has reports it instead of adding it again", async () => {
+  const { actions, get, set } = await import("./store");
+  const issue = {
+    key: "D71-1",
+    board: 1,
+    summary: "Links",
+    status: "todo",
+    assignee: null,
+    labels: [],
+    comments: 0,
+    updated: "",
+    resolved: null,
+  };
+  set({ issues: new Map(get().issues).set(issue.key, issue) });
+  const link = { kind: "link" as const, title: "A", url: "https://a.test/", updated: "" };
+  expect(actions.resource(issue.key, { ...link, id: "1" })).toBe(true);
+  expect(actions.resource(issue.key, { ...link, id: "2" })).toBe(false);
+  expect(
+    get()
+      .issues.get(issue.key)!
+      .resources!.map((r) => r.id),
+  ).toEqual(["1"]);
+});
+
+test("R1-D101: deleting an issue sends no link removals for the issues it was linked to", async () => {
+  const { actions, get, set } = await import("./store");
+  const sent: { key: string; ops: any[] }[] = [],
+    realFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const key = decodeURIComponent(String(input).match(/\/api\/issues\/([^/]+)\/ops$/)?.[1] ?? "");
+    const { ops } = JSON.parse(String(init?.body));
+    sent.push({ key, ops });
+    return Response.json({
+      key,
+      created: {},
+      others: [],
+      issue: ops[0]?.op === "delete" ? null : get().issues.get(key),
+    });
+  }) as typeof fetch;
+  const confirm = (globalThis as any).confirm;
+  (globalThis as any).confirm = () => true;
+  try {
+    const issue = (key: string, related: string) => ({
+      key,
+      board: 1,
+      summary: key,
+      status: "todo",
+      assignee: null,
+      labels: [],
+      comments: 0,
+      updated: "",
+      resolved: null,
+      relations: [{ key: related, kind: "related" }],
+    });
+    set({
+      writable: true,
+      issues: new Map(get().issues)
+        .set("DEL-1", issue("DEL-1", "DEL-2"))
+        .set("DEL-2", issue("DEL-2", "DEL-1")),
+    });
+    actions.remove("DEL-1");
+    for (let i = 0; i < 50 && get().pendingWrites; i++) await Bun.sleep(10);
+    expect(sent).toEqual([{ key: "DEL-1", ops: [{ op: "delete" }] }]);
+  } finally {
+    set({ writable: false });
+    globalThis.fetch = realFetch;
+    (globalThis as any).confirm = confirm;
+  }
+});

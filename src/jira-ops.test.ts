@@ -347,3 +347,16 @@ test("Jira's numeric reply parent wins over the property older app replies kept 
   expect(threadParent({ id: "12", ...legacy })).toEqual({ id: "12", parentId: "10" });
   expect(threadParent({ id: "12", properties: [] })).toEqual({ id: "12" });
 });
+
+test("R1-D11: a pull request is a Jira remote link like any other link", () => {
+  const pr = {
+    id: "p",
+    kind: "pull-request" as const,
+    url: "https://github.com/oven-sh/bun/pull/1",
+    title: "PR",
+    updated: "",
+  };
+  expect(opsFor({ issue: base }, { issue: { ...base, resources: [pr] } }, new Map())).toEqual([
+    { op: "weblink", url: pr.url, title: "PR" },
+  ]);
+});

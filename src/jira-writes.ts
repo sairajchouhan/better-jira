@@ -220,21 +220,33 @@ async function run(ctx: Context, op: Op) {
       return;
     }
     case "weblink": {
-      // globalId makes the POST an upsert, so a resend after reload never duplicates the link.
-      if (op.remove)
-        await jira(`${at(key)}/remotelink?globalId=${encodeURIComponent(op.url)}`, {
-          method: "DELETE",
-        }).catch((e) => {
-          if (!(e instanceof JiraError && e.status === 404)) throw e;
-        });
-      else
-        await jira(`${at(key)}/remotelink`, {
-          method: "POST",
-          body: JSON.stringify({
-            globalId: op.url,
-            object: { url: op.url, title: op.title || op.url },
-          }),
-        });
+      // Matched by URL, not globalId: a link added in Jira's UI has another globalId, so a resend would duplicate it (R1-D1).
+      const title = op.title || op.url,
+        links = (await jira<any[]>(`${at(key)}/remotelink`)).filter(
+          (l) => l.object?.url === op.url,
+        );
+      if (op.remove) {
+        for (const link of links)
+          await jira(`${at(key)}/remotelink/${encodeURIComponent(link.id)}`, {
+            method: "DELETE",
+          }).catch((e) => {
+            if (!(e instanceof JiraError && e.status === 404)) throw e;
+          });
+        return;
+      }
+      if (links.some((l) => (l.object.title || l.object.url) === title)) return;
+      const [link] = links;
+      await jira(`${at(key)}/remotelink${link ? `/${encodeURIComponent(link.id)}` : ""}`, {
+        method: link ? "PUT" : "POST",
+        body: JSON.stringify(
+          link
+            ? {
+                ...(link.globalId ? { globalId: link.globalId } : {}),
+                object: { ...link.object, title },
+              }
+            : { globalId: op.url, object: { url: op.url, title } },
+        ),
+      });
       return;
     }
     case "link": {
@@ -279,12 +291,20 @@ export async function applyOps(key: string, ops: Op[], board?: number) {
   const ctx: Context = { key, created: {}, touched: new Set() };
   let error: string | undefined;
   // A later op in this job may name a comment an earlier op just created.
+  const independent = (op?: Op) => op?.op === "link" || op?.op === "weblink";
   try {
-    for (const op of ops)
-      await run(
-        ctx,
-        renameCommentIds(op, new Map(Object.entries(ctx.created).filter(([from]) => from !== key))),
+    for (let i = 0; i < ops.length;) {
+      // A run of links doesn't depend on itself: send it at once (R1-D101).
+      let end = i + 1;
+      if (independent(ops[i])) while (independent(ops[end])) end++;
+      const comments = new Map(Object.entries(ctx.created).filter(([from]) => from !== key));
+      const results = await Promise.allSettled(
+        ops.slice(i, end).map((op) => run(ctx, renameCommentIds(op, comments))),
       );
+      const failed = results.find((r) => r.status === "rejected");
+      if (failed) throw failed.reason;
+      i = end;
+    }
   } catch (e) {
     error =
       e instanceof JiraError

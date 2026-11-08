@@ -104,7 +104,7 @@ export function ResourceForm({
             return;
           }
           const at = new Date().toISOString();
-          actions.resource(issue.key, {
+          const added = actions.resource(issue.key, {
             id: crypto.randomUUID(),
             kind,
             title: title.trim() || href,
@@ -112,7 +112,9 @@ export function ResourceForm({
             updated: at,
             created: at,
           });
-          if (kind === "link") ui.send({ type: "toast.show", text: "URL successfully linked." });
+          if (!added) ui.send({ type: "toast.show", text: "Already linked" });
+          else if (kind === "link")
+            ui.send({ type: "toast.show", text: "URL successfully linked." });
           close();
         }}
       >
@@ -205,7 +207,12 @@ export function IssueResources({ issue }: { issue: Issue }) {
   // Unfurl links once (Linear shows the site icon, page description and title); a failed fetch retries next session.
   useEffect(() => {
     for (const r of issue.resources ?? [])
-      if (r.kind === "link" && r.url && r.preview === undefined && !previewRequested.has(r.id)) {
+      if (
+        r.kind !== "document" &&
+        r.url &&
+        r.preview === undefined &&
+        !previewRequested.has(r.id)
+      ) {
         previewRequested.add(r.id);
         void fetch(`/api/link-preview?url=${encodeURIComponent(r.url)}`)
           .then((response) => (response.ok ? response.json() : Promise.reject()))

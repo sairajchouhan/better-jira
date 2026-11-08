@@ -122,12 +122,13 @@ export async function prepareOps(key: string, ops: Op[]): Promise<Op[]> {
     pending.set(id, job);
     return job;
   };
+  // Files upload in parallel (R1-D101).
+  await Promise.all(
+    ops.flatMap((op) => (op.op === "attachment.add" ? [upload(op.id, op.name)] : [])),
+  );
   const out: Op[] = [];
   for (const op of ops) {
-    if (op.op === "attachment.add") {
-      await upload(op.id, op.name);
-      continue;
-    }
+    if (op.op === "attachment.add") continue;
     if (op.op === "attachment.delete") {
       const mapped = known(key, op.id),
         id = mapped?.attachment.id ?? op.id;

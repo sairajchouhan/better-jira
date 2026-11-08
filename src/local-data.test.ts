@@ -112,19 +112,56 @@ test("corrupt records are isolated and unknown schema versions cannot overwrite 
   expect(parseLocalState(undefined)).toEqual({ state, recovered: false, readOnly: false });
 });
 
-test("another tab cannot overwrite a newer revision", async () => {
+test("R1-D21/D22: two tabs keep saving; each keeps the other's changes to issues it didn't edit", async () => {
   const factory = new IDBFactory(),
     one = await LocalDatabase.open("same", factory),
     two = await LocalDatabase.open("same", factory);
+  const change = (key: string, summary: string) => ({
+    key,
+    issue: { ...issue, key, summary },
+    issueFields: ["summary"],
+    fullFields: [],
+    created: true,
+  });
+  await one.save({ ...emptyLocalState(), changes: [change("A-1", "base")] });
   await one.load();
   await two.load();
-  await one.save({ ...emptyLocalState(), sequence: 7 });
-  await expect(two.save({ ...emptyLocalState(), sequence: 8 })).rejects.toThrow(
-    "Another tab saved newer",
+  // Tab one edits A-1 and adds A-2; tab two, still on the old revision, adds B-1.
+  await one.save(
+    { ...emptyLocalState(), sequence: 7, changes: [change("A-1", "one"), change("A-2", "one")] },
+    new Set(["A-1", "A-2"]),
   );
-  expect((await two.load()).state.sequence).toBe(7);
+  expect(
+    await two.save(
+      { ...emptyLocalState(), sequence: 5, changes: [change("A-1", "base"), change("B-1", "two")] },
+      new Set(["B-1"]),
+    ),
+  ).toBe(7);
+  // Tab one drops A-2 (Jira took it) and saves again: tab two's B-1 survives.
+  await one.save({ ...emptyLocalState(), changes: [change("A-1", "one")] }, new Set(["A-2"]));
+  const summaries = (await one.load()).state.changes.map((c) => `${c.key}:${c.issue?.summary}`);
+  expect(summaries.sort()).toEqual(["A-1:one", "B-1:two"]);
   one.close();
   two.close();
+});
+test("R1-D6/D7: only changes of closed tabs are claimed, and only once", async () => {
+  const factory = new IDBFactory(),
+    db = await LocalDatabase.open("claims", factory);
+  const change = (key: string, tab?: string) => ({
+    key,
+    issue: { ...issue, key },
+    issueFields: ["summary"],
+    fullFields: [],
+    created: true,
+    ...(tab ? { tab } : {}),
+  });
+  await db.save({
+    ...emptyLocalState(),
+    changes: [change("A-1", "alive"), change("A-2", "closed"), change("A-3")],
+  });
+  expect([...(await db.claim("me", new Set(["alive"])))]).toEqual(["A-2", "A-3"]);
+  expect([...(await db.claim("other", new Set(["alive", "me"])))]).toEqual([]);
+  db.close();
 });
 test("corrupt raw data is backed up and an unknown schema remains protected", async () => {
   const factory = new IDBFactory(),

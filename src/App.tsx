@@ -53,6 +53,7 @@ import {
   flushLocalChanges,
   issueURL,
   retryLocalStorage,
+  dismissWriteError,
   toggleFavorite,
   undoEdit,
   redoEdit,
@@ -926,7 +927,8 @@ function StatusBar() {
     redo = useStore((s) => s.redoCount);
   const storage = useStore((s) => s.storage),
     writable = useStore((s) => s.writable),
-    pending = useStore((s) => s.pendingWrites);
+    pending = useStore((s) => s.pendingWrites),
+    writeError = useStore((s) => s.writeError);
   return (
     <footer className="flex h-7 shrink-0 items-center gap-4 px-4 pb-2 text-[11px] whitespace-nowrap">
       {writable ? (
@@ -951,9 +953,25 @@ function StatusBar() {
           role="status"
           aria-label="Jira save status"
           data-jira-pending={pending}
-          className="text-fg-3"
+          title={writeError?.text}
+          className={`flex min-w-0 items-center gap-1 ${writeError && !pending ? "text-red-500" : "text-fg-3"}`}
         >
-          {pending ? `Sending ${pending} to Jira…` : "Saved to Jira"}
+          <span className="truncate">
+            {pending
+              ? `Sending ${pending} to Jira…`
+              : writeError
+                ? `Not saved to Jira: ${writeError.key}: ${writeError.text}`
+                : "Saved to Jira"}
+          </span>
+          {writeError && !pending && (
+            <button
+              aria-label="Dismiss Jira save error"
+              onClick={dismissWriteError}
+              className={FOOT_BTN}
+            >
+              <Icon name="close" />
+            </button>
+          )}
         </span>
       )}
       <span

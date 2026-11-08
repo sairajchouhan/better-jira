@@ -221,6 +221,8 @@ type State = {
   /** The server writes edits to this Jira site; otherwise edits stay local. */
   writable: boolean;
   pendingWrites: number;
+  /** The last write Jira refused, shown until dismissed or a later write to that issue lands. */
+  writeError: { key: string; text: string } | null;
   /** Jira's own choices for property menus, when writes go to Jira. */
   options: JiraOptions;
   loadError: string;
@@ -290,6 +292,7 @@ let state: State = {
   namespace: "",
   writable: false,
   pendingWrites: 0,
+  writeError: null,
   options: { priorities: [], users: [], labels: [], versions: {} },
   loadError: "",
   canEdit: true,
@@ -400,7 +403,19 @@ app.subscribe(({ context }) => {
 });
 const storage = createActor(
   storageMachine.provide({
-    actors: { save: fromPromise(async () => database!.save(localSnapshot())) },
+    actors: {
+      save: fromPromise(async () => {
+        // Keys edited since the last save; on failure they stay dirty for the retry.
+        const dirty = new Set(dirtyKeys);
+        dirtyKeys.clear();
+        try {
+          localSeq = Math.max(localSeq, await database!.save(localSnapshot(), dirty));
+        } catch (error) {
+          for (const key of dirty) dirtyKeys.add(key);
+          throw error;
+        }
+      }),
+    },
   }),
   { inspect: inspector("storage") },
 ).start();
@@ -597,6 +612,8 @@ async function loadApplication() {
     full = new Map<string, Full>();
   changedKeys.clear();
   createdKeys.clear();
+  dirtyKeys.clear();
+  owners.clear();
   localFields.clear();
   fullFields.clear();
   needsFullRefresh.clear();
@@ -604,7 +621,17 @@ async function loadApplication() {
   for (const change of local.changes) {
     // With Jira writes, an override for an issue Jira no longer has is dropped: the issue was deleted there.
     if (client.writable === true && !change.created && !inJira.has(change.key)) continue;
+    // Older builds saved a link's preview as a local edit, which replayed the link to Jira on every load (R1-D1).
+    if (
+      client.writable === true &&
+      !change.created &&
+      !change.fullFields.length &&
+      change.issueFields.every((f) => f === "resources" || f === "updated") &&
+      change.issue?.resources?.every((r) => r.kind === "link")
+    )
+      continue;
     changedKeys.add(change.key);
+    owners.set(change.key, change.tab ?? "");
     if (change.created) createdKeys.add(change.key);
     localFields.set(change.key, new Set(change.issueFields));
     fullFields.set(change.key, new Set(change.fullFields));
@@ -655,56 +682,82 @@ async function loadApplication() {
   storage.send(opened);
   // Saved local overrides are the durable outbox: whatever Jira hasn't taken yet is sent again.
   // An override for an issue Jira no longer has is not re-created; only issues made here are. Deletes are never replayed.
-  // Only one tab replays: another open tab may still be sending these same writes.
-  const replay = () =>
+  // Only changes of tabs that have closed are replayed, by one tab: an open tab is still sending its own (R1-D6, R1-D7).
+  const replay = async (keys?: Set<string>) =>
     send(
-      local.changes
-        .filter(
-          (change) => change.issue && (change.created || remote.some((i) => i.key === change.key)),
-        )
-        .map((change) => {
-          const after = snapshot(change.key),
-            known = remote.find((i) => i.key === change.key),
-            f = after.full;
-          const full = f && {
-            ...f,
-            fields: {
-              ...f.fields,
-              description: change.fullFields.includes("description")
-                ? undefined
-                : f.fields.description,
-              comment: {
-                ...f.fields.comment,
-                comments: (f.fields.comment?.comments ?? []).filter(
-                  (c: any) => !String(c.id).startsWith("local-"),
-                ),
+      await Promise.all(
+        local.changes
+          .filter(
+            (change) =>
+              (!keys || keys.has(change.key)) &&
+              change.issue &&
+              (change.created || remote.some((i) => i.key === change.key)),
+          )
+          .map(async (change): Promise<[string, Side, Side]> => {
+            const after = snapshot(change.key),
+              known = remote.find((i) => i.key === change.key),
+              f = after.full;
+            const full = f && {
+              ...f,
+              fields: {
+                ...f.fields,
+                description: change.fullFields.includes("description")
+                  ? undefined
+                  : f.fields.description,
+                comment: {
+                  ...f.fields.comment,
+                  comments: (f.fields.comment?.comments ?? []).filter(
+                    (c: any) => !String(c.id).startsWith("local-"),
+                  ),
+                },
               },
-            },
-          };
-          // Only fields still owned locally differ from Jira; the rest already match, so they send nothing.
-          const remoteFields = Object.fromEntries(
-            change.issueFields.map((field) => [
-              field,
-              field === "attachments"
-                ? aliasAttachments(change.key, known?.attachments ?? [])
-                : field === "mediaEdits"
-                  ? jiraImageComments(after.issue?.mediaEdits)
-                  : (known as any)?.[field],
-            ]),
-          );
-          return [
-            change.key,
-            change.created
-              ? {}
-              : { issue: after.issue ? { ...after.issue, ...remoteFields } : known, full },
-            after,
-          ];
-        }),
+            };
+            // The mirror has no remote links: only links Jira lacks are sent again, and none are removed (R1-D1).
+            const links =
+              !change.created &&
+              change.issueFields.includes("resources") &&
+              after.issue?.resources?.some((r) => r.kind !== "document")
+                ? await jiraLinks(change.key)
+                : undefined;
+            // Only fields still owned locally differ from Jira; the rest already match, so they send nothing.
+            const remoteFields = Object.fromEntries(
+              change.issueFields.map((field) => [
+                field,
+                field === "attachments"
+                  ? aliasAttachments(change.key, known?.attachments ?? [])
+                  : field === "mediaEdits"
+                    ? jiraImageComments(after.issue?.mediaEdits)
+                    : field === "resources"
+                      ? after.issue?.resources?.filter(
+                          (r) => r.kind === "document" || !r.url || !links || links.has(r.url),
+                        )
+                      : (known as any)?.[field],
+              ]),
+            );
+            return [
+              change.key,
+              change.created
+                ? {}
+                : { issue: after.issue ? { ...after.issue, ...remoteFields } : known, full },
+              after,
+            ];
+          }),
+      ),
     );
   if (state.writable)
-    void (navigator.locks
-      ? navigator.locks.request("better-jira-outbox", { ifAvailable: true }, (lock) =>
-          lock ? (replay(), new Promise(() => {})) : undefined,
+    void (navigator.locks && database
+      ? holdTabLock().then(() =>
+          navigator.locks.request("better-jira-outbox", async () => {
+            const held = (await navigator.locks.query()).held ?? [],
+              live = new Set(
+                held.flatMap((l) =>
+                  l.name?.startsWith(TAB_LOCK) ? [l.name.slice(TAB_LOCK.length)] : [],
+                ),
+              ),
+              claimed = await database!.claim(tabId, live);
+            for (const key of claimed) owners.delete(key);
+            await replay(claimed);
+          }),
         )
       : replay());
   if (!navigationReady) {
@@ -794,6 +847,7 @@ async function fetchProperties(): Promise<{ pending: number }> {
         issues.delete(key);
         lastProperties.delete(key);
         changedKeys.delete(key);
+        touch(key);
         localFields.delete(key);
         fullFields.delete(key);
         changed = true;
@@ -842,7 +896,7 @@ export function withJiraLinks(
   const jira = new Map(links.map((l) => [l.url, l])),
     have = new Set<string>();
   const kept = resources.flatMap((r) => {
-    if (r.kind !== "link" || !r.url) return [r];
+    if (r.kind === "document" || !r.url) return [r];
     const link = jira.get(r.url);
     if (!link) return replace ? [] : [r];
     have.add(r.url);
@@ -973,6 +1027,32 @@ const changedKeys = new Set<string>(),
 const undo: LocalEdit[] = [],
   redo: LocalEdit[] = [];
 let database: LocalDatabase | undefined;
+/** Issues edited here since the last local save, and which open tab sends each saved change (absent: this tab). */
+const dirtyKeys = new Set<string>(),
+  owners = new Map<string, string>();
+const touch = (...keys: string[]) => {
+  for (const key of keys) {
+    dirtyKeys.add(key);
+    owners.delete(key);
+  }
+};
+const tabId = crypto.randomUUID(),
+  TAB_LOCK = "better-jira-tab:";
+/** Held while this tab is open, so other tabs know its saved changes are still being sent. */
+let tabLock: Promise<void> | undefined;
+const holdTabLock = () =>
+  (tabLock ??= new Promise((resolve) =>
+    navigator.locks.request(TAB_LOCK + tabId, () => (resolve(), new Promise(() => {}))),
+  ));
+/** The URLs of an issue's Jira remote links, or undefined if they can't be read. */
+async function jiraLinks(key: string) {
+  try {
+    const response = await fetch(`/api/issues/${encodeURIComponent(key)}`);
+    if (!response.ok) return;
+    const full: Full = await response.json();
+    return new Set((full.remotelinks ?? []).map((l) => l.url));
+  } catch {}
+}
 function localSnapshot(): LocalState {
   return {
     version: 1,
@@ -992,6 +1072,7 @@ function localSnapshot(): LocalState {
         issueFields: [...(localFields.get(key) ?? [])],
         fullFields: [...(fullFields.get(key) ?? [])],
         created: createdKeys.has(key),
+        tab: owners.get(key) ?? tabId,
       })),
     undo: [...undo],
     redo: [...redo],
@@ -1042,17 +1123,18 @@ function send(changes: [string, Side, Side][]) {
       ops: opsFor(before, after, state.issues),
     }))
     .sort((a, b) => order(a.ops) - order(b.ops));
-  // Jira detaches (or, for sub-tasks, deletes) the children of a deleted issue itself.
+  // Jira detaches (or, for sub-tasks, deletes) the children of a deleted issue, and drops its links, itself (R1-D101).
   const deleted = new Set(jobs.filter((job) => job.ops[0]?.op === "delete").map((job) => job.key));
   for (const job of jobs)
     if (deleted.size && !deleted.has(job.key)) {
       const parent = changes.find(([key]) => key === job.key)?.[1].issue?.parent;
-      if (parent && deleted.has(parent))
-        job.ops = job.ops.flatMap((op): Op[] => {
-          if (op.op !== "fields" || op.fields.parent !== null) return [op];
-          const { parent: _, ...fields } = op.fields;
-          return Object.keys(fields).length ? [{ op: "fields", fields }] : [];
-        });
+      job.ops = job.ops.flatMap((op): Op[] => {
+        if (op.op === "link" && op.remove && deleted.has(op.target)) return [];
+        if (op.op !== "fields" || op.fields.parent !== null || !parent || !deleted.has(parent))
+          return [op];
+        const { parent: _, ...fields } = op.fields;
+        return Object.keys(fields).length ? [{ op: "fields", fields }] : [];
+      });
     }
   for (const { key, board, ops } of jobs) {
     if (!ops.length || board === undefined) continue;
@@ -1139,7 +1221,8 @@ async function flush() {
       }
       outbox.shift();
       // A create Jira refused leaves nothing for its follow-up uploads to attach to.
-      if (first?.op === "create" && !result!.created?.[job.key])
+      const refused = first?.op === "create" && !result!.created?.[job.key];
+      if (refused)
         for (let i = outbox.length - 1; i >= 0; i--)
           if (outbox[i]!.key === job.key) outbox.splice(i, 1);
       const created = new Map(Object.entries(result!.created ?? {}));
@@ -1161,6 +1244,7 @@ async function flush() {
               mediaEdits: renameCommentIds(issue.mediaEdits, comments),
             }),
           });
+          touch(key);
           queueSave();
         }
       }
@@ -1180,12 +1264,37 @@ async function flush() {
       adopt(result!.key ?? job.key, result!, !!result!.error, created);
       for (const other of result!.others ?? [])
         adopt(other.key, { issue: other, error: result!.error }, false, created);
-      set({ pendingWrites: outbox.length });
+      if (refused) discard(job.key);
+      const key = result!.key ?? job.key;
+      set({
+        pendingWrites: outbox.length,
+        ...(result!.error
+          ? { writeError: { key, text: result!.error } }
+          : state.writeError?.key === key
+            ? { writeError: null }
+            : {}),
+      });
     }
   } finally {
     flushing = false;
   }
 }
+/** Drops an issue made here that Jira refused to create, so no ghost stays or is created again after reload (R1-D24). */
+function discard(key: string) {
+  const issues = new Map(state.issues),
+    full = new Map(state.full);
+  issues.delete(key);
+  full.delete(key);
+  changedKeys.delete(key);
+  createdKeys.delete(key);
+  localFields.delete(key);
+  fullFields.delete(key);
+  touch(key);
+  set({ issues, full });
+  if (state.selected === key) navigate({ selected: null, panel: false });
+  queueSave();
+}
+export const dismissWriteError = () => set({ writeError: null });
 /** A new issue's app key becomes Jira's key everywhere: issues, references, undo history and queued writes. */
 function rekey(from: string, to: string) {
   const ids = new Map([[from, to]]),
@@ -1204,6 +1313,7 @@ function rekey(from: string, to: string) {
   }
   if (changedKeys.delete(from)) changedKeys.add(to);
   createdKeys.delete(from);
+  touch(from, to);
   lastProperties.delete(from);
   const label = new RegExp(`${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\d)`, "g");
   for (const list of [undo, redo])
@@ -1230,6 +1340,7 @@ function adopt(
   created = new Map<string, string>(),
 ) {
   if (result.issue === undefined || (!force && outbox.some((job) => job.key === key))) return;
+  touch(key);
   const issue = state.issues.get(key);
   if (result.issue === null) {
     // Gone from Jira (deleted there, or by this write).
@@ -1437,6 +1548,7 @@ function record(key: string | string[], label: string, fn: () => void, group?: s
     });
     if (!changed.length) return;
     for (const key of changed) changedKeys.add(key);
+    touch(...changed);
     send(changed.map((key) => [key, transaction!.before.get(key)!, snapshot(key)]));
     const previous = undo.at(-1);
     if (
@@ -1509,6 +1621,7 @@ function restore(edit: LocalEdit, snapshots: Snapshot[]) {
     } catch {}
   const issues = new Map(state.issues),
     full = new Map(state.full);
+  touch(...edit.keys);
   edit.keys.forEach((key, index) => {
     const snapshot = snapshots[index]!;
     if (snapshot.issue) issues.set(key, snapshot.issue);
@@ -1734,6 +1847,7 @@ export const actions = {
     const next = delivered(issue);
     patchIssue(key, document ? { resources: next.resources } : { reminder: next.reminder });
     changedKeys.add(key);
+    touch(key);
     queueSave();
     ui.send({
       type: "toast.show",
@@ -1741,14 +1855,15 @@ export const actions = {
       key,
     });
   },
+  /** False when the issue already has this URL. */
   resource(key: string, resource: IssueResource) {
     const issue = state.issues.get(key);
-    if (!issue) return;
+    if (!issue) return false;
     if (
       resource.url &&
       (issue.resources?.some((r) => r.url === resource.url) || issue.links?.includes(resource.url))
     )
-      return;
+      return false;
     record(
       key,
       `${resource.kind === "document" ? "create document" : "add resource"} on ${key}`,
@@ -1757,8 +1872,9 @@ export const actions = {
           resources: [...(issue.resources ?? []).filter((r) => r.id !== resource.id), resource],
         }),
     );
+    return true;
   },
-  /** A link's fetched preview is a fact, not a user edit: no undo step, and kept in undo/redo snapshots. */
+  /** A link's fetched preview is display only: not an edit, so it never marks the issue changed or sends it to Jira (R1-D1). */
   linkPreview(key: string, id: string, preview: LinkPreview) {
     const issue = state.issues.get(key);
     if (!issue?.resources?.some((r) => r.id === id && r.kind !== "document")) return;
@@ -1769,9 +1885,7 @@ export const actions = {
     for (const edit of [...undo, ...redo])
       for (const entry of [...edit.before, ...edit.after])
         if (entry.issue?.key === key) entry.issue = add(entry.issue);
-    patchIssue(key, { resources: add(issue).resources });
-    changedKeys.add(key);
-    queueSave();
+    set({ issues: new Map(state.issues).set(key, add(issue)) });
   },
   removeResource(key: string, id: string) {
     const issue = state.issues.get(key),
