@@ -47,6 +47,13 @@ db.run(
 );
 
 db.run("CREATE TABLE IF NOT EXISTS attachment_media (id TEXT PRIMARY KEY, media_id TEXT NOT NULL)");
+// Jira's create has no idempotency key: the issue each client create made, so a replay never makes a second one.
+db.run("CREATE TABLE IF NOT EXISTS created_issues (client TEXT PRIMARY KEY, key TEXT NOT NULL)");
+export const createdIssue = (client: string) =>
+  db.query<{ key: string }, [string]>("SELECT key FROM created_issues WHERE client = ?").get(client)
+    ?.key;
+export const rememberCreated = (client: string, key: string) =>
+  db.query("INSERT OR REPLACE INTO created_issues VALUES (?,?)").run(client, key);
 
 const getMeta = (k: string) =>
   db.query<{ v: string }, [string]>("SELECT v FROM meta WHERE k = ?").get(k)?.v;
@@ -347,14 +354,15 @@ export const issues = () =>
 
 const details = detailCache(db, async (key) => {
   // The Agile endpoint returns legacy strings. API v3 preserves Jira's rich ADF tree.
-  const detail = await jira(
-    `/rest/api/3/issue/${encodeURIComponent(key)}?fields=description,comment,reporter,created,updated,attachment`,
-  );
+  // Remote ("web") links someone added in Jira; the app shows them as link resources. Read alongside the fields.
+  const [detail, remotelinks] = await Promise.all([
+    jira(
+      `/rest/api/3/issue/${encodeURIComponent(key)}?fields=description,comment,reporter,created,updated,attachment`,
+    ),
+    jira<any[]>(`/rest/api/3/issue/${encodeURIComponent(key)}/remotelink`),
+  ]);
   detail.fields.attachment ??= [];
-  // Remote ("web") links someone added in Jira; the app shows them as link resources.
-  detail.remotelinks = (
-    await jira<any[]>(`/rest/api/3/issue/${encodeURIComponent(key)}/remotelink`)
-  ).flatMap((l) =>
+  detail.remotelinks = remotelinks.flatMap((l) =>
     l.object?.url ? [{ url: l.object.url, title: l.object.title ?? l.object.url }] : [],
   );
   const comments = detail.fields.comment;
@@ -384,6 +392,9 @@ export async function refresh(
   const row = db
     .query<{ board: number }, [string]>("SELECT board FROM issues WHERE key = ?")
     .get(key);
+  // Watchers are read alongside, so a write settles in two Jira round trips, not four (R2-create-D2).
+  const watching = jira(`/rest/api/3/issue/${encodeURIComponent(key)}/watchers`);
+  watching.catch(() => {});
   let raw: any;
   try {
     raw = await jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=${FIELDS}`);
@@ -399,7 +410,7 @@ export async function refresh(
   db.query("DELETE FROM issue_details WHERE key = ?").run(raw.key);
   const full = await details.read(raw.key, true),
     issue = slim(raw, target);
-  const w = await jira(`/rest/api/3/issue/${encodeURIComponent(key)}/watchers`);
+  const w = await watching;
   const watchers = (w.watchers ?? []).map((u: any) => ({
     id: u.accountId,
     name: u.displayName,

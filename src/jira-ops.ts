@@ -27,7 +27,8 @@ export type Op =
   | { op: "attachment.add"; id: string; name: string }
   | { op: "attachment.delete"; id: string }
   | { op: "rank"; after?: string; before?: string }
-  | { op: "create"; fields: Fields & { status?: string } }
+  /** `client` names this one submit, so a replay (another tab, a reload, a retry) gets the issue the first send made. */
+  | { op: "create"; fields: Fields & { status?: string }; client?: string }
   | { op: "delete" }
   /** `ref` is the app's id for the new comment; the server answers with Jira's id for it. */
   | { op: "comment"; ref: string; body: AdfDocument; parentId?: string }
@@ -224,6 +225,7 @@ export function opsFor(before: Side, after: Side, issues: Map<string, Issue>): O
           status: b.status,
           ...(description?.content?.length ? { description } : {}),
         },
+        ...(b.created ? { client: `${b.key}@${b.created}` } : {}),
       },
       ...(b.attachments ?? []).map((file): Op => ({
         op: "attachment.add",

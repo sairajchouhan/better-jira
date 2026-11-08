@@ -144,6 +144,33 @@ test("R1-D21/D22: two tabs keep saving; each keeps the other's changes to issues
   one.close();
   two.close();
 });
+test("R2-create-D1: a tab never writes back a create another tab already sent and dropped", async () => {
+  const factory = new IDBFactory(),
+    one = await LocalDatabase.open("resurrect", factory),
+    two = await LocalDatabase.open("resurrect", factory);
+  const change = (key: string, tab: string) => ({
+    key,
+    issue: { ...issue, key },
+    issueFields: ["summary"],
+    fullFields: [],
+    created: true,
+    tab,
+  });
+  const create = change("A-NEW1", "one");
+  await one.load();
+  await one.save({ ...emptyLocalState(), changes: [create] }, new Set(["A-NEW1"]));
+  // Tab two loads while the create is pending, and keeps it in memory.
+  await two.load();
+  // Jira takes the create: tab one renames it to A-7 and drops A-NEW1.
+  await one.save({ ...emptyLocalState(), changes: [] }, new Set(["A-NEW1"]));
+  // Tab two saves its own edits twice, still holding A-NEW1; a closed tab one would have it created again on the next load.
+  const theirs = { ...emptyLocalState(), changes: [create, change("B-1", "two")] };
+  await two.save(theirs, new Set(["B-1"]));
+  await two.save(theirs, new Set(["B-1"]));
+  expect((await one.load()).state.changes.map((c) => c.key)).toEqual(["B-1"]);
+  one.close();
+  two.close();
+});
 test("R1-D6/D7: only changes of closed tabs are claimed, and only once", async () => {
   const factory = new IDBFactory(),
     db = await LocalDatabase.open("claims", factory);

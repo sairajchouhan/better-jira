@@ -1,5 +1,5 @@
 import { jira, JiraError } from "./jira";
-import { ESTIMATES, refresh } from "./mirror";
+import { createdIssue, ESTIMATES, refresh, rememberCreated } from "./mirror";
 import { renameCommentIds, type Op } from "./jira-ops";
 import { adfToText } from "./document";
 
@@ -55,22 +55,26 @@ const linkEnds = (key: string, target: string, kind: string) =>
 /** Sub-issues of a standard issue must use the project's subtask type. */
 async function typeFor(project: string, type: string | undefined, parent: string | undefined) {
   if (!parent) return type ?? "Task";
-  const parentType = (await jira(`${at(parent)}?fields=issuetype`)).fields.issuetype;
-  if (parentType.hierarchyLevel > 0) return type && type !== "Subtask" ? type : "Task";
-  const { issueTypes } = await jira<{ issueTypes: any[] }>(
+  // Both reads at once: a child create waits one Jira round trip here, not two (R2-create-D2).
+  const meta = jira<{ issueTypes: any[] }>(
     `/rest/api/3/issue/createmeta/${encodeURIComponent(project)}/issuetypes`,
   );
+  meta.catch(() => {});
+  const parentType = (await jira(`${at(parent)}?fields=issuetype`)).fields.issuetype;
+  if (parentType.hierarchyLevel > 0) return type && type !== "Subtask" ? type : "Task";
+  const { issueTypes } = await meta;
   const subtask = issueTypes.find((t) => t.subtask);
   if (!subtask) throw new UserError(`Project ${project} has no sub-task issue type.`);
   return subtask.name as string;
 }
 
 async function transition(key: string, status: string) {
-  const current = await jira<{ fields: { status: { id: string } } }>(`${at(key)}?fields=status`);
+  // Both reads at once (R2-create-D2).
+  const [current, { transitions }] = await Promise.all([
+    jira<{ fields: { status: { id: string } } }>(`${at(key)}?fields=status`),
+    jira<{ transitions: { id: string; to: { id: string } }[] }>(`${at(key)}/transitions`),
+  ]);
   if (current.fields.status.id === status) return;
-  const { transitions } = await jira<{ transitions: { id: string; to: { id: string } }[] }>(
-    `${at(key)}/transitions`,
-  );
   const found = transitions.find((t) => t.to.id === status);
   if (!found)
     throw new UserError(
@@ -87,7 +91,32 @@ type Context = {
   created: Record<string, string>;
   touched: Set<string>;
   warning?: string;
+  /** The create was a replay of one Jira already took: the rest of the job went with the first send. */
+  replay?: boolean;
 };
+// ponytail: one create at a time server-wide, so two sends of one submit never race; per-client locks if creates ever queue.
+let creating: Promise<unknown> = Promise.resolve();
+/** Jira's create has no idempotency key, so the issue made for `client` is kept, and a replay gets it back while it exists (R2-create-D1). */
+function createOnce(client: string | undefined, create: () => Promise<string>) {
+  const turn = creating.then(async () => {
+    const known = client && createdIssue(client);
+    if (known) {
+      const there = await jira(`${at(known)}?fields=summary`).then(
+        () => true,
+        (e) => {
+          if (e instanceof JiraError && e.status === 404) return false;
+          throw e;
+        },
+      );
+      if (there) return { key: known, replay: true };
+    }
+    const key = await create();
+    if (client) rememberCreated(client, key);
+    return { key, replay: false };
+  });
+  creating = turn.catch(() => {});
+  return turn;
+}
 async function run(ctx: Context, op: Op) {
   const key = ctx.key;
   switch (op.op) {
@@ -171,12 +200,22 @@ async function run(ctx: Context, op: Op) {
         issuetype: { name: await typeFor(project, rest.type, rest.parent ?? undefined) },
       };
       for (const name of Object.keys(fields)) if (fields[name] === null) delete fields[name];
-      const created = await jira<{ key: string }>("/rest/api/3/issue", {
-        method: "POST",
-        body: JSON.stringify({ fields }),
-      });
+      const created = await createOnce(
+        op.client,
+        async () =>
+          (
+            await jira<{ key: string }>("/rest/api/3/issue", {
+              method: "POST",
+              body: JSON.stringify({ fields }),
+            })
+          ).key,
+      );
       ctx.created[key] = created.key;
       ctx.key = created.key;
+      if (created.replay) {
+        ctx.replay = true;
+        return;
+      }
       if (status)
         await transition(created.key, status).catch((e) => {
           ctx.warning = `Created ${created.key}, but Jira could not move it to the chosen status: ${e instanceof JiraError ? e.reason : e.message}`;
@@ -296,8 +335,11 @@ async function run(ctx: Context, op: Op) {
   }
 }
 
-/** Applies a client's ops in order, then returns Jira's fresh copy of the issue (and of linked issues) either way. */
-export async function applyOps(key: string, ops: Op[], board?: number) {
+/**
+ * Applies a client's ops in order, then returns Jira's fresh copy of the issue (and of linked issues) either way.
+ * `settle: false` skips re-reading the issue itself, for a client that has a later write for it queued (R2-create-D2).
+ */
+export async function applyOps(key: string, ops: Op[], board?: number, settle = true) {
   const ctx: Context = { key, created: {}, touched: new Set() };
   let error: string | undefined;
   // A later op in this job may name a comment an earlier op just created.
@@ -313,6 +355,7 @@ export async function applyOps(key: string, ops: Op[], board?: number) {
       );
       const failed = results.find((r) => r.status === "rejected");
       if (failed) throw failed.reason;
+      if (ctx.replay) break;
       i = end;
     }
   } catch (e) {
@@ -325,10 +368,11 @@ export async function applyOps(key: string, ops: Op[], board?: number) {
     if (!(e instanceof UserError)) console.error("[write]", ctx.key, String(e).slice(0, 300));
   }
   error ??= ctx.warning;
-  const fresh = await refresh(ctx.key, board).catch(() => undefined);
-  const others = (
-    await Promise.all([...ctx.touched].map((other) => refresh(other).catch(() => undefined)))
-  ).flatMap((r) => (r ? [r.issue] : []));
+  const [fresh, ...touched] = await Promise.all([
+    settle ? refresh(ctx.key, board).catch(() => undefined) : undefined,
+    ...[...ctx.touched].map((other) => refresh(other).catch(() => undefined)),
+  ]);
+  const others = touched.flatMap((r) => (r ? [r.issue] : []));
   return {
     error,
     key: ctx.key,

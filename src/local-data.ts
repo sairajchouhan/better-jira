@@ -260,7 +260,10 @@ export class LocalDatabase {
   private urls = new Map<string, string>();
   private writable = true;
   private revision = 0;
-  /** Change keys as of this tab's last load or save, to tell a change another tab dropped from one this tab added. */
+  /**
+   * Every change key this tab has loaded or saved, to tell a change another tab dropped from one this tab added.
+   * Never shrinks: a change another tab sent and dropped stays in this tab's memory, and must not be written back (R2-create-D1).
+   */
   private keys = new Set<string>();
   private constructor(private db: IDBDatabase) {}
   static async open(
@@ -289,7 +292,7 @@ export class LocalDatabase {
     const parsed = parseLocalState(raw);
     this.writable = !parsed.readOnly;
     this.revision = object(raw) && Number.isSafeInteger(raw.revision) ? raw.revision : 0;
-    this.keys = new Set(parsed.state.changes.map((c) => c.key));
+    for (const c of parsed.state.changes) this.keys.add(c.key);
     if (parsed.recovered) {
       const tx = this.db.transaction("recovery", "readwrite"),
         done = completed(tx);
@@ -329,29 +332,33 @@ export class LocalDatabase {
         current = await request(store.get("workspace"));
       const revision =
         object(current) && Number.isSafeInteger(current.revision) ? current.revision : 0;
-      let next = state;
-      if (revision !== this.revision) {
-        const theirs = parseLocalState(current);
-        if (theirs.readOnly)
+      // Always merged, even when no other tab saved since: only issues this tab edited (`dirty`) or never saw are written from `state`.
+      let theirs: LocalState;
+      if (revision && revision === this.revision)
+        theirs = object(current) ? (current as LocalState) : emptyLocalState(); // what this tab wrote
+      else {
+        const parsed = parseLocalState(current);
+        if (parsed.readOnly)
           throw new Error(
             "Another tab saved local data in a newer version. Reload to keep editing; existing data has been preserved.",
           );
-        const stored = new Set(theirs.state.changes.map((c) => c.key));
-        next = {
-          ...state,
-          sequence: Math.max(state.sequence, theirs.state.sequence),
-          changes: [
-            ...theirs.state.changes.filter((c) => !dirty.has(c.key)),
-            ...state.changes.filter(
-              (c) => dirty.has(c.key) || (!stored.has(c.key) && !this.keys.has(c.key)),
-            ),
-          ],
-        };
+        theirs = parsed.state;
       }
+      const stored = new Set(theirs.changes.map((c) => c.key));
+      const next: LocalState = {
+        ...state,
+        sequence: Math.max(state.sequence, theirs.sequence),
+        changes: [
+          ...theirs.changes.filter((c) => !dirty.has(c.key)),
+          ...state.changes.filter(
+            (c) => dirty.has(c.key) || (!stored.has(c.key) && !this.keys.has(c.key)),
+          ),
+        ],
+      };
       store.put({ ...next, revision: revision + 1 }, "workspace");
       await done;
       this.revision = revision + 1;
-      this.keys = new Set(next.changes.map((c) => c.key));
+      for (const c of next.changes) this.keys.add(c.key);
       return next.sequence;
     } catch (error) {
       try {

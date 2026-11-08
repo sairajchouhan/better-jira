@@ -176,7 +176,7 @@ const server = serve({
             { error: "Jira writes are disabled for this site." },
             { status: 403 },
           );
-        let body: { ops: unknown; board?: unknown };
+        let body: { ops: unknown; board?: unknown; settle?: unknown };
         try {
           body = await req.json();
         } catch {
@@ -188,6 +188,7 @@ const server = serve({
           req.params.key,
           body.ops,
           typeof body.board === "number" ? body.board : undefined,
+          body.settle !== false,
         );
         return Response.json(result, { status: result.error ? 422 : 200 });
       }),

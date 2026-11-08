@@ -1230,7 +1230,7 @@ async function flush() {
         const description = first.fields.description;
         job.ops = [
           {
-            op: "create",
+            ...first,
             fields: {
               ...first.fields,
               ...(description ? { description: withoutLocalMedia(description) } : {}),
@@ -1252,7 +1252,14 @@ async function flush() {
         fetch(`/api/issues/${encodeURIComponent(job.key)}/ops`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ops, board: job.board }),
+          // A later write for this issue re-reads it anyway: don't wait for Jira's copy twice (R2-create-D2).
+          body: JSON.stringify({
+            ops,
+            board: job.board,
+            ...(ops.length && outbox.some((other) => other !== job && other.key === job.key)
+              ? { settle: false }
+              : {}),
+          }),
         });
       let result: WriteResult, ops: Op[] | undefined;
       try {
