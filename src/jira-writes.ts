@@ -1,6 +1,6 @@
 import { jira, JiraError } from "./jira";
 import { ESTIMATES, refresh } from "./mirror";
-import { renameCommentIds, THREAD_PROPERTY, type Op } from "./jira-ops";
+import { renameCommentIds, type Op } from "./jira-ops";
 
 const at = (key: string) => `/rest/api/3/issue/${encodeURIComponent(key)}`;
 
@@ -170,12 +170,20 @@ async function run(ctx: Context, op: Op) {
       return;
     }
     case "comment": {
-      const body: Record<string, unknown> = { body: op.body };
-      if (op.parentId)
-        body.properties = [{ key: THREAD_PROPERTY, value: { parentId: op.parentId } }];
-      const comment = await jira<{ id: string }>(`${at(key)}/comment`, {
-        method: "POST",
-        body: JSON.stringify(body),
+      // Jira's native reply thread. A parent that never reached Jira, or is gone with no replies left, can't hold one: the reply then posts as a comment rather than being lost.
+      const post = (parentId?: string) =>
+        jira<{ id: string }>(`${at(key)}/comment`, {
+          method: "POST",
+          body: JSON.stringify({
+            body: op.body,
+            ...(parentId ? { parentId: Number(parentId) } : {}),
+          }),
+        });
+      const parent = op.parentId && /^\d+$/.test(op.parentId) ? op.parentId : undefined;
+      const comment = await post(parent).catch((e) => {
+        if (parent && e instanceof JiraError && e.status === 400 && /parent comment/i.test(e.body))
+          return post();
+        throw e;
       });
       ctx.created[op.ref] = comment.id;
       return;

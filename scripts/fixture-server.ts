@@ -101,10 +101,35 @@ const issues = Array.from({ length: 6 }, (_, i) => ({
   resolved: null,
   project: { key: "TEST", name: "Audit" },
 }));
+/** A Jira reply thread as the mirror serves it: Jira's numeric parentId, as a string. */
+const paragraph = (...content: unknown[]) => ({
+  type: "doc",
+  version: 1,
+  content: [{ type: "paragraph", content }],
+});
+const thread = [
+  {
+    id: "10100",
+    author: { accountId: "alex", displayName: "Alex" },
+    created: "2026-11-06T10:00:00Z",
+    body: paragraph({ type: "text", text: "Thread root from Jira" }),
+  },
+  {
+    id: "10101",
+    parentId: "10100",
+    author: { accountId: "jordan", displayName: "Jordan" },
+    created: "2026-11-06T11:00:00Z",
+    body: paragraph(
+      { type: "mention", attrs: { id: "alex", text: "@Alex" } },
+      { type: "text", text: " Reply made in Jira" },
+    ),
+  },
+];
 let clientFailures = 0,
   detailFailures = 0,
   includeMedia = false,
   mediaInComment = false,
+  threadedComments = false,
   mediaFailure = 0,
   contentFailure = 0,
   unmappedMedia = false,
@@ -294,27 +319,29 @@ function full(key: string): any {
         : {}),
       reporter: { accountId: user.id, displayName: user.name },
       created: "2026-11-06T10:00:00Z",
-      comment: {
-        total: mediaInComment ? 1 : 0,
-        comments: mediaInComment
-          ? [
-              {
-                id: "jira-media-comment",
-                author: { accountId: user.id, displayName: user.name },
-                created: "2026-11-06T10:00:00Z",
-                body: {
-                  type: "doc",
-                  version: 1,
-                  content: mediaVariant.startsWith("nested-")
-                    ? [nested]
-                    : mediaVariant === "layouts"
-                      ? [inlineParagraph]
-                      : mediaNodes,
-                },
-              },
-            ]
-          : [],
-      },
+      comment: threadedComments
+        ? { total: thread.length, comments: thread }
+        : {
+            total: mediaInComment ? 1 : 0,
+            comments: mediaInComment
+              ? [
+                  {
+                    id: "jira-media-comment",
+                    author: { accountId: user.id, displayName: user.name },
+                    created: "2026-11-06T10:00:00Z",
+                    body: {
+                      type: "doc",
+                      version: 1,
+                      content: mediaVariant.startsWith("nested-")
+                        ? [nested]
+                        : mediaVariant === "layouts"
+                          ? [inlineParagraph]
+                          : mediaNodes,
+                    },
+                  },
+                ]
+              : [],
+          },
     },
   };
 }
@@ -385,6 +412,7 @@ async function handle(req: Request) {
     detailFailures = settings.detailFailures ?? 0;
     includeMedia = settings.includeMedia ?? false;
     mediaInComment = settings.mediaInComment ?? false;
+    threadedComments = settings.threadedComments ?? false;
     mediaFailure = settings.mediaFailure ?? 0;
     contentFailure = settings.contentFailure ?? 0;
     unmappedMedia = settings.unmappedMedia ?? false;
@@ -406,7 +434,10 @@ async function handle(req: Request) {
     } else body = { site: "https://example.atlassian.net", user };
   } else if (path === "/api/boards") body = [board];
   else if (path === "/api/issues")
-    body = issues.map((issue) => ({ ...issue, comments: mediaInComment ? 1 : 0 })); // the mirror list counts the same Jira comments the detail returns
+    body = issues.map((issue) => ({
+      ...issue,
+      comments: threadedComments ? thread.length : mediaInComment ? 1 : 0,
+    })); // the mirror list counts the same Jira comments the detail returns
   else if (path === "/api/view-defaults") body = {};
   else if (path === "/api/users") {
     const query = (url.searchParams.get("query") ?? "").toLowerCase();

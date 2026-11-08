@@ -17,7 +17,7 @@ import {
   set,
   type Issue,
 } from "./store";
-import { visibleComments, type IssueComment } from "./comment-thread";
+import { mentionDraft, visibleComments, type IssueComment } from "./comment-thread";
 
 type Props = {
   issue: Issue;
@@ -115,6 +115,15 @@ function Thread({
         )
         ?.focus(),
     );
+  };
+  // Replies are one level deep, as in Jira and Linear: replying to a reply joins this thread and mentions its author.
+  const replyTo = (comment: IssueComment) => {
+    if (comment.parentId && comment.author?.accountId !== ME.id)
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(mentionDraft(draft(), comment.author)));
+      } catch {}
+    setComposer((n) => n + 1);
+    setReplying(true);
   };
   const attachReply = () => {
     setReplying(true);
@@ -220,6 +229,14 @@ function Thread({
               onClick={(e) => setReaction({ anchor: e.currentTarget, id: comment.id })}
             >
               <Icon name="smile" size={14} />
+            </button>
+            <button
+              aria-label="Reply to comment"
+              title="Reply"
+              className="comment-hover-action"
+              onClick={() => replyTo(comment)}
+            >
+              <Icon name="undo" size={14} />
             </button>
             <button
               aria-label={comment.parentId ? "Reply options" : "Comment options"}

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
-  canReplyTo,
+  mentionDraft,
+  replyParent,
   visibleComments,
   visibleCommentTotal,
   validCommentStates,
@@ -30,8 +31,14 @@ test("local comment metadata overlays a fresh Jira response and preserves server
 test("a recovered thread remains connected when its remote ancestor returns", () => {
   const orphan: IssueComment = { id: "local-1", parentId: "jira-1", body, created: "now" },
     reply: IssueComment = { id: "local-2", parentId: "local-1", body, created: "now" };
-  expect(canReplyTo([orphan], orphan.id)).toBe(true);
-  expect(canReplyTo([comments[0]!, orphan], orphan.id)).toBe(false);
+  // A reply to a reply joins the thread: Jira rejects a reply whose parent is itself a reply.
+  expect(replyParent([orphan], orphan.id)).toBe("jira-1");
+  expect(replyParent([comments[0]!, orphan], orphan.id)).toBe("jira-1");
+  expect(replyParent([comments[0]!, orphan, reply], reply.id)).toBe("jira-1");
+  expect(replyParent([comments[0]!, orphan], "missing")).toBeUndefined();
+  expect(replyParent([comments[0]!, orphan], orphan.id, { "jira-1": { deleted: true } })).toBe(
+    undefined,
+  );
   expect(visibleComments([orphan, reply]).map((c) => [c.id, c.parentId])).toEqual([
     ["local-1", undefined],
     ["local-2", "local-1"],
@@ -44,4 +51,37 @@ test("a recovered thread remains connected when its remote ancestor returns", ()
   expect(
     visibleComments([comments[0]!, orphan, reply], { "jira-1": { deleted: true } }),
   ).toHaveLength(0);
+});
+test("replies of a comment deleted in Jira stay one thread filed under its id", () => {
+  const thread: IssueComment[] = [
+    { id: "11", parentId: "10", body, created: "1" },
+    { id: "12", body, created: "2" },
+    { id: "13", parentId: "10", body, created: "3" },
+  ];
+  expect(visibleComments(thread).map((c) => [c.id, c.parentId, c.orphanedFrom])).toEqual([
+    ["11", undefined, "10"],
+    ["12", undefined, undefined],
+    ["13", "11", undefined],
+  ]);
+  expect(replyParent(thread, "13")).toBe("10");
+  expect(replyParent(thread, "12")).toBe("12");
+});
+test("a reply to a reply starts with one @mention of its author", () => {
+  const author = { accountId: "acc-1", displayName: "Alex" },
+    mention = { type: "mention", attrs: { id: "acc-1", text: "@Alex", accessLevel: "" } },
+    started = mentionDraft(body, author);
+  expect(started.content).toEqual([
+    { type: "paragraph", content: [mention, { type: "text", text: " " }] },
+  ]);
+  expect(mentionDraft(started, author)).toBe(started);
+  const typed = {
+    ...body,
+    content: [{ type: "paragraph", content: [{ type: "text", text: "draft" }] }],
+  };
+  expect(mentionDraft(typed, author).content?.[0]?.content?.map((n) => n.type)).toEqual([
+    "mention",
+    "text",
+    "text",
+  ]);
+  expect(mentionDraft(body, undefined)).toBe(body);
 });

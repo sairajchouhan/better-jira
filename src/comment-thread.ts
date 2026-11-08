@@ -1,4 +1,4 @@
-import type { AdfDocument } from "./document";
+import type { AdfDocument, AdfNode } from "./document";
 export type CommentState = {
   resolved?: boolean;
   subscribed?: boolean;
@@ -21,6 +21,8 @@ export function visibleComments(
   states: Record<string, CommentState> = {},
 ) {
   const byId = new Map(comments.map((c) => [c.id, c]));
+  // Jira keeps the replies of a deleted comment under its id; they stay one thread, led by the first.
+  const orphans = new Map<string, string>();
   return comments.flatMap((comment) => {
     let root = comment;
     const visited = new Set<string>();
@@ -36,12 +38,17 @@ export function visibleComments(
       }
       root = parent;
     }
+    let lead = root.id;
+    if (root.parentId) {
+      lead = orphans.get(root.parentId) ?? root.id;
+      orphans.set(root.parentId, lead);
+    }
     const state = states[comment.id];
     return [
       {
         ...comment,
-        parentId: root.id === comment.id ? undefined : root.id,
-        orphanedFrom: root.id === comment.id ? root.parentId : undefined,
+        parentId: lead === comment.id ? undefined : lead,
+        orphanedFrom: lead === comment.id ? root.parentId : undefined,
         ...(state?.body ? { body: state.body, updated: state.updated } : {}),
       },
     ];
@@ -77,15 +84,40 @@ export function validCommentStates(
   );
 }
 
-export function canReplyTo(
+/**
+ * The comment a reply to `id` is filed under in Jira. Jira threads are one level deep (it rejects a
+ * reply whose parent is itself a reply), so replying to a reply joins its thread, as in Jira's and
+ * Linear's own UI. A thread whose first comment was deleted stays under the deleted comment's id.
+ */
+export function replyParent(
   comments: IssueComment[],
   id: string,
   states: Record<string, CommentState> = {},
 ) {
-  const root = comments.find((c) => c.id === id);
-  return (
-    !!root &&
-    !states[id]?.deleted &&
-    (!root.parentId || !comments.some((c) => c.id === root.parentId))
-  );
+  const visible = visibleComments(comments, states),
+    comment = visible.find((c) => c.id === id),
+    root = comment?.parentId ? visible.find((c) => c.id === comment.parentId) : comment;
+  return root && (root.orphanedFrom ?? root.id);
+}
+
+/** Starts a reply to someone's reply with an @mention of them, as Jira's Reply button does. */
+export function mentionDraft(draft: AdfDocument, author?: IssueComment["author"]): AdfDocument {
+  const mentions = (n: AdfNode): boolean =>
+    (n.type === "mention" && n.attrs?.id === author?.accountId) || !!n.content?.some(mentions);
+  if (!author || mentions(draft)) return draft;
+  const mention: AdfNode[] = [
+      {
+        type: "mention",
+        attrs: { id: author.accountId, text: `@${author.displayName}`, accessLevel: "" },
+      },
+      { type: "text", text: " " },
+    ],
+    [first, ...rest] = draft.content ?? [];
+  return {
+    ...draft,
+    content:
+      first?.type === "paragraph"
+        ? [{ ...first, content: [...mention, ...(first.content ?? [])] }, ...rest]
+        : [{ type: "paragraph", content: mention }, ...(draft.content ?? [])],
+  };
 }

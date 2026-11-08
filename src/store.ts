@@ -21,7 +21,7 @@ import { QueryClient, QueryObserver } from "@tanstack/query-core";
 import { asyncRetry } from "@tanstack/pacer";
 
 import { reminderTime } from "./reminder-display";
-import { canReplyTo, visibleCommentTotal, type CommentState } from "./comment-thread";
+import { replyParent, visibleCommentTotal, type CommentState } from "./comment-thread";
 import { jiraCommentId, type ImageCrop, type MediaEdit } from "./media-edits";
 
 import {
@@ -2008,17 +2008,17 @@ export const actions = {
       }),
     );
   },
-  comment(key: string, value: string | AdfDocument, parentId?: string): boolean {
+  /** `replyTo` may be any comment in a thread; the reply is filed under the thread's Jira parent. */
+  comment(key: string, value: string | AdfDocument, replyTo?: string): boolean {
     const body = typeof value === "string" ? textToAdf(value) : normalizeDocument(value);
-    if (
-      parentId &&
-      !canReplyTo(
+    const parentId =
+      replyTo &&
+      replyParent(
         state.full.get(key)?.fields.comment?.comments ?? [],
-        parentId,
+        replyTo,
         state.issues.get(key)?.commentStates,
-      )
-    )
-      return false;
+      );
+    if (replyTo && !parentId) return false;
     if (
       (!adfToText(body).trim() && !documentHasMedia(body)) ||
       !state.full.has(key) ||

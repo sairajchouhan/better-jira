@@ -301,7 +301,9 @@ test("I7: local comments can be rich, edited and deleted, each step undoable; ot
   expect(comments().find((c) => c.id === "10001")?.body).toEqual(doc("Jira"));
   expect(actions.comment(key, doc("Reply"), id)).toBe(true);
   const replyId = get().full.get(key)!.fields.comment.comments.at(-1).id;
-  expect(actions.comment(key, doc("Nested reply"), replyId)).toBe(false);
+  // Jira threads are one level deep: a reply to a reply joins the root's thread.
+  expect(actions.comment(key, doc("Reply to a reply"), replyId)).toBe(true);
+  expect(get().full.get(key)!.fields.comment.comments.at(-1).parentId).toBe(id);
   actions.deleteComment(key, id);
   expect(actions.comment(key, doc("Reply to deleted root"), id)).toBe(false);
   void ME;

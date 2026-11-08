@@ -3,7 +3,7 @@ import { jira } from "./jira";
 import { detailCache } from "./detail-cache";
 import { issueAttachments, attachmentGateway, jiraAttachmentReader } from "./attachment-media";
 import { serverAuth } from "./server-config";
-import { THREAD_PROPERTY } from "./jira-ops";
+import { threadParent } from "./jira-ops";
 import { pullRequestCount, statusDates, type History } from "./issue-properties";
 import { serverConfiguration } from "./server-config";
 
@@ -349,7 +349,7 @@ const details = detailCache(db, async (key) => {
   );
   const comments = detail.fields.comment;
   if (comments?.total) {
-    // The comment endpoint carries properties, where reply threads live (Jira comments are flat).
+    // The comment endpoint carries Jira's reply threads (parentId), and the comment property older replies from this app kept them in.
     const complete: any[] = [];
     for (let start = 0; start < comments.total; start += 100) {
       const page = await jira(
@@ -360,10 +360,7 @@ const details = detailCache(db, async (key) => {
     }
     detail.fields.comment = {
       ...comments,
-      comments: complete.map(({ properties, ...c }) => {
-        const parentId = properties?.find((p: any) => p.key === THREAD_PROPERTY)?.value?.parentId;
-        return typeof parentId === "string" ? { ...c, parentId } : c;
-      }),
+      comments: complete.map(threadParent),
     };
   }
   return detail;

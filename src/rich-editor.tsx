@@ -8,7 +8,7 @@ import { editorBindings } from "./editor-bindings";
 import { activeMention, dismissMention, insertMention, mentionPlugin } from "./mentions";
 import { MentionMenu } from "./mention-menu";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { EditorState, NodeSelection, type Command } from "prosemirror-state";
+import { EditorState, NodeSelection, Selection, type Command } from "prosemirror-state";
 import { mediaNodeView, type MediaNodeView } from "./media-node-view";
 import type { Attachment } from "./attachment-media";
 import { EditorView } from "prosemirror-view";
@@ -222,7 +222,11 @@ export function RichEditor(props: RichEditorProps) {
     });
     view.current = mine = editor;
     const mountedAt = performance.now();
-    if (props.autoFocus) editor.focus();
+    if (props.autoFocus) {
+      // Continue where the content ends: a restored draft, or the @mention a reply starts with.
+      editor.dispatch(editor.state.tr.setSelection(Selection.atEnd(editor.state.doc)));
+      editor.focus();
+    }
     const input = (event: Event) => uploads.enqueue((event as CustomEvent<File[]>).detail);
     const late = (event: Event) => {
       const merged = mergeLateMedia(

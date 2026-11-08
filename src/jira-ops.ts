@@ -36,8 +36,16 @@ export type Op =
   | { op: "weblink"; url: string; title: string; remove?: boolean };
 
 export type Side = { issue?: Issue; full?: Full };
-/** Comment property that keeps Linear-style reply threads; Jira comments are flat. */
+/** Comment property where replies made before Jira had threads kept their parent; read-only now. */
 export const THREAD_PROPERTY = "better-jira";
+/** Jira's numeric reply parent as the app's string id; else the parent an older app reply kept in its property. */
+export function threadParent({ properties, parentId, ...c }: any) {
+  const parent =
+    parentId ?? properties?.find((p: any) => p.key === THREAD_PROPERTY)?.value?.parentId;
+  return typeof parent === "string" || typeof parent === "number"
+    ? { ...c, parentId: String(parent) }
+    : c;
+}
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 /** Issue fields that live in Jira. Everything else on an Issue is local (reminders, resources, activity...). */

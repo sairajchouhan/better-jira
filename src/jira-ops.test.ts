@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mergeOps, opsFor, renameCommentIds, renameIds } from "./jira-ops";
+import { mergeOps, opsFor, renameCommentIds, renameIds, threadParent } from "./jira-ops";
 import type { Issue } from "./store";
 
 const base: Issue = {
@@ -340,4 +340,10 @@ test("image thread comments become Jira comments, and their ids rename to Jira's
     renameCommentIds(at([{ id: "u1", text: "Look" }]).mediaEdits, new Map([["u1", "10"]]))?.m1
       ?.comments?.[0]?.id,
   ).toBe("10");
+});
+test("Jira's numeric reply parent wins over the property older app replies kept it in", () => {
+  const legacy = { properties: [{ key: "better-jira", value: { parentId: "10" } }] };
+  expect(threadParent({ id: "12", parentId: 11, ...legacy })).toEqual({ id: "12", parentId: "11" });
+  expect(threadParent({ id: "12", ...legacy })).toEqual({ id: "12", parentId: "10" });
+  expect(threadParent({ id: "12", properties: [] })).toEqual({ id: "12" });
 });
