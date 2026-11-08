@@ -52,9 +52,10 @@ export function CreateIssue() {
   const issues=[...all.values()].filter(i=>i.board===board.id);
   const users=[...new Map([[ME.id,ME] as const,...issues.flatMap(i=>i.assignee?[[i.assignee.id,i.assignee] as const]:[])]).values()];
   const projects=[...new Map(issues.flatMap(i=>i.project?[[i.project.key,i.project] as const]:[])).values()];
-  const priorities=[...new Set(["Normal",...issues.flatMap(i=>i.priority?[i.priority]:[])])];
+  const options=useStore(s=>s.options),writable=useStore(s=>s.writable);
+  const priorities=[...new Set([...(writable?[]:["Normal"]),...options.priorities.map(p=>p.name),...issues.flatMap(i=>i.priority?[i.priority]:[])])];
   const types=[...new Set(["Task",...issues.flatMap(i=>i.type?[i.type]:[])])];
-  const milestones=[...new Map(issues.filter(i=>i.project?.key===(draft.project?.key??projects[0]?.key)).flatMap(i=>(i.milestones??[]).map(m=>[m.id,m] as const))).values()];
+  const milestones=[...new Map([...(options.versions[draft.project?.key??projects[0]?.key??""]??[]).map(m=>[m.id,m] as const),...issues.filter(i=>i.project?.key===(draft.project?.key??projects[0]?.key)).flatMap(i=>(i.milestones??[]).map(m=>[m.id,m] as const))]).values()];
   const close=()=>ui.send({type:"overlay.close"});
   const submit=()=> {
     if(!title.trim()||filesBusy||!dateValid)return;
@@ -71,7 +72,7 @@ export function CreateIssue() {
       <div className="flex flex-wrap gap-2">
         <PillSelect label="Issue type" value={draft.type??"Task"} options={types.map(t=>[t,t] as const)} onChange={type=>setDraft({...draft,type})}/>
         <PillSelect label="Status" value={draft.status??board.columns[0]?.statuses[0]?.id??""} options={board.columns.flatMap(c=>c.statuses).map(st=>[st.id,st.name] as const)} onChange={status=>setDraft({...draft,status})}/>
-        <PillSelect label="Priority" value={draft.priority??"Normal"} options={[["","No priority"],...[...priorities].sort((a,b)=>priorityRank(a)-priorityRank(b)).map(p=>[p,p] as const)]} onChange={priority=>setDraft({...draft,priority})}/>
+        <PillSelect label="Priority" value={draft.priority??(writable?"":"Normal")} options={[["",writable?"Default priority":"No priority"],...[...priorities].sort((a,b)=>priorityRank(a)-priorityRank(b)).map(p=>[p,p] as const)]} onChange={priority=>setDraft({...draft,priority})}/>
         <PillSelect label="Assignee" value={draft.assignee?.id??""} options={[["","Unassigned"],...users.map(u=>[u.id,u.name] as const)]} onChange={id=>setDraft({...draft,assignee:users.find(u=>u.id===id)??null})}/>
         <PillSelect label="Project" value={draft.project===null?"":draft.project?.key??projects[0]?.key??""} options={[["","No project"],...projects.map(p=>[p.key,p.name] as const)]} onChange={key=>setDraft({...draft,project:projects.find(p=>p.key===key)??null,milestones:[]})}/>
         <PillSelect label="Milestone" value={draft.milestones?.[0]?.id??""} options={[["","No milestone"],...milestones.map(m=>[m.id,m.name] as const)]} onChange={id=>setDraft({...draft,milestones:milestones.filter(m=>m.id===id)})}/>
@@ -92,7 +93,8 @@ export function PropertyPicker({issue,field}:{issue:Issue;field:"priority"|"labe
   const [date,setDate]=useState(issue.due??"");
   const [dateValid,setDateValid]=useState(true);
   // Linear lists the issue's labels first, then the rest after a divider; the order holds while the menu is open.
-  const [order]=useState(()=>{const rest=[...new Set(issues.flatMap(i=>i.labels))].filter(l=>!issue.labels.includes(l));return {checked:[...issue.labels],rest};});
+  const options=useStore(s=>s.options),writable=useStore(s=>s.writable);
+  const [order]=useState(()=>{const rest=[...new Set([...issues.flatMap(i=>i.labels),...options.labels])].filter(l=>!issue.labels.includes(l));return {checked:[...issue.labels],rest};});
   // The label menu opens beside the chip or button that was clicked, else beside the add button (Linear, RAJ-52).
   const [trigger]=useState(()=>document.activeElement instanceof HTMLElement&&document.activeElement.closest("[data-properties]")?document.activeElement:issueAnchor("prop-labels",issue.key));
   const close=()=>ui.send({type:"overlay.close"});
@@ -116,9 +118,10 @@ export function PropertyPicker({issue,field}:{issue:Issue;field:"priority"|"labe
     </PropertyMenu>;
   }
   let choices:Choice[]=[];
-  if(field==="priority")choices=[{id:"",name:"No priority"},...[...new Set(issues.flatMap(i=>i.priority?[i.priority]:[]))].sort((a,b)=>priorityRank(a)-priorityRank(b)).map(p=>({id:p,name:p}))];
+  // Jira can't clear a priority, so with Jira writes the menu offers only Jira's priorities.
+  if(field==="priority")choices=[...(writable?[]:[{id:"",name:"No priority"}]),...[...new Set([...options.priorities.map(p=>p.name),...issues.flatMap(i=>i.priority?[i.priority]:[])])].sort((a,b)=>priorityRank(a)-priorityRank(b)).map(p=>({id:p,name:p}))];
   if(field==="project")choices=[{id:"",name:"No project"},...[...new Map(issues.flatMap(i=>i.project?[[i.project.key,{id:i.project.key,name:i.project.name}] as const]:[])).values()]];
-  if(field==="milestone")choices=[{id:"",name:"No milestone"},...[...new Map(issues.filter(i=>i.project?.key===issue.project?.key).flatMap(i=>(i.milestones??[]).map(m=>[m.id,m] as const))).values()]];
+  if(field==="milestone")choices=[{id:"",name:"No milestone"},...[...new Map([...(options.versions[issue.project?.key??""]??[]).map(m=>[m.id,m] as const),...issues.filter(i=>i.project?.key===issue.project?.key).flatMap(i=>(i.milestones??[]).map(m=>[m.id,m] as const))]).values()]];
   const selected=(id:string)=>field==="priority"?(issue.priority??"")===id:field==="project"?(issue.project?.key??"")===id:(issue.milestones?.[0]?.id??"")===id;
   const choose=(c:Choice)=> {
     if(field==="priority")actions.patch(issue.key,{priority:c.id||undefined});
@@ -227,7 +230,7 @@ export function PersonalIssueDetails({issue}:{issue:Issue}) {
     {/* Linear (RAJ-52): 26px below the last paragraph, 6px left of the text and 16px above the sub-issues header, reaction pills 8px apart, then the round add-reaction and attach buttons. */}
     <div data-reactions className="-ml-1.5 flex flex-wrap items-center"><div className="flex flex-wrap items-center gap-2 empty:hidden [&:not(:empty)]:mr-2">{issue.reactions?.map(emoji=><button key={emoji} aria-label={`Remove ${emoji} reaction`} aria-pressed="true" title={`You reacted with :${shortcode(emoji)}:`} onClick={()=>toggleReaction(emoji)} className="reaction-pill"><span>{emoji}</span><span>1</span></button>)}</div><button aria-label="Add reaction" title="Add reaction" onClick={e=>setReactionAnchor(e.currentTarget)} className="round-action"><Icon name="smile" size={14}/></button><button type="button" aria-label="Attach images, files, or videos" title="Attach images, files, or videos" className="round-action" onClick={()=>document.getElementById('description')?.closest('.rich-editor')?.querySelector<HTMLInputElement>('input[type=file]')?.click()}><Icon name="paperclip" size={14}/></button></div>
     {reactionAnchor&&<ReactionPicker anchor={reactionAnchor} close={()=>setReactionAnchor(null)} choose={toggleReaction}/>}
-    <Attachments hideChooser issueKey={issue.key} attachments={issue.attachments?.filter(a=>!embedded.has(a.id))} onChange={attachments=>actions.patch(issue.key,{attachments:[...(issue.attachments??[]).filter(a=>embedded.has(a.id)),...attachments]})}/>
+    <Attachments hideChooser issueKey={issue.key} attachments={issue.attachments?.filter(a=>!embedded.has(a.id)&&!embedded.has(a.mediaId??""))} onChange={attachments=>actions.patch(issue.key,{attachments:[...(issue.attachments??[]).filter(a=>embedded.has(a.id)||embedded.has(a.mediaId??"")),...attachments]})}/>
 
     <SubIssues key={issue.key} issue={issue}/>
     <IssueResources issue={issue}/>

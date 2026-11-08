@@ -116,5 +116,5 @@ export function attachmentGateway({readIssue,read,lookup=()=>undefined,remember=
     if(!headers.has("Accept-Ranges"))headers.set("Accept-Ranges","bytes");
     return new Response(upstream.body,{status:upstream.status,headers});
   }
-  return {resolve,content};
+  return {resolve,content,identify};
 }

@@ -76,6 +76,7 @@ export class LocalDatabase {
     const restore=async(issue:Issue|undefined|null)=>{
       if(!issue||visited.has(issue))return;visited.add(issue);
       for(const attachment of issue.attachments??[]) {
+        if(attachment.url?.startsWith("/api/issues/"))continue;
         const url=await this.fileURL(attachment.id);
         attachment.url=url??"";
         if(!url){attachment.missing=true;missingFiles++;}else delete attachment.missing;
@@ -103,6 +104,9 @@ export class LocalDatabase {
     return entries.map(({file,id})=>{const url=URL.createObjectURL(localFileBlob(file));this.urls.set(id,url);return {id,name:file.name,url,type:file.type,size:file.size};});
   }
   async addFile(file:File):Promise<NonNullable<Issue["attachments"]>[number]> {return (await this.addFiles([file]))[0]!;}
+  async retainFile(id:string,file:Blob):Promise<void> {
+    const tx=this.db.transaction("files","readwrite"),done=completed(tx);tx.objectStore("files").put(file,id);await done;
+  }
   async fileURL(id:string):Promise<string|undefined> {
     const cached=this.urls.get(id);if(cached)return cached;
     const tx=this.db.transaction("files","readonly"),done=completed(tx),[file]=await Promise.all([request(tx.objectStore("files").get(id)),done]);

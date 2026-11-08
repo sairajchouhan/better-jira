@@ -1,15 +1,20 @@
 import { Database } from "bun:sqlite";
 import { jira } from "./jira";
 import {detailCache} from "./detail-cache";
-import { attachmentGateway, jiraAttachmentReader } from "./attachment-media";
+import { issueAttachments, attachmentGateway, jiraAttachmentReader } from "./attachment-media";
 import { serverAuth } from "./server-config";
+import { THREAD_PROPERTY } from "./jira-ops";
 import { pullRequestCount, statusDates, type History } from "./issue-properties";
 import { serverConfiguration } from "./server-config";
 
 const configuration=serverConfiguration();
 export const BOARDS = configuration.boards;
+// Custom field IDs differ per site; resolve rank and story points by type and name.
+const siteFields=await jira<any[]>("/rest/api/3/field").catch(()=>null);
+export const RANK=siteFields?.find(f=>f.schema?.custom==="com.pyxis.greenhopper.jira:gh-lexo-rank")?.id??"customfield_10022";
+export const ESTIMATES:string[]=siteFields?siteFields.filter(f=>/^story points?( estimate)?$/i.test(f.name)).sort((a,b)=>a.name.length-b.name.length).map(f=>f.id):["customfield_10023","customfield_10016"];
 const FIELDS =
-  "summary,status,issuetype,priority,assignee,reporter,creator,created,updated,resolutiondate,duedate,project,issuelinks,labels,parent,description,comment,fixVersions,watches,customfield_10000,customfield_10022,customfield_10023,customfield_10016";
+  ["summary,status,issuetype,priority,assignee,reporter,creator,created,updated,resolutiondate,duedate,project,issuelinks,labels,parent,description,comment,fixVersions,watches,attachment,customfield_10000",RANK,...ESTIMATES].join(",");
 const POLL_MS = 15_000;
 const FULL_SYNC_EVERY_MS = 6 * 3600_000; // full sync also sweeps out issues that left a board
 const PAGE = 100;
@@ -31,7 +36,11 @@ const source=JSON.stringify({site:configuration.site,email:configuration.email})
 if(getMeta("source")&&getMeta("source")!==source)throw new Error("This cache belongs to another Jira site or account. Choose a different JIRA_CACHE or rerun setup.");
 setMeta("source",source);
 const upsert = db.query(
-  "INSERT OR REPLACE INTO issues (key, board, seen, slim, full) VALUES ($key, $board, $seen, $slim, $full)",
+  // A poll page fetched before a write must not replace the newer row the write's refresh saved; `seen` still advances so sweeps keep it.
+  `INSERT INTO issues (key, board, seen, slim, full) VALUES ($key, $board, $seen, $slim, $full)
+   ON CONFLICT(key) DO UPDATE SET board=excluded.board, seen=excluded.seen,
+     slim=CASE WHEN COALESCE(json_extract(excluded.slim,'$.updated'),'')>=COALESCE(json_extract(issues.slim,'$.updated'),'') THEN excluded.slim ELSE issues.slim END,
+     full=CASE WHEN COALESCE(json_extract(excluded.slim,'$.updated'),'')>=COALESCE(json_extract(issues.slim,'$.updated'),'') THEN excluded.full ELSE issues.full END`,
 );
 
 /** What the board and search need for every issue; description and comments stay in `full`. */
@@ -57,8 +66,9 @@ function slim(i: any, board: number) {
     priority: f.priority?.name,
     assignee: f.assignee && { id: f.assignee.accountId, name: f.assignee.displayName, avatar: f.assignee.avatarUrls?.["24x24"] },
     labels: f.labels,
+    attachments: issueAttachments(i),
     parent: f.parent?.key,
-    rank: f.customfield_10022,
+    rank: f[RANK],
     comments: f.comment?.total ?? 0,
     updated: f.updated,
     resolved: f.resolutiondate,
@@ -69,11 +79,11 @@ function slim(i: any, board: number) {
     description: text(f.description),
     milestones: f.fixVersions?.map((v: any) => ({id:v.id,name:v.name})),
     prCount: pullRequestCount(f.customfield_10000),
-    estimate: typeof f.customfield_10023 === "number"?f.customfield_10023:typeof f.customfield_10016 === "number"?f.customfield_10016:undefined,
+    estimate: ESTIMATES.map(id=>f[id]).find(v=>typeof v === "number"),
     links: [...links],
     relations: (f.issuelinks ?? []).map((r: any) => ({
       key: (r.outwardIssue ?? r.inwardIssue)?.key,
-      kind: /block/i.test(r.type?.name ?? "") ? r.outwardIssue ? "blocking" : "blocked" : /duplicat/i.test(r.type?.name ?? "") ? "duplicate" : "related",
+      kind: /block/i.test(r.type?.name ?? "") ? r.outwardIssue ? "blocking" : "blocked" : /duplicat/i.test(r.type?.name ?? "") ? r.outwardIssue ? "duplicate" : "duplicated" : "related",
     })).filter((r: any)=>r.key),
   };
 }
@@ -171,21 +181,41 @@ export const boards = () => BOARDS.map((b) => JSON.parse(getMeta(`config:${b}`) 
 
 /** All issues on both boards, slim. ~3k rows, ~1MB: the UI keeps them all in memory for instant search. */
 export const issues = () =>
-  `[${db.query<{ slim: string }, []>("SELECT slim FROM issues").all().map((r) => r.slim).join(",")}]`;
+  // Rows of boards dropped from the config stay in the cache; the app only knows configured boards.
+  `[${db.query<{ slim: string }, []>(`SELECT slim FROM issues WHERE board IN (${BOARDS.join(",")})`).all().map((r) => r.slim).join(",")}]`;
 
 const details=detailCache(db,async key=>{
   // The Agile endpoint returns legacy strings. API v3 preserves Jira's rich ADF tree.
   const detail=await jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=description,comment,reporter,created,updated,attachment`);
   detail.fields.attachment??=[];
   const comments=detail.fields.comment;
-  if(comments&&comments.total>comments.comments.length) {
+  if(comments?.total) {
+    // The comment endpoint carries properties, where reply threads live (Jira comments are flat).
     const complete:any[]=[];
-    for(let start=0;start<comments.total;start+=100){const page=await jira(`/rest/api/3/issue/${encodeURIComponent(key)}/comment?startAt=${start}&maxResults=100`);complete.push(...page.comments);if(!page.comments.length)break;}
-    detail.fields.comment={...comments,comments:complete};
+    for(let start=0;start<comments.total;start+=100){const page=await jira(`/rest/api/3/issue/${encodeURIComponent(key)}/comment?startAt=${start}&maxResults=100&expand=properties`);complete.push(...page.comments);if(!page.comments.length)break;}
+    detail.fields.comment={...comments,comments:complete.map(({properties,...c})=>{const parentId=properties?.find((p:any)=>p.key===THREAD_PROPERTY)?.value?.parentId;return typeof parentId==="string"?{...c,parentId}:c;})};
   }
   return detail;
 });
 export const issue=details.read;
+/** Re-read one issue from Jira after a write, so reads and the next client poll see Jira's truth. Null when it no longer exists. */
+export async function refresh(key:string,board?:number):Promise<{issue:any;full:any}|null> {
+  const row=db.query<{board:number},[string]>("SELECT board FROM issues WHERE key = ?").get(key);
+  let raw:any;
+  try{raw=await jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=${FIELDS}`);}
+  catch(error){if((error as {status?:number}).status===404){db.query("DELETE FROM issues WHERE key = ?").run(key);return null;}throw error;}
+  const target=board??row?.board??BOARDS[0]!;
+  save(target,[raw],Date.now());
+  db.query("DELETE FROM issue_details WHERE key = ?").run(raw.key);
+  const full=await details.read(raw.key,true),issue=slim(raw,target);
+  const w=await jira(`/rest/api/3/issue/${encodeURIComponent(key)}/watchers`);
+  const watchers=(w.watchers??[]).map((u:any)=>({id:u.accountId,name:u.displayName,avatar:u.avatarUrls?.["24x24"]}));
+  const old=db.query<{data:string;source_updated:string},[string]>("SELECT data,source_updated FROM issue_properties WHERE key = ?").get(key);
+  const props={...(old?JSON.parse(old.data):{}),watchers,watchersComplete:watchers.length===w.watchCount};
+  // Keep the old revision stamp: status dates in `data` predate this write, so enrichment must recompute them.
+  db.query("INSERT OR REPLACE INTO issue_properties VALUES (?,?,?,?)").run(key,old?.source_updated??"",Date.now(),JSON.stringify(props));
+  return {issue:{...issue,watchers,watchersComplete:props.watchersComplete},full:full&&JSON.parse(full)};
+}
 export const media=attachmentGateway({
   readIssue:details.readParsed,
   read:jiraAttachmentReader(serverAuth()),
@@ -277,7 +307,7 @@ async function enrichProperties() {
 }
 
 export function properties() {
-  const rows=db.query<{key:string;slim:string;data:string|null;source_updated:string|null},[]>("SELECT i.key,i.slim,p.data,p.source_updated FROM issues i LEFT JOIN issue_properties p ON p.key=i.key").all();
+  const rows=db.query<{key:string;slim:string;data:string|null;source_updated:string|null},[]>(`SELECT i.key,i.slim,p.data,p.source_updated FROM issues i LEFT JOIN issue_properties p ON p.key=i.key WHERE i.board IN (${BOARDS.join(",")})`).all();
   let missing=0,errors=0;
   const projects=new Map<string,any>();
   const entries=Object.fromEntries(rows.map(r=>{
@@ -288,8 +318,28 @@ export function properties() {
     if(!fresh)missing++;
     const data=fresh&&r.data?JSON.parse(r.data):{};
     if(data.errors?.length)errors++;
-    return [r.key,{milestones:slim.milestones,prCount:slim.prCount,estimate:slim.estimate,projectLead:projects.get(projectKey)?.lead,...data}];
+    // The whole slim row rides along so edits made directly in Jira reach open clients.
+    return [r.key,{...slim,projectLead:projects.get(projectKey)?.lead,...data}];
   }));
   const pending=Math.max(propertyProgress.pending,missing);
   return {progress:{total:rows.length,pending,completed:rows.length-missing,errors},entries};
+}
+
+/** Jira's choices for the property menus (priorities, assignable people, versions, labels). Cached for ten minutes. */
+let optionCache:{at:number;value:Promise<any>}|undefined;
+export function options() {
+  if(optionCache&&Date.now()-optionCache.at<600_000)return optionCache.value;
+  const value=(async()=>{
+    const projects=db.query<{key:string},[]>("SELECT DISTINCT json_extract(slim,'$.project.key') AS key FROM issues").all().map(r=>r.key).filter(Boolean);
+    const user=(u:any)=>({id:u.accountId,name:u.displayName,avatar:u.avatarUrls?.["24x24"]});
+    const [priorities,users,labels,versions]=await Promise.all([
+      jira<any[]>("/rest/api/3/priority"),
+      projects.length?jira<any[]>(`/rest/api/3/user/assignable/multiProjectSearch?${new URLSearchParams({projectKeys:projects.join(","),maxResults:"1000"})}`):[],
+      jira<{values:string[]}>("/rest/api/3/label?maxResults=1000").then(r=>r.values,()=>[]),
+      Promise.all(projects.map(async key=>[key,(await jira<any[]>(`/rest/api/3/project/${encodeURIComponent(key)}/versions`).catch(()=>[])).filter(v=>!v.archived).map(v=>({id:v.id,name:v.name}))] as const)),
+    ]);
+    return {priorities:priorities.map(p=>({id:p.id,name:p.name})),users:users.filter(u=>u.accountType==="atlassian"&&u.active!==false).map(user),labels,versions:Object.fromEntries(versions)};
+  })();
+  optionCache={at:Date.now(),value:value.catch(e=>{optionCache=undefined;throw e;})};
+  return optionCache.value;
 }

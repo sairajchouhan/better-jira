@@ -19,9 +19,11 @@ export function jiraAuth(env:Environment,local:LocalSettings={}):JiraAuth {
   return {site:siteURL(site),email:email.trim(),token:token.trim()};
 }
 export function configuration(env:Environment,local:LocalSettings={}):Configuration {
-  const auth=jiraAuth(env,local),boards=boardIDs(env.JIRA_BOARDS||local.boards||[]),port=Number(env.PORT||local.port||3000);
+  // Saved boards, port and cache belong to the saved site; another site in env must not reuse them.
+  const auth=jiraAuth(env,local),own=!local.site||siteURL(local.site)===auth.site?local:{};
+  const boards=boardIDs(env.JIRA_BOARDS||own.boards||[]),port=Number(env.PORT||own.port||3000);
   if(!Number.isSafeInteger(port)||port<1||port>65535)throw new Error("PORT must be between 1 and 65535.");
   const source=new URL(auth.site).hostname.replace(/[^a-z0-9.-]/gi,"_");
   const identity=Bun.hash(`${auth.site}\n${auth.email}`).toString(16);
-  return {...auth,boards,port,cachePath:env.JIRA_CACHE||local.cachePath||`cache-${source}-${identity}.db`};
+  return {...auth,boards,port,cachePath:env.JIRA_CACHE||own.cachePath||`cache-${source}-${identity}.db`};
 }

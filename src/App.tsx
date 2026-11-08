@@ -18,6 +18,7 @@ import { Icon, Label, PriorityIcon, RelationIcon, StatusIcon, TypeDot, hue } fro
 import {
   ME, actions, addIssueFiles, boardOf, get, load, loadFull, navigate, set, timed, ui, useStore, dismissRecoveryNotice,
   openSavedView, beginCreate, changeDisplay, changePreferences, downloadLocalBackup, flushLocalChanges, issueURL, isLocalIssue, retryLocalStorage, toggleFavorite, undoEdit, redoEdit, usePreferences, type Board, type Column, type Issue, type User,
+  currentKey, firstKey,
 } from "./store";
 
 import { BoardControls, FilterChips } from "./view-controls";
@@ -46,7 +47,7 @@ function describeActivity(event:PropertyActivity,issue:Issue,then=false):ReactNo
   const {field,before,after}=event;
   if(field==="relation"){
     const relation=(after??before) as Relation,target=get().issues.get(relation.key);
-    const verb=after?{related:"added related issue",blocked:"marked this issue as blocked by",blocking:"marked this issue as blocking",duplicate:"marked this issue as a duplicate of"}[relation.kind]??"added related issue":`removed ${RELATION_ISSUE[relation.kind]??"related"} issue`;
+    const verb=after?{related:"added related issue",blocked:"marked this issue as blocked by",blocking:"marked this issue as blocking",duplicate:"marked this issue as a duplicate of",duplicated:"marked this issue as duplicated by"}[relation.kind]??"added related issue":`removed ${RELATION_ISSUE[relation.kind]??"related"} issue`;
     return <>{verb} {target?<a href={issueURL(target)} onClick={e=>{if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();openRelated(target);}} className="hover:text-fg"><b className="font-medium">{relation.key}</b> {target.summary}</a>:<b className="font-medium">{relation.key}</b>}</>;
   }
   if(field==="status")return then?`moved to ${status(after)}`:`moved from ${status(before)} to ${status(after)}`;
@@ -104,7 +105,7 @@ export function App() {
           {boards.filter(b=>visited.current.has(b.id)).map((b) => (
             <BoardView key={b.id} board={b} active={b.id === boardId} shown={!page && b.id === boardId} selected={selected} />
           ))}
-          {open && <IssueView key={open.key} issue={open} page={page} />}
+          {open && <IssueView key={firstKey(open.key)} issue={open} page={page} />}
         </div>
       </main>
       </div>
@@ -285,16 +286,19 @@ function Sidebar({ boards }: { boards: Board[] }) {
 function Toast() {
   const toast=useStore(s=>s.toast);
   if(!toast)return null;
-  return <div aria-live="polite" data-toast className="fixed right-4 bottom-10 z-50 flex items-center gap-3 rounded-lg border border-line-2 bg-card px-3 py-2 text-[13px] text-fg shadow-lg"><div>{toast.text}{toast.detail&&<p className="mt-1 text-[12px] text-fg-3">{toast.detail}</p>}</div>{toast.undo&&<button className="text-accent hover:underline" onClick={()=>{undoEdit();ui.send({type:"toast.dismiss"});}}>Undo</button>}{toast.key&&<button onClick={()=>(ui.send({type:"toast.dismiss"}),navigate({selected:toast.key,panel:true}))} className="text-accent hover:underline">View issue</button>}</div>;
+  return <div aria-live="polite" data-toast className="fixed right-4 bottom-10 z-50 flex items-center gap-3 rounded-lg border border-line-2 bg-card px-3 py-2 text-[13px] text-fg shadow-lg"><div>{toast.text}{toast.detail&&<p className="mt-1 text-[12px] text-fg-3">{toast.detail}</p>}</div>{toast.undo&&<button className="text-accent hover:underline" onClick={()=>{undoEdit();ui.send({type:"toast.dismiss"});}}>Undo</button>}{toast.key&&<button onClick={()=>(ui.send({type:"toast.dismiss"}),navigate({selected:toast.key,panel:true,board:get().issues.get(currentKey(toast.key??""))?.board}))} className="text-accent hover:underline">View issue</button>}</div>;
 }
 
 function StatusBar() {
   const perf = useStore((s) => s.perf);
   const undo=useStore(s=>s.undoCount),redo=useStore(s=>s.redoCount);
-  const storage=useStore(s=>s.storage);
+  const storage=useStore(s=>s.storage),writable=useStore(s=>s.writable),pending=useStore(s=>s.pendingWrites);
   return (
     <footer className="flex h-7 shrink-0 items-center gap-4 px-4 pb-2 text-[11px] whitespace-nowrap">
-      <span title="Issue changes, files, and view preferences are saved in this browser." className="flex min-w-0 items-center gap-1.5 text-amber-500"><span className="size-1.5 shrink-0 rounded-full bg-amber-500" /><span className="truncate">Local only: nothing is sent to Jira</span></span>
+      {writable
+        ?<span title="Issue edits are written to Jira." className="flex min-w-0 items-center gap-1.5 text-emerald-500"><span className="size-1.5 shrink-0 rounded-full bg-emerald-500" /><span className="truncate">Edits write to Jira</span></span>
+        :<span title="Issue changes, files, and view preferences are saved in this browser." className="flex min-w-0 items-center gap-1.5 text-amber-500"><span className="size-1.5 shrink-0 rounded-full bg-amber-500" /><span className="truncate">Local only: nothing is sent to Jira</span></span>}
+      {writable&&<span role="status" aria-label="Jira save status" data-jira-pending={pending} className="text-fg-3">{pending?`Sending ${pending} to Jira…`:"Saved to Jira"}</span>}
       <span role="status" aria-label="Local save status" data-storage-status={storage.status} className="text-fg-3">{storage.status==="saving"?"Saving…":storage.status==="saved"?"Saved locally":storage.status==="loading"?"Opening local data…":"Not saved"}</span>
       <span className="-ml-2 flex">
         <button aria-label="Undo" disabled={!undo} onClick={undoEdit} title="Undo (⌘Z)" className={FOOT_BTN}><Icon name="undo"/></button>
@@ -564,7 +568,7 @@ function Title({ issue, className }: { issue: Issue; className: string }) {
 }
 
 /** Linear's property list: unlabelled 13px/500 rows under section headings, no box and no Reporter/Created/Updated rows. */
-const RELATION_SECTIONS=[["blocked","Blocked by"],["blocking","Blocking"],["related","Related"],["duplicate","Duplicate of"]] as const;
+const RELATION_SECTIONS=[["blocked","Blocked by"],["blocking","Blocking"],["related","Related"],["duplicate","Duplicate of"],["duplicated","Duplicated by"]] as const;
 function Properties({ issue }: { issue: Issue }) {
   const status = statusOf(issue);
   const issues = useStore((s) => s.issues);
@@ -615,12 +619,13 @@ function Description({ issue, f }: { issue: Issue; f: any }) {
     keepDraft:(_,doc)=>{try{localStorage.setItem(draftKey,JSON.stringify(doc));}catch{/* autosave still runs */}},
     commit:(_,doc)=>{
       if(!doc)return;
-      shown.current=JSON.stringify(normalizeDocument(doc));actions.description(issue.key,doc);
+      shown.current=JSON.stringify(normalizeDocument(doc));actions.description(currentKey(issue.key),doc);
       void flushLocalChanges().then(()=>{try{if(autosave.getSnapshot().matches("clean"))localStorage.removeItem(draftKey);}catch{/* best effort */}});
     },
   }}),{inspect:inspector(`autosave ${issue.key}`)}).start());
   // Undo, redo or a restored revision replaces the document under the editor, so show the stored version.
-  useEffect(()=>{if(stored&&stored!==shown.current){shown.current=stored;setRevision(r=>r+1);}},[stored]);
+  // Never while typing: Jira's copy (e.g. media ids swapped after an upload) would remount the editor mid-sentence.
+  useEffect(()=>{if(stored&&stored!==shown.current&&!document.activeElement?.closest("#description")){shown.current=stored;setRevision(r=>r+1);}},[stored]);
   // A reload in the autosave window leaves the typed draft in localStorage; save it now.
   useEffect(()=>{if(!f)return;try{const draft=localStorage.getItem(draftKey);if(draft){autosave.send({type:"change",doc:JSON.parse(draft)});autosave.send({type:"flush"});setRevision(r=>r+1);}}catch{/* ignore a broken draft */}},[!!f]);
   useEffect(()=>()=>autosave.send({type:"flush"}),[]);
@@ -663,7 +668,7 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
           <Avatar user={author(f.reporter)} size={14} />
           <span><span className="font-medium">{f.reporter?.displayName}</span> created ·</span> {timestamp(f.created,'issue-created')}
         </li>
-        <CommentThreads issue={issue} comments={f.comment.comments} avatar={c=><Avatar user={author(c.author)} size={18}/>} me={<Avatar user={ME} size={18}/>} timestamp={timestamp} events={[...Object.entries(issue.mediaEdits??{}).filter(([,edit])=>edit.comments?.length).map(([mediaId,edit])=>({at:edit.comments![0]!.at,node:<ImageCommentCard key={mediaId} comments={edit.comments!} src={issue.attachments?.find(file=>file.id===mediaId)?.url||edit.src} author={ME.name} me={<Avatar user={ME} size={18}/>} head={c=><><Avatar user={ME} size={18}/><span className="font-medium text-fg">{c.author}</span>{timestamp(c.at,`image-comment-${c.id}`)}</>} save={comments=>actions.mediaEdit(issue.key,mediaId,{...edit,comments})} view={()=>{const frame=document.querySelector<HTMLElement>(`[data-media-id="${CSS.escape(mediaId)}"]`);if(!frame){const file=issue.attachments?.find(file=>file.id===mediaId);const url=file?.url||edit.src;if(url)setViewing({file:file??{id:mediaId,name:'Image',type:'image/png',size:0,url},external:!file});return;}frame.scrollIntoView({block:'center'});frame.dispatchEvent(new Event('show-image-comments'));}}/>})),...activityRows(issue.activity??[]).map(row=>({at:row.at,node:<li key={row.id} id={`activity-${row.id}`} data-activity={row.field} className="activity-event"><span className="grid size-[14px] place-items-center"><ActivityIcon row={row} issue={issue}/></span><span><span className="font-medium">{row.actor.name}</span> {row.events.map((event,i)=><span key={event.id}>{i?" and ":""}{describeActivity(event,issue)}</span>)}{row.chain.map(event=><span key={event.id}>, then {describeActivity(event,issue,true)}</span>)} ·</span> {timestamp(row.at,`activity-${row.id}`)}</li>})),
+        <CommentThreads issue={issue} comments={f.comment?.comments??[]} avatar={c=><Avatar user={author(c.author)} size={18}/>} me={<Avatar user={ME} size={18}/>} timestamp={timestamp} events={[...Object.entries(issue.mediaEdits??{}).filter(([,edit])=>edit.comments?.length).map(([mediaId,edit])=>({at:edit.comments![0]!.at,node:<ImageCommentCard key={mediaId} comments={edit.comments!} src={issue.attachments?.find(file=>file.id===mediaId)?.url||edit.src} author={ME.name} me={<Avatar user={ME} size={18}/>} head={c=><><Avatar user={ME} size={18}/><span className="font-medium text-fg">{c.author}</span>{timestamp(c.at,`image-comment-${c.id}`)}</>} save={comments=>actions.mediaEdit(issue.key,mediaId,{...edit,comments})} view={()=>{const frame=document.querySelector<HTMLElement>(`[data-media-id="${CSS.escape(mediaId)}"]`);if(!frame){const file=issue.attachments?.find(file=>file.id===mediaId);const url=file?.url||edit.src;if(url)setViewing({file:file??{id:mediaId,name:'Image',type:'image/png',size:0,url},external:!file});return;}frame.scrollIntoView({block:'center'});frame.dispatchEvent(new Event('show-image-comments'));}}/>})),...activityRows(issue.activity??[]).map(row=>({at:row.at,node:<li key={row.id} id={`activity-${row.id}`} data-activity={row.field} className="activity-event"><span className="grid size-[14px] place-items-center"><ActivityIcon row={row} issue={issue}/></span><span><span className="font-medium">{row.actor.name}</span> {row.events.map((event,i)=><span key={event.id}>{i?" and ":""}{describeActivity(event,issue)}</span>)}{row.chain.map(event=><span key={event.id}>, then {describeActivity(event,issue,true)}</span>)} ·</span> {timestamp(row.at,`activity-${row.id}`)}</li>})),
           // Linear lists a link while it is attached and drops the row once it is removed (RAJ-52, 2026-11-07).
           ...(issue.resources??[]).filter(resource=>resource.kind==='link'&&resource.created).map(resource=>({at:resource.created!,node:<li key={resource.id} id={`activity-${resource.id}`} data-activity="link" className="activity-event"><Avatar user={ME} size={14}/><span><span className="font-medium">{ME.name}</span> linked <span className="inline-flex align-[-2px]"><Icon name="link" size={12}/></span> <a href={resource.url} target="_blank" rel="noreferrer" className="font-medium">{linkTitle(resource)}</a> ·</span> {timestamp(resource.created!,`activity-${resource.id}`)}</li>}))]}/>
       </ol>
@@ -704,12 +709,14 @@ function StatusPicker({ issueKey }: { issueKey: string }) {
 
 function AssignPicker({ issueKey }: { issueKey: string }) {
   const issues = useStore((s) => s.issues);
+  const jiraUsers = useStore((s) => s.options.users);
   const current = issues.get(issueKey)?.assignee;
   const users = useMemo(() => {
     const m = new Map<string, User>([[ME.id, ME]]);
+    for (const u of jiraUsers) if (!m.has(u.id)) m.set(u.id, u);
     for (const i of issues.values()) if (i.assignee && !m.has(i.assignee.id)) m.set(i.assignee.id, i.assignee);
     return [...m.values()].sort((a, b) => (a.id === ME.id ? -1 : b.id === ME.id ? 1 : a.name.localeCompare(b.name)));
-  }, [issues]);
+  }, [issues, jiraUsers]);
   const value = (u: User) => `${u.name} ${u.id}`;
   return (
     <PropertyMenu label="Assign issue" placeholder="Assign to…" hotkey="A" anchor={issueAnchor("prop-assignee", issueKey)} close={() => ui.send({ type: "overlay.close" })} current={current ? value(current) : "No assignee"}>

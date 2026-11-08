@@ -438,7 +438,7 @@ export const shortcuts: Shortcut[] = [
   },
   {
     id: "delete",
-    name: "Delete issue locally",
+    name: "Delete issue",
     group: "Issues",
     hotkey: "Mod+Backspace",
     issue: true,

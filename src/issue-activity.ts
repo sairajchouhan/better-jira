@@ -5,7 +5,7 @@ export const activityFields=['status','priority','assignee','labels','due','pare
 export type ActivityField=typeof activityFields[number]|'relation';
 export type Relation={key:string;kind:string};
 /** The other issue's role, as Linear's Issue options › Remove names it (RAJ-52): a blocked-by relation lists the "Blocking issue". */
-export const RELATION_ISSUE:Record<string,string>={blocked:"blocking",blocking:"blocked",related:"related",duplicate:"duplicate"};
+export const RELATION_ISSUE:Record<string,string>={blocked:"blocking",blocking:"blocked",related:"related",duplicate:"duplicated",duplicated:"duplicate"};
 /** `at` is the group's time; `updated` is when the group was last edited. */
 export type PropertyActivity={id:string;field:ActivityField;before:unknown;after:unknown;actor:{id:string;name:string};at:string;updated?:string};
 // RAJ-52: edits 30.5 min, 5 min and about 60 min after the group's last edit joined it; one 62.7 min after started a new group.

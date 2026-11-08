@@ -6,6 +6,8 @@ import * as mirror from "./mirror";
 import { parsePreferences } from "./view-model";
 import { serverConfiguration } from "./server-config";
 import { fetchPreview } from "./link-preview";
+import { applyOps } from "./jira-writes";
+import { jira, JiraError, canWrite } from "./jira";
 
 const json = (body: string) => new Response(body, { headers: { "Content-Type": "application/json" } });
 
@@ -16,8 +18,9 @@ const server = serve({
   routes: {
     "/*": index,
     "/api/boards": localOnly(() => Response.json(mirror.boards())),
-    "/api/client": localOnly(async()=>{try{return Response.json(await mirror.clientInfo());}catch{return Response.json({error:"Could not read your Jira account. Check setup and retry."},{status:503});}}),
+    "/api/client": localOnly(async()=>{try{return Response.json({...await mirror.clientInfo(),writable:canWrite(serverConfiguration().site)});}catch{return Response.json({error:"Could not read your Jira account. Check setup and retry."},{status:503});}}),
     "/api/properties": localOnly(() => Response.json(mirror.properties())),
+    "/api/options": localOnly(async()=>{try{return Response.json(await mirror.options());}catch{return Response.json({error:"Could not read Jira's options."},{status:503});}}),
     "/api/view-defaults": localOnly(() => Response.json(mirror.viewDefaults())),
     "/api/view-defaults/:board": {
       PUT: localOnly(async (req:BunRequest<"/api/view-defaults/:board">) => {
@@ -39,6 +42,30 @@ const server = serve({
         return full ? json(full) : Response.json({ error: "not found" }, { status: 404 });
       }catch{return Response.json({error:"Could not read Jira issue details. Retry the request."},{status:503});}
     }),
+    "/api/issues/:key/ops": {
+      POST: localOnly(async(req:BunRequest<"/api/issues/:key/ops">)=>{
+        if(!canWrite(serverConfiguration().site))return Response.json({error:"Jira writes are disabled for this site."},{status:403});
+        let body:{ops:unknown;board?:unknown};
+        try{body=await req.json();}catch{return Response.json({error:"Invalid request"},{status:400});}
+        if(!Array.isArray(body.ops))return Response.json({error:"Invalid request"},{status:400});
+        const result=await applyOps(req.params.key,body.ops,typeof body.board==="number"?body.board:undefined);
+        return Response.json(result,{status:result.error?422:200});
+      }),
+    },
+    "/api/issues/:key/attachments": {
+      POST: localOnly(async(req:BunRequest<"/api/issues/:key/attachments">)=>{
+        if(!canWrite(serverConfiguration().site))return Response.json({error:"Jira writes are disabled for this site."},{status:403});
+        try {
+          const form=await req.formData(),file=form.get("file");
+          if(!(file instanceof File))return Response.json({error:"Choose a file."},{status:400});
+          const body=new FormData();body.append("file",file,file.name);
+          const [attachment]=await jira(`/rest/api/3/issue/${encodeURIComponent(req.params.key)}/attachments`,{method:"POST",body});
+          const mediaId=await mirror.media.identify(String(attachment.id));
+          const issue=await jira(`/rest/api/3/issue/${encodeURIComponent(req.params.key)}?fields=attachment`);
+          return Response.json({attachment:{id:String(attachment.id),name:attachment.filename,type:attachment.mimeType,size:attachment.size,url:`/api/issues/${encodeURIComponent(req.params.key)}/attachments/${attachment.id}`,mediaId},collection:`jira-${issue.id}`});
+        }catch(e){return Response.json({error:e instanceof JiraError?e.reason:"Could not upload attachment."},{status:422});}
+      }),
+    },
     "/api/issues/:key/media/:mediaId": localOnly(async(req:BunRequest<"/api/issues/:key/media/:mediaId">)=>{
       if(req.method!=="GET")return new Response("Method not allowed",{status:405,headers:{Allow:"GET"}});
       try {const attachment=await mirror.media.resolve(req.params.key,req.params.mediaId);return attachment?Response.json(attachment,{headers:{"Cache-Control":"private, no-store"}}):Response.json({error:"Media not found"},{status:404});}

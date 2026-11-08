@@ -1,5 +1,5 @@
 import type {Database} from "bun:sqlite";
-export const DETAIL_CACHE_VERSION="2";
+export const DETAIL_CACHE_VERSION="3";
 
 /** Rich issue details have their own schema version; Jira's updated timestamp cannot invalidate old projections. */
 export function detailCache(db:Database,load:(key:string)=>Promise<any>) {
@@ -25,9 +25,11 @@ export function detailCache(db:Database,load:(key:string)=>Promise<any>) {
     db.query("INSERT OR REPLACE INTO issue_details VALUES (?,?,?)").run(key,updated,data);
     parsed.delete(key);return data;
   }
-  function read(key:string):Promise<string|undefined> {
-    const existing=pending.get(key);if(existing)return existing;
-    const request=readDetails(key).finally(()=>pending.delete(key));pending.set(key,request);return request;
+  /** `fresh` waits out a read already in flight (it may predate a write) and reads again. */
+  function read(key:string,fresh=false):Promise<string|undefined> {
+    const existing=pending.get(key);if(existing&&!fresh)return existing;
+    const request=(existing?existing.catch(()=>undefined).then(()=>readDetails(key)):readDetails(key)).finally(()=>{if(pending.get(key)===request)pending.delete(key);});
+    pending.set(key,request);return request;
   }
   async function readParsed(key:string):Promise<any|undefined> {
     const revision=db.query<{updated:string},[string]>("SELECT json_extract(slim,'$.updated') AS updated FROM issues WHERE key = ?").get(key);

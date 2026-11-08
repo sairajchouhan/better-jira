@@ -6,7 +6,7 @@ import {mediaCaretPlugin} from './media-caret';
 import {mediaUploads,mergeLateMedia,type LateMedia} from './editor-media-upload';
 import {editorBindings} from "./editor-bindings";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { EditorState, NodeSelection, type Command } from "prosemirror-state";
+import { EditorState, NodeSelection, TextSelection, type Command } from "prosemirror-state";
 import {mediaNodeView,type MediaNodeView} from "./media-node-view";
 import type {Attachment} from "./attachment-media";
 import { EditorView } from "prosemirror-view";
@@ -68,15 +68,29 @@ export function RichEditor(props:RichEditorProps) {
   const run=(command:Command)=>{const editor=view.current;if(editor){command(editor.state,editor.dispatch,editor);editor.focus();}};
   const marked=(name:string)=>{const state=view.current?.state;return !!state&&(state.storedMarks??state.selection.$from.marks()).some(m=>m.type.name===name);};
   const changeBlock=(type:string,attributes:Record<string,unknown>={})=>run((state,dispatch)=>{
-    const nodeType=richSchema.nodes[type]!;let changed=false;const tr=state.tr;
-    state.doc.nodesBetween(state.selection.from,state.selection.to,(node,pos)=>{
-      if(node.isTextblock&&nodeType.validContent(node.content)){tr.setNodeMarkup(pos,nodeType,{...node.attrs,...attributes},node.marks);changed=true;return false;}
+    const nodeType=richSchema.nodes[type]!,tr=state.tr;let changed=false,current=state;
+    // A list item must start with a paragraph, so the selected items of each list leave it first (one undo step).
+    if(type!=="paragraph") {
+      const lists:[number,number][]=[];
+      state.doc.nodesBetween(state.selection.from,state.selection.to,(node,pos)=>{if(/^(bullet|ordered)List$/.test(node.type.name)){lists.push([Math.max(state.selection.from,pos+1),Math.min(state.selection.to,pos+node.nodeSize-1)]);return false;}});
+      for(const [a,b] of lists.reverse()) {
+        current=current.apply(current.tr.setSelection(TextSelection.between(current.doc.resolve(tr.mapping.map(a)),current.doc.resolve(tr.mapping.map(b,-1)))));
+        for(let i=0;i<10&&liftListItem(richSchema.nodes.listItem!)(current,t=>{for(const step of t.steps)tr.step(step);current=current.apply(t);});i++);
+      }
+    }
+    const from=tr.mapping.map(state.selection.from),to=tr.mapping.map(state.selection.to,-1);
+    current.doc.nodesBetween(from,to,(node,pos,parent,index)=>{
+      if(node.isTextblock&&nodeType.validContent(node.content)&&parent?.canReplaceWith(index,index+1,nodeType)){tr.setNodeMarkup(pos,nodeType,{...node.attrs,...attributes},node.marks);changed=true;return false;}
     });
-    if(changed)dispatch?.(tr);return changed;
+    if(changed||tr.docChanged)dispatch?.(tr);return changed||tr.docChanged;
   });
   const list=(name:"bulletList"|"orderedList")=>run((state,dispatch,editor)=>{
     for(let d=state.selection.$from.depth;d>0;d--)if(state.selection.$from.node(d).type.name===name)return liftListItem(richSchema.nodes.listItem!)(state,dispatch,editor);
-    return wrapInList(richSchema.nodes[name]!)(state,dispatch,editor);
+    // Already the other kind of list: switch its type instead of nesting.
+    const target=richSchema.nodes[name]!,other=name==="bulletList"?"orderedList":"bulletList",tr=state.tr;
+    state.doc.nodesBetween(state.selection.from,state.selection.to,(node,pos)=>{if(node.type.name===other)tr.setNodeMarkup(pos,target);});
+    if(tr.docChanged){dispatch?.(tr);return true;}
+    return wrapInList(target)(state,dispatch,editor);
   });
   useHotkey("Escape",event=>{if(event.target instanceof Element&&event.target.closest("[data-media-interactive]"))return;event.preventDefault();event.stopPropagation();if(latest.current.onCancel)latest.current.onCancel();else view.current?.dom.blur();},{target:host,capture:true,ignoreInputs:false,preventDefault:false,stopPropagation:false,enabled:!!props.inline||!!props.onCancel||props.variant==='comment'});
   useHotkeys(editorBindings.map(binding=>({hotkey:binding.hotkey,callback:(event:KeyboardEvent)=>{
