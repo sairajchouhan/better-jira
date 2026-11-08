@@ -9,7 +9,13 @@ const original={default:null};
 const attrs={original};
 const block=(tag:string,content="block+"):NodeSpec=>({group:"block",content,marks:"_",attrs,toDOM:()=>[tag,0],parseDOM:[{tag}]});
 const inlineAtom=(name:string,tag="span"):NodeSpec=>({inline:true,group:"inline",atom:true,attrs,toDOM:node=>[tag,{contenteditable:"false",class:"rich-token"},String(node.attrs.original?.data.attrs?.text??node.attrs.original?.data.attrs?.shortName??name)]});
-const table=tableNodes({tableGroup:"block",cellContent:"block+",cellAttributes:{}});
+// Jira's ADF content model, so no command, keystroke or paste can build nesting Jira rejects (a heading in a quote, a quote in a list item, a table in a table).
+// opaqueBlock keeps unfamiliar Jira blocks editable around; only Jira can put one there.
+const QUOTE="(paragraph|bulletList|orderedList|codeBlock|mediaSingle|mediaGroup|opaqueBlock)+";
+const LIST_ITEM="paragraph (paragraph|bulletList|orderedList|taskList|codeBlock|mediaSingle|opaqueBlock)*";
+const PANEL="(paragraph|heading|bulletList|orderedList|taskList|codeBlock|rule|blockCard|mediaSingle|mediaGroup|opaqueBlock)+";
+const CELL="(paragraph|heading|bulletList|orderedList|taskList|codeBlock|blockquote|panel|rule|blockCard|mediaSingle|mediaGroup|opaqueBlock)+";
+const table=tableNodes({tableGroup:"block",cellContent:CELL,cellAttributes:{}});
 function tableNode(name:keyof typeof table,role:string):NodeSpec {
   const spec=table[name]!;
   return {...spec,attrs:{...spec.attrs,original},marks:"_",content:spec.content?.replaceAll("table_row","tableRow").replaceAll("table_cell","tableCell").replaceAll("table_header","tableHeader"),tableRole:role};
@@ -28,18 +34,18 @@ export const richSchema=new Schema({
     heading:{...block("h2","inline*"),attrs:{...attrs,level:{default:2}},defining:true,toDOM:node=>[`h${Math.max(1,Math.min(6,node.attrs.level))}`,0],parseDOM:[1,2,3,4,5,6].map(level=>({tag:`h${level}`,attrs:{level}}))},
     bulletList:{...block("ul","listItem+"),parseDOM:[{tag:"ul"}]},
     orderedList:{...block("ol","listItem+"),attrs:{...attrs,order:{default:1}},toDOM:node=>["ol",{start:node.attrs.order},0],parseDOM:[{tag:"ol",getAttrs:dom=>({order:Number(dom.getAttribute("start"))||1})}]},
-    listItem:{content:"paragraph block*",marks:"_",attrs,defining:true,toDOM:()=>["li",0],parseDOM:[{tag:"li"}]},
+    listItem:{content:LIST_ITEM,marks:"_",attrs,defining:true,toDOM:()=>["li",0],parseDOM:[{tag:"li"}]},
     taskList:{...block("ul","taskItem+"),parseDOM:[],toDOM:()=>["ul",{"data-task-list":"true"},0]},
-    taskItem:{...block("li","inline*"),attrs:{...attrs,state:{default:"TODO"}},defining:true,parseDOM:[],toDOM:node=>["li",{"data-task-state":node.attrs.state},0]},
-    codeBlock:{...block("pre","text*"),attrs:{...attrs,language:{default:null}},code:true,marks:"_",defining:true,whitespace:"pre",toDOM:()=>["pre",["code",0]],parseDOM:[{tag:"pre",preserveWhitespace:"full"}]},
-    blockquote:{...block("blockquote"),defining:true},
-    panel:{...block("div"),isolating:true,parseDOM:[],toDOM:()=>["div",{class:"rich-panel"},0]},
+    taskItem:{...block("li","inline*"),group:undefined,attrs:{...attrs,state:{default:"TODO"}},defining:true,parseDOM:[],toDOM:node=>["li",{"data-task-state":node.attrs.state},0]},
+    codeBlock:{...block("pre","text*"),attrs:{...attrs,language:{default:null}},code:true,marks:"",defining:true,whitespace:"pre",toDOM:()=>["pre",["code",0]],parseDOM:[{tag:"pre",preserveWhitespace:"full"}]},
+    blockquote:{...block("blockquote",QUOTE),defining:true},
+    panel:{...block("div",PANEL),isolating:true,parseDOM:[],toDOM:()=>["div",{class:"rich-panel"},0]},
     rule:{group:"block",attrs,toDOM:()=>["hr"],parseDOM:[{tag:"hr"}]},
     mention:inlineAtom("mention"),emoji:inlineAtom("emoji"),status:inlineAtom("status"),date:inlineAtom("date"),
     inlineCard:{...inlineAtom("link"),toDOM:node=>["span",{contenteditable:"false",class:"rich-token"},String(node.attrs.original?.data.attrs?.url??"Link")]},
     blockCard:{group:"block",atom:true,attrs,toDOM:node=>["div",{contenteditable:"false",class:"rich-preserved"},String(node.attrs.original?.data.attrs?.url??"Link")]},
     table:tableNode("table","table"),tableRow:tableNode("table_row","row"),tableCell:tableNode("table_cell","cell"),tableHeader:tableNode("table_header","header_cell"),
-    mediaSingle:opaque(false),mediaGroup:opaque(false),media:opaque(false),mediaInline:opaque(true),
+    mediaSingle:opaque(false),mediaGroup:opaque(false),media:{...opaque(false),group:undefined},mediaInline:opaque(true),
     opaqueBlock:opaque(false),opaqueInline:opaque(true),
   },
   marks:{

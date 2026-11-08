@@ -6,17 +6,17 @@ import {mediaCaretPlugin} from './media-caret';
 import {mediaUploads,mergeLateMedia,type LateMedia} from './editor-media-upload';
 import {editorBindings} from "./editor-bindings";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { EditorState, NodeSelection, TextSelection, type Command } from "prosemirror-state";
+import { EditorState, NodeSelection, type Command } from "prosemirror-state";
 import {mediaNodeView,type MediaNodeView} from "./media-node-view";
 import type {Attachment} from "./attachment-media";
 import { EditorView } from "prosemirror-view";
 import "prosemirror-view/style/prosemirror.css";
-import { baseKeymap, chainCommands, lift, toggleMark, wrapIn } from "prosemirror-commands";
+import { baseKeymap, chainCommands, toggleMark } from "prosemirror-commands";
 import { keymap } from "prosemirror-keymap";
 import { history, redo, undo } from "prosemirror-history";
-import { liftListItem, sinkListItem, splitListItem, wrapInList } from "prosemirror-schema-list";
+import { splitListItem } from "prosemirror-schema-list";
 import { addColumnAfter, addRowAfter, deleteTable, isInTable, tableEditing } from "prosemirror-tables";
-import { codeDown, codeEnter, insertLink, insertTable, markdownRules, shiftTab, tab } from "./editor-commands";
+import { codeDown, codeEnter, insertLink, insertTable, markdownRules, setBlock, shiftTab, tab, toggleList, toggleQuote } from "./editor-commands";
 import { fromEditorDocument, richSchema, safeLink, toEditorDocument, type AdfDocument } from "./rich-document";
 
 /** inline: no frame, like Linear's description; every editor shows its formatting toolbar floating above it only while focused. */
@@ -67,31 +67,8 @@ export function RichEditor(props:RichEditorProps) {
   useEffect(()=>{if(!props.selectionToolbar)return;const move=()=>refresh(n=>n+1);addEventListener('scroll',move,true);addEventListener('resize',move);return()=>{removeEventListener('scroll',move,true);removeEventListener('resize',move);};},[props.selectionToolbar]);
   const run=(command:Command)=>{const editor=view.current;if(editor){command(editor.state,editor.dispatch,editor);editor.focus();}};
   const marked=(name:string)=>{const state=view.current?.state;return !!state&&(state.storedMarks??state.selection.$from.marks()).some(m=>m.type.name===name);};
-  const changeBlock=(type:string,attributes:Record<string,unknown>={})=>run((state,dispatch)=>{
-    const nodeType=richSchema.nodes[type]!,tr=state.tr;let changed=false,current=state;
-    // A list item must start with a paragraph, so the selected items of each list leave it first (one undo step).
-    if(type!=="paragraph") {
-      const lists:[number,number][]=[];
-      state.doc.nodesBetween(state.selection.from,state.selection.to,(node,pos)=>{if(/^(bullet|ordered)List$/.test(node.type.name)){lists.push([Math.max(state.selection.from,pos+1),Math.min(state.selection.to,pos+node.nodeSize-1)]);return false;}});
-      for(const [a,b] of lists.reverse()) {
-        current=current.apply(current.tr.setSelection(TextSelection.between(current.doc.resolve(tr.mapping.map(a)),current.doc.resolve(tr.mapping.map(b,-1)))));
-        for(let i=0;i<10&&liftListItem(richSchema.nodes.listItem!)(current,t=>{for(const step of t.steps)tr.step(step);current=current.apply(t);});i++);
-      }
-    }
-    const from=tr.mapping.map(state.selection.from),to=tr.mapping.map(state.selection.to,-1);
-    current.doc.nodesBetween(from,to,(node,pos,parent,index)=>{
-      if(node.isTextblock&&nodeType.validContent(node.content)&&parent?.canReplaceWith(index,index+1,nodeType)){tr.setNodeMarkup(pos,nodeType,{...node.attrs,...attributes},node.marks);changed=true;return false;}
-    });
-    if(changed||tr.docChanged)dispatch?.(tr);return changed||tr.docChanged;
-  });
-  const list=(name:"bulletList"|"orderedList")=>run((state,dispatch,editor)=>{
-    for(let d=state.selection.$from.depth;d>0;d--)if(state.selection.$from.node(d).type.name===name)return liftListItem(richSchema.nodes.listItem!)(state,dispatch,editor);
-    // Already the other kind of list: switch its type instead of nesting.
-    const target=richSchema.nodes[name]!,other=name==="bulletList"?"orderedList":"bulletList",tr=state.tr;
-    state.doc.nodesBetween(state.selection.from,state.selection.to,(node,pos)=>{if(node.type.name===other)tr.setNodeMarkup(pos,target);});
-    if(tr.docChanged){dispatch?.(tr);return true;}
-    return wrapInList(target)(state,dispatch,editor);
-  });
+  const changeBlock=(type:string,attributes:Record<string,unknown>={})=>run(setBlock(type,attributes));
+  const list=(name:"bulletList"|"orderedList")=>run(toggleList(name));
   useHotkey("Escape",event=>{if(event.target instanceof Element&&event.target.closest("[data-media-interactive]"))return;event.preventDefault();event.stopPropagation();if(latest.current.onCancel)latest.current.onCancel();else view.current?.dom.blur();},{target:host,capture:true,ignoreInputs:false,preventDefault:false,stopPropagation:false,enabled:!!props.inline||!!props.onCancel||props.variant==='comment'});
   useHotkeys(editorBindings.map(binding=>({hotkey:binding.hotkey,callback:(event:KeyboardEvent)=>{
     if(event.target instanceof Element&&event.target.closest("[data-media-interactive]"))return;
@@ -100,7 +77,7 @@ export function RichEditor(props:RichEditorProps) {
     if(["strong","em","underline","strike","code"].includes(id))run(toggleMark(richSchema.marks[id]!));
     else if(id==="link")setLinkOpen(true);
     else if(id.startsWith("heading-")){const level=Number(id.split("-")[1]);changeBlock(level?"heading":"paragraph",level?{level}:{});}
-    else if(id==="quote")run(wrapIn(richSchema.nodes.blockquote!));
+    else if(id==="quote")run(toggleQuote);
     else if(id==="bullet"||id==="ordered")list(id==="bullet"?"bulletList":"orderedList");
     else if(id==="code-block")changeBlock("codeBlock");
     else if(id==="undo")run(undo);else if(id==="redo")run(redo);else if(id==="save")save();
@@ -127,7 +104,7 @@ export function RichEditor(props:RichEditorProps) {
       {[0,1,2,3,4].map(n=><button key={n} type="button" aria-label={n?`Heading ${n}`:"Text"} title={n?`Heading ${n}`:"Text"} aria-pressed={level===n} className={`${BUTTON} shrink-0`} onClick={()=>changeBlock(n?"heading":"paragraph",n?{level:n}:{})}>{n?`H${n}`:"T"}</button>)}
       <button type="button" aria-label="Bulleted list" className={BUTTON} onClick={()=>list("bulletList")}>• List</button>
       <button type="button" aria-label="Numbered list" className={BUTTON} onClick={()=>list("orderedList")}>1. List</button>
-      <button type="button" aria-label="Block quote" className={BUTTON} onClick={()=>run(wrapIn(richSchema.nodes.blockquote!))}>Quote</button>
+      <button type="button" aria-label="Block quote" className={BUTTON} onClick={()=>run(toggleQuote)}>Quote</button>
       <button type="button" aria-label="Code block" className={BUTTON} onClick={()=>changeBlock("codeBlock")}>Code</button>
       <button type="button" aria-label="Insert link" className={BUTTON} onClick={()=>{const state=view.current?.state;const current=state&&(state.storedMarks??state.selection.$from.marks()).find(m=>m.type.name==="link");setURL(current?.attrs.href??"");setLinkOpen(!linkOpen);}}>Link</button>
       {marked("link")&&<button type="button" aria-label="Remove text link" className={BUTTON} onClick={()=>run(toggleMark(richSchema.marks.link!))}>Unlink</button>}

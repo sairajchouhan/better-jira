@@ -1,7 +1,9 @@
-import { chainCommands, exitCode } from "prosemirror-commands";
+import { chainCommands, exitCode, lift } from "prosemirror-commands";
 import { InputRule, inputRules, textblockTypeInputRule, wrappingInputRule } from "prosemirror-inputrules";
-import { liftListItem, sinkListItem } from "prosemirror-schema-list";
-import { TextSelection, type Command } from "prosemirror-state";
+import type { Node as EditorNode, NodeType } from "prosemirror-model";
+import { liftListItem, sinkListItem, wrapInList } from "prosemirror-schema-list";
+import { EditorState, TextSelection, type Command, type Transaction } from "prosemirror-state";
+import { findWrapping, liftTarget } from "prosemirror-transform";
 import { addRowAfter, goToNextCell, isInTable } from "prosemirror-tables";
 import { richSchema } from "./rich-document";
 
@@ -97,3 +99,77 @@ export const markdownRules = inputRules({ rules: [
     return state.tr.addMark(from, end, link.create({ href: url })).insertText(match[0].slice(-1), end).removeStoredMark(link);
   }),
 ] });
+
+const listItem = richSchema.nodes.listItem!, paragraph = richSchema.nodes.paragraph!, blockquote = richSchema.nodes.blockquote!;
+/** Headings among the selected children of `parent` become paragraphs (a list item or a quote cannot hold one). */
+function headingsToParagraphs(tr: Transaction, parent: EditorNode, start: number, from: number, to: number) {
+  parent.forEach((child, offset) => {
+    const pos = start + offset;
+    if (child.type.name === "heading" && pos < to && pos + child.nodeSize > from) tr.setNodeMarkup(pos, paragraph, child.attrs, child.marks);
+  });
+}
+
+/** Text, heading or code block. A selected block whose quote or list cannot hold the new type is lifted out first,
+ * as often as nesting needs; disallowed marks are dropped (code holds plain text). One transaction, one undo step. */
+export const setBlock = (name: string, attrs: Record<string, unknown> = {}): Command => (state, dispatch) => {
+  const type = richSchema.nodes[name]!, tr = state.tr;
+  let current = state;
+  const range = () => [tr.mapping.map(state.selection.from), tr.mapping.map(state.selection.to, -1)] as const;
+  for (let guard = 0, lifted = true; lifted && guard < 500; guard++) {
+    lifted = false;
+    const [from, to] = range();
+    current.doc.nodesBetween(from, to, (node, pos, parent, index) => {
+      if (lifted || !node.isTextblock) return !lifted;
+      if (parent && !parent.canReplaceWith(index, index + 1, type)) {
+        const at = current.apply(current.tr.setSelection(TextSelection.create(current.doc, pos + 1)));
+        (parent.type === listItem ? liftListItem(listItem) : lift)(at, t => { for (const step of t.steps) tr.step(step); current = at.apply(t); lifted = true; });
+      }
+      return false;
+    });
+  }
+  const [from, to] = range();
+  let changed = false;
+  current.doc.nodesBetween(from, to, (node, pos, parent, index) => {
+    if (!node.isTextblock) return true;
+    if (type.contentMatch.matchFragment(node.content)?.validEnd && parent?.canReplaceWith(index, index + 1, type)) {
+      node.forEach((child, offset) => { for (const mark of child.marks) if (!type.allowsMarkType(mark.type)) tr.removeMark(pos + 1 + offset, pos + 1 + offset + child.nodeSize, mark); });
+      tr.setNodeMarkup(pos, type, { ...node.attrs, ...attrs }, node.marks);
+      changed = true;
+    }
+    return false;
+  });
+  if (changed || tr.docChanged) dispatch?.(tr);
+  return changed || tr.docChanged;
+};
+
+/** Toggles a list. The other kind of list switches type instead of nesting; headings become the items' paragraphs. */
+export const toggleList = (name: "bulletList" | "orderedList"): Command => (state, dispatch, view) => {
+  const { $from, from, to } = state.selection;
+  for (let d = $from.depth; d > 0; d--) if ($from.node(d).type.name === name) return liftListItem(listItem)(state, dispatch, view);
+  const target = richSchema.nodes[name]!, other = name === "bulletList" ? "orderedList" : "bulletList", tr = state.tr;
+  state.doc.nodesBetween(from, to, (node, pos) => { if (node.type.name === other) tr.setNodeMarkup(pos, target); });
+  if (tr.docChanged) { dispatch?.(tr); return true; }
+  const range = $from.blockRange(state.selection.$to);
+  if (range) headingsToParagraphs(tr, range.parent, range.start, from, to);
+  let wrapped = false;
+  wrapInList(target)(EditorState.create({ doc: tr.doc, selection: TextSelection.between(tr.doc.resolve(from), tr.doc.resolve(to)) }), t => { for (const step of t.steps) tr.step(step); wrapped = true; });
+  if (wrapped) dispatch?.(tr);
+  return wrapped;
+};
+
+/** Toggles a quote: inside one it lifts the selection out; otherwise it wraps the nearest blocks a quote may sit among
+ * (a whole list, never part of a list item), turning headings into text. Never nests quotes. */
+export const toggleQuote: Command = (state, dispatch) => {
+  const { $from, $to, from, to } = state.selection;
+  const inside = $from.blockRange($to, node => node.type === blockquote), target = inside && liftTarget(inside);
+  if (inside) { if (target == null) return false; dispatch?.(state.tr.lift(inside, target).scrollIntoView()); return true; }
+  const holds = (node: EditorNode) => !!node.type.contentMatch.matchType(blockquote);
+  const range = $from.blockRange($to, holds);
+  if (!range) return false;
+  const tr = state.tr;
+  headingsToParagraphs(tr, range.parent, range.start, from, to);
+  const mapped = tr.doc.resolve(from).blockRange(tr.doc.resolve(to), holds), wrapping = mapped && findWrapping(mapped, blockquote);
+  if (!mapped || !wrapping) return false;
+  dispatch?.(tr.wrap(mapped, wrapping).scrollIntoView());
+  return true;
+};
