@@ -29,7 +29,7 @@ import {
   type PropertyActivity,
   type Relation,
 } from "./issue-activity";
-import { normalizeDocument } from "./document";
+import { adfToText, normalizeDocument, type AdfDocument } from "./document";
 import { commentCount, imageCommentIds } from "./media-edits";
 import { Icon, Label, PriorityIcon, RelationIcon, StatusIcon, TypeDot, hue } from "./icons";
 import {
@@ -2139,8 +2139,15 @@ function Description({ issue, f }: { issue: Issue; f: any }) {
   const focus = useStore((s) => s.editDesc);
   const error = useStore((s) => s.fullErrors.get(issue.key));
   const stored = f ? JSON.stringify(normalizeDocument(f.description ?? "")) : "";
-  const shown = useRef(stored);
-  const [revision, setRevision] = useState(0);
+  const shown = useRef(stored),
+    typed = useRef<AdfDocument | null>(null);
+  const [revision, setRevision] = useState(0),
+    [focused, setFocused] = useState(false),
+    [restored, setRestored] = useState(0);
+  // Jira's text changed under the editor while typing (someone else's edit, or a save Jira rejected). Saves wait until the person picks a version.
+  const [conflict, setConflict] = useState(false),
+    held = useRef(false);
+  held.current = conflict;
   const draftKey = `better-jira:description-draft:${get().namespace}:${issue.key}`;
   const [autosave] = useState(() =>
     createActor(
@@ -2154,7 +2161,7 @@ function Description({ issue, f }: { issue: Issue; f: any }) {
             }
           },
           commit: (_, doc) => {
-            if (!doc) return;
+            if (!doc || held.current) return;
             shown.current = JSON.stringify(normalizeDocument(doc));
             actions.description(currentKey(issue.key), doc);
             void flushLocalChanges().then(() => {
@@ -2170,14 +2177,49 @@ function Description({ issue, f }: { issue: Issue; f: any }) {
       { inspect: inspector(`autosave ${issue.key}`) },
     ).start(),
   );
-  // Undo, redo or a restored revision replaces the document under the editor, so show the stored version.
-  // Never while typing: Jira's copy (e.g. media ids swapped after an upload) would remount the editor mid-sentence.
+  // Undo, redo, a rolled-back save or a restored revision replaces the document under the editor, so show the stored version once it isn't focused.
+  // While typing, Jira's copy only matters when its text differs (media ids swapped after an upload don't): then ask.
   useEffect(() => {
-    if (stored && stored !== shown.current && !document.activeElement?.closest("#description")) {
+    if (!stored || stored === shown.current || conflict) return;
+    if (!focused) {
       shown.current = stored;
       setRevision((r) => r + 1);
+    } else if (
+      shown.current &&
+      adfToText(JSON.parse(stored)) !== adfToText(JSON.parse(shown.current))
+    )
+      setConflict(true);
+  }, [stored, focused, conflict, restored]);
+  useEffect(() => {
+    const restore = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== issue.key) return;
+      shown.current = "";
+      setConflict(false);
+      setRestored((n) => n + 1);
+    };
+    addEventListener("jira-restored", restore);
+    return () => removeEventListener("jira-restored", restore);
+  }, [issue.key]);
+  const resolve = (keep: boolean) => {
+    autosave.send({ type: "flush" });
+    if (keep) {
+      const doc = typed.current ?? normalizeDocument(JSON.parse(shown.current));
+      shown.current = JSON.stringify(normalizeDocument(doc));
+      setConflict(false);
+      held.current = false;
+      actions.description(currentKey(issue.key), doc);
+      void flushLocalChanges();
+    } else {
+      try {
+        localStorage.removeItem(draftKey);
+      } catch {
+        /* best effort */
+      }
+      shown.current = stored;
+      setConflict(false);
+      setRevision((r) => r + 1);
     }
-  }, [stored]);
+  };
   // A reload in the autosave window leaves the typed draft in localStorage; save it now.
   useEffect(() => {
     if (!f) return;
@@ -2211,7 +2253,32 @@ function Description({ issue, f }: { issue: Issue; f: any }) {
     return () => cancelAnimationFrame(frame);
   }, [focus, !!f]);
   return (
-    <section className="mt-[22px] leading-[1.6] text-fg-2">
+    <section
+      className="mt-[22px] leading-[1.6] text-fg-2"
+      onFocus={() => setFocused(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(false);
+      }}
+    >
+      {conflict && (
+        <div
+          role="alert"
+          className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-line-2 bg-card px-3 py-2 text-[13px]"
+        >
+          <span className="mr-auto">
+            Jira's copy of this description changed. Your edits aren't saved.
+          </span>
+          <button className="rounded px-2 py-0.5 hover:bg-hover" onClick={() => resolve(false)}>
+            Use Jira's version
+          </button>
+          <button
+            className="rounded bg-accent px-2 py-0.5 text-white"
+            onClick={() => resolve(true)}
+          >
+            Keep mine
+          </button>
+        </div>
+      )}
       {!f ? (
         <p role="status" className="text-fg-4">
           {error ? (
@@ -2240,7 +2307,10 @@ function Description({ issue, f }: { issue: Issue; f: any }) {
           issueKey={issue.key}
           attachments={issue.attachments}
           placeholder="Add description…"
-          onChange={(doc) => autosave.send({ type: "change", doc })}
+          onChange={(doc) => {
+            typed.current = doc;
+            autosave.send({ type: "change", doc });
+          }}
           onBlur={() => autosave.send({ type: "flush" })}
         />
       )}

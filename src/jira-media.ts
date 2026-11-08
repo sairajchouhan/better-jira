@@ -26,6 +26,41 @@ function remember(key: string, id: string, value?: Uploaded) {
   } catch {}
 }
 
+let uploading = 0;
+// A reload mid-upload can't resume it, so the browser asks first (the file would miss its place in the description).
+if (typeof window !== "undefined")
+  addEventListener("beforeunload", (event) => {
+    if (uploading) event.preventDefault();
+  });
+async function postAttachment(key: string, file: Blob, name: string): Promise<Uploaded> {
+  uploading++;
+  try {
+    const body = new FormData();
+    body.append("file", file, name);
+    const response = await fetch(`/api/issues/${encodeURIComponent(key)}/attachments`, {
+      method: "POST",
+      body,
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error ?? "Could not upload the file to Jira.");
+    return result as Uploaded;
+  } finally {
+    uploading--;
+  }
+}
+/** Uploads files to Jira at once and in parallel, before they are placed, so a failure shows on the file with Retry and Discard
+ * instead of a card that looks saved; `keep` then stores the local copies, which map to the Jira attachments. */
+export async function uploadNow(
+  key: string,
+  files: File[],
+  keep: (files: File[]) => Promise<Attachment[]>,
+): Promise<Attachment[]> {
+  const uploaded = await Promise.all(files.map((file) => postAttachment(key, file, file.name)));
+  const saved = await keep(files);
+  saved.forEach((file, index) => remember(key, file.id, uploaded[index]));
+  return saved;
+}
+
 /** Walk every value, including future comment ops. Only local ADF media identities change. */
 export async function rewriteDocuments<T>(
   value: T,
@@ -61,7 +96,7 @@ export function uploadedAttachments(
 }
 export function settleUploads(key: string, full: any) {
   aliasAttachments(key, []);
-  const ids = new Set(issueAttachments(full).map((file) => file.id));
+  const ids = new Set(full ? issueAttachments(full).map((file) => file.id) : []);
   for (const [name, value] of mappings)
     if (name.startsWith(`better-jira:upload:${key}:`) && !ids.has(value.attachment.id))
       remember(key, name.slice(`better-jira:upload:${key}:`.length));
@@ -104,20 +139,13 @@ export async function prepareOps(key: string, ops: Op[]): Promise<Op[]> {
       const url = await localFileURL(id);
       if (!url) throw new Error("This local file is unavailable.");
       const blob = await (await fetch(url)).blob(),
-        body = new FormData();
-      body.append(
-        "file",
-        blob,
-        name ?? names.get(id) ?? (blob instanceof File ? blob.name : "Attachment"),
-      );
-      const response = await fetch(`/api/issues/${encodeURIComponent(key)}/attachments`, {
-        method: "POST",
-        body,
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Could not upload attachment.");
+        result = await postAttachment(
+          key,
+          blob,
+          name ?? names.get(id) ?? (blob instanceof File ? blob.name : "Attachment"),
+        );
       remember(key, id, result);
-      return result as Uploaded;
+      return result;
     })();
     pending.set(id, job);
     return job;

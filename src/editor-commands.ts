@@ -10,7 +10,7 @@ import { liftListItem, sinkListItem, wrapInList } from "prosemirror-schema-list"
 import { EditorState, TextSelection, type Command, type Transaction } from "prosemirror-state";
 import { findWrapping, liftTarget } from "prosemirror-transform";
 import { addRowAfter, goToNextCell, isInTable } from "prosemirror-tables";
-import { richSchema } from "./rich-document";
+import { richSchema, safeLink } from "./rich-document";
 
 const inCode = (state: Parameters<Command>[0]) => !!state.selection.$from.parent.type.spec.code;
 
@@ -87,21 +87,65 @@ export const insertLink =
     return true;
   };
 
-/** A 2×2 table with the caret in its first cell. */
+/** A typed link target: a bare domain gets https://, like Linear; anything else must be an http, https or mailto link. */
+export const linkTarget = (input: string) => {
+  const text = input.trim();
+  return safeLink(/^[a-z][\w+.-]*:/i.test(text) ? text : `https://${text}`);
+};
+
+/** Each link touching the selection, whole: Unlink removes the link, not only the selected part. The caret counts at a link's start. */
+export function linkRanges(state: EditorState): [number, number][] {
+  const type = richSchema.marks.link!,
+    { from, to } = state.selection,
+    ranges: [number, number][] = [];
+  state.doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isTextblock) return true;
+    let start = -1,
+      current: EditorNode["marks"][number] | undefined;
+    const close = (end: number) => {
+      if (current && start < Math.max(to, from + 1) && end > from) ranges.push([start, end]);
+      current = undefined;
+    };
+    node.forEach((child, offset) => {
+      const at = pos + 1 + offset,
+        mark = type.isInSet(child.marks);
+      if (current && !mark?.eq(current)) close(at);
+      if (mark && !current) [start, current] = [at, mark];
+    });
+    close(pos + node.nodeSize - 1);
+    return false;
+  });
+  return ranges;
+}
+export const removeLink: Command = (state, dispatch) => {
+  const ranges = linkRanges(state);
+  if (!ranges.length) return false;
+  const tr = state.tr;
+  for (const [from, to] of ranges) tr.removeMark(from, to, richSchema.marks.link!);
+  dispatch?.(tr);
+  return true;
+};
+
+/** A 2×2 table after the selected block, caret in its first cell: the selected text stays, and no mark spreads to the table. */
 export const insertTable: Command = (state, dispatch) => {
   const cell = () => richSchema.nodes.tableCell!.createAndFill()!;
   const row = () => richSchema.nodes.tableRow!.create(null, [cell(), cell()]);
   const table = richSchema.nodes.table!.create(null, [row(), row()]);
+  const { $to } = state.selection;
+  // The nearest block that may have a table after it (a list item or quote cannot hold one).
+  let depth = $to.depth;
+  while (
+    depth > 0 &&
+    !$to
+      .node(depth - 1)
+      .canReplaceWith($to.index(depth - 1) + 1, $to.index(depth - 1) + 1, table.type)
+  )
+    depth--;
+  if (!depth && !$to.parent.canReplaceWith($to.index(), $to.index(), table.type)) return false;
   if (dispatch) {
-    const tr = state.tr.replaceSelectionWith(table),
-      from = tr.mapping.map(state.selection.from, -1);
-    let start = -1;
-    tr.doc.nodesBetween(Math.max(0, from - 2), tr.doc.content.size, (node, pos) => {
-      if (start < 0 && node.type === table.type) start = pos;
-      return start < 0;
-    });
-    if (start >= 0) tr.setSelection(TextSelection.near(tr.doc.resolve(start + 1)));
-    dispatch(tr.scrollIntoView());
+    const at = depth ? $to.after(depth) : $to.pos,
+      tr = state.tr.insert(at, table);
+    dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(at + 1))).scrollIntoView());
   }
   return true;
 };

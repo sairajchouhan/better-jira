@@ -141,21 +141,6 @@ export function ImageMedia({
     (root.current?.contains(document.activeElement) ||
       (!!root.current?.closest(".ProseMirror-selectednode") &&
         document.activeElement === root.current.closest(".rich-content")));
-  useHotkeys(
-    (["F", "Space"] as const).map((hotkey) => ({
-      hotkey,
-      callback: (event: KeyboardEvent) => {
-        if (!open && owned()) {
-          event.preventDefault();
-          event.stopPropagation();
-          setMode("preview");
-          setOpen(true);
-        }
-      },
-      options: { enabled: selected && !open },
-    })),
-    { capture: true, ignoreInputs: false, preventDefault: false, stopPropagation: false },
-  );
   return (
     <div
       ref={root}
@@ -164,6 +149,17 @@ export function ImageMedia({
       onPointerEnter={checkReadAccess}
       onFocus={checkReadAccess}
     >
+      {/* Only the selected image listens, so F and Space are registered once, not once per image. */}
+      {selected && !open && (
+        <PreviewKeys
+          open={() => {
+            if (!owned()) return false;
+            setMode("preview");
+            setOpen(true);
+            return true;
+          }}
+        />
+      )}
       <img
         data-attachment-id={file.id}
         alt={file.name}
@@ -301,4 +297,27 @@ export function ImageMedia({
       )}
     </div>
   );
+}
+
+function PreviewKeys({ open }: { open: () => boolean }) {
+  useHotkeys(
+    (["F", "Space"] as const).map((hotkey) => ({
+      hotkey,
+      callback: (event: KeyboardEvent) => {
+        if (open()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      },
+    })),
+    // The board's own F and Space stay registered: this capture-phase handler runs first and acts only for the selected image.
+    {
+      capture: true,
+      ignoreInputs: false,
+      preventDefault: false,
+      stopPropagation: false,
+      conflictBehavior: "allow",
+    },
+  );
+  return null;
 }

@@ -5,6 +5,7 @@ import { tableNodes } from "prosemirror-tables";
 import {
   normalizeDocument,
   safeLink,
+  jiraDate,
   type AdfMark,
   type AdfNode,
   type AdfDocument,
@@ -76,8 +77,30 @@ const opaque = (inline: boolean): NodeSpec => ({
   toDOM: (node) => [
     inline ? "span" : "div",
     { contenteditable: "false", class: "rich-preserved" },
-    `[${node.attrs.raw?.type ?? "Jira content"}]`,
+    /expand/i.test(node.attrs.raw?.type)
+      ? `▸ ${node.attrs.raw.attrs?.title || "Expand"}`
+      : `[${node.attrs.raw?.type ?? "Jira content"}]`,
   ],
+});
+/** Smart links stay read-only, but open their URL like Jira's. */
+const card = (block: boolean): NodeSpec => ({
+  ...(block ? { group: "block" } : { inline: true, group: "inline" }),
+  atom: true,
+  attrs,
+  toDOM: (node) => {
+    const url = node.attrs.original?.data.attrs?.url;
+    return [
+      "a",
+      {
+        contenteditable: "false",
+        class: block ? "rich-preserved" : "rich-token",
+        href: safeLink(url) ?? "",
+        target: "_blank",
+        rel: "noreferrer",
+      },
+      String(url ?? "Link"),
+    ];
+  },
 });
 
 export const richSchema = new Schema({
@@ -167,25 +190,16 @@ export const richSchema = new Schema({
     },
     emoji: inlineAtom("emoji"),
     status: inlineAtom("status"),
-    date: inlineAtom("date"),
-    inlineCard: {
-      ...inlineAtom("link"),
+    date: {
+      ...inlineAtom("date"),
       toDOM: (node) => [
         "span",
         { contenteditable: "false", class: "rich-token" },
-        String(node.attrs.original?.data.attrs?.url ?? "Link"),
+        jiraDate(node.attrs.original?.data.attrs?.timestamp),
       ],
     },
-    blockCard: {
-      group: "block",
-      atom: true,
-      attrs,
-      toDOM: (node) => [
-        "div",
-        { contenteditable: "false", class: "rich-preserved" },
-        String(node.attrs.original?.data.attrs?.url ?? "Link"),
-      ],
-    },
+    inlineCard: card(false),
+    blockCard: card(true),
     table: tableNode("table", "table"),
     tableRow: tableNode("table_row", "row"),
     tableCell: tableNode("table_cell", "cell"),
@@ -202,7 +216,12 @@ export const richSchema = new Schema({
     em: mark("em"),
     underline: mark("u"),
     strike: mark("s"),
-    code: { ...mark("code"), code: true, excludes: "" },
+    // Jira accepts inline code only with a link: applying code drops the other marks, and they can't be added to code.
+    code: {
+      ...mark("code"),
+      code: true,
+      excludes: "code strong em underline strike subsup textColor backgroundColor",
+    },
     link: {
       attrs: { ...attrs, href: { default: null } },
       inclusive: false,
@@ -232,8 +251,9 @@ export const richSchema = new Schema({
       toDOM: (m) => [
         "span",
         {
+          // Jira's highlight colours are light, so the text on them stays dark in either theme.
           style: /^#[\da-f]{3,8}$/i.test(m.attrs.color ?? "")
-            ? `background-color:${m.attrs.color}`
+            ? `background-color:${m.attrs.color};color:#172b4d`
             : "",
         },
         0,
@@ -252,6 +272,10 @@ const fields: Record<string, Record<string, unknown>> = {
   tableCell: { colspan: 1, rowspan: 1, colwidth: null },
   tableHeader: { colspan: 1, rowspan: 1, colwidth: null },
 };
+/** Attributes Jira rejects a node or mark without, so they are sent even when they equal the default. */
+const REQUIRED = new Set(["heading.level", "taskItem.state", "subsup.type"]);
+/** Jira's marks allowed together with inline code. */
+const WITH_CODE = new Set(["code", "link", "opaqueMark", "textMetadata"]);
 const markFields: Record<string, Record<string, unknown>> = {
   link: { href: null },
   subsup: { type: "sub" },
@@ -318,13 +342,18 @@ export function toEditorDocument(value: unknown): EditorNode {
   );
 }
 function exportedAttrs(
+  type: string,
   base: Record<string, unknown> | undefined,
   values: Record<string, unknown>,
   defaults: Record<string, unknown> = {},
 ) {
   const result = { ...base };
   for (const [name, fallback] of Object.entries(defaults))
-    if (Object.hasOwn(result, name) || JSON.stringify(values[name]) !== JSON.stringify(fallback))
+    if (
+      Object.hasOwn(result, name) ||
+      REQUIRED.has(`${type}.${name}`) ||
+      JSON.stringify(values[name]) !== JSON.stringify(fallback)
+    )
       result[name] = values[name];
   return Object.keys(result).length ? result : undefined;
 }
@@ -346,7 +375,10 @@ function fromEditorNode(node: EditorNode): AdfNode {
     if (original?.data.type !== node.type.name)
       for (const key of Object.keys(fields[String(original?.data.type)] ?? {}))
         delete baseAttrs[key];
-    const attrs = exportedAttrs(baseAttrs, node.attrs, fields[node.type.name]);
+    const attrs = exportedAttrs(node.type.name, baseAttrs, node.attrs, fields[node.type.name]);
+    // Jira requires a task's localId; a task made here (Enter at the end of one) has none yet.
+    if (["taskList", "taskItem"].includes(node.type.name) && attrs && !attrs.localId)
+      attrs.localId = crypto.randomUUID();
     if (attrs) data.attrs = attrs;
     else delete data.attrs;
     if (node.childCount || original?.hadContent) {
@@ -357,11 +389,19 @@ function fromEditorNode(node: EditorNode): AdfNode {
       });
     }
   }
+  // Jira rejects formatting marks on anything but text (a table that inherited a link) and any mark but a link beside code.
+  const code = node.isText && node.marks.some((m) => m.type.name === "code");
   const marks = node.marks.flatMap((mark) => {
-    if (mark.type.name === "textMetadata") return [];
-    if (mark.type.name === "opaqueMark") return structuredClone(mark.attrs.raw) as AdfMark[];
-    const out: AdfMark = { ...mark.attrs.original, type: mark.type.name };
-    const attrs = exportedAttrs(out.attrs, mark.attrs, markFields[mark.type.name]);
+    const name = mark.type.name;
+    if (name === "textMetadata" || (code && !WITH_CODE.has(name))) return [];
+    if (name === "opaqueMark") return structuredClone(mark.attrs.raw) as AdfMark[];
+    if (
+      !node.isText &&
+      !(original?.data.marks as AdfMark[] | undefined)?.some((m) => m.type === name)
+    )
+      return [];
+    const out: AdfMark = { ...mark.attrs.original, type: name };
+    const attrs = exportedAttrs(name, out.attrs, mark.attrs, markFields[name]);
     if (attrs) out.attrs = attrs;
     else delete out.attrs;
     return [out];

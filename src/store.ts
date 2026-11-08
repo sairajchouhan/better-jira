@@ -43,6 +43,7 @@ import {
   uploadedAttachments,
   aliasAttachments,
   settleUploads,
+  uploadNow,
   withoutLocalMedia,
 } from "./jira-media";
 import {
@@ -881,7 +882,12 @@ async function fetchProperties(): Promise<{ pending: number }> {
   set({ propertySync: data.progress, ...(changed ? { issues } : {}) });
   for (const key of stale) {
     needsFullRefresh.add(key);
-    if (key === state.selected && !document.activeElement?.closest?.(".rich-editor"))
+    // The focused description takes Jira's newer text too: it asks before replacing what is being typed.
+    if (
+      key === state.selected &&
+      (!document.activeElement?.closest?.(".rich-editor") ||
+        document.activeElement.id === "description")
+    )
       void loadFull(key);
   }
   return data.progress;
@@ -1284,7 +1290,8 @@ async function flush() {
           for (const queued of outbox)
             queued.ops = renameCommentIds(queued.ops, new Map([[from, to]]));
       if (created.has(job.key)) rekey(job.key, created.get(job.key)!);
-      if (result!.full && result!.key) settleUploads(result!.key, result!.full);
+      // A deleted issue (full null) takes its upload slots with it.
+      if (result!.full !== undefined && result!.key) settleUploads(result!.key, result!.full);
       // New comment ids too, so undo and redo address the comment Jira now has.
       const comments = new Map([...created].filter(([from]) => from !== job.key));
       if (comments.size) {
@@ -1456,6 +1463,11 @@ function adopt(
   queueSave();
 }
 export const pendingJiraWrites = () => outbox.length;
+/** Whether the issue has edits Jira doesn't have yet, so restoring Jira's copy would change something. */
+export const hasLocalJiraChanges = (key: string) =>
+  [...(localFields.get(key) ?? [])].some((field) => JIRA_ISSUE_FIELDS.includes(field as never)) ||
+  !!fullFields.get(key)?.size ||
+  outbox.some((job) => job.key === key);
 export const dismissRecoveryNotice = () => storage.send({ type: "dismiss" });
 export async function flushLocalChanges() {
   await waitFor(storage, (s) => !s.matches("saving"));
@@ -1536,7 +1548,12 @@ export async function restoreLocalFiles(files: NonNullable<Issue["attachments"]>
 export async function addIssueFiles(key: string, files: File[]) {
   if (!database || !state.canEdit)
     throw new Error("Local file storage is unavailable. Retry local storage first.");
-  const saved = await database.addFiles(files),
+  const db = database,
+    // On a writable site the files go to Jira now, so a failed upload shows on the file (Retry, Discard) before anything looks saved.
+    saved =
+      state.writable && !createdKeys.has(key)
+        ? await uploadNow(key, files, (files) => db.addFiles(files))
+        : await db.addFiles(files),
     issue = state.issues.get(key);
   if (issue)
     record(key, `attached files to ${key}`, () =>
@@ -2061,6 +2078,7 @@ export const actions = {
           full: new Map(state.full).set(key, full),
           perf: `Restored mirrored Jira version of ${key}`,
         });
+        dispatchEvent(new CustomEvent("jira-restored", { detail: key }));
         ui.send({ type: "overlay.close" });
       });
     } catch {

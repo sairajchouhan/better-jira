@@ -1,4 +1,5 @@
 import { Plugin, PluginKey } from "prosemirror-state";
+import { insertPoint } from "prosemirror-transform";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
 import type { Attachment } from "./attachment-media";
 import { documentHasMedia, normalizeDocument, type AdfDocument } from "./document";
@@ -198,7 +199,9 @@ export function mediaUploads(
           },
         }),
       );
-      editor.dispatch(editor.state.tr.replaceWith(at, at, nodes).setMeta(key, { id }));
+      // At a paragraph's start or end the files go beside it, not into it, so no empty paragraph is left behind (a drop lands at a start).
+      const place = insertPoint(editor.state.doc, at, editor.state.schema.nodes.mediaSingle!) ?? at;
+      editor.dispatch(editor.state.tr.replaceWith(place, place, nodes).setMeta(key, { id }));
       jobs.delete(id);
       changed?.(jobs.size > 0);
     } catch (error) {

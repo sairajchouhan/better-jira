@@ -29,7 +29,10 @@ import {
   codeEnter,
   insertLink,
   insertTable,
+  linkRanges,
+  linkTarget,
   markdownRules,
+  removeLink,
   setBlock,
   shiftTab,
   shiftTabInside,
@@ -41,7 +44,6 @@ import {
 import {
   fromEditorDocument,
   richSchema,
-  safeLink,
   toEditorDocument,
   type AdfDocument,
 } from "./rich-document";
@@ -309,6 +311,7 @@ export function RichEditor(props: RichEditorProps) {
   };
   const marked = (name: string) => {
     const state = view.current?.state;
+    if (state && name === "link") return linkRanges(state).length > 0;
     return (
       !!state &&
       (state.storedMarks ?? state.selection.$from.marks()).some((m) => m.type.name === name)
@@ -384,7 +387,7 @@ export function RichEditor(props: RichEditorProps) {
     },
   );
   const addLink = () => {
-    const href = safeLink(url);
+    const href = linkTarget(url);
     if (!href) {
       setLinkError("Enter an http, https, or mailto link.");
       return;
@@ -402,10 +405,18 @@ export function RichEditor(props: RichEditorProps) {
     const value = fromEditorDocument(doc);
     return !adfToText(value).trim() && !documentHasMedia(value);
   }, [doc]);
+  const $from = view.current?.state.selection.$from,
+    block = $from?.parent.type.name;
   const level =
-    view.current?.state.selection.$from.parent.type.name === "heading"
-      ? Number(view.current.state.selection.$from.parent.attrs.level)
-      : 0;
+    block === "heading" ? Number($from!.parent.attrs.level) : block === "paragraph" ? 0 : -1;
+  const within = (name: string) =>
+    !!$from &&
+    Array.from({ length: $from.depth }, (_, d) => $from.node(d + 1)).some(
+      (n) => n.type.name === name,
+    );
+  // Comment composers name their own toolbar and undo, not the description's.
+  const subject =
+    props.variant === "comment" || /comment/i.test(props.label ?? "") ? "comment" : "description";
   const selection = view.current?.state.selection;
   // Above the selection; below it when the editor has too little room above, so it never covers the title or header. Either way both edges stay inside the viewport (a long selection can start above and end below it).
   const floating =
@@ -437,6 +448,166 @@ export function RichEditor(props: RichEditorProps) {
       refresh((n) => n + 1);
     }
   });
+  const formatting = (!props.selectionToolbar || floating) && (
+    <div
+      ref={toolbar}
+      role="toolbar"
+      aria-label={`${subject === "comment" ? "Comment" : "Description"} formatting`}
+      style={floating}
+      className={`z-10 items-center gap-0.5 rounded-lg border border-line-2 bg-card p-1 shadow-lg ${floating ? "fixed flex flex-nowrap overflow-x-auto" : "absolute right-0 bottom-full mb-1 hidden max-w-full flex-nowrap overflow-x-auto group-focus-within/editor:flex"}`}
+      onMouseDown={(e) => {
+        if ((e.target as HTMLElement).closest("button")) e.preventDefault();
+      }}
+    >
+      {[
+        ["strong", "Bold", "B"],
+        ["em", "Italic", "I"],
+        ["underline", "Underline", "U"],
+        ["strike", "Strikethrough", "S"],
+        ["code", "Inline code", "<>"],
+      ].map(([name, label, text]) => (
+        <button
+          key={name}
+          type="button"
+          aria-label={label}
+          title={`${label} (${formatForDisplay(editorBindings.find((b) => b.id === name)!.hotkey)})`}
+          aria-pressed={marked(name!)}
+          className={BUTTON}
+          onClick={() => run(toggleMark(richSchema.marks[name!]!))}
+        >
+          {text}
+        </button>
+      ))}
+      {[0, 1, 2, 3, 4].map((n) => (
+        <button
+          key={n}
+          type="button"
+          aria-label={n ? `Heading ${n}` : "Text"}
+          title={n ? `Heading ${n}` : "Text"}
+          aria-pressed={level === n}
+          className={`${BUTTON} shrink-0`}
+          onClick={() => changeBlock(n ? "heading" : "paragraph", n ? { level: n } : {})}
+        >
+          {n ? `H${n}` : "T"}
+        </button>
+      ))}
+      <button
+        type="button"
+        aria-label="Bulleted list"
+        aria-pressed={within("bulletList")}
+        className={BUTTON}
+        onClick={() => list("bulletList")}
+      >
+        • List
+      </button>
+      <button
+        type="button"
+        aria-label="Numbered list"
+        aria-pressed={within("orderedList")}
+        className={BUTTON}
+        onClick={() => list("orderedList")}
+      >
+        1. List
+      </button>
+      <button
+        type="button"
+        aria-label="Block quote"
+        aria-pressed={within("blockquote")}
+        className={BUTTON}
+        onClick={() => run(toggleQuote)}
+      >
+        Quote
+      </button>
+      <button
+        type="button"
+        aria-label="Code block"
+        aria-pressed={block === "codeBlock"}
+        className={BUTTON}
+        onClick={() => changeBlock("codeBlock")}
+      >
+        Code
+      </button>
+      <button
+        type="button"
+        aria-label="Insert link"
+        className={BUTTON}
+        onClick={() => {
+          const state = view.current?.state;
+          const current =
+            state &&
+            (state.storedMarks ?? state.selection.$from.marks()).find(
+              (m) => m.type.name === "link",
+            );
+          setURL(current?.attrs.href ?? "");
+          setLinkOpen(!linkOpen);
+        }}
+      >
+        Link
+      </button>
+      {marked("link") && (
+        <button
+          type="button"
+          aria-label="Remove text link"
+          className={BUTTON}
+          onClick={() => run(removeLink)}
+        >
+          Unlink
+        </button>
+      )}
+      <button
+        type="button"
+        aria-label="Insert table"
+        className={BUTTON}
+        onClick={() => run(insertTable)}
+      >
+        Table
+      </button>
+      {inTable && (
+        <>
+          <button
+            type="button"
+            aria-label="Add table row"
+            className={BUTTON}
+            onClick={() => run(addRowAfter)}
+          >
+            + Row
+          </button>
+          <button
+            type="button"
+            aria-label="Add table column"
+            className={BUTTON}
+            onClick={() => run(addColumnAfter)}
+          >
+            + Column
+          </button>
+          <button
+            type="button"
+            aria-label="Remove table"
+            className={BUTTON}
+            onClick={() => run(deleteTable)}
+          >
+            Remove table
+          </button>
+        </>
+      )}
+      <button
+        type="button"
+        aria-label={`Undo ${subject} edit`}
+        className={BUTTON}
+        onClick={() => run(undo)}
+      >
+        Undo
+      </button>
+      <button
+        type="button"
+        aria-label={`Redo ${subject} edit`}
+        className={BUTTON}
+        onClick={() => run(redo)}
+      >
+        Redo
+      </button>
+    </div>
+  );
   return (
     <div
       className={`rich-editor group/editor relative ${props.inline ? "" : "mb-3 rounded-lg border border-line-2 bg-card"}`}
@@ -457,162 +628,7 @@ export function RichEditor(props: RichEditorProps) {
           }}
         />
       )}
-      {(!props.selectionToolbar || floating) && (
-        <div
-          ref={toolbar}
-          role="toolbar"
-          aria-label="Description formatting"
-          style={floating}
-          className={`z-10 items-center gap-0.5 rounded-lg border border-line-2 bg-card p-1 shadow-lg ${floating ? "fixed flex flex-nowrap overflow-x-auto" : "absolute right-0 bottom-full mb-1 hidden max-w-full flex-nowrap overflow-x-auto group-focus-within/editor:flex"}`}
-          onMouseDown={(e) => {
-            if ((e.target as HTMLElement).closest("button")) e.preventDefault();
-          }}
-        >
-          {[
-            ["strong", "Bold", "B"],
-            ["em", "Italic", "I"],
-            ["underline", "Underline", "U"],
-            ["strike", "Strikethrough", "S"],
-            ["code", "Inline code", "<>"],
-          ].map(([name, label, text]) => (
-            <button
-              key={name}
-              type="button"
-              aria-label={label}
-              title={`${label} (${formatForDisplay(editorBindings.find((b) => b.id === name)!.hotkey)})`}
-              aria-pressed={marked(name!)}
-              className={BUTTON}
-              onClick={() => run(toggleMark(richSchema.marks[name!]!))}
-            >
-              {text}
-            </button>
-          ))}
-          {[0, 1, 2, 3, 4].map((n) => (
-            <button
-              key={n}
-              type="button"
-              aria-label={n ? `Heading ${n}` : "Text"}
-              title={n ? `Heading ${n}` : "Text"}
-              aria-pressed={level === n}
-              className={`${BUTTON} shrink-0`}
-              onClick={() => changeBlock(n ? "heading" : "paragraph", n ? { level: n } : {})}
-            >
-              {n ? `H${n}` : "T"}
-            </button>
-          ))}
-          <button
-            type="button"
-            aria-label="Bulleted list"
-            className={BUTTON}
-            onClick={() => list("bulletList")}
-          >
-            • List
-          </button>
-          <button
-            type="button"
-            aria-label="Numbered list"
-            className={BUTTON}
-            onClick={() => list("orderedList")}
-          >
-            1. List
-          </button>
-          <button
-            type="button"
-            aria-label="Block quote"
-            className={BUTTON}
-            onClick={() => run(toggleQuote)}
-          >
-            Quote
-          </button>
-          <button
-            type="button"
-            aria-label="Code block"
-            className={BUTTON}
-            onClick={() => changeBlock("codeBlock")}
-          >
-            Code
-          </button>
-          <button
-            type="button"
-            aria-label="Insert link"
-            className={BUTTON}
-            onClick={() => {
-              const state = view.current?.state;
-              const current =
-                state &&
-                (state.storedMarks ?? state.selection.$from.marks()).find(
-                  (m) => m.type.name === "link",
-                );
-              setURL(current?.attrs.href ?? "");
-              setLinkOpen(!linkOpen);
-            }}
-          >
-            Link
-          </button>
-          {marked("link") && (
-            <button
-              type="button"
-              aria-label="Remove text link"
-              className={BUTTON}
-              onClick={() => run(toggleMark(richSchema.marks.link!))}
-            >
-              Unlink
-            </button>
-          )}
-          <button
-            type="button"
-            aria-label="Insert table"
-            className={BUTTON}
-            onClick={() => run(insertTable)}
-          >
-            Table
-          </button>
-          {inTable && (
-            <>
-              <button
-                type="button"
-                aria-label="Add table row"
-                className={BUTTON}
-                onClick={() => run(addRowAfter)}
-              >
-                + Row
-              </button>
-              <button
-                type="button"
-                aria-label="Add table column"
-                className={BUTTON}
-                onClick={() => run(addColumnAfter)}
-              >
-                + Column
-              </button>
-              <button
-                type="button"
-                aria-label="Remove table"
-                className={BUTTON}
-                onClick={() => run(deleteTable)}
-              >
-                Remove table
-              </button>
-            </>
-          )}
-          <button
-            type="button"
-            aria-label="Undo description edit"
-            className={BUTTON}
-            onClick={() => run(undo)}
-          >
-            Undo
-          </button>
-          <button
-            type="button"
-            aria-label="Redo description edit"
-            className={BUTTON}
-            onClick={() => run(redo)}
-          >
-            Redo
-          </button>
-        </div>
-      )}
+      {props.variant !== "comment" && formatting}
       {linkOpen && (
         <div className="flex flex-wrap items-center gap-2 border-b border-line-2 p-2">
           <input
@@ -674,6 +690,7 @@ export function RichEditor(props: RichEditorProps) {
       )}
       {(props.onSave || props.onCancel) && (
         <div className="rich-editor-actions flex items-center justify-end gap-2 border-t border-line-2 p-2 text-[12px]">
+          {props.variant === "comment" && formatting}
           {props.variant !== "comment" && (
             <span className="mr-auto text-fg-3">{props.hint ?? "⌘↵ save · Esc cancel"}</span>
           )}

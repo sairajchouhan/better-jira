@@ -1,6 +1,7 @@
 import { jira, JiraError } from "./jira";
 import { ESTIMATES, refresh } from "./mirror";
 import { renameCommentIds, type Op } from "./jira-ops";
+import { adfToText } from "./document";
 
 const at = (key: string) => `/rest/api/3/issue/${encodeURIComponent(key)}`;
 
@@ -93,8 +94,17 @@ async function run(ctx: Context, op: Op) {
     case "fields": {
       if (op.fields.project !== undefined)
         throw new UserError("Jira's API cannot move an issue to another project.");
-      const { labelEdits, ...rest } = op.fields,
+      const { labelEdits, descriptionBase, ...rest } = op.fields,
         fields = fieldPayload(rest);
+      // Jira has no conditional update, so compare first: an edit made from an older text must not overwrite someone else's newer one.
+      if (descriptionBase !== undefined) {
+        const current = (await jira(`${at(key)}?fields=description`)).fields?.description,
+          squash = (text: string) => text.replace(/\s+/g, " ").trim();
+        if (squash(adfToText(current)) !== squash(descriptionBase))
+          throw new UserError(
+            "Someone changed the description in Jira while you were editing it. Pick a version in the description.",
+          );
+      }
       // Single adds and removes, so labels someone else added meanwhile survive.
       const update = labelEdits && {
         labels: [

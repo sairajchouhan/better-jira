@@ -26,6 +26,7 @@ import {
   get,
   issueURL,
   isLocalIssue,
+  hasLocalJiraChanges,
   ME,
   navigate,
   openSavedView,
@@ -987,7 +988,7 @@ export function IssueOptions({ issue }: { issue: Issue }) {
       ],
     },
     { name: "Show description history", icon: "undo", divider: true, run: () => reopen("history") },
-    ...(!isLocalIssue(issue.key)
+    ...(!isLocalIssue(issue.key) && hasLocalJiraChanges(issue.key)
       ? [
           {
             name: "Restore mirrored Jira version",

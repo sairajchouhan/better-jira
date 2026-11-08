@@ -20,6 +20,13 @@ export function safeLink(value: unknown): string | null {
     return null;
   }
 }
+/** A Jira date node's day. Jira stores midnight UTC, so it is read in UTC to keep the day. */
+export function jiraDate(timestamp: unknown): string {
+  const date = new Date(Number(timestamp));
+  return Number.isNaN(date.getTime())
+    ? "Date"
+    : date.toLocaleDateString(undefined, { timeZone: "UTC" });
+}
 export function plainDocument(text: string): AdfDocument {
   return {
     type: "doc",
@@ -89,4 +96,19 @@ export function textToAdf(text: string): AdfDocument {
           ]),
       })),
   };
+}
+
+/** Plain text of ADF: what a reader sees, without formatting or media. */
+export function adfToText(node: any): string {
+  if (!node) return "";
+  if (typeof node === "string") return node;
+  if (node.type === "text") return node.text;
+  if (node.type === "hardBreak") return "\n";
+  if (node.attrs?.text) return node.attrs.text;
+  if (node.type === "inlineCard") return node.attrs?.url ?? "";
+  const kids: string[] = (node.content ?? []).map(adfToText);
+  if (node.type === "doc") return kids.join("\n\n");
+  if (node.type === "bulletList" || node.type === "orderedList")
+    return kids.map((k) => `- ${k}`).join("\n");
+  return kids.join(node.type === "listItem" ? "\n" : "");
 }

@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { MediaView } from "./media-loader";
 import type { Attachment } from "./attachment-media";
-import { safeLink } from "./document";
+import { jiraDate, safeLink } from "./document";
+export { adfToText } from "./document";
 
 /** Renders Jira's ADF (Atlassian Document Format). Unknown nodes fall through to their children. */
 export function Adf({
@@ -79,7 +80,7 @@ export function Adf({
     case "status":
       return <span className="rounded bg-sel px-1 text-xs font-semibold uppercase">{a.text}</span>;
     case "date":
-      return <>{new Date(Number(a.timestamp)).toLocaleDateString()}</>;
+      return <>{jiraDate(a.timestamp)}</>;
     case "inlineCard":
     case "blockCard":
       return (
@@ -219,16 +220,3 @@ function mark(inner: ReactNode, m: any): ReactNode {
 }
 
 /** Text projection for search and previews. Rich editing retains the original document. */
-export function adfToText(node: any): string {
-  if (!node) return "";
-  if (typeof node === "string") return node;
-  if (node.type === "text") return node.text;
-  if (node.type === "hardBreak") return "\n";
-  if (node.attrs?.text) return node.attrs.text;
-  if (node.type === "inlineCard") return node.attrs?.url ?? "";
-  const kids: string[] = (node.content ?? []).map(adfToText);
-  if (node.type === "doc") return kids.join("\n\n");
-  if (node.type === "bulletList" || node.type === "orderedList")
-    return kids.map((k) => `- ${k}`).join("\n");
-  return kids.join(node.type === "listItem" ? "\n" : "");
-}

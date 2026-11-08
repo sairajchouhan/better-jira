@@ -78,3 +78,30 @@ test("rewrites documents nested anywhere in ops without mutating nodes or extern
   expect(result[2]).toEqual({ other: media });
   expect(media.attrs.id).toBe("local");
 });
+
+test("R1-D30: an issue gone from Jira takes its upload slots with it", async () => {
+  const { settleUploads } = await import("./jira-media");
+  const slots = new Map<string, string>([
+    ["better-jira:upload:KAN-9:local-1", JSON.stringify({ attachment: { id: "10001" } })],
+  ]);
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      get length() {
+        return slots.size;
+      },
+      key: (i: number) => [...slots.keys()][i] ?? null,
+      getItem: (key: string) => slots.get(key) ?? null,
+      setItem: (key: string, value: string) => slots.set(key, value),
+      removeItem: (key: string) => slots.delete(key),
+    },
+  });
+  try {
+    settleUploads("KAN-9", null);
+    expect([...slots.keys()]).toEqual([]);
+  } finally {
+    if (previous) Object.defineProperty(globalThis, "localStorage", previous);
+    else delete (globalThis as any).localStorage;
+  }
+});

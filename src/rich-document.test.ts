@@ -276,3 +276,41 @@ test("Backspace removes a selected media atom and undo restores exact ADF", asyn
   ).toBe(true);
   expect(JSON.stringify(fromEditorDocument(state.doc))).toBe(JSON.stringify(nestedMedia));
 });
+
+test("R1-D2: a new Heading 2 carries level 2, which Jira requires (it is the schema default)", () => {
+  const doc = richSchema.nodes.doc!.create(null, [
+    richSchema.nodes.heading!.create({ level: 2 }, richSchema.text("Heading two")),
+    richSchema.nodes.taskList!.create(null, richSchema.nodes.taskItem!.create()),
+  ]);
+  const [heading, tasks] = fromEditorDocument(doc).content!;
+  expect(heading!.attrs).toEqual({ level: 2 });
+  expect(tasks!.content![0]!.attrs).toMatchObject({ state: "TODO", localId: expect.any(String) });
+});
+
+test("R1-D3: inline code keeps only a link beside it, and blocks never carry text marks", () => {
+  const m = richSchema.marks;
+  const text = richSchema.text("seven", [m.em!.create()]);
+  let state = EditorState.create({
+    doc: richSchema.nodes.doc!.create(null, richSchema.nodes.paragraph!.create(null, text)),
+  });
+  // ⌘E on italic text: code replaces the italic, and ⌘I on code adds nothing.
+  state = state.apply(state.tr.addMark(1, 6, m.code!.create()));
+  state = state.apply(state.tr.addMark(1, 6, m.strong!.create()));
+  expect(fromEditorDocument(state.doc).content![0]!.content![0]!.marks).toEqual([{ type: "code" }]);
+  // Whatever builds them, the serializer sends code with a link only, and a table with no inline marks.
+  const link = m.link!.create({ href: "https://example.com" });
+  const doc = richSchema.nodes.doc!.create(null, [
+    richSchema.nodes.paragraph!.create(
+      null,
+      richSchema.text("c1", [m.em!.create(), m.code!.create(), link]),
+    ),
+    richSchema.nodes.table!.create(
+      null,
+      richSchema.nodes.tableRow!.create(null, richSchema.nodes.tableCell!.createAndFill()!),
+      [link],
+    ),
+  ]);
+  const [paragraph, table] = fromEditorDocument(doc).content!;
+  expect(paragraph!.content![0]!.marks!.map((mark) => mark.type).sort()).toEqual(["code", "link"]);
+  expect(table!.marks).toBeUndefined();
+});

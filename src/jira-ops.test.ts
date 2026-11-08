@@ -66,7 +66,14 @@ test("descriptions come from the full record and ranks name a neighbour", () => 
   const full = (text: string) => ({ key: "A-1", fields: { description: doc(text) } });
   expect(
     opsFor({ issue: base, full: full("a") }, { issue: base, full: full("b") }, new Map()),
-  ).toEqual([{ op: "fields", fields: { description: doc("b") } }]);
+    // The text the edit started from, so the server can refuse to overwrite a newer Jira edit (R1-D9).
+  ).toEqual([{ op: "fields", fields: { description: doc("b"), descriptionBase: "a" } }]);
+  expect(
+    mergeOps(
+      [{ op: "fields", fields: { description: doc("b"), descriptionBase: "a" } }],
+      [{ op: "fields", fields: { description: doc("c"), descriptionBase: "b" } }],
+    ),
+  ).toEqual([{ op: "fields", fields: { description: doc("c"), descriptionBase: "a" } }]);
   const peers = new Map<string, Issue>([
     ["A-2", { ...base, key: "A-2", rank: "a" }],
     ["A-3", { ...base, key: "A-3", rank: "c" }],

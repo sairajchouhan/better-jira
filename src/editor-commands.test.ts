@@ -6,7 +6,9 @@ import {
   codeEnter,
   insertLink,
   insertTable,
+  linkTarget,
   markdownRules,
+  removeLink,
   setBlock,
   shiftTab,
   tab,
@@ -357,4 +359,35 @@ test("the editor schema allows no block nesting Jira forbids, so typing and past
   expect(typeInto(empty(), "- > item").doc.firstChild!.firstChild!.firstChild!.type.name).toBe(
     "paragraph",
   );
+});
+
+test("R1-D12: Insert table keeps the selected text and goes after its paragraph", () => {
+  const doc = n.doc!.create(null, [p("keep this text")]);
+  const selected = EditorState.create({ doc, selection: TextSelection.create(doc, 6, 10) });
+  const { after } = run(insertTable, selected);
+  expect(after.doc.childCount).toBe(2);
+  expect(after.doc.firstChild!.textContent).toBe("keep this text");
+  expect(after.doc.lastChild!.type.name).toBe("table");
+  expect(after.selection.empty).toBe(true);
+});
+
+test("R1-D51/D79: Unlink removes the whole link from the caret or a selection at its start; a bare domain gets https", () => {
+  const link = s.marks.link!.create({ href: "https://example.com" });
+  const doc = n.doc!.create(null, [
+    n.paragraph!.create(null, [s.text("see "), s.text("link me", [link]), s.text(" now")]),
+  ]);
+  for (const [from, to] of [
+    [5, 5],
+    [5, 8],
+    [7, 9],
+  ] as const) {
+    const { handled, after } = run(
+      removeLink,
+      EditorState.create({ doc, selection: TextSelection.create(doc, from, to) }),
+    );
+    expect(handled).toBe(true);
+    expect(after.doc.rangeHasMark(0, after.doc.content.size, s.marks.link!)).toBe(false);
+  }
+  expect(linkTarget(" example.com ")).toBe("https://example.com/");
+  expect(linkTarget("javascript:alert(1)")).toBeNull();
 });

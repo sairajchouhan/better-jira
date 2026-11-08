@@ -714,7 +714,8 @@
   opacity: 1;
   pointer-events: auto;
 }
-.rich-editor:has([data-media-interactive]:focus-within) > [role="toolbar"] {
+.rich-editor:has([data-media-interactive]:focus-within) > [role="toolbar"],
+.rich-editor:has([data-media-interactive]:focus-within) > .rich-editor-actions > [role="toolbar"] {
   display: none;
 }
 .video-waiting,
@@ -1523,16 +1524,24 @@
   border: 0;
   background: transparent;
 }
-/* Comment formatting stays inside its composer so it cannot cover the preceding reply row. */
-.rich-editor[data-variant="comment"] > [role="toolbar"] {
-  bottom: 4px;
+/* Comment formatting sits in the composer's action row, left of its buttons, so it never covers the paperclip or the reply row above. */
+.rich-editor[data-variant="comment"] > .rich-editor-actions {
   left: 8px;
-  right: 42px;
-  margin-bottom: 0;
+}
+.rich-editor[data-variant="comment"] .rich-editor-actions > [role="toolbar"] {
+  position: static;
+  min-width: 0;
+  margin: 0 auto 0 0;
+  padding: 0;
   border: 0;
   border-radius: 0;
   box-shadow: none;
   background: transparent;
+}
+/* 24px tall like the row's other buttons, so it stays inside the composer's bottom padding. */
+.rich-editor[data-variant="comment"] .rich-editor-actions > [role="toolbar"] > button {
+  padding-block: 0;
+  line-height: 24px;
 }
 
 /* Keep inline formatting beside the composer actions, clear of the title. */

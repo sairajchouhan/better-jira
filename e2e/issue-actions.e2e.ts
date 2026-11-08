@@ -24,7 +24,6 @@ test("issue options follow Linear's action tree, with descendant search and subm
       "Favorite",
       "Remind me",
       "Show description history",
-      "Restore mirrored Jira version",
       "Delete",
     ]);
     // Linear's Create related (square with +) and Copy (clipboard) glyphs.

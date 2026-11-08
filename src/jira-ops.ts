@@ -1,4 +1,4 @@
-import { textToAdf, type AdfDocument } from "./document";
+import { adfToText, textToAdf, type AdfDocument } from "./document";
 import type { Full, Issue } from "./store";
 import type { CommentState, IssueComment } from "./comment-thread";
 
@@ -6,6 +6,8 @@ import type { CommentState, IssueComment } from "./comment-thread";
 type Fields = {
   summary?: string;
   description?: AdfDocument;
+  /** The text the description edit started from; the server refuses the edit when Jira's text has changed since (someone else's edit). */
+  descriptionBase?: string;
   priority?: string | null;
   assignee?: string | null;
   labels?: string[];
@@ -247,7 +249,11 @@ export function opsFor(before: Side, after: Side, issues: Map<string, Issue>): O
     : changed;
   const da = before.full?.fields.description,
     db = after.full?.fields.description;
-  if (after.full && db !== undefined && !same(da, db)) fields.description = db;
+  if (after.full && db !== undefined && !same(da, db)) {
+    fields.description = db;
+    // Unknown on replay after a reload (the base wasn't kept): sent unchecked, as before.
+    if (da !== undefined) fields.descriptionBase = adfToText(da);
+  }
   if (Object.keys(fields).length) ops.push({ op: "fields", fields });
   if (a.status !== b.status) ops.push({ op: "status", status: b.status });
   if (b.rank !== undefined && a.rank !== b.rank) {
@@ -321,7 +327,15 @@ export function mergeOps(first: Op[], second: Op[]): Op[] {
           : (b ?? a);
       out[index] = {
         op: "fields",
-        fields: { ...first, ...op.fields, ...(labelEdits ? { labelEdits } : {}) },
+        fields: {
+          ...first,
+          ...op.fields,
+          // Merged edits started from the first one's text, which is what Jira still has.
+          ...(first.descriptionBase !== undefined
+            ? { descriptionBase: first.descriptionBase }
+            : {}),
+          ...(labelEdits ? { labelEdits } : {}),
+        },
       };
     } else out[index] = op;
   }
