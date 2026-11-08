@@ -9,3 +9,7 @@ env = "BUN_PUBLIC_*"
 [lint.rules]
 # "no-console" = "warn"
 # "eqeqeq" = ["error", "smart"]
+
+[fmt]
+printWidth = 100 # oxfmt's default, which formatted this repo
+ignorePatterns = [".raj/", "dist/", "e2e/fixtures/"]

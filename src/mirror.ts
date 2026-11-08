@@ -505,12 +505,11 @@ async function enrichProjects() {
 async function enrichProperties() {
   if (enriching) return;
   const rows = db
-    .query<
-      { key: string; full: string; slim: string },
-      [number, number]
-    >(`SELECT i.key,i.full,i.slim FROM issues i LEFT JOIN issue_properties p ON p.key=i.key
+    .query<{ key: string; full: string; slim: string }, [number, number]>(
+      `SELECT i.key,i.full,i.slim FROM issues i LEFT JOIN issue_properties p ON p.key=i.key
     WHERE p.key IS NULL OR p.source_updated != json_extract(i.slim,'$.updated') OR p.synced < ?
-      OR (json_array_length(p.data,'$.errors') > 0 AND p.synced < ?)`)
+      OR (json_array_length(p.data,'$.errors') > 0 AND p.synced < ?)`,
+    )
     .all(Date.now() - FULL_SYNC_EVERY_MS, Date.now() - 15 * 60000);
   if (!rows.length) return;
   enriching = true;

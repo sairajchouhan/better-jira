@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { pullRequestCount, statusDates } from "./issue-properties";
 
 const categories = (id: string) =>
-  ({ todo: "new", doing: "indeterminate", done: "done" } as Record<string, string>)[id];
+  (({ todo: "new", doing: "indeterminate", done: "done" }) as Record<string, string>)[id];
 test("uses the latest real entry into the current status and first started transition", () => {
   const histories = [
     { created: "2026-11-02T10:00:00Z", items: [{ fieldId: "status", from: "todo", to: "doing" }] },

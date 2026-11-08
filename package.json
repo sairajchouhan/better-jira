@@ -12,9 +12,7 @@
     "test:e2e": "bun test --timeout 60000 ./e2e/*.e2e.ts",
     "dev:personal": "bun --env-file=.env.personal --hot src/index.ts",
     "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
-    "fmt": "oxfmt",
-    "fmt:check": "oxfmt --check"
+    "lint:fix": "oxlint --fix"
   },
   "dependencies": {
     "@floating-ui/react": "^0.27.20",
@@ -45,7 +43,6 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "fake-indexeddb": "^6.2.7",
-    "oxfmt": "0.77.0",
     "oxlint": "1.92.0"
   },
   "peerDependencies": {

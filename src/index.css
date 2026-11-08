@@ -1189,10 +1189,9 @@
 }
 .issue-detail-grid {
   display: grid;
-  grid-template-columns: 1fr minmax(0, 80ch) minmax(
-      0,
-      clamp(280px, 26.087cqw + 66.087px, 400px)
-    ) 1fr;
+  grid-template-columns:
+    1fr minmax(0, 80ch) minmax(0, clamp(280px, 26.087cqw + 66.087px, 400px))
+    1fr;
   column-gap: clamp(16px, 8.696cqw - 55.304px, 56px);
   align-content: start;
   padding-block: 59.5px 80px;
