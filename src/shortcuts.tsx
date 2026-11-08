@@ -786,6 +786,8 @@ export function useLinearHotkeys(getColumns: () => Issue[][]) {
                 ? false
                 : true,
             meta: { name: entry.name, group: entry.group },
+            // Document and issue shortcuts share keys on purpose; `enabled` keeps exactly one of each pair active.
+            ...(shortcuts.some((other) => other !== entry && other.hotkey === entry.hotkey && !!other.document !== !!entry.document) ? { conflictBehavior: "allow" as const } : {}),
           },
         }) as UseHotkeyDefinition,
     ),
