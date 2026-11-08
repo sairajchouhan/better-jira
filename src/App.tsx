@@ -200,6 +200,7 @@ function describeActivity(event: PropertyActivity, issue: Issue, then = false): 
     assignee: "assignee",
     due: "due date",
     parent: "parent issue",
+    type: "issue type",
   }[field];
   if (after === null || after === "") return `removed ${label}`;
   if (field === "assignee")
@@ -222,6 +223,7 @@ function ActivityIcon({ row, issue }: { row: ActivityRow; issue: Issue }) {
   if (row.field === "priority")
     return <PriorityIcon name={(last.after as string | null) ?? undefined} />;
   if (row.field === "labels") return <Icon name="label" />;
+  if (row.field === "type") return <TypeDot type={last.after as string} />;
   if (row.field === "due") return <Icon name="calendar" />;
   if (row.field === "assignee") return <Avatar user={last.after as User | null} size={14} />;
   return <Avatar user={row.actor} size={14} />;
@@ -308,6 +310,7 @@ export function App() {
       {overlay === "create" && <CreateIssue />}
       {current &&
         (overlay === "priority" ||
+          overlay === "type" ||
           overlay === "labels" ||
           overlay === "project" ||
           overlay === "milestone" ||
@@ -1765,7 +1768,7 @@ function Properties({ issue }: { issue: Issue }) {
   // Linear: content-width 28px pills 4px apart, icon in a 16px box 6px in, and a tooltip naming the action and its key (no project tooltip).
   const btn = (
     id: string,
-    overlay: "status" | "assign" | "priority" | "labels" | "project" | "milestone" | "due",
+    overlay: "status" | "assign" | "priority" | "type" | "labels" | "project" | "milestone" | "due",
     tip: string,
     body: ReactNode,
   ) => (
@@ -1824,6 +1827,19 @@ function Properties({ issue }: { issue: Issue }) {
                 <Avatar user={issue.assignee} size={16} />
               </span>
               <span className="truncate">{issue.assignee?.name ?? "Unassigned"}</span>
+            </>,
+          )}
+          {btn(
+            "prop-type",
+            "type",
+            "Change issue type",
+            <>
+              <span>
+                <TypeDot type={issue.type} />
+              </span>
+              <span className={`truncate ${issue.type ? "" : "text-fg-3"}`}>
+                {issue.type ?? "Issue type"}
+              </span>
             </>,
           )}
           {issue.due &&

@@ -138,21 +138,22 @@ test("properties are Linear's 28px pills under 13px headings, with its tooltip u
   try {
     await page.waitFor(`!!document.querySelector('[data-properties] button')`);
     // RAJ-53: headings at 127.8 / 278.8 / 365.8 with text from x 910.1; pills from x 903.1, 28 tall, every 32px, text at x 931.1.
+    // Our issue type pill (not in Linear) adds one 32px row to Properties, so later headings sit 32px lower.
     expect(
       await page.eval(
         `[...document.querySelectorAll('[data-properties] h3')].map(h=>{const b=h.getBoundingClientRect();return [h.textContent,Math.round(b.y*10)/10,Math.round(b.x*10)/10+8,getComputedStyle(h).fontSize]})`,
       ),
     ).toEqual([
       ["Properties", 127.8, 910.1, "13px"],
-      ["Labels", 278.8, 910.1, "13px"],
-      ["Project", 365.8, 910.1, "13px"],
+      ["Labels", 310.8, 910.1, "13px"],
+      ["Project", 397.8, 910.1, "13px"],
     ]);
     const pills = await page.eval<number[][]>(
       `[...document.querySelectorAll('[data-properties] button[id^="prop-"]:not(.label-add)')].map(b=>{const r=b.getBoundingClientRect(),t=document.createRange();t.setStartAfter(b.firstChild);t.setEnd(b,b.childNodes.length);return [Math.round(r.x*10)/10,Math.round(r.y),r.height,Math.round(t.getBoundingClientRect().x*10)/10,parseFloat(getComputedStyle(b).borderRadius)>=14?1:0]})`,
     );
-    expect(pills.map((p) => p[0])).toEqual([903.1, 903.1, 903.1, 903.1]);
-    expect(pills.map((p) => p[1])).toEqual([154, 186, 218, 392]);
-    expect(pills.map((p) => p.slice(2))).toEqual(Array(4).fill([28, 931.1, 1]));
+    expect(pills.map((p) => p[0])).toEqual([903.1, 903.1, 903.1, 903.1, 903.1]);
+    expect(pills.map((p) => p[1])).toEqual([154, 186, 218, 250, 424]);
+    expect(pills.map((p) => p.slice(2))).toEqual(Array(5).fill([28, 931.1, 1]));
     // Hover: after a beat, "Change status S" in a menu-surface tooltip centred 8px under the pill; the native title is parked so it does not double up.
     await page.hover("#prop-status");
     await page.waitFor(`!!document.querySelector('[role=tooltip].app-tooltip')`, 2000);
@@ -484,15 +485,15 @@ test("relations follow Linear (RAJ-52): sidebar sections after Project, 28px pil
         `[document.querySelectorAll('[data-relation="related:TEST-1"]').length,document.querySelectorAll('[data-activity="relation"]').length]`,
       ),
     ).toEqual([1, 2]);
-    // RAJ-52 at 1272×846: "Blocked by" then "Related" headings 87px apart from Project's, as Linear's x 902.1 / y 452.8 and 539.8.
+    // RAJ-52 at 1272×846: "Blocked by" then "Related" headings 87px apart from Project's, as Linear's x 902.1 / y 452.8 and 539.8 (+32px for our type pill).
     expect(
       await page.eval(
         `[...document.querySelectorAll('[data-properties] h3')].map(h=>[h.textContent,Math.round(h.getBoundingClientRect().x*10)/10,Math.round(h.getBoundingClientRect().y*10)/10]).slice(2)`,
       ),
     ).toEqual([
-      ["Project", 902.1, 365.8],
-      ["Blocked by", 902.1, 452.8],
-      ["Related", 902.1, 539.8],
+      ["Project", 902.1, 397.8],
+      ["Blocked by", 902.1, 484.8],
+      ["Related", 902.1, 571.8],
     ]);
     // Pill 1px in, 25.7px under the heading (±0.5; our heading is 0.5px taller), status icon 7px and title 28px in, 13px/500 lch(90.451); the remove button 24px round, 8px after the pill, hidden until hover.
     const geometry = `(()=>{const row=document.querySelector('[data-relation="blocked:TEST-2"]'),h=[...document.querySelectorAll('[data-properties] h3')].find(h=>h.textContent==='Blocked by').getBoundingClientRect(),pill=row.querySelector('a'),p=pill.getBoundingClientRect(),btn=row.querySelector('button[aria-label="Remove relation"]'),b=btn.getBoundingClientRect(),c=getComputedStyle(pill);return [p.x-h.x,Math.abs(p.y-h.y-25.7)<=0.5,p.height,pill.querySelector('svg').getBoundingClientRect().x-p.x,pill.children[1].getBoundingClientRect().x-p.x,pill.children[1].textContent,c.fontSize,c.fontWeight,c.color,c.borderRadius,Math.round((b.x-p.right)*10)/10,b.y-p.y,b.width,b.height,getComputedStyle(btn).borderRadius,getComputedStyle(btn).opacity,c.backgroundColor]})()`;

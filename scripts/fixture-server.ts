@@ -134,8 +134,51 @@ let clientFailures = 0,
   contentFailure = 0,
   unmappedMedia = false,
   mediaDelay = 0,
-  mediaVariant = "";
+  mediaVariant = "",
+  writable = false,
+  subtask = false;
 const requests: { method: string; path: string; status: number }[] = [];
+/** Writable mode: ops the app sent, and the types they changed (reset with the fixture). */
+const writes: { key: string; ops: any[] }[] = [],
+  types = new Map<string, string>();
+// Jira's createmeta types for TEST, with their hierarchy levels.
+const issueTypes = [
+  { name: "Epic", hierarchyLevel: 1 },
+  { name: "Subtask", hierarchyLevel: -1 },
+  { name: "Task", hierarchyLevel: 0 },
+  { name: "Story", hierarchyLevel: 0 },
+];
+const listed = () =>
+  issues.map((issue) => ({
+    ...issue,
+    ...(subtask && issue.key === "TEST-6" ? { type: "Subtask", parent: "TEST-5" } : {}),
+    ...(types.has(issue.key) ? { type: types.get(issue.key) } : {}),
+    comments: threadedComments ? thread.length : mediaInComment ? 1 : 0, // the mirror list counts the same Jira comments the detail returns
+  }));
+/** Stands in for the server's applyOps: type changes follow live Jira, which refuses Subtask ↔ standard types. */
+function applyOps(key: string, ops: any[]) {
+  writes.push({ key, ops });
+  const issue = listed().find((i) => i.key === key)!,
+    type = ops.find((op) => op.op === "fields" && op.fields.type)?.fields.type;
+  if (type && (issue.type === "Subtask") !== (type === "Subtask"))
+    return Response.json(
+      {
+        error: `Jira won't change ${key} to ${type}: The issue type selected is invalid. Use Move in Jira for this change.`,
+        key,
+        created: {},
+        others: [],
+        issue,
+      },
+      { status: 422 },
+    );
+  if (type) types.set(key, type);
+  return Response.json({
+    key,
+    created: {},
+    others: [],
+    issue: listed().find((i) => i.key === key),
+  });
+}
 const mediaAssets = [
   {
     id: "101",
@@ -418,12 +461,20 @@ async function handle(req: Request) {
     unmappedMedia = settings.unmappedMedia ?? false;
     mediaDelay = settings.mediaDelay ?? 0;
     mediaVariant = settings.mediaVariant ?? "";
+    writable = settings.writable ?? false;
+    subtask = settings.subtask ?? false;
     requests.length = 0;
+    writes.length = 0;
+    types.clear();
     return Response.json({ ok: true });
   }
-  if (path === "/__fixture" && req.method === "GET") return Response.json({ requests, rich });
+  if (path === "/__fixture" && req.method === "GET")
+    return Response.json({ requests, rich, writes });
   let status = 200,
     body: unknown;
+  const ops = path.match(/^\/api\/issues\/([^/]+)\/ops$/);
+  if (writable && ops && req.method === "POST")
+    return applyOps(decodeURIComponent(ops[1]!), (await req.json()).ops);
   if (req.method !== "GET") {
     status = 405;
     body = { error: "Fixture API is read-only" };
@@ -431,13 +482,11 @@ async function handle(req: Request) {
     if (clientFailures-- > 0) {
       status = 503;
       body = { error: "Test unavailable" };
-    } else body = { site: "https://example.atlassian.net", user };
+    } else body = { site: "https://example.atlassian.net", user, writable };
   } else if (path === "/api/boards") body = [board];
-  else if (path === "/api/issues")
-    body = issues.map((issue) => ({
-      ...issue,
-      comments: threadedComments ? thread.length : mediaInComment ? 1 : 0,
-    })); // the mirror list counts the same Jira comments the detail returns
+  else if (path === "/api/issues") body = listed();
+  else if (path === "/api/options")
+    body = { priorities: [], users: [], labels: [], versions: {}, types: { TEST: issueTypes } };
   else if (path === "/api/view-defaults") body = {};
   else if (path === "/api/users") {
     const query = (url.searchParams.get("query") ?? "").toLowerCase();

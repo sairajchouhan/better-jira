@@ -381,6 +381,7 @@ export const shortcuts: Shortcut[] = [
       ["assign", "Assign issue to user", "A", "assign"],
       ["status", "Change issue status", "S", "status"],
       ["priority", "Change priority", "P", "priority"],
+      ["type", "Change issue type", "Shift+T", "type"],
       ["labels", "Change labels", "L", "labels"],
       ["due", "Set due date", "Shift+D", "due"],
       ["remind", "Remind me", "Shift+H", "reminder"],

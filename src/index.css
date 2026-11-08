@@ -1288,7 +1288,8 @@
   #prop-priority {
     order: 1;
   }
-  #prop-assignee {
+  #prop-assignee,
+  #prop-type {
     order: 2;
   }
   #prop-project {

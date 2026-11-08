@@ -84,3 +84,16 @@ export function pullRequestCount(value: unknown): number | undefined {
   const count = summary?.pullrequest?.overall?.count;
   return typeof count === "number" && Number.isInteger(count) && count >= 0 ? count : undefined;
 }
+
+/** Types an existing issue can switch to with Jira's edit: its project's types at its hierarchy level (live Jira rejects Subtask ↔ Task).
+ *  Without Jira's type list (local mode), the types already seen in the project. */
+export function typeChoices(
+  current: string | undefined,
+  jiraTypes: { name: string; hierarchyLevel: number }[] | undefined,
+  seen: string[],
+): string[] {
+  const level = jiraTypes?.find((t) => t.name === current)?.hierarchyLevel;
+  if (level !== undefined)
+    return jiraTypes!.filter((t) => t.hierarchyLevel === level).map((t) => t.name);
+  return [...new Set([...(current ? [current] : []), ...seen])];
+}

@@ -102,11 +102,27 @@ async function run(ctx: Context, op: Op) {
           ...labelEdits.remove.map((remove) => ({ remove })),
         ],
       };
+      // Jira refuses a type in another workflow or hierarchy (Subtask ↔ Task); only Jira's Move can do that.
+      const refused = (reason: string) =>
+        new UserError(
+          `Jira won't change ${key} to ${rest.type}: ${reason} Use Move in Jira for this change.`,
+        );
       if (Object.keys(fields).length || update?.labels.length)
         await jira(at(key), {
           method: "PUT",
           body: JSON.stringify({ fields, ...(update?.labels.length ? { update } : {}) }),
+        }).catch((e) => {
+          let reason: string | undefined;
+          try {
+            if (e instanceof JiraError) reason = JSON.parse(e.body).errors?.issuetype;
+          } catch {}
+          throw reason ? refused(reason) : e;
         });
+      // Jira answers 204 yet keeps the old type for a name it doesn't know.
+      if (rest.type) {
+        const now = (await jira(`${at(key)}?fields=issuetype`)).fields.issuetype?.name;
+        if (now !== rest.type) throw refused(`Jira kept it as ${now}.`);
+      }
       return;
     }
     case "status":

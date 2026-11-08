@@ -119,6 +119,7 @@ export type Overlay =
   | "status"
   | "create"
   | "priority"
+  | "type"
   | "labels"
   | "project"
   | "milestone"

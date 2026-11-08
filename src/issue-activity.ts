@@ -8,6 +8,7 @@ export const activityFields = [
   "labels",
   "due",
   "parent",
+  "type",
 ] as const;
 export type ActivityField = (typeof activityFields)[number] | "relation";
 export type Relation = { key: string; kind: string };

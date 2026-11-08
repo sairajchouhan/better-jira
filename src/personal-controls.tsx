@@ -7,7 +7,8 @@ import { Adf } from "./adf";
 import { RichEditor } from "./rich-editor-loader";
 import { MediaView } from "./media-loader";
 import { normalizeDocument } from "./document";
-import { Icon, PriorityIcon, StatusIcon, hue } from "./icons";
+import { Icon, PriorityIcon, StatusIcon, TypeDot, hue } from "./icons";
+import { typeChoices } from "./issue-properties";
 import { PICKER_ITEM, PickerRow, PropertyMenu } from "./property-menu";
 import {
   actions,
@@ -30,6 +31,7 @@ import {
   type Board,
   type Issue,
   type IssueDraft,
+  type JiraOptions,
 } from "./store";
 import { RELATION_ISSUE } from "./issue-activity";
 import { buckets, newId, priorityRank, type Field, type Grouping } from "./view-model";
@@ -315,12 +317,19 @@ export function CreateIssue() {
 }
 
 type Choice = { id: string; name: string };
+/** The types `issue` can change to, for the type menu and Issue options. */
+const issueTypes = (issue: Issue, options: JiraOptions, issues: Issue[]) =>
+  typeChoices(
+    issue.type,
+    options.types?.[issue.project?.key ?? ""],
+    issues.flatMap((i) => (i.type && i.project?.key === issue.project?.key ? [i.type] : [])),
+  );
 export function PropertyPicker({
   issue,
   field,
 }: {
   issue: Issue;
-  field: "priority" | "labels" | "project" | "milestone" | "due";
+  field: "priority" | "type" | "labels" | "project" | "milestone" | "due";
 }) {
   const all = useStore((s) => s.issues);
   const issues = [...all.values()].filter((i) => i.board === issue.board);
@@ -346,6 +355,7 @@ export function PropertyPicker({
   const close = () => ui.send({ type: "overlay.close" });
   const label = {
     priority: "Set priority",
+    type: "Change issue type",
     labels: "Change labels",
     project: "Change project",
     milestone: "Set milestone",
@@ -488,6 +498,8 @@ export function PropertyPicker({
         .sort((a, b) => priorityRank(a) - priorityRank(b))
         .map((p) => ({ id: p, name: p })),
     ];
+  if (field === "type")
+    choices = issueTypes(issue, options, issues).map((t) => ({ id: t, name: t }));
   if (field === "project")
     choices = [
       { id: "", name: "No project" },
@@ -510,11 +522,14 @@ export function PropertyPicker({
   const selected = (id: string) =>
     field === "priority"
       ? (issue.priority ?? "") === id
-      : field === "project"
-        ? (issue.project?.key ?? "") === id
-        : (issue.milestones?.[0]?.id ?? "") === id;
+      : field === "type"
+        ? issue.type === id
+        : field === "project"
+          ? (issue.project?.key ?? "") === id
+          : (issue.milestones?.[0]?.id ?? "") === id;
   const choose = (c: Choice) => {
     if (field === "priority") actions.patch(issue.key, { priority: c.id || undefined });
+    if (field === "type" && c.id !== issue.type) actions.patch(issue.key, { type: c.id });
     if (field === "project")
       actions.patch(issue.key, {
         project: issues.find((i) => i.project?.key === c.id)?.project ?? null,
@@ -526,8 +541,14 @@ export function PropertyPicker({
   return (
     <PropertyMenu
       label={label}
-      placeholder={field === "priority" ? "Change priority to…" : `${label}…`}
-      hotkey={field === "priority" ? "P" : undefined}
+      placeholder={
+        field === "priority"
+          ? "Change priority to…"
+          : field === "type"
+            ? "Change issue type to…"
+            : `${label}…`
+      }
+      hotkey={field === "priority" || field === "type" ? shortcutLabel(field) : undefined}
       anchor={issueAnchor(`prop-${field}`, issue.key)}
       close={close}
       current={choices.find((c) => selected(c.id))?.name}
@@ -539,6 +560,8 @@ export function PropertyPicker({
           icon={
             field === "priority" ? (
               <PriorityIcon name={c.id || undefined} />
+            ) : field === "type" ? (
+              <TypeDot type={c.id} />
             ) : field === "project" ? (
               <Icon name="layers" />
             ) : (
@@ -736,6 +759,18 @@ export function IssueOptions({ issue }: { issue: Issue }) {
           },
         })),
       ],
+    },
+    {
+      name: "Issue type",
+      icon: "board",
+      shortcut: keys("type"),
+      children: issueTypes(issue, get().options, [...get().issues.values()]).map((type) => ({
+        name: type,
+        run: () => {
+          if (type !== issue.type) actions.patch(issue.key, { type });
+          close();
+        },
+      })),
     },
     { name: "Add link…", icon: "link", shortcut: keys("link"), run: () => reopen("link") },
     { name: "Add pull request…", icon: "branch", run: () => reopen("pull-request") },

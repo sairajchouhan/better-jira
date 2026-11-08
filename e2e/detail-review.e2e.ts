@@ -80,7 +80,14 @@ test("pills follow Linear order, omit unset dates and milestones, and switch bel
       await page.eval(
         `[...document.querySelectorAll('[data-properties] button[id]')].sort((a,b)=>a.getBoundingClientRect().y-b.getBoundingClientRect().y||a.getBoundingClientRect().x-b.getBoundingClientRect().x).map(b=>b.id)`,
       ),
-    ).toEqual(["prop-status", "prop-priority", "prop-assignee", "prop-project", "prop-labels"]);
+    ).toEqual([
+      "prop-status",
+      "prop-priority",
+      "prop-assignee",
+      "prop-type",
+      "prop-project",
+      "prop-labels",
+    ]);
     await page.click("#prop-project");
     await page.click("text=No project");
     expect(await page.eval(`document.getElementById('prop-project').innerText`)).toBe("Project");

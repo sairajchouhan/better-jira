@@ -127,6 +127,7 @@ const TYPE_COLOR: Record<string, string> = {
   Task: "#4ea7fc",
   Epic: "#bb87fc",
   "Sub-task": "#26b5ce",
+  Subtask: "#26b5ce",
   Spike: "#f2994a",
   Design: "#e88fcf",
   Initiative: "#f2c94c",

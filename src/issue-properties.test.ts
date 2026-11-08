@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { pullRequestCount, statusDates } from "./issue-properties";
+import { pullRequestCount, statusDates, typeChoices } from "./issue-properties";
 
 const categories = (id: string) =>
   (({ todo: "new", doing: "indeterminate", done: "done" }) as Record<string, string>)[id];
@@ -49,4 +49,18 @@ test("distinguishes empty Jira development summaries from unsupported or missing
       '{pullrequest={count=2}, json={"cachedValue":{"summary":{"pullrequest":{"overall":{"count":2}}}}}}',
     ),
   ).toBe(2);
+});
+
+test("type choices stay at the issue's Jira hierarchy level", () => {
+  const types = [
+    { name: "Epic", hierarchyLevel: 1 },
+    { name: "Subtask", hierarchyLevel: -1 },
+    { name: "Task", hierarchyLevel: 0 },
+    { name: "Story", hierarchyLevel: 0 },
+  ];
+  expect(typeChoices("Task", types, [])).toEqual(["Task", "Story"]);
+  expect(typeChoices("Subtask", types, ["Task"])).toEqual(["Subtask"]);
+  expect(typeChoices("Epic", types, [])).toEqual(["Epic"]);
+  // Local mode has no Jira type list: offer what the project already uses.
+  expect(typeChoices("Task", undefined, ["Bug", "Task"])).toEqual(["Task", "Bug"]);
 });

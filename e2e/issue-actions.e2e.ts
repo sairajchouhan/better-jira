@@ -13,6 +13,7 @@ test("issue options follow Linear's action tree, with descendant search and subm
       ),
     ).toEqual([
       "Due date",
+      "Issue type",
       "Add link…",
       "Add pull request…",
       "Add document…",

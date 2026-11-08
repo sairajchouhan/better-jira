@@ -214,7 +214,7 @@ test("action menus open with no row highlighted, like Linear: Enter does nothing
     await page.waitFor(`${lit}.length===1`);
     expect(await page.eval(lit)).toEqual(["Due date"]);
     await page.key("ArrowDown");
-    await page.waitFor(`${lit}[0]==='Add link…'`);
+    await page.waitFor(`${lit}[0]==='Issue type'`);
     await page.key("Escape");
     await page.waitFor(`!document.querySelector('[role=dialog]')`);
     await menu(() => page.click("#issue-options"));
