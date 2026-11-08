@@ -325,6 +325,14 @@
   background: var(--sel);
   padding: 0 3px;
 }
+.mention-chip {
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--fg);
+  font-weight: 500;
+  padding: 0 3px;
+  white-space: nowrap;
+}
 .rich-content .rich-preserved {
   color: var(--fg-3);
   background: var(--col);

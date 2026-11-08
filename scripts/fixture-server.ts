@@ -83,6 +83,7 @@ const board = {
   ],
 };
 const user = { id: "audit-me", name: "Audit user" };
+const people = [user, { id: "alex", name: "Alex" }, { id: "priya", name: "Priya Raman" }];
 const priorities = ["Normal", "Low", "High", "Urgent", "Normal", "Low"];
 const issues = Array.from({ length: 6 }, (_, i) => ({
   key: `TEST-${i + 1}`,
@@ -407,7 +408,10 @@ async function handle(req: Request) {
   else if (path === "/api/issues")
     body = issues.map((issue) => ({ ...issue, comments: mediaInComment ? 1 : 0 })); // the mirror list counts the same Jira comments the detail returns
   else if (path === "/api/view-defaults") body = {};
-  else if (path === "/api/properties")
+  else if (path === "/api/users") {
+    const query = (url.searchParams.get("query") ?? "").toLowerCase();
+    body = people.filter((person) => person.name.toLowerCase().includes(query));
+  } else if (path === "/api/properties")
     body = { entries: {}, progress: { total: 0, pending: 0, completed: 0, errors: 0 } };
   else if (path.match(/^\/api\/issues\/[^/]+\/media\/[^/]+$/)) {
     if (mediaDelay) await Bun.sleep(mediaDelay);

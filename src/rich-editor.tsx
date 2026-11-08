@@ -5,6 +5,8 @@ import { Icon } from "./icons";
 import { mediaCaretPlugin } from "./media-caret";
 import { mediaUploads, mergeLateMedia, type LateMedia } from "./editor-media-upload";
 import { editorBindings } from "./editor-bindings";
+import { activeMention, dismissMention, insertMention, mentionPlugin } from "./mentions";
+import { MentionMenu } from "./mention-menu";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { EditorState, NodeSelection, type Command } from "prosemirror-state";
 import { mediaNodeView, type MediaNodeView } from "./media-node-view";
@@ -80,7 +82,8 @@ export function RichEditor(props: RichEditorProps) {
     fileInput = useRef<HTMLInputElement>(null),
     staged = useRef<Attachment[]>([]);
   const upload = useRef<ReturnType<typeof mediaUploads> | null>(null),
-    toolbar = useRef<HTMLDivElement>(null);
+    toolbar = useRef<HTMLDivElement>(null),
+    mentionKeys = useRef<((event: KeyboardEvent) => boolean) | null>(null);
   const mediaContext = () => ({
     issueKey: latest.current.issueKey,
     attachments: [
@@ -130,6 +133,7 @@ export function RichEditor(props: RichEditorProps) {
         schema: richSchema,
         doc: toEditorDocument(latest.current.initial),
         plugins: [
+          mentionPlugin((_view, event) => mentionKeys.current?.(event) ?? false),
           mediaCaretPlugin(),
           uploads.plugin,
           markdownRules,
@@ -301,7 +305,9 @@ export function RichEditor(props: RichEditorProps) {
         return;
       event.preventDefault();
       event.stopPropagation();
-      if (latest.current.onCancel) latest.current.onCancel();
+      const editor = view.current;
+      if (editor && activeMention(editor.state)) editor.dispatch(dismissMention(editor.state));
+      else if (latest.current.onCancel) latest.current.onCancel();
       else view.current?.dom.blur();
     },
     {
@@ -370,6 +376,7 @@ export function RichEditor(props: RichEditorProps) {
     setLinkError("");
   };
   const inTable = !!view.current && isInTable(view.current.state);
+  const mention = view.current?.hasFocus() ? activeMention(view.current.state) : null;
   const doc = view.current?.state.doc;
   const empty = useMemo(() => {
     if (!doc) return true;
@@ -627,6 +634,20 @@ export function RichEditor(props: RichEditorProps) {
         )}
         <div ref={host} />
       </div>
+      {mention && (
+        <MentionMenu
+          query={mention.query}
+          issueKey={props.issueKey}
+          at={view.current!.coordsAtPos(mention.from)}
+          keys={mentionKeys}
+          pick={(person) => {
+            const editor = view.current!;
+            editor.dispatch(insertMention(editor.state, mention, person));
+            editor.focus();
+          }}
+          dismiss={() => view.current?.dispatch(dismissMention(view.current.state))}
+        />
+      )}
       {uploadNotice && (
         <p role="status" className="text-[12px] text-fg-3">
           {uploadNotice}

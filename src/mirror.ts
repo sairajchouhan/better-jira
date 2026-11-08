@@ -639,6 +639,26 @@ export function properties() {
   };
 }
 
+/** People to @mention: those Jira lets see the issue (user/viewissue/search), as its own mention picker offers. That search returns no one for an empty
+ * query, so a bare "@" lists the issue's assignable people; without an issue (a new one), anyone on the site. Apps and deactivated accounts are left out. */
+export async function people(query: string, issue?: string) {
+  const params = new URLSearchParams({
+    query,
+    maxResults: "20",
+    ...(issue ? { issueKey: issue } : {}),
+  });
+  const search = (kind: string) => jira<any[]>(`/rest/api/3/user/${kind}?${params}`);
+  const found = issue
+    ? await search(query ? "viewissue/search" : "assignable/search").catch(() => {
+        params.delete("issueKey");
+        return search("search");
+      })
+    : await search("search");
+  return found
+    .filter((u) => u.accountType === "atlassian" && u.active !== false)
+    .map((u) => ({ id: u.accountId, name: u.displayName, avatar: u.avatarUrls?.["24x24"] }));
+}
+
 /** Jira's choices for the property menus (priorities, assignable people, versions, labels). Cached for ten minutes. */
 let optionCache: { at: number; value: Promise<any> } | undefined;
 export function options() {

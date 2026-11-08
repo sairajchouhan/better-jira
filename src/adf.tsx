@@ -69,7 +69,11 @@ export function Adf({
     case "rule":
       return <hr className="border-line-2" />;
     case "mention":
-      return <span className="text-accent">{a.text}</span>;
+      return (
+        <span className="mention-chip" data-mention-id={a.id}>
+          {a.text || "@Unknown"}
+        </span>
+      );
     case "emoji":
       return <>{a.text ?? a.shortName}</>;
     case "status":

@@ -153,7 +153,18 @@ export const richSchema = new Schema({
       toDOM: () => ["div", { class: "rich-panel" }, 0],
     },
     rule: { group: "block", attrs, toDOM: () => ["hr"], parseDOM: [{ tag: "hr" }] },
-    mention: inlineAtom("mention"),
+    mention: {
+      ...inlineAtom("mention"),
+      toDOM: (node) => [
+        "span",
+        {
+          contenteditable: "false",
+          class: "mention-chip",
+          "data-mention-id": String(node.attrs.original?.data.attrs?.id ?? ""),
+        },
+        String(node.attrs.original?.data.attrs?.text || "@Unknown"),
+      ],
+    },
     emoji: inlineAtom("emoji"),
     status: inlineAtom("status"),
     date: inlineAtom("date"),
@@ -367,6 +378,14 @@ function fromEditorNode(node: EditorNode): AdfNode {
   else delete data.marks;
   return data;
 }
+/** Jira's mention node: the account ID notifies the person; Jira stores the display text with its "@". */
+export const mentionNode = (person: { id: string; name: string }) =>
+  richSchema.nodes.mention!.create({
+    original: {
+      data: { type: "mention", attrs: { id: person.id, text: `@${person.name}`, accessLevel: "" } },
+      hadContent: false,
+    },
+  });
 export function fromEditorDocument(node: EditorNode): AdfDocument {
   const out = fromEditorNode(node) as AdfDocument;
   out.version = 1;

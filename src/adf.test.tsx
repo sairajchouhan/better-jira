@@ -43,3 +43,15 @@ test("I7: bare URLs in comments and descriptions render as links", () => {
     ),
   ).not.toContain("<a");
 });
+
+test("Jira mentions render as mention chips", () => {
+  const html = renderToStaticMarkup(
+    <Adf
+      node={doc({
+        type: "paragraph",
+        content: [{ type: "mention", attrs: { id: "acc-1", text: "@Priya", accessLevel: "" } }],
+      })}
+    />,
+  );
+  expect(html).toContain('<span class="mention-chip" data-mention-id="acc-1">@Priya</span>');
+});

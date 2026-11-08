@@ -71,6 +71,16 @@ const server = serve({
         return Response.json({ error: "Could not read Jira's options." }, { status: 503 });
       }
     }),
+    "/api/users": localOnly(async (req) => {
+      const params = new URL(req.url).searchParams;
+      try {
+        return Response.json(
+          await mirror.people(params.get("query") ?? "", params.get("issue") || undefined),
+        );
+      } catch {
+        return Response.json({ error: "Could not search Jira people." }, { status: 503 });
+      }
+    }),
     "/api/view-defaults": localOnly(() => Response.json(mirror.viewDefaults())),
     "/api/view-defaults/:board": {
       PUT: localOnly(async (req: BunRequest<"/api/view-defaults/:board">) => {
