@@ -6,10 +6,14 @@ test("every advertised binding parses through TanStack; bindings are unique in e
   for (const binding of shortcuts) {
     expect(() => parseHotkey(binding.hotkey, "mac")).not.toThrow();
   }
-  for(const context of ['issue','document']){
-    const seen=new Set<string>();
-    for(const binding of shortcuts.filter(binding=>context==='document'?!binding.issue:!binding.document)){
-      const key=JSON.stringify(binding.hotkey);expect(seen.has(key)).toBe(false);seen.add(key);
+  for (const context of ["issue", "document"]) {
+    const seen = new Set<string>();
+    for (const binding of shortcuts.filter((binding) =>
+      context === "document" ? !binding.issue : !binding.document,
+    )) {
+      const key = JSON.stringify(binding.hotkey);
+      expect(seen.has(key)).toBe(false);
+      seen.add(key);
     }
   }
   for (const binding of editorBindings)
@@ -24,7 +28,5 @@ test("Linear's observed bindings replace invented single-letter shortcuts", () =
   expect(keys["new-full"]).toBe("V");
   for (const invented of ["B", "D", "E", "H", "M", "N"])
     expect(shortcuts.some((s) => s.hotkey === invented)).toBe(false);
-  expect(editorBindings.find((b) => b.id === "strike")?.hotkey).toBe(
-    "Mod+Shift+X",
-  );
+  expect(editorBindings.find((b) => b.id === "strike")?.hotkey).toBe("Mod+Shift+X");
 });

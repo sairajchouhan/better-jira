@@ -1,134 +1,315 @@
 import { describe, expect, test } from "bun:test";
-import { buckets, defaultPreferences, rankBetween, draftForGroup, listRows, matchesFilters, matchesRule, navigationIssues, parsePreferences, selectIssues, statusDuration, updateFilter, type FilterGroup, type Rule } from "./view-model";
+import {
+  buckets,
+  defaultPreferences,
+  rankBetween,
+  draftForGroup,
+  listRows,
+  matchesFilters,
+  matchesRule,
+  navigationIssues,
+  parsePreferences,
+  selectIssues,
+  statusDuration,
+  updateFilter,
+  type FilterGroup,
+  type Rule,
+} from "./view-model";
 import type { Board, Issue } from "./store";
 
-const board: Board = {id:1,name:"Board",columns:[{name:"Todo",statuses:[{id:"todo",name:"Todo",category:"new"}]},{name:"Doing",statuses:[{id:"doing",name:"In Progress",category:"indeterminate"}]},{name:"Done",statuses:[{id:"done",name:"Done",category:"done"}]}]};
+const board: Board = {
+  id: 1,
+  name: "Board",
+  columns: [
+    { name: "Todo", statuses: [{ id: "todo", name: "Todo", category: "new" }] },
+    { name: "Doing", statuses: [{ id: "doing", name: "In Progress", category: "indeterminate" }] },
+    { name: "Done", statuses: [{ id: "done", name: "Done", category: "done" }] },
+  ],
+};
 const now = new Date("2026-11-06T12:00:00Z").getTime();
-const issue = (key:string, patch:Partial<Issue>={}):Issue => ({key,board:1,summary:key,status:"todo",assignee:null,labels:[],comments:0,updated:"2026-11-06T10:00:00Z",resolved:null,...patch});
+const issue = (key: string, patch: Partial<Issue> = {}): Issue => ({
+  key,
+  board: 1,
+  summary: key,
+  status: "todo",
+  assignee: null,
+  labels: [],
+  comments: 0,
+  updated: "2026-11-06T10:00:00Z",
+  resolved: null,
+  ...patch,
+});
 const all = [
-  issue("A-1",{assignee:{id:"me",name:"Me"},priority:"High",labels:["bug","ui"],rank:"c",created:"2026-10-01T00:00:00Z"}),
-  issue("A-2",{assignee:{id:"other",name:"Other"},priority:"Low",labels:["ui"],rank:"a",parent:"A-1",status:"doing",due:"2026-11-07"}),
-  issue("A-3",{status:"done",resolved:"2026-11-05T12:00:00Z",rank:"b"}),
-  issue("A-4",{status:"done",resolved:"2026-10-01T12:00:00Z"}),
+  issue("A-1", {
+    assignee: { id: "me", name: "Me" },
+    priority: "High",
+    labels: ["bug", "ui"],
+    rank: "c",
+    created: "2026-10-01T00:00:00Z",
+  }),
+  issue("A-2", {
+    assignee: { id: "other", name: "Other" },
+    priority: "Low",
+    labels: ["ui"],
+    rank: "a",
+    parent: "A-1",
+    status: "doing",
+    due: "2026-11-07",
+  }),
+  issue("A-3", { status: "done", resolved: "2026-11-05T12:00:00Z", rank: "b" }),
+  issue("A-4", { status: "done", resolved: "2026-10-01T12:00:00Z" }),
 ];
-const rule = (field:Rule["field"],values:string[],op:Rule["op"]="is"):Rule => ({id:field,field,op,values});
-describe("view selection",()=>{
-  test("All issues includes older completions and still respects board, mine, and search",()=>{
-    const prefs=defaultPreferences();
-    expect(selectIssues([...all,issue("B-1",{board:2})],board,prefs,false,"","me",now).map(i=>i.key)).toEqual(["A-4","A-2","A-3","A-1"]);
-    expect(selectIssues(all,board,prefs,true,"A-1","me",now).map(i=>i.key)).toEqual(["A-1"]);
-    prefs.display.subIssues=false;
-    expect(selectIssues(all,board,prefs,false,"","me",now).some(i=>i.key==="A-2")).toBe(false);
+const rule = (field: Rule["field"], values: string[], op: Rule["op"] = "is"): Rule => ({
+  id: field,
+  field,
+  op,
+  values,
+});
+describe("view selection", () => {
+  test("All issues includes older completions and still respects board, mine, and search", () => {
+    const prefs = defaultPreferences();
+    expect(
+      selectIssues([...all, issue("B-1", { board: 2 })], board, prefs, false, "", "me", now).map(
+        (i) => i.key,
+      ),
+    ).toEqual(["A-4", "A-2", "A-3", "A-1"]);
+    expect(selectIssues(all, board, prefs, true, "A-1", "me", now).map((i) => i.key)).toEqual([
+      "A-1",
+    ]);
+    prefs.display.subIssues = false;
+    expect(selectIssues(all, board, prefs, false, "", "me", now).some((i) => i.key === "A-2")).toBe(
+      false,
+    );
   });
-  test("Active and Backlog use Jira workflow columns rather than treating every new status as backlog",()=>{
-    const backlogBoard={...board,columns:[{name:"Backlog",statuses:[{id:"backlog",name:"Backlog",category:"new"}]},...board.columns]};
-    const issues=[...all,issue("A-5",{status:"backlog"})];
-    const prefs=defaultPreferences();prefs.scope="active";
-    expect(selectIssues(issues,backlogBoard,prefs,false,"","me",now).map(i=>i.key)).toEqual(["A-2","A-1"]);
-    prefs.scope="backlog";
-    expect(selectIssues(issues,backlogBoard,prefs,false,"","me",now).map(i=>i.key)).toEqual(["A-5"]);
+  test("Active and Backlog use Jira workflow columns rather than treating every new status as backlog", () => {
+    const backlogBoard = {
+      ...board,
+      columns: [
+        { name: "Backlog", statuses: [{ id: "backlog", name: "Backlog", category: "new" }] },
+        ...board.columns,
+      ],
+    };
+    const issues = [...all, issue("A-5", { status: "backlog" })];
+    const prefs = defaultPreferences();
+    prefs.scope = "active";
+    expect(
+      selectIssues(issues, backlogBoard, prefs, false, "", "me", now).map((i) => i.key),
+    ).toEqual(["A-2", "A-1"]);
+    prefs.scope = "backlog";
+    expect(
+      selectIssues(issues, backlogBoard, prefs, false, "", "me", now).map((i) => i.key),
+    ).toEqual(["A-5"]);
   });
-  test("combines multi-value OR within a property and nested AND/OR across properties",()=>{
-    const group:FilterGroup={id:"root",join:"and",children:[rule("labels",["bug","ui"]),{id:"or",join:"or",children:[rule("assignee",["$me"]),rule("priority",["Low"])]}]};
-    expect(all.filter(i=>matchesFilters(i,group,all,"me",now)).map(i=>i.key)).toEqual(["A-1","A-2"]);
-    const next=updateFilter(group,"or",{join:"and"});
-    expect(all.some(i=>matchesFilters(i,next,all,"me",now))).toBe(false);
+  test("combines multi-value OR within a property and nested AND/OR across properties", () => {
+    const group: FilterGroup = {
+      id: "root",
+      join: "and",
+      children: [
+        rule("labels", ["bug", "ui"]),
+        { id: "or", join: "or", children: [rule("assignee", ["$me"]), rule("priority", ["Low"])] },
+      ],
+    };
+    expect(all.filter((i) => matchesFilters(i, group, all, "me", now)).map((i) => i.key)).toEqual([
+      "A-1",
+      "A-2",
+    ]);
+    const next = updateFilter(group, "or", { join: "and" });
+    expect(all.some((i) => matchesFilters(i, next, all, "me", now))).toBe(false);
     expect(group.children).toHaveLength(2);
-    expect(updateFilter(group,"labels",null).children).toHaveLength(1);
+    expect(updateFilter(group, "labels", null).children).toHaveLength(1);
   });
-  test("supports missing values, exclusions, content, and parent/child relations",()=>{
-    expect(matchesRule(all[2]!,rule("assignee",["$none"]),all,"me",now)).toBe(true);
-    expect(matchesRule(all[0]!,rule("labels",["bug"],"isNot"),all,"me",now)).toBe(false);
-    expect(matchesRule(all[0]!,rule("content",["a-1"],"contains"),all,"me",now)).toBe(true);
-    expect(matchesRule(all[0]!,rule("relations",["parent"]),all,"me",now)).toBe(true);
-    expect(matchesRule(all[1]!,rule("relations",["child"]),all,"me",now)).toBe(true);
+  test("supports missing values, exclusions, content, and parent/child relations", () => {
+    expect(matchesRule(all[2]!, rule("assignee", ["$none"]), all, "me", now)).toBe(true);
+    expect(matchesRule(all[0]!, rule("labels", ["bug"], "isNot"), all, "me", now)).toBe(false);
+    expect(matchesRule(all[0]!, rule("content", ["a-1"], "contains"), all, "me", now)).toBe(true);
+    expect(matchesRule(all[0]!, rule("relations", ["parent"]), all, "me", now)).toBe(true);
+    expect(matchesRule(all[1]!, rule("relations", ["child"]), all, "me", now)).toBe(true);
   });
-  test("handles relative dates, missing dates, and invalid numeric ranges",()=>{
-    expect(matchesRule(all[1]!,rule("due",["7"],"next"),all,"me",now)).toBe(true);
-    expect(matchesRule(all[2]!,rule("resolved",["7"],"within"),all,"me",now)).toBe(true);
-    expect(matchesRule(all[3]!,rule("resolved",["7"],"within"),all,"me",now)).toBe(false);
-    expect(matchesRule(all[0]!,rule("due",[],"empty"),all,"me",now)).toBe(true);
-    expect(matchesRule(all[1]!,rule("due",["oops"],"next"),all,"me",now)).toBe(false);
+  test("handles relative dates, missing dates, and invalid numeric ranges", () => {
+    expect(matchesRule(all[1]!, rule("due", ["7"], "next"), all, "me", now)).toBe(true);
+    expect(matchesRule(all[2]!, rule("resolved", ["7"], "within"), all, "me", now)).toBe(true);
+    expect(matchesRule(all[3]!, rule("resolved", ["7"], "within"), all, "me", now)).toBe(false);
+    expect(matchesRule(all[0]!, rule("due", [], "empty"), all, "me", now)).toBe(true);
+    expect(matchesRule(all[1]!, rule("due", ["oops"], "next"), all, "me", now)).toBe(false);
   });
-  test("groups labels in every matching group and retains empty workflow columns",()=>{
-    const groups=buckets([all[0]!],"label",board,all);
-    expect(groups.find(g=>g.id==="bug")?.issues.map(i=>i.key)).toEqual(["A-1"]);
-    expect(groups.find(g=>g.id==="ui")?.issues.map(i=>i.key)).toEqual(["A-1"]);
-    expect(buckets([],"status",board).map(g=>g.name)).toEqual(["Todo","Doing","Done"]);
-    expect(buckets([],"status",board,[],true)[0]?.name).toBe("Done");
+  test("groups labels in every matching group and retains empty workflow columns", () => {
+    const groups = buckets([all[0]!], "label", board, all);
+    expect(groups.find((g) => g.id === "bug")?.issues.map((i) => i.key)).toEqual(["A-1"]);
+    expect(groups.find((g) => g.id === "ui")?.issues.map((i) => i.key)).toEqual(["A-1"]);
+    expect(buckets([], "status", board).map((g) => g.name)).toEqual(["Todo", "Doing", "Done"]);
+    expect(buckets([], "status", board, [], true)[0]?.name).toBe("Done");
   });
-  test("orders priority, reverses direction, and keeps undated issues last",()=>{
-    const p=defaultPreferences();p.display.ordering="priority";
-    expect(selectIssues(all,board,p,false,"","me",now)[0]?.key).toBe("A-1");
-    p.display.descending=true;
-    expect(selectIssues(all,board,p,false,"","me",now).at(-1)?.key).toBe("A-1");
-    p.display.ordering="due";
-    expect(selectIssues(all,board,p,false,"","me",now)[0]?.key).toBe("A-2");
+  test("orders priority, reverses direction, and keeps undated issues last", () => {
+    const p = defaultPreferences();
+    p.display.ordering = "priority";
+    expect(selectIssues(all, board, p, false, "", "me", now)[0]?.key).toBe("A-1");
+    p.display.descending = true;
+    expect(selectIssues(all, board, p, false, "", "me", now).at(-1)?.key).toBe("A-1");
+    p.display.ordering = "due";
+    expect(selectIssues(all, board, p, false, "", "me", now)[0]?.key).toBe("A-2");
   });
-  test("saved preferences round-trip and malformed settings fall back without crashing",()=>{
-    const p=defaultPreferences();p.display.layout="list";p.display.properties=[];p.filters.children=[rule("assignee",["$me"])];p.scope="active";p.hidden={status:["Done"]};p.collapsed={assignee:["me"]};
+  test("saved preferences round-trip and malformed settings fall back without crashing", () => {
+    const p = defaultPreferences();
+    p.display.layout = "list";
+    p.display.properties = [];
+    p.filters.children = [rule("assignee", ["$me"])];
+    p.scope = "active";
+    p.hidden = { status: ["Done"] };
+    p.collapsed = { assignee: ["me"] };
     expect(parsePreferences(JSON.parse(JSON.stringify(p)))).toEqual(p);
-    const invalid=parsePreferences({display:{layout:"bad",columns:"bad",subIssues:false},filters:{children:[null,{field:"token",values:[]}]}});
-    expect(invalid.display.layout).toBe("board");expect(invalid.display.subIssues).toBe(false);expect(invalid.filters.children).toEqual([]);
+    const invalid = parsePreferences({
+      display: { layout: "bad", columns: "bad", subIssues: false },
+      filters: { children: [null, { field: "token", values: [] }] },
+    });
+    expect(invalid.display.layout).toBe("board");
+    expect(invalid.display.subIssues).toBe(false);
+    expect(invalid.filters.children).toEqual([]);
   });
-  test("unfinished OR branches do not override completed filters",()=>{
-    const group:FilterGroup={id:"root",join:"or",children:[rule("assignee",["$me"]),rule("priority",[]),{id:"empty",join:"and",children:[]}]};
-    expect(all.filter(i=>matchesFilters(i,group,all,"me",now)).map(i=>i.key)).toEqual(["A-1"]);
+  test("unfinished OR branches do not override completed filters", () => {
+    const group: FilterGroup = {
+      id: "root",
+      join: "or",
+      children: [
+        rule("assignee", ["$me"]),
+        rule("priority", []),
+        { id: "empty", join: "and", children: [] },
+      ],
+    };
+    expect(all.filter((i) => matchesFilters(i, group, all, "me", now)).map((i) => i.key)).toEqual([
+      "A-1",
+    ]);
   });
-  test("list navigation follows nested display order and handles cycles once",()=>{
-    expect(listRows([all[1]!,all[0]!],all,"matching").map(r=>[r.issue.key,r.depth])).toEqual([["A-1",0],["A-2",1]]);
-    expect(listRows([all[0]!],all,"all").map(r=>r.issue.key)).toEqual(["A-1","A-2"]);
-    const cycle=[issue("C-1",{parent:"C-2"}),issue("C-2",{parent:"C-1"})];
-    expect(listRows(cycle,cycle,"matching")).toHaveLength(2);
+  test("list navigation follows nested display order and handles cycles once", () => {
+    expect(
+      listRows([all[1]!, all[0]!], all, "matching").map((r) => [r.issue.key, r.depth]),
+    ).toEqual([
+      ["A-1", 0],
+      ["A-2", 1],
+    ]);
+    expect(listRows([all[0]!], all, "all").map((r) => r.issue.key)).toEqual(["A-1", "A-2"]);
+    const cycle = [issue("C-1", { parent: "C-2" }), issue("C-2", { parent: "C-1" })];
+    expect(listRows(cycle, cycle, "matching")).toHaveLength(2);
   });
-  test("issue-page navigation skips repeated cards in overlapping label groups",()=>{
-    const groups=buckets([all[0]!,all[1]!],"label",board,all).map(g=>g.issues);
-    expect(groups.flat().filter(i=>i.key==="A-1")).toHaveLength(2);
-    expect(navigationIssues(groups).map(i=>i.key)).toEqual(["A-1","A-2"]);
+  test("issue-page navigation skips repeated cards in overlapping label groups", () => {
+    const groups = buckets([all[0]!, all[1]!], "label", board, all).map((g) => g.issues);
+    expect(groups.flat().filter((i) => i.key === "A-1")).toHaveLength(2);
+    expect(navigationIssues(groups).map((i) => i.key)).toEqual(["A-1", "A-2"]);
   });
-  test("column and row creation carries type, priority and assignee defaults into the draft",()=>{
-    expect(draftForGroup("type","Bug",board,all,"active")).toEqual({type:"Bug"});
-    expect(draftForGroup("priority","$none",board,all,"active")).toEqual({priority:""});
-    expect({...draftForGroup("status","Doing",board,all,"active"),...draftForGroup("assignee","me",board,all,"active")}).toEqual({status:"doing",assignee:{id:"me",name:"Me"}});
-    const withBacklog={...board,columns:[{name:"Backlog",statuses:[{id:"backlog",name:"Backlog",category:"new"}]},...board.columns]};
-    expect(draftForGroup("category","new",withBacklog,all,"active")).toEqual({status:"todo"});
+  test("column and row creation carries type, priority and assignee defaults into the draft", () => {
+    expect(draftForGroup("type", "Bug", board, all, "active")).toEqual({ type: "Bug" });
+    expect(draftForGroup("priority", "$none", board, all, "active")).toEqual({ priority: "" });
+    expect({
+      ...draftForGroup("status", "Doing", board, all, "active"),
+      ...draftForGroup("assignee", "me", board, all, "active"),
+    }).toEqual({ status: "doing", assignee: { id: "me", name: "Me" } });
+    const withBacklog = {
+      ...board,
+      columns: [
+        { name: "Backlog", statuses: [{ id: "backlog", name: "Backlog", category: "new" }] },
+        ...board.columns,
+      ],
+    };
+    expect(draftForGroup("category", "new", withBacklog, all, "active")).toEqual({
+      status: "todo",
+    });
   });
-  test("filters watcher lists only when complete and supports milestone and numeric status duration",()=>{
-    const item=issue("A-5",{watchers:[{id:"me",name:"Me"}],watchersComplete:true,milestones:[{id:"release",name:"Release"}],prCount:0,statusSince:"2026-10-30T12:00:00Z"});
-    expect(matchesRule(item,rule("watchers",["$me"]),all,"me",now)).toBe(true);
-    expect(matchesRule({...item,watchersComplete:false},rule("watchers",["$none"]),all,"me",now)).toBe(false);
-    expect(matchesRule({...item,watchersComplete:false},rule("watchers",["other"],"isNot"),all,"me",now)).toBe(false);
-    expect(matchesRule(item,rule("milestone",["release"]),all,"me",now)).toBe(true);
-    expect(matchesRule(item,rule("statusAge",["6.5"],"gt"),all,"me",now)).toBe(true);
-    expect(matchesRule(item,rule("pullRequests",["0"]),all,"me",now)).toBe(true);
-    expect(matchesRule({...item,prCount:undefined},rule("pullRequests",["0"]),all,"me",now)).toBe(false);
+  test("filters watcher lists only when complete and supports milestone and numeric status duration", () => {
+    const item = issue("A-5", {
+      watchers: [{ id: "me", name: "Me" }],
+      watchersComplete: true,
+      milestones: [{ id: "release", name: "Release" }],
+      prCount: 0,
+      statusSince: "2026-10-30T12:00:00Z",
+    });
+    expect(matchesRule(item, rule("watchers", ["$me"]), all, "me", now)).toBe(true);
+    expect(
+      matchesRule(
+        { ...item, watchersComplete: false },
+        rule("watchers", ["$none"]),
+        all,
+        "me",
+        now,
+      ),
+    ).toBe(false);
+    expect(
+      matchesRule(
+        { ...item, watchersComplete: false },
+        rule("watchers", ["other"], "isNot"),
+        all,
+        "me",
+        now,
+      ),
+    ).toBe(false);
+    expect(matchesRule(item, rule("milestone", ["release"]), all, "me", now)).toBe(true);
+    expect(matchesRule(item, rule("statusAge", ["6.5"], "gt"), all, "me", now)).toBe(true);
+    expect(matchesRule(item, rule("pullRequests", ["0"]), all, "me", now)).toBe(true);
+    expect(
+      matchesRule({ ...item, prCount: undefined }, rule("pullRequests", ["0"]), all, "me", now),
+    ).toBe(false);
   });
-  test("persists enriched properties and formats status duration without negative ages",()=>{
-    const p=defaultPreferences();
-    p.display.properties=["milestone","statusAge","pullRequests"];
-    p.display.ordering="estimate";
-    p.filters.children=[rule("watchers",["$me"]),rule("statusAge",["7"],"gt")];
+  test("persists enriched properties and formats status duration without negative ages", () => {
+    const p = defaultPreferences();
+    p.display.properties = ["milestone", "statusAge", "pullRequests"];
+    p.display.ordering = "estimate";
+    p.filters.children = [rule("watchers", ["$me"]), rule("statusAge", ["7"], "gt")];
     expect(parsePreferences(JSON.parse(JSON.stringify(p)))).toEqual(p);
-    expect(statusDuration("2026-11-06T13:00:00Z",now)).toBe("<1m");
-    expect(statusDuration("2026-11-06T11:00:00Z",now)).toBe("1h");
-    expect(statusDuration("2026-11-04T12:00:00Z",now)).toBe("2d");
+    expect(statusDuration("2026-11-06T13:00:00Z", now)).toBe("<1m");
+    expect(statusDuration("2026-11-06T11:00:00Z", now)).toBe("1h");
+    expect(statusDuration("2026-11-04T12:00:00Z", now)).toBe("2d");
   });
-  test("every supported filter property distinguishes a match from a nonmatch",()=>{
-    const rich=issue("A-5",{summary:"Personal draft",description:"A description",assignee:{id:"me",name:"Me"},creator:{id:"me",name:"Me"},priority:"High",labels:["ui"],project:{key:"P",name:"Project"},type:"Bug",parent:"A-0",relations:[{key:"A-1",kind:"blocking"}],links:["https://example.com"],created:"2026-11-01",updated:"2026-11-05",due:"2026-11-07",resolved:"2026-11-05",started:"2026-11-02",statusSince:"2026-11-05",milestones:[{id:"m1",name:"Release"}],watchers:[{id:"me",name:"Me"}],watchersComplete:true,projectLead:{id:"me",name:"Me"},prCount:2,estimate:3});
-    const cases:[Rule["field"],Rule["op"],string,string][]=[
-      ["status","is","todo","doing"],["assignee","is","$me","other"],["creator","is","$me","other"],
-      ["priority","is","High","Low"],["labels","is","ui","api"],["relations","is","blocking","blocked"],
-      ["project","is","P","other"],["type","is","Bug","Task"],["parent","is","A-0","A-99"],
-      ["milestone","is","m1","other"],["watchers","is","$me","other"],["projectLead","is","$me","other"],
-      ["content","contains","personal","absent"],["links","contains","example.com","absent"],
-      ["created","after","2026-10-01","2026-12-01"],["updated","after","2026-10-01","2026-12-01"],
-      ["due","before","2026-12-01","2026-10-01"],["resolved","before","2026-12-01","2026-10-01"],
-      ["started","after","2026-10-01","2026-12-01"],["statusAge","gt","0.5","10"],
-      ["pullRequests","gt","1","3"],["estimate","gt","2","4"],
+  test("every supported filter property distinguishes a match from a nonmatch", () => {
+    const rich = issue("A-5", {
+      summary: "Personal draft",
+      description: "A description",
+      assignee: { id: "me", name: "Me" },
+      creator: { id: "me", name: "Me" },
+      priority: "High",
+      labels: ["ui"],
+      project: { key: "P", name: "Project" },
+      type: "Bug",
+      parent: "A-0",
+      relations: [{ key: "A-1", kind: "blocking" }],
+      links: ["https://example.com"],
+      created: "2026-11-01",
+      updated: "2026-11-05",
+      due: "2026-11-07",
+      resolved: "2026-11-05",
+      started: "2026-11-02",
+      statusSince: "2026-11-05",
+      milestones: [{ id: "m1", name: "Release" }],
+      watchers: [{ id: "me", name: "Me" }],
+      watchersComplete: true,
+      projectLead: { id: "me", name: "Me" },
+      prCount: 2,
+      estimate: 3,
+    });
+    const cases: [Rule["field"], Rule["op"], string, string][] = [
+      ["status", "is", "todo", "doing"],
+      ["assignee", "is", "$me", "other"],
+      ["creator", "is", "$me", "other"],
+      ["priority", "is", "High", "Low"],
+      ["labels", "is", "ui", "api"],
+      ["relations", "is", "blocking", "blocked"],
+      ["project", "is", "P", "other"],
+      ["type", "is", "Bug", "Task"],
+      ["parent", "is", "A-0", "A-99"],
+      ["milestone", "is", "m1", "other"],
+      ["watchers", "is", "$me", "other"],
+      ["projectLead", "is", "$me", "other"],
+      ["content", "contains", "personal", "absent"],
+      ["links", "contains", "example.com", "absent"],
+      ["created", "after", "2026-10-01", "2026-12-01"],
+      ["updated", "after", "2026-10-01", "2026-12-01"],
+      ["due", "before", "2026-12-01", "2026-10-01"],
+      ["resolved", "before", "2026-12-01", "2026-10-01"],
+      ["started", "after", "2026-10-01", "2026-12-01"],
+      ["statusAge", "gt", "0.5", "10"],
+      ["pullRequests", "gt", "1", "3"],
+      ["estimate", "gt", "2", "4"],
     ];
-    for(const [field,op,matching,other] of cases) {
-      expect(matchesRule(rich,rule(field,[matching],op),[...all,rich],"me",now)).toBe(true);
-      expect(matchesRule(rich,rule(field,[other],op),[...all,rich],"me",now)).toBe(false);
+    for (const [field, op, matching, other] of cases) {
+      expect(matchesRule(rich, rule(field, [matching], op), [...all, rich], "me", now)).toBe(true);
+      expect(matchesRule(rich, rule(field, [other], op), [...all, rich], "me", now)).toBe(false);
     }
   });
 });
@@ -140,8 +321,19 @@ test("B2: rankBetween lands strictly between its neighbours in code-unit order",
     if (i > 0) expect(r > ranks[i - 1]!).toBe(true);
     if (i < ranks.length) expect(r < ranks[i]!).toBe(true);
   }
-  const ranked = [issue("R-1", { rank: "a" }), issue("R-2", { rank: "B" }), issue("R-3", { rank: "_" })];
-  expect(selectIssues(ranked, board, defaultPreferences(), false, "", "me").map(i => i.key)).toEqual(["R-2", "R-3", "R-1"]);
-  let low = "0|i00000:", high = "0|i00001:";
-  for (let n = 0; n < 50; n++) { const mid = rankBetween(low, high); expect(mid > low && mid < high).toBe(true); high = mid; }
+  const ranked = [
+    issue("R-1", { rank: "a" }),
+    issue("R-2", { rank: "B" }),
+    issue("R-3", { rank: "_" }),
+  ];
+  expect(
+    selectIssues(ranked, board, defaultPreferences(), false, "", "me").map((i) => i.key),
+  ).toEqual(["R-2", "R-3", "R-1"]);
+  let low = "0|i00000:",
+    high = "0|i00001:";
+  for (let n = 0; n < 50; n++) {
+    const mid = rankBetween(low, high);
+    expect(mid > low && mid < high).toBe(true);
+    high = mid;
+  }
 });

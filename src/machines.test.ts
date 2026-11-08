@@ -2,8 +2,19 @@ import { expect, test } from "bun:test";
 import { createActor, fromPromise, SimulatedClock, waitFor } from "xstate";
 import { appMachine, autosaveMachine, storageMachine, uiMachine } from "./machines";
 
-const doc = (text: string) => ({ type: "doc" as const, version: 1 as const, content: [{ type: "paragraph", content: [{ type: "text", text }] }] });
-const gate = () => { let open!: () => void, fail!: (e: Error) => void; const promise = new Promise<void>((r, j) => { open = r; fail = j; }); return { promise, open, fail }; };
+const doc = (text: string) => ({
+  type: "doc" as const,
+  version: 1 as const,
+  content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+});
+const gate = () => {
+  let open!: () => void, fail!: (e: Error) => void;
+  const promise = new Promise<void>((r, j) => {
+    open = r;
+    fail = j;
+  });
+  return { promise, open, fail };
+};
 
 test("ui: Escape closes the issue, then clears the search, then drops the selection", () => {
   const ui = createActor(uiMachine, { input: { board: 1, view: "side" } }).start();
@@ -33,7 +44,13 @@ test("ui: the toolbar closes under an overlay, over an issue page and on a board
   ui.send({ type: "mine.set", mine: true });
   ui.send({ type: "query.set", query: "x" });
   ui.send({ type: "navigate", board: 2, view: "side" });
-  expect(ui.getSnapshot().context).toMatchObject({ board: 2, view: "side", toolbar: null, mine: false, query: "" });
+  expect(ui.getSnapshot().context).toMatchObject({
+    board: 2,
+    view: "side",
+    toolbar: null,
+    mine: false,
+    query: "",
+  });
   ui.send({ type: "toolbar.open", toolbar: "filter" });
   ui.send({ type: "navigate", board: 2 });
   expect(toolbar()).toBe("filter");
@@ -83,20 +100,38 @@ test("ui: a toast hides after five seconds, and a new toast restarts the timer",
 
 test("app: a failed load shows its error and a retry loads again", async () => {
   let attempts = 0;
-  const app = createActor(appMachine.provide({ actors: { load: fromPromise(async () => { if (!attempts++) throw new Error("Mirror offline"); }) } })).start();
+  const app = createActor(
+    appMachine.provide({
+      actors: {
+        load: fromPromise(async () => {
+          if (!attempts++) throw new Error("Mirror offline");
+        }),
+      },
+    }),
+  ).start();
   app.send({ type: "load" });
-  await waitFor(app, s => s.matches("failed"));
+  await waitFor(app, (s) => s.matches("failed"));
   expect(app.getSnapshot().context.error).toBe("Mirror offline");
   app.send({ type: "load" });
   expect(app.getSnapshot().context.error).toBe("");
-  await waitFor(app, s => s.matches("ready"));
+  await waitFor(app, (s) => s.matches("ready"));
   app.send({ type: "load" });
   expect(app.getSnapshot().matches("ready")).toBe(true);
 });
 
 test("storage: edits during a save trigger one more save; a failure keeps edits unsaved until the next change", async () => {
   const saves: ReturnType<typeof gate>[] = [];
-  const storage = createActor(storageMachine.provide({ actors: { save: fromPromise(() => { const g = gate(); saves.push(g); return g.promise; }) } })).start();
+  const storage = createActor(
+    storageMachine.provide({
+      actors: {
+        save: fromPromise(() => {
+          const g = gate();
+          saves.push(g);
+          return g.promise;
+        }),
+      },
+    }),
+  ).start();
   storage.send({ type: "change" });
   expect(storage.getSnapshot().matches("loading")).toBe(true);
   storage.send({ type: "opened", recovered: true, message: "Recovered" });
@@ -106,13 +141,16 @@ test("storage: edits during a save trigger one more save; a failure keeps edits 
   saves[0]!.open();
   await waitFor(storage, () => saves.length === 2);
   saves[1]!.open();
-  await waitFor(storage, s => s.matches("saved"));
+  await waitFor(storage, (s) => s.matches("saved"));
   expect(saves).toHaveLength(2);
   expect(storage.getSnapshot().context.message).toBe("Recovered");
   storage.send({ type: "change" });
   saves[2]!.fail(new Error("Disk full"));
-  await waitFor(storage, s => s.matches("failed"));
-  expect(storage.getSnapshot().context).toMatchObject({ message: "Disk full", recovered: undefined });
+  await waitFor(storage, (s) => s.matches("failed"));
+  expect(storage.getSnapshot().context).toMatchObject({
+    message: "Disk full",
+    recovered: undefined,
+  });
   storage.send({ type: "change" });
   expect(storage.getSnapshot().matches("saving")).toBe(true);
   storage.send({ type: "blocked", message: "Read only" });
@@ -120,10 +158,16 @@ test("storage: edits during a save trigger one more save; a failure keeps edits 
   expect(storage.getSnapshot().matches("blocked")).toBe(true);
 });
 
-
 test("autosave: keeps every draft, commits 600ms after the last change, and flushes at once", () => {
-  const clock = new SimulatedClock(), drafts: unknown[] = [], commits: unknown[] = [];
-  const autosave = createActor(autosaveMachine.provide({ actions: { keepDraft: (_, d) => void drafts.push(d), commit: (_, d) => void commits.push(d) } }), { clock }).start();
+  const clock = new SimulatedClock(),
+    drafts: unknown[] = [],
+    commits: unknown[] = [];
+  const autosave = createActor(
+    autosaveMachine.provide({
+      actions: { keepDraft: (_, d) => void drafts.push(d), commit: (_, d) => void commits.push(d) },
+    }),
+    { clock },
+  ).start();
   autosave.send({ type: "change", doc: doc("a") });
   clock.increment(500);
   autosave.send({ type: "change", doc: doc("ab") });
@@ -138,14 +182,14 @@ test("autosave: keeps every draft, commits 600ms after the last change, and flus
   expect(commits).toEqual([doc("ab"), doc("abc")]);
 });
 
-test('ui: a document requires an open issue and clears with its issue context', () => {
- const ui=createActor(uiMachine,{input:{board:1,view:'side'}}).start();
- ui.send({type:'navigate',document:'orphan'});
- expect(ui.getSnapshot().context.document).toBeNull();
- ui.send({type:'navigate',selected:'A-1',panel:true,document:'doc'});
- expect(ui.getSnapshot().context.document).toBe('doc');
- ui.send({type:'navigate',panel:false,document:'doc'});
- expect(ui.getSnapshot().context.document).toBeNull();
- ui.send({type:'navigate',selected:null,panel:true,document:'doc'});
- expect(ui.getSnapshot().context.document).toBeNull();
+test("ui: a document requires an open issue and clears with its issue context", () => {
+  const ui = createActor(uiMachine, { input: { board: 1, view: "side" } }).start();
+  ui.send({ type: "navigate", document: "orphan" });
+  expect(ui.getSnapshot().context.document).toBeNull();
+  ui.send({ type: "navigate", selected: "A-1", panel: true, document: "doc" });
+  expect(ui.getSnapshot().context.document).toBe("doc");
+  ui.send({ type: "navigate", panel: false, document: "doc" });
+  expect(ui.getSnapshot().context.document).toBeNull();
+  ui.send({ type: "navigate", selected: null, panel: true, document: "doc" });
+  expect(ui.getSnapshot().context.document).toBeNull();
 });

@@ -1,33 +1,108 @@
 import "@fontsource-variable/inter/opsz.css";
 import "./index.css";
-import {useHotkey} from "@tanstack/react-hotkeys";
+import { useHotkey } from "@tanstack/react-hotkeys";
 import { Command } from "cmdk";
-import { Fragment, lazy, memo, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type {Attachment} from "./attachment-media";
-const ImageViewer=lazy(()=>import("./image-viewer").then(module=>({default:module.ImageViewer})));
-import {ReminderPicker,ReminderControl,ReminderDelivery} from './reminders';
-import {CommentThreads} from './comment-threads';
-import {ImageCommentCard} from './image-thread';
-import {IssueDocument} from './issue-resources';
-import {findIssueDocument,linkTitle} from './issue-resource';
-import {RELATION_ISSUE,activityRows,type ActivityRow,type PropertyActivity,type Relation} from './issue-activity';
-import { Adf, adfToText } from "./adf";
-import { normalizeDocument, type AdfDocument } from "./document";
-import {commentCount,imageCommentIds} from './media-edits';
+import {
+  Fragment,
+  lazy,
+  memo,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import type { Attachment } from "./attachment-media";
+const ImageViewer = lazy(() =>
+  import("./image-viewer").then((module) => ({ default: module.ImageViewer })),
+);
+import { ReminderPicker, ReminderControl, ReminderDelivery } from "./reminders";
+import { CommentThreads } from "./comment-threads";
+import { ImageCommentCard } from "./image-thread";
+import { IssueDocument } from "./issue-resources";
+import { findIssueDocument, linkTitle } from "./issue-resource";
+import {
+  RELATION_ISSUE,
+  activityRows,
+  type ActivityRow,
+  type PropertyActivity,
+  type Relation,
+} from "./issue-activity";
+import { normalizeDocument } from "./document";
+import { commentCount, imageCommentIds } from "./media-edits";
 import { Icon, Label, PriorityIcon, RelationIcon, StatusIcon, TypeDot, hue } from "./icons";
 import {
-  ME, actions, addIssueFiles, boardOf, get, load, loadFull, navigate, set, timed, ui, useStore, dismissRecoveryNotice,
-  openSavedView, beginCreate, changeDisplay, changePreferences, downloadLocalBackup, flushLocalChanges, issueURL, isLocalIssue, retryLocalStorage, toggleFavorite, undoEdit, redoEdit, usePreferences, type Board, type Column, type Issue, type User,
-  currentKey, firstKey,
+  ME,
+  actions,
+  addIssueFiles,
+  boardOf,
+  get,
+  load,
+  loadFull,
+  navigate,
+  set,
+  timed,
+  ui,
+  useStore,
+  dismissRecoveryNotice,
+  openSavedView,
+  beginCreate,
+  changePreferences,
+  downloadLocalBackup,
+  flushLocalChanges,
+  issueURL,
+  retryLocalStorage,
+  toggleFavorite,
+  undoEdit,
+  redoEdit,
+  usePreferences,
+  type Board,
+  type Issue,
+  type User,
+  currentKey,
+  firstKey,
 } from "./store";
 
 import { BoardControls, FilterChips } from "./view-controls";
-import { buckets, columnInScope, draftForGroup, rankBetween, listRows, navigationIssues, selectIssues, statusDuration, type Bucket, type Display, type Grouping, type Property } from "./view-model";
-import { BoardDetails, CreateIssue, Favorites, GroupMenu, IssueOptions, Modal, PersonalIssueDetails, PropertyPicker, Relations, SavedViews, SaveViewButton, Subscribers } from "./personal-controls";
-import {SubIssueOf} from './sub-issues';
-import {Tooltips} from './tooltip';
+import {
+  buckets,
+  columnInScope,
+  draftForGroup,
+  rankBetween,
+  listRows,
+  navigationIssues,
+  selectIssues,
+  statusDuration,
+  type Bucket,
+  type Display,
+  type Property,
+} from "./view-model";
+import {
+  BoardDetails,
+  CreateIssue,
+  Favorites,
+  GroupMenu,
+  IssueOptions,
+  Modal,
+  PersonalIssueDetails,
+  PropertyPicker,
+  Relations,
+  SavedViews,
+  SaveViewButton,
+  Subscribers,
+} from "./personal-controls";
+import { SubIssueOf } from "./sub-issues";
+import { Tooltips } from "./tooltip";
 import { RichEditor } from "./rich-editor-loader";
-import {HelpMenu,ShortcutHelp,runShortcut,shortcutLabel,shortcuts,useLinearHotkeys} from "./shortcuts";
+import {
+  HelpMenu,
+  ShortcutHelp,
+  runShortcut,
+  shortcutLabel,
+  shortcuts,
+  useLinearHotkeys,
+} from "./shortcuts";
 import { issueAnchor } from "./menu-surface";
 import { PickerRow, PropertyMenu } from "./property-menu";
 import { createActor } from "xstate";
@@ -35,213 +110,688 @@ import { autosaveMachine, inspector } from "./machines";
 
 /** The active board's visible columns, for keyboard navigation and the issue page's ↑ ↓ stepping. */
 const nav = { cols: [] as Issue[][] };
-const flatNav=()=>navigationIssues(nav.cols);
+const flatNav = () => navigationIssues(nav.cols);
 
-const openRelated=(target:Issue)=>navigate({board:target.board,selected:target.key,panel:true,view:get().view});
+const openRelated = (target: Issue) =>
+  navigate({ board: target.board, selected: target.key, panel: true, view: get().view });
 
 /** Linear's wording (RAJ-52). `then` is the shorter form after ", then": "set to Medium", "moved to Done". Labels carry their 4px dot. */
-function describeActivity(event:PropertyActivity,issue:Issue,then=false):ReactNode{
-  const name=(value:unknown)=>value&&typeof value==="object"&&"name" in value?String((value as {name:unknown}).name):String(value);
-  const status=(id:unknown)=>boardOf(issue.key)?.columns.flatMap(c=>c.statuses).find(s=>s.id===id)?.name??String(id);
-  const date=(value:unknown)=>new Date(`${value}T00:00`).toLocaleDateString("en",{month:"short",day:"numeric"});
-  const {field,before,after}=event;
-  if(field==="relation"){
-    const relation=(after??before) as Relation,target=get().issues.get(relation.key);
-    const verb=after?{related:"added related issue",blocked:"marked this issue as blocked by",blocking:"marked this issue as blocking",duplicate:"marked this issue as a duplicate of",duplicated:"marked this issue as duplicated by"}[relation.kind]??"added related issue":`removed ${RELATION_ISSUE[relation.kind]??"related"} issue`;
-    return <>{verb} {target?<a href={issueURL(target)} onClick={e=>{if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();openRelated(target);}} className="hover:text-fg"><b className="font-medium">{relation.key}</b> {target.summary}</a>:<b className="font-medium">{relation.key}</b>}</>;
+function describeActivity(event: PropertyActivity, issue: Issue, then = false): ReactNode {
+  const name = (value: unknown) =>
+    value && typeof value === "object" && "name" in value
+      ? String((value as { name: unknown }).name)
+      : String(value);
+  const status = (id: unknown) =>
+    boardOf(issue.key)
+      ?.columns.flatMap((c) => c.statuses)
+      .find((s) => s.id === id)?.name ?? String(id);
+  const date = (value: unknown) =>
+    new Date(`${value}T00:00`).toLocaleDateString("en", { month: "short", day: "numeric" });
+  const { field, before, after } = event;
+  if (field === "relation") {
+    const relation = (after ?? before) as Relation,
+      target = get().issues.get(relation.key);
+    const verb = after
+      ? ({
+          related: "added related issue",
+          blocked: "marked this issue as blocked by",
+          blocking: "marked this issue as blocking",
+          duplicate: "marked this issue as a duplicate of",
+          duplicated: "marked this issue as duplicated by",
+        }[relation.kind] ?? "added related issue")
+      : `removed ${RELATION_ISSUE[relation.kind] ?? "related"} issue`;
+    return (
+      <>
+        {verb}{" "}
+        {target ? (
+          <a
+            href={issueURL(target)}
+            onClick={(e) => {
+              if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+              e.preventDefault();
+              openRelated(target);
+            }}
+            className="hover:text-fg"
+          >
+            <b className="font-medium">{relation.key}</b> {target.summary}
+          </a>
+        ) : (
+          <b className="font-medium">{relation.key}</b>
+        )}
+      </>
+    );
   }
-  if(field==="status")return then?`moved to ${status(after)}`:`moved from ${status(before)} to ${status(after)}`;
-  if(field==="labels"){
-    const was=new Set(before as string[]??[]),now=new Set(after as string[]??[]),added=[...now].filter(l=>!was.has(l)),removed=[...was].filter(l=>!now.has(l));
-    const list=(names:string[])=>names.map((l,i)=><span key={l}>{i?", ":""}<span className="mr-1 inline-block size-1 rounded-full align-middle" style={{background:hue(l)}}/>{l}</span>);
-    return <>{added.length>0&&<>added label{added.length>1?"s":""} {list(added)}</>}{added.length>0&&removed.length>0&&" and "}{removed.length>0&&<>removed label{removed.length>1?"s":""} {list(removed)}</>}</>;
+  if (field === "status")
+    return then ? `moved to ${status(after)}` : `moved from ${status(before)} to ${status(after)}`;
+  if (field === "labels") {
+    const was = new Set((before as string[]) ?? []),
+      now = new Set((after as string[]) ?? []),
+      added = [...now].filter((l) => !was.has(l)),
+      removed = [...was].filter((l) => !now.has(l));
+    const list = (names: string[]) =>
+      names.map((l, i) => (
+        <span key={l}>
+          {i ? ", " : ""}
+          <span
+            className="mr-1 inline-block size-1 rounded-full align-middle"
+            style={{ background: hue(l) }}
+          />
+          {l}
+        </span>
+      ));
+    return (
+      <>
+        {added.length > 0 && (
+          <>
+            added label{added.length > 1 ? "s" : ""} {list(added)}
+          </>
+        )}
+        {added.length > 0 && removed.length > 0 && " and "}
+        {removed.length > 0 && (
+          <>
+            removed label{removed.length > 1 ? "s" : ""} {list(removed)}
+          </>
+        )}
+      </>
+    );
   }
-  const label={priority:"priority",assignee:"assignee",due:"due date",parent:"parent issue"}[field];
-  if(after===null||after==="")return `removed ${label}`;
-  if(field==="assignee")return then?`assigned to ${name(after)}`:`assigned the issue to ${name(after)}`;
-  return then?`set to ${field==="due"?date(after):name(after)}`:`set ${label} to ${field==="due"?date(after):name(after)}`;
+  const label = {
+    priority: "priority",
+    assignee: "assignee",
+    due: "due date",
+    parent: "parent issue",
+  }[field];
+  if (after === null || after === "") return `removed ${label}`;
+  if (field === "assignee")
+    return then ? `assigned to ${name(after)}` : `assigned the issue to ${name(after)}`;
+  return then
+    ? `set to ${field === "due" ? date(after) : name(after)}`
+    : `set ${label} to ${field === "due" ? date(after) : name(after)}`;
 }
 /** The row's icon in Linear (RAJ-52): the new status or priority, the label glyph, the assignee; a row of several changes shows the actor. */
-function ActivityIcon({row,issue}:{row:ActivityRow;issue:Issue}){
-  const last=row.chain.at(-1)??row.events[0]!;
-  if(row.field==="relation")return <RelationIcon kind={((last.after??last.before) as Relation).kind}/>;
-  if(row.field==="status"){const status=boardOf(issue.key)?.columns.flatMap(c=>c.statuses).find(s=>s.id===last.after);if(status)return <StatusIcon status={status}/>;}
-  if(row.field==="priority")return <PriorityIcon name={(last.after as string|null)??undefined}/>;
-  if(row.field==="labels")return <Icon name="label"/>;
-  if(row.field==="due")return <Icon name="calendar"/>;
-  if(row.field==="assignee")return <Avatar user={last.after as User|null} size={14}/>;
-  return <Avatar user={row.actor} size={14}/>;
+function ActivityIcon({ row, issue }: { row: ActivityRow; issue: Issue }) {
+  const last = row.chain.at(-1) ?? row.events[0]!;
+  if (row.field === "relation")
+    return <RelationIcon kind={((last.after ?? last.before) as Relation).kind} />;
+  if (row.field === "status") {
+    const status = boardOf(issue.key)
+      ?.columns.flatMap((c) => c.statuses)
+      .find((s) => s.id === last.after);
+    if (status) return <StatusIcon status={status} />;
+  }
+  if (row.field === "priority")
+    return <PriorityIcon name={(last.after as string | null) ?? undefined} />;
+  if (row.field === "labels") return <Icon name="label" />;
+  if (row.field === "due") return <Icon name="calendar" />;
+  if (row.field === "assignee") return <Avatar user={last.after as User | null} size={14} />;
+  return <Avatar user={row.actor} size={14} />;
 }
-const statusOf = (i: Issue) => boardOf(i.key)?.columns.flatMap((c) => c.statuses).find((s) => s.id === i.status);
-const colLook = (c: Column) => ({ name: c.name, category: c.statuses[0]?.category ?? "new" });
+const statusOf = (i: Issue) =>
+  boardOf(i.key)
+    ?.columns.flatMap((c) => c.statuses)
+    .find((s) => s.id === i.status);
 
 export function App() {
   const boards = useStore((s) => s.boards);
   const boardId = useStore((s) => s.board);
   const selected = useStore((s) => s.selected);
   const view = useStore((s) => s.view);
-  const document = useStore(s=>s.document);
+  const document = useStore((s) => s.document);
   const overlay = useStore((s) => s.overlay);
   const open = useStore((s) => (s.panel && s.selected ? s.issues.get(s.selected) : undefined));
   const current = useStore((s) => (s.selected ? s.issues.get(s.selected) : undefined));
-  const loadError=useStore(s=>s.loadError);
-  const visited=useRef(new Set<number>());visited.current.add(boardId);
+  const loadError = useStore((s) => s.loadError);
+  const visited = useRef(new Set<number>());
+  visited.current.add(boardId);
 
   useEffect(() => void load(), []);
-  useLinearHotkeys(()=>nav.cols);
+  useLinearHotkeys(() => nav.cols);
 
-  if (!boards.length) return <div className="p-6 text-fg-3">{loadError?<div role="alert"><p>{loadError}</p><button className="mt-3 rounded bg-sel px-3 py-2 text-fg" onClick={()=>void load()}>Retry loading</button></div>:"Loading your Jira mirror…"}</div>;
+  if (!boards.length)
+    return (
+      <div className="p-6 text-fg-3">
+        {loadError ? (
+          <div role="alert">
+            <p>{loadError}</p>
+            <button className="mt-3 rounded bg-sel px-3 py-2 text-fg" onClick={() => void load()}>
+              Retry loading
+            </button>
+          </div>
+        ) : (
+          "Loading your Jira mirror…"
+        )}
+      </div>
+    );
   const page = !!open && (view === "page" || !!document);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1">
-      <Sidebar boards={boards} />
-      <Tooltips />
-      <main tabIndex={-1} className="relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border-[0.5px] border-frame bg-panel shadow-(--frame-shadow)">
-        {!page && <BoardHeader />}
-        <div className="flex min-h-0 flex-1">
-          {/* Retain visited boards for scroll restoration; do not render unopened boards. */}
-          {boards.filter(b=>visited.current.has(b.id)).map((b) => (
-            <BoardView key={b.id} board={b} active={b.id === boardId} shown={!page && b.id === boardId} selected={selected} />
-          ))}
-          {open && <IssueView key={firstKey(open.key)} issue={open} page={page} />}
-        </div>
-      </main>
+        <Sidebar boards={boards} />
+        <Tooltips />
+        <main
+          tabIndex={-1}
+          className="relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border-[0.5px] border-frame bg-panel shadow-(--frame-shadow)"
+        >
+          {!page && <BoardHeader />}
+          <div className="flex min-h-0 flex-1">
+            {/* Retain visited boards for scroll restoration; do not render unopened boards. */}
+            {boards
+              .filter((b) => visited.current.has(b.id))
+              .map((b) => (
+                <BoardView
+                  key={b.id}
+                  board={b}
+                  active={b.id === boardId}
+                  shown={!page && b.id === boardId}
+                  selected={selected}
+                />
+              ))}
+            {open && <IssueView key={firstKey(open.key)} issue={open} page={page} />}
+          </div>
+        </main>
       </div>
-      <ReminderDelivery/><StorageNotice/><StatusBar /><Toast/>
-      {(overlay === "palette"||overlay==="search") && <Palette searchOnly={overlay==="search"}/> }
-      {overlay==="shortcuts"&&<ShortcutHelp/>}
-      {overlay==="help"&&<HelpMenu/>}
-      {(overlay==="favorites"||overlay==="views"||overlay==="boards")&&<QuickNavigation kind={overlay}/>}
+      <ReminderDelivery />
+      <StorageNotice />
+      <StatusBar />
+      <Toast />
+      {(overlay === "palette" || overlay === "search") && (
+        <Palette searchOnly={overlay === "search"} />
+      )}
+      {overlay === "shortcuts" && <ShortcutHelp />}
+      {overlay === "help" && <HelpMenu />}
+      {(overlay === "favorites" || overlay === "views" || overlay === "boards") && (
+        <QuickNavigation kind={overlay} />
+      )}
       {overlay === "assign" && selected && <AssignPicker issueKey={selected} />}
       {overlay === "status" && selected && <StatusPicker issueKey={selected} />}
       {overlay === "create" && <CreateIssue />}
-      {current && (overlay === "priority" || overlay === "labels" || overlay === "project" || overlay === "milestone" || overlay === "due") && <PropertyPicker issue={current} field={overlay}/>}
-      {open && overlay === "options" && <IssueOptions issue={open}/>}
-      {current && overlay === "reminder" && <ReminderPicker issue={current}/>}
-      {current && overlay === "relations" && <Relations issue={current}/>}
-      {current && overlay === "subscribers" && <Subscribers issue={current}/>}
+      {current &&
+        (overlay === "priority" ||
+          overlay === "labels" ||
+          overlay === "project" ||
+          overlay === "milestone" ||
+          overlay === "due") && <PropertyPicker issue={current} field={overlay} />}
+      {open && overlay === "options" && <IssueOptions issue={open} />}
+      {current && overlay === "reminder" && <ReminderPicker issue={current} />}
+      {current && overlay === "relations" && <Relations issue={current} />}
+      {current && overlay === "subscribers" && <Subscribers issue={current} />}
     </div>
   );
 }
 
-function BoardView({ board, active, shown, selected }: { board: Board; active: boolean; shown: boolean; selected: string | null }) {
-  const issues = useStore(s=>s.issues);
-  const mine = useStore(s=>s.mine);
-  const query = useStore(s=>s.query);
-  const details=useStore(s=>s.details);
-  const panel=useStore(s=>s.panel);
+function BoardView({
+  board,
+  active,
+  shown,
+  selected,
+}: {
+  board: Board;
+  active: boolean;
+  shown: boolean;
+  selected: string | null;
+}) {
+  const issues = useStore((s) => s.issues);
+  const mine = useStore((s) => s.mine);
+  const query = useStore((s) => s.query);
+  const details = useStore((s) => s.details);
+  const panel = useStore((s) => s.panel);
   const prefs = usePreferences(board.id);
   const d = prefs.display;
-  const [expanded,setExpanded] = useState<string[]>([]);
-  const [hiddenOpen,setHiddenOpen] = useState(true);
-  const all = useMemo(()=>[...issues.values()],[issues]);
-  const visible = useMemo(()=>selectIssues(all,board,prefs,mine,query,ME.id),[all,board,prefs,mine,query]);
-  const universe = useMemo(()=>all.filter(i=>i.board===board.id),[all,board]);
-  const columns = useMemo(()=>buckets(visible,d.columns,board,universe,d.groupDescending).filter(c=>d.columns!=="status"||columnInScope(board.columns.find(x=>x.name===c.id),prefs.scope)),[visible,d,board,universe,prefs.scope]);
-  const hiddenIds=prefs.hidden[d.columns]??[];
-  const collapsed=prefs.collapsed[d.columns]??[];
-  const hidden = columns.filter(c=>hiddenIds.includes(c.id)||!d.emptyGroups&&!c.issues.length&&!expanded.includes(c.id));
-  const show = columns.filter(c=>!hidden.includes(c));
-  const rows = useMemo(()=>buckets(visible,d.rows,board,visible),[visible,d.rows,board]);
-  const navColumns = d.layout === "list" ? [show.filter(c=>!collapsed.includes(c.id)).flatMap(c=>buckets(c.issues,d.rows,board,c.issues).flatMap(r=>listRows(r.issues,universe,d.subIssues?d.nested:"none").map(row=>row.issue)))] : show.map(c=>rows.flatMap(r=>c.issues.filter(i=>r.issues.includes(i))));
-  if (active) nav.cols = navColumns.map(c=>[...new Map(c.map(i=>[i.key,i])).values()]);
-  useEffect(()=>setExpanded([]),[d.emptyGroups,d.columns]);
+  const [expanded, setExpanded] = useState<string[]>([]);
+  const [hiddenOpen, setHiddenOpen] = useState(true);
+  const all = useMemo(() => [...issues.values()], [issues]);
+  const visible = useMemo(
+    () => selectIssues(all, board, prefs, mine, query, ME.id),
+    [all, board, prefs, mine, query],
+  );
+  const universe = useMemo(() => all.filter((i) => i.board === board.id), [all, board]);
+  const columns = useMemo(
+    () =>
+      buckets(visible, d.columns, board, universe, d.groupDescending).filter(
+        (c) =>
+          d.columns !== "status" ||
+          columnInScope(
+            board.columns.find((x) => x.name === c.id),
+            prefs.scope,
+          ),
+      ),
+    [visible, d, board, universe, prefs.scope],
+  );
+  const hiddenIds = prefs.hidden[d.columns] ?? [];
+  const collapsed = prefs.collapsed[d.columns] ?? [];
+  const hidden = columns.filter(
+    (c) =>
+      hiddenIds.includes(c.id) || (!d.emptyGroups && !c.issues.length && !expanded.includes(c.id)),
+  );
+  const show = columns.filter((c) => !hidden.includes(c));
+  const rows = useMemo(() => buckets(visible, d.rows, board, visible), [visible, d.rows, board]);
+  const navColumns =
+    d.layout === "list"
+      ? [
+          show
+            .filter((c) => !collapsed.includes(c.id))
+            .flatMap((c) =>
+              buckets(c.issues, d.rows, board, c.issues).flatMap((r) =>
+                listRows(r.issues, universe, d.subIssues ? d.nested : "none").map(
+                  (row) => row.issue,
+                ),
+              ),
+            ),
+        ]
+      : show.map((c) => rows.flatMap((r) => c.issues.filter((i) => r.issues.includes(i))));
+  if (active) nav.cols = navColumns.map((c) => [...new Map(c.map((i) => [i.key, i])).values()]);
+  useEffect(() => setExpanded([]), [d.emptyGroups, d.columns]);
   useEffect(() => {
     if (!active || !selected) return;
-    if(!get().fullErrors.get(selected))loadFull(selected);
+    if (!get().fullErrors.get(selected)) loadFull(selected);
     const flat = navColumns.flat();
     const i = flat.findIndex((x) => x.key === selected);
-    if (i >= 0) for (const offset of [-2, -1, 1, 2]) flat[i+offset] && loadFull(flat[i+offset]!.key);
+    if (i >= 0)
+      for (const offset of [-2, -1, 1, 2]) {
+        const near = flat[i + offset];
+        if (near) loadFull(near.key);
+      }
   }, [active, selected, visible]);
 
-  const hide=(id:string)=>changePreferences(board.id,{hidden:{...prefs.hidden,[d.columns]:[...hiddenIds,id]}});
-  const reveal=(id:string)=>{changePreferences(board.id,{hidden:{...prefs.hidden,[d.columns]:hiddenIds.filter(x=>x!==id)}});setExpanded([...expanded,id]);};
-  const collapse=(id:string)=>changePreferences(board.id,{collapsed:{...prefs.collapsed,[d.columns]:collapsed.includes(id)?collapsed.filter(x=>x!==id):[...collapsed,id]}});
-  const createIn=(bucket:Bucket,row?:Bucket)=>beginCreate({...draftForGroup(d.columns,bucket.id,board,universe,prefs.scope),...(row?draftForGroup(d.rows,row.id,board,universe,prefs.scope):{})});
-  return <div className={`${shown?"flex":"hidden"} min-w-0 min-h-0 flex-1`}><div className="flex min-w-0 min-h-0 flex-1 flex-col" data-layout={d.layout}>
-    {!visible.length&&<div role="status" className="flex shrink-0 items-center justify-center gap-3 py-8 text-fg-3">No issues match this view.<button onClick={()=>ui.send({type:"toolbar.open",toolbar:"filter"})} className="text-fg-2">Edit filters</button></div>}
-    {d.layout === "list" ? <div className="flex-1 overflow-auto py-1">
-      {show.map(c=><section key={c.id} className="mb-2">
-        <GroupHeading bucket={c} collapsed={collapsed.includes(c.id)} toggle={()=>collapse(c.id)} create={()=>createIn(c)}/>
-        {!collapsed.includes(c.id)&&buckets(c.issues,d.rows,board,c.issues).filter(r=>r.issues.length).map(r=><div key={r.id}>
-          {d.rows!=="none"&&<div className="border-b border-line bg-col px-8 py-2 text-[12px] text-fg-3">{r.name} <span className="ml-2">{r.issues.length}</span></div>}
-          <IssueList issues={r.issues} universe={universe} display={d} selected={selected}/>
-        </div>)}
-      </section>)}
-    </div> : <div className="flex min-h-0 flex-1"><div className="min-h-0 min-w-0 flex-1 overflow-auto px-2 pt-1">
-      {d.rows!=="none"&&<div className="sticky top-0 z-10 flex w-max gap-4 bg-panel">{show.map(col=><div key={col.id} className="w-[340px] shrink-0 rounded-t-[5px] bg-(--col-top)"><ColumnHeading bucket={col} count={col.issues.length} display={d} hide={()=>hide(col.id)} create={()=>createIn(col)}/></div>)}</div>}
-      {rows.filter(r=>d.rows==="none"||r.issues.length).map(row=><div key={row.id} className={d.rows === "none"?"flex h-full min-h-0 gap-4":"mb-4"}>
-        {d.rows!=="none"&&<div className="sticky left-0 mb-2 flex items-center gap-2 px-2 py-2 text-fg-3"><span>{row.name}</span><span>{row.issues.length}</span></div>}
-        <div className={d.rows === "none"?"contents":"flex gap-4"}>
-          {show.map(col=><ColumnView key={col.id} bucket={col} issues={d.rows==="none"?col.issues:col.issues.filter(i=>row.issues.includes(i))} selected={selected} display={d} scroll={d.rows==="none"} header={d.rows==="none"} hide={()=>hide(col.id)} create={()=>createIn(col,d.rows==="none"?undefined:row)} onDrop={(key,before)=>actions.drop(key,board.id,[{by:d.columns,id:col.id},...(d.rows!=="none"?[{by:d.rows,id:row.id}]:[])],d.ordering==="manual"?dropRank((d.rows==="none"?col.issues:col.issues.filter(i=>row.issues.includes(i))).filter(i=>i.key!==key),before,d.descending):undefined)}/>)}
-        </div>
-      </div>)}
-    </div>{d.rows==="none"&&hidden.length>0&&<HiddenColumns columns={hidden} open={hiddenOpen} toggle={()=>setHiddenOpen(!hiddenOpen)} reveal={reveal}/>}</div>}
-    {hidden.length>0&&d.layout==="board"&&d.rows==="none"?null:hidden.length>0&&<details open className="shrink-0 border-t border-line px-4 py-2 text-[12px] text-fg-3"><summary className="cursor-default">Hidden {d.layout==="board"?"columns":"groups"}</summary><div className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-y-auto">{hidden.map(c=><button key={c.id} aria-label={`Show ${c.name}`} className="flex h-8 items-center gap-2 rounded-lg bg-card px-3 text-fg-2 hover:bg-hover" onClick={()=>reveal(c.id)}>{c.status&&<StatusIcon status={c.status}/>}<span>{c.name}</span><span className="text-fg-3">{c.issues.length}</span></button>)}</div></details>}
-  </div>{active&&shown&&details&&!panel&&<BoardDetails board={board} issues={visible}/>}</div>;
+  const hide = (id: string) =>
+    changePreferences(board.id, { hidden: { ...prefs.hidden, [d.columns]: [...hiddenIds, id] } });
+  const reveal = (id: string) => {
+    changePreferences(board.id, {
+      hidden: { ...prefs.hidden, [d.columns]: hiddenIds.filter((x) => x !== id) },
+    });
+    setExpanded([...expanded, id]);
+  };
+  const collapse = (id: string) =>
+    changePreferences(board.id, {
+      collapsed: {
+        ...prefs.collapsed,
+        [d.columns]: collapsed.includes(id)
+          ? collapsed.filter((x) => x !== id)
+          : [...collapsed, id],
+      },
+    });
+  const createIn = (bucket: Bucket, row?: Bucket) =>
+    beginCreate({
+      ...draftForGroup(d.columns, bucket.id, board, universe, prefs.scope),
+      ...(row ? draftForGroup(d.rows, row.id, board, universe, prefs.scope) : {}),
+    });
+  return (
+    <div className={`${shown ? "flex" : "hidden"} min-w-0 min-h-0 flex-1`}>
+      <div className="flex min-w-0 min-h-0 flex-1 flex-col" data-layout={d.layout}>
+        {!visible.length && (
+          <div
+            role="status"
+            className="flex shrink-0 items-center justify-center gap-3 py-8 text-fg-3"
+          >
+            No issues match this view.
+            <button
+              onClick={() => ui.send({ type: "toolbar.open", toolbar: "filter" })}
+              className="text-fg-2"
+            >
+              Edit filters
+            </button>
+          </div>
+        )}
+        {d.layout === "list" ? (
+          <div className="flex-1 overflow-auto py-1">
+            {show.map((c) => (
+              <section key={c.id} className="mb-2">
+                <GroupHeading
+                  bucket={c}
+                  collapsed={collapsed.includes(c.id)}
+                  toggle={() => collapse(c.id)}
+                  create={() => createIn(c)}
+                />
+                {!collapsed.includes(c.id) &&
+                  buckets(c.issues, d.rows, board, c.issues)
+                    .filter((r) => r.issues.length)
+                    .map((r) => (
+                      <div key={r.id}>
+                        {d.rows !== "none" && (
+                          <div className="border-b border-line bg-col px-8 py-2 text-[12px] text-fg-3">
+                            {r.name} <span className="ml-2">{r.issues.length}</span>
+                          </div>
+                        )}
+                        <IssueList
+                          issues={r.issues}
+                          universe={universe}
+                          display={d}
+                          selected={selected}
+                        />
+                      </div>
+                    ))}
+              </section>
+            ))}
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1">
+            <div className="min-h-0 min-w-0 flex-1 overflow-auto px-2 pt-1">
+              {d.rows !== "none" && (
+                <div className="sticky top-0 z-10 flex w-max gap-4 bg-panel">
+                  {show.map((col) => (
+                    <div key={col.id} className="w-[340px] shrink-0 rounded-t-[5px] bg-(--col-top)">
+                      <ColumnHeading
+                        bucket={col}
+                        count={col.issues.length}
+                        display={d}
+                        hide={() => hide(col.id)}
+                        create={() => createIn(col)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {rows
+                .filter((r) => d.rows === "none" || r.issues.length)
+                .map((row) => (
+                  <div
+                    key={row.id}
+                    className={d.rows === "none" ? "flex h-full min-h-0 gap-4" : "mb-4"}
+                  >
+                    {d.rows !== "none" && (
+                      <div className="sticky left-0 mb-2 flex items-center gap-2 px-2 py-2 text-fg-3">
+                        <span>{row.name}</span>
+                        <span>{row.issues.length}</span>
+                      </div>
+                    )}
+                    <div className={d.rows === "none" ? "contents" : "flex gap-4"}>
+                      {show.map((col) => (
+                        <ColumnView
+                          key={col.id}
+                          bucket={col}
+                          issues={
+                            d.rows === "none"
+                              ? col.issues
+                              : col.issues.filter((i) => row.issues.includes(i))
+                          }
+                          selected={selected}
+                          display={d}
+                          scroll={d.rows === "none"}
+                          header={d.rows === "none"}
+                          hide={() => hide(col.id)}
+                          create={() => createIn(col, d.rows === "none" ? undefined : row)}
+                          onDrop={(key, before) =>
+                            actions.drop(
+                              key,
+                              board.id,
+                              [
+                                { by: d.columns, id: col.id },
+                                ...(d.rows !== "none" ? [{ by: d.rows, id: row.id }] : []),
+                              ],
+                              d.ordering === "manual"
+                                ? dropRank(
+                                    (d.rows === "none"
+                                      ? col.issues
+                                      : col.issues.filter((i) => row.issues.includes(i))
+                                    ).filter((i) => i.key !== key),
+                                    before,
+                                    d.descending,
+                                  )
+                                : undefined,
+                            )
+                          }
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+            </div>
+            {d.rows === "none" && hidden.length > 0 && (
+              <HiddenColumns
+                columns={hidden}
+                open={hiddenOpen}
+                toggle={() => setHiddenOpen(!hiddenOpen)}
+                reveal={reveal}
+              />
+            )}
+          </div>
+        )}
+        {hidden.length > 0 && d.layout === "board" && d.rows === "none"
+          ? null
+          : hidden.length > 0 && (
+              <details
+                open
+                className="shrink-0 border-t border-line px-4 py-2 text-[12px] text-fg-3"
+              >
+                <summary className="cursor-default">
+                  Hidden {d.layout === "board" ? "columns" : "groups"}
+                </summary>
+                <div className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-y-auto">
+                  {hidden.map((c) => (
+                    <button
+                      key={c.id}
+                      aria-label={`Show ${c.name}`}
+                      className="flex h-8 items-center gap-2 rounded-lg bg-card px-3 text-fg-2 hover:bg-hover"
+                      onClick={() => reveal(c.id)}
+                    >
+                      {c.status && <StatusIcon status={c.status} />}
+                      <span>{c.name}</span>
+                      <span className="text-fg-3">{c.issues.length}</span>
+                    </button>
+                  ))}
+                </div>
+              </details>
+            )}
+      </div>
+      {active && shown && details && !panel && <BoardDetails board={board} issues={visible} />}
+    </div>
+  );
 }
 
 /** The rank for a card dropped before `before` (or at the end) in a column shown in `list` order. */
-function dropRank(list:Issue[],before:string|undefined,descending:boolean) {
-  const i=list.findIndex(x=>x.key===before),at=i<0?list.length:i,prev=list[at-1]?.rank,next=list[at]?.rank;
-  return descending?rankBetween(next,prev):rankBetween(prev,next);
+function dropRank(list: Issue[], before: string | undefined, descending: boolean) {
+  const i = list.findIndex((x) => x.key === before),
+    at = i < 0 ? list.length : i,
+    prev = list[at - 1]?.rank,
+    next = list[at]?.rank;
+  return descending ? rankBetween(next, prev) : rankBetween(prev, next);
 }
 
 /** Linear's "Hidden columns" list: pinned right, 338px, 50px header on the panel colour, 37px rows 10px apart. */
-function HiddenColumns({columns,open,toggle,reveal}:{columns:Bucket[];open:boolean;toggle:()=>void;reveal:(id:string)=>void}) {
-  return <aside aria-label="Hidden columns" className="mr-3 w-[338px] shrink-0 overflow-y-auto border-l border-line pl-3">
-    <div className="flex h-[50px] items-center">
-      <button aria-expanded={open} onClick={toggle} className="ml-px flex h-6 items-center gap-1 rounded-full border-[0.5px] border-transparent pr-2 pl-1 text-[12px] font-medium text-fg-2 hover:bg-hover">
-        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" className={`text-fg-3 transition-transform ${open?"rotate-90":""}`}><path d="M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z"/></svg>
-        Hidden columns
+function HiddenColumns({
+  columns,
+  open,
+  toggle,
+  reveal,
+}: {
+  columns: Bucket[];
+  open: boolean;
+  toggle: () => void;
+  reveal: (id: string) => void;
+}) {
+  return (
+    <aside
+      aria-label="Hidden columns"
+      className="mr-3 w-[338px] shrink-0 overflow-y-auto border-l border-line pl-3"
+    >
+      <div className="flex h-[50px] items-center">
+        <button
+          aria-expanded={open}
+          onClick={toggle}
+          className="ml-px flex h-6 items-center gap-1 rounded-full border-[0.5px] border-transparent pr-2 pl-1 text-[12px] font-medium text-fg-2 hover:bg-hover"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            className={`text-fg-3 transition-transform ${open ? "rotate-90" : ""}`}
+          >
+            <path d="M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z" />
+          </svg>
+          Hidden columns
+        </button>
+      </div>
+      {open && (
+        <div className="flex flex-col gap-2.5 pb-12">
+          {columns.map((c) => (
+            <button
+              key={c.id}
+              aria-label={`Show ${c.name}`}
+              onClick={() => reveal(c.id)}
+              className="flex h-[37px] shrink-0 items-center gap-3.5 rounded-lg border-[0.5px] border-hidden-line bg-card px-3 text-left text-[13px] font-medium text-fg shadow-(--hidden-shadow) hover:bg-card-hover"
+            >
+              {c.status ? <StatusIcon status={c.status} /> : <Icon name="layers" />}
+              <span className="flex-1 truncate">{c.name}</span>
+              <span className="font-[450] text-card-fg-3">{c.issues.length}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function GroupHeading({
+  bucket,
+  collapsed,
+  toggle,
+  create,
+}: {
+  bucket: Bucket;
+  collapsed: boolean;
+  toggle: () => void;
+  create: () => void;
+}) {
+  return (
+    <div className="flex h-10 items-center gap-2 border-y border-line bg-col px-5 text-[12px] font-medium text-fg-2">
+      <button
+        aria-label={`${collapsed ? "Expand" : "Collapse"} ${bucket.name}`}
+        aria-expanded={!collapsed}
+        onClick={toggle}
+        className="flex flex-1 items-center gap-2 text-left"
+      >
+        <Icon name={collapsed ? "chevron" : "down"} />
+        {bucket.status && <StatusIcon status={bucket.status} />}
+        <span>{bucket.name}</span>
+        <span className="text-fg-3">{bucket.issues.length}</span>
+      </button>
+      <button aria-label={`New issue in ${bucket.name}`} onClick={create} className={COL_BTN}>
+        <Icon name="plus" />
       </button>
     </div>
-    {open&&<div className="flex flex-col gap-2.5 pb-12">{columns.map(c=><button key={c.id} aria-label={`Show ${c.name}`} onClick={()=>reveal(c.id)} className="flex h-[37px] shrink-0 items-center gap-3.5 rounded-lg border-[0.5px] border-hidden-line bg-card px-3 text-left text-[13px] font-medium text-fg shadow-(--hidden-shadow) hover:bg-card-hover">
-      {c.status?<StatusIcon status={c.status}/>:<Icon name="layers"/>}<span className="flex-1 truncate">{c.name}</span><span className="font-[450] text-card-fg-3">{c.issues.length}</span>
-    </button>)}</div>}
-  </aside>;
+  );
 }
 
-function GroupHeading({bucket,collapsed,toggle,create}:{bucket:Bucket;collapsed:boolean;toggle:()=>void;create:()=>void}) {
-  return <div className="flex h-10 items-center gap-2 border-y border-line bg-col px-5 text-[12px] font-medium text-fg-2"><button aria-label={`${collapsed?"Expand":"Collapse"} ${bucket.name}`} aria-expanded={!collapsed} onClick={toggle} className="flex flex-1 items-center gap-2 text-left"><Icon name={collapsed?"chevron":"down"}/>{bucket.status&&<StatusIcon status={bucket.status}/>}<span>{bucket.name}</span><span className="text-fg-3">{bucket.issues.length}</span></button><button aria-label={`New issue in ${bucket.name}`} onClick={create} className={COL_BTN}><Icon name="plus"/></button></div>;
-}
-
-function IssueList({issues,universe,display,selected}:{issues:Issue[];universe:Issue[];display:Display;selected:string|null}) {
-  return listRows(issues,universe,display.subIssues?display.nested:"none").map(({issue,depth})=><Card key={issue.key} issue={issue} selected={selected === issue.key} display={display} list depth={depth}/>);
+function IssueList({
+  issues,
+  universe,
+  display,
+  selected,
+}: {
+  issues: Issue[];
+  universe: Issue[];
+  display: Display;
+  selected: string | null;
+}) {
+  return listRows(issues, universe, display.subIssues ? display.nested : "none").map(
+    ({ issue, depth }) => (
+      <Card
+        key={issue.key}
+        issue={issue}
+        selected={selected === issue.key}
+        display={display}
+        list
+        depth={depth}
+      />
+    ),
+  );
 }
 
 // --- keyboard ---
 
-function QuickNavigation({kind}:{kind:"favorites"|"views"|"boards"}) {
-  const state=useStore(s=>s);
-  const close=()=>ui.send({type:"overlay.close"});
-  const title=kind==="views"?"Open view":kind==="boards"?"Open a team / board":"Open a favorite";
-  const choices=kind==="boards"
-    ?state.boards.map(board=>({id:String(board.id),name:board.name,run:()=>navigate({board:board.id,selected:null,panel:false})}))
-    :kind==="views"
-      ?state.savedViews.map(view=>({id:view.id,name:view.name,run:()=>openSavedView(view)}))
-      :state.favorites.flatMap(id=>{
-        const document=id.startsWith('document:')?findIssueDocument(state.issues.values(),id.slice(9)):undefined;
-        if(document)return [{id,name:document.resource.title||'New document',run:()=>navigate({board:document.issue.board,selected:document.issue.key,panel:true,document:document.resource.id})}];
-        const issue=state.issues.get(id),[,boardId,scope]=id.split(":"),board=state.boards.find(b=>b.id===Number(boardId));
-        if(issue)return [{id,name:`${id} ${issue.summary}`,run:()=>navigate({board:issue.board,selected:issue.key,panel:true})}];
-        if(!board)return [];
-        return [{id,name:`${board.name}${scope?` · ${scope}`:""}`,run:()=>{
-          navigate({board:board.id,selected:null,panel:false});
-          if(scope)changePreferences(board.id,{scope:scope==="active"?"active":scope==="backlog"?"backlog":"all"});
-        }}];
-      });
-  return <Modal label={title} close={close}>
-    <Command loop>
-      <Command.Input autoFocus aria-label="Find view or favorite" placeholder="Search…" className="w-full bg-transparent p-3 outline-none"/>
-      <Command.List>
-        <Command.Empty className="p-3 text-fg-3">No saved {kind}</Command.Empty>
-        {choices.map(choice=><Command.Item key={choice.id} value={choice.name} onSelect={()=>{close();choice.run();}} className="p-2 data-[selected=true]:bg-sel">{choice.name}</Command.Item>)}
-      </Command.List>
-    </Command>
-  </Modal>;
+function QuickNavigation({ kind }: { kind: "favorites" | "views" | "boards" }) {
+  const state = useStore((s) => s);
+  const close = () => ui.send({ type: "overlay.close" });
+  const title =
+    kind === "views" ? "Open view" : kind === "boards" ? "Open a team / board" : "Open a favorite";
+  const choices =
+    kind === "boards"
+      ? state.boards.map((board) => ({
+          id: String(board.id),
+          name: board.name,
+          run: () => navigate({ board: board.id, selected: null, panel: false }),
+        }))
+      : kind === "views"
+        ? state.savedViews.map((view) => ({
+            id: view.id,
+            name: view.name,
+            run: () => openSavedView(view),
+          }))
+        : state.favorites.flatMap((id) => {
+            const document = id.startsWith("document:")
+              ? findIssueDocument(state.issues.values(), id.slice(9))
+              : undefined;
+            if (document)
+              return [
+                {
+                  id,
+                  name: document.resource.title || "New document",
+                  run: () =>
+                    navigate({
+                      board: document.issue.board,
+                      selected: document.issue.key,
+                      panel: true,
+                      document: document.resource.id,
+                    }),
+                },
+              ];
+            const issue = state.issues.get(id),
+              [, boardId, scope] = id.split(":"),
+              board = state.boards.find((b) => b.id === Number(boardId));
+            if (issue)
+              return [
+                {
+                  id,
+                  name: `${id} ${issue.summary}`,
+                  run: () => navigate({ board: issue.board, selected: issue.key, panel: true }),
+                },
+              ];
+            if (!board) return [];
+            return [
+              {
+                id,
+                name: `${board.name}${scope ? ` · ${scope}` : ""}`,
+                run: () => {
+                  navigate({ board: board.id, selected: null, panel: false });
+                  if (scope)
+                    changePreferences(board.id, {
+                      scope:
+                        scope === "active" ? "active" : scope === "backlog" ? "backlog" : "all",
+                    });
+                },
+              },
+            ];
+          });
+  return (
+    <Modal label={title} close={close}>
+      <Command loop>
+        <Command.Input
+          autoFocus
+          aria-label="Find view or favorite"
+          placeholder="Search…"
+          className="w-full bg-transparent p-3 outline-none"
+        />
+        <Command.List>
+          <Command.Empty className="p-3 text-fg-3">No saved {kind}</Command.Empty>
+          {choices.map((choice) => (
+            <Command.Item
+              key={choice.id}
+              value={choice.name}
+              onSelect={() => {
+                close();
+                choice.run();
+              }}
+              className="p-2 data-[selected=true]:bg-sel"
+            >
+              {choice.name}
+            </Command.Item>
+          ))}
+        </Command.List>
+      </Command>
+    </Modal>
+  );
 }
 
 // --- chrome ---
@@ -249,12 +799,17 @@ function QuickNavigation({kind}:{kind:"favorites"|"views"|"boards"}) {
 function Sidebar({ boards }: { boards: Board[] }) {
   const boardId = useStore((s) => s.board);
   const mine = useStore((s) => s.mine);
-  const hidden=useStore(s=>s.sidebarHidden);
-  if(hidden)return null;
+  const hidden = useStore((s) => s.sidebarHidden);
+  if (hidden) return null;
   return (
-    <nav aria-label="Main navigation" className="flex w-[244px] shrink-0 flex-col gap-px overflow-y-auto p-2 font-medium max-md:hidden">
+    <nav
+      aria-label="Main navigation"
+      className="flex w-[244px] shrink-0 flex-col gap-px overflow-y-auto p-2 font-medium max-md:hidden"
+    >
       <div className="mb-1 flex h-11 items-center gap-2 px-2 text-fg">
-        <span className="grid size-[18px] place-items-center rounded-[5px] bg-accent text-[10px] font-semibold text-white">bj</span>
+        <span className="grid size-[18px] place-items-center rounded-[5px] bg-accent text-[10px] font-semibold text-white">
+          bj
+        </span>
         better-jira
       </div>
       <SideItem onClick={() => runShortcut("search")}>
@@ -264,46 +819,163 @@ function Sidebar({ boards }: { boards: Board[] }) {
         <Icon name="plus" /> New issue <kbd className="ml-auto">C</kbd>
       </SideItem>
       {/* Like Linear, My issues is a sidebar view rather than a tab beside Active/Backlog/All. */}
-      <SideItem active={mine} onClick={() => timed("only mine", () => ui.send({ type: "mine.set", mine: !mine }))}>
+      <SideItem
+        active={mine}
+        onClick={() => timed("only mine", () => ui.send({ type: "mine.set", mine: !mine }))}
+      >
         <Icon name="user" /> My issues <kbd className="ml-auto">{shortcutLabel("mine")}</kbd>
       </SideItem>
 
       <div className="mt-5 mb-1 px-2 text-[12px] text-fg-3">Boards</div>
       {boards.map((b) => (
-        <SideItem key={b.id} active={b.id === boardId} onClick={() => timed("switch board", () => navigate({ board: b.id, selected: null, panel: false }))}>
-          <span className="grid size-4 shrink-0 place-items-center rounded-[4px] bg-sel text-[9px] font-semibold text-fg-2">{b.name[0]}</span>
+        <SideItem
+          key={b.id}
+          active={b.id === boardId}
+          onClick={() =>
+            timed("switch board", () => navigate({ board: b.id, selected: null, panel: false }))
+          }
+        >
+          <span className="grid size-4 shrink-0 place-items-center rounded-[4px] bg-sel text-[9px] font-semibold text-fg-2">
+            {b.name[0]}
+          </span>
           <span className="truncate">{b.name}</span>
         </SideItem>
       ))}
-      <SavedViews/>
-      <Favorites/>
-      <button id="help-menu" aria-label="Open Help menu" onClick={()=>runShortcut("help")} className="mt-auto flex items-center justify-between rounded-lg px-2 py-2 text-fg-3 hover:bg-hover">Help <kbd>?</kbd></button>
+      <SavedViews />
+      <Favorites />
+      <button
+        id="help-menu"
+        aria-label="Open Help menu"
+        onClick={() => runShortcut("help")}
+        className="mt-auto flex items-center justify-between rounded-lg px-2 py-2 text-fg-3 hover:bg-hover"
+      >
+        Help <kbd>?</kbd>
+      </button>
     </nav>
   );
 }
 
 /** Linear's 28px bottom bar under the sidebar and panel; ours carries the perf readout and the local-only note. */
 function Toast() {
-  const toast=useStore(s=>s.toast);
-  if(!toast)return null;
-  return <div aria-live="polite" data-toast className="fixed right-4 bottom-10 z-50 flex items-center gap-3 rounded-lg border border-line-2 bg-card px-3 py-2 text-[13px] text-fg shadow-lg"><div>{toast.text}{toast.detail&&<p className="mt-1 text-[12px] text-fg-3">{toast.detail}</p>}</div>{toast.undo&&<button className="text-accent hover:underline" onClick={()=>{undoEdit();ui.send({type:"toast.dismiss"});}}>Undo</button>}{toast.key&&<button onClick={()=>(ui.send({type:"toast.dismiss"}),navigate({selected:toast.key,panel:true,board:get().issues.get(currentKey(toast.key??""))?.board}))} className="text-accent hover:underline">View issue</button>}</div>;
+  const toast = useStore((s) => s.toast);
+  if (!toast) return null;
+  return (
+    <div
+      aria-live="polite"
+      data-toast
+      className="fixed right-4 bottom-10 z-50 flex items-center gap-3 rounded-lg border border-line-2 bg-card px-3 py-2 text-[13px] text-fg shadow-lg"
+    >
+      <div>
+        {toast.text}
+        {toast.detail && <p className="mt-1 text-[12px] text-fg-3">{toast.detail}</p>}
+      </div>
+      {toast.undo && (
+        <button
+          className="text-accent hover:underline"
+          onClick={() => {
+            undoEdit();
+            ui.send({ type: "toast.dismiss" });
+          }}
+        >
+          Undo
+        </button>
+      )}
+      {toast.key && (
+        <button
+          onClick={() => (
+            ui.send({ type: "toast.dismiss" }),
+            navigate({
+              selected: toast.key,
+              panel: true,
+              board: get().issues.get(currentKey(toast.key ?? ""))?.board,
+            })
+          )}
+          className="text-accent hover:underline"
+        >
+          View issue
+        </button>
+      )}
+    </div>
+  );
 }
 
 function StatusBar() {
   const perf = useStore((s) => s.perf);
-  const undo=useStore(s=>s.undoCount),redo=useStore(s=>s.redoCount);
-  const storage=useStore(s=>s.storage),writable=useStore(s=>s.writable),pending=useStore(s=>s.pendingWrites);
+  const undo = useStore((s) => s.undoCount),
+    redo = useStore((s) => s.redoCount);
+  const storage = useStore((s) => s.storage),
+    writable = useStore((s) => s.writable),
+    pending = useStore((s) => s.pendingWrites);
   return (
     <footer className="flex h-7 shrink-0 items-center gap-4 px-4 pb-2 text-[11px] whitespace-nowrap">
-      {writable
-        ?<span title="Issue edits are written to Jira." className="flex min-w-0 items-center gap-1.5 text-emerald-500"><span className="size-1.5 shrink-0 rounded-full bg-emerald-500" /><span className="truncate">Edits write to Jira</span></span>
-        :<span title="Issue changes, files, and view preferences are saved in this browser." className="flex min-w-0 items-center gap-1.5 text-amber-500"><span className="size-1.5 shrink-0 rounded-full bg-amber-500" /><span className="truncate">Local only: nothing is sent to Jira</span></span>}
-      {writable&&<span role="status" aria-label="Jira save status" data-jira-pending={pending} className="text-fg-3">{pending?`Sending ${pending} to Jira…`:"Saved to Jira"}</span>}
-      <span role="status" aria-label="Local save status" data-storage-status={storage.status} className="text-fg-3">{storage.status==="saving"?"Saving…":storage.status==="saved"?"Saved locally":storage.status==="loading"?"Opening local data…":"Not saved"}</span>
+      {writable ? (
+        <span
+          title="Issue edits are written to Jira."
+          className="flex min-w-0 items-center gap-1.5 text-emerald-500"
+        >
+          <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
+          <span className="truncate">Edits write to Jira</span>
+        </span>
+      ) : (
+        <span
+          title="Issue changes, files, and view preferences are saved in this browser."
+          className="flex min-w-0 items-center gap-1.5 text-amber-500"
+        >
+          <span className="size-1.5 shrink-0 rounded-full bg-amber-500" />
+          <span className="truncate">Local only: nothing is sent to Jira</span>
+        </span>
+      )}
+      {writable && (
+        <span
+          role="status"
+          aria-label="Jira save status"
+          data-jira-pending={pending}
+          className="text-fg-3"
+        >
+          {pending ? `Sending ${pending} to Jira…` : "Saved to Jira"}
+        </span>
+      )}
+      <span
+        role="status"
+        aria-label="Local save status"
+        data-storage-status={storage.status}
+        className="text-fg-3"
+      >
+        {storage.status === "saving"
+          ? "Saving…"
+          : storage.status === "saved"
+            ? "Saved locally"
+            : storage.status === "loading"
+              ? "Opening local data…"
+              : "Not saved"}
+      </span>
       <span className="-ml-2 flex">
-        <button aria-label="Undo" disabled={!undo} onClick={undoEdit} title="Undo (⌘Z)" className={FOOT_BTN}><Icon name="undo"/></button>
-        <button aria-label="Redo" disabled={!redo} onClick={redoEdit} title="Redo (⌘⇧Z)" className={FOOT_BTN}><Icon name="redo"/></button>
-        <button aria-label="Download backup" title="Download your local changes and files" onClick={()=>void downloadLocalBackup()} className={FOOT_BTN}><Icon name="download"/></button>
+        <button
+          aria-label="Undo"
+          disabled={!undo}
+          onClick={undoEdit}
+          title="Undo (⌘Z)"
+          className={FOOT_BTN}
+        >
+          <Icon name="undo" />
+        </button>
+        <button
+          aria-label="Redo"
+          disabled={!redo}
+          onClick={redoEdit}
+          title="Redo (⌘⇧Z)"
+          className={FOOT_BTN}
+        >
+          <Icon name="redo" />
+        </button>
+        <button
+          aria-label="Download backup"
+          title="Download your local changes and files"
+          onClick={() => void downloadLocalBackup()}
+          className={FOOT_BTN}
+        >
+          <Icon name="download" />
+        </button>
       </span>
       <span className="ml-auto truncate font-mono text-emerald-500">{perf}</span>
     </footer>
@@ -311,76 +983,200 @@ function StatusBar() {
 }
 
 function StorageNotice() {
-  const storage=useStore(s=>s.storage);
-  if(storage.status!=="error"&&!storage.recovered)return null;
-  return <div role={storage.status==="error"?"alert":"status"} className="flex shrink-0 flex-wrap items-center gap-3 border-t border-line px-4 py-2 text-[12px] text-fg-2"><span className="mr-auto">{storage.message}</span>{storage.status==="error"&&<button onClick={()=>void retryLocalStorage()} className="text-accent">Retry local storage</button>}<button onClick={()=>void downloadLocalBackup()} className="text-accent">Download local backup</button>{storage.recovered&&storage.status!=="error"&&<button aria-label="Dismiss local recovery notice" onClick={dismissRecoveryNotice}><Icon name="close"/></button>}</div>;
+  const storage = useStore((s) => s.storage);
+  if (storage.status !== "error" && !storage.recovered) return null;
+  return (
+    <div
+      role={storage.status === "error" ? "alert" : "status"}
+      className="flex shrink-0 flex-wrap items-center gap-3 border-t border-line px-4 py-2 text-[12px] text-fg-2"
+    >
+      <span className="mr-auto">{storage.message}</span>
+      {storage.status === "error" && (
+        <button onClick={() => void retryLocalStorage()} className="text-accent">
+          Retry local storage
+        </button>
+      )}
+      <button onClick={() => void downloadLocalBackup()} className="text-accent">
+        Download local backup
+      </button>
+      {storage.recovered && storage.status !== "error" && (
+        <button aria-label="Dismiss local recovery notice" onClick={dismissRecoveryNotice}>
+          <Icon name="close" />
+        </button>
+      )}
+    </div>
+  );
 }
 
-const SideItem = ({ active, onClick, children }: { active?: boolean; onClick: () => void; children: ReactNode }) => (
-  <button onClick={onClick} aria-current={active||undefined} className={`flex h-7 items-center gap-2 rounded-lg pr-[9px] pl-2 text-left ${active ? "bg-sel text-fg" : "text-fg-2 hover:bg-hover"}`}>
+const SideItem = ({
+  active,
+  onClick,
+  children,
+}: {
+  active?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) => (
+  <button
+    onClick={onClick}
+    aria-current={active || undefined}
+    className={`flex h-7 items-center gap-2 rounded-lg pr-[9px] pl-2 text-left ${active ? "bg-sel text-fg" : "text-fg-2 hover:bg-hover"}`}
+  >
     {children}
   </button>
 );
 
 // Linear's pill button: 28px, 0.5px ring drawn as a shadow, 12px/500.
-const PILL = "flex h-7 shrink-0 items-center gap-1.5 rounded-full border-[0.5px] border-transparent px-2.5 text-[12px] font-medium";
-const CIRCLE = "flex h-7 min-w-7 shrink-0 items-center rounded-full bg-btn text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2";
+const PILL =
+  "flex h-7 shrink-0 items-center gap-1.5 rounded-full border-[0.5px] border-transparent px-2.5 text-[12px] font-medium";
+const CIRCLE =
+  "flex h-7 min-w-7 shrink-0 items-center rounded-full bg-btn text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2";
 
 function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue }) {
   const openAllIssues = () => {
-    ui.send({type:"mine.set",mine:false});
-    ui.send({type:"query.set",query:""});
-    set({details:false,findInView:false});
-    changePreferences(board.id,{scope:"all"});
-    navigate({board:board.id,selected:null,panel:false});
+    ui.send({ type: "mine.set", mine: false });
+    ui.send({ type: "query.set", query: "" });
+    set({ details: false, findInView: false });
+    changePreferences(board.id, { scope: "all" });
+    navigate({ board: board.id, selected: null, panel: false });
   };
-  const crumb = "flex h-7 min-w-0 items-center gap-2 rounded px-1 hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-accent";
-  return <nav aria-label="Breadcrumb" className="flex min-w-0 items-center text-[13px] font-medium text-fg-2">
-    <button aria-label={board.name} title={board.name} onClick={openAllIssues} className={crumb}>
-      <span aria-hidden="true" className="grid size-4 shrink-0 place-items-center rounded-[4px] bg-accent text-[9px] font-semibold text-white">{board.name[0]}</span>
-      <span className="truncate">{board.name}</span>
-    </button>
-    <span aria-hidden="true" className={`mx-1 text-fg-3 ${issue?"max-sm:hidden":""}`}>›</span>
-    <button aria-label="Issues" aria-current={issue?undefined:"page"} onClick={openAllIssues} className={`${crumb} shrink-0 ${issue?"max-sm:hidden":""}`}>Issues</button>
-    {issue && <>
-      <span aria-hidden="true" className="mx-1 text-fg-3">›</span>
-      {/* The key never truncates (Opus review 4: at 390px it vanished): the title truncates, and below 640px the Issues crumb gives way. */}
-      <a aria-current="page" className={crumb} href={issueURL(issue)} target="_blank" rel="noreferrer"><TypeDot type={issue.type}/><span data-crumb-issue className="flex min-w-0"><span className="mr-[5.6px] shrink-0 tracking-[-0.24px]">{issue.key}</span><span className="truncate">{issue.summary}</span></span></a>
-    </>}
-  </nav>;
+  const crumb =
+    "flex h-7 min-w-0 items-center gap-2 rounded px-1 hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-accent";
+  return (
+    <nav
+      aria-label="Breadcrumb"
+      className="flex min-w-0 items-center text-[13px] font-medium text-fg-2"
+    >
+      <button aria-label={board.name} title={board.name} onClick={openAllIssues} className={crumb}>
+        <span
+          aria-hidden="true"
+          className="grid size-4 shrink-0 place-items-center rounded-[4px] bg-accent text-[9px] font-semibold text-white"
+        >
+          {board.name[0]}
+        </span>
+        <span className="truncate">{board.name}</span>
+      </button>
+      <span aria-hidden="true" className={`mx-1 text-fg-3 ${issue ? "max-sm:hidden" : ""}`}>
+        ›
+      </span>
+      <button
+        aria-label="Issues"
+        aria-current={issue ? undefined : "page"}
+        onClick={openAllIssues}
+        className={`${crumb} shrink-0 ${issue ? "max-sm:hidden" : ""}`}
+      >
+        Issues
+      </button>
+      {issue && (
+        <>
+          <span aria-hidden="true" className="mx-1 text-fg-3">
+            ›
+          </span>
+          {/* The key never truncates (Opus review 4: at 390px it vanished): the title truncates, and below 640px the Issues crumb gives way. */}
+          <a
+            aria-current="page"
+            className={crumb}
+            href={issueURL(issue)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <TypeDot type={issue.type} />
+            <span data-crumb-issue className="flex min-w-0">
+              <span className="mr-[5.6px] shrink-0 tracking-[-0.24px]">{issue.key}</span>
+              <span className="truncate">{issue.summary}</span>
+            </span>
+          </a>
+        </>
+      )}
+    </nav>
+  );
 }
 
 function BoardHeader() {
   const board = useStore((s) => s.boards.find((b) => b.id === s.board));
   const query = useStore((s) => s.query);
-  const details=useStore(s=>s.details);
-  const prefs=usePreferences(board!.id);
-  const finding=useStore(s=>s.findInView);const findRef=useRef<HTMLInputElement>(null);
-  useHotkey("Escape",()=>{set({findInView:false});ui.send({type:"query.set",query:""});findRef.current?.blur();},{target:findRef,ignoreInputs:false});
-  const favoriteId=`board:${board!.id}`;
-  const favorite=useStore(s=>s.favorites.includes(favoriteId));
+  const details = useStore((s) => s.details);
+  const prefs = usePreferences(board!.id);
+  const finding = useStore((s) => s.findInView);
+  const findRef = useRef<HTMLInputElement>(null);
+  useHotkey(
+    "Escape",
+    () => {
+      set({ findInView: false });
+      ui.send({ type: "query.set", query: "" });
+      findRef.current?.blur();
+    },
+    { target: findRef, ignoreInputs: false },
+  );
+  const favoriteId = `board:${board!.id}`;
+  const favorite = useStore((s) => s.favorites.includes(favoriteId));
   return (
     <header className="shrink-0">
       <div className="flex h-11 items-center justify-between border-b-[0.5px] border-frame px-2">
         <div className="flex min-w-0 items-center px-1 text-[13px] font-medium text-fg-2">
-          <BoardBreadcrumbs board={board!}/>
-          <button role="switch" aria-label={favorite?"Remove from favorites":"Add to favorites"} aria-checked={favorite} onClick={()=>toggleFavorite(favoriteId)} className={`ml-2 grid size-7 place-items-center rounded-full hover:bg-hover ${favorite?"text-[#f2c94c]":"text-fg-3 hover:text-fg-2"}`}><Icon name={favorite?"starred":"star"} size={16}/></button>
+          <BoardBreadcrumbs board={board!} />
+          <button
+            role="switch"
+            aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
+            aria-checked={favorite}
+            onClick={() => toggleFavorite(favoriteId)}
+            className={`ml-2 grid size-7 place-items-center rounded-full hover:bg-hover ${favorite ? "text-[#f2c94c]" : "text-fg-3 hover:text-fg-2"}`}
+          >
+            <Icon name={favorite ? "starred" : "star"} size={16} />
+          </button>
         </div>
-        <button aria-label="Search issues" onClick={()=>runShortcut("search")} className={`${COL_BTN} ml-auto md:hidden`}><Icon name="search"/></button>
-        <button onClick={() => beginCreate()} className={`${PILL} pr-2.5 pl-2 text-fg-3 hover:bg-hover hover:text-fg-2`}>
+        <button
+          aria-label="Search issues"
+          onClick={() => runShortcut("search")}
+          className={`${COL_BTN} ml-auto md:hidden`}
+        >
+          <Icon name="search" />
+        </button>
+        <button
+          onClick={() => beginCreate()}
+          className={`${PILL} pr-2.5 pl-2 text-fg-3 hover:bg-hover hover:text-fg-2`}
+        >
           <Icon name="plus" /> New issue
         </button>
       </div>
       <div className="flex min-h-[43.5px] flex-wrap items-center gap-1 px-2 py-1">
-        {(["active","backlog","all"] as const).map(scope=><button key={scope} aria-pressed={prefs.scope===scope} onClick={()=>changePreferences(board!.id,{scope})} className={`${PILL} ${prefs.scope===scope?"bg-tab-on text-fg shadow-(--tab-on-shadow)":"bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2"}`}>{scope==="active"?"Active":scope==="backlog"?"Backlog":"All issues"}</button>)}
-        <SaveViewButton/>
-        <div className="ml-auto flex items-center gap-1"><BoardControls board={board!}/></div>
-        <button aria-label={details?"Close details":"Open details"} aria-expanded={details} title="Board details" onClick={() => (set({details:!details}),navigate({panel:false}))} className={`${CIRCLE} justify-center`}>
+        {(["active", "backlog", "all"] as const).map((scope) => (
+          <button
+            key={scope}
+            aria-pressed={prefs.scope === scope}
+            onClick={() => changePreferences(board!.id, { scope })}
+            className={`${PILL} ${prefs.scope === scope ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2"}`}
+          >
+            {scope === "active" ? "Active" : scope === "backlog" ? "Backlog" : "All issues"}
+          </button>
+        ))}
+        <SaveViewButton />
+        <div className="ml-auto flex items-center gap-1">
+          <BoardControls board={board!} />
+        </div>
+        <button
+          aria-label={details ? "Close details" : "Open details"}
+          aria-expanded={details}
+          title="Board details"
+          onClick={() => (set({ details: !details }), navigate({ panel: false }))}
+          className={`${CIRCLE} justify-center`}
+        >
           <Icon name="side" />
         </button>
       </div>
-      {finding&&<input id="find-in-view" ref={findRef} aria-label="Find in view" autoFocus value={query} onChange={e=>ui.send({type:"query.set",query:e.target.value})} placeholder="Find in view…" className="mx-3 mb-2 rounded border border-line-2 bg-card px-3 py-1.5 outline-none"/>}
-      {board&&<FilterChips board={board}/>}
+      {finding && (
+        <input
+          id="find-in-view"
+          ref={findRef}
+          aria-label="Find in view"
+          autoFocus
+          value={query}
+          onChange={(e) => ui.send({ type: "query.set", query: e.target.value })}
+          placeholder="Find in view…"
+          className="mx-3 mb-2 rounded border border-line-2 bg-card px-3 py-1.5 outline-none"
+        />
+      )}
+      {board && <FilterChips board={board} />}
     </header>
   );
 }
@@ -388,148 +1184,506 @@ function BoardHeader() {
 // --- board ---
 
 // Linear's bottom-bar button: 28px, radius 8, fg-3.
-const FOOT_BTN = "grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg-2 disabled:opacity-30 disabled:hover:bg-transparent";
-const COL_BTN = "grid size-6 place-items-center rounded-full text-fg-3 hover:bg-hover hover:text-fg";
+const FOOT_BTN =
+  "grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg-2 disabled:opacity-30 disabled:hover:bg-transparent";
+const COL_BTN =
+  "grid size-6 place-items-center rounded-full text-fg-3 hover:bg-hover hover:text-fg";
 
-function ColumnHeading({bucket,count,display,hide,create}:{bucket:Bucket;count:number;display:Display;hide:()=>void;create:()=>void}) {
-  return <h2 className="flex h-[46px] shrink-0 items-center gap-2 pr-2 pl-3.5 text-[13px]">
-    {bucket.status?<StatusIcon status={bucket.status}/>:display.columns === "priority"?<PriorityIcon name={bucket.name}/>:<Icon name="layers"/>}
-    <span className="ml-0.5 truncate font-medium text-fg-2">{bucket.name}</span><span className="text-fg-3">{count}</span>
-    <GroupMenu name={bucket.name} hide={hide}/>
-    <button aria-label={`New issue in ${bucket.name}`} onClick={create} className={`-ml-1.5 ${COL_BTN}`}><Icon name="plus"/></button>
-  </h2>;
+function ColumnHeading({
+  bucket,
+  count,
+  display,
+  hide,
+  create,
+}: {
+  bucket: Bucket;
+  count: number;
+  display: Display;
+  hide: () => void;
+  create: () => void;
+}) {
+  return (
+    <h2 className="flex h-[46px] shrink-0 items-center gap-2 pr-2 pl-3.5 text-[13px]">
+      {bucket.status ? (
+        <StatusIcon status={bucket.status} />
+      ) : display.columns === "priority" ? (
+        <PriorityIcon name={bucket.name} />
+      ) : (
+        <Icon name="layers" />
+      )}
+      <span className="ml-0.5 truncate font-medium text-fg-2">{bucket.name}</span>
+      <span className="text-fg-3">{count}</span>
+      <GroupMenu name={bucket.name} hide={hide} />
+      <button
+        aria-label={`New issue in ${bucket.name}`}
+        onClick={create}
+        className={`-ml-1.5 ${COL_BTN}`}
+      >
+        <Icon name="plus" />
+      </button>
+    </h2>
+  );
 }
 
 /** `header={false}` in swimlanes: Linear shows one sticky header row above all lanes. */
-function ColumnView({ bucket, issues, selected, display, scroll, onDrop,hide,create,header=true }: { bucket:Bucket; issues:Issue[]; selected:string|null; display:Display; scroll:boolean; onDrop:(key:string,before?:string)=>void;hide:()=>void;create:()=>void;header?:boolean }) {
-  const [over,setOver] = useState(false);
-  return <section
-    onDragOver={e=>{e.preventDefault();setOver(true);}}
-    onDragLeave={e=>!e.currentTarget.contains(e.relatedTarget as Node)&&setOver(false)}
-    onDrop={e=>{e.preventDefault();setOver(false);const key=e.dataTransfer.getData("text/plain");onDrop(key,[...e.currentTarget.querySelectorAll<HTMLElement>("[data-key]")].find(c=>{const r=c.getBoundingClientRect();return c.dataset.key!==key&&r.top+r.height/2>e.clientY;})?.dataset.key);}}
-    className={`flex w-[340px] shrink-0 flex-col rounded-t-[5px] bg-[linear-gradient(var(--col-top),var(--col-top)_46px,var(--col-bottom))] ${over?"ring-1 ring-accent":""}`}
-  >
-    {header&&<ColumnHeading bucket={bucket} count={issues.length} display={display} hide={hide} create={create}/>}
-    <div className={`flex-1 px-[9px] pt-[9px] ${scroll?"overflow-y-auto":""}`}>
-      {issues.map(i=><Card key={i.key} issue={i} selected={i.key===selected} display={display}/>)}
-    </div>
-  </section>;
+function ColumnView({
+  bucket,
+  issues,
+  selected,
+  display,
+  scroll,
+  onDrop,
+  hide,
+  create,
+  header = true,
+}: {
+  bucket: Bucket;
+  issues: Issue[];
+  selected: string | null;
+  display: Display;
+  scroll: boolean;
+  onDrop: (key: string, before?: string) => void;
+  hide: () => void;
+  create: () => void;
+  header?: boolean;
+}) {
+  const [over, setOver] = useState(false);
+  return (
+    <section
+      onDragOver={(e) => {
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        const key = e.dataTransfer.getData("text/plain");
+        onDrop(
+          key,
+          [...e.currentTarget.querySelectorAll<HTMLElement>("[data-key]")].find((c) => {
+            const r = c.getBoundingClientRect();
+            return c.dataset.key !== key && r.top + r.height / 2 > e.clientY;
+          })?.dataset.key,
+        );
+      }}
+      className={`flex w-[340px] shrink-0 flex-col rounded-t-[5px] bg-[linear-gradient(var(--col-top),var(--col-top)_46px,var(--col-bottom))] ${over ? "ring-1 ring-accent" : ""}`}
+    >
+      {header && (
+        <ColumnHeading
+          bucket={bucket}
+          count={issues.length}
+          display={display}
+          hide={hide}
+          create={create}
+        />
+      )}
+      <div className={`flex-1 px-[9px] pt-[9px] ${scroll ? "overflow-y-auto" : ""}`}>
+        {issues.map((i) => (
+          <Card key={i.key} issue={i} selected={i.key === selected} display={display} />
+        ))}
+      </div>
+    </section>
+  );
 }
 
 const MONTH = new Intl.DateTimeFormat("en", { month: "short", year: "numeric" });
 // Linear's card chip: 24px pill, 0.5px border, 12px/450 muted text after a 14px icon.
-const CHIP = "flex h-6 max-w-[224px] shrink-0 items-center rounded-full border-[0.5px] border-chip-line bg-card px-2 text-[12px] font-[450] text-card-fg-3";
+const CHIP =
+  "flex h-6 max-w-[224px] shrink-0 items-center rounded-full border-[0.5px] border-chip-line bg-card px-2 text-[12px] font-[450] text-card-fg-3";
 
-const Card = memo(function Card({issue,selected,display:d,list=false,depth=0}:{issue:Issue;selected:boolean;display:Display;list?:boolean;depth?:number}) {
+const Card = memo(function Card({
+  issue,
+  selected,
+  display: d,
+  list = false,
+  depth = 0,
+}: {
+  issue: Issue;
+  selected: boolean;
+  display: Display;
+  list?: boolean;
+  depth?: number;
+}) {
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(()=>void(selected&&ref.current?.scrollIntoView({block:"nearest"})),[selected]);
-  const show = (p:Property) => d.properties.includes(p);
-  const clock=useStore(s=>d.properties.includes("statusAge")?s.clock:0);
+  useEffect(() => void (selected && ref.current?.scrollIntoView({ block: "nearest" })), [selected]);
+  const show = (p: Property) => d.properties.includes(p);
+  const clock = useStore((s) => (d.properties.includes("statusAge") ? s.clock : 0));
   const status = statusOf(issue);
-  const properties = <>
-    {show("priority")&&<span title={issue.priority??"No priority"} className={list?"text-fg-3":`${CHIP} px-[4.5px]`}><PriorityIcon name={issue.priority}/></span>}
-    {show("type")&&issue.type&&<span className={CHIP}><TypeDot type={issue.type}/><span className="ml-1.5">{issue.type}</span></span>}
-    {show("project")&&issue.project&&<span title={issue.project.name} className={CHIP}><Icon name="layers"/><span className="ml-1.5 truncate">{issue.project.name}</span></span>}
-    {show("labels")&&issue.labels.slice(0,list?1:2).map(l=><Label key={l} name={l}/>)}
-    {show("labels")&&issue.labels.length>(list?1:2)&&<span title={issue.labels.join(", ")} className={CHIP}>+{issue.labels.length-(list?1:2)}</span>}
-    {show("comments")&&commentCount(issue)>0&&<span className={CHIP} aria-label={`${commentCount(issue)} comments`}><Icon name="comment"/><span className="ml-1.5">{commentCount(issue)}</span></span>}
-    {show("links")&&!!issue.links?.length&&<span title={issue.links.join("\n")} className={CHIP}><Icon name="external"/><span className="ml-1.5">{issue.links.length}</span></span>}
-    {show("creator")&&issue.creator&&<span title={`Created by ${issue.creator.name}`}><Avatar user={issue.creator} size={18}/></span>}
-    {show("due")&&issue.due&&<span className={CHIP}><Icon name="calendar"/><span className="ml-1.5">{issue.due}</span></span>}
-    {show("milestone")&&issue.milestones?.map(v=><span key={v.id} title={`Jira fix version: ${v.name}`} className={CHIP}><Icon name="layers"/><span className="ml-1.5 truncate">{v.name}</span></span>)}
-    {show("statusAge")&&issue.statusSince&&<span className={CHIP} title={`In current status since ${new Date(issue.statusSince).toLocaleString()}`}><Icon name="calendar"/><span className="ml-1.5">{statusDuration(issue.statusSince,Math.max(clock,Date.now()))} in status</span></span>}
-    {show("pullRequests")&&<span className={CHIP} title={issue.prCount === undefined?"Pull-request counts have not been shared by Jira":"Pull requests reported by Jira's development summary"}><Icon name="external"/><span className="ml-1.5">{issue.prCount??"—"} PRs</span></span>}
-  </>;
-  const dates = <>{show("created")&&issue.created&&<span title={`Created ${issue.created}`}>Created {MONTH.format(new Date(issue.created))}</span>}{show("updated")&&<span title={`Updated ${issue.updated}`}>{list?"":"Updated "}{MONTH.format(new Date(issue.updated))}</span>}</>;
-  return <div className={list?"[content-visibility:auto] [contain-intrinsic-size:auto_44px]":"pb-2 [contain-intrinsic-size:auto_124px] [content-visibility:auto] [overflow-clip-margin:4px]"}>
-    <div ref={ref} data-key={issue.key} data-selected={selected||undefined} role="button" aria-label={`${issue.key} ${issue.summary}`} tabIndex={0} draggable
-      onDragStart={e=>e.dataTransfer.setData("text/plain",issue.key)}
-      onKeyDown={e=>{if(e.key === "Enter"||e.key === " "){e.preventDefault();e.stopPropagation();navigate({selected:issue.key,panel:true,view:e.key==="Enter"?"page":"side"});}}}
-      onClick={()=>timed(`open ${issue.key}`,()=>navigate({selected:issue.key,panel:true}))}
-      className={list?`flex min-h-11 cursor-default items-center gap-3 border-b border-line px-5 outline-none focus-visible:ring-1 focus-visible:ring-accent ${selected?"bg-hover shadow-[inset_2px_0_0_var(--accent)]":"hover:bg-hover"}`:`relative flex min-h-[42px] cursor-default flex-col rounded-lg p-2 shadow-(--card-shadow) outline-none focus-visible:ring-1 focus-visible:ring-accent ${selected?"bg-card-hover ring-1 ring-accent":"bg-card hover:bg-card-hover"}`}
-      style={list&&depth?{paddingLeft:20+depth*20}:undefined}>
-      {list?<>
-        {show("id")&&<span className="w-[85px] shrink-0 text-[12px] text-fg-3 tabular-nums">{depth>0&&"↳ "}{issue.key}</span>}
-        {show("status")&&status&&<span title={status.name}><StatusIcon status={status}/></span>}
-        <span className="min-w-32 flex-1 truncate font-medium">{issue.summary}</span>
-        <span className="flex max-w-[45%] shrink-0 items-center gap-2 overflow-hidden">{properties}</span>
-        {show("assignee")&&<Avatar user={issue.assignee} size={18}/>}
-        <span className="flex shrink-0 gap-2 text-[11px] text-fg-3">{dates}</span>
-      </>:<>
-        <div className="flex flex-col gap-1.5 pr-[34px] pl-1">
-          {show("id")&&<span className="truncate text-[12px] leading-[normal] font-[450] tracking-[-0.24px] text-card-fg-3 tabular-nums">{issue.key}</span>}
-          <div className="flex items-start gap-1.5">{show("status")&&status&&<span className="mt-px" title={status.name}><StatusIcon status={status}/></span>}<span className="line-clamp-2 text-[13px] leading-4 font-medium [overflow-wrap:anywhere]">{issue.summary}</span></div>
-        </div>
-        {show("assignee")&&<span className="absolute top-2 right-2"><Avatar user={issue.assignee} size={18}/></span>}
-        <div className="mt-2.5 flex flex-wrap items-center gap-1 overflow-hidden">{properties}</div>
-        {(show("updated")||show("created"))&&<div className="mt-1.5 flex min-h-6 flex-wrap items-center gap-x-3 pl-px text-[12px] font-[450] text-card-fg-3">{dates}</div>}
-      </>}
+  const properties = (
+    <>
+      {show("priority") && (
+        <span
+          title={issue.priority ?? "No priority"}
+          className={list ? "text-fg-3" : `${CHIP} px-[4.5px]`}
+        >
+          <PriorityIcon name={issue.priority} />
+        </span>
+      )}
+      {show("type") && issue.type && (
+        <span className={CHIP}>
+          <TypeDot type={issue.type} />
+          <span className="ml-1.5">{issue.type}</span>
+        </span>
+      )}
+      {show("project") && issue.project && (
+        <span title={issue.project.name} className={CHIP}>
+          <Icon name="layers" />
+          <span className="ml-1.5 truncate">{issue.project.name}</span>
+        </span>
+      )}
+      {show("labels") && issue.labels.slice(0, list ? 1 : 2).map((l) => <Label key={l} name={l} />)}
+      {show("labels") && issue.labels.length > (list ? 1 : 2) && (
+        <span title={issue.labels.join(", ")} className={CHIP}>
+          +{issue.labels.length - (list ? 1 : 2)}
+        </span>
+      )}
+      {show("comments") && commentCount(issue) > 0 && (
+        <span className={CHIP} aria-label={`${commentCount(issue)} comments`}>
+          <Icon name="comment" />
+          <span className="ml-1.5">{commentCount(issue)}</span>
+        </span>
+      )}
+      {show("links") && !!issue.links?.length && (
+        <span title={issue.links.join("\n")} className={CHIP}>
+          <Icon name="external" />
+          <span className="ml-1.5">{issue.links.length}</span>
+        </span>
+      )}
+      {show("creator") && issue.creator && (
+        <span title={`Created by ${issue.creator.name}`}>
+          <Avatar user={issue.creator} size={18} />
+        </span>
+      )}
+      {show("due") && issue.due && (
+        <span className={CHIP}>
+          <Icon name="calendar" />
+          <span className="ml-1.5">{issue.due}</span>
+        </span>
+      )}
+      {show("milestone") &&
+        issue.milestones?.map((v) => (
+          <span key={v.id} title={`Jira fix version: ${v.name}`} className={CHIP}>
+            <Icon name="layers" />
+            <span className="ml-1.5 truncate">{v.name}</span>
+          </span>
+        ))}
+      {show("statusAge") && issue.statusSince && (
+        <span
+          className={CHIP}
+          title={`In current status since ${new Date(issue.statusSince).toLocaleString()}`}
+        >
+          <Icon name="calendar" />
+          <span className="ml-1.5">
+            {statusDuration(issue.statusSince, Math.max(clock, Date.now()))} in status
+          </span>
+        </span>
+      )}
+      {show("pullRequests") && (
+        <span
+          className={CHIP}
+          title={
+            issue.prCount === undefined
+              ? "Pull-request counts have not been shared by Jira"
+              : "Pull requests reported by Jira's development summary"
+          }
+        >
+          <Icon name="external" />
+          <span className="ml-1.5">{issue.prCount ?? "—"} PRs</span>
+        </span>
+      )}
+    </>
+  );
+  const dates = (
+    <>
+      {show("created") && issue.created && (
+        <span title={`Created ${issue.created}`}>
+          Created {MONTH.format(new Date(issue.created))}
+        </span>
+      )}
+      {show("updated") && (
+        <span title={`Updated ${issue.updated}`}>
+          {list ? "" : "Updated "}
+          {MONTH.format(new Date(issue.updated))}
+        </span>
+      )}
+    </>
+  );
+  return (
+    <div
+      className={
+        list
+          ? "[content-visibility:auto] [contain-intrinsic-size:auto_44px]"
+          : "pb-2 [contain-intrinsic-size:auto_124px] [content-visibility:auto] [overflow-clip-margin:4px]"
+      }
+    >
+      <div
+        ref={ref}
+        data-key={issue.key}
+        data-selected={selected || undefined}
+        role="button"
+        aria-label={`${issue.key} ${issue.summary}`}
+        tabIndex={0}
+        draggable
+        onDragStart={(e) => e.dataTransfer.setData("text/plain", issue.key)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            e.stopPropagation();
+            navigate({
+              selected: issue.key,
+              panel: true,
+              view: e.key === "Enter" ? "page" : "side",
+            });
+          }
+        }}
+        onClick={() =>
+          timed(`open ${issue.key}`, () => navigate({ selected: issue.key, panel: true }))
+        }
+        className={
+          list
+            ? `flex min-h-11 cursor-default items-center gap-3 border-b border-line px-5 outline-none focus-visible:ring-1 focus-visible:ring-accent ${selected ? "bg-hover shadow-[inset_2px_0_0_var(--accent)]" : "hover:bg-hover"}`
+            : `relative flex min-h-[42px] cursor-default flex-col rounded-lg p-2 shadow-(--card-shadow) outline-none focus-visible:ring-1 focus-visible:ring-accent ${selected ? "bg-card-hover ring-1 ring-accent" : "bg-card hover:bg-card-hover"}`
+        }
+        style={list && depth ? { paddingLeft: 20 + depth * 20 } : undefined}
+      >
+        {list ? (
+          <>
+            {show("id") && (
+              <span className="w-[85px] shrink-0 text-[12px] text-fg-3 tabular-nums">
+                {depth > 0 && "↳ "}
+                {issue.key}
+              </span>
+            )}
+            {show("status") && status && (
+              <span title={status.name}>
+                <StatusIcon status={status} />
+              </span>
+            )}
+            <span className="min-w-32 flex-1 truncate font-medium">{issue.summary}</span>
+            <span className="flex max-w-[45%] shrink-0 items-center gap-2 overflow-hidden">
+              {properties}
+            </span>
+            {show("assignee") && <Avatar user={issue.assignee} size={18} />}
+            <span className="flex shrink-0 gap-2 text-[11px] text-fg-3">{dates}</span>
+          </>
+        ) : (
+          <>
+            <div className="flex flex-col gap-1.5 pr-[34px] pl-1">
+              {show("id") && (
+                <span className="truncate text-[12px] leading-[normal] font-[450] tracking-[-0.24px] text-card-fg-3 tabular-nums">
+                  {issue.key}
+                </span>
+              )}
+              <div className="flex items-start gap-1.5">
+                {show("status") && status && (
+                  <span className="mt-px" title={status.name}>
+                    <StatusIcon status={status} />
+                  </span>
+                )}
+                <span className="line-clamp-2 text-[13px] leading-4 font-medium [overflow-wrap:anywhere]">
+                  {issue.summary}
+                </span>
+              </div>
+            </div>
+            {show("assignee") && (
+              <span className="absolute top-2 right-2">
+                <Avatar user={issue.assignee} size={18} />
+              </span>
+            )}
+            <div className="mt-2.5 flex flex-wrap items-center gap-1 overflow-hidden">
+              {properties}
+            </div>
+            {(show("updated") || show("created")) && (
+              <div className="mt-1.5 flex min-h-6 flex-wrap items-center gap-x-3 pl-px text-[12px] font-[450] text-card-fg-3">
+                {dates}
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
-  </div>;
+  );
 });
 
 function Avatar({ user, size = 20 }: { user: User | null; size?: number }) {
   const [broken, setBroken] = useState(false); // Jira's default avatars need a Jira login, so they fail here
-  useEffect(()=>setBroken(false),[user?.avatar]);
+  useEffect(() => setBroken(false), [user?.avatar]);
   const box = { width: size, height: size };
-  if (!user) return <span title="Unassigned" className="inline-block shrink-0 rounded-full border border-dashed border-fg-4" style={box} />;
+  if (!user)
+    return (
+      <span
+        title="Unassigned"
+        className="inline-block shrink-0 rounded-full border border-dashed border-fg-4"
+        style={box}
+      />
+    );
   if (!user.avatar || broken)
-    return <span title={user.name} className="inline-grid shrink-0 place-items-center rounded-full bg-sel text-[10px] text-fg-2" style={box}>{user.name[0]}</span>;
-  return <img src={user.avatar} onError={() => setBroken(true)} title={user.name} alt="" width={size} height={size} className="inline-block shrink-0 rounded-full" />;
+    return (
+      <span
+        title={user.name}
+        className="inline-grid shrink-0 place-items-center rounded-full bg-sel text-[10px] text-fg-2"
+        style={box}
+      >
+        {user.name[0]}
+      </span>
+    );
+  return (
+    <img
+      src={user.avatar}
+      onError={() => setBroken(true)}
+      title={user.name}
+      alt=""
+      width={size}
+      height={size}
+      className="inline-block shrink-0 rounded-full"
+    />
+  );
 }
 
 /** Linear's compact Activity times: "just now", "6min ago", "11h ago", "1d ago", then the date. */
 // Linear's exact-time label: "Sat Nov 7, 2026, 07:49:03" (24-hour, with seconds).
-const fullTime = (iso: string) => { const d = new Date(iso); return `${d.toLocaleDateString("en-US", { weekday: "short" })} ${d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })}`; };
+const fullTime = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString("en-US", { weekday: "short" })} ${d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })}`;
+};
 const ago = (iso: string, now = Date.now()) => {
-  const m = Math.floor((now - Date.parse(iso)) / 60_000), date = new Date(iso);
+  const m = Math.floor((now - Date.parse(iso)) / 60_000),
+    date = new Date(iso);
   if (m < 1) return "just now";
   if (m < 60) return `${m}min ago`;
   if (m < 1440) return `${Math.floor(m / 60)}h ago`;
   if (m < 43200) return `${Math.floor(m / 1440)}d ago`;
-  return date.toLocaleDateString("en", { month: "short", day: "numeric", ...(date.getFullYear() !== new Date(now).getFullYear() ? { year: "numeric" } : {}) });
+  return date.toLocaleDateString("en", {
+    month: "short",
+    day: "numeric",
+    ...(date.getFullYear() !== new Date(now).getFullYear() ? { year: "numeric" } : {}),
+  });
 };
 
-const author = (a: any): User | null => a && { id: a.accountId, name: a.displayName, avatar: a.avatarUrls?.["24x24"] };
+const author = (a: any): User | null =>
+  a && { id: a.accountId, name: a.displayName, avatar: a.avatarUrls?.["24x24"] };
 
 // --- issue view: side panel or full page ---
 
-const ICON_BTN = "grid size-7 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg";
+const ICON_BTN =
+  "grid size-7 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg";
 
 function IssueView({ issue, page }: { issue: Issue; page: boolean }) {
   const f = useStore((s) => s.full.get(issue.key))?.fields;
-  const favorite=useStore(s=>s.favorites.includes(issue.key)),optionsOpen=useStore(s=>s.overlay==="options");
-  const propertiesHidden=useStore(s=>s.issuePropertiesHidden);
-  const document=useStore(s=>s.document);
-  if(document)return <IssueDocument issue={issue} id={document}/>;
+  const favorite = useStore((s) => s.favorites.includes(issue.key)),
+    optionsOpen = useStore((s) => s.overlay === "options");
+  const propertiesHidden = useStore((s) => s.issuePropertiesHidden);
+  const document = useStore((s) => s.document);
+  if (document) return <IssueDocument issue={issue} id={document} />;
   const bar = (
     <div className="issue-detail-header flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-3 text-[12px] text-fg-3">
-      {page ? <BoardBreadcrumbs board={boardOf(issue.key)!} issue={issue}/> : <>
-        <TypeDot type={issue.type} />
-        <a className="tracking-[-0.24px] text-fg-2 hover:text-fg" href={issueURL(issue)} target="_blank" rel="noreferrer">{issue.key}</a>
-      </>}
-      <button role="switch" aria-label={favorite?"Remove issue from favorites":"Add issue to favorites"} aria-checked={favorite} onClick={()=>toggleFavorite(issue.key)} className={`${ICON_BTN} ${favorite?"text-[#f2c94c]!":""}`}><Icon name={favorite?"starred":"star"} size={16}/></button>
-      <button id="issue-options" aria-label="Issue options" aria-expanded={optionsOpen} onClick={()=>ui.send({type:"overlay.open",overlay:"options"})} className={`${ICON_BTN} aria-expanded:bg-hover aria-expanded:text-fg`}><Icon name="dots"/></button>
-      <ReminderControl issue={issue}/><span className="flex-1" />
+      {page ? (
+        <BoardBreadcrumbs board={boardOf(issue.key)!} issue={issue} />
+      ) : (
+        <>
+          <TypeDot type={issue.type} />
+          <a
+            className="tracking-[-0.24px] text-fg-2 hover:text-fg"
+            href={issueURL(issue)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {issue.key}
+          </a>
+        </>
+      )}
+      <button
+        role="switch"
+        aria-label={favorite ? "Remove issue from favorites" : "Add issue to favorites"}
+        aria-checked={favorite}
+        onClick={() => toggleFavorite(issue.key)}
+        className={`${ICON_BTN} ${favorite ? "text-[#f2c94c]!" : ""}`}
+      >
+        <Icon name={favorite ? "starred" : "star"} size={16} />
+      </button>
+      <button
+        id="issue-options"
+        aria-label="Issue options"
+        aria-expanded={optionsOpen}
+        onClick={() => ui.send({ type: "overlay.open", overlay: "options" })}
+        className={`${ICON_BTN} aria-expanded:bg-hover aria-expanded:text-fg`}
+      >
+        <Icon name="dots" />
+      </button>
+      <ReminderControl issue={issue} />
+      <span className="flex-1" />
       <Stepper issueKey={issue.key} />
-      <button title={page ? "Open in side panel" : "Open as full page"} onClick={() => navigate({ view: page ? "side" : "page" })} className={ICON_BTN}>
+      <button
+        title={page ? "Open in side panel" : "Open as full page"}
+        onClick={() => navigate({ view: page ? "side" : "page" })}
+        className={ICON_BTN}
+      >
         <Icon name={page ? "side" : "expand"} />
       </button>
-      <button title="Close (esc)" onClick={() => navigate({ panel: false })} className={ICON_BTN}><Icon name="close" /></button>
+      <button title="Close (esc)" onClick={() => navigate({ panel: false })} className={ICON_BTN}>
+        <Icon name="close" />
+      </button>
     </div>
   );
 
-  const body=<>{bar}<div className="issue-detail-body">
-    <div role="toolbar" aria-label="Copy issue" className="issue-copy-toolbar">
-      {([['copy-url','Copy issue URL','link'],['copy-id','Copy issue ID','copy'],['copy-branch','Copy git branch name','branch']] as const).map(([action,label,icon])=><button key={action} aria-label={label} title={`${label} (${shortcutLabel(action)})`} onClick={()=>runShortcut(action)} className={ICON_BTN}><Icon name={icon}/></button>)}
+  const body = (
+    <>
+      {bar}
+      <div className="issue-detail-body">
+        <div role="toolbar" aria-label="Copy issue" className="issue-copy-toolbar">
+          {(
+            [
+              ["copy-url", "Copy issue URL", "link"],
+              ["copy-id", "Copy issue ID", "copy"],
+              ["copy-branch", "Copy git branch name", "branch"],
+            ] as const
+          ).map(([action, label, icon]) => (
+            <button
+              key={action}
+              aria-label={label}
+              title={`${label} (${shortcutLabel(action)})`}
+              onClick={() => runShortcut(action)}
+              className={ICON_BTN}
+            >
+              <Icon name={icon} />
+            </button>
+          ))}
+        </div>
+        <div className="issue-detail-grid" data-properties-hidden={propertiesHidden || undefined}>
+          <div className="issue-detail-title">
+            <Title
+              issue={issue}
+              className="text-[24px] !leading-[32px] tracking-[-0.16px] [font-variation-settings:'opsz'_32]"
+            />
+            <SubIssueOf issue={issue} />
+          </div>
+          {!propertiesHidden && (
+            <div className="issue-detail-properties">
+              <Properties issue={issue} />
+            </div>
+          )}
+          <div className="issue-detail-content">
+            <Description issue={issue} f={f} />
+            <PersonalIssueDetails issue={issue} />
+            <Activity issue={issue} f={f} />
+          </div>
+        </div>
+      </div>
+    </>
+  );
+  return page ? (
+    <div className="issue-detail flex min-w-0 flex-1 flex-col" data-mode="page">
+      {body}
     </div>
-    <div className="issue-detail-grid" data-properties-hidden={propertiesHidden||undefined}>
-      <div className="issue-detail-title"><Title issue={issue} className="text-[24px] !leading-[32px] tracking-[-0.16px] [font-variation-settings:'opsz'_32]" /><SubIssueOf issue={issue}/></div>
-      {!propertiesHidden&&<div className="issue-detail-properties"><Properties issue={issue}/></div>}
-      <div className="issue-detail-content"><Description issue={issue} f={f}/><PersonalIssueDetails issue={issue}/><Activity issue={issue} f={f}/></div>
-    </div>
-  </div></>;
-  return page?<div className="issue-detail flex min-w-0 flex-1 flex-col" data-mode="page">{body}</div>:<aside className="issue-detail flex w-[520px] max-w-full shrink-0 flex-col border-l border-line bg-panel max-md:absolute max-md:inset-0 max-md:z-20 max-md:w-full" data-mode="side">{body}</aside>;
+  ) : (
+    <aside
+      className="issue-detail flex w-[520px] max-w-full shrink-0 flex-col border-l border-line bg-panel max-md:absolute max-md:inset-0 max-md:z-20 max-md:w-full"
+      data-mode="side"
+    >
+      {body}
+    </aside>
+  );
 }
 
 /** Linear shows position, then next and previous, within the current visible view. */
@@ -542,9 +1696,31 @@ function Stepper({ issueKey }: { issueKey: string }) {
   const i = flat.findIndex((x) => x.key === issueKey);
   return (
     <div className="mr-1 flex items-center gap-0.5">
-      {i>=0&&<span aria-label="Issue position" className="mr-2 whitespace-nowrap tabular-nums text-fg-3 max-sm:hidden">{i+1}<span className="text-fg-4"> / {flat.length}</span></span>}
-      <button disabled={i<0||i>=flat.length-1} title="Next (J / ↓)" onClick={() => runShortcut("down")} className={`${ICON_BTN} disabled:opacity-30`}><Icon name="down" /></button>
-      <button disabled={i<=0} title="Previous (K / ↑)" onClick={() => runShortcut("up")} className={`${ICON_BTN} disabled:opacity-30`}><Icon name="up" /></button>
+      {i >= 0 && (
+        <span
+          aria-label="Issue position"
+          className="mr-2 whitespace-nowrap tabular-nums text-fg-3 max-sm:hidden"
+        >
+          {i + 1}
+          <span className="text-fg-4"> / {flat.length}</span>
+        </span>
+      )}
+      <button
+        disabled={i < 0 || i >= flat.length - 1}
+        title="Next (J / ↓)"
+        onClick={() => runShortcut("down")}
+        className={`${ICON_BTN} disabled:opacity-30`}
+      >
+        <Icon name="down" />
+      </button>
+      <button
+        disabled={i <= 0}
+        title="Previous (K / ↑)"
+        onClick={() => runShortcut("up")}
+        className={`${ICON_BTN} disabled:opacity-30`}
+      >
+        <Icon name="up" />
+      </button>
     </div>
   );
 }
@@ -559,8 +1735,14 @@ function Title({ issue, className }: { issue: Issue; className: string }) {
       rows={1}
       onBlur={(e) => actions.summary(issue.key, e.target.value)}
       onKeyDown={(e) => {
-        if (e.key === "Enter") (e.preventDefault(), e.currentTarget.blur());
-        if (e.key === "Escape") {e.currentTarget.value = issue.summary;e.currentTarget.blur();}
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.currentTarget.blur();
+        }
+        if (e.key === "Escape") {
+          e.currentTarget.value = issue.summary;
+          e.currentTarget.blur();
+        }
       }}
       className={`block w-full resize-none rounded-md bg-transparent font-semibold leading-snug text-fg outline-none [field-sizing:content] focus:bg-hover ${className}`}
     />
@@ -568,41 +1750,228 @@ function Title({ issue, className }: { issue: Issue; className: string }) {
 }
 
 /** Linear's property list: unlabelled 13px/500 rows under section headings, no box and no Reporter/Created/Updated rows. */
-const RELATION_SECTIONS=[["blocked","Blocked by"],["blocking","Blocking"],["related","Related"],["duplicate","Duplicate of"],["duplicated","Duplicated by"]] as const;
+const RELATION_SECTIONS = [
+  ["blocked", "Blocked by"],
+  ["blocking", "Blocking"],
+  ["related", "Related"],
+  ["duplicate", "Duplicate of"],
+  ["duplicated", "Duplicated by"],
+] as const;
 function Properties({ issue }: { issue: Issue }) {
   const status = statusOf(issue);
   const issues = useStore((s) => s.issues);
   // Like Linear, a pill stays highlighted while its menu is open (Opus review 4).
   const open = useStore((s) => s.overlay);
   // Linear: content-width 28px pills 4px apart, icon in a 16px box 6px in, and a tooltip naming the action and its key (no project tooltip).
-  const btn = (id: string, overlay: "status" | "assign" | "priority" | "labels" | "project" | "milestone" | "due", tip: string, body: ReactNode) => (
-    <button id={id} aria-expanded={open === overlay} title={tip ? `${tip} (${shortcutLabel(overlay)})` : undefined} onClick={() => ui.send({ type: "overlay.open", overlay })} className="ml-px flex h-7 max-w-full items-center gap-1.5 rounded-full pr-2.5 pl-1.5 text-left text-fg-2 hover:bg-hover hover:text-fg aria-expanded:bg-hover aria-expanded:text-fg [&>svg]:shrink-0 [&>:first-child]:grid [&>:first-child]:size-4 [&>:first-child]:place-items-center">
+  const btn = (
+    id: string,
+    overlay: "status" | "assign" | "priority" | "labels" | "project" | "milestone" | "due",
+    tip: string,
+    body: ReactNode,
+  ) => (
+    <button
+      id={id}
+      aria-expanded={open === overlay}
+      title={tip ? `${tip} (${shortcutLabel(overlay)})` : undefined}
+      onClick={() => ui.send({ type: "overlay.open", overlay })}
+      className="ml-px flex h-7 max-w-full items-center gap-1.5 rounded-full pr-2.5 pl-1.5 text-left text-fg-2 hover:bg-hover hover:text-fg aria-expanded:bg-hover aria-expanded:text-fg [&>svg]:shrink-0 [&>:first-child]:grid [&>:first-child]:size-4 [&>:first-child]:place-items-center"
+    >
       {body}
     </button>
   );
-  const section = (name: string, rows: ReactNode) => <section className="flex flex-col items-start gap-1 [&+section]:mt-[33px]"><h3 className="mb-1.5 px-2 text-[13px] leading-[normal] font-medium text-fg-3">{name}</h3>{rows}</section>;
+  const section = (name: string, rows: ReactNode) => (
+    <section className="flex flex-col items-start gap-1 [&+section]:mt-[33px]">
+      <h3 className="mb-1.5 px-2 text-[13px] leading-[normal] font-medium text-fg-3">{name}</h3>
+      {rows}
+    </section>
+  );
   return (
     <div data-properties className="text-[13px] font-medium">
-      {section("Properties", <>
-        {btn("prop-status", "status", "Change status", <><span>{status && <StatusIcon status={status} />}</span><span className="truncate">{status?.name}</span></>)}
-        {btn("prop-priority", "priority", issue.priority ? "Change priority" : "Set priority", <><span><PriorityIcon name={issue.priority}/></span>{issue.priority ?? <><span className="property-wide">Set priority</span><span className="property-short">Priority</span></>}</>)}
-        {btn("prop-assignee", "assign", "Assign to", <><span><Avatar user={issue.assignee} size={16} /></span><span className="truncate">{issue.assignee?.name ?? "Unassigned"}</span></>)}
-        {issue.due&&btn("prop-due", "due", "Change due date", <><span><Icon name="calendar"/></span><span className={issue.due ? "" : "text-fg-3"}>{issue.due ?? "Set due date"}</span></>)}
-      </>)}
+      {section(
+        "Properties",
+        <>
+          {btn(
+            "prop-status",
+            "status",
+            "Change status",
+            <>
+              <span>{status && <StatusIcon status={status} />}</span>
+              <span className="truncate">{status?.name}</span>
+            </>,
+          )}
+          {btn(
+            "prop-priority",
+            "priority",
+            issue.priority ? "Change priority" : "Set priority",
+            <>
+              <span>
+                <PriorityIcon name={issue.priority} />
+              </span>
+              {issue.priority ?? (
+                <>
+                  <span className="property-wide">Set priority</span>
+                  <span className="property-short">Priority</span>
+                </>
+              )}
+            </>,
+          )}
+          {btn(
+            "prop-assignee",
+            "assign",
+            "Assign to",
+            <>
+              <span>
+                <Avatar user={issue.assignee} size={16} />
+              </span>
+              <span className="truncate">{issue.assignee?.name ?? "Unassigned"}</span>
+            </>,
+          )}
+          {issue.due &&
+            btn(
+              "prop-due",
+              "due",
+              "Change due date",
+              <>
+                <span>
+                  <Icon name="calendar" />
+                </span>
+                <span className={issue.due ? "" : "text-fg-3"}>{issue.due ?? "Set due date"}</span>
+              </>,
+            )}
+        </>,
+      )}
       {/* Linear (RAJ-52): one 25px chip per label, its dot and name, then a round + button; clicking either opens the label menu beside it. */}
-      {section("Labels", issue.labels.length ? <div className="flex min-h-7 max-w-full flex-wrap gap-1.5 pt-0.5 pl-[1.5px]">
-        {issue.labels.map((label) => <button key={label} data-label-chip onClick={() => ui.send({ type: "overlay.open", overlay: "labels" })} className="label-chip"><span className="size-[9px] shrink-0 rounded-full" style={{ background: hue(label) }} /><span className="truncate">{label}</span></button>)}
-        <button id="prop-labels" aria-label="Add label" onClick={() => ui.send({ type: "overlay.open", overlay: "labels" })} className="label-add"><Icon name="plus" size={14} /></button>
-      </div> : btn("prop-labels", "labels", "Add labels", <><span><Icon name="label"/></span><span className="truncate text-fg-3"><span className="property-wide">Add label</span><span className="property-short">Labels</span></span></>))}
-      {section("Project", <>
-        {btn("prop-project", "project", "", <><span><Icon name="layers"/></span><span className="truncate">{issue.project?.name ?? <><span className="property-wide">Add to project</span><span className="property-short">Project</span></>}</span></>)}
-        {issue.milestones?.length?btn("prop-milestone", "milestone", "", <><span><Icon name="calendar"/></span><span className={`truncate ${issue.milestones?.length ? "" : "text-fg-3"}`}>{issue.milestones?.map(m => m.name).join(", ") || "Set milestone"}</span></>):null}
-      </>)}
+      {section(
+        "Labels",
+        issue.labels.length ? (
+          <div className="flex min-h-7 max-w-full flex-wrap gap-1.5 pt-0.5 pl-[1.5px]">
+            {issue.labels.map((label) => (
+              <button
+                key={label}
+                data-label-chip
+                onClick={() => ui.send({ type: "overlay.open", overlay: "labels" })}
+                className="label-chip"
+              >
+                <span
+                  className="size-[9px] shrink-0 rounded-full"
+                  style={{ background: hue(label) }}
+                />
+                <span className="truncate">{label}</span>
+              </button>
+            ))}
+            <button
+              id="prop-labels"
+              aria-label="Add label"
+              onClick={() => ui.send({ type: "overlay.open", overlay: "labels" })}
+              className="label-add"
+            >
+              <Icon name="plus" size={14} />
+            </button>
+          </div>
+        ) : (
+          btn(
+            "prop-labels",
+            "labels",
+            "Add labels",
+            <>
+              <span>
+                <Icon name="label" />
+              </span>
+              <span className="truncate text-fg-3">
+                <span className="property-wide">Add label</span>
+                <span className="property-short">Labels</span>
+              </span>
+            </>,
+          )
+        ),
+      )}
+      {section(
+        "Project",
+        <>
+          {btn(
+            "prop-project",
+            "project",
+            "",
+            <>
+              <span>
+                <Icon name="layers" />
+              </span>
+              <span className="truncate">
+                {issue.project?.name ?? (
+                  <>
+                    <span className="property-wide">Add to project</span>
+                    <span className="property-short">Project</span>
+                  </>
+                )}
+              </span>
+            </>,
+          )}
+          {issue.milestones?.length
+            ? btn(
+                "prop-milestone",
+                "milestone",
+                "",
+                <>
+                  <span>
+                    <Icon name="calendar" />
+                  </span>
+                  <span className={`truncate ${issue.milestones?.length ? "" : "text-fg-3"}`}>
+                    {issue.milestones?.map((m) => m.name).join(", ") || "Set milestone"}
+                  </span>
+                </>,
+              )
+            : null}
+        </>,
+      )}
       {/* Linear (RAJ-52): a section per relation kind after Project, each related issue a 28px pill (its status and title) with a round remove button on hover. */}
-      {RELATION_SECTIONS.map(([kind,heading])=>{const rows=(issue.relations??[]).filter(r=>r.kind===kind);return rows.length?<Fragment key={kind}>{section(heading,rows.map(r=>{const target=issues.get(r.key),status=target&&statusOf(target);return <div key={r.key} data-relation={`${kind}:${r.key}`} className="group/relation flex max-w-full items-center gap-2">
-        {target?<a href={issueURL(target)} onClick={e=>{if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();openRelated(target);}} className="relation-pill"><span>{status&&<StatusIcon status={status}/>}</span><span className="truncate">{target.summary}</span></a>:<span className="relation-pill"><span/><span className="truncate">{r.key}</span></span>}
-        <button aria-label="Remove relation" onClick={()=>actions.relate(issue.key,r.key,kind,true)} className="relation-remove"><Icon name="close" size={14}/></button>
-      </div>;}))}</Fragment>:null;})}
+      {RELATION_SECTIONS.map(([kind, heading]) => {
+        const rows = (issue.relations ?? []).filter((r) => r.kind === kind);
+        return rows.length ? (
+          <Fragment key={kind}>
+            {section(
+              heading,
+              rows.map((r) => {
+                const target = issues.get(r.key),
+                  status = target && statusOf(target);
+                return (
+                  <div
+                    key={r.key}
+                    data-relation={`${kind}:${r.key}`}
+                    className="group/relation flex max-w-full items-center gap-2"
+                  >
+                    {target ? (
+                      <a
+                        href={issueURL(target)}
+                        onClick={(e) => {
+                          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                          e.preventDefault();
+                          openRelated(target);
+                        }}
+                        className="relation-pill"
+                      >
+                        <span>{status && <StatusIcon status={status} />}</span>
+                        <span className="truncate">{target.summary}</span>
+                      </a>
+                    ) : (
+                      <span className="relation-pill">
+                        <span />
+                        <span className="truncate">{r.key}</span>
+                      </span>
+                    )}
+                    <button
+                      aria-label="Remove relation"
+                      onClick={() => actions.relate(issue.key, r.key, kind, true)}
+                      className="relation-remove"
+                    >
+                      <Icon name="close" size={14} />
+                    </button>
+                  </div>
+                );
+              }),
+            )}
+          </Fragment>
+        ) : null;
+      })}
     </div>
   );
 }
@@ -610,72 +1979,365 @@ function Properties({ issue }: { issue: Issue }) {
 /** Edited in place like Linear: changes save 600ms after typing stops and on blur, so a reload never loses them. */
 function Description({ issue, f }: { issue: Issue; f: any }) {
   const focus = useStore((s) => s.editDesc);
-  const error=useStore(s=>s.fullErrors.get(issue.key));
-  const stored=f?JSON.stringify(normalizeDocument(f.description??"")):"";
-  const shown=useRef(stored);
-  const [revision,setRevision]=useState(0);
-  const draftKey=`better-jira:description-draft:${get().namespace}:${issue.key}`;
-  const [autosave]=useState(()=>createActor(autosaveMachine.provide({actions:{
-    keepDraft:(_,doc)=>{try{localStorage.setItem(draftKey,JSON.stringify(doc));}catch{/* autosave still runs */}},
-    commit:(_,doc)=>{
-      if(!doc)return;
-      shown.current=JSON.stringify(normalizeDocument(doc));actions.description(currentKey(issue.key),doc);
-      void flushLocalChanges().then(()=>{try{if(autosave.getSnapshot().matches("clean"))localStorage.removeItem(draftKey);}catch{/* best effort */}});
-    },
-  }}),{inspect:inspector(`autosave ${issue.key}`)}).start());
+  const error = useStore((s) => s.fullErrors.get(issue.key));
+  const stored = f ? JSON.stringify(normalizeDocument(f.description ?? "")) : "";
+  const shown = useRef(stored);
+  const [revision, setRevision] = useState(0);
+  const draftKey = `better-jira:description-draft:${get().namespace}:${issue.key}`;
+  const [autosave] = useState(() =>
+    createActor(
+      autosaveMachine.provide({
+        actions: {
+          keepDraft: (_, doc) => {
+            try {
+              localStorage.setItem(draftKey, JSON.stringify(doc));
+            } catch {
+              /* autosave still runs */
+            }
+          },
+          commit: (_, doc) => {
+            if (!doc) return;
+            shown.current = JSON.stringify(normalizeDocument(doc));
+            actions.description(currentKey(issue.key), doc);
+            void flushLocalChanges().then(() => {
+              try {
+                if (autosave.getSnapshot().matches("clean")) localStorage.removeItem(draftKey);
+              } catch {
+                /* best effort */
+              }
+            });
+          },
+        },
+      }),
+      { inspect: inspector(`autosave ${issue.key}`) },
+    ).start(),
+  );
   // Undo, redo or a restored revision replaces the document under the editor, so show the stored version.
   // Never while typing: Jira's copy (e.g. media ids swapped after an upload) would remount the editor mid-sentence.
-  useEffect(()=>{if(stored&&stored!==shown.current&&!document.activeElement?.closest("#description")){shown.current=stored;setRevision(r=>r+1);}},[stored]);
+  useEffect(() => {
+    if (stored && stored !== shown.current && !document.activeElement?.closest("#description")) {
+      shown.current = stored;
+      setRevision((r) => r + 1);
+    }
+  }, [stored]);
   // A reload in the autosave window leaves the typed draft in localStorage; save it now.
-  useEffect(()=>{if(!f)return;try{const draft=localStorage.getItem(draftKey);if(draft){autosave.send({type:"change",doc:JSON.parse(draft)});autosave.send({type:"flush"});setRevision(r=>r+1);}}catch{/* ignore a broken draft */}},[!!f]);
-  useEffect(()=>()=>autosave.send({type:"flush"}),[]);
-  useEffect(()=>{
-    if(!focus||!f)return;ui.send({type:"description.editDone"});
-    let tries=0;const go=()=>{const editor=document.getElementById("description");if(editor)editor.focus();else if(tries++<60)requestAnimationFrame(go);};go();
-  },[focus,!!f]);
+  useEffect(() => {
+    if (!f) return;
+    try {
+      const draft = localStorage.getItem(draftKey);
+      if (draft) {
+        autosave.send({ type: "change", doc: JSON.parse(draft) });
+        autosave.send({ type: "flush" });
+        setRevision((r) => r + 1);
+      }
+    } catch {
+      /* ignore a broken draft */
+    }
+  }, [!!f]);
+  useEffect(() => () => autosave.send({ type: "flush" }), []);
+  useEffect(() => {
+    if (!focus || !f) return;
+    ui.send({ type: "description.editDone" });
+    let tries = 0;
+    const go = () => {
+      const editor = document.getElementById("description");
+      if (editor) editor.focus();
+      else if (tries++ < 60) requestAnimationFrame(go);
+    };
+    go();
+  }, [focus, !!f]);
   return (
     <section className="mt-[22px] leading-[1.6] text-fg-2">
-      {!f ? <p role="status" className="text-fg-4">{error?<>{error}. <button onClick={()=>void loadFull(issue.key)} className="text-accent">Retry</button></>:"Loading…"}</p>
-        : <RichEditor key={revision} id="description" inline selectionToolbar scope={`${issue.key}:description`} onLateMedia={merge=>actions.description(issue.key,merge(get().full.get(issue.key)?.fields.description))} initial={f.description} onFiles={files=>addIssueFiles(issue.key,files)} issueKey={issue.key} attachments={issue.attachments} placeholder="Add description…"
-            onChange={doc=>autosave.send({type:"change",doc})}
-            onBlur={()=>autosave.send({type:"flush"})}/>}
+      {!f ? (
+        <p role="status" className="text-fg-4">
+          {error ? (
+            <>
+              {error}.{" "}
+              <button onClick={() => void loadFull(issue.key)} className="text-accent">
+                Retry
+              </button>
+            </>
+          ) : (
+            "Loading…"
+          )}
+        </p>
+      ) : (
+        <RichEditor
+          key={revision}
+          id="description"
+          inline
+          selectionToolbar
+          scope={`${issue.key}:description`}
+          onLateMedia={(merge) =>
+            actions.description(issue.key, merge(get().full.get(issue.key)?.fields.description))
+          }
+          initial={f.description}
+          onFiles={(files) => addIssueFiles(issue.key, files)}
+          issueKey={issue.key}
+          attachments={issue.attachments}
+          placeholder="Add description…"
+          onChange={(doc) => autosave.send({ type: "change", doc })}
+          onBlur={() => autosave.send({ type: "flush" })}
+        />
+      )}
     </section>
   );
 }
 
 function Activity({ issue, f }: { issue: Issue; f: any }) {
-  const [composer,setComposer]=useState(0);
-  const followedAnchor=useRef<HTMLElement|null>(null);
-  useEffect(()=>{
-    if(!f||!location.hash)return;
-    let id:string;try{id=decodeURIComponent(location.hash.slice(1));}catch{return;}
-    const frame=requestAnimationFrame(()=>{const target=document.getElementById(id);if(target&&target!==followedAnchor.current){target.scrollIntoView({block:'center'});followedAnchor.current=target;}});
-    return()=>cancelAnimationFrame(frame);
-  },[f]);
-  const subscribed=issue.watchers?.some(u=>u.id===ME.id);
+  const [composer, setComposer] = useState(0);
+  const followedAnchor = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!f || !location.hash) return;
+    let id: string;
+    try {
+      id = decodeURIComponent(location.hash.slice(1));
+    } catch {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      const target = document.getElementById(id);
+      if (target && target !== followedAnchor.current) {
+        target.scrollIntoView({ block: "center" });
+        followedAnchor.current = target;
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [f]);
+  const subscribed = issue.watchers?.some((u) => u.id === ME.id);
   /** An image comment whose image was removed from the description opens the image on its own. */
-  const [viewing,setViewing]=useState<{file:Attachment;external:boolean}>();
-  const draftKey=`better-jira:comment-draft:${get().namespace}:${issue.key}`;
-  const [draft]=useState(()=>{try{return normalizeDocument(JSON.parse(localStorage.getItem(draftKey)??'""'));}catch{return normalizeDocument('');}});
-  const timestamp=(date:string,id:string)=>{const url=new URL(location.href);url.hash=id;return <a href={url.href} title={fullTime(date)} aria-label={fullTime(date)} data-tip="above" className="hover:text-fg-2 focus-visible:outline-offset-[-1px]"><time dateTime={date}>{ago(date)}</time></a>;};
+  const [viewing, setViewing] = useState<{ file: Attachment; external: boolean }>();
+  const draftKey = `better-jira:comment-draft:${get().namespace}:${issue.key}`;
+  const [draft] = useState(() => {
+    try {
+      return normalizeDocument(JSON.parse(localStorage.getItem(draftKey) ?? '""'));
+    } catch {
+      return normalizeDocument("");
+    }
+  });
+  const timestamp = (date: string, id: string) => {
+    const url = new URL(location.href);
+    url.hash = id;
+    return (
+      <a
+        href={url.href}
+        title={fullTime(date)}
+        aria-label={fullTime(date)}
+        data-tip="above"
+        className="hover:text-fg-2 focus-visible:outline-offset-[-1px]"
+      >
+        <time dateTime={date}>{ago(date)}</time>
+      </a>
+    );
+  };
   if (!f) return null;
-  const imageComments=imageCommentIds(issue.mediaEdits);
+  const imageComments = imageCommentIds(issue.mediaEdits);
   return (
     <section className="issue-activity mt-4 border-t border-line pt-[18px]">
-      {viewing&&<Suspense fallback={null}><ImageViewer file={viewing.file} original={viewing.file} external={viewing.external} editable readReason="" issueKey={issue.key} close={()=>setViewing(undefined)}/></Suspense>}
-      <div className="mb-[14px] flex h-8 items-center gap-3"><h3 className="mr-auto text-[15px] leading-[23px] font-semibold text-fg">Activity</h3><button aria-label={subscribed?'Unsubscribe from issue':'Subscribe to issue'} title={`${subscribed?'Unsubscribe':'Subscribe'} (${shortcutLabel('subscribe')})`} onClick={()=>runShortcut('subscribe')} className="text-[13px] text-fg-3 hover:text-fg">{subscribed?'Unsubscribe':'Subscribe'}</button><button id="issue-subscribers" aria-label="Change subscribers" title={`Change subscribers (${shortcutLabel('subscribers')})`} onClick={()=>ui.send({type:'overlay.open',overlay:'subscribers'})} className="flex min-w-6 items-center -space-x-1 rounded-full">{issue.watchers?.length?issue.watchers.slice(0,3).map(user=><Avatar key={user.id} user={user} size={20}/>):<Icon name="user"/>}</button></div>
+      {viewing && (
+        <Suspense fallback={null}>
+          <ImageViewer
+            file={viewing.file}
+            original={viewing.file}
+            external={viewing.external}
+            editable
+            readReason=""
+            issueKey={issue.key}
+            close={() => setViewing(undefined)}
+          />
+        </Suspense>
+      )}
+      <div className="mb-[14px] flex h-8 items-center gap-3">
+        <h3 className="mr-auto text-[15px] leading-[23px] font-semibold text-fg">Activity</h3>
+        <button
+          aria-label={subscribed ? "Unsubscribe from issue" : "Subscribe to issue"}
+          title={`${subscribed ? "Unsubscribe" : "Subscribe"} (${shortcutLabel("subscribe")})`}
+          onClick={() => runShortcut("subscribe")}
+          className="text-[13px] text-fg-3 hover:text-fg"
+        >
+          {subscribed ? "Unsubscribe" : "Subscribe"}
+        </button>
+        <button
+          id="issue-subscribers"
+          aria-label="Change subscribers"
+          title={`Change subscribers (${shortcutLabel("subscribers")})`}
+          onClick={() => ui.send({ type: "overlay.open", overlay: "subscribers" })}
+          className="flex min-w-6 items-center -space-x-1 rounded-full"
+        >
+          {issue.watchers?.length ? (
+            issue.watchers.slice(0, 3).map((user) => <Avatar key={user.id} user={user} size={20} />)
+          ) : (
+            <Icon name="user" />
+          )}
+        </button>
+      </div>
       <ol className="space-y-3">
         <li id="issue-created" className="activity-event">
           <Avatar user={author(f.reporter)} size={14} />
-          <span><span className="font-medium">{f.reporter?.displayName}</span> created ·</span> {timestamp(f.created,'issue-created')}
+          <span>
+            <span className="font-medium">{f.reporter?.displayName}</span> created ·
+          </span>{" "}
+          {timestamp(f.created, "issue-created")}
         </li>
-        <CommentThreads issue={issue} comments={(f.comment?.comments??[]).filter((c:any)=>!imageComments.has(c.id))} avatar={c=><Avatar user={author(c.author)} size={18}/>} me={<Avatar user={ME} size={18}/>} timestamp={timestamp} events={[...Object.entries(issue.mediaEdits??{}).filter(([,edit])=>edit.comments?.length).map(([mediaId,edit])=>({at:edit.comments![0]!.at,node:<ImageCommentCard key={mediaId} comments={edit.comments!} src={issue.attachments?.find(file=>file.id===mediaId)?.url||edit.src} author={ME.name} me={<Avatar user={ME} size={18}/>} head={c=><><Avatar user={ME} size={18}/><span className="font-medium text-fg">{c.author}</span>{timestamp(c.at,`image-comment-${c.id}`)}</>} save={comments=>actions.mediaEdit(issue.key,mediaId,{...edit,comments})} view={()=>{const frame=document.querySelector<HTMLElement>(`[data-media-id="${CSS.escape(mediaId)}"]`);if(!frame){const file=issue.attachments?.find(file=>file.id===mediaId);const url=file?.url||edit.src;if(url)setViewing({file:file??{id:mediaId,name:'Image',type:'image/png',size:0,url},external:!file});return;}frame.scrollIntoView({block:'center'});frame.dispatchEvent(new Event('show-image-comments'));}}/>})),...activityRows(issue.activity??[]).map(row=>({at:row.at,node:<li key={row.id} id={`activity-${row.id}`} data-activity={row.field} className="activity-event"><span className="grid size-[14px] place-items-center"><ActivityIcon row={row} issue={issue}/></span><span><span className="font-medium">{row.actor.name}</span> {row.events.map((event,i)=><span key={event.id}>{i?" and ":""}{describeActivity(event,issue)}</span>)}{row.chain.map(event=><span key={event.id}>, then {describeActivity(event,issue,true)}</span>)} ·</span> {timestamp(row.at,`activity-${row.id}`)}</li>})),
-          // Linear lists a link while it is attached and drops the row once it is removed (RAJ-52, 2026-11-07).
-          ...(issue.resources??[]).filter(resource=>resource.kind==='link'&&resource.created).map(resource=>({at:resource.created!,node:<li key={resource.id} id={`activity-${resource.id}`} data-activity="link" className="activity-event"><Avatar user={ME} size={14}/><span><span className="font-medium">{ME.name}</span> linked <span className="inline-flex align-[-2px]"><Icon name="link" size={12}/></span> <a href={resource.url} target="_blank" rel="noreferrer" className="font-medium">{linkTitle(resource)}</a> ·</span> {timestamp(resource.created!,`activity-${resource.id}`)}</li>}))]}/>
+        <CommentThreads
+          issue={issue}
+          comments={(f.comment?.comments ?? []).filter((c: any) => !imageComments.has(c.id))}
+          avatar={(c) => <Avatar user={author(c.author)} size={18} />}
+          me={<Avatar user={ME} size={18} />}
+          timestamp={timestamp}
+          events={[
+            ...Object.entries(issue.mediaEdits ?? {})
+              .filter(([, edit]) => edit.comments?.length)
+              .map(([mediaId, edit]) => ({
+                at: edit.comments![0]!.at,
+                node: (
+                  <ImageCommentCard
+                    key={mediaId}
+                    comments={edit.comments!}
+                    src={issue.attachments?.find((file) => file.id === mediaId)?.url || edit.src}
+                    author={ME.name}
+                    me={<Avatar user={ME} size={18} />}
+                    head={(c) => (
+                      <>
+                        <Avatar user={ME} size={18} />
+                        <span className="font-medium text-fg">{c.author}</span>
+                        {timestamp(c.at, `image-comment-${c.id}`)}
+                      </>
+                    )}
+                    save={(comments) =>
+                      actions.mediaEdit(issue.key, mediaId, { ...edit, comments })
+                    }
+                    view={() => {
+                      const frame = document.querySelector<HTMLElement>(
+                        `[data-media-id="${CSS.escape(mediaId)}"]`,
+                      );
+                      if (!frame) {
+                        const file = issue.attachments?.find((file) => file.id === mediaId);
+                        const url = file?.url || edit.src;
+                        if (url)
+                          setViewing({
+                            file: file ?? {
+                              id: mediaId,
+                              name: "Image",
+                              type: "image/png",
+                              size: 0,
+                              url,
+                            },
+                            external: !file,
+                          });
+                        return;
+                      }
+                      frame.scrollIntoView({ block: "center" });
+                      frame.dispatchEvent(new Event("show-image-comments"));
+                    }}
+                  />
+                ),
+              })),
+            ...activityRows(issue.activity ?? []).map((row) => ({
+              at: row.at,
+              node: (
+                <li
+                  key={row.id}
+                  id={`activity-${row.id}`}
+                  data-activity={row.field}
+                  className="activity-event"
+                >
+                  <span className="grid size-[14px] place-items-center">
+                    <ActivityIcon row={row} issue={issue} />
+                  </span>
+                  <span>
+                    <span className="font-medium">{row.actor.name}</span>{" "}
+                    {row.events.map((event, i) => (
+                      <span key={event.id}>
+                        {i ? " and " : ""}
+                        {describeActivity(event, issue)}
+                      </span>
+                    ))}
+                    {row.chain.map((event) => (
+                      <span key={event.id}>, then {describeActivity(event, issue, true)}</span>
+                    ))}{" "}
+                    ·
+                  </span>{" "}
+                  {timestamp(row.at, `activity-${row.id}`)}
+                </li>
+              ),
+            })),
+            // Linear lists a link while it is attached and drops the row once it is removed (RAJ-52, 2026-11-07).
+            ...(issue.resources ?? [])
+              .filter((resource) => resource.kind === "link" && resource.created)
+              .map((resource) => ({
+                at: resource.created!,
+                node: (
+                  <li
+                    key={resource.id}
+                    id={`activity-${resource.id}`}
+                    data-activity="link"
+                    className="activity-event"
+                  >
+                    <Avatar user={ME} size={14} />
+                    <span>
+                      <span className="font-medium">{ME.name}</span> linked{" "}
+                      <span className="inline-flex align-[-2px]">
+                        <Icon name="link" size={12} />
+                      </span>{" "}
+                      <a
+                        href={resource.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-medium"
+                      >
+                        {linkTitle(resource)}
+                      </a>{" "}
+                      ·
+                    </span>{" "}
+                    {timestamp(resource.created!, `activity-${resource.id}`)}
+                  </li>
+                ),
+              })),
+          ]}
+        />
       </ol>
       <div className="mt-[14px]">
         {/* A new key clears the box after sending; autoFocus keeps the caret in it. */}
-        <RichEditor key={composer} initial={composer?'':draft} variant="comment" id="comment" scope={`${issue.key}:comment`} onLateMedia={merge=>{try{localStorage.setItem(draftKey,JSON.stringify(merge(JSON.parse(localStorage.getItem(draftKey)??'""'))));}catch{/* the file stays in the issue attachments */}}} issueKey={issue.key} attachments={issue.attachments} onFiles={files=>addIssueFiles(issue.key,files)} label="Leave a comment…" placeholder="Leave a comment…" autoFocus={composer>0} saveLabel="Submit comment" onChange={doc=>{try{localStorage.setItem(draftKey,JSON.stringify(doc));}catch{/* The open composer still retains its draft. */}}} onSave={doc=>{if(actions.comment(issue.key,doc)){try{localStorage.removeItem(draftKey);}catch{}setComposer(n=>n+1);}}}/>
+        <RichEditor
+          key={composer}
+          initial={composer ? "" : draft}
+          variant="comment"
+          id="comment"
+          scope={`${issue.key}:comment`}
+          onLateMedia={(merge) => {
+            try {
+              localStorage.setItem(
+                draftKey,
+                JSON.stringify(merge(JSON.parse(localStorage.getItem(draftKey) ?? '""'))),
+              );
+            } catch {
+              /* the file stays in the issue attachments */
+            }
+          }}
+          issueKey={issue.key}
+          attachments={issue.attachments}
+          onFiles={(files) => addIssueFiles(issue.key, files)}
+          label="Leave a comment…"
+          placeholder="Leave a comment…"
+          autoFocus={composer > 0}
+          saveLabel="Submit comment"
+          onChange={(doc) => {
+            try {
+              localStorage.setItem(draftKey, JSON.stringify(doc));
+            } catch {
+              /* The open composer still retains its draft. */
+            }
+          }}
+          onSave={(doc) => {
+            if (actions.comment(issue.key, doc)) {
+              try {
+                localStorage.removeItem(draftKey);
+              } catch {}
+              setComposer((n) => n + 1);
+            }
+          }}
+        />
       </div>
     </section>
   );
@@ -688,11 +2350,19 @@ const MENU =
   "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[12px] [&_[cmdk-group-heading]]:text-fg-3 " +
   "[&_[cmdk-item]]:flex [&_[cmdk-item]]:h-9 [&_[cmdk-item]]:cursor-default [&_[cmdk-item]]:items-center [&_[cmdk-item]]:gap-2.5 [&_[cmdk-item]]:rounded-md [&_[cmdk-item]]:px-2 " +
   "[&_[cmdk-item][data-selected=true]]:bg-sel [&_[cmdk-item][data-selected=true]]:text-fg";
-const MENU_INPUT = "h-11 w-full border-b border-line bg-transparent px-3.5 text-fg outline-none placeholder:text-fg-4";
-const close = (e: React.MouseEvent) => e.target === e.currentTarget && ui.send({type:"overlay.close"});
 
-function Overlay({ children,label="Search issues and commands" }: { children: ReactNode;label?:string }) {
-  return <Modal label={label} close={()=>ui.send({type:"overlay.close"})}>{children}</Modal>;
+function Overlay({
+  children,
+  label = "Search issues and commands",
+}: {
+  children: ReactNode;
+  label?: string;
+}) {
+  return (
+    <Modal label={label} close={() => ui.send({ type: "overlay.close" })}>
+      {children}
+    </Modal>
+  );
 }
 
 /** Linear's status and assignee menus (RAJ-52): under the property in the issue view, else under the selected card. */
@@ -702,8 +2372,27 @@ function StatusPicker({ issueKey }: { issueKey: string }) {
   if (!issue || !board) return null;
   const statuses = board.columns.flatMap((c) => c.statuses.map((s) => ({ ...s, column: c.name })));
   return (
-    <PropertyMenu label="Change status" placeholder="Change status…" hotkey="S" anchor={issueAnchor("prop-status", issueKey)} close={() => ui.send({ type: "overlay.close" })} current={statusOf(issue)?.name}>
-      {statuses.map((s, i) => <PickerRow key={s.id} value={s.name} keywords={[s.column]} icon={<StatusIcon status={s} />} current={s.id === issue.status} number={i < 9 ? i + 1 : undefined} onSelect={() => actions.status(issueKey, s.id)}>{s.name}</PickerRow>)}
+    <PropertyMenu
+      label="Change status"
+      placeholder="Change status…"
+      hotkey="S"
+      anchor={issueAnchor("prop-status", issueKey)}
+      close={() => ui.send({ type: "overlay.close" })}
+      current={statusOf(issue)?.name}
+    >
+      {statuses.map((s, i) => (
+        <PickerRow
+          key={s.id}
+          value={s.name}
+          keywords={[s.column]}
+          icon={<StatusIcon status={s} />}
+          current={s.id === issue.status}
+          number={i < 9 ? i + 1 : undefined}
+          onSelect={() => actions.status(issueKey, s.id)}
+        >
+          {s.name}
+        </PickerRow>
+      ))}
     </PropertyMenu>
   );
 }
@@ -715,14 +2404,43 @@ function AssignPicker({ issueKey }: { issueKey: string }) {
   const users = useMemo(() => {
     const m = new Map<string, User>([[ME.id, ME]]);
     for (const u of jiraUsers) if (!m.has(u.id)) m.set(u.id, u);
-    for (const i of issues.values()) if (i.assignee && !m.has(i.assignee.id)) m.set(i.assignee.id, i.assignee);
-    return [...m.values()].sort((a, b) => (a.id === ME.id ? -1 : b.id === ME.id ? 1 : a.name.localeCompare(b.name)));
+    for (const i of issues.values())
+      if (i.assignee && !m.has(i.assignee.id)) m.set(i.assignee.id, i.assignee);
+    return [...m.values()].sort((a, b) =>
+      a.id === ME.id ? -1 : b.id === ME.id ? 1 : a.name.localeCompare(b.name),
+    );
   }, [issues, jiraUsers]);
   const value = (u: User) => `${u.name} ${u.id}`;
   return (
-    <PropertyMenu label="Assign issue" placeholder="Assign to…" hotkey="A" anchor={issueAnchor("prop-assignee", issueKey)} close={() => ui.send({ type: "overlay.close" })} current={current ? value(current) : "No assignee"}>
-      <PickerRow value="No assignee" icon={<Avatar user={null} size={16} />} current={!current} number={0} onSelect={() => actions.assign(issueKey, null)}>No assignee</PickerRow>
-      {users.map((u, i) => <PickerRow key={u.id} value={value(u)} icon={<Avatar user={u} size={16} />} current={current?.id === u.id} number={i < 9 ? i + 1 : undefined} onSelect={() => actions.assign(issueKey, u)}>{u.name}</PickerRow>)}
+    <PropertyMenu
+      label="Assign issue"
+      placeholder="Assign to…"
+      hotkey="A"
+      anchor={issueAnchor("prop-assignee", issueKey)}
+      close={() => ui.send({ type: "overlay.close" })}
+      current={current ? value(current) : "No assignee"}
+    >
+      <PickerRow
+        value="No assignee"
+        icon={<Avatar user={null} size={16} />}
+        current={!current}
+        number={0}
+        onSelect={() => actions.assign(issueKey, null)}
+      >
+        No assignee
+      </PickerRow>
+      {users.map((u, i) => (
+        <PickerRow
+          key={u.id}
+          value={value(u)}
+          icon={<Avatar user={u} size={16} />}
+          current={current?.id === u.id}
+          number={i < 9 ? i + 1 : undefined}
+          onSelect={() => actions.assign(issueKey, u)}
+        >
+          {u.name}
+        </PickerRow>
+      ))}
     </PropertyMenu>
   );
 }
@@ -730,28 +2448,64 @@ function AssignPicker({ issueKey }: { issueKey: string }) {
 type Cmd = { name: string; hint?: string; icon?: ReactNode; run: () => void };
 /** A palette command that runs a shortcut, so the hint shown is the key that does the same thing. */
 
-function Palette({searchOnly=false}:{searchOnly?:boolean}) {
+function Palette({ searchOnly = false }: { searchOnly?: boolean }) {
   const issues = useStore((s) => s.issues);
   const boards = useStore((s) => s.boards);
   const boardId = useStore((s) => s.board);
-  const mine = useStore((s) => s.mine);
-  const view = useStore((s) => s.view);
-  const [scope, setScope] = useState(searchOnly||get().document?null:get().selected); // ⌘K acts on the selected issue; Backspace drops it
+  useStore((s) => s.mine);
+  useStore((s) => s.view);
+  const [scope, setScope] = useState(searchOnly || get().document ? null : get().selected); // ⌘K acts on the selected issue; Backspace drops it
   const [q, setQ] = useState("");
   const scoped = scope ? issues.get(scope) : undefined;
 
   const results = useMemo(() => {
     const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-    if (!words.length) return searchOnly?[...issues.values()].sort((a,b)=>b.updated.localeCompare(a.updated)).slice(0,20):[];
+    if (!words.length)
+      return searchOnly
+        ? [...issues.values()].sort((a, b) => b.updated.localeCompare(a.updated)).slice(0, 20)
+        : [];
     const exact = q.trim().toUpperCase();
-    const hits = [...issues.values()].filter((i) => words.every((w) => `${i.key} ${i.summary}`.toLowerCase().includes(w)));
-    hits.sort((a, b) => Number(b.key === exact) - Number(a.key === exact) || (a.updated < b.updated ? 1 : -1));
+    const hits = [...issues.values()].filter((i) =>
+      words.every((w) => `${i.key} ${i.summary}`.toLowerCase().includes(w)),
+    );
+    hits.sort(
+      (a, b) =>
+        Number(b.key === exact) - Number(a.key === exact) || (a.updated < b.updated ? 1 : -1),
+    );
     return hits.slice(0, 50);
   }, [q, issues, searchOnly]);
 
-  const command=(entry:typeof shortcuts[number]):Cmd=>({name:entry.name,hint:shortcutLabel(entry.id),run:()=>{ui.send({type:"overlay.close"});runShortcut(entry.id);}});
-  const issueCmds:Cmd[]=scoped?shortcuts.filter(s=>s.issue).map(command):[];
-  const general:Cmd[]=searchOnly?[]:[...shortcuts.filter((s,i,a)=>!s.issue&&(!s.when||s.when())&&s.id!=="commands"&&a.findIndex(other=>other.name===s.name)===i).map(command),...boards.filter(b=>b.id!==boardId).map((b):Cmd=>({name:`Switch to ${b.name}`,run:()=>{ui.send({type:"overlay.close"});navigate({board:b.id,selected:null,panel:false});}}))];
+  const command = (entry: (typeof shortcuts)[number]): Cmd => ({
+    name: entry.name,
+    hint: shortcutLabel(entry.id),
+    run: () => {
+      ui.send({ type: "overlay.close" });
+      runShortcut(entry.id);
+    },
+  });
+  const issueCmds: Cmd[] = scoped ? shortcuts.filter((s) => s.issue).map(command) : [];
+  const general: Cmd[] = searchOnly
+    ? []
+    : [
+        ...shortcuts
+          .filter(
+            (s, i, a) =>
+              !s.issue &&
+              (!s.when || s.when()) &&
+              s.id !== "commands" &&
+              a.findIndex((other) => other.name === s.name) === i,
+          )
+          .map(command),
+        ...boards
+          .filter((b) => b.id !== boardId)
+          .map((b): Cmd => ({
+            name: `Switch to ${b.name}`,
+            run: () => {
+              ui.send({ type: "overlay.close" });
+              navigate({ board: b.id, selected: null, panel: false });
+            },
+          })),
+      ];
   const match = (c: Cmd) => c.name.toLowerCase().includes(q.trim().toLowerCase());
   const item = (c: Cmd) => (
     <Command.Item key={c.name} value={`cmd:${c.name}`} onSelect={c.run}>
@@ -762,12 +2516,13 @@ function Palette({searchOnly=false}:{searchOnly?:boolean}) {
   );
 
   return (
-    <Overlay label={searchOnly?"Search issues":"Search issues and commands"}>
+    <Overlay label={searchOnly ? "Search issues" : "Search issues and commands"}>
       <Command shouldFilter={false} loop className={`w-full ${MENU}`}>
         <div className="flex items-center gap-2 border-b border-line px-3.5">
           {scoped && (
             <span className="flex h-6 shrink-0 items-center gap-1.5 rounded-md bg-sel px-2 text-[12px] text-fg-2">
-              <TypeDot type={scoped.type} />{scoped.key}
+              <TypeDot type={scoped.type} />
+              {scoped.key}
             </span>
           )}
           <Command.Input
@@ -775,24 +2530,48 @@ function Palette({searchOnly=false}:{searchOnly?:boolean}) {
             value={q}
             onValueChange={setQ}
             onKeyDown={(e) => e.key === "Backspace" && !q && setScope(null)}
-            placeholder={scoped ? "Type a command, or ⌫ to search everything…" : "Search issues or type a command…"}
+            placeholder={
+              scoped
+                ? "Type a command, or ⌫ to search everything…"
+                : "Search issues or type a command…"
+            }
             className="h-12 flex-1 bg-transparent text-fg outline-none placeholder:text-fg-4"
           />
         </div>
         <Command.List className="max-h-[60vh] overflow-y-auto p-1.5">
           <Command.Empty className="p-3 text-fg-3">No results</Command.Empty>
-          {issueCmds.some(match) && <Command.Group heading={scoped!.key}>{issueCmds.filter(match).map(item)}</Command.Group>}
-          {general.some(match) && <Command.Group heading="General">{general.filter(match).map(item)}</Command.Group>}
+          {issueCmds.some(match) && (
+            <Command.Group heading={scoped!.key}>{issueCmds.filter(match).map(item)}</Command.Group>
+          )}
+          {general.some(match) && (
+            <Command.Group heading="General">{general.filter(match).map(item)}</Command.Group>
+          )}
           {results.length > 0 && (
-            <Command.Group heading={`Issues (${results.length === 50 ? "top 50" : results.length})`}>
+            <Command.Group
+              heading={`Issues (${results.length === 50 ? "top 50" : results.length})`}
+            >
               {results.map((i) => (
                 <Command.Item
                   key={i.key}
                   value={i.key}
-                  onSelect={() => timed(`open ${i.key}`, () => (ui.send({type:"overlay.close"}),navigate({ board: i.board, selected: i.key, panel: true }),ui.send({type:"query.set",query:""})))}
+                  onSelect={() =>
+                    timed(
+                      `open ${i.key}`,
+                      () => (
+                        ui.send({ type: "overlay.close" }),
+                        navigate({ board: i.board, selected: i.key, panel: true }),
+                        ui.send({ type: "query.set", query: "" })
+                      ),
+                    )
+                  }
                 >
-                  {(() => { const s = statusOf(i); return s ? <StatusIcon status={s} /> : <TypeDot type={i.type} />; })()}
-                  <span className="w-[88px] shrink-0 text-[12px] tracking-[-0.24px] text-fg-3">{i.key}</span>
+                  {(() => {
+                    const s = statusOf(i);
+                    return s ? <StatusIcon status={s} /> : <TypeDot type={i.type} />;
+                  })()}
+                  <span className="w-[88px] shrink-0 text-[12px] tracking-[-0.24px] text-fg-3">
+                    {i.key}
+                  </span>
                   <span className="flex-1 truncate">{i.summary}</span>
                   <Avatar user={i.assignee} size={18} />
                 </Command.Item>
@@ -804,6 +2583,5 @@ function Palette({searchOnly=false}:{searchOnly?:boolean}) {
     </Overlay>
   );
 }
-
 
 export default App;

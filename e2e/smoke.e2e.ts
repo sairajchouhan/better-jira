@@ -8,6 +8,12 @@ test("board loads fixture issues and j selects the first card", async () => {
   try {
     expect(await page.eval(`document.querySelectorAll("[data-key]").length`)).toBeGreaterThan(3);
     await page.key("j");
-    expect(await page.eval(`document.querySelector("[data-key][data-selected=true]")?.dataset.key ?? document.activeElement?.tagName`)).toBeTruthy();
-  } finally { await page.close(); }
+    expect(
+      await page.eval(
+        `document.querySelector("[data-key][data-selected=true]")?.dataset.key ?? document.activeElement?.tagName`,
+      ),
+    ).toBeTruthy();
+  } finally {
+    await page.close();
+  }
 });

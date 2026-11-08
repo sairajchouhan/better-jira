@@ -1,9 +1,9 @@
-import {afterAll,expect,test} from 'bun:test';
-import {APP,open,stop} from './harness';
+import { afterAll, expect, test } from "bun:test";
+import { APP, open, stop } from "./harness";
 afterAll(stop);
 
 // A writable site, faked in the page: the fixture server never reaches Jira. The first write is rejected, later ones accepted.
-const setup=`(()=>{const real=fetch;window.__ops=[];let calls=0;
+const setup = `(()=>{const real=fetch;window.__ops=[];let calls=0;
 window.fetch=async(input,init)=>{const path=new URL(String(input),location.href).pathname;
  if(path==='/api/client'){const client=await (await real(input,init)).json();return Response.json({...client,writable:true});}
  if(path==='/api/options')return Response.json({priorities:[],users:[],labels:[],versions:{}});
@@ -15,26 +15,36 @@ window.fetch=async(input,init)=>{const path=new URL(String(input),location.href)
  return Response.json({key:m[1],created:{},others:[],issue:next});
 };})()`;
 
-const rename=(name:string)=>`(()=>{const t=document.getElementById('summary');t.focus();t.value=${JSON.stringify(name)};t.blur();})()`;
-const title=`document.getElementById('summary')?.value`;
+const rename = (name: string) =>
+  `(()=>{const t=document.getElementById('summary');t.focus();t.value=${JSON.stringify(name)};t.blur();})()`;
+const title = `document.getElementById('summary')?.value`;
 
-test('writes queue to Jira; a rejected write rolls back with a toast and later writes land',async()=>{
-  const p=await open('?issue=TEST-2&view=page',{setup});
-  try{
+test("writes queue to Jira; a rejected write rolls back with a toast and later writes land", async () => {
+  const p = await open("?issue=TEST-2&view=page", { setup });
+  try {
     await p.waitFor(`!!document.getElementById('summary')`);
-    const original=await p.eval<string>(title);
-    await p.eval(rename('Rejected title'));
-    expect(await p.waitFor<string>(`document.querySelector("[data-toast]")?.textContent`)).toContain('Jira did not save the change to TEST-2');
-    expect(await p.waitFor<string>(`${title}===${JSON.stringify(original)}&&${title}`)).toBe(original);
-    await p.eval(rename('Accepted title'));
+    const original = await p.eval<string>(title);
+    await p.eval(rename("Rejected title"));
+    expect(
+      await p.waitFor<string>(`document.querySelector("[data-toast]")?.textContent`),
+    ).toContain("Jira did not save the change to TEST-2");
+    expect(await p.waitFor<string>(`${title}===${JSON.stringify(original)}&&${title}`)).toBe(
+      original,
+    );
+    await p.eval(rename("Accepted title"));
     await p.waitFor(`window.__ops.length===2`);
-    expect(await p.eval(`window.__ops`)).toEqual([[{op:'fields',fields:{summary:'Rejected title'}}],[{op:'fields',fields:{summary:'Accepted title'}}]]);
-    expect(await p.eval<string>(title)).toBe('Accepted title');
-  }finally{await p.close();}
+    expect(await p.eval(`window.__ops`)).toEqual([
+      [{ op: "fields", fields: { summary: "Rejected title" } }],
+      [{ op: "fields", fields: { summary: "Accepted title" } }],
+    ]);
+    expect(await p.eval<string>(title)).toBe("Accepted title");
+  } finally {
+    await p.close();
+  }
 });
 
 // Creates get Jira key TEST-90; setting a parent is rejected the way Jira rejects a Task parent (defect 4).
-const created=`(()=>{const real=fetch;window.__ops=[];
+const created = `(()=>{const real=fetch;window.__ops=[];
 window.fetch=async(input,init)=>{const path=new URL(String(input),location.href).pathname;
  if(path==='/api/client'){const client=await (await real(input,init)).json();return Response.json({...client,writable:true});}
  if(path==='/api/options')return Response.json({priorities:[],users:[],labels:[],versions:{},types:{TEST:[{name:'Epic',hierarchyLevel:1},{name:'Task',hierarchyLevel:0},{name:'Story',hierarchyLevel:0},{name:'Subtask',hierarchyLevel:-1}]}});
@@ -46,53 +56,94 @@ window.fetch=async(input,init)=>{const path=new URL(String(input),location.href)
  return Response.json({key:m[1],created:{},others:[],issue});
 };})()`;
 
-test('Create related › Parent issue defaults to the type above the source; a rejected parent says which issue was left and leaves no Activity',async()=>{
-  const p=await open('?issue=TEST-2&view=page',{setup:created});
-  try{
+test("Create related › Parent issue defaults to the type above the source; a rejected parent says which issue was left and leaves no Activity", async () => {
+  const p = await open("?issue=TEST-2&view=page", { setup: created });
+  try {
     await p.waitFor(`!!document.getElementById('comment')`);
-    await p.click('#issue-options');await p.hover('[cmdk-item][data-value="Create related"]');await p.click('[cmdk-item][data-value="Parent issue…"]');
+    await p.click("#issue-options");
+    await p.hover('[cmdk-item][data-value="Create related"]');
+    await p.click('[cmdk-item][data-value="Parent issue…"]');
     await p.waitFor(`document.activeElement?.getAttribute('aria-label')==='Issue title'`);
     // Only Epic (one level above Task) is offered.
-    await p.waitFor(`!!document.querySelector('[aria-label="Issue type: Epic"]')`);await p.click('[aria-label="Issue type: Epic"]');
-    expect(await p.waitFor<string[]>(`(()=>{const items=[...document.querySelectorAll('[role="dialog"][aria-label="Issue type"] [cmdk-item]')].map(n=>n.textContent);return items.length&&items})()`)).toEqual(['Epic']);
-    await p.click('[role="dialog"][aria-label="Issue type"] [cmdk-item]');await p.waitFor(`!document.querySelector('[role="dialog"][aria-label="Issue type"]')`);await p.eval(`document.querySelector('[aria-label="Create issue"] [aria-label="Issue title"]').focus()`);
-    await p.type('[QA] parent epic');await p.key('Enter','meta');
-    const toast=await p.waitFor<string>(`(()=>{const t=document.querySelector("[data-toast]")?.textContent;return t?.includes('Jira did not save')&&t})()`);
-    expect(toast).toContain('Jira did not save the change to TEST-2');
-    expect(toast).toContain('TEST-90 was created in Jira, but not linked.');
-    expect((await p.eval<any[][]>(`window.__ops`))[0]![0]).toMatchObject({op:'create',fields:{type:'Epic'}});
+    await p.waitFor(`!!document.querySelector('[aria-label="Issue type: Epic"]')`);
+    await p.click('[aria-label="Issue type: Epic"]');
+    expect(
+      await p.waitFor<string[]>(
+        `(()=>{const items=[...document.querySelectorAll('[role="dialog"][aria-label="Issue type"] [cmdk-item]')].map(n=>n.textContent);return items.length&&items})()`,
+      ),
+    ).toEqual(["Epic"]);
+    await p.click('[role="dialog"][aria-label="Issue type"] [cmdk-item]');
+    await p.waitFor(`!document.querySelector('[role="dialog"][aria-label="Issue type"]')`);
+    await p.eval(
+      `document.querySelector('[aria-label="Create issue"] [aria-label="Issue title"]').focus()`,
+    );
+    await p.type("[QA] parent epic");
+    await p.key("Enter", "meta");
+    const toast = await p.waitFor<string>(
+      `(()=>{const t=document.querySelector("[data-toast]")?.textContent;return t?.includes('Jira did not save')&&t})()`,
+    );
+    expect(toast).toContain("Jira did not save the change to TEST-2");
+    expect(toast).toContain("TEST-90 was created in Jira, but not linked.");
+    expect((await p.eval<any[][]>(`window.__ops`))[0]![0]).toMatchObject({
+      op: "create",
+      fields: { type: "Epic" },
+    });
     await p.eval(`window.machines.ui.send({type:'navigate',selected:'TEST-2',panel:true})`);
-    await p.waitFor(`!!document.querySelector('.issue-activity')&&location.search.includes('issue=TEST-2')`);
-    expect(await p.eval<string>(`document.querySelector('.issue-activity').textContent`)).not.toContain('parent');
-  }finally{await p.close();}
+    await p.waitFor(
+      `!!document.querySelector('.issue-activity')&&location.search.includes('issue=TEST-2')`,
+    );
+    expect(
+      await p.eval<string>(`document.querySelector('.issue-activity').textContent`),
+    ).not.toContain("parent");
+  } finally {
+    await p.close();
+  }
 });
 
-test('Create related › Parent issue on a top-level issue says so and creates nothing',async()=>{
-  const p=await open('?issue=TEST-2&view=page',{setup:created.replace(`{name:'Epic',hierarchyLevel:1},`,'')});
-  try{
+test("Create related › Parent issue on a top-level issue says so and creates nothing", async () => {
+  const p = await open("?issue=TEST-2&view=page", {
+    setup: created.replace(`{name:'Epic',hierarchyLevel:1},`, ""),
+  });
+  try {
     await p.waitFor(`!!document.getElementById('comment')`);
-    await p.click('#issue-options');await p.hover('[cmdk-item][data-value="Create related"]');await p.click('[cmdk-item][data-value="Parent issue…"]');
-    expect(await p.waitFor<string>(`document.querySelector('[role="alert"]')?.textContent`)).toBe("Jira has no issue type above Task, so TEST-2 can't have a parent.");
-    await p.type('[QA] nothing');await p.key('Enter','meta');await Bun.sleep(300);
+    await p.click("#issue-options");
+    await p.hover('[cmdk-item][data-value="Create related"]');
+    await p.click('[cmdk-item][data-value="Parent issue…"]');
+    expect(await p.waitFor<string>(`document.querySelector('[role="alert"]')?.textContent`)).toBe(
+      "Jira has no issue type above Task, so TEST-2 can't have a parent.",
+    );
+    await p.type("[QA] nothing");
+    await p.key("Enter", "meta");
+    await Bun.sleep(300);
     expect(await p.eval(`window.__ops.length`)).toBe(0);
     expect(await p.eval(`document.querySelector('button[type="submit"]').disabled`)).toBe(true);
-  }finally{await p.close();}
+  } finally {
+    await p.close();
+  }
 });
 
-test('the open-last-toast shortcut opens a created issue by the key Jira assigned, like View issue',async()=>{
-  const p=await open('',{setup:created});
-  try{
+test("the open-last-toast shortcut opens a created issue by the key Jira assigned, like View issue", async () => {
+  const p = await open("", { setup: created });
+  try {
     await p.waitFor(`!!document.querySelector('[data-key]')`);
-    await p.key('c');await p.waitFor(`document.activeElement?.getAttribute('aria-label')==='Issue title'`);
-    await p.type('[QA] toast');await p.key('Enter','meta');
-    expect(await p.waitFor<string>(`(()=>{const t=document.querySelector("[data-toast]")?.textContent;return t?.includes('TEST-90')&&t})()`)).toBe('Created TEST-90View issue');
-    await p.key('o','meta','alt');
+    await p.key("c");
+    await p.waitFor(`document.activeElement?.getAttribute('aria-label')==='Issue title'`);
+    await p.type("[QA] toast");
+    await p.key("Enter", "meta");
+    expect(
+      await p.waitFor<string>(
+        `(()=>{const t=document.querySelector("[data-toast]")?.textContent;return t?.includes('TEST-90')&&t})()`,
+      ),
+    ).toBe("Created TEST-90View issue");
+    await p.key("o", "meta", "alt");
     await p.waitFor(`new URL(location.href).searchParams.get('issue')==='TEST-90'`);
-  }finally{await p.close();}
+  } finally {
+    await p.close();
+  }
 });
 
 // Writable site that accepts every write: uploads get a Jira id and media id, new comments a Jira comment id.
-const accepting=`(()=>{const real=fetch;window.__ops=[];window.__uploads=[];let next=700;
+const accepting = `(()=>{const real=fetch;window.__ops=[];window.__uploads=[];let next=700;
 window.fetch=async(input,init)=>{const path=new URL(String(input),location.href).pathname;
  if(path==='/api/client'){const client=await (await real(input,init)).json();return Response.json({...client,writable:true});}
  if(path==='/api/options')return Response.json({priorities:[],users:[],labels:[],versions:{}});
@@ -103,43 +154,78 @@ window.fetch=async(input,init)=>{const path=new URL(String(input),location.href)
  return Response.json({key:m[1],created:Object.fromEntries(ops.filter(o=>o.op==='comment').map(o=>[o.ref,String(next++)])),others:[],issue});
 };})()`;
 
-test('a crop on a writable site uploads the cropped image as a new attachment that replaces it in the description, and undo deletes it',async()=>{
-  const p=await open('',{setup:accepting});
-  try{
-    await fetch(`${APP}__fixture`,{method:'POST',body:JSON.stringify({includeMedia:true})});await p.click('[data-key="TEST-2"]');
-    await p.waitFor(`document.querySelector('#description img')?.naturalWidth===320`,15000);
-    const original=await p.eval<string>(`document.querySelector('#description img').alt`);
-    await p.click('#description img');await p.click('#description [aria-label="Crop image"]');
+test("a crop on a writable site uploads the cropped image as a new attachment that replaces it in the description, and undo deletes it", async () => {
+  const p = await open("", { setup: accepting });
+  try {
+    await fetch(`${APP}__fixture`, {
+      method: "POST",
+      body: JSON.stringify({ includeMedia: true }),
+    });
+    await p.click('[data-key="TEST-2"]');
+    await p.waitFor(`document.querySelector('#description img')?.naturalWidth===320`, 15000);
+    const original = await p.eval<string>(`document.querySelector('#description img').alt`);
+    await p.click("#description img");
+    await p.click('#description [aria-label="Crop image"]');
     await p.waitFor(`!!document.querySelector('[aria-label="Resize from top left"]')`);
-    await p.click('[aria-label="Resize from top left"]');await p.key('ArrowRight','shift');await p.click('text=Save');
+    await p.click('[aria-label="Resize from top left"]');
+    await p.key("ArrowRight", "shift");
+    await p.click("text=Save");
     await p.waitFor(`window.__ops.length===1`);
-    expect(await p.eval(`window.__uploads`)).toEqual([{name:original.replace(/\.[^.]+$/,'')+'-cropped.png',type:'image/png'}]);
-    const description=JSON.stringify(await p.eval(`window.__ops[0]`));
+    expect(await p.eval(`window.__uploads`)).toEqual([
+      { name: original.replace(/\.[^.]+$/, "") + "-cropped.png", type: "image/png" },
+    ]);
+    const description = JSON.stringify(await p.eval(`window.__ops[0]`));
     expect(description).toContain('"op":"fields"');
-    expect(description).toContain('"id":"0b6f3c1e-1111-4222-8333-944455556666","collection":"jira-1"');
+    expect(description).toContain(
+      '"id":"0b6f3c1e-1111-4222-8333-944455556666","collection":"jira-1"',
+    );
     await p.waitFor(`!document.querySelector('.image-crop-editor')`);
-    await p.eval(`document.activeElement?.blur()`);await p.key('z','meta');
+    await p.eval(`document.activeElement?.blur()`);
+    await p.key("z", "meta");
     await p.waitFor(`window.__ops.length===2`);
-    const undone=await p.eval<any[]>(`window.__ops[1]`);
-    expect(undone.find(op=>op.op==='attachment.delete')).toEqual({op:'attachment.delete',id:'9001'});
-    expect(JSON.stringify(undone.find(op=>op.op==='fields'))).not.toContain('0b6f3c1e');
-  }finally{await p.close();await fetch(`${APP}__fixture`,{method:'POST',body:'{}'});}
+    const undone = await p.eval<any[]>(`window.__ops[1]`);
+    expect(undone.find((op) => op.op === "attachment.delete")).toEqual({
+      op: "attachment.delete",
+      id: "9001",
+    });
+    expect(JSON.stringify(undone.find((op) => op.op === "fields"))).not.toContain("0b6f3c1e");
+  } finally {
+    await p.close();
+    await fetch(`${APP}__fixture`, { method: "POST", body: "{}" });
+  }
 });
 
-test('an image comment on a writable site is a Jira comment: created, renamed to its Jira id, then deleted',async()=>{
-  const p=await open('',{setup:accepting});
-  try{
-    await fetch(`${APP}__fixture`,{method:'POST',body:JSON.stringify({includeMedia:true})});await p.click('[data-key="TEST-2"]');
-    await p.waitFor(`document.querySelector('#description img')?.naturalWidth===320`,15000);
-    await p.hover('#description img');await p.click('#description [aria-label="Add image comment"]');
-    await p.waitFor(`document.activeElement?.getAttribute('aria-label')==='Image comment'`);await p.type('Jira image review');
+test("an image comment on a writable site is a Jira comment: created, renamed to its Jira id, then deleted", async () => {
+  const p = await open("", { setup: accepting });
+  try {
+    await fetch(`${APP}__fixture`, {
+      method: "POST",
+      body: JSON.stringify({ includeMedia: true }),
+    });
+    await p.click('[data-key="TEST-2"]');
+    await p.waitFor(`document.querySelector('#description img')?.naturalWidth===320`, 15000);
+    await p.hover("#description img");
+    await p.click('#description [aria-label="Add image comment"]');
+    await p.waitFor(`document.activeElement?.getAttribute('aria-label')==='Image comment'`);
+    await p.type("Jira image review");
     await p.click('[aria-label="Submit image comment"]');
     await p.waitFor(`window.__ops.length===1`);
-    const [created]=await p.eval<any[]>(`window.__ops[0]`);
-    expect(created).toMatchObject({op:'comment',body:{type:'doc',version:1,content:[{type:'paragraph',content:[{type:'text',text:'Jira image review'}]}]}});
+    const [created] = await p.eval<any[]>(`window.__ops[0]`);
+    expect(created).toMatchObject({
+      op: "comment",
+      body: {
+        type: "doc",
+        version: 1,
+        content: [{ type: "paragraph", content: [{ type: "text", text: "Jira image review" }] }],
+      },
+    });
     await p.waitFor(`!!document.querySelector('[data-image-comment="700"]')`);
-    await p.click('[aria-label="Image comment options"]');await p.click('text=Delete image comment');
+    await p.click('[aria-label="Image comment options"]');
+    await p.click("text=Delete image comment");
     await p.waitFor(`window.__ops.length===2`);
-    expect(await p.eval(`window.__ops[1]`)).toEqual([{op:'comment.delete',id:'700'}]);
-  }finally{await p.close();await fetch(`${APP}__fixture`,{method:'POST',body:'{}'});}
+    expect(await p.eval(`window.__ops[1]`)).toEqual([{ op: "comment.delete", id: "700" }]);
+  } finally {
+    await p.close();
+    await fetch(`${APP}__fixture`, { method: "POST", body: "{}" });
+  }
 });

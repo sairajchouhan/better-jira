@@ -38,7 +38,7 @@ type Shortcut = {
   group: string;
   hotkey: Hotkey;
   issue?: boolean;
-  document?:boolean;
+  document?: boolean;
   run: () => void;
   when?: () => boolean;
 };
@@ -94,9 +94,7 @@ function moveColumn(direction: number) {
     prefs = preferencesFor(issue.board);
   const choices = board.columns.filter((c) => columnInScope(c, prefs.scope));
   if (prefs.display.groupDescending) choices.reverse();
-  const at = choices.findIndex((c) =>
-    c.statuses.some((s) => s.id === issue.status),
-  );
+  const at = choices.findIndex((c) => c.statuses.some((s) => s.id === issue.status));
   const target = choices[at + direction]?.statuses[0];
   if (at >= 0 && target) actions.status(issue.key, target.id);
 }
@@ -116,12 +114,7 @@ function reorder(direction: number, edge = false) {
   const descending = preferencesFor(issue.board).display.descending;
   const a = rest[at - 1]?.rank,
     b = rest[at]?.rank;
-  actions.drop(
-    issue.key,
-    issue.board,
-    [],
-    descending ? rankBetween(b, a) : rankBetween(a, b),
-  );
+  actions.drop(issue.key, issue.board, [], descending ? rankBetween(b, a) : rankBetween(a, b));
 }
 const manual = () => preferencesFor(get().board).display.ordering === "manual";
 function scope(value: "active" | "backlog" | "all", mine = false) {
@@ -135,8 +128,7 @@ async function copy(kind: CopyKind) {
   try {
     if (kind === "everything as Markdown" && !get().full.has(issue.key)) {
       await loadFull(issue.key);
-      if (!get().full.has(issue.key))
-        throw new Error("Issue details unavailable");
+      if (!get().full.has(issue.key)) throw new Error("Issue details unavailable");
     }
     const full = get().full.get(issue.key),
       status =
@@ -169,35 +161,43 @@ function collapse(all = false) {
     );
   const ids = all
     ? groups.map((g) => g.id)
-    : groups
-        .filter((g) => g.issues.some((i) => i.key === s.selected))
-        .map((g) => g.id);
+    : groups.filter((g) => g.issues.some((i) => i.key === s.selected)).map((g) => g.id);
   const current = prefs.collapsed[by] ?? [],
     closed = ids.every((id) => current.includes(id));
   changePreferences(s.board, {
     collapsed: {
       ...prefs.collapsed,
-      [by]: closed
-        ? current.filter((id) => !ids.includes(id))
-        : [...new Set([...current, ...ids])],
+      [by]: closed ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])],
     },
   });
 }
 
 /** Live Linear Chrome reference, 6 Nov 2026. Only existing personal workflows are included. */
 export const shortcuts: Shortcut[] = [
-  ...([
-    {id:'rename',name:'Rename document',hotkey:'Shift+R'},
-    {id:'favorite',name:'Favorite document',hotkey:'Alt+F'},
-    {id:'authors',name:'Show document author names',hotkey:'Shift+A'},
-    {id:'remind',name:'Remind me about document',hotkey:'Shift+H'},
-    {id:'subscribers',name:'Change document subscribers',hotkey:'Mod+Shift+S'},
-    {id:'copy-url',name:'Copy document URL',hotkey:'Mod+Shift+,'},
-    {id:'copy-title',name:'Copy document title',hotkey:"Mod+Shift+'"},
-    // Outside text fields only; a page text selection keeps the browser's own copy.
-    {id:'copy-link',name:'Copy document title as link',hotkey:'Mod+C'},
-    {id:'copy-markdown',name:'Copy document content as Markdown',hotkey:'Mod+Alt+C'},
-  ] as const).map(entry=>({...entry,id:`document-${entry.id}`,document:true,group:'Documents',when:()=>!!get().document&&(entry.id!=='copy-link'||!!getSelection()?.isCollapsed),run:()=>document.querySelector('[data-document]')?.dispatchEvent(new CustomEvent('document-action',{detail:entry.id}))})),
+  ...(
+    [
+      { id: "rename", name: "Rename document", hotkey: "Shift+R" },
+      { id: "favorite", name: "Favorite document", hotkey: "Alt+F" },
+      { id: "authors", name: "Show document author names", hotkey: "Shift+A" },
+      { id: "remind", name: "Remind me about document", hotkey: "Shift+H" },
+      { id: "subscribers", name: "Change document subscribers", hotkey: "Mod+Shift+S" },
+      { id: "copy-url", name: "Copy document URL", hotkey: "Mod+Shift+," },
+      { id: "copy-title", name: "Copy document title", hotkey: "Mod+Shift+'" },
+      // Outside text fields only; a page text selection keeps the browser's own copy.
+      { id: "copy-link", name: "Copy document title as link", hotkey: "Mod+C" },
+      { id: "copy-markdown", name: "Copy document content as Markdown", hotkey: "Mod+Alt+C" },
+    ] as const
+  ).map((entry) => ({
+    ...entry,
+    id: `document-${entry.id}`,
+    document: true,
+    group: "Documents",
+    when: () => !!get().document && (entry.id !== "copy-link" || !!getSelection()?.isCollapsed),
+    run: () =>
+      document
+        .querySelector("[data-document]")
+        ?.dispatchEvent(new CustomEvent("document-action", { detail: entry.id })),
+  })),
   {
     id: "commands",
     name: "Open command menu",
@@ -218,9 +218,7 @@ export const shortcuts: Shortcut[] = [
     group: "General",
     hotkey: "Mod+/",
     run: () =>
-      get().overlay === "shortcuts"
-        ? ui.send({ type: "overlay.close" })
-        : overlay("shortcuts")(),
+      get().overlay === "shortcuts" ? ui.send({ type: "overlay.close" }) : overlay("shortcuts")(),
   },
   {
     id: "search",
@@ -351,8 +349,7 @@ export const shortcuts: Shortcut[] = [
     run: () => {
       // Like the toast's View issue: a key Jira has since replaced still finds the issue.
       const issue = get().issues.get(currentKey(get().toast?.key ?? ""));
-      if (issue)
-        navigate({ board: issue.board, selected: issue.key, panel: true });
+      if (issue) navigate({ board: issue.board, selected: issue.key, panel: true });
     },
   },
   {
@@ -453,8 +450,11 @@ export const shortcuts: Shortcut[] = [
     hotkey: "Mod+Shift+S",
     issue: true,
     run: issueAction(() => {
-      navigate({panel:true});
-      requestAnimationFrame(()=>{document.getElementById('issue-subscribers')?.focus();overlay('subscribers')();});
+      navigate({ panel: true });
+      requestAnimationFrame(() => {
+        document.getElementById("issue-subscribers")?.focus();
+        overlay("subscribers")();
+      });
     }),
   },
   {
@@ -505,8 +505,12 @@ export const shortcuts: Shortcut[] = [
     hotkey: "Mod+Shift+O",
     issue: true,
     run: issueAction((i) => {
-      const inline=document.querySelector<HTMLElement>(`[data-sub-issues="${CSS.escape(i.key)}"] [data-create-child]`);
-      if(inline){inline.click();}else beginCreate({parent:i.key,project:i.project});
+      const inline = document.querySelector<HTMLElement>(
+        `[data-sub-issues="${CSS.escape(i.key)}"] [data-create-child]`,
+      );
+      if (inline) {
+        inline.click();
+      } else beginCreate({ parent: i.key, project: i.project });
     }),
   },
   {
@@ -525,8 +529,7 @@ export const shortcuts: Shortcut[] = [
     issue: true,
     run: issueAction((i) => {
       const parent = get().issues.get(i.parent ?? "");
-      if (parent)
-        navigate({ board: parent.board, selected: parent.key, panel: true });
+      if (parent) navigate({ board: parent.board, selected: parent.key, panel: true });
     }),
   },
   {
@@ -545,8 +548,7 @@ export const shortcuts: Shortcut[] = [
     issue: true,
     run: issueAction((i) => {
       const child = [...get().issues.values()].find((c) => c.parent === i.key);
-      if (child)
-        navigate({ board: child.board, selected: child.key, panel: true });
+      if (child) navigate({ board: child.board, selected: child.key, panel: true });
     }),
   },
   ...(
@@ -556,12 +558,7 @@ export const shortcuts: Shortcut[] = [
       ["copy-url", "Copy issue URL", "Mod+Shift+,", "URL"],
       ["copy-title", "Copy issue title", "Mod+Shift+'", "title"],
       ["copy-link", "Copy issue title as link", "Mod+C", "title as link"],
-      [
-        "copy-markdown",
-        "Copy everything as Markdown",
-        "Mod+Alt+C",
-        "everything as Markdown",
-      ],
+      ["copy-markdown", "Copy everything as Markdown", "Mod+Alt+C", "everything as Markdown"],
     ] as const
   ).map(([id, name, hotkey, kind]) => ({
     id,
@@ -642,13 +639,7 @@ export const shortcuts: Shortcut[] = [
       ["reorder-up", "Move one position up", "Alt+ArrowUp", -1, false],
       ["reorder-down", "Move one position down", "Alt+ArrowDown", 1, false],
       ["reorder-top", "Move to top of group", "Alt+Shift+ArrowUp", -1, true],
-      [
-        "reorder-bottom",
-        "Move to bottom of group",
-        "Alt+Shift+ArrowDown",
-        1,
-        true,
-      ],
+      ["reorder-bottom", "Move to bottom of group", "Alt+Shift+ArrowDown", 1, true],
     ] as const
   ).map(([id, name, hotkey, dir, edge]) => ({
     id,
@@ -702,9 +693,7 @@ export const shortcuts: Shortcut[] = [
     when: boardVisible,
     run: () => {
       set({ findInView: true });
-      requestAnimationFrame(() =>
-        document.getElementById("find-in-view")?.focus(),
-      );
+      requestAnimationFrame(() => document.getElementById("find-in-view")?.focus());
     },
   },
   {
@@ -756,9 +745,8 @@ export function shortcutLabel(id: string) {
 }
 export function runShortcut(id: string) {
   const entry = shortcuts.find((s) => s.id === id);
-  if(get().document&&(entry?.issue||entry?.group==="List / Board"))return;
-  if (entry && (!entry.issue || selected()) && (!entry.when || entry.when()))
-    entry.run();
+  if (get().document && (entry?.issue || entry?.group === "List / Board")) return;
+  if (entry && (!entry.issue || selected()) && (!entry.when || entry.when())) entry.run();
 }
 export function useLinearHotkeys(getColumns: () => Issue[][]) {
   columns = getColumns;
@@ -768,14 +756,22 @@ export function useLinearHotkeys(getColumns: () => Issue[][]) {
       (entry) =>
         ({
           hotkey: entry.hotkey,
-          callback: (event:KeyboardEvent) => {
-            if(event.target instanceof Element&&event.target.closest("[data-media-interactive]")&&!((event.metaKey||event.ctrlKey)&&(entry.id==="commands"||entry.id==="shortcuts")))return;
+          callback: (event: KeyboardEvent) => {
+            if (
+              event.target instanceof Element &&
+              event.target.closest("[data-media-interactive]") &&
+              !(
+                (event.metaKey || event.ctrlKey) &&
+                (entry.id === "commands" || entry.id === "shortcuts")
+              )
+            )
+              return;
             runShortcut(entry.id);
           },
           options: {
             enabled:
               state.boards.length > 0 &&
-              (!state.document || !entry.issue && entry.group!=="List / Board") &&
+              (!state.document || (!entry.issue && entry.group !== "List / Board")) &&
               ((!state.overlay && !state.toolbar) ||
                 (entry.id === "commands" && state.overlay === "palette") ||
                 (entry.id === "shortcuts" && state.overlay === "shortcuts")) &&
@@ -787,7 +783,14 @@ export function useLinearHotkeys(getColumns: () => Issue[][]) {
                 : true,
             meta: { name: entry.name, group: entry.group },
             // Document and issue shortcuts share keys on purpose; `enabled` keeps exactly one of each pair active.
-            ...(shortcuts.some((other) => other !== entry && other.hotkey === entry.hotkey && !!other.document !== !!entry.document) ? { conflictBehavior: "allow" as const } : {}),
+            ...(shortcuts.some(
+              (other) =>
+                other !== entry &&
+                other.hotkey === entry.hotkey &&
+                !!other.document !== !!entry.document,
+            )
+              ? { conflictBehavior: "allow" as const }
+              : {}),
           },
         }) as UseHotkeyDefinition,
     ),
@@ -798,9 +801,7 @@ export function ShortcutHelp() {
   const [query, setQuery] = useState("");
   const catalog = [
     ...shortcuts.filter(
-      (s) =>
-        !/^team-\d+$/.test(s.id) ||
-        Number(s.id.slice(5)) <= get().boards.length,
+      (s) => !/^team-\d+$/.test(s.id) || Number(s.id.slice(5)) <= get().boards.length,
     ),
     ...editorBindings.map((b) => ({
       ...b,
@@ -815,8 +816,7 @@ export function ShortcutHelp() {
   const matches = catalog.filter((s) => {
     const names = formatForDisplay(s.hotkey, { useSymbols: false });
     const raw = Array.isArray(s.hotkey) ? s.hotkey.join(" ") : s.hotkey;
-    const text =
-      `${s.name} ${s.group} ${names} ${raw} ${formatForDisplay(s.hotkey)}`.toLowerCase();
+    const text = `${s.name} ${s.group} ${names} ${raw} ${formatForDisplay(s.hotkey)}`.toLowerCase();
     return words.every((word) => text.includes(word));
   });
   return (
@@ -827,16 +827,13 @@ export function ShortcutHelp() {
     >
       <div className="mb-3 flex items-center justify-between">
         <h2 className="font-semibold text-fg">Keyboard Shortcuts</h2>
-        <button
-          aria-label="Close dialog"
-          onClick={() => ui.send({ type: "overlay.close" })}
-        >
+        <button aria-label="Close dialog" onClick={() => ui.send({ type: "overlay.close" })}>
           ×
         </button>
       </div>
       <p className="mb-3 text-[12px] text-fg-3">
-        Issue actions need a selected issue. Editor shortcuts apply while
-        typing. Reordering requires Manual ordering.
+        Issue actions need a selected issue. Editor shortcuts apply while typing. Reordering
+        requires Manual ordering.
       </p>
       <input
         aria-label="Search shortcuts"
@@ -854,10 +851,7 @@ export function ShortcutHelp() {
               {matches
                 .filter((s) => s.group === group)
                 .map((s) => (
-                  <div
-                    key={s.id}
-                    className="flex items-center gap-3 py-1.5 text-[12px]"
-                  >
+                  <div key={s.id} className="flex items-center gap-3 py-1.5 text-[12px]">
                     <dt className="flex-1">{s.name}</dt>
                     <dd>
                       <kbd className="rounded border border-line-2 px-1.5 py-0.5">
