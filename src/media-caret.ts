@@ -1,5 +1,6 @@
 import {Fragment,type Node as EditorNode} from 'prosemirror-model';
 import {Plugin} from 'prosemirror-state';
+import {Debouncer} from '@tanstack/pacer';
 import type {EditorView} from 'prosemirror-view';
 const media=(node:EditorNode|undefined|null)=>!!node?.isBlock&&['mediaSingle','mediaGroup','media'].includes(node.type.name);
 /** Editor-only empty paragraphs give Chromium real caret positions beside block media. */
@@ -16,13 +17,14 @@ export function mediaCaretDocument(node:EditorNode):EditorNode{
  const content=Fragment.fromArray(out);return node.type.validContent(content)?node.copy(content):node;
 }
 export function mediaCaretPlugin(){
- let editor:EditorView|undefined,compositionEnd:ReturnType<typeof setTimeout>|undefined;
+ let editor:EditorView|undefined;
+ const compositionEnd=new Debouncer((view:EditorView)=>{if(!view.isDestroyed&&!view.composing)view.dispatch(view.state.tr.setMeta('mediaCompositionEnd',true));},{wait:0});
  return new Plugin({
- view(view){editor=view;return {destroy(){clearTimeout(compositionEnd);editor=undefined;}};},
+ view(view){editor=view;return {destroy(){compositionEnd.cancel();editor=undefined;}};},
  props:{handleDOMEvents:{compositionend(view){
   // Run after ProseMirror has flushed the final composition mutation. Replacing a
   // paragraph during pre-edit detaches the IME's live text node in Chromium.
-  clearTimeout(compositionEnd);compositionEnd=setTimeout(()=>{if(!view.isDestroyed&&!view.composing)view.dispatch(view.state.tr.setMeta('mediaCompositionEnd',true));},0);
+  compositionEnd.maybeExecute(view);
   return false;
  }}},
  appendTransaction(_transactions,_old,state){

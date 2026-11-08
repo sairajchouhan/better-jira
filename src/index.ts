@@ -18,6 +18,20 @@ const server = serve({
   routes: {
     "/*": index,
     "/api/boards": localOnly(() => Response.json(mirror.boards())),
+    // Server-sent events: one "changed" message whenever the mirror took in something new from Jira.
+    "/api/events": localOnly(req => {
+      server.timeout(req, 0);
+      const issue = new URL(req.url).searchParams.get("issue") || undefined, bytes = new TextEncoder();
+      let stop = () => {};
+      return new Response(new ReadableStream({
+        start(stream) {
+          stream.enqueue(bytes.encode(": open\n\n"));
+          stop = mirror.watch({ issue, send: () => { try { stream.enqueue(bytes.encode("data: changed\n\n")); } catch { stop(); } } });
+          req.signal.addEventListener("abort", () => stop());
+        },
+        cancel: () => stop(),
+      }), { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-store" } });
+    }),
     "/api/client": localOnly(async()=>{try{return Response.json({...await mirror.clientInfo(),writable:canWrite(serverConfiguration().site)});}catch{return Response.json({error:"Could not read your Jira account. Check setup and retry."},{status:503});}}),
     "/api/properties": localOnly(() => Response.json(mirror.properties())),
     "/api/options": localOnly(async()=>{try{return Response.json(await mirror.options());}catch{return Response.json({error:"Could not read Jira's options."},{status:503});}}),

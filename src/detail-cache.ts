@@ -1,5 +1,5 @@
 import type {Database} from "bun:sqlite";
-export const DETAIL_CACHE_VERSION="3";
+export const DETAIL_CACHE_VERSION="4";
 
 /** Rich issue details have their own schema version; Jira's updated timestamp cannot invalidate old projections. */
 export function detailCache(db:Database,load:(key:string)=>Promise<any>) {

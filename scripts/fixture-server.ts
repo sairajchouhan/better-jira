@@ -104,5 +104,5 @@ async function splitFixture(req:Request){
   const file=name==='index.html'?[...files.entries()].find(([name])=>name.endsWith('.html'))?.[1]:files.get(name);
   return file?new Response(file,{headers:{'Content-Type':file.type}}):new Response(null,{status:404});
 }
-const server=Bun.serve({hostname:"127.0.0.1",port:Number(process.env.FIXTURE_PORT??3001),routes:{"/*":index,"/__editor-media-fixture":editorMediaFixture,"/__split-media-assets/*":splitFixture,"/api/*":handle,"/__fixture":handle,"/__link-icon.svg":()=>new Response('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="#fff"/></svg>',{headers:{"Content-Type":"image/svg+xml"}})}});
+const server=Bun.serve({hostname:"127.0.0.1",port:Number(process.env.FIXTURE_PORT??3001),routes:{"/*":index,"/api/events":req=>{server.timeout(req,0);return new Response(new ReadableStream({start(c){c.enqueue(new TextEncoder().encode(": open\n\n"));}}),{headers:{"Content-Type":"text/event-stream"}});},"/__editor-media-fixture":editorMediaFixture,"/__split-media-assets/*":splitFixture,"/api/*":handle,"/__fixture":handle,"/__link-icon.svg":()=>new Response('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="#fff"/></svg>',{headers:{"Content-Type":"image/svg+xml"}})}});
 console.log(`Disposable browser fixture on ${server.url}`);

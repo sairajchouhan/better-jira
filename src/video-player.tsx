@@ -1,5 +1,6 @@
 import {useEffect,useId,useRef,useState,type CSSProperties} from 'react';
 import {useHotkeys,type UseHotkeyDefinition} from '@tanstack/react-hotkeys';
+import {Debouncer} from '@tanstack/pacer';
 import type {Attachment} from './attachment-media';
 import {Icon} from './icons';
 
@@ -18,13 +19,13 @@ export function VideoPlayer({file,onSize,onSelect}:{file:Attachment;onSize:(size
  const [playing,setPlaying]=useState(false),[ended,setEnded]=useState(false),[elapsed,setElapsed]=useState(0),[duration,setDuration]=useState(0),[volume,setVolume]=useState(1),[muted,setMuted]=useState(false),[rate,setRate]=useState(1);
  const [expanded,setExpanded]=useState(false),[pip,setPip]=useState(false),[visible,setVisible]=useState(false),[keyboardControls,setKeyboardControls]=useState(false),[waiting,setWaiting]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [dimensions,setDimensions]=useState<{width:number;height:number}>();
- const timer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined),saved=useRef<Snapshot>({time:0,volume:1,muted:false,rate:1,paused:true}),restoring=useRef(false);
+ const [hideControls]=useState(()=>new Debouncer(()=>setVisible(false),{wait:2500})),saved=useRef<Snapshot>({time:0,volume:1,muted:false,rate:1,paused:true}),restoring=useRef(false);
  const diagnostic=useRef<AbortController|undefined>(undefined);
  const broken=useRef(false);
  const openingFocus=useRef(false);
  const lastVolume=useRef(1);
  const snapshot=()=>{const v=video.current;if(v&&v.readyState>=1&&!broken.current&&!restoring.current&&!v.error)saved.current={time:v.currentTime,volume:v.volume,muted:v.muted,rate:v.playbackRate,paused:v.paused};};
- const reveal=()=>{setVisible(true);clearTimeout(timer.current);timer.current=setTimeout(()=>setVisible(false),2500);};
+ const reveal=()=>{setVisible(true);hideControls.maybeExecute();};
  const play=()=>{const v=video.current;if(!v||error)return;if(v.paused){if(v.ended)v.currentTime=0;void v.play().catch(()=>{setNotice('Playback could not start. Press Play to try again.');});}else v.pause();reveal();};
  const seek=(to:number)=>{const v=video.current;if(v&&Number.isFinite(v.duration)){v.currentTime=Math.max(0,Math.min(v.duration,to));setElapsed(v.currentTime);snapshot();reveal();}};
  const changeVolume=(to:number)=>{const v=video.current;if(v){v.volume=Math.max(0,Math.min(1,to));if(v.volume>0)lastVolume.current=v.volume;v.muted=v.volume===0;snapshot();reveal();}};
@@ -53,7 +54,7 @@ export function VideoPlayer({file,onSize,onSelect}:{file:Attachment;onSize:(size
  ] as UseHotkeyDefinition[],{target:root,capture:true,ignoreInputs:false,preventDefault:true,stopPropagation:true});
  useEffect(()=>{if(expanded){const overflow=document.body.style.overflow;document.body.style.overflow='hidden';openingFocus.current=true;(playButton.current??root.current)?.focus();openingFocus.current=false;return()=>{document.body.style.overflow=overflow;if(root.current?.contains(document.activeElement)||document.activeElement===document.body)expand.current?.focus();};}},[expanded]);
  useEffect(()=>{const v=video.current!;const enter=()=>setPip(true),leave=()=>setPip(false);v.addEventListener('enterpictureinpicture',enter);v.addEventListener('leavepictureinpicture',leave);return()=>{v.removeEventListener('enterpictureinpicture',enter);v.removeEventListener('leavepictureinpicture',leave);};},[]);
- useEffect(()=>{const v=video.current;return()=>{clearTimeout(timer.current);diagnostic.current?.abort();if(v&&document.pictureInPictureElement===v)void document.exitPictureInPicture().catch(()=>{});};},[]);
+ useEffect(()=>{const v=video.current;return()=>{hideControls.cancel();diagnostic.current?.abort();if(v&&document.pictureInPictureElement===v)void document.exitPictureInPicture().catch(()=>{});};},[]);
  const failed=()=>{broken.current=true;video.current?.pause();if(root.current?.contains(document.activeElement))root.current.focus();setWaiting(false);setPlaying(false);const code=video.current?.error?.code;setError(code===3?'This video could not be decoded. Download it to watch in another player.':code===4?'This video format is unavailable or its attachment could not be loaded.':'The video connection was interrupted. Retry to continue from your last position.');
   if(!file.url.startsWith('/api/'))return;
   diagnostic.current?.abort();const abort=new AbortController();diagnostic.current=abort;
@@ -71,7 +72,7 @@ export function VideoPlayer({file,onSize,onSelect}:{file:Attachment;onSize:(size
  };
  const percent=duration?elapsed/duration*100:0;
  const playLabel=playing?'Pause':ended?'Replay':'Play';
- return <div ref={root} data-video-player data-expanded={expanded} data-controls-visible={visible} data-keyboard-controls={keyboardControls} role={expanded?'dialog':'region'} aria-label={expanded?'Expanded media player':'Media player'} aria-modal={expanded||undefined} tabIndex={0} className={`video-player${expanded?' video-expanded':''}`} onPointerMove={reveal} onPointerLeave={()=>{clearTimeout(timer.current);setVisible(false);}} onFocus={event=>{if(!openingFocus.current&&event.target!==root.current&&event.target.matches(':focus-visible'))setKeyboardControls(true);reveal();}} onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget)){setKeyboardControls(false);setVisible(false);}}} onKeyDownCapture={event=>{if(event.key==='Tab'){setKeyboardControls(true);reveal();}}} onMouseDown={event=>{setKeyboardControls(false);if(expanded&&!(event.target instanceof Element&&event.target.closest('button,a,input,select'))){event.preventDefault();event.stopPropagation();root.current?.focus();}}}>
+ return <div ref={root} data-video-player data-expanded={expanded} data-controls-visible={visible} data-keyboard-controls={keyboardControls} role={expanded?'dialog':'region'} aria-label={expanded?'Expanded media player':'Media player'} aria-modal={expanded||undefined} tabIndex={0} className={`video-player${expanded?' video-expanded':''}`} onPointerMove={reveal} onPointerLeave={()=>{hideControls.cancel();setVisible(false);}} onFocus={event=>{if(!openingFocus.current&&event.target!==root.current&&event.target.matches(':focus-visible'))setKeyboardControls(true);reveal();}} onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget)){setKeyboardControls(false);setVisible(false);}}} onKeyDownCapture={event=>{if(event.key==='Tab'){setKeyboardControls(true);reveal();}}} onMouseDown={event=>{setKeyboardControls(false);if(expanded&&!(event.target instanceof Element&&event.target.closest('button,a,input,select'))){event.preventDefault();event.stopPropagation();root.current?.focus();}}}>
   {expanded&&<button className="video-close" aria-label="Exit full window" onClick={exit}><Icon name="close" size={20}/></button>}
   <div className="video-stage" style={expanded&&dimensions?{width:`min(${dimensions.width}px, calc(100vw - 64px), calc((100vh - 64px) * ${dimensions.width/dimensions.height}))`,aspectRatio:`${dimensions.width}/${dimensions.height}`} : undefined}>
    <video ref={video} data-attachment-id={file.id} aria-label={file.name} src={file.url} preload="metadata" playsInline tabIndex={-1} onClick={event=>{event.currentTarget.focus();play();}} onDoubleClick={toggleExpanded} onLoadedMetadata={metadata}

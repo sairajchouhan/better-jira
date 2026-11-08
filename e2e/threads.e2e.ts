@@ -18,7 +18,7 @@ test('mirrored comment edits and thread state survive a fresh Jira detail respon
   await fetch(`${APP}__fixture`,{method:'POST',body:JSON.stringify({includeMedia:true,mediaInComment:true})});await page.reload();
   await page.waitFor(`!!document.querySelector('[data-comment="jira-media-comment"]')`);await page.hover('[data-comment="jira-media-comment"]');await page.click('[aria-label="Comment options"]');await page.click('text=Edit');await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Edit comment'`);
   await page.key('a','meta');await page.type('Edited mirror comment locally');await page.click('text=Save comment');await page.waitFor(`document.querySelector('[data-thread]').textContent.includes('Edited mirror comment locally')`);
-  await page.click('[aria-label="Comment options"]');await page.click('text=Unsubscribe from thread');await page.eval(`machines.details.get('TEST-2').send({type:'load'})`);await page.waitFor(`machines.details.get('TEST-2').getSnapshot().matches('loaded')`);
+  await page.click('[aria-label="Comment options"]');await page.click('text=Unsubscribe from thread');await page.eval(`loadFull('TEST-2',true)`);
   expect(await page.eval(`document.querySelector('[data-thread]').textContent`)).toContain('Edited mirror comment locally');await page.reload();await page.waitFor(`document.querySelector('[data-thread]')?.textContent.includes('Edited mirror comment locally')`);await page.hover('[data-comment]');await page.click('[aria-label="Comment options"]');await page.waitFor(`!![...document.querySelectorAll('[cmdk-item]')].find(e=>e.textContent==='Subscribe to thread')`);
  }finally{await page.close();await fetch(`${APP}__fixture`,{method:'POST',body:'{}'});}
 });

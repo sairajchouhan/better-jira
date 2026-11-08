@@ -4,7 +4,9 @@ import { defaultPreferences, parsePreferences, type Display, type Grouping, type
 import { documentHasMedia, normalizeDocument, type AdfDocument } from "./document";
 import { emptyLocalState,LocalDatabase,type LocalState,type Snapshot,type LocalEdit } from "./local-data";
 import { createActor, fromPromise, waitFor } from "xstate";
-import { appMachine, detailMachine, inspector, storageMachine, syncMachine, uiMachine, type UiContext } from "./machines";
+import { appMachine, inspector, storageMachine, uiMachine, type UiContext } from "./machines";
+import { QueryClient, QueryObserver } from "@tanstack/query-core";
+import { asyncRetry } from "@tanstack/pacer";
 
 import {reminderTime} from './reminder-display';
 import {canReplyTo,visibleCommentTotal,type CommentState} from "./comment-thread";
@@ -57,7 +59,7 @@ export type Status = { id: string; name: string; category: string };
 export type Column = { name: string; statuses: Status[] };
 export type Board = { id: number; name: string; columns: Column[] };
 /** Raw Jira issue: { key, fields: { description, comment, reporter, created, ... } } */
-export type Full = { key: string; fields: any };
+export type Full = { key: string; fields: any; /** Jira remote links, read with the full record. */ remotelinks?: { url: string; title: string }[] };
 export type Overlay = null | "palette" | "assign" | "status" | "create" | "priority" | "labels" | "project" | "milestone" | "due" | "options" | "relations" | "shortcuts" | "help" | "search" | "favorites" | "views" | "boards" | "subscribers" | "reminder";
 export type IssueDraft = Partial<Pick<Issue,"status"|"assignee"|"priority"|"labels"|"project"|"milestones"|"due"|"parent"|"type"|"rank"|"attachments">> & {description?:string;descriptionDoc?:AdfDocument;/** Linear "Create related": link the new issue to this one in the same undo step. */related?:{key:string;kind:"related"|"blocked"|"blocking"|"parent"}};
 export type View = "side" | "page";
@@ -196,10 +198,27 @@ storage.subscribe(s => {
   const status = s.matches("failed") || s.matches("blocked") ? "error" : s.value as "loading" | "saving" | "saved";
   commit({ canEdit: !s.matches("blocked"), storage: { status, ...(s.context.message ? { message: s.context.message } : {}), ...(s.context.recovered ? { recovered: true } : {}) } });
 });
-const sync = createActor(syncMachine.provide({ actors: { fetch: fromPromise(fetchProperties) } }), { inspect: inspector("sync") }).start();
-const details = new Map<string, ReturnType<typeof createActor<typeof detailMachine>>>();
-const detailLoader = detailMachine.provide({ actors: { fetch: fromPromise<void, { key: string }>(({ input }) => fetchFull(input.key)) } });
-if (typeof window !== "undefined") Object.assign(window, { machines: { ui, app, storage, sync, details } });
+/** Server data goes through TanStack Query: it dedupes loads in flight, schedules the poll and refetches on focus. Invalidate a key to refetch it. */
+export const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 0 } } });
+/** Next property poll: soon while Jira is still syncing, every 30 s once settled, 10 s after a failure. */
+export const pollDelay = (failed: boolean, pending = 0) => failed ? 10000 : pending ? 3000 : 30000;
+const poll = new QueryObserver(queryClient, { queryKey: ["properties"], queryFn: fetchProperties, refetchInterval: q => pollDelay(q.state.status === "error", q.state.data?.pending), refetchIntervalInBackground: true, refetchOnWindowFocus: true });
+let polling: (() => void) | undefined;
+function startPoll() { if (polling) void poll.refetch(); else { queryClient.mount(); polling = poll.subscribe(() => {}); listen(); subscribe(listen); document.addEventListener("visibilitychange", listen); } }
+/** The server pushes "changed" when Jira did, so the poll runs at once; the timer is only a backstop. A visible tab stays connected, naming its open issue,
+ * which the server then checks every few seconds; a hidden tab disconnects, letting the server poll Jira slowly. */
+let events: EventSource | undefined, eventsFor: string | undefined;
+function listen() {
+  const wanted = document.visibilityState === "visible" ? state.selected ?? "" : undefined;
+  if (wanted === eventsFor) return;
+  events?.close(); events = undefined; eventsFor = wanted;
+  if (wanted === undefined) return;
+  events = new EventSource(`/api/events${wanted ? `?issue=${encodeURIComponent(wanted)}` : ""}`);
+  events.onmessage = () => void poll.refetch();
+}
+/** A JSON endpoint as a query; `staleTime` lets a recent answer stand in for a new request. */
+const fetchJson = <T,>(path: string, staleTime = 0) => queryClient.fetchQuery<T>({ queryKey: [path], queryFn: () => json<T>(path), staleTime });
+if (typeof window !== "undefined") Object.assign(window, { machines: { ui, app, storage }, queryClient, loadFull });
 
 const fallbackPreferences = defaultPreferences();
 export const preferencesFor = (board: number) => state.preferences[board] ?? fallbackPreferences;
@@ -236,12 +255,12 @@ function migratePreferences(namespace:string) {
   }catch{/* The mirror can still load if browser preferences are unavailable. */}
 }
 async function loadApplication() {
-  const client=await json<{site:string;user:User;writable?:boolean}>("/api/client");
+  const client=await fetchJson<{site:string;user:User;writable?:boolean}>("/api/client");
   if(!client.site||!client.user?.id||!client.user.name)throw new Error("Jira account setup is incomplete");
   Object.assign(ME,client.user);
   const namespace=`${client.site}/${client.user.id}`;
   migratePreferences(namespace);
-  const [boards, remote]=await Promise.all([json<Board[]>("/api/boards"),json<Issue[]>("/api/issues")]);
+  const [boards, remote]=await Promise.all([fetchJson<Board[]>("/api/boards"),fetchJson<Issue[]>("/api/issues")]);
   if(!boards.length)throw new Error("The Jira mirror is still syncing your boards. Retry in a moment.");
   let local=emptyLocalState(),opened:{type:"opened";message?:string;recovered?:boolean}|{type:"blocked";message:string};
   try {
@@ -260,7 +279,10 @@ async function loadApplication() {
   const board=boards.some(b=>b.id===savedBoard)?savedBoard:boards[0]!.id;
   const issues=new Map(remote.map(i=>[i.key,i])),full=new Map<string,Full>();
   changedKeys.clear();createdKeys.clear();localFields.clear();fullFields.clear();needsFullRefresh.clear();
+  const inJira=new Set(remote.map(i=>i.key));
   for(const change of local.changes) {
+    // With Jira writes, an override for an issue Jira no longer has is dropped: the issue was deleted there.
+    if(client.writable===true&&!change.created&&!inJira.has(change.key))continue;
     changedKeys.add(change.key);if(change.created)createdKeys.add(change.key);
     localFields.set(change.key,new Set(change.issueFields));fullFields.set(change.key,new Set(change.fullFields));
     if(change.issue===null)issues.delete(change.key);
@@ -287,14 +309,14 @@ async function loadApplication() {
     restoreNavigation();navigationReady=true;syncNavigation(true);window.addEventListener("popstate",restoreNavigation);
     window.addEventListener("beforeunload",event=>{const s=storage.getSnapshot();if(s.matches("saving")||s.matches("failed")||outbox.length){event.preventDefault();event.returnValue="";}});
   }
-  sync.send({type:"start"});
-  if(state.writable)json<JiraOptions>("/api/options").then(options=>set({options}),()=>{});
+  startPoll();
+  if(state.writable)fetchJson<JiraOptions>("/api/options",5*60_000).then(options=>set({options}),()=>{});
   clockTimer??=setInterval(()=>set({clock:Date.now()}),60000);
 }
 
 let clockTimer: ReturnType<typeof setInterval> | undefined;
 const lastProperties=new Map<string,string>();
-/** One poll of the sync machine; it schedules the next. */
+/** One property poll; the poll query schedules the next. */
 async function fetchProperties():Promise<{pending:number}> {
     const res=await fetch("/api/properties");
     if(!res.ok)throw new Error("Properties unavailable");
@@ -327,6 +349,7 @@ async function fetchProperties():Promise<{pending:number}> {
       if(!(key in data.entries)&&!createdKeys.has(key)&&!outbox.some(job=>job.key===key)){
         // Gone from Jira, so its local overrides go too; a saved tombstone would otherwise send a delete after reload.
         issues.delete(key);lastProperties.delete(key);changedKeys.delete(key);localFields.delete(key);fullFields.delete(key);changed=true;
+        if(state.selected===key){navigate({selected:null,panel:false});ui.send({type:"toast.show",text:`${key} was deleted in Jira`,detail:"It is no longer on your boards."});}
       }
     set({propertySync:data.progress,...(changed?{issues}:{})});
     for(const key of stale){needsFullRefresh.add(key);if(key===state.selected&&!document.activeElement?.closest?.(".rich-editor"))void loadFull(key);}
@@ -335,16 +358,25 @@ async function fetchProperties():Promise<{pending:number}> {
 
 export async function loadFull(key: string,force=false) {
   if (createdKeys.has(key)||state.full.has(key)&&!needsFullRefresh.has(key)&&!force) return;
-  let detail=details.get(key);
-  if(!detail){
-    detail=createActor(detailLoader,{input:{key},inspect:inspector(`detail ${key}`)}).start();
-    detail.subscribe(({context})=>{if(state.fullErrors.get(key)!==context.error)set({fullErrors:new Map(state.fullErrors).set(key,context.error)});});
-    details.set(key,detail);
-  }
-  detail.send({type:"load"});
-  await waitFor(detail,s=>!s.matches("loading"));
+  const error=(text:string)=>{if((state.fullErrors.get(key)??"")!==text)set({fullErrors:new Map(state.fullErrors).set(key,text)});};
+  error("");
+  // A load while one runs joins it.
+  try{await queryClient.fetchQuery({queryKey:["issue",key],queryFn:()=>fetchFull(key).then(()=>true)});}catch{error("Could not load issue details");}
 }
-/** The detail machine's fetch: loads the Jira record and keeps local field edits on top. */
+/** Jira's remote links as link resources. A writable site takes Jira's set (unless a write is queued); a read-only one only adds links it lacks. */
+export function withJiraLinks(resources:Issue["resources"]=[],links:{url:string;title:string}[]|undefined,replace:boolean):Issue["resources"] {
+  if(!links)return resources;
+  const jira=new Map(links.map(l=>[l.url,l])),have=new Set<string>();
+  const kept=resources.flatMap(r=>{
+    if(r.kind!=="link"||!r.url)return [r];
+    const link=jira.get(r.url);
+    if(!link)return replace?[]:[r];
+    have.add(r.url);return [{...r,title:link.title}];
+  });
+  const at=now();
+  return [...kept,...links.filter(l=>!have.has(l.url)).map(l=>({id:crypto.randomUUID(),kind:"link" as const,url:l.url,title:l.title,updated:at,created:at}))];
+}
+/** Loads an issue's Jira record and keeps local field edits on top. */
 async function fetchFull(key:string) {
     const res = await fetch(`/api/issues/${encodeURIComponent(key)}`);
     if (!res.ok) throw new Error("Could not load issue details");
@@ -356,7 +388,7 @@ async function fetchFull(key:string) {
     }
     needsFullRefresh.delete(key);
     const issue=state.issues.get(key);
-    if(issue)set({full:new Map(state.full).set(key,full),issues:new Map(state.issues).set(key,{...issue,...(full.fields.comment?{comments:visibleCommentTotal(full.fields.comment.total,full.fields.comment.comments??[],issue.commentStates)}:{}),...(!localFields.get(key)?.has("description")?{description:adfToText(full.fields.description)}:{})})});
+    if(issue)set({full:new Map(state.full).set(key,full),issues:new Map(state.issues).set(key,{...issue,...(outbox.some(job=>job.key===key)?{}:{resources:withJiraLinks(issue.resources,full.remotelinks,state.writable)}),...(full.fields.comment?{comments:visibleCommentTotal(full.fields.comment.total,full.fields.comment.comments??[],issue.commentStates)}:{}),...(!localFields.get(key)?.has("description")?{description:adfToText(full.fields.description)}:{})})});
 }
 
 /** Time from the action to the next painted frame, shown in the header. */
@@ -447,12 +479,8 @@ async function flush() {
         try{result={...await (await post([])).json(),error:result.error};}catch{}
       }
       if(ops) {
-        const response=await post(ops).catch(()=>undefined);
-        if(!response) {
-          // The server is unreachable, so nothing reached Jira: keep the job and try again.
-          job.started=false;set({perf:"Can't reach the better-jira server. Retrying the Jira write…"});
-          await new Promise(resolve=>setTimeout(resolve,5000));continue;
-        }
+        // An unreachable server means nothing reached Jira: send the same ops again every 5 s until it answers.
+        const response=(await asyncRetry(post,{maxAttempts:Infinity,backoff:"fixed",baseWait:5000,onRetry:()=>set({perf:"Can't reach the better-jira server. Retrying the Jira write…"})})(ops))!;
         result=await response.json().catch(()=>({error:`Server returned ${response.status}`}));
       }
       outbox.shift();
@@ -504,6 +532,7 @@ function adopt(key:string,result:WriteResult,force:boolean,created=new Map<strin
   localFields.set(key,local);
   const next:Issue={...issue,...fields} as Issue;
   const full=state.full.get(key),patch:{issues:Map<string,Issue>;full?:Map<string,Full>}={issues:new Map(state.issues)};
+  if(result.full?.remotelinks)next.resources=withJiraLinks(issue.resources,result.full.remotelinks,true);
   if(full&&result.full) {
     for(const field of ["description","comment"])fullFields.get(key)?.delete(field);
     const comment=result.full.fields?.comment;
@@ -724,7 +753,7 @@ export const actions = {
   async restoreJira(key:string) {
     if(createdKeys.has(key)||!state.canEdit)return;
     try {
-      const [remote,full]=await Promise.all([json<Issue[]>("/api/issues"),json<Full>(`/api/issues/${encodeURIComponent(key)}`)]);
+      const [remote,full]=await Promise.all([fetchJson<Issue[]>("/api/issues"),fetchJson<Full>(`/api/issues/${encodeURIComponent(key)}`)]);
       const issue=remote.find(i=>i.key===key);if(!issue)throw new Error("Issue is no longer in the Jira mirror");
       record(key,`restore Jira version of ${key}`,()=>{
         localFields.set(key,new Set());fullFields.set(key,new Set());needsFullRefresh.delete(key);

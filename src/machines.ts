@@ -219,47 +219,6 @@ export const storageMachine = setup({
   },
 });
 
-/** `fetch` applies one /api/properties response and returns how many issues are still pending. */
-export const syncMachine = setup({
-  types: {} as { context: { delay: number }; events: { type: "start" } },
-  actors: { fetch: fromPromise<{ pending: number }>(async () => ({ pending: 0 })) },
-  delays: { next: ({ context }) => context.delay },
-}).createMachine({
-  id: "sync",
-  initial: "idle",
-  context: { delay: 0 },
-  states: {
-    idle: { on: { start: "fetching" } },
-    fetching: {
-      invoke: {
-        src: "fetch",
-        onDone: { target: "waiting", actions: assign({ delay: ({ event }) => (event.output.pending ? 3000 : 30000) }) },
-        onError: { target: "waiting", actions: assign({ delay: 10000 }) },
-      },
-    },
-    waiting: { after: { next: "fetching" }, on: { start: "fetching" } },
-  },
-});
-
-/** One per issue. `fetch` loads and merges its full Jira record; a load while one runs is ignored. */
-export const detailMachine = setup({
-  types: {} as { context: { key: string; error: string }; events: { type: "load" }; input: { key: string } },
-  actors: { fetch: fromPromise<void, { key: string }>(async () => {}) },
-}).createMachine({
-  id: "detail",
-  initial: "idle",
-  context: ({ input }) => ({ key: input.key, error: "" }),
-  states: {
-    idle: { on: { load: "loading" } },
-    loading: {
-      entry: assign({ error: "" }),
-      invoke: { src: "fetch", input: ({ context }) => ({ key: context.key }), onDone: "loaded", onError: { target: "failed", actions: assign({ error: "Could not load issue details" }) } },
-    },
-    loaded: { on: { load: "loading" } },
-    failed: { on: { load: "loading" } },
-  },
-});
-
 /** One per description editor. `keepDraft` stores each change for reload recovery; `commit` saves the document. */
 export const autosaveMachine = setup({
   types: {} as { context: { doc: AdfDocument | null }; events: { type: "change"; doc: AdfDocument } | { type: "flush" } },

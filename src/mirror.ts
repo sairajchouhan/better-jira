@@ -15,7 +15,10 @@ export const RANK=siteFields?.find(f=>f.schema?.custom==="com.pyxis.greenhopper.
 export const ESTIMATES:string[]=siteFields?siteFields.filter(f=>/^story points?( estimate)?$/i.test(f.name)).sort((a,b)=>a.name.length-b.name.length).map(f=>f.id):["customfield_10023","customfield_10016"];
 const FIELDS =
   ["summary,status,issuetype,priority,assignee,reporter,creator,created,updated,resolutiondate,duedate,project,issuelinks,labels,parent,description,comment,fixVersions,watches,attachment,customfield_10000",RANK,...ESTIMATES].join(",");
-const POLL_MS = 15_000;
+const ACTIVE_POLL_MS = 5_000; // a tab is open and visible
+const IDLE_POLL_MS = 60_000; // no tab open: keep the mirror warm
+const OPEN_ISSUE_POLL_MS = 3_000;
+const PROBE_MS = 30_000; // the deleted-issue count check
 const FULL_SYNC_EVERY_MS = 6 * 3600_000; // full sync also sweeps out issues that left a board
 const PAGE = 100;
 const PARALLEL = 4;
@@ -88,9 +91,16 @@ function slim(i: any, board: number) {
   };
 }
 
+const updatedOf = db.query<{ updated: string }, [string]>("SELECT json_extract(slim,'$.updated') AS updated FROM issues WHERE key = ?");
+/** Returns the keys Jira changed since the mirror last saw them. */
 const save = db.transaction((board: number, issues: any[], seen: number) => {
-  for (const i of issues)
+  const changed: string[] = [];
+  for (const i of issues) {
+    // Jira's search index can lag behind a newer copy saved from an issue read; the upsert keeps the newer one, so that is no change.
+    if ((updatedOf.get(i.key)?.updated ?? "") < i.fields.updated) changed.push(i.key);
     upsert.run({ key: i.key, board, seen, slim: JSON.stringify(slim(i, board)), full: JSON.stringify(i) });
+  }
+  return changed;
 });
 
 // Expand existing cached rows immediately; a subsequent full sync fetches newly requested fields.
@@ -135,7 +145,7 @@ async function fullSync(board: number) {
   console.log(`[sync] board ${board}: full, ${first.total} issues, ${gone} removed, ${Date.now() - t0}ms`);
 }
 
-/** Fetch issues updated since the last sync. Returns the changed keys. */
+/** Fetch issues updated since the last sync (with a minute of overlap). Returns the keys that actually changed. */
 async function incrementalSync(board: number): Promise<string[]> {
   const t0 = Date.now();
   const since = Number(getMeta(`inc:${board}`));
@@ -145,34 +155,74 @@ async function incrementalSync(board: number): Promise<string[]> {
   for (let s = 0, total = 1; s < total; s += PAGE) {
     const p = await page(board, jql, s);
     total = p.total;
-    save(board, p.issues, t0);
-    keys.push(...p.issues.map((i: any) => i.key));
+    keys.push(...save(board, p.issues, t0));
   }
   setMeta(`inc:${board}`, String(t0));
   return keys;
 }
 
+const probed = new Map<number, number>();
+/** Returns whether the mirror changed. */
 async function syncBoard(board: number) {
   const lastFull = Number(getMeta(`full:${board}`) ?? 0);
-  if (getMeta(`fields:${board}`) !== "4" || Date.now() - lastFull > FULL_SYNC_EVERY_MS) return void (await fullSync(board));
+  if (getMeta(`fields:${board}`) !== "4" || Date.now() - lastFull > FULL_SYNC_EVERY_MS) return await fullSync(board), true;
   const keys = await incrementalSync(board);
   if (keys.length) console.log(`[sync] board ${board}: ${keys.join(" ")}`);
+  if (Date.now() - (probed.get(board) ?? 0) < PROBE_MS) return keys.length > 0;
+  probed.set(board, Date.now());
+  // Jira has no feed of deleted issues. A board holding fewer issues than the mirror lost some (deleted or moved off it): resync it.
+  const { total } = await jira<{ total: number }>(`/rest/agile/1.0/board/${board}/issue?maxResults=1&fields=key`);
+  const mirrored = db.query<{ n: number }, [number]>("SELECT count(*) AS n FROM issues WHERE board = ?").get(board)!.n;
+  if (total < mirrored) return await fullSync(board), true;
+  return keys.length > 0;
 }
+
+// `bun --hot` re-runs this module on every edit; the loops and the open tabs live on globalThis so they survive it.
+const g = globalThis as { syncing?: boolean; live?: { clients: Set<Client>; wake: () => void } };
+type Client = { issue?: string; send: () => void };
+const live = (g.live ??= { clients: new Set(), wake: () => {} });
+/** An open, visible tab, and the issue it shows. Jira is polled fast while one is connected; the first one syncs at once. Returns the disconnect. */
+export function watch(client: Client) { live.clients.add(client); live.wake(); return () => void live.clients.delete(client); }
+/** Tells every open tab the mirror changed, so it refetches now instead of on its timer. */
+const notify = () => { for (const client of live.clients) client.send(); };
 
 async function loop() {
   for (;;) {
-    await Promise.all(BOARDS.map((b) => syncBoard(b).catch((e) => console.error(`[sync] board ${b}:`, e.message))));
+    const changed = await Promise.all(BOARDS.map((b) => syncBoard(b).catch((e) => (console.error(`[sync] board ${b}:`, e.message), false))));
+    if (changed.includes(true)) notify();
     await enrichProjects();
     void enrichProperties().catch(e=>console.error("[properties]",String(e).slice(0,200)));
-    await Bun.sleep(POLL_MS);
+    await new Promise<void>((resolve) => { live.wake = resolve; setTimeout(resolve, live.clients.size ? ACTIVE_POLL_MS : IDLE_POLL_MS); });
   }
 }
 
-// `bun --hot` re-runs this module on every edit; start the loop only once per process.
-const g = globalThis as { syncing?: boolean };
+/** The issues open in tabs are checked every few seconds: a cheap `updated` read, and the full row only when it moved. */
+async function watchOpenIssues() {
+  for (;;) {
+    await Bun.sleep(OPEN_ISSUE_POLL_MS);
+    let changed = false;
+    for (const key of new Set([...live.clients].flatMap((c) => c.issue ? [c.issue] : []))) {
+      const row = db.query<{ board: number; updated: string }, [string]>("SELECT board, json_extract(slim,'$.updated') AS updated FROM issues WHERE key = ?").get(key);
+      if (!row) continue;
+      try {
+        const { fields } = await jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=updated`);
+        if (fields.updated === row.updated) continue;
+        save(row.board, [await jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=${FIELDS}`)], Date.now());
+        console.log(`[sync] open issue ${key}`);
+        changed = true;
+      } catch (error) {
+        if ((error as { status?: number }).status === 404) { db.query("DELETE FROM issues WHERE key = ?").run(key); changed = true; }
+        else console.error(`[sync] ${key}:`, String(error).slice(0, 200));
+      }
+    }
+    if (changed) notify();
+  }
+}
+
 if (!g.syncing) {
   g.syncing = true;
   loop();
+  watchOpenIssues();
 }
 
 // --- reads (the UI only ever reads from here) ---
@@ -188,6 +238,8 @@ const details=detailCache(db,async key=>{
   // The Agile endpoint returns legacy strings. API v3 preserves Jira's rich ADF tree.
   const detail=await jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=description,comment,reporter,created,updated,attachment`);
   detail.fields.attachment??=[];
+  // Remote ("web") links someone added in Jira; the app shows them as link resources.
+  detail.remotelinks=(await jira<any[]>(`/rest/api/3/issue/${encodeURIComponent(key)}/remotelink`)).flatMap(l=>l.object?.url?[{url:l.object.url,title:l.object.title??l.object.url}]:[]);
   const comments=detail.fields.comment;
   if(comments?.total) {
     // The comment endpoint carries properties, where reply threads live (Jira comments are flat).
@@ -214,6 +266,7 @@ export async function refresh(key:string,board?:number):Promise<{issue:any;full:
   const props={...(old?JSON.parse(old.data):{}),watchers,watchersComplete:watchers.length===w.watchCount};
   // Keep the old revision stamp: status dates in `data` predate this write, so enrichment must recompute them.
   db.query("INSERT OR REPLACE INTO issue_properties VALUES (?,?,?,?)").run(key,old?.source_updated??"",Date.now(),JSON.stringify(props));
+  notify(); // other tabs see the write
   return {issue:{...issue,watchers,watchersComplete:props.watchersComplete},full:full&&JSON.parse(full)};
 }
 export const media=attachmentGateway({

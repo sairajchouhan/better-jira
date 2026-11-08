@@ -223,3 +223,18 @@ test('deleting a document keeps attachments that another document still shows',a
  actions.resource(key,{id:'copy',kind:'document',title:'Copy',body:media('shared'),updated:'2000-01-01T00:00:00Z',owner:ME});
  actions.removeResource(key,'original');expect(get().issues.get(key)!.attachments!.map(a=>a.id)).toEqual(['shared']);
 });
+
+test("the property poll comes back in 3s while Jira syncs, 30s once settled and 10s after a failure",async()=>{
+  const {pollDelay}=await import("./store");
+  expect([pollDelay(false,5),pollDelay(false,0),pollDelay(true,5)]).toEqual([3000,30000,10000]);
+});
+
+test("Jira's remote links become link resources: a writable site takes Jira's set, a read-only one only adds",async()=>{
+  const {withJiraLinks}=await import("./store");
+  const doc={id:"d",kind:"document" as const,title:"Doc",updated:""},link=(url:string,title:string)=>({id:url,kind:"link" as const,url,title,updated:""});
+  const local=[doc,link("https://a","A"),link("https://gone","Gone")],jira=[{url:"https://a",title:"A2"},{url:"https://new",title:"New"}];
+  const shown=(r:any[]|undefined)=>r!.map(x=>`${x.kind}:${x.url??x.id}:${x.title}`);
+  expect(shown(withJiraLinks(local,jira,true))).toEqual(["document:d:Doc","link:https://a:A2","link:https://new:New"]);
+  expect(shown(withJiraLinks(local,jira,false))).toEqual(["document:d:Doc","link:https://a:A2","link:https://gone:Gone","link:https://new:New"]);
+  expect(withJiraLinks(local,undefined,true)).toBe(local);
+});

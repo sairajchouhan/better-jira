@@ -1,4 +1,5 @@
 import {useEffect,useLayoutEffect,useRef,useState} from 'react';
+import {Debouncer} from '@tanstack/pacer';
 import {Command} from 'cmdk';
 import {Icon,StatusIcon} from './icons';
 import {Confirm,MenuSurface,MENU_INPUT,MENU_ITEM} from './menu-surface';
@@ -23,13 +24,16 @@ function DocumentEditor({issue,resource}:{issue:Issue;resource:IssueResource}){
  const titleInput=useRef<HTMLTextAreaElement>(null);
  const draftKey=`better-jira:resource-draft:${get().namespace}:${issue.key}:${resource.id}`;
  const read=():Draft=>{try{const value=JSON.parse(localStorage.getItem(draftKey)??'null');if(value&&typeof value.title==='string')return {title:value.title,body:normalizeDocument(value.body)};}catch{}return {title:resource.title,body:normalizeDocument(resource.body)};};
- const [draft,setDraft]=useState(read),pending=useRef(draft),session=useRef(crypto.randomUUID()),timer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined),[revision,setRevision]=useState(0);
+ const [draft,setDraft]=useState(read),pending=useRef(draft),session=useRef(crypto.randomUUID()),[revision,setRevision]=useState(0);
+ // Saves 600ms after the last keystroke; `latest` lets the debouncer call this render's flush.
+ const latest=useRef(()=>{}),[saveSoon]=useState(()=>new Debouncer(()=>latest.current(),{wait:600}));
  const stored=JSON.stringify({title:resource.title,body:normalizeDocument(resource.body)}),saved=useRef(stored),observed=useRef(stored);
- const flush=()=>{clearTimeout(timer.current);const value=pending.current,signature=JSON.stringify(value);saved.current=signature;actions.editResource(issue.key,resource.id,value,session.current);void flushLocalChanges().then(()=>{if(get().storage.status==='saved'&&saved.current===signature&&JSON.stringify(pending.current)===signature)try{localStorage.removeItem(draftKey);}catch{}});};
- const update=(patch:Partial<Draft>)=>{const next={...pending.current,...patch};pending.current=next;setDraft(next);try{localStorage.setItem(draftKey,JSON.stringify(next));}catch{set({perf:'Could not retain this document draft across reloads'});}clearTimeout(timer.current);timer.current=setTimeout(flush,600);};
+ const flush=()=>{saveSoon.cancel();const value=pending.current,signature=JSON.stringify(value);saved.current=signature;actions.editResource(issue.key,resource.id,value,session.current);void flushLocalChanges().then(()=>{if(get().storage.status==='saved'&&saved.current===signature&&JSON.stringify(pending.current)===signature)try{localStorage.removeItem(draftKey);}catch{}});};
+ const update=(patch:Partial<Draft>)=>{const next={...pending.current,...patch};pending.current=next;setDraft(next);try{localStorage.setItem(draftKey,JSON.stringify(next));}catch{set({perf:'Could not retain this document draft across reloads'});}saveSoon.maybeExecute();};
+ latest.current=flush;
  const endSession=()=>{flush();session.current=crypto.randomUUID();};
  useEffect(()=>{flush();return()=>{flush();};},[]);
- useEffect(()=>{if(stored===observed.current)return;observed.current=stored;if(stored===saved.current)return;clearTimeout(timer.current);const next={title:resource.title,body:normalizeDocument(resource.body)};pending.current=next;saved.current=stored;setDraft(next);setRevision(n=>n+1);try{localStorage.setItem(draftKey,JSON.stringify(next));}catch{}},[stored]);
+ useEffect(()=>{if(stored===observed.current)return;observed.current=stored;if(stored===saved.current)return;saveSoon.cancel();const next={title:resource.title,body:normalizeDocument(resource.body)};pending.current=next;saved.current=stored;setDraft(next);setRevision(n=>n+1);try{localStorage.setItem(draftKey,JSON.stringify(next));}catch{}},[stored]);
  useEffect(()=>{const unload=()=>flush();window.addEventListener('pagehide',unload);return()=>window.removeEventListener('pagehide',unload);},[]);
  useLayoutEffect(()=>{
   const input=titleInput.current;if(!input)return;

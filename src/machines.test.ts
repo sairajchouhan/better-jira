@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createActor, fromPromise, SimulatedClock, waitFor } from "xstate";
-import { appMachine, autosaveMachine, detailMachine, storageMachine, syncMachine, uiMachine } from "./machines";
+import { appMachine, autosaveMachine, storageMachine, uiMachine } from "./machines";
 
 const doc = (text: string) => ({ type: "doc" as const, version: 1 as const, content: [{ type: "paragraph", content: [{ type: "text", text }] }] });
 const gate = () => { let open!: () => void, fail!: (e: Error) => void; const promise = new Promise<void>((r, j) => { open = r; fail = j; }); return { promise, open, fail }; };
@@ -107,32 +107,6 @@ test("storage: edits during a save trigger one more save; a failure keeps edits 
   expect(storage.getSnapshot().matches("blocked")).toBe(true);
 });
 
-test("sync: polls every 3s while warming, 30s when idle and 10s after an error", async () => {
-  const clock = new SimulatedClock(), results: (number | Error)[] = [5, 0, new Error("down")];
-  let calls = 0;
-  const sync = createActor(syncMachine.provide({ actors: { fetch: fromPromise(async () => { const r = results[calls++]!; if (r instanceof Error) throw r; return { pending: r }; }) } }), { clock }).start();
-  sync.send({ type: "start" });
-  const waited = async (delay: number) => { await waitFor(sync, s => s.matches("waiting")); expect(sync.getSnapshot().context.delay).toBe(delay); clock.increment(delay); };
-  await waited(3000);
-  await waited(30000);
-  await waited(10000);
-  expect(calls).toBe(4);
-});
-
-test("detail: a load while one runs is ignored; a failure can be retried", async () => {
-  const loads: ReturnType<typeof gate>[] = [];
-  const detail = createActor(detailMachine.provide({ actors: { fetch: fromPromise(() => { const g = gate(); loads.push(g); return g.promise; }) } }), { input: { key: "A-1" } }).start();
-  detail.send({ type: "load" });
-  detail.send({ type: "load" });
-  expect(loads).toHaveLength(1);
-  loads[0]!.fail(new Error("503"));
-  await waitFor(detail, s => s.matches("failed"));
-  expect(detail.getSnapshot().context.error).toBe("Could not load issue details");
-  detail.send({ type: "load" });
-  expect(detail.getSnapshot().context.error).toBe("");
-  loads[1]!.open();
-  await waitFor(detail, s => s.matches("loaded"));
-});
 
 test("autosave: keeps every draft, commits 600ms after the last change, and flushes at once", () => {
   const clock = new SimulatedClock(), drafts: unknown[] = [], commits: unknown[] = [];
