@@ -12,7 +12,7 @@ const inboxCalls = async () =>
   ).filter((r) => r.path === "/api/inbox" && r.method === "POST").length;
 const rows = `[...document.querySelectorAll('[data-inbox-row]')]`;
 const rowText = `${rows}.map(r=>r.getAttribute('aria-label'))`;
-const badge = `document.querySelector('[data-inbox-badge]')?.textContent ?? ''`;
+const badge = `(document.querySelector('[data-inbox-badge]')?.textContent ?? '')`;
 const current = `(document.querySelector('[data-inbox-row][aria-current]')?.getAttribute('aria-label') ?? '')`;
 
 test("Inbox lists Jira notifications per issue in Linear's words and clears the bell", async () => {
@@ -261,6 +261,162 @@ test("Unread-only and a notification outside the mirror", async () => {
     await p.waitFor(`${current}.startsWith("Read OUT-9") && ${rows}.length === 5`);
     await p.key("k");
     await p.waitFor(`${current}.startsWith("Read TEST-6") && ${rows}.length === 4`);
+  } finally {
+    await p.close();
+  }
+});
+
+const LOCAL = "better-jira:inbox-local:v1:https://example.atlassian.net/audit-me";
+const toastText = `(document.querySelector('[data-toast]')?.textContent ?? '')`;
+
+test("The badge counts unread rows past page 1; ⌥U then Z restores every one of them in Jira", async () => {
+  await reset({ inboxExtra: 40, inboxExtraUnread: true });
+  const p = await open("?inbox=1");
+  try {
+    await p.waitFor(`${rows}.length === 20`);
+    // 5 + 13 unread rows are loaded; Jira has 45.
+    await p.waitFor(`${badge} === "45"`);
+    await p.key("u", "alt");
+    await p.waitFor(`${badge} === "" && ${rowText}.every(l=>l.startsWith("Read"))`);
+    await p.key("z");
+    await p.waitFor(`${badge} === "45"`);
+  } finally {
+    await p.close();
+  }
+});
+
+test("The toast's Undo undoes its own action, not the newest", async () => {
+  await reset();
+  const p = await open("?inbox=1");
+  try {
+    await p.waitFor(`${rows}.length === 7`);
+    await p.key("j");
+    await p.key("e");
+    await p.waitFor(
+      `${rows}.length === 6 && ${current}.includes("TEST-1") && ${toastText}.includes("Notification deleted")`,
+    );
+    await p.key("u");
+    await p.waitFor(`${current}.startsWith("Unread TEST-1")`);
+    await p.click(`[data-toast] button`);
+    await p.waitFor(
+      `${rows}.length === 7 && ${rowText}.some(l=>l.startsWith("Unread TEST-1")) && ${current}.includes("TEST-2")`,
+    );
+  } finally {
+    await p.close();
+  }
+});
+
+test("Another tab's local changes survive this tab's writes, and its storage event shows them", async () => {
+  await reset();
+  const p = await open("?inbox=1");
+  try {
+    await p.waitFor(`${rows}.length === 7`);
+    await p.key("j");
+    await p.key("e");
+    await p.waitFor(`${rows}.length === 6 && ${current}.includes("TEST-1")`);
+    // Another tab undoes the delete; this tab has not heard yet.
+    await p.eval(`localStorage.setItem(${JSON.stringify(LOCAL)}, "{}")`);
+    await p.key("e");
+    await p.reload();
+    await p.waitFor(
+      `${rows}.length === 6 && ${rowText}.some(l=>l.includes("TEST-2")) && !${rowText}.some(l=>l.includes("TEST-1"))`,
+    );
+    await p.eval(
+      `localStorage.setItem(${JSON.stringify(LOCAL)}, "{}"); dispatchEvent(new StorageEvent("storage", { key: ${JSON.stringify(LOCAL)} }))`,
+    );
+    await p.waitFor(`${rows}.length === 7`);
+  } finally {
+    await p.close();
+  }
+});
+
+test("A failed ⌥U shows the rows unread again", async () => {
+  await reset({ inboxFail: true });
+  const p = await open("?inbox=1");
+  try {
+    await p.waitFor(`${rows}.length === 7`);
+    await p.key("u", "alt");
+    await p.waitFor(`document.body.innerText.includes("Could not update Jira")`);
+    await p.waitFor(`${rowText}.filter(l=>l.startsWith("Unread")).length === 5`);
+  } finally {
+    await p.close();
+  }
+});
+
+test("An expired snooze brings the row back unread, in Jira too", async () => {
+  await reset();
+  // TEST-4 is read, and its snooze ended a second ago.
+  const setup = `if(!sessionStorage.seeded){sessionStorage.seeded=1;localStorage.setItem(${JSON.stringify(LOCAL)},JSON.stringify({"fixture-4-1560":{snoozed:Date.now()-1000}}))}`;
+  const p = await open("?inbox=1", { setup });
+  try {
+    await p.waitFor(`${rows}.length === 7 && ${rowText}.some(l=>l.startsWith("Unread TEST-4"))`);
+    await p.waitFor(`${badge} === "6"`);
+    await p.reload();
+    await p.waitFor(`${rowText}.some(l=>l.startsWith("Unread TEST-4"))`);
+  } finally {
+    await p.close();
+  }
+});
+
+test("Keyboard: arrows in the snooze and ··· menus, F then Enter, Enter after a click, the row menu's H", async () => {
+  await reset();
+  const p = await open("?inbox=1");
+  try {
+    await p.waitFor(`${rows}.length === 7`);
+    await p.key("j");
+    await p.key("h");
+    const snooze = `document.querySelector('[data-snooze][data-selected=true]')?.dataset.snooze`;
+    await p.waitFor(`${snooze} === "An hour from now"`);
+    await p.key("ArrowDown");
+    await p.waitFor(`${snooze} === "In 3 hours"`);
+    await p.key("Enter");
+    await p.waitFor(`${rows}.length === 6 && ${toastText}.includes("Notification snoozed")`);
+    await p.key("z");
+    await p.waitFor(`${rows}.length === 7`);
+    await p.click(`[aria-label="Notification actions"]`);
+    const action = `document.querySelector('[role=dialog][aria-label="Notification actions"] [cmdk-item][data-selected=true]')?.dataset.value`;
+    await p.key("ArrowDown");
+    await p.waitFor(`${action} === "Mark all as read"`);
+    await p.key("ArrowDown");
+    await p.waitFor(`${action} === "Delete all"`);
+    await p.key("Escape");
+    await p.waitFor(`!document.querySelector('[role=dialog]')`);
+    // Linear's filter menu opens on its first field.
+    await p.key("f");
+    await p.key("Enter");
+    await p.waitFor(`!!document.querySelector('${item("Notification type", "Mentions")}')`);
+    await p.key("Escape");
+    await p.key("Escape");
+    await p.waitFor(`!document.querySelector('[role=dialog]')`);
+    // The row menu shows Snooze's H.
+    await p.eval(
+      `(()=>{const n=document.querySelector('[data-inbox-row*="issue/3"]'),r=n.getBoundingClientRect();n.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:r.x+40,clientY:r.y+20}))})()`,
+    );
+    await p.waitFor(
+      `document.querySelector('[aria-label="Notification options"] [cmdk-item][data-value="Snooze"]')?.textContent.endsWith("H")`,
+    );
+    await p.key("Escape");
+    await p.waitFor(`!document.querySelector('[role=dialog]')`);
+    // Enter after clicking a row opens the full page.
+    await p.click(`[data-inbox-row*="issue/1"]`);
+    await p.waitFor(`${current}.includes("TEST-1")`);
+    await p.key("Enter");
+    await p.waitFor(`document.querySelector('.issue-detail')?.dataset.mode === 'page'`);
+  } finally {
+    await p.close();
+  }
+});
+
+test("A reload keeps the selected row and shows the last feed before Jira answers", async () => {
+  await reset();
+  const p = await open("?inbox=1&issue=TEST-1&view=side");
+  try {
+    await p.waitFor(`${rows}.length === 7 && ${current}.includes("TEST-1")`);
+    await p.key("e");
+    await p.waitFor(`${rows}.length === 6 && !${rowText}.some(l=>l.includes("TEST-1"))`);
+    await reset({ inboxDelay: 3000 });
+    await p.reload();
+    await p.waitFor(`${rows}.length === 6`, 1500);
   } finally {
     await p.close();
   }

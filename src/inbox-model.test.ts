@@ -8,8 +8,11 @@ import {
   describe,
   kindOf,
   mapFeed,
+  missingIssueNote,
   shortAgo,
   snoozeChoices,
+  snoozeTime,
+  unreadCount,
   visibleItems,
   type InboxItem,
 } from "./inbox-model";
@@ -140,6 +143,48 @@ test("describe uses Linear's wording", () => {
   expect(status("Ana changed a task from To Do to In Review")).toBe("Status updated by Ana");
   expect(describe(item({ kind: "created", actor: null }))).toBe("Someone created a new issue");
   expect(describe(item({}))).toBe("Ana updated a task");
+});
+
+test("a description mention reads as Linear's (Jira says 'on a task'); a missing issue in a mirrored project is called deleted", () => {
+  expect(describe(item({ kind: "mentioned", message: "Ana mentioned you on a task" }))).toBe(
+    "Ana mentioned you in an issue description",
+  );
+  expect(
+    describe(item({ kind: "mentioned", message: "Ana mentioned you in a comment", preview: "hi" })),
+  ).toBe("Ana mentioned you: hi");
+  expect(missingIssueNote("KAN-9", new Set(["KAN"]))).toContain("may have been deleted");
+  expect(missingIssueNote("OUT-9", new Set(["KAN"]))).toContain("outside your mirrored boards");
+});
+
+test("snooze times read like Linear's: weekday, day month, time", () => {
+  expect(snoozeTime(new Date(2026, 10, 8, 19, 13).getTime())).toMatch(/^Sun, 8 Nov, 7:13\sPM$/);
+});
+
+test("unreadCount counts Jira's unread rows beyond the loaded pages, less local state", () => {
+  const now = 1_000;
+  const unread = Array.from({ length: 61 }, (_, i) => ({ head: `h${i}` }));
+  const loaded = [
+    item({ head: "h0", unread: true }),
+    item({ head: "x", unread: false }),
+    item({ head: "y", unread: false }),
+  ];
+  expect(unreadCount(unread, loaded, {}, now)).toBe(61);
+  expect(
+    unreadCount(
+      unread,
+      loaded,
+      {
+        h0: { read: true },
+        h1: { deleted: true },
+        h2: { snoozed: now + 1 },
+        h3: { snoozed: now - 1 },
+        x: { read: false },
+      },
+      now,
+    ),
+  ).toBe(61 - 3 + 1);
+  // Without Jira's list (an older server), the loaded rows still count.
+  expect(unreadCount(undefined, loaded, {}, now)).toBe(1);
 });
 
 test("adfText flattens ADF and its JSON string", () => {

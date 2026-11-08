@@ -44,6 +44,7 @@ export function ActionMenu({
   close,
   align,
   point,
+  highlight = false,
 }: {
   anchor?: HTMLElement | null;
   entries: ActionEntry[];
@@ -51,6 +52,8 @@ export function ActionMenu({
   close: () => void;
   align?: "end";
   point?: { x: number; y: number };
+  /** Open with the first row highlighted, as Linear's filter menu does, instead of its row menus' none. */
+  highlight?: boolean;
 }) {
   const container = useRef<HTMLDivElement>(null);
   return (
@@ -65,7 +68,13 @@ export function ActionMenu({
     >
       <div ref={container}>
         <FloatingTree>
-          <Level entries={entries} label={label} container={container} close={close} />
+          <Level
+            entries={entries}
+            label={label}
+            container={container}
+            close={close}
+            highlight={highlight}
+          />
         </FloatingTree>
       </div>
     </MenuSurface>
@@ -77,19 +86,21 @@ function Level({
   container,
   close,
   nested = false,
+  highlight = false,
 }: {
   entries: ActionEntry[];
   label: string;
   container: Container;
   close: () => void;
   nested?: boolean;
+  highlight?: boolean;
 }) {
   const [query, setQuery] = useState(""),
     [open, setOpen] = useState<string | null>(null),
     command = useRef<HTMLDivElement>(null);
   // Linear (RAJ-52 issue, comment and sub-issue row menus) opens with no row highlighted: Enter does nothing, ArrowDown highlights the first row, ArrowUp the last.
   // cmdk always selects its first row, so until a key, a filter or the pointer moves, that selection is hidden and inert.
-  const [pristine, setPristine] = useState(!nested);
+  const [pristine, setPristine] = useState(!nested && !highlight);
   const choices = query.trim() ? searchActions(entries, query.trim()) : entries;
   useHotkey(
     "ArrowRight",

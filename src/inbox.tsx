@@ -1,5 +1,6 @@
 /** Linear's Inbox over Jira's in-app notifications. Read state goes to Jira; delete and snooze stay in this browser, because Jira's notification API has neither. */
 import { InfiniteQueryObserver, type InfiniteData } from "@tanstack/query-core";
+import { Command } from "cmdk";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { Icon, StatusIcon, type IconName } from "./icons";
@@ -10,8 +11,11 @@ import {
   facetsOf,
   feedCategory,
   focusGroups,
+  missingIssueNote,
   shortAgo,
   snoozeChoices,
+  snoozeTime,
+  unreadCount,
   visibleItems,
   type FilterField,
   type InboxFeed,
@@ -20,7 +24,7 @@ import {
   type Local,
 } from "./inbox-model";
 import { issueCopy, type CopyKind } from "./issue-copy";
-import { MENU_ITEM, MenuSurface } from "./menu-surface";
+import { MENU_INPUT, MENU_ITEM, MenuSurface } from "./menu-surface";
 import { shortcutLabel } from "./shortcuts";
 import {
   boardOf,
@@ -61,11 +65,23 @@ const emit = () => listeners.forEach((l) => l());
 const subscribe = (l: () => void) => (listeners.add(l), () => void listeners.delete(l));
 const localState = () => (local ??= read<Record<string, Local>>("local", {}));
 const viewState = () => (view ??= read("view", DEFAULT_VIEW));
-/** Sets each head's local state; `undefined` drops it. */
-function putLocal(entries: [string, Local | undefined][]) {
-  const next = { ...localState() };
-  for (const [head, value] of entries) {
-    if (value) next[head] = value;
+// Another tab's write: drop the cache so the next read sees it.
+globalThis.addEventListener?.("storage", (e) => {
+  const { key } = e as StorageEvent;
+  if (key === storageKey("local")) local = undefined;
+  else if (key === storageKey("view")) view = undefined;
+  else return;
+  emit();
+});
+/** Changes each head's local state (`undefined` drops it), on top of what is stored now, so another tab's changes to other heads survive. */
+function putLocal(
+  heads: string[],
+  change: (old: Local | undefined, head: string) => Local | undefined,
+) {
+  const next = read<Record<string, Local> | null>("local", null) ?? { ...localState() };
+  for (const head of heads) {
+    const value = change(next[head], head);
+    if (value && Object.keys(value).length) next[head] = value;
     else delete next[head];
   }
   local = next;
@@ -73,18 +89,12 @@ function putLocal(entries: [string, Local | undefined][]) {
   emit();
 }
 const setLocal = (heads: string[], patch: Local) =>
-  putLocal(heads.map((head) => [head, { ...localState()[head], ...patch }]));
-function dropLocal(heads: string[], key: keyof Local) {
-  const next = { ...localState() };
-  for (const head of heads) {
-    const { [key]: _, ...rest } = next[head] ?? {};
-    if (Object.keys(rest).length) next[head] = rest;
-    else delete next[head];
-  }
-  local = next;
-  save("local", next);
-  emit();
-}
+  putLocal(heads, (old) => ({ ...old, ...patch }));
+const dropLocal = (heads: string[], key: keyof Local) =>
+  putLocal(heads, (old) => {
+    const { [key]: _, ...rest } = old ?? {};
+    return rest;
+  });
 export function changeView(patch: Partial<InboxView>) {
   view = { ...viewState(), ...patch };
   save("view", view);
@@ -114,8 +124,16 @@ const options = (category: Category) => ({
     const res = await fetch(`/api/inbox${query.size ? `?${query}` : ""}`);
     if (!res.ok)
       throw new Error((await res.json().catch(() => null))?.error ?? "Inbox unavailable");
-    return res.json();
+    const page: Feed = await res.json();
+    if (!pageParam) save(`feed-${category}`, page);
+    return page;
   },
+  // The last first page shows at once on reload, and is refetched straight away (Jira's feed takes about a second).
+  initialData: () => {
+    const page = read<Partial<Feed>>(`feed-${category}`, {});
+    return page.items ? { pages: [page as Feed], pageParams: [""] } : undefined;
+  },
+  initialDataUpdatedAt: 0,
   initialPageParam: "",
   getNextPageParam: (last: Feed) => (last.more && last.cursor) || undefined,
   staleTime: 30_000,
@@ -158,28 +176,50 @@ const statusOf = (key: string) => {
 /** Filter facts for a row; priority, project and status come from the mirror when the issue is in it. */
 const facets = (item: InboxItem) => facetsOf(item, get().issues.get(item.key), statusOf(item.key));
 
-/** The sidebar badge: unread rows, as Linear counts them. */
-export function useInboxBadge() {
+/** Unread rows, as Linear counts them: every unread notification in Jira, not just the loaded pages. */
+function useUnreadCount() {
   const { data } = useFeed("all");
   const own = useLocal();
-  useStore((s) => s.clock); // snoozes expire
-  return visibleItems(itemsOf(data), own, { ...DEFAULT_VIEW, unreadOnly: true }).length;
+  const now = useStore((s) => s.clock); // snoozes expire
+  return { count: unreadCount(data?.pages[0]?.unread, itemsOf(data), own, now), data, own, now };
+}
+/** The sidebar badge. It is always mounted, so it also brings back expired snoozes: unread, as Linear does, and in Jira too. */
+export function useInboxBadge() {
+  const { count, data, own, now } = useUnreadCount();
+  useEffect(() => {
+    const due = itemsOf(data).filter((i) => (own[i.head]?.snoozed ?? Infinity) <= now);
+    if (!due.length) return;
+    dropLocal(
+      due.map((i) => i.head),
+      "snoozed",
+    );
+    void markRead(due, false);
+  }, [data, own, now]);
+  return count;
 }
 
 // --- undo: Linear's Z steps back through inbox actions ---
 
-const undos: { label: string; run: () => void }[] = [];
+type Undo = { label: string; run: () => void };
+const undos: Undo[] = [];
+/** The action the inbox's toast offers to undo: not always the newest, once U or ⌥U follow it. */
+let toastUndo: Undo | undefined;
 function remember(label: string, run: () => void) {
-  undos.push({ label, run });
+  const entry = { label, run };
+  undos.push(entry);
   undos.splice(0, undos.length - 50);
+  return entry;
 }
-export function undoInbox() {
-  const last = undos.pop();
-  if (!last) return;
-  last.run();
-  ui.send({ type: "toast.dismiss" });
-  set({ perf: `Undid ${last.label}` });
+/** Z undoes the newest action; the toast's Undo its own. */
+export function undoInbox(entry = undos.at(-1)) {
+  const at = entry ? undos.indexOf(entry) : -1;
+  if (!entry || at < 0) return;
+  undos.splice(at, 1);
+  entry.run();
+  if (entry === toastUndo) ui.send({ type: "toast.dismiss" });
+  set({ perf: `Undid ${entry.label}` });
 }
+export const undoInboxToast = () => undoInbox(toastUndo);
 
 // --- actions (also the keyboard shortcuts) ---
 
@@ -193,30 +233,39 @@ async function send(body: object) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "Jira refused");
+  const reply = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(reply?.error ?? "Jira refused");
+  return reply as { groups?: string[] } | null;
 }
 /** The server takes 50 groups per call. */
 async function sendGroups(action: "read" | "unread", groups: string[]) {
   for (let i = 0; i < groups.length; i += 50)
     await send({ action, groups: groups.slice(i, i + 50) });
 }
-/** Shown at once; on a writable site Jira takes it and the local override goes once the feed agrees. A `label` makes it undoable. */
-async function markRead(items: InboxItem[], value: boolean, label?: string) {
+/** Shown at once; on a writable site Jira takes it and the local override goes once the feed agrees, or at once if Jira refuses.
+ *  A `label` makes it undoable. `all` marks Jira's whole feed read, and the groups Jira changed join `groups` for the undo. */
+async function markRead(
+  items: InboxItem[],
+  value: boolean,
+  label?: string,
+  groups = items.map((i) => i.id),
+  all = false,
+) {
   if (!items.length) return;
-  if (label) remember(label, () => void markRead(items, !value));
+  if (label) remember(label, () => void markRead(items, !value, undefined, groups));
   const heads = items.map((i) => i.head);
   setLocal(heads, { read: value });
   if (!firstPage()?.writable) return;
   try {
-    await sendGroups(
-      value ? "read" : "unread",
-      items.map((i) => i.id),
-    );
+    if (all) {
+      const changed = (await send({ action: "read-all" }))?.groups ?? [];
+      groups.push(...changed.filter((g) => !groups.includes(g)));
+    } else await sendGroups(value ? "read" : "unread", groups);
     await queryClient.invalidateQueries({ queryKey: ["inbox"] });
-    dropLocal(heads, "read");
   } catch (error) {
-    dropLocal(heads, "read");
     set({ perf: `Could not update Jira: ${(error as Error).message}` });
+  } finally {
+    dropLocal(heads, "read");
   }
 }
 export function selectRow(item: InboxItem | undefined, open: "side" | "page" = "side") {
@@ -245,31 +294,20 @@ export function toggleRead(row = selectedRow()) {
 }
 const hasFilters = (v: InboxView) => Object.values(v.filters).some((values) => values?.length);
 /** Linear's ⌥U: every row in the current view. With no tab or filter, Jira marks its whole feed. */
-export async function markAllRead() {
-  const unread = rows.filter((r) => r.unread);
-  if (!unread.length) return;
-  remember("mark notifications as read", () => void markRead(unread, false));
-  const heads = unread.map((r) => r.head);
-  setLocal(heads, { read: true });
-  if (!firstPage()?.writable) return;
-  try {
-    const v = viewState();
-    if (!v.priorityInbox && !hasFilters(v)) await send({ action: "read-all" });
-    else
-      await sendGroups(
-        "read",
-        unread.map((r) => r.id),
-      );
-    await queryClient.invalidateQueries({ queryKey: ["inbox"] });
-    dropLocal(heads, "read");
-  } catch (error) {
-    set({ perf: `Could not update Jira: ${(error as Error).message}` });
-  }
+export function markAllRead() {
+  const v = viewState();
+  return markRead(
+    rows.filter((r) => r.unread),
+    true,
+    "mark notifications as read",
+    undefined,
+    !v.priorityInbox && !hasFilters(v),
+  );
 }
 /** Removes rows here, selects the next one as Linear does, and offers Linear's undo toast. */
 function hide(items: InboxItem[], patch: Local, label: string, toast: string) {
   if (!items.length) return;
-  const before = items.map((i): [string, Local | undefined] => [i.head, localState()[i.head]]),
+  const before = new Map(items.map((i) => [i.head, localState()[i.head]])),
     was = selectedRow();
   const gone = new Set(items.map((i) => i.id)),
     at = rows.findIndex((r) => r.id === selectedId),
@@ -288,8 +326,8 @@ function hide(items: InboxItem[], patch: Local, label: string, toast: string) {
       navigate({ selected: null, panel: false, inbox: true });
     }
   }
-  remember(label, () => {
-    putLocal(before);
+  toastUndo = remember(label, () => {
+    putLocal([...before.keys()], (_, head) => before.get(head));
     if (was && gone.has(was.id)) selectRow(was);
   });
   ui.send({ type: "toast.show", text: toast, undo: "inbox" });
@@ -430,6 +468,13 @@ function Row({
         e.preventDefault();
         selectRow(item);
       }}
+      onKeyDown={(e) => {
+        // A clicked row keeps focus, and Enter on a link would click it again: open the full page, as Enter does elsewhere.
+        if (e.key !== "Enter" || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        e.stopPropagation();
+        selectRow(item, "page");
+      }}
       onContextMenu={(e) => {
         e.preventDefault();
         onMenu(item, { x: e.clientX, y: e.clientY });
@@ -465,14 +510,6 @@ function Row({
   );
 }
 
-const when = (until: number) =>
-  new Date(until).toLocaleString("en", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
 const COPY: [CopyKind, string][] = [
   ["ID", "copy-id"],
   ["URL", "copy-url"],
@@ -499,10 +536,11 @@ function rowEntries(item: InboxItem): ActionEntry[] {
     {
       name: "Snooze",
       icon: "clock",
+      shortcut: shortcutLabel("inbox-snooze"),
       children: [
         ...snoozeChoices().map((c) => ({
           name: c.label,
-          shortcut: when(c.until),
+          shortcut: snoozeTime(c.until),
           run: () => snoozeRow(c.until, item),
         })),
         { name: "Custom…", run: () => openSnooze(item, true) },
@@ -599,26 +637,31 @@ function SnoozeMenu({ close }: { close: () => void }) {
           </button>
         </form>
       ) : (
-        <div className="p-1">
-          {snoozeChoices().map((c) => (
-            <button
-              key={c.label}
-              role="menuitem"
-              data-snooze={c.label}
-              className={MENU_ITEM}
-              onClick={() => {
-                close();
-                snoozeRow(c.until);
-              }}
-            >
-              <span className="flex-1">{c.label}</span>
-              <span className="text-[12px] text-fg-3">{when(c.until)}</span>
-            </button>
-          ))}
-          <button role="menuitem" className={MENU_ITEM} onClick={() => setCustom(true)}>
-            Custom…
-          </button>
-        </div>
+        // cmdk, as the other command menus: the first choice is highlighted, arrows move, typing filters.
+        <Command loop>
+          <Command.Input autoFocus placeholder="Snooze until…" className={MENU_INPUT} />
+          <Command.List className="p-1">
+            <Command.Empty className="px-2 py-1.5 text-[13px] text-fg-3">No match</Command.Empty>
+            {snoozeChoices().map((c) => (
+              <Command.Item
+                key={c.label}
+                value={c.label}
+                data-snooze={c.label}
+                className={MENU_ITEM}
+                onSelect={() => {
+                  close();
+                  snoozeRow(c.until);
+                }}
+              >
+                <span className="flex-1">{c.label}</span>
+                <span className="text-[12px] text-fg-3">{snoozeTime(c.until)}</span>
+              </Command.Item>
+            ))}
+            <Command.Item value="Custom…" className={MENU_ITEM} onSelect={() => setCustom(true)}>
+              Custom…
+            </Command.Item>
+          </Command.List>
+        </Command>
       )}
     </MenuSurface>
   );
@@ -629,20 +672,6 @@ function Menus({ base }: { base: InboxItem[] }) {
   const site = useStore((s) => s.site);
   const v = useView();
   const close = () => ui.send({ type: "overlay.close" });
-  const item = (label: string, run: () => void, hint?: string) => (
-    <button
-      key={label}
-      role="menuitem"
-      className={MENU_ITEM}
-      onClick={() => {
-        close();
-        run();
-      }}
-    >
-      <span className="flex-1">{label}</span>
-      {hint && <kbd className="text-fg-3">{hint}</kbd>}
-    </button>
-  );
   const toggle = (label: string, key: "showSnoozed" | "unreadFirst" | "priorityInbox") => (
     <label key={key} className={`${MENU_ITEM} justify-between`}>
       {label}
@@ -680,16 +709,31 @@ function Menus({ base }: { base: InboxItem[] }) {
   );
   if (overlay === "inbox-actions")
     return (
-      <MenuSurface label="Notification actions" anchorId="inbox-actions" fit close={close}>
-        {item("Mark all as read", () => void markAllRead(), "⌥U")}
-        {item("Delete all", () => deleteAll("all"))}
-        {item("Delete all read", () => deleteAll("read"), "⇧⌫")}
-        {item("Delete all completed", () => deleteAll("completed"))}
-        {/* Jira's own notification settings: better-jira has none of its own. */}
-        {item("Go to settings", () =>
-          window.open(`${site}/jira/settings/personal/notifications`, "_blank", "noopener"),
-        )}
-      </MenuSurface>
+      <ActionMenu
+        label="Notification actions"
+        anchor={document.getElementById("inbox-actions")}
+        entries={[
+          {
+            name: "Mark all as read",
+            shortcut: shortcutLabel("inbox-read-all"),
+            run: () => void markAllRead(),
+          },
+          { name: "Delete all", run: () => deleteAll("all") },
+          {
+            name: "Delete all read",
+            shortcut: shortcutLabel("inbox-delete-read"),
+            run: () => deleteAll("read"),
+          },
+          { name: "Delete all completed", run: () => deleteAll("completed") },
+          // Jira's own notification settings: better-jira has none of its own.
+          {
+            name: "Go to settings",
+            run: () =>
+              window.open(`${site}/jira/settings/personal/notifications`, "_blank", "noopener"),
+          },
+        ]}
+        close={close}
+      />
     );
   if (overlay === "inbox-filter")
     return (
@@ -697,6 +741,7 @@ function Menus({ base }: { base: InboxItem[] }) {
         label="Filter"
         anchor={document.getElementById("inbox-filter")}
         align="end"
+        highlight
         entries={filterEntries(base, v)}
         close={close}
       />
@@ -778,6 +823,17 @@ export function InboxList() {
     if (unseen) void clearUnseen();
   }, [unseen]);
   const pages = data?.pages.length ?? 0;
+  // A reload keeps the open issue in the URL: select its row again, so U, E and H act on it.
+  const issueKey = useStore((s) => (s.inbox ? s.selected : null));
+  const known = itemsOf(data).some((i) => i.key === issueKey);
+  useEffect(() => {
+    if (selectedId || !issueKey) return;
+    const row = rows.find((r) => r.key === issueKey);
+    if (row) {
+      selectedId = row.id;
+      emit();
+    }
+  }, [issueKey, known]);
   useEffect(() => {
     if (!end.current || !hasNextPage || isFetchingNextPage) return;
     // A fresh observer reports at once, so a short or fully filtered page keeps loading while the end stays in view.
@@ -960,9 +1016,8 @@ export function InboxIssueActions() {
 /** The right pane when no issue is open: Linear's empty state, or the notification itself when its issue is not in the mirror. */
 export function InboxPane() {
   const selected = useSelected();
-  useLocal();
+  const unread = useUnreadCount().count;
   const row = rows.find((r) => r.id === selected);
-  const unread = rows.filter((r) => r.unread).length;
   if (row)
     return (
       <div className="flex min-w-0 flex-1 flex-col">
@@ -999,7 +1054,10 @@ export function InboxPane() {
             </blockquote>
           )}
           <p className="mt-4 text-[12px] text-fg-3">
-            This issue is outside your mirrored boards, so it opens in Jira.
+            {missingIssueNote(
+              row.key,
+              new Set([...get().issues.keys()].map((k) => k.split("-")[0]!)),
+            )}
           </p>
         </div>
       </div>

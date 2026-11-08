@@ -69,11 +69,16 @@ const server = serve({
         const params = new URL(req.url).searchParams,
           category = params.get("category");
         try {
+          const after = params.get("after") || undefined,
+            kind = category === "direct" || category === "watching" ? category : undefined;
+          // The badge counts every unread row, not just the loaded pages; without the list it falls back to them.
+          const [page, unread] = await Promise.all([
+            inbox.feed(kind, after),
+            after || kind ? undefined : inbox.unreadGroups().catch(() => undefined),
+          ]);
           return Response.json({
-            ...(await inbox.feed(
-              category === "direct" || category === "watching" ? category : undefined,
-              params.get("after") || undefined,
-            )),
+            ...page,
+            ...(unread ? { unread } : {}),
             writable: canWrite(serverConfiguration().site),
           });
         } catch (e) {
@@ -101,8 +106,12 @@ const server = serve({
         try {
           if ((body.action === "read" || body.action === "unread") && groups.length)
             await inbox.mark(groups, body.action === "read");
-          else if (body.action === "read-all") await inbox.markAllRead();
-          else if (body.action === "seen") await inbox.clearUnseen();
+          else if (body.action === "read-all") {
+            // Jira marks its whole feed; the groups it changed let ⌥U's undo reach rows that were never loaded.
+            const groups = (await inbox.unreadGroups()).map((g) => g.id);
+            await inbox.markAllRead();
+            return Response.json({ ok: true, groups });
+          } else if (body.action === "seen") await inbox.clearUnseen();
           else return Response.json({ error: "Invalid request" }, { status: 400 });
           return Response.json({ ok: true });
         } catch (e) {

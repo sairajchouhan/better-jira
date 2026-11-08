@@ -32,7 +32,14 @@ export type InboxItem = {
   count: number;
 };
 /** One page of Jira's feed; `cursor` asks for the next one. Jira can return a short or empty page before the end. */
-export type InboxFeed = { unseen: number; items: InboxItem[]; more: boolean; cursor?: string };
+export type InboxFeed = {
+  unseen: number;
+  items: InboxItem[];
+  more: boolean;
+  cursor?: string;
+  /** On the unfiltered first page: every unread row in Jira, loaded or not. */
+  unread?: { id: string; head: string }[];
+};
 
 const ISSUE_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
 const str = (v: unknown) => (typeof v === "string" ? v : "");
@@ -123,7 +130,10 @@ export function describe(item: InboxItem): string {
     case "unassigned":
       return `${who} unassigned your issue`;
     case "mentioned":
-      return `${who} mentioned you${preview}`;
+      // Jira says "mentioned you on a task" for a description mention and "in a comment" for a comment.
+      return /\bmentioned you on\b/i.test(item.message)
+        ? `${who} mentioned you in an issue description`
+        : `${who} mentioned you${preview}`;
     case "comment":
       return `${who} commented${preview}`;
     case "reaction":
@@ -150,6 +160,36 @@ export function shortAgo(iso: string, now = Date.now()): string {
   if (m < 10080) return `${Math.floor(m / 1440)}d`;
   if (m < 525600) return `${Math.floor(m / 10080)}w`;
   return `${Math.floor(m / 525600)}y`;
+}
+
+/** Linear's snooze times: "Sun, 8 Nov, 7:13 PM". */
+export function snoozeTime(until: number): string {
+  const d = new Date(until),
+    f = (o: Intl.DateTimeFormatOptions) => d.toLocaleString("en", o);
+  return `${f({ weekday: "short" })}, ${d.getDate()} ${f({ month: "short" })}, ${f({ hour: "numeric", minute: "2-digit" })}`;
+}
+
+/** The fallback pane's note. An issue the mirror lacks in a project it mirrors was deleted (or moved); otherwise it lives outside the boards. */
+export const missingIssueNote = (key: string, mirroredProjects: Set<string>) =>
+  mirroredProjects.has(key.split("-")[0]!)
+    ? "This issue is no longer in your boards. It may have been deleted."
+    : "This issue is outside your mirrored boards, so it opens in Jira.";
+
+/** Linear's unread count: Jira's unread rows (all of them from `unread`, plus the loaded ones), less this browser's deletes, snoozes and read marks. */
+export function unreadCount(
+  unread: { head: string }[] | undefined,
+  items: InboxItem[],
+  local: Record<string, Local>,
+  now = Date.now(),
+): number {
+  const heads = new Set(unread?.map((u) => u.head));
+  for (const i of items) if (i.unread || local[i.head]?.read === false) heads.add(i.head);
+  let count = 0;
+  for (const head of heads) {
+    const own = local[head];
+    if (!own?.deleted && !(own?.snoozed && own.snoozed > now) && !own?.read) count++;
+  }
+  return count;
 }
 
 /** What the inbox keeps locally per head notification: Jira has no delete or snooze, and read-only sites keep read state here too. */

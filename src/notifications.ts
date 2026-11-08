@@ -88,6 +88,30 @@ export async function feed(category?: "direct" | "watching", after?: string): Pr
   };
 }
 
+const UNREAD = `query InboxUnread($ari: String, $after: String) {
+  notifications {
+    notificationFeed(first: 50, after: $after, collabContextRoutingAri: $ari, filter: { productFilter: "jira", readStateFilter: unread }) {
+      pageInfo { hasNextPage endCursor }
+      nodes { groupId headNotification { notificationId } }
+    }
+  }
+}`;
+/** Every unread row in Jira's feed: Jira has no unread count, and the feed itself pages, so loaded rows undercount. */
+export async function unreadGroups(): Promise<{ id: string; head: string }[]> {
+  const out: { id: string; head: string }[] = [];
+  let after: string | null = null;
+  // ponytail: 10 pages (about 500 unread rows) at most; raise it if anyone gets near that.
+  for (let i = 0; i < 10; i++) {
+    const f: any = (await gateway("InboxUnread", UNREAD, { after })).notificationFeed;
+    for (const n of f?.nodes ?? [])
+      if (n?.groupId)
+        out.push({ id: String(n.groupId), head: String(n.headNotification?.notificationId ?? "") });
+    if (!f?.pageInfo?.hasNextPage || !f.pageInfo.endCursor) break;
+    after = String(f.pageInfo.endCursor);
+  }
+  return out;
+}
+
 const UNSEEN = `query InboxUnseen($ari: String) {
   notifications { unseenNotificationCount(product: "jira", collabContextRoutingAri: $ari) }
 }`;

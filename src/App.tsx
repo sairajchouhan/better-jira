@@ -105,7 +105,7 @@ import {
   useLinearHotkeys,
 } from "./shortcuts";
 import { issueAnchor } from "./menu-surface";
-import { InboxIssueActions, InboxList, InboxPane, undoInbox, useInboxBadge } from "./inbox";
+import { InboxIssueActions, InboxList, InboxPane, undoInboxToast, useInboxBadge } from "./inbox";
 import { PickerRow, PropertyMenu } from "./property-menu";
 import { createActor } from "xstate";
 import { autosaveMachine, inspector } from "./machines";
@@ -894,7 +894,7 @@ function Toast() {
         <button
           className="text-accent hover:underline"
           onClick={() => {
-            if (toast.undo === "inbox") undoInbox();
+            if (toast.undo === "inbox") undoInboxToast();
             else undoEdit();
             ui.send({ type: "toast.dismiss" });
           }}

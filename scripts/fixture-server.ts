@@ -228,8 +228,8 @@ const notification = (
     },
   },
 });
-/** `extra` appends that many older, read notifications on issues outside the mirror, so the list pages. */
-const freshInbox = (extra = 0) => ({
+/** `extra` appends that many older notifications on issues outside the mirror, so the list pages; read unless `extraUnread`. */
+const freshInbox = (extra = 0, extraUnread = false) => ({
   unseen: 4,
   nodes: [
     notification(
@@ -312,7 +312,7 @@ const freshInbox = (extra = 0) => ({
         "updated",
         "Sam updated a task",
         "watching",
-        true,
+        !extraUnread,
         60 * 24 * 500 + i,
       ),
     ),
@@ -320,11 +320,20 @@ const freshInbox = (extra = 0) => ({
 });
 /** Rows per page; the cursor is the next row's index, like the gateway's opaque one. */
 const INBOX_PAGE = 20;
-let inbox = freshInbox();
+let inbox = freshInbox(),
+  /** Writes (read, unread, read-all) answer 502, as when Jira refuses. */
+  inboxFail = false,
+  /** Milliseconds each feed read waits, like Jira's slow gateway. */
+  inboxDelay = 0;
+const unreadGroups = () =>
+  inbox.nodes
+    .filter((n) => n.readStates.includes("unread"))
+    .map((n) => ({ id: n.groupId, head: n.headNotification.notificationId }));
 async function inboxRoute(req: Request, url: URL) {
   let status = 200,
     body: unknown = { ok: true };
   if (req.method === "GET") {
+    await Bun.sleep(inboxDelay);
     const category = url.searchParams.get("category"),
       start = Number(url.searchParams.get("after") || 0),
       nodes = inbox.nodes.filter((n) => !category || n.headNotification.category === category);
@@ -333,6 +342,7 @@ async function inboxRoute(req: Request, url: URL) {
       items: mapFeed(nodes.slice(start, start + INBOX_PAGE)),
       more: start + INBOX_PAGE < nodes.length,
       cursor: String(start + INBOX_PAGE),
+      ...(start || category ? {} : { unread: unreadGroups() }),
       writable: true,
     };
   } else {
@@ -341,12 +351,17 @@ async function inboxRoute(req: Request, url: URL) {
       node.readStates = [read ? "read" : "unread"];
       node.headNotification.readState = read ? "read" : "unread";
     };
-    if (action === "read" || action === "unread")
+    if (inboxFail && action !== "seen") {
+      status = 502;
+      body = { error: "Jira did not update the notification." };
+    } else if (action === "read" || action === "unread")
       inbox.nodes
         .filter((n) => groups.includes(n.groupId))
         .forEach((n) => marks(n, action === "read"));
-    else if (action === "read-all") inbox.nodes.forEach((n) => marks(n, true));
-    else if (action === "seen") inbox.unseen = 0;
+    else if (action === "read-all") {
+      body = { ok: true, groups: unreadGroups().map((g) => g.id) };
+      inbox.nodes.forEach((n) => marks(n, true));
+    } else if (action === "seen") inbox.unseen = 0;
     else {
       status = 400;
       body = { error: "Unknown inbox action" };
@@ -639,7 +654,9 @@ async function handle(req: Request) {
     mediaVariant = settings.mediaVariant ?? "";
     writable = settings.writable ?? false;
     subtask = settings.subtask ?? false;
-    inbox = freshInbox(settings.inboxExtra ?? 0);
+    inbox = freshInbox(settings.inboxExtra ?? 0, settings.inboxExtraUnread ?? false);
+    inboxFail = settings.inboxFail ?? false;
+    inboxDelay = settings.inboxDelay ?? 0;
     requests.length = 0;
     writes.length = 0;
     types.clear();
