@@ -28,7 +28,13 @@ import {
   type Issue,
   type Overlay,
 } from "./store";
-import { buckets, columnInScope, rankBetween } from "./view-model";
+import {
+  buckets,
+  columnInScope,
+  defaultPreferences,
+  rankBetween,
+  updateFilter,
+} from "./view-model";
 import { issueCopy, type CopyKind } from "./issue-copy";
 import { editorBindings } from "./editor-bindings";
 import { MenuSurface } from "./menu-surface";
@@ -827,10 +833,7 @@ export const shortcuts: Shortcut[] = [
     when: boardVisible,
     run: () => {
       if (get().inbox) return clearInboxFilters();
-      const p = preferencesFor(get().board);
-      changePreferences(get().board, {
-        filters: { ...p.filters, children: [] },
-      });
+      changePreferences(get().board, { filters: defaultPreferences().filters });
     },
   },
   {
@@ -840,10 +843,9 @@ export const shortcuts: Shortcut[] = [
     hotkey: "Shift+F",
     when: boardVisible,
     run: () => {
-      const p = preferencesFor(get().board);
-      changePreferences(get().board, {
-        filters: { ...p.filters, children: p.filters.children.slice(0, -1) },
-      });
+      const { filters } = preferencesFor(get().board);
+      const last = filters.children.at(-1);
+      if (last) changePreferences(get().board, { filters: updateFilter(filters, last.id, null) });
     },
   },
 ];

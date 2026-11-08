@@ -186,16 +186,29 @@ export const isDate = (field: Field) =>
 OPERATORS.push(["gt", "greater than"], ["lt", "less than"]);
 export const isNumeric = (field: Field) =>
   field === "statusAge" || field === "pullRequests" || field === "estimate";
-export const operatorsFor = (field: Field) =>
-  OPERATORS.filter(([op]) =>
-    isNumeric(field)
-      ? ["is", "isNot", "gt", "lt"].includes(op)
-      : ["gt", "lt"].includes(op)
-        ? false
-        : isDate(field) || field === "started"
-          ? !["contains", "notContains"].includes(op)
-          : !["before", "after", "within", "next"].includes(op),
-  );
+/** Linear's operators per kind: choices are/aren't one of a list, text contains, dates and numbers compare. Status is never empty. */
+export const operatorsFor = (field: Field) => {
+  const ops: Operator[] = isNumeric(field)
+    ? [
+        "is",
+        "isNot",
+        "gt",
+        "lt",
+        ...(field === "statusAge" ? [] : (["empty", "notEmpty"] as const)),
+      ]
+    : isDate(field)
+      ? ["is", "isNot", "before", "after", "within", "next", "empty", "notEmpty"]
+      : field === "content"
+        ? ["contains", "notContains"]
+        : field === "links"
+          ? ["contains", "notContains", "empty", "notEmpty"]
+          : ["is", "isNot", ...(field === "status" ? [] : (["empty", "notEmpty"] as const))];
+  return OPERATORS.filter(([op]) => ops.includes(op));
+};
+/** Display settings equal, ignoring the order properties were toggled in. */
+export const sameDisplay = (a: Display, b: Display) =>
+  JSON.stringify({ ...a, properties: [...a.properties].sort() }) ===
+  JSON.stringify({ ...b, properties: [...b.properties].sort() });
 export const newId = () => crypto.randomUUID();
 export const defaultDisplay = (): Display => ({
   layout: "board",
@@ -257,7 +270,8 @@ export function parsePreferences(value: unknown): Preferences {
   }
   const parseGroup = (v: any, depth = 0): FilterGroup => ({
     id: typeof v?.id === "string" ? v.id : newId(),
-    join: v?.join === "or" ? "or" : "and",
+    // An emptied "Match any" would silently OR the next plain filters.
+    join: v?.join === "or" && v.children?.length ? "or" : "and",
     children:
       depth > 5 || !Array.isArray(v?.children)
         ? []
@@ -323,8 +337,13 @@ export function valuesFor(i: Issue, field: Field, issues: Issue[]): string[] {
       ];
     case "content":
       return [`${i.key} ${i.summary} ${i.description ?? ""}`];
-    case "links":
-      return i.links ?? [];
+    case "links": // description links, Jira web links, and link resources
+      return [
+        ...new Set([
+          ...(i.links ?? []),
+          ...(i.resources ?? []).flatMap((r) => (r.kind === "link" && r.url ? [r.url] : [])),
+        ]),
+      ];
     case "created":
       return i.created ? [i.created] : [];
     case "updated":
@@ -341,8 +360,8 @@ export function valuesFor(i: Issue, field: Field, issues: Issue[]): string[] {
       return i.started ? [i.started] : [];
     case "statusAge":
       return i.statusSince ? [i.statusSince] : [];
-    case "pullRequests":
-      return i.prCount === undefined ? [] : [String(i.prCount)];
+    case "pullRequests": // "is empty": no pull requests
+      return i.prCount ? [String(i.prCount)] : [];
     case "estimate":
       return i.estimate === undefined ? [] : [String(i.estimate)];
     case "projectLead":
@@ -478,6 +497,12 @@ function groupValues(i: Issue, by: Grouping, board: Board): { id: string; name: 
   }
 }
 
+/** A parent shows as "KEY Title" when its issue is known, like Linear. */
+export const parentName = (key: string, issues: Issue[]) => {
+  const summary = issues.find((i) => i.key === key)?.summary;
+  return summary ? `${key} ${summary}` : key;
+};
+
 export function buckets(
   items: Issue[],
   by: Grouping,
@@ -500,6 +525,8 @@ export function buckets(
       if (!map.has(v.id)) map.set(v.id, { ...v, issues: [] });
   if (by === "none" && !map.size) map.set("all", { id: "all", name: "All issues", issues: [] });
   for (const i of items) for (const v of groupValues(i, by, board)) map.get(v.id)?.issues.push(i);
+  if (by === "parent")
+    for (const b of map.values()) if (b.id !== "$none") b.name = parentName(b.id, universe);
   const result = [...map.values()];
   if (by === "priority") result.sort((a, b) => priorityRank(a.name) - priorityRank(b.name));
   else if (by !== "status" && by !== "category")
@@ -549,13 +576,16 @@ export function selectIssues(
   );
   const colOrder = (i: Issue) =>
     board.columns.findIndex((c) => c.statuses.some((s) => s.id === i.status));
+  // Jira workflows that never set a resolution leave `resolved` empty; entering Done is then the completion time.
+  const completed = (i: Issue) => i.resolved ?? i.statusSince ?? "";
   items.sort((a, b) => {
     if (
       d.completedRecency &&
       statusFor(a, board)?.category === "done" &&
-      statusFor(b, board)?.category === "done"
+      statusFor(b, board)?.category === "done" &&
+      completed(a) !== completed(b)
     )
-      return (b.resolved ?? "").localeCompare(a.resolved ?? "");
+      return completed(b).localeCompare(completed(a));
     let cmp = 0;
     switch (d.ordering) {
       case "manual": {
@@ -627,17 +657,17 @@ export function updateFilter(
   id: string,
   patch: Partial<Rule & FilterGroup> | null,
 ): FilterGroup {
-  if (group.id === id) return patch ? { ...group, ...patch } : { ...group, children: [] };
-  return {
-    ...group,
-    children: group.children.flatMap((c) =>
-      c.id === id
-        ? patch
-          ? [{ ...c, ...patch } as Rule | FilterGroup]
-          : []
-        : ["children" in c ? updateFilter(c, id, patch) : c],
-    ),
-  };
+  if (group.id === id)
+    return patch ? { ...group, ...patch } : { ...group, join: "and", children: [] };
+  const children = group.children.flatMap((c) =>
+    c.id === id
+      ? patch
+        ? [{ ...c, ...patch } as Rule | FilterGroup]
+        : []
+      : ["children" in c ? updateFilter(c, id, patch) : c],
+  );
+  // Removing the last rule also drops "Match any", so later filters don't silently OR.
+  return { ...group, children, ...(!patch && !children.length ? { join: "and" as const } : {}) };
 }
 export const filterCount = (g: FilterGroup): number =>
   g.children.reduce((n, c) => n + ("children" in c ? filterCount(c) : 1), 0);

@@ -5,6 +5,7 @@ import { MenuSurface, MENU_POPUP as POPUP } from "./menu-surface";
 import { filterChoices, PropertyFilter } from "./property-filter";
 import { PillSelect } from "./pill-select";
 import { Icon } from "./icons";
+import { shortDate } from "./due-date";
 import {
   changeDisplay,
   changePreferences,
@@ -21,6 +22,7 @@ import {
 import {
   defaultDisplay,
   defaultPreferences,
+  sameDisplay,
   filterCount,
   FIELDS,
   GROUPINGS,
@@ -49,6 +51,7 @@ const CIRCLE =
 export function BoardControls({ board }: { board: Board }) {
   const toolbar = useStore((s) => s.toolbar);
   const preferences = usePreferences(board.id);
+  const savedDefault = useStore((s) => s.defaults[board.id]);
   const filterRef = useRef<HTMLButtonElement>(null);
   const displayRef = useRef<HTMLButtonElement>(null);
   const popup = useRef<HTMLDivElement>(null);
@@ -65,6 +68,7 @@ export function BoardControls({ board }: { board: Board }) {
   );
   useEffect(() => {
     if (!toolbar) return;
+    const trigger = ref.current;
     const position = () => {
       const r = ref.current?.getBoundingClientRect();
       if (r) setRect({ top: r.bottom + 6, right: innerWidth - r.right });
@@ -86,6 +90,8 @@ export function BoardControls({ board }: { board: Board }) {
     document.addEventListener("pointerdown", outside);
     window.addEventListener("resize", position);
     return () => {
+      // Closing with Done or a menu choice unmounts the focused control; give focus back to the trigger, as Esc does.
+      if (document.activeElement === document.body) trigger?.focus();
       cancelAnimationFrame(focusFrame);
       document.removeEventListener("pointerdown", outside);
       window.removeEventListener("resize", position);
@@ -119,7 +125,7 @@ export function BoardControls({ board }: { board: Board }) {
         className={CIRCLE}
       >
         <Icon name="display" />
-        {JSON.stringify(preferences.display) !== JSON.stringify(defaultDisplay()) && (
+        {!sameDisplay(preferences.display, savedDefault ?? defaultDisplay()) && (
           <span className="absolute top-0 right-0 size-1.5 rounded-full bg-accent" />
         )}
       </button>
@@ -391,7 +397,7 @@ export function FilterChips({ board }: { board: Board }) {
   const labelFor = (field: Field, value: string) => {
     if (value === "$me") return "me";
     if (value === "$none") return "none";
-    if (field === "statusAge") return `${value} days`;
+    if (isDate(field)) return shortDate(value);
     if (field === "status")
       return board.columns.flatMap((c) => c.statuses).find((s) => s.id === value)?.name ?? value;
     if (field === "assignee" || field === "creator")
@@ -427,9 +433,21 @@ export function FilterChips({ board }: { board: Board }) {
       );
     return value;
   };
+  const days = (v = "") => `${v} day${Number(v) === 1 ? "" : "s"}`;
+  const chipText = (c: Rule) => {
+    const field = FIELDS.find(([f]) => f === c.field)?.[1],
+      op = operatorsFor(c.field).find(([o]) => o === c.op)?.[1];
+    if (c.op === "empty" || c.op === "notEmpty") return `${field} ${op}`;
+    if (c.op === "within") return `${field} in the last ${days(c.values[0])}`;
+    if (c.op === "next") return `${field} in the next ${days(c.values[0])}`;
+    if (c.field === "statusAge") return `${field} ${op} ${days(c.values[0])}`;
+    return `${field} ${op} ${c.values.map((v) => labelFor(c.field, v)).join(", ")}`;
+  };
   const [edit, setEdit] = useState<{ id: string; anchor: HTMLElement } | null>(null);
   const editing = filters.children.find((c): c is Rule => !("children" in c) && c.id === edit?.id);
-  if (!filters.children.length) return null;
+  // An empty group filters nothing, so it gets no chip.
+  const chips = filters.children.filter((c) => !("children" in c) || filterCount(c) > 0);
+  if (!chips.length) return null;
   return (
     <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-1.5 border-t border-line px-3 py-1.5 text-[12px]">
       {/* Like Linear, a chip edits its own rule in a small picker under it; groups still open the advanced editor. */}
@@ -449,7 +467,16 @@ export function FilterChips({ board }: { board: Board }) {
           />
         </MenuSurface>
       )}
-      {filters.children.map((c) => (
+      {filters.join === "or" && chips.length > 1 && (
+        <button
+          className="text-fg-3 hover:text-fg-2"
+          title="Issues match any of these filters"
+          onClick={() => ui.send({ type: "toolbar.open", toolbar: "advanced" })}
+        >
+          Any of
+        </button>
+      )}
+      {chips.map((c) => (
         <div
           key={c.id}
           className="flex h-6 max-w-[320px] items-center overflow-hidden rounded-md border border-line-2 bg-tab"
@@ -463,8 +490,8 @@ export function FilterChips({ board }: { board: Board }) {
             }
           >
             {"children" in c
-              ? `${c.join.toUpperCase()} group · ${filterCount(c)} rules`
-              : `${FIELDS.find(([f]) => f === c.field)?.[1]} ${operatorsFor(c.field).find(([op]) => op === c.op)?.[1]} ${c.values.map((v) => labelFor(c.field, v)).join(", ")}`}
+              ? `${c.join.toUpperCase()} group · ${filterCount(c)} rule${filterCount(c) === 1 ? "" : "s"}`
+              : chipText(c)}
           </button>
           <button
             className="mr-1 rounded hover:bg-hover"
@@ -486,7 +513,7 @@ export function FilterChips({ board }: { board: Board }) {
       </button>
       <button
         className="ml-1 text-fg-3"
-        onClick={() => changePreferences(board.id, { filters: { ...filters, children: [] } })}
+        onClick={() => changePreferences(board.id, { filters: defaultPreferences().filters })}
       >
         Clear
       </button>
@@ -698,7 +725,7 @@ function RuleEditor({
             }
             step={isNumeric(r.field) ? "any" : undefined}
             value={r.values[0] ?? ""}
-            min={isNumeric(r.field) ? 0 : undefined}
+            min={isNumeric(r.field) || ["within", "next"].includes(r.op) ? 0 : undefined}
             onChange={(e) => patch({ values: e.target.value ? [e.target.value] : [] })}
             placeholder={r.field === "statusAge" ? "Days…" : "Value…"}
           />
@@ -734,6 +761,11 @@ function RuleEditor({
             </select>
           </div>
         ))}
+      {Number(r.values[0]) < 0 && (isNumeric(r.field) || ["within", "next"].includes(r.op)) && (
+        <span role="alert" className="self-center text-[11px] text-red-500">
+          Use 0 or more
+        </span>
+      )}
       <button
         aria-label="Remove condition"
         className="grid size-7 place-items-center text-fg-3"

@@ -103,10 +103,10 @@ test("hierarchy pickers offer only what Jira accepts: a parent one level up in t
 test("search ranks an exact match above a partial one", () => {
   const rank = (summary: string) => matchRank("relations child A", { key: "KAN-1", summary });
   expect(rank("relations child A")).toBe(0);
-  expect(rank("[QA] relations child A")).toBe(1);
-  expect(rank("[QA] relations child Ab")).toBe(2);
-  expect(rank("[QA] relations child B")).toBe(3);
+  expect(rank("[QA] relations child A")).toBe(2);
+  expect(rank("[QA] relations child Ab")).toBe(3);
+  expect(rank("[QA] relations child B")).toBe(5);
   expect(rank("[QA] relations parent")).toBe(-1);
   expect(matchRank("kan-1", { key: "KAN-1", summary: "x" })).toBe(0);
-  expect(matchRank("(", { key: "KAN-1", summary: "a (b)" })).toBe(2); // regex characters are literal
+  expect(matchRank("(", { key: "KAN-1", summary: "a (b)" })).toBe(3); // regex characters are literal
 });

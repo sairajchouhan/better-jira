@@ -60,7 +60,7 @@ test("breadcrumb exits the side panel, My issues and text search", async () => {
     await page.key("f", "meta");
     await page.waitFor(`document.activeElement?.id==='find-in-view'`);
     await page.type("no matching issue");
-    await page.click('[aria-label="Breadcrumb"] [aria-label="Issues"]');
+    await page.click('[aria-label="Breadcrumb"] [aria-label="My issues"]');
     await page.waitFor(`!document.getElementById('summary')`);
     expect(await page.eval(`!!document.getElementById('find-in-view')`)).toBe(false);
     expect(await page.eval(`document.querySelectorAll('[data-key]').length`)).toBe(6);

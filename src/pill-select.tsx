@@ -36,7 +36,8 @@ export function PillSelect({
       </button>
       {anchor && (
         <MenuSurface label={label} anchor={anchor} width={220} close={() => setAnchor(null)}>
-          <Command loop>
+          {/* Opens on the current choice, like Linear, not the first option. */}
+          <Command loop defaultValue={`${current} ${value}`}>
             <Command.Input
               autoFocus
               aria-label={`${label}…`}

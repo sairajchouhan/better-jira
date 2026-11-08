@@ -1,3 +1,4 @@
+import { matchRank as textRank } from "./search-rank";
 export type History = {
   created: string | number;
   items: { fieldId?: string; field?: string; from?: string | null; to?: string | null }[];
@@ -132,13 +133,11 @@ export const canHaveChildren = (s: Hierarchy, issue: Typed) => childTypes(s, iss
 /** Jira can't create a Subtask without a parent or take its parent away. */
 export const needsParent = (s: Hierarchy, issue: Typed) => (levelOf(s, issue) ?? 0) < 0;
 
-/** How well an issue matches a search, best first: 0 exact key or title, 1 the whole query as words, 2 the query inside a word, 3 every word somewhere; -1 no match. */
+/** How well an issue matches a search, best first (search-rank's scale over its key, title or both); -1 no match. */
 export function matchRank(query: string, issue: { key: string; summary: string }) {
-  const q = query.trim().toLowerCase(),
-    text = `${issue.key} ${issue.summary}`.toLowerCase();
-  if (!q) return 3;
-  if (issue.key.toLowerCase() === q || issue.summary.toLowerCase() === q) return 0;
-  if (new RegExp(`(^|\\W)${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\W|$)`).test(text)) return 1;
-  if (text.includes(q)) return 2;
-  return q.split(/\s+/).every((w) => text.includes(w)) ? 3 : -1;
+  if (!query.trim()) return 5;
+  const ranks = [issue.key, issue.summary, `${issue.key} ${issue.summary}`]
+    .map((text) => textRank(text, query))
+    .filter((r) => r >= 0);
+  return ranks.length ? Math.min(...ranks) : -1;
 }

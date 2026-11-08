@@ -138,7 +138,9 @@ let clientFailures = 0,
   mediaDelay = 0,
   mediaVariant = "",
   writable = false,
-  subtask = false;
+  subtask = false,
+  /** Speed checks: this many extra issues on each of two boards, like a real team board. */
+  bulk = 0;
 const requests: { method: string; path: string; status: number }[] = [];
 /** Writable mode: ops the app sent, and the types they changed (reset with the fixture). */
 const writes: { key: string; ops: any[] }[] = [],
@@ -150,8 +152,26 @@ const issueTypes = [
   { name: "Task", hierarchyLevel: 0 },
   { name: "Story", hierarchyLevel: 0 },
 ];
+const statuses = ["backlog", "todo", "doing", "review", "done"];
+const bulkIssues = () =>
+  [1, 2].flatMap((boardId) =>
+    Array.from({ length: bulk }, (_, i) => ({
+      ...issues[1]!,
+      key: `${boardId === 1 ? "BULK" : "TWO"}-${i + 1}`,
+      board: boardId,
+      summary: `Bulk fixture ${i + 1} with a longer title that wraps onto a second line`,
+      status: statuses[i % 5]!,
+      rank: `0|i1${String(i).padStart(4, "0")}:`,
+      priority: priorities[i % 6],
+      labels: ["test", ...(i % 3 ? [] : ["perf"])],
+      comments: i % 4,
+      assignee: people[i % 3]!,
+      due: i % 7 ? null : "2026-11-20",
+      resolved: i % 5 === 4 ? "2026-11-07T10:00:00Z" : null,
+    })),
+  );
 const listed = () =>
-  issues.map((issue) => ({
+  [...issues, ...bulkIssues()].map((issue) => ({
     ...issue,
     ...(subtask && issue.key === "TEST-6" ? { type: "Subtask", parent: "TEST-5" } : {}),
     ...(types.has(issue.key) ? { type: types.get(issue.key) } : {}),
@@ -655,6 +675,7 @@ async function handle(req: Request) {
     mediaVariant = settings.mediaVariant ?? "";
     writable = settings.writable ?? false;
     subtask = settings.subtask ?? false;
+    bulk = settings.bulk ?? 0;
     inbox = freshInbox(settings.inboxExtra ?? 0, settings.inboxExtraUnread ?? false);
     inboxFail = settings.inboxFail ?? false;
     inboxDelay = settings.inboxDelay ?? 0;
@@ -679,7 +700,8 @@ async function handle(req: Request) {
       status = 503;
       body = { error: "Test unavailable" };
     } else body = { site: "https://example.atlassian.net", user, writable };
-  } else if (path === "/api/boards") body = [board];
+  } else if (path === "/api/boards")
+    body = bulk ? [board, { ...board, id: 2, name: "Second board" }] : [board];
   else if (path === "/api/issues") body = listed();
   else if (path === "/api/options")
     body = { priorities: [], users: [], labels: [], versions: {}, types: { TEST: issueTypes } };

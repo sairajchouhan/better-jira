@@ -22,7 +22,7 @@ export const ESTIMATES: string[] = siteFields
       .map((f) => f.id)
   : ["customfield_10023", "customfield_10016"];
 const FIELDS = [
-  "summary,status,issuetype,priority,assignee,reporter,creator,created,updated,resolutiondate,duedate,project,issuelinks,labels,parent,description,comment,fixVersions,watches,attachment,customfield_10000",
+  "summary,status,issuetype,priority,assignee,reporter,creator,created,updated,resolutiondate,statuscategorychangedate,duedate,project,issuelinks,labels,parent,description,comment,fixVersions,watches,attachment,customfield_10000",
   RANK,
   ...ESTIMATES,
 ].join(",");
@@ -100,7 +100,11 @@ function slim(i: any, board: number) {
     rank: f[RANK],
     comments: f.comment?.total ?? 0,
     updated: f.updated,
-    resolved: f.resolutiondate,
+    // Workflows that set no resolution leave resolutiondate empty; entering Done is the completion time then.
+    resolved:
+      f.resolutiondate ??
+      (f.status?.statusCategory?.key === "done" ? f.statuscategorychangedate : null) ??
+      null,
     created: f.created,
     creator: user(f.creator ?? f.reporter),
     due: f.duedate ?? null,
@@ -591,6 +595,16 @@ async function enrichProperties() {
               data.watchersComplete = false;
               errors.push("Watcher list unavailable");
             }
+            try {
+              // Jira web links live outside the search fields; the Links filter matches them too.
+              data.remoteLinks = (
+                await jira<any[]>(`/rest/api/3/issue/${encodeURIComponent(row.key)}/remotelink`, {
+                  signal: AbortSignal.timeout(30000),
+                })
+              ).flatMap((l) => (l.object?.url ? [l.object.url] : []));
+            } catch {
+              errors.push("Web links unavailable");
+            }
             if (errors.length) {
               data.errors = errors;
               propertyProgress.errors++;
@@ -632,7 +646,16 @@ export function properties() {
       const data = fresh && r.data ? JSON.parse(r.data) : {};
       if (data.errors?.length) errors++;
       // The whole slim row rides along so edits made directly in Jira reach open clients.
-      return [r.key, { ...slim, projectLead: projects.get(projectKey)?.lead, ...data }];
+      const { remoteLinks = [], ...extra } = data;
+      return [
+        r.key,
+        {
+          ...slim,
+          projectLead: projects.get(projectKey)?.lead,
+          ...extra,
+          links: [...new Set([...(slim.links ?? []), ...remoteLinks])],
+        },
+      ];
     }),
   );
   const pending = Math.max(propertyProgress.pending, missing);

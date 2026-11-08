@@ -18,6 +18,8 @@ import {
   matchesRule,
   newId,
   operatorsFor,
+  parentName,
+  priorityRank,
   selectIssues,
   updateFilter,
   type Field,
@@ -68,13 +70,18 @@ export function filterChoices(field: Field, board: Board, issues: Issue[]): Choi
       add(i.priority, i.priority, <PriorityIcon name={i.priority} />);
     if (field === "project" && i.project) add(i.project.key, i.project.name);
     if (field === "type" && i.type) add(i.type, i.type);
-    if (field === "parent" && i.parent) add(i.parent, i.parent);
+    if (field === "parent" && i.parent) add(i.parent, parentName(i.parent, issues));
     if (field === "milestone")
       for (const version of i.milestones ?? []) add(version.id, version.name);
     if (field === "watchers") for (const user of i.watchers ?? []) add(user.id, user.name);
     if (field === "projectLead" && i.projectLead) add(i.projectLead.id, i.projectLead.name);
   }
   const out = [...opts.values()];
+  // Priorities go by rank, like Linear; other choices by name. "No …" and "Current user" lead.
+  const order = (a: Choice, b: Choice) =>
+    field === "priority"
+      ? priorityRank(a.label) - priorityRank(b.label) || a.label.localeCompare(b.label)
+      : a.label.localeCompare(b.label);
   if (field !== "status")
     out.sort((a, b) =>
       a.value.startsWith("$")
@@ -83,7 +90,7 @@ export function filterChoices(field: Field, board: Board, issues: Issue[]): Choi
           : -1
         : b.value.startsWith("$")
           ? 1
-          : a.label.localeCompare(b.label),
+          : order(a, b),
     );
   for (const o of out)
     o.count = issues.filter((i) =>
@@ -147,7 +154,11 @@ export function PropertyFilter({
     const next = vals.includes(v) ? vals.filter((x) => x !== v) : [...vals, v];
     if (!next.length && rule)
       changePreferences(board.id, { filters: updateFilter(prefs.filters, rule.id, null) });
-    else timed("filter", () => apply(next));
+    // Picking a value leaves "is empty" for "is".
+    else
+      timed("filter", () =>
+        apply(next, rule && !["empty", "notEmpty"].includes(rule.op) ? rule.op : "is"),
+      );
   };
   const date = isDate(field);
   const numeric = isNumeric(field);
@@ -160,7 +171,7 @@ export function PropertyFilter({
             <button
               key={v}
               aria-pressed={rule.op === v}
-              onClick={() => apply(rule.values, v)}
+              onClick={() => apply(["empty", "notEmpty"].includes(v) ? [] : rule.values, v)}
               className={`rounded-full px-2 py-0.5 text-[11px] ${rule.op === v ? "bg-tab-on text-fg" : "bg-tab text-fg-3 hover:text-fg-2"}`}
             >
               {l}

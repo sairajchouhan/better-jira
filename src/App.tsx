@@ -6,6 +6,7 @@ import {
   Fragment,
   lazy,
   memo,
+  startTransition,
   Suspense,
   useEffect,
   useMemo,
@@ -75,6 +76,7 @@ import {
   listRows,
   navigationIssues,
   selectIssues,
+  defaultPreferences,
   statusDuration,
   type Bucket,
   type Display,
@@ -108,11 +110,11 @@ import {
   useLinearHotkeys,
 } from "./shortcuts";
 import { Confirm, issueAnchor } from "./menu-surface";
-import { dueLabel } from "./due-date";
 import { InboxIssueActions, InboxList, InboxPane, undoInboxToast, useInboxBadge } from "./inbox";
 import { PickerRow, PropertyMenu } from "./property-menu";
 import { createActor } from "xstate";
 import { autosaveMachine, inspector } from "./machines";
+import { shortDate } from "./due-date";
 
 /** The active board's visible columns, for keyboard navigation and the issue page's ↑ ↓ stepping. */
 const nav = { cols: [] as Issue[][] };
@@ -364,6 +366,19 @@ const BoardView = memo(function BoardView({
   const d = prefs.display;
   const [expanded, setExpanded] = useState<string[]>([]);
   const [hiddenOpen, setHiddenOpen] = useState(true);
+  // Opening a board or switching layout paints the first screenful of cards at once and the rest in a transition:
+  // mounting ~90 cards in one task took 100–200 ms (QA D95, D96).
+  const [filled, setFilled] = useState("");
+  const cap = filled === d.layout ? Infinity : d.layout === "list" ? 30 : 10;
+  useEffect(() => {
+    if (filled !== d.layout) startTransition(() => setFilled(d.layout));
+  }, [filled, d.layout]);
+  let listBudget = cap;
+  const take = (rows: number) => {
+    const limit = Math.max(0, listBudget);
+    listBudget -= rows;
+    return limit;
+  };
   const all = useMemo(() => [...issues.values()], [issues]);
   const visible = useMemo(
     () => selectIssues(all, board, prefs, mine, query, ME.id),
@@ -440,6 +455,17 @@ const BoardView = memo(function BoardView({
       ...draftForGroup(d.columns, bucket.id, board, universe, prefs.scope),
       ...(row ? draftForGroup(d.rows, row.id, board, universe, prefs.scope) : {}),
     });
+  // Linear's empty view counts what filters, search and My issues hide, and offers to clear them.
+  const filteredOut = visible.length
+    ? 0
+    : selectIssues(
+        all,
+        board,
+        { ...prefs, filters: defaultPreferences().filters },
+        false,
+        "",
+        ME.id,
+      ).length;
   return (
     <div className={`${shown ? "flex" : "hidden"} min-w-0 min-h-0 flex-1`}>
       <div className="flex min-w-0 min-h-0 flex-1 flex-col" data-layout={d.layout}>
@@ -448,13 +474,24 @@ const BoardView = memo(function BoardView({
             role="status"
             className="flex shrink-0 items-center justify-center gap-3 py-8 text-fg-3"
           >
-            No issues match this view.
-            <button
-              onClick={() => ui.send({ type: "toolbar.open", toolbar: "filter" })}
-              className="text-fg-2"
-            >
-              Edit filters
-            </button>
+            {filteredOut ? (
+              <>
+                {filteredOut} issue{filteredOut === 1 ? "" : "s"} hidden by filters
+                <button
+                  onClick={() => {
+                    changePreferences(board.id, { filters: defaultPreferences().filters });
+                    ui.send({ type: "query.set", query: "" });
+                    ui.send({ type: "mine.set", mine: false });
+                    set({ findInView: false });
+                  }}
+                  className="text-fg-2"
+                >
+                  Clear filters
+                </button>
+              </>
+            ) : (
+              "No issues in this view."
+            )}
           </div>
         )}
         {d.layout === "list" ? (
@@ -478,6 +515,7 @@ const BoardView = memo(function BoardView({
                           </div>
                         )}
                         <IssueList
+                          limit={take(r.issues.length)}
                           issues={r.issues}
                           universe={universe}
                           display={d}
@@ -511,18 +549,29 @@ const BoardView = memo(function BoardView({
                 .map((row) => (
                   <div
                     key={row.id}
-                    className={d.rows === "none" ? "flex h-full min-h-0 gap-4" : "mb-4"}
+                    className={d.rows === "none" ? "flex h-full min-h-0 gap-4" : "mb-4 w-max"}
                   >
+                    {/* The lane spans the board's full width, so its title can stay pinned left while the board scrolls. */}
                     {d.rows !== "none" && (
-                      <div className="sticky left-0 mb-2 flex items-center gap-2 px-2 py-2 text-fg-3">
+                      <div className="sticky left-0 mb-2 flex w-fit items-center gap-2 px-2 py-2 text-fg-3">
                         <span>{row.name}</span>
                         <span>{row.issues.length}</span>
+                        {show[0] && (
+                          <button
+                            aria-label={`New issue in ${row.name}`}
+                            onClick={() => createIn(show[0]!, row)}
+                            className={COL_BTN}
+                          >
+                            <Icon name="plus" />
+                          </button>
+                        )}
                       </div>
                     )}
                     <div className={d.rows === "none" ? "contents" : "flex gap-4"}>
                       {show.map((col) => (
                         <ColumnView
                           key={col.id}
+                          limit={cap}
                           bucket={col}
                           issues={
                             d.rows === "none"
@@ -703,14 +752,17 @@ function IssueList({
   universe,
   display,
   selected,
+  limit,
 }: {
   issues: Issue[];
   universe: Issue[];
   display: Display;
   selected: string | null;
+  limit: number;
 }) {
-  return listRows(issues, universe, display.subIssues ? display.nested : "none").map(
-    ({ issue, depth }) => (
+  return listRows(issues, universe, display.subIssues ? display.nested : "none")
+    .slice(0, limit)
+    .map(({ issue, depth }) => (
       <Card
         key={issue.key}
         issue={issue}
@@ -719,8 +771,7 @@ function IssueList({
         list
         depth={depth}
       />
-    ),
-  );
+    ));
 }
 
 // --- keyboard ---
@@ -1171,7 +1222,7 @@ function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue }) {
         ›
       </span>
       <button
-        aria-label="Issues"
+        aria-label={mine ? "My issues" : "Issues"}
         aria-current={issue ? undefined : "page"}
         onClick={openAllIssues}
         className={`${crumb} shrink-0 ${issue ? "max-sm:hidden" : ""}`}
@@ -1347,8 +1398,10 @@ function ColumnView({
   hide,
   create,
   header = true,
+  limit,
 }: {
   bucket: Bucket;
+  limit: number;
   issues: Issue[];
   selected: string | null;
   display: Display;
@@ -1390,7 +1443,7 @@ function ColumnView({
         />
       )}
       <div className={`flex-1 px-[9px] pt-[9px] ${scroll ? "overflow-y-auto" : ""}`}>
-        {issues.map((i) => (
+        {issues.slice(0, limit).map((i) => (
           <Card key={i.key} issue={i} selected={i.key === selected} display={display} />
         ))}
       </div>
@@ -1398,7 +1451,6 @@ function ColumnView({
   );
 }
 
-const MONTH = new Intl.DateTimeFormat("en", { month: "short", year: "numeric" });
 // Linear's card chip: 24px pill, 0.5px border, 12px/450 muted text after a 14px icon.
 const CHIP =
   "flex h-6 max-w-[224px] shrink-0 items-center rounded-full border-[0.5px] border-chip-line bg-card px-2 text-[12px] font-[450] text-card-fg-3";
@@ -1469,7 +1521,7 @@ const Card = memo(function Card({
       {show("due") && issue.due && (
         <span className={CHIP}>
           <Icon name="calendar" />
-          <span className="ml-1.5">{issue.due}</span>
+          <span className="ml-1.5">{shortDate(issue.due)}</span>
         </span>
       )}
       {show("milestone") &&
@@ -1490,17 +1542,12 @@ const Card = memo(function Card({
           </span>
         </span>
       )}
-      {show("pullRequests") && (
-        <span
-          className={CHIP}
-          title={
-            issue.prCount === undefined
-              ? "Pull-request counts have not been shared by Jira"
-              : "Pull requests reported by Jira's development summary"
-          }
-        >
+      {show("pullRequests") && !!issue.prCount && (
+        <span className={CHIP} title="Pull requests reported by Jira's development summary">
           <Icon name="external" />
-          <span className="ml-1.5">{issue.prCount ?? "—"} PRs</span>
+          <span className="ml-1.5">
+            {issue.prCount} PR{issue.prCount === 1 ? "" : "s"}
+          </span>
         </span>
       )}
     </>
@@ -1508,14 +1555,12 @@ const Card = memo(function Card({
   const dates = (
     <>
       {show("created") && issue.created && (
-        <span title={`Created ${issue.created}`}>
-          Created {MONTH.format(new Date(issue.created))}
-        </span>
+        <span title={`Created ${issue.created}`}>Created {shortDate(issue.created)}</span>
       )}
       {show("updated") && (
         <span title={`Updated ${issue.updated}`}>
           {list ? "" : "Updated "}
-          {MONTH.format(new Date(issue.updated))}
+          {shortDate(issue.updated)}
         </span>
       )}
     </>
@@ -1983,7 +2028,7 @@ function Properties({ issue }: { issue: Issue }) {
                   <Icon name="calendar" />
                 </span>
                 <span className={issue.due ? "" : "text-fg-3"}>
-                  {issue.due ? dueLabel(issue.due) : "Set due date"}
+                  {issue.due ? shortDate(issue.due) : "Set due date"}
                 </span>
               </>,
             )}

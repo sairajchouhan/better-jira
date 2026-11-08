@@ -8,7 +8,10 @@ import {
   matchesFilters,
   matchesRule,
   navigationIssues,
+  operatorsFor,
+  parentName,
   parsePreferences,
+  sameDisplay,
   selectIssues,
   statusDuration,
   updateFilter,
@@ -336,4 +339,61 @@ test("B2: rankBetween lands strictly between its neighbours in code-unit order",
     expect(mid > low && mid < high).toBe(true);
     high = mid;
   }
+});
+
+describe("QA round 1 (G7)", () => {
+  test("R1-D32: an emptied Match any root reverts to AND, on removal and on reload", () => {
+    const or: FilterGroup = { id: "root", join: "or", children: [rule("labels", ["ui"])] };
+    expect(updateFilter(or, "labels", null).join).toBe("and");
+    expect(updateFilter(or, "root", null).join).toBe("and");
+    expect(
+      parsePreferences({ filters: { id: "root", join: "or", children: [] } }).filters.join,
+    ).toBe("and");
+  });
+  test("R1-D39: the Links filter matches Jira web links kept as link resources", () => {
+    const linked = issue("L-1", {
+      resources: [
+        { id: "r", kind: "link", title: "Marker", updated: "", url: "https://example.com/marker" },
+      ],
+    });
+    expect(matchesRule(linked, rule("links", ["example.com"], "contains"), [linked], "me")).toBe(
+      true,
+    );
+  });
+  test("R1-D40/D88: enum fields offer is / is not (+ empty), never text operators; Status is never empty", () => {
+    const ops = (f: Rule["field"]) => operatorsFor(f).map(([op]) => op);
+    expect(ops("status")).toEqual(["is", "isNot"]);
+    expect(ops("priority")).toEqual(["is", "isNot", "empty", "notEmpty"]);
+    expect(ops("pullRequests")).toContain("empty");
+    expect(ops("estimate")).toContain("notEmpty");
+    const none = issue("P-1", { prCount: 0 });
+    expect(matchesRule(none, rule("pullRequests", [], "empty"), [none], "me")).toBe(true);
+  });
+  test("R1-D41: completed by recency falls back to the time the issue entered Done", () => {
+    const done = [
+      issue("D-1", { status: "done", statusSince: "2026-11-05T18:01:05Z", created: "2026-10-01" }),
+      issue("D-2", { status: "done", statusSince: "2026-11-05T18:19:44Z", created: "2026-10-02" }),
+    ];
+    const prefs = defaultPreferences();
+    prefs.display.ordering = "created";
+    prefs.display.descending = true; // ascending by age: D-1 first
+    expect(selectIssues(done, board, prefs, false, "", "me").map((i) => i.key)).toEqual([
+      "D-1",
+      "D-2",
+    ]);
+    prefs.display.completedRecency = true;
+    expect(selectIssues(done, board, prefs, false, "", "me").map((i) => i.key)).toEqual([
+      "D-2",
+      "D-1",
+    ]);
+  });
+  test("R1-D90: display equality ignores the order properties were toggled in", () => {
+    const a = defaultPreferences().display;
+    expect(sameDisplay(a, { ...a, properties: [...a.properties].reverse() })).toBe(true);
+    expect(sameDisplay(a, { ...a, properties: a.properties.slice(1) })).toBe(false);
+  });
+  test("R1-D91: parent groups and choices show the parent's title", () => {
+    expect(parentName("A-1", [issue("A-1", { summary: "Epic title" })])).toBe("A-1 Epic title");
+    expect(buckets(all, "parent", board).find((b) => b.id === "A-1")?.name).toBe("A-1 A-1");
+  });
 });

@@ -51,7 +51,7 @@ test("R1-D56: My issues is in the URL and survives a reload", async () => {
     await p.cmd("Page.reload"); // no fixture issue is the audit user's, so there are no cards to wait for
     await Bun.sleep(300);
     await p.waitFor(
-      `document.querySelector('nav[aria-label="Breadcrumb"] [aria-label="Issues"]')?.textContent==='My issues'`,
+      `document.querySelector('nav[aria-label="Breadcrumb"] [aria-label="My issues"]')?.textContent==='My issues'`,
     );
     await p.keys("ge");
     await p.waitFor(`!new URL(location.href).searchParams.has('mine')`);

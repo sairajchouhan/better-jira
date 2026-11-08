@@ -1042,7 +1042,9 @@ function restoreNavigation() {
       ? { view: params.get("view") as View }
       : {}),
   });
-  if (!params.has("inbox")) ui.send({ type: "mine.set", mine: params.has("mine") });
+  // mine.set also leaves the inbox, so send it only when My issues actually changes.
+  if (!params.has("inbox") && get().mine !== params.has("mine"))
+    ui.send({ type: "mine.set", mine: params.has("mine") });
   restoringNavigation = false;
   if (wanted && !issue) ui.send({ type: "toast.show", text: `Issue ${wanted} not found` });
 }

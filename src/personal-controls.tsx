@@ -30,7 +30,7 @@ import {
   ME,
   navigate,
   openSavedView,
-  preferencesFor,
+  usePreferences,
   saveView,
   set,
   toggleFavorite,
@@ -42,7 +42,14 @@ import {
   type JiraOptions,
 } from "./store";
 import { RELATION_ISSUE } from "./issue-activity";
-import { buckets, newId, priorityRank, type Field, type Grouping } from "./view-model";
+import {
+  buckets,
+  newId,
+  priorityRank,
+  updateFilter,
+  type Field,
+  type Grouping,
+} from "./view-model";
 
 const INPUT =
   "w-full rounded-md border border-line-2 bg-card px-3 py-2 text-fg outline-none focus:border-accent";
@@ -61,7 +68,7 @@ import { shortcutLabel, runShortcut } from "./shortcuts";
 import { copyIcons, copyKinds, copyShortcuts, issueCopy, type CopyKind } from "./issue-copy";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { reminderPresets, reminderTime } from "./reminder-display";
-import { dueLabel, duePresets, parseDueDate } from "./due-date";
+import { duePresets, parseDueDate, shortDate } from "./due-date";
 
 /** Linear keeps an unsent title and description when the composer closes; the next C brings them back. */
 const unsent = { title: "", description: normalizeDocument("") };
@@ -399,7 +406,7 @@ export function PropertyPicker({
     const dated = (name: string, due: string) => (
       <span className="flex gap-2">
         <span className="flex-1 truncate">{name}</span>
-        <span className="text-fg-3">{dueLabel(due)}</span>
+        <span className="text-fg-3">{shortDate(due)}</span>
       </span>
     );
     return (
@@ -676,6 +683,7 @@ export function PropertyPicker({
 
 export function BoardDetails({ board, issues }: { board: Board; issues: Issue[] }) {
   const [tab, setTab] = useState<Grouping>("assignee");
+  const { filters } = usePreferences(board.id);
   const tabs: [Grouping, string][] = [
     ["assignee", "Assignees"],
     ["label", "Labels"],
@@ -702,28 +710,42 @@ export function BoardDetails({ board, issues }: { board: Board; issues: Issue[] 
       </div>
       {buckets(issues, tab, board, issues)
         .filter((g) => g.issues.length)
-        .map((group) => (
-          <button
-            key={group.id}
-            onClick={() => {
-              const prefs = preferencesFor(board.id);
-              const field: Field = tab === "label" ? "labels" : (tab as Field);
-              changePreferences(board.id, {
-                filters: {
-                  ...prefs.filters,
-                  children: [
-                    ...prefs.filters.children.filter((c) => !("field" in c && c.field === field)),
-                    { id: newId(), field, op: "is", values: [group.id] },
-                  ],
-                },
-              });
-            }}
-            className="mb-1 flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-[12px] hover:bg-hover"
-          >
-            <span className="flex-1 truncate">{group.name}</span>
-            <span className="rounded-md bg-sel px-2 tabular-nums">{group.issues.length}</span>
-          </button>
-        ))}
+        .map((group) => {
+          const field: Field = tab === "label" ? "labels" : (tab as Field);
+          // Like Linear, a bucket filters the view, and clicking it again clears that filter.
+          const active = filters.children.find(
+            (c) =>
+              "field" in c &&
+              c.field === field &&
+              c.op === "is" &&
+              c.values.length === 1 &&
+              c.values[0] === group.id,
+          );
+          return (
+            <button
+              key={group.id}
+              aria-pressed={!!active}
+              title={active ? "Clear filter" : undefined}
+              onClick={() =>
+                changePreferences(board.id, {
+                  filters: active
+                    ? updateFilter(filters, active.id, null)
+                    : {
+                        ...filters,
+                        children: [
+                          ...filters.children.filter((c) => !("field" in c && c.field === field)),
+                          { id: newId(), field, op: "is", values: [group.id] },
+                        ],
+                      },
+                })
+              }
+              className={`mb-1 flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-[12px] hover:bg-hover ${active ? "bg-sel text-fg" : ""}`}
+            >
+              <span className="flex-1 truncate">{group.name}</span>
+              <span className="rounded-md bg-sel px-2 tabular-nums">{group.issues.length}</span>
+            </button>
+          );
+        })}
       {!issues.length && <p className="text-fg-3">No issues in this view.</p>}
     </aside>
   );
@@ -1572,6 +1594,8 @@ export function SavedViews() {
                 type="button"
                 className={`${BUTTON} mr-auto`}
                 onClick={() => {
+                  const view = views.find((v) => v.id === editing);
+                  if (!confirm(`Remove the view "${view?.name}"? This can't be undone.`)) return;
                   set({ savedViews: views.filter((v) => v.id !== editing) });
                   setEditing(null);
                 }}

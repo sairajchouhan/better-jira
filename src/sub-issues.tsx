@@ -30,7 +30,7 @@ import { ActionMenu, type ActionEntry } from "./action-menu";
 import { copyIcons, copyKinds, copyShortcuts, issueCopy } from "./issue-copy";
 import { Relations } from "./personal-controls";
 import { ResourceForm, createIssueDocument } from "./issue-resources";
-import { duePresets } from "./due-date";
+import { duePresets, shortDate } from "./due-date";
 import { reminderPresets, reminderTime } from "./reminder-display";
 import { shortcutLabel } from "./shortcuts";
 import { RELATION_ISSUE } from "./issue-activity";
@@ -890,7 +890,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
             )}
             {display.properties.includes("due") && child.due && (
               <time dateTime={child.due} className="text-fg-3">
-                {child.due}
+                {shortDate(child.due)}
               </time>
             )}
             {display.properties.includes("links") && !!child.links?.length && (

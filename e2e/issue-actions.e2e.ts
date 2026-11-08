@@ -60,9 +60,9 @@ test("issue options follow Linear's action tree, with descendant search and subm
       separators: 0,
     });
     await page.key("Escape");
-    // Due date › Tomorrow sets tomorrow's local date.
+    // Due date › Tomorrow sets tomorrow's local date, shown Linear-style as "Nov 9".
     const tomorrow = await page.eval<string>(
-      `(()=>{const d=new Date();d.setDate(d.getDate()+1);return d.toLocaleDateString('en',{month:'short',day:'numeric'})})()`,
+      `(()=>{const d=new Date();d.setDate(d.getDate()+1);return d.toLocaleDateString('en-US',{month:'short',day:'numeric'})})()`,
     );
     await page.click("#issue-options");
     await page.hover('[cmdk-item][data-value="Due date"]');

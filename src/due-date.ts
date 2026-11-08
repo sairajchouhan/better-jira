@@ -4,15 +4,6 @@ export function dateOnly(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 /** The one short date the app shows for due dates and reminders: "Nov 9", with the year only when it isn't this year. */
-export function dueLabel(date: string, reference = new Date()) {
-  const [year, month, day] = date.split("-").map(Number),
-    value = new Date(year!, month! - 1, day!);
-  return value.toLocaleDateString("en", {
-    month: "short",
-    day: "numeric",
-    ...(year === reference.getFullYear() ? {} : { year: "numeric" }),
-  });
-}
 /** Linear's Due date presets, with their short date. */
 export function duePresets(reference = new Date()) {
   const day = (days: number) => {
@@ -29,7 +20,7 @@ export function duePresets(reference = new Date()) {
   ).map(([name, date]) => ({
     name,
     due: dateOnly(date),
-    label: dueLabel(dateOnly(date), reference),
+    label: shortDate(dateOnly(date), reference),
   }));
 }
 /** Date-only values use the browser's local calendar, never a UTC conversion. */
@@ -64,4 +55,16 @@ export function parseDueDate(input: string, reference = new Date()): string | nu
     return null;
   const date = result.start.date();
   return Number.isNaN(date.getTime()) ? null : dateOnly(date);
+}
+const SHORT = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }),
+  SHORT_YEAR = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+/** Linear's short date: "Nov 8" this year, "Nov 8, 2025" otherwise. A date-only value stays on the local calendar. */
+export function shortDate(value: string, now = new Date()): string {
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value);
+  if (Number.isNaN(date.getTime())) return value;
+  return (date.getFullYear() === now.getFullYear() ? SHORT : SHORT_YEAR).format(date);
 }
