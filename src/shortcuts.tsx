@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { canHaveChildren } from "./issue-properties";
 import {
   formatForDisplay,
   useHotkeys,
@@ -575,6 +576,10 @@ export const shortcuts: Shortcut[] = [
     hotkey: "Mod+Shift+O",
     issue: true,
     run: issueAction((i) => {
+      if (!canHaveChildren(get(), i)) {
+        set({ perf: `Jira has no issue type below ${i.type}, so ${i.key} can't have sub-issues` });
+        return;
+      }
       const inline = document.querySelector<HTMLElement>(
         `[data-sub-issues="${CSS.escape(i.key)}"] [data-create-child]`,
       );

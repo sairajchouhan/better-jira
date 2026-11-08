@@ -1,5 +1,14 @@
 import { expect, test } from "bun:test";
-import { pullRequestCount, statusDates, typeChoices } from "./issue-properties";
+import {
+  canHaveChildren,
+  canParent,
+  childTypes,
+  matchRank,
+  needsParent,
+  pullRequestCount,
+  statusDates,
+  typeChoices,
+} from "./issue-properties";
 
 const categories = (id: string) =>
   (({ todo: "new", doing: "indeterminate", done: "done" }) as Record<string, string>)[id];
@@ -63,4 +72,41 @@ test("type choices stay at the issue's Jira hierarchy level", () => {
   expect(typeChoices("Epic", types, [])).toEqual(["Epic"]);
   // Local mode has no Jira type list: offer what the project already uses.
   expect(typeChoices("Task", undefined, ["Bug", "Task"])).toEqual(["Task", "Bug"]);
+});
+
+test("hierarchy pickers offer only what Jira accepts: a parent one level up in the same project", () => {
+  const levels = [
+    { name: "Epic", hierarchyLevel: 1 },
+    { name: "Task", hierarchyLevel: 0 },
+    { name: "Story", hierarchyLevel: 0 },
+    { name: "Subtask", hierarchyLevel: -1 },
+  ];
+  const jira = { writable: true, options: { types: { KAN: levels, SAM1: levels } } };
+  const kan = (type: string) => ({ type, project: { key: "KAN" } });
+  expect(canParent(jira, kan("Epic"), kan("Task"))).toBe(true);
+  expect(canParent(jira, kan("Task"), kan("Subtask"))).toBe(true);
+  expect(canParent(jira, kan("Story"), kan("Task"))).toBe(false);
+  expect(canParent(jira, kan("Subtask"), kan("Task"))).toBe(false);
+  expect(canParent(jira, { type: "Epic", project: { key: "SAM1" } }, kan("Task"))).toBe(false);
+  expect(childTypes(jira, kan("Epic"))).toEqual(["Task", "Story"]);
+  expect(childTypes(jira, kan("Task"))).toEqual(["Subtask"]);
+  expect(canHaveChildren(jira, kan("Subtask"))).toBe(false);
+  expect(needsParent(jira, kan("Subtask"))).toBe(true);
+  expect(needsParent(jira, kan("Task"))).toBe(false);
+  // Local mode isn't bound by Jira's rules.
+  const local = { ...jira, writable: false };
+  expect(canParent(local, kan("Story"), kan("Task"))).toBe(true);
+  expect(canHaveChildren(local, kan("Subtask"))).toBe(true);
+  expect(needsParent(local, kan("Subtask"))).toBe(false);
+});
+
+test("search ranks an exact match above a partial one", () => {
+  const rank = (summary: string) => matchRank("relations child A", { key: "KAN-1", summary });
+  expect(rank("relations child A")).toBe(0);
+  expect(rank("[QA] relations child A")).toBe(1);
+  expect(rank("[QA] relations child Ab")).toBe(2);
+  expect(rank("[QA] relations child B")).toBe(3);
+  expect(rank("[QA] relations parent")).toBe(-1);
+  expect(matchRank("kan-1", { key: "KAN-1", summary: "x" })).toBe(0);
+  expect(matchRank("(", { key: "KAN-1", summary: "a (b)" })).toBe(2); // regex characters are literal
 });

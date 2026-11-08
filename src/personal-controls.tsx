@@ -8,7 +8,14 @@ import { RichEditor } from "./rich-editor-loader";
 import { MediaView } from "./media-loader";
 import { normalizeDocument } from "./document";
 import { Icon, PriorityIcon, StatusIcon, TypeDot, hue } from "./icons";
-import { typeChoices } from "./issue-properties";
+import {
+  canHaveChildren,
+  canParent,
+  childTypes,
+  matchRank,
+  needsParent,
+  typeChoices,
+} from "./issue-properties";
 import { PICKER_ITEM, PickerRow, PropertyMenu } from "./property-menu";
 import {
   actions,
@@ -111,13 +118,21 @@ export function CreateIssue() {
     source && sourceLevel !== undefined
       ? jiraTypes!.filter((t) => t.hierarchyLevel === sourceLevel + 1).map((t) => t.name)
       : undefined;
+  const project = draft.project ?? projects[0],
+    parentIssue = draft.parent ? all.get(draft.parent) : undefined;
   const noParentType =
     parentTypes?.length === 0
       ? `Jira has no issue type above ${source!.type}, so ${source!.key} can't have a parent.`
-      : "";
-  const types = parentTypes ?? [
-    ...new Set(["Task", ...issues.flatMap((i) => (i.type ? [i.type] : []))]),
-  ];
+      : parentIssue && !canHaveChildren(get(), parentIssue)
+        ? `Jira has no issue type below ${parentIssue.type}, so ${parentIssue.key} can't have sub-issues.`
+        : "";
+  // A sub-issue takes a type one level below its parent; any other new issue can't be a Subtask, which needs a parent.
+  const types =
+    parentTypes ??
+    (parentIssue && childTypes(get(), parentIssue)) ??
+    [...new Set(["Task", ...issues.flatMap((i) => (i.type ? [i.type] : []))])].filter(
+      (type) => draft.parent || !needsParent(get(), { type, project }),
+    );
   const type = draft.type && types.includes(draft.type) ? draft.type : (types[0] ?? "Task");
   const milestones = [
     ...new Map([
@@ -251,8 +266,12 @@ export function CreateIssue() {
           />
           <PillSelect
             label="Project"
-            value={draft.project === null ? "" : (draft.project?.key ?? projects[0]?.key ?? "")}
-            options={[["", "No project"], ...projects.map((p) => [p.key, p.name] as const)]}
+            value={draft.project === null && !writable ? "" : (project?.key ?? "")}
+            // Every Jira issue needs a project.
+            options={[
+              ...(writable ? [] : [["", "No project"] as const]),
+              ...projects.map((p) => [p.key, p.name] as const),
+            ]}
             onChange={(key) =>
               setDraft({
                 ...draft,
@@ -500,15 +519,22 @@ export function PropertyPicker({
     ];
   if (field === "type")
     choices = issueTypes(issue, options, issues).map((t) => ({ id: t, name: t }));
+  // Jira's API can't move an issue to another project or out of one, so with Jira writes the menu shows only its own.
   if (field === "project")
-    choices = [
-      { id: "", name: "No project" },
-      ...new Map(
-        issues.flatMap((i) =>
-          i.project ? [[i.project.key, { id: i.project.key, name: i.project.name }] as const] : [],
-        ),
-      ).values(),
-    ];
+    choices = writable
+      ? issue.project
+        ? [{ id: issue.project.key, name: issue.project.name }]
+        : []
+      : [
+          { id: "", name: "No project" },
+          ...new Map(
+            issues.flatMap((i) =>
+              i.project
+                ? [[i.project.key, { id: i.project.key, name: i.project.name }] as const]
+                : [],
+            ),
+          ).values(),
+        ];
   if (field === "milestone")
     choices = [
       { id: "", name: "No milestone" },
@@ -530,7 +556,7 @@ export function PropertyPicker({
   const choose = (c: Choice) => {
     if (field === "priority") actions.patch(issue.key, { priority: c.id || undefined });
     if (field === "type" && c.id !== issue.type) actions.patch(issue.key, { type: c.id });
-    if (field === "project")
+    if (field === "project" && c.id !== (issue.project?.key ?? ""))
       actions.patch(issue.key, {
         project: issues.find((i) => i.project?.key === c.id)?.project ?? null,
         milestones: [],
@@ -781,14 +807,18 @@ export function IssueOptions({ issue }: { issue: Issue }) {
       divider: true,
       children: [
         { name: "Issue…", run: () => related("related") },
-        {
-          name: "Sub-issue…",
-          shortcut: keys("sub-issue"),
-          run: () => {
-            close();
-            requestAnimationFrame(() => runShortcut("sub-issue"));
-          },
-        },
+        ...(canHaveChildren(get(), issue)
+          ? [
+              {
+                name: "Sub-issue…",
+                shortcut: keys("sub-issue"),
+                run: () => {
+                  close();
+                  requestAnimationFrame(() => runShortcut("sub-issue"));
+                },
+              },
+            ]
+          : []),
         { name: "Parent issue…", run: () => related("parent") },
         { name: "Blocked issue…", run: () => related("blocked") },
         { name: "Blocking issue…", run: () => related("blocking") },
@@ -807,13 +837,13 @@ export function IssueOptions({ issue }: { issue: Issue }) {
       ],
     },
     // Linear (RAJ-52): Remove lists the parent and every relation, named by the other issue's role ("Blocking issue RAJ-54 …").
-    ...(parent || issue.relations?.length
+    ...((parent && !needsParent(get(), issue)) || issue.relations?.length
       ? [
           {
             name: "Remove",
             icon: "flag-x" as const,
             children: [
-              ...(parent
+              ...(parent && !needsParent(get(), issue)
                 ? [
                     {
                       name: `Parent issue ${parent.key} ${parent.summary}`,
@@ -1205,25 +1235,41 @@ export function Relations({ issue, close: done }: { issue: Issue; close?: () => 
   if (kind === "parent" || kind === "child")
     for (const i of all.values())
       if (i.parent === issue.key || i.key === issue.parent) linked.add(i.key);
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean),
-    fits = (i: Issue) =>
-      i.key !== issue.key &&
-      !linked.has(i.key) &&
-      words.every((w) => `${i.key} ${i.summary}`.toLowerCase().includes(w));
+  // Jira takes a parent only one hierarchy level up in the same project; best match first, so Enter never picks a partial match over an exact one.
+  const fits = (i: Issue) =>
+    i.key !== issue.key &&
+    !linked.has(i.key) &&
+    matchRank(query, i) >= 0 &&
+    (kind === "parent"
+      ? canParent(get(), i, issue)
+      : kind === "child"
+        ? canParent(get(), issue, i)
+        : true);
+  const ranked = (list: Issue[]) =>
+    list
+      .map((i) => [matchRank(query, i), i] as const)
+      .sort(([a, x], [b, y]) => a - b || y.updated.localeCompare(x.updated))
+      .map(([, i]) => i);
   const relatedIssues = ["blocked", "blocking", "duplicate"].includes(kind)
-    ? (issue.relations ?? [])
-        .filter((r) => r.kind === "related")
-        .map((r) => all.get(r.key))
-        .filter((i): i is Issue => !!i && fits(i))
+    ? ranked(
+        (issue.relations ?? [])
+          .filter((r) => r.kind === "related")
+          .map((r) => all.get(r.key))
+          .filter((i): i is Issue => !!i && fits(i)),
+      )
     : [];
   const recent = useMemo(
     () =>
-      [...all.values()]
-        .filter(fits)
-        .sort((a, b) => b.updated.localeCompare(a.updated))
-        .slice(0, query ? 40 : 8),
-    [all, query, kind],
+      ranked([...all.values()].filter((i) => fits(i) && !relatedIssues.includes(i))).slice(
+        0,
+        query ? 40 : 8,
+      ),
+    [all, query, kind, issue],
   );
+  // cmdk selects the first row as the query changes, so the group holding the best match goes first.
+  const relatedFirst =
+    !recent[0] ||
+    (!!relatedIssues[0] && matchRank(query, relatedIssues[0]) <= matchRank(query, recent[0]));
   const add = (target: Issue) => {
     if (kind === "parent") {
       let ancestor: Issue | undefined = target;
@@ -1257,7 +1303,7 @@ export function Relations({ issue, close: done }: { issue: Issue; close?: () => 
           close();
           beginCreate({ related: { key: issue.key, kind: mark.draft! }, project: issue.project });
         }
-      : kind === "child" && !query
+      : kind === "child" && !query && canHaveChildren(get(), issue)
         ? () => {
             close();
             requestAnimationFrame(() => runShortcut("sub-issue"));
@@ -1276,6 +1322,11 @@ export function Relations({ issue, close: done }: { issue: Issue; close?: () => 
       <span className="text-[var(--menu-fg-3)]">{i.key}</span>
       <span className="truncate text-[var(--menu-fg)]">{i.summary}</span>
     </Command.Item>
+  );
+  const relatedGroup = relatedIssues.length > 0 && (
+    <Command.Group heading="Related issues">
+      {relatedIssues.map((i) => row(i, "related"))}
+    </Command.Group>
   );
   return (
     <Modal label="Issue relations" close={close} command width={720}>
@@ -1298,11 +1349,7 @@ export function Relations({ issue, close: done }: { issue: Issue; close?: () => 
           />
         </div>
         <Command.List className="mark-list min-h-0 flex-1 overflow-y-auto p-1.5">
-          {relatedIssues.length > 0 && (
-            <Command.Group heading="Related issues">
-              {relatedIssues.map((i) => row(i, "related"))}
-            </Command.Group>
-          )}
+          {relatedFirst && relatedGroup}
           {recent.length > 0 &&
             (kind === "parent" && !query ? (
               recent.map((i) => row(i, "recent"))
@@ -1311,6 +1358,7 @@ export function Relations({ issue, close: done }: { issue: Issue; close?: () => 
                 {recent.map((i) => row(i, "recent"))}
               </Command.Group>
             ))}
+          {!relatedFirst && relatedGroup}
           {create && (
             <Command.Group heading="Create">
               <Command.Item value="create" onSelect={create} className="mark-row">

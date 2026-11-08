@@ -34,6 +34,7 @@ import { duePresets } from "./due-date";
 import { reminderPresets, reminderTime } from "./reminder-display";
 import { shortcutLabel } from "./shortcuts";
 import { RELATION_ISSUE } from "./issue-activity";
+import { canHaveChildren, needsParent } from "./issue-properties";
 import { priorityRank, rankBetween, type Property } from "./view-model";
 import { defaultSubIssueDisplay, subIssueRows, type SubIssueDisplay } from "./sub-issue-model";
 import {
@@ -537,27 +538,32 @@ export function SubIssues({ issue }: { issue: Issue }) {
         run: () => select("labels", choice.id, child),
       })),
     },
-    {
-      name: "Project",
-      icon: "layers",
-      shortcut: shortcutLabel("project") || undefined,
-      children: [
-        {
-          name: "No project",
-          run: () => actions.patch(child.key, { project: null, milestones: [] }),
-        },
-        ...[
-          ...new Map(
-            [...all.values()].flatMap((i) =>
-              i.project ? [[i.project.key, i.project] as const] : [],
-            ),
-          ).values(),
-        ].map((project) => ({
-          name: `${child.project?.key === project.key ? "✓ " : ""}${project.name}`,
-          run: () => actions.patch(child.key, { project, milestones: [] }),
-        })),
-      ],
-    },
+    // Jira's API can't move an issue to another project or out of one.
+    ...(writable
+      ? []
+      : ([
+          {
+            name: "Project",
+            icon: "layers",
+            shortcut: shortcutLabel("project") || undefined,
+            children: [
+              {
+                name: "No project",
+                run: () => actions.patch(child.key, { project: null, milestones: [] }),
+              },
+              ...[
+                ...new Map(
+                  [...all.values()].flatMap((i) =>
+                    i.project ? [[i.project.key, i.project] as const] : [],
+                  ),
+                ).values(),
+              ].map((project) => ({
+                name: `${child.project?.key === project.key ? "✓ " : ""}${project.name}`,
+                run: () => actions.patch(child.key, { project, milestones: [] }),
+              })),
+            ],
+          },
+        ] as ActionEntry[])),
     {
       name: "More properties",
       icon: "square-dots",
@@ -592,10 +598,14 @@ export function SubIssues({ issue }: { issue: Issue }) {
           run: () =>
             beginCreate({ related: { key: child.key, kind: "related" }, project: child.project }),
         },
-        {
-          name: "Sub-issue…",
-          run: () => beginCreate({ parent: child.key, project: child.project }),
-        },
+        ...(canHaveChildren(get(), child)
+          ? [
+              {
+                name: "Sub-issue…",
+                run: () => beginCreate({ parent: child.key, project: child.project }),
+              },
+            ]
+          : []),
         ...(["parent", "blocked", "blocking"] as const).map((kind) => ({
           name: `${kind === "parent" ? "Parent" : kind === "blocked" ? "Blocked" : "Blocking"} issue…`,
           run: () => beginCreate({ related: { key: child.key, kind }, project: child.project }),
@@ -624,13 +634,13 @@ export function SubIssues({ issue }: { issue: Issue }) {
       })),
     },
     // Remove sits in the Create related group and names the parent and every relation by the other issue's role, as on Issue options.
-    ...(child.parent || child.relations?.length
+    ...((child.parent && !needsParent(get(), child)) || child.relations?.length
       ? [
           {
             name: "Remove",
             icon: "flag-x" as const,
             children: [
-              ...(child.parent
+              ...(child.parent && !needsParent(get(), child)
                 ? [
                     {
                       name: `Parent issue ${child.parent} ${all.get(child.parent)?.summary ?? ""}`.trim(),
@@ -881,7 +891,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
               )}
           </div>
         ))}
-      {!model.total && !creating && (
+      {!model.total && !creating && canHaveChildren(get(), issue) && (
         <button
           data-create-child
           aria-label="Add sub-issues"

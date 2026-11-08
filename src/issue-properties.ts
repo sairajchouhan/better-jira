@@ -97,3 +97,48 @@ export function typeChoices(
     return jiraTypes!.filter((t) => t.hierarchyLevel === level).map((t) => t.name);
   return [...new Set([...(current ? [current] : []), ...seen])];
 }
+
+type Hierarchy = {
+  writable: boolean;
+  options: { types?: Record<string, { name: string; hierarchyLevel: number }[]> };
+};
+type Typed = { type?: string; project?: { key: string } | null };
+/** Where an issue's type sits in Jira's hierarchy (Epic 1, Task 0, Subtask -1). Undefined in local mode, which Jira's rules don't bind. */
+const levelOf = (s: Hierarchy, issue: Typed) =>
+  s.writable
+    ? s.options.types?.[issue.project?.key ?? ""]?.find((t) => t.name === issue.type)
+        ?.hierarchyLevel
+    : undefined;
+/** Jira takes `parent` for `child` only one hierarchy level up, in the same project. */
+export function canParent(s: Hierarchy, parent: Typed, child: Typed) {
+  const above = levelOf(s, parent),
+    below = levelOf(s, child);
+  return (
+    above === undefined ||
+    below === undefined ||
+    (above === below + 1 && parent.project?.key === child.project?.key)
+  );
+}
+/** Types a new child of `parent` can take: its project's types one level down, none under a Subtask. Undefined when unknown. */
+export function childTypes(s: Hierarchy, parent: Typed) {
+  const level = levelOf(s, parent);
+  return level === undefined
+    ? undefined
+    : s.options
+        .types![parent.project!.key]!.filter((t) => t.hierarchyLevel === level - 1)
+        .map((t) => t.name);
+}
+export const canHaveChildren = (s: Hierarchy, issue: Typed) => childTypes(s, issue)?.length !== 0;
+/** Jira can't create a Subtask without a parent or take its parent away. */
+export const needsParent = (s: Hierarchy, issue: Typed) => (levelOf(s, issue) ?? 0) < 0;
+
+/** How well an issue matches a search, best first: 0 exact key or title, 1 the whole query as words, 2 the query inside a word, 3 every word somewhere; -1 no match. */
+export function matchRank(query: string, issue: { key: string; summary: string }) {
+  const q = query.trim().toLowerCase(),
+    text = `${issue.key} ${issue.summary}`.toLowerCase();
+  if (!q) return 3;
+  if (issue.key.toLowerCase() === q || issue.summary.toLowerCase() === q) return 0;
+  if (new RegExp(`(^|\\W)${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\W|$)`).test(text)) return 1;
+  if (text.includes(q)) return 2;
+  return q.split(/\s+/).every((w) => text.includes(w)) ? 3 : -1;
+}
