@@ -27,9 +27,11 @@ export function visibleComments(
     let root = comment;
     const visited = new Set<string>();
     while (true) {
-      if (states[root.id]?.deleted || (root.parentId && states[root.parentId]?.deleted)) return [];
+      if (states[root.id]?.deleted) return [];
       visited.add(root.id);
-      const parent = root.parentId ? byId.get(root.parentId) : undefined;
+      // A parent deleted here reads as one Jira already deleted, so its replies move to the orphan thread at once.
+      const parent =
+        root.parentId && !states[root.parentId]?.deleted ? byId.get(root.parentId) : undefined;
       if (!parent) break;
       // A malformed cycle has no root. Recover its comments rather than losing them.
       if (visited.has(parent.id)) {

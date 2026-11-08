@@ -108,7 +108,7 @@ test("reply drafts remain per thread across reloads and copy thread produces ric
     await page.click('[aria-label="Comment options"]');
     await page.click("text=Copy thread as Markdown");
     expect(await page.eval("navigator.clipboard.readText()")).toBe(
-      "**Root** reference\n\nReply draft",
+      "**Audit user:**\n**Root** reference\n\n**Audit user:**\nReply draft",
     );
   } finally {
     await page.close();
@@ -230,6 +230,9 @@ test('a comment card follows Linear (RAJ-52): 0.5px line and shadow, 16px paddin
     await page.type("Synthetic reply");
     await page.key("Enter", "meta");
     await page.waitFor(`document.querySelectorAll('[data-comment]').length===2`);
+    // The empty reply editor keeps the focus after sending; Esc closes it back to the row.
+    await page.key("Escape");
+    await page.waitFor(`!!document.querySelector('.comment-reply-row')`);
     await page.eval("document.activeElement?.blur()");
     await page.cmd("Input.dispatchMouseEvent", { type: "mouseMoved", x: 1265, y: 895 });
     await Bun.sleep(200);

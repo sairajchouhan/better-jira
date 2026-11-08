@@ -1,6 +1,8 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { Debouncer } from "@tanstack/pacer";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Adf } from "./adf";
-import { normalizeDocument } from "./document";
+import { normalizeDocument, type AdfDocument } from "./document";
+import { resourceMediaIds } from "./issue-resource";
 import { adfToMarkdown } from "./issue-copy";
 import { Icon } from "./icons";
 import { Confirm } from "./menu-surface";
@@ -18,6 +20,46 @@ import {
   type Issue,
 } from "./store";
 import { mentionDraft, visibleComments, type IssueComment } from "./comment-thread";
+
+/**
+ * Files a comment draft uploaded leave the issue again once the draft drops them, so a discarded upload is not left
+ * attached in Jira (R1-D17). The 5 s wait lets the editor's undo bring a file back first.
+ * ponytail: tracked per mounted composer; a file dropped just before leaving the issue, or in a draft restored after a
+ * reload, stays attached.
+ */
+export function useDraftFiles(key: string) {
+  const uploaded = useRef(new Set<string>()),
+    draft = useRef<AdfDocument | undefined>(undefined);
+  const sweep = useMemo(() => {
+    const run = (body = draft.current) => {
+      const kept = resourceMediaIds(body),
+        gone = [...uploaded.current].filter((id) => !kept.has(id));
+      for (const id of gone) uploaded.current.delete(id);
+      if (gone.length) actions.dropDraftFiles(key, gone);
+    };
+    return { run, later: new Debouncer(() => run(), { wait: 5000 }) };
+  }, [key]);
+  // Leaving the issue only cancels: an upload may still be on its way into the saved draft.
+  useEffect(() => () => sweep.later.cancel(), [sweep]);
+  return {
+    onFiles: async (files: File[]) => {
+      const saved = await addIssueFiles(key, files);
+      for (const file of saved) uploaded.current.add(file.id);
+      return saved;
+    },
+    changed: (body: AdfDocument) => {
+      draft.current = body;
+      sweep.later.maybeExecute();
+    },
+    /** The sent body keeps its files; the rest go now. */
+    sent: (body: AdfDocument) => {
+      sweep.later.cancel();
+      sweep.run(body);
+      uploaded.current.clear();
+      draft.current = undefined;
+    },
+  };
+}
 
 type Props = {
   issue: Issue;
@@ -62,6 +104,8 @@ function Thread({
   const [replying, setReplying] = useState(false),
     [editing, setEditing] = useState<string | null>(null),
     [composer, setComposer] = useState(0);
+  const replyFiles = useDraftFiles(issue.key),
+    editFiles = useDraftFiles(issue.key);
   const [deleting, setDeleting] = useState<string | null>(null),
     [menu, setMenu] = useState<{
       anchor: HTMLElement;
@@ -153,9 +197,12 @@ function Thread({
       const text =
         kind === "link"
           ? url.href
-          : [comment, ...(!comment.parentId ? replies : [])]
-              .map((c) => adfToMarkdown(c.body))
-              .join("\n\n");
+          : !comment.parentId && replies.length
+            ? // A thread names each author first, as Linear's "Copy thread as Markdown" does.
+              [comment, ...replies]
+                .map((c) => `**${c.author?.displayName ?? "Unknown"}:**\n${adfToMarkdown(c.body)}`)
+                .join("\n\n")
+            : adfToMarkdown(comment.body);
       await navigator.clipboard.writeText(text);
       set({ perf: kind === "link" ? "Copied comment link" : "Copied comment as Markdown" });
     } catch {
@@ -255,17 +302,21 @@ function Thread({
               id={`edit-${comment.id}`}
               label="Edit comment"
               autoFocus
+              required
               initial={comment.body}
               issueKey={issue.key}
               attachments={issue.attachments}
-              onFiles={(files) => addIssueFiles(issue.key, files)}
+              onFiles={editFiles.onFiles}
+              onChange={editFiles.changed}
               saveLabel="Save comment"
               onSave={(body) => {
+                editFiles.sent(body);
                 actions.editComment(issue.key, comment.id, body);
                 setEditing(null);
                 restoreFocus(comment.id);
               }}
               onCancel={() => {
+                editFiles.sent(comment.body);
                 setEditing(null);
                 restoreFocus(comment.id);
               }}
@@ -345,23 +396,22 @@ function Thread({
                   initial={draft()}
                   issueKey={issue.key}
                   attachments={issue.attachments}
-                  onFiles={(files) => addIssueFiles(issue.key, files)}
+                  onFiles={replyFiles.onFiles}
                   saveLabel="Submit reply"
                   onChange={(body) => {
+                    replyFiles.changed(body);
                     try {
                       localStorage.setItem(draftKey, JSON.stringify(body));
                     } catch {}
                   }}
                   onSave={(body) => {
                     if (actions.comment(issue.key, body, root.id)) {
+                      replyFiles.sent(body);
                       try {
                         localStorage.removeItem(draftKey);
                       } catch {}
+                      // A fresh, empty reply editor keeps the focus, as in Linear.
                       setComposer((n) => n + 1);
-                      setReplying(false);
-                      requestAnimationFrame(() =>
-                        document.querySelector<HTMLElement>("main")?.focus(),
-                      );
                     }
                   }}
                   onCancel={cancelReply}

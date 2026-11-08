@@ -767,7 +767,7 @@ async function loadApplication() {
     window.addEventListener("popstate", restoreNavigation);
     window.addEventListener("beforeunload", (event) => {
       const s = storage.getSnapshot();
-      if (s.matches("saving") || s.matches("failed") || outbox.length) {
+      if (s.matches("saving") || s.matches("failed") || outbox.length || heldDeletes.size) {
         event.preventDefault();
         event.returnValue = "";
       }
@@ -1136,6 +1136,7 @@ function send(changes: [string, Side, Side][]) {
         return Object.keys(fields).length ? [{ op: "fields", fields }] : [];
       });
     }
+  for (const job of jobs) job.ops = holdCommentDeletes(job.key, job.board, job.ops);
   for (const { key, board, ops } of jobs) {
     if (!ops.length || board === undefined) continue;
     // Ops naming an issue whose create is still queued must run after that create, so they never fold into an earlier job.
@@ -1151,6 +1152,34 @@ function send(changes: [string, Side, Side][]) {
   }
   set({ pendingWrites: outbox.length });
   void flush();
+}
+/**
+ * Jira can't restore a deleted comment's id, time or thread, so a comment delete waits out the undo window and ⌘Z
+ * simply cancels it, leaving the comment where it was (R1-D16). The comment is hidden locally meanwhile.
+ */
+const COMMENT_UNDO_WINDOW = 8000;
+const heldDeletes = new Map<string, ReturnType<typeof setTimeout>>();
+function holdCommentDeletes(key: string, board: number | undefined, ops: Op[]): Op[] {
+  if (board === undefined) return ops;
+  return ops.filter((op) => {
+    if (op.op === "comment" && heldDeletes.has(op.ref)) {
+      clearTimeout(heldDeletes.get(op.ref));
+      heldDeletes.delete(op.ref);
+      return false;
+    }
+    if (op.op !== "comment.delete") return true;
+    clearTimeout(heldDeletes.get(op.id));
+    heldDeletes.set(
+      op.id,
+      setTimeout(() => {
+        heldDeletes.delete(op.id);
+        outbox.push({ key: currentKey(key), board, ops: [op] });
+        set({ pendingWrites: outbox.length });
+        void flush();
+      }, COMMENT_UNDO_WINDOW),
+    );
+    return false;
+  });
 }
 let flushing = false;
 async function flush() {
@@ -1226,7 +1255,13 @@ async function flush() {
         for (let i = outbox.length - 1; i >= 0; i--)
           if (outbox[i]!.key === job.key) outbox.splice(i, 1);
       const created = new Map(Object.entries(result!.created ?? {}));
-      for (const [from, to] of created) (from === job.key ? jiraKeys : jiraComments).set(from, to);
+      for (const [from, to] of created)
+        if (from === job.key) jiraKeys.set(from, to);
+        // A re-created comment's old Jira id still files the replies Jira kept under it: only writes already queued move to the new id (R1-D15).
+        else if (from.startsWith("local-")) jiraComments.set(from, to);
+        else
+          for (const queued of outbox)
+            queued.ops = renameCommentIds(queued.ops, new Map([[from, to]]));
       if (created.has(job.key)) rekey(job.key, created.get(job.key)!);
       if (result!.full && result!.key) settleUploads(result!.key, result!.full);
       // New comment ids too, so undo and redo address the comment Jira now has.
@@ -1385,10 +1420,13 @@ function adopt(
     });
     // Bodies and deletions now live in Jira; resolved, subscribed and reactions stay local.
     const states: Record<string, CommentState> = {};
-    for (const [id, { body: _b, updated: _u, deleted: _d, ...rest }] of Object.entries(
+    for (const [id, { body: _b, updated: _u, deleted, ...rest }] of Object.entries(
       issue.commentStates ?? {},
-    ))
-      if (Object.keys(rest).length) states[created.get(id) ?? id] = rest;
+    )) {
+      // A delete still held for undo has not reached Jira yet.
+      const kept = heldDeletes.has(id) ? { ...rest, deleted } : rest;
+      if (Object.keys(kept).length) states[created.get(id) ?? id] = kept;
+    }
     next.commentStates = states;
     next.comments = visibleCommentTotal(comment?.total ?? 0, comment?.comments ?? [], states);
   }
@@ -1630,11 +1668,14 @@ function restore(edit: LocalEdit, snapshots: Snapshot[]) {
     else full.delete(key);
     if (snapshot.issueFields) localFields.set(key, new Set(snapshot.issueFields));
     if (snapshot.fullFields) fullFields.set(key, new Set(snapshot.fullFields));
-    if (snapshot.issue && !createdKeys.has(key)) needsFullRefresh.add(key);
   });
   set({ issues, full });
   ui.send({ type: "overlay.close" });
   send(edit.keys.map((key, index) => [key, from[index]!, to[index]!]));
+  // The write's answer brings Jira's copy; a refresh before it lands would show the undone value again (R1-D16).
+  for (const key of edit.keys)
+    if (state.issues.has(key) && !createdKeys.has(key) && !outbox.some((job) => job.key === key))
+      needsFullRefresh.add(key);
   if (state.selected && !issues.has(state.selected)) navigate({ selected: null, panel: false });
 }
 /** Jira can't restore a deleted issue; undo or redo would only create a copy under a new key. Issues made here (PREFIX-NEWn) can be re-created. */
@@ -2223,6 +2264,21 @@ export const actions = {
     const comment = state.full.get(key)?.fields.comment?.comments?.find((c: any) => c.id === id);
     // Linear confirms first and shows no toast; local undo history still covers it.
     if (comment?.author?.accountId === ME.id) actions.commentState(key, id, { deleted: true });
+  },
+  /** Removes files a comment draft uploaded and then dropped, unless the description, a comment or a resource shows them. */
+  dropDraftFiles(key: string, ids: string[]) {
+    const issue = state.issues.get(key),
+      full = state.full.get(key);
+    if (!issue) return;
+    const used = resourceMediaIds(full?.fields.description);
+    for (const c of full?.fields.comment?.comments ?? []) resourceMediaIds(c.body, used);
+    for (const c of Object.values(issue.commentStates ?? {})) resourceMediaIds(c.body, used);
+    for (const r of issue.resources ?? []) resourceMediaIds(r, used);
+    const drop = new Set(ids.filter((id) => !used.has(id)));
+    if (issue.attachments?.some((a) => drop.has(a.id)))
+      record(key, `remove unused draft files from ${key}`, () =>
+        patchIssue(key, { attachments: issue.attachments!.filter((a) => !drop.has(a.id)) }),
+      );
   },
   /** Like Linear, creating from the composer stays on the board and confirms with a toast; `open` shows the new issue instead. */
   create(summary: string, draft: IssueDraft = {}, more = false, open = false) {

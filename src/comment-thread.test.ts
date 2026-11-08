@@ -19,10 +19,14 @@ test("local comment metadata overlays a fresh Jira response and preserves server
     content: [{ type: "paragraph", content: [{ type: "text", text: "Edited locally" }] }],
   };
   expect(visibleComments(comments, { "jira-1": { body: changed } })[0]?.body).toEqual(changed);
-  expect(visibleComments(comments, { "jira-1": { deleted: true } }).map((c) => c.id)).toEqual([
-    "jira-2",
+  // Deleting a root here moves its replies to the orphan thread at once, as Jira's answer will (R1-D52).
+  expect(
+    visibleComments(comments, { "jira-1": { deleted: true } }).map((c) => [c.id, c.orphanedFrom]),
+  ).toEqual([
+    ["local-1", "jira-1"],
+    ["jira-2", undefined],
   ]);
-  expect(visibleCommentTotal(15, comments, { "jira-1": { deleted: true } })).toBe(13);
+  expect(visibleCommentTotal(15, comments, { "jira-1": { deleted: true } })).toBe(14);
   expect(
     validCommentStates({ "jira-1": { resolved: true, reactions: ["💙"], body: changed } }),
   ).toBe(true);
@@ -37,7 +41,7 @@ test("a recovered thread remains connected when its remote ancestor returns", ()
   expect(replyParent([comments[0]!, orphan, reply], reply.id)).toBe("jira-1");
   expect(replyParent([comments[0]!, orphan], "missing")).toBeUndefined();
   expect(replyParent([comments[0]!, orphan], orphan.id, { "jira-1": { deleted: true } })).toBe(
-    undefined,
+    "jira-1",
   );
   expect(visibleComments([orphan, reply]).map((c) => [c.id, c.parentId])).toEqual([
     ["local-1", undefined],
@@ -49,8 +53,14 @@ test("a recovered thread remains connected when its remote ancestor returns", ()
     ["local-2", "jira-1"],
   ]);
   expect(
-    visibleComments([comments[0]!, orphan, reply], { "jira-1": { deleted: true } }),
-  ).toHaveLength(0);
+    visibleComments([comments[0]!, orphan, reply], { "jira-1": { deleted: true } }).map((c) => [
+      c.id,
+      c.parentId,
+    ]),
+  ).toEqual([
+    ["local-1", undefined],
+    ["local-2", "local-1"],
+  ]);
 });
 test("replies of a comment deleted in Jira stay one thread filed under its id", () => {
   const thread: IssueComment[] = [

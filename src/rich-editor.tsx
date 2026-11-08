@@ -60,6 +60,8 @@ export type RichEditorProps = {
   variant?: "comment";
   placeholder?: string;
   saveLabel?: string;
+  /** Save stays off while the content is empty (comment composers always are). */
+  required?: boolean;
   cancelLabel?: string;
   hint?: string;
   onChange?: (doc: AdfDocument) => void;
@@ -111,8 +113,15 @@ export function RichEditor(props: RichEditorProps) {
       return;
     }
     if (view.current) {
+      const doc = fromEditorDocument(view.current.state.doc);
+      if (
+        (latest.current.required || latest.current.variant === "comment") &&
+        !adfToText(doc).trim() &&
+        !documentHasMedia(doc)
+      )
+        return;
       if (deferred && latest.current.scope) discardLateMedia(latest.current.scope);
-      latest.current.onSave?.(fromEditorDocument(view.current.state.doc));
+      latest.current.onSave?.(doc);
     }
   };
   useEffect(() => {
@@ -689,7 +698,7 @@ export function RichEditor(props: RichEditorProps) {
             <button
               type="button"
               aria-label={props.saveLabel ?? "Save description"}
-              disabled={uploadBusy || (props.variant === "comment" && empty)}
+              disabled={uploadBusy || ((props.variant === "comment" || props.required) && empty)}
               title={
                 uploadBusy
                   ? "Finish or discard attachments before sending"

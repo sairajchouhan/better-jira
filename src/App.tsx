@@ -18,7 +18,7 @@ const ImageViewer = lazy(() =>
   import("./image-viewer").then((module) => ({ default: module.ImageViewer })),
 );
 import { ReminderPicker, ReminderControl, ReminderDelivery } from "./reminders";
-import { CommentThreads } from "./comment-threads";
+import { CommentThreads, useDraftFiles } from "./comment-threads";
 import { ImageCommentCard } from "./image-thread";
 import { IssueDocument } from "./issue-resources";
 import { findIssueDocument, linkTitle } from "./issue-resource";
@@ -2139,7 +2139,8 @@ function Description({ issue, f }: { issue: Issue; f: any }) {
 }
 
 function Activity({ issue, f }: { issue: Issue; f: any }) {
-  const [composer, setComposer] = useState(0);
+  const [composer, setComposer] = useState(0),
+    composerFiles = useDraftFiles(issue.key);
   const followedAnchor = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (!f || !location.hash) return;
@@ -2371,12 +2372,13 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
           }}
           issueKey={issue.key}
           attachments={issue.attachments}
-          onFiles={(files) => addIssueFiles(issue.key, files)}
+          onFiles={composerFiles.onFiles}
           label="Leave a comment…"
           placeholder="Leave a comment…"
           autoFocus={composer > 0}
           saveLabel="Submit comment"
           onChange={(doc) => {
+            composerFiles.changed(doc);
             try {
               localStorage.setItem(draftKey, JSON.stringify(doc));
             } catch {
@@ -2385,6 +2387,7 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
           }}
           onSave={(doc) => {
             if (actions.comment(issue.key, doc)) {
+              composerFiles.sent(doc);
               try {
                 localStorage.removeItem(draftKey);
               } catch {}

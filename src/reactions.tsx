@@ -5,9 +5,9 @@ import { get } from "./store";
 // Linear's picker (RAJ-52): "Frequently used" first, then categories. ponytail: a curated set, not the full Unicode catalogue; add a dataset if search misses matter.
 const groups: Record<string, string> = {
   "Smileys & People":
-    "👍:thumbs up yes approve|👎:thumbs down no|🙏:folded hands thanks please|👏:clap applause|💪:flexed biceps strong|😀:grinning smile happy|😄:smile laugh|😂:tears of joy lol|🥹:holding back tears|😊:blush happy|😍:heart eyes|🤔:thinking question|🫡:salute understood|🙃:upside down|😅:sweat smile|😎:cool sunglasses|🥳:party face|😢:cry sad|😭:sob crying|😬:grimace|😴:sleep tired|🤯:mind blown|🤝:handshake agreement|👋:wave hello|👌:ok hand|✌️:victory peace|🤞:crossed fingers luck|🤘:rock on|🙌:raised hands hooray|👐:open hands|✍️:writing hand|🧑‍💻:technologist coding|🧑‍🔧:mechanic fixing|😃:smiley happy|🙂:slightly smiling face|😕:confused",
+    "👍:thumbs up yes approve thumbsup like|👎:thumbs down no thumbsdown dislike|🙏:folded hands thanks please|👏:clap applause|💪:flexed biceps strong|😀:grinning smile happy|😄:smile laugh|😂:tears of joy lol laughing|🤣:rofl rolling laughing|😆:laughing satisfied|😉:wink|🥹:holding back tears|😊:blush happy|😍:heart eyes love|🥰:smiling hearts love|😘:kissing heart|🤗:hugs hugging|🤔:thinking question|🫡:salute understood|🙃:upside down|😅:sweat smile|😎:cool sunglasses|🥳:party face|😢:cry sad|😮:open mouth wow surprised|😱:scream shocked|😡:rage angry|😤:triumph huff|🙈:see no evil monkey|💀:skull dead|👻:ghost|🤦:facepalm|🤷:shrug|🤩:star struck excited|🥲:smiling tear|😭:sob crying|😬:grimace|😴:sleep tired|🤯:mind blown|🤝:handshake agreement|👋:wave hello bye|👆:point up|👉:point right|👌:ok hand|✌️:victory peace|🤞:crossed fingers luck|🤘:rock on|🙌:raised hands hooray|👐:open hands|✍️:writing hand|🧑‍💻:technologist coding|🧑‍🔧:mechanic fixing|😃:smiley happy|🙂:slightly smiling face|😕:confused",
   Objects:
-    "🎉:party popper celebration|❤️:red heart love|👀:eyes looking watching|🚀:rocket launch|✅:check done complete|💯:hundred perfect|🔥:fire hot|💡:light bulb idea|⚡:lightning fast|🐛:bug|🛠️:tools fix|🔧:wrench|🧪:test experiment|🧹:broom cleanup|📌:pin|🎯:target goal|📦:package shipping|🔒:lock secure|🔍:search inspect|⏳:hourglass waiting|🚧:construction work|🏁:finish flag|🏆:trophy win|🌱:seedling growth|🌈:rainbow|☕:coffee|🍕:pizza|🐱:cat|🐶:dog|🦆:duck|🦄:unicorn|🦋:butterfly|🌟:star|💚:green heart|💙:blue heart|💜:purple heart|🧡:orange heart|🤍:white heart|🖤:black heart|⚠️:warning|❌:x cross no",
+    "🎉:party popper celebration|❤️:red heart love|👀:eyes looking watching|🚀:rocket launch|✅:check done complete|💯:hundred perfect|🔥:fire hot|💡:light bulb idea|⚡:lightning fast|🐛:bug|🛠️:tools fix|🔧:wrench|🧪:test experiment|🧹:broom cleanup|📌:pin|🎯:target goal|📦:package shipping|🔒:lock secure|🔍:search inspect|⏳:hourglass waiting|🚧:construction work|🏁:finish flag|🏆:trophy win|🌱:seedling growth|🌈:rainbow|☕:coffee|🍕:pizza|🐱:cat|🐶:dog|🦆:duck|🦄:unicorn|🦋:butterfly|🌟:star glowing|⭐:star|✨:sparkles|🎊:confetti ball|🥽:goggles|💚:green heart|💙:blue heart|💜:purple heart|🧡:orange heart|🤍:white heart|🖤:black heart|⚠️:warning|❌:x cross no",
 };
 export const emojiOptions = Object.entries(groups).flatMap(([group, items]) =>
   items.split("|").map((item) => {
@@ -62,6 +62,7 @@ const SHORTCODES: Record<string, string> = {
   "💯": "100",
   "👏": "clap",
   "💪": "muscle",
+  "😍": "heart_eyes",
 };
 /** The emoji's shortcode, as Linear's tooltip names it ("You reacted with :+1:"). ponytail: names outside SHORTCODES use their first words. */
 export const shortcode = (emoji: string) =>
@@ -72,6 +73,24 @@ export const shortcode = (emoji: string) =>
     .slice(0, 2)
     .join("_") ??
   emoji;
+/** Emoji matching `q`, best first: the exact shortcode or name, then a whole word ("eyes" puts 👀 before 😍), a word start, anything else. */
+export function searchEmoji(query: string): string[] {
+  const q = query.trim().toLowerCase().replace(/^:|:$/g, "");
+  if (!q) return [];
+  const rank = (option: (typeof emojiOptions)[number]) => {
+    const code = shortcode(option.emoji),
+      words = [...option.name.split(" "), ...code.split("_")];
+    if (code === q || option.name === q || option.emoji === q) return 0;
+    if (words.includes(q)) return 1;
+    if (words.some((word) => word.startsWith(q))) return 2;
+    return `${option.name} ${code}`.includes(q) ? 3 : -1;
+  };
+  return emojiOptions
+    .map((option) => [option.emoji, rank(option)] as const)
+    .filter(([, r]) => r >= 0)
+    .sort((a, b) => a[1] - b[1])
+    .map(([emoji]) => emoji);
+}
 export function isSingleEmoji(value: string): boolean {
   return (
     [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(value)].length === 1 &&
@@ -149,16 +168,7 @@ export function ReactionPicker({
     ? [
         [
           "Search results",
-          [
-            ...(isSingleEmoji(query.trim()) ? [query.trim()] : []),
-            ...emojiOptions
-              .filter((option) =>
-                `${option.name} ${shortcode(option.emoji)} ${option.emoji}`
-                  .toLowerCase()
-                  .includes(q),
-              )
-              .map((option) => option.emoji),
-          ],
+          [...(isSingleEmoji(query.trim()) ? [query.trim()] : []), ...searchEmoji(q)],
         ],
       ]
     : [

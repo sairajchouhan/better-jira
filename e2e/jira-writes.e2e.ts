@@ -222,7 +222,8 @@ test("an image comment on a writable site is a Jira comment: created, renamed to
     await p.waitFor(`!!document.querySelector('[data-image-comment="700"]')`);
     await p.click('[aria-label="Image comment options"]');
     await p.click("text=Delete image comment");
-    await p.waitFor(`window.__ops.length===2`);
+    // Comment deletes wait out the 8 s undo window before reaching Jira.
+    await p.waitFor(`window.__ops.length===2`, 12000);
     expect(await p.eval(`window.__ops[1]`)).toEqual([{ op: "comment.delete", id: "700" }]);
   } finally {
     await p.close();

@@ -146,7 +146,9 @@ test("copy links, hash navigation, reaction removal and reply draft cleanup foll
     await page.type("Saved reply");
     await page.key("Enter", "meta");
     await page.waitFor(`document.querySelectorAll('[data-comment]').length===2`);
-    expect(await page.active()).toBe("MAIN");
+    // Focus stays in the emptied reply editor, as in Linear (R1-D75); Esc leaves it.
+    expect(await page.active()).toBe("Reply to thread");
+    await page.key("Escape");
     const replyId = await page.eval<string>(
       `document.querySelector('.comment-reply').dataset.comment`,
     );
@@ -255,6 +257,15 @@ test("deleting a thread confirms like Linear, shows no toast and stays absent fr
     await page.key("Escape");
     await page.waitFor(`!document.querySelector('[aria-label="Delete this comment?"]')`);
     expect(await page.eval(`document.querySelectorAll('[data-comment]').length`)).toBe(2);
+    await page.hover("[data-comment]");
+    await page.click('[aria-label="Comment options"]');
+    await page.click("text=Delete");
+    await page.waitFor(`!!document.querySelector('[aria-label="Delete this comment?"]')`);
+    await page.key("Enter");
+    // As in Jira, the reply outlives its root: it moves to "Original comment removed" at once (R1-D52).
+    await page.waitFor(
+      `document.querySelectorAll('[data-comment]').length===1&&document.querySelector('[data-thread]').textContent.includes('Original comment removed')`,
+    );
     await page.hover("[data-comment]");
     await page.click('[aria-label="Comment options"]');
     await page.click("text=Delete");
