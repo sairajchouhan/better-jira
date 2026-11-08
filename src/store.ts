@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
-import { adfToText, textToAdf } from "./adf";
+import { adfToText } from "./adf";
 import { defaultPreferences, parsePreferences, type Display, type Grouping, type Preferences } from "./view-model";
-import { documentHasMedia, normalizeDocument, type AdfDocument } from "./document";
+import { documentHasMedia, normalizeDocument, textToAdf, type AdfDocument } from "./document";
 import { emptyLocalState,LocalDatabase,type LocalState,type Snapshot,type LocalEdit } from "./local-data";
 import { createActor, fromPromise, waitFor } from "xstate";
 import { appMachine, inspector, storageMachine, uiMachine, type UiContext } from "./machines";
@@ -10,7 +10,7 @@ import { asyncRetry } from "@tanstack/pacer";
 
 import {reminderTime} from './reminder-display';
 import {canReplyTo,visibleCommentTotal,type CommentState} from "./comment-thread";
-import type {MediaEdit} from "./media-edits";
+import {jiraCommentId,type ImageCrop,type MediaEdit} from "./media-edits";
 
 import {resourceMediaIds,type DocumentProperties,type IssueResource,type LinkPreview} from './issue-resource';
 import {RELATION_ISSUE,recordActivity,recordRelation,rollbackActivity,type PropertyActivity} from './issue-activity';
@@ -301,7 +301,7 @@ async function loadApplication() {
     const after=snapshot(change.key),known=remote.find(i=>i.key===change.key),f=after.full;
     const full=f&&{...f,fields:{...f.fields,description:change.fullFields.includes("description")?undefined:f.fields.description,comment:{...f.fields.comment,comments:(f.fields.comment?.comments??[]).filter((c:any)=>!String(c.id).startsWith("local-"))}}};
     // Only fields still owned locally differ from Jira; the rest already match, so they send nothing.
-    const remoteFields=Object.fromEntries(change.issueFields.map(field=>[field,field==="attachments"?aliasAttachments(change.key,known?.attachments??[]):(known as any)?.[field]]));
+    const remoteFields=Object.fromEntries(change.issueFields.map(field=>[field,field==="attachments"?aliasAttachments(change.key,known?.attachments??[]):field==="mediaEdits"?jiraImageComments(after.issue?.mediaEdits):(known as any)?.[field]]));
     return [change.key,change.created?{}:{issue:after.issue?{...after.issue,...remoteFields}:known,full},after];
   }));
   if(state.writable)void (navigator.locks?navigator.locks.request("better-jira-outbox",{ifAvailable:true},lock=>lock?(replay(),new Promise(()=>{})):undefined):replay());
@@ -435,6 +435,8 @@ const jiraKeys=new Map<string,string>(),jiraComments=new Map<string,string>();
 export const currentKey=(key:string)=>jiraKeys.get(key)??key;
 /** The first key an issue had in this session, so a view stays mounted when Jira assigns the real key. */
 export const firstKey=(key:string)=>{for(const [from,to] of jiraKeys)if(to===key)return from;return key;};
+/** Image comments Jira already has; a replay re-sends only the rest. */
+const jiraImageComments=(edits:Issue["mediaEdits"])=>edits&&Object.fromEntries(Object.entries(edits).map(([id,edit])=>[id,{...edit,comments:edit.comments?.filter(c=>jiraCommentId(c.id))}]));
 function send(changes:[string,Side,Side][]) {
   if(!state.writable)return;
   // Creates go first, so other issues can name the new key; deletes last, so edits to related issues (cleared parents, links) land first.
@@ -492,7 +494,12 @@ async function flush() {
       if(result!.full&&result!.key)settleUploads(result!.key,result!.full);
       // New comment ids too, so undo and redo address the comment Jira now has.
       const comments=new Map([...created].filter(([from])=>from!==job.key));
-      if(comments.size)for(const list of [undo,redo])list.splice(0,list.length,...renameCommentIds(list,comments));
+      if(comments.size){
+        for(const list of [undo,redo])list.splice(0,list.length,...renameCommentIds(list,comments));
+        // An image thread keeps its place on the image under the Jira comment id.
+        const key=result!.key??job.key,issue=state.issues.get(key);
+        if(issue?.mediaEdits){set({issues:new Map(state.issues).set(key,{...issue,mediaEdits:renameCommentIds(issue.mediaEdits,comments)})});queueSave();}
+      }
       // A rejected link or parent naming an issue created here leaves that issue in Jira on its own: say which.
       const orphans=first?.op==="create"?[]:[...new Set(jiraKeys.values())].filter(created=>JSON.stringify(job.ops).includes(`"${created}"`));
       if(result!.error)ui.send({type:"toast.show",text:`Jira did not save the change to ${result!.key??job.key}`,detail:`${result!.error}${orphans.length?` ${orphans.join(", ")} was created in Jira, but not linked.`:""}`});
@@ -562,6 +569,26 @@ export async function localFileURL(id:string){return database?.fileURL(id);}
 export async function retainJiraFile(id:string,url:string){const response=await fetch(url);if(!response.ok)throw new Error("Could not retain attachment for undo.");await database?.retainFile(id,await response.blob());}
 export async function addLocalFiles(files:File[]) {if(!database||!state.canEdit)throw new Error("Local file storage is unavailable. Retry local storage first.");return database.addFiles(files);}
 export async function addLocalFile(file:File) {return (await addLocalFiles([file]))[0]!;}
+/** On a writable site a crop uploads as a new Jira attachment, which takes the original's place in the description. Read-only sites keep it as a local view edit. */
+export async function saveCrop(key:string,id:string,crop:ImageCrop,file:File) {
+  const edit=()=>({...state.issues.get(key)?.mediaEdits?.[id],crop});
+  if(!state.writable){actions.mediaEdit(key,id,edit());return;}
+  const [saved]=await addLocalFiles([file]),issue=state.issues.get(key);if(!issue||!saved)return;
+  let swapped=false;
+  const swap=(node:any):any=>{
+    if(!node||typeof node!=="object")return node;
+    if(["media","mediaInline"].includes(node.type)&&node.attrs?.id===id){
+      swapped=true;const {width,height}=node.attrs;
+      return {...node,attrs:{...node.attrs,id:saved.id,collection:"local",localId:saved.id,...(width&&height?{width:Math.round(width*crop.width),height:Math.round(height*crop.height)}:{})}};
+    }
+    return Array.isArray(node.content)?{...node,content:node.content.map(swap)}:node;
+  };
+  const description=swap(normalizeDocument(state.full.get(key)?.fields.description));
+  record(key,`crop image on ${key}`,()=>{
+    patchIssue(key,{attachments:[...(issue.attachments??[]),saved],...(swapped?{}:{mediaEdits:{...issue.mediaEdits,[id]:edit()}})});
+    if(swapped)patchFields(key,()=>({description}));
+  });
+}
 export async function restoreLocalFiles(files:NonNullable<Issue['attachments']>) {
  return Promise.all(files.map(async file=>{const url=await database?.fileURL(file.id);return {...file,url:url??'',missing:!url};}));
 }

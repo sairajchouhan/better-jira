@@ -27,3 +27,18 @@ const discarded=new Map<string,number>();
 /** The owner threw this content away (a discarded draft): media still uploading from editors mounted before now is dropped, not added to the next draft. */
 export const discardLateMedia=(scope:string)=>{discarded.set(scope,performance.now());};
 export const lateMediaDiscarded=(scope:string|undefined,since:number)=>!!scope&&(discarded.get(scope)??-Infinity)>=since;
+
+/** Plain text → ADF: blank lines split paragraphs, single newlines become hard breaks. */
+export function textToAdf(text: string): AdfDocument {
+  return {
+    type: "doc",
+    version: 1,
+    content: text.trim().split(/\n{2,}/).map((p) => ({
+      type: "paragraph",
+      content: p.split("\n").flatMap((line, i) => [
+        ...(i ? [{ type: "hardBreak" }] : []),
+        ...(line ? [{ type: "text", text: line }] : []),
+      ]),
+    })),
+  };
+}

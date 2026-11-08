@@ -1,5 +1,5 @@
 import {afterAll,expect,test} from 'bun:test';
-import {open,stop} from './harness';
+import {APP,open,stop} from './harness';
 afterAll(stop);
 
 // A writable site, faked in the page: the fixture server never reaches Jira. The first write is rejected, later ones accepted.
@@ -89,4 +89,57 @@ test('the open-last-toast shortcut opens a created issue by the key Jira assigne
     await p.key('o','meta','alt');
     await p.waitFor(`new URL(location.href).searchParams.get('issue')==='TEST-90'`);
   }finally{await p.close();}
+});
+
+// Writable site that accepts every write: uploads get a Jira id and media id, new comments a Jira comment id.
+const accepting=`(()=>{const real=fetch;window.__ops=[];window.__uploads=[];let next=700;
+window.fetch=async(input,init)=>{const path=new URL(String(input),location.href).pathname;
+ if(path==='/api/client'){const client=await (await real(input,init)).json();return Response.json({...client,writable:true});}
+ if(path==='/api/options')return Response.json({priorities:[],users:[],labels:[],versions:{}});
+ if(/^\\/api\\/issues\\/[^/]+\\/attachments$/.test(path)&&init?.method==='POST'){const file=init.body.get('file');window.__uploads.push({name:file.name,type:file.type});return Response.json({attachment:{id:'9001',name:file.name,type:file.type,size:file.size,url:'/none',mediaId:'0b6f3c1e-1111-4222-8333-944455556666'},collection:'jira-1'});}
+ const m=path.match(/^\\/api\\/issues\\/([^/]+)\\/ops$/);if(!m)return real(input,init);
+ const {ops}=JSON.parse(init.body);window.__ops.push(ops);
+ const issue=(await (await real('/api/issues')).json()).find(i=>i.key===m[1]);
+ return Response.json({key:m[1],created:Object.fromEntries(ops.filter(o=>o.op==='comment').map(o=>[o.ref,String(next++)])),others:[],issue});
+};})()`;
+
+test('a crop on a writable site uploads the cropped image as a new attachment that replaces it in the description, and undo deletes it',async()=>{
+  const p=await open('',{setup:accepting});
+  try{
+    await fetch(`${APP}__fixture`,{method:'POST',body:JSON.stringify({includeMedia:true})});await p.click('[data-key="TEST-2"]');
+    await p.waitFor(`document.querySelector('#description img')?.naturalWidth===320`,15000);
+    const original=await p.eval<string>(`document.querySelector('#description img').alt`);
+    await p.click('#description img');await p.click('#description [aria-label="Crop image"]');
+    await p.waitFor(`!!document.querySelector('[aria-label="Resize from top left"]')`);
+    await p.click('[aria-label="Resize from top left"]');await p.key('ArrowRight','shift');await p.click('text=Save');
+    await p.waitFor(`window.__ops.length===1`);
+    expect(await p.eval(`window.__uploads`)).toEqual([{name:original.replace(/\.[^.]+$/,'')+'-cropped.png',type:'image/png'}]);
+    const description=JSON.stringify(await p.eval(`window.__ops[0]`));
+    expect(description).toContain('"op":"fields"');
+    expect(description).toContain('"id":"0b6f3c1e-1111-4222-8333-944455556666","collection":"jira-1"');
+    await p.waitFor(`!document.querySelector('.image-crop-editor')`);
+    await p.eval(`document.activeElement?.blur()`);await p.key('z','meta');
+    await p.waitFor(`window.__ops.length===2`);
+    const undone=await p.eval<any[]>(`window.__ops[1]`);
+    expect(undone.find(op=>op.op==='attachment.delete')).toEqual({op:'attachment.delete',id:'9001'});
+    expect(JSON.stringify(undone.find(op=>op.op==='fields'))).not.toContain('0b6f3c1e');
+  }finally{await p.close();await fetch(`${APP}__fixture`,{method:'POST',body:'{}'});}
+});
+
+test('an image comment on a writable site is a Jira comment: created, renamed to its Jira id, then deleted',async()=>{
+  const p=await open('',{setup:accepting});
+  try{
+    await fetch(`${APP}__fixture`,{method:'POST',body:JSON.stringify({includeMedia:true})});await p.click('[data-key="TEST-2"]');
+    await p.waitFor(`document.querySelector('#description img')?.naturalWidth===320`,15000);
+    await p.hover('#description img');await p.click('#description [aria-label="Add image comment"]');
+    await p.waitFor(`document.activeElement?.getAttribute('aria-label')==='Image comment'`);await p.type('Jira image review');
+    await p.click('[aria-label="Submit image comment"]');
+    await p.waitFor(`window.__ops.length===1`);
+    const [created]=await p.eval<any[]>(`window.__ops[0]`);
+    expect(created).toMatchObject({op:'comment',body:{type:'doc',version:1,content:[{type:'paragraph',content:[{type:'text',text:'Jira image review'}]}]}});
+    await p.waitFor(`!!document.querySelector('[data-image-comment="700"]')`);
+    await p.click('[aria-label="Image comment options"]');await p.click('text=Delete image comment');
+    await p.waitFor(`window.__ops.length===2`);
+    expect(await p.eval(`window.__ops[1]`)).toEqual([{op:'comment.delete',id:'700'}]);
+  }finally{await p.close();await fetch(`${APP}__fixture`,{method:'POST',body:'{}'});}
 });

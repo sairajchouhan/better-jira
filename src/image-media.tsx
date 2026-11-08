@@ -2,7 +2,7 @@ import {lazy,Suspense,useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {useHotkeys} from '@tanstack/react-hotkeys';
 import type {Attachment} from './attachment-media';
 import {Icon} from './icons';
-import {actions,ME,useStore} from './store';
+import {actions,ME,saveCrop,useStore} from './store';
 import {ImageThread,type ImageThreadDraft} from './image-thread';
 import type {ImageCrop} from './media-edits';
 const Viewer=lazy(()=>import('./image-viewer').then(module=>({default:module.ImageViewer})));
@@ -43,6 +43,6 @@ export function ImageMedia({file,external,issueKey,onSize,onError,onSelect}:{onS
   </div>
   {thread&&issueKey&&<ImageThread draft={threadDraft} setDraft={setThreadDraft} comments={edit?.comments??[]} author={ME.name} save={comments=>actions.mediaEdit(issueKey,id,{...edit,comments,...(file.url.startsWith('blob:')?{}:{src:file.url})})} close={()=>{setSelected(true);setThread(false);}}/>}
   {notice&&<span role="status" className="image-notice">{notice}</span>}
-  {open&&<Suspense fallback={<div role="status">Opening preview…</div>}><Viewer issueKey={issueKey} editable={editable} readReason={readReason} file={displayFile} original={file} crop={edit?.crop} startCrop={mode==='crop'} onCrop={issueKey&&editable?async crop=>{await imageBlob(file.url,crop);actions.mediaEdit(issueKey,id,{...edit,crop});}:undefined} external={external} close={()=>{setSelected(true);setOpen(false);requestAnimationFrame(()=>{if(!document.querySelector('[cmdk-input]'))trigger.current?.focus();});}}/></Suspense>}
+  {open&&<Suspense fallback={<div role="status">Opening preview…</div>}><Viewer issueKey={issueKey} editable={editable} readReason={readReason} file={displayFile} original={file} crop={edit?.crop} startCrop={mode==='crop'} onCrop={issueKey&&editable?async crop=>{const blob=await imageBlob(file.url,crop);await saveCrop(issueKey,id,crop,new File([blob],`${file.name.replace(/\.[^.]+$/,'')}-cropped.png`,{type:'image/png'}));}:undefined} external={external} close={()=>{setSelected(true);setOpen(false);requestAnimationFrame(()=>{if(!document.querySelector('[cmdk-input]'))trigger.current?.focus();});}}/></Suspense>}
  </div>;
 }

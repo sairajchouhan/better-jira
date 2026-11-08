@@ -68,3 +68,13 @@ test("Jira's new ids replace app ids wherever they appear",()=>{
   expect(renameIds({key:"A-NEW1",ops:[{op:"comment",ref:"local-1",parentId:"local-1"}],summary:"A-NEW1 x"},new Map([["A-NEW1","A-11"],["local-1","100"]])))
     .toEqual({key:"A-11",ops:[{op:"comment",ref:"100",parentId:"100"}],summary:"A-NEW1 x"});
 });
+
+test("image thread comments become Jira comments, and their ids rename to Jira's",()=>{
+  const at=(comments:{id:string;text:string}[]):Issue=>({...base,mediaEdits:{m1:{crop:{x:0,y:0,width:.5,height:.5},comments:comments.map(c=>({...c,author:"Me",at:""}))}}});
+  const body=(text:string)=>({type:"doc" as const,version:1 as const,content:[{type:"paragraph",content:[{type:"text",text}]}]});
+  expect(opsFor({issue:base},{issue:at([{id:"u1",text:"Look"}])},new Map())).toEqual([{op:"comment",ref:"u1",body:body("Look")}]);
+  expect(opsFor({issue:at([{id:"10",text:"Look"}])},{issue:at([{id:"10",text:"Look here"}])},new Map())).toEqual([{op:"comment.edit",id:"10",body:body("Look here")}]);
+  expect(opsFor({issue:at([{id:"10",text:"Look"}])},{issue:at([])},new Map())).toEqual([{op:"comment.delete",id:"10"}]);
+  expect(opsFor({issue:{...base,mediaEdits:{m1:{crop:{x:0,y:0,width:1,height:1}}}}},{issue:at([])},new Map())).toEqual([]);
+  expect(renameCommentIds(at([{id:"u1",text:"Look"}]).mediaEdits,new Map([["u1","10"]]))?.m1?.comments?.[0]?.id).toBe("10");
+});

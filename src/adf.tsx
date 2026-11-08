@@ -65,21 +65,6 @@ function mark(inner: ReactNode, m: any): ReactNode {
   }
 }
 
-/** Plain text → ADF: blank lines split paragraphs, single newlines become hard breaks. */
-export function textToAdf(text: string) {
-  return {
-    type: "doc",
-    version: 1,
-    content: text.trim().split(/\n{2,}/).map((p) => ({
-      type: "paragraph",
-      content: p.split("\n").flatMap((line, i) => [
-        ...(i ? [{ type: "hardBreak" }] : []),
-        ...(line ? [{ type: "text", text: line }] : []),
-      ]),
-    })),
-  };
-}
-
 /** Text projection for search and previews. Rich editing retains the original document. */
 export function adfToText(node: any): string {
   if (!node) return "";

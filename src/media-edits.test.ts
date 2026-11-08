@@ -12,5 +12,7 @@ test('crop movement and resizing stay inside the source and retain a nonempty se
 test('image identity hides URL tokens and comment badges derive independent totals',()=>{
  const url='https://example.test/picture.png?token=private';
  expect(externalMediaId(url)).toBe(externalMediaId(url));expect(externalMediaId(url)).toMatch(/^external-[a-f0-9]{16}$/);expect(externalMediaId(url)).not.toContain('private');expect(externalMediaId(url+'2')).not.toBe(externalMediaId(url));
- expect(commentCount({comments:2,mediaEdits:{image:{comments:[{id:'1',text:'Review',author:'Me',at:'now'}]}}})).toBe(3);
+ expect(commentCount({comments:2,mediaEdits:{image:{comments:[{id:'local-uuid',text:'Review',author:'Me',at:'now'}]}}})).toBe(3);
+ // Once Jira has it, the image comment is one of the issue's Jira comments and is not counted twice.
+ expect(commentCount({comments:2,mediaEdits:{image:{comments:[{id:'10001',text:'Review',author:'Me',at:'now'}]}}})).toBe(2);
 });

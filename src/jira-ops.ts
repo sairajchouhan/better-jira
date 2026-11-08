@@ -1,4 +1,4 @@
-import type { AdfDocument } from "./document";
+import { textToAdf, type AdfDocument } from "./document";
 import type { Full, Issue } from "./store";
 import type { CommentState, IssueComment } from "./comment-thread";
 
@@ -88,6 +88,15 @@ function commentOps(before:Side,after:Side):Op[] {
   return ops;
 }
 
+/** Image thread comments are real Jira comments; only their place on the image (mediaEdits) stays local. */
+function imageCommentOps(a:Issue|undefined,b:Issue):Op[] {
+  const list=(issue?:Issue)=>new Map(Object.values(issue?.mediaEdits??{}).flatMap(edit=>edit.comments??[]).map(c=>[c.id,c]));
+  const before=list(a),after=list(b),ops:Op[]=[];
+  for(const [id,c] of after){const old=before.get(id);if(!old)ops.push({op:"comment",ref:id,body:textToAdf(c.text)});else if(old.text!==c.text)ops.push({op:"comment.edit",id,body:textToAdf(c.text)});}
+  for(const id of before.keys())if(!after.has(id))ops.push({op:"comment.delete",id});
+  return ops;
+}
+
 /** The Jira ops that turn `before` into `after` for one issue. `issues` supplies rank neighbours and linked issues. */
 export function opsFor(before:Side,after:Side,issues:Map<string,Issue>):Op[] {
   const a=before.issue,b=after.issue;
@@ -101,6 +110,7 @@ export function opsFor(before:Side,after:Side,issues:Map<string,Issue>):Op[] {
       ...linkOps(b.key,[],b.relations,issues),
       ...webLinkOps([],b.resources),
       ...commentOps({},after),
+      ...imageCommentOps(undefined,b),
     ];
   }
   const {labels,...changed}=fieldChanges(a,b),ops:Op[]=[];
@@ -119,7 +129,7 @@ export function opsFor(before:Side,after:Side,issues:Map<string,Issue>):Op[] {
   for(const user of a.watchers??[])if(!b.watchers?.some(u=>u.id===user.id))ops.push({op:"watcher",id:user.id,add:false});
   for(const file of b.attachments??[])if(!a.attachments?.some(f=>f.id===file.id))ops.push({op:"attachment.add",id:file.id,name:file.name});
   for(const file of a.attachments??[])if(!b.attachments?.some(f=>f.id===file.id))ops.push({op:"attachment.delete",id:file.id});
-  ops.push(...linkOps(b.key,a.relations,b.relations,issues),...webLinkOps(a.resources,b.resources),...commentOps(before,after));
+  ops.push(...linkOps(b.key,a.relations,b.relations,issues),...webLinkOps(a.resources,b.resources),...commentOps(before,after),...imageCommentOps(a,b));
   return ops;
 }
 
