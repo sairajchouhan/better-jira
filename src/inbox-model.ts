@@ -1,4 +1,5 @@
 /** Jira's in-app notifications as Linear Inbox rows. Pure: the server maps the GraphQL feed, the client words and filters it. */
+import { priorityRank } from "./view-model";
 
 export type InboxKind =
   | "assigned"
@@ -30,7 +31,8 @@ export type InboxItem = {
   category: "direct" | "watching";
   count: number;
 };
-export type InboxFeed = { unseen: number; items: InboxItem[]; more: boolean };
+/** One page of Jira's feed; `cursor` asks for the next one. Jira can return a short or empty page before the end. */
+export type InboxFeed = { unseen: number; items: InboxItem[]; more: boolean; cursor?: string };
 
 const ISSUE_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
 const str = (v: unknown) => (typeof v === "string" ? v : "");
@@ -152,20 +154,88 @@ export function shortAgo(iso: string, now = Date.now()): string {
 
 /** What the inbox keeps locally per head notification: Jira has no delete or snooze, and read-only sites keep read state here too. */
 export type Local = { read?: boolean; deleted?: boolean; snoozed?: number };
+
+/** What Linear's inbox filter can ask of a row, from the notification and, when the issue is mirrored, the issue. */
+export type Facets = {
+  type: string;
+  from: string;
+  project: string;
+  priority: string;
+  statusType: string;
+};
+export type FilterField = keyof Facets;
+/** Linear's filter menu, in its order. */
+export const FILTER_FIELDS: [FilterField, string][] = [
+  ["type", "Notification type"],
+  ["from", "From"],
+  ["project", "Project"],
+  ["priority", "Issue priority"],
+  ["statusType", "Issue status type"],
+];
+/** Linear's notification types for each Jira kind; Jira's generic changes are what Linear calls subscriptions. */
+const TYPE: Record<InboxKind, string> = {
+  assigned: "Assignments",
+  unassigned: "Assignments",
+  mentioned: "Mentions",
+  comment: "Comments and replies",
+  reaction: "Reactions",
+  status: "Status changes",
+  created: "Subscriptions",
+  updated: "Subscriptions",
+};
+const PRIORITY = ["Urgent", "High", "Medium", "Low", "No priority"];
+
+/** Linear's status types for a Jira status: its category first, the name for what categories cannot tell. */
+export function statusType({ name, category }: { name: string; category: string }): string {
+  if (/duplicate/i.test(name)) return "Duplicate";
+  if (/cancel|won't|declined|archived/i.test(name)) return "Canceled";
+  if (category === "done" || (!category && /done|closed|resolved|complete/i.test(name)))
+    return "Completed";
+  if (/triage/i.test(name)) return "Triage";
+  if (/backlog/i.test(name)) return "Backlog";
+  if (category === "indeterminate" || (!category && /progress|review|doing/i.test(name)))
+    return "Started";
+  return name || category ? "Unstarted" : "";
+}
+
+export function facetsOf(
+  item: InboxItem,
+  issue?: { priority?: string; project?: { name: string } | null },
+  status?: { name: string; category: string },
+): Facets {
+  return {
+    type: TYPE[item.kind],
+    from: item.actor?.name ?? "Jira",
+    project: issue?.project?.name ?? (item.key ? item.key.split("-")[0]! : "No project"),
+    priority: PRIORITY[issue ? priorityRank(issue.priority) : 4]!,
+    statusType: statusType(status ?? { name: item.status, category: "" }),
+  };
+}
+
 export type InboxView = {
-  category: "all" | "direct" | "watching";
+  /** Linear's priority inbox: Priority and Other tabs, which are Jira's Direct and Watching. */
+  priorityInbox: boolean;
+  tab: "direct" | "watching";
   unreadOnly: boolean;
   showSnoozed: boolean;
   unreadFirst: boolean;
-  oldest: boolean;
+  ordering: "newest" | "oldest" | "priority";
+  grouping: "none" | "focus";
+  /** Each field matches any of its values; fields combine with AND, as in Linear. */
+  filters: Partial<Record<FilterField, string[]>>;
 };
 export const DEFAULT_VIEW: InboxView = {
-  category: "all",
+  priorityInbox: false,
+  tab: "direct",
   unreadOnly: false,
   showSnoozed: false,
   unreadFirst: false,
-  oldest: false,
+  ordering: "newest",
+  grouping: "none",
+  filters: {},
 };
+/** The Jira feed the view reads: one category in the priority inbox, else both. */
+export const feedCategory = (view: InboxView) => (view.priorityInbox ? view.tab : "all");
 
 /** Applies local state, then the view's filters and ordering. `keep` (the selected row) stays in unread-only after it is read. */
 export function visibleItems(
@@ -174,36 +244,145 @@ export function visibleItems(
   view: InboxView,
   now = Date.now(),
   keep?: string | null,
+  facets: (item: InboxItem) => Facets = (item) => facetsOf(item),
 ): InboxItem[] {
+  const filters = Object.entries(view.filters).filter(([, values]) => values?.length) as [
+    FilterField,
+    string[],
+  ][];
   const rows = items.flatMap((item) => {
     const own = local[item.head];
     if (own?.deleted) return [];
     if (own?.snoozed && own.snoozed > now && !view.showSnoozed) return [];
     const row = own?.read === undefined ? item : { ...item, unread: !own.read };
-    if (view.category !== "all" && row.category !== view.category) return [];
+    if (view.priorityInbox && row.category !== view.tab) return [];
     if (view.unreadOnly && !row.unread && row.id !== keep) return [];
+    if (filters.length) {
+      const f = facets(row);
+      if (!filters.every(([field, values]) => values.includes(f[field]))) return [];
+    }
     return [row];
   });
+  const rank = (r: InboxItem) => PRIORITY.indexOf(facets(r).priority);
   return rows.sort(
     (a, b) =>
       (view.unreadFirst ? Number(b.unread) - Number(a.unread) : 0) ||
-      (view.oldest ? a.time.localeCompare(b.time) : b.time.localeCompare(a.time)),
+      (view.ordering === "priority" ? rank(a) - rank(b) : 0) ||
+      (view.ordering === "oldest" ? a.time.localeCompare(b.time) : b.time.localeCompare(a.time)),
   );
 }
 
-/** Linear's snooze choices (its inbox snooze menu): tomorrow and next week at 8:00, a month from now. */
+type Focus = {
+  label: string;
+  match?: (row: InboxItem, f: Facets) => boolean;
+  /** A child shows as its own group from this many rows; below it, its rows stay in the parent. */
+  min?: number;
+  children?: Focus[];
+  mergeTrailingSingletons?: boolean;
+};
+const CLOSED = new Set(["Completed", "Canceled", "Duplicate"]);
+/** Linear's "Focus" grouping (useInboxNotificationsProvider, 2026-11-08), keeping the groups Jira's notifications can fill. */
+const FOCUS: Focus[] = [
+  { label: "Urgent", match: (_, f) => f.priority === "Urgent" && !CLOSED.has(f.statusType) },
+  {
+    label: "Mentions & replies",
+    children: [{ label: "Mentions", match: (r) => r.kind === "mentioned", min: 5 }],
+  },
+  {
+    label: "Other",
+    match: () => true,
+    mergeTrailingSingletons: true,
+    children: [
+      { label: "Comments", match: (r) => r.kind === "comment", min: 2 },
+      {
+        label: "Assignments",
+        match: (r) => r.kind === "assigned" || r.kind === "unassigned",
+        min: 6,
+      },
+      { label: "Reactions", match: (r) => r.kind === "reaction", min: 6 },
+      { label: "Completed", match: (_, f) => f.statusType === "Completed", min: 10 },
+      { label: "Canceled", match: (_, f) => f.statusType === "Canceled", min: 10 },
+      { label: "Duplicates", match: (_, f) => f.statusType === "Duplicate", min: 6 },
+    ],
+  },
+];
+export type InboxGroup = { label: string; rows: InboxItem[] };
+/** Linear's "Group unreads by: Focus": unread rows in focus groups, read rows last under "Read"; one group alone is "Unread". */
+export function focusGroups(
+  rows: InboxItem[],
+  facets: (item: InboxItem) => Facets = (item) => facetsOf(item),
+): InboxGroup[] {
+  const unread = rows.filter((r) => r.unread),
+    read = rows.filter((r) => !r.unread);
+  if (!unread.length) return [{ label: "", rows }];
+  const own = new Map<Focus, InboxItem[]>();
+  const matches = (n: Focus, r: InboxItem, f: Facets): boolean =>
+    n.match ? n.match(r, f) : (n.children ?? []).some((c) => matches(c, r, f));
+  const place = (r: InboxItem, f: Facets, nodes: Focus[]): Focus | undefined => {
+    for (const n of nodes)
+      if (matches(n, r, f)) return (n.children && place(r, f, n.children)) || n;
+  };
+  for (const r of unread) {
+    const n = place(r, facets(r), FOCUS);
+    if (n) own.set(n, [...(own.get(n) ?? []), r]);
+  }
+  const all = (n: Focus): InboxItem[] => [
+    ...(own.get(n) ?? []),
+    ...(n.children ?? []).flatMap(all),
+  ];
+  const meets = (n: Focus) => all(n).length >= (n.min ?? 1);
+  const allSmall = (n: Focus) => (n.children ?? []).every((c) => !meets(c));
+  const single = (n: Focus): Focus => {
+    const filled = (n.children ?? []).filter((c) => all(c).length);
+    return own.get(n)?.length || filled.length !== 1 ? n : single(filled[0]!);
+  };
+  const groups: InboxGroup[] = [];
+  const push = (label: string, items: InboxItem[]) =>
+    items.length && groups.push({ label, rows: unread.filter((r) => items.includes(r)) });
+  const emit = (n: Focus) => {
+    if (allSmall(n)) return void push(single(n).label, all(n));
+    const children = n.children ?? [];
+    // Linear folds two or more trailing one-row groups back into the parent.
+    const trailing = new Set<Focus>();
+    for (const c of [...children].reverse()) {
+      const count = all(c).length;
+      if (!count) continue;
+      if (count > 1 || meets(c)) break;
+      trailing.add(c);
+    }
+    const merge = n.mergeTrailingSingletons && trailing.size > 1 ? trailing : undefined;
+    const rest: Focus[] = [];
+    for (const c of children)
+      if (meets(c)) emit(c);
+      else if (merge && !merge.has(c)) push(single(c).label, all(c));
+      else rest.push(c);
+    const filled = rest.filter((c) => all(c).length);
+    const label = !own.get(n)?.length && filled.length === 1 ? single(filled[0]!).label : n.label;
+    push(label, [...(own.get(n) ?? []), ...rest.flatMap(all)]);
+  };
+  FOCUS.forEach(emit);
+  if (groups.length === 1) groups[0]!.label = "Unread";
+  if (read.length) groups.push({ label: "Read", rows: read });
+  return groups;
+}
+
+/** Linear's snooze presets (generateDefaultTimeOptions, 2026-11-08): this evening only while it is an hour or more away; then "Custom…". */
 export function snoozeChoices(now = new Date()): { label: string; until: number }[] {
-  const at = (days: number) => {
+  const day = (days: number, hour: number, months = 0) => {
     const d = new Date(now);
-    d.setDate(d.getDate() + days);
-    d.setHours(8, 0, 0, 0);
+    d.setMonth(d.getMonth() + months, d.getDate() + days);
+    d.setHours(hour, 0, 0, 0);
     return d.getTime();
   };
-  const month = new Date(now);
-  month.setMonth(month.getMonth() + 1);
+  const hour = now.getTime() + 3_600_000,
+    evening = day(0, 18),
+    monday = day(7 - ((now.getDay() + 6) % 7), 9);
   return [
-    { label: "Tomorrow", until: at(1) },
-    { label: "Next week", until: at(7) },
-    { label: "A month from now", until: month.getTime() },
-  ];
+    { label: "An hour from now", until: hour },
+    { label: "In 3 hours", until: now.getTime() + 3 * 3_600_000 },
+    ...(evening >= hour ? [{ label: "This evening", until: evening }] : []),
+    { label: "Tomorrow", until: day(1, 9) },
+    { label: "Next week", until: monday },
+    { label: "A month from now", until: day(0, 9, 1) },
+  ].sort((a, b) => a.until - b.until);
 }

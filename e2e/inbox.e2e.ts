@@ -3,7 +3,8 @@ import { APP, open, stop } from "./harness";
 afterAll(stop);
 
 /** Fresh feed per test; before the first open() the fixture is not up yet and is fresh anyway. */
-const reset = () => fetch(`${APP}__fixture`, { method: "POST", body: "{}" }).catch(() => {});
+const reset = (settings = {}) =>
+  fetch(`${APP}__fixture`, { method: "POST", body: JSON.stringify(settings) }).catch(() => {});
 
 const inboxCalls = async () =>
   (
@@ -97,16 +98,159 @@ test("j/k select rows, mark them read in Jira and open the issue; U, E, Enter an
   }
 });
 
-test("Filter, unread-only and a notification outside the mirror", async () => {
+const rowKeys = `${rowText}.map(l=>l.split(" ")[1]).join()`;
+const item = (menu: string, value: string) =>
+  `[role=dialog][aria-label="${menu}"] [cmdk-item][data-value="${value}"]`;
+const toggle = (label: string) =>
+  `[...document.querySelectorAll('label')].find(l=>l.textContent.trim().startsWith(${JSON.stringify(label)})).querySelector('input').click()`;
+const choose = (label: string, value: string) =>
+  `(()=>{const s=document.querySelector('select[aria-label="${label}"]');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(s,'${value}');s.dispatchEvent(new Event('change',{bubbles:true}))})()`;
+
+test("Priority inbox tabs, Linear's filters with chips, and Focus grouping", async () => {
   await reset();
   const p = await open("?inbox=1");
   try {
     await p.waitFor(`${rows}.length === 7`);
-    await p.click(`[aria-label="Filter"]`);
-    await p.click("text=Direct");
-    await p.waitFor(`${rowText}.map(l=>l.split(' ')[1]).join() === "TEST-2,TEST-1,TEST-5"`);
-    await p.click(`[aria-label="Filter"]`);
-    await p.click("text=All notifications");
+    // Display options: the priority inbox splits Jira's Direct (Priority) from Watching (Other); ⌥2 / ⌥1 switch.
+    await p.click(`[aria-label="Display options"]`);
+    await p.eval(toggle("Enable priority inbox"));
+    await p.waitFor(`${rowKeys} === "TEST-2,TEST-1,TEST-5"`);
+    await p.key("Escape");
+    await p.key("2", "alt");
+    await p.waitFor(`${rowKeys} === "TEST-3,TEST-4,TEST-6,OUT-9"`);
+    await p.click(`[role=tab][aria-selected=false]`);
+    await p.waitFor(`${rowKeys} === "TEST-2,TEST-1,TEST-5"`);
+    await p.click(`[aria-label="Display options"]`);
+    await p.eval(toggle("Enable priority inbox"));
+    await p.waitFor(`${rows}.length === 7`);
+    // Focus grouping: unread rows by focus group, then the read ones.
+    await p.eval(choose("Group unreads by", "focus"));
+    await p.waitFor(
+      `[...document.querySelectorAll('[data-inbox-group]')].map(g=>g.dataset.inboxGroup).join() === "Mentions,Other,Read"`,
+    );
+    await p.eval(choose("Ordering", "priority"));
+    // TEST-4 is the only Urgent issue; it is read, so it leads the Read group.
+    await p.waitFor(`${rowKeys}.startsWith("TEST-1,") && ${rowKeys}.includes("TEST-4,TEST-5")`);
+    await p.eval(choose("Group unreads by", "none"));
+    await p.eval(choose("Ordering", "newest"));
+    await p.key("Escape");
+    // F opens Linear's filter menu; each field lists the values the rows have, with counts.
+    await p.key("f");
+    await p.click(`[cmdk-item][data-value="Notification type"]`);
+    await p.waitFor(
+      `document.querySelector('${item("Notification type", "Mentions")}')?.textContent.includes("1 notification")`,
+    );
+    await p.click(item("Notification type", "Mentions"));
+    await p.waitFor(`${rowKeys} === "TEST-1"`);
+    await p.waitFor(
+      `document.querySelector('[data-inbox-chip="type"]')?.textContent === "Notification type isMentions"`,
+    );
+    await p.click(`[aria-label="Add filter"]`);
+    await p.click(`[cmdk-item][data-value="Notification type"]`);
+    await p.click(item("Notification type", "Comments and replies"));
+    await p.waitFor(`${rowKeys} === "TEST-1,TEST-4"`);
+    await p.waitFor(
+      `document.querySelector('[data-inbox-chip="type"]')?.textContent.includes("is any of")`,
+    );
+    await p.click(`[aria-label="Add filter"]`);
+    await p.click(`[cmdk-item][data-value="Issue priority"]`);
+    await p.click(item("Issue priority", "Urgent"));
+    await p.waitFor(`${rowKeys} === "TEST-4"`);
+    await p.click(`[aria-label="Remove Notification type filter"]`);
+    await p.waitFor(`${rowKeys} === "TEST-4"`);
+    await p.click(`text=Clear`);
+    await p.waitFor(`${rows}.length === 7 && !document.querySelector('[data-inbox-chip]')`);
+    // Filters persist across reloads, like Linear's view.
+    await p.key("f");
+    await p.click(`[cmdk-item][data-value="Project"]`);
+    await p.click(item("Project", "OUT"));
+    await p.waitFor(`${rowKeys} === "OUT-9"`);
+    await p.reload();
+    await p.waitFor(`${rowKeys} === "OUT-9"`);
+  } finally {
+    await p.close();
+  }
+});
+
+test("Older notifications load on scroll; Z and the toast undo delete, snooze and read; ⌫ deletes; the row menu", async () => {
+  await reset({ inboxExtra: 40 });
+  const p = await open("?inbox=1");
+  try {
+    await p.waitFor(`${rows}.length === 20`);
+    await Bun.sleep(300);
+    expect(await p.eval(`${rows}.length`)).toBe(20); // the end of the list is out of view
+    await p.eval(`document.querySelector('[data-inbox-end]').scrollIntoView()`);
+    await p.waitFor(`${rows}.length === 40`);
+    await p.eval(`document.querySelector('[data-inbox-end]').scrollIntoView()`);
+    await p.waitFor(`${rows}.length === 47`);
+    const gets: string[] = (await (await fetch(`${APP}__fixture`)).json()).requests
+      .filter((r: any) => r.method === "GET" && r.path.startsWith("/api/inbox"))
+      .map((r: any) => r.path);
+    expect(gets).toContain("/api/inbox?after=20");
+    expect(gets).toContain("/api/inbox?after=40");
+    await p.eval(`document.querySelector('[data-inbox-row]').scrollIntoView()`);
+    // E deletes with Linear's toast; Z brings the row back and selects it again.
+    await p.key("j");
+    await p.waitFor(`${current}.includes("TEST-2")`);
+    await p.key("e");
+    await p.waitFor(
+      `${rows}.length === 46 && document.querySelector('[data-toast]')?.textContent.includes("Notification deleted")`,
+    );
+    await p.key("z");
+    await p.waitFor(`${rows}.length === 47 && ${current}.includes("TEST-2")`);
+    // ⌫ deletes too; the toast's Undo restores.
+    await p.key("Backspace");
+    await p.waitFor(`${rows}.length === 46 && ${current}.includes("TEST-1")`);
+    await p.click(`[data-toast] button`);
+    await p.waitFor(`${rows}.length === 47 && ${current}.includes("TEST-2")`);
+    // H snoozes for an hour; Z unsnoozes.
+    await p.key("h");
+    await p.click(`[data-snooze="An hour from now"]`);
+    await p.waitFor(
+      `${rows}.length === 46 && document.querySelector('[data-toast]')?.textContent.includes("Notification snoozed")`,
+    );
+    await p.key("z");
+    await p.waitFor(`${rows}.length === 47`);
+    // U marks unread in Jira; Z marks it read again.
+    await p.key("u");
+    await p.waitFor(`${current}.startsWith("Unread TEST-2")`);
+    await p.key("z");
+    await p.waitFor(`${current}.startsWith("Read TEST-2")`);
+    // Snooze and delete in the open issue's header.
+    await p.click(`[aria-label="Delete notification"]`);
+    await p.waitFor(`${rows}.length === 46 && ${current}.includes("TEST-1")`);
+    await p.key("z");
+    await p.waitFor(`${rows}.length === 47`);
+    // Right-click: Linear's row menu, acting on that row without selecting it.
+    await p.eval(
+      `(()=>{const r=document.querySelector('[data-inbox-row*="issue/3"]').getBoundingClientRect();document.querySelector('[data-inbox-row*="issue/3"]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:r.x+40,clientY:r.y+20}))})()`,
+    );
+    await p.waitFor(
+      `["Mark as read","Delete notification","Snooze","Favorite","Copy"].every(v=>document.querySelector('[role=dialog][aria-label="Notification options"] [cmdk-item][data-value="'+v+'"]'))`,
+    );
+    await p.click(`[cmdk-item][data-value="Favorite"]`);
+    await p.waitFor(`!document.querySelector('[aria-label="Notification options"]')`);
+    await p.eval(
+      `(()=>{const n=document.querySelector('[data-inbox-row*="issue/3"]'),r=n.getBoundingClientRect();n.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:r.x+40,clientY:r.y+20}))})()`,
+    );
+    await p.waitFor(`!!document.querySelector('[cmdk-item][data-value="Remove from favorites"]')`);
+    await p.click(`[cmdk-item][data-value="Delete notification"]`);
+    await p.waitFor(
+      `${rows}.length === 46 && !${rowText}.some(l=>l.includes("TEST-3")) && ${current}.includes("TEST-2")`,
+    );
+    // Deletes and snoozes are this browser's own (Jira has neither); they survive a reload.
+    await p.reload();
+    await p.waitFor(`${rows}.length === 19 && !${rowText}.some(l=>l.includes("TEST-3"))`);
+  } finally {
+    await p.close();
+  }
+});
+
+test("Unread-only and a notification outside the mirror", async () => {
+  await reset();
+  const p = await open("?inbox=1");
+  try {
+    await p.waitFor(`${rows}.length === 7`);
     await p.click(`[aria-label="Show unreads only"]`);
     await p.waitFor(`${rows}.length === 5 && ${rowText}.every(l=>l.startsWith("Unread"))`);
     await p.click(`[data-inbox-row*="issue/9"]`);

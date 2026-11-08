@@ -197,7 +197,7 @@ type State = {
   editDesc: boolean;
   perf: string;
   /** A transient confirmation, e.g. after creating an issue. */
-  toast: { text: string; key?: string; undo?: boolean; detail?: string } | null;
+  toast: { text: string; key?: string; undo?: boolean | "inbox"; detail?: string } | null;
   preferences: Record<number, Preferences>;
   defaults: Record<number, Display>;
   toolbar: "display" | "filter" | "advanced" | null;

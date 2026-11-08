@@ -19,7 +19,7 @@ import type { AdfDocument } from "./document";
 import type { IssueDraft, Overlay, View } from "./store";
 
 export type Toolbar = "display" | "filter" | "advanced";
-export type Toast = { text: string; key?: string; undo?: boolean; detail?: string };
+export type Toast = { text: string; key?: string; undo?: boolean | "inbox"; detail?: string };
 /** The screen state; store.ts copies it onto `get()` so components keep reading it with `useStore`. */
 export type UiContext = {
   board: number;
@@ -66,7 +66,7 @@ export type UiEvent =
   | { type: "toolbar.close" }
   | { type: "description.edit" }
   | { type: "description.editDone" }
-  | { type: "toast.show"; text: string; key?: string; undo?: boolean; detail?: string }
+  | { type: "toast.show"; text: string; key?: string; undo?: boolean | "inbox"; detail?: string }
   | { type: "toast.dismiss" }
   /** Jira gave an issue created here its real key: the toast names and opens the new key, without restarting its timer. */
   | { type: "toast.rekey"; from: string; to: string };
@@ -216,7 +216,7 @@ export const uiMachine = setup({
                 toast: ({ event }) => ({
                   text: event.text,
                   ...(event.key ? { key: event.key } : {}),
-                  ...(event.undo ? { undo: true } : {}),
+                  ...(event.undo ? { undo: event.undo } : {}),
                   ...(event.detail ? { detail: event.detail } : {}),
                 }),
               }),
@@ -233,7 +233,7 @@ export const uiMachine = setup({
                 toast: ({ event }) => ({
                   text: event.text,
                   ...(event.key ? { key: event.key } : {}),
-                  ...(event.undo ? { undo: true } : {}),
+                  ...(event.undo ? { undo: event.undo } : {}),
                   ...(event.detail ? { detail: event.detail } : {}),
                 }),
               }),

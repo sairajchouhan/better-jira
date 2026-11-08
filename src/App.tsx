@@ -104,7 +104,7 @@ import {
   useLinearHotkeys,
 } from "./shortcuts";
 import { issueAnchor } from "./menu-surface";
-import { InboxList, InboxPane, useInboxBadge } from "./inbox";
+import { InboxIssueActions, InboxList, InboxPane, undoInbox, useInboxBadge } from "./inbox";
 import { PickerRow, PropertyMenu } from "./property-menu";
 import { createActor } from "xstate";
 import { autosaveMachine, inspector } from "./machines";
@@ -893,7 +893,8 @@ function Toast() {
         <button
           className="text-accent hover:underline"
           onClick={() => {
-            undoEdit();
+            if (toast.undo === "inbox") undoInbox();
+            else undoEdit();
             ui.send({ type: "toast.dismiss" });
           }}
         >
@@ -1595,6 +1596,7 @@ function IssueView({ issue, page, fill }: { issue: Issue; page: boolean; fill?: 
     optionsOpen = useStore((s) => s.overlay === "options");
   const propertiesHidden = useStore((s) => s.issuePropertiesHidden);
   const document = useStore((s) => s.document);
+  const inbox = useStore((s) => s.inbox);
   if (document) return <IssueDocument issue={issue} id={document} />;
   const bar = (
     <div className="issue-detail-header flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-3 text-[12px] text-fg-3">
@@ -1632,6 +1634,7 @@ function IssueView({ issue, page, fill }: { issue: Issue; page: boolean; fill?: 
         <Icon name="dots" />
       </button>
       <ReminderControl issue={issue} />
+      {inbox && <InboxIssueActions />}
       <span className="flex-1" />
       <Stepper issueKey={issue.key} />
       <button

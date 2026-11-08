@@ -32,13 +32,18 @@ import { issueCopy, type CopyKind } from "./issue-copy";
 import { editorBindings } from "./editor-bindings";
 import { MenuSurface } from "./menu-surface";
 import {
+  clearFilters as clearInboxFilters,
   deleteAll,
   deleteRow,
   hasSelectedRow,
   markAllRead,
   moveRow,
   openRow,
+  openSnooze,
+  priorityInbox,
+  showTab,
   toggleRead,
+  undoInbox,
 } from "./inbox";
 
 type Shortcut = {
@@ -315,31 +320,47 @@ export const shortcuts: Shortcut[] = [
   },
   ...(
     [
-      ["inbox-read", "Mark as read / unread", "U", toggleRead, true],
-      [
-        "inbox-read-all",
-        "Mark all notifications as read",
-        "Alt+U",
-        () => void markAllRead(),
-        false,
-      ],
-      ["inbox-delete", "Delete notification", "E", deleteRow, true],
+      ["inbox-read", "Mark as read / unread", "U", () => toggleRead()],
+      ["inbox-read-all", "Mark all notifications as read", "Alt+U", () => void markAllRead()],
+      ["inbox-delete", "Delete notification", "E", () => deleteRow()],
+      ["inbox-backspace", "Delete notification", "Backspace", () => deleteRow()],
       [
         "inbox-delete-read",
         "Delete all read notifications",
         "Shift+Backspace",
         () => deleteAll("read"),
-        false,
       ],
-      ["inbox-snooze", "Snooze notification…", "H", overlay("snooze"), true],
+      ["inbox-snooze", "Snooze notification…", "H", () => hasSelectedRow() && openSnooze()],
     ] as const
-  ).map(([id, name, hotkey, run, row]): Shortcut => ({
+  ).map(([id, name, hotkey, run]): Shortcut => ({
     id,
     name,
     hotkey,
     group: "Inbox",
     run,
-    when: () => get().inbox && (!row || hasSelectedRow()),
+    // Enablement is computed on store changes, and the inbox selection lives outside the store: row actions check it when they run.
+    when: () => get().inbox,
+  })),
+  {
+    id: "inbox-undo",
+    name: "Undo",
+    group: "Inbox",
+    hotkey: "Z",
+    run: undoInbox,
+    when: () => get().inbox,
+  },
+  ...(
+    [
+      ["inbox-priority", "Show priority notifications", "Alt+1", "direct"],
+      ["inbox-other", "Show other notifications", "Alt+2", "watching"],
+    ] as const
+  ).map(([id, name, hotkey, tab]): Shortcut => ({
+    id,
+    name,
+    hotkey,
+    group: "Inbox",
+    run: () => priorityInbox() && showTab(tab),
+    when: () => get().inbox,
   })),
   {
     id: "mine",
@@ -751,7 +772,10 @@ export const shortcuts: Shortcut[] = [
     group: "Filters",
     hotkey: "F",
     when: boardVisible,
-    run: () => ui.send({ type: "toolbar.open", toolbar: "filter" }),
+    run: () =>
+      get().inbox
+        ? ui.send({ type: "overlay.open", overlay: "inbox-filter" })
+        : ui.send({ type: "toolbar.open", toolbar: "filter" }),
   },
   {
     id: "filter-clear",
@@ -760,6 +784,7 @@ export const shortcuts: Shortcut[] = [
     hotkey: "Alt+Shift+F",
     when: boardVisible,
     run: () => {
+      if (get().inbox) return clearInboxFilters();
       const p = preferencesFor(get().board);
       changePreferences(get().board, {
         filters: { ...p.filters, children: [] },

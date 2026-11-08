@@ -66,11 +66,13 @@ const server = serve({
     }),
     "/api/inbox": {
       GET: localOnly(async (req) => {
-        const category = new URL(req.url).searchParams.get("category");
+        const params = new URL(req.url).searchParams,
+          category = params.get("category");
         try {
           return Response.json({
             ...(await inbox.feed(
               category === "direct" || category === "watching" ? category : undefined,
+              params.get("after") || undefined,
             )),
             writable: canWrite(serverConfiguration().site),
           });

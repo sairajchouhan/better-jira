@@ -1,6 +1,9 @@
 import { describe as group, expect, test } from "bun:test";
 import {
   DEFAULT_VIEW,
+  facetsOf,
+  focusGroups,
+  statusType,
   adfText,
   describe,
   kindOf,
@@ -191,8 +194,9 @@ test("visibleItems applies local state, filters and ordering", () => {
   expect(ids()).toEqual(["a", "b"]);
   expect(visibleItems([a], local, DEFAULT_VIEW, now)[0]?.unread).toBe(true);
   expect(ids({ showSnoozed: true })).toEqual(["a", "b", "d"]);
-  expect(ids({ category: "direct" })).toEqual(["b"]);
-  expect(ids({ oldest: true })).toEqual(["b", "a"]);
+  expect(ids({ priorityInbox: true, tab: "direct" })).toEqual(["b"]);
+  expect(ids({ priorityInbox: true, tab: "watching" })).toEqual(["a"]);
+  expect(ids({ ordering: "oldest" })).toEqual(["b", "a"]);
   expect(
     visibleItems([d, c, b, a], {}, { ...DEFAULT_VIEW, unreadOnly: true }, now).map((r) => r.id),
   ).toEqual(["b", "c", "d"]);
@@ -203,9 +207,92 @@ test("visibleItems applies local state, filters and ordering", () => {
   expect(visibleItems([d], local, DEFAULT_VIEW, now + 2000).map((r) => r.id)).toEqual(["d"]);
 });
 
-test("snoozeChoices: tomorrow and next week at 8:00, a month from now", () => {
-  const [tomorrow, week, month] = snoozeChoices(new Date(2026, 10, 8, 15, 30));
-  expect(new Date(tomorrow!.until)).toEqual(new Date(2026, 10, 9, 8));
-  expect(new Date(week!.until)).toEqual(new Date(2026, 10, 15, 8));
-  expect(new Date(month!.until)).toEqual(new Date(2026, 11, 8, 15, 30));
+test("filters match any value per field and every field; priority ordering puts no priority last", () => {
+  const now = Date.parse("2026-11-08T12:00:00Z");
+  const a = item({ id: "a", head: "ha", kind: "mentioned", key: "KAN-1" }),
+    b = item({ id: "b", head: "hb", kind: "comment", key: "SAM-2", time: "2026-11-08T11:00:00Z" }),
+    c = item({ id: "c", head: "hc", kind: "assigned", key: "KAN-3", actor: { name: "Bo" } });
+  const issues: Record<string, { priority?: string; project?: { name: string } }> = {
+    "KAN-1": { priority: "Low", project: { name: "Kanban" } },
+    "KAN-3": { priority: "Highest", project: { name: "Kanban" } },
+  };
+  const facets = (i: InboxItem) => facetsOf(i, issues[i.key]);
+  const ids = (view = {}) =>
+    visibleItems([a, b, c], {}, { ...DEFAULT_VIEW, ...view }, now, null, facets).map((r) => r.id);
+  expect(ids({ filters: { type: ["Mentions", "Comments and replies"] } })).toEqual(["b", "a"]);
+  expect(ids({ filters: { project: ["Kanban"], from: ["Bo"] } })).toEqual(["c"]);
+  expect(ids({ filters: { project: ["SAM"] } })).toEqual(["b"]);
+  expect(ids({ filters: { priority: ["No priority"] } })).toEqual(["b"]);
+  expect(ids({ filters: { type: [] } })).toEqual(["b", "a", "c"]);
+  expect(ids({ ordering: "priority" })).toEqual(["c", "a", "b"]);
+});
+
+test("statusType maps Jira statuses to Linear's status types", () => {
+  expect(statusType({ name: "Done", category: "done" })).toBe("Completed");
+  expect(statusType({ name: "Won't do", category: "done" })).toBe("Canceled");
+  expect(statusType({ name: "Duplicate", category: "done" })).toBe("Duplicate");
+  expect(statusType({ name: "In Review", category: "indeterminate" })).toBe("Started");
+  expect(statusType({ name: "Backlog", category: "new" })).toBe("Backlog");
+  expect(statusType({ name: "To Do", category: "new" })).toBe("Unstarted");
+  expect(statusType({ name: "In Progress", category: "" })).toBe("Started");
+  expect(statusType({ name: "", category: "" })).toBe("");
+});
+
+test("focusGroups follows Linear's Focus grouping", () => {
+  const row = (id: string, kind: InboxItem["kind"], unread = true) =>
+    item({ id, head: id, kind, unread });
+  const labels = (rows: InboxItem[], facets?: (i: InboxItem) => ReturnType<typeof facetsOf>) =>
+    focusGroups(rows, facets).map((g) => `${g.label}:${g.rows.map((r) => r.id).join("")}`);
+  // One group alone is "Unread"; read rows go last.
+  expect(labels([row("a", "updated"), row("b", "updated", false)])).toEqual(["Unread:a", "Read:b"]);
+  // Mentions get their own group; small children stay in Other.
+  expect(labels([row("m", "mentioned"), row("u", "updated"), row("x", "assigned")])).toEqual([
+    "Mentions:m",
+    "Other:ux",
+  ]);
+  // Comments split out from two; Other alone with one child keeps that child's name.
+  expect(labels([row("m", "mentioned"), row("c", "comment"), row("d", "comment")])).toEqual([
+    "Mentions:m",
+    "Comments:cd",
+  ]);
+  // Two or more trailing one-row children fold back into Other; earlier ones show on their own.
+  expect(
+    labels([
+      row("c", "comment"),
+      row("d", "comment"),
+      row("x", "assigned"),
+      row("r", "reaction"),
+      row("u", "updated"),
+    ]),
+  ).toEqual(["Comments:cd", "Other:xru"]);
+  // Urgent: open issues at the highest priority.
+  const urgent = (i: InboxItem) => facetsOf(i, { priority: i.id === "p" ? "Highest" : "Low" });
+  expect(labels([row("p", "updated"), row("u", "updated")], urgent)).toEqual([
+    "Urgent:p",
+    "Other:u",
+  ]);
+  // No unread rows: one flat, unlabeled list.
+  expect(labels([row("a", "updated", false)])).toEqual([":a"]);
+});
+
+test("snoozeChoices: Linear's presets, in time order, at 9:00", () => {
+  const labels = (now: Date) =>
+    snoozeChoices(now).map((c) => `${c.label} ${new Date(c.until).toString().slice(0, 21)}`);
+  // Sunday 15:30: this evening is still ahead; next week is Monday.
+  expect(labels(new Date(2026, 10, 8, 15, 30))).toEqual([
+    "An hour from now Sun Nov 08 2026 16:30",
+    "This evening Sun Nov 08 2026 18:00",
+    "In 3 hours Sun Nov 08 2026 18:30",
+    "Tomorrow Mon Nov 09 2026 09:00",
+    "Next week Mon Nov 09 2026 09:00",
+    "A month from now Tue Dec 08 2026 09:00",
+  ]);
+  // Monday 17:30: the evening is under an hour away, so it is not offered; next week is the Monday after.
+  expect(labels(new Date(2026, 10, 9, 17, 30)).map((l) => l.split(" 2026")[0])).toEqual([
+    "An hour from now Mon Nov 09",
+    "In 3 hours Mon Nov 09",
+    "Tomorrow Tue Nov 10",
+    "Next week Mon Nov 16",
+    "A month from now Wed Dec 09",
+  ]);
 });

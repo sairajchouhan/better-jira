@@ -1,23 +1,41 @@
-/** Linear's Inbox over Jira's in-app notifications. Read state goes to Jira; delete and snooze stay in this browser. */
-import { QueryObserver } from "@tanstack/query-core";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+/** Linear's Inbox over Jira's in-app notifications. Read state goes to Jira; delete and snooze stay in this browser, because Jira's notification API has neither. */
+import { InfiniteQueryObserver, type InfiniteData } from "@tanstack/query-core";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { ActionMenu, type ActionEntry } from "./action-menu";
 import { Icon, StatusIcon, type IconName } from "./icons";
 import {
   DEFAULT_VIEW,
+  FILTER_FIELDS,
   describe,
+  facetsOf,
+  feedCategory,
+  focusGroups,
   shortAgo,
   snoozeChoices,
   visibleItems,
+  type FilterField,
   type InboxFeed,
   type InboxItem,
   type InboxView,
   type Local,
 } from "./inbox-model";
+import { issueCopy, type CopyKind } from "./issue-copy";
 import { MENU_ITEM, MenuSurface } from "./menu-surface";
-import { boardOf, get, navigate, queryClient, set, ui, useStore } from "./store";
+import { shortcutLabel } from "./shortcuts";
+import {
+  boardOf,
+  get,
+  navigate,
+  queryClient,
+  set,
+  toggleFavorite,
+  ui,
+  useStore,
+  type Issue,
+} from "./store";
 
 type Feed = InboxFeed & { writable: boolean };
-type Category = InboxView["category"];
+type Category = "all" | "direct" | "watching";
 
 // --- local state: per head notification, plus the view's display options ---
 
@@ -43,13 +61,19 @@ const emit = () => listeners.forEach((l) => l());
 const subscribe = (l: () => void) => (listeners.add(l), () => void listeners.delete(l));
 const localState = () => (local ??= read<Record<string, Local>>("local", {}));
 const viewState = () => (view ??= read("view", DEFAULT_VIEW));
-function setLocal(heads: string[], patch: Local) {
+/** Sets each head's local state; `undefined` drops it. */
+function putLocal(entries: [string, Local | undefined][]) {
   const next = { ...localState() };
-  for (const head of heads) next[head] = { ...next[head], ...patch };
+  for (const [head, value] of entries) {
+    if (value) next[head] = value;
+    else delete next[head];
+  }
   local = next;
   save("local", next);
   emit();
 }
+const setLocal = (heads: string[], patch: Local) =>
+  putLocal(heads.map((head) => [head, { ...localState()[head], ...patch }]));
 function dropLocal(heads: string[], key: keyof Local) {
   const next = { ...localState() };
   for (const head of heads) {
@@ -66,40 +90,95 @@ export function changeView(patch: Partial<InboxView>) {
   save("view", view);
   emit();
 }
+export const toggleFilter = (field: FilterField, value: string) => {
+  const values = viewState().filters[field] ?? [];
+  changeView({
+    filters: {
+      ...viewState().filters,
+      [field]: values.includes(value) ? values.filter((v) => v !== value) : [...values, value],
+    },
+  });
+};
+export const clearFilters = () => changeView({ filters: {} });
 const useLocal = () => useSyncExternalStore(subscribe, localState);
 const useView = () => useSyncExternalStore(subscribe, viewState);
 const useSelected = () => useSyncExternalStore(subscribe, () => selectedId);
 
-// --- data: TanStack Query; the server's SSE "inbox" message invalidates ["inbox"] ---
+// --- data: TanStack Query, a page per Jira cursor; the server's SSE "inbox" message invalidates ["inbox"] ---
 
 const options = (category: Category) => ({
   queryKey: ["inbox", category],
-  queryFn: async (): Promise<Feed> => {
-    const res = await fetch(`/api/inbox${category === "all" ? "" : `?category=${category}`}`);
+  queryFn: async ({ pageParam }: { pageParam: string }): Promise<Feed> => {
+    const query = new URLSearchParams(category === "all" ? {} : { category });
+    if (pageParam) query.set("after", pageParam);
+    const res = await fetch(`/api/inbox${query.size ? `?${query}` : ""}`);
     if (!res.ok)
       throw new Error((await res.json().catch(() => null))?.error ?? "Inbox unavailable");
     return res.json();
   },
+  initialPageParam: "",
+  getNextPageParam: (last: Feed) => (last.more && last.cursor) || undefined,
   staleTime: 30_000,
   refetchOnWindowFocus: true,
   refetchInterval: 5 * 60_000, // backstop; the server's unseen-count poll pushes changes sooner
 });
 function useFeed(category: Category) {
-  const [observer] = useState(() => new QueryObserver(queryClient, options(category)));
+  const [observer] = useState(
+    () =>
+      new InfiniteQueryObserver<Feed, Error, InfiniteData<Feed, string>, string[], string>(
+        queryClient,
+        options(category),
+      ),
+  );
   useEffect(() => observer.setOptions(options(category)), [observer, category]);
   return useSyncExternalStore(
     useCallback((l) => observer.subscribe(l), [observer]),
     () => observer.getCurrentResult(),
   );
 }
-const cached = (category: Category) => queryClient.getQueryData<Feed>(["inbox", category]);
+/** Every loaded page's rows; a row Jira repeats on a later page keeps its first place. */
+function itemsOf(data?: InfiniteData<Feed, string>) {
+  const seen = new Set<string>();
+  return (data?.pages ?? [])
+    .flatMap((p) => p.items)
+    .filter((i) => !seen.has(i.id) && !!seen.add(i.id));
+}
+const firstPage = () =>
+  queryClient.getQueryData<InfiniteData<Feed, string>>(["inbox", "all"])?.pages[0];
+
+const statusOf = (key: string) => {
+  const issue = get().issues.get(key);
+  return (
+    issue &&
+    boardOf(issue.key)
+      ?.columns.flatMap((c) => c.statuses)
+      .find((s) => s.id === issue.status)
+  );
+};
+/** Filter facts for a row; priority, project and status come from the mirror when the issue is in it. */
+const facets = (item: InboxItem) => facetsOf(item, get().issues.get(item.key), statusOf(item.key));
 
 /** The sidebar badge: unread rows, as Linear counts them. */
 export function useInboxBadge() {
   const { data } = useFeed("all");
   const own = useLocal();
   useStore((s) => s.clock); // snoozes expire
-  return data ? visibleItems(data.items, own, { ...DEFAULT_VIEW, unreadOnly: true }).length : 0;
+  return visibleItems(itemsOf(data), own, { ...DEFAULT_VIEW, unreadOnly: true }).length;
+}
+
+// --- undo: Linear's Z steps back through inbox actions ---
+
+const undos: { label: string; run: () => void }[] = [];
+function remember(label: string, run: () => void) {
+  undos.push({ label, run });
+  undos.splice(0, undos.length - 50);
+}
+export function undoInbox() {
+  const last = undos.pop();
+  if (!last) return;
+  last.run();
+  ui.send({ type: "toast.dismiss" });
+  set({ perf: `Undid ${last.label}` });
 }
 
 // --- actions (also the keyboard shortcuts) ---
@@ -116,14 +195,23 @@ async function send(body: object) {
   });
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "Jira refused");
 }
-/** Shown at once; on a writable site Jira takes it and the local override goes once the feed agrees. */
-async function markRead(items: InboxItem[], value: boolean) {
+/** The server takes 50 groups per call. */
+async function sendGroups(action: "read" | "unread", groups: string[]) {
+  for (let i = 0; i < groups.length; i += 50)
+    await send({ action, groups: groups.slice(i, i + 50) });
+}
+/** Shown at once; on a writable site Jira takes it and the local override goes once the feed agrees. A `label` makes it undoable. */
+async function markRead(items: InboxItem[], value: boolean, label?: string) {
   if (!items.length) return;
+  if (label) remember(label, () => void markRead(items, !value));
   const heads = items.map((i) => i.head);
   setLocal(heads, { read: value });
-  if (!cached("all")?.writable) return;
+  if (!firstPage()?.writable) return;
   try {
-    await send({ action: value ? "read" : "unread", groups: items.map((i) => i.id) });
+    await sendGroups(
+      value ? "read" : "unread",
+      items.map((i) => i.id),
+    );
     await queryClient.invalidateQueries({ queryKey: ["inbox"] });
     dropLocal(heads, "read");
   } catch (error) {
@@ -152,34 +240,37 @@ export function moveRow(direction: number) {
 }
 export const openRow = () => selectRow(selectedRow(), "page");
 /** Linear's U. */
-export function toggleRead() {
-  const row = selectedRow();
-  if (row) void markRead([row], row.unread);
+export function toggleRead(row = selectedRow()) {
+  if (row) void markRead([row], row.unread, row.unread ? "mark as read" : "mark as unread");
 }
-/** Linear's ⌥U: every row in the current filter. */
+const hasFilters = (v: InboxView) => Object.values(v.filters).some((values) => values?.length);
+/** Linear's ⌥U: every row in the current view. With no tab or filter, Jira marks its whole feed. */
 export async function markAllRead() {
   const unread = rows.filter((r) => r.unread);
-  setLocal(
-    unread.map((r) => r.head),
-    { read: true },
-  );
-  if (!cached("all")?.writable || !unread.length) return;
+  if (!unread.length) return;
+  remember("mark notifications as read", () => void markRead(unread, false));
+  const heads = unread.map((r) => r.head);
+  setLocal(heads, { read: true });
+  if (!firstPage()?.writable) return;
   try {
-    const category = viewState().category;
-    if (category === "all") await send({ action: "read-all" });
-    else await send({ action: "read", groups: unread.map((r) => r.id) });
+    const v = viewState();
+    if (!v.priorityInbox && !hasFilters(v)) await send({ action: "read-all" });
+    else
+      await sendGroups(
+        "read",
+        unread.map((r) => r.id),
+      );
     await queryClient.invalidateQueries({ queryKey: ["inbox"] });
-    dropLocal(
-      unread.map((r) => r.head),
-      "read",
-    );
+    dropLocal(heads, "read");
   } catch (error) {
     set({ perf: `Could not update Jira: ${(error as Error).message}` });
   }
 }
-/** Removes rows here and selects the next one, as Linear does after delete or snooze. */
-function hide(items: InboxItem[], patch: Local) {
+/** Removes rows here, selects the next one as Linear does, and offers Linear's undo toast. */
+function hide(items: InboxItem[], patch: Local, label: string, toast: string) {
   if (!items.length) return;
+  const before = items.map((i): [string, Local | undefined] => [i.head, localState()[i.head]]),
+    was = selectedRow();
   const gone = new Set(items.map((i) => i.id)),
     at = rows.findIndex((r) => r.id === selectedId),
     next =
@@ -197,23 +288,21 @@ function hide(items: InboxItem[], patch: Local) {
       navigate({ selected: null, panel: false, inbox: true });
     }
   }
+  remember(label, () => {
+    putLocal(before);
+    if (was && gone.has(was.id)) selectRow(was);
+  });
+  ui.send({ type: "toast.show", text: toast, undo: "inbox" });
 }
-/** Linear's E. Jira notifications cannot be deleted, so this hides the row until the issue has new activity. */
-export const deleteRow = () => hide(selectedRow() ? [selectedRow()!] : [], { deleted: true });
-const completed = (item: InboxItem) => {
-  const issue = get().issues.get(item.key),
-    status =
-      issue &&
-      boardOf(issue.key)
-        ?.columns.flatMap((c) => c.statuses)
-        .find((s) => s.id === issue.status);
-  return status
-    ? status.category === "done"
-    : /done|closed|resolved|complete|cancel/i.test(item.status);
-};
+/** Linear's E and ⌫. Jira notifications cannot be deleted, so this hides the row in this browser until the issue has new activity. */
+export function deleteRow(item = selectedRow()) {
+  if (item) hide([item], { deleted: true }, "delete notification", "Notification deleted");
+}
+const closed = (item: InboxItem) =>
+  ["Completed", "Canceled", "Duplicate"].includes(facets(item).statusType);
 export function deleteAll(which: "all" | "read" | "completed") {
   const items = rows.filter((r) =>
-    which === "read" ? !r.unread : which === "completed" ? completed(r) : true,
+    which === "read" ? !r.unread : which === "completed" ? closed(r) : true,
   );
   const what =
     which === "read"
@@ -225,19 +314,50 @@ export function deleteAll(which: "all" | "read" | "completed") {
     items.length &&
     confirm(`Delete all ${what}? Jira keeps them; this hides them in better-jira.`)
   )
-    hide(items, { deleted: true });
+    hide(
+      items,
+      { deleted: true },
+      "delete notifications",
+      items.length > 1 ? "Notifications deleted" : "Notification deleted",
+    );
 }
-export const snoozeRow = (until: number) =>
-  hide(selectedRow() ? [selectedRow()!] : [], { snoozed: until });
+/** The row a snooze applies to: the right-clicked one, else the selected one. */
+let snoozeTarget: InboxItem | undefined,
+  snoozeCustom = false;
+export function openSnooze(item?: InboxItem, custom = false) {
+  snoozeTarget = item;
+  snoozeCustom = custom;
+  ui.send({ type: "overlay.open", overlay: "snooze" });
+}
+export function snoozeRow(until: number, item = snoozeTarget ?? selectedRow()) {
+  snoozeTarget = undefined;
+  if (item) hide([item], { snoozed: until }, "snooze notification", "Notification snoozed");
+}
 export const hasSelectedRow = () => !!selectedRow();
+/** Linear's ⌥1 and ⌥2: the priority inbox's tabs. */
+export const showTab = (tab: InboxView["tab"]) => changeView({ tab });
+export const priorityInbox = () => viewState().priorityInbox;
+async function copyRow(item: InboxItem, kind: CopyKind) {
+  try {
+    await navigator.clipboard.writeText(
+      issueCopy(kind, { key: item.key, summary: item.title } as Issue, undefined, item.url, ""),
+    );
+    set({ perf: `Copied ${kind}` });
+  } catch {
+    set({ perf: "Could not access the clipboard" });
+  }
+}
 /** Unseen is Jira's bell count; opening the inbox clears it, as opening the bell does. */
 let clearing = false;
 async function clearUnseen() {
-  if (clearing || !cached("all")?.writable || !cached("all")?.unseen) return;
+  if (clearing || !firstPage()?.writable || !firstPage()?.unseen) return;
   clearing = true;
   try {
     await send({ action: "seen" });
-    queryClient.setQueryData<Feed>(["inbox", "all"], (d) => d && { ...d, unseen: 0 });
+    queryClient.setQueryData<InfiniteData<Feed, string>>(
+      ["inbox", "all"],
+      (d) => d && { ...d, pages: d.pages.map((p, i) => (i ? p : { ...p, unseen: 0 })) },
+    );
   } catch {
     /* the bell count is cosmetic here */
   } finally {
@@ -284,13 +404,19 @@ function Actor({ item }: { item: InboxItem }) {
   );
 }
 
-function Row({ item, selected, now }: { item: InboxItem; selected: boolean; now: number }) {
+function Row({
+  item,
+  selected,
+  now,
+  onMenu,
+}: {
+  item: InboxItem;
+  selected: boolean;
+  now: number;
+  onMenu: (item: InboxItem, point: { x: number; y: number }) => void;
+}) {
   const issue = useStore((s) => s.issues.get(item.key));
-  const status =
-    issue &&
-    boardOf(issue.key)
-      ?.columns.flatMap((c) => c.statuses)
-      .find((s) => s.id === issue.status);
+  const status = issue && statusOf(issue.key);
   const ink = item.unread ? "text-fg" : "text-fg-3";
   return (
     <a
@@ -303,6 +429,10 @@ function Row({ item, selected, now }: { item: InboxItem; selected: boolean; now:
         if (e.metaKey || e.ctrlKey || e.shiftKey) return;
         e.preventDefault();
         selectRow(item);
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onMenu(item, { x: e.clientX, y: e.clientY });
       }}
       className={`mx-2 flex h-[55px] gap-3 rounded-lg px-2 ${selected ? "bg-sel" : "hover:bg-hover"}`}
     >
@@ -335,15 +465,174 @@ function Row({ item, selected, now }: { item: InboxItem; selected: boolean; now:
   );
 }
 
-function Menus({ anchor }: { anchor: string }) {
+const when = (until: number) =>
+  new Date(until).toLocaleString("en", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+const COPY: [CopyKind, string][] = [
+  ["ID", "copy-id"],
+  ["URL", "copy-url"],
+  ["title", "copy-title"],
+  ["title as link", "copy-link"],
+];
+/** Linear's row menu: read state, delete, snooze, favorite and copy. Favorite needs the issue in the mirror. */
+function rowEntries(item: InboxItem): ActionEntry[] {
+  const mirrored = get().issues.has(item.key),
+    favorite = get().favorites.includes(item.key);
+  return [
+    {
+      name: item.unread ? "Mark as read" : "Mark as unread",
+      icon: "check",
+      shortcut: shortcutLabel("inbox-read"),
+      run: () => toggleRead(item),
+    },
+    {
+      name: "Delete notification",
+      icon: "trash",
+      shortcut: shortcutLabel("inbox-backspace"),
+      run: () => deleteRow(item),
+    },
+    {
+      name: "Snooze",
+      icon: "clock",
+      children: [
+        ...snoozeChoices().map((c) => ({
+          name: c.label,
+          shortcut: when(c.until),
+          run: () => snoozeRow(c.until, item),
+        })),
+        { name: "Custom…", run: () => openSnooze(item, true) },
+      ],
+    },
+    ...(mirrored
+      ? [
+          {
+            name: favorite ? "Remove from favorites" : "Favorite",
+            icon: (favorite ? "starred" : "star") as IconName,
+            shortcut: shortcutLabel("favorite"),
+            divider: true,
+            run: () => toggleFavorite(item.key),
+          },
+        ]
+      : []),
+    {
+      name: "Copy",
+      icon: "copy",
+      divider: !mirrored,
+      children: COPY.map(([kind, id]) => ({
+        name: `Copy ${kind}`,
+        shortcut: shortcutLabel(id),
+        run: () => void copyRow(item, kind),
+      })),
+    },
+  ];
+}
+
+const FIELD_ICON: Record<FilterField, IconName> = {
+  type: "bell",
+  from: "user",
+  project: "layers",
+  priority: "priority",
+  statusType: "status",
+};
+const ORDER: Partial<Record<FilterField, string[]>> = {
+  priority: ["No priority", "Urgent", "High", "Medium", "Low"],
+  statusType: ["Triage", "Backlog", "Unstarted", "Started", "Completed", "Canceled", "Duplicate"],
+};
+/** Linear's filter menu: a submenu per field listing the values the rows have, with their counts; picking one toggles it. */
+function filterEntries(base: InboxItem[], v: InboxView): ActionEntry[] {
+  return FILTER_FIELDS.map(([field, name]) => {
+    const counts = new Map<string, number>();
+    for (const r of base) {
+      const value = facets(r)[field];
+      if (value) counts.set(value, (counts.get(value) ?? 0) + 1);
+    }
+    for (const value of v.filters[field] ?? []) counts.set(value, counts.get(value) ?? 0);
+    const order = ORDER[field];
+    const values = [...counts.keys()].sort((a, b) =>
+      order ? order.indexOf(a) - order.indexOf(b) : a.localeCompare(b),
+    );
+    return {
+      name,
+      icon: FIELD_ICON[field],
+      children: values.map((value) => ({
+        name: value,
+        icon: v.filters[field]?.includes(value) ? ("check" as const) : undefined,
+        shortcut: `${counts.get(value)} notification${counts.get(value) === 1 ? "" : "s"}`,
+        run: () => toggleFilter(field, value),
+      })),
+    };
+  });
+}
+
+function SnoozeMenu({ close }: { close: () => void }) {
+  const [custom, setCustom] = useState(snoozeCustom);
+  const [value, setValue] = useState("");
+  return (
+    <MenuSurface label="Snooze notification until…" command width={360} close={close}>
+      {custom ? (
+        <form
+          className="flex items-center gap-2 p-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const until = new Date(value).getTime();
+            if (!(until > Date.now())) return set({ perf: "Choose a future snooze time" });
+            close();
+            snoozeRow(until);
+          }}
+        >
+          <input
+            type="datetime-local"
+            aria-label="Snooze until"
+            required
+            autoFocus
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="flex-1 rounded border border-line-2 bg-transparent px-2 py-1 text-[13px] text-fg"
+          />
+          <button type="submit" className="rounded bg-accent px-3 py-1 text-[13px] text-white">
+            Snooze
+          </button>
+        </form>
+      ) : (
+        <div className="p-1">
+          {snoozeChoices().map((c) => (
+            <button
+              key={c.label}
+              role="menuitem"
+              data-snooze={c.label}
+              className={MENU_ITEM}
+              onClick={() => {
+                close();
+                snoozeRow(c.until);
+              }}
+            >
+              <span className="flex-1">{c.label}</span>
+              <span className="text-[12px] text-fg-3">{when(c.until)}</span>
+            </button>
+          ))}
+          <button role="menuitem" className={MENU_ITEM} onClick={() => setCustom(true)}>
+            Custom…
+          </button>
+        </div>
+      )}
+    </MenuSurface>
+  );
+}
+
+function Menus({ base }: { base: InboxItem[] }) {
   const overlay = useStore((s) => s.overlay);
+  const site = useStore((s) => s.site);
   const v = useView();
   const close = () => ui.send({ type: "overlay.close" });
-  const item = (label: string, run: () => void, hint?: string, checked?: boolean) => (
+  const item = (label: string, run: () => void, hint?: string) => (
     <button
       key={label}
-      role={checked === undefined ? "menuitem" : "menuitemradio"}
-      aria-checked={checked}
+      role="menuitem"
       className={MENU_ITEM}
       onClick={() => {
         close();
@@ -351,98 +640,161 @@ function Menus({ anchor }: { anchor: string }) {
       }}
     >
       <span className="flex-1">{label}</span>
-      {checked && <Icon name="check" />}
       {hint && <kbd className="text-fg-3">{hint}</kbd>}
     </button>
   );
-  const toggle = (label: string, key: "showSnoozed" | "unreadFirst") => (
+  const toggle = (label: string, key: "showSnoozed" | "unreadFirst" | "priorityInbox") => (
     <label key={key} className={`${MENU_ITEM} justify-between`}>
       {label}
       <input
         type="checkbox"
         role="switch"
+        // Focus starts inside the menu, so Escape closes it.
+        data-autofocus={key === "priorityInbox" || undefined}
         checked={v[key]}
         onChange={(e) => changeView({ [key]: e.target.checked })}
         className="accent-[var(--accent)]"
       />
     </label>
   );
+  const select = <K extends "grouping" | "ordering">(
+    label: string,
+    key: K,
+    choices: [InboxView[K], string][],
+  ) => (
+    <label className={`${MENU_ITEM} justify-between`}>
+      {label}
+      <select
+        aria-label={label}
+        value={v[key]}
+        onChange={(e) => changeView({ [key]: e.target.value })}
+        className="rounded bg-sel px-1.5 py-0.5 text-[12px] text-fg"
+      >
+        {choices.map(([value, name]) => (
+          <option key={value} value={value}>
+            {name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
   if (overlay === "inbox-actions")
     return (
-      <MenuSurface label="Notification actions" anchorId={anchor} fit close={close}>
+      <MenuSurface label="Notification actions" anchorId="inbox-actions" fit close={close}>
         {item("Mark all as read", () => void markAllRead(), "⌥U")}
         {item("Delete all", () => deleteAll("all"))}
         {item("Delete all read", () => deleteAll("read"), "⇧⌫")}
         {item("Delete all completed", () => deleteAll("completed"))}
+        {/* Jira's own notification settings: better-jira has none of its own. */}
+        {item("Go to settings", () =>
+          window.open(`${site}/jira/settings/personal/notifications`, "_blank", "noopener"),
+        )}
       </MenuSurface>
     );
   if (overlay === "inbox-filter")
     return (
-      <MenuSurface label="Filter notifications" anchorId="inbox-filter" fit close={close}>
-        {(
-          [
-            ["all", "All notifications"],
-            ["direct", "Direct"],
-            ["watching", "Watching"],
-          ] as const
-        ).map(([category, label]) =>
-          item(label, () => changeView({ category }), undefined, v.category === category),
-        )}
-      </MenuSurface>
+      <ActionMenu
+        label="Filter"
+        anchor={document.getElementById("inbox-filter")}
+        align="end"
+        entries={filterEntries(base, v)}
+        close={close}
+      />
     );
   if (overlay === "inbox-display")
     return (
       <MenuSurface label="Display options" anchorId="inbox-display" width={300} close={close}>
-        <label className={`${MENU_ITEM} justify-between`}>
-          Ordering
-          <select
-            aria-label="Ordering"
-            value={v.oldest ? "oldest" : "newest"}
-            onChange={(e) => changeView({ oldest: e.target.value === "oldest" })}
-            className="rounded bg-sel px-1.5 py-0.5 text-[12px] text-fg"
-          >
-            <option value="newest">Newest</option>
-            <option value="oldest">Oldest</option>
-          </select>
-        </label>
+        {toggle("Enable priority inbox", "priorityInbox")}
+        {select("Group unreads by", "grouping", [
+          ["none", "No grouping"],
+          ["focus", "Focus"],
+        ])}
+        {select("Ordering", "ordering", [
+          ["newest", "Newest"],
+          ["oldest", "Oldest"],
+          ["priority", "Priority"],
+        ])}
         {toggle("Show snoozed", "showSnoozed")}
         {toggle("Show unread first", "unreadFirst")}
       </MenuSurface>
     );
-  if (overlay === "snooze")
-    return (
-      <MenuSurface label="Snooze notification until…" command width={360} close={close}>
-        {snoozeChoices().map((c) =>
-          item(
-            c.label,
-            () => snoozeRow(c.until),
-            new Date(c.until).toLocaleDateString("en", {
-              weekday: "short",
-              month: "short",
-              day: "numeric",
-            }),
-          ),
-        )}
-      </MenuSurface>
-    );
+  if (overlay === "snooze") return <SnoozeMenu close={close} />;
   return null;
 }
 
-/** The list pane: Linear's 416px column with its own 44px header. */
+/** Linear's filter chips under the header: "Field is value", "is any of" for several; × removes one, Clear removes all. */
+function FilterChips({ v }: { v: InboxView }) {
+  const active = FILTER_FIELDS.filter(([field]) => v.filters[field]?.length);
+  if (!active.length) return null;
+  return (
+    <div
+      aria-label="Active filters"
+      className="flex shrink-0 flex-wrap items-center gap-1 border-b-[0.5px] border-frame px-3 py-1.5"
+    >
+      {active.map(([field, name]) => {
+        const values = v.filters[field]!;
+        return (
+          <span
+            key={field}
+            data-inbox-chip={field}
+            className="flex h-6 items-center gap-1 rounded-full border-[0.5px] border-line-2 pr-1 pl-2 text-[12px] text-fg-3"
+          >
+            {name} {values.length > 1 ? "is any of" : "is"}
+            <span className="text-fg-2">{values.join(", ")}</span>
+            <button
+              aria-label={`Remove ${name} filter`}
+              onClick={() => changeView({ filters: { ...v.filters, [field]: [] } })}
+              className="grid size-4 place-items-center rounded-full hover:bg-hover hover:text-fg"
+            >
+              <Icon name="close" size={10} />
+            </button>
+          </span>
+        );
+      })}
+      <button onClick={clearFilters} className="ml-auto text-[12px] text-fg-3 hover:text-fg">
+        Clear
+      </button>
+    </div>
+  );
+}
+
+/** The list pane: Linear's 416px column with its own 44px header. Older pages load as the end of the list scrolls into view. */
 export function InboxList() {
   const v = useView();
-  const { data, error, isPending, refetch } = useFeed(v.category);
+  const feed = useFeed(feedCategory(v));
+  const { data, error, isPending, refetch, hasNextPage, isFetchingNextPage, fetchNextPage } = feed;
   const { data: all } = useFeed("all");
   const own = useLocal();
   const selected = useSelected();
   const now = useStore((s) => s.clock);
-  const unseen = all?.unseen ?? 0;
+  useStore((s) => s.issues); // filters and grouping read mirrored issues
+  const [menu, setMenu] = useState<{ item: InboxItem; point: { x: number; y: number } } | null>(
+    null,
+  );
+  const list = useRef<HTMLDivElement>(null),
+    end = useRef<HTMLDivElement>(null);
+  const unseen = all?.pages[0]?.unseen ?? 0;
   useEffect(() => {
     if (unseen) void clearUnseen();
   }, [unseen]);
+  const pages = data?.pages.length ?? 0;
+  useEffect(() => {
+    if (!end.current || !hasNextPage || isFetchingNextPage) return;
+    // A fresh observer reports at once, so a short or fully filtered page keeps loading while the end stays in view.
+    const observer = new IntersectionObserver(
+      ([entry]) => entry?.isIntersecting && void fetchNextPage(),
+      { root: list.current, rootMargin: "200px" },
+    );
+    observer.observe(end.current);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, pages, fetchNextPage]);
+  const items = itemsOf(data);
+  const base = visibleItems(items, own, { ...v, filters: {} }, now, selected, facets);
+  const shown = visibleItems(items, own, v, now, selected, facets);
+  const groups = v.grouping === "focus" ? focusGroups(shown, facets) : [{ label: "", rows: shown }];
   // ponytail: module-level row cache so shortcuts act on what is on screen; a store field if a second list ever renders.
-  rows = data ? visibleItems(data.items, own, v, now, selected) : [];
-  const filtered = v.category !== "all" || v.unreadOnly;
+  rows = groups.flatMap((g) => g.rows);
+  const filtered = hasFilters(v) || v.unreadOnly;
   return (
     <section
       aria-label="Inbox"
@@ -459,6 +811,27 @@ export function InboxList() {
         >
           <Icon name="dots" />
         </button>
+        {v.priorityInbox && (
+          <span role="tablist" aria-label="Priority inbox" className="ml-1 flex gap-1">
+            {(
+              [
+                ["direct", "Priority", "Alt+1"],
+                ["watching", "Other", "Alt+2"],
+              ] as const
+            ).map(([tab, label, key]) => (
+              <button
+                key={tab}
+                role="tab"
+                aria-selected={v.tab === tab}
+                title={`${label} (${key.replace("Alt+", "⌥")})`}
+                onClick={() => showTab(tab)}
+                className="h-7 rounded-full px-2.5 text-[12px] font-medium text-fg-3 aria-selected:bg-sel aria-selected:text-fg"
+              >
+                {label}
+              </button>
+            ))}
+          </span>
+        )}
         <span className="flex-1" />
         <button
           aria-label={v.unreadOnly ? "Show read" : "Show unreads only"}
@@ -471,9 +844,9 @@ export function InboxList() {
         </button>
         <button
           id="inbox-filter"
-          aria-label="Filter"
-          title="Filter"
-          aria-pressed={v.category !== "all"}
+          aria-label="Add filter"
+          title={`Add filter (${shortcutLabel("filter")})`}
+          aria-pressed={hasFilters(v)}
           onClick={() => ui.send({ type: "overlay.open", overlay: "inbox-filter" })}
           className={HEADER_BTN}
         >
@@ -489,10 +862,29 @@ export function InboxList() {
           <Icon name="display" />
         </button>
       </header>
-      <div role="list" className="min-h-0 flex-1 overflow-y-auto py-1.5">
-        {rows.map((item) => (
-          <Row key={item.id} item={item} selected={item.id === selected} now={now} />
-        ))}
+      <FilterChips v={v} />
+      <div ref={list} role="list" className="min-h-0 flex-1 overflow-y-auto py-1.5">
+        {groups.map((group) => [
+          group.label && (
+            <div
+              key={`group-${group.label}`}
+              data-inbox-group={group.label}
+              className="flex gap-1.5 px-4 pt-3 pb-1 text-[12px] font-medium text-fg-3"
+            >
+              {group.label}
+              <span className="font-[450]">{group.rows.length}</span>
+            </div>
+          ),
+          ...group.rows.map((item) => (
+            <Row
+              key={item.id}
+              item={item}
+              selected={item.id === selected}
+              now={now}
+              onMenu={(item, point) => setMenu({ item, point })}
+            />
+          )),
+        ])}
         {!rows.length && (
           <div role="status" className="grid h-full place-items-center text-[13px] text-fg-3">
             {error ? (
@@ -505,10 +897,10 @@ export function InboxList() {
                   Retry
                 </button>
               </span>
-            ) : isPending ? (
+            ) : isPending || isFetchingNextPage ? (
               "Loading notifications…"
-            ) : data?.items.length && filtered ? (
-              v.unreadOnly ? (
+            ) : items.length && filtered ? (
+              v.unreadOnly && !hasFilters(v) ? (
                 "No unreads"
               ) : (
                 "No matching notifications"
@@ -518,9 +910,50 @@ export function InboxList() {
             )}
           </div>
         )}
+        {rows.length > 0 && isFetchingNextPage && (
+          <div role="status" className="py-2 text-center text-[12px] text-fg-3">
+            Loading older notifications…
+          </div>
+        )}
+        <div ref={end} data-inbox-end aria-hidden className="h-px" />
       </div>
-      <Menus anchor="inbox-actions" />
+      <Menus base={base} />
+      {menu && (
+        <ActionMenu
+          label="Notification options"
+          point={menu.point}
+          entries={rowEntries(menu.item)}
+          close={() => setMenu(null)}
+        />
+      )}
     </section>
+  );
+}
+
+/** Linear's notification actions in the open issue's header, while the inbox is open. */
+export function InboxIssueActions() {
+  useSelected();
+  useLocal();
+  if (!selectedRow()) return null;
+  return (
+    <>
+      <button
+        aria-label="Snooze notification"
+        title={`Snooze notification (${shortcutLabel("inbox-snooze")})`}
+        onClick={() => openSnooze()}
+        className="grid size-7 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"
+      >
+        <Icon name="clock" />
+      </button>
+      <button
+        aria-label="Delete notification"
+        title={`Delete notification (${shortcutLabel("inbox-backspace")})`}
+        onClick={() => deleteRow()}
+        className="grid size-7 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"
+      >
+        <Icon name="trash" />
+      </button>
+    </>
   );
 }
 
@@ -533,8 +966,20 @@ export function InboxPane() {
   if (row)
     return (
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-3 text-[12px] text-fg-3">
+        <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-3 text-[12px] text-fg-3">
           {row.key}
+          <InboxIssueActions />
+          {COPY.slice(0, 2).map(([kind, id]) => (
+            <button
+              key={kind}
+              aria-label={`Copy issue ${kind}`}
+              title={`Copy issue ${kind} (${shortcutLabel(id)})`}
+              onClick={() => void copyRow(row, kind)}
+              className="grid size-7 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"
+            >
+              <Icon name={kind === "URL" ? "link" : "copy"} />
+            </button>
+          ))}
           <span className="flex-1" />
           <a
             href={row.url}

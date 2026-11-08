@@ -228,7 +228,8 @@ const notification = (
     },
   },
 });
-const freshInbox = () => ({
+/** `extra` appends that many older, read notifications on issues outside the mirror, so the list pages. */
+const freshInbox = (extra = 0) => ({
   unseen: 4,
   nodes: [
     notification(
@@ -303,20 +304,35 @@ const freshInbox = () => ({
       false,
       60 * 24 * 400,
     ),
+    ...Array.from({ length: extra }, (_, i) =>
+      notification(
+        100 + i,
+        `OLD-${i + 1}`,
+        `Older notification ${i + 1}`,
+        "updated",
+        "Sam updated a task",
+        "watching",
+        true,
+        60 * 24 * 500 + i,
+      ),
+    ),
   ],
 });
+/** Rows per page; the cursor is the next row's index, like the gateway's opaque one. */
+const INBOX_PAGE = 20;
 let inbox = freshInbox();
 async function inboxRoute(req: Request, url: URL) {
   let status = 200,
     body: unknown = { ok: true };
   if (req.method === "GET") {
-    const category = url.searchParams.get("category");
+    const category = url.searchParams.get("category"),
+      start = Number(url.searchParams.get("after") || 0),
+      nodes = inbox.nodes.filter((n) => !category || n.headNotification.category === category);
     body = {
       unseen: inbox.unseen,
-      items: mapFeed(
-        inbox.nodes.filter((n) => !category || n.headNotification.category === category),
-      ),
-      more: false,
+      items: mapFeed(nodes.slice(start, start + INBOX_PAGE)),
+      more: start + INBOX_PAGE < nodes.length,
+      cursor: String(start + INBOX_PAGE),
       writable: true,
     };
   } else {
@@ -336,7 +352,7 @@ async function inboxRoute(req: Request, url: URL) {
       body = { error: "Unknown inbox action" };
     }
   }
-  requests.push({ method: req.method, path: url.pathname, status });
+  requests.push({ method: req.method, path: url.pathname + url.search, status });
   return Response.json(body, { status });
 }
 const mediaAssets = [
@@ -623,7 +639,7 @@ async function handle(req: Request) {
     mediaVariant = settings.mediaVariant ?? "";
     writable = settings.writable ?? false;
     subtask = settings.subtask ?? false;
-    inbox = freshInbox();
+    inbox = freshInbox(settings.inboxExtra ?? 0);
     requests.length = 0;
     writes.length = 0;
     types.clear();

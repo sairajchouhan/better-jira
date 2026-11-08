@@ -51,11 +51,11 @@ function routingAri() {
   }));
 }
 
-const FEED = `query InboxFeed($ari: String, $first: Int, $category: InfluentsNotificationCategory) {
+const FEED = `query InboxFeed($ari: String, $first: Int, $after: String, $category: InfluentsNotificationCategory) {
   notifications {
     unseenNotificationCount(product: "jira", collabContextRoutingAri: $ari)
-    notificationFeed(first: $first, collabContextRoutingAri: $ari, filter: { productFilter: "jira", categoryFilter: $category }) {
-      pageInfo { hasNextPage }
+    notificationFeed(first: $first, after: $after, collabContextRoutingAri: $ari, filter: { productFilter: "jira", categoryFilter: $category }) {
+      pageInfo { hasNextPage endCursor }
       nodes {
         groupId groupSize readStates
         headNotification {
@@ -72,13 +72,19 @@ const FEED = `query InboxFeed($ari: String, $first: Int, $category: InfluentsNot
     }
   }
 }`;
-/** Jira's bell tabs: Direct (assigned, mentioned, your issues) and Watching; no category is both. */
-export async function feed(category?: "direct" | "watching"): Promise<InboxFeed> {
-  const data = await gateway("InboxFeed", FEED, { first: PAGE, category: category ?? null });
+/** Jira's bell tabs: Direct (assigned, mentioned, your issues) and Watching; no category is both. `after` is the previous page's cursor. */
+export async function feed(category?: "direct" | "watching", after?: string): Promise<InboxFeed> {
+  const data = await gateway("InboxFeed", FEED, {
+    first: PAGE,
+    after: after ?? null,
+    category: category ?? null,
+  });
+  const page = data.notificationFeed?.pageInfo;
   return {
     unseen: Number(data.unseenNotificationCount) || 0,
     items: mapFeed(data.notificationFeed?.nodes),
-    more: !!data.notificationFeed?.pageInfo?.hasNextPage,
+    more: !!page?.hasNextPage && !!page.endCursor,
+    ...(page?.endCursor ? { cursor: String(page.endCursor) } : {}),
   };
 }
 
