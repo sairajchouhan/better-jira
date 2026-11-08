@@ -86,7 +86,8 @@ const board = {
 const user = { id: "audit-me", name: "Audit user" };
 const people = [user, { id: "alex", name: "Alex" }, { id: "priya", name: "Priya Raman" }];
 const priorities = ["Normal", "Low", "High", "Urgent", "Normal", "Low"];
-const issues = Array.from({ length: 6 }, (_, i) => ({
+// FIXTURE_ISSUES pads the board for speed measurements; tests use the default six.
+const issues = Array.from({ length: Number(process.env.FIXTURE_ISSUES ?? 6) }, (_, i) => ({
   key: `TEST-${i + 1}`,
   board: 1,
   summary: i === 0 ? "Rich browser fixture" : `Browser fixture ${i + 1}`,

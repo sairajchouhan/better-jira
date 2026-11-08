@@ -56,6 +56,8 @@ type Shortcut = {
   document?: boolean;
   run: () => void;
   when?: () => boolean;
+  /** The ⌘K row's name when it depends on state, e.g. "Unfavorite issue". */
+  label?: () => string;
 };
 let columns: () => Issue[][] = () => [];
 const selected = () =>
@@ -249,9 +251,11 @@ export const shortcuts: Shortcut[] = [
     group: "General",
     hotkey: "Escape",
     run: () =>
-      get().inbox && get().panel && get().view === "page" && !get().document
-        ? navigate({ view: "side" })
-        : ui.send({ type: "escape" }),
+      get().sidebarOpen
+        ? set({ sidebarOpen: false })
+        : get().inbox && get().panel && get().view === "page" && !get().document
+          ? navigate({ view: "side" })
+          : ui.send({ type: "escape" }),
   },
   {
     id: "undo",
@@ -272,13 +276,18 @@ export const shortcuts: Shortcut[] = [
     name: "Toggle left sidebar",
     group: "Navigation",
     hotkey: "[",
-    run: () => ui.send({ type: "sidebar.toggle" }),
+    // Below 768px the sidebar opens over the page instead (Linear's Menu button).
+    run: () =>
+      matchMedia("(max-width: 767.98px)").matches
+        ? set({ sidebarOpen: !get().sidebarOpen })
+        : ui.send({ type: "sidebar.toggle" }),
   },
   {
     id: "details",
     name: "Toggle right sidebar",
     group: "Navigation",
     hotkey: "]",
+    when: () => !get().document,
     run: () =>
       get().panel
         ? set({ issuePropertiesHidden: !get().issuePropertiesHidden })
@@ -408,7 +417,7 @@ export const shortcuts: Shortcut[] = [
     group: "Navigation",
     hotkey: "Shift+V",
     run: () => ui.send({ type: "toolbar.open", toolbar: "display" }),
-    when: () => !get().panel || get().view !== "page",
+    when: boardVisible,
   },
   {
     id: "toast-open",
@@ -501,6 +510,8 @@ export const shortcuts: Shortcut[] = [
   {
     id: "favorite",
     name: "Mark as favorite",
+    label: () =>
+      get().favorites.includes(selected()?.key ?? "") ? "Unfavorite issue" : "Mark as favorite",
     group: "Issues",
     hotkey: "Alt+F",
     issue: true,
@@ -531,6 +542,10 @@ export const shortcuts: Shortcut[] = [
   {
     id: "subscribe",
     name: "Subscribe to issue",
+    label: () =>
+      selected()?.watchers?.some((w) => w.id === ME.id)
+        ? "Unsubscribe from issue"
+        : "Subscribe to issue",
     group: "Issues",
     hotkey: "Shift+S",
     issue: true,
@@ -602,6 +617,7 @@ export const shortcuts: Shortcut[] = [
     group: "Issues",
     hotkey: "Mod+Shift+ArrowUp",
     issue: true,
+    when: () => !!get().issues.get(selected()?.parent ?? ""),
     run: issueAction((i) => {
       const parent = get().issues.get(i.parent ?? "");
       if (parent) navigate({ board: parent.board, selected: parent.key, panel: true });
@@ -613,7 +629,14 @@ export const shortcuts: Shortcut[] = [
     group: "Issues",
     hotkey: "Mod+Shift+ArrowRight",
     issue: true,
-    run: () => document.querySelector<HTMLElement>("[data-parent-progress]")?.click(),
+    when: () => !!get().issues.get(selected()?.parent ?? ""),
+    // The parent's sub-issue menu lives in the open issue.
+    run: () => {
+      navigate({ panel: true });
+      requestAnimationFrame(() =>
+        document.querySelector<HTMLElement>("[data-parent-progress]")?.click(),
+      );
+    },
   },
   {
     id: "child-open",
@@ -621,6 +644,10 @@ export const shortcuts: Shortcut[] = [
     group: "Issues",
     hotkey: "Mod+Shift+ArrowDown",
     issue: true,
+    when: () => {
+      const key = selected()?.key;
+      return !!key && [...get().issues.values()].some((c) => c.parent === key);
+    },
     run: issueAction((i) => {
       const child = [...get().issues.values()].find((c) => c.parent === i.key);
       if (child) navigate({ board: child.board, selected: child.key, panel: true });
@@ -810,22 +837,33 @@ export const shortcuts: Shortcut[] = [
     },
   },
 ];
-/** Board filters act only while the board is on screen, not behind a full-page issue or document. */
+/** Board filters and display act only while the board is on screen, not behind a full-page issue or a document. */
 function boardVisible() {
-  return !get().panel || get().view !== "page";
+  return !get().document && (!get().panel || get().view !== "page");
 }
+const labels = new Map<string, string>();
+const keyText = (hotkey: Hotkey | string) =>
+  formatForDisplay(hotkey as Hotkey, { sequenceSeparator: " then " });
 export function shortcutLabel(id: string) {
-  const entry = shortcuts.find((s) => s.id === id);
-  return entry
-    ? formatForDisplay(id === "help" ? "?" : entry.hotkey, {
-        sequenceSeparator: " then ",
-      })
-    : "";
+  let label = labels.get(id);
+  if (label === undefined) {
+    const entry = shortcuts.find((s) => s.id === id);
+    label = entry ? keyText(id === "help" ? "?" : entry.hotkey) : "";
+    labels.set(id, label);
+  }
+  return label;
+}
+/** Whether a shortcut would act now; keys, ⌘K and clicks all go through this. */
+export function shortcutApplies(entry: Shortcut) {
+  return (
+    (!get().document || (!entry.issue && entry.group !== "List / Board")) &&
+    (!entry.issue || !!selected()) &&
+    (!entry.when || entry.when())
+  );
 }
 export function runShortcut(id: string) {
   const entry = shortcuts.find((s) => s.id === id);
-  if (get().document && (entry?.issue || entry?.group === "List / Board")) return;
-  if (entry && (!entry.issue || selected()) && (!entry.when || entry.when())) entry.run();
+  if (entry && shortcutApplies(entry)) entry.run();
 }
 export function useLinearHotkeys(getColumns: () => Issue[][]) {
   columns = getColumns;
@@ -850,12 +888,10 @@ export function useLinearHotkeys(getColumns: () => Issue[][]) {
           options: {
             enabled:
               state.boards.length > 0 &&
-              (!state.document || (!entry.issue && entry.group !== "List / Board")) &&
               ((!state.overlay && !state.toolbar) ||
                 (entry.id === "commands" && state.overlay === "palette") ||
                 (entry.id === "shortcuts" && state.overlay === "shortcuts")) &&
-              (!entry.issue || !!selected()) &&
-              (!entry.when || entry.when()),
+              shortcutApplies(entry),
             ignoreInputs:
               entry.id === "shortcuts" || entry.id === "commands" || entry.id === "sub-issue"
                 ? false
@@ -893,10 +929,15 @@ export function ShortcutHelp() {
     .split(/[+\s]+/)
     .filter(Boolean);
   const matches = catalog.filter((s) => {
-    const names = formatForDisplay(s.hotkey, { useSymbols: false });
+    const names = formatForDisplay(s.hotkey, { useSymbols: false, sequenceSeparator: " then " });
     const raw = Array.isArray(s.hotkey) ? s.hotkey.join(" ") : s.hotkey;
-    const text = `${s.name} ${s.group} ${names} ${raw} ${formatForDisplay(s.hotkey)}`.toLowerCase();
-    return words.every((word) => text.includes(word));
+    const text =
+      `${s.name} ${s.group} ${names} ${raw} ${keyText(s.id === "help" ? "?" : s.hotkey)}`.toLowerCase();
+    const tokens = text.split(/[^\p{L}\p{N}]+/u);
+    // A single letter is a key name, so it must be a whole word: "shift d" is not every name with a d in it.
+    return words.every((word) =>
+      word.length === 1 && /[\p{L}\p{N}]/u.test(word) ? tokens.includes(word) : text.includes(word),
+    );
   });
   return (
     <MenuSurface

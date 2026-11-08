@@ -96,10 +96,12 @@ import {
 import { SubIssueOf } from "./sub-issues";
 import { Tooltips } from "./tooltip";
 import { RichEditor } from "./rich-editor-loader";
+import { matchRank } from "./search-rank";
 import {
   HelpMenu,
   ShortcutHelp,
   runShortcut,
+  shortcutApplies,
   shortcutLabel,
   shortcuts,
   useLinearHotkeys,
@@ -235,6 +237,11 @@ const statusOf = (i: Issue) =>
     ?.columns.flatMap((c) => c.statuses)
     .find((s) => s.id === i.status);
 
+/** The keyboard map re-registers on every store change; its own component keeps that from re-rendering App. */
+function Hotkeys() {
+  useLinearHotkeys(() => nav.cols);
+  return null;
+}
 export function App() {
   const boards = useStore((s) => s.boards);
   const boardId = useStore((s) => s.board);
@@ -250,7 +257,6 @@ export function App() {
   visited.current.add(boardId);
 
   useEffect(() => void load(), []);
-  useLinearHotkeys(() => nav.cols);
 
   if (!boards.length)
     return (
@@ -271,6 +277,7 @@ export function App() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
+      <Hotkeys />
       <div className="flex min-h-0 flex-1">
         <Sidebar boards={boards} />
         <Tooltips />
@@ -331,7 +338,8 @@ export function App() {
   );
 }
 
-function BoardView({
+// Memoised: an overlay opening (⌘K) re-renders App, and must not re-render every board.
+const BoardView = memo(function BoardView({
   board,
   active,
   shown,
@@ -588,7 +596,7 @@ function BoardView({
       {active && shown && details && !panel && <BoardDetails board={board} issues={visible} />}
     </div>
   );
-}
+});
 
 /** The rank for a card dropped before `before` (or at the end) in a column shown in `list` order. */
 function dropRank(list: Issue[], before: string | undefined, descending: boolean) {
@@ -811,68 +819,82 @@ function Sidebar({ boards }: { boards: Board[] }) {
   const boardId = useStore((s) => s.board);
   const mine = useStore((s) => s.mine);
   const hidden = useStore((s) => s.sidebarHidden);
+  const open = useStore((s) => s.sidebarOpen);
   const inbox = useStore((s) => s.inbox);
   const badge = useInboxBadge();
-  if (hidden) return null;
+  if (hidden && !open) return null;
+  const close = () => set({ sidebarOpen: false });
   return (
-    <nav
-      aria-label="Main navigation"
-      className="flex w-[244px] shrink-0 flex-col gap-px overflow-y-auto p-2 font-medium max-md:hidden"
-    >
-      <div className="mb-1 flex h-11 items-center gap-2 px-2 text-fg">
-        <span className="grid size-[18px] place-items-center rounded-[5px] bg-accent text-[10px] font-semibold text-white">
-          bj
-        </span>
-        better-jira
-      </div>
-      <SideItem active={inbox} onClick={() => timed("open inbox", () => runShortcut("inbox"))}>
-        <Icon name="inbox" /> Inbox
-        {badge > 0 && (
-          <span data-inbox-badge className="ml-auto text-[12px] text-fg-2">
-            {badge}
-          </span>
-        )}
-      </SideItem>
-      <SideItem onClick={() => runShortcut("search")}>
-        <Icon name="search" /> Search <kbd className="ml-auto">/</kbd>
-      </SideItem>
-      <SideItem onClick={() => beginCreate()}>
-        <Icon name="plus" /> New issue <kbd className="ml-auto">C</kbd>
-      </SideItem>
-      {/* Like Linear, My issues is a sidebar view rather than a tab beside Active/Backlog/All. */}
-      <SideItem
-        active={mine && !inbox}
-        onClick={() => timed("only mine", () => ui.send({ type: "mine.set", mine: !mine }))}
+    <>
+      {open && (
+        <button
+          aria-label="Close menu"
+          tabIndex={-1}
+          onClick={close}
+          className="fixed inset-0 z-40 bg-black/30 md:hidden"
+        />
+      )}
+      <nav
+        aria-label="Main navigation"
+        // Below 768px the sidebar opens over the page from the Menu button or [, and closes after a pick.
+        onClick={(e) => open && (e.target as Element).closest("button") && close()}
+        className={`flex w-[244px] shrink-0 flex-col gap-px overflow-y-auto p-2 font-medium ${open ? "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:bg-panel max-md:shadow-lg" : "max-md:hidden"}`}
       >
-        <Icon name="user" /> My issues <kbd className="ml-auto">{shortcutLabel("mine")}</kbd>
-      </SideItem>
-
-      <div className="mt-5 mb-1 px-2 text-[12px] text-fg-3">Boards</div>
-      {boards.map((b) => (
-        <SideItem
-          key={b.id}
-          active={!inbox && b.id === boardId}
-          onClick={() =>
-            timed("switch board", () => navigate({ board: b.id, selected: null, panel: false }))
-          }
-        >
-          <span className="grid size-4 shrink-0 place-items-center rounded-[4px] bg-sel text-[9px] font-semibold text-fg-2">
-            {b.name[0]}
+        <div className="mb-1 flex h-11 items-center gap-2 px-2 text-fg">
+          <span className="grid size-[18px] place-items-center rounded-[5px] bg-accent text-[10px] font-semibold text-white">
+            bj
           </span>
-          <span className="truncate">{b.name}</span>
+          better-jira
+        </div>
+        <SideItem active={inbox} onClick={() => timed("open inbox", () => runShortcut("inbox"))}>
+          <Icon name="inbox" /> Inbox
+          {badge > 0 && (
+            <span data-inbox-badge className="ml-auto text-[12px] text-fg-2">
+              {badge}
+            </span>
+          )}
         </SideItem>
-      ))}
-      <SavedViews />
-      <Favorites />
-      <button
-        id="help-menu"
-        aria-label="Open Help menu"
-        onClick={() => runShortcut("help")}
-        className="mt-auto flex items-center justify-between rounded-lg px-2 py-2 text-fg-3 hover:bg-hover"
-      >
-        Help <kbd>?</kbd>
-      </button>
-    </nav>
+        <SideItem onClick={() => runShortcut("search")}>
+          <Icon name="search" /> Search <kbd className="ml-auto">/</kbd>
+        </SideItem>
+        <SideItem onClick={() => beginCreate()}>
+          <Icon name="plus" /> New issue <kbd className="ml-auto">C</kbd>
+        </SideItem>
+        {/* Like Linear, My issues is a sidebar view rather than a tab beside Active/Backlog/All. */}
+        <SideItem
+          active={mine && !inbox}
+          onClick={() => timed("only mine", () => ui.send({ type: "mine.set", mine: !mine }))}
+        >
+          <Icon name="user" /> My issues <kbd className="ml-auto">{shortcutLabel("mine")}</kbd>
+        </SideItem>
+
+        <div className="mt-5 mb-1 px-2 text-[12px] text-fg-3">Boards</div>
+        {boards.map((b) => (
+          <SideItem
+            key={b.id}
+            active={!inbox && b.id === boardId}
+            onClick={() =>
+              timed("switch board", () => navigate({ board: b.id, selected: null, panel: false }))
+            }
+          >
+            <span className="grid size-4 shrink-0 place-items-center rounded-[4px] bg-sel text-[9px] font-semibold text-fg-2">
+              {b.name[0]}
+            </span>
+            <span className="truncate">{b.name}</span>
+          </SideItem>
+        ))}
+        <SavedViews />
+        <Favorites />
+        <button
+          id="help-menu"
+          aria-label="Open Help menu"
+          onClick={() => runShortcut("help")}
+          className="mt-auto flex items-center justify-between rounded-lg px-2 py-2 text-fg-3 hover:bg-hover"
+        >
+          Help <kbd>?</kbd>
+        </button>
+      </nav>
+    </>
   );
 }
 
@@ -1071,7 +1093,20 @@ const PILL =
 const CIRCLE =
   "flex h-7 min-w-7 shrink-0 items-center rounded-full bg-btn text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2";
 
+/** Linear's Menu button: below 768px it opens the hidden sidebar. */
+function MenuButton() {
+  return (
+    <button
+      aria-label="Menu"
+      onClick={() => set({ sidebarOpen: true })}
+      className={`${COL_BTN} mr-1 shrink-0 md:hidden`}
+    >
+      <Icon name="side" />
+    </button>
+  );
+}
 function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue }) {
+  const mine = useStore((s) => s.mine);
   const openAllIssues = () => {
     ui.send({ type: "mine.set", mine: false });
     ui.send({ type: "query.set", query: "" });
@@ -1086,6 +1121,7 @@ function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue }) {
       aria-label="Breadcrumb"
       className="flex min-w-0 items-center text-[13px] font-medium text-fg-2"
     >
+      <MenuButton />
       <button aria-label={board.name} title={board.name} onClick={openAllIssues} className={crumb}>
         <span
           aria-hidden="true"
@@ -1104,7 +1140,7 @@ function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue }) {
         onClick={openAllIssues}
         className={`${crumb} shrink-0 ${issue ? "max-sm:hidden" : ""}`}
       >
-        Issues
+        {mine ? "My issues" : "Issues"}
       </button>
       {issue && (
         <>
@@ -1608,7 +1644,15 @@ const author = (a: any): User | null =>
 const ICON_BTN =
   "grid size-7 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg";
 
-function IssueView({ issue, page, fill }: { issue: Issue; page: boolean; fill?: boolean }) {
+const IssueView = memo(function IssueView({
+  issue,
+  page,
+  fill,
+}: {
+  issue: Issue;
+  page: boolean;
+  fill?: boolean;
+}) {
   const f = useStore((s) => s.full.get(issue.key))?.fields;
   const favorite = useStore((s) => s.favorites.includes(issue.key)),
     optionsOpen = useStore((s) => s.overlay === "options");
@@ -1725,7 +1769,7 @@ function IssueView({ issue, page, fill }: { issue: Issue; page: boolean; fill?: 
       {body}
     </aside>
   );
-}
+});
 
 /** Linear shows position, then next and previous, within the current visible view. */
 function Stepper({ issueKey }: { issueKey: string }) {
@@ -2089,16 +2133,22 @@ function Description({ issue, f }: { issue: Issue; f: any }) {
     }
   }, [!!f]);
   useEffect(() => () => autosave.send({ type: "flush" }), []);
+  // Done only once focus has held for a frame: opening the issue can remount this editor right after the first
+  // focus, and the remounted one must still see the request.
   useEffect(() => {
     if (!focus || !f) return;
-    ui.send({ type: "description.editDone" });
-    let tries = 0;
+    let tries = 0,
+      frame = 0;
     const go = () => {
       const editor = document.getElementById("description");
-      if (editor) editor.focus();
-      else if (tries++ < 60) requestAnimationFrame(go);
+      if (editor && editor === document.activeElement && tries > 3)
+        return ui.send({ type: "description.editDone" });
+      editor?.focus();
+      if (tries++ < 60) frame = requestAnimationFrame(go);
+      else ui.send({ type: "description.editDone" });
     };
     go();
+    return () => cancelAnimationFrame(frame);
   }, [focus, !!f]);
   return (
     <section className="mt-[22px] leading-[1.6] text-fg-2">
@@ -2522,25 +2572,31 @@ function Palette({ searchOnly = false }: { searchOnly?: boolean }) {
         ? [...issues.values()].sort((a, b) => b.updated.localeCompare(a.updated)).slice(0, 20)
         : [];
     const exact = q.trim().toUpperCase();
-    const hits = [...issues.values()].filter((i) =>
-      words.every((w) => `${i.key} ${i.summary}`.toLowerCase().includes(w)),
-    );
-    hits.sort(
-      (a, b) =>
-        Number(b.key === exact) - Number(a.key === exact) || (a.updated < b.updated ? 1 : -1),
-    );
-    return hits.slice(0, 50);
+    // Exact key, then title matches (exact, prefix, whole word…), then the most recently updated.
+    const rank = (i: Issue) => {
+      const title = matchRank(i.summary, q);
+      return i.key === exact ? -1 : title < 0 ? 6 : title;
+    };
+    return [...issues.values()]
+      .filter((i) => words.every((w) => `${i.key} ${i.summary}`.toLowerCase().includes(w)))
+      .map((i) => [rank(i), i] as const)
+      .sort(([ra, a], [rb, b]) => ra - rb || (a.updated < b.updated ? 1 : -1))
+      .slice(0, 50)
+      .map(([, i]) => i);
   }, [q, issues, searchOnly]);
 
   const command = (entry: (typeof shortcuts)[number]): Cmd => ({
-    name: entry.name,
+    name: entry.label?.() ?? entry.name,
     hint: shortcutLabel(entry.id),
     run: () => {
       ui.send({ type: "overlay.close" });
       runShortcut(entry.id);
     },
   });
-  const issueCmds: Cmd[] = scoped ? shortcuts.filter((s) => s.issue).map(command) : [];
+  // Only commands that would do something now, as Linear lists them.
+  const issueCmds: Cmd[] = scoped
+    ? shortcuts.filter((s) => s.issue && shortcutApplies(s)).map(command)
+    : [];
   const general: Cmd[] = searchOnly
     ? []
     : [
@@ -2548,7 +2604,7 @@ function Palette({ searchOnly = false }: { searchOnly?: boolean }) {
           .filter(
             (s, i, a) =>
               !s.issue &&
-              (!s.when || s.when()) &&
+              shortcutApplies(s) &&
               s.id !== "commands" &&
               a.findIndex((other) => other.name === s.name) === i,
           )
@@ -2563,7 +2619,18 @@ function Palette({ searchOnly = false }: { searchOnly?: boolean }) {
             },
           })),
       ];
-  const match = (c: Cmd) => c.name.toLowerCase().includes(q.trim().toLowerCase());
+  // Best match first, so Enter runs the command whose name was typed.
+  const ranked = (cmds: Cmd[]) =>
+    cmds
+      .map((c) => [q.trim() ? matchRank(c.name, q) : 0, c] as const)
+      .filter(([r]) => r >= 0)
+      .sort(([a], [b]) => a - b);
+  const groups = [
+    { heading: scoped?.key ?? "", rows: ranked(issueCmds) },
+    { heading: "General", rows: ranked(general) },
+  ]
+    .filter((g) => g.rows.length)
+    .sort((a, b) => a.rows[0]![0] - b.rows[0]![0]);
   const item = (c: Cmd) => (
     <Command.Item key={c.name} value={`cmd:${c.name}`} onSelect={c.run}>
       <span className="grid w-4 shrink-0 place-items-center text-fg-3">{c.icon}</span>
@@ -2597,12 +2664,11 @@ function Palette({ searchOnly = false }: { searchOnly?: boolean }) {
         </div>
         <Command.List className="max-h-[60vh] overflow-y-auto p-1.5">
           <Command.Empty className="p-3 text-fg-3">No results</Command.Empty>
-          {issueCmds.some(match) && (
-            <Command.Group heading={scoped!.key}>{issueCmds.filter(match).map(item)}</Command.Group>
-          )}
-          {general.some(match) && (
-            <Command.Group heading="General">{general.filter(match).map(item)}</Command.Group>
-          )}
+          {groups.map((g) => (
+            <Command.Group key={g.heading} heading={g.heading}>
+              {g.rows.map(([, c]) => item(c))}
+            </Command.Group>
+          ))}
           {results.length > 0 && (
             <Command.Group
               heading={`Issues (${results.length === 50 ? "top 50" : results.length})`}

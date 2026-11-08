@@ -207,6 +207,8 @@ type State = {
   issuePropertiesHidden: boolean;
   findInView: boolean;
   sidebarHidden: boolean;
+  /** Below 768px the sidebar is hidden; Menu or [ opens it over the page. */
+  sidebarOpen: boolean;
   relationKind: string;
   issueOptionsStart: "link" | "pull-request" | "history" | "reminder" | null;
   createExpanded: boolean;
@@ -235,6 +237,7 @@ type State = {
 };
 
 const PREF_KEY = "better-jira:views:v1";
+const SIDEBAR_KEY = "better-jira:sidebar";
 let preferenceNamespace = "";
 const preferenceKey = (key: string) =>
   preferenceNamespace ? `${key}:${preferenceNamespace}` : key;
@@ -278,7 +281,8 @@ let state: State = {
   details: false,
   issuePropertiesHidden: false,
   findInView: false,
-  sidebarHidden: false,
+  sidebarHidden: savedValue(SIDEBAR_KEY) === "hidden", // the namespace is still empty here
+  sidebarOpen: false,
   relationKind: "related",
   issueOptionsStart: null,
   createExpanded: false,
@@ -312,6 +316,9 @@ function commit(patch: Partial<State>) {
   try {
     if (patch.board) localStorage.setItem(preferenceKey("board"), String(patch.board));
     if (patch.view) localStorage.setItem(preferenceKey("view"), patch.view);
+    // Not per site: it is read before the site is known, so the first paint has the right layout.
+    if (patch.sidebarHidden !== undefined)
+      localStorage.setItem(SIDEBAR_KEY, patch.sidebarHidden ? "hidden" : "shown");
   } catch {
     /* Preference failure is separate from durable issue storage. */
   }
@@ -348,6 +355,7 @@ function commit(patch: Partial<State>) {
       patch.panel !== undefined ||
       patch.view !== undefined ||
       patch.inbox !== undefined ||
+      patch.mine !== undefined ||
       patch.document !== undefined)
   )
     syncNavigation();
@@ -359,7 +367,7 @@ export const useStore = <T>(sel: (s: State) => T) =>
 
 // The running machines. Each mirrors its state onto `state` so components read it with useStore.
 export const ui = createActor(uiMachine, {
-  input: { board: state.board, view: state.view },
+  input: { board: state.board, view: state.view, sidebarHidden: state.sidebarHidden },
   inspect: inspector("ui"),
 }).start();
 ui.subscribe(({ context }) => {
@@ -998,6 +1006,8 @@ function syncNavigation(replace = false) {
   else url.searchParams.delete("document");
   if (state.inbox) url.searchParams.set("inbox", "1");
   else url.searchParams.delete("inbox");
+  if (state.mine && !state.inbox) url.searchParams.set("mine", "1");
+  else url.searchParams.delete("mine");
   if (url.href !== location.href) history[replace ? "replaceState" : "pushState"]({}, "", url);
 }
 function restoreNavigation() {
@@ -1016,6 +1026,7 @@ function restoreNavigation() {
       ? { view: params.get("view") as View }
       : {}),
   });
+  if (!params.has("inbox")) ui.send({ type: "mine.set", mine: params.has("mine") });
   restoringNavigation = false;
   if (wanted && !issue) ui.send({ type: "toast.show", text: `Issue ${wanted} not found` });
 }

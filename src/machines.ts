@@ -72,7 +72,11 @@ export type UiEvent =
   | { type: "toast.rekey"; from: string; to: string };
 
 export const uiMachine = setup({
-  types: {} as { context: UiContext; events: UiEvent; input: { board: number; view: View } },
+  types: {} as {
+    context: UiContext;
+    events: UiEvent;
+    input: { board: number; view: View; sidebarHidden?: boolean };
+  },
   guards: {
     documentOpen: ({ context }) => !!context.document,
     panelOpen: ({ context }) => context.panel,
@@ -80,9 +84,9 @@ export const uiMachine = setup({
     paletteOpen: ({ context }) => context.overlay === "palette",
     sameToolbar: ({ context, event }) =>
       event.type === "toolbar.toggle" && context.toolbar === event.toolbar,
-    /** The toolbar never stays open behind an overlay or over an issue page. */
+    /** The toolbar never stays open behind an overlay, over an issue page or over a document. */
     toolbarCovered: ({ context }) =>
-      !!context.overlay || (context.panel && context.view === "page"),
+      !!context.overlay || !!context.document || (context.panel && context.view === "page"),
   },
 }).createMachine({
   id: "ui",
@@ -95,7 +99,7 @@ export const uiMachine = setup({
     document: null,
     mine: false,
     inbox: false,
-    sidebarHidden: false,
+    sidebarHidden: input.sidebarHidden ?? false,
     query: "",
     overlay: null,
     toolbar: null,
