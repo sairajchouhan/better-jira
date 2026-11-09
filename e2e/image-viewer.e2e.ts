@@ -258,6 +258,8 @@ test("keyboard and pointer cropping keep their geometry, and unreadable sources 
       method: "POST",
       body: JSON.stringify({ includeMedia: true, contentFailure: 403 }),
     });
+    // Attachment bytes are cached as immutable (R2-D10); an unreadable source means no copy in the cache either.
+    await page.cmd("Network.clearBrowserCache");
     await page.click("text=Save");
     await page.waitFor(
       `document.querySelector('[aria-label="Crop image"] [role="alert"]')?.textContent.includes('Could not crop')`,

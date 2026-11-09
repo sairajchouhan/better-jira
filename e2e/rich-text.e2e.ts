@@ -82,7 +82,7 @@ test("R1-D9/D27: a description save Jira refuses while typing raises a conflict 
       if(hit){const issue=(await (await real('/api/issues')).json()).find(i=>i.key===hit[1]);
        const full=await (await real('/api/issues/'+hit[1])).json();
        full.fields.description={type:'doc',version:1,content:[{type:'paragraph',content:[{type:'text',text:'Newer text from Jira'}]}]};
-       return Response.json({error:'Someone changed the description in Jira while you were editing it.',key:hit[1],created:{},others:[],issue,full},{status:422});}`),
+       return Response.json({error:'Someone changed the description in Jira while you were editing it. Pick a version in the description.',key:hit[1],created:{},others:[],issue,full},{status:422});}`),
   });
   try {
     await page.waitFor(`!!document.querySelector('#description')`);
@@ -90,7 +90,7 @@ test("R1-D9/D27: a description save Jira refuses while typing raises a conflict 
     await page.key("End");
     await page.type(" mine");
     await page.waitFor(
-      `document.querySelector('[role="alert"]')?.textContent.includes("Jira's copy of this description changed")`,
+      `document.querySelector('[role="alert"]')?.textContent.includes("Someone changed this description in Jira")`,
     );
     // Leaving the editor keeps both the bar and the unsaved text.
     await page.key("Escape");

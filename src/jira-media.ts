@@ -55,10 +55,37 @@ export async function uploadNow(
   files: File[],
   keep: (files: File[]) => Promise<Attachment[]>,
 ): Promise<Attachment[]> {
-  const uploaded = await Promise.all(files.map((file) => postAttachment(key, file, file.name)));
-  const saved = await keep(files);
-  saved.forEach((file, index) => remember(key, file.id, uploaded[index]));
-  return saved;
+  // Marked while it runs: a reload can't resume it, so the next page says the file wasn't placed (R2-D9).
+  const marker = `${UPLOADING}${key}:${crypto.randomUUID()}`;
+  ownMarkers.add(marker);
+  try {
+    localStorage.setItem(marker, JSON.stringify(files.map((file) => file.name)));
+  } catch {}
+  try {
+    const uploaded = await Promise.all(files.map((file) => postAttachment(key, file, file.name)));
+    const saved = await keep(files);
+    saved.forEach((file, index) => remember(key, file.id, uploaded[index]));
+    return saved;
+  } finally {
+    ownMarkers.delete(marker);
+    try {
+      localStorage.removeItem(marker);
+    } catch {}
+  }
+}
+const UPLOADING = "better-jira:uploading:",
+  ownMarkers = new Set<string>();
+/** Names of files an earlier page was still uploading to this issue when it closed; reading clears them. */
+export function interruptedUploads(key: string): string[] {
+  const names: string[] = [];
+  try {
+    for (const name of Object.keys(localStorage))
+      if (name.startsWith(`${UPLOADING}${key}:`) && !ownMarkers.has(name)) {
+        names.push(...(JSON.parse(localStorage.getItem(name) ?? "[]") as string[]));
+        localStorage.removeItem(name);
+      }
+  } catch {}
+  return names;
 }
 
 /** Walk every value, including future comment ops. Only local ADF media identities change. */

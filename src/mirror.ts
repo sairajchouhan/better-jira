@@ -428,9 +428,8 @@ export async function refresh(
   const target = board ?? row?.board ?? BOARDS[0]!;
   save(target, [raw], Date.now());
   db.query("DELETE FROM issue_details WHERE key = ?").run(raw.key);
-  const full = await details.read(raw.key, true),
+  const [full, w] = await Promise.all([details.read(raw.key, true), watching]),
     issue = slim(raw, target);
-  const w = await watching;
   const watchers = (w.watchers ?? []).map((u: any) => ({
     id: u.accountId,
     name: u.displayName,

@@ -1,6 +1,6 @@
 import { jira, JiraError } from "./jira";
 import { createdIssue, ESTIMATES, refresh, rememberCreated } from "./mirror";
-import { renameCommentIds, type Op } from "./jira-ops";
+import { DESCRIPTION_CONFLICT, renameCommentIds, type Op } from "./jira-ops";
 import { adfToText } from "./document";
 
 const at = (key: string) => `/rest/api/3/issue/${encodeURIComponent(key)}`;
@@ -130,9 +130,7 @@ async function run(ctx: Context, op: Op) {
         const current = (await jira(`${at(key)}?fields=description`)).fields?.description,
           squash = (text: string) => text.replace(/\s+/g, " ").trim();
         if (squash(adfToText(current)) !== squash(descriptionBase))
-          throw new UserError(
-            "Someone changed the description in Jira while you were editing it. Pick a version in the description.",
-          );
+          throw new UserError(DESCRIPTION_CONFLICT);
       }
       // Single adds and removes, so labels someone else added meanwhile survive.
       const update = labelEdits && {

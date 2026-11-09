@@ -66,7 +66,8 @@ test("attachment gateway streams byte ranges, download names and upstream range 
   expect(await response.text()).toBe("bc");
   expect(response.headers.get("Content-Range")).toBe("bytes 1-2/6");
   expect(response.headers.get("Content-Disposition")).toContain("inline;");
-  expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+  // R2-D10: content by attachment id is immutable, so the browser may keep it.
+  expect(response.headers.get("Cache-Control")).toBe("private, max-age=31536000, immutable");
   const download = await gateway.content(
     new Request("http://localhost/api?download=1"),
     "TEST-1",

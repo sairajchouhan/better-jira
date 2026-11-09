@@ -212,7 +212,9 @@ export function attachmentGateway({
       return new Response("Unexpected compressed byte range", { status: 502 });
     }
     const headers = new Headers({
-      "Cache-Control": "private, no-store",
+      // A Jira attachment id never changes content, so the browser keeps it: a save that remounts the editor doesn't download every image again (R2-D10).
+      "Cache-Control":
+        upstream.status === 416 ? "private, no-store" : "private, max-age=31536000, immutable",
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "sandbox; default-src 'none'",
     });

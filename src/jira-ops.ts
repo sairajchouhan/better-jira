@@ -39,6 +39,9 @@ export type Op =
   | { op: "weblink"; url: string; title: string; remove?: boolean };
 
 export type Side = { issue?: Issue; full?: Full };
+/** The server's answer when Jira's description changed since the edit started; the editor then asks which version to keep. */
+export const DESCRIPTION_CONFLICT =
+  "Someone changed the description in Jira while you were editing it. Pick a version in the description.";
 /** Comment property where replies made before Jira had threads kept their parent; read-only now. */
 export const THREAD_PROPERTY = "better-jira";
 /** Jira's numeric reply parent as the app's string id; else the parent an older app reply kept in its property. */

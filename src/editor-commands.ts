@@ -80,8 +80,12 @@ export const insertLink =
   (href: string): Command =>
   (state, dispatch) => {
     const mark = richSchema.marks.link!.create({ href });
-    const tr = state.tr;
-    if (state.selection.empty) tr.replaceSelectionWith(richSchema.text(href, [mark]), false);
+    const tr = state.tr,
+      ranges = linkRanges(state);
+    // The caret in a link edits that whole link (R2-D6); elsewhere an empty selection inserts the URL as text.
+    if (state.selection.empty && ranges.length)
+      for (const [from, to] of ranges) tr.removeMark(from, to, mark.type).addMark(from, to, mark);
+    else if (state.selection.empty) tr.replaceSelectionWith(richSchema.text(href, [mark]), false);
     else tr.addMark(state.selection.from, state.selection.to, mark);
     dispatch?.(tr);
     return true;
@@ -116,6 +120,12 @@ export function linkRanges(state: EditorState): [number, number][] {
     return false;
   });
   return ranges;
+}
+/** The address of the first link touching the selection (the caret counts), to prefill the link field. */
+export function linkHref(state: EditorState): string {
+  const [range] = linkRanges(state);
+  if (!range) return "";
+  return richSchema.marks.link!.isInSet(state.doc.nodeAt(range[0])?.marks ?? [])?.attrs.href ?? "";
 }
 export const removeLink: Command = (state, dispatch) => {
   const ranges = linkRanges(state);
@@ -316,3 +326,31 @@ export const toggleQuote: Command = (state, dispatch) => {
   dispatch?.(tr.wrap(mapped, wrapping).scrollIntoView());
   return true;
 };
+
+type Box = { top: number; bottom: number; left: number };
+/** Where the selection toolbar floats: above the selection, or below it when the editor has too little room above (so it never covers
+ * the title or header) and below fits. It stays within the editor's column (the side panel), scrolling when narrower (R2-D8). */
+export function floatingPlacement(
+  start: Box,
+  end: Box,
+  area: { top: number; left: number; right: number; width: number },
+  size: { width: number; height: number },
+  viewport: { width: number; height: number },
+) {
+  const maxWidth = Math.min(viewport.width - 24, Math.max(320, area.width)),
+    width = Math.min(size.width, maxWidth),
+    room = start.top - Math.max(0, area.top),
+    above = start.top - 8 - size.height,
+    below = end.bottom + 8;
+  // Below only when it fits: clamped up from the viewport's bottom it would cover the selection (a table cell).
+  const top =
+    room >= 120 || (below + size.height > viewport.height - 8 && above >= 8) ? above : below;
+  return {
+    top: Math.max(8, Math.min(top, viewport.height - 8 - size.height)),
+    left: Math.max(
+      12,
+      Math.min(start.left, Math.max(area.left, area.right - width), viewport.width - 12 - width),
+    ),
+    maxWidth,
+  };
+}

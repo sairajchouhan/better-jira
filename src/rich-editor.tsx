@@ -27,8 +27,10 @@ import {
 import {
   codeDown,
   codeEnter,
+  floatingPlacement,
   insertLink,
   insertTable,
+  linkHref,
   linkRanges,
   linkTarget,
   markdownRules,
@@ -312,10 +314,12 @@ export function RichEditor(props: RichEditorProps) {
   const marked = (name: string) => {
     const state = view.current?.state;
     if (state && name === "link") return linkRanges(state).length > 0;
-    return (
-      !!state &&
-      (state.storedMarks ?? state.selection.$from.marks()).some((m) => m.type.name === name)
-    );
+    if (!state) return false;
+    const { empty, from, to, $from } = state.selection;
+    // A selection starting at the marked text: $from.marks() would read the marks before it (R2-D7).
+    return empty
+      ? (state.storedMarks ?? $from.marks()).some((m) => m.type.name === name)
+      : state.doc.rangeHasMark(from, to, richSchema.marks[name]!);
   };
   const changeBlock = (type: string, attributes: Record<string, unknown> = {}) =>
     run(setBlock(type, attributes));
@@ -352,8 +356,10 @@ export function RichEditor(props: RichEditorProps) {
         const id = binding.id;
         if (["strong", "em", "underline", "strike", "code"].includes(id))
           run(toggleMark(richSchema.marks[id]!));
-        else if (id === "link") setLinkOpen(true);
-        else if (id.startsWith("heading-")) {
+        else if (id === "link") {
+          setURL(view.current ? linkHref(view.current.state) : "");
+          setLinkOpen(true);
+        } else if (id.startsWith("heading-")) {
           const level = Number(id.split("-")[1]);
           changeBlock(level ? "heading" : "paragraph", level ? { level } : {});
         } else if (id === "quote") run(toggleQuote);
@@ -426,17 +432,16 @@ export function RichEditor(props: RichEditorProps) {
     !selection.empty &&
     !(selection instanceof NodeSelection)
       ? (() => {
-          const start = view.current!.coordsAtPos(selection.from),
-            end = view.current!.coordsAtPos(selection.to),
-            width = Math.min(toolbar.current?.offsetWidth ?? 560, innerWidth - 24),
-            height = toolbar.current?.offsetHeight ?? 40,
-            room = start.top - Math.max(0, view.current!.dom.getBoundingClientRect().top),
-            top = room >= 120 ? start.top - 8 - height : end.bottom + 8;
-          return {
-            top: Math.max(8, Math.min(top, innerHeight - 8 - height)),
-            left: Math.max(12, Math.min(start.left, innerWidth - 12 - width)),
-            maxWidth: innerWidth - 24,
-          };
+          return floatingPlacement(
+            view.current!.coordsAtPos(selection.from),
+            view.current!.coordsAtPos(selection.to),
+            view.current!.dom.getBoundingClientRect(),
+            {
+              width: toolbar.current?.offsetWidth ?? 560,
+              height: toolbar.current?.offsetHeight ?? 40,
+            },
+            { width: innerWidth, height: innerHeight },
+          );
         })()
       : undefined;
   // The first placement guesses the size; re-place once the toolbar is measured.
@@ -532,13 +537,7 @@ export function RichEditor(props: RichEditorProps) {
         aria-label="Insert link"
         className={BUTTON}
         onClick={() => {
-          const state = view.current?.state;
-          const current =
-            state &&
-            (state.storedMarks ?? state.selection.$from.marks()).find(
-              (m) => m.type.name === "link",
-            );
-          setURL(current?.attrs.href ?? "");
+          setURL(view.current ? linkHref(view.current.state) : "");
           setLinkOpen(!linkOpen);
         }}
       >
@@ -654,6 +653,19 @@ export function RichEditor(props: RichEditorProps) {
           <button type="button" className={BUTTON} onClick={addLink}>
             Apply link
           </button>
+          {marked("link") && (
+            <button
+              type="button"
+              className={BUTTON}
+              onClick={() => {
+                run(removeLink);
+                setLinkOpen(false);
+                setURL("");
+              }}
+            >
+              Remove link
+            </button>
+          )}
           {linkError && (
             <span role="alert" className="w-full text-[12px] text-fg-3">
               {linkError}

@@ -113,6 +113,11 @@ export type Full = {
     url: string;
     title: string;
   }[];
+  /** Jira's description the unsent local one started from, kept so a replay after reload can still refuse to overwrite a newer Jira text (R2-D2). */
+  descriptionBase?: AdfDocument;
+  /** A description Jira refused (someone else's newer text, or invalid content), with Jira's reason; kept until the person picks a version or edits again. */
+  descriptionRejected?: AdfDocument;
+  descriptionError?: string;
 };
 export type Overlay =
   | null
@@ -736,7 +741,7 @@ async function loadApplication() {
               fields: {
                 ...f.fields,
                 description: change.fullFields.includes("description")
-                  ? undefined
+                  ? f.descriptionBase
                   : f.fields.description,
                 comment: {
                   ...f.fields.comment,
@@ -852,14 +857,11 @@ async function fetchProperties(): Promise<{ pending: number }> {
     }
     lastProperties.set(key, signature);
     // Edited in Jira: the cached description and comments are stale, so a later edit would overwrite Jira's newer text.
-    if (
-      state.writable &&
-      state.full.has(key) &&
-      extra.updated &&
-      extra.updated !== issue.updated &&
-      !fullFields.get(key)?.size
-    )
-      stale.push(key);
+    if (state.writable && state.full.has(key) && extra.updated && extra.updated !== issue.updated) {
+      // With a local edit still unsent, look again once its write lands (the write's refresh notifies), or the change is never read (R2-D1).
+      if (fullFields.get(key)?.size) lastProperties.delete(key);
+      else stale.push(key);
+    }
     const local = localFields.get(key) ?? new Set();
     for (const field of local) delete extra[field];
     if (local.has("status")) {
@@ -980,6 +982,15 @@ async function fetchFull(key: string) {
         };
       } else full = { ...full, fields: { ...full.fields, [field]: local.fields[field] } };
     }
+  // A refused description, and the base of one still unsent, outlive Jira's copy.
+  if (local?.descriptionRejected)
+    full = {
+      ...full,
+      descriptionRejected: local.descriptionRejected,
+      descriptionError: local.descriptionError,
+    };
+  if (local?.descriptionBase && fullFields.get(key)?.has("description"))
+    full = { ...full, descriptionBase: local.descriptionBase };
   needsFullRefresh.delete(key);
   const issue = state.issues.get(key);
   if (issue)
@@ -1141,7 +1152,7 @@ const queueSave = () => storage.send({ type: "change" });
 
 // --- Jira writes: each edit's before/after becomes ops, sent one job at a time ---
 // ponytail: the outbox lives in memory; closing the tab with writes pending is guarded by beforeunload only.
-type Job = { key: string; board: number; ops: Op[]; started?: boolean };
+type Job = { key: string; board: number; ops: Op[]; started?: boolean; cancelled?: boolean };
 type WriteResult = {
   error?: string;
   key?: string;
@@ -1277,19 +1288,22 @@ async function flush() {
           ],
         });
       }
-      const post = (ops: Op[]) =>
-        fetch(`/api/issues/${encodeURIComponent(job.key)}/ops`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          // A later write for this issue re-reads it anyway: don't wait for Jira's copy twice (R2-create-D2).
-          body: JSON.stringify({
-            ops,
-            board: job.board,
-            ...(ops.length && outbox.some((other) => other !== job && other.key === job.key)
-              ? { settle: false }
-              : {}),
-          }),
-        });
+      // A cancelled job (Restore mirrored Jira version) stops retrying instead of sending discarded edits (R2-D3).
+      const post = async (ops: Op[]) =>
+        job.cancelled
+          ? Response.json({})
+          : fetch(`/api/issues/${encodeURIComponent(job.key)}/ops`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              // A later write for this issue re-reads it anyway: don't wait for Jira's copy twice (R2-create-D2).
+              body: JSON.stringify({
+                ops,
+                board: job.board,
+                ...(ops.length && outbox.some((other) => other !== job && other.key === job.key)
+                  ? { settle: false }
+                  : {}),
+              }),
+            });
       let result: WriteResult, ops: Op[] | undefined;
       try {
         ops = await prepareOps(job.key, job.ops);
@@ -1299,6 +1313,15 @@ async function flush() {
         try {
           result = { ...(await (await post([])).json()), error: result.error };
         } catch {}
+      }
+      // Files uploaded before they were placed leave nothing to send: no empty write for the next one to wait behind (R2-D10).
+      // The issue's next write, or the property poll, brings Jira's attachment list.
+      if (ops && !ops.length) {
+        outbox.shift();
+        if (job.ops.every((op) => op.op === "attachment.add" || op.op === "attachment.delete"))
+          localFields.get(job.key)?.delete("attachments");
+        set({ pendingWrites: outbox.length });
+        continue;
       }
       if (ops) {
         // An unreachable server means nothing reached Jira: send the same ops again every 5 s until it answers.
@@ -1362,7 +1385,19 @@ async function flush() {
           text: `Jira did not save the change to ${result!.key ?? job.key}`,
           detail: `${result!.error}${orphans.length ? ` ${orphans.join(", ")} was created in Jira, but not linked.` : ""}`,
         });
-      adopt(result!.key ?? job.key, result!, !!result!.error, created);
+      const describes = job.ops.some(
+        (op) => op.op === "fields" && op.fields.description !== undefined,
+      );
+      // A refused description stands in for the description edits still queued: they started from the refused text, so Jira would refuse them too.
+      if (result!.error && describes)
+        for (const queued of outbox)
+          if (queued.key === job.key && !queued.started)
+            queued.ops = queued.ops.flatMap((op): Op[] => {
+              if (op.op !== "fields" || op.fields.description === undefined) return [op];
+              const { description: _d, descriptionBase: _b, ...fields } = op.fields;
+              return Object.keys(fields).length ? [{ op: "fields", fields }] : [];
+            });
+      adopt(result!.key ?? job.key, result!, !!result!.error, created, describes);
       for (const other of result!.others ?? [])
         adopt(other.key, { issue: other, error: result!.error }, false, created);
       if (refused) discard(job.key);
@@ -1439,6 +1474,7 @@ function adopt(
   result: WriteResult,
   force: boolean,
   created = new Map<string, string>(),
+  describes = false,
 ) {
   if (result.issue === undefined || (!force && outbox.some((job) => job.key === key))) return;
   touch(key);
@@ -1479,10 +1515,20 @@ function adopt(
     next.resources = withJiraLinks(issue.resources, result.full.remotelinks, true);
   if (full && result.full) {
     for (const field of ["description", "comment"]) fullFields.get(key)?.delete(field);
-    const comment = result.full.fields?.comment;
+    const comment = result.full.fields?.comment,
+      description = result.full.fields?.description,
+      mine = full.fields.description;
+    // Jira refused this description: keep it beside Jira's copy, so it's never silently lost, even unfocused or after a reload (R2-D2, R2-D4).
+    const refused =
+      !!result.error &&
+      describes &&
+      mine !== undefined &&
+      JSON.stringify(normalizeDocument(mine)) !== JSON.stringify(normalizeDocument(description));
     patch.full = new Map(state.full).set(key, {
       ...full,
-      fields: { ...full.fields, description: result.full.fields?.description, comment },
+      fields: { ...full.fields, description, comment },
+      descriptionBase: undefined,
+      ...(refused ? { descriptionRejected: mine, descriptionError: result.error } : {}),
     });
     // Bodies and deletions now live in Jira; resolved, subscribed and reactions stay local.
     const states: Record<string, CommentState> = {};
@@ -1506,6 +1552,15 @@ export const hasLocalJiraChanges = (key: string) =>
   [...(localFields.get(key) ?? [])].some((field) => JIRA_ISSUE_FIELDS.includes(field as never)) ||
   !!fullFields.get(key)?.size ||
   outbox.some((job) => job.key === key);
+/** Drops the issue's queued Jira writes; one already being sent stops retrying (an unreachable server never got it). */
+function cancelWrites(key: string) {
+  for (let i = outbox.length - 1; i >= 0; i--)
+    if (outbox[i]!.key === key) {
+      if (outbox[i]!.started) outbox[i]!.cancelled = true;
+      else outbox.splice(i, 1);
+    }
+  set({ pendingWrites: outbox.length });
+}
 export const dismissRecoveryNotice = () => storage.send({ type: "dismiss" });
 export async function flushLocalChanges() {
   await waitFor(storage, (s) => !s.matches("saving"));
@@ -1642,7 +1697,13 @@ const snapshot = (key: string): Snapshot => ({
 });
 let lastEditGroup: string | undefined;
 let transaction: { label: string; before: Map<string, Snapshot> } | null = null;
-function record(key: string | string[], label: string, fn: () => void, group?: string) {
+function record(
+  key: string | string[],
+  label: string,
+  fn: () => void,
+  group?: string,
+  quiet = false,
+) {
   if (!state.canEdit) {
     set({ perf: "Local editing is paused until saved data is available" });
     return;
@@ -1666,7 +1727,7 @@ function record(key: string | string[], label: string, fn: () => void, group?: s
     if (!changed.length) return;
     for (const key of changed) changedKeys.add(key);
     touch(...changed);
-    send(changed.map((key) => [key, transaction!.before.get(key)!, snapshot(key)]));
+    if (!quiet) send(changed.map((key) => [key, transaction!.before.get(key)!, snapshot(key)]));
     const previous = undo.at(-1);
     if (
       group &&
@@ -1909,9 +1970,16 @@ function patchIssue(key: string, patch: Partial<Issue>) {
 function patchFields(key: string, fn: (fields: any) => object) {
   const f = state.full.get(key);
   if (f) {
-    const patch = fn(f.fields);
+    const patch = fn(f.fields),
+      // The first unsent description edit remembers Jira's text it started from.
+      base =
+        "description" in patch && !fullFields.get(key)?.has("description")
+          ? { descriptionBase: f.fields.description }
+          : {};
     fullFields.set(key, new Set([...(fullFields.get(key) ?? []), ...Object.keys(patch)]));
-    set({ full: new Map(state.full).set(key, { ...f, fields: { ...f.fields, ...patch } }) });
+    set({
+      full: new Map(state.full).set(key, { ...f, ...base, fields: { ...f.fields, ...patch } }),
+    });
   }
 }
 
@@ -2108,18 +2176,26 @@ export const actions = {
       ]);
       const issue = remote.find((i) => i.key === key);
       if (!issue) throw new Error("Issue is no longer in the Jira mirror");
-      record(key, `restore Jira version of ${key}`, () => {
-        localFields.set(key, new Set());
-        fullFields.set(key, new Set());
-        needsFullRefresh.delete(key);
-        set({
-          issues: new Map(state.issues).set(key, issue),
-          full: new Map(state.full).set(key, full),
-          perf: `Restored mirrored Jira version of ${key}`,
-        });
-        dispatchEvent(new CustomEvent("jira-restored", { detail: key }));
-        ui.send({ type: "overlay.close" });
-      });
+      // Jira already has this version: queued edits are dropped and nothing is written (R2-D3).
+      cancelWrites(key);
+      record(
+        key,
+        `restore Jira version of ${key}`,
+        () => {
+          localFields.set(key, new Set());
+          fullFields.set(key, new Set());
+          needsFullRefresh.delete(key);
+          set({
+            issues: new Map(state.issues).set(key, issue),
+            full: new Map(state.full).set(key, full),
+            perf: `Restored mirrored Jira version of ${key}`,
+          });
+          dispatchEvent(new CustomEvent("jira-restored", { detail: key }));
+          ui.send({ type: "overlay.close" });
+        },
+        undefined,
+        true,
+      );
     } catch {
       set({ perf: "Could not read the Jira version. Your local changes are still here." });
     }
@@ -2246,6 +2322,15 @@ export const actions = {
   description(key: string, value: string | AdfDocument, restore = false) {
     const previous = normalizeDocument(state.full.get(key)?.fields.description);
     const document = normalizeDocument(value);
+    // Any new version replaces one Jira refused: it is sent from Jira's copy, or is Jira's copy.
+    const f = state.full.get(key);
+    if (f?.descriptionRejected) {
+      const { descriptionRejected: _r, descriptionError: _e, ...rest } = f;
+      set({ full: new Map(state.full).set(key, rest) });
+      if (state.writeError?.key === key) set({ writeError: null });
+      touch(key);
+      queueSave();
+    }
     if (JSON.stringify(document) === JSON.stringify(previous)) {
       ui.send({ type: "description.editDone" });
       return;
@@ -2273,6 +2358,32 @@ export const actions = {
         ui.send({ type: "description.editDone" });
       }),
     );
+  },
+  /** Use Jira's version: drops a refused description (and any unsaved text) into the description history, so it can still be restored. */
+  discardDescription(key: string, unsaved?: AdfDocument) {
+    const f = state.full.get(key),
+      issue = state.issues.get(key),
+      dropped = unsaved ?? f?.descriptionRejected;
+    if (f?.descriptionRejected) {
+      const { descriptionRejected: _r, descriptionError: _e, ...rest } = f;
+      set({ full: new Map(state.full).set(key, rest) });
+    }
+    if (issue && dropped && adfToText(dropped) !== adfToText(f?.fields.description)) {
+      const doc = normalizeDocument(dropped);
+      changedKeys.add(key);
+      set({
+        issues: new Map(state.issues).set(key, {
+          ...issue,
+          descriptionHistory: [
+            ...(issue.descriptionHistory ?? []),
+            { text: adfToText(doc), document: doc, at: now() },
+          ],
+        }),
+      });
+    }
+    if (state.writeError?.key === key) set({ writeError: null });
+    touch(key);
+    queueSave();
   },
   /** `replyTo` may be any comment in a thread; the reply is filed under the thread's Jira parent. */
   comment(key: string, value: string | AdfDocument, replyTo?: string): boolean {

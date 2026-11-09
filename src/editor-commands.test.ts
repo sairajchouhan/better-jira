@@ -4,7 +4,9 @@ import { AllSelection, EditorState, TextSelection, type Command } from "prosemir
 import {
   codeDown,
   codeEnter,
+  floatingPlacement,
   insertLink,
+  linkHref,
   insertTable,
   linkTarget,
   markdownRules,
@@ -390,4 +392,39 @@ test("R1-D51/D79: Unlink removes the whole link from the caret or a selection at
   }
   expect(linkTarget(" example.com ")).toBe("https://example.com/");
   expect(linkTarget("javascript:alert(1)")).toBeNull();
+});
+
+test("R2-D6: with the caret in a link, the link field shows its address and applying edits that whole link", () => {
+  const link = s.marks.link!.create({ href: "https://old.test/" });
+  const doc = n.doc!.create(null, [
+    n.paragraph!.create(null, [s.text("see "), s.text("docs", [link])]),
+  ]);
+  const caret = EditorState.create({ doc, selection: TextSelection.create(doc, 7) });
+  expect(linkHref(caret)).toBe("https://old.test/");
+  const { after } = run(insertLink("https://new.test/"), caret);
+  expect(after.doc.textContent).toBe("see docs");
+  const marks: string[] = [];
+  after.doc.descendants((node) => {
+    if (node.isText) marks.push(`${node.text}:${node.marks.map((m) => m.attrs.href).join()}`);
+  });
+  expect(marks).toEqual(["see :", "docs:https://new.test/"]);
+  expect(run(removeLink, caret).after.doc.rangeHasMark(0, doc.content.size, s.marks.link!)).toBe(
+    false,
+  );
+});
+
+test("R2-D8: near the viewport's bottom the selection toolbar goes above the selection, within the side panel", () => {
+  const cell = { top: 833, bottom: 870, left: 900 },
+    place = floatingPlacement(
+      cell,
+      cell,
+      { top: 800, left: 880, right: 1400, width: 520 },
+      { width: 908, height: 37 },
+      { width: 1440, height: 900 },
+    );
+  // Not over the cell (833–870)…
+  expect(place.top + 37 <= cell.top || place.top >= cell.bottom).toBe(true);
+  // …and no wider than the panel, starting inside it.
+  expect(place.maxWidth).toBe(520);
+  expect(place.left).toBe(880);
 });
