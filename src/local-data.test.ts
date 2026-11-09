@@ -224,6 +224,36 @@ test("corrupt raw data is backed up and an unknown schema remains protected", as
   raw.close();
 });
 
+test("R2-palette-shortcuts-D2: a recovered record is copied once and its cleaned state saved at load", async () => {
+  const factory = new IDBFactory(),
+    db = await LocalDatabase.open("once", factory);
+  await db.save({ ...emptyLocalState(), undo: "corrupt" as any });
+  db.close();
+  for (const recovered of [true, false, false]) {
+    const current = await LocalDatabase.open("once", factory);
+    expect((await current.load()).recovered).toBe(recovered);
+    expect(await current.recoveryCopies()).toHaveLength(1);
+    current.close();
+  }
+  const raw = await new Promise<IDBDatabase>((resolve) => {
+    const request = factory.open("better-jira:local:v1:once");
+    request.onsuccess = () => resolve(request.result);
+  });
+  await new Promise<void>((resolve) => {
+    const tx = raw.transaction("state", "readwrite");
+    tx.objectStore("state").put({ version: 99 }, "workspace");
+    tx.oncomplete = () => resolve();
+  });
+  raw.close();
+  await Bun.sleep(2); // recovery copies are keyed by time
+  for (let i = 0; i < 2; i++) {
+    const current = await LocalDatabase.open("once", factory);
+    expect((await current.load()).readOnly).toBe(true);
+    expect(await current.recoveryCopies()).toHaveLength(2);
+    current.close();
+  }
+});
+
 test("active local files keep their metadata but their blob URLs cannot render HTML or SVG", async () => {
   const factory = new IDBFactory();
   let db = await LocalDatabase.open("safe-files", factory);

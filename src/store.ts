@@ -321,7 +321,10 @@ type UiKey = keyof UiContext;
 export function set(patch: Partial<Omit<State, UiKey | "loadError" | "storage" | "canEdit">>) {
   commit(patch);
 }
+/** Counts footer messages, so `timed` never covers one its action posted. */
+let perfPosts = 0;
 function commit(patch: Partial<State>) {
+  if (patch.perf !== undefined) perfPosts++;
   state = { ...state, ...patch };
   try {
     if (patch.board) localStorage.setItem(preferenceKey("board"), String(patch.board));
@@ -336,6 +339,7 @@ function commit(patch: Partial<State>) {
     try {
       localStorage.setItem(preferenceKey(PREF_KEY), JSON.stringify(patch.preferences));
     } catch {
+      perfPosts++;
       state = { ...state, perf: "Could not save view preferences in this browser" };
     }
   }
@@ -346,6 +350,7 @@ function commit(patch: Partial<State>) {
         JSON.stringify(patch.savedViews),
       );
     } catch {
+      perfPosts++;
       state = { ...state, perf: "Could not save views in this browser" };
     }
   if (patch.favorites)
@@ -355,6 +360,7 @@ function commit(patch: Partial<State>) {
         JSON.stringify(patch.favorites),
       );
     } catch {
+      perfPosts++;
       state = { ...state, perf: "Could not save favorites in this browser" };
     }
   if (
@@ -993,8 +999,11 @@ async function fetchFull(key: string) {
 
 /** Time from the action to the next painted frame, shown in the header. */
 export function timed(label: string, fn: () => void) {
-  const t0 = performance.now();
+  const t0 = performance.now(),
+    posts = perfPosts;
   fn();
+  // The action posted its own message, such as why it was refused; keep it.
+  if (perfPosts !== posts) return;
   requestAnimationFrame(() =>
     setTimeout(() => set({ perf: `${label} · ${(performance.now() - t0).toFixed(1)}ms` })),
   );

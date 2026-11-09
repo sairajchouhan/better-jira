@@ -286,19 +286,27 @@ export class LocalDatabase {
     return new LocalDatabase(database);
   }
   async load(): Promise<LocalLoad> {
-    const tx = this.db.transaction("state", "readonly"),
+    // One transaction: the copy of a corrupt record and its cleaned state land together, so the next load is clean and keeps a single copy.
+    const tx = this.db.transaction(["state", "recovery"], "readwrite"),
       done = completed(tx);
-    const [raw] = await Promise.all([request(tx.objectStore("state").get("workspace")), done]);
-    const parsed = parseLocalState(raw);
+    done.catch(() => {});
+    const store = tx.objectStore("state"),
+      recovery = tx.objectStore("recovery"),
+      raw = await request(store.get("workspace")),
+      parsed = parseLocalState(raw);
     this.writable = !parsed.readOnly;
     this.revision = object(raw) && Number.isSafeInteger(raw.revision) ? raw.revision : 0;
     for (const c of parsed.state.changes) this.keys.add(c.key);
-    if (parsed.recovered) {
-      const tx = this.db.transaction("recovery", "readwrite"),
-        done = completed(tx);
-      tx.objectStore("recovery").put(raw, Date.now());
-      await done;
+    if (parsed.readOnly) {
+      // An unsupported version stays in place untouched; copy it only once.
+      const copies = await request(recovery.getAll());
+      if (!copies.some((copy) => JSON.stringify(copy) === JSON.stringify(raw)))
+        recovery.put(raw, Date.now());
+    } else if (parsed.recovered) {
+      recovery.put(raw, Date.now());
+      store.put({ ...parsed.state, revision: ++this.revision }, "workspace");
     }
+    await done;
     let missingFiles = 0;
     const visited = new WeakSet<object>();
     const restore = async (issue: Issue | undefined | null) => {

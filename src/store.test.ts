@@ -709,3 +709,14 @@ test("R1-D101: deleting an issue sends no link removals for the issues it was li
     globalThis.fetch = realFetch;
   }
 });
+
+test("R2-palette-shortcuts-D3: a timed action that posts its own message, such as a refused edit, keeps it", async () => {
+  const { timed, get, set } = await import("./store");
+  const frame = () => new Promise((resolve) => setTimeout(resolve, 5));
+  timed("edit KAN-1", () => set({ perf: "Local editing is paused until saved data is available" }));
+  await frame();
+  expect(get().perf).toBe("Local editing is paused until saved data is available");
+  timed("edit KAN-1", () => {});
+  await frame();
+  expect(get().perf).toStartWith("edit KAN-1 · ");
+});
