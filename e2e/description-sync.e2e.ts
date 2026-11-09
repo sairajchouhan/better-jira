@@ -58,7 +58,8 @@ test("R2-D1: Use Jira's version drops the held edit: a later Jira change shows w
   try {
     await page.waitFor(`!!document.querySelector('#description h2')`);
     await edit(page, " mine1");
-    await page.waitFor(`window.__ops.length===1`);
+    // Jira has taken the write (its answer may still be on the way). A change that lands before the write is a real conflict, not this case.
+    await page.waitFor(`sessionStorage.getItem('jira')?.includes('mine1')`);
     // Someone else's edit while nothing is unsaved: it simply shows, focused or not.
     await page.eval(`__theirs('EXT3')`);
     await page.waitFor(`document.getElementById('description').textContent==='EXT3'`);
