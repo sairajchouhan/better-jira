@@ -530,8 +530,10 @@ export function PropertyPicker({
         </Command.Item>
       );
     };
+    // Jira labels can't contain spaces: a new label joins its words with hyphens (R2-issue-fields-D5).
+    const created = query.trim().replace(/\s+/g, "-");
     const exact = [...order.checked, ...order.rest].some(
-      (l) => l.toLowerCase() === query.trim().toLowerCase(),
+      (l) => l.toLowerCase() === created.toLowerCase(),
     );
     return (
       <PropertyMenu
@@ -566,7 +568,7 @@ export function PropertyPicker({
             value={`Create ${query}`}
             // Like Enter on an existing label: apply it and close, so the menu never shows a list without it.
             onSelect={() => {
-              toggle(query.trim());
+              toggle(created);
               close();
             }}
             className={PICKER_ITEM}
@@ -574,7 +576,7 @@ export function PropertyPicker({
             <span className="grid size-4 place-items-center">
               <Icon name="plus" size={14} />
             </span>
-            <span className="flex-1 truncate">Create new label: "{query.trim()}"</span>
+            <span className="flex-1 truncate">Create new label: "{created}"</span>
           </Command.Item>
         )}
       </PropertyMenu>

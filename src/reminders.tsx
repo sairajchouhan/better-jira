@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Command } from "cmdk";
 import { reminderDistance, reminderTime } from "./reminder-display";
+import { ActionMenu } from "./action-menu";
 import { Icon } from "./icons";
 import { MenuSurface, MENU_ITEM, MENU_INPUT } from "./menu-surface";
 import { actions, get, set, ui, useStore, type Issue } from "./store";
@@ -160,37 +161,29 @@ export function ReminderControl({ issue }: { issue: Issue }) {
       >
         <Icon name="clock" size={15} />
       </button>
+      {/* An action menu takes focus, so Esc closes it and not the issue (R2-issue-fields-D4). */}
       {anchor && (
-        <MenuSurface
+        <ActionMenu
           label="Reminder options"
           anchor={anchor}
-          close={() => setAnchor(null)}
-          width={240}
-        >
-          <Command loop>
-            <Command.List className="p-1">
-              <Command.Item
-                className={MENU_ITEM}
-                onSelect={() => {
-                  setAnchor(null);
-                  ui.send({ type: "overlay.open", overlay: "reminder" });
-                }}
-              >
-                Reschedule reminder
-              </Command.Item>
-              <Command.Item
-                className={MENU_ITEM}
-                onSelect={() => {
-                  actions.remind(issue.key, null);
-                  setAnchor(null);
-                  requestAnimationFrame(() => document.getElementById("issue-options")?.focus());
-                }}
-              >
-                Cancel reminder
-              </Command.Item>
-            </Command.List>
-          </Command>
-        </MenuSurface>
+          close={() => {
+            setAnchor(null);
+            anchor.focus();
+          }}
+          entries={[
+            {
+              name: "Reschedule reminder",
+              run: () => ui.send({ type: "overlay.open", overlay: "reminder" }),
+            },
+            {
+              name: "Cancel reminder",
+              run: () => {
+                actions.remind(issue.key, null);
+                requestAnimationFrame(() => document.getElementById("issue-options")?.focus());
+              },
+            },
+          ]}
+        />
       )}
     </>
   );

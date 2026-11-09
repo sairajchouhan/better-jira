@@ -127,20 +127,62 @@ test("R1-D21/D22: two tabs keep saving; each keeps the other's changes to issues
   await one.load();
   await two.load();
   // Tab one edits A-1 and adds A-2; tab two, still on the old revision, adds B-1.
-  await one.save(
-    { ...emptyLocalState(), sequence: 7, changes: [change("A-1", "one"), change("A-2", "one")] },
-    new Set(["A-1", "A-2"]),
-  );
+  await one.save({
+    ...emptyLocalState(),
+    sequence: 7,
+    changes: [change("A-1", "one"), change("A-2", "one")],
+  });
   expect(
-    await two.save(
-      { ...emptyLocalState(), sequence: 5, changes: [change("A-1", "base"), change("B-1", "two")] },
-      new Set(["B-1"]),
-    ),
+    await two.save({
+      ...emptyLocalState(),
+      sequence: 5,
+      changes: [change("A-1", "base"), change("B-1", "two")],
+    }),
   ).toBe(7);
   // Tab one drops A-2 (Jira took it) and saves again: tab two's B-1 survives.
-  await one.save({ ...emptyLocalState(), changes: [change("A-1", "one")] }, new Set(["A-2"]));
+  await one.save({ ...emptyLocalState(), changes: [change("A-1", "one")] });
   const summaries = (await one.load()).state.changes.map((c) => `${c.key}:${c.issue?.summary}`);
   expect(summaries.sort()).toEqual(["A-1:one", "B-1:two"]);
+  one.close();
+  two.close();
+});
+test("R2-issue-fields-D1: a tab's later saves keep another tab's reminders and activity rows, field by field", async () => {
+  const factory = new IDBFactory(),
+    one = await LocalDatabase.open("merge", factory),
+    two = await LocalDatabase.open("merge", factory);
+  const row = (id: string) => ({
+    id,
+    field: "priority",
+    at: "2026-11-08T00:00:00Z",
+    actor: { id: "me", name: "Me" },
+  });
+  const change = (key: string, fields: Partial<Issue>): any => ({
+    key,
+    issue: { ...issue, key, ...fields },
+    issueFields: Object.keys(fields),
+    fullFields: [],
+    created: false,
+  });
+  await one.load();
+  await two.load();
+  // Tab two: a reminder on B-1, and a priority edit with an Activity row on A-1.
+  await two.save({
+    ...emptyLocalState(),
+    changes: [
+      change("B-1", { reminder: { at: "2026-11-09T00:00:00Z" } }),
+      change("A-1", { priority: "Low", activity: [row("two")] } as any),
+    ],
+  });
+  // Tab one, which never saw those: edits A-1's priority with its own Activity row, then saves twice.
+  const mine = change("A-1", { priority: "High", activity: [row("one")] } as any);
+  await one.save({ ...emptyLocalState(), changes: [mine] });
+  await one.save({ ...emptyLocalState(), changes: [mine] });
+  const { changes } = (await two.load()).state;
+  const b = changes.find((c) => c.key === "B-1"),
+    a = changes.find((c) => c.key === "A-1");
+  expect(b?.issue?.reminder?.at).toBe("2026-11-09T00:00:00Z");
+  expect(a?.issue?.priority).toBe("High");
+  expect(a?.issue?.activity?.map((r) => r.id).sort()).toEqual(["one", "two"]);
   one.close();
   two.close();
 });
@@ -158,15 +200,12 @@ test("R2-create-D1: a tab never writes back a create another tab already sent an
   });
   const create = change("A-NEW1", "one");
   await one.load();
-  await one.save({ ...emptyLocalState(), changes: [create] }, new Set(["A-NEW1"]));
-  // Tab two loads while the create is pending, and keeps it in memory.
+  await one.save({ ...emptyLocalState(), changes: [create] });
   await two.load();
-  // Jira takes the create: tab one renames it to A-7 and drops A-NEW1.
-  await one.save({ ...emptyLocalState(), changes: [] }, new Set(["A-NEW1"]));
-  // Tab two saves its own edits twice, still holding A-NEW1; a closed tab one would have it created again on the next load.
+  await one.save({ ...emptyLocalState(), changes: [] });
   const theirs = { ...emptyLocalState(), changes: [create, change("B-1", "two")] };
-  await two.save(theirs, new Set(["B-1"]));
-  await two.save(theirs, new Set(["B-1"]));
+  await two.save(theirs);
+  await two.save(theirs);
   expect((await one.load()).state.changes.map((c) => c.key)).toEqual(["B-1"]);
   one.close();
   two.close();
@@ -487,18 +526,14 @@ test("R2-comments-D2: reactions made in two tabs on the same issue both survive,
     fullFields: [],
     created: false,
   });
-  const dirty = new Set(["KAN-1"]);
-  await one.save({ ...emptyLocalState(), changes: [change({ c1: ["💯"] })] }, dirty);
+  await one.save({ ...emptyLocalState(), changes: [change({ c1: ["💯"] })] });
   await one.load();
   await two.load();
   // Tab two adds 🔥 to c2; tab one, still on its own copy, adds 🚀 to c2 and removes its 💯 from c1.
-  await two.save({ ...emptyLocalState(), changes: [change({ c1: ["💯"], c2: ["🔥"] })] }, dirty);
-  await one.save({ ...emptyLocalState(), changes: [change({ c2: ["🚀"] })] }, dirty);
+  await two.save({ ...emptyLocalState(), changes: [change({ c1: ["💯"], c2: ["🔥"] })] });
+  await one.save({ ...emptyLocalState(), changes: [change({ c2: ["🚀"] })] });
   // Tab two saves again with only what it knew: its own copy must not bring back 💯 or drop 🚀.
-  await two.save(
-    { ...emptyLocalState(), changes: [change({ c1: ["💯"], c2: ["🔥", "👀"] })] },
-    dirty,
-  );
+  await two.save({ ...emptyLocalState(), changes: [change({ c1: ["💯"], c2: ["🔥", "👀"] })] });
   const [saved] = (await one.load()).state.changes;
   expect(saved?.issue?.commentStates).toEqual({ c2: { reactions: ["🔥", "🚀", "👀"] } });
   one.close();

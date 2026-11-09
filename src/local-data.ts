@@ -249,6 +249,123 @@ export function parseLocalState(raw: unknown): {
   return { state: { version: 1, sequence, changes, undo, redo }, recovered, readOnly: false };
 }
 
+const snapshotChanges = (changes: LocalChange[]) =>
+  new Map(changes.map((c) => [c.key, structuredClone(c)]));
+/** A field's local value, or "" when the change doesn't override it. */
+function fieldValue(change: LocalChange | undefined, field: string): string {
+  if (!change) return "";
+  if (field === "$deleted") return change.issue === null ? "1" : "";
+  if (field === "$created") return change.created ? "1" : "";
+  if (field.startsWith("full:"))
+    return change.fullFields.includes(field.slice(5))
+      ? "v" + JSON.stringify(change.full?.fields[field.slice(5)] ?? null)
+      : "";
+  return change.issue && change.issueFields.includes(field)
+    ? "v" + JSON.stringify((change.issue as any)[field] ?? null)
+    : "";
+}
+const changeFields = (change: LocalChange | undefined) =>
+  change
+    ? ["$deleted", "$created", ...change.issueFields, ...change.fullFields.map((f) => "full:" + f)]
+    : [];
+/** Three-way merge of id'd lists (Activity rows): adds and removals from both sides are kept. */
+function mergeById<T extends { id: string }>(base: T[], mine: T[], theirs: T[]): T[] {
+  const ids = (list: T[]) => new Set(list.map((v) => v.id)),
+    b = ids(base),
+    m = ids(mine),
+    t = ids(theirs);
+  return [
+    ...mine.filter((v) => !b.has(v.id) || t.has(v.id)),
+    ...theirs.filter((v) => !b.has(v.id) && !m.has(v.id)),
+  ];
+}
+/** Merges this tab's changes with the stored ones against `base` (this tab's last load or save), field by field. */
+export function mergeChanges(
+  base: ReadonlyMap<string, LocalChange>,
+  mine: LocalChange[],
+  stored: LocalChange[],
+): LocalChange[] {
+  const ours = new Map(mine.map((c) => [c.key, c])),
+    theirs = new Map(stored.map((c) => [c.key, c])),
+    result: LocalChange[] = [];
+  for (const key of new Set([...theirs.keys(), ...ours.keys()])) {
+    const b = base.get(key),
+      m = ours.get(key),
+      t = theirs.get(key);
+    const fields = new Set([...changeFields(b), ...changeFields(m), ...changeFields(t)]);
+    const take = new Map<string, LocalChange | undefined>();
+    for (const field of fields)
+      take.set(field, fieldValue(m, field) !== fieldValue(b, field) ? m : t);
+    const from = (field: string) => take.get(field);
+    if (from("$deleted") && fieldValue(from("$deleted"), "$deleted")) {
+      result.push({ ...from("$deleted")!, issue: null });
+      continue;
+    }
+    const issueFields = [...fields].filter(
+      (f) => !f.startsWith("$") && !f.startsWith("full:") && fieldValue(from(f), f),
+    );
+    const fullFields = [...fields]
+      .filter((f) => f.startsWith("full:") && fieldValue(from(f), f))
+      .map((f) => f.slice(5));
+    const created = !!fieldValue(from("$created"), "$created");
+    if (!issueFields.length && !fullFields.length && !created) continue;
+    const owner = [...take.values()].includes(m) && m ? m : (t ?? m)!;
+    const issue = { ...(owner.issue ?? m?.issue ?? t?.issue)! } as Issue;
+    for (const field of issueFields) (issue as any)[field] = (from(field)!.issue as any)[field];
+    // Both tabs added or removed Activity rows: keep both sides' rows.
+    if (
+      m?.issue &&
+      t?.issue &&
+      fieldValue(m, "activity") !== fieldValue(b, "activity") &&
+      fieldValue(t, "activity") !== fieldValue(b, "activity") &&
+      m.issueFields.includes("activity") &&
+      t.issueFields.includes("activity")
+    )
+      issue.activity = mergeById(
+        (b?.issue?.activity ?? []) as any[],
+        m.issue.activity ?? [],
+        t.issue.activity ?? [],
+      ) as Issue["activity"];
+    const fullBase = owner.full ?? m?.full ?? t?.full;
+    const full = fullBase && {
+      ...fullBase,
+      fields: {
+        ...fullBase.fields,
+        ...Object.fromEntries(fullFields.map((f) => [f, from("full:" + f)!.full?.fields[f]])),
+      },
+    };
+    const merged: LocalChange = {
+      key,
+      issue,
+      ...(full ? { full } : {}),
+      issueFields,
+      fullFields,
+      created,
+      ...(owner.tab ? { tab: owner.tab } : {}),
+    };
+    // Both tabs changed comment marks or reactions: merge them per reaction, not whole-field (R2-comments-D2).
+    const marks = (c?: LocalChange) =>
+      !!c?.issueFields.some((f) => f === "commentStates" || f === "reactions");
+    result.push(
+      m?.issue && t?.issue && m !== t && marks(m) && marks(t)
+        ? mergeCommentMarks(
+            b?.issue,
+            {
+              ...merged,
+              issue: {
+                ...issue,
+                commentStates: m.issue.commentStates,
+                reactions: m.issue.reactions,
+              },
+            },
+            t,
+          )
+        : merged,
+    );
+  }
+  return result;
+}
+
 function request<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
@@ -315,14 +432,8 @@ export function mergeCommentMarks(
 export class LocalDatabase {
   private urls = new Map<string, string>();
   private writable = true;
-  private revision = 0;
-  /**
-   * Every change key this tab has loaded or saved, to tell a change another tab dropped from one this tab added.
-   * Never shrinks: a change another tab sent and dropped stays in this tab's memory, and must not be written back (R2-create-D1).
-   */
-  private keys = new Set<string>();
-  /** This tab's copy of each changed issue as of its last load or save: what its own reaction edits are measured from. */
-  private base = new Map<string, Issue | null>();
+  /** This tab's changes as of its last load or save: the common base for merging with other tabs. */
+  private base = new Map<string, LocalChange>();
   private constructor(private db: IDBDatabase) {}
   static async open(
     namespace: string,
@@ -353,9 +464,8 @@ export class LocalDatabase {
       raw = await request(store.get("workspace")),
       parsed = parseLocalState(raw);
     this.writable = !parsed.readOnly;
-    this.revision = object(raw) && Number.isSafeInteger(raw.revision) ? raw.revision : 0;
-    for (const c of parsed.state.changes) this.keys.add(c.key);
-    this.base = new Map(parsed.state.changes.map((c) => [c.key, c.issue]));
+    const revision = object(raw) && Number.isSafeInteger(raw.revision) ? raw.revision : 0;
+    this.base = snapshotChanges(parsed.state.changes);
     if (parsed.readOnly) {
       // An unsupported version stays in place untouched; copy it only once.
       const copies = await request(recovery.getAll());
@@ -363,7 +473,7 @@ export class LocalDatabase {
         recovery.put(raw, Date.now());
     } else if (parsed.recovered) {
       recovery.put(raw, Date.now());
-      store.put({ ...parsed.state, revision: ++this.revision }, "workspace");
+      store.put({ ...parsed.state, revision: revision + 1 }, "workspace");
     }
     await done;
     let missingFiles = 0;
@@ -386,8 +496,8 @@ export class LocalDatabase {
       for (const snapshot of [...edit.before, ...edit.after]) await restore(snapshot.issue);
     return { ...parsed, missingFiles };
   }
-  /** Writes `state`. When another tab saved since, its changes to issues this tab hasn't edited (`dirty`) are kept, and this tab's undo history wins. Returns the sequence written. */
-  async save(state: LocalState, dirty: ReadonlySet<string> = new Set()): Promise<number> {
+  /** Writes `state`, merged field by field with whatever other tabs saved since this tab's last load or save: a field this tab changed wins, every other field keeps the stored value, so no tab's write is lost (R2-issue-fields-D1). This tab's undo history wins. Returns the sequence written. */
+  async save(state: LocalState): Promise<number> {
     if (!this.writable)
       throw new Error(
         "This local database uses an unsupported version. Existing data has been preserved.",
@@ -399,36 +509,20 @@ export class LocalDatabase {
         current = await request(store.get("workspace"));
       const revision =
         object(current) && Number.isSafeInteger(current.revision) ? current.revision : 0;
-      // Always merged, even when no other tab saved since: only issues this tab edited (`dirty`) or never saw are written from `state`.
-      let theirs: LocalState;
-      if (revision && revision === this.revision)
-        theirs = object(current) ? (current as LocalState) : emptyLocalState(); // what this tab wrote
-      else {
-        const parsed = parseLocalState(current);
-        if (parsed.readOnly)
-          throw new Error(
-            "Another tab saved local data in a newer version. Reload to keep editing; existing data has been preserved.",
-          );
-        theirs = parsed.state;
-      }
-      const stored = new Set(theirs.changes.map((c) => c.key)),
-        their = new Map(theirs.changes.map((c) => [c.key, c]));
-      const next: LocalState = {
+      const theirs = parseLocalState(current);
+      if (theirs.readOnly)
+        throw new Error(
+          "Another tab saved local data in a newer version. Reload to keep editing; existing data has been preserved.",
+        );
+      const next = {
         ...state,
-        sequence: Math.max(state.sequence, theirs.sequence),
-        changes: [
-          ...theirs.changes.filter((c) => !dirty.has(c.key)),
-          ...state.changes
-            .filter((c) => dirty.has(c.key) || (!stored.has(c.key) && !this.keys.has(c.key)))
-            // Comment marks and reactions: only this tab's own changes since its last load or save (R2-comments-D2).
-            .map((c) => mergeCommentMarks(this.base.get(c.key), c, their.get(c.key))),
-        ],
+        sequence: Math.max(state.sequence, theirs.state.sequence),
+        changes: mergeChanges(this.base, state.changes, theirs.state.changes),
       };
       store.put({ ...next, revision: revision + 1 }, "workspace");
       await done;
-      this.revision = revision + 1;
-      for (const c of next.changes) this.keys.add(c.key);
-      this.base = new Map(state.changes.map((c) => [c.key, c.issue]));
+      // The base is this tab's own copy, not the merge: fields taken from other tabs then stay theirs next time.
+      this.base = snapshotChanges(state.changes);
       return next.sequence;
     } catch (error) {
       try {

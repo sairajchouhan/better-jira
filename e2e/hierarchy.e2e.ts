@@ -45,7 +45,7 @@ test("a Subtask offers no sub-issue create and no parent removal (R1-D35)", asyn
   }
 });
 
-test("Set parent lists only Jira-valid parents and the project picker can't move the issue (R1-D33, R1-D34)", async () => {
+test("Set parent lists only Jira-valid parents and the project is read-only on a Jira issue (R1-D33, R1-D34, R2-issue-fields-D8)", async () => {
   const p = await writable("?issue=TEST-2&view=page");
   try {
     // Every other issue is a Task or a Subtask: none can be a Task's parent.
@@ -56,8 +56,12 @@ test("Set parent lists only Jira-valid parents and the project picker can't move
     await p.key("Escape");
     await p.eval("document.activeElement?.blur()");
     await p.key("p", "shift");
-    await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Change project"]')`);
-    expect(await items(p, "Change project")).toEqual(["Audit"]);
+    await Bun.sleep(150);
+    expect(
+      await p.eval(`!!document.querySelector('[role="dialog"][aria-label="Change project"]')`),
+    ).toBe(false);
+    expect(await p.eval(`document.getElementById('prop-project')?.tagName`)).toBe("SPAN");
+    expect(await p.eval(`document.getElementById('prop-project')?.textContent`)).toBe("Audit");
   } finally {
     await p.close();
     await fetch(`${APP}__fixture`, { method: "POST", body: "{}" });

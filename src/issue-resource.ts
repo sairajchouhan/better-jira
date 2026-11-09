@@ -91,6 +91,16 @@ export function resourceURL(value: string): string | null {
   }
 }
 
+/** A typed link: a bare domain such as `example.com/page` becomes https, as Linear does (R2-issue-fields-D10). */
+export function typedResourceURL(value: string): string | null {
+  const text = value.trim();
+  return resourceURL(
+    /^[a-z][a-z\d+.-]*:\/\//i.test(text) || !/^[^\s/]+\.[^\s/]+/.test(text)
+      ? text
+      : `https://${text}`,
+  );
+}
+
 export function resourceMediaIds(node: unknown, ids = new Set<string>()): Set<string> {
   if (!node || typeof node !== "object") return ids;
   const value = node as {

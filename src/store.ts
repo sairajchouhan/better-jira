@@ -87,6 +87,8 @@ export type Issue = {
   started?: string;
   watchers?: User[];
   watchersComplete?: boolean;
+  /** Whether this Jira user watches the issue, from the mirror list; `watchers` wins once loaded (R2-issue-fields-D9). */
+  watching?: boolean;
   estimate?: number;
   projectLead?: User | null;
   attachments?: {
@@ -443,15 +445,7 @@ const storage = createActor(
   storageMachine.provide({
     actors: {
       save: fromPromise(async () => {
-        // Keys edited since the last save; on failure they stay dirty for the retry.
-        const dirty = new Set(dirtyKeys);
-        dirtyKeys.clear();
-        try {
-          localSeq = Math.max(localSeq, await database!.save(localSnapshot(), dirty));
-        } catch (error) {
-          for (const key of dirty) dirtyKeys.add(key);
-          throw error;
-        }
+        localSeq = Math.max(localSeq, await database!.save(localSnapshot()));
       }),
     },
   }),
@@ -650,7 +644,6 @@ async function loadApplication() {
     full = new Map<string, Full>();
   changedKeys.clear();
   createdKeys.clear();
-  dirtyKeys.clear();
   owners.clear();
   localFields.clear();
   fullFields.clear();
@@ -1115,14 +1108,10 @@ const changedKeys = new Set<string>(),
 const undo: LocalEdit[] = [],
   redo: LocalEdit[] = [];
 let database: LocalDatabase | undefined;
-/** Issues edited here since the last local save, and which open tab sends each saved change (absent: this tab). */
-const dirtyKeys = new Set<string>(),
-  owners = new Map<string, string>();
+/** Which open tab sends each saved change (absent: this tab). */
+const owners = new Map<string, string>();
 const touch = (...keys: string[]) => {
-  for (const key of keys) {
-    dirtyKeys.add(key);
-    owners.delete(key);
-  }
+  for (const key of keys) owners.delete(key);
 };
 /** This tab across reloads (sessionStorage is per tab), so its undo history survives a reload and never reaches another tab.
  *  ponytail: a duplicated tab copies sessionStorage and shares the history; mint a new id on `pageshow` duplicates if that matters. */
@@ -1180,7 +1169,17 @@ const queueSave = () => storage.send({ type: "change" });
 
 // --- Jira writes: each edit's before/after becomes ops, sent one job at a time ---
 // ponytail: the outbox lives in memory; closing the tab with writes pending is guarded by beforeunload only.
-type Job = { key: string; board: number; ops: Op[]; started?: boolean; cancelled?: boolean };
+/** `hold`: a status change waits until then, so rapid changes reach Jira as one transition (R2-issue-fields-D13). */
+type Job = {
+  key: string;
+  board: number;
+  ops: Op[];
+  started?: boolean;
+  cancelled?: boolean;
+  hold?: number;
+};
+// ponytail: fixed 400 ms debounce on status writes; tune if single status edits must settle faster.
+const STATUS_HOLD = 400;
 type WriteResult = {
   error?: string;
   key?: string;
@@ -1244,8 +1243,11 @@ function send(changes: [string, Side, Side][]) {
     const waiting = afterCreate
       ? undefined
       : outbox.findLast((job) => job.key === key && !job.started);
-    if (waiting) waiting.ops = mergeOps(waiting.ops, ops);
-    else outbox.push({ key, board, ops });
+    const hold = ops.some((op) => op.op === "status") ? Date.now() + STATUS_HOLD : undefined;
+    if (waiting) {
+      waiting.ops = mergeOps(waiting.ops, ops);
+      if (hold) waiting.hold = hold;
+    } else outbox.push({ key, board, ops, ...(hold ? { hold } : {}) });
   }
   // A change that queued no write (nothing to send, or a redo that only cancelled a held comment delete) gets no answer
   // for adopt() to settle, so its Jira fields would stay pinned over every refresh: Jira's copy owns them again (R2-comments-D1).
@@ -1300,6 +1302,11 @@ async function flush() {
   try {
     while (outbox.length) {
       const job = outbox[0]!;
+      // Later status changes merge into a held job; the wait restarts with each.
+      if (job.hold && job.hold > Date.now()) {
+        await new Promise((resolve) => setTimeout(resolve, job.hold! - Date.now()));
+        continue;
+      }
       job.started = true;
       job.key = currentKey(job.key);
       job.ops = renameCommentIds(renameIds(job.ops, jiraKeys), jiraComments);
@@ -2012,13 +2019,18 @@ function readFavorites(): string[] {
     return [];
   }
 }
+/** Toggles against the stored list, so another tab's favorites aren't overwritten (R2-issue-fields-D1). */
 export function toggleFavorite(id: string) {
+  const favorites = readFavorites();
   set({
-    favorites: state.favorites.includes(id)
-      ? state.favorites.filter((v) => v !== id)
-      : [...state.favorites, id],
+    favorites: favorites.includes(id) ? favorites.filter((v) => v !== id) : [...favorites, id],
   });
 }
+if (typeof addEventListener === "function")
+  addEventListener("storage", (event: StorageEvent) => {
+    if (event.key === preferenceKey("better-jira:favorites:v1"))
+      set({ favorites: readFavorites() });
+  });
 export function saveView(name: string) {
   if (!name.trim()) return;
   const view: SavedView = {
@@ -2072,6 +2084,8 @@ function patchFields(key: string, fn: (fields: any) => object) {
   }
 }
 
+export const isWatching = (issue: Issue) =>
+  issue.watchers ? issue.watchers.some((u) => u.id === ME.id) : !!issue.watching;
 export const boardOf = (key: string) =>
   state.boards.find((b) => b.id === state.issues.get(key)?.board);
 
@@ -2274,8 +2288,13 @@ export const actions = {
           localFields.set(key, new Set());
           fullFields.set(key, new Set());
           needsFullRefresh.delete(key);
+          // The mirror's list carries no remote links: take them from the full record, or the restore would delete them in Jira (R2-issue-fields-D2).
+          const current = state.issues.get(key);
           set({
-            issues: new Map(state.issues).set(key, issue),
+            issues: new Map(state.issues).set(key, {
+              ...issue,
+              resources: withJiraLinks(current?.resources, full.remotelinks, true),
+            }),
             full: new Map(state.full).set(key, full),
             perf: `Restored mirrored Jira version of ${key}`,
           });

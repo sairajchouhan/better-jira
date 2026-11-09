@@ -15,7 +15,13 @@ import {
   useStore,
   type Issue,
 } from "./store";
-import { linkTitle, resourceURL, type IssueResource, type LinkPreview } from "./issue-resource";
+import {
+  linkTitle,
+  resourceURL,
+  typedResourceURL,
+  type IssueResource,
+  type LinkPreview,
+} from "./issue-resource";
 
 const previewRequested = new Set<string>();
 /** A link's site icon, falling back to the link icon when it does not load. */
@@ -98,7 +104,7 @@ export function ResourceForm({
             close();
             return;
           }
-          const href = resourceURL(url);
+          const href = typedResourceURL(url);
           if (!href) {
             setError("Enter an http or https URL");
             return;

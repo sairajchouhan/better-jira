@@ -116,6 +116,7 @@ function slim(i: any, board: number) {
     created: f.created,
     creator: user(f.creator ?? f.reporter),
     due: f.duedate ?? null,
+    watching: f.watches?.isWatching === true,
     project: f.project
       ? { key: f.project.key, name: f.project.name }
       : { key: i.key.split("-")[0], name: i.key.split("-")[0] },

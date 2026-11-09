@@ -890,7 +890,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
             )}
             {display.properties.includes("due") && child.due && (
               <time dateTime={child.due} className="text-fg-3">
-                {shortDate(child.due)}
+                {shortDate(child.due, undefined, true)}
               </time>
             )}
             {display.properties.includes("links") && !!child.links?.length && (

@@ -38,3 +38,11 @@ test("R1-D50/D60: short dates omit this year, like Linear, and keep date-only va
   expect(shortDate(new Date(2026, 10, 8, 9).toISOString(), now)).toBe("Nov 8");
   expect(shortDate("2025-10-03", now)).toBe("Oct 3, 2025");
 });
+test("R2-issue-fields-D7: due date properties read Yesterday, Today and Tomorrow, like Linear", () => {
+  const now = new Date(2026, 10, 8, 21, 30);
+  expect(shortDate("2026-11-07", now, true)).toBe("Yesterday");
+  expect(shortDate("2026-11-08", now, true)).toBe("Today");
+  expect(shortDate("2026-11-09", now, true)).toBe("Tomorrow");
+  expect(shortDate("2026-11-10", now, true)).toBe("Nov 10");
+  expect(shortDate("2026-11-09", now)).toBe("Nov 9");
+});

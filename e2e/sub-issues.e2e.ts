@@ -520,9 +520,7 @@ test("right-clicking a sub-issue row opens Linear's row actions, which act on th
     await project("✓ Audit");
     await page.key("Escape");
     // Due date › Tomorrow and Remind me › An hour from now act on the child, not the open issue.
-    const tomorrow = await page.eval<string>(
-      `(()=>{const d=new Date();d.setDate(d.getDate()+1);return d.toLocaleDateString('en-US',{month:'short',day:'numeric'})})()`,
-    );
+    const tomorrow = "Tomorrow"; // Linear reads near due dates relatively (R2-issue-fields-D7).
     await menu("TEST-4");
     await page.type("tomorrow");
     await page.waitFor(`${names}.includes('Due date › Tomorrow')`);

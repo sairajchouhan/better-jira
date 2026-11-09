@@ -62,9 +62,16 @@ const SHORT = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" 
     day: "numeric",
     year: "numeric",
   });
-/** Linear's short date: "Nov 8" this year, "Nov 8, 2025" otherwise. A date-only value stays on the local calendar. */
-export function shortDate(value: string, now = new Date()): string {
+/** Linear's short date: "Nov 8" this year, "Nov 8, 2025" otherwise. A date-only value stays on the local calendar.
+ * `relative` (due date properties) reads Yesterday, Today or Tomorrow for those days, as Linear does (R2-issue-fields-D7). */
+export function shortDate(value: string, now = new Date(), relative = false): string {
   const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value);
   if (Number.isNaN(date.getTime())) return value;
+  if (relative) {
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+      days = Math.round((date.getTime() - day.getTime()) / 86_400_000);
+    const name = { [-1]: "Yesterday", 0: "Today", 1: "Tomorrow" }[days];
+    if (name && date.getHours() === 0) return name;
+  }
   return (date.getFullYear() === now.getFullYear() ? SHORT : SHORT_YEAR).format(date);
 }

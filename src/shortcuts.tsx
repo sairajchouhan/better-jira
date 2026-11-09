@@ -15,6 +15,8 @@ import {
   currentKey,
   get,
   issueURL,
+  isLocalIssue,
+  isWatching,
   loadFull,
   ME,
   navigate,
@@ -57,7 +59,8 @@ type Shortcut = {
   id: string;
   name: string;
   group: string;
-  hotkey: Hotkey;
+  /** Absent for ⌘K-only commands, as Linear's "Copy issue as Markdown". */
+  hotkey?: Hotkey;
   issue?: boolean;
   document?: boolean;
   run: () => void;
@@ -91,8 +94,12 @@ const focus = (id: string) =>
     const attempt = () => {
       if (get().selected !== issue.key || !get().panel) return;
       const node = document.getElementById(id);
-      if (node) node.focus();
-      else if (tries++ < 100) requestAnimationFrame(attempt);
+      if (node) {
+        node.focus();
+        // Linear puts the caret at the end, so typing appends (R2-issue-fields-D6).
+        if (node instanceof HTMLTextAreaElement || node instanceof HTMLInputElement)
+          node.setSelectionRange(node.value.length, node.value.length);
+      } else if (tries++ < 100) requestAnimationFrame(attempt);
     };
     requestAnimationFrame(attempt);
   });
@@ -489,15 +496,20 @@ export const shortcuts: Shortcut[] = [
     hotkey,
     group: "Issues",
     issue: true,
+    // Jira can't move an issue to another project: only an issue made here, not yet in Jira, picks one (R2-issue-fields-D8).
+    ...(id === "project"
+      ? { when: () => !get().writable || isLocalIssue(target()?.key ?? "") }
+      : {}),
     run: overlay(value),
   })),
   {
     id: "assign-me",
     name: "Assign to me",
+    label: () => (target()?.assignee?.id === ME.id ? "Un-assign from me" : "Assign to me"),
     group: "Issues",
     hotkey: "I",
     issue: true,
-    run: issueAction((i) => actions.assign(i.key, ME)),
+    run: issueAction((i) => actions.assign(i.key, i.assignee?.id === ME.id ? null : ME)),
   },
   {
     id: "remove-due",
@@ -505,6 +517,7 @@ export const shortcuts: Shortcut[] = [
     group: "Issues",
     hotkey: "Mod+Shift+D",
     issue: true,
+    when: () => !!target()?.due,
     run: issueAction((i) => actions.patch(i.key, { due: null })),
   },
   {
@@ -559,9 +572,7 @@ export const shortcuts: Shortcut[] = [
     id: "subscribe",
     name: "Subscribe to issue",
     label: () =>
-      selected()?.watchers?.some((w) => w.id === ME.id)
-        ? "Unsubscribe from issue"
-        : "Subscribe to issue",
+      selected() && isWatching(selected()!) ? "Unsubscribe from issue" : "Subscribe to issue",
     group: "Issues",
     hotkey: "Shift+S",
     issue: true,
@@ -676,6 +687,7 @@ export const shortcuts: Shortcut[] = [
       ["copy-url", "Copy issue URL", "Mod+Shift+,", "URL"],
       ["copy-title", "Copy issue title", "Mod+Shift+'", "title"],
       ["copy-link", "Copy issue title as link", "Mod+C", "title as link"],
+      ["copy-issue-markdown", "Copy issue as Markdown", undefined, "issue as Markdown"],
       ["copy-markdown", "Copy everything as Markdown", "Mod+Alt+C", "everything as Markdown"],
     ] as const
   ).map(([id, name, hotkey, kind]) => ({
@@ -860,7 +872,7 @@ export function shortcutLabel(id: string) {
   let label = labels.get(id);
   if (label === undefined) {
     const entry = shortcuts.find((s) => s.id === id);
-    label = entry ? keyText(id === "help" ? "?" : entry.hotkey) : "";
+    label = entry?.hotkey ? keyText(id === "help" ? "?" : entry.hotkey) : "";
     labels.set(id, label);
   }
   return label;
@@ -881,55 +893,60 @@ export function useLinearHotkeys(getColumns: () => Issue[][]) {
   columns = getColumns;
   const state = useStore((s) => s);
   useHotkeys(
-    shortcuts.map(
-      (entry) =>
-        ({
-          hotkey: entry.hotkey,
-          callback: (event: KeyboardEvent) => {
-            if (
-              event.target instanceof Element &&
-              event.target.closest("[data-media-interactive]") &&
-              !(
-                (event.metaKey || event.ctrlKey) &&
-                (entry.id === "commands" || entry.id === "shortcuts")
+    shortcuts
+      .filter((entry) => entry.hotkey)
+      .map(
+        (entry) =>
+          ({
+            hotkey: entry.hotkey!,
+            callback: (event: KeyboardEvent) => {
+              if (
+                event.target instanceof Element &&
+                event.target.closest("[data-media-interactive]") &&
+                !(
+                  (event.metaKey || event.ctrlKey) &&
+                  (entry.id === "commands" || entry.id === "shortcuts")
+                )
               )
-            )
-              return;
-            runShortcut(entry.id);
-          },
-          options: {
-            enabled:
-              state.boards.length > 0 &&
-              ((!state.overlay && !state.toolbar) ||
-                (entry.id === "commands" && state.overlay === "palette") ||
-                (entry.id === "shortcuts" && state.overlay === "shortcuts")) &&
-              shortcutApplies(entry),
-            ignoreInputs:
-              entry.id === "shortcuts" || entry.id === "commands" || entry.id === "sub-issue"
-                ? false
-                : true,
-            meta: { name: entry.name, group: entry.group },
-            // Document and issue shortcuts share keys on purpose; `enabled` keeps exactly one of each pair active.
-            ...(shortcuts.some(
-              (other) =>
-                other !== entry &&
-                other.hotkey === entry.hotkey &&
-                !!other.document !== !!entry.document,
-            )
-              ? { conflictBehavior: "allow" as const }
-              : {}),
-          },
-        }) as UseHotkeyDefinition,
-    ),
+                return;
+              runShortcut(entry.id);
+            },
+            options: {
+              enabled:
+                state.boards.length > 0 &&
+                ((!state.overlay && !state.toolbar) ||
+                  (entry.id === "commands" && state.overlay === "palette") ||
+                  (entry.id === "shortcuts" && state.overlay === "shortcuts")) &&
+                shortcutApplies(entry),
+              ignoreInputs:
+                entry.id === "shortcuts" || entry.id === "commands" || entry.id === "sub-issue"
+                  ? false
+                  : true,
+              meta: { name: entry.name, group: entry.group },
+              // Document and issue shortcuts share keys on purpose; `enabled` keeps exactly one of each pair active.
+              ...(shortcuts.some(
+                (other) =>
+                  other !== entry &&
+                  other.hotkey === entry.hotkey &&
+                  !!other.document !== !!entry.document,
+              )
+                ? { conflictBehavior: "allow" as const }
+                : {}),
+            },
+          }) as UseHotkeyDefinition,
+      ),
     { ignoreDefaultPrevented: true },
   );
 }
 export function ShortcutHelp() {
   const [query, setQuery] = useState("");
   const catalog = [
-    ...shortcuts.filter(
-      (s) => !/^team-\d+$/.test(s.id) || Number(s.id.slice(5)) <= get().boards.length,
-    ),
+    ...shortcuts
+      .filter(
+        (s) =>
+          !!s.hotkey && (!/^team-\d+$/.test(s.id) || Number(s.id.slice(5)) <= get().boards.length),
+      )
+      .map((s) => ({ ...s, hotkey: s.hotkey! })),
     ...editorBindings.map((b) => ({
       ...b,
       id: `editor-${b.id}`,

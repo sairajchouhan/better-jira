@@ -53,6 +53,8 @@ import {
   downloadLocalBackup,
   flushLocalChanges,
   issueURL,
+  isLocalIssue,
+  isWatching,
   appURL,
   retryLocalStorage,
   dismissWriteError,
@@ -1523,7 +1525,7 @@ const Card = memo(function Card({
       {show("due") && issue.due && (
         <span className={CHIP}>
           <Icon name="calendar" />
-          <span className="ml-1.5">{shortDate(issue.due)}</span>
+          <span className="ml-1.5">{shortDate(issue.due, undefined, true)}</span>
         </span>
       )}
       {show("milestone") &&
@@ -1943,6 +1945,7 @@ function Properties({ issue }: { issue: Issue }) {
   const issues = useStore((s) => s.issues);
   // Like Linear, a pill stays highlighted while its menu is open (Opus review 4).
   const open = useStore((s) => s.overlay);
+  const writable = useStore((s) => s.writable);
   // Linear: content-width 28px pills 4px apart, icon in a 16px box 6px in, and a tooltip naming the action and its key (no project tooltip).
   const btn = (
     id: string,
@@ -2030,7 +2033,7 @@ function Properties({ issue }: { issue: Issue }) {
                   <Icon name="calendar" />
                 </span>
                 <span className={issue.due ? "" : "text-fg-3"}>
-                  {issue.due ? shortDate(issue.due) : "Set due date"}
+                  {issue.due ? shortDate(issue.due, undefined, true) : "Set due date"}
                 </span>
               </>,
             )}
@@ -2084,23 +2087,37 @@ function Properties({ issue }: { issue: Issue }) {
       {section(
         "Project",
         <>
-          {btn(
-            "prop-project",
-            "project",
-            "",
-            <>
+          {/* Jira can't move an issue between projects, so with Jira writes an issue already in Jira shows its project read-only (R2-issue-fields-D8). */}
+          {!writable || isLocalIssue(issue.key) ? (
+            btn(
+              "prop-project",
+              "project",
+              "",
+              <>
+                <span>
+                  <Icon name="layers" />
+                </span>
+                <span className="truncate">
+                  {issue.project?.name ?? (
+                    <>
+                      <span className="property-wide">Add to project</span>
+                      <span className="property-short">Project</span>
+                    </>
+                  )}
+                </span>
+              </>,
+            )
+          ) : (
+            <span
+              id="prop-project"
+              title="Jira can't move an issue to another project"
+              className="ml-px flex h-7 max-w-full items-center gap-1.5 rounded-full pr-2.5 pl-1.5 text-fg-2 [&>:first-child]:grid [&>:first-child]:size-4 [&>:first-child]:place-items-center"
+            >
               <span>
                 <Icon name="layers" />
               </span>
-              <span className="truncate">
-                {issue.project?.name ?? (
-                  <>
-                    <span className="property-wide">Add to project</span>
-                    <span className="property-short">Project</span>
-                  </>
-                )}
-              </span>
-            </>,
+              <span className="truncate">{issue.project?.name ?? "No project"}</span>
+            </span>
           )}
           {issue.milestones?.length
             ? btn(
@@ -2434,7 +2451,7 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
     });
     return () => cancelAnimationFrame(frame);
   }, [f]);
-  const subscribed = issue.watchers?.some((u) => u.id === ME.id);
+  const subscribed = isWatching(issue);
   /** An image comment whose image was removed from the description opens the image on its own. */
   const [viewing, setViewing] = useState<{ file: Attachment; external: boolean }>();
   const draftKey = `better-jira:comment-draft:${get().namespace}:${issue.key}`;

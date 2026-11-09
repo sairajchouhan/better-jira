@@ -297,9 +297,12 @@ async function run(ctx: Context, op: Op) {
       return;
     }
     case "link": {
-      const type = await linkType(op.kind),
-        ends = linkEnds(key, op.target, op.kind);
+      const ends = linkEnds(key, op.target, op.kind);
       ctx.touched.add(op.target);
+      // A remove reads the issue's links alongside the link type, not after it (R2-issue-fields-D13).
+      const read = op.remove ? jira(`${at(key)}?fields=issuelinks`) : undefined;
+      read?.catch(() => {});
+      const type = await linkType(op.kind);
       if (!op.remove) {
         await jira("/rest/api/3/issueLink", {
           method: "POST",
@@ -311,7 +314,7 @@ async function run(ctx: Context, op: Op) {
         });
         return;
       }
-      const links = (await jira(`${at(key)}?fields=issuelinks`)).fields.issuelinks as any[];
+      const links = (await read!).fields.issuelinks as any[];
       const outwardFromKey = ends.outward === key;
       const link =
         links.find(

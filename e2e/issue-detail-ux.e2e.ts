@@ -115,11 +115,9 @@ test("R1-D44, R1-D45, R1-D63: label create closes, Shift+D is a click-to-apply m
     await p.key("d", "shift");
     await p.click('[role="dialog"][aria-label="Due date"] [cmdk-item][data-value="Tomorrow"]');
     await p.waitFor(`!document.querySelector('[role="dialog"][aria-label="Due date"]')`);
-    const tomorrow = await p.eval<string>(
-      `(()=>{const d=new Date();d.setDate(d.getDate()+1);return d.toLocaleDateString('en',{month:'short',day:'numeric'})})()`,
-    );
+    // Linear reads near due dates relatively (R2-issue-fields-D7).
     expect(await p.waitFor<string>(`document.getElementById('prop-due')?.textContent`)).toBe(
-      tomorrow,
+      "Tomorrow",
     );
     await p.eval("document.activeElement?.blur()");
     await p.key("h", "shift");

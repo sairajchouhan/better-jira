@@ -3,13 +3,12 @@ import { parseHotkey } from "@tanstack/react-hotkeys";
 import { shortcuts } from "./shortcuts";
 import { editorBindings } from "./editor-bindings";
 test("every advertised binding parses through TanStack; bindings are unique in each context", () => {
-  for (const binding of shortcuts) {
-    expect(() => parseHotkey(binding.hotkey, "mac")).not.toThrow();
-  }
+  for (const binding of shortcuts)
+    if (binding.hotkey) expect(() => parseHotkey(binding.hotkey!, "mac")).not.toThrow();
   for (const context of ["issue", "document"]) {
     const seen = new Set<string>();
-    for (const binding of shortcuts.filter((binding) =>
-      context === "document" ? !binding.issue : !binding.document,
+    for (const binding of shortcuts.filter(
+      (binding) => binding.hotkey && (context === "document" ? !binding.issue : !binding.document),
     )) {
       const key = JSON.stringify(binding.hotkey);
       expect(seen.has(key)).toBe(false);
