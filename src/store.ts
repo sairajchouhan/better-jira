@@ -392,7 +392,10 @@ ui.subscribe(({ context }) => {
     if (context[key] !== state[key]) Object.assign(patch, { [key]: context[key] });
   if (!Object.keys(patch).length) return;
   if (patch.overlay === null) patch.target = null;
-  if (patch.view) {
+  // A link's `view` opens that issue once; it lasts until the panel closes and never becomes the board's preference (R2-D4).
+  if (patch.view && restoringNavigation) linkView = true;
+  else if (patch.view) {
+    linkView = false;
     // Each board remembers how its issues open.
     const id = context.board,
       prefs = state.preferences[id] ?? defaultPreferences();
@@ -402,6 +405,11 @@ ui.subscribe(({ context }) => {
     };
   }
   commit(patch);
+  if (linkView && !context.panel) {
+    linkView = false;
+    const openIn = state.preferences[context.board]?.display.openIn ?? "side";
+    if (openIn !== context.view) queueMicrotask(() => navigate({ view: openIn }));
+  }
 });
 /** Sends `navigate`, filling in a new board's remembered issue view. */
 export function navigate(to: {
@@ -1011,7 +1019,8 @@ export function timed(label: string, fn: () => void) {
 
 const now = () => new Date().toISOString();
 let navigationReady = false,
-  restoringNavigation = false;
+  restoringNavigation = false,
+  linkView = false;
 function syncNavigation(replace = false) {
   const url = new URL(location.href);
   if (

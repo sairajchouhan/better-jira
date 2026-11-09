@@ -41,8 +41,18 @@ import {
   type Rule,
 } from "./view-model";
 
-const loadFilterMenu = () => import("./filter-menu");
-const FilterMenu = lazy(loadFilterMenu);
+type FilterMenuModule = typeof import("./filter-menu");
+let filterMenu: FilterMenuModule | undefined;
+const loadFilterMenu = () => import("./filter-menu").then((m) => (filterMenu = m));
+// Preloaded after first paint; a loaded module resolves `lazy` synchronously, so the first F skips the Suspense round trip (R2-D6).
+const FilterMenu = lazy(
+  () =>
+    (filterMenu
+      ? // A native promise resolves a tick later, so lazy would still suspend; React only calls `then`.
+        // oxlint-disable-next-line unicorn/no-thenable
+        { then: (done: (m: FilterMenuModule) => void) => done(filterMenu!) }
+      : loadFilterMenu()) as Promise<FilterMenuModule>,
+);
 
 export { MENU_POPUP as POPUP } from "./menu-surface";
 const CIRCLE =
@@ -58,6 +68,11 @@ export function BoardControls({ board }: { board: Board }) {
   const [rect, setRect] = useState({ top: 100, right: 16 });
   const ref = toolbar === "display" ? displayRef : filterRef;
   const count = filterCount(preferences.filters);
+  useEffect(() => {
+    (window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 200)))(
+      () => void loadFilterMenu(),
+    );
+  }, []);
   useHotkey(
     "Escape",
     () => {
@@ -397,7 +412,7 @@ export function FilterChips({ board }: { board: Board }) {
   const labelFor = (field: Field, value: string) => {
     if (value === "$me") return "me";
     if (value === "$none") return "none";
-    if (isDate(field)) return shortDate(value);
+    if (isDate(field)) return value === "P0D" ? "today" : shortDate(value);
     if (field === "status")
       return board.columns.flatMap((c) => c.statuses).find((s) => s.id === value)?.name ?? value;
     if (field === "assignee" || field === "creator")
@@ -438,6 +453,7 @@ export function FilterChips({ board }: { board: Board }) {
     const field = FIELDS.find(([f]) => f === c.field)?.[1],
       op = operatorsFor(c.field).find(([o]) => o === c.op)?.[1];
     if (c.op === "empty" || c.op === "notEmpty") return `${field} ${op}`;
+    if (c.field === "due" && c.op === "before" && c.values[0] === "P0D") return "Overdue";
     if (c.op === "within") return `${field} in the last ${days(c.values[0])}`;
     if (c.op === "next") return `${field} in the next ${days(c.values[0])}`;
     if (c.field === "statusAge") return `${field} ${op} ${days(c.values[0])}`;
@@ -445,6 +461,14 @@ export function FilterChips({ board }: { board: Board }) {
   };
   const [edit, setEdit] = useState<{ id: string; anchor: HTMLElement } | null>(null);
   const editing = filters.children.find((c): c is Rule => !("children" in c) && c.id === edit?.id);
+  // A chip switched from "is empty" back to "is" and closed without a value filters nothing: drop it.
+  const closeEdit = () => {
+    const current = preferencesFor(board.id).filters;
+    const rule = current.children.find((c): c is Rule => !("children" in c) && c.id === edit?.id);
+    if (rule && !rule.values.length && rule.op !== "empty" && rule.op !== "notEmpty")
+      changePreferences(board.id, { filters: updateFilter(current, rule.id, null) });
+    setEdit(null);
+  };
   // An empty group filters nothing, so it gets no chip.
   const chips = filters.children.filter((c) => !("children" in c) || filterCount(c) > 0);
   if (!chips.length) return null;
@@ -456,14 +480,14 @@ export function FilterChips({ board }: { board: Board }) {
           label={`Edit ${FIELDS.find(([f]) => f === editing.field)?.[1]} filter`}
           anchor={edit.anchor}
           width={280}
-          close={() => setEdit(null)}
+          close={closeEdit}
         >
           <PropertyFilter
             inline
             field={editing.field}
             name={FIELDS.find(([f]) => f === editing.field)?.[1] ?? editing.field}
             board={board}
-            onBack={() => setEdit(null)}
+            onBack={closeEdit}
           />
         </MenuSurface>
       )}

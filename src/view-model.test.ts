@@ -387,6 +387,53 @@ describe("QA round 1 (G7)", () => {
       "D-1",
     ]);
   });
+  test("R2-D2: completed by recency is one order whatever the ordering, direction or open issues", () => {
+    const list = [
+      issue("KAN-145", {
+        status: "done",
+        resolved: "2026-11-08T20:17:12.698Z",
+        rank: "b",
+        created: "1",
+      }),
+      issue("KAN-146", { status: "todo", rank: "a", created: "4" }),
+      issue("KAN-147", {
+        status: "done",
+        resolved: "2026-11-08T20:17:16.312Z",
+        rank: "c",
+        created: "2",
+      }),
+      issue("KAN-148", { status: "doing", rank: "e", created: "6" }),
+      issue("KAN-150", {
+        status: "done",
+        resolved: "2026-11-08T20:17:16.177Z",
+        rank: "d",
+        created: "3",
+      }),
+      issue("KAN-151", { status: "todo", rank: "f", created: "5" }),
+    ];
+    for (const ordering of ["manual", "created", "title"] as const)
+      for (const descending of [false, true]) {
+        const prefs = defaultPreferences();
+        Object.assign(prefs.display, { ordering, descending, completedRecency: true });
+        const keys = selectIssues(list, board, prefs, false, "", "me").map((i) => i.key);
+        expect(keys.filter((k) => ["KAN-145", "KAN-147", "KAN-150"].includes(k))).toEqual([
+          "KAN-147",
+          "KAN-150",
+          "KAN-145",
+        ]);
+      }
+  });
+  test("R2-D3: Overdue stays relative to today", () => {
+    const overdue = rule("due", ["P0D"], "before");
+    const day = (d: string) => new Date(`${d}T12:00:00`).getTime();
+    const due = (d: string) => issue("D-1", { due: d });
+    expect(matchesRule(due("2026-11-07"), overdue, [], "me", day("2026-11-08"))).toBe(true);
+    expect(matchesRule(due("2026-11-08"), overdue, [], "me", day("2026-11-08"))).toBe(false);
+    expect(matchesRule(due("2026-11-08"), overdue, [], "me", day("2026-11-09"))).toBe(true);
+  });
+  test("R2-D5: issue type is never empty in Jira, so it offers no empty operators", () => {
+    expect(operatorsFor("type").map(([op]) => op)).toEqual(["is", "isNot"]);
+  });
   test("R1-D90: display equality ignores the order properties were toggled in", () => {
     const a = defaultPreferences().display;
     expect(sameDisplay(a, { ...a, properties: [...a.properties].reverse() })).toBe(true);

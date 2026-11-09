@@ -235,7 +235,7 @@ export function PropertyFilter({
             <div className="border-t border-line-2 pt-1">
               {(field === "due"
                 ? [
-                    ["Overdue", "before", new Date().toLocaleDateString("en-CA")],
+                    ["Overdue", "before", "P0D"],
                     ["1 day from now", "next", "1"],
                     ["3 days from now", "next", "3"],
                     ["1 week from now", "next", "7"],

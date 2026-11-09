@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { jira } from "./jira";
 import { detailCache } from "./detail-cache";
+import { recentlyTouched, storeRemoteLinks } from "./remote-links";
 import { issueAttachments, attachmentGateway, jiraAttachmentReader } from "./attachment-media";
 import { serverAuth } from "./server-config";
 import { threadParent } from "./jira-ops";
@@ -87,7 +88,7 @@ function slim(i: any, board: number) {
     for (const child of n?.content ?? []) collectLinks(child);
   };
   collectLinks(f.description);
-  for (const url of text(f.description).match(/https?:\/\/[^\s<>"\])]+/g) ?? []) links.add(url);
+  for (const url of text(f.description).match(/https?:\/\/[^\s<>"\]|)]+/g) ?? []) links.add(url);
   return {
     key: i.key,
     board,
@@ -310,9 +311,20 @@ async function watchOpenIssues() {
         .get(key);
       if (!row) continue;
       try {
-        const { fields } = await jira(
-          `/rest/api/3/issue/${encodeURIComponent(key)}?fields=updated`,
-        );
+        const [{ fields }, remote] = await Promise.all([
+          jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=updated`),
+          jira<any[]>(`/rest/api/3/issue/${encodeURIComponent(key)}/remotelink`),
+        ]);
+        if (
+          storeRemoteLinks(
+            db,
+            key,
+            remote.flatMap((l) => (l.object?.url ? [l.object.url] : [])),
+          )
+        ) {
+          db.query("DELETE FROM issue_details WHERE key = ?").run(key); // the panel's web links too
+          changed = true;
+        }
         if (fields.updated === row.updated) continue;
         save(
           row.board,
@@ -365,6 +377,14 @@ const details = detailCache(db, async (key) => {
   detail.remotelinks = remotelinks.flatMap((l) =>
     l.object?.url ? [{ url: l.object.url, title: l.object.title ?? l.object.url }] : [],
   );
+  if (
+    storeRemoteLinks(
+      db,
+      key,
+      detail.remotelinks.map((l: { url: string }) => l.url),
+    )
+  )
+    notify();
   const comments = detail.fields.comment;
   if (comments?.total) {
     // The comment endpoint carries Jira's reply threads (parentId), and the comment property older replies from this app kept them in.
@@ -522,13 +542,15 @@ async function enrichProjects() {
 /** Extra reads never sit on the board's request path. Cache them across process restarts. */
 async function enrichProperties() {
   if (enriching) return;
+  const recent = recentlyTouched(db);
   const rows = db
-    .query<{ key: string; full: string; slim: string }, [number, number]>(
+    .query<{ key: string; full: string; slim: string }, [number, number, string]>(
       `SELECT i.key,i.full,i.slim FROM issues i LEFT JOIN issue_properties p ON p.key=i.key
     WHERE p.key IS NULL OR p.source_updated != json_extract(i.slim,'$.updated') OR p.synced < ?
-      OR (json_array_length(p.data,'$.errors') > 0 AND p.synced < ?)`,
+      OR (json_array_length(p.data,'$.errors') > 0 AND p.synced < ?)
+      OR i.key IN (SELECT value FROM json_each(?))`,
     )
-    .all(Date.now() - FULL_SYNC_EVERY_MS, Date.now() - 15 * 60000);
+    .all(Date.now() - FULL_SYNC_EVERY_MS, Date.now() - 15 * 60000, JSON.stringify(recent));
   if (!rows.length) return;
   enriching = true;
   propertyProgress = { pending: rows.length, completed: 0, errors: 0 };

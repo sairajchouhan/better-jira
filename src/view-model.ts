@@ -186,7 +186,7 @@ export const isDate = (field: Field) =>
 OPERATORS.push(["gt", "greater than"], ["lt", "less than"]);
 export const isNumeric = (field: Field) =>
   field === "statusAge" || field === "pullRequests" || field === "estimate";
-/** Linear's operators per kind: choices are/aren't one of a list, text contains, dates and numbers compare. Status is never empty. */
+/** Linear's operators per kind: choices are/aren't one of a list, text contains, dates and numbers compare. Status and type are never empty. */
 export const operatorsFor = (field: Field) => {
   const ops: Operator[] = isNumeric(field)
     ? [
@@ -202,7 +202,12 @@ export const operatorsFor = (field: Field) => {
         ? ["contains", "notContains"]
         : field === "links"
           ? ["contains", "notContains", "empty", "notEmpty"]
-          : ["is", "isNot", ...(field === "status" ? [] : (["empty", "notEmpty"] as const))];
+          : [
+              "is",
+              "isNot",
+              // Jira always sets a status and an issue type.
+              ...(field === "status" || field === "type" ? [] : (["empty", "notEmpty"] as const)),
+            ];
   return OPERATORS.filter(([op]) => ops.includes(op));
 };
 /** Display settings equal, ignoring the order properties were toggled in. */
@@ -403,7 +408,9 @@ export function matchesRule(
           : actualNumber === wanted;
   }
   if (isDate(r.field) || r.field === "started") {
-    const date = Date.parse(actual[0] ?? "");
+    // A date-only value (due) is that local day, as the wanted day is; UTC would shift it a day west of Greenwich.
+    const raw = actual[0] ?? "",
+      date = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T00:00:00` : raw);
     if (!Number.isFinite(date)) return r.op === "isNot";
     const day = (t: number) => new Date(t).toLocaleDateString("en-CA");
     if (r.op === "within" || r.op === "next") {
@@ -413,7 +420,8 @@ export function matchesRule(
         ? date <= now && date >= now - n * 864e5
         : date >= now && date <= now + n * 864e5;
     }
-    const wanted = Date.parse(`${values[0]}T00:00:00`);
+    // "P0D" is today, kept relative like Linear's `dueDate lt P0D` so a saved Overdue filter stays overdue.
+    const wanted = Date.parse(`${values[0] === "P0D" ? day(now) : values[0]}T00:00:00`);
     if (!Number.isFinite(wanted)) return false;
     if (r.op === "before") return date < wanted;
     if (r.op === "after") return date >= wanted + 864e5;
@@ -579,13 +587,6 @@ export function selectIssues(
   // Jira workflows that never set a resolution leave `resolved` empty; entering Done is then the completion time.
   const completed = (i: Issue) => i.resolved ?? i.statusSince ?? "";
   items.sort((a, b) => {
-    if (
-      d.completedRecency &&
-      statusFor(a, board)?.category === "done" &&
-      statusFor(b, board)?.category === "done" &&
-      completed(a) !== completed(b)
-    )
-      return completed(b).localeCompare(completed(a));
     let cmp = 0;
     switch (d.ordering) {
       case "manual": {
@@ -631,6 +632,15 @@ export function selectIssues(
     }
     return (d.descending ? -cmp : cmp) || a.key.localeCompare(b.key, undefined, { numeric: true });
   });
+  if (d.completedRecency) {
+    // Done issues keep the slots the ordering gave them, refilled newest-completed first; mixing
+    // recency into the comparator only for Done pairs made the sort non-transitive (R2-D2).
+    const slots = items.flatMap((i, n) => (statusFor(i, board)?.category === "done" ? [n] : []));
+    const done = slots
+      .map((n) => items[n]!)
+      .sort((a, b) => completed(b).localeCompare(completed(a)));
+    slots.forEach((n, k) => (items[n] = done[k]!));
+  }
   return items;
 }
 
