@@ -15,17 +15,21 @@ import {
   addIssueFiles,
   addLocalFiles,
   beginCreate,
+  currentKey,
   get,
+  REJECTED_COMMENT,
+  restoreRejectedDraft,
   set,
   type Issue,
+  type RejectedComment,
 } from "./store";
+import { noteDraftUploads, settleDraftUploads } from "./draft-uploads";
 import { mentionDraft, visibleComments, type IssueComment } from "./comment-thread";
 
 /**
  * Files a comment draft uploaded leave the issue again once the draft drops them, so a discarded upload is not left
  * attached in Jira (R1-D17). The 5 s wait lets the editor's undo bring a file back first.
- * ponytail: tracked per mounted composer; a file dropped just before leaving the issue, or in a draft restored after a
- * reload, stays attached.
+ * A file dropped just before leaving the issue, or cut off by a reload, is removed on a later load (draft-uploads.ts).
  */
 export function useDraftFiles(key: string) {
   const uploaded = useRef(new Set<string>()),
@@ -43,7 +47,18 @@ export function useDraftFiles(key: string) {
   useEffect(() => () => sweep.later.cancel(), [sweep]);
   return {
     onFiles: async (files: File[]) => {
-      const saved = await addIssueFiles(key, files);
+      const namespace = get().namespace,
+        noted = get().writable ? noteDraftUploads(namespace, key, files) : [];
+      let saved: Awaited<ReturnType<typeof addIssueFiles>> = [];
+      try {
+        saved = await addIssueFiles(key, files);
+      } finally {
+        settleDraftUploads(
+          namespace,
+          noted,
+          saved.map((file) => file.id),
+        );
+      }
       for (const file of saved) uploaded.current.add(file.id);
       return saved;
     },
@@ -61,6 +76,28 @@ export function useDraftFiles(key: string) {
   };
 }
 
+/** A comment Jira refused comes back into the composer that sent it, after anything typed since (R2-comments-D4). */
+export function useRejectedComment(
+  key: string,
+  parents: (string | undefined)[],
+  draftKey: string,
+  restore: (body: AdfDocument) => void,
+) {
+  const latest = useRef(restore);
+  latest.current = restore;
+  const ids = parents.join(",");
+  useEffect(() => {
+    const listen = (event: Event) => {
+      const { detail } = event as CustomEvent<RejectedComment>;
+      if (currentKey(detail.key) !== currentKey(key) || !parents.includes(detail.parentId)) return;
+      event.preventDefault();
+      latest.current(restoreRejectedDraft(draftKey, detail.body));
+    };
+    addEventListener(REJECTED_COMMENT, listen);
+    return () => removeEventListener(REJECTED_COMMENT, listen);
+  }, [key, ids, draftKey]);
+}
+
 type Props = {
   issue: Issue;
   comments: IssueComment[];
@@ -68,9 +105,47 @@ type Props = {
   me: ReactNode;
   timestamp: (date: string, id: string) => ReactNode;
   events?: { at: string; node: ReactNode }[];
+  /** Keeps the text of an open edit; `null` when the edit closes. */
+  trackEdit?: (id: string, body: AdfDocument | null) => void;
 };
 export function CommentThreads(props: Props) {
   const comments = visibleComments(props.comments, props.issue.commentStates);
+  const key = props.issue.key;
+  // An edit open on a comment deleted elsewhere keeps its text here, with a note, instead of vanishing (R2-comments-D4).
+  const edits = useRef(new Map<string, AdfDocument>()),
+    [lost, setLost] = useState<{ key: string; id: string; body: AdfDocument }[]>([]);
+  const present = props.comments.map((c) => c.id).join(",");
+  useEffect(() => {
+    const ids = new Set(present.split(","));
+    const gone = [...edits.current].filter(([id]) => !ids.has(id));
+    for (const [id] of gone) edits.current.delete(id);
+    if (gone.length) setLost((list) => [...list, ...gone.map(([id, body]) => ({ key, id, body }))]);
+  }, [present]);
+  useEffect(() => () => edits.current.clear(), [key]);
+  const trackEdit = (id: string, body: AdfDocument | null) =>
+    body ? edits.current.set(id, body) : edits.current.delete(id);
+  const drop = (id: string) => setLost((list) => list.filter((l) => l.id !== id));
+  const kept = lost
+    .filter((l) => l.key === key)
+    .map(({ id, body }) => (
+      <li key={`lost-${id}`} className="comment-thread" data-lost-edit={id}>
+        <p role="alert" className="px-3 pt-2 text-[12px] text-fg-3">
+          This comment was deleted in Jira while you were editing it. Your text is kept here.
+        </p>
+        <RichEditor
+          id={`lost-${id}`}
+          label="Unsaved comment edit"
+          initial={body}
+          issueKey={key}
+          attachments={props.issue.attachments}
+          saveLabel="Post as new comment"
+          onSave={(doc) => {
+            if (actions.comment(key, doc)) drop(id);
+          }}
+          onCancel={() => drop(id)}
+        />
+      </li>
+    ));
   const threads = comments
     .filter((c) => !c.parentId)
     .map((root) => ({
@@ -79,15 +154,19 @@ export function CommentThreads(props: Props) {
         <Thread
           key={root.id}
           {...props}
+          trackEdit={trackEdit}
           root={root}
           replies={comments.filter((c) => c.parentId === root.id)}
         />
       ),
     }));
   // Property history interleaves with threads by time, as in Linear's Activity.
-  return [...threads, ...(props.events ?? [])]
-    .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
-    .map((item) => item.node);
+  return [
+    ...[...threads, ...(props.events ?? [])]
+      .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+      .map((item) => item.node),
+    ...kept,
+  ];
 }
 function Thread({
   issue,
@@ -96,6 +175,7 @@ function Thread({
   avatar,
   me,
   timestamp,
+  trackEdit = () => {},
 }: Props & { root: IssueComment; replies: IssueComment[] }) {
   const state = issue.commentStates?.[root.id] ?? {};
   const [expanded, setExpanded] = useState(() =>
@@ -182,6 +262,15 @@ function Thread({
     };
     requestAnimationFrame(choose);
   };
+  useRejectedComment(
+    issue.key,
+    root.orphanedFrom ? [root.id, root.orphanedFrom] : [root.id],
+    draftKey,
+    () => {
+      setComposer((n) => n + 1);
+      setReplying(true);
+    },
+  );
   const toggleReaction = (id: string, emoji: string) => {
     const reactions = issue.commentStates?.[id]?.reactions ?? [];
     actions.commentState(issue.key, id, {
@@ -307,15 +396,20 @@ function Thread({
               issueKey={issue.key}
               attachments={issue.attachments}
               onFiles={editFiles.onFiles}
-              onChange={editFiles.changed}
+              onChange={(body) => {
+                editFiles.changed(body);
+                trackEdit(comment.id, body);
+              }}
               saveLabel="Save comment"
               onSave={(body) => {
+                trackEdit(comment.id, null);
                 editFiles.sent(body);
                 actions.editComment(issue.key, comment.id, body);
                 setEditing(null);
                 restoreFocus(comment.id);
               }}
               onCancel={() => {
+                trackEdit(comment.id, null);
                 editFiles.sent(comment.body);
                 setEditing(null);
                 restoreFocus(comment.id);
@@ -472,7 +566,16 @@ function Thread({
           // Linear's comment menu groups and icons (RAJ-52, 2026-11-07).
           const entries: ActionEntry[] = [
             ...(mine
-              ? [{ name: "Edit", icon: "pencil" as const, run: () => setEditing(comment.id) }]
+              ? [
+                  {
+                    name: "Edit",
+                    icon: "pencil" as const,
+                    run: () => {
+                      setEditing(comment.id);
+                      trackEdit(comment.id, comment.body);
+                    },
+                  },
+                ]
               : []),
             {
               name: state.subscribed === false ? "Subscribe to thread" : "Unsubscribe from thread",
@@ -550,6 +653,7 @@ function Thread({
           detail="You cannot undo this action."
           action="Delete"
           onConfirm={() => {
+            trackEdit(deleting, null);
             actions.deleteComment(issue.key, deleting);
             setDeleting(null);
           }}

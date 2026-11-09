@@ -814,6 +814,29 @@ async function loadApplication() {
   }
   startPoll();
   if (state.writable)
+    void import("./draft-uploads").then(({ keepDraftUploadsClean }) =>
+      keepDraftUploadsClean(namespace, () => JSON.stringify(localSnapshot().changes), {
+        full: async (key) => {
+          const response = await fetch(`/api/issues/${encodeURIComponent(key)}`);
+          if (response.status === 404) return null;
+          if (!response.ok) throw new Error("Could not read the issue");
+          return response.json();
+        },
+        remove: async (key, id) => {
+          const response = await fetch(`/api/issues/${encodeURIComponent(key)}/ops`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ops: [{ op: "attachment.delete", id }],
+              board: state.issues.get(key)?.board,
+            }),
+          });
+          const result = await response.json().catch(() => ({ error: "No answer" }));
+          if (!response.ok || result.error) throw new Error(result.error);
+        },
+      }),
+    );
+  if (state.writable)
     fetchJson<JiraOptions>("/api/options", 5 * 60_000).then(
       (options) => set({ options }),
       () => {},
@@ -963,6 +986,11 @@ async function fetchFull(key: string) {
   const res = await fetch(`/api/issues/${encodeURIComponent(key)}`);
   if (!res.ok) throw new Error("Could not load issue details");
   let full = await res.json();
+  // A comment whose delete waits out the undo window (an undone add) stays hidden until Jira drops it.
+  if (heldDeletes.size && Array.isArray(full.fields?.comment?.comments))
+    full.fields.comment.comments = full.fields.comment.comments.filter(
+      (c: any) => !heldDeletes.has(String(c.id)),
+    );
   const local = state.full.get(key);
   if (local)
     for (const field of fullFields.get(key) ?? []) {
@@ -1219,6 +1247,21 @@ function send(changes: [string, Side, Side][]) {
     if (waiting) waiting.ops = mergeOps(waiting.ops, ops);
     else outbox.push({ key, board, ops });
   }
+  // A change that queued no write (nothing to send, or a redo that only cancelled a held comment delete) gets no answer
+  // for adopt() to settle, so its Jira fields would stay pinned over every refresh: Jira's copy owns them again (R2-comments-D1).
+  for (const { key } of jobs)
+    if (
+      !createdKeys.has(key) &&
+      !outbox.some((job) => job.key === key) &&
+      (fullFields.get(key)?.size ||
+        JIRA_ISSUE_FIELDS.some((field) => localFields.get(key)?.has(field)))
+    ) {
+      fullFields.delete(key);
+      for (const field of JIRA_ISSUE_FIELDS) localFields.get(key)?.delete(field);
+      needsFullRefresh.add(key);
+      touch(key);
+      queueSave();
+    }
   set({ pendingWrites: outbox.length });
   void flush();
 }
@@ -1397,6 +1440,11 @@ async function flush() {
               const { description: _d, descriptionBase: _b, ...fields } = op.fields;
               return Object.keys(fields).length ? [{ op: "fields", fields }] : [];
             });
+      // A comment Jira refused goes back into its composer, so the text is never lost (R2-comments-D4).
+      if (result!.error)
+        for (const op of job.ops)
+          if (op.op === "comment" && !created.has(op.ref))
+            rejectComment({ key: result!.key ?? job.key, parentId: op.parentId, body: op.body });
       adopt(result!.key ?? job.key, result!, !!result!.error, created, describes);
       for (const other of result!.others ?? [])
         adopt(other.key, { issue: other, error: result!.error }, false, created);
@@ -1415,8 +1463,33 @@ async function flush() {
     flushing = false;
   }
 }
+export const REJECTED_COMMENT = "better-jira:comment-rejected";
+export type RejectedComment = { key: string; parentId?: string; body: AdfDocument };
+/** Puts a refused comment back into the saved draft at `draftKey`, after anything typed since, and returns it. */
+export function restoreRejectedDraft(draftKey: string, body: AdfDocument): AdfDocument {
+  let draft = normalizeDocument("");
+  try {
+    draft = normalizeDocument(JSON.parse(localStorage.getItem(draftKey) ?? '""'));
+  } catch {}
+  const merged =
+    adfToText(draft).trim() || documentHasMedia(draft)
+      ? { ...draft, content: [...(draft.content ?? []), ...(body.content ?? [])] }
+      : body;
+  try {
+    localStorage.setItem(draftKey, JSON.stringify(merged));
+  } catch {}
+  return merged;
+}
+/** An open composer takes the text back (and cancels the event); otherwise it waits in the issue's comment draft. */
+function rejectComment(detail: RejectedComment) {
+  const event = new CustomEvent(REJECTED_COMMENT, { detail, cancelable: true });
+  if (dispatchEvent(event))
+    restoreRejectedDraft(`better-jira:comment-draft:${state.namespace}:${detail.key}`, detail.body);
+}
 /** Drops an issue made here that Jira refused to create, so no ghost stays or is created again after reload (R1-D24). */
 function discard(key: string) {
+  const issue = state.issues.get(key),
+    description = state.full.get(key)?.fields.description;
   const issues = new Map(state.issues),
     full = new Map(state.full);
   issues.delete(key);
@@ -1429,6 +1502,22 @@ function discard(key: string) {
   set({ issues, full });
   if (state.selected === key) navigate({ selected: null, panel: false });
   queueSave();
+  // The composer comes back with what was typed, so a create Jira refuses loses nothing (R2-comments-D3).
+  if (issue && !state.overlay)
+    beginCreate({
+      title: issue.summary,
+      descriptionDoc: description,
+      attachments: issue.attachments,
+      status: issue.status,
+      type: issue.type,
+      priority: issue.priority,
+      assignee: issue.assignee,
+      labels: issue.labels,
+      parent: issue.parent,
+      project: issue.project,
+      due: issue.due,
+      milestones: issue.milestones,
+    });
 }
 export const dismissWriteError = () => set({ writeError: null });
 /** A new issue's app key becomes Jira's key everywhere: issues, references, undo history and queued writes. */

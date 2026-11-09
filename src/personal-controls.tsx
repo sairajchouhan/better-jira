@@ -238,6 +238,7 @@ export function CreateIssue() {
           id="create-description"
           initial={description}
           onChange={setDescription}
+          attachments={attachments}
           expanded={expanded}
           tabLeaves
         />

@@ -1,7 +1,7 @@
 import type { Op } from "./jira-ops";
 import { issueAttachments, type Attachment } from "./attachment-media";
 
-type Uploaded = { attachment: Attachment; collection: string };
+export type Uploaded = { attachment: Attachment; collection: string };
 const mappings = new Map<string, Uploaded>();
 const slot = (key: string, id: string) => `better-jira:upload:${key}:${id}`;
 function known(key: string, id: string): Uploaded | undefined {
@@ -16,7 +16,7 @@ function known(key: string, id: string): Uploaded | undefined {
     }
   } catch {}
 }
-function remember(key: string, id: string, value?: Uploaded) {
+export function remember(key: string, id: string, value?: Uploaded) {
   const name = slot(key, id);
   if (value) mappings.set(name, value);
   else mappings.delete(name);

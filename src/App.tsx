@@ -19,7 +19,7 @@ const ImageViewer = lazy(() =>
   import("./image-viewer").then((module) => ({ default: module.ImageViewer })),
 );
 import { ReminderPicker, ReminderControl, ReminderDelivery } from "./reminders";
-import { CommentThreads, useDraftFiles } from "./comment-threads";
+import { CommentThreads, useDraftFiles, useRejectedComment } from "./comment-threads";
 import { ImageCommentCard } from "./image-thread";
 import { IssueDocument } from "./issue-resources";
 import { findIssueDocument, linkTitle } from "./issue-resource";
@@ -2438,12 +2438,18 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
   /** An image comment whose image was removed from the description opens the image on its own. */
   const [viewing, setViewing] = useState<{ file: Attachment; external: boolean }>();
   const draftKey = `better-jira:comment-draft:${get().namespace}:${issue.key}`;
-  const [draft] = useState(() => {
+  const [draft, setDraft] = useState(() => {
     try {
       return normalizeDocument(JSON.parse(localStorage.getItem(draftKey) ?? '""'));
     } catch {
       return normalizeDocument("");
     }
+  });
+  // A comment Jira refused comes back here with the caret in it (R2-comments-D4).
+  const [restored, setRestored] = useState(0);
+  useRejectedComment(issue.key, [undefined], draftKey, (body) => {
+    setDraft(body);
+    setRestored((n) => n + 1);
   });
   const timestamp = (date: string, id: string) => {
     const url = new URL(location.href);
@@ -2630,8 +2636,8 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
       <div className="mt-[14px]">
         {/* A new key clears the box after sending; autoFocus keeps the caret in it. */}
         <RichEditor
-          key={composer}
-          initial={composer ? "" : draft}
+          key={`${composer}:${restored}`}
+          initial={composer && !restored ? "" : draft}
           variant="comment"
           id="comment"
           scope={`${issue.key}:comment`}
@@ -2650,7 +2656,7 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
           onFiles={composerFiles.onFiles}
           label="Leave a comment…"
           placeholder="Leave a comment…"
-          autoFocus={composer > 0}
+          autoFocus={composer > 0 || restored > 0}
           saveLabel="Submit comment"
           onChange={(doc) => {
             composerFiles.changed(doc);
@@ -2667,6 +2673,7 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
                 localStorage.removeItem(draftKey);
               } catch {}
               setComposer((n) => n + 1);
+              setRestored(0);
             }
           }}
         />

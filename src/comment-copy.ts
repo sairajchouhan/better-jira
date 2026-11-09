@@ -54,7 +54,18 @@ export async function copyCommentDocument(
       : undefined;
     return {
       ...node,
-      ...(file ? { attrs: { ...node.attrs, id: file.id, type: "file", collection: "" } } : {}),
+      // A local file: the new issue uploads it once created and places Jira's media id here (R2-comments-D3).
+      ...(file
+        ? {
+            attrs: {
+              ...node.attrs,
+              id: file.id,
+              type: "file",
+              collection: "local",
+              localId: file.id,
+            },
+          }
+        : {}),
       ...(node.content ? { content: node.content.map(rewrite) } : {}),
     };
   };

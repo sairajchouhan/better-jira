@@ -39,3 +39,19 @@ test("Jira writes reach only the personal site; other sites fail before network 
       else process.env[name] = value;
   }
 });
+
+test("R2-comments-D4: Jira's bare refusal codes read as a sentence, once", () => {
+  const { JiraError } = require("./jira") as typeof import("./jira");
+  const error = new JiraError(
+    "POST",
+    "/rest/api/3/issue/KAN-200/comment",
+    400,
+    JSON.stringify({
+      errorMessages: ["CONTENT_LIMIT_EXCEEDED"],
+      errors: { comment: "CONTENT_LIMIT_EXCEEDED" },
+    }),
+  );
+  expect(error.reason).toBe(
+    "The text is longer than Jira allows (32,767 characters). Shorten it and send again.",
+  );
+});

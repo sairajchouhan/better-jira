@@ -64,7 +64,11 @@ export function MentionMenu({
   );
   useEffect(() => {
     if (cached) setLast({ query, people: cached });
-    else search.maybeExecute(query, issueKey);
+    // The bare "@" needs no debounce: it joins the list preloaded when the editor was approached.
+    else if (!query) {
+      search.cancel();
+      search.fn("", issueKey);
+    } else search.maybeExecute(query, issueKey);
   }, [query, issueKey]);
   useEffect(() => () => search.cancel(), []);
   useEffect(() => setActive(0), [query]);
@@ -75,7 +79,7 @@ export function MentionMenu({
     list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
   }, [active]);
   // A typed name with a space that matches no one is ordinary text: the menu steps aside.
-  const hidden = !people.length && (!settled || /\s/.test(query));
+  const hidden = !people.length && (settled ? /\s/.test(query) : !!query);
   keys.current = (event) => {
     if (event.key === "Escape") {
       dismiss();
@@ -106,7 +110,9 @@ export function MentionMenu({
       }}
       onMouseDown={(event) => event.preventDefault()}
     >
-      {people.length ? (
+      {!people.length && !settled ? (
+        <div className="px-2 py-1.5 text-[13px] text-fg-3">Searching people…</div>
+      ) : people.length ? (
         people.map((person, i) => (
           <div
             key={person.id}

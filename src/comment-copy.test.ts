@@ -66,6 +66,8 @@ test("copying remote media saves bytes once and preserves rich content, geometry
     expect(await saved[0]!.text()).toBe("bytes");
     expect(result.attachments).toHaveLength(1);
     expect(result.body.content?.[1]?.content?.[0]?.attrs?.id).toBe("local-id");
+    // R2-comments-D3: a copied file is local media, so the new issue uploads it and Jira gets its media id.
+    expect(result.body.content?.[1]?.content?.[0]?.attrs?.collection).toBe("local");
     expect(result.body.content?.[1]?.attrs).toEqual({
       layout: "center",
       width: 80,

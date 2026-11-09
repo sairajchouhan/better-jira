@@ -6,7 +6,7 @@ import { mediaCaretPlugin } from "./media-caret";
 import { mediaUploads, mergeLateMedia, type LateMedia } from "./editor-media-upload";
 import { editorBindings } from "./editor-bindings";
 import { activeMention, dismissMention, insertMention, mentionPlugin } from "./mentions";
-import { MentionMenu } from "./mention-menu";
+import { MentionMenu, searchPeople } from "./mention-menu";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { EditorState, NodeSelection, Selection, type Command } from "prosemirror-state";
 import { mediaNodeView, type MediaNodeView } from "./media-node-view";
@@ -607,12 +607,17 @@ export function RichEditor(props: RichEditorProps) {
       </button>
     </div>
   );
+  const preloadPeople = () =>
+    void searchPeople("", props.mentionIssue ?? props.issueKey).catch(() => {});
   return (
     <div
       className={`rich-editor group/editor relative ${props.inline ? "" : "mb-3 rounded-lg border border-line-2 bg-card"}`}
       data-variant={props.variant}
       data-inline={props.inline || undefined}
       data-expanded={props.expanded || undefined}
+      // The first @ lists people at once: Jira is asked when the editor is approached, not on the @ (R2-comments-D6).
+      onPointerEnter={props.onSave ? preloadPeople : undefined}
+      onFocusCapture={preloadPeople}
     >
       {props.onFiles && (
         <input

@@ -470,3 +470,37 @@ test("thread overrides, reply parents and reminder delivery persist with undo sn
   expect(loaded.state.undo[0]?.after[0]?.issue?.reminder).toEqual(savedIssue.reminder);
   db.close();
 });
+test("R2-comments-D2: reactions made in two tabs on the same issue both survive, and only removals made here remove", async () => {
+  const factory = new IDBFactory(),
+    one = await LocalDatabase.open("tabs", factory),
+    two = await LocalDatabase.open("tabs", factory);
+  const change = (reactions: Record<string, string[]>) => ({
+    key: "KAN-1",
+    issue: {
+      ...issue,
+      key: "KAN-1",
+      commentStates: Object.fromEntries(
+        Object.entries(reactions).map(([id, list]) => [id, { reactions: list }]),
+      ),
+    },
+    issueFields: ["commentStates"],
+    fullFields: [],
+    created: false,
+  });
+  const dirty = new Set(["KAN-1"]);
+  await one.save({ ...emptyLocalState(), changes: [change({ c1: ["💯"] })] }, dirty);
+  await one.load();
+  await two.load();
+  // Tab two adds 🔥 to c2; tab one, still on its own copy, adds 🚀 to c2 and removes its 💯 from c1.
+  await two.save({ ...emptyLocalState(), changes: [change({ c1: ["💯"], c2: ["🔥"] })] }, dirty);
+  await one.save({ ...emptyLocalState(), changes: [change({ c2: ["🚀"] })] }, dirty);
+  // Tab two saves again with only what it knew: its own copy must not bring back 💯 or drop 🚀.
+  await two.save(
+    { ...emptyLocalState(), changes: [change({ c1: ["💯"], c2: ["🔥", "👀"] })] },
+    dirty,
+  );
+  const [saved] = (await one.load()).state.changes;
+  expect(saved?.issue?.commentStates).toEqual({ c2: { reactions: ["🔥", "🚀", "👀"] } });
+  one.close();
+  two.close();
+});

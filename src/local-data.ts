@@ -4,6 +4,7 @@ import { activityFields } from "./issue-activity";
 import { localFileBlob } from "./media-types";
 import { validMediaEdits } from "./media-edits";
 import type { Full, Issue } from "./store";
+import type { CommentState } from "./comment-thread";
 
 export type Snapshot = {
   issue?: Issue;
@@ -262,6 +263,54 @@ function completed(transaction: IDBTransaction): Promise<void> {
   });
 }
 
+/** `theirs` with this tab's own changes since `base` on top: an emoji added or removed, a mark set. */
+function mergeList(base: string[] = [], mine: string[] = [], theirs: string[] = []) {
+  const added = mine.filter((r) => !base.includes(r)),
+    removed = new Set(base.filter((r) => !mine.includes(r)));
+  return [...new Set([...theirs.filter((r) => !removed.has(r)), ...added])];
+}
+/**
+ * Reactions and thread marks (resolved, subscribed, local edits) another tab saved for the same issue survive this tab's
+ * save, which applies only what it changed since `base`, its own last load or save (R2-comments-D2).
+ */
+export function mergeCommentMarks(
+  base: Issue | null | undefined,
+  mine: LocalChange,
+  theirs: LocalChange | undefined,
+): LocalChange {
+  if (!mine.issue || !theirs?.issue || theirs === mine) return mine;
+  const states: Record<string, CommentState> = {},
+    b = base?.commentStates ?? {},
+    m = mine.issue.commentStates ?? {},
+    t = theirs.issue.commentStates ?? {};
+  for (const id of new Set([...Object.keys(b), ...Object.keys(m), ...Object.keys(t)])) {
+    const state: Record<string, unknown> = {};
+    for (const field of new Set([
+      ...Object.keys(b[id] ?? {}),
+      ...Object.keys(m[id] ?? {}),
+      ...Object.keys(t[id] ?? {}),
+    ]) as Set<keyof CommentState>) {
+      const value =
+        field === "reactions"
+          ? mergeList(b[id]?.reactions, m[id]?.reactions, t[id]?.reactions)
+          : JSON.stringify(m[id]?.[field]) !== JSON.stringify(b[id]?.[field])
+            ? m[id]?.[field]
+            : t[id]?.[field];
+      if (value !== undefined && !(Array.isArray(value) && !value.length)) state[field] = value;
+    }
+    if (Object.keys(state).length) states[id] = state;
+  }
+  const reactions = mergeList(base?.reactions, mine.issue.reactions, theirs.issue.reactions);
+  const fields = new Set(mine.issueFields);
+  if (Object.keys(states).length) fields.add("commentStates");
+  if (reactions.length) fields.add("reactions");
+  return {
+    ...mine,
+    issue: { ...mine.issue, commentStates: states, reactions },
+    issueFields: [...fields],
+  };
+}
+
 /** Separate databases keep two Jira accounts from sharing local edits or files. */
 export class LocalDatabase {
   private urls = new Map<string, string>();
@@ -272,6 +321,8 @@ export class LocalDatabase {
    * Never shrinks: a change another tab sent and dropped stays in this tab's memory, and must not be written back (R2-create-D1).
    */
   private keys = new Set<string>();
+  /** This tab's copy of each changed issue as of its last load or save: what its own reaction edits are measured from. */
+  private base = new Map<string, Issue | null>();
   private constructor(private db: IDBDatabase) {}
   static async open(
     namespace: string,
@@ -304,6 +355,7 @@ export class LocalDatabase {
     this.writable = !parsed.readOnly;
     this.revision = object(raw) && Number.isSafeInteger(raw.revision) ? raw.revision : 0;
     for (const c of parsed.state.changes) this.keys.add(c.key);
+    this.base = new Map(parsed.state.changes.map((c) => [c.key, c.issue]));
     if (parsed.readOnly) {
       // An unsupported version stays in place untouched; copy it only once.
       const copies = await request(recovery.getAll());
@@ -359,21 +411,24 @@ export class LocalDatabase {
           );
         theirs = parsed.state;
       }
-      const stored = new Set(theirs.changes.map((c) => c.key));
+      const stored = new Set(theirs.changes.map((c) => c.key)),
+        their = new Map(theirs.changes.map((c) => [c.key, c]));
       const next: LocalState = {
         ...state,
         sequence: Math.max(state.sequence, theirs.sequence),
         changes: [
           ...theirs.changes.filter((c) => !dirty.has(c.key)),
-          ...state.changes.filter(
-            (c) => dirty.has(c.key) || (!stored.has(c.key) && !this.keys.has(c.key)),
-          ),
+          ...state.changes
+            .filter((c) => dirty.has(c.key) || (!stored.has(c.key) && !this.keys.has(c.key)))
+            // Comment marks and reactions: only this tab's own changes since its last load or save (R2-comments-D2).
+            .map((c) => mergeCommentMarks(this.base.get(c.key), c, their.get(c.key))),
         ],
       };
       store.put({ ...next, revision: revision + 1 }, "workspace");
       await done;
       this.revision = revision + 1;
       for (const c of next.changes) this.keys.add(c.key);
+      this.base = new Map(state.changes.map((c) => [c.key, c.issue]));
       return next.sequence;
     } catch (error) {
       try {

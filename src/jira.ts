@@ -36,6 +36,16 @@ export async function jira<T = any>(path: string, init: RequestInit = {}): Promi
   }
 }
 
+/** Jira answers some refusals with a bare code; say what it means (R2-comments-D4). */
+const CODES: Record<string, string> = {
+  CONTENT_LIMIT_EXCEEDED:
+    "The text is longer than Jira allows (32,767 characters). Shorten it and send again.",
+};
+const humanReason = (message: string) => {
+  const code = message.replace(/^[\w.-]+: /, "");
+  return CODES[code] ?? message;
+};
+
 export class JiraError extends Error {
   constructor(
     readonly method: string,
@@ -53,7 +63,7 @@ export class JiraError extends Error {
         ...(b.errorMessages ?? []),
         ...Object.entries(b.errors ?? {}).map(([k, v]) => `${k}: ${v}`),
       ];
-      if (messages.length) return messages.join("; ");
+      if (messages.length) return [...new Set(messages.map(humanReason))].join("; ");
     } catch {}
     return `Jira returned ${this.status}`;
   }
