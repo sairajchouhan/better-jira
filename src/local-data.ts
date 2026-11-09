@@ -11,7 +11,14 @@ export type Snapshot = {
   issueFields?: string[];
   fullFields?: string[];
 };
-export type LocalEdit = { keys: string[]; label: string; before: Snapshot[]; after: Snapshot[] };
+/** `tab` is the tab that made the edit; only it can undo it (R2-inbox-D3). */
+export type LocalEdit = {
+  keys: string[];
+  label: string;
+  before: Snapshot[];
+  after: Snapshot[];
+  tab?: string;
+};
 export type LocalChange = {
   key: string;
   issue: Issue | null;

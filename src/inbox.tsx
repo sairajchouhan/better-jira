@@ -174,7 +174,21 @@ const statusOf = (key: string) => {
   );
 };
 /** Filter facts for a row; priority, project and status come from the mirror when the issue is in it. */
-const facets = (item: InboxItem) => facetsOf(item, get().issues.get(item.key), statusOf(item.key));
+const facets = (item: InboxItem) =>
+  facetsOf(item, get().issues.get(item.key), statusOf(item.key), projectNames());
+/** Key prefix → project name, from the mirror; rebuilt when the issues change. */
+let projectsFor: Map<string, Issue> | undefined,
+  projects = new Map<string, string>();
+function projectNames() {
+  const issues = get().issues;
+  if (projectsFor !== issues) {
+    projectsFor = issues;
+    projects = new Map();
+    for (const issue of issues.values())
+      if (issue.project) projects.set(issue.project.key, issue.project.name);
+  }
+  return projects;
+}
 
 /** Unread rows, as Linear counts them: every unread notification in Jira, not just the loaded pages. */
 function useUnreadCount() {
@@ -242,6 +256,13 @@ async function sendGroups(action: "read" | "unread", groups: string[]) {
   for (let i = 0; i < groups.length; i += 50)
     await send({ action, groups: groups.slice(i, i + 50) });
 }
+/** Per group: the newest read state asked for, and its queue of sends. A group's sends run one at a time and a stale one is skipped,
+ *  so rapid U presses end where the last one did, here and in Jira; sent together they could land out of order (R2-inbox-D1). */
+const wanted = new Map<string, boolean>(),
+  queues = new Map<string, Promise<unknown>>();
+/** Per head: the newest markRead call, the only one that drops the local override. */
+const marking = new Map<string, number>();
+let marks = 0;
 /** Shown at once; on a writable site Jira takes it and the local override goes once the feed agrees, or at once if Jira refuses.
  *  A `label` makes it undoable. `all` marks Jira's whole feed read, and the groups Jira changed join `groups` for the undo. */
 async function markRead(
@@ -253,20 +274,48 @@ async function markRead(
 ) {
   if (!items.length) return;
   if (label) remember(label, () => void markRead(items, !value, undefined, groups));
-  const heads = items.map((i) => i.head);
+  const heads = items.map((i) => i.head),
+    mark = ++marks;
+  for (const head of heads) marking.set(head, mark);
   setLocal(heads, { read: value });
   if (!firstPage()?.writable) return;
-  try {
+  const mine = [...groups];
+  for (const group of mine) wanted.set(group, value);
+  const job = Promise.all(mine.map((g) => queues.get(g))).then(async () => {
     if (all) {
       const changed = (await send({ action: "read-all" }))?.groups ?? [];
       groups.push(...changed.filter((g) => !groups.includes(g)));
-    } else await sendGroups(value ? "read" : "unread", groups);
+    } else
+      await sendGroups(
+        value ? "read" : "unread",
+        mine.filter((g) => wanted.get(g) === value),
+      );
+  });
+  const queued = job.catch(() => {});
+  for (const group of mine) queues.set(group, queued);
+  try {
+    await job;
     await queryClient.invalidateQueries({ queryKey: ["inbox"] });
   } catch (error) {
     set({ perf: `Could not update Jira: ${(error as Error).message}` });
   } finally {
-    dropLocal(heads, "read");
+    for (const group of mine)
+      if (queues.get(group) === queued) {
+        queues.delete(group);
+        wanted.delete(group);
+      }
+    const latest = heads.filter((h) => marking.get(h) === mark);
+    for (const head of latest) marking.delete(head);
+    dropLocal(latest, "read");
   }
+}
+/** A row whose issue isn't mirrored has no `issue=` in the URL; this keeps it selected over a reload (R2-inbox-D6). The store drops it outside the inbox. */
+const ROW_PARAM = "notification";
+function keepRowInUrl(id: string | null) {
+  const url = new URL(location.href);
+  if (id) url.searchParams.set(ROW_PARAM, id);
+  else url.searchParams.delete(ROW_PARAM);
+  if (url.href !== location.href) history.replaceState(history.state, "", url);
 }
 export function selectRow(item: InboxItem | undefined, open: "side" | "page" = "side") {
   if (!item) return;
@@ -274,9 +323,13 @@ export function selectRow(item: InboxItem | undefined, open: "side" | "page" = "
   emit();
   if (item.unread) void markRead([item], true);
   const issue = get().issues.get(item.key);
-  if (issue)
+  if (issue) {
+    keepRowInUrl(null);
     navigate({ board: issue.board, selected: issue.key, panel: true, view: open, inbox: true });
-  else navigate({ selected: null, panel: false, inbox: true });
+  } else {
+    navigate({ selected: null, panel: false, inbox: true });
+    keepRowInUrl(item.id);
+  }
   requestAnimationFrame(() =>
     document
       .querySelector(`[data-inbox-row="${CSS.escape(item.id)}"]`)
@@ -304,7 +357,7 @@ export function markAllRead() {
     !v.priorityInbox && !hasFilters(v),
   );
 }
-/** Removes rows here, selects the next one as Linear does, and offers Linear's undo toast. */
+/** Removes rows here, selects the next one as Linear does, and offers Linear's undo toast. Returns what the undo restores, so more rows can join it. */
 function hide(items: InboxItem[], patch: Local, label: string, toast: string) {
   if (!items.length) return;
   const before = new Map(items.map((i) => [i.head, localState()[i.head]])),
@@ -323,6 +376,7 @@ function hide(items: InboxItem[], patch: Local, label: string, toast: string) {
     else {
       selectedId = null;
       emit();
+      keepRowInUrl(null);
       navigate({ selected: null, panel: false, inbox: true });
     }
   }
@@ -331,6 +385,7 @@ function hide(items: InboxItem[], patch: Local, label: string, toast: string) {
     if (was && gone.has(was.id)) selectRow(was);
   });
   ui.send({ type: "toast.show", text: toast, undo: "inbox" });
+  return before;
 }
 /** Linear's E and ⌫. Jira notifications cannot be deleted, so this hides the row in this browser until the issue has new activity. */
 export function deleteRow(item = selectedRow()) {
@@ -338,10 +393,10 @@ export function deleteRow(item = selectedRow()) {
 }
 const closed = (item: InboxItem) =>
   ["Completed", "Canceled", "Duplicate"].includes(facets(item).statusType);
-export function deleteAll(which: "all" | "read" | "completed") {
-  const items = rows.filter((r) =>
-    which === "read" ? !r.unread : which === "completed" ? closed(r) : true,
-  );
+/** Linear's Delete all: the whole feed, not just the loaded rows. The loaded ones go at once; older pages load and join the same undo (R2-inbox-D2). */
+export async function deleteAll(which: "all" | "read" | "completed") {
+  const matches = (r: InboxItem) =>
+    which === "read" ? !r.unread : which === "completed" ? closed(r) : true;
   const what =
     which === "read"
       ? "read notifications"
@@ -349,15 +404,37 @@ export function deleteAll(which: "all" | "read" | "completed") {
         ? "notifications for completed issues"
         : "notifications";
   if (
-    items.length &&
-    confirm(`Delete all ${what}? Jira keeps them; this hides them in better-jira.`)
+    !rows.length ||
+    !confirm(`Delete all ${what}? Jira keeps them; this hides them in better-jira.`)
   )
-    hide(
-      items,
-      { deleted: true },
-      "delete notifications",
-      items.length > 1 ? "Notifications deleted" : "Notification deleted",
+    return;
+  const items = rows.filter(matches),
+    toast = items.length === 1 ? "Notification deleted" : "Notifications deleted";
+  const before = hide(items, { deleted: true }, "delete notifications", toast);
+  const v = viewState(),
+    observer = new InfiniteQueryObserver<Feed, Error, InfiniteData<Feed, string>, string[], string>(
+      queryClient,
+      options(feedCategory(v)),
     );
+  let result = observer.getCurrentResult();
+  // ponytail: 20 pages (about 1,000 notifications) at most; anything older still shows.
+  for (let i = 0; i < 20 && result.hasNextPage && !result.isError; i++)
+    result = await observer.fetchNextPage({ cancelRefetch: false });
+  const rest = visibleItems(
+    itemsOf(result.data),
+    localState(),
+    v,
+    Date.now(),
+    selectedId,
+    facets,
+  ).filter(matches);
+  if (!rest.length) return;
+  if (!before) return void hide(rest, { deleted: true }, "delete notifications", toast);
+  for (const r of rest) before.set(r.head, localState()[r.head]);
+  setLocal(
+    rest.map((r) => r.head),
+    { deleted: true },
+  );
 }
 /** The row a snooze applies to: the right-clicked one, else the selected one. */
 let snoozeTarget: InboxItem | undefined,
@@ -610,15 +687,17 @@ function filterEntries(base: InboxItem[], v: InboxView): ActionEntry[] {
 function SnoozeMenu({ close }: { close: () => void }) {
   const [custom, setCustom] = useState(snoozeCustom);
   const [value, setValue] = useState("");
+  // The dialog's own error, not the footer's status line: it goes with the dialog (R2-inbox-D7).
+  const [error, setError] = useState("");
   return (
     <MenuSurface label="Snooze notification until…" command width={360} close={close}>
       {custom ? (
         <form
-          className="flex items-center gap-2 p-3"
+          className="flex flex-wrap items-center gap-2 p-3"
           onSubmit={(e) => {
             e.preventDefault();
             const until = new Date(value).getTime();
-            if (!(until > Date.now())) return set({ perf: "Choose a future snooze time" });
+            if (!(until > Date.now())) return setError("Choose a future snooze time");
             close();
             snoozeRow(until);
           }}
@@ -629,12 +708,19 @@ function SnoozeMenu({ close }: { close: () => void }) {
             required
             autoFocus
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={(e) => (setValue(e.target.value), setError(""))}
+            aria-invalid={!!error || undefined}
+            aria-describedby={error ? "snooze-error" : undefined}
             className="flex-1 rounded border border-line-2 bg-transparent px-2 py-1 text-[13px] text-fg"
           />
           <button type="submit" className="rounded bg-accent px-3 py-1 text-[13px] text-white">
             Snooze
           </button>
+          {error && (
+            <p id="snooze-error" role="alert" className="basis-full text-[12px] text-danger">
+              {error}
+            </p>
+          )}
         </form>
       ) : (
         // cmdk, as the other command menus: the first choice is highlighted, arrows move, typing filters.
@@ -823,17 +909,18 @@ export function InboxList() {
     if (unseen) void clearUnseen();
   }, [unseen]);
   const pages = data?.pages.length ?? 0;
-  // A reload keeps the open issue in the URL: select its row again, so U, E and H act on it.
-  const issueKey = useStore((s) => (s.inbox ? s.selected : null));
-  const known = itemsOf(data).some((i) => i.key === issueKey);
+  // A reload keeps the open issue, or a row outside the mirror, in the URL: select its row again, so U, E and H act on it.
+  const issueKey = useStore((s) => (s.inbox ? s.selected : null)),
+    rowId = issueKey ? null : new URLSearchParams(location.search).get(ROW_PARAM);
+  const known = itemsOf(data).some((r) => (issueKey ? r.key === issueKey : r.id === rowId));
   useEffect(() => {
-    if (selectedId || !issueKey) return;
-    const row = rows.find((r) => r.key === issueKey);
+    if (selectedId || (!issueKey && !rowId)) return;
+    const row = rows.find((r) => (issueKey ? r.key === issueKey : r.id === rowId));
     if (row) {
       selectedId = row.id;
       emit();
     }
-  }, [issueKey, known]);
+  }, [issueKey, rowId, known]);
   useEffect(() => {
     if (!end.current || !hasNextPage || isFetchingNextPage) return;
     // A fresh observer reports at once, so a short or fully filtered page keeps loading while the end stays in view.

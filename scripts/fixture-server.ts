@@ -345,7 +345,9 @@ let inbox = freshInbox(),
   /** Writes (read, unread, read-all) answer 502, as when Jira refuses. */
   inboxFail = false,
   /** Milliseconds each feed read waits, like Jira's slow gateway. */
-  inboxDelay = 0;
+  inboxDelay = 0,
+  /** Milliseconds each read/unread write waits before Jira applies it, in order of arrival; overlapping writes then land out of order. */
+  inboxWriteDelays: number[] = [];
 const unreadGroups = () =>
   inbox.nodes
     .filter((n) => n.readStates.includes("unread"))
@@ -368,6 +370,7 @@ async function inboxRoute(req: Request, url: URL) {
     };
   } else {
     const { action, groups = [] } = await req.json();
+    if (action === "read" || action === "unread") await Bun.sleep(inboxWriteDelays.shift() ?? 0);
     const marks = (node: (typeof inbox.nodes)[number], read: boolean) => {
       node.readStates = [read ? "read" : "unread"];
       node.headNotification.readState = read ? "read" : "unread";
@@ -679,6 +682,7 @@ async function handle(req: Request) {
     inbox = freshInbox(settings.inboxExtra ?? 0, settings.inboxExtraUnread ?? false);
     inboxFail = settings.inboxFail ?? false;
     inboxDelay = settings.inboxDelay ?? 0;
+    inboxWriteDelays = settings.inboxWriteDelays ?? [];
     requests.length = 0;
     writes.length = 0;
     types.clear();

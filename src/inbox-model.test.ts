@@ -272,6 +272,21 @@ test("filters match any value per field and every field; priority ordering puts 
   expect(ids({ ordering: "priority" })).toEqual(["c", "a", "b"]);
 });
 
+test("R2-inbox-D5: a row whose issue isn't mirrored takes its project's name from the key prefix", () => {
+  const projects = new Map([["KAN", "Team Astro"]]);
+  const mirrored = item({ id: "a", key: "KAN-1" }),
+    deleted = item({ id: "b", key: "KAN-69" }),
+    outside = item({ id: "c", key: "OUT-9" });
+  expect(facetsOf(mirrored, { project: { name: "Team Astro" } }, undefined, projects).project).toBe(
+    "Team Astro",
+  );
+  expect(facetsOf(deleted, undefined, undefined, projects).project).toBe("Team Astro");
+  expect(facetsOf(outside, undefined, undefined, projects).project).toBe("OUT");
+  expect(facetsOf(item({ id: "d", key: "" }), undefined, undefined, projects).project).toBe(
+    "No project",
+  );
+});
+
 test("statusType maps Jira statuses to Linear's status types", () => {
   expect(statusType({ name: "Done", category: "done" })).toBe("Completed");
   expect(statusType({ name: "Won't do", category: "done" })).toBe("Canceled");

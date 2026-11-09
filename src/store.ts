@@ -694,8 +694,9 @@ async function loadApplication() {
       if (!change.created) needsFullRefresh.add(change.key);
     }
   }
-  undo.splice(0, undo.length, ...local.undo);
-  redo.splice(0, redo.length, ...local.redo);
+  // Undo covers this tab's own edits only, as Linear's per-client history does; a reload keeps them (R2-inbox-D3).
+  undo.splice(0, undo.length, ...local.undo.filter((e) => e.tab === undoTab));
+  redo.splice(0, redo.length, ...local.redo.filter((e) => e.tab === undoTab));
   localSeq = local.sequence;
   set({
     boards,
@@ -1040,6 +1041,7 @@ function syncNavigation(replace = false) {
   else url.searchParams.delete("document");
   if (state.inbox) url.searchParams.set("inbox", "1");
   else url.searchParams.delete("inbox");
+  if (!state.inbox) url.searchParams.delete("notification"); // the inbox's selected row outside the mirror
   if (state.mine && !state.inbox) url.searchParams.set("mine", "1");
   else url.searchParams.delete("mine");
   if (url.href !== location.href) history[replace ? "replaceState" : "pushState"]({}, "", url);
@@ -1083,6 +1085,15 @@ const touch = (...keys: string[]) => {
     owners.delete(key);
   }
 };
+/** This tab across reloads (sessionStorage is per tab), so its undo history survives a reload and never reaches another tab.
+ *  ponytail: a duplicated tab copies sessionStorage and shares the history; mint a new id on `pageshow` duplicates if that matters. */
+const undoTab = (() => {
+  try {
+    return (sessionStorage["better-jira:undo-tab"] ??= crypto.randomUUID()) as string;
+  } catch {
+    return crypto.randomUUID();
+  }
+})();
 const tabId = crypto.randomUUID(),
   TAB_LOCK = "better-jira-tab:";
 /** Held while this tab is open, so other tabs know its saved changes are still being sent. */
@@ -1666,6 +1677,7 @@ function record(key: string | string[], label: string, fn: () => void, group?: s
       previous.after = changed.map(snapshot);
     else
       undo.push({
+        tab: undoTab,
         keys: changed,
         label,
         before: changed.map((key) => transaction!.before.get(key)!),

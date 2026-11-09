@@ -238,15 +238,18 @@ export function statusType({ name, category }: { name: string; category: string 
   return name || category ? "Unstarted" : "";
 }
 
+/** `projects` names a key prefix's project, from the mirror, so a row whose issue isn't mirrored joins its project's rows (R2-inbox-D5). */
 export function facetsOf(
   item: InboxItem,
   issue?: { priority?: string; project?: { name: string } | null },
   status?: { name: string; category: string },
+  projects?: Map<string, string>,
 ): Facets {
+  const prefix = item.key.split("-")[0]!;
   return {
     type: TYPE[item.kind],
     from: item.actor?.name ?? "Jira",
-    project: issue?.project?.name ?? (item.key ? item.key.split("-")[0]! : "No project"),
+    project: issue?.project?.name ?? (prefix ? (projects?.get(prefix) ?? prefix) : "No project"),
     priority: PRIORITY[issue ? priorityRank(issue.priority) : 4]!,
     statusType: statusType(status ?? { name: item.status, category: "" }),
   };

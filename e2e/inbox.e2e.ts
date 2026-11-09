@@ -368,7 +368,8 @@ test("Keyboard: arrows in the snooze and ··· menus, F then Enter, Enter after
     const snooze = `document.querySelector('[data-snooze][data-selected=true]')?.dataset.snooze`;
     await p.waitFor(`${snooze} === "An hour from now"`);
     await p.key("ArrowDown");
-    await p.waitFor(`${snooze} === "In 3 hours"`);
+    // The second choice is "In 3 hours", or "This evening" from 15:00 (Linear's order by time), in the browser's time zone.
+    await p.waitFor(`${snooze} === document.querySelectorAll('[data-snooze]')[1]?.dataset.snooze`);
     await p.key("Enter");
     await p.waitFor(`${rows}.length === 6 && ${toastText}.includes("Notification snoozed")`);
     await p.key("z");
@@ -417,6 +418,129 @@ test("A reload keeps the selected row and shows the last feed before Jira answer
     await reset({ inboxDelay: 3000 });
     await p.reload();
     await p.waitFor(`${rows}.length === 6`, 1500);
+  } finally {
+    await p.close();
+  }
+});
+
+const jiraUnread = async (n: number) =>
+  ((await (await fetch(`${APP}api/inbox`)).json()).items as { id: string; unread: boolean }[]).find(
+    (i) => i.id === `ari:cloud:jira:fixture:issue/${n}`,
+  )?.unread;
+
+test("R2-inbox-D1: U three times fast ends unread here and in Jira, though Jira would apply overlapping writes out of order", async () => {
+  await reset();
+  const p = await open("?inbox=1");
+  try {
+    // The second write waits in Jira: sent at once, the read lands after the last unread. Set once the fixture is up.
+    await reset({ inboxWriteDelays: [0, 600, 0] });
+    await p.waitFor(`${rows}.length === 7`);
+    await p.click(`[data-inbox-row*="issue/4"]`);
+    await p.waitFor(`${current}.startsWith("Read TEST-4")`);
+    for (const state of ["Unread", "Read", "Unread"]) {
+      await p.key("u");
+      await p.waitFor(`${current}.startsWith("${state} TEST-4")`);
+    }
+    await Bun.sleep(1500);
+    expect(await jiraUnread(4)).toBe(true);
+    expect(await p.eval(current)).toStartWith("Unread TEST-4");
+  } finally {
+    await p.close();
+  }
+});
+
+test("R2-inbox-D2: Delete all hides older pages too, and Z brings every row back", async () => {
+  await reset();
+  const p = await open("?inbox=1");
+  try {
+    await reset({ inboxExtra: 40, inboxExtraUnread: true });
+    await p.reload();
+    await p.waitFor(`${rows}.length === 20 && ${badge} === "45"`);
+    await p.eval(`window.confirm = () => true`);
+    await p.click(`[aria-label="Notification actions"]`);
+    await p.click(`[cmdk-item][data-value="Delete all"]`);
+    await p.waitFor(`document.body.innerText.includes("No notifications")`);
+    await Bun.sleep(1000);
+    expect(await p.eval(`${rows}.length`)).toBe(0);
+    expect(await p.eval(badge)).toBe("");
+    await p.key("z");
+    await p.waitFor(`${rows}.length === 47 && ${badge} === "45"`);
+  } finally {
+    await p.close();
+  }
+});
+
+test("R2-inbox-D3: undo history is this tab's own: a reload keeps it, another tab loaded after the edit has nothing to undo", async () => {
+  await reset();
+  const p = await open("?issue=TEST-2&view=page");
+  const undoOff = `document.querySelector('[aria-label="Undo"]').disabled`;
+  const commented = `document.querySelector('[data-comment]')?.textContent.includes("Edit in another tab")`;
+  try {
+    await p.waitFor(`!!document.getElementById('comment')`);
+    await p.click("#comment");
+    await p.type("Edit in another tab");
+    await p.key("Enter", "meta");
+    await p.waitFor(commented);
+    await p.waitFor(
+      `!${undoOff} && document.querySelector('[aria-label="Local save status"]')?.textContent==="Saved locally"`,
+    );
+    await p.reload();
+    await p.waitFor(`${commented} && !${undoOff}`);
+    // Another tab: same saved edits, its own (empty) sessionStorage.
+    await p.eval(`sessionStorage.clear()`);
+    await p.reload();
+    await p.waitFor(commented);
+    expect(await p.eval(undoOff)).toBe(true);
+    await p.key("z", "meta");
+    await Bun.sleep(300);
+    expect(await p.eval(commented)).toBe(true);
+  } finally {
+    await p.close();
+  }
+});
+
+test("R2-inbox-D6: a selected row outside the mirror stays selected over a reload", async () => {
+  await reset();
+  const p = await open("?inbox=1");
+  try {
+    await p.waitFor(`${rows}.length === 7`);
+    await p.click(`[data-inbox-row*="issue/9"]`);
+    await p.waitFor(`${current}.includes("OUT-9") && location.search.includes("notification=")`);
+    await p.reload();
+    await p.waitFor(
+      `${current}.includes("OUT-9") && document.body.innerText.includes("Open in Jira")`,
+    );
+    // Leaving the inbox drops it from the URL.
+    await p.click(`[data-inbox-row*="issue/1"]`);
+    await p.waitFor(`${current}.includes("TEST-1") && !location.search.includes("notification=")`);
+  } finally {
+    await p.close();
+  }
+});
+
+test("R2-inbox-D7: a past custom snooze time shows its error in the dialog, which goes with it", async () => {
+  await reset();
+  const p = await open("?inbox=1");
+  try {
+    await p.waitFor(`${rows}.length === 7`);
+    await p.key("j");
+    await p.key("h");
+    await p.click(`[cmdk-item][data-value="Custom…"]`);
+    const setValue = (v: string) =>
+      p.eval(
+        `(()=>{const i=document.querySelector('[aria-label="Snooze until"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,${JSON.stringify(v)});i.dispatchEvent(new Event('input',{bubbles:true}))})()`,
+      );
+    await setValue("2020-01-01T09:00");
+    await p.click(`[role=dialog] button[type=submit]`);
+    await p.waitFor(
+      `document.querySelector('[role=dialog] [role=alert]')?.textContent === "Choose a future snooze time"`,
+    );
+    await setValue("2099-01-01T09:00");
+    await p.click(`[role=dialog] button[type=submit]`);
+    await p.waitFor(`${rows}.length === 6 && !document.querySelector('[role=dialog]')`);
+    expect(await p.eval(`document.body.innerText.includes("Choose a future snooze time")`)).toBe(
+      false,
+    );
   } finally {
     await p.close();
   }

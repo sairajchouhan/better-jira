@@ -112,12 +112,6 @@ export async function unreadGroups(): Promise<{ id: string; head: string }[]> {
   return out;
 }
 
-const UNSEEN = `query InboxUnseen($ari: String) {
-  notifications { unseenNotificationCount(product: "jira", collabContextRoutingAri: $ari) }
-}`;
-export const unseen = async () =>
-  Number((await gateway("InboxUnseen", UNSEEN, {})).unseenNotificationCount) || 0;
-
 /** Read or unread, per row: a row is a Jira notification group, so the whole group changes. */
 export async function mark(groups: string[], read: boolean) {
   const field = read ? "markNotificationsByGroupIdAsRead" : "markNotificationsByGroupIdAsUnread";
@@ -147,13 +141,23 @@ export const clearUnseen = () =>
     {},
   );
 
-const g = globalThis as { inboxUnseen?: number; inboxChecked?: number };
-/** Called from the mirror's poll loop while a tab is open: a cheap count read, at most every 10 s. True when it moved, so tabs refetch the feed. */
+const PULSE = `query InboxPulse($ari: String) {
+  notifications {
+    unseenNotificationCount(product: "jira", collabContextRoutingAri: $ari)
+    notificationFeed(first: 1, collabContextRoutingAri: $ari, filter: { productFilter: "jira" }) {
+      nodes { headNotification { notificationId } }
+    }
+  }
+}`;
+const g = globalThis as { inboxPulse?: string; inboxChecked?: number };
+/** Called from the mirror's poll loop while a tab is open: a cheap read, at most every 10 s. True when the feed moved, so tabs refetch it.
+ *  The count alone misses a new notification once a tab's "seen" cleared it in between (1 → 0 → 1 reads as no change), so the newest notification's id counts too (R2-inbox-D4). */
 export async function unseenChanged(): Promise<boolean> {
   if (Date.now() - (g.inboxChecked ?? 0) < 10_000) return false;
   g.inboxChecked = Date.now();
-  const count = await unseen();
-  const changed = g.inboxUnseen !== undefined && count !== g.inboxUnseen;
-  g.inboxUnseen = count;
+  const data = await gateway("InboxPulse", PULSE, {});
+  const pulse = `${Number(data.unseenNotificationCount) || 0}:${data.notificationFeed?.nodes?.[0]?.headNotification?.notificationId ?? ""}`;
+  const changed = g.inboxPulse !== undefined && pulse !== g.inboxPulse;
+  g.inboxPulse = pulse;
   return changed;
 }
