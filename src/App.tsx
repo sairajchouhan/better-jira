@@ -274,8 +274,9 @@ export function App() {
         {loadError ? (
           <div role="alert">
             <p>{loadError}</p>
+            <p className="mt-1">Retrying automatically…</p>
             <button className="mt-3 rounded bg-sel px-3 py-2 text-fg" onClick={() => void load()}>
-              Retry loading
+              Retry now
             </button>
           </div>
         ) : (

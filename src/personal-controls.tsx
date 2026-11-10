@@ -155,12 +155,15 @@ export function CreateIssue() {
     ]).values(),
   ];
   const close = () => ui.send({ type: "overlay.close" });
+  // One id per draft, read from this render: a second submit before React re-renders (a double click) makes no second issue.
+  const submission = useMemo(() => crypto.randomUUID(), [draftIndex]);
   const submit = () => {
     if (!title.trim() || filesBusy || !dateValid || noParentType) return;
     const key = actions.create(
       title,
       {
         ...draft,
+        submission,
         type,
         ...(draft.priority === "" ? { priority: undefined } : {}),
         descriptionDoc: description,

@@ -172,6 +172,8 @@ export type IssueDraft = Partial<
     key: string;
     kind: "related" | "blocked" | "blocking" | "parent";
   };
+  /** Names one submit of a composer: a second call with it (a double click before React re-renders) creates nothing. */
+  submission?: string;
 };
 export type View = "side" | "page";
 export type JiraOptions = {
@@ -449,6 +451,7 @@ const storage = createActor(
     actors: {
       save: fromPromise(async () => {
         localSeq = Math.max(localSeq, await database!.save(localSnapshot()));
+        learnKeys(database!.moved);
       }),
     },
   }),
@@ -470,7 +473,8 @@ storage.subscribe((s) => {
 });
 /** Server data goes through TanStack Query: it dedupes loads in flight, schedules the poll and refetches on focus. Invalidate a key to refetch it. */
 export const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: false, staleTime: 0 } },
+  // "always": a read made offline fails at once instead of pausing and running unseen when the network returns (sync check 6).
+  defaultOptions: { queries: { retry: false, staleTime: 0, networkMode: "always" } },
 });
 /** Next property poll: soon while Jira is still syncing, every 30 s once settled, 10 s after a failure. */
 export const pollDelay = (failed: boolean, pending = 0) =>
@@ -647,6 +651,7 @@ async function loadApplication() {
     full = new Map<string, Full>();
   changedKeys.clear();
   createdKeys.clear();
+  othersCreating.clear();
   owners.clear();
   localFields.clear();
   fullFields.clear();
@@ -666,7 +671,10 @@ async function loadApplication() {
       continue;
     changedKeys.add(change.key);
     owners.set(change.key, change.tab ?? "");
-    if (change.created) createdKeys.add(change.key);
+    if (change.created) {
+      createdKeys.add(change.key);
+      othersCreating.add(change.key);
+    }
     localFields.set(change.key, new Set(change.issueFields));
     fullFields.set(change.key, new Set(change.fullFields));
     if (change.issue === null) issues.delete(change.key);
@@ -699,6 +707,7 @@ async function loadApplication() {
   undo.splice(0, undo.length, ...local.undo.filter((e) => e.tab === undoTab));
   redo.splice(0, redo.length, ...local.redo.filter((e) => e.tab === undoTab));
   localSeq = local.sequence;
+  for (const [from, to] of Object.entries(local.keys ?? {})) jiraKeys.set(from, to);
   set({
     boards,
     site: client.site,
@@ -790,11 +799,14 @@ async function loadApplication() {
                 ),
               ),
               claimed = await database!.claim(tabId, live);
-            for (const key of claimed) owners.delete(key);
+            for (const key of claimed) {
+              owners.delete(key);
+              othersCreating.delete(key);
+            }
             await replay(claimed);
           }),
         )
-      : replay());
+      : (othersCreating.clear(), replay()));
   if (!navigationReady) {
     restoreNavigation();
     navigationReady = true;
@@ -817,6 +829,12 @@ async function loadApplication() {
           if (response.status === 404) return null;
           if (!response.ok) throw new Error("Could not read the issue");
           return response.json();
+        },
+        uploaded: async (client) => {
+          const response = await fetch(`/api/uploads/${encodeURIComponent(client)}`);
+          if (response.status === 404) return undefined;
+          if (!response.ok) throw new Error("Could not read the upload");
+          return (await response.json()).id;
         },
         remove: async (key, id) => {
           const response = await fetch(`/api/issues/${encodeURIComponent(key)}/ops`, {
@@ -1084,7 +1102,8 @@ function syncNavigation(replace = false) {
 function restoreNavigation() {
   const params = new URL(location.href).searchParams,
     wanted = params.get("issue"),
-    issue = state.issues.get(wanted ?? "");
+    // A link to an issue's app key opens the issue Jira made for it, wherever it was created (sync check 7).
+    issue = state.issues.get(currentKey(wanted ?? ""));
   const board = issue?.board ?? Number(params.get("board"));
   restoringNavigation = true;
   navigate({
@@ -1165,6 +1184,7 @@ function localSnapshot(): LocalState {
       })),
     undo: [...undo],
     redo: [...redo],
+    keys: Object.fromEntries(jiraKeys),
   };
 }
 /** Ignored until storage has opened, and while it is blocked; see storageMachine. */
@@ -1308,6 +1328,15 @@ async function flush() {
       // Later status changes merge into a held job; the wait restarts with each.
       if (job.hold && job.hold > Date.now()) {
         await new Promise((resolve) => setTimeout(resolve, job.hold! - Date.now()));
+        continue;
+      }
+      // Another tab is creating this issue: its edits here wait for the Jira key that tab saves, then go there (sync check 7).
+      // ponytail: waits until that tab sends its create; if it closes first, the create is sent on the next load.
+      if (othersCreating.has(currentKey(job.key))) {
+        if (!learnKeys(await database?.keys().catch(() => ({})))) {
+          set({ perf: `Waiting for ${job.key} to be created in Jira…` });
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
         continue;
       }
       job.started = true;
@@ -1536,9 +1565,13 @@ function rekey(from: string, to: string) {
     mentions = (v: unknown) => JSON.stringify(v).includes(`"${from}"`);
   const issues = new Map<string, Issue>(),
     full = new Map<string, Full>();
+  // The issue under its app key carries the local edits: it wins over a copy the poll already brought under the Jira key.
   for (const [k, v] of state.issues)
-    issues.set(ids.get(k) ?? k, mentions(v) ? renameIds(v, ids) : v);
-  for (const [k, v] of state.full) full.set(ids.get(k) ?? k, k === from ? renameIds(v, ids) : v);
+    if (k !== to || !state.issues.has(from))
+      issues.set(ids.get(k) ?? k, mentions(v) ? renameIds(v, ids) : v);
+  for (const [k, v] of state.full)
+    if (k !== to || !state.full.has(from))
+      full.set(ids.get(k) ?? k, k === from ? renameIds(v, ids) : v);
   for (const map of [localFields, fullFields] as Map<string, Set<string>>[]) {
     const v = map.get(from);
     if (v) {
@@ -1566,6 +1599,17 @@ function rekey(from: string, to: string) {
   set({ issues, full });
   ui.send({ type: "toast.rekey", from, to });
   if (state.selected === from) navigate({ selected: to });
+}
+/** Takes up key moves another tab saved for issues it created (app key → Jira key). Returns whether any was new. */
+function learnKeys(keys: Record<string, string> = {}) {
+  let learned = false;
+  for (const [from, to] of Object.entries(keys))
+    if (!jiraKeys.has(from)) {
+      jiraKeys.set(from, to);
+      learned = true;
+      if (state.issues.has(from)) rekey(from, to);
+    }
+  return learned;
 }
 /** Takes Jira's copy of what Jira owns, once no later write for the issue waits. `force` rolls a failed write back. */
 function adopt(
@@ -1737,14 +1781,15 @@ export async function restoreLocalFiles(files: NonNullable<Issue["attachments"]>
     }),
   );
 }
-export async function addIssueFiles(key: string, files: File[]) {
+/** `clients` name each upload (see draft-uploads), so cleanup can find what it made by id. */
+export async function addIssueFiles(key: string, files: File[], clients?: string[]) {
   if (!database || !state.canEdit)
     throw new Error("Local file storage is unavailable. Retry local storage first.");
   const db = database,
     // On a writable site the files go to Jira now, so a failed upload shows on the file (Retry, Discard) before anything looks saved.
     saved =
       state.writable && !createdKeys.has(key)
-        ? await uploadNow(key, files, (files) => db.addFiles(files))
+        ? await uploadNow(key, files, (files) => db.addFiles(files), clients)
         : await db.addFiles(files),
     issue = state.issues.get(key);
   if (issue)
@@ -1824,7 +1869,10 @@ function record(
       return before.issue !== after.issue || before.full !== after.full;
     });
     if (!changed.length) return;
-    for (const key of changed) changedKeys.add(key);
+    for (const key of changed) {
+      changedKeys.add(key);
+      editCounts.set(key, (editCounts.get(key) ?? 0) + 1);
+    }
     touch(...changed);
     if (!quiet) send(changed.map((key) => [key, transaction!.before.get(key)!, snapshot(key)]));
     const previous = undo.at(-1);
@@ -2093,6 +2141,24 @@ export const boardOf = (key: string) =>
   state.boards.find((b) => b.id === state.issues.get(key)?.board);
 
 let localSeq = 0;
+/** Local edits per issue in this tab, so a slow read can tell whether the issue was edited meanwhile. */
+const editCounts = new Map<string, number>();
+/** Issues another open tab made and is still creating in Jira: edits here wait for the Jira key it gets. */
+const othersCreating = new Set<string>();
+/** Submission id → the issue it created. */
+const submissions = new Map<string, string>();
+/** The next local number, shared with this browser's other tabs at once, so two tabs never mint the same PREFIX-NEWn (sync check 7). */
+function nextSeq() {
+  const name = `better-jira:sequence:${state.namespace}`;
+  try {
+    localSeq = Math.max(localSeq, Number(localStorage.getItem(name)) || 0);
+  } catch {}
+  localSeq++;
+  try {
+    localStorage.setItem(name, String(localSeq));
+  } catch {}
+  return localSeq;
+}
 
 // Local overrides are saved separately from the read-only Jira mirror.
 export const actions = {
@@ -2275,6 +2341,7 @@ export const actions = {
   },
   async restoreJira(key: string) {
     if (createdKeys.has(key) || !state.canEdit) return;
+    const edits = editCounts.get(key);
     try {
       const [remote, full] = await Promise.all([
         fetchJson<Issue[]>("/api/issues"),
@@ -2282,6 +2349,16 @@ export const actions = {
       ]);
       const issue = remote.find((i) => i.key === key);
       if (!issue) throw new Error("Issue is no longer in the Jira mirror");
+      // An edit made after the click is newer than the choice to restore: keep it and say so (sync check 6).
+      if (editCounts.get(key) !== edits) {
+        ui.send({
+          type: "toast.show",
+          text: `Didn't restore ${key}`,
+          detail:
+            "You edited it while Jira's version loaded. Restore again to discard your changes.",
+        });
+        return;
+      }
       // Jira already has this version: queued edits are dropped and nothing is written (R2-D3).
       cancelWrites(key);
       record(
@@ -2308,7 +2385,11 @@ export const actions = {
         true,
       );
     } catch {
-      set({ perf: "Could not read the Jira version. Your local changes are still here." });
+      ui.send({
+        type: "toast.show",
+        text: "Could not read the Jira version",
+        detail: "Nothing was restored. Your local changes are still here.",
+      });
     }
   },
   patch(
@@ -2516,7 +2597,7 @@ export const actions = {
     timed(`comment on ${key}`, () =>
       record(key, `comment on ${key}`, () => {
         const c = {
-          id: `local-${++localSeq}`,
+          id: `local-${nextSeq()}`,
           ...(parentId ? { parentId } : {}),
           author: { accountId: ME.id, displayName: ME.name, avatarUrls: { "24x24": ME.avatar } },
           body,
@@ -2589,15 +2670,26 @@ export const actions = {
   /** Like Linear, creating from the composer stays on the board and confirms with a toast; `open` shows the new issue instead. */
   create(summary: string, draft: IssueDraft = {}, more = false, open = false) {
     if (!state.canEdit) return;
+    // The submit itself is guarded, not just its button: one submission makes one issue (comments smoke F1).
+    const made = draft.submission && submissions.get(draft.submission);
+    if (made) return made;
     const board = state.boards.find((b) => b.id === state.board);
     const statuses = board?.columns.flatMap((c) => c.statuses) ?? [];
     const status = statuses.find((s) => s.id === draft.status) ?? statuses[0];
     if (!board || !status || !summary.trim()) return;
     const prefix =
       [...state.issues.values()].find((i) => i.board === board.id)?.key.split("-")[0] ?? "LOCAL";
-    const key = `${prefix}-NEW${++localSeq}`;
+    const key = `${prefix}-NEW${nextSeq()}`;
     createdKeys.add(key);
-    const { descriptionDoc, related, title: _title, copy: _copy, ...fields } = draft;
+    if (draft.submission) submissions.set(draft.submission, key);
+    const {
+      descriptionDoc,
+      related,
+      title: _title,
+      copy: _copy,
+      submission: _submission,
+      ...fields
+    } = draft;
     const document = normalizeDocument(descriptionDoc ?? draft.description ?? "");
     timed(`create ${key}`, () =>
       record(key, `create ${key}`, () => {

@@ -24,8 +24,8 @@ mock.module("./jira", () => ({
 mock.module("./mirror", () => ({
   ESTIMATES: [],
   refresh: () => turn(() => undefined),
-  createdIssue: (client: string) => created.get(client),
-  rememberCreated: (client: string, key: string) => created.set(client, key),
+  madeFor: (client: string) => created.get(client),
+  rememberMade: (client: string, key: string) => created.set(client, key),
 }));
 const { applyOps } = await import("./jira-writes");
 import type { Op } from "./jira-ops";
@@ -103,4 +103,42 @@ test("R2-create-D2: a create's independent Jira reads go out together, not one a
   // A client with a later write queued for the issue doesn't wait for its re-read.
   calls.length = 0;
   expect((await applyOps("K-1", [], undefined, false)).issue).toBe(undefined);
+});
+
+test("sync D1: a comment whose first send reached Jira is not posted again by a replay, however soon it comes", async () => {
+  const { opsFor } = await import("./jira-ops");
+  let posted = 0;
+  answer = (path, init) =>
+    path === "/rest/api/3/issue/K-1/comment" && init?.method === "POST"
+      ? { id: String(10120 + posted++) }
+      : {};
+  calls.length = 0;
+  // The ops a closed tab's saved change replays: a local comment Jira has no id for yet.
+  const comment = {
+    id: "local-7",
+    created: "2026-11-10T13:40:06.000Z",
+    body: { type: "doc", version: 1, content: [] },
+  };
+  const issue = { key: "K-1", board: 1, status: "1", labels: [] } as any;
+  const ops = () =>
+    opsFor(
+      { issue, full: { key: "K-1", fields: { comment: { comments: [] } } } },
+      { issue, full: { key: "K-1", fields: { comment: { comments: [comment] } } } },
+      new Map(),
+    );
+  // The closing tab's send and the next tab's replay overlap, then a reload replays it again.
+  const [one, two] = await Promise.all([applyOps("K-1", ops()), applyOps("K-1", ops())]);
+  const three = await applyOps("K-1", ops());
+  expect(posted).toBe(1);
+  expect([one, two, three].map((r) => r.created["local-7"])).toEqual(["10120", "10120", "10120"]);
+  // A comment Jira has since lost is posted again.
+  const { JiraError } = await import("./jira");
+  answer = (path, init) => {
+    if (path === "/rest/api/3/issue/K-1/comment/10120")
+      throw Object.assign(new JiraError("GET", path, 404, "gone"), { status: 404 });
+    return path === "/rest/api/3/issue/K-1/comment" && init?.method === "POST"
+      ? { id: String(10120 + posted++) }
+      : {};
+  };
+  expect((await applyOps("K-1", ops())).created["local-7"]).toBe("10121");
 });

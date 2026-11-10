@@ -6,7 +6,7 @@ import * as mirror from "./mirror";
 import { parsePreferences } from "./view-model";
 import { serverConfiguration } from "./server-config";
 import { fetchPreview } from "./link-preview";
-import { applyOps } from "./jira-writes";
+import { applyOps, uploadAttachment } from "./jira-writes";
 import { jira, JiraError, canWrite } from "./jira";
 import * as inbox from "./notifications";
 
@@ -202,19 +202,25 @@ const server = serve({
           );
         try {
           const form = await req.formData(),
-            file = form.get("file");
+            file = form.get("file"),
+            client = form.get("client");
           if (!(file instanceof File))
             return Response.json({ error: "Choose a file." }, { status: 400 });
-          const body = new FormData();
-          body.append("file", file, file.name);
-          const [attachment] = await jira(
-            `/rest/api/3/issue/${encodeURIComponent(req.params.key)}/attachments`,
-            { method: "POST", body },
+          const id = await uploadAttachment(
+            req.params.key,
+            file,
+            typeof client === "string" && client ? client : undefined,
           );
-          const mediaId = await mirror.media.identify(String(attachment.id));
+          const mediaId = await mirror.media.identify(id);
           const issue = await jira(
             `/rest/api/3/issue/${encodeURIComponent(req.params.key)}?fields=attachment`,
           );
+          const attachment = issue.fields.attachment?.find((a: any) => String(a.id) === id) ?? {
+            id,
+            filename: file.name,
+            mimeType: file.type,
+            size: file.size,
+          };
           return Response.json({
             attachment: {
               id: String(attachment.id),
@@ -234,6 +240,13 @@ const server = serve({
         }
       }),
     },
+    // The attachment an upload made, by the app's id for it, so a cut-off draft upload is removed by id, never guessed (R2-comments-D5).
+    "/api/uploads/:client": localOnly((req: BunRequest<"/api/uploads/:client">) => {
+      const id = mirror.madeFor(`upload:${req.params.client}`);
+      return id
+        ? Response.json({ id })
+        : Response.json({ error: "No such upload" }, { status: 404 });
+    }),
     "/api/issues/:key/media/:mediaId": localOnly(
       async (req: BunRequest<"/api/issues/:key/media/:mediaId">) => {
         if (req.method !== "GET")

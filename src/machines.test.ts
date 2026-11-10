@@ -193,3 +193,30 @@ test("ui: a document requires an open issue and clears with its issue context", 
   ui.send({ type: "navigate", selected: null, panel: true, document: "doc" });
   expect(ui.getSnapshot().context.document).toBeNull();
 });
+
+test("sync D4: a load that can't reach the server retries by itself, backing off, and says so", async () => {
+  const clock = new SimulatedClock();
+  let attempts = 0;
+  const app = createActor(
+    appMachine.provide({
+      actors: {
+        load: fromPromise(async () => {
+          if (attempts++ < 2) throw new TypeError("Failed to fetch");
+        }),
+      },
+    }),
+    { clock },
+  ).start();
+  app.send({ type: "load" });
+  await waitFor(app, (s) => s.matches("failed"));
+  expect(app.getSnapshot().context.error).toBe("Can't reach the better-jira server.");
+  clock.increment(999);
+  expect(attempts).toBe(1);
+  clock.increment(1);
+  await waitFor(app, (s) => s.matches("failed") && attempts === 2);
+  // The next wait is twice as long.
+  clock.increment(1999);
+  expect(attempts).toBe(2);
+  clock.increment(1);
+  await waitFor(app, (s) => s.matches("ready"));
+});

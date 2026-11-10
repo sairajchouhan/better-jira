@@ -75,6 +75,8 @@ function uploaded(entry: DraftUpload): Uploaded | undefined {
 type Jira = {
   full: (key: string) => Promise<any>;
   remove: (key: string, attachment: string) => Promise<void>;
+  /** The attachment id the server made for this upload (the entry's id), or undefined if Jira never got it. */
+  uploaded: (client: string) => Promise<string | undefined>;
 };
 /**
  * Settles old entries: a file a draft or an unsent change still holds stays; one Jira's description or comments show
@@ -116,42 +118,21 @@ export async function cleanDraftUploads(
       ...(full.fields?.comment?.comments ?? []).map((c: any) => c.body),
     ]);
     const files: any[] = full.fields?.attachment ?? [];
-    // Files whose upload did answer (any slot of this issue) are never taken for a cut-off one.
-    const claimed = new Set<string>();
-    try {
-      for (let i = 0; i < localStorage.length; i++) {
-        const name = localStorage.key(i);
-        if (name?.startsWith(`better-jira:upload:${key}:`))
-          claimed.add(String(JSON.parse(localStorage.getItem(name) ?? "{}")?.attachment?.id));
-      }
-    } catch {}
     for (const entry of entries) {
       if (entry.local && (held.has(entry.local) || pending.includes(entry.local))) continue;
-      let attachment: string | undefined;
-      if (entry.local) {
-        const value = uploaded(entry);
-        const id = value?.attachment.id,
-          media = value?.attachment.mediaId;
-        if (
-          id &&
-          files.some((f) => String(f.id) === id) &&
-          !shown.has(id) &&
-          !(media && shown.has(media))
-        )
-          attachment = id;
-      } else {
-        // The upload's answer never arrived (a reload cut it off): find it by name, size and time.
-        const match = files.find(
-          (f) =>
-            !claimed.has(String(f.id)) &&
-            f.filename === entry.name &&
-            Number(f.size) === entry.size &&
-            (!f.created || Math.abs(Date.parse(f.created) - entry.at) < 10 * 60_000) &&
-            !shown.has(String(f.id)) &&
-            !(f.mediaId && shown.has(f.mediaId)),
-        );
-        if (match) claimed.add((attachment = String(match.id)));
+      // Only the attachment this upload made, by id: from its slot, or, when the answer never arrived (a reload cut it
+      // off), from the server's record of it. A file of the same name and size someone else attached is never touched.
+      let id: string | undefined, media: string | undefined;
+      try {
+        if (entry.local) ({ id, mediaId: media } = uploaded(entry)?.attachment ?? {});
+        else id = await jira.uploaded(entry.id);
+      } catch {
+        continue;
       }
+      const file = files.find((f) => String(f.id) === id);
+      media ??= file?.mediaId;
+      const attachment =
+        file && !shown.has(id!) && !(media && shown.has(media)) ? String(file.id) : undefined;
       try {
         if (attachment) await jira.remove(key, attachment);
       } catch {

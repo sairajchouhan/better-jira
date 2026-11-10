@@ -30,8 +30,8 @@ export type Op =
   /** `client` names this one submit, so a replay (another tab, a reload, a retry) gets the issue the first send made. */
   | { op: "create"; fields: Fields & { status?: string }; client?: string }
   | { op: "delete" }
-  /** `ref` is the app's id for the new comment; the server answers with Jira's id for it. */
-  | { op: "comment"; ref: string; body: AdfDocument; parentId?: string }
+  /** `ref` is the app's id for the new comment; the server answers with Jira's id for it. `client` names this one comment, so a replay gets the comment the first send made. */
+  | { op: "comment"; ref: string; body: AdfDocument; parentId?: string; client?: string }
   | { op: "comment.edit"; id: string; body: AdfDocument }
   | { op: "comment.delete"; id: string }
   | { op: "link"; target: string; kind: string; remove?: boolean }
@@ -160,6 +160,7 @@ function commentOps(before: Side, after: Side): Op[] {
       ref: c.id,
       body: statesB[c.id]?.body ?? c.body,
       ...(c.parentId ? { parentId: c.parentId } : {}),
+      ...(c.created ? { client: `${c.id}@${c.created}` } : {}),
     });
   for (const c of listB) {
     const sa = statesA[c.id],
@@ -191,7 +192,13 @@ function imageCommentOps(a: Issue | undefined, b: Issue): Op[] {
     ops: Op[] = [];
   for (const [id, c] of after) {
     const old = before.get(id);
-    if (!old) ops.push({ op: "comment", ref: id, body: textToAdf(c.text) });
+    if (!old)
+      ops.push({
+        op: "comment",
+        ref: id,
+        body: textToAdf(c.text),
+        ...(c.at ? { client: `${id}@${c.at}` } : {}),
+      });
     else if (old.text !== c.text) ops.push({ op: "comment.edit", id, body: textToAdf(c.text) });
   }
   for (const id of before.keys()) if (!after.has(id)) ops.push({ op: "comment.delete", id });

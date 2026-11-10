@@ -269,33 +269,43 @@ export const uiMachine = setup({
 });
 
 /** `load` runs the whole mirror load; store.ts provides it. */
+/** Loading retries on its own with backoff (1 s, 2 s, 4 s … up to 30 s), so a server that comes back is picked up without a click (sync D4). */
+export const LOAD_RETRY_MS = (attempt: number) => Math.min(30_000, 1000 * 2 ** attempt);
 export const appMachine = setup({
-  types: {} as { context: { error: string }; events: { type: "load" } | { type: "reload" } },
+  types: {} as {
+    context: { error: string; attempt: number };
+    events: { type: "load" } | { type: "reload" };
+  },
   actors: { load: fromPromise<void>(async () => {}) },
+  delays: { retry: ({ context }) => LOAD_RETRY_MS(context.attempt - 1) },
 }).createMachine({
   id: "app",
   initial: "idle",
-  context: { error: "" },
+  context: { error: "", attempt: 0 },
   states: {
     idle: { on: { load: "loading" } },
     loading: {
       entry: assign({ error: "" }),
       invoke: {
         src: "load",
-        onDone: "ready",
+        onDone: { target: "ready", actions: assign({ attempt: 0 }) },
         onError: {
           target: "failed",
           actions: assign({
+            attempt: ({ context }) => context.attempt + 1,
             error: ({ event }) =>
-              event.error instanceof Error
-                ? event.error.message
-                : "Could not load the Jira mirror. Retry.",
+              // fetch's own error: the request never got an answer.
+              event.error instanceof TypeError
+                ? "Can't reach the better-jira server."
+                : event.error instanceof Error
+                  ? event.error.message
+                  : "Could not load the Jira mirror.",
           }),
         },
       },
     },
     ready: { on: { reload: "loading" } },
-    failed: { on: { load: "loading", reload: "loading" } },
+    failed: { after: { retry: "loading" }, on: { load: "loading", reload: "loading" } },
   },
 });
 

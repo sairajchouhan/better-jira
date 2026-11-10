@@ -51,7 +51,7 @@ export function useDraftFiles(key: string) {
         noted = get().writable ? noteDraftUploads(namespace, key, files) : [];
       let saved: Awaited<ReturnType<typeof addIssueFiles>> = [];
       try {
-        saved = await addIssueFiles(key, files);
+        saved = await addIssueFiles(key, files, noted);
       } finally {
         settleDraftUploads(
           namespace,

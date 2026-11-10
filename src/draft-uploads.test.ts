@@ -31,12 +31,13 @@ test("R2-comments-D5: orphaned composer uploads leave Jira on a later load, and 
   try {
     const file = (name: string) => new File(["x".repeat(name.length)], name);
     // dropped: uploaded, then the draft dropped it; sent: a comment shows it; drafted: a saved draft still holds it;
-    // cut: a reload cut its upload off, so only Jira knows its id.
+    // cut: a reload cut its upload off, so only the server knows its id; lost: cut off before it reached Jira.
     const ids = noteDraftUploads("ns", "KAN-1", [
       file("dropped.png"),
       file("sent.png"),
       file("drafted.png"),
       file("cut.png"),
+      file("lost.png"),
     ]);
     settleDraftUploads("ns", ids.slice(0, 3), ["l-dropped", "l-sent", "l-drafted"]);
     for (const [local, id] of [
@@ -59,10 +60,14 @@ test("R2-comments-D5: orphaned composer uploads leave Jira on a later load, and 
             { id: "102", filename: "sent.png", size: 8 },
             { id: "103", filename: "drafted.png", size: 11 },
             { id: "104", filename: "cut.png", size: 7, created: new Date().toISOString() },
+            // Someone else's file with the same name, size and time as the lost upload.
+            { id: "105", filename: "lost.png", size: 8, created: new Date().toISOString() },
           ],
         },
       }),
       remove: async (_key: string, id: string) => void removed.push(id),
+      // The server's record of what each upload made: the cut one reached Jira, the lost one didn't.
+      uploaded: async (client: string) => (client === ids[3] ? "104" : undefined),
     };
     // Too new: another tab may still be placing these files.
     await cleanDraftUploads("ns", "[]", jira);

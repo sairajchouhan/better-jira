@@ -48,13 +48,13 @@ db.run(
 );
 
 db.run("CREATE TABLE IF NOT EXISTS attachment_media (id TEXT PRIMARY KEY, media_id TEXT NOT NULL)");
-// Jira's create has no idempotency key: the issue each client create made, so a replay never makes a second one.
+// Jira's creates have no idempotency key: what each client write made (issue key, comment id, attachment id), so a replay never makes a second one.
 db.run("CREATE TABLE IF NOT EXISTS created_issues (client TEXT PRIMARY KEY, key TEXT NOT NULL)");
-export const createdIssue = (client: string) =>
+export const madeFor = (client: string) =>
   db.query<{ key: string }, [string]>("SELECT key FROM created_issues WHERE client = ?").get(client)
     ?.key;
-export const rememberCreated = (client: string, key: string) =>
-  db.query("INSERT OR REPLACE INTO created_issues VALUES (?,?)").run(client, key);
+export const rememberMade = (client: string, id: string) =>
+  db.query("INSERT OR REPLACE INTO created_issues VALUES (?,?)").run(client, id);
 
 const getMeta = (k: string) =>
   db.query<{ v: string }, [string]>("SELECT v FROM meta WHERE k = ?").get(k)?.v;

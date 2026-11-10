@@ -112,3 +112,27 @@ test("B13: the Display menu uses pill menus instead of native selects", async ()
     await page.close();
   }
 });
+
+test("sync check 2: a double click on Create issue makes one issue", async () => {
+  const page = await open();
+  try {
+    await page.key("c");
+    await page.waitFor(`document.activeElement===${title}`);
+    await page.type("Double submit");
+    // Both clicks land before React re-renders, as a fast double click does.
+    await page.eval(`(() => {
+      const b = [...document.querySelectorAll('[role=dialog][aria-label="Create issue"] button')].find((b) => b.textContent === "Create issue");
+      b.click();
+      b.click();
+    })()`);
+    await page.waitFor(`!${title}`);
+    await page.waitFor(`!!document.querySelector("[data-toast]")`);
+    expect(
+      await page.eval(
+        `[...document.querySelectorAll("[data-key]")].filter((e) => e.textContent.includes("Double submit")).map((e) => e.dataset.key)`,
+      ),
+    ).toHaveLength(1);
+  } finally {
+    await page.close();
+  }
+});

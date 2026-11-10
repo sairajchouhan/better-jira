@@ -249,3 +249,29 @@ test("R2-D7: mark buttons show pressed for a selection that starts at the marked
     await page.close();
   }
 });
+
+test("sync check 6: Restore while offline says it failed at once and never drops an edit made afterwards", async () => {
+  const offline = `if(window.__offline&&(path==='/api/issues'||path.startsWith('/api/issues/TEST-2')))throw new TypeError('Failed to fetch');`;
+  const page = await open("?issue=TEST-2&view=page", { setup: fakeJira(offline) });
+  try {
+    await page.waitFor(`!!document.querySelector('#description h2')`);
+    await page.eval(`window.__block=true`);
+    await edit(page, " unsent");
+    await page.key("Escape");
+    await Bun.sleep(900);
+    // The browser goes offline: Jira's version can't be read.
+    await page.eval(`window.__offline=true;dispatchEvent(new Event('offline'))`);
+    await page.click("#issue-options");
+    await page.click("text=Restore mirrored Jira version");
+    expect(
+      await page.waitFor<string>(`document.querySelector("[data-toast]")?.textContent`),
+    ).toContain("Could not read the Jira version");
+    await edit(page, " later");
+    await page.key("Escape");
+    await page.eval(`window.__offline=false;dispatchEvent(new Event('online'))`);
+    await Bun.sleep(2000);
+    expect(await text(page)).toContain("unsent later");
+  } finally {
+    await page.close();
+  }
+});

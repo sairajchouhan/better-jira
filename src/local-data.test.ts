@@ -539,3 +539,35 @@ test("R2-comments-D2: reactions made in two tabs on the same issue both survive,
   one.close();
   two.close();
 });
+
+test("sync check 7: an edit another tab made on a new issue's app key moves to the Jira key, whenever either tab saves", async () => {
+  const factory = new IDBFactory(),
+    one = await LocalDatabase.open("move", factory),
+    two = await LocalDatabase.open("move", factory);
+  const change = (key: string, fields: Partial<Issue>, created: boolean): any => ({
+    key,
+    issue: { ...issue, key, ...fields },
+    issueFields: Object.keys(fields),
+    fullFields: [],
+    created,
+  });
+  // Tab one creates A-NEW1; tab two opens it from a link.
+  await one.load();
+  await one.save({ ...emptyLocalState(), changes: [change("A-NEW1", {}, true)] });
+  await two.load();
+  // Tab one's create lands as A-5 and it saves the move; tab two, which hasn't seen that, edits the app key.
+  await one.save({ ...emptyLocalState(), changes: [], keys: { "A-NEW1": "A-5" } });
+  await two.save({
+    ...emptyLocalState(),
+    changes: [change("A-NEW1", { priority: "High" }, true)],
+  });
+  expect(two.moved).toEqual({ "A-NEW1": "A-5" });
+  // Tab one saves again with nothing for the issue: tab two's edit stays, on the Jira key, as an edit (not a create).
+  await one.save({ ...emptyLocalState(), changes: [], keys: { "A-NEW1": "A-5" } });
+  const { changes } = (await one.load()).state;
+  expect(changes.map((c) => [c.key, c.created, c.issueFields, c.issue?.priority])).toEqual([
+    ["A-5", false, ["priority"], "High"],
+  ]);
+  one.close();
+  two.close();
+});

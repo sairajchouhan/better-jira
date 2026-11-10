@@ -32,11 +32,18 @@ if (typeof window !== "undefined")
   addEventListener("beforeunload", (event) => {
     if (uploading) event.preventDefault();
   });
-async function postAttachment(key: string, file: Blob, name: string): Promise<Uploaded> {
+/** `client` is the app's id for this upload: a resend gets the attachment the first send made, and cleanup finds it by id. */
+async function postAttachment(
+  key: string,
+  file: Blob,
+  name: string,
+  client: string,
+): Promise<Uploaded> {
   uploading++;
   try {
     const body = new FormData();
     body.append("file", file, name);
+    body.append("client", client);
     const response = await fetch(`/api/issues/${encodeURIComponent(key)}/attachments`, {
       method: "POST",
       body,
@@ -54,6 +61,7 @@ export async function uploadNow(
   key: string,
   files: File[],
   keep: (files: File[]) => Promise<Attachment[]>,
+  clients: string[] = [],
 ): Promise<Attachment[]> {
   // Marked while it runs: a reload can't resume it, so the next page says the file wasn't placed (R2-D9).
   const marker = `${UPLOADING}${key}:${crypto.randomUUID()}`;
@@ -62,7 +70,11 @@ export async function uploadNow(
     localStorage.setItem(marker, JSON.stringify(files.map((file) => file.name)));
   } catch {}
   try {
-    const uploaded = await Promise.all(files.map((file) => postAttachment(key, file, file.name)));
+    const uploaded = await Promise.all(
+      files.map((file, i) =>
+        postAttachment(key, file, file.name, clients[i] ?? crypto.randomUUID()),
+      ),
+    );
     const saved = await keep(files);
     saved.forEach((file, index) => remember(key, file.id, uploaded[index]));
     return saved;
@@ -170,6 +182,7 @@ export async function prepareOps(key: string, ops: Op[]): Promise<Op[]> {
           key,
           blob,
           name ?? names.get(id) ?? (blob instanceof File ? blob.name : "Attachment"),
+          id,
         );
       remember(key, id, result);
       return result;

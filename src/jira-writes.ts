@@ -1,5 +1,5 @@
 import { jira, JiraError } from "./jira";
-import { createdIssue, ESTIMATES, refresh, rememberCreated } from "./mirror";
+import { ESTIMATES, madeFor, refresh, rememberMade } from "./mirror";
 import { DESCRIPTION_CONFLICT, renameCommentIds, type Op } from "./jira-ops";
 import { adfToText } from "./document";
 
@@ -94,28 +94,55 @@ type Context = {
   /** The create was a replay of one Jira already took: the rest of the job went with the first send. */
   replay?: boolean;
 };
-// ponytail: one create at a time server-wide, so two sends of one submit never race; per-client locks if creates ever queue.
-let creating: Promise<unknown> = Promise.resolve();
-/** Jira's create has no idempotency key, so the issue made for `client` is kept, and a replay gets it back while it exists (R2-create-D1). */
-function createOnce(client: string | undefined, create: () => Promise<string>) {
-  const turn = creating.then(async () => {
-    const known = client && createdIssue(client);
-    if (known) {
-      const there = await jira(`${at(known)}?fields=summary`).then(
-        () => true,
-        (e) => {
-          if (e instanceof JiraError && e.status === 404) return false;
-          throw e;
-        },
-      );
-      if (there) return { key: known, replay: true };
-    }
-    const key = await create();
-    if (client) rememberCreated(client, key);
-    return { key, replay: false };
-  });
-  creating = turn.catch(() => {});
+/** Whether Jira still has the thing at `path`. */
+const stillThere = (path: string) =>
+  jira(path).then(
+    () => true,
+    (e) => {
+      if (e instanceof JiraError && e.status === 404) return false;
+      throw e;
+    },
+  );
+const making = new Map<string, Promise<unknown>>();
+/**
+ * Jira's creates (issue, comment, attachment) have no idempotency key, so what `client` made is kept, and a replay
+ * (another tab, a reload, a retry after a lost answer) gets it back while `exists` says Jira still has it. Sends of one
+ * client run one at a time, so two at once never both create (R2-create-D1, sync D1).
+ */
+export function once(
+  client: string | undefined,
+  exists: (id: string) => Promise<boolean>,
+  make: () => Promise<string>,
+): Promise<{ id: string; replay: boolean }> {
+  if (!client) return make().then((id) => ({ id, replay: false }));
+  const turn = (making.get(client) ?? Promise.resolve())
+    .catch(() => {})
+    .then(async () => {
+      const known = madeFor(client);
+      if (known && (await exists(known))) return { id: known, replay: true };
+      const id = await make();
+      rememberMade(client, id);
+      return { id, replay: false };
+    });
+  making.set(client, turn);
+  void turn.finally(() => making.get(client) === turn && making.delete(client)).catch(() => {});
   return turn;
+}
+/** Uploads a file to the issue once per `client` (the app's id for the file), so a resend after a lost answer doesn't attach it twice. */
+export async function uploadAttachment(key: string, file: File, client?: string) {
+  const attachments = async () =>
+    ((await jira(`${at(key)}?fields=attachment`)).fields.attachment ?? []) as any[];
+  const made = await once(
+    client && `upload:${client}`,
+    async (id) => (await attachments()).some((a) => String(a.id) === id),
+    async () => {
+      const body = new FormData();
+      body.append("file", file, file.name);
+      const [attachment] = await jira(`${at(key)}/attachments`, { method: "POST", body });
+      return String(attachment.id);
+    },
+  );
+  return made.id;
 }
 async function run(ctx: Context, op: Op) {
   const key = ctx.key;
@@ -198,8 +225,9 @@ async function run(ctx: Context, op: Op) {
         issuetype: { name: await typeFor(project, rest.type, rest.parent ?? undefined) },
       };
       for (const name of Object.keys(fields)) if (fields[name] === null) delete fields[name];
-      const created = await createOnce(
+      const made = await once(
         op.client,
+        (known) => stillThere(`${at(known)}?fields=summary`),
         async () =>
           (
             await jira<{ key: string }>("/rest/api/3/issue", {
@@ -208,15 +236,15 @@ async function run(ctx: Context, op: Op) {
             })
           ).key,
       );
-      ctx.created[key] = created.key;
-      ctx.key = created.key;
-      if (created.replay) {
+      ctx.created[key] = made.id;
+      ctx.key = made.id;
+      if (made.replay) {
         ctx.replay = true;
         return;
       }
       if (status)
-        await transition(created.key, status).catch((e) => {
-          ctx.warning = `Created ${created.key}, but Jira could not move it to the chosen status: ${e instanceof JiraError ? e.reason : e.message}`;
+        await transition(made.id, status).catch((e) => {
+          ctx.warning = `Created ${made.id}, but Jira could not move it to the chosen status: ${e instanceof JiraError ? e.reason : e.message}`;
         });
       return;
     }
@@ -243,11 +271,26 @@ async function run(ctx: Context, op: Op) {
           }),
         });
       const parent = op.parentId && /^\d+$/.test(op.parentId) ? op.parentId : undefined;
-      const comment = await post(parent).catch((e) => {
-        if (parent && e instanceof JiraError && e.status === 400 && /parent comment/i.test(e.body))
-          return post();
-        throw e;
-      });
+      // A resend whose first send reached Jira (the tab closed or lost the answer) gets that comment back (sync D1).
+      const comment = await once(
+        op.client && `comment:${op.client}`,
+        (id) => stillThere(`${at(key)}/comment/${encodeURIComponent(id)}`),
+        async () =>
+          String(
+            (
+              await post(parent).catch((e) => {
+                if (
+                  parent &&
+                  e instanceof JiraError &&
+                  e.status === 400 &&
+                  /parent comment/i.test(e.body)
+                )
+                  return post();
+                throw e;
+              })
+            ).id,
+          ),
+      );
       ctx.created[op.ref] = comment.id;
       return;
     }

@@ -3,8 +3,8 @@ import { resourceURL, validDocumentProperties, validLinkPreview } from "./issue-
 import { activityFields } from "./issue-activity";
 import { localFileBlob } from "./media-types";
 import { validMediaEdits } from "./media-edits";
+import { renameIds } from "./jira-ops";
 import type { Full, Issue } from "./store";
-import type { CommentState } from "./comment-thread";
 
 export type Snapshot = {
   issue?: Issue;
@@ -36,7 +36,11 @@ export type LocalState = {
   changes: LocalChange[];
   undo: LocalEdit[];
   redo: LocalEdit[];
+  /** App key (PREFIX-NEWn) → the key Jira gave it, so every tab moves its edits there (sync check 7). */
+  keys?: Record<string, string>;
 };
+// ponytail: the newest 200 key moves are kept; a tab left open across 200 creates elsewhere misses older ones.
+const KEPT_KEYS = 200;
 export type LocalLoad = {
   state: LocalState;
   recovered: boolean;
@@ -214,6 +218,7 @@ export const emptyLocalState = (): LocalState => ({
   changes: [],
   undo: [],
   redo: [],
+  keys: {},
 });
 export function parseLocalState(raw: unknown): {
   state: LocalState;
@@ -238,6 +243,10 @@ export function parseLocalState(raw: unknown): {
   const undo = Array.isArray(raw.undo) ? raw.undo.filter(isEdit).slice(-100) : [];
   const redo = Array.isArray(raw.redo) ? raw.redo.filter(isEdit).slice(-100) : [];
   const sequence = Number.isSafeInteger(raw.sequence) && raw.sequence >= 0 ? raw.sequence : 0;
+  const keys =
+    object(raw.keys) && Object.values(raw.keys).every((v) => typeof v === "string")
+      ? (raw.keys as Record<string, string>)
+      : {};
   const recovered =
     !Array.isArray(raw.changes) ||
     changes.length !== raw.changes.length ||
@@ -245,31 +254,32 @@ export function parseLocalState(raw: unknown): {
     undo.length !== raw.undo.length ||
     !Array.isArray(raw.redo) ||
     redo.length !== raw.redo.length ||
-    sequence !== raw.sequence;
-  return { state: { version: 1, sequence, changes, undo, redo }, recovered, readOnly: false };
+    sequence !== raw.sequence ||
+    (raw.keys !== undefined && keys !== raw.keys);
+  return { state: { version: 1, sequence, changes, undo, redo, keys }, recovered, readOnly: false };
 }
 
 const snapshotChanges = (changes: LocalChange[]) =>
   new Map(changes.map((c) => [c.key, structuredClone(c)]));
-/** A field's local value, or "" when the change doesn't override it. */
-function fieldValue(change: LocalChange | undefined, field: string): string {
-  if (!change) return "";
-  if (field === "$deleted") return change.issue === null ? "1" : "";
-  if (field === "$created") return change.created ? "1" : "";
-  if (field.startsWith("full:"))
-    return change.fullFields.includes(field.slice(5))
-      ? "v" + JSON.stringify(change.full?.fields[field.slice(5)] ?? null)
-      : "";
-  return change.issue && change.issueFields.includes(field)
-    ? "v" + JSON.stringify((change.issue as any)[field] ?? null)
-    : "";
+
+// --- Merging another tab's saved changes with this tab's -------------------------------------------------------------
+// One three-way model. Each change is a set of fields it overrides ($deleted, $created, issue fields, full:description,
+// full:comment). `base` is this tab's own copy at its last load or save. Per field: a value only this tab changed since
+// `base` is this tab's; one it didn't change is the stored one (so another tab's edit, or its "Jira took it", wins);
+// where both changed, the field's rule below merges them, else this tab's wins.
+
+/** A field a change doesn't override, told apart from one it clears (`parent: undefined`). */
+const NONE = Symbol("none");
+const same = (a: unknown, b: unknown) =>
+  a === b || (a !== NONE && b !== NONE && JSON.stringify(a) === JSON.stringify(b));
+/** Three-way merge of a list of plain values: the stored list with this tab's adds and removals since `base` (a reaction). */
+function mergeList(base: string[] = [], mine: string[] = [], theirs: string[] = []) {
+  const added = mine.filter((r) => !base.includes(r)),
+    removed = new Set(base.filter((r) => !mine.includes(r)));
+  return [...new Set([...theirs.filter((r) => !removed.has(r)), ...added])];
 }
-const changeFields = (change: LocalChange | undefined) =>
-  change
-    ? ["$deleted", "$created", ...change.issueFields, ...change.fullFields.map((f) => "full:" + f)]
-    : [];
 /** Three-way merge of id'd lists (Activity rows): adds and removals from both sides are kept. */
-function mergeById<T extends { id: string }>(base: T[], mine: T[], theirs: T[]): T[] {
+function mergeById<T extends { id: string }>(base: T[] = [], mine: T[] = [], theirs: T[] = []) {
   const ids = (list: T[]) => new Set(list.map((v) => v.id)),
     b = ids(base),
     m = ids(mine),
@@ -279,62 +289,108 @@ function mergeById<T extends { id: string }>(base: T[], mine: T[], theirs: T[]):
     ...theirs.filter((v) => !b.has(v.id) && !m.has(v.id)),
   ];
 }
+type Rule = (base: any, mine: any, theirs: any) => unknown;
+/** Three-way merge of records, key by key, with `rules` (or `each`) for keys both sides changed. Empty entries are dropped. */
+const mergeRecord =
+  (rules: Record<string, Rule>, each?: Rule): Rule =>
+  (base = {}, mine = {}, theirs = {}) => {
+    const out: Record<string, unknown> = {};
+    for (const key of new Set([
+      ...Object.keys(base),
+      ...Object.keys(mine),
+      ...Object.keys(theirs),
+    ])) {
+      const value = merge3(base[key], mine[key], theirs[key], rules[key] ?? each);
+      if (
+        value !== undefined &&
+        !(Array.isArray(value) && !value.length) &&
+        !(object(value) && !Object.keys(value).length)
+      )
+        out[key] = value;
+    }
+    return out;
+  };
+function merge3(base: unknown, mine: unknown, theirs: unknown, rule?: Rule) {
+  if (same(mine, base)) return theirs;
+  if (same(theirs, base) || !rule) return mine;
+  return rule(base, mine, theirs);
+}
+/** Fields both tabs may change at once, merged item by item rather than one tab's value winning (R2-issue-fields-D1, R2-comments-D2). */
+const rules: Record<string, Rule> = {
+  activity: mergeById,
+  reactions: mergeList,
+  // Per comment, per mark: resolved, subscribed, a local body, its reactions.
+  commentStates: mergeRecord({}, mergeRecord({ reactions: mergeList })),
+};
+/** The fields a change overrides, by name; an absent field is not overridden. */
+function fieldsOf(change: LocalChange | undefined): Map<string, unknown> {
+  const fields = new Map<string, unknown>();
+  if (!change) return fields;
+  if (change.issue === null) fields.set("$deleted", true);
+  if (change.created) fields.set("$created", true);
+  for (const f of change.issueFields) fields.set(f, (change.issue as any)?.[f]);
+  for (const f of change.fullFields) fields.set("full:" + f, change.full?.fields[f]);
+  return fields;
+}
+/**
+ * Moves changes made on an app key to the key Jira gave it (`keys`), in this tab's, its base and the stored copy alike, so
+ * an edit a tab made on the app key lands on the issue Jira made, whichever tab created it (sync check 7).
+ */
+function moveCreated(changes: LocalChange[], keys: Record<string, string>): LocalChange[] {
+  const ids = new Map(Object.entries(keys));
+  if (!ids.size || !changes.some((c) => JSON.stringify(c).includes("-NEW"))) return changes;
+  return changes.map((change) =>
+    ids.has(change.key) ? { ...renameIds(change, ids), created: false } : renameIds(change, ids),
+  );
+}
 /** Merges this tab's changes with the stored ones against `base` (this tab's last load or save), field by field. */
 export function mergeChanges(
   base: ReadonlyMap<string, LocalChange>,
   mine: LocalChange[],
   stored: LocalChange[],
+  keys: Record<string, string> = {},
 ): LocalChange[] {
-  const ours = new Map(mine.map((c) => [c.key, c])),
-    theirs = new Map(stored.map((c) => [c.key, c])),
+  const ours = new Map(moveCreated(mine, keys).map((c) => [c.key, c])),
+    theirs = new Map(moveCreated(stored, keys).map((c) => [c.key, c])),
+    bases = new Map(moveCreated([...base.values()], keys).map((c) => [c.key, c])),
     result: LocalChange[] = [];
   for (const key of new Set([...theirs.keys(), ...ours.keys()])) {
-    const b = base.get(key),
-      m = ours.get(key),
-      t = theirs.get(key);
-    const fields = new Set([...changeFields(b), ...changeFields(m), ...changeFields(t)]);
-    const take = new Map<string, LocalChange | undefined>();
-    for (const field of fields)
-      take.set(field, fieldValue(m, field) !== fieldValue(b, field) ? m : t);
-    const from = (field: string) => take.get(field);
-    if (from("$deleted") && fieldValue(from("$deleted"), "$deleted")) {
-      result.push({ ...from("$deleted")!, issue: null });
+    const m = ours.get(key),
+      t = theirs.get(key),
+      fb = fieldsOf(bases.get(key)),
+      fm = fieldsOf(m),
+      ft = fieldsOf(t);
+    const values = new Map<string, unknown>();
+    let fromMine = false;
+    for (const field of new Set([...fb.keys(), ...fm.keys(), ...ft.keys()])) {
+      const [b, mv, tv] = [fb, fm, ft].map((f) => (f.has(field) ? f.get(field) : NONE));
+      const rule = fm.has(field) && ft.has(field) ? rules[field] : undefined;
+      const value = merge3(b, mv, tv, rule && ((_, x, y) => rule(fb.get(field), x, y)));
+      if (!same(mv, b)) fromMine = true;
+      if (value !== NONE) values.set(field, value);
+    }
+    const owner = fromMine && m ? m : (t ?? m)!;
+    const fields = (full: boolean) =>
+      [...values.keys()].filter((f) => !f.startsWith("$") && f.startsWith("full:") === full);
+    if (values.get("$deleted")) {
+      result.push({ ...owner, issue: null });
       continue;
     }
-    const issueFields = [...fields].filter(
-      (f) => !f.startsWith("$") && !f.startsWith("full:") && fieldValue(from(f), f),
-    );
-    const fullFields = [...fields]
-      .filter((f) => f.startsWith("full:") && fieldValue(from(f), f))
-      .map((f) => f.slice(5));
-    const created = !!fieldValue(from("$created"), "$created");
+    const issueFields = fields(false),
+      fullFields = fields(true).map((f) => f.slice(5)),
+      created = !!values.get("$created");
     if (!issueFields.length && !fullFields.length && !created) continue;
-    const owner = [...take.values()].includes(m) && m ? m : (t ?? m)!;
     const issue = { ...(owner.issue ?? m?.issue ?? t?.issue)! } as Issue;
-    for (const field of issueFields) (issue as any)[field] = (from(field)!.issue as any)[field];
-    // Both tabs added or removed Activity rows: keep both sides' rows.
-    if (
-      m?.issue &&
-      t?.issue &&
-      fieldValue(m, "activity") !== fieldValue(b, "activity") &&
-      fieldValue(t, "activity") !== fieldValue(b, "activity") &&
-      m.issueFields.includes("activity") &&
-      t.issueFields.includes("activity")
-    )
-      issue.activity = mergeById(
-        (b?.issue?.activity ?? []) as any[],
-        m.issue.activity ?? [],
-        t.issue.activity ?? [],
-      ) as Issue["activity"];
+    for (const f of issueFields) (issue as any)[f] = values.get(f);
     const fullBase = owner.full ?? m?.full ?? t?.full;
     const full = fullBase && {
       ...fullBase,
       fields: {
         ...fullBase.fields,
-        ...Object.fromEntries(fullFields.map((f) => [f, from("full:" + f)!.full?.fields[f]])),
+        ...Object.fromEntries(fullFields.map((f) => [f, values.get("full:" + f)])),
       },
     };
-    const merged: LocalChange = {
+    result.push({
       key,
       issue,
       ...(full ? { full } : {}),
@@ -342,26 +398,7 @@ export function mergeChanges(
       fullFields,
       created,
       ...(owner.tab ? { tab: owner.tab } : {}),
-    };
-    // Both tabs changed comment marks or reactions: merge them per reaction, not whole-field (R2-comments-D2).
-    const marks = (c?: LocalChange) =>
-      !!c?.issueFields.some((f) => f === "commentStates" || f === "reactions");
-    result.push(
-      m?.issue && t?.issue && m !== t && marks(m) && marks(t)
-        ? mergeCommentMarks(
-            b?.issue,
-            {
-              ...merged,
-              issue: {
-                ...issue,
-                commentStates: m.issue.commentStates,
-                reactions: m.issue.reactions,
-              },
-            },
-            t,
-          )
-        : merged,
-    );
+    });
   }
   return result;
 }
@@ -380,60 +417,14 @@ function completed(transaction: IDBTransaction): Promise<void> {
   });
 }
 
-/** `theirs` with this tab's own changes since `base` on top: an emoji added or removed, a mark set. */
-function mergeList(base: string[] = [], mine: string[] = [], theirs: string[] = []) {
-  const added = mine.filter((r) => !base.includes(r)),
-    removed = new Set(base.filter((r) => !mine.includes(r)));
-  return [...new Set([...theirs.filter((r) => !removed.has(r)), ...added])];
-}
-/**
- * Reactions and thread marks (resolved, subscribed, local edits) another tab saved for the same issue survive this tab's
- * save, which applies only what it changed since `base`, its own last load or save (R2-comments-D2).
- */
-export function mergeCommentMarks(
-  base: Issue | null | undefined,
-  mine: LocalChange,
-  theirs: LocalChange | undefined,
-): LocalChange {
-  if (!mine.issue || !theirs?.issue || theirs === mine) return mine;
-  const states: Record<string, CommentState> = {},
-    b = base?.commentStates ?? {},
-    m = mine.issue.commentStates ?? {},
-    t = theirs.issue.commentStates ?? {};
-  for (const id of new Set([...Object.keys(b), ...Object.keys(m), ...Object.keys(t)])) {
-    const state: Record<string, unknown> = {};
-    for (const field of new Set([
-      ...Object.keys(b[id] ?? {}),
-      ...Object.keys(m[id] ?? {}),
-      ...Object.keys(t[id] ?? {}),
-    ]) as Set<keyof CommentState>) {
-      const value =
-        field === "reactions"
-          ? mergeList(b[id]?.reactions, m[id]?.reactions, t[id]?.reactions)
-          : JSON.stringify(m[id]?.[field]) !== JSON.stringify(b[id]?.[field])
-            ? m[id]?.[field]
-            : t[id]?.[field];
-      if (value !== undefined && !(Array.isArray(value) && !value.length)) state[field] = value;
-    }
-    if (Object.keys(state).length) states[id] = state;
-  }
-  const reactions = mergeList(base?.reactions, mine.issue.reactions, theirs.issue.reactions);
-  const fields = new Set(mine.issueFields);
-  if (Object.keys(states).length) fields.add("commentStates");
-  if (reactions.length) fields.add("reactions");
-  return {
-    ...mine,
-    issue: { ...mine.issue, commentStates: states, reactions },
-    issueFields: [...fields],
-  };
-}
-
 /** Separate databases keep two Jira accounts from sharing local edits or files. */
 export class LocalDatabase {
   private urls = new Map<string, string>();
   private writable = true;
   /** This tab's changes as of its last load or save: the common base for merging with other tabs. */
   private base = new Map<string, LocalChange>();
+  /** The key moves (app key → Jira key) as of this tab's last load or save. */
+  moved: Record<string, string> = {};
   private constructor(private db: IDBDatabase) {}
   static async open(
     namespace: string,
@@ -466,6 +457,7 @@ export class LocalDatabase {
     this.writable = !parsed.readOnly;
     const revision = object(raw) && Number.isSafeInteger(raw.revision) ? raw.revision : 0;
     this.base = snapshotChanges(parsed.state.changes);
+    this.moved = parsed.state.keys ?? {};
     if (parsed.readOnly) {
       // An unsupported version stays in place untouched; copy it only once.
       const copies = await request(recovery.getAll());
@@ -496,7 +488,7 @@ export class LocalDatabase {
       for (const snapshot of [...edit.before, ...edit.after]) await restore(snapshot.issue);
     return { ...parsed, missingFiles };
   }
-  /** Writes `state`, merged field by field with whatever other tabs saved since this tab's last load or save: a field this tab changed wins, every other field keeps the stored value, so no tab's write is lost (R2-issue-fields-D1). This tab's undo history wins. Returns the sequence written. */
+  /** Writes `state`, merged with whatever other tabs saved since this tab's last load or save (see mergeChanges), so no tab's write is lost (R2-issue-fields-D1). This tab's undo history wins. Returns the sequence written; `moved` then holds the key moves. */
   async save(state: LocalState): Promise<number> {
     if (!this.writable)
       throw new Error(
@@ -514,15 +506,20 @@ export class LocalDatabase {
         throw new Error(
           "Another tab saved local data in a newer version. Reload to keep editing; existing data has been preserved.",
         );
+      const keys = Object.fromEntries(
+        Object.entries({ ...theirs.state.keys, ...state.keys }).slice(-KEPT_KEYS),
+      );
       const next = {
         ...state,
         sequence: Math.max(state.sequence, theirs.state.sequence),
-        changes: mergeChanges(this.base, state.changes, theirs.state.changes),
+        changes: mergeChanges(this.base, state.changes, theirs.state.changes, keys),
+        keys,
       };
       store.put({ ...next, revision: revision + 1 }, "workspace");
       await done;
       // The base is this tab's own copy, not the merge: fields taken from other tabs then stay theirs next time.
       this.base = snapshotChanges(state.changes);
+      this.moved = keys;
       return next.sequence;
     } catch (error) {
       try {
@@ -531,6 +528,13 @@ export class LocalDatabase {
       await done.catch(() => {});
       throw error;
     }
+  }
+  /** The key moves other tabs saved: app key → Jira key. */
+  async keys(): Promise<Record<string, string>> {
+    const tx = this.db.transaction("state", "readonly"),
+      done = completed(tx),
+      [raw] = await Promise.all([request(tx.objectStore("state").get("workspace")), done]);
+    return parseLocalState(raw).state.keys ?? {};
   }
   /** Takes over changes whose tab is no longer open (`live` lists the open ones), so exactly one tab replays each. Returns their keys. */
   async claim(tab: string, live: ReadonlySet<string>): Promise<Set<string>> {
