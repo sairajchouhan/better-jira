@@ -1068,14 +1068,16 @@ function StatusBar() {
           aria-label="Jira save status"
           data-jira-pending={pending}
           title={writeError?.text}
-          className={`flex min-w-0 items-center gap-1 ${writeError && !pending ? "text-red-500" : "text-fg-3"}`}
+          className={`flex min-w-0 items-center gap-1 ${writeError && (!pending || writeError.retrying) ? "text-red-500" : "text-fg-3"}`}
         >
           <span className="truncate">
-            {pending
-              ? `Sending ${pending} to Jira…`
-              : writeError
-                ? `Not saved to Jira: ${writeError.key}: ${writeError.text}`
-                : "Saved to Jira"}
+            {pending && writeError?.retrying
+              ? `Still sending ${pending} to Jira: ${writeError.key}: ${writeError.text}`
+              : pending
+                ? `Sending ${pending} to Jira…`
+                : writeError
+                  ? `Not saved to Jira: ${writeError.key}: ${writeError.text}`
+                  : "Saved to Jira"}
           </span>
           {writeError && !pending && (
             <button

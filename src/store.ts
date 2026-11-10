@@ -14,6 +14,7 @@ import {
   type LocalState,
   type Snapshot,
   type LocalEdit,
+  type LocalChange,
 } from "./local-data";
 import { createActor, fromPromise, waitFor } from "xstate";
 import { appMachine, inspector, storageMachine, uiMachine, type UiContext } from "./machines";
@@ -243,7 +244,8 @@ type State = {
   writable: boolean;
   pendingWrites: number;
   /** The last write Jira refused, shown until dismissed or a later write to that issue lands. */
-  writeError: { key: string; text: string } | null;
+  /** `retrying`: the write is kept and sent again; shown even while writes are pending. */
+  writeError: { key: string; text: string; retrying?: boolean } | null;
   /** Jira's own choices for property menus, when writes go to Jira. */
   options: JiraOptions;
   loadError: string;
@@ -656,53 +658,57 @@ async function loadApplication() {
   localFields.clear();
   fullFields.clear();
   needsFullRefresh.clear();
-  const inJira = new Set(remote.map((i) => i.key));
-  for (const change of local.changes) {
-    // With Jira writes, an override for an issue Jira no longer has is dropped: the issue was deleted there.
-    if (client.writable === true && !change.created && !inJira.has(change.key)) continue;
-    // Older builds saved a link's preview as a local edit, which replayed the link to Jira on every load (R1-D1).
-    if (
-      client.writable === true &&
-      !change.created &&
-      !change.fullFields.length &&
-      change.issueFields.every((f) => f === "resources" || f === "updated") &&
-      change.issue?.resources?.every((r) => r.kind === "link")
-    )
-      continue;
-    changedKeys.add(change.key);
-    owners.set(change.key, change.tab ?? "");
-    if (change.created) {
-      createdKeys.add(change.key);
-      othersCreating.set(change.key, change.tab ?? "");
-    }
-    localFields.set(change.key, new Set(change.issueFields));
-    fullFields.set(change.key, new Set(change.fullFields));
-    if (change.issue === null) issues.delete(change.key);
-    else if (change.created || !issues.has(change.key)) issues.set(change.key, change.issue);
-    else {
-      const base = issues.get(change.key)!;
-      const patch = Object.fromEntries(
-        change.issueFields.map((field) => [field, (change.issue as any)[field]]),
-      );
+  const inJira = new Map(remote.map((i) => [i.key, i]));
+  /** Puts saved changes over Jira's copies, into `issues` and `full`. */
+  const install = (changes: LocalChange[], issues: Map<string, Issue>, full: Map<string, Full>) => {
+    for (const change of changes) {
+      // With Jira writes, an override for an issue Jira no longer has is dropped: the issue was deleted there.
+      if (client.writable === true && !change.created && !inJira.has(change.key)) continue;
+      // Older builds saved a link's preview as a local edit, which replayed the link to Jira on every load (R1-D1).
       if (
-        change.full?.fields.comment &&
-        (change.fullFields.includes("comment") || change.issue.commentStates)
+        client.writable === true &&
+        !change.created &&
+        !change.fullFields.length &&
+        change.issueFields.every((f) => f === "resources" || f === "updated") &&
+        change.issue?.resources?.every((r) => r.kind === "link")
       )
-        patch.comments = visibleCommentTotal(
-          base.comments +
-            (change.full?.fields.comment?.comments ?? []).filter((c: any) =>
-              String(c.id).startsWith("local-"),
-            ).length,
-          change.full?.fields.comment?.comments ?? [],
-          change.issue.commentStates,
+        continue;
+      changedKeys.add(change.key);
+      owners.set(change.key, change.tab ?? "");
+      if (change.created) {
+        createdKeys.add(change.key);
+        othersCreating.set(change.key, change.tab ?? "");
+      }
+      localFields.set(change.key, new Set(change.issueFields));
+      fullFields.set(change.key, new Set(change.fullFields));
+      if (change.issue === null) issues.delete(change.key);
+      else if (change.created || !inJira.has(change.key)) issues.set(change.key, change.issue);
+      else {
+        const base = inJira.get(change.key)!;
+        const patch = Object.fromEntries(
+          change.issueFields.map((field) => [field, (change.issue as any)[field]]),
         );
-      issues.set(change.key, { ...base, ...patch });
+        if (
+          change.full?.fields.comment &&
+          (change.fullFields.includes("comment") || change.issue.commentStates)
+        )
+          patch.comments = visibleCommentTotal(
+            base.comments +
+              (change.full?.fields.comment?.comments ?? []).filter((c: any) =>
+                String(c.id).startsWith("local-"),
+              ).length,
+            change.full?.fields.comment?.comments ?? [],
+            change.issue.commentStates,
+          );
+        issues.set(change.key, { ...base, ...patch });
+      }
+      if (change.full) {
+        full.set(change.key, change.full);
+        if (!change.created) needsFullRefresh.add(change.key);
+      }
     }
-    if (change.full) {
-      full.set(change.key, change.full);
-      if (!change.created) needsFullRefresh.add(change.key);
-    }
-  }
+  };
+  install(local.changes, issues, full);
   // Undo covers this tab's own edits only, as Linear's per-client history does; a reload keeps them (R2-inbox-D3).
   undo.splice(0, undo.length, ...local.undo.filter((e) => e.tab === undoTab));
   redo.splice(0, redo.length, ...local.redo.filter((e) => e.tab === undoTab));
@@ -729,10 +735,10 @@ async function loadApplication() {
   // Saved local overrides are the durable outbox: whatever Jira hasn't taken yet is sent again.
   // An override for an issue Jira no longer has is not re-created; only issues made here are. Deletes are never replayed.
   // Only changes of tabs that have closed are replayed, by one tab: an open tab is still sending its own (R1-D6, R1-D7).
-  const replay = async (keys?: Set<string>) =>
+  const replay = async (keys?: Set<string>, changes = local.changes) =>
     send(
       await Promise.all(
-        local.changes
+        changes
           .filter(
             (change) =>
               (!keys || keys.has(change.key)) &&
@@ -801,11 +807,18 @@ async function loadApplication() {
                 ),
               ),
               claimed = await database!.claim(tabId, live);
+            // A closed tab may have saved edits after this tab read the saved data: send and show the merged copy saved
+            // now, as a takeover later on does (sync review 3-5).
+            const saved = (await database!.stored()).changes.filter((c) => claimed.has(c.key)),
+              issues = new Map(state.issues),
+              full = new Map(state.full);
+            install(saved, issues, full);
+            set({ issues, full });
             for (const key of claimed) {
               owners.delete(key);
               othersCreating.delete(key);
             }
-            await replay(claimed);
+            await replay(claimed, saved);
           }),
         )
       : (othersCreating.clear(), replay()));
@@ -1209,7 +1222,14 @@ type Job = {
   started?: boolean;
   cancelled?: boolean;
   hold?: number;
+  /** Jira couldn't tell yet whether an earlier send went through: tries so far, and when to send it again. */
+  tries?: number;
+  retryAt?: number;
 };
+// ponytail: fixed backoff (5 s doubling to 1 min) and error after 4 tries; tune if outages need other pacing.
+const RETRY_WAIT = 5000,
+  RETRY_WAIT_MAX = 60_000,
+  RETRY_SHOWN = 4;
 // ponytail: fixed 400 ms debounce on status writes; tune if single status edits must settle faster.
 const STATUS_HOLD = 400;
 type WriteResult = {
@@ -1403,17 +1423,33 @@ async function waitForCreators() {
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 }
-class WaitForJira extends Error {}
-let flushing = false;
+let flushing = false,
+  wake: (() => void) | undefined;
 async function flush() {
-  if (flushing) return;
+  // A write made while the loop waits on a retry goes now.
+  if (flushing) return wake?.();
   flushing = true;
   try {
     while (outbox.length) {
-      // A job for an issue another tab is still creating waits for its Jira key; the rest go on without it (sync review 3).
-      const index = outbox.findIndex((job) => !waitsForCreate(job));
+      // A job for an issue another tab is still creating waits for its Jira key; one Jira couldn't settle yet waits for
+      // its retry, and its issue's later jobs behind it. Every other issue's jobs go on (sync review 3, 3-2).
+      const now = Date.now(),
+        cooling = new Set(
+          outbox.flatMap((job) => (job.retryAt! > now ? [currentKey(job.key)] : [])),
+        );
+      const index = outbox.findIndex(
+        (job) => !waitsForCreate(job) && !cooling.has(currentKey(job.key)),
+      );
       if (index < 0) {
-        await waitForCreators();
+        if (outbox.some(waitsForCreate)) await waitForCreators();
+        else {
+          const next = Math.min(...outbox.map((job) => job.retryAt ?? now));
+          await new Promise<void>((resolve) => {
+            wake = resolve;
+            setTimeout(resolve, Math.min(next - now, 1000));
+          });
+          wake = undefined;
+        }
         continue;
       }
       if (index > 0) outbox.unshift(...outbox.splice(index, 1));
@@ -1468,6 +1504,7 @@ async function flush() {
                 ...(ops.length && outbox.some((other) => other !== job && other.key === job.key)
                   ? { settle: false }
                   : {}),
+                ...(job.tries ? { resend: true } : {}),
               }),
             });
       let result: WriteResult, ops: Op[] | undefined;
@@ -1490,30 +1527,29 @@ async function flush() {
         continue;
       }
       if (ops) {
-        // An unreachable server means nothing reached Jira: send the same ops again every 5 s until it answers. So does a
-        // 503: Jira can't yet tell whether an earlier send of this create made the issue (sync review 2-2).
-        const response = (await asyncRetry(
-          async (ops: Op[]) => {
-            const response = await post(ops);
-            if (response.status === 503) {
-              const { error } = await response.json().catch(() => ({}));
-              throw new WaitForJira(error ?? "Waiting for Jira. Retrying the Jira write…");
-            }
-            return response;
-          },
-          {
-            maxAttempts: Infinity,
-            backoff: "fixed",
-            baseWait: 5000,
-            onRetry: (_attempt, error) =>
-              set({
-                perf:
-                  error instanceof WaitForJira
-                    ? error.message
-                    : "Can't reach the better-jira server. Retrying the Jira write…",
-              }),
-          },
-        )(ops))!;
+        // An unreachable server means nothing reached Jira: send the same ops again every 5 s until it answers.
+        const response = (await asyncRetry(post, {
+          maxAttempts: Infinity,
+          backoff: "fixed",
+          baseWait: 5000,
+          onRetry: () =>
+            set({ perf: "Can't reach the better-jira server. Retrying the Jira write…" }),
+        })(ops))!;
+        // 503: Jira didn't answer, or can't tell yet whether an earlier send went through. The same job (same client ids)
+        // goes again later, with backoff, behind other issues' writes; it is never dropped (sync review 2-2, 3-1, 3-2).
+        if (response.status === 503) {
+          const { error } = await response.json().catch(() => ({}));
+          const text = error ?? "Jira didn't answer. The change will be sent again shortly.";
+          job.tries = (job.tries ?? 0) + 1;
+          job.retryAt = Date.now() + Math.min(RETRY_WAIT * 2 ** (job.tries - 1), RETRY_WAIT_MAX);
+          set({
+            perf: text,
+            ...(job.tries >= RETRY_SHOWN
+              ? { writeError: { key: job.key, text, retrying: true } }
+              : {}),
+          });
+          continue;
+        }
         result = await response
           .json()
           .catch(() => ({ error: `Server returned ${response.status}` }));

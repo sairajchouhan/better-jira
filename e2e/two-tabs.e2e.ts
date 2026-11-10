@@ -176,3 +176,30 @@ n.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clien
     await host.close();
   }
 });
+
+test("sync review 3-5: a tab that takes over a closed tab's changes at load sends what that tab saved last", async () => {
+  const host = await open("", { setup });
+  try {
+    const one = await open("", { setup, tabOf: host });
+    const key = await createHeld(one);
+    // Tab one holds the outbox lock, so tab two's load reads the saved data now but claims it only once one closes.
+    await one.eval(
+      `navigator.locks.request("better-jira-outbox",()=>new Promise(()=>{}));undefined`,
+    );
+    const two = await open("", { setup, tabOf: host });
+    await two.waitFor(`!!document.querySelector('[data-key="${key}"]')`);
+    // Meanwhile tab one edits the new issue and saves it.
+    await one.front();
+    const priority = await setPriority(one, key);
+    await Bun.sleep(500);
+    await one.waitFor(
+      `document.querySelector('[aria-label="Local save status"]')?.textContent==="Saved locally"`,
+    );
+    await one.close();
+    const create = await two.waitFor<any>(`${sentTo(key)}.find(o=>o.op==='create')`, 8000);
+    expect(create.fields.priority).toBe(priority);
+    await two.close();
+  } finally {
+    await host.close();
+  }
+});

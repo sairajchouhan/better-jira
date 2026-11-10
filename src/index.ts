@@ -176,7 +176,7 @@ const server = serve({
             { error: "Jira writes are disabled for this site." },
             { status: 403 },
           );
-        let body: { ops: unknown; board?: unknown; settle?: unknown };
+        let body: { ops: unknown; board?: unknown; settle?: unknown; resend?: unknown };
         try {
           body = await req.json();
         } catch {
@@ -189,6 +189,7 @@ const server = serve({
           body.ops,
           typeof body.board === "number" ? body.board : undefined,
           body.settle !== false,
+          body.resend === true,
         );
         // 503: an earlier send's outcome can't be told yet; the tab sends the same ops again later.
         return Response.json(result, {

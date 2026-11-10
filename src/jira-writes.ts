@@ -91,7 +91,7 @@ type Context = {
   created: Record<string, string>;
   touched: Set<string>;
   warning?: string;
-  /** The create was a replay of one Jira already took: the job's other steps may have gone with the first send. */
+  /** An earlier send of these ops may have reached Jira: a resend, or a replayed create. */
   replay?: boolean;
 };
 /** Whether Jira still has the thing at `path`. */
@@ -254,8 +254,10 @@ async function taggedIssue(project: string, client: string, since: number) {
 }
 /** A field's value as the create payload shapes it, from Jira's copy or from a payload, for comparing the two. */
 function comparable(field: string, value: any): unknown {
-  if (value === null || value === undefined) return undefined;
-  if (field === "description") return adfToText(value).replace(/\s+/g, " ").trim();
+  // Empty is empty however it's spelt: Jira answers [] for no labels or fix versions, a payload leaves them out.
+  if (value === null || value === undefined || (Array.isArray(value) && !value.length))
+    return undefined;
+  if (field === "description") return value.content?.length ? adfShape(value) : undefined;
   if (field === "priority") return value.name;
   if (field === "assignee") return value.accountId;
   if (field === "parent") return value.key;
@@ -263,25 +265,43 @@ function comparable(field: string, value: any): unknown {
   if (field === "labels") return [...value].sort();
   return value;
 }
+/** A document's structure, text, marks, link URLs and media ids, without the ids and empty values Jira adds or drops. */
+function adfShape(node: any): unknown {
+  if (Array.isArray(node)) {
+    const list = node.map(adfShape).filter((child) => child !== undefined);
+    return list.length ? list : undefined;
+  }
+  if (node === null || typeof node !== "object") return node ?? undefined;
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(node).sort()) {
+    if (key === "localId" || key === "version" || key.startsWith("__")) continue;
+    const value = adfShape(node[key]);
+    if (value !== undefined && !(typeof value === "object" && !Object.keys(value as object).length))
+      out[key] = value;
+  }
+  return out;
+}
 const sameValue = (field: string, a: unknown, b: unknown) =>
   JSON.stringify(comparable(field, a)) === JSON.stringify(comparable(field, b));
 /**
  * A replayed create: the first send made the issue, but its answer was lost and the issue was edited since. Sends the
- * fields edited since that send (`sent`), unless Jira's copy of one changed too: Jira's newer value wins then, as a
- * description edit made from an older text does (DESCRIPTION_CONFLICT). Empty fields are never sent.
+ * fields edited or cleared since that send (`sent`), unless Jira's copy of one changed too: Jira's newer value wins
+ * then, as a description edit made from an older text does (DESCRIPTION_CONFLICT).
  */
 async function catchUp(key: string, fields: Record<string, unknown>, sent: any) {
   // An older build's intent has no record of what was sent: nothing to tell edits from Jira's values.
   if (!sent) return;
-  const edited = Object.entries(fields).filter(
-    ([field, value]) =>
-      !["project", "issuetype"].includes(field) && !sameValue(field, value, sent[field]),
+  // A field the create leaves out is empty now: one the send had was cleared since (sync review 3-3).
+  const edited = [...new Set([...Object.keys(fields), ...Object.keys(sent)])].filter(
+    (field) =>
+      !["project", "issuetype"].includes(field) && !sameValue(field, fields[field], sent[field]),
   );
   if (!edited.length) return;
-  const current =
-    (await jira(`${at(key)}?fields=${edited.map(([f]) => f).join(",")}`)).fields ?? {};
+  const current = (await jira(`${at(key)}?fields=${edited.join(",")}`)).fields ?? {};
   const update = Object.fromEntries(
-    edited.filter(([field]) => sameValue(field, current[field], sent[field])),
+    edited
+      .filter((field) => sameValue(field, current[field], sent[field]))
+      .map((field) => [field, fields[field] ?? (Array.isArray(sent[field]) ? [] : null)]),
   );
   if (Object.keys(update).length)
     await jira(at(key), { method: "PUT", body: JSON.stringify({ fields: update }) });
@@ -366,7 +386,8 @@ async function run(ctx: Context, op: Op) {
         project: { key: project },
         issuetype: { name: await typeFor(project, rest.type, rest.parent ?? undefined) },
       };
-      for (const name of Object.keys(fields)) if (fields[name] === null) delete fields[name];
+      // The create sends no empty fields; a replay compares with them, so a clear made since goes to Jira.
+      const sent = Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== null));
       const made = await once(
         op.client,
         (known) => stillThere(`${at(known)}?fields=summary`),
@@ -374,7 +395,7 @@ async function run(ctx: Context, op: Op) {
           (
             await jira<{ key: string }>("/rest/api/3/issue", {
               method: "POST",
-              body: JSON.stringify({ fields, ...tag(op.client) }),
+              body: JSON.stringify({ fields: sent, ...tag(op.client) }),
             })
           ).key,
         async ({ at: since }) => {
@@ -386,7 +407,7 @@ async function run(ctx: Context, op: Op) {
               "Jira hasn't confirmed whether an earlier send created this issue yet. It will be sent again shortly.",
             );
         },
-        () => fields,
+        () => sent,
       );
       ctx.created[key] = made.id;
       ctx.key = made.id;
@@ -508,7 +529,7 @@ async function run(ctx: Context, op: Op) {
       read?.catch(() => {});
       const type = await linkType(op.kind);
       if (!op.remove) {
-        // A replayed create's first send may have linked it already.
+        // A resent job (an earlier send's answer was lost) or a replayed create may have linked it already.
         if (ctx.replay) {
           const links = (await jira(`${at(key)}?fields=issuelinks`)).fields.issuelinks as any[];
           if (
@@ -570,8 +591,9 @@ export async function applyOps(
   ops: Op[],
   board?: number,
   settle = true,
+  resend = false,
 ): Promise<Written> {
-  const ctx: Context = { key, created: {}, touched: new Set() };
+  const ctx: Context = { key, created: {}, touched: new Set(), replay: resend };
   let error: string | undefined;
   // A later op in this job may name a comment an earlier op just created.
   const independent = (op?: Op) => op?.op === "link" || op?.op === "weblink";
@@ -589,15 +611,22 @@ export async function applyOps(
       i = end;
     }
   } catch (e) {
-    if (e instanceof RetryLater)
-      return { error: e.message, retry: true, key, created: {}, others: [] };
-    error =
-      e instanceof JiraError
-        ? e.reason
-        : e instanceof UserError
-          ? e.message
-          : "Could not reach Jira.";
-    if (!(e instanceof UserError)) console.error("[write]", ctx.key, String(e).slice(0, 300));
+    // Anything short of a definite refusal (a lost answer, a 5xx, a timeout) may have reached Jira: the same job, with the
+    // same client ids, is sent again and reconciled, never dropped and resubmitted as new (sync review 3-1).
+    if (!refusedOutright(e)) {
+      console.error("[write]", ctx.key, String(e).slice(0, 300));
+      return {
+        error:
+          e instanceof RetryLater
+            ? e.message
+            : "Jira didn't answer. The change will be sent again shortly.",
+        retry: true,
+        key,
+        created: {},
+        others: [],
+      };
+    }
+    error = e instanceof JiraError ? e.reason : (e as UserError).message;
   }
   error ??= ctx.warning;
   const [fresh, ...touched] = await Promise.all([

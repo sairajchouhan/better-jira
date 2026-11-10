@@ -360,6 +360,8 @@ export async function open(
         ? send("Target.closeTarget", { targetId })
         : send("Target.disposeBrowserContext", { browserContextId });
     },
+    /** Brings the tab to the front, so its menus open (a background tab's animation frames don't run). */
+    front: () => send("Target.activateTarget", { targetId }),
     context: browserContextId as string,
   };
   await page.goto(path);

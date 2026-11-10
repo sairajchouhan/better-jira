@@ -202,8 +202,12 @@ test("sync review 1: a create, comment or upload Jira took but whose answer was 
     { op: "comment", ref: "local-9", body: { type: "doc", version: 1, content: [] }, client: "c9" },
   ];
   const file = new File(["abc"], "a.png");
-  expect((await applyOps("K-NEW9", create)).error).toBe("Could not reach Jira.");
-  expect((await applyOps("K-1", comment)).error).toBe("Could not reach Jira.");
+  expect((await applyOps("K-NEW9", create)).error).toBe(
+    "Jira didn't answer. The change will be sent again shortly.",
+  );
+  expect((await applyOps("K-1", comment)).error).toBe(
+    "Jira didn't answer. The change will be sent again shortly.",
+  );
   expect(await uploadAttachment("K-1", file, "f9").catch(() => "lost")).toBe("lost");
   lose = false;
   // The replays find each one in Jira.
@@ -316,7 +320,9 @@ test("sync review 2-2: an issue search can't find yet doesn't authorize a second
   ];
   const start = Date.now();
   try {
-    expect((await applyOps("K-NEW20", create("K-NEW20@t"))).error).toBe("Could not reach Jira.");
+    expect((await applyOps("K-NEW20", create("K-NEW20@t"))).error).toBe(
+      "Jira didn't answer. The change will be sent again shortly.",
+    );
     lose = false;
     // Minutes later, still not in search: retry later, don't create.
     setSystemTime(start + 4 * 60_000);
@@ -388,7 +394,8 @@ test("sync review 2-4: a replayed create sends only the fields edited here and u
   ];
   calls.length = 0;
   expect((await applyOps("K-NEW30", ops())).error).toBe(undefined);
-  expect(puts).toEqual([{ fields: { summary: "Mine" } }]);
+  // Jira's changed description and priority stay; the summary edit and the clear (Jira still has acc-1) go.
+  expect(puts).toEqual([{ fields: { summary: "Mine", assignee: null } }]);
   refuse = true;
   calls.length = 0;
   const refused = await applyOps("K-NEW30", ops());
@@ -435,4 +442,150 @@ test("sync review 2-6: reconciliation reads every page of comments and of search
   expect((await applyOps("K-3", comment)).created["local-40"]).toBe("777");
   expect((await applyOps("K-NEW40", create)).created["K-NEW40"]).toBe("K-77");
   expect(posted).toBe(2);
+});
+
+test("sync review 3-1: a create or comment whose answer is lost, or whose reconciling read fails, is sent again, not refused", async () => {
+  const { JiraError } = await import("./jira");
+  const gateway = (path: string) =>
+    Object.assign(new JiraError("POST", path, 502, "Bad gateway"), {
+      status: 502,
+      reason: "Bad gateway",
+    });
+  let issues = 0,
+    comments = 0,
+    searchDown = false;
+  answer = (path, init) => {
+    if (path === "/rest/api/3/issue" && init?.method === "POST") {
+      issues++;
+      throw gateway(path); // Jira made it; the gateway lost the answer.
+    }
+    if (path === "/rest/api/3/issue/K-5/comment" && init?.method === "POST") {
+      comments++;
+      throw new TypeError("socket reset");
+    }
+    if (path === "/rest/api/3/search/jql") {
+      if (searchDown) throw gateway(path);
+      return { issues: [{ key: "K-70", properties: { "better-jira": { client: "K-NEW50@t" } } }] };
+    }
+    if (path.startsWith("/rest/api/3/issue/K-5/comment?"))
+      return {
+        comments: [{ id: "55", properties: [{ key: "better-jira", value: { client: "c50" } }] }],
+        total: 1,
+      };
+    return jiraAnswers(path, init);
+  };
+  const create: Op[] = [
+    { op: "create", fields: { summary: "S", project: "K" }, client: "K-NEW50@t" },
+  ];
+  const comment: Op[] = [{ op: "comment", ref: "local-50", body: doc("x"), client: "c50" }];
+  for (const [key, ops] of [
+    ["K-NEW50", create],
+    ["K-5", comment],
+  ] as const) {
+    const lost = await applyOps(key, [...ops]);
+    expect([lost.retry, lost.created]).toEqual([true, {}]);
+  }
+  // A failing search while reconciling is no refusal either.
+  searchDown = true;
+  expect((await applyOps("K-NEW50", create)).retry).toBe(true);
+  searchDown = false;
+  // The same job resent: reconciled, never posted again.
+  expect((await applyOps("K-NEW50", create)).created).toEqual({ "K-NEW50": "K-70" });
+  expect((await applyOps("K-5", comment)).created).toEqual({ "local-50": "55" });
+  expect([issues, comments]).toEqual([1, 1]);
+});
+
+test("sync review 3-3: a replay sends labels and fix versions added since, and clears made since", async () => {
+  // Sent without labels or fix versions (empty), with an assignee and a due date.
+  ledger.intend("K-NEW31@t", {
+    summary: "S",
+    assignee: { accountId: "acc-1" },
+    duedate: "2026-12-01",
+    project: { key: "K" },
+    issuetype: { name: "Task" },
+  });
+  ledger.remember("K-NEW31@t", "K-31");
+  const puts: unknown[] = [];
+  answer = (path, init) => {
+    if (init?.method === "PUT" && path === "/rest/api/3/issue/K-31")
+      return void puts.push(JSON.parse(String(init.body)));
+    // Jira spells no labels or fix versions [].
+    if (path.startsWith("/rest/api/3/issue/K-31?fields="))
+      return {
+        fields: {
+          summary: "S",
+          labels: [],
+          fixVersions: [],
+          assignee: { accountId: "acc-1" },
+          duedate: "2026-12-01",
+        },
+      };
+    return jiraAnswers(path, init);
+  };
+  // Here since: a label and a fix version added, the assignee and due date cleared.
+  await applyOps("K-NEW31", [
+    {
+      op: "create",
+      fields: {
+        summary: "S",
+        labels: ["x"],
+        milestones: ["10"],
+        assignee: null,
+        due: null,
+        project: "K",
+      },
+      client: "K-NEW31@t",
+    },
+  ]);
+  expect(puts).toEqual([
+    { fields: { labels: ["x"], fixVersions: [{ id: "10" }], assignee: null, duedate: null } },
+  ]);
+});
+
+test("sync review 3-4: a replay compares descriptions by structure: Jira's image stays, a formatting edit goes", async () => {
+  const image = {
+    ...doc("Old"),
+    content: [
+      ...doc("Old").content,
+      { type: "mediaSingle", content: [{ type: "media", attrs: { id: "m1", type: "file" } }] },
+    ],
+  };
+  const bold = {
+    ...doc(""),
+    content: [
+      { type: "paragraph", content: [{ type: "text", text: "Old", marks: [{ type: "strong" }] }] },
+    ],
+  };
+  const replay = async (client: string, key: string, jiraHas: unknown, mine: any) => {
+    ledger.intend(client, {
+      summary: "S",
+      description: doc("Old"),
+      project: { key: "K" },
+      issuetype: { name: "Task" },
+    });
+    ledger.remember(client, key);
+    const puts: unknown[] = [];
+    answer = (path, init) => {
+      if (init?.method === "PUT" && path === `/rest/api/3/issue/${key}`)
+        return void puts.push(JSON.parse(String(init.body)));
+      // Jira adds ids of its own to what it stores.
+      if (path.startsWith(`/rest/api/3/issue/${key}?fields=`))
+        return { fields: { description: jiraHas } };
+      return jiraAnswers(path, init);
+    };
+    await applyOps(client.split("@")[0]!, [
+      { op: "create", fields: { summary: "S", description: mine, project: "K" }, client },
+    ]);
+    return puts;
+  };
+  // Someone added an image in Jira; the text alone still reads "Old": the edit here must not remove it.
+  expect(await replay("K-NEW32@t", "K-32", image, doc("Mine"))).toEqual([]);
+  // A formatting-only edit here, with Jira's copy unchanged but for its own ids: sent.
+  const stored = {
+    ...doc("Old"),
+    content: [{ ...doc("Old").content[0], attrs: { localId: "abc" } }],
+  };
+  expect(await replay("K-NEW33@t", "K-33", stored, bold)).toEqual([
+    { fields: { description: bold } },
+  ]);
 });
