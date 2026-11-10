@@ -222,6 +222,8 @@ type State = {
   sidebarOpen: boolean;
   relationKind: string;
   issueOptionsStart: "link" | "pull-request" | "history" | "reminder" | "due" | null;
+  /** Where a right-click on a card or list row opened Issue options; null opens it under its button. */
+  issueOptionsPoint: { x: number; y: number } | null;
   createExpanded: boolean;
   /** The sub-issue row an issue shortcut opened the open menu for; null means the selected issue. */
   target: string | null;
@@ -300,6 +302,7 @@ let state: State = {
   sidebarOpen: false,
   relationKind: "related",
   issueOptionsStart: null,
+  issueOptionsPoint: null,
   createExpanded: false,
   target: null,
   deleting: null,
@@ -398,7 +401,7 @@ ui.subscribe(({ context }) => {
   for (const key of Object.keys(context) as UiKey[])
     if (context[key] !== state[key]) Object.assign(patch, { [key]: context[key] });
   if (!Object.keys(patch).length) return;
-  if (patch.overlay === null) patch.target = null;
+  if (patch.overlay === null) Object.assign(patch, { target: null, issueOptionsPoint: null });
   // A link's `view` opens that issue once; it lasts until the panel closes and never becomes the board's preference (R2-D4).
   if (patch.view && restoringNavigation) linkView = true;
   else if (patch.view) {

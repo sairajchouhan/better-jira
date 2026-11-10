@@ -885,6 +885,10 @@ export function shortcutApplies(entry: Shortcut) {
     (!entry.when || entry.when())
   );
 }
+export function canRunShortcut(id: string) {
+  const entry = shortcuts.find((s) => s.id === id);
+  return !!entry && shortcutApplies(entry);
+}
 export function runShortcut(id: string) {
   const entry = shortcuts.find((s) => s.id === id);
   if (entry && shortcutApplies(entry)) entry.run();

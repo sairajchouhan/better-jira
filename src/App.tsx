@@ -340,7 +340,7 @@ export function App() {
           overlay === "project" ||
           overlay === "milestone" ||
           overlay === "due") && <PropertyPicker issue={current} field={overlay} />}
-      {open && overlay === "options" && <IssueOptions issue={current ?? open} />}
+      {current && overlay === "options" && <IssueOptions issue={current} />}
       {current && overlay === "reminder" && <ReminderPicker issue={current} />}
       {current && overlay === "relations" && <Relations issue={current} />}
       {current && overlay === "subscribers" && <Subscribers issue={current} />}
@@ -1600,6 +1600,13 @@ const Card = memo(function Card({
         onClick={() =>
           timed(`open ${issue.key}`, () => navigate({ selected: issue.key, panel: true }))
         }
+        // Linear's row menu: Issue options at the pointer, on this issue, which stays highlighted as the selection.
+        onContextMenu={(e) => {
+          e.preventDefault();
+          navigate({ selected: issue.key });
+          set({ issueOptionsPoint: { x: e.clientX + 3, y: e.clientY } });
+          ui.send({ type: "overlay.open", overlay: "options" });
+        }}
         className={
           list
             ? `flex min-h-11 cursor-default items-center gap-3 border-b border-line px-5 outline-none focus-visible:ring-1 focus-visible:ring-accent ${selected ? "bg-hover shadow-[inset_2px_0_0_var(--accent)]" : "hover:bg-hover"}`

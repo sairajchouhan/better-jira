@@ -7,7 +7,7 @@ import { Adf } from "./adf";
 import { RichEditor } from "./rich-editor-loader";
 import { MediaView } from "./media-loader";
 import { normalizeDocument } from "./document";
-import { Icon, PriorityIcon, StatusIcon, TypeDot, hue } from "./icons";
+import { Icon, PriorityIcon, StatusIcon, TypeDot, hue, type IconName } from "./icons";
 import {
   canHaveChildren,
   canParent,
@@ -64,7 +64,7 @@ const DateInput = lazy(() =>
 import { IssueResources, ResourceForm, createIssueDocument } from "./issue-resources";
 import { ReactionPicker, shortcode } from "./reactions";
 import { PillSelect } from "./pill-select";
-import { shortcutLabel, runShortcut } from "./shortcuts";
+import { canRunShortcut, shortcutLabel, runShortcut } from "./shortcuts";
 import { copyIcons, copyKinds, copyShortcuts, issueCopy, type CopyKind } from "./issue-copy";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { reminderPresets, reminderTime } from "./reminder-display";
@@ -789,6 +789,7 @@ export function IssueOptions({ issue }: { issue: Issue }) {
     parent = useStore((s) => (issue.parent ? s.issues.get(issue.parent) : undefined));
   const close = () => ui.send({ type: "overlay.close" });
   const start = useStore((s) => s.issueOptionsStart),
+    point = useStore((s) => s.issueOptionsPoint),
     [view, setView] = useState(start);
   useEffect(() => {
     if (start && start !== "reminder" && start !== "due") {
@@ -863,29 +864,36 @@ export function IssueOptions({ issue }: { issue: Issue }) {
     set({ issueOptionsStart: view });
     ui.send({ type: "overlay.open", overlay: "options" });
   };
-  const entries: ActionEntry[] = [
-    {
-      name: "Due date",
-      icon: "calendar",
-      shortcut: keys("due"),
-      children: [
-        {
-          name: "Custom…",
-          run: () => {
-            set({ issueOptionsStart: "due" });
-            open("due");
-          },
+  // A right-click on a card or list row (Linear's row menu) leads with the property pickers its shortcuts open, acting on the selected issue.
+  const picker = (name: string, icon: IconName, id: string): ActionEntry => ({
+    name,
+    icon,
+    shortcut: keys(id),
+    run: () => runShortcut(id),
+  });
+  const due: ActionEntry = {
+    name: "Due date",
+    icon: "calendar",
+    shortcut: keys("due"),
+    children: [
+      {
+        name: "Custom…",
+        run: () => {
+          set({ issueOptionsStart: "due" });
+          open("due");
         },
-        ...duePresets().map((preset) => ({
-          name: preset.name,
-          shortcut: preset.label,
-          run: () => {
-            actions.patch(issue.key, { due: preset.due });
-            close();
-          },
-        })),
-      ],
-    },
+      },
+      ...duePresets().map((preset) => ({
+        name: preset.name,
+        shortcut: preset.label,
+        run: () => {
+          actions.patch(issue.key, { due: preset.due });
+          close();
+        },
+      })),
+    ],
+  };
+  const properties: ActionEntry[] = [
     {
       name: "Issue type",
       icon: "board",
@@ -901,6 +909,8 @@ export function IssueOptions({ issue }: { issue: Issue }) {
     { name: "Add link…", icon: "link", shortcut: keys("link"), run: () => reopen("link") },
     { name: "Add pull request…", icon: "branch", run: () => reopen("pull-request") },
     { name: "Add document…", icon: "file", run: () => createIssueDocument(issue) },
+  ];
+  const actionsAfter: ActionEntry[] = [
     {
       name: "Create related",
       icon: "square-plus",
@@ -1022,17 +1032,45 @@ export function IssueOptions({ issue }: { issue: Issue }) {
           },
         ]
       : []),
-    {
-      name: "Delete",
-      icon: "trash",
-      shortcut: keys("delete"),
-      danger: true,
-      run: () => actions.remove(issue.key),
-    },
   ];
+  const remove: ActionEntry = {
+    name: "Delete",
+    icon: "trash",
+    shortcut: keys("delete"),
+    danger: true,
+    run: () => actions.remove(issue.key),
+  };
+  const moves = (
+    [
+      ["column-left", "Left column"],
+      ["column-right", "Right column"],
+      ["reorder-top", "To top of group"],
+      ["reorder-up", "One position up"],
+      ["reorder-down", "One position down"],
+      ["reorder-bottom", "To bottom of group"],
+    ] as const
+  )
+    .filter(([id]) => canRunShortcut(id))
+    .map(([id, name]) => ({ name, shortcut: keys(id), run: () => runShortcut(id) }));
+  const entries: ActionEntry[] = point
+    ? [
+        picker("Status", "status", "status"),
+        picker("Priority", "priority", "priority"),
+        picker("Assignee", "user", "assign"),
+        due,
+        picker("Labels", "label", "labels"),
+        { name: "More properties", icon: "square-dots", children: properties },
+        ...actionsAfter,
+        ...(moves.length
+          ? [{ name: "Move", icon: "chevron" as const, divider: true, children: moves }]
+          : []),
+        remove,
+      ]
+    : [due, ...properties, ...actionsAfter, remove];
   return (
     <ActionMenu
-      anchor={document.getElementById("issue-options")}
+      anchor={point ? undefined : document.getElementById("issue-options")}
+      point={point ?? undefined}
       entries={entries}
       label="Issue options"
       close={close}
