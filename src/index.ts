@@ -23,7 +23,22 @@ const server = serve({
   port: serverConfiguration().port,
   routes: {
     "/*": index,
-    "/api/boards": localOnly(() => Response.json(mirror.boards())),
+    "/api/boards": {
+      GET: localOnly(() => Response.json(mirror.boards())),
+      POST: localOnly(async (req) => {
+        if (req.headers.get("origin") && req.headers.get("origin") !== new URL(req.url).origin)
+          return new Response("Forbidden", { status: 403 });
+        try {
+          const { board } = await req.json().catch(() => ({}));
+          return Response.json(await mirror.addBoard(typeof board === "string" ? board : ""));
+        } catch (e) {
+          return Response.json(
+            { error: e instanceof Error ? e.message : "Could not add the board." },
+            { status: 422 },
+          );
+        }
+      }),
+    },
     // Server-sent events: one "changed" message whenever the mirror took in something new from Jira.
     "/api/events": localOnly((req) => {
       server.timeout(req, 0);

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { boardIDs, configuration, siteURL } from "./config";
+import { boardFromInput, boardIDs, configuration, siteURL, withAddedBoard } from "./config";
 const env = {
   JIRA_URL: "https://example.atlassian.net/",
   JIRA_EMAIL: "person@example.invalid",
@@ -38,4 +38,36 @@ test("setup validates site and board IDs and separates caches by account and sit
   for (const value of ["", "1,", "-1", "1.5", "NaN"]) expect(() => boardIDs(value)).toThrow();
   expect(() => configuration({ ...env, PORT: "0" })).toThrow();
   expect(() => configuration({ ...env, JIRA_TOKEN: "" })).toThrow("bun run setup");
+});
+test("boards added in the app join env or saved boards for their own site only", () => {
+  const site = "https://example.atlassian.net",
+    other = "https://work.atlassian.net";
+  let local = withAddedBoard({ site: other, boards: [9] }, site, 7);
+  local = withAddedBoard(local, site, 7);
+  local = withAddedBoard(local, other, 8);
+  expect(local.addedBoards).toEqual({ [site]: [7], [other]: [8] });
+  // Env site: env boards plus its own added ones; the saved site's boards and additions stay out.
+  expect(configuration(env, local).boards).toEqual([12, 34, 7]);
+  // Saved site: its saved boards plus its additions.
+  expect(configuration({ ...env, JIRA_URL: other, JIRA_BOARDS: "" }, local).boards).toEqual([9, 8]);
+  // Added boards alone are enough.
+  expect(configuration({ ...env, JIRA_BOARDS: "" }, withAddedBoard({}, site, 5)).boards).toEqual([
+    5,
+  ]);
+});
+test("board links and IDs parse to a board on the connected site", () => {
+  const site = "https://example.atlassian.net";
+  expect(boardFromInput(" 12 ", site)).toBe(12);
+  expect(boardFromInput(`${site}/jira/software/projects/KAN/boards/1`, site)).toBe(1);
+  expect(boardFromInput(`${site}/jira/software/c/projects/KAN/boards/34/backlog?x=1`, site)).toBe(
+    34,
+  );
+  expect(boardFromInput(`${site}/secure/RapidBoard.jspa?rapidView=12&view=planning`, site)).toBe(
+    12,
+  );
+  expect(() => boardFromInput("https://other.atlassian.net/jira/boards/1", site)).toThrow(
+    "other.atlassian.net",
+  );
+  for (const bad of ["", "0", "KAN", `${site}/browse/KAN-1`, `${site}/jira/boards/1x`])
+    expect(() => boardFromInput(bad, site)).toThrow();
 });

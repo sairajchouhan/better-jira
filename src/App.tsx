@@ -87,6 +87,7 @@ import {
   type Property,
 } from "./view-model";
 import {
+  AddBoard,
   BoardDetails,
   CreateIssue,
   Favorites,
@@ -327,6 +328,7 @@ export function App() {
         <Palette searchOnly={overlay === "search"} />
       )}
       {overlay === "shortcuts" && <ShortcutHelp />}
+      {overlay === "add-board" && <AddBoard />}
       {overlay === "help" && <HelpMenu />}
       {(overlay === "favorites" || overlay === "views" || overlay === "boards") && (
         <QuickNavigation kind={overlay} />
@@ -929,7 +931,17 @@ function Sidebar({ boards }: { boards: Board[] }) {
           <Icon name="user" /> My issues <kbd className="ml-auto">{shortcutLabel("mine")}</kbd>
         </SideItem>
 
-        <div className="mt-5 mb-1 px-2 text-[12px] text-fg-3">Boards</div>
+        <div className="group mt-5 mb-1 flex items-center px-2 text-[12px] text-fg-3">
+          Boards
+          <button
+            aria-label="Add board"
+            title="Add board"
+            onClick={() => ui.send({ type: "overlay.open", overlay: "add-board" })}
+            className="ml-auto grid size-5 place-items-center rounded opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-hover hover:text-fg-2"
+          >
+            <Icon name="plus" size={14} />
+          </button>
+        </div>
         {boards.map((b) => (
           <SideItem
             key={b.id}

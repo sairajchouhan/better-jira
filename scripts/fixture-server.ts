@@ -5,6 +5,7 @@ import tailwind from "bun-plugin-tailwind";
 import { attachmentGateway } from "../src/attachment-media";
 import { previewFrom } from "../src/link-preview";
 import { mapFeed } from "../src/inbox-model";
+import { boardFromInput } from "../src/config";
 const rich = {
   type: "doc",
   version: 1,
@@ -140,7 +141,9 @@ let clientFailures = 0,
   writable = false,
   subtask = false,
   /** Speed checks: this many extra issues on each of two boards, like a real team board. */
-  bulk = 0;
+  bulk = 0,
+  /** Board 2 was added from the app. */
+  added = false;
 const requests: { method: string; path: string; status: number }[] = [];
 /** Writable mode: ops the app sent, and the types they changed (reset with the fixture). */
 const writes: { key: string; ops: any[] }[] = [],
@@ -171,7 +174,11 @@ const bulkIssues = () =>
     })),
   );
 const listed = () =>
-  [...issues, ...bulkIssues()].map((issue) => ({
+  [
+    ...issues,
+    ...bulkIssues(),
+    ...(added ? [{ ...issues[1]!, key: "ADD-1", board: 2, summary: "Added board issue" }] : []),
+  ].map((issue) => ({
     ...issue,
     ...(subtask && issue.key === "TEST-6" ? { type: "Subtask", parent: "TEST-5" } : {}),
     ...(types.has(issue.key) ? { type: types.get(issue.key) } : {}),
@@ -679,6 +686,7 @@ async function handle(req: Request) {
     writable = settings.writable ?? false;
     subtask = settings.subtask ?? false;
     bulk = settings.bulk ?? 0;
+    added = false;
     inbox = freshInbox(settings.inboxExtra ?? 0, settings.inboxExtraUnread ?? false);
     inboxFail = settings.inboxFail ?? false;
     inboxDelay = settings.inboxDelay ?? 0;
@@ -696,6 +704,22 @@ async function handle(req: Request) {
   const ops = path.match(/^\/api\/issues\/([^/]+)\/ops$/);
   if (writable && ops && req.method === "POST")
     return applyOps(decodeURIComponent(ops[1]!), (await req.json()).ops);
+  // Stands in for the server's addBoard: board 2 exists on the fixture site, nothing else does.
+  if (path === "/api/boards" && req.method === "POST") {
+    try {
+      const id = boardFromInput((await req.json()).board ?? "", "https://example.atlassian.net");
+      if (id === 1 || (id === 2 && (added || bulk)))
+        return Response.json({ id, message: `Board ${id} is already in your sidebar.` });
+      if (id !== 2)
+        throw new Error(
+          `Board ${id} doesn't exist on example.atlassian.net, or your Jira account can't see it.`,
+        );
+      added = true;
+      return Response.json({ id, message: "Added Second board." });
+    } catch (error) {
+      return Response.json({ error: (error as Error).message }, { status: 422 });
+    }
+  }
   if (req.method !== "GET") {
     status = 405;
     body = { error: "Fixture API is read-only" };
@@ -705,7 +729,7 @@ async function handle(req: Request) {
       body = { error: "Test unavailable" };
     } else body = { site: "https://example.atlassian.net", user, writable };
   } else if (path === "/api/boards")
-    body = bulk ? [board, { ...board, id: 2, name: "Second board" }] : [board];
+    body = bulk || added ? [board, { ...board, id: 2, name: "Second board" }] : [board];
   else if (path === "/api/issues") body = listed();
   else if (path === "/api/options")
     body = { priorities: [], users: [], labels: [], versions: {}, types: { TEST: issueTypes } };

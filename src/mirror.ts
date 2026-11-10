@@ -1,9 +1,10 @@
 import { Database } from "bun:sqlite";
-import { jira } from "./jira";
+import { jira, JiraError } from "./jira";
+import { boardFromInput } from "./config";
 import { detailCache } from "./detail-cache";
 import { recentlyTouched, storeRemoteLinks } from "./remote-links";
 import { issueAttachments, attachmentGateway, jiraAttachmentReader } from "./attachment-media";
-import { serverAuth } from "./server-config";
+import { saveAddedBoard, serverAuth } from "./server-config";
 import { threadParent } from "./jira-ops";
 import { pullRequestCount, statusDates, type History } from "./issue-properties";
 import { serverConfiguration } from "./server-config";
@@ -11,7 +12,15 @@ import { unseenChanged } from "./notifications";
 import { writeLedger } from "./write-ledger";
 
 const configuration = serverConfiguration();
-export const BOARDS = configuration.boards;
+// `bun --hot` re-runs this module on every edit; the loops and the open tabs live on globalThis so they survive it.
+const g = globalThis as {
+  syncing?: boolean;
+  live?: { clients: Set<Client>; wake: () => void };
+  boards?: number[];
+};
+/** Live: a board added in the app joins it, and the sync loop (which outlives a hot reload) reads the same array. */
+export const BOARDS = (g.boards ??= []);
+for (const b of configuration.boards) if (!BOARDS.includes(b)) BOARDS.push(b);
 // Custom field IDs differ per site; resolve rank and story points by type and name.
 const siteFields = await jira<any[]>("/rest/api/3/field").catch(() => null);
 export const RANK =
@@ -259,9 +268,7 @@ async function syncBoard(board: number) {
   return keys.length > 0;
 }
 
-// `bun --hot` re-runs this module on every edit; the loops and the open tabs live on globalThis so they survive it.
-const g = globalThis as { syncing?: boolean; live?: { clients: Set<Client>; wake: () => void } };
-type Client = { issue?: string; send: (kind?: "changed" | "inbox") => void };
+type Client = { issue?: string; send: (kind?: "changed" | "inbox" | "boards") => void };
 const live = (g.live ??= { clients: new Set(), wake: () => {} });
 /** An open, visible tab, and the issue it shows. Jira is polled fast while one is connected; the first one syncs at once. Returns the disconnect. */
 export function watch(client: Client) {
@@ -270,7 +277,7 @@ export function watch(client: Client) {
   return () => void live.clients.delete(client);
 }
 /** Tells every open tab the mirror changed, so it refetches now instead of on its timer. */
-const notify = (kind?: "inbox") => {
+const notify = (kind?: "inbox" | "boards") => {
   for (const client of live.clients) client.send(kind);
 };
 
@@ -352,6 +359,31 @@ if (!g.syncing) {
 
 export const boards = () =>
   BOARDS.map((b) => JSON.parse(getMeta(`config:${b}`) ?? "null")).filter(Boolean);
+
+/** Adds a board from a pasted link or ID: checked against Jira (reads only), mirrored, then saved for this site and pushed to open tabs. */
+export async function addBoard(input: string) {
+  const id = boardFromInput(input, configuration.site);
+  if (BOARDS.includes(id)) {
+    const name = boards().find((b) => b.id === id)?.name ?? `Board ${id}`;
+    return { id, message: `${name} is already in your sidebar.` };
+  }
+  try {
+    await jira(`/rest/agile/1.0/board/${id}`);
+    await fullSync(id);
+  } catch (error) {
+    console.error(`[boards] add ${id}:`, String(error).slice(0, 300));
+    if (error instanceof JiraError && [400, 401, 403, 404].includes(error.status))
+      throw new Error(
+        `Board ${id} doesn't exist on ${new URL(configuration.site).host}, or your Jira account can't see it.`,
+        { cause: error },
+      );
+    throw new Error(`Could not read board ${id} from Jira. Retry in a moment.`, { cause: error });
+  }
+  await saveAddedBoard(id);
+  if (!BOARDS.includes(id)) BOARDS.push(id);
+  notify("boards");
+  return { id, message: `Added ${boards().find((b) => b.id === id)?.name ?? `board ${id}`}.` };
+}
 
 /** All issues on both boards, slim. ~3k rows, ~1MB: the UI keeps them all in memory for instant search. */
 export const issues = () =>

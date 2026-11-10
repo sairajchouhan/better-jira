@@ -416,6 +416,7 @@ export const shortcuts: Shortcut[] = [
     hotkey: ["O", "T"],
     run: overlay("boards"),
   },
+  { id: "board-add", name: "Add board", group: "Navigation", run: overlay("add-board") },
   ...Array.from({ length: 9 }, (_, i): Shortcut => ({
     id: `team-${i + 1}`,
     name: `Go to team / board ${i + 1}`,

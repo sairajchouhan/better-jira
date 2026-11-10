@@ -142,6 +142,7 @@ export type Overlay =
   | "favorites"
   | "views"
   | "boards"
+  | "add-board"
   | "subscribers"
   | "reminder"
   | "inbox-actions"
@@ -514,7 +515,39 @@ function listen() {
   events.onmessage = (e) =>
     void (e.data === "inbox"
       ? queryClient.invalidateQueries({ queryKey: ["inbox"] })
-      : poll.refetch());
+      : e.data === "boards"
+        ? refreshBoards().catch(() => {})
+        : poll.refetch());
+}
+/** Boards added on the server since load, by this tab or another: the list, the new boards' issues, and their default view. */
+async function refreshBoards() {
+  const [boards, remote] = await Promise.all([
+    json<Board[]>("/api/boards"),
+    json<Issue[]>("/api/issues"),
+  ]);
+  const known = new Set(state.boards.map((b) => b.id)),
+    issues = new Map(state.issues),
+    preferences = { ...state.preferences };
+  for (const issue of remote)
+    if (!known.has(issue.board) && !issues.has(issue.key)) issues.set(issue.key, issue);
+  for (const b of boards)
+    preferences[b.id] ??= {
+      ...defaultPreferences(),
+      display: parsePreferences({ display: state.defaults[b.id] }).display,
+    };
+  set({ boards, issues, preferences });
+}
+/** Adds a Jira board by link or ID; the server checks it with Jira and mirrors it. Throws Jira's refusal in words. */
+export async function addBoard(input: string): Promise<{ id: number; message: string }> {
+  const response = await fetch("/api/boards", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ board: input }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error ?? "Could not add the board. Retry in a moment.");
+  await refreshBoards();
+  return body;
 }
 /** A JSON endpoint as a query; `staleTime` lets a recent answer stand in for a new request. */
 const fetchJson = <T>(path: string, staleTime = 0) =>

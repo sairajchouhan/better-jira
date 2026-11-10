@@ -19,6 +19,7 @@ import {
 import { PICKER_ITEM, PickerRow, PropertyMenu } from "./property-menu";
 import {
   actions,
+  addBoard,
   addLocalFiles,
   beginCreate,
   boardOf,
@@ -1711,5 +1712,63 @@ export function Favorites() {
         );
       })}
     </div>
+  );
+}
+
+/** Linear's "add team", for Jira boards: paste a board link or ID; the board mirrors and opens without a reload. */
+export function AddBoard() {
+  const [value, setValue] = useState(""),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const close = () => ui.send({ type: "overlay.close" });
+  return (
+    <Modal label="Add board" close={close} width={440}>
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setBusy(true);
+          setError("");
+          try {
+            const { id, message } = await addBoard(value);
+            close();
+            navigate({ board: id, selected: null, panel: false });
+            ui.send({ type: "toast.show", text: message });
+          } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <label className="text-[12px]">
+          Jira board link or ID
+          <input
+            autoFocus
+            aria-label="Jira board link or ID"
+            placeholder="https://your-team.atlassian.net/jira/software/projects/KAN/boards/1"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className={`${INPUT} mt-2`}
+          />
+        </label>
+        {error ? (
+          <p role="alert" className="mt-2 text-[12px] text-red-500">
+            {error}
+          </p>
+        ) : (
+          <p className="mt-2 text-[12px] text-fg-3">
+            Open the board in Jira and copy its address. Better-jira only reads it.
+          </p>
+        )}
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" className={BUTTON} onClick={close}>
+            Cancel
+          </button>
+          <button disabled={!value.trim() || busy} className={BUTTON}>
+            {busy ? "Adding…" : "Add board"}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
