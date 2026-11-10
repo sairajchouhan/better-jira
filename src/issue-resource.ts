@@ -1,5 +1,5 @@
 import type { AdfDocument } from "./document";
-import type { User } from "./store";
+import type { Issue, User } from "./store";
 export type DocumentRevision = { title: string; body: AdfDocument; at: string; author: User };
 export type DocumentProperties = {
   reminder?: { at: string; delivered?: boolean } | null;
@@ -116,4 +116,25 @@ export function resourceMediaIds(node: unknown, ids = new Set<string>()): Set<st
   if (value.body) resourceMediaIds(value.body, ids);
   for (const revision of value.history ?? []) resourceMediaIds(revision.body, ids);
   return ids;
+}
+
+/** Resource rows shared by every issue view, including URLs from the mirror. */
+export function issueResources(
+  issue: Pick<Issue, "resources" | "links" | "updated">,
+): IssueResource[] {
+  const urls = new Set(
+    (issue.resources ?? []).filter((r) => r.kind !== "document" && r.url).map((r) => r.url),
+  );
+  return [
+    ...(issue.resources ?? []),
+    ...[...new Set(issue.links ?? [])]
+      .filter((url) => !urls.has(url))
+      .map((url) => ({
+        id: `legacy:${url}`,
+        kind: "link" as const,
+        title: url,
+        url,
+        updated: issue.updated,
+      })),
+  ];
 }

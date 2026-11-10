@@ -16,6 +16,7 @@ import {
   type Issue,
 } from "./store";
 import {
+  issueResources,
   linkTitle,
   resourceURL,
   typedResourceURL,
@@ -173,16 +174,7 @@ export function IssueResources({ issue }: { issue: Issue }) {
     [form, setForm] = useState<"link" | "pull-request" | null>(null),
     [editing, setEditing] = useState<IssueResource | null>(null),
     [removing, setRemoving] = useState<IssueResource | null>(null);
-  const resources: IssueResource[] = [
-    ...(issue.resources ?? []),
-    ...(issue.links ?? []).map((url) => ({
-      id: `legacy:${url}`,
-      kind: "link" as const,
-      title: url,
-      url,
-      updated: issue.updated,
-    })),
-  ];
+  const resources = issueResources(issue);
   const remove = (resource: IssueResource) => {
     if (resource.id.startsWith("legacy:"))
       actions.patch(issue.key, { links: issue.links?.filter((url) => url !== resource.url) });
