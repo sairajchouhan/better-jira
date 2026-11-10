@@ -848,3 +848,9 @@ const server = Bun.serve({
   },
 });
 console.log(`Disposable browser fixture on ${server.url}`);
+// The e2e launcher holds this pipe open: once it is gone, even killed, the server goes too.
+if (process.env.FIXTURE_EXIT_ON_EOF)
+  void (async () => {
+    for await (const _ of Bun.stdin.stream());
+    process.exit();
+  })();

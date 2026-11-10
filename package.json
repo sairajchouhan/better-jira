@@ -9,7 +9,7 @@
     "build": "bun run build.ts",
     "typecheck": "bun check",
     "setup": "bun scripts/setup.ts",
-    "test:e2e": "bun test --timeout 60000 ./e2e/*.e2e.ts",
+    "test:e2e": "bunx playwright test",
     "dev:personal": "bun --env-file=.env.personal --hot src/index.ts",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix"
@@ -39,6 +39,7 @@
     "xstate": "^5.33.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@types/bun": "latest",
     "@types/react": "^19",
     "@types/react-dom": "^19",
