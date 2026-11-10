@@ -1,6 +1,12 @@
 import { expect, test } from "bun:test";
 import { IDBFactory } from "fake-indexeddb";
-import { emptyLocalState, LocalDatabase, parseLocalState, type LocalState } from "./local-data";
+import {
+  emptyLocalState,
+  LocalDatabase,
+  mergeChanges,
+  parseLocalState,
+  type LocalState,
+} from "./local-data";
 import type { Issue, Full } from "./store";
 
 const issue: Issue = {
@@ -570,4 +576,34 @@ test("sync check 7: an edit another tab made on a new issue's app key moves to t
   ]);
   one.close();
   two.close();
+});
+
+const edit = (key: string, fields: Partial<Issue>, created = false): any => ({
+  key,
+  issue: { ...issue, key, ...fields },
+  issueFields: Object.keys(fields),
+  fullFields: [],
+  created,
+});
+
+test("sync review 4: a tab's edits on a new issue's app key and on its Jira key both survive the move", () => {
+  // Before this tab learnt A-NEW1 → A-5, it edited the summary on A-NEW1 and the priority on A-5, which the poll showed.
+  const mine = [edit("A-NEW1", { summary: "Mine" }, true), edit("A-5", { priority: "High" })];
+  const [merged, ...rest] = mergeChanges(new Map(), mine, [], { "A-NEW1": "A-5" });
+  expect(rest).toEqual([]);
+  expect([merged!.key, merged!.created, merged!.issueFields.sort()]).toEqual([
+    "A-5",
+    false,
+    ["priority", "summary"],
+  ]);
+  expect([merged!.issue?.summary, merged!.issue?.priority]).toEqual(["Mine", "High"]);
+});
+
+test("sync review 6: a field this tab stopped overriding (Jira took it) doesn't wipe another tab's newer edit of it", () => {
+  // This tab's summary edit was saved; Jira took it, so the tab dropped it. Meanwhile another tab edited the summary.
+  const base = new Map([["A-2", edit("A-2", { summary: "Sent" })]]);
+  const merged = mergeChanges(base, [], [edit("A-2", { summary: "Theirs" })]);
+  expect(merged.map((c) => [c.key, c.issueFields, c.issue?.summary])).toEqual([
+    ["A-2", ["summary"], "Theirs"],
+  ]);
 });

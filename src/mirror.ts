@@ -8,6 +8,7 @@ import { threadParent } from "./jira-ops";
 import { pullRequestCount, statusDates, type History } from "./issue-properties";
 import { serverConfiguration } from "./server-config";
 import { unseenChanged } from "./notifications";
+import { writeLedger } from "./write-ledger";
 
 const configuration = serverConfiguration();
 export const BOARDS = configuration.boards;
@@ -48,13 +49,9 @@ db.run(
 );
 
 db.run("CREATE TABLE IF NOT EXISTS attachment_media (id TEXT PRIMARY KEY, media_id TEXT NOT NULL)");
-// Jira's creates have no idempotency key: what each client write made (issue key, comment id, attachment id), so a replay never makes a second one.
-db.run("CREATE TABLE IF NOT EXISTS created_issues (client TEXT PRIMARY KEY, key TEXT NOT NULL)");
-export const madeFor = (client: string) =>
-  db.query<{ key: string }, [string]>("SELECT key FROM created_issues WHERE client = ?").get(client)
-    ?.key;
-export const rememberMade = (client: string, id: string) =>
-  db.query("INSERT OR REPLACE INTO created_issues VALUES (?,?)").run(client, id);
+export const ledger = writeLedger(db);
+// Each day, so a server left running prunes too.
+setInterval(ledger.prune, 24 * 3600_000).unref?.();
 
 const getMeta = (k: string) =>
   db.query<{ v: string }, [string]>("SELECT v FROM meta WHERE k = ?").get(k)?.v;

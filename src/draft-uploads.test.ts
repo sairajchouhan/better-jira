@@ -31,13 +31,15 @@ test("R2-comments-D5: orphaned composer uploads leave Jira on a later load, and 
   try {
     const file = (name: string) => new File(["x".repeat(name.length)], name);
     // dropped: uploaded, then the draft dropped it; sent: a comment shows it; drafted: a saved draft still holds it;
-    // cut: a reload cut its upload off, so only the server knows its id; lost: cut off before it reached Jira.
+    // cut: a reload cut its upload off, so only the server knows its id; lost: cut off before it reached Jira;
+    // slow: still uploading when cleanup runs (sync review 8).
     const ids = noteDraftUploads("ns", "KAN-1", [
       file("dropped.png"),
       file("sent.png"),
       file("drafted.png"),
       file("cut.png"),
       file("lost.png"),
+      file("slow.png"),
     ]);
     settleDraftUploads("ns", ids.slice(0, 3), ["l-dropped", "l-sent", "l-drafted"]);
     for (const [local, id] of [
@@ -62,13 +64,22 @@ test("R2-comments-D5: orphaned composer uploads leave Jira on a later load, and 
             { id: "104", filename: "cut.png", size: 7, created: new Date().toISOString() },
             // Someone else's file with the same name, size and time as the lost upload.
             { id: "105", filename: "lost.png", size: 8, created: new Date().toISOString() },
+            ...(slowDone ? [{ id: "106", filename: "slow.png", size: 8 }] : []),
           ],
         },
       }),
       remove: async (_key: string, id: string) => void removed.push(id),
       // The server's record of what each upload made: the cut one reached Jira, the lost one didn't.
-      uploaded: async (client: string) => (client === ids[3] ? "104" : undefined),
+      uploaded: async (client: string) =>
+        client === ids[3]
+          ? { id: "104" }
+          : client === ids[5]
+            ? slowDone
+              ? { id: "106" }
+              : { pending: true }
+            : undefined,
     };
+    let slowDone = false;
     // Too new: another tab may still be placing these files.
     await cleanDraftUploads("ns", "[]", jira);
     expect(removed).toEqual([]);
@@ -77,6 +88,11 @@ test("R2-comments-D5: orphaned composer uploads leave Jira on a later load, and 
     expect([...slots.keys()].filter((k) => k.startsWith("better-jira:upload:"))).toEqual([
       "better-jira:upload:KAN-1:l-drafted",
     ]);
+    expect(readDraftUploads("ns").map((e) => e.name)).toEqual(["drafted.png", "slow.png"]);
+    // Once the slow upload lands, the next cleanup removes what it made.
+    slowDone = true;
+    await cleanDraftUploads("ns", "[]", jira, Date.now() + SETTLE_MS);
+    expect(removed.sort()).toEqual(["101", "104", "106"]);
     expect(readDraftUploads("ns").map((e) => e.name)).toEqual(["drafted.png"]);
   } finally {
     if (previous) Object.defineProperty(globalThis, "localStorage", previous);

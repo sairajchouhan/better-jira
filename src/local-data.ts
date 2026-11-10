@@ -312,8 +312,9 @@ const mergeRecord =
   };
 function merge3(base: unknown, mine: unknown, theirs: unknown, rule?: Rule) {
   if (same(mine, base)) return theirs;
-  if (same(theirs, base) || !rule) return mine;
-  return rule(base, mine, theirs);
+  // This tab dropped a field it no longer overrides (Jira took it, or it was restored): another tab's edit of it stays.
+  if (same(theirs, base) || (!rule && mine !== NONE)) return mine;
+  return mine === NONE ? theirs : rule!(base, mine, theirs);
 }
 /** Fields both tabs may change at once, merged item by item rather than one tab's value winning (R2-issue-fields-D1, R2-comments-D2). */
 const rules: Record<string, Rule> = {
@@ -339,9 +340,30 @@ function fieldsOf(change: LocalChange | undefined): Map<string, unknown> {
 function moveCreated(changes: LocalChange[], keys: Record<string, string>): LocalChange[] {
   const ids = new Map(Object.entries(keys));
   if (!ids.size || !changes.some((c) => JSON.stringify(c).includes("-NEW"))) return changes;
-  return changes.map((change) =>
-    ids.has(change.key) ? { ...renameIds(change, ids), created: false } : renameIds(change, ids),
-  );
+  const moved = new Map<string, LocalChange>();
+  for (const change of changes) {
+    const next = ids.has(change.key)
+      ? { ...renameIds(change, ids), created: false }
+      : renameIds(change, ids);
+    const other = moved.get(next.key);
+    moved.set(next.key, other ? combine(next.key, other, next) : next);
+  }
+  return [...moved.values()];
+}
+/**
+ * One tab's two copies of an issue: edits on its app key, and edits on the Jira key the poll showed before the tab learnt
+ * the move. Each field either copy changed is kept; a field both changed keeps the Jira-key copy's (made later) or,
+ * with a rule, both sides' items.
+ */
+function combine(key: string, a: LocalChange, b: LocalChange): LocalChange {
+  if (a.issue === null || b.issue === null) return a.issue === null ? a : b;
+  const fa = fieldsOf(a),
+    fb = fieldsOf(b),
+    values = new Map(fb);
+  for (const [field, value] of fa)
+    if (!fb.has(field)) values.set(field, value);
+    else if (rules[field]) values.set(field, rules[field](undefined, value, fb.get(field)));
+  return build(key, b, a, b, values) ?? b;
 }
 /** Merges this tab's changes with the stored ones against `base` (this tab's last load or save), field by field. */
 export function mergeChanges(
@@ -370,37 +392,45 @@ export function mergeChanges(
       if (value !== NONE) values.set(field, value);
     }
     const owner = fromMine && m ? m : (t ?? m)!;
-    const fields = (full: boolean) =>
-      [...values.keys()].filter((f) => !f.startsWith("$") && f.startsWith("full:") === full);
-    if (values.get("$deleted")) {
-      result.push({ ...owner, issue: null });
-      continue;
-    }
-    const issueFields = fields(false),
-      fullFields = fields(true).map((f) => f.slice(5)),
-      created = !!values.get("$created");
-    if (!issueFields.length && !fullFields.length && !created) continue;
-    const issue = { ...(owner.issue ?? m?.issue ?? t?.issue)! } as Issue;
-    for (const f of issueFields) (issue as any)[f] = values.get(f);
-    const fullBase = owner.full ?? m?.full ?? t?.full;
-    const full = fullBase && {
-      ...fullBase,
-      fields: {
-        ...fullBase.fields,
-        ...Object.fromEntries(fullFields.map((f) => [f, values.get("full:" + f)])),
-      },
-    };
-    result.push({
-      key,
-      issue,
-      ...(full ? { full } : {}),
-      issueFields,
-      fullFields,
-      created,
-      ...(owner.tab ? { tab: owner.tab } : {}),
-    });
+    const merged = build(key, owner, m, t, values);
+    if (merged) result.push(merged);
   }
   return result;
+}
+/** A change from merged field values, on `owner`'s copy of the issue; undefined if it overrides nothing. */
+function build(
+  key: string,
+  owner: LocalChange,
+  m: LocalChange | undefined,
+  t: LocalChange | undefined,
+  values: Map<string, unknown>,
+): LocalChange | undefined {
+  if (values.get("$deleted")) return { ...owner, issue: null };
+  const fields = (full: boolean) =>
+    [...values.keys()].filter((f) => !f.startsWith("$") && f.startsWith("full:") === full);
+  const issueFields = fields(false),
+    fullFields = fields(true).map((f) => f.slice(5)),
+    created = !!values.get("$created");
+  if (!issueFields.length && !fullFields.length && !created) return undefined;
+  const issue = { ...(owner.issue ?? m?.issue ?? t?.issue)! } as Issue;
+  for (const f of issueFields) (issue as any)[f] = values.get(f);
+  const fullBase = owner.full ?? m?.full ?? t?.full;
+  const full = fullBase && {
+    ...fullBase,
+    fields: {
+      ...fullBase.fields,
+      ...Object.fromEntries(fullFields.map((f) => [f, values.get("full:" + f)])),
+    },
+  };
+  return {
+    key,
+    issue,
+    ...(full ? { full } : {}),
+    issueFields,
+    fullFields,
+    created,
+    ...(owner.tab ? { tab: owner.tab } : {}),
+  };
 }
 
 function request<T>(request: IDBRequest<T>): Promise<T> {
@@ -530,14 +560,39 @@ export class LocalDatabase {
     }
   }
   /** The key moves other tabs saved: app key → Jira key. */
-  async keys(): Promise<Record<string, string>> {
+  /** The saved key moves (app key → Jira key), and the keys of saved issues made here that Jira doesn't have yet. */
+  async stored(): Promise<{ keys: Record<string, string>; created: Set<string> }> {
     const tx = this.db.transaction("state", "readonly"),
       done = completed(tx),
-      [raw] = await Promise.all([request(tx.objectStore("state").get("workspace")), done]);
-    return parseLocalState(raw).state.keys ?? {};
+      [raw] = await Promise.all([request(tx.objectStore("state").get("workspace")), done]),
+      { state } = parseLocalState(raw);
+    return {
+      keys: state.keys ?? {},
+      created: new Set(state.changes.filter((c) => c.created).map((c) => c.key)),
+    };
   }
-  /** Takes over changes whose tab is no longer open (`live` lists the open ones), so exactly one tab replays each. Returns their keys. */
-  async claim(tab: string, live: ReadonlySet<string>): Promise<Set<string>> {
+  /**
+   * Reserves `count` local numbers (for PREFIX-NEWn keys and local comment ids) above `floor`, in one readwrite
+   * transaction, which IndexedDB runs one at a time across tabs: no two tabs get the same number (sync review 2).
+   * Returns the first.
+   */
+  async reserve(count: number, floor = 0): Promise<number> {
+    const tx = this.db.transaction("state", "readwrite"),
+      done = completed(tx),
+      store = tx.objectStore("state"),
+      last = await request(store.get("numbers")),
+      first = Math.max(Number.isSafeInteger(last) ? (last as number) : 0, floor) + 1;
+    store.put(first + count - 1, "numbers");
+    await done;
+    return first;
+  }
+  /** Takes over changes whose tab is no longer open (`live` lists the open ones), so exactly one tab replays each, or
+   * only those of `only`. Returns their keys. */
+  async claim(
+    tab: string,
+    live: ReadonlySet<string>,
+    only?: ReadonlySet<string>,
+  ): Promise<Set<string>> {
     const tx = this.db.transaction("state", "readwrite"),
       done = completed(tx),
       store = tx.objectStore("state"),
@@ -545,7 +600,11 @@ export class LocalDatabase {
       claimed = new Set<string>();
     if (object(current) && current.version === 1 && Array.isArray(current.changes)) {
       for (const change of current.changes)
-        if (object(change) && (typeof change.tab !== "string" || !live.has(change.tab))) {
+        if (
+          object(change) &&
+          (!only || only.has(change.key as string)) &&
+          (typeof change.tab !== "string" || !live.has(change.tab))
+        ) {
           change.tab = tab;
           claimed.add(change.key);
         }

@@ -13,7 +13,9 @@ const turn = async <T>(value: () => T) => {
   inFlight--;
   return value();
 };
-const created = new Map<string, string>();
+import { Database } from "bun:sqlite";
+import { writeLedger } from "./write-ledger";
+const ledger = writeLedger(new Database(":memory:"));
 mock.module("./jira", () => ({
   JiraError: class extends Error {},
   jira: async (path: string, init?: RequestInit) => {
@@ -24,8 +26,7 @@ mock.module("./jira", () => ({
 mock.module("./mirror", () => ({
   ESTIMATES: [],
   refresh: () => turn(() => undefined),
-  madeFor: (client: string) => created.get(client),
-  rememberMade: (client: string, key: string) => created.set(client, key),
+  ledger,
 }));
 const { applyOps } = await import("./jira-writes");
 import type { Op } from "./jira-ops";
@@ -46,16 +47,26 @@ test("R1-D1: a web link Jira already has, added in Jira's UI under another globa
   ]);
 });
 
-const jiraAnswers = (path: string, init?: RequestInit) =>
-  path === "/rest/api/3/issue" && init?.method === "POST"
-    ? { key: `K-${calls.filter((c) => c === "POST /rest/api/3/issue").length + 10}` }
-    : path.endsWith("?fields=status")
-      ? { fields: { status: { id: "1" } } }
-      : path.endsWith("/transitions") && !init?.method
-        ? { transitions: [{ id: "31", to: { id: "3" } }] }
-        : path === "/rest/api/3/issueLinkType"
-          ? { issueLinkTypes: [{ name: "Blocks", inward: "is blocked by", outward: "blocks" }] }
-          : {};
+// Jira for creates: issues it made, their status, and the links posted between them.
+const moved = new Set<string>(),
+  linked: any[] = [];
+const jiraAnswers = (path: string, init?: RequestInit) => {
+  if (path === "/rest/api/3/issue" && init?.method === "POST")
+    return { key: `K-${calls.filter((c) => c === "POST /rest/api/3/issue").length + 10}` };
+  if (path.endsWith("/transitions") && init?.method === "POST")
+    return void moved.add(path.split("/")[5]!);
+  if (path.endsWith("?fields=status"))
+    return {
+      fields: { status: { id: moved.has(path.split("/")[5]!.split("?")[0]!) ? "3" : "1" } },
+    };
+  if (path.endsWith("/transitions")) return { transitions: [{ id: "31", to: { id: "3" } }] };
+  if (path === "/rest/api/3/issueLinkType")
+    return { issueLinkTypes: [{ name: "Blocks", inward: "is blocked by", outward: "blocks" }] };
+  if (path === "/rest/api/3/issueLink")
+    return void linked.push({ type: { name: "Blocks" }, inwardIssue: { key: "K-2" } });
+  if (path.endsWith("?fields=issuelinks")) return { fields: { issuelinks: linked } };
+  return {};
+};
 
 test("R2-create-D1: one submit makes one Jira issue, however often or however concurrently it is sent", async () => {
   answer = jiraAnswers;
@@ -90,7 +101,6 @@ test("R2-create-D1: one submit makes one Jira issue, however often or however co
 
 test("R2-create-D2: a create's independent Jira reads go out together, not one after another", async () => {
   answer = jiraAnswers;
-  created.clear();
   mostInFlight = 0;
   // The status reads (current status, transitions), and the issue's and the linked issue's re-reads.
   await applyOps("K-NEW3", [
@@ -141,4 +151,97 @@ test("sync D1: a comment whose first send reached Jira is not posted again by a 
       : {};
   };
   expect((await applyOps("K-1", ops())).created["local-7"]).toBe("10121");
+});
+
+test("sync review 1: a create, comment or upload Jira took but whose answer was lost is found in Jira by its tag, not sent again", async () => {
+  const { uploadAttachment } = await import("./jira-writes");
+  // Jira keeps what it was sent; the answer to each first send never arrives (the server exited, the socket dropped).
+  const issues: any[] = [],
+    comments: any[] = [],
+    attachments: any[] = [];
+  let lose = true;
+  const lost = <T>(value: T) => {
+    if (lose) throw new TypeError("socket closed");
+    return value;
+  };
+  answer = (path, init) => {
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+    if (path === "/rest/api/3/issue" && init?.method === "POST") {
+      const issue = {
+        key: `K-${30 + issues.length}`,
+        properties: { [body.properties[0].key]: body.properties[0].value },
+      };
+      issues.push(issue);
+      return lost({ key: issue.key });
+    }
+    if (path === "/rest/api/3/search/jql") return { issues };
+    if (path === "/rest/api/3/issue/K-1/comment" && init?.method === "POST") {
+      comments.push({ id: String(500 + comments.length), properties: body.properties });
+      return lost({ id: comments.at(-1).id });
+    }
+    if (path.startsWith("/rest/api/3/issue/K-1/comment?")) return { comments };
+    if (path === "/rest/api/3/issue/K-1/attachments") {
+      attachments.push({
+        id: String(900 + attachments.length),
+        filename: "a.png",
+        size: 3,
+        created: new Date().toISOString(),
+        author: { accountId: "me" },
+      });
+      return lost([attachments.at(-1)]);
+    }
+    if (path === "/rest/api/3/issue/K-1?fields=attachment")
+      return { fields: { attachment: attachments } };
+    if (path === "/rest/api/3/myself") return { accountId: "me" };
+    return jiraAnswers(path, init);
+  };
+  const create: Op[] = [
+    { op: "create", fields: { summary: "S", project: "K" }, client: "K-NEW9@t" },
+  ];
+  const comment: Op[] = [
+    { op: "comment", ref: "local-9", body: { type: "doc", version: 1, content: [] }, client: "c9" },
+  ];
+  const file = new File(["abc"], "a.png");
+  expect((await applyOps("K-NEW9", create)).error).toBe("Could not reach Jira.");
+  expect((await applyOps("K-1", comment)).error).toBe("Could not reach Jira.");
+  expect(await uploadAttachment("K-1", file, "f9").catch(() => "lost")).toBe("lost");
+  lose = false;
+  // The replays find each one in Jira.
+  expect((await applyOps("K-NEW9", create)).created["K-NEW9"]).toBe("K-30");
+  expect((await applyOps("K-1", comment)).created["local-9"]).toBe("500");
+  expect(await uploadAttachment("K-1", file, "f9")).toBe("900");
+  expect([issues.length, comments.length, attachments.length]).toEqual([1, 1, 1]);
+  // A comment whose send never reached Jira is sent.
+  expect(
+    (await applyOps("K-1", [{ ...comment[0]!, ref: "local-10", client: "c10" } as Op])).created[
+      "local-10"
+    ],
+  ).toBe("501");
+});
+
+test("sync review 5: a replayed create sends the fields edited since its first send, and the job's later steps", async () => {
+  answer = jiraAnswers;
+  // The first send made K-15; its answer was lost, the user edited the new issue, then reloaded.
+  ledger.remember("K-NEW5@t", "K-15");
+  calls.length = 0;
+  const bodies: Record<string, unknown> = {};
+  answer = (path, init) => {
+    if (init?.method === "PUT") bodies[path] = JSON.parse(String(init.body));
+    return jiraAnswers(path, init);
+  };
+  const result = await applyOps("K-NEW5", [
+    {
+      op: "create",
+      fields: { summary: "Edited", project: "K", priority: "High", status: "3" },
+      client: "K-NEW5@t",
+    },
+    { op: "watcher", id: "acc-2", add: true },
+  ]);
+  expect([result.key, result.error]).toEqual(["K-15", undefined]);
+  expect(calls.filter((c) => c === "POST /rest/api/3/issue")).toEqual([]);
+  expect(bodies["/rest/api/3/issue/K-15"]).toEqual({
+    fields: { summary: "Edited", priority: { name: "High" } },
+  });
+  expect(calls).toContain("POST /rest/api/3/issue/K-15/transitions");
+  expect(calls).toContain("POST /rest/api/3/issue/K-15/watchers");
 });

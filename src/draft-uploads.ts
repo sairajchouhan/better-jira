@@ -15,6 +15,8 @@ export type DraftUpload = {
 };
 /** Another open tab may still be uploading or placing a file, so only entries this old are cleaned. */
 export const SETTLE_MS = 2 * 60_000;
+/** An upload whose send still has no answer after this long is given up on: the server can't say what it made. */
+export const PENDING_MAX_MS = 24 * 3600_000;
 const store = (namespace: string) => `better-jira:draft-uploads:${namespace}`;
 export function readDraftUploads(namespace: string): DraftUpload[] {
   try {
@@ -75,8 +77,9 @@ function uploaded(entry: DraftUpload): Uploaded | undefined {
 type Jira = {
   full: (key: string) => Promise<any>;
   remove: (key: string, attachment: string) => Promise<void>;
-  /** The attachment id the server made for this upload (the entry's id), or undefined if Jira never got it. */
-  uploaded: (client: string) => Promise<string | undefined>;
+  /** What the server made for this upload (the entry's id): its attachment id, `pending` while the send has no answer
+   * yet, or undefined if the server never got it. */
+  uploaded: (client: string) => Promise<{ id?: string; pending?: boolean } | undefined>;
 };
 /**
  * Settles old entries: a file a draft or an unsent change still holds stays; one Jira's description or comments show
@@ -125,7 +128,12 @@ export async function cleanDraftUploads(
       let id: string | undefined, media: string | undefined;
       try {
         if (entry.local) ({ id, mediaId: media } = uploaded(entry)?.attachment ?? {});
-        else id = await jira.uploaded(entry.id);
+        else {
+          const made = await jira.uploaded(entry.id);
+          // Still uploading (a slow or large file): look again later rather than lose track of it.
+          if (made?.pending && now - entry.at < PENDING_MAX_MS) continue;
+          id = made?.id;
+        }
       } catch {
         continue;
       }

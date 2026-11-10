@@ -1,5 +1,5 @@
 import { jira, JiraError } from "./jira";
-import { ESTIMATES, madeFor, refresh, rememberMade } from "./mirror";
+import { ESTIMATES, ledger, refresh } from "./mirror";
 import { DESCRIPTION_CONFLICT, renameCommentIds, type Op } from "./jira-ops";
 import { adfToText } from "./document";
 
@@ -91,7 +91,7 @@ type Context = {
   created: Record<string, string>;
   touched: Set<string>;
   warning?: string;
-  /** The create was a replay of one Jira already took: the rest of the job went with the first send. */
+  /** The create was a replay of one Jira already took: the job's other steps may have gone with the first send. */
   replay?: boolean;
 };
 /** Whether Jira still has the thing at `path`. */
@@ -103,32 +103,78 @@ const stillThere = (path: string) =>
       throw e;
     },
   );
+/** The entity property a create carries its client id in, so a send whose answer was lost can be found in Jira. */
+const TAG = "better-jira";
+const tag = (client: string | undefined) =>
+  client ? { properties: [{ key: TAG, value: { client } }] } : {};
+const tagged = (properties: any, client: string) =>
+  Array.isArray(properties)
+    ? properties.some((p) => p?.key === TAG && p.value?.client === client)
+    : properties?.[TAG]?.client === client;
+/** Jira's search index trails a create by seconds: an intent this young that search can't find yet is looked for again. */
+const SEARCH_LAG_MS = 30_000;
+let me: Promise<string> | undefined;
+const myself = () =>
+  (me ??= jira<{ accountId: string }>("/rest/api/3/myself").then(
+    (r) => r.accountId,
+    (e) => {
+      me = undefined;
+      throw e;
+    },
+  ));
+/** Jira refused it outright (not a lost answer, a timeout or a rate limit): nothing was made. */
+const refusedOutright = (e: unknown) =>
+  e instanceof UserError ||
+  (e instanceof JiraError &&
+    e.status >= 400 &&
+    e.status < 500 &&
+    e.status !== 408 &&
+    e.status !== 429);
 const making = new Map<string, Promise<unknown>>();
 /**
  * Jira's creates (issue, comment, attachment) have no idempotency key, so what `client` made is kept, and a replay
- * (another tab, a reload, a retry after a lost answer) gets it back while `exists` says Jira still has it. Sends of one
- * client run one at a time, so two at once never both create (R2-create-D1, sync D1).
+ * (another tab, a reload, a retry after a lost answer) gets it back while `exists` says Jira still has it. The intent is
+ * recorded before the send: if the answer never came, `find` looks for what the send made (since the intent's time)
+ * before sending again. Sends of one client run one at a time, so two at once never both create (R2-create-D1, sync D1).
  */
 export function once(
   client: string | undefined,
   exists: (id: string) => Promise<boolean>,
   make: () => Promise<string>,
+  find: (since: number) => Promise<string | undefined>,
 ): Promise<{ id: string; replay: boolean }> {
   if (!client) return make().then((id) => ({ id, replay: false }));
   const turn = (making.get(client) ?? Promise.resolve())
     .catch(() => {})
     .then(async () => {
-      const known = madeFor(client);
-      if (known && (await exists(known))) return { id: known, replay: true };
-      const id = await make();
-      rememberMade(client, id);
-      return { id, replay: false };
+      const known = ledger.made(client);
+      if (known?.key && (await exists(known.key))) return { id: known.key, replay: true };
+      if (known && !known.key) {
+        const found = await find(known.at);
+        if (found) {
+          ledger.remember(client, found);
+          return { id: found, replay: true };
+        }
+      }
+      ledger.intend(client);
+      try {
+        const id = await make();
+        ledger.remember(client, id);
+        return { id, replay: false };
+      } catch (e) {
+        if (refusedOutright(e)) ledger.forget(client);
+        throw e;
+      }
     });
   making.set(client, turn);
   void turn.finally(() => making.get(client) === turn && making.delete(client)).catch(() => {});
   return turn;
 }
-/** Uploads a file to the issue once per `client` (the app's id for the file), so a resend after a lost answer doesn't attach it twice. */
+/**
+ * Uploads a file to the issue once per `client` (the app's id for the file), so a resend after a lost answer doesn't
+ * attach it twice. Jira keeps no properties on attachments: a send whose answer was lost is matched to the file this
+ * account attached since the intent with the same name and size, the user's own copy of the same bytes either way.
+ */
 export async function uploadAttachment(key: string, file: File, client?: string) {
   const attachments = async () =>
     ((await jira(`${at(key)}?fields=attachment`)).fields.attachment ?? []) as any[];
@@ -140,6 +186,19 @@ export async function uploadAttachment(key: string, file: File, client?: string)
       body.append("file", file, file.name);
       const [attachment] = await jira(`${at(key)}/attachments`, { method: "POST", body });
       return String(attachment.id);
+    },
+    async (since) => {
+      const account = await myself();
+      const match = (await attachments())
+        .filter(
+          (a) =>
+            a.author?.accountId === account &&
+            a.filename === file.name &&
+            Number(a.size) === file.size &&
+            Date.parse(a.created) >= since - 60_000,
+        )
+        .sort((a, b) => Date.parse(a.created) - Date.parse(b.created))[0];
+      return match && String(match.id);
     },
   );
   return made.id;
@@ -232,15 +291,36 @@ async function run(ctx: Context, op: Op) {
           (
             await jira<{ key: string }>("/rest/api/3/issue", {
               method: "POST",
-              body: JSON.stringify({ fields }),
+              body: JSON.stringify({ fields, ...tag(op.client) }),
             })
           ).key,
+        async (since) => {
+          for (;;) {
+            const minutes = Math.ceil((Date.now() - since) / 60_000) + 2;
+            const { issues = [] } = await jira<{ issues?: any[] }>("/rest/api/3/search/jql", {
+              method: "POST",
+              body: JSON.stringify({
+                jql: `project = "${project}" AND creator = currentUser() AND created >= -${minutes}m`,
+                fields: ["summary"],
+                properties: [TAG],
+                maxResults: 100,
+              }),
+            });
+            const hit = issues.find((i) => tagged(i.properties, op.client!));
+            if (hit) return hit.key as string;
+            if (Date.now() - since >= SEARCH_LAG_MS) return undefined;
+            await Bun.sleep(2000);
+          }
+        },
       );
       ctx.created[key] = made.id;
       ctx.key = made.id;
       if (made.replay) {
+        // The first send's answer was lost, so edits made since then reached no one: the create's fields are today's.
         ctx.replay = true;
-        return;
+        const { issuetype: _type, ...update } = fieldPayload(rest);
+        if (Object.keys(update).length)
+          await jira(at(made.id), { method: "PUT", body: JSON.stringify({ fields: update }) });
       }
       if (status)
         await transition(made.id, status).catch((e) => {
@@ -268,6 +348,7 @@ async function run(ctx: Context, op: Op) {
           body: JSON.stringify({
             body: op.body,
             ...(parentId ? { parentId: Number(parentId) } : {}),
+            ...tag(op.client),
           }),
         });
       const parent = op.parentId && /^\d+$/.test(op.parentId) ? op.parentId : undefined;
@@ -290,6 +371,13 @@ async function run(ctx: Context, op: Op) {
               })
             ).id,
           ),
+        async () => {
+          const { comments = [] } = await jira<{ comments?: any[] }>(
+            `${at(key)}/comment?expand=properties&orderBy=-created&maxResults=100`,
+          );
+          const hit = comments.find((c) => tagged(c.properties, op.client!));
+          return hit && String(hit.id);
+        },
       );
       ctx.created[op.ref] = comment.id;
       return;
@@ -347,6 +435,17 @@ async function run(ctx: Context, op: Op) {
       read?.catch(() => {});
       const type = await linkType(op.kind);
       if (!op.remove) {
+        // A replayed create's first send may have linked it already.
+        if (ctx.replay) {
+          const links = (await jira(`${at(key)}?fields=issuelinks`)).fields.issuelinks as any[];
+          if (
+            links?.some(
+              (l) =>
+                l.type.name === type.name && (l.outwardIssue ?? l.inwardIssue)?.key === op.target,
+            )
+          )
+            return;
+        }
         await jira("/rest/api/3/issueLink", {
           method: "POST",
           body: JSON.stringify({
@@ -399,7 +498,6 @@ export async function applyOps(key: string, ops: Op[], board?: number, settle = 
       );
       const failed = results.find((r) => r.status === "rejected");
       if (failed) throw failed.reason;
-      if (ctx.replay) break;
       i = end;
     }
   } catch (e) {

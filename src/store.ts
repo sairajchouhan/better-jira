@@ -673,7 +673,7 @@ async function loadApplication() {
     owners.set(change.key, change.tab ?? "");
     if (change.created) {
       createdKeys.add(change.key);
-      othersCreating.add(change.key);
+      othersCreating.set(change.key, change.tab ?? "");
     }
     localFields.set(change.key, new Set(change.issueFields));
     fullFields.set(change.key, new Set(change.fullFields));
@@ -707,6 +707,8 @@ async function loadApplication() {
   undo.splice(0, undo.length, ...local.undo.filter((e) => e.tab === undoTab));
   redo.splice(0, redo.length, ...local.redo.filter((e) => e.tab === undoTab));
   localSeq = local.sequence;
+  numbers = { next: 0, end: 0 };
+  if (opened.type === "opened") await reserveNumbers();
   for (const [from, to] of Object.entries(local.keys ?? {})) jiraKeys.set(from, to);
   set({
     boards,
@@ -814,7 +816,13 @@ async function loadApplication() {
     window.addEventListener("popstate", restoreNavigation);
     window.addEventListener("beforeunload", (event) => {
       const s = storage.getSnapshot();
-      if (s.matches("saving") || s.matches("failed") || outbox.length || heldDeletes.size) {
+      // Jobs waiting on another tab's create are saved, and replayed by whichever tab sends that create.
+      if (
+        s.matches("saving") ||
+        s.matches("failed") ||
+        outbox.some((job) => !waitsForCreate(job)) ||
+        heldDeletes.size
+      ) {
         event.preventDefault();
         event.returnValue = "";
       }
@@ -834,7 +842,7 @@ async function loadApplication() {
           const response = await fetch(`/api/uploads/${encodeURIComponent(client)}`);
           if (response.status === 404) return undefined;
           if (!response.ok) throw new Error("Could not read the upload");
-          return (await response.json()).id;
+          return response.json();
         },
         remove: async (key, id) => {
           const response = await fetch(`/api/issues/${encodeURIComponent(key)}/ops`, {
@@ -1318,25 +1326,79 @@ function holdCommentDeletes(key: string, board: number | undefined, ops: Op[]): 
     return false;
   });
 }
+/** Whether `job` is for, or names, an issue another tab is still creating in Jira. */
+const waitsForCreate = (job: Job) =>
+  othersCreating.size > 0 &&
+  [...othersCreating.keys()].some(
+    (key) => currentKey(job.key) === key || JSON.stringify(job.ops).includes(`"${key}"`),
+  );
+/**
+ * Waits for the tabs creating issues this tab's jobs name: takes up the Jira keys they saved; sends a create itself once
+ * its tab has closed; and lets go of an issue its tab discarded (sync check 7, sync review 3).
+ */
+async function waitForCreators() {
+  const stored = await database?.stored().catch(() => undefined);
+  if (!stored) {
+    othersCreating.clear();
+    return;
+  }
+  learnKeys(stored.keys);
+  for (const key of othersCreating.keys())
+    if (jiraKeys.has(key)) othersCreating.delete(key);
+    else if (!stored.created.has(key)) {
+      // Discarded in the tab that made it (or Jira refused the create): its edits here go with it.
+      othersCreating.delete(key);
+      for (let i = outbox.length - 1; i >= 0; i--) if (outbox[i]!.key === key) outbox.splice(i, 1);
+      if (state.issues.has(key)) discard(key, false);
+    }
+  if (othersCreating.size && navigator.locks)
+    await navigator.locks.request("better-jira-outbox", async () => {
+      const held = (await navigator.locks.query()).held ?? [],
+        live = new Set(
+          held.flatMap((l) =>
+            l.name?.startsWith(TAB_LOCK) ? [l.name.slice(TAB_LOCK.length)] : [],
+          ),
+        );
+      // Its tab closed before Jira had it: send the create from this tab's copy, in place of the edits queued for it.
+      // The create's client id is the issue's, so if that tab's send did reach Jira this one gets the same issue back.
+      const orphaned = new Set(
+        [...othersCreating].flatMap(([key, tab]) => (live.has(tab) ? [] : [key])),
+      );
+      if (!orphaned.size) return;
+      await database!.claim(tabId, live, orphaned);
+      for (const key of orphaned) {
+        owners.delete(key);
+        othersCreating.delete(key);
+        for (let i = outbox.length - 1; i >= 0; i--)
+          if (outbox[i]!.key === key) outbox.splice(i, 1);
+        send([[key, {}, snapshot(key)]]);
+      }
+    });
+  set({ pendingWrites: outbox.length });
+  if (othersCreating.size) {
+    set({
+      perf: `Waiting for another tab to create ${[...othersCreating.keys()].join(", ")} in Jira…`,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+}
 let flushing = false;
 async function flush() {
   if (flushing) return;
   flushing = true;
   try {
     while (outbox.length) {
+      // A job for an issue another tab is still creating waits for its Jira key; the rest go on without it (sync review 3).
+      const index = outbox.findIndex((job) => !waitsForCreate(job));
+      if (index < 0) {
+        await waitForCreators();
+        continue;
+      }
+      if (index > 0) outbox.unshift(...outbox.splice(index, 1));
       const job = outbox[0]!;
       // Later status changes merge into a held job; the wait restarts with each.
       if (job.hold && job.hold > Date.now()) {
         await new Promise((resolve) => setTimeout(resolve, job.hold! - Date.now()));
-        continue;
-      }
-      // Another tab is creating this issue: its edits here wait for the Jira key that tab saves, then go there (sync check 7).
-      // ponytail: waits until that tab sends its create; if it closes first, the create is sent on the next load.
-      if (othersCreating.has(currentKey(job.key))) {
-        if (!learnKeys(await database?.keys().catch(() => ({})))) {
-          set({ perf: `Waiting for ${job.key} to be created in Jira…` });
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-        }
         continue;
       }
       job.started = true;
@@ -1526,7 +1588,7 @@ function rejectComment(detail: RejectedComment) {
     restoreRejectedDraft(`better-jira:comment-draft:${state.namespace}:${detail.key}`, detail.body);
 }
 /** Drops an issue made here that Jira refused to create, so no ghost stays or is created again after reload (R1-D24). */
-function discard(key: string) {
+function discard(key: string, reopen = true) {
   const issue = state.issues.get(key),
     description = state.full.get(key)?.fields.description;
   const issues = new Map(state.issues),
@@ -1542,7 +1604,7 @@ function discard(key: string) {
   if (state.selected === key) navigate({ selected: null, panel: false });
   queueSave();
   // The composer comes back with what was typed, so a create Jira refuses loses nothing (R2-comments-D3).
-  if (issue && !state.overlay)
+  if (reopen && issue && !state.overlay)
     beginCreate({
       title: issue.summary,
       descriptionDoc: description,
@@ -1565,18 +1627,42 @@ function rekey(from: string, to: string) {
     mentions = (v: unknown) => JSON.stringify(v).includes(`"${from}"`);
   const issues = new Map<string, Issue>(),
     full = new Map<string, Full>();
-  // The issue under its app key carries the local edits: it wins over a copy the poll already brought under the Jira key.
+  // The issue under its app key carries the local edits: it wins over a copy the poll already brought under the Jira key,
+  // except for fields edited on that copy before this tab learnt the move (sync review 4).
+  const edited = <T>(value: T, copy: any, fields?: Set<string>, nested?: "fields"): T => {
+    if (!copy || !fields?.size) return value;
+    const picked = Object.fromEntries(
+      [...fields].map((f) => [f, (nested ? copy[nested] : copy)[f]]),
+    );
+    return (
+      nested
+        ? { ...value, fields: { ...(value as any).fields, ...picked } }
+        : { ...value, ...picked }
+    ) as T;
+  };
   for (const [k, v] of state.issues)
     if (k !== to || !state.issues.has(from))
-      issues.set(ids.get(k) ?? k, mentions(v) ? renameIds(v, ids) : v);
+      issues.set(
+        ids.get(k) ?? k,
+        edited(
+          mentions(v) ? renameIds(v, ids) : v,
+          k === from && state.issues.get(to),
+          localFields.get(to),
+        ),
+      );
   for (const [k, v] of state.full)
     if (k !== to || !state.full.has(from))
-      full.set(ids.get(k) ?? k, k === from ? renameIds(v, ids) : v);
+      full.set(
+        ids.get(k) ?? k,
+        k === from
+          ? edited(renameIds(v, ids), state.full.get(to), fullFields.get(to), "fields")
+          : v,
+      );
   for (const map of [localFields, fullFields] as Map<string, Set<string>>[]) {
     const v = map.get(from);
     if (v) {
       map.delete(from);
-      map.set(to, v);
+      map.set(to, new Set([...v, ...(map.get(to) ?? [])]));
     }
   }
   if (changedKeys.delete(from)) changedKeys.add(to);
@@ -1597,11 +1683,13 @@ function rekey(from: string, to: string) {
     job.ops = renameIds(job.ops, ids);
   }
   set({ issues, full });
+  // Saved at once: other tabs wait for this move to send their edits of the issue (sync check 7).
+  queueSave();
   ui.send({ type: "toast.rekey", from, to });
   if (state.selected === from) navigate({ selected: to });
 }
 /** Takes up key moves another tab saved for issues it created (app key → Jira key). Returns whether any was new. */
-function learnKeys(keys: Record<string, string> = {}) {
+export function learnKeys(keys: Record<string, string> = {}) {
   let learned = false;
   for (const [from, to] of Object.entries(keys))
     if (!jiraKeys.has(from)) {
@@ -1948,6 +2036,8 @@ function restore(edit: LocalEdit, snapshots: Snapshot[]) {
   const issues = new Map(state.issues),
     full = new Map(state.full);
   touch(...edit.keys);
+  // Undo and redo are edits too: a Restore reading Jira's version meanwhile must not discard them (sync review 7).
+  for (const key of edit.keys) editCounts.set(key, (editCounts.get(key) ?? 0) + 1);
   edit.keys.forEach((key, index) => {
     const snapshot = snapshots[index]!;
     if (snapshot.issue) issues.set(key, snapshot.issue);
@@ -2143,21 +2233,37 @@ export const boardOf = (key: string) =>
 let localSeq = 0;
 /** Local edits per issue in this tab, so a slow read can tell whether the issue was edited meanwhile. */
 const editCounts = new Map<string, number>();
-/** Issues another open tab made and is still creating in Jira: edits here wait for the Jira key it gets. */
-const othersCreating = new Set<string>();
+/** Issues another open tab made and is still creating in Jira, with that tab's id: edits here wait for the Jira key it gets. */
+const othersCreating = new Map<string, string>();
 /** Submission id → the issue it created. */
 const submissions = new Map<string, string>();
-/** The next local number, shared with this browser's other tabs at once, so two tabs never mint the same PREFIX-NEWn (sync check 7). */
+/** Local numbers (PREFIX-NEWn keys, local comment ids) come from blocks this tab reserves in IndexedDB, one transaction per
+ * block, so two tabs never mint the same one (sync review 2). */
+const NUMBER_BLOCK = 50;
+let numbers = { next: 0, end: 0 },
+  reserving: Promise<void> | undefined;
+function reserveNumbers() {
+  return (reserving ??= (async () => {
+    try {
+      const first = await database!.reserve(NUMBER_BLOCK, localSeq);
+      numbers = { next: first, end: first + NUMBER_BLOCK };
+    } catch {
+    } finally {
+      reserving = undefined;
+    }
+  })());
+}
 function nextSeq() {
-  const name = `better-jira:sequence:${state.namespace}`;
-  try {
-    localSeq = Math.max(localSeq, Number(localStorage.getItem(name)) || 0);
-  } catch {}
-  localSeq++;
-  try {
-    localStorage.setItem(name, String(localSeq));
-  } catch {}
-  return localSeq;
+  let n: number;
+  if (numbers.next < numbers.end) n = numbers.next++;
+  // No shared storage, so no other tab to clash with: count on.
+  else if (!database) n = localSeq + 1;
+  // ponytail: the block ran out before the next one arrived (dozens of creates within one IndexedDB write); a random number
+  // well past the blocks stands in. Reserve larger blocks if this ever shows.
+  else n = 1_000_000 + Math.floor(Math.random() * 9_000_000);
+  if (database && numbers.end - numbers.next < NUMBER_BLOCK / 2) void reserveNumbers();
+  localSeq = Math.max(localSeq, n);
+  return n;
 }
 
 // Local overrides are saved separately from the read-only Jira mirror.

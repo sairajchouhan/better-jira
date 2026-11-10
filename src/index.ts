@@ -242,9 +242,10 @@ const server = serve({
     },
     // The attachment an upload made, by the app's id for it, so a cut-off draft upload is removed by id, never guessed (R2-comments-D5).
     "/api/uploads/:client": localOnly((req: BunRequest<"/api/uploads/:client">) => {
-      const id = mirror.madeFor(`upload:${req.params.client}`);
-      return id
-        ? Response.json({ id })
+      // No id yet: the upload was sent and its answer hasn't come (or was lost).
+      const made = mirror.ledger.made(`upload:${req.params.client}`);
+      return made
+        ? Response.json(made.key ? { id: made.key } : { pending: true })
         : Response.json({ error: "No such upload" }, { status: 404 });
     }),
     "/api/issues/:key/media/:mediaId": localOnly(

@@ -720,3 +720,73 @@ test("R2-palette-shortcuts-D3: a timed action that posts its own message, such a
   await frame();
   expect(get().perf).toStartWith("edit KAN-1 · ");
 });
+
+test("sync review 4: learning a new issue's Jira key keeps the edits made on both its keys", async () => {
+  const { actions, get, set, learnKeys } = await import("./store");
+  const key = actions.create("Mine")!;
+  // The poll brought the issue under its Jira key before this tab learnt the move, and the user edited that copy.
+  set({
+    issues: new Map(get().issues).set("TEST-77", {
+      ...get().issues.get(key)!,
+      key: "TEST-77",
+      summary: "Jira's",
+      priority: "Normal",
+    }),
+  });
+  actions.patch("TEST-77", { priority: "Highest" });
+  learnKeys({ [key]: "TEST-77" });
+  expect(get().issues.has(key)).toBe(false);
+  expect(get().issues.get("TEST-77")).toMatchObject({ summary: "Mine", priority: "Highest" });
+});
+
+test("sync review 7: an undo made while Restore reads Jira's version is not discarded by the Restore", async () => {
+  const { actions, get, set, undoEdit } = await import("./store");
+  const issue = { ...[...get().issues.values()][0]!, key: "TEST-91", priority: "Low" };
+  set({ issues: new Map(get().issues).set("TEST-91", issue) });
+  actions.patch("TEST-91", { priority: "High" });
+  actions.patch("TEST-91", { priority: "Highest" });
+  let answer!: () => void;
+  const answered = new Promise<void>((resolve) => (answer = resolve));
+  const previous = globalThis.fetch;
+  globalThis.fetch = (async (input: string) => {
+    await answered;
+    return Response.json(
+      String(input).endsWith("/api/issues") ? [issue] : { key: "TEST-91", fields: {} },
+    );
+  }) as any;
+  try {
+    const restoring = actions.restoreJira("TEST-91");
+    await Bun.sleep(5);
+    undoEdit();
+    answer();
+    await restoring;
+    expect(get().issues.get("TEST-91")?.priority).toBe("High");
+    expect(get().toast?.text).toBe("Didn't restore TEST-91");
+  } finally {
+    globalThis.fetch = previous;
+  }
+});
+
+test("sync review 2: a tab never mints a new-issue number another tab of the browser has", async () => {
+  const { actions, get } = await import("./store");
+  const { LocalDatabase } = await import("./local-data");
+  expect(get().namespace).toBeTruthy();
+  // Another tab of this browser takes numbers from the same saved data while this one creates issues.
+  const other = await LocalDatabase.open(get().namespace);
+  const theirs = new Set<number>(),
+    mine: number[] = [];
+  try {
+    for (let i = 0; i < 60; i++) {
+      if (i % 20 === 0) {
+        const first = await other.reserve(50);
+        for (let n = first; n < first + 50; n++) theirs.add(n);
+      }
+      mine.push(Number(actions.create(`N${i}`)!.match(/-NEW(\d+)$/)![1]));
+      await Bun.sleep(1);
+    }
+  } finally {
+    other.close();
+  }
+  expect(new Set(mine).size).toBe(60);
+  expect(mine.filter((n) => theirs.has(n))).toEqual([]);
+});

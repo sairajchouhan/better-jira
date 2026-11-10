@@ -143,10 +143,21 @@ const MODS: Record<string, number> = { alt: 1, ctrl: 2, meta: 4, shift: 8 };
 
 export type Page = Awaited<ReturnType<typeof open>>;
 /** A fresh browser context per page, so local data never leaks between tests. */
-export async function open(path = "", { width = 1440, height = 900, setup = "" } = {}) {
+/** `tabOf`: open another tab in that page's browser context (shared IndexedDB, storage and locks), as a second tab. */
+export async function open(
+  path = "",
+  {
+    width = 1440,
+    height = 900,
+    setup = "",
+    tabOf,
+  }: { width?: number; height?: number; setup?: string; tabOf?: { context: string } } = {},
+) {
   clearTimeout(idle);
   await (started ??= start());
-  const { browserContextId } = await send("Target.createBrowserContext");
+  const { browserContextId } = tabOf
+    ? { browserContextId: tabOf.context }
+    : await send("Target.createBrowserContext");
   const { targetId } = await send("Target.createTarget", { url: "about:blank", browserContextId });
   const { sessionId } = await send("Target.attachToTarget", { targetId, flatten: true });
   const cmd = (method: string, params: object = {}) => send(method, params, sessionId);
@@ -344,8 +355,12 @@ export async function open(path = "", { width = 1440, height = 900, setup = "" }
         const i = events.indexOf(listen);
         if (i >= 0) events.splice(i, 1);
       }
-      return send("Target.disposeBrowserContext", { browserContextId });
+      // A second tab closes alone; the first takes its context, and any tabs left in it, with it.
+      return tabOf
+        ? send("Target.closeTarget", { targetId })
+        : send("Target.disposeBrowserContext", { browserContextId });
     },
+    context: browserContextId as string,
   };
   await page.goto(path);
   return page;
