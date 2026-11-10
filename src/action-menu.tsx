@@ -156,7 +156,9 @@ function Level({
               key={entry.name}
               entry={entry}
               open={open === entry.name}
-              setOpen={(next) => setOpen(next ? entry.name : null)}
+              setOpen={(next) =>
+                setOpen((cur) => (next ? entry.name : cur === entry.name ? null : cur))
+              }
               parent={command}
               container={container}
               close={close}
