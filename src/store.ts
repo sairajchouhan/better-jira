@@ -1140,8 +1140,9 @@ const undo: LocalEdit[] = [],
 let database: LocalDatabase | undefined;
 /** Which open tab sends each saved change (absent: this tab). */
 const owners = new Map<string, string>();
+// An issue another tab is creating stays that tab's to send: two editing tabs never wait on each other (sync review 2-3).
 const touch = (...keys: string[]) => {
-  for (const key of keys) owners.delete(key);
+  for (const key of keys) if (!othersCreating.has(key)) owners.delete(key);
 };
 /** This tab across reloads (sessionStorage is per tab), so its undo history survives a reload and never reaches another tab.
  *  ponytail: a duplicated tab copies sessionStorage and shares the history; mint a new id on `pageshow` duplicates if that matters. */
@@ -1351,7 +1352,10 @@ async function waitForCreators() {
       for (let i = outbox.length - 1; i >= 0; i--) if (outbox[i]!.key === key) outbox.splice(i, 1);
       if (state.issues.has(key)) discard(key, false);
     }
-  if (othersCreating.size && navigator.locks)
+  if (othersCreating.size && navigator.locks) {
+    // This tab's own edits go into the saved copy first, so a create sent from that copy carries them.
+    queueSave();
+    await flushLocalChanges();
     await navigator.locks.request("better-jira-outbox", async () => {
       const held = (await navigator.locks.query()).held ?? [],
         live = new Set(
@@ -1359,21 +1363,38 @@ async function waitForCreators() {
             l.name?.startsWith(TAB_LOCK) ? [l.name.slice(TAB_LOCK.length)] : [],
           ),
         );
-      // Its tab closed before Jira had it: send the create from this tab's copy, in place of the edits queued for it.
-      // The create's client id is the issue's, so if that tab's send did reach Jira this one gets the same issue back.
       const orphaned = new Set(
         [...othersCreating].flatMap(([key, tab]) => (live.has(tab) ? [] : [key])),
       );
       if (!orphaned.size) return;
-      await database!.claim(tabId, live, orphaned);
+      // Its tab closed before Jira had it. Exactly one open tab claims it and sends the create (sync review 2-3).
+      const claimed = await database!.claim(tabId, live, orphaned),
+        saved = await database!.stored();
       for (const key of orphaned) {
+        const change = saved.changes.find((c) => c.key === key);
+        if (!claimed.has(key)) {
+          // Another open tab claimed it: wait for that tab's create instead.
+          if (change?.tab) othersCreating.set(key, change.tab);
+          continue;
+        }
         owners.delete(key);
         othersCreating.delete(key);
         for (let i = outbox.length - 1; i >= 0; i--)
           if (outbox[i]!.key === key) outbox.splice(i, 1);
-        send([[key, {}, snapshot(key)]]);
+        if (!change?.issue) continue;
+        // The saved copy merges every tab's edits: the create carries them all, and this tab shows it. The create's
+        // client id is the issue's, so if the closed tab's send did reach Jira this one gets the same issue back.
+        set({
+          issues: new Map(state.issues).set(key, change.issue),
+          ...(change.full ? { full: new Map(state.full).set(key, change.full) } : {}),
+        });
+        send([[key, {}, { issue: change.issue, full: change.full }]]);
+        // First: jobs waiting on it (links, parents, ranks naming it) must find its Jira key (sync review 2-5).
+        const index = outbox.findIndex((job) => job.key === key && job.ops[0]?.op === "create");
+        if (index > 0) outbox.unshift(...outbox.splice(index, 1));
       }
     });
+  }
   set({ pendingWrites: outbox.length });
   if (othersCreating.size) {
     set({
@@ -1382,6 +1403,7 @@ async function waitForCreators() {
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 }
+class WaitForJira extends Error {}
 let flushing = false;
 async function flush() {
   if (flushing) return;
@@ -1468,14 +1490,30 @@ async function flush() {
         continue;
       }
       if (ops) {
-        // An unreachable server means nothing reached Jira: send the same ops again every 5 s until it answers.
-        const response = (await asyncRetry(post, {
-          maxAttempts: Infinity,
-          backoff: "fixed",
-          baseWait: 5000,
-          onRetry: () =>
-            set({ perf: "Can't reach the better-jira server. Retrying the Jira write…" }),
-        })(ops))!;
+        // An unreachable server means nothing reached Jira: send the same ops again every 5 s until it answers. So does a
+        // 503: Jira can't yet tell whether an earlier send of this create made the issue (sync review 2-2).
+        const response = (await asyncRetry(
+          async (ops: Op[]) => {
+            const response = await post(ops);
+            if (response.status === 503) {
+              const { error } = await response.json().catch(() => ({}));
+              throw new WaitForJira(error ?? "Waiting for Jira. Retrying the Jira write…");
+            }
+            return response;
+          },
+          {
+            maxAttempts: Infinity,
+            backoff: "fixed",
+            baseWait: 5000,
+            onRetry: (_attempt, error) =>
+              set({
+                perf:
+                  error instanceof WaitForJira
+                    ? error.message
+                    : "Can't reach the better-jira server. Retrying the Jira write…",
+              }),
+          },
+        )(ops))!;
         result = await response
           .json()
           .catch(() => ({ error: `Server returned ${response.status}` }));

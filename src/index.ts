@@ -190,7 +190,10 @@ const server = serve({
           typeof body.board === "number" ? body.board : undefined,
           body.settle !== false,
         );
-        return Response.json(result, { status: result.error ? 422 : 200 });
+        // 503: an earlier send's outcome can't be told yet; the tab sends the same ops again later.
+        return Response.json(result, {
+          status: result.retry ? 503 : result.error ? 422 : 200,
+        });
       }),
     },
     "/api/issues/:key/attachments": {
@@ -206,7 +209,7 @@ const server = serve({
             client = form.get("client");
           if (!(file instanceof File))
             return Response.json({ error: "Choose a file." }, { status: 400 });
-          const id = await uploadAttachment(
+          const { id, found } = await uploadAttachment(
             req.params.key,
             file,
             typeof client === "string" && client ? client : undefined,
@@ -229,6 +232,8 @@ const server = serve({
               size: attachment.size,
               url: `/api/issues/${encodeURIComponent(req.params.key)}/attachments/${attachment.id}`,
               mediaId,
+              // Matched after a lost answer, not answered by Jira: never deleted as an orphan.
+              ...(found ? { found: true } : {}),
             },
             collection: `jira-${issue.id}`,
           });
@@ -245,7 +250,9 @@ const server = serve({
       // No id yet: the upload was sent and its answer hasn't come (or was lost).
       const made = mirror.ledger.made(`upload:${req.params.client}`);
       return made
-        ? Response.json(made.key ? { id: made.key } : { pending: true })
+        ? Response.json(
+            made.key ? { id: made.key, ...(made.found ? { found: true } : {}) } : { pending: true },
+          )
         : Response.json({ error: "No such upload" }, { status: 404 });
     }),
     "/api/issues/:key/media/:mediaId": localOnly(

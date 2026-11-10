@@ -79,7 +79,9 @@ type Jira = {
   remove: (key: string, attachment: string) => Promise<void>;
   /** What the server made for this upload (the entry's id): its attachment id, `pending` while the send has no answer
    * yet, or undefined if the server never got it. */
-  uploaded: (client: string) => Promise<{ id?: string; pending?: boolean } | undefined>;
+  uploaded: (
+    client: string,
+  ) => Promise<{ id?: string; pending?: boolean; found?: boolean } | undefined>;
 };
 /**
  * Settles old entries: a file a draft or an unsent change still holds stays; one Jira's description or comments show
@@ -92,7 +94,7 @@ export async function cleanDraftUploads(
   now = Date.now(),
 ) {
   const due = readDraftUploads(namespace).filter((entry) => now - entry.at >= SETTLE_MS);
-  if (!due.length) return;
+  if (!due.length) return { kept: [] as string[] };
   const held = new Set<string>();
   // Drafts are stored as JSON strings of documents; read their media nodes.
   try {
@@ -102,7 +104,8 @@ export async function cleanDraftUploads(
         mediaIds(JSON.parse(localStorage.getItem(name) ?? "null"), held);
     }
   } catch {}
-  const done: string[] = [];
+  const done: string[] = [],
+    kept: string[] = [];
   const byKey = Map.groupBy(due, (entry) => entry.key);
   for (const [key, entries] of byKey) {
     let full: any;
@@ -125,16 +128,23 @@ export async function cleanDraftUploads(
       if (entry.local && (held.has(entry.local) || pending.includes(entry.local))) continue;
       // Only the attachment this upload made, by id: from its slot, or, when the answer never arrived (a reload cut it
       // off), from the server's record of it. A file of the same name and size someone else attached is never touched.
-      let id: string | undefined, media: string | undefined;
+      let id: string | undefined, media: string | undefined, found: boolean | undefined;
       try {
-        if (entry.local) ({ id, mediaId: media } = uploaded(entry)?.attachment ?? {});
+        if (entry.local) ({ id, mediaId: media, found } = uploaded(entry)?.attachment ?? {});
         else {
           const made = await jira.uploaded(entry.id);
           // Still uploading (a slow or large file): look again later rather than lose track of it.
           if (made?.pending && now - entry.at < PENDING_MAX_MS) continue;
-          id = made?.id;
+          ({ id, found } = made ?? {});
         }
       } catch {
+        continue;
+      }
+      // Matched by name and size after a lost answer, so possibly the user's own file: kept, never deleted.
+      if (found) {
+        kept.push(id!);
+        if (entry.local) remember(key, entry.local);
+        done.push(entry.id);
         continue;
       }
       const file = files.find((f) => String(f.id) === id);
@@ -151,6 +161,7 @@ export async function cleanDraftUploads(
     }
   }
   edit(namespace, (list) => list.filter((entry) => !done.includes(entry.id)));
+  return { kept };
 }
 
 /** Cleans now, then again when the youngest entry is old enough. */

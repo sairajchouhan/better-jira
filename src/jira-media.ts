@@ -1,7 +1,8 @@
 import type { Op } from "./jira-ops";
 import { issueAttachments, type Attachment } from "./attachment-media";
 
-export type Uploaded = { attachment: Attachment; collection: string };
+/** `found`: matched after a lost answer rather than answered by Jira (see uploadAttachment). */
+export type Uploaded = { attachment: Attachment & { found?: boolean }; collection: string };
 const mappings = new Map<string, Uploaded>();
 const slot = (key: string, id: string) => `better-jira:upload:${key}:${id}`;
 function known(key: string, id: string): Uploaded | undefined {

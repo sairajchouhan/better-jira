@@ -17,8 +17,22 @@ test("sync review 9: the write ledger drops rows older than its age limit, keepi
   ledger.prune();
   expect(ledger.made("old-build")).toBe(undefined);
   expect(ledger.made("comment:a")).toBe(undefined);
-  expect(ledger.made("upload:b")).toEqual({
+  expect(ledger.made("upload:b")).toMatchObject({
     key: "",
     at: 1_000_000_000_000 + LEDGER_MAX_AGE_MS / 2,
+  });
+});
+
+test("sync review 2-7: a new intent for a client starts its clock again", () => {
+  let now = 1_000;
+  const ledger = writeLedger(new Database(":memory:"), () => now);
+  ledger.intend("issue:a", { summary: "S" });
+  now = 5_000;
+  ledger.intend("issue:a", { summary: "T" });
+  expect(ledger.made("issue:a")).toEqual({
+    key: "",
+    at: 5_000,
+    data: { summary: "T" },
+    found: false,
   });
 });

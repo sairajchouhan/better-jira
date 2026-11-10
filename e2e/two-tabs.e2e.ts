@@ -93,3 +93,86 @@ test("sync review 3: when the tab creating an issue closes first, the second tab
     await host.close();
   }
 });
+
+/** Moves a board card to another status through its right-click menu. */
+async function setStatus(page: Page, key: string) {
+  await page.eval(
+    `(()=>{const n=document.querySelector('[data-key="${key}"]'),r=n.getBoundingClientRect();
+n.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.x+10,clientY:r.y+10}))})()`,
+  );
+  await page.click(`${MENU} [cmdk-item][data-value="Status"]`);
+  const pick = await page.waitFor<string>(
+    `[...document.querySelectorAll('[role="dialog"][aria-label="Change status"] [cmdk-item]')].map(n=>n.dataset.value).find(v=>v&&!/backlog/i.test(v))`,
+  );
+  await page.click(`[role="dialog"][aria-label="Change status"] [cmdk-item][data-value="${pick}"]`);
+}
+
+test("sync review 2-3: when the creating tab closes, exactly one of the open tabs sends the create, with every tab's edits", async () => {
+  const host = await open("", { setup });
+  try {
+    const one = await open("", { setup, tabOf: host });
+    const key = await createHeld(one);
+    // Each tab edits while it is the newest: a background tab's menus don't open.
+    const saved = `document.querySelector('[aria-label="Local save status"]')?.textContent==="Saved locally"`;
+    const two = await open("", { setup, tabOf: host });
+    await two.waitFor(`!!document.querySelector('[data-key="${key}"]')`);
+    const priority = await setPriority(two, key);
+    await two.waitFor(saved);
+    const three = await open("", { setup, tabOf: host });
+    await three.waitFor(`!!document.querySelector('[data-key="${key}"]')`);
+    await setStatus(three, key);
+    await three.waitFor(saved);
+    await one.close();
+    const creates = `${sentTo(key)}.filter(o=>o.op==='create')`;
+    const count = async () =>
+      (await two.eval<number>(`${creates}.length`)) +
+      (await three.eval<number>(`${creates}.length`));
+    for (let i = 0; i < 80 && !(await count()); i++) await Bun.sleep(100);
+    // Both tabs see the creator gone; give the slower one time to send a second create if it would.
+    await Bun.sleep(2500);
+    expect(await count()).toBe(1);
+    const [create] = [...(await two.eval<any[]>(creates)), ...(await three.eval<any[]>(creates))];
+    expect(create.fields.priority).toBe(priority);
+    expect(create.fields.status).not.toBe("backlog");
+    await two.close();
+    await three.close();
+  } finally {
+    await host.close();
+  }
+});
+
+test("sync review 2-5: a create taken over from a closed tab goes before the jobs that name its key", async () => {
+  const host = await open("", { setup });
+  try {
+    const one = await open("", { setup, tabOf: host });
+    const key = await createHeld(one);
+    const two = await open("", { setup, tabOf: host });
+    await two.waitFor(`!!document.querySelector('[data-key="${key}"]')`);
+    // A related issue made in tab two links to the issue tab one is creating, so its create waits for that key.
+    await two.eval(
+      `(()=>{const n=document.querySelector('[data-key="${key}"]'),r=n.getBoundingClientRect();
+n.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.x+10,clientY:r.y+10}))})()`,
+    );
+    await two.click(`${MENU} [cmdk-item][data-value="Create related"]`);
+    const issue = await two.waitFor<string>(
+      `[...document.querySelectorAll('[role="dialog"] [cmdk-item]')].map(n=>n.dataset.value).find(v=>/^(Create related › )?Issue…$/.test(v))`,
+    );
+    await two.click(`[role="dialog"] [cmdk-item][data-value="${issue}"]`);
+    await two.waitFor(
+      `document.activeElement===document.querySelector('[aria-label="Issue title"]')`,
+    );
+    await two.type("Related");
+    await two.key("Enter", "meta");
+    await two.waitFor(
+      `/^Created TEST-NEW\\d+/.test(document.querySelector("[data-toast]")?.textContent??"")`,
+    );
+    await Bun.sleep(1500);
+    expect(await two.eval(`window.__ops.length`)).toBe(0);
+    await one.close();
+    const first = await two.waitFor<any>(`window.__ops[0]`, 8000);
+    expect([first.key, first.ops[0].op]).toEqual([key, "create"]);
+    await two.close();
+  } finally {
+    await host.close();
+  }
+});

@@ -111,8 +111,13 @@ const tagged = (properties: any, client: string) =>
   Array.isArray(properties)
     ? properties.some((p) => p?.key === TAG && p.value?.client === client)
     : properties?.[TAG]?.client === client;
-/** Jira's search index trails a create by seconds: an intent this young that search can't find yet is looked for again. */
-const SEARCH_LAG_MS = 30_000;
+/**
+ * Jira's search index trails a create, sometimes by minutes: an issue intent younger than this that search can't find
+ * is not taken as absent. The write answers "retry later" and the tab sends it again, rather than create a second issue.
+ */
+export const SEARCH_WAIT_MS = 5 * 60_000;
+/** Sent again later: what an earlier send made can't be told yet. */
+export class RetryLater extends Error {}
 let me: Promise<string> | undefined;
 const myself = () =>
   (me ??= jira<{ accountId: string }>("/rest/api/3/myself").then(
@@ -130,37 +135,43 @@ const refusedOutright = (e: unknown) =>
     e.status < 500 &&
     e.status !== 408 &&
     e.status !== 429);
+type Made = { id: string; replay: boolean; data?: any; found: boolean };
+type Intent = NonNullable<ReturnType<typeof ledger.made>>;
 const making = new Map<string, Promise<unknown>>();
 /**
  * Jira's creates (issue, comment, attachment) have no idempotency key, so what `client` made is kept, and a replay
- * (another tab, a reload, a retry after a lost answer) gets it back while `exists` says Jira still has it. The intent is
- * recorded before the send: if the answer never came, `find` looks for what the send made (since the intent's time)
- * before sending again. Sends of one client run one at a time, so two at once never both create (R2-create-D1, sync D1).
+ * (another tab, a reload, a retry after a lost answer) gets it back while `exists` says Jira still has it. The intent,
+ * with `data` (what the send starts from), is recorded before the send: if the answer never came, `find` looks for what
+ * the send made before sending again. Sends of one client run one at a time, so two at once never both create
+ * (R2-create-D1, sync D1).
  */
 export function once(
   client: string | undefined,
   exists: (id: string) => Promise<boolean>,
   make: () => Promise<string>,
-  find: (since: number) => Promise<string | undefined>,
-): Promise<{ id: string; replay: boolean }> {
-  if (!client) return make().then((id) => ({ id, replay: false }));
+  find: (intent: Intent) => Promise<{ id: string; found?: boolean } | undefined>,
+  data?: () => unknown,
+): Promise<Made> {
+  if (!client) return make().then((id) => ({ id, replay: false, found: false }));
   const turn = (making.get(client) ?? Promise.resolve())
     .catch(() => {})
-    .then(async () => {
+    .then(async (): Promise<Made> => {
       const known = ledger.made(client);
-      if (known?.key && (await exists(known.key))) return { id: known.key, replay: true };
+      if (known?.key && (await exists(known.key)))
+        return { id: known.key, replay: true, data: known.data, found: known.found };
       if (known && !known.key) {
-        const found = await find(known.at);
-        if (found) {
-          ledger.remember(client, found);
-          return { id: found, replay: true };
+        const hit = await find(known);
+        if (hit) {
+          ledger.remember(client, hit.id, hit.found);
+          return { id: hit.id, replay: true, data: known.data, found: !!hit.found };
         }
       }
-      ledger.intend(client);
+      const start = await data?.();
+      ledger.intend(client, start);
       try {
         const id = await make();
         ledger.remember(client, id);
-        return { id, replay: false };
+        return { id, replay: false, data: start, found: false };
       } catch (e) {
         if (refusedOutright(e)) ledger.forget(client);
         throw e;
@@ -172,14 +183,16 @@ export function once(
 }
 /**
  * Uploads a file to the issue once per `client` (the app's id for the file), so a resend after a lost answer doesn't
- * attach it twice. Jira keeps no properties on attachments: a send whose answer was lost is matched to the file this
- * account attached since the intent with the same name and size, the user's own copy of the same bytes either way.
+ * attach it twice. Jira keeps no properties on attachments, so the intent keeps the issue's attachment ids from before
+ * the send: a lost answer is matched to a file this account attached since, of the same name and size, that no other
+ * upload owns. Such a match is marked `found`: it may be the user's own file, so cleanup never deletes it.
  */
 export async function uploadAttachment(key: string, file: File, client?: string) {
   const attachments = async () =>
     ((await jira(`${at(key)}?fields=attachment`)).fields.attachment ?? []) as any[];
+  const ledgerClient = client && `upload:${client}`;
   const made = await once(
-    client && `upload:${client}`,
+    ledgerClient,
     async (id) => (await attachments()).some((a) => String(a.id) === id),
     async () => {
       const body = new FormData();
@@ -187,21 +200,91 @@ export async function uploadAttachment(key: string, file: File, client?: string)
       const [attachment] = await jira(`${at(key)}/attachments`, { method: "POST", body });
       return String(attachment.id);
     },
-    async (since) => {
+    async ({ data: before }) => {
+      // An older build's intent has no list to tell new files from old ones: upload again rather than guess.
+      if (!Array.isArray(before)) return undefined;
       const account = await myself();
       const match = (await attachments())
         .filter(
           (a) =>
+            !before.includes(String(a.id)) &&
+            !ledger.owned("upload:", String(a.id), ledgerClient!) &&
             a.author?.accountId === account &&
             a.filename === file.name &&
-            Number(a.size) === file.size &&
-            Date.parse(a.created) >= since - 60_000,
+            Number(a.size) === file.size,
         )
         .sort((a, b) => Date.parse(a.created) - Date.parse(b.created))[0];
-      return match && String(match.id);
+      return match && { id: String(match.id), found: true };
     },
+    async () => (await attachments()).map((a) => String(a.id)),
   );
-  return made.id;
+  return { id: made.id, found: made.found };
+}
+/** Every comment on the issue, page by page. */
+async function allComments(key: string) {
+  const comments: any[] = [];
+  for (let startAt = 0; ;) {
+    const page = await jira<{ comments?: any[]; total?: number }>(
+      `${at(key)}/comment?expand=properties&startAt=${startAt}&maxResults=100`,
+    );
+    comments.push(...(page.comments ?? []));
+    startAt += page.comments?.length ?? 0;
+    if (!page.comments?.length || startAt >= (page.total ?? 0)) return comments;
+  }
+}
+/** The issue this client's create made, by its tag: every page of the project's issues this user created since the intent. */
+async function taggedIssue(project: string, client: string, since: number) {
+  const minutes = Math.ceil((Date.now() - since) / 60_000) + 2;
+  let nextPageToken: string | undefined;
+  do {
+    const page = await jira<{ issues?: any[]; nextPageToken?: string }>("/rest/api/3/search/jql", {
+      method: "POST",
+      body: JSON.stringify({
+        jql: `project = "${project}" AND creator = currentUser() AND created >= -${minutes}m`,
+        fields: ["summary"],
+        properties: [TAG],
+        maxResults: 100,
+        ...(nextPageToken ? { nextPageToken } : {}),
+      }),
+    });
+    const hit = page.issues?.find((i) => tagged(i.properties, client));
+    if (hit) return hit.key as string;
+    nextPageToken = page.nextPageToken;
+  } while (nextPageToken);
+}
+/** A field's value as the create payload shapes it, from Jira's copy or from a payload, for comparing the two. */
+function comparable(field: string, value: any): unknown {
+  if (value === null || value === undefined) return undefined;
+  if (field === "description") return adfToText(value).replace(/\s+/g, " ").trim();
+  if (field === "priority") return value.name;
+  if (field === "assignee") return value.accountId;
+  if (field === "parent") return value.key;
+  if (field === "fixVersions") return value.map((v: any) => String(v.id)).sort();
+  if (field === "labels") return [...value].sort();
+  return value;
+}
+const sameValue = (field: string, a: unknown, b: unknown) =>
+  JSON.stringify(comparable(field, a)) === JSON.stringify(comparable(field, b));
+/**
+ * A replayed create: the first send made the issue, but its answer was lost and the issue was edited since. Sends the
+ * fields edited since that send (`sent`), unless Jira's copy of one changed too: Jira's newer value wins then, as a
+ * description edit made from an older text does (DESCRIPTION_CONFLICT). Empty fields are never sent.
+ */
+async function catchUp(key: string, fields: Record<string, unknown>, sent: any) {
+  // An older build's intent has no record of what was sent: nothing to tell edits from Jira's values.
+  if (!sent) return;
+  const edited = Object.entries(fields).filter(
+    ([field, value]) =>
+      !["project", "issuetype"].includes(field) && !sameValue(field, value, sent[field]),
+  );
+  if (!edited.length) return;
+  const current =
+    (await jira(`${at(key)}?fields=${edited.map(([f]) => f).join(",")}`)).fields ?? {};
+  const update = Object.fromEntries(
+    edited.filter(([field]) => sameValue(field, current[field], sent[field])),
+  );
+  if (Object.keys(update).length)
+    await jira(at(key), { method: "PUT", body: JSON.stringify({ fields: update }) });
 }
 async function run(ctx: Context, op: Op) {
   const key = ctx.key;
@@ -294,33 +377,26 @@ async function run(ctx: Context, op: Op) {
               body: JSON.stringify({ fields, ...tag(op.client) }),
             })
           ).key,
-        async (since) => {
-          for (;;) {
-            const minutes = Math.ceil((Date.now() - since) / 60_000) + 2;
-            const { issues = [] } = await jira<{ issues?: any[] }>("/rest/api/3/search/jql", {
-              method: "POST",
-              body: JSON.stringify({
-                jql: `project = "${project}" AND creator = currentUser() AND created >= -${minutes}m`,
-                fields: ["summary"],
-                properties: [TAG],
-                maxResults: 100,
-              }),
-            });
-            const hit = issues.find((i) => tagged(i.properties, op.client!));
-            if (hit) return hit.key as string;
-            if (Date.now() - since >= SEARCH_LAG_MS) return undefined;
-            await Bun.sleep(2000);
-          }
+        async ({ at: since }) => {
+          const hit = await taggedIssue(project, op.client!, since);
+          if (hit) return { id: hit };
+          // Not in search yet: Jira's index may still be behind. Only an intent this old counts as never made.
+          if (Date.now() - since < SEARCH_WAIT_MS)
+            throw new RetryLater(
+              "Jira hasn't confirmed whether an earlier send created this issue yet. It will be sent again shortly.",
+            );
         },
+        () => fields,
       );
       ctx.created[key] = made.id;
       ctx.key = made.id;
       if (made.replay) {
-        // The first send's answer was lost, so edits made since then reached no one: the create's fields are today's.
         ctx.replay = true;
-        const { issuetype: _type, ...update } = fieldPayload(rest);
-        if (Object.keys(update).length)
-          await jira(at(made.id), { method: "PUT", body: JSON.stringify({ fields: update }) });
+        // A field Jira refuses doesn't keep the job's later steps (status, comments, links) from going.
+        await catchUp(made.id, fields, made.data).catch((e) => {
+          if (!(e instanceof JiraError && e.status === 400) && !(e instanceof UserError)) throw e;
+          ctx.warning = `Jira didn't take the edits made to ${made.id} since it was created: ${e instanceof JiraError ? e.reason : e.message}`;
+        });
       }
       if (status)
         await transition(made.id, status).catch((e) => {
@@ -372,11 +448,8 @@ async function run(ctx: Context, op: Op) {
             ).id,
           ),
         async () => {
-          const { comments = [] } = await jira<{ comments?: any[] }>(
-            `${at(key)}/comment?expand=properties&orderBy=-created&maxResults=100`,
-          );
-          const hit = comments.find((c) => tagged(c.properties, op.client!));
-          return hit && String(hit.id);
+          const hit = (await allComments(key)).find((c) => tagged(c.properties, op.client!));
+          return hit && { id: String(hit.id) };
         },
       );
       ctx.created[op.ref] = comment.id;
@@ -482,7 +555,22 @@ async function run(ctx: Context, op: Op) {
  * Applies a client's ops in order, then returns Jira's fresh copy of the issue (and of linked issues) either way.
  * `settle: false` skips re-reading the issue itself, for a client that has a later write for it queued (R2-create-D2).
  */
-export async function applyOps(key: string, ops: Op[], board?: number, settle = true) {
+/** What a write did; `retry`: send the same ops again later (an earlier send's outcome can't be told yet). */
+export type Written = {
+  error?: string;
+  retry?: boolean;
+  key: string;
+  created: Record<string, string>;
+  others: any[];
+  issue?: any;
+  full?: any;
+};
+export async function applyOps(
+  key: string,
+  ops: Op[],
+  board?: number,
+  settle = true,
+): Promise<Written> {
   const ctx: Context = { key, created: {}, touched: new Set() };
   let error: string | undefined;
   // A later op in this job may name a comment an earlier op just created.
@@ -501,6 +589,8 @@ export async function applyOps(key: string, ops: Op[], board?: number, settle = 
       i = end;
     }
   } catch (e) {
+    if (e instanceof RetryLater)
+      return { error: e.message, retry: true, key, created: {}, others: [] };
     error =
       e instanceof JiraError
         ? e.reason

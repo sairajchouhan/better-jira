@@ -99,3 +99,53 @@ test("R2-comments-D5: orphaned composer uploads leave Jira on a later load, and 
     else delete (globalThis as any).localStorage;
   }
 });
+
+test("sync review 2-1: an upload matched by name and size after a lost answer is kept, never deleted", async () => {
+  const slots = new Map<string, string>();
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      get length() {
+        return slots.size;
+      },
+      key: (i: number) => [...slots.keys()][i] ?? null,
+      getItem: (key: string) => slots.get(key) ?? null,
+      setItem: (key: string, value: string) => slots.set(key, value),
+      removeItem: (key: string) => slots.delete(key),
+    },
+  });
+  try {
+    const ids = noteDraftUploads("ns2", "KAN-2", [
+      new File(["ab"], "a.png"),
+      new File(["cd"], "c.png"),
+    ]);
+    // a.png's answer arrived marked found; c.png's was cut off and only the server knows its found match.
+    settleDraftUploads("ns2", ids.slice(0, 1), ["l-a"]);
+    slots.set(
+      "better-jira:upload:KAN-2:l-a",
+      JSON.stringify({ attachment: { id: "201", mediaId: "m-201", found: true }, collection: "c" }),
+    );
+    const removed: string[] = [];
+    const jira = {
+      full: async () => ({
+        fields: {
+          comment: { comments: [] },
+          attachment: [
+            { id: "201", filename: "a.png", size: 2 },
+            { id: "202", filename: "c.png", size: 2 },
+          ],
+        },
+      }),
+      remove: async (_key: string, id: string) => void removed.push(id),
+      uploaded: async () => ({ id: "202", found: true }),
+    };
+    const { kept } = await cleanDraftUploads("ns2", "[]", jira, Date.now() + SETTLE_MS);
+    expect(removed).toEqual([]);
+    expect(kept.sort()).toEqual(["201", "202"]);
+    expect(readDraftUploads("ns2")).toEqual([]);
+  } finally {
+    if (previous) Object.defineProperty(globalThis, "localStorage", previous);
+    else delete (globalThis as any).localStorage;
+  }
+});

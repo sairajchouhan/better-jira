@@ -561,7 +561,11 @@ export class LocalDatabase {
   }
   /** The key moves other tabs saved: app key → Jira key. */
   /** The saved key moves (app key → Jira key), and the keys of saved issues made here that Jira doesn't have yet. */
-  async stored(): Promise<{ keys: Record<string, string>; created: Set<string> }> {
+  async stored(): Promise<{
+    keys: Record<string, string>;
+    created: Set<string>;
+    changes: LocalChange[];
+  }> {
     const tx = this.db.transaction("state", "readonly"),
       done = completed(tx),
       [raw] = await Promise.all([request(tx.objectStore("state").get("workspace")), done]),
@@ -569,6 +573,7 @@ export class LocalDatabase {
     return {
       keys: state.keys ?? {},
       created: new Set(state.changes.filter((c) => c.created).map((c) => c.key)),
+      changes: state.changes,
     };
   }
   /**
@@ -603,7 +608,10 @@ export class LocalDatabase {
         if (
           object(change) &&
           (!only || only.has(change.key as string)) &&
-          (typeof change.tab !== "string" || !live.has(change.tab))
+          // Already this tab's (it edited the issue): taking it over is this tab's to do.
+          (typeof change.tab !== "string" ||
+            !live.has(change.tab) ||
+            (!!only && change.tab === tab))
         ) {
           change.tab = tab;
           claimed.add(change.key);
