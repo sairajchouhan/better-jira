@@ -15,22 +15,63 @@ Object.defineProperty(globalThis, "requestAnimationFrame", {
   value: (callback: FrameRequestCallback) => setTimeout(() => callback(0), 0),
 });
 Object.defineProperty(globalThis, "indexedDB", { configurable: true, value: new IDBFactory() });
-// Tests after load() navigate; give them a minimal browser location.
+// Tests after load() navigate; give them a browser with a history stack, sessionStorage and window events.
+const page = { entries: ["http://localhost:3000/"], index: 0 };
+const windowListeners = new Map<string, () => void>();
+const session = new Map<string, string>();
 Object.defineProperty(globalThis, "location", {
   configurable: true,
-  value: { href: "http://localhost:3000/", origin: "http://localhost:3000" },
+  value: {
+    get href() {
+      return page.entries[page.index]!;
+    },
+    get pathname() {
+      return new URL(page.entries[page.index]!).pathname;
+    },
+    origin: "http://localhost:3000",
+  },
 });
 Object.defineProperty(globalThis, "history", {
   configurable: true,
   value: {
+    state: null,
     pushState: (_s: unknown, _t: string, url: URL) => {
-      (globalThis as any).location.href = String(url);
+      page.entries.splice(page.index + 1);
+      page.entries.push(String(url));
+      page.index++;
     },
     replaceState: (_s: unknown, _t: string, url: URL) => {
-      (globalThis as any).location.href = String(url);
+      page.entries[page.index] = String(url);
     },
   },
 });
+Object.defineProperty(globalThis, "window", {
+  configurable: true,
+  value: { addEventListener: (name: string, listener: () => void) => windowListeners.set(name, listener) },
+});
+Object.defineProperty(globalThis, "sessionStorage", {
+  configurable: true,
+  value: {
+    getItem: (key: string) => session.get(key) ?? null,
+    setItem: (key: string, value: string) => session.set(key, value),
+    removeItem: (key: string) => session.delete(key),
+  },
+});
+/** The browser's Back (-1) or Forward (+1) button. */
+const travel = (step: number) => {
+  page.index += step;
+  windowListeners.get("popstate")!();
+};
+/** Opens an address as a fresh tab history, through the same restore a reload or link uses. */
+const visit = (url: string) => {
+  page.entries = [new URL(url, "http://localhost:3000").href];
+  page.index = 0;
+  windowListeners.get("popstate")!();
+};
+const address = () => {
+  const url = new URL(location.href);
+  return url.pathname + url.search;
+};
 
 test("personal issue edits, comments, creation and deletion undo without losing issue details", async () => {
   const { actions, get, set, navigate, undoEdit, redoEdit, ME } = await import("./store");
@@ -181,38 +222,10 @@ test("browser history restores issue selection without pushing another navigatio
   const issues = [...get().issues.values()],
     boards = get().boards;
   const [first, second] = issues;
-  const keys = ["location", "history", "window"] as const;
-  const descriptors = keys.map((key) => Object.getOwnPropertyDescriptor(globalThis, key));
   const originalFetch = globalThis.fetch;
-  const page = { href: "http://localhost:3000/?board=1" },
-    entries = [page.href];
-  let index = 0;
-  let popstate: (() => void) | undefined;
+  page.entries = ["http://localhost:3000/?board=1"];
+  page.index = 0;
   try {
-    Object.defineProperty(globalThis, "location", { configurable: true, value: page });
-    Object.defineProperty(globalThis, "history", {
-      configurable: true,
-      value: {
-        pushState: (_state: unknown, _title: string, url: URL) => {
-          entries.splice(index + 1);
-          entries.push(String(url));
-          index++;
-          page.href = String(url);
-        },
-        replaceState: (_state: unknown, _title: string, url: URL) => {
-          entries[index] = String(url);
-          page.href = String(url);
-        },
-      },
-    });
-    Object.defineProperty(globalThis, "window", {
-      configurable: true,
-      value: {
-        addEventListener: (name: string, listener: () => void) => {
-          if (name === "popstate") popstate = listener;
-        },
-      },
-    });
     globalThis.fetch = Object.assign(
       async (input: string | URL | Request) =>
         Response.json(
@@ -229,25 +242,18 @@ test("browser history restores issue selection without pushing another navigatio
     await load();
     navigate({ selected: first!.key, panel: true, view: "page" });
     navigate({ selected: second!.key });
-    expect(entries).toHaveLength(3);
-    page.href = entries[--index]!;
-    popstate!();
+    expect(page.entries).toHaveLength(3);
+    travel(-1);
     expect(get().selected).toBe(first!.key);
     expect(get().panel).toBe(true);
     expect(get().view).toBe("page");
-    expect(entries).toHaveLength(3);
-    page.href = entries[++index]!;
-    popstate!();
+    expect(page.entries).toHaveLength(3);
+    travel(1);
     expect(get().selected).toBe(second!.key);
     navigate({ panel: false });
-    expect(new URL(page.href).searchParams.has("issue")).toBe(false);
+    expect(new URL(location.href).searchParams.has("issue")).toBe(false);
   } finally {
     globalThis.fetch = originalFetch;
-    keys.forEach((key, i) => {
-      const descriptor = descriptors[i];
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-      else Reflect.deleteProperty(globalThis, key);
-    });
   }
 });
 
@@ -1148,4 +1154,1024 @@ test("view settings: an edit in the view editor goes to the draft", async () => 
   expect(get().editorDraft!.filters.children).toHaveLength(0);
   expect(JSON.stringify(get().preferences)).toBe(before);
   discardViewEditor();
+});
+
+// Characterization of screen navigation: what each step shows, which address it leaves and which history entries exist.
+const navigationFixture = async () => {
+  const store = await import("./store");
+  const { defaultPreferences } = await import("./view-model");
+  const columns = [{ name: "Todo", statuses: [{ id: "todo", name: "Todo", category: "new" }] }];
+  const template = [...store.get().issues.values()][0]!;
+  const issues = new Map(store.get().issues);
+  for (const [key, board] of [["NAV-1", 1], ["NAV-2", 1], ["NAV-3", 2]] as const)
+    issues.set(key, { ...template, key, board, parent: undefined });
+  store.set({
+    boards: [{ id: 1, name: "Personal", columns }, { id: 2, name: "Second", columns }],
+    issues,
+    preferences: { 1: defaultPreferences(), 2: defaultPreferences() },
+    savedViews: [],
+  });
+  visit("/?board=1");
+  page.entries = [page.entries[0]!];
+  session.clear();
+  const trace = () => {
+    const s = store.get();
+    return {
+      address: address(),
+      entries: page.index + 1 + "/" + page.entries.length,
+      board: s.board,
+      view: s.view,
+      selected: s.selected,
+      panel: s.panel,
+      document: s.document,
+      inbox: s.inbox,
+      mine: s.mine,
+      viewsPage: s.viewsPage,
+      activeViewId: s.activeViewId,
+      overlayFilters: s.overlayFilters.children.length,
+      draft: s.editorDraft ? `${s.editorDraft.name || "new"}:${s.editorDraft.display.openIn}` : null,
+      boardOpenIn: `${s.preferences[1]?.display.openIn}/${s.preferences[2]?.display.openIn}`,
+    };
+  };
+  return { ...store, trace };
+};
+const savedView = async (patch: Record<string, unknown>) => {
+  const v = await viewFixture(patch);
+  return { ...v, display: { ...v.display, ...(patch.display as object) } };
+};
+const recordRequests = () => {
+  const original = globalThis.fetch,
+    requests: string[] = [];
+  globalThis.fetch = Object.assign(async (input: string | URL | Request, init?: RequestInit) => {
+    requests.push(`${init?.method ?? "GET"} ${String(input)} ${init?.body ?? ""}`);
+    return String(input).startsWith("/api/views/")
+      ? Response.json({ ...JSON.parse(String(init?.body ?? "{}")), id: String(input).split("/").pop() })
+      : Response.json({});
+  }, original);
+  return { requests, restore: () => (globalThis.fetch = original) };
+};
+
+test("navigation: back and forward restore each screen without adding entries", async () => {
+  const { navigate, openSavedView, set, get, trace } = await navigationFixture();
+  const view = await savedView({ id: "nav-view", name: "Nav view", board: 2 });
+  set({ savedViews: [view] });
+  const steps = [trace()];
+  navigate({ selected: "NAV-1", panel: true });
+  steps.push(trace());
+  navigate({ board: 2, selected: null, panel: false });
+  steps.push(trace());
+  openSavedView(view);
+  steps.push(trace());
+  navigate({ inbox: true, selected: null, panel: false });
+  steps.push(trace());
+  travel(-1);
+  steps.push(trace());
+  travel(-1);
+  steps.push(trace());
+  travel(-1);
+  steps.push(trace());
+  travel(1);
+  steps.push(trace());
+  travel(1);
+  steps.push(trace());
+  expect(get().activeViewId).toBe(view.id);
+  expect(steps).toMatchInlineSnapshot(`
+    [
+      {
+        "activeViewId": null,
+        "address": "/?board=1",
+        "board": 1,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "1/1",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": null,
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=1&issue=NAV-1&view=side",
+        "board": 1,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "2/2",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": true,
+        "selected": "NAV-1",
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=2",
+        "board": 2,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "3/3",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": null,
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": "nav-view",
+        "address": "/view/nav-view-nav-view?board=2",
+        "board": 2,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "4/4",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": null,
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=2&inbox=1",
+        "board": 2,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "5/5",
+        "inbox": true,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": null,
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": "nav-view",
+        "address": "/view/nav-view-nav-view?board=2",
+        "board": 2,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "4/5",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": null,
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=2",
+        "board": 2,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "3/5",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": null,
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=1&issue=NAV-1&view=side",
+        "board": 1,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "2/5",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": true,
+        "selected": "NAV-1",
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=2",
+        "board": 2,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "3/5",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": null,
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": "nav-view",
+        "address": "/view/nav-view-nav-view?board=2",
+        "board": 2,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "4/5",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": null,
+        "view": "side",
+        "viewsPage": false,
+      },
+    ]
+  `);
+});
+
+test("navigation: issues open beside the board or as a page, and the board remembers the choice", async () => {
+  const { navigate, ui, trace } = await navigationFixture();
+  const steps = [];
+  navigate({ selected: "NAV-1", panel: true });
+  steps.push(trace());
+  navigate({ view: "page" });
+  steps.push(trace());
+  ui.send({ type: "escape" });
+  await Promise.resolve();
+  steps.push(trace());
+  navigate({ selected: "NAV-2", panel: true, document: "doc-1" });
+  steps.push(trace());
+  navigate({ selected: "NAV-1" });
+  steps.push(trace());
+  navigate({ board: 2 });
+  steps.push(trace());
+  navigate({ view: "side" });
+  steps.push(trace());
+  travel(-1);
+  steps.push(trace());
+  expect(steps).toMatchInlineSnapshot(`
+    [
+      {
+        "activeViewId": null,
+        "address": "/?board=1&issue=NAV-1&view=side",
+        "board": 1,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "2/2",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": true,
+        "selected": "NAV-1",
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=1&issue=NAV-1&view=page",
+        "board": 1,
+        "boardOpenIn": "page/side",
+        "document": null,
+        "draft": null,
+        "entries": "3/3",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": true,
+        "selected": "NAV-1",
+        "view": "page",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=1",
+        "board": 1,
+        "boardOpenIn": "page/side",
+        "document": null,
+        "draft": null,
+        "entries": "4/4",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": "NAV-1",
+        "view": "page",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=1&issue=NAV-2&view=page&document=doc-1",
+        "board": 1,
+        "boardOpenIn": "page/side",
+        "document": "doc-1",
+        "draft": null,
+        "entries": "5/5",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": true,
+        "selected": "NAV-2",
+        "view": "page",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=1&issue=NAV-1&view=page",
+        "board": 1,
+        "boardOpenIn": "page/side",
+        "document": null,
+        "draft": null,
+        "entries": "6/6",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": true,
+        "selected": "NAV-1",
+        "view": "page",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=2&issue=NAV-1&view=side",
+        "board": 2,
+        "boardOpenIn": "page/side",
+        "document": null,
+        "draft": null,
+        "entries": "7/7",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": true,
+        "selected": "NAV-1",
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=2&issue=NAV-1&view=side",
+        "board": 2,
+        "boardOpenIn": "page/side",
+        "document": null,
+        "draft": null,
+        "entries": "7/7",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": true,
+        "selected": "NAV-1",
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=1&issue=NAV-1&view=page",
+        "board": 1,
+        "boardOpenIn": "page/side",
+        "document": null,
+        "draft": null,
+        "entries": "6/7",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": true,
+        "selected": "NAV-1",
+        "view": "page",
+        "viewsPage": false,
+      },
+    ]
+  `);
+});
+
+test("navigation: a link's view opens that issue once and never becomes the board's preference", async () => {
+  const { navigate, ui, trace } = await navigationFixture();
+  const steps = [];
+  visit("/?board=1&issue=NAV-1&view=page");
+  steps.push(trace());
+  navigate({ selected: "NAV-2" });
+  steps.push(trace());
+  ui.send({ type: "escape" });
+  steps.push(trace());
+  await Promise.resolve();
+  steps.push(trace());
+  navigate({ selected: "NAV-1", panel: true });
+  steps.push(trace());
+  visit("/?board=2&issue=NAV-3&view=page");
+  steps.push(trace());
+  navigate({ view: "side" });
+  steps.push(trace());
+  navigate({ panel: false });
+  await Promise.resolve();
+  steps.push(trace());
+  expect(steps).toMatchInlineSnapshot(`
+    [
+      {
+        "activeViewId": null,
+        "address": "/?board=1&issue=NAV-1&view=page",
+        "board": 1,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "1/1",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": true,
+        "selected": "NAV-1",
+        "view": "page",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=1&issue=NAV-2&view=page",
+        "board": 1,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "2/2",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": true,
+        "selected": "NAV-2",
+        "view": "page",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=1",
+        "board": 1,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "3/3",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": "NAV-2",
+        "view": "page",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=1",
+        "board": 1,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "3/3",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": "NAV-2",
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=1&issue=NAV-1&view=side",
+        "board": 1,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "4/4",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": true,
+        "selected": "NAV-1",
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=2&issue=NAV-3&view=page",
+        "board": 2,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "1/1",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": true,
+        "selected": "NAV-3",
+        "view": "page",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=2&issue=NAV-3&view=side",
+        "board": 2,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "2/2",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": true,
+        "selected": "NAV-3",
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=2",
+        "board": 2,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "3/3",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": "NAV-3",
+        "view": "side",
+        "viewsPage": false,
+      },
+    ]
+  `);
+});
+
+test("navigation: changing how issues open inside a saved view saves it to that view, but restoring the view never does (BJ-155)", async () => {
+  const { navigate, openSavedView, set, get, trace } = await navigationFixture();
+  const view = await savedView({ id: "open-in", name: "Open in", display: { openIn: "page" } });
+  set({ savedViews: [view] });
+  const { requests, restore } = recordRequests();
+  const steps = [];
+  try {
+    visit("/view/open-in-open-in?board=1");
+    steps.push(trace());
+    visit("/view/open-in?board=1&issue=NAV-1&view=side");
+    steps.push(trace());
+    navigate({ panel: false });
+    await Promise.resolve();
+    steps.push(trace());
+    expect(requests).toEqual([]);
+    openSavedView(view);
+    navigate({ selected: "NAV-1", panel: true });
+    steps.push(trace());
+    navigate({ view: "side" });
+    steps.push(trace());
+    await Promise.resolve();
+    expect(get().savedViews[0]!.display.openIn).toBe("side");
+    navigate({ view: "side" });
+    steps.push(trace());
+    travel(-1);
+    steps.push(trace());
+    await Promise.resolve();
+    expect(steps).toMatchInlineSnapshot(`
+      [
+        {
+          "activeViewId": "open-in",
+          "address": "/view/open-in-open-in?board=1",
+          "board": 1,
+          "boardOpenIn": "side/side",
+          "document": null,
+          "draft": null,
+          "entries": "1/1",
+          "inbox": false,
+          "mine": false,
+          "overlayFilters": 0,
+          "panel": false,
+          "selected": null,
+          "view": "page",
+          "viewsPage": false,
+        },
+        {
+          "activeViewId": "open-in",
+          "address": "/view/open-in-open-in?board=1&issue=NAV-1&view=side",
+          "board": 1,
+          "boardOpenIn": "side/side",
+          "document": null,
+          "draft": null,
+          "entries": "1/1",
+          "inbox": false,
+          "mine": false,
+          "overlayFilters": 0,
+          "panel": true,
+          "selected": "NAV-1",
+          "view": "side",
+          "viewsPage": false,
+        },
+        {
+          "activeViewId": "open-in",
+          "address": "/view/open-in-open-in?board=1",
+          "board": 1,
+          "boardOpenIn": "side/side",
+          "document": null,
+          "draft": null,
+          "entries": "2/2",
+          "inbox": false,
+          "mine": false,
+          "overlayFilters": 0,
+          "panel": false,
+          "selected": "NAV-1",
+          "view": "page",
+          "viewsPage": false,
+        },
+        {
+          "activeViewId": "open-in",
+          "address": "/view/open-in-open-in?board=1&issue=NAV-1&view=page",
+          "board": 1,
+          "boardOpenIn": "side/side",
+          "document": null,
+          "draft": null,
+          "entries": "3/3",
+          "inbox": false,
+          "mine": false,
+          "overlayFilters": 0,
+          "panel": true,
+          "selected": "NAV-1",
+          "view": "page",
+          "viewsPage": false,
+        },
+        {
+          "activeViewId": "open-in",
+          "address": "/view/open-in-open-in?board=1&issue=NAV-1&view=side",
+          "board": 1,
+          "boardOpenIn": "side/side",
+          "document": null,
+          "draft": null,
+          "entries": "4/4",
+          "inbox": false,
+          "mine": false,
+          "overlayFilters": 0,
+          "panel": true,
+          "selected": "NAV-1",
+          "view": "side",
+          "viewsPage": false,
+        },
+        {
+          "activeViewId": "open-in",
+          "address": "/view/open-in-open-in?board=1&issue=NAV-1&view=side",
+          "board": 1,
+          "boardOpenIn": "side/side",
+          "document": null,
+          "draft": null,
+          "entries": "4/4",
+          "inbox": false,
+          "mine": false,
+          "overlayFilters": 0,
+          "panel": true,
+          "selected": "NAV-1",
+          "view": "side",
+          "viewsPage": false,
+        },
+        {
+          "activeViewId": "open-in",
+          "address": "/view/open-in-open-in?board=1&issue=NAV-1&view=page",
+          "board": 1,
+          "boardOpenIn": "side/side",
+          "document": null,
+          "draft": null,
+          "entries": "3/4",
+          "inbox": false,
+          "mine": false,
+          "overlayFilters": 0,
+          "panel": true,
+          "selected": "NAV-1",
+          "view": "page",
+          "viewsPage": false,
+        },
+      ]
+    `);
+    expect(requests.map((r) => r.replace(/,"(?!openIn)[a-zA-Z]+":(\[[^\]]*\]|"[^"]*"|[^,}]*)/g, ""))).toMatchInlineSnapshot(`
+      [
+        "PUT /api/views/open-in {"display":{"openIn":"side"}}",
+      ]
+    `);
+  } finally {
+    restore();
+  }
+});
+
+test("navigation: switching or leaving a view resets its filter overlay; closing a menu forgets its target", async () => {
+  const { navigate, openSavedView, changePreferences, set, get, ui, trace } = await navigationFixture();
+  const first = await savedView({ id: "first", name: "First" }),
+    second = await savedView({ id: "second", name: "Second" });
+  set({ savedViews: [first, second] });
+  const filters = { id: "overlay", join: "and" as const, children: [{ id: "o", field: "labels" as const, op: "is" as const, values: ["urgent"] }] };
+  const steps = [];
+  openSavedView(first);
+  changePreferences(1, { filters });
+  steps.push(trace());
+  openSavedView(second);
+  steps.push(trace());
+  travel(-1);
+  steps.push(trace());
+  navigate({ board: 1 });
+  steps.push(trace());
+  openSavedView(first);
+  changePreferences(1, { filters });
+  navigate({ inbox: true });
+  steps.push(trace());
+  expect(steps).toMatchInlineSnapshot(`
+    [
+      {
+        "activeViewId": "first",
+        "address": "/view/first-first?board=1&filter=eyJ2IjoxLCJmaWx0ZXJzIjp7ImlkIjoib3ZlcmxheSIsImpvaW4iOiJhbmQiLCJjaGlsZHJlbiI6W3siaWQiOiJvIiwiZmllbGQiOiJsYWJlbHMiLCJvcCI6ImlzIiwidmFsdWVzIjpbInVyZ2VudCJdfV19fQ",
+        "board": 1,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "3/3",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 1,
+        "panel": false,
+        "selected": null,
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": "second",
+        "address": "/view/second-second?board=1",
+        "board": 1,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "4/4",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": null,
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": "first",
+        "address": "/view/first-first?board=1&filter=eyJ2IjoxLCJmaWx0ZXJzIjp7ImlkIjoib3ZlcmxheSIsImpvaW4iOiJhbmQiLCJjaGlsZHJlbiI6W3siaWQiOiJvIiwiZmllbGQiOiJsYWJlbHMiLCJvcCI6ImlzIiwidmFsdWVzIjpbInVyZ2VudCJdfV19fQ",
+        "board": 1,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "3/4",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 1,
+        "panel": false,
+        "selected": null,
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=1",
+        "board": 1,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "4/4",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": null,
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=1&inbox=1",
+        "board": 1,
+        "boardOpenIn": "side/side",
+        "document": null,
+        "draft": null,
+        "entries": "7/7",
+        "inbox": true,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": null,
+        "view": "side",
+        "viewsPage": false,
+      },
+    ]
+  `);
+  set({ target: "NAV-2", issueOptionsPoint: { x: 4, y: 5 } });
+  ui.send({ type: "overlay.open", overlay: "options" });
+  expect([get().target, get().issueOptionsPoint]).toEqual(["NAV-2", { x: 4, y: 5 }]);
+  ui.send({ type: "overlay.open", overlay: "status" });
+  expect(get().target).toBe("NAV-2");
+  ui.send({ type: "overlay.close" });
+  expect([get().target, get().issueOptionsPoint]).toEqual([null, null]);
+});
+
+test("navigation: the view editor keeps its draft in the address across reload, takes display changes, and returns on cancel", async () => {
+  const { navigate, beginViewEditor, createViewDraft, editViewDraft, discardViewEditor, changeDisplay, set, get, trace } = await navigationFixture();
+  const view = await savedView({ id: "edited", name: "Edited", board: 2 });
+  set({ savedViews: [view] });
+  const steps = [];
+  navigate({ view: "page" });
+  beginViewEditor(createViewDraft());
+  steps.push(trace());
+  changeDisplay(1, { layout: "board" });
+  steps.push(trace());
+  navigate({ selected: "NAV-1", panel: true });
+  navigate({ view: "side" });
+  steps.push(trace());
+  navigate({ panel: false });
+  await Promise.resolve();
+  const saved = session.get(`view-editor:${get().namespace}:/view/new`);
+  expect(JSON.parse(saved!).display.layout).toBe("board");
+  visit("/view/new?board=1");
+  steps.push(trace());
+  expect(get().editorDraft?.display.layout).toBe("board");
+  navigate({ board: 2, selected: null, panel: false });
+  steps.push(trace());
+  travel(-1);
+  steps.push(trace());
+  travel(-1);
+  steps.push(trace());
+  beginViewEditor(editViewDraft(view.id));
+  steps.push(trace());
+  expect(session.has(`view-editor:${get().namespace}:/view/edited-edited/edit`)).toBe(true);
+  discardViewEditor();
+  steps.push(trace());
+  expect(session.has(`view-editor:${get().namespace}:/view/edited-edited/edit`)).toBe(false);
+  beginViewEditor(createViewDraft());
+  navigate({ viewsPage: true, board: 1 });
+  steps.push(trace());
+  expect(steps).toMatchInlineSnapshot(`
+    [
+      {
+        "activeViewId": null,
+        "address": "/view/new?board=1",
+        "board": 1,
+        "boardOpenIn": "page/side",
+        "document": null,
+        "draft": "new:page",
+        "entries": "2/2",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": null,
+        "view": "page",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/view/new?board=1",
+        "board": 1,
+        "boardOpenIn": "page/side",
+        "document": null,
+        "draft": "new:page",
+        "entries": "2/2",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": null,
+        "view": "page",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/view/new?board=1&issue=NAV-1&view=side",
+        "board": 1,
+        "boardOpenIn": "page/side",
+        "document": null,
+        "draft": "new:side",
+        "entries": "4/4",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": true,
+        "selected": "NAV-1",
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/view/new?board=1",
+        "board": 1,
+        "boardOpenIn": "page/side",
+        "document": null,
+        "draft": "new:side",
+        "entries": "1/1",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": null,
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=2",
+        "board": 2,
+        "boardOpenIn": "page/side",
+        "document": null,
+        "draft": null,
+        "entries": "3/3",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": null,
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/?board=1",
+        "board": 1,
+        "boardOpenIn": "page/side",
+        "document": null,
+        "draft": null,
+        "entries": "2/3",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": null,
+        "view": "page",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/view/new?board=1",
+        "board": 1,
+        "boardOpenIn": "page/side",
+        "document": null,
+        "draft": "new:side",
+        "entries": "1/3",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": null,
+        "view": "page",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/view/edited-edited/edit?board=2",
+        "board": 2,
+        "boardOpenIn": "page/side",
+        "document": null,
+        "draft": "Edited:side",
+        "entries": "2/2",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": null,
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": "edited",
+        "address": "/view/edited-edited?board=2",
+        "board": 2,
+        "boardOpenIn": "page/side",
+        "document": null,
+        "draft": null,
+        "entries": "3/3",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": null,
+        "view": "side",
+        "viewsPage": false,
+      },
+      {
+        "activeViewId": null,
+        "address": "/views?board=1",
+        "board": 1,
+        "boardOpenIn": "page/side",
+        "document": null,
+        "draft": null,
+        "entries": "6/6",
+        "inbox": false,
+        "mine": false,
+        "overlayFilters": 0,
+        "panel": false,
+        "selected": null,
+        "view": "page",
+        "viewsPage": true,
+      },
+    ]
+  `);
 });
