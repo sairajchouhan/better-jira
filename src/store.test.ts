@@ -551,6 +551,13 @@ test("deleting a sub-issue keeps its open parent; with Jira writes it asks in th
     Response.json({ created: {}, others: [], issue: null })) as unknown as typeof fetch;
   set({ writable: true });
   try {
+    const before = get().issues;
+    actions.remove(parent);
+    expect(get().deleting).toBe(parent);
+    expect(get().issues).toBe(before);
+    expect(get().pendingWrites).toBe(0);
+    set({ deleting: null }); // Escape/cancel only clears the request.
+    expect(get().issues.has(parent)).toBe(true);
     actions.remove(child);
     expect(get().deleting).toBe(child);
     expect(get().issues.has(child)).toBe(true);

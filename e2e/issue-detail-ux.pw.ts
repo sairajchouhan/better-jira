@@ -196,4 +196,17 @@ test("R1-D4, R1-D64: with Jira writes, delete asks in the app, names the row, an
     await p.key("Escape");
     expect((await fixture.log()).writes.length).toBe(0);
   });
+  await test.step("BJ-4: Enter confirms only after the delete dialog takes focus", async () => {
+    await p.hover('[data-sub-issue="TEST-6"]');
+    await p.key("Backspace", "meta");
+    await p.waitFor(
+      `${dialog}?.contains(document.activeElement) && document.activeElement?.textContent === 'Delete'`,
+    );
+    expect((await fixture.log()).writes.length).toBe(0);
+    await p.key("Enter");
+    await p.waitFor(`!${dialog} && !document.querySelector('[data-sub-issue="TEST-6"]')`);
+    await expect
+      .poll(async () => (await fixture.log()).writes)
+      .toContainEqual({ key: "TEST-6", ops: [{ op: "delete" }] });
+  });
 });
