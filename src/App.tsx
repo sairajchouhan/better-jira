@@ -27,6 +27,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import type { Attachment } from "./attachment-media";
@@ -733,12 +734,11 @@ function IssueList({
   return listRows(issues, universe, display.subIssues ? display.nested : "none")
     .slice(0, limit)
     .map(({ issue, depth }) => (
-      <Card
+      <IssueRow
         key={issue.key}
         issue={issue}
         selected={selected === issue.key}
         display={display}
-        list
         depth={depth}
       />
     ));
@@ -1416,7 +1416,7 @@ function ColumnView({
       )}
       <div className={`flex-1 px-[9px] pt-[9px] ${scroll ? "overflow-y-auto" : ""}`}>
         {issues.slice(0, limit).map((i) => (
-          <Card key={i.key} issue={i} selected={i.key === selected} display={display} />
+          <BoardCard key={i.key} issue={i} selected={i.key === selected} display={display} />
         ))}
       </div>
     </section>
@@ -1427,34 +1427,85 @@ function ColumnView({
 const CHIP =
   "flex h-6 max-w-[224px] shrink-0 items-center rounded-full border-[0.5px] border-chip-line bg-card px-2 text-[12px] font-[450] text-card-fg-3";
 
-const Card = memo(function Card({
+/** What a row and a card share: the clickable, draggable target with selection scrolling, the menu highlight and the issue's keys. */
+function IssueTarget({
   issue,
   selected,
-  display: d,
-  list = false,
-  depth = 0,
+  className,
+  style,
+  children,
 }: {
   issue: Issue;
   selected: boolean;
-  display: Display;
-  list?: boolean;
-  depth?: number;
+  className: (lit: boolean) => string;
+  style?: CSSProperties;
+  children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => void (selected && ref.current?.scrollIntoView({ block: "nearest" })), [selected]);
   // A right-clicked card is highlighted only while its menu is open, as Linear does; it never becomes the selection.
   const menu = useStore((s) => !!s.overlay && s.target === issue.key);
-  const lit = selected || menu;
+  return (
+    <div
+      ref={ref}
+      data-key={issue.key}
+      data-selected={selected || undefined}
+      data-menu={menu || undefined}
+      role="button"
+      aria-label={`${issue.key} ${issue.summary}`}
+      tabIndex={0}
+      draggable
+      onDragStart={(e) => e.dataTransfer.setData("text/plain", issue.key)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          e.stopPropagation();
+          navigate({
+            selected: issue.key,
+            panel: true,
+            view: e.key === "Enter" ? "page" : "side",
+          });
+        }
+      }}
+      onClick={() =>
+        timed(`open ${issue.key}`, () => navigate({ selected: issue.key, panel: true }))
+      }
+      // Linear's row menu: Issue options at the pointer, on this issue, without selecting it.
+      onContextMenu={(e) => {
+        e.preventDefault();
+        ui.send({
+          type: "overlay.open",
+          overlay: "options",
+          target: issue.key,
+          point: { x: e.clientX + 3, y: e.clientY },
+        });
+      }}
+      className={className(selected || menu)}
+      style={style}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** The display's property chips; a row fits one label and a plain priority icon, a card two labels and a priority chip. */
+function IssueProperties({
+  issue,
+  display: d,
+  labels,
+  priorityClass,
+}: {
+  issue: Issue;
+  display: Display;
+  labels: number;
+  priorityClass: string;
+}) {
   const show = (p: Property) => d.properties.includes(p);
   const clock = useStore((s) => (d.properties.includes("statusAge") ? s.clock : 0));
-  const status = statusOf(issue);
-  const properties = (
+  return (
     <>
       {show("priority") && (
-        <span
-          title={issue.priority ?? "No priority"}
-          className={list ? "text-fg-3" : `${CHIP} px-[4.5px]`}
-        >
+        <span title={issue.priority ?? "No priority"} className={priorityClass}>
           <PriorityIcon name={issue.priority} />
         </span>
       )}
@@ -1470,10 +1521,10 @@ const Card = memo(function Card({
           <span className="ml-1.5 truncate">{issue.project.name}</span>
         </span>
       )}
-      {show("labels") && issue.labels.slice(0, list ? 1 : 2).map((l) => <Label key={l} name={l} />)}
-      {show("labels") && issue.labels.length > (list ? 1 : 2) && (
+      {show("labels") && issue.labels.slice(0, labels).map((l) => <Label key={l} name={l} />)}
+      {show("labels") && issue.labels.length > labels && (
         <span title={issue.labels.join(", ")} className={CHIP}>
-          +{issue.labels.length - (list ? 1 : 2)}
+          +{issue.labels.length - labels}
         </span>
       )}
       {show("comments") && commentCount(issue) > 0 && (
@@ -1527,123 +1578,130 @@ const Card = memo(function Card({
       )}
     </>
   );
-  const dates = (
+}
+
+/** Created and updated dates; `updated` is the label before the updated date ("Updated " on cards, none on rows). */
+function IssueDates({ issue, display: d, updated }: { issue: Issue; display: Display; updated: string }) {
+  return (
     <>
-      {show("created") && issue.created && (
+      {d.properties.includes("created") && issue.created && (
         <span title={`Created ${issue.created}`}>Created {shortDate(issue.created)}</span>
       )}
-      {show("updated") && (
+      {d.properties.includes("updated") && (
         <span title={`Updated ${issue.updated}`}>
-          {list ? "" : "Updated "}
+          {updated}
           {shortDate(issue.updated)}
         </span>
       )}
     </>
   );
+}
+
+/** A list row: key, status, title, then properties, assignee and dates on one line; nested rows indent 20px per level. */
+const IssueRow = memo(function IssueRow({
+  issue,
+  selected,
+  display: d,
+  depth,
+}: {
+  issue: Issue;
+  selected: boolean;
+  display: Display;
+  depth: number;
+}) {
+  const show = (p: Property) => d.properties.includes(p);
+  const status = statusOf(issue);
   return (
-    <div
-      className={
-        list
-          ? "[content-visibility:auto] [contain-intrinsic-size:auto_44px]"
-          : "pb-2 [contain-intrinsic-size:auto_124px] [content-visibility:auto] [overflow-clip-margin:4px]"
-      }
-    >
-      <div
-        ref={ref}
-        data-key={issue.key}
-        data-selected={selected || undefined}
-        data-menu={menu || undefined}
-        role="button"
-        aria-label={`${issue.key} ${issue.summary}`}
-        tabIndex={0}
-        draggable
-        onDragStart={(e) => e.dataTransfer.setData("text/plain", issue.key)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            e.stopPropagation();
-            navigate({
-              selected: issue.key,
-              panel: true,
-              view: e.key === "Enter" ? "page" : "side",
-            });
-          }
-        }}
-        onClick={() =>
-          timed(`open ${issue.key}`, () => navigate({ selected: issue.key, panel: true }))
+    <div className="[content-visibility:auto] [contain-intrinsic-size:auto_44px]">
+      <IssueTarget
+        issue={issue}
+        selected={selected}
+        className={(lit) =>
+          `flex min-h-11 cursor-default items-center gap-3 border-b border-line px-5 outline-none focus-visible:ring-1 focus-visible:ring-accent ${lit ? "bg-hover shadow-[inset_2px_0_0_var(--accent)]" : "hover:bg-hover"}`
         }
-        // Linear's row menu: Issue options at the pointer, on this issue, without selecting it.
-        onContextMenu={(e) => {
-          e.preventDefault();
-          ui.send({
-            type: "overlay.open",
-            overlay: "options",
-            target: issue.key,
-            point: { x: e.clientX + 3, y: e.clientY },
-          });
-        }}
-        className={
-          list
-            ? `flex min-h-11 cursor-default items-center gap-3 border-b border-line px-5 outline-none focus-visible:ring-1 focus-visible:ring-accent ${lit ? "bg-hover shadow-[inset_2px_0_0_var(--accent)]" : "hover:bg-hover"}`
-            : `relative flex min-h-[42px] cursor-default flex-col rounded-lg p-2 shadow-(--card-shadow) outline-none focus-visible:ring-1 focus-visible:ring-accent ${lit ? "bg-card-hover ring-1 ring-accent" : "bg-card hover:bg-card-hover"}`
-        }
-        style={list && depth ? { paddingLeft: 20 + depth * 20 } : undefined}
+        style={depth ? { paddingLeft: 20 + depth * 20 } : undefined}
       >
-        {list ? (
-          <>
-            {show("id") && (
-              <span className="w-[85px] shrink-0 text-[12px] text-fg-3 tabular-nums">
-                {depth > 0 && "↳ "}
-                {issue.key}
-              </span>
-            )}
+        {show("id") && (
+          <span className="w-[85px] shrink-0 text-[12px] text-fg-3 tabular-nums">
+            {depth > 0 && "↳ "}
+            {issue.key}
+          </span>
+        )}
+        {show("status") && status && (
+          <span title={status.name}>
+            <StatusIcon status={status} />
+          </span>
+        )}
+        <span className="min-w-32 flex-1 truncate font-medium">{issue.summary}</span>
+        <span className="flex max-w-[45%] shrink-0 items-center gap-2 overflow-hidden">
+          <IssueProperties issue={issue} display={d} labels={1} priorityClass="text-fg-3" />
+        </span>
+        {show("assignee") && <Avatar user={issue.assignee} size={18} />}
+        <span className="flex shrink-0 gap-2 text-[11px] text-fg-3">
+          <IssueDates issue={issue} display={d} updated="" />
+        </span>
+      </IssueTarget>
+    </div>
+  );
+});
+
+/** A board card: key and two-line title with the assignee in the corner, then property chips and dates. */
+const BoardCard = memo(function BoardCard({
+  issue,
+  selected,
+  display: d,
+}: {
+  issue: Issue;
+  selected: boolean;
+  display: Display;
+}) {
+  const show = (p: Property) => d.properties.includes(p);
+  const status = statusOf(issue);
+  return (
+    <div className="pb-2 [contain-intrinsic-size:auto_124px] [content-visibility:auto] [overflow-clip-margin:4px]">
+      <IssueTarget
+        issue={issue}
+        selected={selected}
+        className={(lit) =>
+          `relative flex min-h-[42px] cursor-default flex-col rounded-lg p-2 shadow-(--card-shadow) outline-none focus-visible:ring-1 focus-visible:ring-accent ${lit ? "bg-card-hover ring-1 ring-accent" : "bg-card hover:bg-card-hover"}`
+        }
+      >
+        <div className="flex flex-col gap-1.5 pr-[34px] pl-1">
+          {show("id") && (
+            <span className="truncate text-[12px] leading-[normal] font-[450] tracking-[-0.24px] text-card-fg-3 tabular-nums">
+              {issue.key}
+            </span>
+          )}
+          <div className="flex items-start gap-1.5">
             {show("status") && status && (
-              <span title={status.name}>
+              <span className="mt-px" title={status.name}>
                 <StatusIcon status={status} />
               </span>
             )}
-            <span className="min-w-32 flex-1 truncate font-medium">{issue.summary}</span>
-            <span className="flex max-w-[45%] shrink-0 items-center gap-2 overflow-hidden">
-              {properties}
+            <span className="line-clamp-2 text-[13px] leading-4 font-medium [overflow-wrap:anywhere]">
+              {issue.summary}
             </span>
-            {show("assignee") && <Avatar user={issue.assignee} size={18} />}
-            <span className="flex shrink-0 gap-2 text-[11px] text-fg-3">{dates}</span>
-          </>
-        ) : (
-          <>
-            <div className="flex flex-col gap-1.5 pr-[34px] pl-1">
-              {show("id") && (
-                <span className="truncate text-[12px] leading-[normal] font-[450] tracking-[-0.24px] text-card-fg-3 tabular-nums">
-                  {issue.key}
-                </span>
-              )}
-              <div className="flex items-start gap-1.5">
-                {show("status") && status && (
-                  <span className="mt-px" title={status.name}>
-                    <StatusIcon status={status} />
-                  </span>
-                )}
-                <span className="line-clamp-2 text-[13px] leading-4 font-medium [overflow-wrap:anywhere]">
-                  {issue.summary}
-                </span>
-              </div>
-            </div>
-            {show("assignee") && (
-              <span className="absolute top-2 right-2">
-                <Avatar user={issue.assignee} size={18} />
-              </span>
-            )}
-            <div className="mt-2.5 flex flex-wrap items-center gap-1 overflow-hidden">
-              {properties}
-            </div>
-            {(show("updated") || show("created")) && (
-              <div className="mt-1.5 flex min-h-6 flex-wrap items-center gap-x-3 pl-px text-[12px] font-[450] text-card-fg-3">
-                {dates}
-              </div>
-            )}
-          </>
+          </div>
+        </div>
+        {show("assignee") && (
+          <span className="absolute top-2 right-2">
+            <Avatar user={issue.assignee} size={18} />
+          </span>
         )}
-      </div>
+        <div className="mt-2.5 flex flex-wrap items-center gap-1 overflow-hidden">
+          <IssueProperties
+            issue={issue}
+            display={d}
+            labels={2}
+            priorityClass={`${CHIP} px-[4.5px]`}
+          />
+        </div>
+        {(show("updated") || show("created")) && (
+          <div className="mt-1.5 flex min-h-6 flex-wrap items-center gap-x-3 pl-px text-[12px] font-[450] text-card-fg-3">
+            <IssueDates issue={issue} display={d} updated="Updated " />
+          </div>
+        )}
+      </IssueTarget>
     </div>
   );
 });
