@@ -78,8 +78,12 @@ export function MentionMenu({
     } else search.maybeExecute(query, issueKey);
   }, [query, issueKey, cached, search]);
   useEffect(() => () => search.cancel(), [search]);
-  // oxlint-disable-next-line react/exhaustive-effect-dependencies -- A new query resets keyboard selection.
-  useEffect(() => setActive(0), [query]);
+  // A new query resets keyboard selection.
+  const [activeQuery, setActiveQuery] = useState(query);
+  if (activeQuery !== query) {
+    setActiveQuery(query);
+    setActive(0);
+  }
   const people = cached ?? last?.people.filter((p) => matches(p, query)) ?? [];
   const settled = !!cached || last?.query === query;
   const list = useRef<HTMLDivElement>(null);
