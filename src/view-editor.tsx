@@ -10,7 +10,8 @@ import {
 import { createPortal } from "react-dom";
 import { Command } from "cmdk";
 import { Icon, type IconName } from "./icons";
-import { Confirm, MenuSurface, MENU_INPUT, MENU_ITEM } from "./menu-surface";
+import { MenuSurface, MENU_ITEM } from "./menu-surface";
+import { ViewIconPicker } from "./view-icon-picker";
 import {
   beginViewEditor,
   discardViewEditor,
@@ -37,64 +38,23 @@ import "./view-editor.css";
 export function openViewEditor(draft: ViewDraft): void {
   beginViewEditor(draft);
 }
-const colors = [
-  ["Grey", "#8a8f98"],
-  ["Dark Grey", "#555b66"],
-  ["Purple", "#8d79db"],
-  ["Teal", "#4db6ac"],
-  ["Green", "#6abf69"],
-  ["Yellow", "#e2b53e"],
-  ["Orange", "#e99545"],
-  ["Pink", "#d77ba9"],
-  ["Red", "#dc6868"],
-];
-const glyphs: IconName[] = [
-  "filter",
-  "view",
-  "star",
-  "board",
-  "list",
-  "status",
-  "user",
-  "calendar",
-  "label",
-  "layers",
-  "search",
-  "check",
-  "flag",
-  "inbox",
-];
-const emojis = [
-  ["🎯", "target"],
-  ["🚀", "rocket"],
-  ["🔥", "fire"],
-  ["💡", "idea"],
-  ["🐛", "bug"],
-  ["✨", "sparkles"],
-  ["📋", "clipboard"],
-  ["💜", "heart"],
-  ["🌱", "seedling"],
-  ["⚡", "lightning"],
-];
 function DraftIcon({ icon }: { icon: string }) {
-  return glyphs.includes(icon as IconName) ? (
-    <Icon name={icon as IconName} size={18} />
-  ) : (
-    <span>{icon === "filter" ? "☷" : icon}</span>
-  );
+  return /[^\x00-\x7F]/.test(icon) ? <span>{icon}</span> : <Icon name={icon as IconName} size={16} />;
 }
+type Created = { id: string; name: string; icon: string; color: string };
 const createdListeners = new Set<() => void>();
-let created: { id: string; name: string } | null = null;
+let created: Created | null = null;
 let toastTimer: ReturnType<typeof setTimeout>;
-function createdToast(id: string, name: string) {
-  created = { id, name };
+function showCreated(value: Created | null) {
+  created = value;
   createdListeners.forEach((fn) => fn());
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => {
-    created = null;
-    createdListeners.forEach((fn) => fn());
-  }, 8000);
 }
+function createdToast(value: Created) {
+  showCreated(value);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => showCreated(null), 8000);
+}
+/** Linear's "View created" toast: bottom right, check + title, the view's icon and name, then Open view. */
 function ViewCreatedToast() {
   const value = useSyncExternalStore(
     (fn) => {
@@ -107,20 +67,26 @@ function ViewCreatedToast() {
   );
   if (!value) return null;
   return createPortal(
-    <div
-      role="status"
-      data-toast
-      className="fixed right-4 bottom-10 z-50 flex items-center gap-3 rounded-lg border border-line-2 bg-card px-3 py-2 text-[13px] text-fg shadow-lg"
-    >
-      <div>
-        View created<p className="mt-1 text-[12px] text-fg-3">{value.name}</p>
-      </div>
+    <div role="status" data-toast className="view-created-toast">
+      <span className="view-toast-check">
+        <Icon name="check" size={10} />
+      </span>
+      <p className="view-toast-title">View created</p>
+      <button type="button" aria-label="Dismiss" className="view-toast-close" onClick={() => showCreated(null)}>
+        <Icon name="close" size={12} />
+      </button>
+      <p className="view-toast-name">
+        <span style={{ color: value.color === "gray" ? "var(--fg-3)" : value.color }}>
+          <DraftIcon icon={value.icon} />
+        </span>
+        <span className="truncate">{value.name}</span>
+      </p>
       <button
-        className="text-accent"
+        type="button"
+        className="view-toast-open"
         onClick={() => {
           openSavedView(value.id);
-          created = null;
-          createdListeners.forEach((fn) => fn());
+          showCreated(null);
         }}
       >
         Open view
@@ -140,7 +106,6 @@ export function ViewEditorPage() {
 }
 function Editor({ draft }: { draft: ViewDraft }) {
   const [picker, setPicker] = useState<HTMLElement | null>(null),
-    [tab, setTab] = useState("Icons"),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const patch = (change: Partial<ViewDraft>) =>
@@ -162,7 +127,7 @@ function Editor({ draft }: { draft: ViewDraft }) {
           const name = draft.name.trim() || placeholder;
           const id = await saveViewDraft({ ...draft, name });
           openSavedView(id);
-          if (!draft.id) createdToast(id, name);
+          if (!draft.id) createdToast({ id, name, icon: draft.icon, color: draft.color });
         } catch (e) {
           setError(String(e));
           setBusy(false);
@@ -211,89 +176,26 @@ function Editor({ draft }: { draft: ViewDraft }) {
         value={draft.description}
         onChange={(e) => patch({ description: e.target.value })}
       />
-      <div className="view-editor-scope">
-        <Icon name="user" />
-        Personal
-      </div>
+      {draft.kind === "custom" && (
+        <div className="view-editor-scope">
+          <Icon name="user" />
+          Personal
+        </div>
+      )}
       {error && <p role="alert">{error}</p>}
       {picker &&
         createPortal(
-          <MenuSurface
-            label="View icon"
+          <ViewIconPicker
             anchor={picker}
-            width={300}
+            icon={draft.icon}
+            color={draft.color}
+            onIcon={(icon) => {
+              patch({ icon });
+              setPicker(null);
+            }}
+            onColor={(color) => patch({ color })}
             close={() => setPicker(null)}
-          >
-            <Command loop>
-              <Command.Input
-                className={MENU_INPUT}
-                placeholder="Search icons…"
-              />
-              <div className="flex gap-2 py-2">
-                {["Icons", "Emojis"].map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    aria-pressed={tab === t}
-                    className="view-editor-pill hover:bg-hover"
-                    onClick={() => setTab(t)}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-              <Command.List className="view-icon-grid">
-                <Command.Empty>No icons found</Command.Empty>
-                {tab === "Icons"
-                  ? glyphs.map((icon) => (
-                      <Command.Item
-                        key={icon}
-                        value={icon}
-                        onSelect={() => {
-                          patch({ icon });
-                          setPicker(null);
-                        }}
-                      >
-                        <Icon name={icon} size={18} />
-                      </Command.Item>
-                    ))
-                  : emojis.map(([icon, label]) => (
-                      <Command.Item
-                        key={icon}
-                        value={label}
-                        onSelect={() => {
-                          patch({ icon });
-                          setPicker(null);
-                        }}
-                      >
-                        {icon}
-                      </Command.Item>
-                    ))}
-              </Command.List>
-            </Command>
-            <div className="view-color-grid">
-              {colors.map(([label, color]) => (
-                <button
-                  key={label}
-                  type="button"
-                  title={label}
-                  aria-label={label}
-                  aria-pressed={draft.color === color}
-                  style={{ background: color }}
-                  onClick={() => patch({ color: color! })}
-                />
-              ))}
-              <label title="Custom color" className="view-custom-color">
-                +
-                <input
-                  aria-label="Custom color"
-                  type="color"
-                  value={draft.color.startsWith("#") ? draft.color : "#8a8f98"}
-                  onChange={(e) => patch({ color: e.target.value })}
-                />
-              </label>
-            </div>
-          </MenuSurface>,
+          />,
           document.body,
         )}
     </form>
@@ -320,6 +222,56 @@ function exportView(view: SavedView) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+/** Linear's delete confirmation: one question, Cancel and a red Delete, centred over a dimmed page. */
+export function ViewDeleteDialog({ view, close }: { view: SavedView; close: () => void }) {
+  const [error, setError] = useState("");
+  return (
+    <MenuSurface label={`Delete view ${view.name}`} close={close} width={480}>
+      <div className="view-delete">
+        <h2>Delete the view "{view.name}"?</h2>
+        {error && <p role="alert">{error}</p>}
+        <div>
+          <button type="button" className="view-delete-cancel" onClick={close}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            data-autofocus
+            className="view-delete-confirm"
+            onClick={() => {
+              void deleteSavedView(view.id)
+                .then(close)
+                .catch((e) => setError(String(e)));
+            }}
+          >
+            {view.kind === "tab" ? "Delete view" : "Delete"}
+          </button>
+        </div>
+      </div>
+    </MenuSurface>
+  );
+}
+type Action = [label: string, icon: IconName, run: () => void];
+/** Linear's groups: Edit/Duplicate, then Favorite (right-click only; the header has a star) and Copy link, then Delete. CSV export is only offered for custom views. */
+export function viewActions(view: SavedView, favorite: boolean, contextMenu: boolean): Action[][] {
+  const link = () =>
+    void navigator.clipboard
+      .writeText(new URL(`/view/${encodeURIComponent(view.id)}`, location.origin).href)
+      .catch((e) => ui.send({ type: "toast.show", text: String(e) }));
+  return [
+    [
+      ["Edit…", "pencil", () => openViewEditor(editViewDraft(view.id))],
+      ["Duplicate…", "view", () => openViewEditor(duplicateViewDraft(view.id))],
+    ],
+    [
+      ...(contextMenu
+        ? [[favorite ? "Unfavorite" : "Favorite", favorite ? "starred" : "star", () => toggleFavorite(`view:${view.id}`)] as Action]
+        : []),
+      ["Copy link", "link", link],
+      ...(view.kind === "custom" ? [["Export issues as CSV…", "download", () => exportView(view)] as Action] : []),
+    ],
+  ];
+}
 function Management({
   view,
   close,
@@ -331,79 +283,40 @@ function Management({
   anchor?: HTMLElement;
   point?: { x: number; y: number };
 }) {
-  const favorites = useStore((s) => s.favorites),
-    [confirm, setConfirm] = useState(false),
-    [error, setError] = useState("");
-  const favorite = favorites.includes(`view:${view.id}`);
-  const items = [
-    ["Edit…", () => openViewEditor(editViewDraft(view.id))],
-    ["Duplicate…", () => openViewEditor(duplicateViewDraft(view.id))],
-    [
-      favorite ? "Unfavorite" : "Favorite",
-      () => toggleFavorite(`view:${view.id}`),
-    ],
-    [
-      "Copy link",
-      () => {
-        void navigator.clipboard
-          .writeText(
-            new URL(`/view/${encodeURIComponent(view.id)}`, location.origin)
-              .href,
-          )
-          .catch((e) => ui.send({ type: "toast.show", text: String(e) }));
-      },
-    ],
-    ["Export issues as CSV…", () => exportView(view)],
-  ] as const;
+  const favorite = useStore((s) => s.favorites.includes(`view:${view.id}`)),
+    [confirm, setConfirm] = useState(false);
   return createPortal(
     confirm ? (
-      <>
-        <Confirm
-          title={`Delete “${view.name}”?`}
-          detail={`The view “${view.name}” will be permanently deleted. Issues in this view will not be deleted.${error ? ` ${error}` : ""}`}
-          action={view.kind === "tab" ? "Delete view" : "Delete"}
-          close={close}
-          onConfirm={() => {
-            void deleteSavedView(view.id)
-              .then(close)
-              .catch((e) => setError(String(e)));
-          }}
-        />
-      </>
+      <ViewDeleteDialog view={view} close={close} />
     ) : (
-      <MenuSurface
-        label="View options"
-        close={close}
-        anchor={anchor}
-        point={point}
-        width={240}
-        fit
-      >
-        <Command loop>
-          <Command.Input className={MENU_INPUT} placeholder="Search actions…" />
-          <Command.List className="p-1">
-            <Command.Empty className="p-2 text-[13px]">
-              No actions found
-            </Command.Empty>
-            {items.map(([label, action]) => (
-              <Command.Item
-                key={label}
-                className={MENU_ITEM}
-                onSelect={() => {
-                  action();
-                  close();
-                }}
-              >
-                {label}
-              </Command.Item>
+      <MenuSurface label="View options" close={close} anchor={anchor} point={point} fit>
+        <Command loop className="view-menu">
+          <Command.Input autoFocus className="view-menu-search" placeholder="Search actions…" />
+          <Command.List>
+            <Command.Empty className="p-2 text-[13px]">No actions found</Command.Empty>
+            {viewActions(view, favorite, !!point).map((group, i) => (
+              <Command.Group key={i}>
+                {group.map(([label, icon, action]) => (
+                  <Command.Item
+                    key={label}
+                    className={MENU_ITEM}
+                    onSelect={() => {
+                      action();
+                      close();
+                    }}
+                  >
+                    <Icon name={icon} />
+                    {label}
+                  </Command.Item>
+                ))}
+              </Command.Group>
             ))}
-            <Command.Separator className="my-1 border-t border-line-2" />
-            <Command.Item
-              className={`${MENU_ITEM} text-red-500`}
-              onSelect={() => setConfirm(true)}
-            >
-              Delete
-            </Command.Item>
+            <Command.Group>
+              <Command.Item className={MENU_ITEM} onSelect={() => setConfirm(true)}>
+                <Icon name="trash" />
+                Delete
+              </Command.Item>
+            </Command.Group>
           </Command.List>
         </Command>
       </MenuSurface>

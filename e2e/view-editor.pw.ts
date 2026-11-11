@@ -31,6 +31,7 @@ test("draft reload, cancel, create toast, edit, duplicate and themed delete", as
     await expect(
       p.getByRole("status").filter({ hasText: "View created" }),
     ).toContainText("My new view");
+    await expect(p.getByRole("button", { name: "Open view", exact: true })).toBeVisible();
     const route = new URL(p.url()).pathname;
     await p
       .getByRole("button", { name: "Issue view options" })
@@ -53,10 +54,11 @@ test("draft reload, cancel, create toast, edit, duplicate and themed delete", as
     await p.getByRole("button", { name: "Views", exact: true }).click();
     await p.getByRole("button", { name: "Renamed", exact: true }).click();
     await p.getByRole("button", { name: "Issue view options" }).click();
-    await p.getByPlaceholder("Search actions…").fill("Delete");
+    await p.keyboard.type("Delete"); // Linear's menus filter as you type; the search field stays hidden until then
+    await expect(p.getByPlaceholder("Search actions…")).toHaveValue("Delete");
     await p.keyboard.press("ArrowDown");
     await p.keyboard.press("Enter");
-    await expect(p.getByRole("dialog")).toContainText("Renamed");
+    await expect(p.getByRole("dialog")).toHaveText('Delete the view "Renamed"?CancelDelete');
     await p.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(
       p.getByRole("button", { name: "Issue view options" }),
@@ -76,6 +78,7 @@ test("draft filters, display and icon stay detached through reload and cancel", 
       `localStorage.getItem(${JSON.stringify(PREFS_KEY)})`,
     );
     await p.getByRole("button", { name: "Add new view", exact: true }).click();
+    await expect(p.getByText("Personal", { exact: true })).toHaveCount(0); // tab drafts have no scope line
     await p.getByRole("button", { name: "Choose view icon and color" }).click();
     await p.getByRole("button", { name: "Purple", exact: true }).click();
     await p.getByRole("button", { name: "Emojis", exact: true }).click();
@@ -91,6 +94,8 @@ test("draft filters, display and icon stay detached through reload and cancel", 
     );
     await app.hover("text=Due date");
     await app.click("text=Overdue");
+    await expect(p.locator(".view-filter-row")).toBeVisible();
+    await expect(p.locator(".view-filter-actions")).toBeHidden(); // editor Cancel/Save are the only save controls
     await p
       .getByRole("button", { name: "Display options", exact: true })
       .click();

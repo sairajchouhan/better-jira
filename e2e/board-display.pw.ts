@@ -58,7 +58,7 @@ test("the default board: My issues, board details, saved views and a fast layout
     await page.waitFor(`document.querySelector('[role=table]')?.textContent.includes('Mine')`);
     await page.page.getByRole("row").filter({ hasText: "Mine" }).click({ button: "right" });
     await page.click("text=Delete");
-    expect(await page.eval(`document.querySelector('[role=dialog]')?.textContent.includes("permanently deleted")`)).toBe(true);
+    expect(await page.eval(`document.querySelector('[role=dialog]')?.textContent.includes('Delete the view "Mine"?')`)).toBe(true);
     await page.click("text=Cancel");
     expect(await page.page.getByRole("row").filter({ hasText: "Mine" }).count()).toBe(1);
     await page.waitFor(`document.querySelector('[role=table]')?.textContent.includes('Mine')`);
