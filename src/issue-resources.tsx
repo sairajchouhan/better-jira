@@ -1,5 +1,4 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Command } from "cmdk";
 import { Icon } from "./icons";
 import { Confirm, MenuSurface } from "./menu-surface";
 import { ActionMenu, type ActionEntry } from "./action-menu";
@@ -231,7 +230,7 @@ export function IssueResources({ issue }: { issue: Issue }) {
             run: () => navigate({ document: resource.id, panel: true }),
           },
           { name: "Copy URL", icon: "link", run: () => void copy(resource) },
-          { name: "Delete", icon: "trash", danger: true, run: () => setRemoving(resource) },
+          { name: "Delete", icon: "trash", run: () => setRemoving(resource) },
         ]
       : [
           {
@@ -257,7 +256,6 @@ export function IssueResources({ issue }: { issue: Issue }) {
             name: "Remove…",
             icon: "trash",
             divider: true,
-            danger: true,
             run: () => setRemoving(resource),
           },
         ];
@@ -355,35 +353,17 @@ export function IssueResources({ issue }: { issue: Issue }) {
           </div>
         ))}
       {menu && (
-        <MenuSurface label="Add resource" anchor={menu} close={() => setMenu(null)} width={240}>
-          <Command loop>
-            <Command.Input
-              autoFocus
-              placeholder="Filter…"
-              aria-label="Find resource action"
-              className="mb-2 w-full bg-transparent p-2 outline-none"
-            />
-            <Command.List>
-              {(["link", "pull-request", "document"] as const).map((kind) => (
-                <Command.Item
-                  key={kind}
-                  className={`${BUTTON} data-[selected=true]:bg-sel`}
-                  onSelect={() => {
-                    setMenu(null);
-                    if (kind === "document") createIssueDocument(issue);
-                    else setForm(kind);
-                  }}
-                >
-                  {kind === "link"
-                    ? "Add link…"
-                    : kind === "document"
-                      ? "Add document…"
-                      : "Link pull request…"}
-                </Command.Item>
-              ))}
-            </Command.List>
-          </Command>
-        </MenuSurface>
+        <ActionMenu
+          label="Add resource"
+          anchor={menu}
+          highlight
+          close={() => setMenu(null)}
+          entries={[
+            { name: "Add link…", icon: "link", run: () => setForm("link") },
+            { name: "Link pull request…", icon: "branch", run: () => setForm("pull-request") },
+            { name: "Add document…", icon: "file", run: () => createIssueDocument(issue) },
+          ]}
+        />
       )}
       {options && (
         <ActionMenu

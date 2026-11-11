@@ -1,6 +1,5 @@
-import { Command } from "cmdk";
 import { useState } from "react";
-import { Icon } from "./icons";
+import { Menu } from "./menu";
 import { MenuSurface } from "./menu-surface";
 
 export const PILL_SELECT =
@@ -35,33 +34,27 @@ export function PillSelect({
         <span className="truncate">{current}</span>
       </button>
       {anchor && (
-        <MenuSurface label={label} anchor={anchor} width={220} close={() => setAnchor(null)}>
+        <MenuSurface label={label} anchor={anchor} fit close={() => setAnchor(null)}>
           {/* Opens on the current choice, like Linear, not the first option. */}
-          <Command loop defaultValue={`${current} ${value}`}>
-            <Command.Input
-              autoFocus
-              aria-label={`${label}…`}
-              placeholder={`${label}…`}
-              className="mb-1 w-full rounded-md border border-line-2 bg-card px-2 py-1.5 text-[12px] outline-none focus:border-accent"
-            />
-            <Command.List className="max-h-[300px] overflow-y-auto [&_[data-selected=true]]:bg-sel">
-              <Command.Empty className="p-2 text-fg-3">No matches</Command.Empty>
+          <Menu defaultValue={`${current} ${value}`}>
+            <Menu.Input autoFocus aria-label={`${label}…`} placeholder={`${label}…`} />
+            <Menu.List maxHeight="300px">
+              <Menu.Empty>No matches</Menu.Empty>
               {options.map(([v, l]) => (
-                <Command.Item
+                <Menu.Item
                   key={v}
                   value={`${l} ${v}`}
+                  checked={v === value}
                   onSelect={() => {
                     onChange(v);
                     setAnchor(null);
                   }}
-                  className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-[12px]"
                 >
-                  <span className="flex-1 truncate">{l}</span>
-                  {v === value && <Icon name="check" />}
-                </Command.Item>
+                  {l}
+                </Menu.Item>
               ))}
-            </Command.List>
-          </Command>
+            </Menu.List>
+          </Menu>
         </MenuSurface>
       )}
     </>

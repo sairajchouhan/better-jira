@@ -14,10 +14,6 @@ import { createPortal } from "react-dom";
 
 export const MENU_POPUP =
   "view-popup rounded-xl border border-[var(--menu-line)] bg-[var(--menu)] text-fg-2 shadow-[var(--menu-shadow)] [--sel:var(--menu-sel)]";
-export const MENU_ITEM =
-  "flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] hover:bg-sel data-[selected=true]:bg-sel";
-export const MENU_INPUT =
-  "h-9 w-full border-b border-line-2 bg-transparent px-3 text-[13px] outline-none placeholder:text-fg-3";
 
 /**
  * The one placement engine every popup uses. `place` turns the anchor's box (null without one) and the popup node into the popup's
@@ -225,7 +221,7 @@ export function MenuSurface({
     ref,
     anchor ?? fallback,
     (r, node) => {
-      const w = Math.min(fit ? node.offsetWidth : width, innerWidth - 24),
+      const w = Math.min(fit ? node.getBoundingClientRect().width : width, innerWidth - 24),
         h = Math.min(node.scrollHeight + node.offsetHeight - node.clientHeight, innerHeight - 24); // scrollHeight leaves out the border, which max-height (border-box) includes
       // no transform: it would re-anchor nested fixed menus
       if (point)
@@ -297,7 +293,7 @@ export function MenuSurface({
         role="dialog"
         aria-modal="true"
         aria-label={label}
-        className={`overflow-y-auto rounded-xl border border-[var(--menu-line)] bg-[var(--menu)] text-fg-2 shadow-[var(--menu-shadow)] [--sel:var(--menu-sel)] ${fit ? "w-max min-w-[175px] max-w-[min(520px,calc(100vw-24px))]" : command ? "flex flex-col overflow-hidden" : "p-3"}`}
+        className={`overflow-y-auto rounded-xl border border-[var(--menu-line)] bg-[var(--menu)] text-fg-2 shadow-[var(--menu-shadow)] [--sel:var(--menu-sel)] ${fit ? "w-max min-w-[175px] max-w-[min(500px,calc(100vw-24px))]" : command ? "flex flex-col overflow-hidden" : "p-3"}`}
         onKeyDown={(e) => {
           if (!((e.metaKey || e.ctrlKey) && ["k", "/"].includes(e.key.toLowerCase())))
             e.stopPropagation(); // ⌘K reaches the app so it can toggle the command menu

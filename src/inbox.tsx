@@ -1,6 +1,5 @@
 /** Linear's Inbox over Jira's in-app notifications. Read state goes to Jira; delete and snooze stay in this browser, because Jira's notification API has neither. */
 import { InfiniteQueryObserver, type InfiniteData } from "@tanstack/query-core";
-import { Command } from "cmdk";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { Avatar } from "./avatar";
@@ -28,7 +27,8 @@ import {
   type Local,
 } from "./inbox-model";
 import { issueCopy, type CopyKind } from "./issue-copy";
-import { MENU_INPUT, MENU_ITEM, MenuSurface } from "./menu-surface";
+import { Menu } from "./menu";
+import { MenuSurface } from "./menu-surface";
 import { shortcutLabel } from "./shortcuts";
 import {
   boardOf,
@@ -711,6 +711,10 @@ function filterEntries(base: InboxItem[], v: InboxView): ActionEntry[] {
   });
 }
 
+/** A display option: a label with its switch or select. A panel row, not a menu row. */
+const OPTION_ROW =
+  "flex min-h-8 w-full items-center justify-between gap-2 rounded-md px-2 text-[13px] hover:bg-sel";
+
 function SnoozeMenu({ close }: { close: () => void }) {
   const [custom, setCustom] = useState(snoozeCustom);
   const [value, setValue] = useState("");
@@ -750,31 +754,30 @@ function SnoozeMenu({ close }: { close: () => void }) {
           )}
         </form>
       ) : (
-        // cmdk, as the other command menus: the first choice is highlighted, arrows move, typing filters.
-        <Command loop>
-          <Command.Input autoFocus placeholder="Snooze until…" className={MENU_INPUT} />
-          <Command.List className="p-1">
-            <Command.Empty className="px-2 py-1.5 text-[13px] text-fg-3">No match</Command.Empty>
+        // Linear's snooze options are an action menu (IB): the first choice is highlighted, arrows move, typing filters.
+        <Menu>
+          <Menu.Input autoFocus placeholder="Snooze until…" />
+          <Menu.List>
+            <Menu.Empty>No match</Menu.Empty>
             {snoozeChoices().map((c) => (
-              <Command.Item
+              <Menu.Item
                 key={c.label}
                 value={c.label}
                 data-snooze={c.label}
-                className={MENU_ITEM}
+                hint={snoozeTime(c.until)}
                 onSelect={() => {
                   close();
                   snoozeRow(c.until);
                 }}
               >
-                <span className="flex-1">{c.label}</span>
-                <span className="text-[12px] text-fg-3">{snoozeTime(c.until)}</span>
-              </Command.Item>
+                {c.label}
+              </Menu.Item>
             ))}
-            <Command.Item value="Custom…" className={MENU_ITEM} onSelect={() => setCustom(true)}>
+            <Menu.Item value="Custom…" onSelect={() => setCustom(true)}>
               Custom…
-            </Command.Item>
-          </Command.List>
-        </Command>
+            </Menu.Item>
+          </Menu.List>
+        </Menu>
       )}
     </MenuSurface>
   );
@@ -787,7 +790,7 @@ function Menus({ base }: { base: InboxItem[] }) {
   const v = useView();
   const close = () => ui.send({ type: "overlay.close" });
   const toggle = (label: string, key: "showSnoozed" | "unreadFirst" | "priorityInbox") => (
-    <label key={key} className={`${MENU_ITEM} justify-between`}>
+    <label key={key} className={OPTION_ROW}>
       {label}
       <input
         type="checkbox"
@@ -805,7 +808,7 @@ function Menus({ base }: { base: InboxItem[] }) {
     key: K,
     choices: [InboxView[K], string][],
   ) => (
-    <label className={`${MENU_ITEM} justify-between`}>
+    <label className={OPTION_ROW}>
       {label}
       <select
         aria-label={label}

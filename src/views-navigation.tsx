@@ -6,6 +6,7 @@ import { findIssueDocument } from "./issue-resource";
 import { createViewDraft, openSavedView, useActiveView, useSavedViews, type SavedView } from "./saved-views";
 import { openViewEditor, ViewContextMenu } from "./view-editor";
 import { MenuSurface } from "./menu-surface";
+import { Menu } from "./menu";
 import { directoryViews, resultFeedback, viewSummaries } from "./views-navigation-model";
 import "./views-navigation.css";
 
@@ -26,7 +27,7 @@ export function ViewsDirectory() {
   return <section aria-label="Views" className="views-directory flex min-w-0 flex-1 flex-col">
     <header className="flex h-11 shrink-0 items-center gap-2 border-b border-frame px-4 text-[13px] font-medium text-fg-2"><span>{board?.name}</span><span className="text-fg-3">›</span><h2>Views</h2><button className="ml-auto flex h-7 items-center gap-2 rounded-full pr-2.5 pl-2 text-[12px] text-fg-3 hover:bg-hover" onClick={create}><Icon name="plus" />New view</button></header>
     <div className="flex h-11 shrink-0 items-center px-2"><span className="rounded-full bg-tab-on px-3 py-1.5 text-[12px] font-medium">Issues</span><button aria-label="Display options" aria-expanded={!!displayAnchor} className="ml-auto grid size-7 place-items-center rounded-full bg-btn text-fg-2 shadow-(--tab-shadow) hover:bg-hover" onClick={e => setDisplayAnchor(e.currentTarget)}><Icon name="display" /></button></div>
-    {displayAnchor && <MenuSurface label="Display options" anchor={displayAnchor} align="end" width={200} close={() => setDisplayAnchor(null)}><div className="px-2 pt-1 pb-1.5 text-[12px] text-fg-3">Ordering</div>{(["name", "owner"] as const).map(key => <button key={key} className="filter-row w-full" aria-pressed={sort === key} onClick={() => { setSort(key); setDescending(false); setDisplayAnchor(null); }}><span className="flex-1 text-left">{key === "name" ? "Name" : "Owner"}</span>{sort === key && <Icon name="check" />}</button>)}</MenuSurface>}
+    {displayAnchor && <MenuSurface label="Display options" anchor={displayAnchor} align="end" fit close={() => setDisplayAnchor(null)}><Menu tabIndex={0} defaultValue={sort}><Menu.List><Menu.GroupHeader>Ordering</Menu.GroupHeader>{(["name", "owner"] as const).map(key => <Menu.Item key={key} value={key} checked={sort === key} onSelect={() => { setSort(key); setDescending(false); setDisplayAnchor(null); }}>{key === "name" ? "Name" : "Owner"}</Menu.Item>)}</Menu.List></Menu></MenuSurface>}
     {rows.length ? <div role="table" aria-label="Custom views" className="overflow-auto">
       <div role="row" className="views-directory-grid border-b border-line py-1 pr-6 pl-2">
         {(["name", "owner"] as const).map(key => <div role="columnheader" aria-sort={sort === key ? descending ? "descending" : "ascending" : "none"} key={key}><button aria-label={`Order by ${key === "name" ? "Name" : "Owner"}`} className="h-6 rounded-full px-1.5 text-[12px] font-medium text-fg-2 hover:bg-hover" onClick={() => order(key)}>{key === "name" ? "Name" : "Owner"}{sort === key && (descending ? " ↑" : " ↓")}</button></div>)}

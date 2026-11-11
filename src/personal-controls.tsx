@@ -18,7 +18,9 @@ import {
   needsParent,
   typeChoices,
 } from "./issue-properties";
-import { PICKER_ITEM, PickerRow, PropertyMenu } from "./property-menu";
+import { Avatar } from "./avatar";
+import { Menu } from "./menu";
+import { PickerRow, PropertyMenu } from "./property-menu";
 import {
   actions,
   addBoard,
@@ -40,6 +42,7 @@ import {
   type Issue,
   type IssueDraft,
   type JiraOptions,
+  type User,
 } from "./store";
 import { RELATION_ISSUE } from "./issue-activity";
 import {
@@ -406,12 +409,6 @@ export function PropertyPicker({
         actions.patch(issue.key, { due });
         close();
       };
-    const dated = (name: string, due: string) => (
-      <span className="flex gap-2">
-        <span className="flex-1 truncate">{name}</span>
-        <span className="text-fg-3">{shortDate(due)}</span>
-      </span>
-    );
     return (
       <PropertyMenu
         label={label}
@@ -427,9 +424,10 @@ export function PropertyPicker({
             value={`Due ${query}`}
             keywords={[query]}
             icon={<Icon name="calendar" />}
+            hint={shortDate(parsed)}
             onSelect={() => apply(parsed)}
           >
-            {dated("Due", parsed)}
+            Due
           </PickerRow>
         )}
         <PickerRow value="Custom…" icon={<Icon name="calendar" />} onSelect={() => setCustom(true)}>
@@ -441,9 +439,10 @@ export function PropertyPicker({
             value={preset.name}
             icon={<Icon name="calendar" />}
             current={issue.due === preset.due}
+            hint={shortDate(preset.due)}
             onSelect={() => apply(preset.due)}
           >
-            {dated(preset.name, preset.due)}
+            {preset.name}
           </PickerRow>
         ))}
         {issue.due && (
@@ -503,33 +502,21 @@ export function PropertyPicker({
     const row = (name: string) => {
       const on = issue.labels.includes(name);
       return (
-        <Command.Item
+        <Menu.Item
           key={name}
           value={name}
           data-label={name}
-          data-checked={on}
+          checkbox={on}
+          checkboxLabel={`${on ? "Remove" : "Add"} label ${name}`}
+          onCheckboxClick={() => toggle(name)}
+          icon={<span className="size-[9px] rounded-full" style={{ background: hue(name) }} />}
           onSelect={() => {
             toggle(name);
             close();
           }}
-          className={`${PICKER_ITEM} label-row`}
         >
-          <span className="grid size-4 shrink-0 place-items-center">
-            <input
-              type="checkbox"
-              tabIndex={-1}
-              aria-label={`${on ? "Remove" : "Add"} label ${name}`}
-              checked={on}
-              onChange={() => toggle(name)}
-              onClick={(e) => e.stopPropagation()}
-              className="label-check"
-            />
-          </span>
-          <span className="-ml-0.5 grid size-4 shrink-0 place-items-center">
-            <span className="size-[9px] rounded-full" style={{ background: hue(name) }} />
-          </span>
-          <span className="min-w-0 flex-1 truncate">{name}</span>
-        </Command.Item>
+          {name}
+        </Menu.Item>
       );
     };
     // Jira labels can't contain spaces: a new label joins its words with hyphens (R2-issue-fields-D5).
@@ -559,27 +546,24 @@ export function PropertyPicker({
         }}
       >
         {order.checked.map(row)}
-        {order.checked.length > 0 && order.rest.length > 0 && <Command.Separator />}
+        {order.checked.length > 0 && order.rest.length > 0 && <Menu.Divider />}
         {order.checked.length > 0 && order.rest.length > 0 ? (
-          <Command.Group heading="Workspace labels">{order.rest.map(row)}</Command.Group>
+          <Menu.Group heading="Workspace labels">{order.rest.map(row)}</Menu.Group>
         ) : (
           order.rest.map(row)
         )}
         {query.trim() && !exact && (
-          <Command.Item
+          <Menu.Item
             value={`Create ${query}`}
+            icon={<Icon name="plus" size={14} />}
             // Like Enter on an existing label: apply it and close, so the menu never shows a list without it.
             onSelect={() => {
               toggle(created);
               close();
             }}
-            className={PICKER_ITEM}
           >
-            <span className="grid size-4 place-items-center">
-              <Icon name="plus" size={14} />
-            </span>
-            <span className="flex-1 truncate">Create new label: "{created}"</span>
-          </Command.Item>
+            Create new label: "{created}"
+          </Menu.Item>
         )}
       </PropertyMenu>
     );
@@ -1066,7 +1050,7 @@ export function IssueOptions({ issue }: { issue: Issue }) {
     name: "Delete",
     icon: "trash",
     shortcut: keys("delete"),
-    danger: true,
+   
     run: () => actions.remove(issue.key),
   };
   const moves = (
@@ -1295,50 +1279,39 @@ export function Subscribers({ issue }: { issue: Issue }) {
       ].map((user) => [user.id, user]),
     ).values(),
   ];
+  const watching = (user: User) => !!issue.watchers?.some((u) => u.id === user.id);
+  // Linear's subscribers menu: a multi-select people menu that stays open while you toggle.
   return (
     <Modal
       label="Change subscribers"
       anchorId="issue-subscribers"
-      width={300}
+      fit
       close={() => ui.send({ type: "overlay.close" })}
     >
-      <Command loop>
-        <Command.Input
-          autoFocus
-          aria-label="Change subscribers"
-          placeholder="Change subscribers…"
-          className={`${INPUT} mb-2`}
-        />
-        <Command.List className="max-h-[40vh] overflow-y-auto">
-          <Command.Empty className="p-2">No people found</Command.Empty>
+      <Menu>
+        <Menu.Input autoFocus aria-label="Change subscribers" placeholder="Change subscribers…" />
+        <Menu.List maxHeight="40vh">
+          <Menu.Empty>No people found</Menu.Empty>
           {people.map((user) => (
-            <Command.Item
+            <Menu.Item
               key={user.id}
-              aria-checked={!!issue.watchers?.some((u) => u.id === user.id)}
               value={`${user.name} ${user.id}`}
+              checkbox={watching(user)}
+              icon={<Avatar user={user} size={16} />}
+              hint={issue.assignee?.id === user.id ? "Assignee" : undefined}
               onSelect={() =>
                 actions.patch(issue.key, {
-                  watchers: issue.watchers?.some((u) => u.id === user.id)
-                    ? issue.watchers.filter((u) => u.id !== user.id)
+                  watchers: watching(user)
+                    ? (issue.watchers ?? []).filter((u) => u.id !== user.id)
                     : [...(issue.watchers ?? []), user],
                 })
               }
-              className="flex items-center gap-2 rounded px-2 py-2 data-[selected=true]:bg-sel"
             >
-              <span
-                aria-hidden
-                className="grid size-4 place-items-center rounded border border-line-2"
-              >
-                {issue.watchers?.some((u) => u.id === user.id) && <Icon name="check" size={12} />}
-              </span>
-              <span>{user.name}</span>
-              {issue.assignee?.id === user.id && (
-                <span className="ml-auto text-[11px] text-fg-3">Assignee</span>
-              )}
-            </Command.Item>
+              {user.name}
+            </Menu.Item>
           ))}
-        </Command.List>
-      </Command>
+        </Menu.List>
+      </Menu>
     </Modal>
   );
 }

@@ -1,15 +1,16 @@
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 import { useEffect, useRef, useState } from "react";
-import { Command } from "cmdk";
 import { reminderDistance, reminderTime } from "./reminder-display";
 import { ActionMenu } from "./action-menu";
 import { Icon } from "./icons";
-import { MenuSurface, MENU_ITEM, MENU_INPUT } from "./menu-surface";
+import { Menu } from "./menu";
+import { MenuSurface } from "./menu-surface";
 import { actions, set, ui, useStore, type Issue } from "./store";
 import { kept, useCommand } from "./commands";
 
 type Preset = { label: string; at: string };
+const BUTTON = "rounded-md px-2 py-1.5 text-[13px] text-fg-2 hover:bg-hover disabled:opacity-40";
 export function ReminderPicker({ issue }: { issue: Issue }) {
   const reference = useRef(new Date()),
     [query, setQuery] = useState(""),
@@ -50,10 +51,14 @@ export function ReminderPicker({ issue }: { issue: Issue }) {
     actions.remind(issue.key, at);
     close();
   };
+  const matches = presets.filter(
+    (p) => !query || p.label.toLowerCase().includes(query.toLowerCase()),
+  );
   return (
-    <MenuSurface label="Remind me" anchorId="issue-options" close={close} width={320}>
+    <MenuSurface label="Remind me" anchorId="issue-options" close={close} fit>
       {custom ? (
         <form
+          className="w-[320px]"
           onSubmit={(e) => {
             e.preventDefault();
             if (parsed) choose(parsed);
@@ -79,7 +84,7 @@ export function ReminderPicker({ issue }: { issue: Issue }) {
           <div className="flex justify-end gap-2 p-2">
             <button
               type="button"
-              className={MENU_ITEM}
+              className={BUTTON}
               // The custom time isn't a typed query: Back shows the presets again, not that time.
               onClick={() => {
                 setParsed(null);
@@ -88,15 +93,15 @@ export function ReminderPicker({ issue }: { issue: Issue }) {
             >
               Back
             </button>
-            <button disabled={!parsed} className={`${MENU_ITEM} disabled:opacity-40`}>
+            <button disabled={!parsed} className={BUTTON}>
               Set reminder
             </button>
           </div>
         </form>
       ) : (
-        <Command
-          loop
+        <Menu
           shouldFilter={false}
+          style={{ width: 320 }}
           onKeyDown={(event) => {
             if (event.key === "ArrowDown" || event.key === "ArrowUp") keyboardChoice.current = true;
             if (event.key === "Enter" && !query && !keyboardChoice.current) {
@@ -105,48 +110,40 @@ export function ReminderPicker({ issue }: { issue: Issue }) {
             }
           }}
         >
-          <Command.Input
+          <Menu.Input
             autoFocus
             aria-label="Reminder time"
             placeholder="Try: 4 pm, 2 days, in 5 weeks…"
             value={query}
             onValueChange={setQuery}
-            className={MENU_INPUT}
           />
-          <Command.List className="p-1">
+          <Menu.List>
             {parsed ? (
-              <Command.Item value={parsed} className={MENU_ITEM} onSelect={() => choose(parsed)}>
+              <Menu.Item value={parsed} onSelect={() => choose(parsed)}>
                 {reminderTime(parsed)}
-              </Command.Item>
+              </Menu.Item>
             ) : (
-              presets
-                .filter((p) => !query || p.label.toLowerCase().includes(query.toLowerCase()))
-                .map((p) => (
-                  <Command.Item
-                    key={p.label}
-                    value={p.label}
-                    className={MENU_ITEM}
-                    onSelect={() => choose(p.at)}
-                  >
-                    <span className="flex-1">{p.label}</span>
-                    <time dateTime={p.at} className="text-[11px] text-fg-3">
-                      {reminderTime(p.at)}
-                    </time>
-                  </Command.Item>
-                ))
+              matches.map((p) => (
+                <Menu.Item
+                  key={p.label}
+                  value={p.label}
+                  hint={<time dateTime={p.at}>{reminderTime(p.at)}</time>}
+                  onSelect={() => choose(p.at)}
+                >
+                  {p.label}
+                </Menu.Item>
+              ))
             )}
-            {query &&
-              !parsed &&
-              !presets.some((p) => p.label.toLowerCase().includes(query.toLowerCase())) && (
-                <p role="status" className="p-2 text-[12px] text-fg-3">
-                  Choose a future date and time
-                </p>
-              )}
-            <Command.Item className={MENU_ITEM} onSelect={() => setCustom(true)}>
+            {query && !parsed && !matches.length && (
+              <div role="status">
+                <Menu.Empty always>Choose a future date and time</Menu.Empty>
+              </div>
+            )}
+            <Menu.Item value="Custom…" onSelect={() => setCustom(true)}>
               Custom…
-            </Command.Item>
-          </Command.List>
-        </Command>
+            </Menu.Item>
+          </Menu.List>
+        </Menu>
       )}
     </MenuSurface>
   );

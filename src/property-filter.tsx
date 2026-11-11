@@ -1,9 +1,9 @@
-import { Command } from "cmdk";
 import { useMemo, useState, type ReactNode } from "react";
 import { Avatar } from "./avatar";
 import { statuses } from "./board-catalog";
 import { FilterIcon } from "./filter-icons";
 import { hue, PriorityIcon, StatusIcon, TypeDot } from "./icons";
+import { Menu } from "./menu";
 import { setRule, updateRule, useViewSettings } from "./view-settings";
 import {
   ME,
@@ -150,6 +150,19 @@ export function useFieldFilter(field: Field, board: Board) {
   return { issues, rule, choices, apply, toggle };
 }
 
+/** "Status › Todo": a searched row's dimmed path before its name (Linear's M4e breadcrumbs). */
+export function Path({ path, children }: { path: string; children: ReactNode }) {
+  return (
+    <>
+      <span className="text-[var(--menu-fg-3)]">{path}</span>
+      <svg width="5" height="9" viewBox="0 0 5 9" aria-hidden className="mx-2 inline text-[var(--menu-placeholder)]">
+        <path d="m1 1 3 3.5L1 8" fill="none" stroke="currentColor" strokeLinecap="round" />
+      </svg>
+      {children}
+    </>
+  );
+}
+
 /** One value row: Linear's checkbox slot, then the value's icon, its name and its issue count. */
 export function ValueRow({
   choice,
@@ -165,33 +178,16 @@ export function ValueRow({
   path?: string;
 }) {
   return (
-    <Command.Item
+    <Menu.Item
       value={path ? `${path} ${choice.label} ${choice.value}` : `${choice.label} ${choice.value}`}
       aria-checked={checked}
+      checkbox={check ? checked : undefined}
+      icon={choice.icon}
+      hint={issueCount(choice.count)}
       onSelect={onSelect}
-      className="filter-row"
     >
-      {check && <span aria-hidden className="filter-check" />}
-      <span className={check ? "filter-value" : "contents"}>
-        {choice.icon}
-        {path && (
-          <>
-            <span className="filter-path">{path}</span>
-            <svg
-              width="5"
-              height="9"
-              viewBox="0 0 5 9"
-              aria-hidden
-              className="text-[var(--filter-dim)]"
-            >
-              <path d="m1 1 3 3.5L1 8" fill="none" stroke="currentColor" strokeLinecap="round" />
-            </svg>
-          </>
-        )}
-        <span className="min-w-0 truncate">{choice.label}</span>
-        <span className="filter-count">{issueCount(choice.count)}</span>
-      </span>
-    </Command.Item>
+      {path ? <Path path={path}>{choice.label}</Path> : choice.label}
+    </Menu.Item>
   );
 }
 
@@ -359,15 +355,13 @@ export function PropertyFilter({
     </form>
   );
   const searchRow = (placeholder = "Filter…", label = `Filter ${name}`) => (
-    <div className="filter-search">
-      <Command.Input
-        autoFocus={autoFocus}
-        placeholder={placeholder}
-        aria-label={label}
-        value={search}
-        onValueChange={setSearch}
-      />
-    </div>
+    <Menu.Input
+      autoFocus={autoFocus}
+      placeholder={placeholder}
+      aria-label={label}
+      value={search}
+      onValueChange={setSearch}
+    />
   );
   // Linear's chip editor and the numeric Jira fields keep the operator form.
   if (inline && (dated || numeric || text)) return form;
@@ -376,46 +370,42 @@ export function PropertyFilter({
   if (dated) {
     const presets = datePresets(field, search);
     return (
-      <Command loop shouldFilter={false} className="filter-menu filter-sub">
+      <Menu shouldFilter={false} className="filter-menu filter-sub">
         {searchRow(field === "due" ? "Try: 1 week ago, 1 week from now…" : "Filter…", name)}
-        <Command.List className="filter-list max-h-[360px] overflow-y-auto">
-          {!presets.length && <div className="filter-empty">No matching options</div>}
+        <Menu.List maxHeight="360px">
+          {!presets.length && <Menu.Empty always>No matching options</Menu.Empty>}
           {presets.map((p) => {
             const count =
               p.value || p.op === "empty"
                 ? countWhere(issues, { field, op: p.op, values: p.value ? [p.value] : [] })
                 : 0;
             return (
-              <Command.Item
+              <Menu.Item
                 key={p.label}
                 value={p.label}
-                className="filter-row"
+                hint={p.typed ? `${count} issue${count === 1 ? "" : "s"}` : issueCount(count)}
                 onSelect={() => {
                   if (!p.value && p.op === "is") return setCustom(true);
                   apply(p.value ? [p.value] : [], p.op);
                   done();
                 }}
               >
-                <span className="min-w-0 flex-1 truncate">{p.label}</span>
-                <span className="filter-count">
-                  {p.typed ? `${count} issue${count === 1 ? "" : "s"}` : issueCount(count)}
-                </span>
-              </Command.Item>
+                {p.label}
+              </Menu.Item>
             );
           })}
-        </Command.List>
-      </Command>
+        </Menu.List>
+      </Menu>
     );
   }
   if (text && !inline) {
     const noun = field === "content" ? "content" : "link";
     return (
-      <Command loop shouldFilter={false} className="filter-menu filter-sub">
+      <Menu shouldFilter={false} className="filter-menu filter-sub">
         {searchRow()}
-        <Command.List className="filter-list">
-          <Command.Item
+        <Menu.List>
+          <Menu.Item
             value="text"
-            className="filter-row"
             onSelect={() => {
               if (!search.trim()) return;
               apply([search.trim()], "contains");
@@ -423,9 +413,9 @@ export function PropertyFilter({
             }}
           >
             {search.trim() ? `Filter by ${noun} “${search.trim()}”` : `Filter by ${noun}…`}
-          </Command.Item>
-        </Command.List>
-      </Command>
+          </Menu.Item>
+        </Menu.List>
+      </Menu>
     );
   }
   return (
@@ -444,10 +434,10 @@ export function PropertyFilter({
           ))}
         </div>
       )}
-      <Command loop className={inline ? "filter-sub" : ""}>
+      <Menu>
         {searchRow()}
-        <Command.List className="filter-list max-h-[360px] overflow-y-auto">
-          <Command.Empty className="filter-empty">No matching options</Command.Empty>
+        <Menu.List maxHeight="360px">
+          <Menu.Empty>No matching options</Menu.Empty>
           {choices.map((c) => (
             <ValueRow
               key={c.value}
@@ -457,8 +447,8 @@ export function PropertyFilter({
               onSelect={() => toggle(c.value)}
             />
           ))}
-        </Command.List>
-      </Command>
+        </Menu.List>
+      </Menu>
     </div>
   );
 }

@@ -1,23 +1,8 @@
-/* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
-import {
-  autoUpdate,
-  flip,
-  FloatingNode,
-  FloatingTree,
-  offset,
-  safePolygon,
-  shift,
-  useFloating,
-  useFloatingNodeId,
-  useHover,
-  useInteractions,
-} from "@floating-ui/react";
-import { useHotkey } from "@tanstack/react-hotkeys";
-import { Command } from "cmdk";
-import { useEffect, useRef, useState, type RefObject } from "react";
-import { createPortal } from "react-dom";
+import { FloatingTree } from "@floating-ui/react";
+import { useRef, useState, type RefObject } from "react";
 import { Icon, type IconName } from "./icons";
-import { MenuSurface, MENU_INPUT, MENU_ITEM, MENU_POPUP } from "./menu-surface";
+import { Menu } from "./menu";
+import { MenuSurface, MENU_POPUP } from "./menu-surface";
 
 /** `divider` starts a new group, drawn as a separator above the entry while the menu is unfiltered. */
 export type ActionEntry = {
@@ -25,7 +10,6 @@ export type ActionEntry = {
   run?: () => void;
   children?: ActionEntry[];
   shortcut?: string;
-  danger?: boolean;
   selected?: boolean;
   icon?: IconName;
   divider?: boolean;
@@ -69,7 +53,7 @@ export function ActionMenu({
       align={align}
       point={point}
     >
-      <div ref={container} className="action-menu">
+      <div ref={container}>
         <FloatingTree>
           <Level
             entries={entries}
@@ -99,29 +83,15 @@ function Level({
   highlight?: boolean;
 }) {
   const [query, setQuery] = useState(""),
-    [open, setOpen] = useState<string | null>(null),
-    command = useRef<HTMLDivElement>(null);
+    [open, setOpen] = useState<string | null>(null);
   // Linear (RAJ-52 issue, comment and sub-issue row menus) opens with no row highlighted: Enter does nothing, ArrowDown highlights the first row, ArrowUp the last.
   // cmdk always selects its first row, so until a key, a filter or the pointer moves, that selection is hidden and inert.
   const [pristine, setPristine] = useState(!nested && !highlight);
   const choices = query.trim() ? searchActions(entries, query.trim()) : entries;
-  useHotkey(
-    "ArrowRight",
-    () =>
-      !command.current?.hasAttribute("data-pristine") &&
-      command.current
-        ?.querySelector<HTMLElement>("[cmdk-item][data-selected=true][aria-haspopup]")
-        ?.click(),
-    { target: command, capture: true, ignoreInputs: false },
-  );
   return (
-    <Command
-      ref={command}
-      loop
+    <Menu
       shouldFilter={false}
-      className={
-        nested ? `action-menu-level ${MENU_POPUP} w-max min-w-[174px] max-w-[min(520px,calc(100vw-24px))]` : ""
-      }
+      className={nested ? `${MENU_POPUP} w-max min-w-[175px] max-w-[min(500px,calc(100vw-24px))]` : ""}
       data-pristine={pristine || undefined}
       onPointerMove={() => setPristine(false)}
       onKeyDown={(event) => {
@@ -131,7 +101,9 @@ function Level({
       }}
       onValueChange={(value) => setOpen((current) => (value === current ? current : null))}
     >
-      <Command.Input
+      {/* Linear keeps the filter focused but shows it only once typing starts. */}
+      <Menu.Input
+        hideWhenEmpty
         autoFocus={!nested}
         aria-label={`Find ${label.toLowerCase()}`}
         placeholder="Filter…"
@@ -141,187 +113,64 @@ function Level({
           setOpen(null);
           setPristine(false);
         }}
-        className={query ? MENU_INPUT : "sr-only"}
       />
-      {/* Linear keeps the filter focused but shows it only once typing starts. */}
-      {/* Linear (RAJ-52 resource menu): 6px above and below the rows, and 12px separators with a centred 1px line in the menu border colour. */}
-      <Command.List className="max-h-[60vh] overflow-y-auto py-1.5">
-        <Command.Empty>No actions found</Command.Empty>
+      <Menu.List maxHeight="60vh">
+        <Menu.Empty>No actions found</Menu.Empty>
         {choices.map((entry) => [
-          !query && entry.divider && (
-            <Command.Separator
-              key={`-${entry.name}`}
-              className="my-[5.5px] h-px bg-[var(--menu-line)]"
-            />
-          ),
+          !query && entry.divider && <Menu.Divider key={`-${entry.name}`} />,
           entry.children ? (
-            <Branch
-              key={entry.name}
-              entry={entry}
-              open={open === entry.name}
-              setOpen={(next) =>
-                setOpen((cur) => (next ? entry.name : cur === entry.name ? null : cur))
-              }
-              parent={command}
-              container={container}
-              close={close}
-            />
-          ) : (
-            <Command.Item
+            <Menu.Submenu
               key={entry.name}
               value={entry.name}
-              aria-checked={entry.selected}
-              className={`${MENU_ITEM} ${entry.danger ? "text-danger" : ""}`}
+              label={<Label name={entry.name} />}
+              icon={entry.icon && <Icon name={entry.icon} size={16} />}
+              hint={entry.shortcut}
+              open={open === entry.name}
+              onOpenChange={(next) =>
+                setOpen((cur) => (next ? entry.name : cur === entry.name ? null : cur))
+              }
+              container={container}
+            >
+              <Level
+                nested
+                entries={entry.children}
+                label={entry.name}
+                container={container}
+                close={close}
+              />
+            </Menu.Submenu>
+          ) : (
+            <Menu.Item
+              key={entry.name}
+              value={entry.name}
+              icon={entry.icon && <Icon name={entry.icon} size={16} />}
+              checked={entry.selected}
+              hint={entry.shortcut}
               onSelect={() => {
                 close();
                 entry.run?.();
               }}
             >
-              <Label entry={entry} />
-              {entry.selected && <Icon name="check" size={16} />}
-              {entry.shortcut && (
-                <span className="ml-4 text-[11px] text-[var(--menu-fg-3)]">{entry.shortcut}</span>
-              )}
-            </Command.Item>
+              <Label name={entry.name} />
+            </Menu.Item>
           ),
         ])}
-      </Command.List>
-    </Command>
+      </Menu.List>
+    </Menu>
   );
 }
-// Row colours from live Linear (Opus review 4): labels lch 91.178, keys 64.714, a small ▶ submenu arrow at 41.778.
-/** Searched descendants read "Parent › Child", with the path dimmed as in Linear. */
-function Label({ entry }: { entry: ActionEntry }) {
-  const path = entry.name.split(" › "),
-    name = path.pop();
+/** Searched descendants read "Parent › Child", with the path dimmed as in Linear (M4e's labelMuted breadcrumbs). */
+function Label({ name }: { name: string }) {
+  const path = name.split(" › "),
+    last = path.pop();
   return (
-    <span className="flex flex-1 items-center gap-2 whitespace-nowrap">
-      {entry.icon && (
-        <span className="text-fg-3">
-          <Icon name={entry.icon} size={16} />
-        </span>
-      )}
+    <>
       {path.map((part) => (
-        <span key={part} className="text-fg-3">
+        <span key={part} className="mr-2 text-[var(--menu-fg-3)]">
           {part} ›
         </span>
       ))}
-      <span className={entry.danger ? "" : "text-[var(--menu-fg)]"}>{name}</span>
-    </span>
-  );
-}
-// Like Linear (RAJ-52): a submenu opens to the right, overlapping its menu by 2px, its first row level with the row that opened it; content-sized.
-function Branch({
-  entry,
-  open,
-  setOpen,
-  parent,
-  container,
-  close,
-}: {
-  entry: ActionEntry;
-  open: boolean;
-  setOpen: (open: boolean) => void;
-  parent: Container;
-  container: Container;
-  close: () => void;
-}) {
-  const nodeId = useFloatingNodeId(),
-    keyboard = useRef(false);
-  const { refs, floatingStyles, context, isPositioned } = useFloating({
-    nodeId,
-    open,
-    onOpenChange: (next) => {
-      keyboard.current = false;
-      setOpen(next);
-    },
-    placement: "right-start",
-    strategy: "fixed",
-    whileElementsMounted: autoUpdate,
-    middleware: [
-      offset({ mainAxis: -1, alignmentAxis: -7 }),
-      flip({ padding: 12, fallbackAxisSideDirection: "end" }),
-      shift({ padding: 12 }),
-    ],
-  });
-  const hover = useHover(context, {
-    mouseOnly: true,
-    delay: { open: 75, close: 120 },
-    handleClose: safePolygon({ buffer: 2 }),
-  });
-  const { getReferenceProps, getFloatingProps } = useInteractions([hover]);
-  const focus = () => refs.floating.current?.querySelector<HTMLInputElement>("input")?.focus();
-  const back = () => {
-    setOpen(false);
-    parent.current?.querySelector<HTMLInputElement>("input")?.focus();
-  };
-  useHotkey(
-    "ArrowLeft",
-    (event) => {
-      const input = event.target instanceof HTMLInputElement ? event.target : null;
-      if (input?.value && input.selectionStart !== 0) return;
-      back();
-    },
-    { target: refs.floating, capture: true, ignoreInputs: false },
-  );
-  useHotkey("Escape", back, { target: refs.floating, capture: true, ignoreInputs: false });
-  useEffect(() => {
-    if (open && isPositioned && keyboard.current) {
-      focus();
-      keyboard.current = false;
-    }
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Focus only on the open/positioned transition; the render-local helper changes each render.
-  }, [open, isPositioned]);
-  return (
-    <FloatingNode id={nodeId}>
-      <Command.Item
-        ref={refs.setReference}
-        value={entry.name}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        {...getReferenceProps()}
-        className={`${MENU_ITEM} ${open ? "bg-sel" : ""}`}
-        onSelect={() => {
-          keyboard.current = true;
-          if (open) focus();
-          else setOpen(true);
-        }}
-      >
-        <Label entry={entry} />
-        {entry.shortcut && (
-          <span className="ml-4 text-[11px] text-[var(--menu-fg-3)]">{entry.shortcut}</span>
-        )}
-        <span
-          aria-hidden="true"
-          data-submenu-arrow
-          className="text-[8px] text-[var(--menu-placeholder)] before:content-['▶']"
-        />
-      </Command.Item>
-      {open &&
-        container.current &&
-        createPortal(
-          <div
-            ref={refs.setFloating}
-            style={{ ...floatingStyles, visibility: isPositioned ? "visible" : "hidden" }}
-            role="dialog"
-            aria-label={entry.name}
-            {...getFloatingProps({
-              onPointerEnter: focus,
-              onKeyDown: (event: React.KeyboardEvent) => {
-                if (event.key !== "Tab") event.stopPropagation();
-              },
-            })}
-          >
-            <Level
-              nested
-              entries={entry.children!}
-              label={entry.name}
-              container={container}
-              close={close}
-            />
-          </div>,
-          container.current,
-        )}
-    </FloatingNode>
+      {last}
+    </>
   );
 }

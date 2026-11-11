@@ -8,9 +8,9 @@ import {
   type MouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { Command } from "cmdk";
 import { Icon, type IconName } from "./icons";
-import { MenuSurface, MENU_ITEM } from "./menu-surface";
+import { ActionMenu, type ActionEntry } from "./action-menu";
+import { MenuSurface } from "./menu-surface";
 import { ViewIconPicker } from "./view-icon-picker";
 import {
   beginViewEditor,
@@ -268,55 +268,37 @@ export function viewActions(view: SavedView, favorite: boolean, contextMenu: boo
     ],
   ];
 }
-function Management({
+/** Where the view's menu is open: under its ⋯ (`anchor`) or at a right-click (`point`); "delete" once Delete was chosen. */
+type MenuTarget = { anchor?: HTMLElement; point?: { x: number; y: number } } | "delete" | null;
+/** The ⋯ and right-click view menu: Linear builds it as an action menu (groups split by dividers), then the delete confirmation. */
+function ViewOptions({
   view,
-  close,
-  anchor,
-  point,
+  target,
+  setTarget,
 }: {
   view: SavedView;
-  close: () => void;
-  anchor?: HTMLElement;
-  point?: { x: number; y: number };
+  target: Exclude<MenuTarget, null>;
+  setTarget: (target: MenuTarget) => void;
 }) {
-  const favorite = useStore((s) => s.favorites.includes(`view:${view.id}`)),
-    [confirm, setConfirm] = useState(false);
+  const favorite = useStore((s) => s.favorites.includes(`view:${view.id}`));
+  const close = () => setTarget(null);
+  if (target === "delete") return createPortal(<ViewDeleteDialog view={view} close={close} />, document.body);
+  // The action menu closes before running a row, so Delete's run replaces that close with the confirmation.
+  const groups: Action[][] = [
+    ...viewActions(view, favorite, !!target.point),
+    [["Delete", "trash", () => setTarget("delete")]],
+  ];
+  const entries = groups.flatMap((group, g) =>
+    group.map(([name, icon, run], i): ActionEntry => ({ name, icon, run, divider: g > 0 && i === 0 })),
+  );
   return createPortal(
-    confirm ? (
-      <ViewDeleteDialog view={view} close={close} />
-    ) : (
-      <MenuSurface label="View options" close={close} anchor={anchor} point={point} fit>
-        <Command loop className="view-menu">
-          <Command.Input autoFocus className="view-menu-search" placeholder="Search actions…" />
-          <Command.List>
-            <Command.Empty className="p-2 text-[13px]">No actions found</Command.Empty>
-            {viewActions(view, favorite, !!point).map((group, i) => (
-              <Command.Group key={i}>
-                {group.map(([label, icon, action]) => (
-                  <Command.Item
-                    key={label}
-                    className={MENU_ITEM}
-                    onSelect={() => {
-                      action();
-                      close();
-                    }}
-                  >
-                    <Icon name={icon} />
-                    {label}
-                  </Command.Item>
-                ))}
-              </Command.Group>
-            ))}
-            <Command.Group>
-              <Command.Item className={MENU_ITEM} onSelect={() => setConfirm(true)}>
-                <Icon name="trash" />
-                Delete
-              </Command.Item>
-            </Command.Group>
-          </Command.List>
-        </Command>
-      </MenuSurface>
-    ),
+    <ActionMenu
+      label="View options"
+      anchor={target.anchor}
+      point={target.point}
+      entries={entries}
+      close={close}
+    />,
     document.body,
   );
 }
@@ -327,7 +309,7 @@ export function ViewMenu({
   view: SavedView;
   children: ReactElement;
 }): JSX.Element {
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [target, setTarget] = useState<MenuTarget>(null);
   return (
     <>
       {cloneElement(
@@ -337,18 +319,16 @@ export function ViewMenu({
           "aria-haspopup": "dialog";
         }>,
         {
-          "aria-expanded": !!anchor,
+          "aria-expanded": !!target,
           "aria-haspopup": "dialog",
           onClick: (e) => {
             e.preventDefault();
             e.stopPropagation();
-            setAnchor(e.currentTarget);
+            setTarget({ anchor: e.currentTarget });
           },
         },
       )}
-      {anchor && (
-        <Management view={view} anchor={anchor} close={() => setAnchor(null)} />
-      )}
+      {target && <ViewOptions view={view} target={target} setTarget={setTarget} />}
     </>
   );
 }
@@ -359,20 +339,18 @@ export function ViewContextMenu({
   view: SavedView;
   children: ReactNode;
 }): JSX.Element {
-  const [point, setPoint] = useState<{ x: number; y: number } | null>(null);
+  const [target, setTarget] = useState<MenuTarget>(null);
   return (
     <div
       className="contents"
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        setPoint({ x: e.clientX, y: e.clientY });
+        setTarget({ point: { x: e.clientX, y: e.clientY } });
       }}
     >
       {children}
-      {point && (
-        <Management view={view} point={point} close={() => setPoint(null)} />
-      )}
+      {target && <ViewOptions view={view} target={target} setTarget={setTarget} />}
     </div>
   );
 }

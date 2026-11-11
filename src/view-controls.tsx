@@ -1,5 +1,4 @@
 import "./view-toolbar.css";
-import { Command } from "cmdk";
 import { useActiveView, useOverlayFilters, saveOverlayToView } from "./saved-views";
 import { clearFilters, resetDisplay, setDisplay, updateRule, useViewSettings } from "./view-settings";
 import { canMergeOverlay } from "./saved-view-model";
@@ -16,7 +15,8 @@ import {
   type RefObject,
 } from "react";
 import { MenuSurface, MENU_POPUP as POPUP, Popover } from "./menu-surface";
-import { filterChoices, PropertyFilter } from "./property-filter";
+import { filterChoices, PropertyFilter, ValueRow } from "./property-filter";
+import { Menu } from "./menu";
 import { PillSelect } from "./pill-select";
 import { Icon } from "./icons";
 import { shortDate } from "./due-date";
@@ -430,23 +430,30 @@ export function FilterChips({ board }: { board: Board }) {
   const choices = rule
     ? filterChoices(rule.field, board, [...issues.values()])
     : [];
+  // Dates, numbers and text edit through PropertyFilter's operator form rather than a value list.
+  const form =
+    edit?.segment === "value" &&
+    !!rule &&
+    (isDate(rule.field) || isNumeric(rule.field) || ["content", "links"].includes(rule.field));
   return (
     <div className="view-filter-row" aria-label={editing ? "View filters" : "Temporary filters"}>
       {edit && rule && (
         <MenuSurface
           label={`${FIELDS.find(([f]) => f === rule.field)?.[1]} ${edit.segment}`}
           anchor={edit.anchor}
+          // The free-value form keeps its 248px; the operator and value lists are content-sized menus.
+          fit={!form}
           width={248}
           close={close}
         >
           {edit.segment === "operator" ? (
-            <Command loop tabIndex={0} defaultValue={rule.op}>
-              <Command.List>
+            <Menu tabIndex={0} defaultValue={rule.op}>
+              <Menu.List>
                 {operatorsFor(rule.field).map(([op, label]) => (
-                  <Command.Item
+                  <Menu.Item
                     key={op}
                     value={op}
-                    className="filter-row"
+                    checked={rule.op === op}
                     onSelect={() => {
                       patch(rule, {
                         op,
@@ -462,15 +469,12 @@ export function FilterChips({ board }: { board: Board }) {
                       );
                     }}
                   >
-                    <span className="flex-1">{label}</span>
-                    {rule.op === op && <Icon name="check" />}
-                  </Command.Item>
+                    {label}
+                  </Menu.Item>
                 ))}
-              </Command.List>
-            </Command>
-          ) : isDate(rule.field) ||
-            isNumeric(rule.field) ||
-            ["content", "links"].includes(rule.field) ? (
+              </Menu.List>
+            </Menu>
+          ) : form ? (
             <PropertyFilter
               inline
               field={rule.field}
@@ -479,20 +483,19 @@ export function FilterChips({ board }: { board: Board }) {
               onBack={close}
             />
           ) : (
-            <Command loop>
-              <Command.Input
+            <Menu>
+              <Menu.Input
                 autoFocus
                 aria-label={`Filter ${FIELDS.find(([f]) => f === rule.field)?.[1]}`}
                 placeholder="Filter…"
-                className="mb-1 w-full p-2 text-[12px] outline-none"
               />
-              <Command.List className="max-h-[300px] overflow-y-auto">
-                <Command.Empty>No matches</Command.Empty>
+              <Menu.List maxHeight="300px">
+                <Menu.Empty>No matches</Menu.Empty>
                 {choices.map((c) => (
-                  <Command.Item
+                  <ValueRow
                     key={c.value}
-                    value={`${c.label} ${c.value}`}
-                    className="filter-row"
+                    choice={c}
+                    checked={rule.values.includes(c.value)}
                     onSelect={() =>
                       patch(rule, {
                         values: rule.values.includes(c.value)
@@ -500,14 +503,10 @@ export function FilterChips({ board }: { board: Board }) {
                           : [...rule.values, c.value],
                       })
                     }
-                  >
-                    {c.icon}
-                    <span className="flex-1">{c.label}</span>
-                    {rule.values.includes(c.value) && <Icon name="check" />}
-                  </Command.Item>
+                  />
                 ))}
-              </Command.List>
-            </Command>
+              </Menu.List>
+            </Menu>
           )}
         </MenuSurface>
       )}
@@ -642,12 +641,10 @@ function FilterSaveActions({ board }: { board: Board }) {
           label="Save filters"
           anchor={saveAnchor}
           align="end"
-          width={mergeable ? 200 : 288}
+          fit
           close={() => setSaveAnchor(null)}
         >
-          <Command
-            className="view-save-menu"
-            loop
+          <Menu
             tabIndex={0}
             onKeyDownCapture={(event) => {
               const id = viewShortcutId(event);
@@ -662,30 +659,31 @@ function FilterSaveActions({ board }: { board: Board }) {
               }
             }}
           >
-            <Command.List>
+            <Menu.List>
               {view && (
-                <Command.Item
-                  className="filter-row"
+                <Menu.Item
+                  value="save"
                   disabled={saving || !mergeable}
                   title={mergeable ? undefined : "Cannot merge these filters into the view"}
+                  description={mergeable ? undefined : "Cannot merge these filters into the view"}
+                  hint="⌥S"
                   onSelect={() => void save()}
                 >
-                  <span className={`flex-1 ${mergeable ? "" : "text-fg-3"}`}>Save to this view{!mergeable && <span className="block text-[11px] leading-4">Cannot merge these filters into the view</span>}</span>
-                  <kbd>⌥S</kbd>
-                </Command.Item>
+                  Save to this view
+                </Menu.Item>
               )}
-              <Command.Item
-                className="filter-row"
+              <Menu.Item
+                value="create"
+                hint="⌥V"
                 onSelect={() => {
                   setSaveAnchor(null);
                   createToolbarView();
                 }}
               >
-                <span className="flex-1">Create new view…</span>
-                <kbd>⌥V</kbd>
-              </Command.Item>
-            </Command.List>
-          </Command>
+                Create new view…
+              </Menu.Item>
+            </Menu.List>
+          </Menu>
         </MenuSurface>
       )}
     </>

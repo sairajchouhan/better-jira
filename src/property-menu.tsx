@@ -1,10 +1,6 @@
-import { Command } from "cmdk";
 import type { ReactNode } from "react";
-import { Icon } from "./icons";
+import { Menu } from "./menu";
 import { MenuSurface } from "./menu-surface";
-
-/** A 32px row inset 6px, icon box at 15px, text at 39px, then the check and the row's number key (Linear, RAJ-52). */
-export const PICKER_ITEM = "picker-item";
 
 /** Linear's property menu (RAJ-52 status, priority, assignee and labels): 208px wide, a 36px filter with the key that opens it at its right,
  *  rows 6px below. With an empty filter, a row's number key picks it, as in Linear. */
@@ -35,10 +31,9 @@ export function PropertyMenu({
 }) {
   return (
     <MenuSurface label={label} anchor={anchor} close={close} fit gap={4.5} side={side}>
-      <Command
-        loop
+      <Menu
         defaultValue={current}
-        className="property-menu"
+        style={{ width: 206 }}
         onKeyDown={(event) => {
           onKeyDown?.(event);
           if (event.defaultPrevented) return;
@@ -61,21 +56,12 @@ export function PropertyMenu({
           }
         }}
       >
-        <div className="flex h-[37px] items-center gap-3.5 border-b border-[var(--menu-line)] pr-3 pl-3.5">
-          <Command.Input
-            autoFocus
-            placeholder={placeholder}
-            value={query}
-            onValueChange={onQuery}
-            className="h-9 min-w-0 flex-1 bg-transparent text-[13px] text-fg-2 outline-none placeholder:text-fg-3"
-          />
-          {hotkey && <kbd className="property-menu-key">{hotkey}</kbd>}
-        </div>
-        <Command.List className="max-h-[min(400px,calc(100vh-80px))] overflow-y-auto py-1.5">
-          <Command.Empty className="px-3.5 py-2 text-[13px] text-fg-3">No results</Command.Empty>
+        <Menu.Input autoFocus placeholder={placeholder} hotkey={hotkey} value={query} onValueChange={onQuery} />
+        <Menu.List maxHeight="min(400px,calc(100vh - 80px))">
+          <Menu.Empty>No results</Menu.Empty>
           {children}
-        </Command.List>
-      </Command>
+        </Menu.List>
+      </Menu>
     </MenuSurface>
   );
 }
@@ -86,6 +72,7 @@ export function PickerRow({
   icon,
   current,
   number,
+  hint = number,
   keywords,
   onSelect,
   children,
@@ -94,22 +81,23 @@ export function PickerRow({
   icon?: ReactNode;
   current?: boolean;
   number?: number;
+  /** Trailing text; the number key by default. */
+  hint?: ReactNode;
   keywords?: string[];
   onSelect: () => void;
   children: ReactNode;
 }) {
   return (
-    <Command.Item
+    <Menu.Item
       value={value}
       keywords={keywords}
       data-number={number}
+      icon={icon}
+      checked={current}
+      hint={hint}
       onSelect={onSelect}
-      className={PICKER_ITEM}
     >
-      <span className="grid size-4 shrink-0 place-items-center">{icon}</span>
-      <span className="min-w-0 flex-1 truncate">{children}</span>
-      {current && <Icon name="check" size={16} />}
-      {number !== undefined && <kbd className="picker-number">{number}</kbd>}
-    </Command.Item>
+      {children}
+    </Menu.Item>
   );
 }

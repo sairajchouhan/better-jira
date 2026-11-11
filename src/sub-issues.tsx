@@ -3,9 +3,10 @@
 /* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { Command } from "cmdk";
-import { RelationIcon, Icon, PriorityIcon, ProgressRing, StatusIcon } from "./icons";
-import { Confirm, MenuSurface, MENU_INPUT, MENU_ITEM } from "./menu-surface";
+import { RelationIcon, Icon, PriorityIcon, ProgressRing, StatusIcon, hue } from "./icons";
+import { Confirm, MenuSurface } from "./menu-surface";
+import { Menu } from "./menu";
+import { PickerRow, PropertyMenu } from "./property-menu";
 import { InlineEditor } from "./rich-editor-loader";
 import { useCommand } from "./commands";
 import {
@@ -30,6 +31,7 @@ import {
   type Board,
   type Issue,
   type IssueDraft,
+  type User,
 } from "./store";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { Avatar } from "./avatar";
@@ -79,7 +81,7 @@ const button = "rounded px-2 py-1 text-fg-3 hover:bg-hover";
 export const CIRCLE =
   "grid size-7 place-items-center rounded-full bg-card text-fg-3 hover:bg-hover";
 type Field = "status" | "priority" | "assignee" | "labels";
-type Choice = { id: string; name: string };
+type Choice = { id: string; name: string; user?: User };
 
 /**
  * One property button with its own picker, rendered on each sub-issue row and in the composer. Each instance owns its anchor and
@@ -160,52 +162,59 @@ function PropertyPicker({
     if (field === "labels") setQuery("");
     else close();
   };
+  const created = query.trim();
+  // Linear's property menu (PropertyMenu), opened beside the sub-issue row or composer chip that was clicked.
   return (
-    <MenuSurface label={`Change sub-issue ${field}`} anchor={anchor} close={close} width={280}>
-      <Command loop defaultValue={choices.find((c) => isSelected(c.id))?.name}>
-        <Command.Input
-          autoFocus
-          aria-label={`Find sub-issue ${field}`}
-          placeholder="Filter…"
-          value={query}
-          onValueChange={setQuery}
-          className={MENU_INPUT}
-        />
-        <Command.List className="max-h-[40vh] overflow-y-auto p-1">
-          <Command.Empty>No matches</Command.Empty>
-          {choices.map((choice) => (
-            <Command.Item
-              key={choice.id}
-              className={MENU_ITEM}
-              value={choice.name}
-              aria-checked={isSelected(choice.id)}
-              onSelect={() => pick(choice.id)}
-            >
-              {field === "priority" && <PriorityIcon name={choice.id || undefined} />}
-              {field === "status" && (
-                <StatusIcon
-                  status={statusById(board, choice.id) ?? { name: choice.name, category: "new" }}
-                />
-              )}
-              <span className="flex-1">{choice.name}</span>
-              {isSelected(choice.id) && <Icon name="check" size={13} />}
-            </Command.Item>
-          ))}
-          {field === "labels" &&
-            query.trim() &&
-            !choices.some((c) => c.id.toLowerCase() === query.trim().toLowerCase()) && (
-              <Command.Item
-                className={MENU_ITEM}
-                value={`Create ${query}`}
-                onSelect={() => pick(query.trim())}
-              >
-                Create label "{query.trim()}"
-              </Command.Item>
-            )}
-        </Command.List>
-      </Command>
-    </MenuSurface>
+    <PropertyMenu
+      label={`Change sub-issue ${field}`}
+      placeholder={PLACEHOLDER[field]}
+      hotkey={shortcutLabel(field === "assignee" ? "assign" : field) || undefined}
+      anchor={anchor}
+      close={close}
+      current={choices.find((c) => isSelected(c.id))?.name}
+      query={query}
+      onQuery={setQuery}
+    >
+      {choices.map((choice) => (
+        <PickerRow
+          key={choice.id}
+          value={choice.name}
+          icon={choiceIcon(field, board, choice)}
+          current={isSelected(choice.id)}
+          onSelect={() => pick(choice.id)}
+        >
+          {choice.name}
+        </PickerRow>
+      ))}
+      {field === "labels" &&
+        created &&
+        !choices.some((c) => c.id.toLowerCase() === created.toLowerCase()) && (
+          <PickerRow
+            value={`Create ${query}`}
+            icon={<Icon name="plus" size={14} />}
+            onSelect={() => pick(created)}
+          >
+            Create label "{created}"
+          </PickerRow>
+        )}
+    </PropertyMenu>
   );
+}
+const PLACEHOLDER: Record<Field, string> = {
+  status: "Change status…",
+  priority: "Change priority to…",
+  assignee: "Assign to…",
+  labels: "Change or add labels…",
+};
+/** The icon the issue's own property menu shows for the same choice. */
+function choiceIcon(field: Field, board: Board, choice: Choice) {
+  if (field === "priority") return <PriorityIcon name={choice.id || undefined} />;
+  if (field === "status")
+    return (
+      <StatusIcon status={statusById(board, choice.id) ?? { name: choice.name, category: "new" }} />
+    );
+  if (field === "assignee") return <Avatar user={choice.user ?? null} size={16} />;
+  return <span className="size-[9px] rounded-full" style={{ background: hue(choice.name) }} />;
 }
 /** Whether a choice is the field's current value on this issue or draft. */
 const isCurrent = (field: Field, on: IssueDraft, id: string) =>
@@ -297,46 +306,31 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
           label={`Open sub-issues of ${parent.key}`}
           anchor={menu}
           close={() => setMenu(null)}
-          width={349}
+          fit
         >
-          <Command loop className="-m-3 py-0">
-            <Command.Input
-              autoFocus
-              aria-label={`Open sub-issues of ${parent.key}…`}
-              className="sr-only"
-            />
-            <Command.List className="pb-1.5">
-              <Command.Group
-                heading="Navigation"
-                className="[&_[cmdk-group-heading]]:px-3.5 [&_[cmdk-group-heading]]:py-2 [&_[cmdk-group-heading]]:text-[12px] [&_[cmdk-group-heading]]:leading-[14px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-fg-3"
-              >
+          <Menu style={{ width: 347 }}>
+            <Menu.Input hideWhenEmpty autoFocus aria-label={`Open sub-issues of ${parent.key}…`} />
+            <Menu.List>
+              <Menu.Group heading="Navigation">
                 {siblings.map((child) => (
-                  <Command.Item
+                  <Menu.Item
                     key={child.key}
                     value={`${child.key} ${child.summary}`}
-                    className={`${MENU_ITEM} mx-1.5 w-auto! px-2 font-[450]`}
+                    icon={<StatusIcon status={status(child)} />}
+                    checked={child.key === issue.key}
+                    hint={<Avatar user={child.assignee ?? null} size={14} />}
                     onSelect={() => {
                       setMenu(null);
                       if (child.key !== issue.key) openIssue(child);
                     }}
                   >
-                    <StatusIcon status={status(child)} />
-                    <span className="text-fg-3">{child.key}</span>
-                    <span className="min-w-0 flex-1 truncate text-fg-2">{child.summary}</span>
-                    {child.key === issue.key && <Icon name="check" size={16} />}
-                    {child.assignee ? (
-                      <Avatar user={child.assignee} size={14} />
-                    ) : (
-                      <span
-                        title="Unassigned"
-                        className="grid size-3.5 place-items-center rounded-full bg-sel"
-                      />
-                    )}
-                  </Command.Item>
+                    <span className="mr-2 text-[var(--menu-fg-3)]">{child.key}</span>
+                    {child.summary}
+                  </Menu.Item>
                 ))}
-              </Command.Group>
-            </Command.List>
-          </Command>
+              </Menu.Group>
+            </Menu.List>
+          </Menu>
         </MenuSurface>
       )}
     </div>
@@ -645,7 +639,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
                     (u) => [u.id, u],
                   ),
                 ).values(),
-              ].map((u) => ({ id: u.id, name: u.name })),
+              ].map((u) => ({ id: u.id, name: u.name, user: u })),
             ]
           : [
               ...new Set([
@@ -889,7 +883,6 @@ export function SubIssues({ issue }: { issue: Issue }) {
       icon: "trash",
       divider: true,
       shortcut: shortcutLabel("delete") || undefined,
-      danger: true,
       run: () => actions.remove(child.key),
     },
   ];

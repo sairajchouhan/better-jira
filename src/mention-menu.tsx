@@ -4,7 +4,8 @@
 import { Debouncer } from "@tanstack/pacer";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Avatar } from "./avatar";
-import { MENU_ITEM, MENU_POPUP, usePlacement } from "./menu-surface";
+import { Menu, MENU } from "./menu";
+import { MENU_POPUP, usePlacement } from "./menu-surface";
 import { queryClient, type User } from "./store";
 
 const peopleKey = (query: string, issue?: string) => [
@@ -107,7 +108,11 @@ export function MentionMenu({
     else return false;
     return true;
   };
-  const height = Math.min(8, Math.max(1, people.length)) * 32 + 10;
+  // Up to eight 32px rows (or the empty state) inside the list's 6px padding and the popup's 1px border.
+  const height =
+    (people.length ? Math.min(8, people.length) * MENU.ITEM_HEIGHT : MENU.LIST_EMPTY_STATE_HEIGHT) +
+    2 * MENU.LIST_PADDING +
+    2;
   const style = usePlacement(
     list,
     editor,
@@ -123,39 +128,36 @@ export function MentionMenu({
     !hidden && `${query} ${height}`,
   );
   if (hidden) return null;
+  // The editor keeps focus and drives the highlight through `keys`; the menu mirrors `active` and follows the pointer.
   return (
-    <div
+    <Menu
       ref={list}
-      role="listbox"
       aria-label="Mention people"
-      className={`${MENU_POPUP} fixed z-50 w-[260px] overflow-y-auto p-1`}
+      shouldFilter={false}
+      value={people[Math.min(active, people.length - 1)]?.id ?? ""}
+      onValueChange={(id) => {
+        const i = people.findIndex((p) => p.id === id);
+        if (i >= 0) setActive(i);
+      }}
+      className={`${MENU_POPUP} fixed z-50 w-[260px]`}
       style={style}
       onMouseDown={(event) => event.preventDefault()}
     >
-      {!people.length && !settled ? (
-        <div className="px-2 py-1.5 text-[13px] text-fg-3">Searching people…</div>
-      ) : people.length ? (
-        people.map((person, i) => (
-          <div
+      <Menu.List>
+        {!people.length && (
+          <Menu.Empty always>{settled ? "No people found" : "Searching people…"}</Menu.Empty>
+        )}
+        {people.map((person) => (
+          <Menu.Item
             key={person.id}
-            role="option"
-            aria-selected={i === active}
-            data-selected={i === active}
-            className={`${MENU_ITEM} cursor-default`}
-            onMouseMove={() => setActive(i)}
-            onClick={() => pick(person)}
+            value={person.id}
+            icon={<Avatar user={person} size={16} />}
+            onSelect={() => pick(person)}
           >
-            <Face person={person} />
-            <span className="truncate text-fg">{person.name}</span>
-          </div>
-        ))
-      ) : (
-        <div className="px-2 py-1.5 text-[13px] text-fg-3">No people found</div>
-      )}
-    </div>
+            {person.name}
+          </Menu.Item>
+        ))}
+      </Menu.List>
+    </Menu>
   );
-}
-
-function Face({ person }: { person: User }) {
-  return <Avatar user={person} size={18} />;
 }

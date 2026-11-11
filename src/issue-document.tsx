@@ -2,9 +2,9 @@
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 import { createContext, use, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Debouncer } from "@tanstack/pacer";
-import { Command } from "cmdk";
 import { Icon, StatusIcon } from "./icons";
-import { Confirm, MenuSurface, MENU_INPUT, MENU_ITEM } from "./menu-surface";
+import { Menu } from "./menu";
+import { Confirm, MenuSurface } from "./menu-surface";
 import { DocumentBodyEditor } from "./rich-editor-loader";
 import { Adf } from "./adf";
 import { statusById } from "./board-catalog";
@@ -21,6 +21,7 @@ import {
   toggleFavorite,
   useStore,
   type Issue,
+  type User,
 } from "./store";
 import type { DocumentRevision, IssueResource } from "./issue-resource";
 import { documentURL } from "./issue-resources";
@@ -420,7 +421,7 @@ function DocumentHeader() {
         setHistory(true);
       },
     },
-    { name: "Delete", icon: "trash", danger: true, run: () => setDeleting(true) },
+    { name: "Delete", icon: "trash", run: () => setDeleting(true) },
   ];
   useCommand("document-action", (name) => {
     if (!root.current?.closest("[data-document]")) return;
@@ -678,60 +679,56 @@ function DocumentPeople({
       ].map((user) => [user.id, user]),
     ).values(),
   ];
+  const owner = resource.owner?.id ?? ME.id;
+  // Owner picks one and closes; subscribers toggle and stay open. Both keep a named checkbox per person.
+  const pick = (user: User, checked: boolean) => {
+    if (kind === "owner") {
+      actions.documentProperties(issue.key, resource.id, { owner: user });
+      close();
+    } else
+      actions.documentProperties(issue.key, resource.id, {
+        subscribers: checked
+          ? resource.subscribers?.filter((u) => u.id !== user.id)
+          : [...(resource.subscribers ?? []), user],
+      });
+  };
   return (
     <MenuSurface
       label={kind === "owner" ? "Change document owner" : "Change document subscribers"}
       anchor={anchor}
       close={close}
-      width={280}
+      fit
     >
-      <Command loop>
-        <Command.Input
+      <Menu>
+        <Menu.Input
           autoFocus
           placeholder={kind === "owner" ? "Change owner…" : "Change subscribers…"}
           aria-label={kind === "owner" ? "Find document owner" : "Find document subscribers"}
           value={query}
           onValueChange={setQuery}
-          className={MENU_INPUT}
         />
-        <Command.List className="p-1">
-          <Command.Empty>No people found</Command.Empty>
+        <Menu.List>
+          <Menu.Empty>No people found</Menu.Empty>
           {users.map((user) => {
             const checked =
               kind === "owner"
-                ? (resource.owner?.id ?? ME.id) === user.id
+                ? owner === user.id
                 : !!resource.subscribers?.some((u) => u.id === user.id);
             return (
-              <Command.Item
+              <Menu.Item
                 key={user.id}
                 value={user.name}
-                className={MENU_ITEM}
-                onSelect={() => {
-                  if (kind === "owner") {
-                    actions.documentProperties(issue.key, resource.id, { owner: user });
-                    close();
-                  } else
-                    actions.documentProperties(issue.key, resource.id, {
-                      subscribers: checked
-                        ? resource.subscribers?.filter((u) => u.id !== user.id)
-                        : [...(resource.subscribers ?? []), user],
-                    });
-                }}
+                checkbox={checked}
+                checkboxLabel={user.name}
+                onCheckboxClick={() => pick(user, checked)}
+                onSelect={() => pick(user, checked)}
               >
-                <input
-                  type="checkbox"
-                  aria-label={user.name}
-                  tabIndex={-1}
-                  checked={checked}
-                  readOnly
-                  className="pointer-events-none"
-                />
-                <span>{user.name}</span>
-              </Command.Item>
+                {user.name}
+              </Menu.Item>
             );
           })}
-        </Command.List>
-      </Command>
+        </Menu.List>
+      </Menu>
     </MenuSurface>
   );
 }
@@ -819,7 +816,7 @@ function DocumentIcon({ resource, issue }: { resource: IssueResource; issue: Iss
             placeholder="Search icons…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className={MENU_INPUT}
+            className="h-9 w-full border-b border-line-2 bg-transparent px-3 text-[13px] outline-none placeholder:text-fg-3"
           />
           {tab === "icons" && (
             <div className="my-2 flex gap-2" aria-label="Icon color">

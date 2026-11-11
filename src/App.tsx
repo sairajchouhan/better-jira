@@ -137,6 +137,7 @@ import { Confirm, issueAnchor } from "./menu-surface";
 import { useCommand } from "./commands";
 import { InboxIssueActions, InboxList, InboxPane, undoInboxToast, useInboxBadge } from "./inbox";
 import { PickerRow, PropertyMenu } from "./property-menu";
+import { Menu } from "./menu";
 import { descriptionSession, type DescriptionPorts } from "./description-session";
 import { shortDate } from "./due-date";
 
@@ -760,18 +761,13 @@ function QuickNavigation({ kind }: { kind: "favorites" | "views" | "boards" }) {
     kind === "views" ? "Open view" : kind === "boards" ? "Open a team / board" : "Open a favorite";
   const choices = navigationChoices(kind, { boards, savedViews, favorites, issues });
   return (
-    <Modal label={title} close={close}>
-      <Command loop>
-        <Command.Input
-          autoFocus
-          aria-label="Find view or favorite"
-          placeholder="Search…"
-          className="w-full bg-transparent p-3 outline-none"
-        />
-        <Command.List>
-          <Command.Empty className="p-3 text-fg-3">No saved {kind}</Command.Empty>
+    <Modal label={title} close={close} fit>
+      <Menu>
+        <Menu.Input autoFocus aria-label="Find view or favorite" placeholder="Search…" />
+        <Menu.List maxHeight="60vh">
+          <Menu.Empty>No saved {kind}</Menu.Empty>
           {choices.map((choice) => (
-            <Command.Item
+            <Menu.Item
               key={choice.id}
               value={choice.name}
               onSelect={() => {
@@ -784,13 +780,12 @@ function QuickNavigation({ kind }: { kind: "favorites" | "views" | "boards" }) {
                   if (scope) setScope(to.board, scope);
                 }
               }}
-              className="p-2 data-[selected=true]:bg-sel"
             >
               {choice.name}
-            </Command.Item>
+            </Menu.Item>
           ))}
-        </Command.List>
-      </Command>
+        </Menu.List>
+      </Menu>
     </Modal>
   );
 }

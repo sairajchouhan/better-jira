@@ -633,7 +633,6 @@ function Thread({
                     name: "Delete",
                     icon: "trash" as const,
                     divider: true,
-                    danger: true,
                     run: () => setDeleting(comment.id),
                   },
                 ]

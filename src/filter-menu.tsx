@@ -1,33 +1,10 @@
-/* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
-import {
-  autoUpdate,
-  flip,
-  FloatingNode,
-  FloatingTree,
-  offset,
-  safePolygon,
-  shift,
-  useFloating,
-  useFloatingNodeId,
-  useHover,
-  useInteractions,
-} from "@floating-ui/react";
+import { FloatingTree } from "@floating-ui/react";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { Command } from "cmdk";
-import {
-  Fragment,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type ReactNode,
-  type RefObject,
-} from "react";
-import { createPortal } from "react-dom";
+import { Fragment, useState, type ReactNode, type RefObject } from "react";
 import { FilterIcon } from "./filter-icons";
 import { Icon, type IconName } from "./icons";
-import { PropertyFilter, useFieldFilter, ValueRow } from "./property-filter";
+import { Menu } from "./menu";
+import { Path, PropertyFilter, useFieldFilter, ValueRow } from "./property-filter";
 import type { Board } from "./store";
 import { type Field } from "./view-model";
 
@@ -145,15 +122,12 @@ export default function FilterMenu({
 }
 
 function EntryIcon({ entry }: { entry: Entry }) {
-  return entry.icon ? (
-    <span className="filter-glyph grid size-4 shrink-0 place-items-center">
-      <Icon name={entry.icon} size={14} />
-    </span>
-  ) : (
-    <span className="filter-glyph contents">
-      <FilterIcon name={entry.glyph ?? entry.name} />
-    </span>
-  );
+  return entry.icon ? <Icon name={entry.icon} size={14} /> : <FilterIcon name={entry.glyph ?? entry.name} />;
+}
+
+/** A nested entry found by the root search reads "Dates › Due date", as Linear's breadcrumb labels do. */
+function EntryLabel({ entry }: { entry: Entry }) {
+  return entry.path ? <Path path={entry.path}>{entry.name}</Path> : entry.name;
 }
 
 /** Each level owns its search and selection; opening a branch never unmounts its parent. */
@@ -172,68 +146,57 @@ function FilterLevel({
   footer?: ReactNode;
   onAdvanced: () => void;
 }) {
-  const command = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [info, setInfo] = useState("");
   const [query, setQuery] = useState("");
   const q = query.trim();
-  useHotkey(
-    "ArrowRight",
-    () =>
-      command.current
-        ?.querySelector<HTMLElement>("[cmdk-item][data-selected=true][aria-haspopup]")
-        ?.click(),
-    { target: command, ignoreInputs: false, capture: true },
-  );
   const shown = q
     ? [...entries, ...(name ? [] : NESTED)].filter((e) => matches(`${e.path ?? ""} ${e.name}`, q))
     : entries;
   return (
-    <Command
-      ref={command}
-      loop
+    <Menu
       shouldFilter={false}
       className={`filter-menu ${name ? "filter-sub" : ""} max-h-[calc(100vh-140px)]`}
       onValueChange={(value) => setOpen((current) => (current === value ? current : null))}
     >
-      <div className="filter-search">
-        <Command.Input
-          autoFocus={!name}
-          aria-label={name ? `Filter ${name}` : "Add Filter…"}
-          placeholder={name ? "Filter…" : "Add Filter…"}
-          value={query}
-          onValueChange={(value) => {
-            setQuery(value);
-            setOpen(null);
-          }}
-        />
-        {!name && <kbd aria-hidden>F</kbd>}
-      </div>
-      <Command.List className="filter-list">
+      <Menu.Input
+        autoFocus={!name}
+        aria-label={name ? `Filter ${name}` : "Add Filter…"}
+        placeholder={name ? "Filter…" : "Add Filter…"}
+        hotkey={name ? undefined : "F"}
+        value={query}
+        onValueChange={(value) => {
+          setQuery(value);
+          setOpen(null);
+        }}
+      />
+      <Menu.List>
         {shown.map((entry) => (
           <Fragment key={(entry.path ?? "") + entry.name}>
-            {!q && entry.divider && <div role="separator" className="filter-separator" />}
+            {!q && entry.divider && <Menu.Divider />}
             {entry.group === "advanced" || entry.reason ? (
-              <Command.Item
+              <Menu.Item
                 value={entry.name}
-                data-disabled-reason={entry.reason ? "" : undefined}
+                icon={<EntryIcon entry={entry} />}
+                aria-disabled={entry.reason ? true : undefined}
                 onSelect={() => {
                   setOpen(null);
                   if (entry.reason) setInfo(entry.reason);
                   else onAdvanced();
                 }}
-                className="filter-row"
               >
-                <EntryIcon entry={entry} />
-                <span className="flex-1">{entry.name}</span>
-              </Command.Item>
+                {entry.name}
+              </Menu.Item>
             ) : (
-              <FilterBranch
-                entry={entry}
+              <Menu.Submenu
+                value={entry.name}
+                label={<EntryLabel entry={entry} />}
+                icon={<EntryIcon entry={entry} />}
+                side="left"
+                popupLabel={`${entry.name} filter`}
                 container={container}
-                parent={command}
                 open={open === entry.name}
-                setOpen={(next) =>
+                onOpenChange={(next) =>
                   setOpen((current) =>
                     next ? entry.name : current === entry.name ? null : current,
                   )
@@ -256,7 +219,7 @@ function FilterLevel({
                     onBack={() => setOpen(null)}
                   />
                 )}
-              </FilterBranch>
+              </Menu.Submenu>
             )}
           </Fragment>
         ))}
@@ -265,18 +228,18 @@ function FilterLevel({
           SEARCHED.map(([field, path]) => (
             <SearchedValues key={field} field={field} path={path} board={board} query={q} />
           ))}
-        {!shown.length && !(!name && q) && <div className="filter-empty">No matching options</div>}
-      </Command.List>
+        {!shown.length && !(!name && q) && <Menu.Empty always>No matching options</Menu.Empty>}
+      </Menu.List>
       {footer}
       {info && (
         <div
           role="status"
-          className="border-t-[0.5px] border-[var(--filter-divider)] px-3.5 py-2 text-[12px] leading-5 text-[var(--filter-icon)]"
+          className="border-t-[0.5px] border-[var(--menu-divider)] px-3.5 py-2 text-[12px] leading-5 text-[var(--menu-fg-3)]"
         >
           {info}
         </div>
       )}
-    </Command>
+    </Menu>
   );
 }
 
@@ -305,143 +268,4 @@ function SearchedValues({
         onSelect={() => toggle(c.value)}
       />
     ));
-}
-
-/** Floating UI supplies hover intent, a safe pointer path, and collision-aware placement.
- * Linear opens a submenu on the left, overlapping its menu by 2px, with its first row level with the row that opened it. */
-function FilterBranch({
-  entry,
-  children,
-  container,
-  parent,
-  open,
-  setOpen,
-}: {
-  entry: Entry;
-  children: ReactNode;
-  container: Container;
-  parent: Container;
-  open: boolean;
-  setOpen: (open: boolean) => void;
-}) {
-  const id = useId(),
-    nodeId = useFloatingNodeId();
-  const focusOnOpen = useRef(false);
-  const { refs, floatingStyles, context, isPositioned } = useFloating({
-    nodeId,
-    open,
-    onOpenChange: (next) => {
-      focusOnOpen.current = false;
-      setOpen(next);
-    },
-    placement: "left-start",
-    strategy: "fixed",
-    whileElementsMounted: autoUpdate,
-    // The row sits 6.5px inside its menu (0.5px border, 6px inset): 4.5px more leaves a 2px overlap. Its first row is 43px down (search row, 6px gap).
-    middleware: [
-      offset({ mainAxis: 4.5, alignmentAxis: -43 }),
-      flip({ padding: 12, fallbackAxisSideDirection: "end" }),
-      shift({ padding: 12 }),
-    ],
-  });
-  const hover = useHover(context, {
-    mouseOnly: true,
-    delay: { open: 75, close: 120 },
-    handleClose: safePolygon({ buffer: 2 }),
-  });
-  const { getReferenceProps, getFloatingProps } = useInteractions([hover]);
-  const focusSearch = () => {
-    const node = refs.floating.current;
-    (
-      node?.querySelector<HTMLElement>("input") ?? node?.querySelector<HTMLElement>("select,button")
-    )?.focus();
-  };
-  const back = () => {
-    setOpen(false);
-    parent.current?.querySelector<HTMLInputElement>("input")?.focus();
-  };
-  useHotkey(
-    "ArrowLeft",
-    (event) => {
-      const input = event.target instanceof HTMLInputElement ? event.target : null;
-      if (input?.value && input.selectionStart !== 0) return;
-      event.preventDefault();
-      back();
-    },
-    { target: refs.floating, ignoreInputs: false, capture: true, preventDefault: false },
-  );
-  useEffect(() => {
-    if (open && isPositioned && focusOnOpen.current) {
-      focusSearch();
-      focusOnOpen.current = false;
-    }
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Focus only on opening; cleanup resolves the latest parent menu after nested menus change.
-  }, [open, isPositioned]);
-  useEffect(() => {
-    if (!open) return;
-    const node = refs.floating.current;
-    return () => {
-      if (node?.contains(document.activeElement))
-        // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Focus only on opening; cleanup resolves the latest parent menu after nested menus change.
-        parent.current?.querySelector<HTMLInputElement>("input")?.focus();
-    };
-  }, [open, parent, refs.floating]);
-  return (
-    <FloatingNode id={nodeId}>
-      <Command.Item
-        ref={refs.setReference}
-        value={entry.name}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={open ? id : undefined}
-        {...getReferenceProps()}
-        onSelect={() => {
-          focusOnOpen.current = true;
-          if (open) focusSearch();
-          else setOpen(true);
-        }}
-        className="filter-row"
-      >
-        <EntryIcon entry={entry} />
-        {entry.path && (
-          <>
-            <span className="filter-path">{entry.path}</span>
-            <svg
-              width="5"
-              height="9"
-              viewBox="0 0 5 9"
-              aria-hidden
-              className="text-[var(--filter-dim)]"
-            >
-              <path d="m1 1 3 3.5L1 8" fill="none" stroke="currentColor" strokeLinecap="round" />
-            </svg>
-          </>
-        )}
-        <span className="flex-1">{entry.name}</span>
-        <span aria-hidden className="filter-arrow" />
-      </Command.Item>
-      {open &&
-        container.current &&
-        createPortal(
-          <div
-            id={id}
-            ref={refs.setFloating}
-            style={{ ...floatingStyles, visibility: isPositioned ? "visible" : "hidden" }}
-            role="dialog"
-            aria-label={`${entry.name} filter`}
-            {...getFloatingProps({
-              onPointerEnter: () => {
-                if (!refs.floating.current?.contains(document.activeElement)) focusSearch();
-              },
-              onKeyDown: (event: KeyboardEvent) => {
-                if (event.key !== "Tab") event.stopPropagation();
-              },
-            })}
-          >
-            {children}
-          </div>,
-          container.current,
-        )}
-    </FloatingNode>
-  );
 }

@@ -311,7 +311,6 @@ export function ImageCommentCard({
               name: "Delete",
               icon: "trash",
               divider: true,
-              danger: true,
               run: () => setDeleting(menu.id),
             },
           ]}

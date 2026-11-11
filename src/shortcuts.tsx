@@ -44,6 +44,7 @@ import {
 import { issueCopy, type CopyKind } from "./issue-copy";
 import { statusById } from "./board-catalog";
 import { editorBindings } from "./editor-bindings";
+import { ActionMenu } from "./action-menu";
 import { MenuSurface } from "./menu-surface";
 import {
   clearFilters as clearInboxFilters,
@@ -1094,22 +1095,15 @@ export function ShortcutHelp() {
     </MenuSurface>
   );
 }
+/** Linear's Help menu is an action menu under the sidebar's Help button. */
 export function HelpMenu() {
+  const [anchor] = useState(() => document.getElementById("help-menu"));
   return (
-    <MenuSurface
+    <ActionMenu
       label="Help"
-      anchorId="help-menu"
-      width={280}
+      anchor={anchor}
       close={() => ui.send({ type: "overlay.close" })}
-    >
-      <button
-        aria-label="Keyboard shortcuts"
-        className="flex w-full items-center gap-4 rounded px-3 py-2 text-left hover:bg-hover"
-        onClick={overlay("shortcuts")}
-      >
-        <span className="flex-1">Keyboard shortcuts</span>
-        <kbd>{shortcutLabel("shortcuts")}</kbd>
-      </button>
-    </MenuSurface>
+      entries={[{ name: "Keyboard shortcuts", shortcut: shortcutLabel("shortcuts"), run: overlay("shortcuts") }]}
+    />
   );
 }
