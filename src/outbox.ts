@@ -250,7 +250,8 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
         if (index < 0) {
           if (outbox.some(waitsForCreate)) await waitForCreators();
           else {
-            const next = Math.min(...outbox.map((job) => job.retryAt ?? now));
+            // The issue's later jobs, behind the one cooling, have no retry time of their own: they don't make the wait 0 ms.
+            const next = Math.min(...outbox.map((job) => job.retryAt ?? Infinity));
             await new Promise<void>((resolve) => {
               wake = resolve;
               clock.setTimeout(resolve, Math.min(next - now, 1000));
