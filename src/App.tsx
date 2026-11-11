@@ -59,6 +59,7 @@ import {
   useStore,
   dismissRecoveryNotice,
   openSavedView,
+  openAllIssues as openBoardIssues,
   beginCreate,
   changePreferences,
   downloadLocalBackup,
@@ -1210,13 +1211,7 @@ function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue }) {
   const mine = useStore((s) => s.mine);
   const activeView = useActiveView();
   const custom = activeView?.kind === "custom" ? activeView : null;
-  const openAllIssues = () => {
-    ui.send({ type: "mine.set", mine: false });
-    ui.send({ type: "query.set", query: "" });
-    set({ details: false, findInView: false });
-    changePreferences(board.id, { scope: "all" });
-    navigate({ board: board.id, selected: null, panel: false });
-  };
+  const openAllIssues = () => openBoardIssues(board.id);
   const crumb =
     "flex h-7 min-w-0 items-center gap-2 rounded px-1 hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-accent";
   return (

@@ -98,7 +98,8 @@ export const emptyOverlay = (): FilterGroup => ({
   join: "and",
   children: [],
 });
-/** Always AND whole trees: flattening an OR group would widen the saved base. */
+/** ANDs base and overlay. An AND side splices its children in, as Linear shows plain chips;
+ * an OR side stays a nested group, since flattening it would widen the saved base. */
 export function mergeFilters(base: FilterGroup, overlay: FilterGroup): FilterGroup {
   if (!overlay.children.length) return structuredClone(base);
   if (!base.children.length) return structuredClone(overlay);
@@ -106,7 +107,7 @@ export function mergeFilters(base: FilterGroup, overlay: FilterGroup): FilterGro
   const merged: FilterGroup = {
     id: crypto.randomUUID(),
     join: "and",
-    children: structuredClone([base, overlay]),
+    children: structuredClone([base, overlay].flatMap((g) => (g.join === "and" ? g.children : [g]))),
   };
   const rekey = (g: FilterGroup) => {
     g.id = crypto.randomUUID();

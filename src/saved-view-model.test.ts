@@ -166,6 +166,18 @@ test("merging keeps OR bases and overlays as AND operands", () => {
   expect(merged.children[0]).toMatchObject({ join: "or" });
 });
 
+test("BJ-140: merging AND groups flattens into plain rules; an OR side stays nested", () => {
+  const r = (id: string, field: string, ...values: string[]) => ({ id, field, op: "is", values }) as any;
+  const and = (...children: any[]) => ({ id: "g", join: "and" as const, children });
+  const merged = mergeFilters(and(r("a", "status", "todo")), and(r("b", "priority", "High")));
+  expect(merged.join).toBe("and");
+  expect(merged.children.map((c: any) => [c.field, c.values])).toEqual([["status", ["todo"]], ["priority", ["High"]]]);
+  const or = { ...and(r("c", "labels", "x"), r("d", "labels", "y")), join: "or" as const };
+  const mixed = mergeFilters(and(r("a", "status", "todo")), or);
+  expect(mixed.children).toHaveLength(2);
+  expect(mixed.children[1]).toMatchObject({ join: "or" });
+  expect(canMergeOverlay(merged, and(r("e", "status", "progress")))).toBe(false);
+});
 test("canMergeOverlay rejects same-field values the saved base excludes", () => {
   const g = (...children: any[]) => ({ id: "g", join: "and" as const, children });
   const r = (field: string, op: string, ...values: string[]) => ({ id: field + op + values, field, op, values }) as any;

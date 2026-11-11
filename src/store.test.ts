@@ -919,7 +919,7 @@ test("BJ-128: Save to this view refuses an overlay the saved base excludes", asy
 });
 
 test("BJ-132: a new custom view starts as a list with details open; a tab keeps the board layout", async () => {
-  const { get, set, navigate, createViewDraft, createSavedView, changeDisplay } = await import("./store");
+  const { get, set, navigate, createViewDraft, createSavedView, changeDisplay, openSavedView } = await import("./store");
   navigate({ board: 1 });
   changeDisplay(1, { layout: "board" });
   set({ details: false });
@@ -929,7 +929,46 @@ test("BJ-132: a new custom view starts as a list with details open; a tab keeps 
   await withFetch((_url, init) => ({ ...JSON.parse(String(init?.body)), id: "fresh", createdAt: "", updatedAt: "" }), async () => {
     await createSavedView({ ...draft, name: "Fresh" });
   });
+  openSavedView("fresh");
   expect(get().details).toBe(true);
+  navigate({ board: 1 });
+  expect(get().details).toBe(false);
+});
+
+test("BJ-142: a custom view remembers its details panel; boards keep their own", async () => {
+  const { get, set, navigate, openSavedView } = await import("./store");
+  const view = await viewFixture({ id: "details-view" });
+  set({ savedViews: [view] });
+  navigate({ board: 1 });
+  set({ details: false });
+  openSavedView(view);
+  expect(get().details).toBe(false);
+  set({ details: true });
+  navigate({ board: 1 });
+  expect(get().details).toBe(false);
+  openSavedView(view);
+  expect(get().details).toBe(true);
+  set({ details: false });
+  navigate({ board: 1 });
+  set({ details: true });
+  openSavedView(view);
+  expect(get().details).toBe(false);
+  navigate({ board: 1 });
+  expect(get().details).toBe(true);
+});
+
+test("BJ-142: deleting the active view lands on the board's All issues", async () => {
+  const { get, set, navigate, openSavedView, deleteSavedView, changePreferences, preferencesFor } = await import("./store");
+  const view = await viewFixture({ id: "doomed", scope: "active" as const });
+  set({ savedViews: [view] });
+  navigate({ board: 1 });
+  changePreferences(1, { scope: "backlog" });
+  openSavedView(view);
+  await withFetch(() => ({}), () => deleteSavedView(view.id));
+  expect(get().activeViewId).toBeNull();
+  expect(get().savedViews).toHaveLength(0);
+  expect(preferencesFor(1).scope).toBe("all");
+  expect(new URL(location.href).pathname).toBe("/");
 });
 
 test("BJ-133: Cancel on a duplicate draft returns to the source view", async () => {

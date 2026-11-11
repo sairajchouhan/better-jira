@@ -367,9 +367,38 @@ export function set(patch: Partial<Omit<State, UiKey | "loadError" | "storage" |
 }
 /** Counts footer messages, so `timed` never covers one its action posted. */
 let perfPosts = 0;
+/** Details open on boards and tab views; a custom view keeps its own, as Linear does. */
+let boardDetails = false;
+const VIEW_DETAILS = "better-jira:view-details:v1";
+function detailViews(): string[] {
+  try {
+    const ids = JSON.parse(savedValue(VIEW_DETAILS) ?? "[]");
+    return Array.isArray(ids) ? ids : [];
+  } catch {
+    return [];
+  }
+}
+function rememberViewDetails(id: string, open: boolean) {
+  try {
+    const ids = detailViews().filter((v) => v !== id);
+    localStorage.setItem(preferenceKey(VIEW_DETAILS), JSON.stringify(open ? [...ids, id] : ids));
+  } catch {
+    /* Preference failure is separate from durable issue storage. */
+  }
+}
+const customViewId = () =>
+  state.savedViews.find((v) => v.id === state.activeViewId && v.kind === "custom")?.id;
 function commit(patch: Partial<State>) {
   if (patch.perf !== undefined) perfPosts++;
+  const was = customViewId(),
+    wasDetails = state.details;
   state = { ...state, ...patch };
+  const now = customViewId();
+  if (was !== now) {
+    if (!was) boardDetails = wasDetails;
+    state.details = now ? detailViews().includes(now) : boardDetails;
+  } else if (now && patch.details !== undefined && patch.details !== wasDetails)
+    rememberViewDetails(now, patch.details);
   if (patch.savedViews || patch.activeViewId !== undefined || patch.overlayFilters || patch.editorDraft !== undefined) {
     const v = state.savedViews.find((v) => v.id === state.activeViewId);
     state.viewPreferences = state.editorDraft
@@ -2475,10 +2504,8 @@ export function duplicateViewDraft(id: string): ViewDraft {
 export async function createSavedView(draft: ViewDraft): Promise<string> {
   const { sourceId: _source, ...definition } = draft;
   const view = await viewRequest<SavedView>("", "POST", definition);
-  set({
-    savedViews: [...state.savedViews.filter((v) => v.id !== view.id), view],
-    ...(view.kind === "custom" ? { details: true } : {}),
-  });
+  if (view.kind === "custom") rememberViewDetails(view.id, true);
+  set({ savedViews: [...state.savedViews.filter((v) => v.id !== view.id), view] });
   return view.id;
 }
 const viewWrites = new Map<string, Promise<unknown>>();
@@ -2513,11 +2540,20 @@ export async function saveViewDraft(draft: ViewDraft): Promise<string> {
 }
 export async function deleteSavedView(id: string) {
   await viewRequest(`/${encodeURIComponent(id)}`, "DELETE");
-  if (state.activeViewId === id) navigate({ board: state.board });
+  rememberViewDetails(id, false);
+  if (state.activeViewId === id) openAllIssues(state.board);
   set({
     savedViews: state.savedViews.filter((v) => v.id !== id),
     favorites: readFavorites().filter((v) => v !== `view:${id}`),
   });
+}
+/** The board's Issues › All. Leaves any view first, so its scope and details stay untouched. */
+export function openAllIssues(board: number) {
+  navigate({ board, selected: null, panel: false });
+  ui.send({ type: "mine.set", mine: false });
+  ui.send({ type: "query.set", query: "" });
+  set({ details: false, findInView: false });
+  changePreferences(board, { scope: "all" });
 }
 export function clearOverlay() {
   set({ overlayFilters: emptyOverlay() });
