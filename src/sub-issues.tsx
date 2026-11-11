@@ -6,7 +6,7 @@ import { useHotkey } from "@tanstack/react-hotkeys";
 import { Command } from "cmdk";
 import { RelationIcon, Icon, PriorityIcon, ProgressRing, StatusIcon } from "./icons";
 import { Confirm, MenuSurface, MENU_INPUT, MENU_ITEM } from "./menu-surface";
-import { RichEditor } from "./rich-editor-loader";
+import { InlineEditor } from "./rich-editor-loader";
 import { useCommand } from "./commands";
 import {
   discardLateMedia,
@@ -999,9 +999,8 @@ export function SubIssues({ issue }: { issue: Issue }) {
               className="min-w-0 flex-1 bg-transparent p-1 text-[14px] outline-none"
             />
           </div>
-          <RichEditor
+          <InlineEditor
             key={editor}
-            inline
             id={`sub-issue-description-${issue.key}`}
             mentionIssue={issue.key}
             scope={scope}

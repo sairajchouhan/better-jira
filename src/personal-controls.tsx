@@ -6,7 +6,7 @@ import { useHotkey } from "@tanstack/react-hotkeys";
 import { Command } from "cmdk";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Adf } from "./adf";
-import { RichEditor } from "./rich-editor-loader";
+import { FramedEditor } from "./rich-editor-loader";
 import { MediaView } from "./media-loader";
 import { normalizeDocument } from "./document";
 import { Icon, PriorityIcon, StatusIcon, TypeDot, hue, type IconName } from "./icons";
@@ -234,7 +234,7 @@ export function CreateIssue() {
           placeholder="Issue title"
           className="mb-2 w-full bg-transparent py-1 text-[18px] font-medium text-fg outline-none"
         />
-        <RichEditor
+        <FramedEditor
           key={draftIndex}
           id="create-description"
           initial={description}

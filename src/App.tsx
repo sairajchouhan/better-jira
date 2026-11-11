@@ -119,7 +119,7 @@ import {
 import { SubIssueOf } from "./sub-issues";
 import { Avatar } from "./avatar";
 import { Tooltips } from "./tooltip";
-import { RichEditor } from "./rich-editor-loader";
+import { DocumentBodyEditor, CommentComposer } from "./rich-editor-loader";
 import { matchRank } from "./search-rank";
 import {
   HelpMenu,
@@ -2283,11 +2283,9 @@ function Description({ issue }: { issue: Issue }) {
           )}
         </p>
       ) : (
-        <RichEditor
+        <DocumentBodyEditor
           key={revision}
           id="description"
-          inline
-          selectionToolbar
           scope={`${issue.key}:description`}
           onLateMedia={session.lateMedia}
           initial={draft ?? content}
@@ -2532,10 +2530,9 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
       </ol>
       <div ref={commentRef} className="mt-[14px]">
         {/* A new key clears the box after sending; autoFocus keeps the caret in it. */}
-        <RichEditor
+        <CommentComposer
           key={`${composer}:${restored}`}
           initial={composer && !restored ? "" : draft}
-          variant="comment"
           id="comment"
           scope={`${issue.key}:comment`}
           onLateMedia={(merge) => {

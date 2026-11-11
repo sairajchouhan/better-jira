@@ -66,7 +66,7 @@ function Fixture() {
       <button className="ml-4" onClick={() => setIssueKey("TEST-2")}>
         Switch issue context
       </button>
-      <RichEditor
+      <RichEditor presentation="framed"
         id="context-editor"
         initial={document}
         issueKey={issueKey}

@@ -5,7 +5,7 @@ import { Debouncer } from "@tanstack/pacer";
 import { Command } from "cmdk";
 import { Icon, StatusIcon } from "./icons";
 import { Confirm, MenuSurface, MENU_INPUT, MENU_ITEM } from "./menu-surface";
-import { RichEditor } from "./rich-editor-loader";
+import { DocumentBodyEditor } from "./rich-editor-loader";
 import { Adf } from "./adf";
 import { statusById } from "./board-catalog";
 import { adfToMarkdown } from "./issue-copy";
@@ -191,11 +191,9 @@ function DocumentEditor({ issue, resource }: { issue: Issue; resource: IssueReso
             onBlur={endSession}
             className="mb-6 block w-full resize-none overflow-hidden bg-transparent text-[24px] leading-[32px] tracking-[-0.16px] [font-variation-settings:'opsz'_32] font-semibold outline-none"
           />
-          <RichEditor
+          <DocumentBodyEditor
             key={revision}
             id="resource-document"
-            inline
-            selectionToolbar
             scope={`${issue.key}:document:${resource.id}`}
             onLateMedia={(merge) => {
               const current = get()

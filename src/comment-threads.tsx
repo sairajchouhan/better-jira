@@ -10,7 +10,7 @@ import { Icon } from "./icons";
 import { Confirm } from "./menu-surface";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { ReactionPicker, shortcode } from "./reactions";
-import { RichEditor } from "./rich-editor-loader";
+import { FramedEditor, CommentComposer } from "./rich-editor-loader";
 import {
   ME,
   actions,
@@ -136,7 +136,7 @@ export function CommentThreads(props: Props) {
         <p role="alert" className="px-3 pt-2 text-[12px] text-fg-3">
           This comment was deleted in Jira while you were editing it. Your text is kept here.
         </p>
-        <RichEditor
+        <FramedEditor
           id={`lost-${id}`}
           label="Unsaved comment edit"
           initial={body}
@@ -391,7 +391,7 @@ function Thread({
         </div>
         <div className="comment-body">
           {editing === comment.id ? (
-            <RichEditor
+            <FramedEditor
               id={`edit-${comment.id}`}
               label="Edit comment"
               autoFocus
@@ -478,10 +478,9 @@ function Thread({
           {
             <div className="comment-reply-composer">
               {replying ? (
-                <RichEditor
+                <CommentComposer
                   key={composer}
                   id={`reply-${root.id}`}
-                  variant="comment"
                   scope={`${issue.key}:reply:${root.id}`}
                   onLateMedia={(merge) => {
                     try {

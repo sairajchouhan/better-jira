@@ -53,7 +53,7 @@ import {
   type AdfDocument,
 } from "./rich-document";
 
-/** inline: no frame, like Linear's description; every editor shows its formatting toolbar floating above it only while focused. */
+/** Shared content, persistence and interaction contract for every editor presentation. */
 export type RichEditorProps = {
   initial: unknown;
   onFiles?: (files: File[]) => Promise<Attachment[]>;
@@ -65,8 +65,6 @@ export type RichEditorProps = {
   id?: string;
   autoFocus?: boolean;
   expanded?: boolean;
-  inline?: boolean;
-  variant?: "comment";
   placeholder?: string;
   saveLabel?: string;
   /** Save stays off while the content is empty (comment composers always are). */
@@ -81,13 +79,23 @@ export type RichEditorProps = {
   /** Receives a function that applies the late media to the content as it is now. */ onLateMedia?: (
     merge: (current: unknown) => AdfDocument,
   ) => void;
-  /** Like Linear's documents: no toolbar on focus, a floating one above a text selection. */ selectionToolbar?: boolean;
   /** Tab outside a list, table or code block moves focus on (Linear's create composer) instead of staying in the editor. */ tabLeaves?: boolean;
 };
 const BUTTON =
   "shrink-0 whitespace-nowrap rounded px-2 py-1 text-[12px] text-fg-2 hover:bg-hover disabled:opacity-30 aria-pressed:bg-sel";
 
-export function RichEditor(props: RichEditorProps) {
+export type EditorPresentation = "framed" | "inline" | "document" | "comment";
+export type EditorEngineProps = RichEditorProps & { presentation: EditorPresentation };
+// Presentation policy stays private to the engine. Callers compose a named editor variant.
+const presentations = {
+  framed: { inline: false, selectionToolbar: false, variant: undefined },
+  inline: { inline: true, selectionToolbar: false, variant: undefined },
+  document: { inline: true, selectionToolbar: true, variant: undefined },
+  comment: { inline: false, selectionToolbar: false, variant: "comment" },
+} as const;
+
+export function RichEditor(props: EditorEngineProps) {
+  const presentation = presentations[props.presentation];
   const host = useRef<HTMLDivElement>(null),
     view = useRef<EditorView | null>(null),
     latest = useRef(props);
@@ -125,7 +133,7 @@ export function RichEditor(props: RichEditorProps) {
     if (view.current) {
       const doc = fromEditorDocument(view.current.state.doc);
       if (
-        (latest.current.required || latest.current.variant === "comment") &&
+        (latest.current.required || latest.current.presentation === "comment") &&
         !adfToText(doc).trim() &&
         !documentHasMedia(doc)
       )
@@ -338,7 +346,7 @@ export function RichEditor(props: RichEditorProps) {
       ignoreInputs: false,
       preventDefault: false,
       stopPropagation: false,
-      enabled: !!props.inline || !!props.onCancel || props.variant === "comment",
+      enabled: !!presentation.inline || !!props.onCancel || presentation.variant === "comment",
     },
   );
   useHotkeys(
@@ -418,11 +426,11 @@ export function RichEditor(props: RichEditorProps) {
     );
   // Comment composers name their own toolbar and undo, not the description's.
   const subject =
-    props.variant === "comment" || /comment/i.test(props.label ?? "") ? "comment" : "description";
+    presentation.variant === "comment" || /comment/i.test(props.label ?? "") ? "comment" : "description";
   const selection = view.current?.state.selection;
   // Above the selection; below it when the editor has too little room above, so it never covers the title or header. Either way both edges stay inside the viewport (a long selection can start above and end below it).
   const selecting =
-    !!props.selectionToolbar &&
+    !!presentation.selectionToolbar &&
     !!view.current?.hasFocus() &&
     !!selection &&
     !selection.empty &&
@@ -443,7 +451,7 @@ export function RichEditor(props: RichEditorProps) {
     },
     selecting && `${selection!.from} ${selection!.to}`,
   );
-  const formatting = (!props.selectionToolbar || selecting) && (
+  const formatting = (!presentation.selectionToolbar || selecting) && (
     <div
       ref={toolbar}
       role="toolbar"
@@ -601,9 +609,9 @@ export function RichEditor(props: RichEditorProps) {
     void searchPeople("", props.mentionIssue ?? props.issueKey).catch(() => {});
   return (
     <div
-      className={`rich-editor group/editor relative ${props.inline ? "" : "mb-3 rounded-lg border border-line-2 bg-card"}`}
-      data-variant={props.variant}
-      data-inline={props.inline || undefined}
+      className={`rich-editor group/editor relative ${presentation.inline ? "" : "mb-3 rounded-lg border border-line-2 bg-card"}`}
+      data-variant={presentation.variant}
+      data-inline={presentation.inline || undefined}
       data-expanded={props.expanded || undefined}
       // The first @ lists people at once: Jira is asked when the editor is approached, not on the @ (R2-comments-D6).
       onPointerEnter={props.onSave ? preloadPeople : undefined}
@@ -622,7 +630,7 @@ export function RichEditor(props: RichEditorProps) {
           }}
         />
       )}
-      {props.variant !== "comment" && formatting}
+      {presentation.variant !== "comment" && formatting}
       {linkOpen && (
         <div className="flex flex-wrap items-center gap-2 border-b border-line-2 p-2">
           <input
@@ -698,8 +706,8 @@ export function RichEditor(props: RichEditorProps) {
       )}
       {(props.onSave || props.onCancel) && (
         <div className="rich-editor-actions flex items-center justify-end gap-2 border-t border-line-2 p-2 text-[12px]">
-          {props.variant === "comment" && formatting}
-          {props.variant !== "comment" && (
+          {presentation.variant === "comment" && formatting}
+          {presentation.variant !== "comment" && (
             <span className="mr-auto text-fg-3">{props.hint ?? "⌘↵ save · Esc cancel"}</span>
           )}
           {props.onCancel && (
@@ -727,18 +735,18 @@ export function RichEditor(props: RichEditorProps) {
             <button
               type="button"
               aria-label={props.saveLabel ?? "Save description"}
-              disabled={uploadBusy || ((props.variant === "comment" || props.required) && empty)}
+              disabled={uploadBusy || ((presentation.variant === "comment" || props.required) && empty)}
               title={
                 uploadBusy
                   ? "Finish or discard attachments before sending"
-                  : props.variant === "comment"
+                  : presentation.variant === "comment"
                     ? "Submit comment (⌘↵)"
                     : undefined
               }
               className="rich-editor-submit disabled:opacity-40 rounded bg-accent px-3 py-1 text-white"
               onClick={() => save()}
             >
-              {props.variant === "comment" ? (
+              {presentation.variant === "comment" ? (
                 <>
                   <Icon name="up" />
                   <span className="sr-only">{props.saveLabel}</span>
