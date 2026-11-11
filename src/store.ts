@@ -1,6 +1,7 @@
 import { savedViewClient } from "./saved-view-client";
+import { assignableUsers, statusById, statuses } from "./board-catalog";
 import { effectiveSettings, setScope, viewSettings } from "./view-settings";
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { adfToText } from "./adf";
 import {
   defaultPreferences,
@@ -470,6 +471,12 @@ function commit(patch: Partial<State>) {
 /** Selector must return a stable reference (a state field or a Map entry), never a fresh object. */
 export const useStore = <T>(sel: (s: State) => T) =>
   useSyncExternalStore(subscribe, () => sel(state));
+/** The assignee choices every picker offers, Assign and Create alike. */
+export function useAssignableUsers(): User[] {
+  const issues = useStore((s) => s.issues);
+  const jiraUsers = useStore((s) => s.options.users);
+  return useMemo(() => assignableUsers(ME, jiraUsers, issues.values()), [issues, jiraUsers]);
+}
 
 // The running machines. Each mirrors its state onto `state` so components read it with useStore.
 export const ui = createActor(uiMachine, {
@@ -2847,7 +2854,7 @@ export const actions = {
           const col = board.columns.findIndex((c) => c.name === id);
           if (col >= 0) actions.move(key, col);
         } else if (by === "category") {
-          const status = board.columns.flatMap((c) => c.statuses).find((s) => s.category === id);
+          const status = statuses(board).find((s) => s.category === id);
           if (status) actions.status(key, status.id);
         } else if (by === "assignee")
           actions.assign(
@@ -2894,9 +2901,7 @@ export const actions = {
   },
   status(key: string, id: string) {
     const i = state.issues.get(key);
-    const s = boardOf(key)
-      ?.columns.flatMap((c) => c.statuses)
-      .find((x) => x.id === id);
+    const s = statusById(boardOf(key), id);
     ui.send({ type: "overlay.close" });
     if (!i || !s || i.status === id) return;
     timed(`move ${key} → ${s.name}`, () =>
@@ -3093,8 +3098,7 @@ export const actions = {
     const made = draft.submission && submissions.get(draft.submission);
     if (made) return made;
     const board = state.boards.find((b) => b.id === state.board);
-    const statuses = board?.columns.flatMap((c) => c.statuses) ?? [];
-    const status = statuses.find((s) => s.id === draft.status) ?? statuses[0];
+    const status = statusById(board, draft.status) ?? statuses(board)[0];
     if (!board || !status || !summary.trim()) return;
     const prefix =
       [...state.issues.values()].find((i) => i.board === board.id)?.key.split("-")[0] ?? "LOCAL";

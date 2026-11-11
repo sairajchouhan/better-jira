@@ -24,6 +24,7 @@ import {
   addBoard,
   addLocalFiles,
   beginCreate,
+  useAssignableUsers,
   boardOf,
   get,
   issueURL,
@@ -48,6 +49,7 @@ import {
   type Field,
   type Grouping,
 } from "./view-model";
+import { knownLabels, statusById, statuses } from "./board-catalog";
 import { setOnlyRule, updateRule, useViewSettings } from "./view-settings";
 
 const INPUT =
@@ -99,12 +101,7 @@ export function CreateIssue() {
   const titleRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const issues = [...all.values()].filter((i) => i.board === board.id);
-  const users = [
-    ...new Map([
-      [ME.id, ME] as const,
-      ...issues.flatMap((i) => (i.assignee ? [[i.assignee.id, i.assignee] as const] : [])),
-    ]).values(),
-  ];
+  const users = useAssignableUsers();
   const projects = [
     ...new Map(
       issues.flatMap((i) => (i.project ? [[i.project.key, i.project] as const] : [])),
@@ -255,9 +252,7 @@ export function CreateIssue() {
           <PillSelect
             label="Status"
             value={draft.status ?? board.columns[0]?.statuses[0]?.id ?? ""}
-            options={board.columns
-              .flatMap((c) => c.statuses)
-              .map((st) => [st.id, st.name] as const)}
+            options={statuses(board).map((st) => [st.id, st.name] as const)}
             onChange={(status) => setDraft({ ...draft, status })}
           />
           <PillSelect
@@ -379,7 +374,7 @@ export function PropertyPicker({
   const options = useStore((s) => s.options),
     writable = useStore((s) => s.writable);
   const [order] = useState(() => {
-    const rest = [...new Set([...issues.flatMap((i) => i.labels), ...options.labels])].filter(
+    const rest = knownLabels(issues, options.labels).filter(
       (l) => !issue.labels.includes(l),
     );
     return { checked: [...issue.labels], rest };
@@ -797,9 +792,7 @@ export function IssueOptions({ issue }: { issue: Issue }) {
   const resourceKind = view === "pull-request" ? "pull-request" : "link";
   const copy = async (kind: CopyKind) => {
     const status =
-      boardOf(issue.key)
-        ?.columns.flatMap((c) => c.statuses)
-        .find((s) => s.id === issue.status)?.name ?? issue.status;
+      statusById(boardOf(issue.key), issue.status)?.name ?? issue.status;
     try {
       await navigator.clipboard.writeText(
         issueCopy(kind, issue, full, issueURL(issue), status, ME.name),

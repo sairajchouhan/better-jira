@@ -1,4 +1,5 @@
 import type { Board, Issue, IssueDraft } from "./store";
+import { statusById } from "./board-catalog";
 
 export type Grouping =
   | "none"
@@ -313,8 +314,6 @@ export const priorityRank = (p?: string) =>
         : /low|minor/i.test(p ?? "")
           ? 3
           : 4;
-export const statusFor = (i: Issue, board: Board) =>
-  board.columns.flatMap((c) => c.statuses).find((s) => s.id === i.status);
 export function valuesFor(i: Issue, field: Field, issues: Issue[]): string[] {
   switch (field) {
     case "status":
@@ -474,7 +473,7 @@ function groupValues(i: Issue, by: Grouping, board: Board): { id: string; name: 
       return [{ id: c?.name ?? "Other", name: c?.name ?? "Other" }];
     }
     case "category": {
-      const key = statusFor(i, board)?.category ?? "new";
+      const key = statusById(board, i.status)?.category ?? "new";
       return [
         {
           id: key,
@@ -577,7 +576,7 @@ export function selectIssues(
       (prefs.scope === "all" ||
         (prefs.scope === "backlog"
           ? isBacklog(i, board)
-          : !isBacklog(i, board) && statusFor(i, board)?.category !== "done")) &&
+          : !isBacklog(i, board) && statusById(board, i.status)?.category !== "done")) &&
       (!mine || i.assignee?.id === me) &&
       (!q || `${i.key} ${i.summary}`.toLowerCase().includes(q)) &&
       matchesFilters(i, prefs.filters, all, me, now),
@@ -635,7 +634,7 @@ export function selectIssues(
   if (d.completedRecency) {
     // Done issues keep the slots the ordering gave them, refilled newest-completed first; mixing
     // recency into the comparator only for Done pairs made the sort non-transitive (R2-D2).
-    const slots = items.flatMap((i, n) => (statusFor(i, board)?.category === "done" ? [n] : []));
+    const slots = items.flatMap((i, n) => (statusById(board, i.status)?.category === "done" ? [n] : []));
     const done = slots
       .map((n) => items[n]!)
       .sort((a, b) => completed(b).localeCompare(completed(a)));
@@ -658,7 +657,7 @@ export function isBacklog(issue: Issue, board: Board): boolean {
   return (
     board.columns.some(
       (c) => /backlog/i.test(c.name) && c.statuses.some((s) => s.id === issue.status),
-    ) || /backlog/i.test(statusFor(issue, board)?.name ?? "")
+    ) || /backlog/i.test(statusById(board, issue.status)?.name ?? "")
   );
 }
 

@@ -31,6 +31,7 @@ import {
 } from "./store";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { Avatar } from "./avatar";
+import { statusById, statuses } from "./board-catalog";
 import { copyIcons, copyKinds, copyShortcuts, issueCopy } from "./issue-copy";
 import { Relations } from "./personal-controls";
 import { ResourceForm, createIssueDocument } from "./issue-resources";
@@ -95,8 +96,9 @@ function parseDisplay(value: unknown): SubIssueDisplay {
 }
 type Boards = ReturnType<typeof get>["boards"];
 export const statusOf = (boards: Boards, child: Issue) => {
-  const columns = boards.find((b) => b.id === child.board)?.columns ?? [];
-  const result = columns.flatMap((c) => c.statuses).find((s) => s.id === child.status);
+  const board = boards.find((b) => b.id === child.board),
+    columns = board?.columns ?? [],
+    result = statusById(board, child.status);
   return {
     name: result?.name ?? child.status,
     category: result?.category ?? "new",
@@ -474,9 +476,10 @@ export function SubIssues({ issue }: { issue: Issue }) {
           : (targetDraft.assignee?.id ?? "") === id;
   const choicesFor = (field: Field | undefined, on = target) =>
     field === "status"
-      ? ((on ? boards.find((b) => b.id === on.board) : board)?.columns
-          .flatMap((c) => c.statuses)
-          .map((s) => ({ id: s.id, name: s.name })) ?? [])
+      ? statuses(on ? boards.find((b) => b.id === on.board) : board).map((s) => ({
+          id: s.id,
+          name: s.name,
+        }))
       : field === "priority"
         ? [
             ...(writable && on ? [] : [{ id: "", name: noPriority }]),
@@ -945,13 +948,13 @@ export function SubIssues({ issue }: { issue: Issue }) {
         >
           <div className="flex items-center gap-2">
             <button
-              aria-label={`Sub-issue status. ${board.columns.flatMap((c) => c.statuses).find((s) => s.id === draft.status)?.name ?? "Todo"} is selected`}
+              aria-label={`Sub-issue status. ${statusById(board, draft.status)?.name ?? "Todo"} is selected`}
               className={button}
               onClick={(e) => setPicker({ anchor: e.currentTarget, field: "status" })}
             >
               <StatusIcon
                 status={
-                  board.columns.flatMap((c) => c.statuses).find((s) => s.id === draft.status) ?? {
+                  statusById(board, draft.status) ?? {
                     name: "Todo",
                     category: "new",
                   }
@@ -1162,9 +1165,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
                   {picker.field === "status" && (
                     <StatusIcon
                       status={
-                        board.columns
-                          .flatMap((c) => c.statuses)
-                          .find((st) => st.id === choice.id) ?? {
+                        statusById(board, choice.id) ?? {
                           name: choice.name,
                           category: "new",
                         }

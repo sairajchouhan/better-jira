@@ -47,6 +47,7 @@ import {
   viewSettings,
 } from "./view-settings";
 import { issueCopy, type CopyKind } from "./issue-copy";
+import { statusById } from "./board-catalog";
 import { editorBindings } from "./editor-bindings";
 import { MenuSurface } from "./menu-surface";
 import {
@@ -186,10 +187,7 @@ async function copy(kind: CopyKind) {
       if (!get().full.has(issue.key)) throw new Error("Issue details unavailable");
     }
     const full = get().full.get(issue.key),
-      status =
-        boardOf(issue.key)
-          ?.columns.flatMap((c) => c.statuses)
-          .find((s) => s.id === issue.status)?.name ?? issue.status;
+      status = statusById(boardOf(issue.key), issue.status)?.name ?? issue.status;
     await navigator.clipboard.writeText(
       issueCopy(kind, issue, full, issueURL(issue), status, ME.name),
     );

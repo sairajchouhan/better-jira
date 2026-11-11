@@ -1,6 +1,7 @@
 import { Command } from "cmdk";
 import { useMemo, useState, type ReactNode } from "react";
 import { Avatar } from "./avatar";
+import { statuses } from "./board-catalog";
 import { FilterIcon } from "./filter-icons";
 import { hue, PriorityIcon, StatusIcon, TypeDot } from "./icons";
 import { setRule, updateRule, useViewSettings } from "./view-settings";
@@ -69,9 +70,7 @@ export function filterChoices(field: Field, board: Board, issues: Issue[]): Choi
     );
   if (PEOPLE.includes(field)) add("$me", "Current user", <FilterIcon name="Current user" />);
   if (field === "status")
-    board.columns
-      .flatMap((c) => c.statuses)
-      .forEach((s) => add(s.id, s.name, <StatusIcon status={s} />));
+    statuses(board).forEach((s) => add(s.id, s.name, <StatusIcon status={s} />));
   if (field === "relations")
     return RELATIONS.map(([value, label, glyph]) => ({
       value,

@@ -7,6 +7,7 @@ import { Icon, StatusIcon } from "./icons";
 import { Confirm, MenuSurface, MENU_INPUT, MENU_ITEM } from "./menu-surface";
 import { RichEditor } from "./rich-editor-loader";
 import { Adf } from "./adf";
+import { statusById } from "./board-catalog";
 import { adfToMarkdown } from "./issue-copy";
 import { normalizeDocument, type AdfDocument } from "./document";
 import {
@@ -389,10 +390,10 @@ function DocumentHeader({
     return () => node?.removeEventListener("document-action", action);
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- The document action listener retains its resource session; rename reads the live title ref.
   }, [resource.id, resource.showAuthors, issue.key]);
-  const status = get()
-    .boards.find((b) => b.id === issue.board)
-    ?.columns.flatMap((c) => c.statuses)
-    .find((s) => s.id === issue.status) ?? { name: issue.status, category: "new" };
+  const status = statusById(
+    get().boards.find((b) => b.id === issue.board),
+    issue.status,
+  ) ?? { name: issue.status, category: "new" };
   return (
     <>
       <header

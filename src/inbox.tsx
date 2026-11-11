@@ -5,6 +5,7 @@ import { Command } from "cmdk";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { Avatar } from "./avatar";
+import { statusById } from "./board-catalog";
 import { Icon, StatusIcon, type IconName } from "./icons";
 import {
   DEFAULT_VIEW,
@@ -170,9 +171,7 @@ const statusOf = (key: string) => {
   const issue = get().issues.get(key);
   return (
     issue &&
-    boardOf(issue.key)
-      ?.columns.flatMap((c) => c.statuses)
-      .find((s) => s.id === issue.status)
+    statusById(boardOf(issue.key), issue.status)
   );
 };
 /** Filter facts for a row; priority, project and status come from the mirror when the issue is in it. */

@@ -1,5 +1,6 @@
 import { navigationChoices } from "./quick-navigation";
 import { useEffectiveMine, useActiveView, useSavedViews, useOverlayFilters, createViewDraft, editViewDraft, duplicateViewDraft, saveOverlayToView } from "./saved-views";
+import { statusById } from "./board-catalog";
 import { clearFilters, hideGroup, setScope, showGroup, toggleCollapsed, useEffectiveSettings, useViewSettings } from "./view-settings";
 import { openViewEditor, ViewMenu, ViewContextMenu, ViewEditorPage, ViewDeleteDialog } from "./view-editor";
 import { canMergeOverlay } from "./saved-view-model";
@@ -63,6 +64,7 @@ import {
   openSavedView,
   openAllIssues as openBoardIssues,
   beginCreate,
+  useAssignableUsers,
   downloadLocalBackup,
   flushLocalChanges,
   issueURL,
@@ -145,10 +147,7 @@ function describeActivity(event: PropertyActivity, issue: Issue, then = false): 
     value && typeof value === "object" && "name" in value
       ? String((value as { name: unknown }).name)
       : String(value);
-  const status = (id: unknown) =>
-    boardOf(issue.key)
-      ?.columns.flatMap((c) => c.statuses)
-      .find((s) => s.id === id)?.name ?? String(id);
+  const status = (id: unknown) => statusById(boardOf(issue.key), id)?.name ?? String(id);
   const date = (value: unknown) =>
     new Date(`${value}T00:00`).toLocaleDateString("en", { month: "short", day: "numeric" });
   const { field, before, after } = event;
@@ -239,9 +238,7 @@ function ActivityIcon({ row, issue }: { row: ActivityRow; issue: Issue }) {
   if (row.field === "relation")
     return <RelationIcon kind={((last.after ?? last.before) as Relation).kind} />;
   if (row.field === "status") {
-    const status = boardOf(issue.key)
-      ?.columns.flatMap((c) => c.statuses)
-      .find((s) => s.id === last.after);
+    const status = statusById(boardOf(issue.key), last.after);
     if (status) return <StatusIcon status={status} />;
   }
   if (row.field === "priority")
@@ -252,10 +249,7 @@ function ActivityIcon({ row, issue }: { row: ActivityRow; issue: Issue }) {
   if (row.field === "assignee") return <Avatar user={last.after as User | null} size={14} />;
   return <Avatar user={row.actor} size={14} />;
 }
-const statusOf = (i: Issue) =>
-  boardOf(i.key)
-    ?.columns.flatMap((c) => c.statuses)
-    .find((s) => s.id === i.status);
+const statusOf = (i: Issue) => statusById(boardOf(i.key), i.status);
 
 /** The keyboard map re-registers on every store change; its own component keeps that from re-rendering App. */
 function Hotkeys() {
@@ -2716,18 +2710,8 @@ function StatusPicker({ issueKey }: { issueKey: string }) {
 }
 
 function AssignPicker({ issueKey }: { issueKey: string }) {
-  const issues = useStore((s) => s.issues);
-  const jiraUsers = useStore((s) => s.options.users);
-  const current = issues.get(issueKey)?.assignee;
-  const users = useMemo(() => {
-    const m = new Map<string, User>([[ME.id, ME]]);
-    for (const u of jiraUsers) if (!m.has(u.id)) m.set(u.id, u);
-    for (const i of issues.values())
-      if (i.assignee && !m.has(i.assignee.id)) m.set(i.assignee.id, i.assignee);
-    return [...m.values()].sort((a, b) =>
-      a.id === ME.id ? -1 : b.id === ME.id ? 1 : a.name.localeCompare(b.name),
-    );
-  }, [issues, jiraUsers]);
+  const current = useStore((s) => s.issues.get(issueKey)?.assignee);
+  const users = useAssignableUsers();
   const value = (u: User) => `${u.name} ${u.id}`;
   return (
     <PropertyMenu
