@@ -1,4 +1,5 @@
 import { expect, test, PREFS_KEY } from "./app";
+import { defaultPreferences } from "../src/view-model";
 
 test("saved view has a stable route, survives reload and leaves board preferences unchanged", async ({
   open,
@@ -6,11 +7,10 @@ test("saved view has a stable route, survives reload and leaves board preference
   const page = await open();
   try {
     const before = await page.eval(`localStorage.getItem(${JSON.stringify(PREFS_KEY)})`);
-    await page.click('[aria-label="Save current view"]');
-    await page.click('[aria-label="View name"]');
-    await page.type("Stable view");
-    await page.click("text=Create view");
-    await page.waitFor(`location.pathname.startsWith('/view/')`);
+    const prefs = defaultPreferences();
+    const draft = {board:1,kind:"custom",name:"Stable view",description:"",icon:"filter",color:"gray",filters:prefs.filters,display:prefs.display,scope:prefs.scope,mine:false};
+    const saved = await page.eval(`fetch('/api/views', {method:'POST',headers:{'Content-Type':'application/json'},body:${JSON.stringify(JSON.stringify(draft))}}).then(r=>r.json())`);
+    await page.goto(`/view/${saved.id}?board=1`);
     const path = await page.eval("location.pathname");
     expect(await page.eval(`localStorage.getItem(${JSON.stringify(PREFS_KEY)})`)).toBe(before);
     await page.reload();

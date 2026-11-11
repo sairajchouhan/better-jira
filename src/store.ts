@@ -210,6 +210,7 @@ type State = {
   view: View;
   mine: boolean;
   inbox: boolean;
+  viewsPage: boolean;
   query: string;
   overlay: Overlay;
   editDesc: boolean;
@@ -308,6 +309,7 @@ let state: State = {
   view: savedValue("view") === "page" ? "page" : "side",
   mine: false,
   inbox: false,
+  viewsPage: false,
   query: "",
   overlay: null,
   editDesc: false,
@@ -478,6 +480,7 @@ export function navigate(to: {
   panel?: boolean;
   document?: string | null;
   inbox?: boolean;
+  viewsPage?: boolean;
 }) {
   if (
     !restoringNavigation &&
@@ -494,6 +497,7 @@ export function navigate(to: {
   }
   if (!restoringNavigation && state.editorDraft && (to.board !== undefined || to.inbox))
     commit({ editorDraft: null });
+  if (!restoringNavigation) commit({ viewsPage: to.viewsPage ?? (to.board !== undefined || to.inbox === true ? false : state.viewsPage) });
   if (to.selected) to = { ...to, selected: currentKey(to.selected) };
   const view =
     to.view ??
@@ -1236,7 +1240,7 @@ function syncNavigation(replace = false) {
     url.searchParams.get("document") !== state.document
   )
     url.hash = "";
-  url.pathname = state.editorDraft ? (state.editorDraft.id ? `/view/${encodeURIComponent(state.editorDraft.id)}/edit` : "/view/new") : state.activeViewId ? `/view/${encodeURIComponent(state.activeViewId)}` : "/";
+  url.pathname = state.editorDraft ? (state.editorDraft.id ? `/view/${encodeURIComponent(state.editorDraft.id)}/edit` : "/view/new") : state.activeViewId ? `/view/${encodeURIComponent(state.activeViewId)}` : state.viewsPage ? "/views" : "/";
   if (state.activeViewId && state.overlayFilters.children.length)
     url.searchParams.set("filter", encodeOverlay(state.overlayFilters));
   else url.searchParams.delete("filter");
@@ -1280,6 +1284,7 @@ function restoreNavigation() {
   restoringNavigation = true;
   commit({
     editorDraft,
+    viewsPage: location.pathname === "/views",
     activeViewId: active?.id ?? null,
     overlayFilters: active ? decodeOverlay(params.get("filter")) : emptyOverlay(),
   });
@@ -2526,7 +2531,7 @@ export function openSavedView(view: SavedView | string) {
   if (state.editorDraft) clearEditorSession();
   const previous = restoringNavigation;
   restoringNavigation = true;
-  commit({ editorDraft: null, activeViewId: v.id, overlayFilters: emptyOverlay() });
+  commit({ editorDraft: null, activeViewId: v.id, viewsPage: false, overlayFilters: emptyOverlay() });
   ui.send({
     type: "navigate",
     board: v.board,

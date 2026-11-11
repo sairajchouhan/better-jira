@@ -1,0 +1,7 @@
+.views-directory-grid { display: grid; grid-template-columns: minmax(0, 1fr) 144px; gap: 16px; }
+.views-directory { color: lch(19.588 1.25 282); }
+.views-create { height: 28px; padding: 0 12px; border-radius: 9999px; font-size: 12px; font-weight: 500; color: white; background: lch(53 52.26 286.91); box-shadow: 0 3px 6px -2px lch(0 0 0 / .02), 0 1px 1px lch(0 0 0 / .04); }
+@media (prefers-color-scheme: dark) {
+  .views-directory { color: lch(90.451 1.2 272); }
+  .views-create { background: lch(47.918 59.303 288.421); box-shadow: 0 .5px 1px 1px lch(0 0 0 / .3); }
+}
