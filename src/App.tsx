@@ -1,3 +1,4 @@
+import { navigationChoices } from "./quick-navigation";
 import { useEffectiveMine, useActiveView, useSavedViews, useOverlayFilters, createViewDraft, editViewDraft, duplicateViewDraft, saveOverlayToView, clearOverlay } from "./saved-views";
 import { openViewEditor, ViewMenu, ViewContextMenu, ViewEditorPage, ViewDeleteDialog } from "./view-editor";
 import { canMergeOverlay } from "./saved-view-model";
@@ -33,7 +34,7 @@ import { ReminderPicker, ReminderControl, ReminderDelivery } from "./reminders";
 import { CommentThreads, useDraftFiles, useRejectedComment } from "./comment-threads";
 import { ImageCommentCard } from "./image-thread";
 import { IssueDocument } from "./issue-resources";
-import { findIssueDocument, linkTitle } from "./issue-resource";
+import { linkTitle } from "./issue-resource";
 import {
   RELATION_ISSUE,
   activityRows,
@@ -777,70 +778,14 @@ function IssueList({
 // --- keyboard ---
 
 function QuickNavigation({ kind }: { kind: "favorites" | "views" | "boards" }) {
-  const state = useStore((s) => s);
+  const boards = useStore((s) => s.boards);
+  const savedViews = useStore((s) => s.savedViews);
+  const favorites = useStore((s) => s.favorites);
+  const issues = useStore((s) => s.issues);
   const close = () => ui.send({ type: "overlay.close" });
   const title =
     kind === "views" ? "Open view" : kind === "boards" ? "Open a team / board" : "Open a favorite";
-  const choices =
-    kind === "boards"
-      ? state.boards.map((board) => ({
-          id: String(board.id),
-          name: board.name,
-          run: () => navigate({ board: board.id, selected: null, panel: false }),
-        }))
-      : kind === "views"
-        ? state.savedViews.map((view) => ({
-            id: view.id,
-            name: view.name,
-            run: () => openSavedView(view),
-          }))
-        : state.favorites.flatMap((id) => {
-            const savedView = state.savedViews.find(v => `view:${v.id}` === id);
-            if (savedView) return [{ id, name: savedView.name, run: () => openSavedView(savedView) }];
-            const document = id.startsWith("document:")
-              ? findIssueDocument(state.issues.values(), id.slice(9))
-              : undefined;
-            if (document)
-              return [
-                {
-                  id,
-                  name: document.resource.title || "New document",
-                  run: () =>
-                    navigate({
-                      board: document.issue.board,
-                      selected: document.issue.key,
-                      panel: true,
-                      document: document.resource.id,
-                    }),
-                },
-              ];
-            const issue = state.issues.get(id),
-              [, boardId, scope] = id.split(":"),
-              board = state.boards.find((b) => b.id === Number(boardId));
-            if (issue)
-              return [
-                {
-                  id,
-                  name: `${id} ${issue.summary}`,
-                  run: () => navigate({ board: issue.board, selected: issue.key, panel: true }),
-                },
-              ];
-            if (!board) return [];
-            return [
-              {
-                id,
-                name: `${board.name}${scope ? ` · ${scope}` : ""}`,
-                run: () => {
-                  navigate({ board: board.id, selected: null, panel: false });
-                  if (scope)
-                    changePreferences(board.id, {
-                      scope:
-                        scope === "active" ? "active" : scope === "backlog" ? "backlog" : "all",
-                    });
-                },
-              },
-            ];
-          });
+  const choices = navigationChoices(kind, { boards, savedViews, favorites, issues });
   return (
     <Modal label={title} close={close}>
       <Command loop>
@@ -858,7 +803,13 @@ function QuickNavigation({ kind }: { kind: "favorites" | "views" | "boards" }) {
               value={choice.name}
               onSelect={() => {
                 close();
-                choice.run();
+                const to = choice.destination;
+                if ("view" in to) openSavedView(to.view);
+                else {
+                  const { scope, ...route } = to;
+                  navigate(route);
+                  if (scope) changePreferences(to.board, { scope });
+                }
               }}
               className="p-2 data-[selected=true]:bg-sel"
             >
