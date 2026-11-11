@@ -22,7 +22,6 @@ import {
 import { createActor, fromPromise, waitFor } from "xstate";
 import { appMachine, inspector, storageMachine, uiMachine, type UiContext } from "./machines";
 import { QueryClient, QueryObserver } from "@tanstack/query-core";
-import { asyncRetry } from "@tanstack/pacer";
 
 import { reminderTime } from "./reminder-display";
 import { typeChoices } from "./issue-properties";
@@ -42,21 +41,18 @@ import {
   rollbackActivity,
   type PropertyActivity,
 } from "./issue-activity";
+import { createOutbox, type Answer, type WriteResult } from "./outbox";
 import {
   prepareOps,
   uploadedAttachments,
   aliasAttachments,
   settleUploads,
   uploadNow,
-  withoutLocalMedia,
 } from "./jira-media";
 import {
   JIRA_ISSUE_FIELDS,
-  mergeOps,
-  opsFor,
   renameCommentIds,
   renameIds,
-  type Op,
   type Side,
 } from "./jira-ops";
 export type User = { id: string; name: string; avatar?: string };
@@ -790,8 +786,7 @@ async function loadApplication() {
     full = new Map<string, Full>();
   changedKeys.clear();
   createdKeys.clear();
-  othersCreating.clear();
-  owners.clear();
+  writes.reset();
   localFields.clear();
   fullFields.clear();
   needsFullRefresh.clear();
@@ -811,11 +806,8 @@ async function loadApplication() {
       )
         continue;
       changedKeys.add(change.key);
-      owners.set(change.key, change.tab ?? "");
-      if (change.created) {
-        createdKeys.add(change.key);
-        othersCreating.set(change.key, change.tab ?? "");
-      }
+      writes.own(change.key, change.tab ?? "", change.created);
+      if (change.created) createdKeys.add(change.key);
       localFields.set(change.key, new Set(change.issueFields));
       fullFields.set(change.key, new Set(change.fullFields));
       if (change.issue === null) issues.delete(change.key);
@@ -852,7 +844,7 @@ async function loadApplication() {
   localSeq = local.sequence;
   numbers = { next: 0, end: 0 };
   if (opened.type === "opened") await reserveNumbers();
-  for (const [from, to] of Object.entries(local.keys ?? {})) jiraKeys.set(from, to);
+  writes.restoreKeys(local.keys);
   set({
     boards,
     site: client.site,
@@ -936,29 +928,19 @@ async function loadApplication() {
   if (state.writable)
     void (navigator.locks && database
       ? holdTabLock().then(() =>
-          navigator.locks.request("better-jira-outbox", async () => {
-            const held = (await navigator.locks.query()).held ?? [],
-              live = new Set(
-                held.flatMap((l) =>
-                  l.name?.startsWith(TAB_LOCK) ? [l.name.slice(TAB_LOCK.length)] : [],
-                ),
-              ),
-              claimed = await database!.claim(tabId, live);
+          writes.claimClosed(async (claimed, changes) => {
             // A closed tab may have saved edits after this tab read the saved data: send and show the merged copy saved
             // now, as a takeover later on does (sync review 3-5).
-            const saved = (await database!.stored()).changes.filter((c) => claimed.has(c.key)),
+            const saved = changes.filter((c) => claimed.has(c.key)),
               issues = new Map(state.issues),
               full = new Map(state.full);
             install(saved, issues, full);
             set({ issues, full });
-            for (const key of claimed) {
-              owners.delete(key);
-              othersCreating.delete(key);
-            }
+            for (const key of claimed) writes.release(key);
             await replay(claimed, saved);
           }),
         )
-      : (othersCreating.clear(), replay()));
+      : (writes.reset(true), replay()));
   if (!navigationReady) {
     window.addEventListener("focus", () => {
       void refreshSavedViews().catch(viewError);
@@ -973,8 +955,7 @@ async function loadApplication() {
       if (
         s.matches("saving") ||
         s.matches("failed") ||
-        outbox.some((job) => !waitsForCreate(job)) ||
-        heldDeletes.size
+        writes.unsent()
       ) {
         event.preventDefault();
         event.returnValue = "";
@@ -1045,7 +1026,7 @@ async function fetchProperties(): Promise<{ pending: number }> {
         state.writable &&
         !changedKeys.has(key) &&
         extra.key === key &&
-        !outbox.some((job) => job.ops[0]?.op === "create")
+        !writes.creating()
       ) {
         issues.set(key, extra);
         changed = true;
@@ -1075,7 +1056,7 @@ async function fetchProperties(): Promise<{ pending: number }> {
       if (
         !(key in data.entries) &&
         !createdKeys.has(key) &&
-        !outbox.some((job) => job.key === key)
+        !writes.has(key)
       ) {
         // Gone from Jira, so its local overrides go too; a saved tombstone would otherwise send a delete after reload.
         issues.delete(key);
@@ -1162,9 +1143,9 @@ async function fetchFull(key: string) {
   if (!res.ok) throw new Error("Could not load issue details");
   let full = await res.json();
   // A comment whose delete waits out the undo window (an undone add) stays hidden until Jira drops it.
-  if (heldDeletes.size && Array.isArray(full.fields?.comment?.comments))
+  if (writes.holdsDeletes() && Array.isArray(full.fields?.comment?.comments))
     full.fields.comment.comments = full.fields.comment.comments.filter(
-      (c: any) => !heldDeletes.has(String(c.id)),
+      (c: any) => !writes.holdsDelete(String(c.id)),
     );
   const local = state.full.get(key);
   if (local)
@@ -1201,7 +1182,7 @@ async function fetchFull(key: string) {
       full: new Map(state.full).set(key, full),
       issues: new Map(state.issues).set(key, {
         ...issue,
-        ...(outbox.some((job) => job.key === key)
+        ...(writes.has(key)
           ? {}
           : { resources: withJiraLinks(issue.resources, full.remotelinks, state.writable) }),
         ...(full.fields.comment
@@ -1327,12 +1308,7 @@ const changedKeys = new Set<string>(),
 const undo: LocalEdit[] = [],
   redo: LocalEdit[] = [];
 let database: LocalDatabase | undefined;
-/** Which open tab sends each saved change (absent: this tab). */
-const owners = new Map<string, string>();
-// An issue another tab is creating stays that tab's to send: two editing tabs never wait on each other (sync review 2-3).
-const touch = (...keys: string[]) => {
-  for (const key of keys) if (!othersCreating.has(key)) owners.delete(key);
-};
+const touch = (...keys: string[]) => writes.touch(...keys);
 /** This tab across reloads (sessionStorage is per tab), so its undo history survives a reload and never reaches another tab.
  *  ponytail: a duplicated tab copies sessionStorage and shares the history; mint a new id on `pageshow` duplicates if that matters. */
 const undoTab = (() => {
@@ -1378,55 +1354,85 @@ function localSnapshot(): LocalState {
         issueFields: [...(localFields.get(key) ?? [])],
         fullFields: [...(fullFields.get(key) ?? [])],
         created: createdKeys.has(key),
-        tab: owners.get(key) ?? tabId,
+        tab: writes.tab(key),
       })),
     undo: [...undo],
     redo: [...redo],
-    keys: Object.fromEntries(jiraKeys),
+    keys: writes.keys(),
   };
 }
 /** Ignored until storage has opened, and while it is blocked; see storageMachine. */
 const queueSave = () => storage.send({ type: "change" });
 
-// --- Jira writes: each edit's before/after becomes ops, sent one job at a time ---
-// ponytail: the outbox lives in memory; closing the tab with writes pending is guarded by beforeunload only.
-/** `hold`: a status change waits until then, so rapid changes reach Jira as one transition (R2-issue-fields-D13). */
-type Job = {
-  key: string;
-  board: number;
-  ops: Op[];
-  started?: boolean;
-  cancelled?: boolean;
-  hold?: number;
-  /** Jira couldn't tell yet whether an earlier send went through: tries so far, and when to send it again. */
-  tries?: number;
-  retryAt?: number;
-};
-// ponytail: fixed backoff (5 s doubling to 1 min) and error after 4 tries; tune if outages need other pacing.
-const RETRY_WAIT = 5000,
-  RETRY_WAIT_MAX = 60_000,
-  RETRY_SHOWN = 4;
-// ponytail: fixed 400 ms debounce on status writes; tune if single status edits must settle faster.
-const STATUS_HOLD = 400;
-type WriteResult = {
-  error?: string;
-  key?: string;
-  created?: Record<string, string>;
-  others?: Issue[];
-  issue?: Issue | null;
-  full?: Full | null;
-};
-const outbox: Job[] = [];
-/** App ids (new issue keys, new comment ids) that Jira has since replaced. Kept apart: comment ids are plain numbers. */
-const jiraKeys = new Map<string, string>(),
-  jiraComments = new Map<string, string>();
+// --- Jira writes: each edit's before/after becomes ops, which the outbox sends one job at a time (see outbox.ts) ---
+const writes = createOutbox(
+  {
+    post: (key, body) =>
+      fetch(`/api/issues/${encodeURIComponent(key)}/ops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    prepare: prepareOps,
+    clock: {
+      now: () => Date.now(),
+      setTimeout: (fn, ms) => setTimeout(fn, ms),
+      clearTimeout: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
+    },
+    tabs: {
+      id: tabId,
+      stored: async () => database?.stored(),
+      save: () => (queueSave(), flushLocalChanges()),
+      ...(typeof navigator !== "undefined" && navigator.locks
+        ? {
+            exclusive: (fn: (live: Set<string>) => Promise<void>) =>
+              navigator.locks.request("better-jira-outbox", async () => {
+                const held = (await navigator.locks.query()).held ?? [];
+                await fn(
+                  new Set(
+                    held.flatMap((l) =>
+                      l.name?.startsWith(TAB_LOCK) ? [l.name.slice(TAB_LOCK.length)] : [],
+                    ),
+                  ),
+                );
+              }),
+          }
+        : {}),
+      claim: async (live, only) => {
+        const claimed = await database!.claim(tabId, live, only);
+        return { claimed, changes: (await database!.stored()).changes };
+      },
+    },
+  },
+  {
+    pending: (count) => set({ pendingWrites: count }),
+    status: (perf) => set({ perf }),
+    retrying: (key, text, shown) =>
+      set({
+        perf: text,
+        ...(shown ? { writeError: { key, text, retrying: true } } : {}),
+      }),
+    uploadsOnly: (key) => localFields.get(key)?.delete("attachments"),
+    answered,
+    moved: (from, to) => {
+      if (state.issues.has(from)) rekey(from, to);
+    },
+    discarded: (key) => {
+      if (state.issues.has(key)) discard(key, false);
+    },
+    takeOver: (change) => {
+      set({
+        issues: new Map(state.issues).set(change.key, change.issue!),
+        ...(change.full ? { full: new Map(state.full).set(change.key, change.full) } : {}),
+      });
+      send([[change.key, {}, { issue: change.issue!, full: change.full }]]);
+    },
+  },
+);
 /** The key Jira gave an issue created here; views and closures holding the app key reach the issue through it. */
-export const currentKey = (key: string) => jiraKeys.get(key) ?? key;
+export const currentKey = (key: string) => writes.currentKey(key);
 /** The first key an issue had in this session, so a view stays mounted when Jira assigns the real key. */
-export const firstKey = (key: string) => {
-  for (const [from, to] of jiraKeys) if (to === key) return from;
-  return key;
-};
+export const firstKey = (key: string) => writes.firstKey(key);
 /** Image comments Jira already has; a replay re-sends only the rest. */
 const jiraImageComments = (edits: Issue["mediaEdits"]) =>
   edits &&
@@ -1438,51 +1444,11 @@ const jiraImageComments = (edits: Issue["mediaEdits"]) =>
   );
 function send(changes: [string, Side, Side][]) {
   if (!state.writable) return;
-  // Creates go first, so other issues can name the new key; deletes last, so edits to related issues (cleared parents, links) land first.
-  const order = (ops: Op[]) => (ops[0]?.op === "create" ? -1 : ops[0]?.op === "delete" ? 1 : 0);
-  const jobs = changes
-    .map(([key, before, after]) => ({
-      key,
-      board: (after.issue ?? before.issue)?.board,
-      ops: opsFor(before, after, state.issues),
-    }))
-    .sort((a, b) => order(a.ops) - order(b.ops));
-  // Jira detaches (or, for sub-tasks, deletes) the children of a deleted issue, and drops its links, itself (R1-D101).
-  const deleted = new Set(jobs.filter((job) => job.ops[0]?.op === "delete").map((job) => job.key));
-  for (const job of jobs)
-    if (deleted.size && !deleted.has(job.key)) {
-      const parent = changes.find(([key]) => key === job.key)?.[1].issue?.parent;
-      job.ops = job.ops.flatMap((op): Op[] => {
-        if (op.op === "link" && op.remove && deleted.has(op.target)) return [];
-        if (op.op !== "fields" || op.fields.parent !== null || !parent || !deleted.has(parent))
-          return [op];
-        const { parent: _, ...fields } = op.fields;
-        return Object.keys(fields).length ? [{ op: "fields", fields }] : [];
-      });
-    }
-  for (const job of jobs) job.ops = holdCommentDeletes(job.key, job.board, job.ops);
-  for (const { key, board, ops } of jobs) {
-    if (!ops.length || board === undefined) continue;
-    // Ops naming an issue whose create is still queued must run after that create, so they never fold into an earlier job.
-    const text = JSON.stringify(ops),
-      afterCreate = outbox.some(
-        (job) => job.key !== key && job.ops[0]?.op === "create" && text.includes(`"${job.key}"`),
-      );
-    const waiting = afterCreate
-      ? undefined
-      : outbox.findLast((job) => job.key === key && !job.started);
-    const hold = ops.some((op) => op.op === "status") ? Date.now() + STATUS_HOLD : undefined;
-    if (waiting) {
-      waiting.ops = mergeOps(waiting.ops, ops);
-      if (hold) waiting.hold = hold;
-    } else outbox.push({ key, board, ops, ...(hold ? { hold } : {}) });
-  }
   // A change that queued no write (nothing to send, or a redo that only cancelled a held comment delete) gets no answer
   // for adopt() to settle, so its Jira fields would stay pinned over every refresh: Jira's copy owns them again (R2-comments-D1).
-  for (const { key } of jobs)
+  for (const key of writes.queue(changes, state.issues))
     if (
       !createdKeys.has(key) &&
-      !outbox.some((job) => job.key === key) &&
       (fullFields.get(key)?.size ||
         JIRA_ISSUE_FIELDS.some((field) => localFields.get(key)?.has(field)))
     ) {
@@ -1492,327 +1458,63 @@ function send(changes: [string, Side, Side][]) {
       touch(key);
       queueSave();
     }
-  set({ pendingWrites: outbox.length });
-  void flush();
+  writes.flush();
 }
-/**
- * Jira can't restore a deleted comment's id, time or thread, so a comment delete waits out the undo window and ⌘Z
- * simply cancels it, leaving the comment where it was (R1-D16). The comment is hidden locally meanwhile.
- */
-const COMMENT_UNDO_WINDOW = 8000;
-const heldDeletes = new Map<string, ReturnType<typeof setTimeout>>();
-function holdCommentDeletes(key: string, board: number | undefined, ops: Op[]): Op[] {
-  if (board === undefined) return ops;
-  return ops.filter((op) => {
-    if (op.op === "comment" && heldDeletes.has(op.ref)) {
-      clearTimeout(heldDeletes.get(op.ref));
-      heldDeletes.delete(op.ref);
-      return false;
-    }
-    if (op.op !== "comment.delete") return true;
-    clearTimeout(heldDeletes.get(op.id));
-    heldDeletes.set(
-      op.id,
-      setTimeout(() => {
-        heldDeletes.delete(op.id);
-        outbox.push({ key: currentKey(key), board, ops: [op] });
-        set({ pendingWrites: outbox.length });
-        void flush();
-      }, COMMENT_UNDO_WINDOW),
-    );
-    return false;
-  });
-}
-/** Whether `job` is for, or names, an issue another tab is still creating in Jira. */
-const waitsForCreate = (job: Job) =>
-  othersCreating.size > 0 &&
-  [...othersCreating.keys()].some(
-    (key) => currentKey(job.key) === key || JSON.stringify(job.ops).includes(`"${key}"`),
-  );
-/**
- * Waits for the tabs creating issues this tab's jobs name: takes up the Jira keys they saved; sends a create itself once
- * its tab has closed; and lets go of an issue its tab discarded (sync check 7, sync review 3).
- */
-async function waitForCreators() {
-  const stored = await database?.stored().catch(() => undefined);
-  if (!stored) {
-    othersCreating.clear();
-    return;
-  }
-  learnKeys(stored.keys);
-  for (const key of othersCreating.keys())
-    if (jiraKeys.has(key)) othersCreating.delete(key);
-    else if (!stored.created.has(key)) {
-      // Discarded in the tab that made it (or Jira refused the create): its edits here go with it.
-      othersCreating.delete(key);
-      for (let i = outbox.length - 1; i >= 0; i--) if (outbox[i]!.key === key) outbox.splice(i, 1);
-      if (state.issues.has(key)) discard(key, false);
-    }
-  if (othersCreating.size && navigator.locks) {
-    // This tab's own edits go into the saved copy first, so a create sent from that copy carries them.
-    queueSave();
-    await flushLocalChanges();
-    await navigator.locks.request("better-jira-outbox", async () => {
-      const held = (await navigator.locks.query()).held ?? [],
-        live = new Set(
-          held.flatMap((l) =>
-            l.name?.startsWith(TAB_LOCK) ? [l.name.slice(TAB_LOCK.length)] : [],
-          ),
-        );
-      const orphaned = new Set(
-        [...othersCreating].flatMap(([key, tab]) => (live.has(tab) ? [] : [key])),
-      );
-      if (!orphaned.size) return;
-      // Its tab closed before Jira had it. Exactly one open tab claims it and sends the create (sync review 2-3).
-      const claimed = await database!.claim(tabId, live, orphaned),
-        saved = await database!.stored();
-      for (const key of orphaned) {
-        const change = saved.changes.find((c) => c.key === key);
-        if (!claimed.has(key)) {
-          // Another open tab claimed it: wait for that tab's create instead.
-          if (change?.tab) othersCreating.set(key, change.tab);
-          continue;
-        }
-        owners.delete(key);
-        othersCreating.delete(key);
-        for (let i = outbox.length - 1; i >= 0; i--)
-          if (outbox[i]!.key === key) outbox.splice(i, 1);
-        if (!change?.issue) continue;
-        // The saved copy merges every tab's edits: the create carries them all, and this tab shows it. The create's
-        // client id is the issue's, so if the closed tab's send did reach Jira this one gets the same issue back.
-        set({
-          issues: new Map(state.issues).set(key, change.issue),
-          ...(change.full ? { full: new Map(state.full).set(key, change.full) } : {}),
-        });
-        send([[key, {}, { issue: change.issue, full: change.full }]]);
-        // First: jobs waiting on it (links, parents, ranks naming it) must find its Jira key (sync review 2-5).
-        const index = outbox.findIndex((job) => job.key === key && job.ops[0]?.op === "create");
-        if (index > 0) outbox.unshift(...outbox.splice(index, 1));
-      }
-    });
-  }
-  set({ pendingWrites: outbox.length });
-  if (othersCreating.size) {
-    set({
-      perf: `Waiting for another tab to create ${[...othersCreating.keys()].join(", ")} in Jira…`,
-    });
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
-}
-let flushing = false,
-  wake: (() => void) | undefined;
-async function flush() {
-  // A write made while the loop waits on a retry goes now.
-  if (flushing) return wake?.();
-  flushing = true;
-  try {
-    while (outbox.length) {
-      // A job for an issue another tab is still creating waits for its Jira key; one Jira couldn't settle yet waits for
-      // its retry, and its issue's later jobs behind it. Every other issue's jobs go on (sync review 3, 3-2).
-      const now = Date.now(),
-        cooling = new Set(
-          outbox.flatMap((job) => (job.retryAt! > now ? [currentKey(job.key)] : [])),
-        );
-      const index = outbox.findIndex(
-        (job) => !waitsForCreate(job) && !cooling.has(currentKey(job.key)),
-      );
-      if (index < 0) {
-        if (outbox.some(waitsForCreate)) await waitForCreators();
-        else {
-          const next = Math.min(...outbox.map((job) => job.retryAt ?? now));
-          await new Promise<void>((resolve) => {
-            wake = resolve;
-            setTimeout(resolve, Math.min(next - now, 1000));
-          });
-          wake = undefined;
-        }
-        continue;
-      }
-      if (index > 0) outbox.unshift(...outbox.splice(index, 1));
-      const job = outbox[0]!;
-      // Later status changes merge into a held job; the wait restarts with each.
-      if (job.hold && job.hold > Date.now()) {
-        await new Promise((resolve) => setTimeout(resolve, job.hold! - Date.now()));
-        continue;
-      }
-      job.started = true;
-      job.key = currentKey(job.key);
-      job.ops = renameCommentIds(renameIds(job.ops, jiraKeys), jiraComments);
-      // Files attach to an existing issue: create it first, then upload and attach in a follow-up job.
-      const [first, ...rest] = job.ops;
-      if (
-        first?.op === "create" &&
-        (rest.some((op) => op.op === "attachment.add") ||
-          JSON.stringify(first).includes('"collection":"local"'))
-      ) {
-        const description = first.fields.description;
-        job.ops = [
-          {
-            ...first,
-            fields: {
-              ...first.fields,
-              ...(description ? { description: withoutLocalMedia(description) } : {}),
-            },
-          },
-        ];
-        outbox.splice(1, 0, {
-          key: job.key,
-          board: job.board,
-          ops: [
-            ...(description && JSON.stringify(description).includes('"collection":"local"')
-              ? [{ op: "fields" as const, fields: { description } }]
-              : []),
-            ...rest,
-          ],
-        });
-      }
-      // A cancelled job (Restore mirrored Jira version) stops retrying instead of sending discarded edits (R2-D3).
-      const post = async (ops: Op[]) =>
-        job.cancelled
-          ? Response.json({})
-          : fetch(`/api/issues/${encodeURIComponent(job.key)}/ops`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              // A later write for this issue re-reads it anyway: don't wait for Jira's copy twice (R2-create-D2).
-              body: JSON.stringify({
-                ops,
-                board: job.board,
-                ...(ops.length && outbox.some((other) => other !== job && other.key === job.key)
-                  ? { settle: false }
-                  : {}),
-                ...(job.tries ? { resend: true } : {}),
-              }),
-            });
-      let result: WriteResult, ops: Op[] | undefined;
-      try {
-        ops = await prepareOps(job.key, job.ops);
-      } catch (e) {
-        // An upload failed: fetch Jira's copy to roll back to.
-        result = { error: e instanceof Error ? e.message : "Could not upload the file to Jira." };
-        try {
-          result = { ...(await (await post([])).json()), error: result.error };
-        } catch {}
-      }
-      // Files uploaded before they were placed leave nothing to send: no empty write for the next one to wait behind (R2-D10).
-      // The issue's next write, or the property poll, brings Jira's attachment list.
-      if (ops && !ops.length) {
-        outbox.shift();
-        if (job.ops.every((op) => op.op === "attachment.add" || op.op === "attachment.delete"))
-          localFields.get(job.key)?.delete("attachments");
-        set({ pendingWrites: outbox.length });
-        continue;
-      }
-      if (ops) {
-        // An unreachable server means nothing reached Jira: send the same ops again every 5 s until it answers.
-        const response = (await asyncRetry(post, {
-          maxAttempts: Infinity,
-          backoff: "fixed",
-          baseWait: 5000,
-          onRetry: () =>
-            set({ perf: "Can't reach the better-jira server. Retrying the Jira write…" }),
-        })(ops))!;
-        // 503: Jira didn't answer, or can't tell yet whether an earlier send went through. The same job (same client ids)
-        // goes again later, with backoff, behind other issues' writes; it is never dropped (sync review 2-2, 3-1, 3-2).
-        if (response.status === 503) {
-          const { error } = await response.json().catch(() => ({}));
-          const text = error ?? "Jira didn't answer. The change will be sent again shortly.";
-          job.tries = (job.tries ?? 0) + 1;
-          job.retryAt = Date.now() + Math.min(RETRY_WAIT * 2 ** (job.tries - 1), RETRY_WAIT_MAX);
-          set({
-            perf: text,
-            ...(job.tries >= RETRY_SHOWN
-              ? { writeError: { key: job.key, text, retrying: true } }
-              : {}),
-          });
-          continue;
-        }
-        result = await response
-          .json()
-          .catch(() => ({ error: `Server returned ${response.status}` }));
-      }
-      outbox.shift();
-      // A create Jira refused leaves nothing for its follow-up uploads to attach to.
-      const refused = first?.op === "create" && !result!.created?.[job.key];
-      if (refused)
-        for (let i = outbox.length - 1; i >= 0; i--)
-          if (outbox[i]!.key === job.key) outbox.splice(i, 1);
-      const created = new Map(Object.entries(result!.created ?? {}));
-      for (const [from, to] of created)
-        if (from === job.key) jiraKeys.set(from, to);
-        // A re-created comment's old Jira id still files the replies Jira kept under it: only writes already queued move to the new id (R1-D15).
-        else if (from.startsWith("local-")) jiraComments.set(from, to);
-        else
-          for (const queued of outbox)
-            queued.ops = renameCommentIds(queued.ops, new Map([[from, to]]));
-      if (created.has(job.key)) rekey(job.key, created.get(job.key)!);
-      // A deleted issue (full null) takes its upload slots with it.
-      if (result!.full !== undefined && result!.key) settleUploads(result!.key, result!.full);
-      // New comment ids too, so undo and redo address the comment Jira now has.
-      const comments = new Map([...created].filter(([from]) => from !== job.key));
-      if (comments.size) {
-        for (const list of [undo, redo])
-          list.splice(0, list.length, ...renameCommentIds(list, comments));
-        // An image thread keeps its place on the image under the Jira comment id.
-        const key = result!.key ?? job.key,
-          issue = state.issues.get(key);
-        if (issue?.mediaEdits) {
-          set({
-            issues: new Map(state.issues).set(key, {
-              ...issue,
-              mediaEdits: renameCommentIds(issue.mediaEdits, comments),
-            }),
-          });
-          touch(key);
-          queueSave();
-        }
-      }
-      // A rejected link or parent naming an issue created here leaves that issue in Jira on its own: say which.
-      const orphans =
-        first?.op === "create"
-          ? []
-          : [...new Set(jiraKeys.values())].filter((created) =>
-              JSON.stringify(job.ops).includes(`"${created}"`),
-            );
-      if (result!.error)
-        ui.send({
-          type: "toast.show",
-          text: `Jira did not save the change to ${result!.key ?? job.key}`,
-          detail: `${result!.error}${orphans.length ? ` ${orphans.join(", ")} was created in Jira, but not linked.` : ""}`,
-        });
-      const describes = job.ops.some(
-        (op) => op.op === "fields" && op.fields.description !== undefined,
-      );
-      // A refused description stands in for the description edits still queued: they started from the refused text, so Jira would refuse them too.
-      if (result!.error && describes)
-        for (const queued of outbox)
-          if (queued.key === job.key && !queued.started)
-            queued.ops = queued.ops.flatMap((op): Op[] => {
-              if (op.op !== "fields" || op.fields.description === undefined) return [op];
-              const { description: _d, descriptionBase: _b, ...fields } = op.fields;
-              return Object.keys(fields).length ? [{ op: "fields", fields }] : [];
-            });
-      // A comment Jira refused goes back into its composer, so the text is never lost (R2-comments-D4).
-      if (result!.error)
-        for (const op of job.ops)
-          if (op.op === "comment" && !created.has(op.ref))
-            rejectComment({ key: result!.key ?? job.key, parentId: op.parentId, body: op.body });
-      adopt(result!.key ?? job.key, result!, !!result!.error, created, describes);
-      for (const other of result!.others ?? [])
-        adopt(other.key, { issue: other, error: result!.error }, false, created);
-      if (refused) discard(job.key);
-      const key = result!.key ?? job.key;
+/** Applies Jira's answer to a write: new keys and comment ids, Jira's copy (or a rollback), and what to tell the user. */
+function answered({ key: sent, ops, result, created, refused, describes }: Answer) {
+  if (created.has(sent)) rekey(sent, created.get(sent)!);
+  // A deleted issue (full null) takes its upload slots with it.
+  if (result.full !== undefined && result.key) settleUploads(result.key, result.full);
+  // New comment ids too, so undo and redo address the comment Jira now has.
+  const comments = new Map([...created].filter(([from]) => from !== sent));
+  if (comments.size) {
+    for (const list of [undo, redo])
+      list.splice(0, list.length, ...renameCommentIds(list, comments));
+    // An image thread keeps its place on the image under the Jira comment id.
+    const key = result.key ?? sent,
+      issue = state.issues.get(key);
+    if (issue?.mediaEdits) {
       set({
-        pendingWrites: outbox.length,
-        ...(result!.error
-          ? { writeError: { key, text: result!.error } }
-          : state.writeError?.key === key
-            ? { writeError: null }
-            : {}),
+        issues: new Map(state.issues).set(key, {
+          ...issue,
+          mediaEdits: renameCommentIds(issue.mediaEdits, comments),
+        }),
       });
+      touch(key);
+      queueSave();
     }
-  } finally {
-    flushing = false;
   }
+  // A rejected link or parent naming an issue created here leaves that issue in Jira on its own: say which.
+  const orphans =
+    ops[0]?.op === "create"
+      ? []
+      : [...new Set(Object.values(writes.keys()))].filter((created) =>
+          JSON.stringify(ops).includes(`"${created}"`),
+        );
+  if (result.error)
+    ui.send({
+      type: "toast.show",
+      text: `Jira did not save the change to ${result.key ?? sent}`,
+      detail: `${result.error}${orphans.length ? ` ${orphans.join(", ")} was created in Jira, but not linked.` : ""}`,
+    });
+  // A comment Jira refused goes back into its composer, so the text is never lost (R2-comments-D4).
+  if (result.error)
+    for (const op of ops)
+      if (op.op === "comment" && !created.has(op.ref))
+        rejectComment({ key: result.key ?? sent, parentId: op.parentId, body: op.body });
+  adopt(result.key ?? sent, result, !!result.error, created, describes);
+  for (const other of result.others ?? [])
+    adopt(other.key, { issue: other, error: result.error }, false, created);
+  if (refused) discard(sent);
+  const key = result.key ?? sent;
+  set({
+    pendingWrites: writes.pending(),
+    ...(result.error
+      ? { writeError: { key, text: result.error } }
+      : state.writeError?.key === key
+        ? { writeError: null }
+        : {}),
+  });
 }
 export const REJECTED_COMMENT = "better-jira:comment-rejected";
 export type RejectedComment = {
@@ -1932,10 +1634,7 @@ function rekey(from: string, to: string) {
         mentions(edit) ? { ...renameIds(edit, ids), label: edit.label.replace(label, to) } : edit,
       ),
     );
-  for (const job of outbox) {
-    job.key = ids.get(job.key) ?? job.key;
-    job.ops = renameIds(job.ops, ids);
-  }
+  writes.rename(from, to);
   set({ issues, full });
   // Saved at once: other tabs wait for this move to send their edits of the issue (sync check 7).
   queueSave();
@@ -1943,16 +1642,7 @@ function rekey(from: string, to: string) {
   if (state.selected === from) navigate({ selected: to });
 }
 /** Takes up key moves another tab saved for issues it created (app key → Jira key). Returns whether any was new. */
-export function learnKeys(keys: Record<string, string> = {}) {
-  let learned = false;
-  for (const [from, to] of Object.entries(keys))
-    if (!jiraKeys.has(from)) {
-      jiraKeys.set(from, to);
-      learned = true;
-      if (state.issues.has(from)) rekey(from, to);
-    }
-  return learned;
-}
+export const learnKeys = (keys?: Record<string, string>) => writes.learnKeys(keys);
 /** Takes Jira's copy of what Jira owns, once no later write for the issue waits. `force` rolls a failed write back. */
 function adopt(
   key: string,
@@ -1961,7 +1651,7 @@ function adopt(
   created = new Map<string, string>(),
   describes = false,
 ) {
-  if (result.issue === undefined || (!force && outbox.some((job) => job.key === key))) return;
+  if (result.issue === undefined || (!force && writes.has(key))) return;
   touch(key);
   const issue = state.issues.get(key);
   if (result.issue === null) {
@@ -2021,7 +1711,7 @@ function adopt(
       issue.commentStates ?? {},
     )) {
       // A delete still held for undo has not reached Jira yet.
-      const kept = heldDeletes.has(id) ? { ...rest, deleted } : rest;
+      const kept = writes.holdsDelete(id) ? { ...rest, deleted } : rest;
       if (Object.keys(kept).length) states[created.get(id) ?? id] = kept;
     }
     next.commentStates = states;
@@ -2031,21 +1721,12 @@ function adopt(
   set(patch);
   queueSave();
 }
-export const pendingJiraWrites = () => outbox.length;
+export const pendingJiraWrites = () => writes.pending();
 /** Whether the issue has edits Jira doesn't have yet, so restoring Jira's copy would change something. */
 export const hasLocalJiraChanges = (key: string) =>
   [...(localFields.get(key) ?? [])].some((field) => JIRA_ISSUE_FIELDS.includes(field as never)) ||
   !!fullFields.get(key)?.size ||
-  outbox.some((job) => job.key === key);
-/** Drops the issue's queued Jira writes; one already being sent stops retrying (an unreachable server never got it). */
-function cancelWrites(key: string) {
-  for (let i = outbox.length - 1; i >= 0; i--)
-    if (outbox[i]!.key === key) {
-      if (outbox[i]!.started) outbox[i]!.cancelled = true;
-      else outbox.splice(i, 1);
-    }
-  set({ pendingWrites: outbox.length });
-}
+  writes.has(key);
 export const dismissRecoveryNotice = () => storage.send({ type: "dismiss" });
 export async function flushLocalChanges() {
   await waitFor(storage, (s) => !s.matches("saving"));
@@ -2306,7 +1987,7 @@ function restore(edit: LocalEdit, snapshots: Snapshot[]) {
   send(edit.keys.map((key, index) => [key, from[index]!, to[index]!]));
   // The write's answer brings Jira's copy; a refresh before it lands would show the undone value again (R1-D16).
   for (const key of edit.keys)
-    if (state.issues.has(key) && !createdKeys.has(key) && !outbox.some((job) => job.key === key))
+    if (state.issues.has(key) && !createdKeys.has(key) && !writes.has(key))
       needsFullRefresh.add(key);
   if (state.selected && !issues.has(state.selected)) navigate({ selected: null, panel: false });
 }
@@ -2551,8 +2232,6 @@ export const boardOf = (key: string) =>
 let localSeq = 0;
 /** Local edits per issue in this tab, so a slow read can tell whether the issue was edited meanwhile. */
 const editCounts = new Map<string, number>();
-/** Issues another open tab made and is still creating in Jira, with that tab's id: edits here wait for the Jira key it gets. */
-const othersCreating = new Map<string, string>();
 /** Submission id → the issue it created. */
 const submissions = new Map<string, string>();
 /** Local numbers (PREFIX-NEWn keys, local comment ids) come from blocks this tab reserves in IndexedDB, one transaction per
@@ -2786,7 +2465,7 @@ export const actions = {
         return;
       }
       // Jira already has this version: queued edits are dropped and nothing is written (R2-D3).
-      cancelWrites(key);
+      writes.cancel(key);
       record(
         key,
         `restore Jira version of ${key}`,
