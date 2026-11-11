@@ -1,3 +1,4 @@
+import { storedMediaIds } from "./issue-attachments";
 import { remember, type Uploaded } from "./jira-media";
 
 /**
@@ -55,18 +56,6 @@ export function settleDraftUploads(namespace: string, ids: string[], locals?: st
   );
 }
 
-function mediaIds(value: unknown, ids = new Set<string>()): Set<string> {
-  if (!value || typeof value !== "object") return ids;
-  if (Array.isArray(value)) {
-    for (const v of value) mediaIds(v, ids);
-    return ids;
-  }
-  const node = value as Record<string, any>;
-  if (["media", "mediaInline"].includes(node.type) && node.attrs?.id)
-    ids.add(String(node.attrs.id));
-  for (const child of Object.values(node)) mediaIds(child, ids);
-  return ids;
-}
 const slot = (entry: DraftUpload) => `better-jira:upload:${entry.key}:${entry.local}`;
 function uploaded(entry: DraftUpload): Uploaded | undefined {
   try {
@@ -101,7 +90,7 @@ export async function cleanDraftUploads(
     for (let i = 0; i < localStorage.length; i++) {
       const name = localStorage.key(i);
       if (name?.includes("-draft:"))
-        mediaIds(JSON.parse(localStorage.getItem(name) ?? "null"), held);
+        storedMediaIds(JSON.parse(localStorage.getItem(name) ?? "null"), held);
     }
   } catch {}
   const done: string[] = [],
@@ -119,7 +108,7 @@ export async function cleanDraftUploads(
       done.push(...entries.map((e) => e.id));
       continue;
     }
-    const shown = mediaIds([
+    const shown = storedMediaIds([
       full.fields?.description,
       ...(full.fields?.comment?.comments ?? []).map((c: any) => c.body),
     ]);

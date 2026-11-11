@@ -1,7 +1,7 @@
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
 /* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { SubIssues, statusOf } from "./sub-issues";
-import { resourceMediaIds } from "./issue-resource";
+import { attachmentSplit } from "./issue-attachments";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { Command } from "cmdk";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -1170,16 +1170,7 @@ export function PersonalIssueDetails({ issue }: { issue: Issue }) {
         : [...(issue.reactions ?? []), emoji],
     });
   const full = useStore((s) => s.full.get(issue.key));
-  const embedded = new Set<string>();
-  const mediaIds = (node: any) => {
-    if (!node || typeof node !== "object") return;
-    if (["media", "mediaInline"].includes(node.type) && node.attrs?.id)
-      embedded.add(String(node.attrs.id));
-    for (const child of node.content ?? []) mediaIds(child);
-  };
-  for (const resource of issue.resources ?? []) resourceMediaIds(resource, embedded);
-  mediaIds(full?.fields.description);
-  for (const comment of full?.fields.comment?.comments ?? []) mediaIds(comment.body);
+  const { visible, embedded } = attachmentSplit(issue, full?.fields);
   useStore((s) => s.issues);
   return (
     <div className="mt-5 space-y-3 text-[12px]">
@@ -1234,18 +1225,9 @@ export function PersonalIssueDetails({ issue }: { issue: Issue }) {
       <Attachments
         hideChooser
         issueKey={issue.key}
-        attachments={issue.attachments?.filter(
-          (a) => !embedded.has(a.id) && !embedded.has(a.mediaId ?? ""),
-        )}
+        attachments={visible}
         onChange={(attachments) =>
-          actions.patch(issue.key, {
-            attachments: [
-              ...(issue.attachments ?? []).filter(
-                (a) => embedded.has(a.id) || embedded.has(a.mediaId ?? ""),
-              ),
-              ...attachments,
-            ],
-          })
+          actions.patch(issue.key, { attachments: [...embedded, ...attachments] })
         }
       />
 
