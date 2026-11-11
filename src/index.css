@@ -179,10 +179,10 @@
 }
 
 @layer base {
-  /* No macOS rubber-band bounce or back/forward swipe at the page edges. */
+  /* No macOS rubber-band bounce at the top/bottom; the horizontal axis stays default so a two-finger swipe still goes back/forward. */
   html,
   body {
-    overscroll-behavior: none;
+    overscroll-behavior-y: none;
   }
   body {
     @apply bg-app text-[13px] text-fg antialiased;
