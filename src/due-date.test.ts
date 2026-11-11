@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { parseDueDate, shortDate } from "./due-date";
+import { shortDate } from "./due-date";
+import { parseDueDate } from "./due-parse";
 const friday = new Date(2026, 10, 6, 23, 45);
 test("natural dates use a reference and local calendar, including future weekdays", () => {
   for (const [text, date] of [

@@ -74,7 +74,7 @@ import { copyIcons, copyKinds, copyShortcuts, issueCopy, type CopyKind } from ".
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { kept, post, useCommand } from "./commands";
 import { reminderPresets, reminderTime } from "./reminder-display";
-import { duePresets, parseDueDate, shortDate } from "./due-date";
+import { duePresets, shortDate } from "./due-date";
 
 /** Linear keeps an unsent title and description when the composer closes; the next C brings them back. */
 const unsent = { title: "", description: normalizeDocument("") };
@@ -372,6 +372,16 @@ export function PropertyPicker({
   const [dateValid, setDateValid] = useState(true);
   // Issue options › Due date › Custom… opens the date form; Shift+D opens Linear's due menu first.
   const [custom, setCustom] = useState(() => kept("issue-options-start") === "due");
+  // The typed-date parser (chrono) loads with the due menu, off the main bundle, like the reminder parser.
+  const [parseDue, setParseDue] = useState<typeof import("./due-parse").parseDueDate>();
+  useEffect(() => {
+    if (field !== "due") return;
+    let active = true;
+    void import("./due-parse").then(({ parseDueDate }) => active && setParseDue(() => parseDueDate));
+    return () => {
+      active = false;
+    };
+  }, [field]);
   useCommand("issue-options-start", (start) => {
     if (start !== "due") return;
     setCustom(true);
@@ -404,7 +414,7 @@ export function PropertyPicker({
   }[field];
   if (field === "due" && !custom) {
     // Linear (RAJ-61): a click or Enter applies at once; typed text like "24h" or "Feb 9" offers that date.
-    const parsed = parseDueDate(query),
+    const parsed = parseDue?.(query) ?? null,
       apply = (due: string | null) => {
         actions.patch(issue.key, { due });
         close();
