@@ -44,8 +44,11 @@ test("empty directory and saved versus temporary empty results", async ({ open }
     const draft = {board:1,kind:"custom",name:"Empty base",description:"",icon:"filter",color:"gray",display:p.display,scope:p.scope,mine:false,filters:{id:"root",join:"and",children:[{id:"missing",field:"labels",op:"is",values:["missing-label"]}]}};
     const saved = await page.eval(`fetch('/api/views',{method:'POST',headers:{'Content-Type':'application/json'},body:${JSON.stringify(JSON.stringify(draft))}}).then(r=>r.json())`);
     await page.page.goto(`${new URL(page.page.url()).origin}/view/${saved.id}?board=1`);
-    await page.waitFor(`document.querySelector('[role=status]')?.textContent.includes('No issues matching your filters')`);
-    expect(await page.eval(`!![...document.querySelectorAll('button')].find(b=>b.textContent==='Edit your filters')`)).toBe(true);
+    // BJ-143: Linear's saved-empty state is an illustration and "No matching issues", with no count or action.
+    await page.waitFor(`document.querySelector('[role=status]')?.textContent === 'No matching issues'`);
+    expect(await page.eval(`!!document.querySelector('[role=status] svg') && !document.querySelector('[role=status] button')`)).toBe(true);
+    // BJ-141: a custom view shows no team tabs.
+    expect(await page.eval(`[...document.querySelectorAll('header button')].some(b=>['Active','Backlog','All issues','Add new view'].includes(b.textContent.trim()))`)).toBe(false);
     await page.eval(`fetch('/api/views/${saved.id}',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({filters:{id:'root',join:'and',children:[]}})})`);
     const filter = Buffer.from(JSON.stringify({v:1,filters:draft.filters})).toString('base64url');
     await page.page.goto(`${new URL(page.page.url()).origin}/view/${saved.id}?board=1&filter=${filter}`);
@@ -63,9 +66,9 @@ test("Linear parity: hidden counts, merge conflicts, editor chrome, draft tab, p
     const draft = {board:1,kind:"custom",name:"Conflict base",description:"",icon:"filter",color:"gray",display:p.display,scope:p.scope,mine:false,filters:{id:"root",join:"and",children:[{id:"missing",field:"labels",op:"is",values:["missing-label"]}]}};
     const saved = await page.eval<any>(`fetch('/api/views',{method:'POST',headers:{'Content-Type':'application/json'},body:${JSON.stringify(JSON.stringify(draft))}}).then(r=>r.json())`);
     const origin = new URL(page.page.url()).origin;
-    // Saved-empty still says how many issues the definition hides.
+    // Saved-empty is Linear's bare "No matching issues".
     await page.page.goto(`${origin}/view/${saved.id}?board=1`);
-    await page.waitFor(`/\\d+ issues? hidden by filters/.test(document.querySelector('[role=status]')?.textContent ?? '')`);
+    await page.waitFor(`document.querySelector('[role=status]')?.textContent === 'No matching issues'`);
     // Display inside a view has no footer actions.
     await page.click('[aria-label="Display options"]');
     const display = await page.eval<string>(`document.querySelector('[aria-label="Display options"][role=dialog]').textContent`);
@@ -76,11 +79,15 @@ test("Linear parity: hidden counts, merge conflicts, editor chrome, draft tab, p
     await page.click('[aria-label="Open details"]');
     await page.click('[aria-label="View details"] [role=tab]:nth-child(2)');
     expect(await page.eval(`document.querySelector('[aria-label="View details"] [role=tab][aria-selected=true]').textContent`)).toBe("Labels");
+    // BJ-145: Linear's 32px pills, sized from their labels.
+    expect(await page.eval(`[...document.querySelectorAll('[aria-label="View details"] [role=tab]')].map(t=>t.getBoundingClientRect().height)`)).toEqual([32, 32]);
     // A contradicting temporary filter cannot be merged: Save menu, ⌥S and ⌘K all refuse.
     await page.eval(`fetch('/api/views/${saved.id}',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({filters:${JSON.stringify(rule(["High"]))}})})`);
     const filter = Buffer.from(JSON.stringify({v:1,filters:rule(["Low"])})).toString("base64url");
     await page.page.goto(`${origin}/view/${saved.id}?board=1&filter=${filter}`);
     await page.waitFor(`/\\d+ issues? hidden by filters/.test(document.querySelector('[role=status]')?.textContent ?? '')`);
+    // BJ-145: the temporary chip row is flat: transparent, unshadowed, 30px.
+    expect(await page.eval(`(s=>[s.backgroundColor,s.boxShadow,s.height])(getComputedStyle(document.querySelector('.view-filter-row')))`)).toEqual(["rgba(0, 0, 0, 0)", "none", "30px"]);
     await page.click('.view-filter-save');
     await page.waitFor(`!!document.querySelector('[aria-label="Save filters"] [aria-disabled=true]')`);
     expect(await page.eval(`document.querySelector('[aria-label="Save filters"] [aria-disabled=true]').textContent`)).toContain("Cannot merge these filters into the view");
@@ -105,11 +112,14 @@ test("Linear parity: hidden counts, merge conflicts, editor chrome, draft tab, p
     await page.waitFor(`!!document.querySelector('.view-filter-chip')`);
     expect(await page.eval(`document.querySelector('.view-filter-row').getAttribute('aria-label')`)).toBe("View filters");
     expect(await page.eval(`!!document.querySelector('.view-filter-row .view-filter-actions')`)).toBe(false);
+    // BJ-141: the custom-view editor shows no team tabs either.
+    expect(await page.eval(`[...document.querySelectorAll('header button')].some(b=>['Active','Backlog','All issues','Add new view'].includes(b.textContent.trim()))`)).toBe(false);
     await page.click("text=Cancel");
     // New tab draft replaces Add new view with the selected draft tab.
     await page.page.goto(`${origin}/?board=1`);
     await page.click("text=Add new view");
     await page.waitFor(`[...document.querySelectorAll('header span[aria-current=page]')].some(e=>e.textContent.includes('New view'))`);
+    expect(await page.eval(`[...document.querySelectorAll('header button')].some(b=>b.textContent.trim()==='Active')`)).toBe(true);
     expect(await page.eval(`[...document.querySelectorAll('button')].some(b=>b.textContent.includes('Add new view'))`)).toBe(false);
     expect(await page.eval(`document.querySelectorAll('header button[aria-pressed=true]').length`)).toBe(0);
     await page.click("text=Cancel");
