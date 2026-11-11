@@ -6,7 +6,7 @@
  * While the view editor is open, everything goes to the editor's draft. Any other board's settings are its own
  * preferences.
  */
-import { get, navigate, set, updateSavedView, useStore } from "./store";
+import { get, navigate, set, setOverlay, setViewDraft, updateSavedView, useStore } from "./store";
 import {
   defaultDisplay,
   defaultPreferences,
@@ -35,11 +35,11 @@ export const useEffectiveSettings = (board: number) => useStore((s) => effective
 function write(board: number, patch: Partial<Preferences>) {
   const s = get();
   if (s.editorDraft && board === s.board) {
-    set({ editorDraft: { ...s.editorDraft, ...patch } });
+    setViewDraft({ ...s.editorDraft, ...patch });
     return;
   }
   if (s.activeViewId && board === s.board) {
-    if (patch.filters) set({ overlayFilters: patch.filters });
+    if (patch.filters) setOverlay(patch.filters);
     const { display, scope } = patch;
     if (display || scope)
       void updateSavedView(s.activeViewId, {
@@ -77,7 +77,7 @@ export const setOnlyRule = (board: number, rule: Rule) =>
 /** Clears the filters being edited; a saved view keeps its base filters. */
 export function clearFilters(board: number) {
   const s = get();
-  if (s.activeViewId && !s.editorDraft && board === s.board) set({ overlayFilters: emptyOverlay() });
+  if (s.activeViewId && !s.editorDraft && board === s.board) setOverlay(emptyOverlay());
   else write(board, { filters: defaultPreferences().filters });
 }
 

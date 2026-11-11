@@ -4,7 +4,8 @@
  * Debug: run `localStorage.setItem("better-jira:debug","machines")` and reload. The console then logs
  * every event and the state it leads to, and `window.machines` holds the running actors.
  *
- *   ui       what is on screen: location (board, issue, view), overlay, toolbar, toast
+ *   ui       what is on screen: location (board, issue, view), overlay, toolbar, toast. Where you go is decided in
+ *            navigation.ts; this machine holds the result for Escape and the toolbar, and owns overlay, toolbar and toast.
  *   app      loading the mirror: idle → loading → ready | failed, retry with load
  *   storage  saving local edits: loading → saved ⇄ saving → failed; blocked while read-only
  *   sync     polling Jira properties: fetching → waiting (3s warming, 30s idle, 10s after an error) → fetching
@@ -45,17 +46,10 @@ export type UiContext = {
   toast: Toast | null;
 };
 export type UiEvent =
-  /** Changes where you are. A new board resets its search, "only mine" and draft, and closes the toolbar. */
-  | {
-      type: "navigate";
-      board?: number;
-      view?: View;
-      selected?: string | null;
-      panel?: boolean;
-      document?: string | null;
-      /** Opens or leaves the Inbox; picking a board leaves it. */
-      inbox?: boolean;
-    }
+  /** Shows where navigation.ts moved you. A new board resets its search and draft, and closes the toolbar. */
+  | ({ type: "navigate" } & Partial<
+      Pick<UiContext, "board" | "view" | "selected" | "panel" | "document" | "inbox" | "mine">
+    >)
   /** Escape with nothing on top: close the issue, else clear the search, else drop the selection. */
   | { type: "escape" }
   | { type: "sidebar.toggle" }
@@ -123,27 +117,9 @@ export const uiMachine = setup({
   on: {
     navigate: {
       actions: enqueueActions(({ context, event, enqueue }) => {
-        const changed = event.board !== undefined && event.board !== context.board;
-        enqueue.assign({
-          ...(changed ? { board: event.board, query: "", mine: false, draft: {} } : {}),
-          ...(event.view ? { view: event.view } : {}),
-          ...(event.inbox !== undefined
-            ? { inbox: event.inbox }
-            : event.board !== undefined
-              ? { inbox: false }
-              : {}),
-          ...(event.selected !== undefined ? { selected: event.selected } : {}),
-          ...(event.panel !== undefined ? { panel: event.panel } : {}),
-          document:
-            !(event.panel ?? context.panel) ||
-            !(event.selected !== undefined ? event.selected : context.selected)
-              ? null
-              : event.document !== undefined
-                ? event.document
-                : changed || (event.selected !== undefined && event.selected !== context.selected)
-                  ? null
-                  : context.document,
-        });
+        const { type: _, ...screen } = event;
+        const changed = screen.board !== undefined && screen.board !== context.board;
+        enqueue.assign({ ...screen, ...(changed ? { query: "", draft: {} } : {}) });
         if (changed) enqueue.raise({ type: "toolbar.close" });
       }),
     },

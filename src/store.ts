@@ -21,6 +21,14 @@ import {
 } from "./local-data";
 import { createActor, fromPromise, waitFor } from "xstate";
 import { appMachine, inspector, storageMachine, uiMachine, type UiContext } from "./machines";
+import {
+  MACHINE_FIELDS,
+  screenUrl,
+  transition,
+  type Destination,
+  type NavigationEvent,
+  type Screen,
+} from "./navigation";
 import { QueryClient, QueryObserver } from "@tanstack/query-core";
 
 import { reminderTime } from "./reminder-display";
@@ -190,12 +198,8 @@ import {
   type ViewDraft,
   emptyOverlay,
   mergeFilters,
-  encodeOverlay,
-  decodeOverlay,
   canMergeOverlay,
   MERGE_CONFLICT,
-  viewPath,
-  viewForRoute,
 } from "./saved-view-model";
 
 export const ME: User = { id: "", name: "Me" };
@@ -256,6 +260,8 @@ type State = {
   savedViews: SavedView[];
   editorDraft: ViewDraft | null;
   activeViewId: string | null;
+  /** A link's `view` shows the open issue that way once; see navigation.ts. */
+  linkView: boolean;
   overlayFilters: import("./view-model").FilterGroup;
   viewPreferences: Preferences | null;
   effectiveViewPreferences: Preferences | null;
@@ -340,6 +346,7 @@ let state: State = {
   savedViews: [],
   editorDraft: null,
   activeViewId: null,
+  linkView: false,
   overlayFilters: emptyOverlay(),
   viewPreferences: null,
   effectiveViewPreferences: null,
@@ -359,9 +366,15 @@ const listeners = new Set<() => void>();
 const subscribe = (l: () => void) => (listeners.add(l), () => void listeners.delete(l));
 export const get = () => state;
 type UiKey = keyof UiContext;
-/** Data changes. Screen state (board, issue, overlay, toolbar…) changes only through `ui.send`; see machines.ts. */
-export function set(patch: Partial<Omit<State, UiKey | "loadError" | "storage" | "canEdit">>) {
+/** Set once load has restored the address; before that nothing is written to history. */
+let navigationReady = false;
+/** Data changes. Screen state changes only through `navigate` and the view functions (navigation.ts), or `ui.send` (machines.ts). */
+export function set(
+  patch: Partial<Omit<State, UiKey | keyof Screen | "loadError" | "storage" | "canEdit">>,
+) {
   commit(patch);
+  // A rename (here or in another tab) moves the slug; the id suffix keeps the entry.
+  if (patch.savedViews && navigationReady && state.activeViewId) showAddress(true);
 }
 /** Counts footer messages, so `timed` never covers one its action posted. */
 let perfPosts = 0;
@@ -444,24 +457,6 @@ function commit(patch: Partial<State>) {
       perfPosts++;
       state = { ...state, perf: "Could not save favorites in this browser" };
     }
-  if (
-    navigationReady &&
-    !restoringNavigation &&
-    (patch.editorDraft !== undefined ||
-      patch.activeViewId !== undefined ||
-      patch.overlayFilters !== undefined ||
-      patch.board !== undefined ||
-      patch.selected !== undefined ||
-      patch.panel !== undefined ||
-      patch.view !== undefined ||
-      patch.inbox !== undefined ||
-      patch.mine !== undefined ||
-      patch.document !== undefined)
-  )
-    syncNavigation();
-  // A rename (here or in another tab) moves the slug; the id suffix keeps the entry.
-  else if (patch.savedViews && navigationReady && !restoringNavigation && state.activeViewId)
-    syncNavigation(true);
   listeners.forEach((l) => l());
 }
 /** Selector must return a stable reference (a state field or a Map entry), never a fresh object. */
@@ -484,72 +479,97 @@ ui.subscribe(({ context }) => {
   for (const key of Object.keys(context) as UiKey[])
     if (context[key] !== state[key]) Object.assign(patch, { [key]: context[key] });
   if (!Object.keys(patch).length) return;
-  // A link's `view` opens that issue once; it lasts until the panel closes and never becomes the board's preference (R2-D4).
-  if (patch.view && restoringNavigation) linkView = true;
-  else if (patch.view && state.activeViewId) {
-    const v = state.savedViews.find((v) => v.id === state.activeViewId);
-    if (v && v.display.openIn !== patch.view)
-      void updateSavedView(v.id, {
-        display: { ...v.display, openIn: patch.view },
-      }).catch(viewError);
-  } else if (patch.view && state.editorDraft) {
-    patch.editorDraft = { ...state.editorDraft, display: { ...state.editorDraft.display, openIn: patch.view } };
-  } else if (patch.view) {
-    linkView = false;
-    // Each board remembers how its issues open.
-    const id = context.board,
-      prefs = state.preferences[id] ?? defaultPreferences();
-    patch.preferences = {
-      ...state.preferences,
-      [id]: { ...prefs, display: { ...prefs.display, openIn: patch.view } },
-    };
-  }
+  // Escape, My issues or editing a description moved the screen; navigation settles it and shows the address.
+  const moved = MACHINE_FIELDS.filter((key) => key in patch);
+  if (moved.length) go({ type: "moved", screen: Object.fromEntries(moved.map((key) => [key, patch[key]])) });
+  for (const key of moved) delete patch[key];
   commit(patch);
-  if (linkView && !context.panel) {
-    linkView = false;
-    // Back to how the open view (or else the board) opens issues; never the board's choice written into a view.
-    const openIn =
-      (state.editorDraft ?? state.savedViews.find((v) => v.id === state.activeViewId))?.display.openIn ??
-      state.preferences[context.board]?.display.openIn ??
-      "side";
-    if (openIn !== context.view) queueMicrotask(() => navigate({ view: openIn }));
-  }
 });
-/** Sends `navigate`, filling in a new board's remembered issue view. */
-export function navigate(to: {
-  board?: number;
-  view?: View;
-  selected?: string | null;
-  panel?: boolean;
-  document?: string | null;
-  inbox?: boolean;
-  viewsPage?: boolean;
-}) {
-  if (
-    !restoringNavigation &&
-    state.activeViewId &&
-    (to.board !== undefined || to.inbox === true)
-  ) {
-    restoringNavigation = true;
-    commit({ activeViewId: null, overlayFilters: emptyOverlay() });
-    restoringNavigation = false;
-    to = {
-      ...to,
-      view: to.view ?? state.preferences[to.board ?? state.board]?.display.openIn ?? "side",
-    };
-  }
-  if (!restoringNavigation && state.editorDraft && (to.board !== undefined || to.inbox))
-    commit({ editorDraft: null });
-  if (!restoringNavigation) commit({ viewsPage: to.viewsPage ?? (to.board !== undefined || to.inbox === true ? false : state.viewsPage) });
-  if (to.selected) to = { ...to, selected: currentKey(to.selected) };
-  const view =
-    to.view ??
-    (to.board !== undefined && to.board !== state.board
-      ? (state.preferences[to.board]?.display.openIn ?? state.defaults[to.board]?.openIn ?? "side")
-      : undefined);
-  ui.send({ type: "navigate", ...to, ...(view ? { view } : {}) });
-  if (navigationReady && !restoringNavigation) syncNavigation();
+/** Goes somewhere: see navigation.ts for leaving views, how issues open and what the address shows. */
+export function navigate(to: Destination) {
+  go({ type: "go", to });
 }
+const screen = (): Screen => ({
+  board: state.board,
+  view: state.view,
+  selected: state.selected,
+  panel: state.panel,
+  document: state.document,
+  inbox: state.inbox,
+  mine: state.mine,
+  viewsPage: state.viewsPage,
+  activeViewId: state.activeViewId,
+  overlayFilters: state.overlayFilters,
+  editorDraft: state.editorDraft,
+  linkView: state.linkView,
+});
+/** Applies one navigation step: the screen (state, then the ui machine), the preference it changed, then the address. */
+function go(event: NavigationEvent) {
+  const t = transition(screen(), event, {
+    savedViews: state.savedViews,
+    preferences: state.preferences,
+    defaults: state.defaults,
+    boards: state.boards,
+    issue: (key) => state.issues.get(currentKey(key)),
+    currentKey,
+    draftFor: (id) => (id ? editViewDraft(id) : createViewDraft()),
+  });
+  if (t.forgetDraft) address.forgetDraft();
+  if (t.path) address.replacePath(t.path);
+  if (t.via && navigationReady) address.show(screenUrl(t.via, location.href, state.savedViews), false);
+  const patch: Partial<State> = t.preferences ? { preferences: t.preferences } : {};
+  for (const key of Object.keys(t.screen) as (keyof Screen)[])
+    if (t.screen[key] !== state[key]) Object.assign(patch, { [key]: t.screen[key] });
+  commit(patch);
+  const machine = ui.getSnapshot().context,
+    moved = MACHINE_FIELDS.filter((key) => machine[key] !== t.screen[key]);
+  if (moved.length)
+    ui.send({ type: "navigate", ...Object.fromEntries(moved.map((key) => [key, t.screen[key]])) });
+  if (navigationReady && t.history === "push") showAddress();
+  // After the push: its optimistic write re-shows the address in place.
+  if (t.viewDisplay)
+    void updateSavedView(t.viewDisplay.id, { display: t.viewDisplay.display }).catch(viewError);
+  if (t.missing) ui.send({ type: "toast.show", text: `Issue ${t.missing} not found` });
+}
+/** The address bar, history, and the view editor's draft kept per address (sessionStorage is per tab). */
+const address = {
+  draftKey: (path: string) => `view-editor:${state.namespace}:${path}`,
+  show(href: string, replace: boolean) {
+    if (href !== location.href) history[replace ? "replaceState" : "pushState"]({}, "", href);
+  },
+  replacePath(path: string) {
+    const url = new URL(location.href);
+    url.pathname = path;
+    history.replaceState(history.state, "", url);
+  },
+  draft(): ViewDraft | null {
+    try {
+      return JSON.parse(sessionStorage.getItem(address.draftKey(location.pathname)) ?? "null");
+    } catch {
+      return null; // Start a fresh draft.
+    }
+  },
+  keepDraft(href: string, draft: ViewDraft) {
+    try {
+      sessionStorage.setItem(address.draftKey(new URL(href).pathname), JSON.stringify(draft));
+    } catch {
+      /* Draft remains available until navigation. */
+    }
+  },
+  forgetDraft() {
+    try {
+      sessionStorage.removeItem(address.draftKey(location.pathname));
+    } catch {
+      /* Best effort. */
+    }
+  },
+};
+function showAddress(replace = false) {
+  const href = screenUrl(screen(), location.href, state.savedViews);
+  if (state.editorDraft) address.keepDraft(href, state.editorDraft);
+  address.show(href, replace);
+}
+const restoreNavigation = () => go({ type: "restore", href: location.href, draft: address.draft() });
 const app = createActor(appMachine.provide({ actors: { load: fromPromise(loadApplication) } }), {
   inspect: inspector("app"),
 }).start();
@@ -946,7 +966,7 @@ async function loadApplication() {
     });
     restoreNavigation();
     navigationReady = true;
-    syncNavigation(true);
+    showAddress(true);
     window.addEventListener("popstate", restoreNavigation);
     window.addEventListener("beforeunload", (event) => {
       const s = storage.getSnapshot();
@@ -1213,92 +1233,6 @@ export function timed(label: string, fn: () => void) {
 }
 
 const now = () => new Date().toISOString();
-let navigationReady = false,
-  restoringNavigation = false,
-  linkView = false;
-function syncNavigation(replace = false) {
-  const url = new URL(location.href);
-  if (
-    url.searchParams.get("issue") !== (state.panel ? state.selected : null) ||
-    url.searchParams.get("document") !== state.document
-  )
-    url.hash = "";
-  const routeOf = (id: string) => {
-    const v = state.savedViews.find((v) => v.id === id);
-    return v ? viewPath(v) : `/view/${encodeURIComponent(id)}`;
-  };
-  url.pathname = state.editorDraft ? (state.editorDraft.id ? `${routeOf(state.editorDraft.id)}/edit` : "/view/new") : state.activeViewId ? routeOf(state.activeViewId) : state.viewsPage ? "/views" : "/";
-  if (state.activeViewId && state.overlayFilters.children.length)
-    url.searchParams.set("filter", encodeOverlay(state.overlayFilters));
-  else url.searchParams.delete("filter");
-  url.searchParams.set("board", String(state.board));
-  if (state.panel && state.selected) {
-    url.searchParams.set("issue", state.selected);
-    url.searchParams.set("view", state.view);
-  } else {
-    url.searchParams.delete("issue");
-    url.searchParams.delete("view");
-  }
-  if (state.document && state.panel) url.searchParams.set("document", state.document);
-  else url.searchParams.delete("document");
-  if (state.inbox) url.searchParams.set("inbox", "1");
-  else url.searchParams.delete("inbox");
-  if (!state.inbox) url.searchParams.delete("notification"); // the inbox's selected row outside the mirror
-  if (state.mine && !state.inbox) url.searchParams.set("mine", "1");
-  else url.searchParams.delete("mine");
-  if (state.editorDraft) {
-    try { sessionStorage.setItem(`view-editor:${state.namespace}:${url.pathname}`, JSON.stringify(state.editorDraft)); } catch { /* Draft remains available until navigation. */ }
-  }
-  if (url.href !== location.href) history[replace ? "replaceState" : "pushState"]({}, "", url);
-}
-function restoreNavigation() {
-  const params = new URL(location.href).searchParams,
-    wanted = params.get("issue"),
-    // A link to an issue's app key opens the issue Jira made for it, wherever it was created (sync check 7).
-    issue = state.issues.get(currentKey(wanted ?? ""));
-  const editorRoute = /^\/view\/(new|[^/]+\/edit)$/.test(location.pathname);
-  let editorDraft: ViewDraft | null = null;
-  if (editorRoute) {
-    try { editorDraft = JSON.parse(sessionStorage.getItem(`view-editor:${state.namespace}:${location.pathname}`) ?? "null"); } catch { /* Start a fresh draft. */ }
-    if (!editorDraft) {
-      const id = /^\/view\/([^/]+)\/edit$/.exec(location.pathname)?.[1];
-      const v = id ? viewForRoute(state.savedViews, id) : undefined;
-      editorDraft = v ? editViewDraft(v.id) : createViewDraft();
-    }
-  }
-  const routeId = /^\/view\/([^/]+)$/.exec(new URL(location.href).pathname)?.[1];
-  const active = routeId ? viewForRoute(state.savedViews, routeId) : undefined;
-  // Old `/view/<id>` links and stale slugs land on the view's current address.
-  if (active && location.pathname !== viewPath(active)) {
-    const url = new URL(location.href);
-    url.pathname = viewPath(active);
-    history.replaceState(history.state, "", url);
-  }
-  const board = editorDraft?.board ?? active?.board ?? issue?.board ?? Number(params.get("board"));
-  restoringNavigation = true;
-  commit({
-    editorDraft,
-    viewsPage: location.pathname === "/views",
-    activeViewId: active?.id ?? null,
-    overlayFilters: active ? decodeOverlay(params.get("filter")) : emptyOverlay(),
-  });
-  navigate({
-    ...(state.boards.some((b) => b.id === board) ? { board } : {}),
-    selected: issue?.key ?? null,
-    panel: !!issue,
-    document: issue ? params.get("document") : null,
-    inbox: params.has("inbox"),
-    ...(active ? { view: active.display.openIn } : {}),
-    ...(params.get("view") === "page" || params.get("view") === "side"
-      ? { view: params.get("view") as View }
-      : {}),
-  });
-  // mine.set also leaves the inbox, so send it only when My issues actually changes.
-  if (!params.has("inbox") && get().mine !== (editorDraft?.mine ?? active?.mine ?? params.has("mine")))
-    ui.send({ type: "mine.set", mine: editorDraft?.mine ?? active?.mine ?? params.has("mine") });
-  restoringNavigation = false;
-  if (wanted && !issue) ui.send({ type: "toast.show", text: `Issue ${wanted} not found` });
-}
 const localFields = new Map<string, Set<string>>(),
   fullFields = new Map<string, Set<string>>();
 const changedKeys = new Set<string>(),
@@ -2159,9 +2093,10 @@ export function openAllIssues(board: number) {
   set({ details: false, findInView: false });
   setScope(board, "all");
 }
-export function clearOverlay() {
-  set({ overlayFilters: emptyOverlay() });
+export function setOverlay(filters: State["overlayFilters"]) {
+  go({ type: "filters", filters });
 }
+export const clearOverlay = () => setOverlay(emptyOverlay());
 export async function saveOverlayToView() {
   const v = state.savedViews.find((v) => v.id === state.activeViewId);
   if (!v) return;
@@ -2174,23 +2109,8 @@ export async function saveOverlayToView() {
 export function openSavedView(view: SavedView | string) {
   const v = typeof view === "string" ? state.savedViews.find((v) => v.id === view) : view;
   if (!v) return;
-  // One history entry, with identity installed before UI view changes can persist defaults.
-  if (state.editorDraft) clearEditorSession();
-  const previous = restoringNavigation;
-  restoringNavigation = true;
-  commit({ editorDraft: null, activeViewId: v.id, viewsPage: false, overlayFilters: emptyOverlay() });
-  ui.send({
-    type: "navigate",
-    board: v.board,
-    selected: null,
-    panel: false,
-    inbox: false,
-    view: v.display.openIn,
-  });
-  ui.send({ type: "mine.set", mine: v.mine });
+  go({ type: "open-view", view: v });
   ui.send({ type: "toolbar.close" });
-  restoringNavigation = previous;
-  if (navigationReady) syncNavigation();
 }
 
 function patchIssue(key: string, patch: Partial<Issue>) {
@@ -2945,27 +2865,13 @@ export const actions = {
 
 /** Editor routes keep a detached draft, including toolbar changes, across history and reload. */
 export function beginViewEditor(draft: ViewDraft) {
-  const previous = restoringNavigation;
-  restoringNavigation = true;
-  commit({ editorDraft: structuredClone(draft), viewsPage: false, activeViewId: null, overlayFilters: emptyOverlay() });
-  navigate({ board: draft.board, selected: null, panel: false, inbox: false });
-  ui.send({ type: "mine.set", mine: draft.mine });
-  restoringNavigation = previous;
-  syncNavigation();
+  go({ type: "edit-view", draft });
 }
-function clearEditorSession() {
-  try { sessionStorage.removeItem(`view-editor:${state.namespace}:${location.pathname}`); } catch { /* Best effort. */ }
+export function setViewDraft(draft: ViewDraft) {
+  go({ type: "draft", draft });
 }
 export function discardViewEditor() {
-  const draft = state.editorDraft;
-  if (!draft) return;
-  clearEditorSession();
-  const previous = restoringNavigation;
-  restoringNavigation = true;
-  commit({ editorDraft: null });
-  restoringNavigation = previous;
-  // Edit and duplicate return to the view they came from, while it still exists.
-  const back = draft.id ?? draft.sourceId;
-  if (back && state.savedViews.some((v) => v.id === back)) openSavedView(back);
-  else navigate({ board: draft.board });
+  go({ type: "discard-editor" });
+  // Back on the view it edits or duplicates, as opening that view does.
+  if (state.activeViewId) ui.send({ type: "toolbar.close" });
 }

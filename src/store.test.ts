@@ -1011,11 +1011,11 @@ const withFetch = async (respond: (url: string, init?: RequestInit) => unknown, 
 };
 
 test("BJ-128: Save to this view refuses an overlay the saved base excludes", async () => {
-  const { get, set, openSavedView, saveOverlayToView } = await import("./store");
+  const { get, set, openSavedView, saveOverlayToView, setOverlay } = await import("./store");
   const view = await viewFixture();
   set({ savedViews: [view] });
   openSavedView(view);
-  set({ overlayFilters: { id: "overlay", join: "and", children: [{ id: "o", field: "status", op: "is", values: ["progress"] }] } });
+  setOverlay({ id: "overlay", join: "and", children: [{ id: "o", field: "status", op: "is", values: ["progress"] }] });
   let writes = 0;
   await withFetch(() => (writes++, view), async () => {
     await expect(saveOverlayToView()).rejects.toThrow("Cannot merge these filters into the view");
@@ -1564,8 +1564,6 @@ test("navigation: a link's view opens that issue once and never becomes the boar
   steps.push(trace());
   ui.send({ type: "escape" });
   steps.push(trace());
-  await Promise.resolve();
-  steps.push(trace());
   navigate({ selected: "NAV-1", panel: true });
   steps.push(trace());
   visit("/?board=2&issue=NAV-3&view=page");
@@ -1605,22 +1603,6 @@ test("navigation: a link's view opens that issue once and never becomes the boar
         "mine": false,
         "overlayFilters": 0,
         "panel": true,
-        "selected": "NAV-2",
-        "view": "page",
-        "viewsPage": false,
-      },
-      {
-        "activeViewId": null,
-        "address": "/?board=1",
-        "board": 1,
-        "boardOpenIn": "side/side",
-        "document": null,
-        "draft": null,
-        "entries": "3/3",
-        "inbox": false,
-        "mine": false,
-        "overlayFilters": 0,
-        "panel": false,
         "selected": "NAV-2",
         "view": "page",
         "viewsPage": false,
@@ -1863,14 +1845,14 @@ test("navigation: changing how issues open inside a saved view saves it to that 
 });
 
 test("navigation: switching or leaving a view resets its filter overlay; closing a menu forgets its target", async () => {
-  const { navigate, openSavedView, changePreferences, set, get, ui, trace } = await navigationFixture();
+  const { navigate, openSavedView, setOverlay, set, get, ui, trace } = await navigationFixture();
   const first = await savedView({ id: "first", name: "First" }),
     second = await savedView({ id: "second", name: "Second" });
   set({ savedViews: [first, second] });
   const filters = { id: "overlay", join: "and" as const, children: [{ id: "o", field: "labels" as const, op: "is" as const, values: ["urgent"] }] };
   const steps = [];
   openSavedView(first);
-  changePreferences(1, { filters });
+  setOverlay(filters);
   steps.push(trace());
   openSavedView(second);
   steps.push(trace());
@@ -1879,7 +1861,7 @@ test("navigation: switching or leaving a view resets its filter overlay; closing
   navigate({ board: 1 });
   steps.push(trace());
   openSavedView(first);
-  changePreferences(1, { filters });
+  setOverlay(filters);
   navigate({ inbox: true });
   steps.push(trace());
   expect(steps).toMatchInlineSnapshot(`
@@ -1975,7 +1957,8 @@ test("navigation: switching or leaving a view resets its filter overlay; closing
 });
 
 test("navigation: the view editor keeps its draft in the address across reload, takes display changes, and returns on cancel", async () => {
-  const { navigate, beginViewEditor, createViewDraft, editViewDraft, discardViewEditor, changeDisplay, set, get, trace } = await navigationFixture();
+  const { navigate, beginViewEditor, createViewDraft, editViewDraft, discardViewEditor, set, get, trace } = await navigationFixture();
+  const { setDisplay: changeDisplay } = await import("./view-settings");
   const view = await savedView({ id: "edited", name: "Edited", board: 2 });
   set({ savedViews: [view] });
   const steps = [];

@@ -16,7 +16,7 @@ import {
   beginViewEditor,
   discardViewEditor,
   get,
-  set,
+  setViewDraft,
   ui,
   useStore,
   ME,
@@ -110,7 +110,7 @@ function Editor({ draft }: { draft: ViewDraft }) {
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const patch = (change: Partial<ViewDraft>) =>
-    set({ editorDraft: { ...draft, ...change } });
+    setViewDraft({ ...draft, ...change });
   const placeholder = viewPlaceholder(
     draft.filters,
     get().boards.find((b) => b.id === draft.board),

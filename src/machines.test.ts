@@ -41,14 +41,12 @@ test("ui: the toolbar closes under an overlay, over an issue page and on a board
   expect(toolbar()).toBeNull();
   ui.send({ type: "navigate", panel: false });
   ui.send({ type: "toolbar.open", toolbar: "filter" });
-  ui.send({ type: "mine.set", mine: true });
   ui.send({ type: "query.set", query: "x" });
   ui.send({ type: "navigate", board: 2, view: "side" });
   expect(ui.getSnapshot().context).toMatchObject({
     board: 2,
     view: "side",
     toolbar: null,
-    mine: false,
     query: "",
   });
   ui.send({ type: "toolbar.open", toolbar: "filter" });
@@ -180,18 +178,6 @@ test("autosave: keeps every draft, commits 600ms after the last change, and flus
   autosave.send({ type: "flush" });
   autosave.send({ type: "flush" });
   expect(commits).toEqual([doc("ab"), doc("abc")]);
-});
-
-test("ui: a document requires an open issue and clears with its issue context", () => {
-  const ui = createActor(uiMachine, { input: { board: 1, view: "side" } }).start();
-  ui.send({ type: "navigate", document: "orphan" });
-  expect(ui.getSnapshot().context.document).toBeNull();
-  ui.send({ type: "navigate", selected: "A-1", panel: true, document: "doc" });
-  expect(ui.getSnapshot().context.document).toBe("doc");
-  ui.send({ type: "navigate", panel: false, document: "doc" });
-  expect(ui.getSnapshot().context.document).toBeNull();
-  ui.send({ type: "navigate", selected: null, panel: true, document: "doc" });
-  expect(ui.getSnapshot().context.document).toBeNull();
 });
 
 test("sync D4: a load that can't reach the server retries by itself, backing off, and says so", async () => {
