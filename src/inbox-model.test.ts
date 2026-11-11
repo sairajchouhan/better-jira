@@ -281,6 +281,27 @@ test("R2-inbox-D5: a row whose issue isn't mirrored takes its project's name fro
     "Team Astro",
   );
   expect(facetsOf(deleted, undefined, undefined, projects).project).toBe("Team Astro");
+  const rows = [mirrored, deleted];
+  const facets = (row: InboxItem) =>
+    facetsOf(
+      row,
+      row === mirrored ? { project: { name: "Team Astro" } } : undefined,
+      undefined,
+      projects,
+    );
+  expect(new Set(rows.map((row) => facets(row).project)).size).toBe(1);
+  expect(
+    visibleItems(
+      rows,
+      {},
+      { ...DEFAULT_VIEW, filters: { project: ["Team Astro"] } },
+      Date.now(),
+      null,
+      facets,
+    )
+      .map((row) => row.id)
+      .sort(),
+  ).toEqual(["a", "b"]);
   expect(facetsOf(outside, undefined, undefined, projects).project).toBe("OUT");
   expect(facetsOf(item({ id: "d", key: "" }), undefined, undefined, projects).project).toBe(
     "No project",
