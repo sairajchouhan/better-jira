@@ -1,3 +1,4 @@
+/* oxlint-disable react/globals -- The single mounted surface publishes current rows to the shared shortcut dispatcher. */
 import { useState } from "react";
 import { canHaveChildren } from "./issue-properties";
 import {
@@ -933,10 +934,11 @@ export function useLinearHotkeys(getColumns: () => Issue[][]) {
                   (entry.id === "commands" && state.overlay === "palette") ||
                   (entry.id === "shortcuts" && state.overlay === "shortcuts")) &&
                 shortcutApplies(entry),
-              ignoreInputs:
-                entry.id === "shortcuts" || entry.id === "commands" || entry.id === "sub-issue"
-                  ? false
-                  : true,
+              ignoreInputs: !(
+                entry.id === "shortcuts" ||
+                entry.id === "commands" ||
+                entry.id === "sub-issue"
+              ),
               meta: { name: entry.name, group: entry.group },
               // Document and issue shortcuts share keys on purpose; `enabled` keeps exactly one of each pair active.
               ...(shortcuts.some(

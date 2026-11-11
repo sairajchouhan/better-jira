@@ -1,3 +1,5 @@
+/* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
+/* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { SubIssues, statusOf } from "./sub-issues";
 import { findIssueDocument, resourceMediaIds } from "./issue-resource";
 import { useHotkey } from "@tanstack/react-hotkeys";
@@ -87,7 +89,7 @@ export function CreateIssue() {
     if (initial.copy) return;
     unsent.title = title;
     unsent.description = description;
-  }, [title, description]);
+  }, [title, description, initial.copy]);
   const [draftIndex, setDraftIndex] = useState(0);
   const [labels, setLabels] = useState(initial.labels?.join(", ") ?? "");
   const [more, setMore] = useState(false);
@@ -157,6 +159,7 @@ export function CreateIssue() {
   ];
   const close = () => ui.send({ type: "overlay.close" });
   // One id per draft, read from this render: a second submit before React re-renders (a double click) makes no second issue.
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- Memo invalidation follows draft identity or relation inputs; render-local helpers would invalidate every render.
   const submission = useMemo(() => crypto.randomUUID(), [draftIndex]);
   const submit = () => {
     if (!title.trim() || filesBusy || !dateValid || noParentType) return;
@@ -1415,6 +1418,7 @@ export function Relations({ issue, close: done }: { issue: Issue; close?: () => 
         0,
         query ? 40 : 8,
       ),
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Memo invalidation follows draft identity or relation inputs; render-local helpers would invalidate every render.
     [all, query, kind, issue],
   );
   // cmdk selects the first row as the query changes, so the group holding the best match goes first.

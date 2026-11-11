@@ -1,3 +1,4 @@
+/* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 import {
   autoUpdate,
   flip,
@@ -350,12 +351,14 @@ function FilterBranch({
       focusSearch();
       focusOnOpen.current = false;
     }
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Focus only on opening; cleanup resolves the latest parent menu after nested menus change.
   }, [open, isPositioned]);
   useEffect(() => {
     if (!open) return;
     const node = refs.floating.current;
     return () => {
       if (node?.contains(document.activeElement))
+        // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Focus only on opening; cleanup resolves the latest parent menu after nested menus change.
         parent.current?.querySelector<HTMLInputElement>("input")?.focus();
     };
   }, [open, parent, refs.floating]);

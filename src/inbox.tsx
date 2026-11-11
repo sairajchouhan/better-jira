@@ -1,3 +1,4 @@
+/* oxlint-disable react/globals -- The single mounted surface publishes current rows to the shared shortcut dispatcher. */
 /** Linear's Inbox over Jira's in-app notifications. Read state goes to Jira; delete and snooze stay in this browser, because Jira's notification API has neither. */
 import { InfiniteQueryObserver, type InfiniteData } from "@tanstack/query-core";
 import { Command } from "cmdk";
@@ -915,6 +916,7 @@ export function InboxList() {
       selectedId = row.id;
       emit();
     }
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Re-select the issue when its mirror row becomes available.
   }, [issueKey, rowId, known]);
   useEffect(() => {
     if (!end.current || !hasNextPage || isFetchingNextPage) return;
@@ -925,6 +927,7 @@ export function InboxList() {
     );
     observer.observe(end.current);
     return () => observer.disconnect();
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Reobserve the load sentinel after a page appends rows.
   }, [hasNextPage, isFetchingNextPage, pages, fetchNextPage]);
   const items = itemsOf(data);
   const base = visibleItems(items, own, { ...v, filters: {} }, now, selected, facets);

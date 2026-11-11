@@ -1,3 +1,4 @@
+/* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys";
@@ -41,6 +42,7 @@ export function ImageViewer({
     [failed, setFailed] = useState(false);
   useEffect(() => {
     setFailed(false);
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- A new image URL resets a previous load failure.
   }, [file.url]);
   const fit = size.width
       ? Math.min(
@@ -111,6 +113,7 @@ export function ImageViewer({
       document.body.style.overflow = previous;
       window.removeEventListener("resize", resize);
     };
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Crop mode replaces the measured image element.
   }, [cropping]);
   if (cropping && onCrop)
     return createPortal(

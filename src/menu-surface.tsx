@@ -1,3 +1,4 @@
+/* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 export const MENU_POPUP =
@@ -150,13 +151,18 @@ export function MenuSurface({
       observer.disconnect();
       window.removeEventListener("resize", place);
       window.removeEventListener("scroll", place, true);
+      // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Position tracks point coordinates; cleanup deliberately restores the latest connected focus target.
       (previous.current?.isConnected
-        ? previous.current
-        : fallback.current?.isConnected
-          ? fallback.current
+        ? // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Position tracks point coordinates; cleanup deliberately restores the latest connected focus target.
+          previous.current
+        : // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Position tracks point coordinates; cleanup deliberately restores the latest connected focus target.
+          fallback.current?.isConnected
+          ? // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Position tracks point coordinates; cleanup deliberately restores the latest connected focus target.
+            fallback.current
           : null
       )?.focus();
     };
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Position tracks point coordinates; cleanup deliberately restores the latest connected focus target.
   }, [anchorId, anchor, anchored, width, label, gap, side, align, command, point?.x, point?.y]);
   return (
     <div

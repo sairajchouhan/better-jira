@@ -1,3 +1,4 @@
+/* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { useEffect, useMemo, useState } from "react";
 import type { MediaProps } from "./media-loader";
 import type { Attachment } from "./attachment-media";
@@ -114,6 +115,7 @@ function MediaFile({ node, issueKey, attachments, onSelect }: MediaProps) {
           setError(reason instanceof Error ? reason.message : "Could not load attachment");
       });
     return () => abort.abort();
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Only a changed local URL should restart the request, not mirror object replacements.
   }, [id, issueKey, local?.url, attempt, external]);
   const file = local ?? remote,
     size = intrinsic ?? mediaDimensions(node),

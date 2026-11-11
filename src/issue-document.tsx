@@ -1,3 +1,5 @@
+/* oxlint-disable react/immutability -- Session callbacks and mutable imperative models are intentionally owned outside React state. */
+/* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Debouncer } from "@tanstack/pacer";
 import { Command } from "cmdk";
@@ -110,6 +112,7 @@ function DocumentEditor({ issue, resource }: { issue: Issue; resource: IssueReso
     return () => {
       flush();
     };
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Flush uses the session closure; rerunning on render would flush pending edits before the debounce.
   }, []);
   useEffect(() => {
     if (stored === observed.current) return;
@@ -124,11 +127,13 @@ function DocumentEditor({ issue, resource }: { issue: Issue; resource: IssueReso
     try {
       localStorage.setItem(draftKey, JSON.stringify(next));
     } catch {}
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Flush uses the session closure; rerunning on render would flush pending edits before the debounce.
   }, [stored]);
   useEffect(() => {
     const unload = () => flush();
     window.addEventListener("pagehide", unload);
     return () => window.removeEventListener("pagehide", unload);
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Flush uses the session closure; rerunning on render would flush pending edits before the debounce.
   }, []);
   useLayoutEffect(() => {
     const input = titleInput.current;
@@ -382,6 +387,7 @@ function DocumentHeader({
     const node = root.current?.closest("[data-document]");
     node?.addEventListener("document-action", action);
     return () => node?.removeEventListener("document-action", action);
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- The document action listener retains its resource session; rename reads the live title ref.
   }, [resource.id, resource.showAuthors, issue.key]);
   const status = get()
     .boards.find((b) => b.id === issue.board)

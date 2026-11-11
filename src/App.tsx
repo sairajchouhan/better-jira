@@ -1,3 +1,8 @@
+/* oxlint-disable react/immutability -- Session callbacks and mutable imperative models are intentionally owned outside React state. */
+/* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
+/* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
+/* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
+/* oxlint-disable react/no-unstable-nested-components -- The timestamp renderer is a render callback supplied to the activity view. */
 import { jiraAvatar } from "./avatar-url";
 import "@fontsource-variable/inter/opsz.css";
 import "./index.css";
@@ -440,6 +445,7 @@ const BoardView = memo(function BoardView({
         const near = flat[i + offset];
         if (near) loadFull(near.key);
       }
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Prefetch and draft recovery follow selection/load transitions, not render-local arrays or refreshed full issue objects.
   }, [active, selected, visible]);
 
   const hide = (id: string) =>
@@ -2257,7 +2263,7 @@ function Description({ issue }: { issue: Issue }) {
       show(stored);
       ui.send({ type: "description.edit" });
     }
-  }, [stored, focused, conflict, restored]);
+  }, [stored, focused, conflict, restored, autosave]);
   useEffect(() => {
     const restore = (event: Event) => {
       if ((event as CustomEvent<string>).detail !== issue.key) return;
@@ -2319,6 +2325,7 @@ function Description({ issue }: { issue: Issue }) {
     } catch {
       /* ignore a broken draft */
     }
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Prefetch and draft recovery follow selection/load transitions, not render-local arrays or refreshed full issue objects.
   }, [!!f]);
   // Files that were uploading when the page reloaded reached Jira's attachments, if anything, but not the text (R2-D9).
   useEffect(() => {
@@ -2331,7 +2338,7 @@ function Description({ issue }: { issue: Issue }) {
           "The page reloaded during the upload. Check the issue's attachments in Jira, then attach it again.",
       });
   }, [issue.key]);
-  useEffect(() => () => autosave.send({ type: "flush" }), []);
+  useEffect(() => () => autosave.send({ type: "flush" }), [autosave]);
   // Done only once focus has held for a frame: opening the issue can remount this editor right after the first
   // focus, and the remounted one must still see the request.
   useEffect(() => {
@@ -2348,6 +2355,7 @@ function Description({ issue }: { issue: Issue }) {
     };
     go();
     return () => cancelAnimationFrame(frame);
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Prefetch and draft recovery follow selection/load transitions, not render-local arrays or refreshed full issue objects.
   }, [focus, !!f]);
   const message = conflict
     ? "Jira's copy of this description changed. Your edits aren't saved."

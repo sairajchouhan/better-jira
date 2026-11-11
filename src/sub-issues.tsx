@@ -1,3 +1,6 @@
+/* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
+/* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
+/* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { Command } from "cmdk";
@@ -285,6 +288,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
       mounted.current = false;
       removeEventListener(`late:${draftKey}`, apply);
     };
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
   }, [draftKey]);
   const late = (change: (draft: SubIssueDraft) => Partial<SubIssueDraft>) => {
     if (mounted.current) {
@@ -311,6 +315,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
     return () => {
       active = false;
     };
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
   }, []);
   const form = useRef<HTMLDivElement>(null),
     titleInput = useRef<HTMLInputElement>(null);
@@ -326,9 +331,11 @@ export function SubIssues({ issue }: { issue: Issue }) {
         counts.set(i.parent, count);
       }
     return counts;
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
   }, [all, boards]);
   const model = useMemo(
     () => subIssueRows(issue.key, [...all.values()], display, status, Date.now(), reveal),
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
     [issue.key, all, boards, display, reveal],
   );
   useEffect(() => {

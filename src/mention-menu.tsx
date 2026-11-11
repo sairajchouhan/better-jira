@@ -1,3 +1,6 @@
+/* oxlint-disable react/immutability -- Session callbacks and mutable imperative models are intentionally owned outside React state. */
+/* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
+/* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { Debouncer } from "@tanstack/pacer";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Avatar } from "./avatar";
@@ -70,14 +73,16 @@ export function MentionMenu({
       search.cancel();
       search.fn("", issueKey);
     } else search.maybeExecute(query, issueKey);
-  }, [query, issueKey]);
-  useEffect(() => () => search.cancel(), []);
+  }, [query, issueKey, cached, search]);
+  useEffect(() => () => search.cancel(), [search]);
+  // oxlint-disable-next-line react/exhaustive-effect-dependencies -- A new query resets keyboard selection.
   useEffect(() => setActive(0), [query]);
   const people = cached ?? last?.people.filter((p) => matches(p, query)) ?? [];
   const settled = !!cached || last?.query === query;
   const list = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Scroll the newly active result into view.
   }, [active]);
   // A typed name with a space that matches no one is ordinary text: the menu steps aside.
   const hidden = !people.length && (settled ? /\s/.test(query) : !!query);

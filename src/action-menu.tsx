@@ -1,3 +1,4 @@
+/* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 import {
   autoUpdate,
   flip,
@@ -265,6 +266,7 @@ function Branch({
       focus();
       keyboard.current = false;
     }
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Focus only on the open/positioned transition; the render-local helper changes each render.
   }, [open, isPositioned]);
   return (
     <FloatingNode id={nodeId}>

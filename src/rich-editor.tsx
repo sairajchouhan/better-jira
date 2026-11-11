@@ -1,3 +1,5 @@
+/* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
+/* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { useHotkeys, useHotkey, formatForDisplay } from "@tanstack/react-hotkeys";
 import { adfToText } from "./adf";
 import { discardLateMedia, documentHasMedia, lateMediaDiscarded } from "./document";
@@ -292,6 +294,7 @@ export function RichEditor(props: RichEditorProps) {
         if (view.current === editor) view.current = null;
       });
     };
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- The editor mounts once with initial props; toolbar measurement runs after each commit with a size guard.
   }, []);
   useEffect(() => {
     for (const media of mediaViews.current) media.updateContext();
@@ -448,6 +451,7 @@ export function RichEditor(props: RichEditorProps) {
       : undefined;
   // The first placement guesses the size; re-place once the toolbar is measured.
   const placed = useRef("");
+  // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- The editor mounts once with initial props; toolbar measurement runs after each commit with a size guard.
   useLayoutEffect(() => {
     const size = `${toolbar.current?.offsetWidth}x${toolbar.current?.offsetHeight}`;
     if (floating && size !== placed.current) {

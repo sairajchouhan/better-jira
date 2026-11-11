@@ -1,3 +1,5 @@
+/* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
+/* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 import { useEffect, useRef, useState } from "react";
 import { Command } from "cmdk";
 import { reminderDistance, reminderTime } from "./reminder-display";
@@ -220,6 +222,7 @@ export function ReminderDelivery() {
     };
     check();
     return () => clearTimeout(timer);
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Clock changes reschedule reminders after the tab wakes.
   }, [issues, toast, canEdit, clock]);
   return null;
 }

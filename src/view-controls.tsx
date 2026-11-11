@@ -111,7 +111,8 @@ export function BoardControls({ board }: { board: Board }) {
       document.removeEventListener("pointerdown", outside);
       window.removeEventListener("resize", position);
     };
-  }, [toolbar, board.id]);
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Changing boards repositions the toolbar for the new trigger.
+  }, [toolbar, board.id, ref]);
   return (
     <>
       <button

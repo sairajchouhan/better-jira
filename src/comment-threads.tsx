@@ -1,3 +1,5 @@
+/* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
+/* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 import { Debouncer } from "@tanstack/pacer";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Adf } from "./adf";
@@ -95,6 +97,7 @@ export function useRejectedComment(
     };
     addEventListener(REJECTED_COMMENT, listen);
     return () => removeEventListener(REJECTED_COMMENT, listen);
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- The joined parent IDs track membership without reattaching for each new array identity.
   }, [key, ids, draftKey]);
 }
 
@@ -120,7 +123,8 @@ export function CommentThreads(props: Props) {
     const gone = [...edits.current].filter(([id]) => !ids.has(id));
     for (const [id] of gone) edits.current.delete(id);
     if (gone.length) setLost((list) => [...list, ...gone.map(([id, body]) => ({ key, id, body }))]);
-  }, [present]);
+  }, [present, key]);
+  // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Leaving an issue clears its tracked comment edits.
   useEffect(() => () => edits.current.clear(), [key]);
   const trackEdit = (id: string, body: AdfDocument | null) =>
     body ? edits.current.set(id, body) : edits.current.delete(id);

@@ -148,7 +148,7 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
     );
     expect(pills.map((p) => p[0])).toEqual([903.1, 903.1, 903.1, 903.1, 903.1]);
     expect(pills.map((p) => p[1])).toEqual([154, 186, 218, 250, 424]);
-    expect(pills.map((p) => p.slice(2))).toEqual(Array(5).fill([28, 931.1, 1]));
+    expect(pills.map((p) => p.slice(2))).toEqual(Array.from({ length: 5 }, () => [28, 931.1, 1]));
     // Hover: after a beat, "Change status S" in a menu-surface tooltip centred 8px under the pill; the native title is parked so it does not double up.
     await page.hover("#prop-status");
     await page.waitFor(`!!document.querySelector('[role=tooltip].app-tooltip')`, 2000);
