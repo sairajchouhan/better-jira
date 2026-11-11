@@ -22,6 +22,8 @@ const server = serve({
   port: serverConfiguration().port,
   routes: {
     "/*": index,
+    "/api/views": localOnly(async (req) => mirror.views.handle(req, (await mirror.clientInfo()).namespace)),
+    "/api/views/:id": localOnly(async (req: BunRequest<"/api/views/:id">) => mirror.views.handle(req, (await mirror.clientInfo()).namespace, req.params.id)),
     "/api/boards": {
       GET: localOnly(() => Response.json(mirror.boards())),
       POST: localOnly(async (req) => {

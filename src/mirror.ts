@@ -1,4 +1,5 @@
 import { jiraAvatar } from "./avatar-url";
+import { viewRepository } from "./view-repository";
 import { Database } from "bun:sqlite";
 import { jira, JiraError } from "./jira";
 import { boardFromInput } from "./config";
@@ -48,6 +49,7 @@ const PAGE = 100;
 const PARALLEL = 4;
 
 const db = new Database(configuration.cachePath, { create: true, strict: true });
+export const views = viewRepository(db);
 db.run("PRAGMA journal_mode = WAL");
 db.run(`CREATE TABLE IF NOT EXISTS issues (
   key TEXT PRIMARY KEY, board INTEGER NOT NULL, seen INTEGER NOT NULL, slim TEXT NOT NULL, full TEXT NOT NULL)`);

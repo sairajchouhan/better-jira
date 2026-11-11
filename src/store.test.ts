@@ -220,7 +220,7 @@ test("browser history restores issue selection without pushing another navigatio
             ? { site: "https://example.atlassian.net", user: { id: "me", name: "Me" } }
             : String(input) === "/api/boards"
               ? boards
-              : String(input) === "/api/issues"
+              : String(input).startsWith("/api/views") ? [] : String(input) === "/api/issues"
                 ? issues
                 : { entries: {}, progress: { total: 0, pending: 0, completed: 0, errors: 0 } },
         ),
@@ -865,3 +865,28 @@ test("sync review 3-2: a write Jira can't settle yet backs off behind other issu
     globalThis.fetch = realFetch;
   }
 }, 20_000);
+
+test("opening saved views and changing their overlay never writes board preferences", async () => {
+  const { get, set, openSavedView, changePreferences, navigate, preferencesFor, effectivePreferencesFor } = await import("./store");
+  const { defaultPreferences } = await import("./view-model");
+  const p = defaultPreferences();
+  const view = {id:"identity-test",board:1,kind:"custom" as const,name:"Identity",description:"",icon:"filter",color:"gray",filters:{...p.filters,children:[{id:"saved",field:"status" as const,op:"is" as const,values:["todo"]}]},display:{...p.display,openIn:"page" as const},scope:p.scope,mine:false,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  set({preferences:{1:p}, savedViews:[view]});
+  const before = JSON.stringify(get().preferences);
+  openSavedView(view);
+  expect(get().activeViewId).toBe(view.id);
+  expect(preferencesFor(1).filters.children).toHaveLength(0);
+  expect(effectivePreferencesFor(1).filters.children).toHaveLength(1);
+  changePreferences(1,{filters:{...p.filters,children:[{id:"temp",field:"labels",op:"is",values:["urgent"]}]}});
+  expect(JSON.stringify(get().preferences)).toBe(before);
+  expect(effectivePreferencesFor(1).filters.children).toHaveLength(2);
+  const second = {...view,id:"second-identity",display:{...view.display,layout:"list" as const}};
+  set({savedViews:[view,second]});
+  openSavedView(second);
+  expect(get().activeViewId).toBe(second.id);
+  expect(get().overlayFilters.children).toHaveLength(0);
+  expect(JSON.stringify(get().preferences)).toBe(before);
+  navigate({board:1});
+  expect(get().activeViewId).toBeNull();
+  expect(JSON.stringify(get().preferences)).toBe(before);
+});

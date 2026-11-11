@@ -1,3 +1,7 @@
+import { Database } from "bun:sqlite";
+import { viewRepository } from "../src/view-repository";
+const viewDb = new Database(":memory:");
+const views = viewRepository(viewDb);
 /** Disposable browser-test data. No Jira client, credentials, or cache are imported. */
 import index from "../src/index.html";
 import editorMediaFixture from "./editor-media-fixture.html";
@@ -684,6 +688,8 @@ async function handle(req: Request) {
   const url = new URL(req.url),
     path = url.pathname;
   if (path === "/__fixture" && req.method === "POST") {
+    viewDb.run("DELETE FROM saved_views");
+    viewDb.run("DELETE FROM view_imports");
     const settings = await req.json();
     clientFailures = settings.clientFailures ?? 0;
     detailFailures = settings.detailFailures ?? 0;
@@ -837,6 +843,8 @@ const server = Bun.serve({
   port: Number(process.env.FIXTURE_PORT ?? 3001),
   routes: {
     "/*": index,
+    "/api/views": (req) => views.handle(req, "fixture"),
+    "/api/views/:id": (req) => views.handle(req, "fixture", req.params.id),
     "/api/events": (req) => {
       server.timeout(req, 0);
       return new Response(

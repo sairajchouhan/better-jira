@@ -185,13 +185,16 @@ export type JiraOptions = {
   versions: Record<string, { id: string; name: string }[]>;
   types?: Record<string, { name: string; hierarchyLevel: number }[]>;
 };
-export type SavedView = {
-  id: string;
-  board: number;
-  name: string;
-  preferences: Preferences;
-  mine: boolean;
-};
+export type { SavedView } from "./saved-view-model";
+import {
+  type SavedView,
+  type ViewDraft,
+  migrateLegacyViews,
+  emptyOverlay,
+  mergeFilters,
+  encodeOverlay,
+  decodeOverlay,
+} from "./saved-view-model";
 
 export const ME: User = { id: "", name: "Me" };
 
@@ -212,11 +215,21 @@ type State = {
   editDesc: boolean;
   perf: string;
   /** A transient confirmation, e.g. after creating an issue. */
-  toast: { text: string; key?: string; undo?: boolean | "inbox"; detail?: string } | null;
+  toast: {
+    text: string;
+    key?: string;
+    undo?: boolean | "inbox";
+    detail?: string;
+  } | null;
   preferences: Record<number, Preferences>;
   defaults: Record<number, Display>;
   toolbar: "display" | "filter" | "advanced" | null;
-  propertySync: { total: number; pending: number; completed: number; errors: number };
+  propertySync: {
+    total: number;
+    pending: number;
+    completed: number;
+    errors: number;
+  };
   clock: number;
   details: boolean;
   issuePropertiesHidden: boolean;
@@ -238,6 +251,10 @@ type State = {
   redoCount: number;
   fullErrors: Map<string, string>;
   savedViews: SavedView[];
+  activeViewId: string | null;
+  overlayFilters: import("./view-model").FilterGroup;
+  viewPreferences: Preferences | null;
+  effectiveViewPreferences: Preferences | null;
   favorites: string[];
   site: string;
   namespace: string;
@@ -315,7 +332,11 @@ let state: State = {
   undoCount: 0,
   redoCount: 0,
   fullErrors: new Map(),
-  savedViews: readSavedViews(),
+  savedViews: [],
+  activeViewId: null,
+  overlayFilters: emptyOverlay(),
+  viewPreferences: null,
+  effectiveViewPreferences: null,
   favorites: readFavorites(),
   site: "",
   namespace: "",
@@ -341,6 +362,24 @@ let perfPosts = 0;
 function commit(patch: Partial<State>) {
   if (patch.perf !== undefined) perfPosts++;
   state = { ...state, ...patch };
+  if (patch.savedViews || patch.activeViewId !== undefined || patch.overlayFilters) {
+    const v = state.savedViews.find((v) => v.id === state.activeViewId);
+    state.viewPreferences = v
+      ? {
+          ...defaultPreferences(),
+          scope: v.scope,
+          display: v.display,
+          filters: state.overlayFilters,
+        }
+      : null;
+    state.effectiveViewPreferences =
+      v && state.viewPreferences
+        ? {
+            ...state.viewPreferences,
+            filters: mergeFilters(v.filters, state.overlayFilters),
+          }
+        : null;
+  }
   try {
     if (patch.board) localStorage.setItem(preferenceKey("board"), String(patch.board));
     if (patch.view) localStorage.setItem(preferenceKey("view"), patch.view);
@@ -358,16 +397,6 @@ function commit(patch: Partial<State>) {
       state = { ...state, perf: "Could not save view preferences in this browser" };
     }
   }
-  if (patch.savedViews)
-    try {
-      localStorage.setItem(
-        preferenceKey("better-jira:saved-views:v1"),
-        JSON.stringify(patch.savedViews),
-      );
-    } catch {
-      perfPosts++;
-      state = { ...state, perf: "Could not save views in this browser" };
-    }
   if (patch.favorites)
     try {
       localStorage.setItem(
@@ -381,7 +410,9 @@ function commit(patch: Partial<State>) {
   if (
     navigationReady &&
     !restoringNavigation &&
-    (patch.board !== undefined ||
+    (patch.activeViewId !== undefined ||
+      patch.overlayFilters !== undefined ||
+      patch.board !== undefined ||
       patch.selected !== undefined ||
       patch.panel !== undefined ||
       patch.view !== undefined ||
@@ -409,7 +440,13 @@ ui.subscribe(({ context }) => {
   if (patch.overlay === null) Object.assign(patch, { target: null, issueOptionsPoint: null });
   // A link's `view` opens that issue once; it lasts until the panel closes and never becomes the board's preference (R2-D4).
   if (patch.view && restoringNavigation) linkView = true;
-  else if (patch.view) {
+  else if (patch.view && state.activeViewId) {
+    const v = state.savedViews.find((v) => v.id === state.activeViewId);
+    if (v && v.display.openIn !== patch.view)
+      void updateSavedView(v.id, {
+        display: { ...v.display, openIn: patch.view },
+      }).catch(viewError);
+  } else if (patch.view) {
     linkView = false;
     // Each board remembers how its issues open.
     const id = context.board,
@@ -435,6 +472,19 @@ export function navigate(to: {
   document?: string | null;
   inbox?: boolean;
 }) {
+  if (
+    !restoringNavigation &&
+    state.activeViewId &&
+    (to.board !== undefined || to.inbox === true)
+  ) {
+    restoringNavigation = true;
+    commit({ activeViewId: null, overlayFilters: emptyOverlay() });
+    restoringNavigation = false;
+    to = {
+      ...to,
+      view: to.view ?? state.preferences[to.board ?? state.board]?.display.openIn ?? "side",
+    };
+  }
   if (to.selected) to = { ...to, selected: currentKey(to.selected) };
   const view =
     to.view ??
@@ -442,6 +492,7 @@ export function navigate(to: {
       ? (state.preferences[to.board]?.display.openIn ?? state.defaults[to.board]?.openIn ?? "side")
       : undefined);
   ui.send({ type: "navigate", ...to, ...(view ? { view } : {}) });
+  if (navigationReady && !restoringNavigation) syncNavigation();
 }
 const app = createActor(appMachine.provide({ actors: { load: fromPromise(loadApplication) } }), {
   inspect: inspector("app"),
@@ -556,10 +607,37 @@ if (typeof window !== "undefined")
   Object.assign(window, { machines: { ui, app, storage }, queryClient, loadFull });
 
 const fallbackPreferences = defaultPreferences();
-export const preferencesFor = (board: number) => state.preferences[board] ?? fallbackPreferences;
+export const preferencesFor = (board: number) =>
+  (board === state.board ? state.viewPreferences : null) ??
+  state.preferences[board] ??
+  fallbackPreferences;
 export const usePreferences = (board: number) =>
-  useStore((s) => s.preferences[board] ?? fallbackPreferences);
+  useStore(
+    (s) =>
+      (board === s.board ? s.viewPreferences : null) ??
+      s.preferences[board] ??
+      fallbackPreferences,
+  );
+export const effectivePreferencesFor = (board: number) =>
+  (board === state.board ? state.effectiveViewPreferences : null) ?? preferencesFor(board);
+export const useEffectivePreferences = (board: number) =>
+  useStore(
+    (s) =>
+      (board === s.board ? s.effectiveViewPreferences : null) ??
+      s.preferences[board] ??
+      fallbackPreferences,
+  );
 export function changePreferences(board: number, patch: Partial<Preferences>) {
+  if (state.activeViewId && board === state.board) {
+    if (patch.filters) commit({ overlayFilters: patch.filters });
+    const { display, scope } = patch;
+    if (display || scope)
+      void updateSavedView(state.activeViewId, {
+        ...(display ? { display } : {}),
+        ...(scope ? { scope } : {}),
+      }).catch(viewError);
+    return;
+  }
   const prefs = { ...preferencesFor(board), ...patch };
   set({ preferences: { ...state.preferences, [board]: prefs } });
   if (board === state.board) navigate({ view: prefs.display.openIn });
@@ -571,6 +649,7 @@ export function changeDisplay(board: number, patch: Partial<Display>) {
   changePreferences(board, { display });
 }
 export async function saveDefault(board: number) {
+  if (state.activeViewId) return;
   const display = preferencesFor(board).display;
   try {
     const defaults = { ...state.defaults, [board]: structuredClone(display) };
@@ -615,7 +694,11 @@ function migratePreferences(namespace: string) {
   }
 }
 async function loadApplication() {
-  const client = await fetchJson<{ site: string; user: User; writable?: boolean }>("/api/client");
+  const client = await fetchJson<{
+    site: string;
+    user: User;
+    writable?: boolean;
+  }>("/api/client");
   if (!client.site || !client.user?.id || !client.user.name)
     throw new Error("Jira account setup is incomplete");
   Object.assign(ME, client.user);
@@ -758,7 +841,7 @@ async function loadApplication() {
     full,
     defaults,
     preferences,
-    savedViews: readSavedViews(),
+    savedViews: [],
     favorites: readFavorites(),
     undoCount: undo.length,
     redoCount: redo.length,
@@ -855,7 +938,11 @@ async function loadApplication() {
           }),
         )
       : (othersCreating.clear(), replay()));
+  await refreshSavedViews(true);
   if (!navigationReady) {
+    window.addEventListener("focus", () => {
+      void refreshSavedViews().catch(viewError);
+    });
     restoreNavigation();
     navigationReady = true;
     syncNavigation(true);
@@ -1136,6 +1223,10 @@ function syncNavigation(replace = false) {
     url.searchParams.get("document") !== state.document
   )
     url.hash = "";
+  url.pathname = state.activeViewId ? `/view/${encodeURIComponent(state.activeViewId)}` : "/";
+  if (state.activeViewId && state.overlayFilters.children.length)
+    url.searchParams.set("filter", encodeOverlay(state.overlayFilters));
+  else url.searchParams.delete("filter");
   url.searchParams.set("board", String(state.board));
   if (state.panel && state.selected) {
     url.searchParams.set("issue", state.selected);
@@ -1158,21 +1249,28 @@ function restoreNavigation() {
     wanted = params.get("issue"),
     // A link to an issue's app key opens the issue Jira made for it, wherever it was created (sync check 7).
     issue = state.issues.get(currentKey(wanted ?? ""));
-  const board = issue?.board ?? Number(params.get("board"));
+  const routeId = /^\/view\/([^/]+)$/.exec(new URL(location.href).pathname)?.[1];
+  const active = state.savedViews.find((v) => v.id === routeId);
+  const board = active?.board ?? issue?.board ?? Number(params.get("board"));
   restoringNavigation = true;
+  commit({
+    activeViewId: active?.id ?? null,
+    overlayFilters: active ? decodeOverlay(params.get("filter")) : emptyOverlay(),
+  });
   navigate({
     ...(state.boards.some((b) => b.id === board) ? { board } : {}),
     selected: issue?.key ?? null,
     panel: !!issue,
     document: issue ? params.get("document") : null,
     inbox: params.has("inbox"),
+    ...(active ? { view: active.display.openIn } : {}),
     ...(params.get("view") === "page" || params.get("view") === "side"
       ? { view: params.get("view") as View }
       : {}),
   });
   // mine.set also leaves the inbox, so send it only when My issues actually changes.
-  if (!params.has("inbox") && get().mine !== params.has("mine"))
-    ui.send({ type: "mine.set", mine: params.has("mine") });
+  if (!params.has("inbox") && get().mine !== (active?.mine ?? params.has("mine")))
+    ui.send({ type: "mine.set", mine: active?.mine ?? params.has("mine") });
   restoringNavigation = false;
   if (wanted && !issue) ui.send({ type: "toast.show", text: `Issue ${wanted} not found` });
 }
@@ -1672,7 +1770,11 @@ async function flush() {
   }
 }
 export const REJECTED_COMMENT = "better-jira:comment-rejected";
-export type RejectedComment = { key: string; parentId?: string; body: AdfDocument };
+export type RejectedComment = {
+  key: string;
+  parentId?: string;
+  body: AdfDocument;
+};
 /** Puts a refused comment back into the saved draft at `draftKey`, after anything typed since, and returns it. */
 export function restoreRejectedDraft(draftKey: string, body: AdfDocument): AdfDocument {
   let draft = normalizeDocument("");
@@ -2227,29 +2329,6 @@ export function beginCreate(draft: IssueDraft = {}) {
     draft: { ...(status ? { status } : {}), ...(state.mine ? { assignee: ME } : {}), ...draft },
   });
 }
-function readSavedViews(): SavedView[] {
-  try {
-    const items = JSON.parse(savedValue("better-jira:saved-views:v1") ?? "[]");
-    return Array.isArray(items)
-      ? items
-          .filter(
-            (v) =>
-              v &&
-              typeof v.id === "string" &&
-              typeof v.name === "string" &&
-              v.name.trim() &&
-              typeof v.board === "number",
-          )
-          .map((v) => ({
-            ...v,
-            preferences: parsePreferences(v.preferences),
-            mine: v.mine === true,
-          }))
-      : [];
-  } catch {
-    return [];
-  }
-}
 /** Boards are favourited once, not per tab; older `board:<id>:<tab>` entries collapse into `board:<id>`. */
 function readFavorites(): string[] {
   try {
@@ -2279,27 +2358,160 @@ if (typeof addEventListener === "function")
     if (event.key === preferenceKey("better-jira:favorites:v1"))
       set({ favorites: readFavorites() });
   });
-export function saveView(name: string) {
-  if (!name.trim()) return;
-  const view: SavedView = {
-    id: crypto.randomUUID(),
-    name: name.trim(),
-    board: state.board,
-    preferences: structuredClone(preferencesFor(state.board)),
-    mine: state.mine,
-  };
-  set({ savedViews: [...state.savedViews, view], perf: `Saved view ${view.name}` });
+const viewError = (e: unknown) =>
+  set({ perf: e instanceof Error ? e.message : "Could not save view" });
+async function viewRequest<T>(path = "", method = "GET", body?: unknown): Promise<T> {
+  const response = await fetch(`/api/views${path}`, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  if (!response.ok)
+    throw new Error(
+      `Could not ${method === "GET" ? "load" : "save"} views (${response.status})`,
+    );
+  return response.status === 204 ? (undefined as T) : response.json();
 }
-export function openSavedView(view: SavedView) {
-  set({ preferences: { ...state.preferences, [view.board]: structuredClone(view.preferences) } });
-  navigate({
-    board: view.board,
+export async function refreshSavedViews(migrate = false) {
+  if (migrate) {
+    const key = preferenceKey("better-jira:saved-views:v1");
+    const marker = `${key}:imported`;
+    if (localStorage.getItem(marker) !== "1") {
+      const legacy = migrateLegacyViews(localStorage.getItem(key));
+      await viewRequest("/import", "POST", legacy);
+      // Retain the old source as a backup; never overwrite it with server state.
+      localStorage.setItem(marker, "1");
+    }
+  }
+  const savedViews = await viewRequest<SavedView[]>();
+  if (viewWrites.size) return; // A focus read must not replace a display edit still being saved.
+  set({
+    savedViews,
+    favorites: readFavorites().filter(
+      (id) => !id.startsWith("view:") || savedViews.some((v) => `view:${v.id}` === id),
+    ),
+  });
+  if (state.activeViewId && !savedViews.some((v) => v.id === state.activeViewId))
+    navigate({ board: state.board });
+}
+export function createViewDraft(
+  kind: SavedView["kind"] = "custom",
+  board = state.board,
+): ViewDraft {
+  const p = effectivePreferencesFor(board);
+  return structuredClone({
+    board,
+    kind,
+    name: "",
+    description: "",
+    icon: "filter",
+    color: "gray",
+    filters: p.filters,
+    display: p.display,
+    scope: p.scope,
+    mine: state.mine,
+  });
+}
+export function editViewDraft(id: string): ViewDraft {
+  const v = state.savedViews.find((v) => v.id === id);
+  if (!v) throw new Error("View not found");
+  const { createdAt: _created, updatedAt: _updated, ...draft } = structuredClone(v);
+  return draft;
+}
+export function duplicateViewDraft(id: string): ViewDraft {
+  const { id: _id, ...draft } = editViewDraft(id);
+  return { ...draft, name: "", description: "" };
+}
+export async function createSavedView(draft: ViewDraft): Promise<string> {
+  const view = await viewRequest<SavedView>("", "POST", draft);
+  set({
+    savedViews: [...state.savedViews.filter((v) => v.id !== view.id), view],
+  });
+  return view.id;
+}
+const viewWrites = new Map<string, Promise<unknown>>();
+export async function updateSavedView(id: string, patch: Partial<ViewDraft>): Promise<string> {
+  const old = state.savedViews.find((v) => v.id === id);
+  if (!old) throw new Error("View not found");
+  const optimistic = { ...old, ...patch, id };
+  set({
+    savedViews: state.savedViews.map((v) => (v.id === id ? optimistic : v)),
+  });
+  const request = (viewWrites.get(id) ?? Promise.resolve())
+    .catch(() => {})
+    .then(() => viewRequest<SavedView>(`/${encodeURIComponent(id)}`, "PUT", patch));
+  viewWrites.set(id, request);
+  try {
+    const view = await request;
+    set({
+      savedViews: state.savedViews.map((v) => (v === optimistic ? view : v)),
+    });
+    return id;
+  } catch (e) {
+    set({
+      savedViews: state.savedViews.map((v) => (v === optimistic ? old : v)),
+    });
+    throw e;
+  } finally {
+    if (viewWrites.get(id) === request) viewWrites.delete(id);
+  }
+}
+export async function saveViewDraft(draft: ViewDraft): Promise<string> {
+  return draft.id ? updateSavedView(draft.id, draft) : createSavedView(draft);
+}
+export async function deleteSavedView(id: string) {
+  await viewRequest(`/${encodeURIComponent(id)}`, "DELETE");
+  if (state.activeViewId === id) navigate({ board: state.board });
+  set({
+    savedViews: state.savedViews.filter((v) => v.id !== id),
+    favorites: readFavorites().filter((v) => v !== `view:${id}`),
+  });
+}
+export function clearOverlay() {
+  set({ overlayFilters: emptyOverlay() });
+}
+export async function saveOverlayToView() {
+  const v = state.savedViews.find((v) => v.id === state.activeViewId);
+  if (!v) return;
+  await updateSavedView(v.id, {
+    filters: mergeFilters(v.filters, state.overlayFilters),
+  });
+  clearOverlay();
+}
+export async function createViewFromCurrent(
+  name: string,
+  kind: SavedView["kind"] = "custom",
+): Promise<string> {
+  const id = await createSavedView({ ...createViewDraft(kind), name });
+  openSavedView(id);
+  return id;
+}
+export async function saveView(name: string) {
+  try {
+    return await createViewFromCurrent(name);
+  } catch (e) {
+    viewError(e);
+  }
+}
+export function openSavedView(view: SavedView | string) {
+  const v = typeof view === "string" ? state.savedViews.find((v) => v.id === view) : view;
+  if (!v) return;
+  // One history entry, with identity installed before UI view changes can persist defaults.
+  const previous = restoringNavigation;
+  restoringNavigation = true;
+  commit({ activeViewId: v.id, overlayFilters: emptyOverlay() });
+  ui.send({
+    type: "navigate",
+    board: v.board,
     selected: null,
     panel: false,
-    view: view.preferences.display.openIn,
+    inbox: false,
+    view: v.display.openIn,
   });
+  ui.send({ type: "mine.set", mine: v.mine });
   ui.send({ type: "toolbar.close" });
-  ui.send({ type: "mine.set", mine: view.mine });
+  restoringNavigation = previous;
+  if (navigationReady) syncNavigation();
 }
 
 function patchIssue(key: string, patch: Partial<Issue>) {
@@ -2385,7 +2597,9 @@ export const actions = {
         key,
         document
           ? {
-              resources: issue?.resources?.map((r) => (r.id === document ? { ...r, reminder } : r)),
+              resources: issue?.resources?.map((r) =>
+                r.id === document ? { ...r, reminder } : r,
+              ),
             }
           : { reminder },
       ),

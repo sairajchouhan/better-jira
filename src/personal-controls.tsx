@@ -1,3 +1,4 @@
+import { updateSavedView, deleteSavedView } from "./saved-views";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
 /* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { SubIssues, statusOf } from "./sub-issues";
@@ -1574,7 +1575,7 @@ export function SaveViewButton() {
               />
             </label>
             <p className="mt-2 text-[12px] text-fg-3">
-              Saves this board's filters, layout, and issue scope in your browser.
+              Saves this board's filters, layout, and issue scope on this app server.
             </p>
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" className={BUTTON} onClick={() => setOpen(false)}>
@@ -1626,9 +1627,7 @@ export function SavedViews() {
             onSubmit={(e) => {
               e.preventDefault();
               if (!name.trim()) return;
-              set({
-                savedViews: views.map((v) => (v.id === editing ? { ...v, name: name.trim() } : v)),
-              });
+              void updateSavedView(editing, { name: name.trim() }).catch(e => set({ perf: String(e) }));
               setEditing(null);
             }}
           >
@@ -1645,7 +1644,7 @@ export function SavedViews() {
                 onClick={() => {
                   const view = views.find((v) => v.id === editing);
                   if (!confirm(`Remove the view "${view?.name}"? This can't be undone.`)) return;
-                  set({ savedViews: views.filter((v) => v.id !== editing) });
+                  void deleteSavedView(editing).catch(e => set({ perf: String(e) }));
                   setEditing(null);
                 }}
               >

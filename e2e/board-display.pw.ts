@@ -53,7 +53,7 @@ test("the default board: My issues, board details, saved views and a fast layout
     const view = { id: "v1", board: 1, name: "Mine", mine: false, preferences: {} };
     const key = PREFS_KEY.replace("views:v1", "saved-views:v1");
     await page.eval(
-      `localStorage.setItem(${JSON.stringify(key)},${JSON.stringify(JSON.stringify([view]))})`,
+      `localStorage.removeItem(${JSON.stringify(key + ":imported")});localStorage.setItem(${JSON.stringify(key)},${JSON.stringify(JSON.stringify([view]))})`,
     );
     await page.reload();
     await page.waitFor(`!!document.querySelector('[aria-label="Edit view Mine"]')`);

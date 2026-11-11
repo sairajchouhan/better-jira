@@ -1,3 +1,4 @@
+import { useEffectiveMine } from "./saved-views";
 /* oxlint-disable react/immutability -- Session callbacks and mutable imperative models are intentionally owned outside React state. */
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
@@ -68,6 +69,7 @@ import {
   undoEdit,
   redoEdit,
   usePreferences,
+  useEffectivePreferences,
   type Board,
   type Issue,
   type User,
@@ -372,11 +374,11 @@ const BoardView = memo(function BoardView({
   selected: string | null;
 }) {
   const issues = useStore((s) => s.issues);
-  const mine = useStore((s) => s.mine);
+  const mine = useEffectiveMine();
   const query = useStore((s) => s.query);
   const details = useStore((s) => s.details);
   const panel = useStore((s) => s.panel);
-  const prefs = usePreferences(board.id);
+  const prefs = useEffectivePreferences(board.id);
   const d = prefs.display;
   const [expanded, setExpanded] = useState<string[]>([]);
   const [hiddenOpen, setHiddenOpen] = useState(true);
