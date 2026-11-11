@@ -1171,7 +1171,6 @@ export function PersonalIssueDetails({ issue }: { issue: Issue }) {
     });
   const full = useStore((s) => s.full.get(issue.key));
   const { visible, embedded } = attachmentSplit(issue, full?.fields);
-  useStore((s) => s.issues);
   return (
     <div className="mt-5 space-y-3 text-[12px]">
       {/* Linear (RAJ-52): 26px below the last paragraph, 6px left of the text and 16px above the sub-issues header, reaction pills 8px apart, then the round add-reaction and attach buttons. */}
