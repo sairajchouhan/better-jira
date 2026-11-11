@@ -6,7 +6,8 @@ import { reminderDistance, reminderTime } from "./reminder-display";
 import { ActionMenu } from "./action-menu";
 import { Icon } from "./icons";
 import { MenuSurface, MENU_ITEM, MENU_INPUT } from "./menu-surface";
-import { actions, get, set, ui, useStore, type Issue } from "./store";
+import { actions, set, ui, useStore, type Issue } from "./store";
+import { kept, useCommand } from "./commands";
 
 type Preset = { label: string; at: string };
 export function ReminderPicker({ issue }: { issue: Issue }) {
@@ -14,10 +15,12 @@ export function ReminderPicker({ issue }: { issue: Issue }) {
     [query, setQuery] = useState(""),
     [presets, setPresets] = useState<Preset[]>([]),
     [parsed, setParsed] = useState<string | null>(null),
-    [custom, setCustom] = useState(() => get().issueOptionsStart === "reminder");
-  useEffect(() => {
-    if (get().issueOptionsStart === "reminder") set({ issueOptionsStart: null });
-  }, []);
+    [custom, setCustom] = useState(() => kept("issue-options-start") === "reminder");
+  useCommand("issue-options-start", (start) => {
+    if (start !== "reminder") return;
+    setCustom(true);
+    return true;
+  });
   const keyboardChoice = useRef(false);
   const close = () => {
     ui.send({ type: "overlay.close" });

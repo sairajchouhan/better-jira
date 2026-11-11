@@ -25,6 +25,7 @@ import {
 import type { DocumentRevision, IssueResource } from "./issue-resource";
 import { documentURL } from "./issue-resources";
 import { ActionMenu, type ActionEntry } from "./action-menu";
+import { useCommand } from "./commands";
 import { emojiOptions } from "./reactions";
 import { reminderPresets, reminderTime } from "./reminder-display";
 const BUTTON = "rounded px-2 py-1.5 text-[13px] text-fg-2 hover:bg-hover";
@@ -360,33 +361,27 @@ function DocumentHeader({
     },
     { name: "Delete", icon: "trash", danger: true, run: () => setDeleting(true) },
   ];
-  useEffect(() => {
-    const action = (event: Event) => {
-      const name = (event as CustomEvent<string>).detail;
-      if (name === "rename") rename();
-      if (name === "remind") setReminding("presets");
-      if (name === "favorite") toggleFavorite(`document:${resource.id}`);
-      if (name === "authors")
-        actions.documentProperties(issue.key, resource.id, { showAuthors: !resource.showAuthors });
-      if (name.startsWith("copy-"))
-        void latestCopy.current(
-          (
-            {
-              "copy-url": "url",
-              "copy-title": "title",
-              "copy-link": "link",
-              "copy-markdown": "markdown",
-            } as const
-          )[name as "copy-url"],
-        );
-      if (name === "subscribers" && root.current)
-        setPeople({ anchor: root.current, kind: "subscribers" });
-    };
-    const node = root.current?.closest("[data-document]");
-    node?.addEventListener("document-action", action);
-    return () => node?.removeEventListener("document-action", action);
-    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- The document action listener retains its resource session; rename reads the live title ref.
-  }, [resource.id, resource.showAuthors, issue.key]);
+  useCommand("document-action", (name) => {
+    if (!root.current?.closest("[data-document]")) return;
+    if (name === "rename") rename();
+    if (name === "remind") setReminding("presets");
+    if (name === "favorite") toggleFavorite(`document:${resource.id}`);
+    if (name === "authors")
+      actions.documentProperties(issue.key, resource.id, { showAuthors: !resource.showAuthors });
+    if (name.startsWith("copy-"))
+      void latestCopy.current(
+        (
+          {
+            "copy-url": "url",
+            "copy-title": "title",
+            "copy-link": "link",
+            "copy-markdown": "markdown",
+          } as const
+        )[name as "copy-url"],
+      );
+    if (name === "subscribers") setPeople({ anchor: root.current!, kind: "subscribers" });
+    return true;
+  });
   const status = statusById(
     get().boards.find((b) => b.id === issue.board),
     issue.status,

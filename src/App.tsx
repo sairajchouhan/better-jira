@@ -131,6 +131,7 @@ import {
   useLinearHotkeys,
 } from "./shortcuts";
 import { Confirm, issueAnchor } from "./menu-surface";
+import { useCommand } from "./commands";
 import { InboxIssueActions, InboxList, InboxPane, undoInboxToast, useInboxBadge } from "./inbox";
 import { PickerRow, PropertyMenu } from "./property-menu";
 import { descriptionSession, type DescriptionPorts } from "./description-session";
@@ -247,6 +248,9 @@ function ActivityIcon({ row, issue }: { row: ActivityRow; issue: Issue }) {
   if (row.field === "assignee") return <Avatar user={last.after as User | null} size={14} />;
   return <Avatar user={row.actor} size={14} />;
 }
+/** Focuses an owner's element for a command; takes the command only when the element is there. */
+const focusNode = (node: HTMLElement | null | undefined) =>
+  node ? (node.focus(), true as const) : undefined;
 const statusOf = (i: Issue) => statusById(boardOf(i.key), i.status);
 
 function Hotkeys() {
@@ -1214,6 +1218,7 @@ function BoardHeader() {
   const prefs = useViewSettings(board!.id);
   const finding = useStore((s) => s.findInView);
   const findRef = useRef<HTMLInputElement>(null);
+  useCommand("focus-find", () => focusNode(findRef.current));
   useHotkey(
     "Escape",
     () => {
@@ -1832,6 +1837,14 @@ function Stepper({ issueKey }: { issueKey: string }) {
 function Title({ issue, className }: { issue: Issue; className: string }) {
   const ref = useRef<HTMLTextAreaElement>(null),
     start = useRef("");
+  useCommand("focus-title", () => {
+    const node = ref.current;
+    if (!node) return;
+    node.focus();
+    // Linear puts the caret at the end, so typing appends (R2-issue-fields-D6).
+    node.setSelectionRange(node.value.length, node.value.length);
+    return true;
+  });
   useEffect(() => {
     if (ref.current && document.activeElement !== ref.current) ref.current.value = issue.summary;
   }, [issue.summary]);
@@ -2286,6 +2299,12 @@ function Description({ issue }: { issue: Issue }) {
 function Activity({ issue, f }: { issue: Issue; f: any }) {
   const [composer, setComposer] = useState(0),
     composerFiles = useDraftFiles(issue.key);
+  const subscribersRef = useRef<HTMLButtonElement>(null),
+    commentRef = useRef<HTMLDivElement>(null);
+  useCommand("focus-subscribers", () => focusNode(subscribersRef.current));
+  useCommand("focus-comment", () =>
+    focusNode(commentRef.current?.querySelector<HTMLElement>("#comment")),
+  );
   const followedAnchor = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (!f || !location.hash) return;
@@ -2364,6 +2383,7 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
           {subscribed ? "Unsubscribe" : "Subscribe"}
         </button>
         <button
+          ref={subscribersRef}
           id="issue-subscribers"
           aria-label="Change subscribers"
           title={`Change subscribers (${shortcutLabel("subscribers")})`}
@@ -2503,7 +2523,7 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
           ]}
         />
       </ol>
-      <div className="mt-[14px]">
+      <div ref={commentRef} className="mt-[14px]">
         {/* A new key clears the box after sending; autoFocus keeps the caret in it. */}
         <RichEditor
           key={`${composer}:${restored}`}

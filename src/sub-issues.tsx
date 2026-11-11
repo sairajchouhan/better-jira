@@ -7,6 +7,7 @@ import { Command } from "cmdk";
 import { RelationIcon, Icon, PriorityIcon, ProgressRing, StatusIcon } from "./icons";
 import { Confirm, MenuSurface, MENU_INPUT, MENU_ITEM } from "./menu-surface";
 import { RichEditor } from "./rich-editor-loader";
+import { useCommand } from "./commands";
 import {
   discardLateMedia,
   documentHasMedia,
@@ -112,7 +113,13 @@ const openIssue = (target: Issue) =>
 export function SubIssueOf({ issue }: { issue: Issue }) {
   const all = useStore((s) => s.issues),
     boards = useStore((s) => s.boards),
-    [menu, setMenu] = useState<HTMLElement | null>(null);
+    [menu, setMenu] = useState<HTMLElement | null>(null),
+    progress = useRef<HTMLButtonElement>(null);
+  useCommand("open-parent-sub-issues", () => {
+    if (!progress.current) return;
+    setMenu(progress.current);
+    return true;
+  });
   const parent = issue.parent ? all.get(issue.parent) : undefined;
   if (!parent) return null;
   const status = (i: Issue) => statusOf(boards, i),
@@ -138,6 +145,7 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
         <span className="truncate font-medium text-fg">{parent.summary}</span>
       </a>
       <button
+        ref={progress}
         data-parent-progress
         title={`Open sub-issues of ${parent.key} (${shortcutLabel("sub-issues-of-parent")})`}
         aria-label={`Open sub-issues of ${parent.key}`}
@@ -360,6 +368,21 @@ export function SubIssues({ issue }: { issue: Issue }) {
     setCreating(true);
     requestAnimationFrame(() => titleInput.current?.focus());
   };
+  const section = useRef<HTMLElement>(null);
+  // ⌘⇧O does what this section's create button does, while it shows one.
+  useCommand("create-sub-issue", (key) => {
+    const button = section.current?.querySelector<HTMLElement>("[data-create-child]");
+    if (key !== issue.key || !button) return;
+    button.click();
+    return true;
+  });
+  useCommand(
+    "hovered-sub-issue",
+    () =>
+      section.current?.querySelector<HTMLElement>(
+        "[data-sub-issue]:hover, [data-sub-issue]:focus-within",
+      )?.dataset.subIssue,
+  );
   const close = () => {
     setCreating(false);
     requestAnimationFrame(() =>
@@ -743,7 +766,12 @@ export function SubIssues({ issue }: { issue: Issue }) {
     return url.href;
   };
   return (
-    <section data-sub-issues={issue.key} aria-label="Sub-issues" className="mt-[14px] text-[13px]">
+    <section
+      ref={section}
+      data-sub-issues={issue.key}
+      aria-label="Sub-issues"
+      className="mt-[14px] text-[13px]"
+    >
       {!!model.total && (
         <div className="-ml-1.5 mb-2 flex items-center gap-1.5 pr-2">
           <button

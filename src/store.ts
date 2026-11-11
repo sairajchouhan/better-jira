@@ -245,7 +245,6 @@ type State = {
   /** Below 768px the sidebar is hidden; Menu or [ opens it over the page. */
   sidebarOpen: boolean;
   relationKind: string;
-  issueOptionsStart: "link" | "pull-request" | "history" | "reminder" | "due" | null;
   /** Where a right-click on a card or list row opened Issue options; null opens it under its button. */
   issueOptionsPoint: { x: number; y: number } | null;
   createExpanded: boolean;
@@ -334,7 +333,6 @@ let state: State = {
   sidebarHidden: savedValue(SIDEBAR_KEY) === "hidden", // the namespace is still empty here
   sidebarOpen: false,
   relationKind: "related",
-  issueOptionsStart: null,
   issueOptionsPoint: null,
   createExpanded: false,
   target: null,

@@ -4,6 +4,7 @@ import { createToolbarView } from "./view-toolbar-actions";
 import { activeView, saveOverlayToView } from "./saved-views";
 import { canMergeOverlay } from "./saved-view-model";
 import { filterCount, visibleOrder } from "./view-model";
+import { post, run as command } from "./commands";
 import { canHaveChildren } from "./issue-properties";
 import { formatForDisplay, getHotkeyManager, type Hotkey } from "@tanstack/react-hotkeys";
 import {
@@ -80,9 +81,7 @@ const selected = () => {
 };
 /** Linear: an issue shortcut acts on the sub-issue row under the pointer or keyboard focus, as its row menu's hints promise. */
 const hoveredRow = () => {
-  const key = document.querySelector<HTMLElement>(
-    "[data-sub-issue]:hover, [data-sub-issue]:focus-within",
-  )?.dataset.subIssue;
+  const key = command("hovered-sub-issue");
   return key ? get().issues.get(key) : undefined;
 };
 const target = () => (selected() ? (hoveredRow() ?? selected()) : undefined);
@@ -97,19 +96,14 @@ const overlay = (value: NonNullable<Overlay>) => () => {
     target: selected() ? (acting ?? hoveredRow()?.key ?? null) : null,
   });
 };
-const focus = (id: string) =>
+/** Opens the issue, then asks it to focus a field, each frame while it mounts (up to 100). */
+const focus = (name: "focus-title" | "focus-comment") =>
   issueAction((issue) => {
     navigate({ selected: issue.key, panel: true });
     let tries = 0;
     const attempt = () => {
       if (get().selected !== issue.key || !get().panel) return;
-      const node = document.getElementById(id);
-      if (node) {
-        node.focus();
-        // Linear puts the caret at the end, so typing appends (R2-issue-fields-D6).
-        if (node instanceof HTMLTextAreaElement || node instanceof HTMLInputElement)
-          node.setSelectionRange(node.value.length, node.value.length);
-      } else if (tries++ < 100) requestAnimationFrame(attempt);
+      if (!command(name) && tries++ < 100) requestAnimationFrame(attempt);
     };
     requestAnimationFrame(attempt);
   });
@@ -234,10 +228,7 @@ export const shortcuts: Shortcut[] = [
     document: true,
     group: "Documents",
     when: () => !!get().document && (entry.id !== "copy-link" || !!getSelection()?.isCollapsed),
-    run: () =>
-      document
-        .querySelector("[data-document]")
-        ?.dispatchEvent(new CustomEvent("document-action", { detail: entry.id })),
+    run: () => void command("document-action", entry.id),
   })),
   {
     id: "commands",
@@ -527,7 +518,7 @@ export const shortcuts: Shortcut[] = [
     group: "Issues",
     hotkey: "Shift+R",
     issue: true,
-    run: focus("summary"),
+    run: focus("focus-title"),
   },
   {
     id: "description",
@@ -565,7 +556,7 @@ export const shortcuts: Shortcut[] = [
     run: issueAction(() => {
       navigate({ panel: true });
       requestAnimationFrame(() => {
-        document.getElementById("issue-subscribers")?.focus();
+        command("focus-subscribers");
         overlay("subscribers")();
       });
     }),
@@ -608,7 +599,7 @@ export const shortcuts: Shortcut[] = [
     hotkey: "Control+L",
     issue: true,
     run: () => {
-      set({ issueOptionsStart: "link" });
+      post("issue-options-start", "link");
       navigate({ panel: true });
       overlay("options")();
     },
@@ -624,12 +615,7 @@ export const shortcuts: Shortcut[] = [
         set({ perf: `Jira has no issue type below ${i.type}, so ${i.key} can't have sub-issues` });
         return;
       }
-      const inline = document.querySelector<HTMLElement>(
-        `[data-sub-issues="${CSS.escape(i.key)}"] [data-create-child]`,
-      );
-      if (inline) {
-        inline.click();
-      } else beginCreate({ parent: i.key, project: i.project });
+      if (!command("create-sub-issue", i.key)) beginCreate({ parent: i.key, project: i.project });
     }),
   },
   {
@@ -662,9 +648,7 @@ export const shortcuts: Shortcut[] = [
     // The parent's sub-issue menu lives in the open issue.
     run: () => {
       navigate({ panel: true });
-      requestAnimationFrame(() =>
-        document.querySelector<HTMLElement>("[data-parent-progress]")?.click(),
-      );
+      requestAnimationFrame(() => command("open-parent-sub-issues"));
     },
   },
   {
@@ -708,7 +692,7 @@ export const shortcuts: Shortcut[] = [
     group: "Comments",
     hotkey: "Control+M",
     issue: true,
-    run: focus("comment"),
+    run: focus("focus-comment"),
   },
   {
     id: "peek",
@@ -825,7 +809,7 @@ export const shortcuts: Shortcut[] = [
     when: boardVisible,
     run: () => {
       set({ findInView: true });
-      requestAnimationFrame(() => document.getElementById("find-in-view")?.focus());
+      requestAnimationFrame(() => command("focus-find"));
     },
   },
   {

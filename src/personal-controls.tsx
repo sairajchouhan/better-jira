@@ -68,6 +68,7 @@ import { PillSelect } from "./pill-select";
 import { canRunShortcut, shortcutLabel, runShortcut } from "./shortcuts";
 import { copyIcons, copyKinds, copyShortcuts, issueCopy, type CopyKind } from "./issue-copy";
 import { ActionMenu, type ActionEntry } from "./action-menu";
+import { kept, post, useCommand } from "./commands";
 import { reminderPresets, reminderTime } from "./reminder-display";
 import { duePresets, parseDueDate, shortDate } from "./due-date";
 
@@ -366,10 +367,12 @@ export function PropertyPicker({
   const [date, setDate] = useState(issue.due ?? "");
   const [dateValid, setDateValid] = useState(true);
   // Issue options › Due date › Custom… opens the date form; Shift+D opens Linear's due menu first.
-  const [custom, setCustom] = useState(() => get().issueOptionsStart === "due");
-  useEffect(() => {
-    if (get().issueOptionsStart === "due") set({ issueOptionsStart: null });
-  }, []);
+  const [custom, setCustom] = useState(() => kept("issue-options-start") === "due");
+  useCommand("issue-options-start", (start) => {
+    if (start !== "due") return;
+    setCustom(true);
+    return true;
+  });
   // Linear lists the issue's labels first, then the rest after a divider; the order holds while the menu is open.
   const options = useStore((s) => s.options),
     writable = useStore((s) => s.writable);
@@ -778,15 +781,13 @@ export function IssueOptions({ issue }: { issue: Issue }) {
   const full = useStore((s) => s.full.get(issue.key)),
     parent = useStore((s) => (issue.parent ? s.issues.get(issue.parent) : undefined));
   const close = () => ui.send({ type: "overlay.close" });
-  const start = useStore((s) => s.issueOptionsStart),
-    point = useStore((s) => s.issueOptionsPoint),
-    [view, setView] = useState(start);
-  useEffect(() => {
-    if (start && start !== "reminder" && start !== "due") {
-      setView(start);
-      set({ issueOptionsStart: null });
-    }
-  }, [start]);
+  const point = useStore((s) => s.issueOptionsPoint),
+    [view, setView] = useState(() => kept("issue-options-start"));
+  useCommand("issue-options-start", (start) => {
+    if (start === "reminder" || start === "due") return;
+    setView(start);
+    return true;
+  });
   const historyOpen = view === "history";
   const linkOpen = view === "link" || view === "pull-request";
   const resourceKind = view === "pull-request" ? "pull-request" : "link";
@@ -849,7 +850,7 @@ export function IssueOptions({ issue }: { issue: Issue }) {
     open("relations");
   };
   const reopen = (view: "link" | "pull-request" | "history") => {
-    set({ issueOptionsStart: view });
+    post("issue-options-start", view);
     ui.send({ type: "overlay.open", overlay: "options" });
   };
   // A right-click on a card or list row (Linear's row menu) leads with the property pickers its shortcuts open, acting on the selected issue.
@@ -867,7 +868,7 @@ export function IssueOptions({ issue }: { issue: Issue }) {
       {
         name: "Custom…",
         run: () => {
-          set({ issueOptionsStart: "due" });
+          post("issue-options-start", "due");
           open("due");
         },
       },
@@ -1004,7 +1005,7 @@ export function IssueOptions({ issue }: { issue: Issue }) {
         {
           name: "Custom…",
           run: () => {
-            set({ issueOptionsStart: "reminder" });
+            post("issue-options-start", "reminder");
             open("reminder");
           },
         },
