@@ -26,6 +26,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import type { Attachment } from "./attachment-media";
@@ -44,7 +45,7 @@ import {
   type PropertyActivity,
   type Relation,
 } from "./issue-activity";
-import { adfToText, normalizeDocument, type AdfDocument } from "./document";
+import { normalizeDocument } from "./document";
 import { commentCount, imageCommentIds } from "./media-edits";
 import { Icon, Label, PriorityIcon, RelationIcon, StatusIcon, TypeDot, hue } from "./icons";
 import {
@@ -130,8 +131,7 @@ import {
 import { Confirm, issueAnchor } from "./menu-surface";
 import { InboxIssueActions, InboxList, InboxPane, undoInboxToast, useInboxBadge } from "./inbox";
 import { PickerRow, PropertyMenu } from "./property-menu";
-import { createActor } from "xstate";
-import { autosaveMachine, inspector } from "./machines";
+import { descriptionSession, type DescriptionPorts } from "./description-session";
 import { shortDate } from "./due-date";
 
 /** The active board's visible columns, for keyboard navigation and the issue page's ↑ ↓ stepping. */
@@ -2156,6 +2156,20 @@ function Properties({ issue }: { issue: Issue }) {
   );
 }
 
+const descriptionPorts: DescriptionPorts = {
+  storage: {
+    getItem: (name) => localStorage.getItem(name),
+    setItem: (name, value) => localStorage.setItem(name, value),
+    removeItem: (name) => localStorage.removeItem(name),
+  },
+  read: (key) => get().full.get(key)?.fields.description,
+  refused: (key) => get().full.get(key)?.descriptionError === DESCRIPTION_CONFLICT,
+  write: (key, doc) => actions.description(key, doc),
+  discard: (key, unsaved) => actions.discardDescription(key, unsaved),
+  persist: flushLocalChanges,
+  currentKey,
+};
+
 /** Edited in place like Linear: changes save 600ms after typing stops and on blur, so a reload never loses them. */
 function Description({ issue }: { issue: Issue }) {
   const focus = useStore((s) => s.editDesc);
@@ -2165,128 +2179,37 @@ function Description({ issue }: { issue: Issue }) {
   const refusal = f?.descriptionError,
     content = f ? (f.descriptionRejected ?? f.fields.description ?? "") : undefined;
   const stored = content !== undefined ? JSON.stringify(normalizeDocument(content)) : "";
-  const shown = useRef(stored),
-    typed = useRef<AdfDocument | null>(null),
-    section = useRef<HTMLElement>(null);
-  const [revision, setRevision] = useState(0),
-    [focused, setFocused] = useState(false),
-    [restored, setRestored] = useState(0);
-  // Jira's text changed under unsaved typing; or Jira refused the save because someone else changed it. Saves wait until the person picks a version.
-  const [conflict, setConflict] = useState(false),
-    held = useRef(false);
-  held.current = conflict || refusal === DESCRIPTION_CONFLICT;
-  const draftKey = `better-jira:description-draft:${get().namespace}:${issue.key}`;
-  const [autosave] = useState(() =>
-    createActor(
-      autosaveMachine.provide({
-        actions: {
-          keepDraft: (_, doc) => {
-            try {
-              // With the text it started from, so a reload can tell whether Jira changed meanwhile.
-              localStorage.setItem(draftKey, JSON.stringify({ doc, base: shown.current }));
-            } catch {
-              /* autosave still runs */
-            }
-          },
-          commit: (_, doc) => {
-            if (!doc || held.current) return;
-            shown.current = JSON.stringify(normalizeDocument(doc));
-            typed.current = null;
-            actions.description(currentKey(issue.key), doc);
-            void flushLocalChanges().then(() => {
-              try {
-                if (autosave.getSnapshot().matches("clean")) localStorage.removeItem(draftKey);
-              } catch {
-                /* best effort */
-              }
-            });
-          },
-        },
-      }),
-      { inspect: inspector(`autosave ${issue.key}`) },
-    ).start(),
+  const section = useRef<HTMLElement>(null),
+    [focused, setFocused] = useState(false);
+  const [session] = useState(() =>
+    descriptionSession({ key: issue.key, namespace: get().namespace, stored }, descriptionPorts),
   );
-  const show = (doc: string) => {
-    shown.current = doc;
-    setRevision((r) => r + 1);
-  };
-  const textOf = (doc: string) => adfToText(JSON.parse(doc || "null"));
-  // Undo, redo, a rolled-back save, a restored revision or someone else's edit replaces the document under the editor.
-  // Only unsaved typing asks first (R2-D1): a focused editor with nothing unsaved takes Jira's text too, but not a mere media id swap after its own save.
+  const snapshot = useSyncExternalStore(session.subscribe, session.getSnapshot),
+    { revision, draft, conflict } = snapshot;
+  // Jira's text changed under unsaved typing; or Jira refused the save because someone else changed it. Saves wait until the person picks a version.
+  const held = conflict || refusal === DESCRIPTION_CONFLICT;
+  // Re-observed on focus changes too: a focused editor keeps its own text until it blurs.
   useEffect(() => {
-    if (!stored || stored === shown.current || conflict) return;
-    const inside = !!section.current?.contains(document.activeElement);
-    if (autosave.getSnapshot().matches("dirty") && textOf(stored) !== textOf(shown.current))
-      setConflict(true);
-    else if (!inside) show(stored);
-    else if (textOf(stored) !== textOf(shown.current)) {
-      show(stored);
+    if (session.observe(stored, !!section.current?.contains(document.activeElement)))
       ui.send({ type: "description.edit" });
-    }
-  }, [stored, focused, conflict, restored, autosave]);
+  }, [stored, focused, snapshot, session]);
   useEffect(() => {
     const restore = (event: Event) => {
-      if ((event as CustomEvent<string>).detail !== issue.key) return;
-      shown.current = "";
-      typed.current = null;
-      setConflict(false);
-      setRestored((n) => n + 1);
+      if ((event as CustomEvent<string>).detail === issue.key) session.restored();
     };
     addEventListener("jira-restored", restore);
     return () => removeEventListener("jira-restored", restore);
-  }, [issue.key]);
+  }, [issue.key, session]);
   const resolve = (keep: boolean) => {
-    // Typing not yet saved is kept (or dropped) below, never committed on the way.
-    held.current = true;
-    autosave.send({ type: "flush" });
-    const key = currentKey(issue.key);
-    if (keep) {
-      const doc = typed.current ?? normalizeDocument(JSON.parse(shown.current));
-      shown.current = JSON.stringify(normalizeDocument(doc));
-      typed.current = null;
-      setConflict(false);
-      held.current = false;
-      actions.description(key, doc);
-      void flushLocalChanges();
-    } else {
-      try {
-        localStorage.removeItem(draftKey);
-      } catch {
-        /* best effort */
-      }
-      // The discarded text goes to the description history, and nothing of it is sent later (R2-D1).
-      actions.discardDescription(key, typed.current ?? undefined);
-      typed.current = null;
-      setConflict(false);
-      show(JSON.stringify(normalizeDocument(get().full.get(key)?.fields.description ?? "")));
-    }
+    session.resolve(keep);
     // Back to the editor, not the page: typing must not run board shortcuts (R2-D5).
     ui.send({ type: "description.edit" });
   };
-  // A reload in the autosave window leaves the typed draft in localStorage: save it, unless Jira's text changed since it started (R2-D1, R2-D2).
+  const loaded = !!f;
   useEffect(() => {
-    if (!f) return;
-    try {
-      const raw = localStorage.getItem(draftKey);
-      if (!raw) return;
-      const saved = JSON.parse(raw),
-        doc: AdfDocument = saved?.type === "doc" ? saved : saved.doc,
-        base: string | undefined = saved?.type === "doc" ? undefined : saved.base;
-      if (textOf(JSON.stringify(doc)) === textOf(stored)) localStorage.removeItem(draftKey);
-      else if (held.current || (base && textOf(base) !== textOf(stored))) {
-        typed.current = doc;
-        if (!held.current) setConflict(true);
-        setRevision((r) => r + 1);
-      } else {
-        autosave.send({ type: "change", doc });
-        autosave.send({ type: "flush" });
-        setRevision((r) => r + 1);
-      }
-    } catch {
-      /* ignore a broken draft */
-    }
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Prefetch and draft recovery follow selection/load transitions, not render-local arrays or refreshed full issue objects.
-  }, [!!f]);
+    if (loaded) session.recover(stored);
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft recovery follows the load transition, not each refreshed description.
+  }, [loaded, session]);
   // Files that were uploading when the page reloaded reached Jira's attachments, if anything, but not the text (R2-D9).
   useEffect(() => {
     const names = interruptedUploads(issue.key);
@@ -2298,7 +2221,7 @@ function Description({ issue }: { issue: Issue }) {
           "The page reloaded during the upload. Check the issue's attachments in Jira, then attach it again.",
       });
   }, [issue.key]);
-  useEffect(() => () => autosave.send({ type: "flush" }), [autosave]);
+  useEffect(() => () => session.flush(), [session]);
   // Done only once focus has held for a frame: opening the issue can remount this editor right after the first
   // focus, and the remounted one must still see the request.
   useEffect(() => {
@@ -2341,7 +2264,7 @@ function Description({ issue }: { issue: Issue }) {
           <button className="rounded px-2 py-0.5 hover:bg-hover" onClick={() => resolve(false)}>
             Use Jira's version
           </button>
-          {held.current && (
+          {held && (
             <button
               className="rounded bg-accent px-2 py-0.5 text-white"
               onClick={() => resolve(true)}
@@ -2371,19 +2294,14 @@ function Description({ issue }: { issue: Issue }) {
           inline
           selectionToolbar
           scope={`${issue.key}:description`}
-          onLateMedia={(merge) =>
-            actions.description(issue.key, merge(get().full.get(issue.key)?.fields.description))
-          }
-          initial={typed.current ?? content}
+          onLateMedia={session.lateMedia}
+          initial={draft ?? content}
           onFiles={(files) => addIssueFiles(issue.key, files)}
           issueKey={issue.key}
           attachments={issue.attachments}
           placeholder="Add description…"
-          onChange={(doc) => {
-            typed.current = doc;
-            autosave.send({ type: "change", doc });
-          }}
-          onBlur={() => autosave.send({ type: "flush" })}
+          onChange={session.edit}
+          onBlur={session.flush}
         />
       )}
     </section>
