@@ -8,7 +8,7 @@ export type AvatarCache = {
   set(url: string, type: string, body: Uint8Array): void;
 };
 const MAX_BYTES = 512 * 1024;
-const FRESH_MS = 24 * 3600_000;
+const FRESH_MS = 30 * 24 * 3600_000;
 const AVATAR_HOSTS = [
   /(^|\.)atl-paas\.net$/,
   /(^|\.)atlassian\.com$/,
@@ -29,12 +29,20 @@ export function avatarProxy({
   fetcher?: typeof fetch;
 }) {
   const origin = new URL(site).origin;
+  // Gravatar's fallback for people without a photo goes through wp.com's image proxy (i0.wp.com/<host>/<path>),
+  // which rate-limits (429) a burst of avatars. When the wrapped host is an allowed one, fetch it directly.
+  const unwrapPhoton = (url: URL) => {
+    const [, host, ...rest] = url.pathname.split("/");
+    if (!/^i\d\.wp\.com$/.test(url.hostname) || !host?.includes(".")) return url;
+    const inner = new URL(`https://${host}/${rest.join("/")}`);
+    return inner.origin !== origin && allowed(inner) ? inner : url;
+  };
   const allowed = (url: URL) =>
     url.origin === origin ||
     (url.protocol === "https:" && AVATAR_HOSTS.some((host) => host.test(url.hostname)));
   const image = (type: string, body: Uint8Array) =>
     new Response(body as Uint8Array<ArrayBuffer>, {
-      headers: { "Content-Type": type, "Cache-Control": "private, max-age=86400" },
+      headers: { "Content-Type": type, "Cache-Control": "private, max-age=2592000" },
     });
   const missing = () =>
     new Response(null, { status: 404, headers: { "Cache-Control": "private, max-age=300" } });
@@ -42,6 +50,7 @@ export function avatarProxy({
   async function load(start: string) {
     let url = new URL(start);
     for (let hop = 0; hop < 5; hop++) {
+      url = unwrapPhoton(url);
       if (!allowed(url)) return;
       const res = await fetcher(url, {
         redirect: "manual",
@@ -58,6 +67,7 @@ export function avatarProxy({
         url = new URL(next, url);
         continue;
       }
+      if (res.status === 429 || res.status >= 500) throw new Error(`avatar host ${res.status}`); // passing; retry later
       const type = res.headers.get("Content-Type")?.split(";")[0]?.trim() ?? "";
       if (!res.ok || !type.startsWith("image/") || type.includes("svg")) return; // SVG can carry script
       if (Number(res.headers.get("Content-Length") ?? 0) > MAX_BYTES) return;

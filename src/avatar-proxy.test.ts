@@ -109,3 +109,30 @@ test("a network failure is not cached by the browser; a real miss is, briefly", 
   })(ask("https://i0.wp.com/a.png"));
   expect([miss.status, miss.headers.get("Cache-Control")]).toEqual([404, "private, max-age=300"]);
 });
+
+test("fetches a Gravatar fallback from its own host instead of the rate-limited wp.com proxy", async () => {
+  const start =
+    "https://secure.gravatar.com/avatar/x?d=https%3A%2F%2Fa.prod.public.atl-paas.net%2Finitials%2FPC-2.png";
+  const { fetcher, calls } = fake({
+    [start]: () => redirect("https://i2.wp.com/a.prod.public.atl-paas.net/initials/PC-2.png?ssl=1"),
+    "https://i2.wp.com/a.prod.public.atl-paas.net/initials/PC-2.png?ssl=1": () =>
+      new Response(null, { status: 429 }),
+    "https://a.prod.public.atl-paas.net/initials/PC-2.png": () => image(),
+  });
+  const res = await avatarProxy({ site: SITE, cache: memoryAvatarCache(), fetcher })(ask(start));
+  expect(res.status).toBe(200);
+  expect(calls.map((c) => new URL(c.url).hostname)).toEqual([
+    "secure.gravatar.com",
+    "a.prod.public.atl-paas.net",
+  ]);
+});
+
+test("a rate-limited avatar host is a passing failure, not a cached miss", async () => {
+  const { fetcher } = fake({
+    "https://i0.wp.com/y.png": () => new Response(null, { status: 429 }),
+  });
+  const res = await avatarProxy({ site: SITE, cache: memoryAvatarCache(), fetcher })(
+    ask("https://i0.wp.com/y.png"),
+  );
+  expect([res.status, res.headers.get("Cache-Control")]).toEqual([502, "no-store"]);
+});
