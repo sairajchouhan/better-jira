@@ -1,8 +1,10 @@
 import { serverAuth } from "./server-config";
 
-/** Only the personal test site accepts writes; every other site stays read-only. */
+/** The personal test site accepts writes. Any other site stays read-only unless the production server (`bun start`) runs with JIRA_WRITES naming it exactly; a dev server never writes to it. */
 export const WRITABLE_SITES = new Set(["https://cloudsairaj.atlassian.net"]);
-export const canWrite = (site: string) => WRITABLE_SITES.has(site);
+export const canWrite = (site: string) =>
+  WRITABLE_SITES.has(site) ||
+  (process.env.NODE_ENV === "production" && process.env.JIRA_WRITES === site);
 /** POST is Jira's documented bulk changelog READ; it changes no issues. */
 const isRead = (method: string, path: string) =>
   method === "GET" || (method === "POST" && path === "/rest/api/3/changelog/bulkfetch");

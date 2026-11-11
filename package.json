@@ -5,13 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "bun --hot src/index.ts",
-    "start": "NODE_ENV=production sh -c 'while bun src/index.ts; do :; done'",
+    "start": "NODE_ENV=production JIRA_WRITES=https://contentstack.atlassian.net bun --env-file=.env src/index.ts",
     "build": "bun run build.ts",
     "typecheck": "bun check",
     "setup": "bun scripts/setup.ts",
     "test:e2e": "bunx playwright test",
     "dev:personal": "bun --env-file=.env.personal --hot src/index.ts",
-    "dev:work": "bun --env-file=.env --hot src/index.ts",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix"
   },

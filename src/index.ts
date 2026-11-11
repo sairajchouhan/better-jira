@@ -1,6 +1,5 @@
 import { serve, type BunRequest } from "bun";
 import { localMediaRequest } from "./attachment-media";
-import { watch } from "node:fs";
 import index from "./index.html";
 import * as mirror from "./mirror";
 import { parsePreferences } from "./view-model";
@@ -305,7 +304,3 @@ const server = serve({
 });
 
 console.log(`better-jira on ${server.url}`);
-
-// Production caches the frontend bundle, so exit on any source edit; `bun start` loops and rebuilds.
-if (process.env.NODE_ENV === "production")
-  watch(import.meta.dir, { recursive: true }, () => process.exit(0));
