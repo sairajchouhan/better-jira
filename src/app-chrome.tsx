@@ -1,3 +1,4 @@
+import { FavoriteButton } from "./favorite-button";
 import { navigationChoices } from "./quick-navigation";
 import { useActiveView, useSavedViews, createViewDraft } from "./saved-views";
 import { setScope, useViewSettings } from "./view-settings";
@@ -22,7 +23,6 @@ import {
   issueURL,
   retryLocalStorage,
   dismissWriteError,
-  toggleFavorite,
   undoEdit,
   redoEdit,
   type Board,
@@ -520,22 +520,17 @@ export function BoardHeader() {
     { target: findRef, ignoreInputs: false },
   );
   const favoriteId = activeView?.kind === "custom" ? `view:${activeView.id}` : `board:${board!.id}`;
-  const favorite = useStore((s) => s.favorites.includes(favoriteId));
   return (
     <header className="shrink-0">
       <div className="flex h-11 items-center justify-between border-b-[0.5px] border-frame px-2">
         <div className="flex min-w-0 items-center pr-1 pl-2.5 text-[13px] font-medium text-fg-2">
           <BoardBreadcrumbs board={board!} />
           {/* Linear: star, then ⋯ — 28px round buttons, 14px glyphs, 4px apart; hover fills --crumb-hover and whitens the glyph. */}
-          <button
-            role="switch"
-            aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
-            aria-checked={favorite}
-            onClick={() => toggleFavorite(favoriteId)}
-            className={`ml-2 grid size-7 shrink-0 place-items-center rounded-full border-[0.5px] border-transparent transition-[border-color,background-color,color,opacity] duration-150 ease-[ease] hover:bg-(--crumb-hover) ${favorite ? "text-[#f2c94c]" : "text-fg-3 hover:text-fg"}`}
-          >
-            <Icon name={favorite ? "starred" : "star"} size={14} />
-          </button>
+          <FavoriteButton
+            id={favoriteId}
+            size={14}
+            className="ml-2 grid size-7 shrink-0 place-items-center rounded-full border-[0.5px] border-transparent text-fg-3 transition-[border-color,background-color,color,opacity] duration-150 ease-[ease] hover:bg-(--crumb-hover) hover:text-fg"
+          />
           {activeView?.kind === "custom" && <ViewMenu view={activeView}><button aria-label="Issue view options" className="ml-1 grid size-7 shrink-0 place-items-center rounded-full border-[0.5px] border-transparent transition-[border-color,background-color,color,opacity] duration-150 ease-[ease] hover:bg-(--crumb-hover) text-fg-3 hover:text-fg"><Icon name="dots" size={14} /></button></ViewMenu>}
         </div>
         <button

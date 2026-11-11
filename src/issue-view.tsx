@@ -1,4 +1,5 @@
 /* oxlint-disable react/no-unstable-nested-components -- The timestamp renderer is a render callback supplied to the activity view. */
+import { FavoriteButton } from "./favorite-button";
 import { statusById } from "./board-catalog";
 import { jiraAvatar } from "./avatar-url";
 import {
@@ -44,7 +45,6 @@ import {
   isLocalIssue,
   isWatching,
   appURL,
-  toggleFavorite,
   type Issue,
   type User,
   currentKey,
@@ -216,8 +216,7 @@ export const IssueView = memo(function IssueView({
   fill?: boolean;
 }) {
   const f = useStore((s) => s.full.get(issue.key))?.fields;
-  const favorite = useStore((s) => s.favorites.includes(issue.key)),
-    optionsOpen = useStore((s) => s.overlay === "options");
+  const optionsOpen = useStore((s) => s.overlay === "options");
   const propertiesHidden = useStore((s) => s.issuePropertiesHidden);
   const document = useStore((s) => s.document);
   const inbox = useStore((s) => s.inbox);
@@ -239,15 +238,7 @@ export const IssueView = memo(function IssueView({
           </a>
         </>
       )}
-      <button
-        role="switch"
-        aria-label={favorite ? "Remove issue from favorites" : "Add issue to favorites"}
-        aria-checked={favorite}
-        onClick={() => toggleFavorite(issue.key)}
-        className={`${ICON_BTN} ${favorite ? "text-[#f2c94c]!" : ""}`}
-      >
-        <Icon name={favorite ? "starred" : "star"} size={16} />
-      </button>
+      <FavoriteButton id={issue.key} noun="issue" size={16} className={ICON_BTN} />
       <button
         id="issue-options"
         aria-label="Issue options"

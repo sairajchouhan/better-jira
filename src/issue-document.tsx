@@ -1,5 +1,6 @@
 /* oxlint-disable react/immutability -- Session callbacks and mutable imperative models are intentionally owned outside React state. */
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
+import { FavoriteButton } from "./favorite-button";
 import { createContext, use, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Debouncer } from "@tanstack/pacer";
 import { Icon, StatusIcon } from "./icons";
@@ -466,15 +467,7 @@ function DocumentHeader() {
         <span aria-hidden>›</span>
         <Icon name="file" size={14} />
         <span className="min-w-0 truncate text-fg-2">{title}</span>
-        <button
-          role="switch"
-          aria-label={favorite ? "Remove document from favorites" : "Add document to favorites"}
-          aria-checked={favorite}
-          className={`${BUTTON} ${favorite ? "text-[#f2c94c]" : ""}`}
-          onClick={() => toggleFavorite(`document:${resource.id}`)}
-        >
-          <Icon name={favorite ? "starred" : "star"} size={15} />
-        </button>
+        <FavoriteButton id={`document:${resource.id}`} noun="document" size={15} className={BUTTON} />
         <button
           aria-label="Document options"
           aria-haspopup="dialog"
