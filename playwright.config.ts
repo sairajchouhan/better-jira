@@ -4,6 +4,7 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "e2e",
   testMatch: "*.pw.ts",
+  globalSetup: "./e2e/global-setup.ts",
   fullyParallel: true,
   workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : 6, // measured best on an 8-core Mac; more workers contend for CPU
   timeout: 90_000,

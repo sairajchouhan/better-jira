@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "bun --hot src/index.ts",
-    "start": "NODE_ENV=production JIRA_WRITES=https://contentstack.atlassian.net bun --env-file=.env src/index.ts",
+    "start": "bun run build:server && NODE_ENV=production JIRA_WRITES=https://contentstack.atlassian.net bun --env-file=.env dist/app/index.js",
+    "build:server": "bun scripts/build-server.ts",
     "build": "bun run build.ts",
     "typecheck": "bun check",
     "setup": "bun scripts/setup.ts",

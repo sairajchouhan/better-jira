@@ -8,7 +8,7 @@ Unless a section says otherwise, nothing was dropped.
 
 ## Changes that apply to every file
 
-- **Harness → `e2e/app.ts`.** The same page wrapper (`open`, `click`, `key`, `type`, `eval`, `waitFor`, `cmd` for raw CDP), now over Playwright pages. Each worker runs its own `scripts/fixture-server.ts` on port 3200 + worker index; the fixture is reset before every test, and each `open()` gets a fresh browser context (fresh storage).
+- **Harness → `e2e/app.ts`.** The same page wrapper (`open`, `click`, `key`, `type`, `eval`, `waitFor`, `cmd` for raw CDP), now over Playwright pages. Each worker runs its own `scripts/fixture-server.ts`, built with the React Compiler by `e2e/global-setup.ts` as `bun start` builds the app, on port 3200 + worker index; the fixture is reset before every test, and each `open()` gets a fresh browser context (fresh storage).
 - **Timing budgets** (for example, menus open in under 100 ms) are unchanged. They are measured in the page as before.
 - **Fixed sleeps** that waited _for_ something became waits on that thing (`waitFor`, `expect.poll`, saved IndexedDB/localStorage state, fake-Jira counters). Sleeps that prove something does _not_ happen within a window were kept. Of about 67 s of `Bun.sleep`, the kept ones are listed per file.
 - **Clipboard:** CDP `Browser.grantPermissions` → `context.grantPermissions`. **Downloads:** CDP download behaviour plus polling the folder → Playwright's `download` event (`savedAs`), checking the suggested file name and the saved bytes.

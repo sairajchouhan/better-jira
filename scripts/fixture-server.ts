@@ -7,6 +7,9 @@ import { previewFrom } from "../src/link-preview";
 import { mapFeed } from "../src/inbox-model";
 import { boardFromInput } from "../src/config";
 import { avatarProxy, memoryAvatarCache } from "../src/avatar-proxy";
+
+/** A file in e2e/fixtures, from the repo root the suite runs in, so the built copy in dist/ finds it too. */
+const fixtureFile = (name: string) => Bun.file(`e2e/fixtures/${name}`);
 const rich = {
   type: "doc",
   version: 1,
@@ -586,7 +589,7 @@ function full(key: string): any {
                 id: a.id,
                 filename: a.filename,
                 mimeType: a.mimeType,
-                size: Bun.file(new URL(`../e2e/fixtures/${a.filename}`, import.meta.url)).size,
+                size: fixtureFile(a.filename).size,
                 content: `https://example.atlassian.net/secure/attachment/${a.id}/${a.filename}`,
               })),
           }
@@ -638,7 +641,7 @@ const gateway = attachmentGateway({
       });
     }
     if (contentFailure) return new Response(null, { status: contentFailure });
-    const file = Bun.file(new URL(`../e2e/fixtures/${asset.filename}`, import.meta.url));
+    const file = fixtureFile(asset.filename);
     let start = 0,
       end = file.size - 1,
       status = 200;
@@ -850,8 +853,7 @@ const server = Bun.serve({
     "/api/*": handle,
     "/__fixture": handle,
     "/api/avatar": avatar,
-    "/__avatar/alex.png": () =>
-      new Response(Bun.file(new URL("../e2e/fixtures/media-image.png", import.meta.url))),
+    "/__avatar/alex.png": () => new Response(fixtureFile("media-image.png")),
     "/__link-icon.svg": () =>
       new Response(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="#fff"/></svg>',

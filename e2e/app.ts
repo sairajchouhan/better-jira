@@ -74,10 +74,10 @@ export const fixture = {
   }> => (await fetch(`${fixture.url}__fixture`)).json(),
 };
 
-/** Starts scripts/fixture-server.ts on `port` and resolves once that child, not some other process, is listening. */
+/** Starts the fixture server (built with the React Compiler by e2e/global-setup.ts) on `port` and resolves once that child, not some other process, is listening. */
 export function startFixture(port: number, env: Record<string, string> = {}) {
-  const child = spawn("bun", ["scripts/fixture-server.ts"], {
-    // A production bundle: the dev bundle costs each page load (and so the suite) about a fifth more.
+  const child = spawn("bun", ["dist/fixture/fixture-server.js"], {
+    // A production build, like `bun start` serves.
     env: {
       ...process.env,
       NODE_ENV: "production",
