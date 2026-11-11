@@ -67,6 +67,7 @@
   /* Linear breadcrumb / header icon-button hover, and the "Grey" view colour (linear.app light theme, 2026-11-11) */
   --crumb-hover: lch(94.854% 0.5 282);
   --view-gray: lch(67.969% 3.577 260.65);
+  --bg-border: var(--frame); /* Linear bgBorder (--sx-1o1lnwn) */
   --menu-fg: var(--fg);
   --menu-fg-3: var(--fg-3);
   --menu-placeholder: var(--fg-4);
@@ -145,6 +146,7 @@
     --add-hover: lch(14.006% 0.593 272);
     --crumb-hover: lch(14.006% 0.593 272);
     --view-gray: #bec2c8;
+    --bg-border: lch(18.48% 1.48 272);
     --menu-fg: lch(91.178% 1.425 272);
     --menu-fg-3: lch(64.714% 1.425 272);
     --menu-placeholder: lch(

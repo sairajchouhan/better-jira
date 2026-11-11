@@ -66,7 +66,17 @@ export function ViewDetails({ view, issues }: { view: SavedView; issues: Issue[]
     <div role="tabpanel" aria-label={tab === "assignees" ? "Assignees" : "Labels"}>{rows.length ? rows.map(([name, count]) => <div key={name} className="flex h-9 items-center justify-between px-1 text-fg-2"><span className="truncate">{name}</span><span className="text-fg-3">{count}</span></div>) : <p className="px-1 py-2 text-fg-3">{tab === "assignees" ? "No assignees" : "No labels"}</p>}</div>
   </aside>;
 }
-export function ResultsFeedback({ count, baseline, view, temporary, clear }: { count: number; baseline: number; view: SavedView | null; temporary: boolean; clear: () => void }) {
+// Linear HiddenIndicator (assets/HiddenIndicator.*.js, 2026-11-11): a flex row (so no space) of the count as Text miniPlus (12px/normal/500, labelTitle,
+// 3px 5px padding, 3px radius), " ", label as Text mini (12px/normal/450, labelMuted); row gap 8px; the action is a
+// small borderless Button (24px, 8px sides, pill, 12px/500 labelBase; hover bgBorder-hover + labelTitle, instant in,
+// 0.15s out) holding "Clear Filters" and a 12px X 6px apart. Numbers use Intl.NumberFormat.
+function HiddenRow({ hidden, clear, between }: { hidden: number; clear: () => void; between?: boolean }) {
+  return <div className={`flex flex-wrap items-center gap-2 ${between ? "justify-between" : "justify-center"}`}>
+    <span className="flex items-center whitespace-nowrap"><span className="rounded-[3px] px-[5px] py-[3px] text-[12px] leading-[normal] font-medium text-fg">{new Intl.NumberFormat().format(hidden)} issue{hidden === 1 ? "" : "s"}</span> <span className="text-[12px] leading-[normal] font-[450] text-fg-3">hidden by filters</span></span>
+    <div className="flex"><button onClick={clear} className="relative inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-[9999px] border-[0.5px] border-transparent px-2 text-[12px] leading-[normal] font-medium whitespace-nowrap text-fg-2 transition-[border-color,background-color,color,opacity] duration-150 ease-[ease] select-none hover:bg-(--crumb-hover) hover:text-fg hover:duration-0 active:bg-(--crumb-hover) active:text-fg"><span className="flex items-center gap-1.5"><span>Clear Filters</span><Icon name="x" size={12} /></span></button></div>
+  </div>;
+}
+export function ResultsFeedback({ count, baseline, view, temporary, clear, layout = "list" }: { count: number; baseline: number; view: SavedView | null; temporary: boolean; clear: () => void; layout?: "list" | "board" }) {
   const feedback = resultFeedback(count, baseline, !!view, temporary);
   if (!feedback) return null;
   // Linear's saved-empty state: a centred filter illustration and one line, nothing to act on.
@@ -82,8 +92,13 @@ export function ResultsFeedback({ count, baseline, view, temporary, clear }: { c
     </svg>
     {feedback.text}
   </div>;
-  const action = <button className="flex items-center gap-1.5 text-[12px] font-medium text-fg-2" onClick={clear}>{count ? "Clear filters" : <>Clear Filters<Icon name="close" size={12} /></>}</button>;
-  if (count) return <div role="status" className="flex shrink-0 flex-col items-center justify-center gap-3 py-4 text-[13px] text-fg-3"><span>{feedback.text}</span>{action}</div>;
+  // Partial results: hiddenItemsContainer (full width, 12px top/bottom, wraps, centred, 20px gap) inside Linear's board
+  // footer (45px bar on bgBase under the columns) or list footer (84px row after the last item, 34px sides).
+  if (count) {
+    const inner = <div role="status" className="flex w-full flex-wrap items-center justify-center gap-5 py-3"><HiddenRow hidden={feedback.hidden} clear={clear} /></div>;
+    return layout === "board" ? <div className="flex h-[45px] shrink-0 items-center justify-center bg-panel">{inner}</div> : <div className="flex h-[84px] justify-center px-[34px]">{inner}</div>;
+  }
+  // Zero state: the rows sit in a bgBorder box (0.5px, 5px radius, min 350px), each 16px padded, count left, action right.
   return <div role="status" className="flex shrink-0 flex-col items-center justify-center gap-4 py-12 text-[13px] text-fg-3"><span className="text-[15px] font-medium">{feedback.text}</span>
-    {feedback.hidden ? <div className="flex h-14 w-[350px] max-w-full items-center justify-between gap-4 rounded-lg border-[0.5px] border-line px-5"><span><span className="font-medium text-fg-2">{feedback.hidden} issue{feedback.hidden === 1 ? "" : "s"}</span> hidden by filters</span>{action}</div> : action}</div>;
+    {feedback.hidden ? <div className="min-w-[350px] rounded-[5px] border-[0.5px] border-(--bg-border)"><div className="p-4"><HiddenRow hidden={feedback.hidden} clear={clear} between /></div></div> : null}</div>;
 }

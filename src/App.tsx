@@ -522,6 +522,8 @@ const BoardView = memo(function BoardView({
                     ))}
               </section>
             ))}
+            {/* Linear's list footer scrolls with the rows, right after the last one. */}
+            {visible.length > 0 && <ResultsFeedback count={visible.length} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !activeView?.mine)} clear={clearFilters} />}
           </div>
         ) : (
           <div className="flex min-h-0 flex-1">
@@ -643,7 +645,7 @@ const BoardView = memo(function BoardView({
                 </div>
               </details>
             )}
-        {visible.length > 0 && <ResultsFeedback count={visible.length} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !activeView?.mine)} clear={clearFilters} />}
+        {d.layout === "board" && visible.length > 0 && <ResultsFeedback count={visible.length} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !activeView?.mine)} clear={clearFilters} layout="board" />}
       </div>
       {active && shown && details && !panel && (activeView ? <ViewDetails view={activeView} issues={visible} /> : <BoardDetails board={board} issues={visible} />)}
     </div>
