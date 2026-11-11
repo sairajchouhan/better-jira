@@ -1,14 +1,21 @@
-import { jiraAvatar } from "./avatar-url";
 import { viewRepository } from "./view-repository";
 import { Database } from "bun:sqlite";
 import { jira, JiraError } from "./jira";
 import { boardFromInput } from "./config";
 import { detailCache } from "./detail-cache";
 import { recentlyTouched, storeRemoteLinks } from "./remote-links";
-import { issueAttachments, attachmentGateway, jiraAttachmentReader } from "./attachment-media";
+import { attachmentGateway, jiraAttachmentReader } from "./attachment-media";
 import { saveAddedBoard, serverAuth } from "./server-config";
 import { threadParent } from "./jira-ops";
-import { pullRequestCount, statusDates, type History } from "./issue-properties";
+import { statusDates, type History } from "./issue-properties";
+import {
+  issueProjection,
+  jiraUser,
+  propertyEntries,
+  remoteLinkUrls,
+  watcherList,
+  type PropertyRow,
+} from "./issue-projection";
 import { serverConfiguration } from "./server-config";
 import { unseenChanged } from "./notifications";
 import { writeLedger } from "./write-ledger";
@@ -24,22 +31,10 @@ const g = globalThis as {
 /** Live: a board added in the app joins it, and the sync loop (which outlives a hot reload) reads the same array. */
 export const BOARDS = (g.boards ??= []);
 for (const b of configuration.boards) if (!BOARDS.includes(b)) BOARDS.push(b);
-// Custom field IDs differ per site; resolve rank and story points by type and name.
-const siteFields = await jira<any[]>("/rest/api/3/field").catch(() => null);
-export const RANK =
-  siteFields?.find((f) => f.schema?.custom === "com.pyxis.greenhopper.jira:gh-lexo-rank")?.id ??
-  "customfield_10022";
-export const ESTIMATES: string[] = siteFields
-  ? siteFields
-      .filter((f) => /^story points?( estimate)?$/i.test(f.name))
-      .sort((a, b) => a.name.length - b.name.length)
-      .map((f) => f.id)
-  : ["customfield_10023", "customfield_10016"];
-const FIELDS = [
-  "summary,status,issuetype,priority,assignee,reporter,creator,created,updated,resolutiondate,statuscategorychangedate,duedate,project,issuelinks,labels,parent,description,comment,fixVersions,watches,attachment,customfield_10000",
-  RANK,
-  ...ESTIMATES,
-].join(",");
+// Custom field IDs differ per site; the projection resolves rank and story points from the site's field list.
+const projection = issueProjection(await jira<any[]>("/rest/api/3/field").catch(() => null));
+export const ESTIMATES = projection.estimates;
+const FIELDS = projection.fields;
 const ACTIVE_POLL_MS = 5_000; // a tab is open and visible
 const IDLE_POLL_MS = 60_000; // no tab open: keep the mirror warm
 const OPEN_ISSUE_POLL_MS = 3_000;
@@ -111,73 +106,7 @@ const upsert = db.query(
      full=CASE WHEN COALESCE(json_extract(excluded.slim,'$.updated'),'')>=COALESCE(json_extract(issues.slim,'$.updated'),'') THEN excluded.full ELSE issues.full END`,
 );
 
-/** What the board and search need for every issue; description and comments stay in `full`. */
-function slim(i: any, board: number) {
-  const f = i.fields;
-  const text = (n: any): string =>
-    typeof n === "string" ? n : [n?.text ?? "", ...(n?.content ?? []).map(text)].join(" ");
-  const user = (u: any) =>
-    u ? { id: u.accountId, name: u.displayName, avatar: jiraAvatar(u.avatarUrls) } : null;
-  const links = new Set<string>();
-  const collectLinks = (n: any) => {
-    for (const m of n?.marks ?? []) if (m.type === "link" && m.attrs?.href) links.add(m.attrs.href);
-    if (n?.type === "inlineCard" && n.attrs?.url) links.add(n.attrs.url);
-    for (const child of n?.content ?? []) collectLinks(child);
-  };
-  collectLinks(f.description);
-  for (const url of text(f.description).match(/https?:\/\/[^\s<>"\]|)]+/g) ?? []) links.add(url);
-  return {
-    key: i.key,
-    board,
-    summary: f.summary,
-    status: f.status.id,
-    type: f.issuetype?.name,
-    typeIcon: f.issuetype?.iconUrl,
-    priority: f.priority?.name,
-    assignee: f.assignee && {
-      id: f.assignee.accountId,
-      name: f.assignee.displayName,
-      avatar: jiraAvatar(f.assignee.avatarUrls),
-    },
-    labels: f.labels,
-    attachments: issueAttachments(i),
-    parent: f.parent?.key,
-    rank: f[RANK],
-    comments: f.comment?.total ?? 0,
-    updated: f.updated,
-    // Workflows that set no resolution leave resolutiondate empty; entering Done is the completion time then.
-    resolved:
-      f.resolutiondate ??
-      (f.status?.statusCategory?.key === "done" ? f.statuscategorychangedate : null) ??
-      null,
-    created: f.created,
-    creator: user(f.creator ?? f.reporter),
-    due: f.duedate ?? null,
-    watching: f.watches?.isWatching === true,
-    project: f.project
-      ? { key: f.project.key, name: f.project.name }
-      : { key: i.key.split("-")[0], name: i.key.split("-")[0] },
-    description: text(f.description),
-    milestones: f.fixVersions?.map((v: any) => ({ id: v.id, name: v.name })),
-    prCount: pullRequestCount(f.customfield_10000),
-    estimate: ESTIMATES.map((id) => f[id]).find((v) => typeof v === "number"),
-    links: [...links],
-    relations: (f.issuelinks ?? [])
-      .map((r: any) => ({
-        key: (r.outwardIssue ?? r.inwardIssue)?.key,
-        kind: /block/i.test(r.type?.name ?? "")
-          ? r.outwardIssue
-            ? "blocking"
-            : "blocked"
-          : /duplicat/i.test(r.type?.name ?? "")
-            ? r.outwardIssue
-              ? "duplicate"
-              : "duplicated"
-            : "related",
-      }))
-      .filter((r: any) => r.key),
-  };
-}
+const slim = projection.slim;
 
 const updatedOf = db.query<{ updated: string }, [string]>(
   "SELECT json_extract(slim,'$.updated') AS updated FROM issues WHERE key = ?",
@@ -355,7 +284,7 @@ async function watchOpenIssues() {
           storeRemoteLinks(
             db,
             key,
-            remote.flatMap((l) => (l.object?.url ? [l.object.url] : [])),
+            remoteLinkUrls(remote),
           )
         ) {
           db.query("DELETE FROM issue_details WHERE key = ?").run(key); // the panel's web links too
@@ -491,11 +420,7 @@ export async function refresh(
   db.query("DELETE FROM issue_details WHERE key = ?").run(raw.key);
   const [full, w] = await Promise.all([details.read(raw.key, true), watching]),
     issue = slim(raw, target);
-  const watchers = (w.watchers ?? []).map((u: any) => ({
-    id: u.accountId,
-    name: u.displayName,
-    avatar: jiraAvatar(u.avatarUrls),
-  }));
+  const { watchers, watchersComplete } = watcherList(w);
   const old = db
     .query<{ data: string; source_updated: string }, [string]>(
       "SELECT data,source_updated FROM issue_properties WHERE key = ?",
@@ -504,7 +429,7 @@ export async function refresh(
   const props = {
     ...(old ? JSON.parse(old.data) : {}),
     watchers,
-    watchersComplete: watchers.length === w.watchCount,
+    watchersComplete,
   };
   // Keep the old revision stamp: status dates in `data` predate this write, so enrichment must recompute them.
   db.query("INSERT OR REPLACE INTO issue_properties VALUES (?,?,?,?)").run(
@@ -534,11 +459,7 @@ let profileRequest: Promise<{ id: string; name: string; avatar?: string }> | und
 async function profile() {
   try {
     const user = await jira("/rest/api/3/myself");
-    const profile = {
-      id: user.accountId,
-      name: user.displayName,
-      avatar: jiraAvatar(user.avatarUrls),
-    };
+    const profile = jiraUser(user);
     if (!profile.id) throw new Error("Jira did not return an account ID");
     setMeta("profile", JSON.stringify(profile));
     return profile;
@@ -588,9 +509,7 @@ async function enrichProjects() {
         `project-info:${key}`,
         JSON.stringify({
           synced: Date.now(),
-          lead: u
-            ? { id: u.accountId, name: u.displayName, avatar: jiraAvatar(u.avatarUrls) }
-            : null,
+          lead: u ? jiraUser(u) : null,
         }),
       );
     } catch (e) {
@@ -676,12 +595,7 @@ async function enrichProperties() {
                   : await jira(`/rest/api/3/issue/${encodeURIComponent(row.key)}/watchers`, {
                       signal: AbortSignal.timeout(30000),
                     });
-              data.watchers = (w.watchers ?? []).map((u: any) => ({
-                id: u.accountId,
-                name: u.displayName,
-                avatar: jiraAvatar(u.avatarUrls),
-              }));
-              data.watchersComplete = data.watchers.length === w.watchCount;
+              Object.assign(data, watcherList(w));
               if (!data.watchersComplete)
                 errors.push("Watcher list restricted by Jira permissions");
             } catch {
@@ -690,11 +604,11 @@ async function enrichProperties() {
             }
             try {
               // Jira web links live outside the search fields; the Links filter matches them too.
-              data.remoteLinks = (
+              data.remoteLinks = remoteLinkUrls(
                 await jira<any[]>(`/rest/api/3/issue/${encodeURIComponent(row.key)}/remotelink`, {
                   signal: AbortSignal.timeout(30000),
-                })
-              ).flatMap((l) => (l.object?.url ? [l.object.url] : []));
+                }),
+              );
             } catch {
               errors.push("Web links unavailable");
             }
@@ -719,44 +633,16 @@ async function enrichProperties() {
   }
 }
 
-export function properties() {
-  const rows = db
-    .query<{ key: string; slim: string; data: string | null; source_updated: string | null }, []>(
-      `SELECT i.key,i.slim,p.data,p.source_updated FROM issues i LEFT JOIN issue_properties p ON p.key=i.key WHERE i.board IN (${BOARDS.join(",")})`,
-    )
-    .all();
-  let missing = 0,
-    errors = 0;
-  const projects = new Map<string, any>();
-  const entries = Object.fromEntries(
-    rows.map((r) => {
-      const slim = JSON.parse(r.slim);
-      const projectKey = slim.project?.key;
-      if (projectKey && !projects.has(projectKey))
-        projects.set(projectKey, JSON.parse(getMeta(`project-info:${projectKey}`) ?? "null"));
-      const fresh = r.source_updated === slim.updated;
-      if (!fresh) missing++;
-      const data = fresh && r.data ? JSON.parse(r.data) : {};
-      if (data.errors?.length) errors++;
-      // The whole slim row rides along so edits made directly in Jira reach open clients.
-      const { remoteLinks = [], ...extra } = data;
-      return [
-        r.key,
-        {
-          ...slim,
-          projectLead: projects.get(projectKey)?.lead,
-          ...extra,
-          links: [...new Set([...(slim.links ?? []), ...remoteLinks])],
-        },
-      ];
-    }),
+export const properties = () =>
+  propertyEntries(
+    db
+      .query<PropertyRow, []>(
+        `SELECT i.key,i.slim,p.data,p.source_updated FROM issues i LEFT JOIN issue_properties p ON p.key=i.key WHERE i.board IN (${BOARDS.join(",")})`,
+      )
+      .all(),
+    (key) => JSON.parse(getMeta(`project-info:${key}`) ?? "null"),
+    propertyProgress.pending,
   );
-  const pending = Math.max(propertyProgress.pending, missing);
-  return {
-    progress: { total: rows.length, pending, completed: rows.length - missing, errors },
-    entries,
-  };
-}
 
 /** People to @mention: those Jira lets see the issue (user/viewissue/search), as its own mention picker offers. That search returns no one for an empty
  * query, so a bare "@" lists the issue's assignable people; without an issue (a new one), anyone on the site. Apps and deactivated accounts are left out. */
@@ -775,7 +661,7 @@ export async function people(query: string, issue?: string) {
     : await search("search");
   return found
     .filter((u) => u.accountType === "atlassian" && u.active !== false)
-    .map((u) => ({ id: u.accountId, name: u.displayName, avatar: jiraAvatar(u.avatarUrls) }));
+    .map(jiraUser);
 }
 
 /** Jira's choices for the property menus (priorities, assignable people, versions, labels). Cached for ten minutes. */
@@ -790,11 +676,6 @@ export function options() {
       .all()
       .map((r) => r.key)
       .filter(Boolean);
-    const user = (u: any) => ({
-      id: u.accountId,
-      name: u.displayName,
-      avatar: jiraAvatar(u.avatarUrls),
-    });
     const [priorities, users, labels, versions, types] = await Promise.all([
       jira<any[]>("/rest/api/3/priority"),
       projects.length
@@ -838,7 +719,7 @@ export function options() {
     ]);
     return {
       priorities: priorities.map((p) => ({ id: p.id, name: p.name })),
-      users: users.filter((u) => u.accountType === "atlassian" && u.active !== false).map(user),
+      users: users.filter((u) => u.accountType === "atlassian" && u.active !== false).map(jiraUser),
       labels,
       versions: Object.fromEntries(versions),
       types: Object.fromEntries(types),
