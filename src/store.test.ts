@@ -875,7 +875,7 @@ test("outbox: an issue's edits queued behind its write in flight merge into one 
   }
 });
 
-test("outbox: rapid status changes wait 400 ms and reach Jira as one transition", async () => {
+test("outbox: rapid status changes reach Jira as one transition", async () => {
   const { actions, get, set } = await import("./store");
   const jira = await fakeJiraWrites();
   try {
@@ -896,15 +896,15 @@ test("outbox: rapid status changes wait 400 ms and reach Jira as one transition"
           ],
       issues: new Map(get().issues).set("OS-1", writableIssue("OS-1")),
     });
-    const started = Date.now();
     actions.status("OS-1", "done");
     await Bun.sleep(100);
     actions.status("OS-1", "todo");
     await Bun.sleep(100);
     actions.status("OS-1", "done");
+    // The hold restarts with each change (the exact timing is in outbox.test.ts).
+    await Bun.sleep(250);
     expect(jira.sent).toEqual([]);
     await jira.settled();
-    expect(Date.now() - started).toBeGreaterThanOrEqual(600);
     expect(jira.sent.map((s) => s.ops)).toEqual([[{ op: "status", status: "done" }]]);
   } finally {
     set({ writable: false });
