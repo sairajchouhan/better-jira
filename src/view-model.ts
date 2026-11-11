@@ -686,6 +686,88 @@ export const navigationIssues = (columns: Issue[][]): Issue[] => [
   ...new Map(columns.flat().map((i) => [i.key, i])).values(),
 ];
 
+/** A board's groups as columns: status columns outside the scope drop out. `universe` is the board's issues. */
+export function boardColumns(
+  visible: Issue[],
+  board: Board,
+  prefs: Preferences,
+  universe: Issue[],
+): Bucket[] {
+  const d = prefs.display;
+  return buckets(visible, d.columns, board, universe, d.groupDescending).filter(
+    (c) =>
+      d.columns !== "status" ||
+      columnInScope(
+        board.columns.find((x) => x.name === c.id),
+        prefs.scope,
+      ),
+  );
+}
+
+/** The on-screen order, one array per column: a list is one column of its rows (nested sub-issues included), a board its cards row by row.
+ *  Hidden groups, and a list's collapsed groups, drop out; a card a label grouping repeats in a column is visited once. */
+export function issueOrder(
+  columns: Bucket[],
+  visible: Issue[],
+  board: Board,
+  prefs: Preferences,
+  universe: Issue[],
+): Issue[][] {
+  const d = prefs.display,
+    hidden = prefs.hidden[d.columns] ?? [],
+    collapsed = prefs.collapsed[d.columns] ?? [],
+    shown = columns.filter((c) => !hidden.includes(c.id));
+  let order: Issue[][];
+  if (d.layout === "list")
+    order = [
+      shown
+        .filter((c) => !collapsed.includes(c.id))
+        .flatMap((c) =>
+          buckets(c.issues, d.rows, board, c.issues).flatMap((r) =>
+            listRows(r.issues, universe, d.subIssues ? d.nested : "none").map((row) => row.issue),
+          ),
+        ),
+    ];
+  else {
+    const rows = buckets(visible, d.rows, board, visible);
+    order = shown.map((c) => rows.flatMap((r) => c.issues.filter((i) => r.issues.includes(i))));
+  }
+  return order.map((c) => [...new Map(c.map((i) => [i.key, i])).values()]);
+}
+
+/** The store fields the active board's visible issues depend on. */
+export type OrderState = {
+  boards: Board[];
+  issues: Map<string, Issue>;
+  board: number;
+  preferences: Record<number, Preferences>;
+  /** The open saved view's settings with its temporary filters, or the view editor's draft. */
+  effectiveViewPreferences: Preferences | null;
+  savedViews: { id: string; mine: boolean }[];
+  activeViewId: string | null;
+  mine: boolean;
+  query: string;
+};
+const noPreferences = defaultPreferences();
+let lastOrder: { inputs: unknown[]; order: Issue[][] } | undefined;
+/** The active board's issues in on-screen order, as the board shows them: J/K, ←/→ and the issue page's stepper all follow it.
+ *  Memoised on its inputs, so a store selector can return it. */
+export function visibleOrder(state: OrderState, me: string): Issue[][] {
+  const board = state.boards.find((b) => b.id === state.board);
+  if (!board) return [];
+  const prefs = state.effectiveViewPreferences ?? state.preferences[board.id] ?? noPreferences,
+    mine = state.mine || !!state.savedViews.find((v) => v.id === state.activeViewId)?.mine,
+    inputs = [state.issues, board, prefs, mine, state.query, me];
+  if (lastOrder?.inputs.every((x, i) => x === inputs[i])) return lastOrder.order;
+  const all = [...state.issues.values()],
+    visible = selectIssues(all, board, prefs, mine, state.query, me),
+    universe = all.filter((i) => i.board === board.id),
+    columns = boardColumns(visible, board, prefs, universe),
+    order = issueOrder(columns, visible, board, prefs, universe);
+  lastOrder = { inputs, order };
+  return order;
+}
+
 export function draftForGroup(
   by: Grouping,
   id: string,

@@ -1,10 +1,9 @@
-/* oxlint-disable react/globals -- The single mounted surface publishes current rows to the shared shortcut dispatcher. */
 import { useEffect, useState } from "react";
 import { viewShortcutId } from "./view-shortcut";
 import { createToolbarView } from "./view-toolbar-actions";
 import { activeView, saveOverlayToView } from "./saved-views";
 import { canMergeOverlay } from "./saved-view-model";
-import { filterCount } from "./view-model";
+import { filterCount, visibleOrder } from "./view-model";
 import { canHaveChildren } from "./issue-properties";
 import {
   formatForDisplay,
@@ -78,7 +77,6 @@ type Shortcut = {
   /** The ⌘K row's name when it depends on state, e.g. "Unfavorite issue". */
   label?: () => string;
 };
-let columns: () => Issue[][] = () => [];
 /** The issue a menu item runs a shortcut on (`runShortcut(id, key)`); a right-click menu's issue never becomes the selection. */
 let acting: string | null = null;
 const selected = () => {
@@ -121,10 +119,11 @@ const focus = (id: string) =>
     };
     requestAnimationFrame(attempt);
   });
+const order = () => visibleOrder(get(), ME.id);
 function move(direction: number, horizontal = false) {
   if (get().inbox && !horizontal) return moveRow(direction);
   const s = get(),
-    cols = columns(),
+    cols = order(),
     flat = [...new Map(cols.flat().map((i) => [i.key, i])).values()];
   if (s.panel && !horizontal) {
     const index = flat.findIndex((i) => i.key === s.selected);
@@ -160,7 +159,7 @@ function moveColumn(direction: number) {
 function reorder(direction: number, edge = false) {
   const issue = selected();
   if (!issue) return;
-  const list = columns().find((c) => c.some((i) => i.key === issue.key));
+  const list = order().find((c) => c.some((i) => i.key === issue.key));
   if (!list) return;
   const i = list.findIndex((x) => x.key === issue.key),
     rest = list.filter((x) => x.key !== issue.key),
@@ -944,8 +943,7 @@ export function runShortcut(id: string, key?: string) {
     acting = null;
   }
 }
-export function useLinearHotkeys(getColumns: () => Issue[][]) {
-  columns = getColumns;
+export function useLinearHotkeys() {
   const state = useStore((s) => s);
   useEffect(() => {
     const handle = (event: KeyboardEvent) => {

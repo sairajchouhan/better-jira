@@ -88,12 +88,14 @@ import { interruptedUploads } from "./jira-media";
 
 import { BoardControls, FilterChips } from "./view-controls";
 import {
+  boardColumns,
   buckets,
-  columnInScope,
   draftForGroup,
+  issueOrder,
   rankBetween,
   listRows,
   navigationIssues,
+  visibleOrder,
   selectIssues,
   defaultPreferences,
   filterCount,
@@ -133,10 +135,6 @@ import { InboxIssueActions, InboxList, InboxPane, undoInboxToast, useInboxBadge 
 import { PickerRow, PropertyMenu } from "./property-menu";
 import { descriptionSession, type DescriptionPorts } from "./description-session";
 import { shortDate } from "./due-date";
-
-/** The active board's visible columns, for keyboard navigation and the issue page's ↑ ↓ stepping. */
-const nav = { cols: [] as Issue[][] };
-const flatNav = () => navigationIssues(nav.cols);
 
 const openRelated = (target: Issue) =>
   navigate({ board: target.board, selected: target.key, panel: true, view: get().view });
@@ -253,7 +251,7 @@ const statusOf = (i: Issue) => statusById(boardOf(i.key), i.status);
 
 /** The keyboard map re-registers on every store change; its own component keeps that from re-rendering App. */
 function Hotkeys() {
-  useLinearHotkeys(() => nav.cols);
+  useLinearHotkeys();
   return null;
 }
 export function App() {
@@ -402,16 +400,8 @@ const BoardView = memo(function BoardView({
   );
   const universe = useMemo(() => all.filter((i) => i.board === board.id), [all, board]);
   const columns = useMemo(
-    () =>
-      buckets(visible, d.columns, board, universe, d.groupDescending).filter(
-        (c) =>
-          d.columns !== "status" ||
-          columnInScope(
-            board.columns.find((x) => x.name === c.id),
-            prefs.scope,
-          ),
-      ),
-    [visible, d, board, universe, prefs.scope],
+    () => boardColumns(visible, board, prefs, universe),
+    [visible, board, prefs, universe],
   );
   const hiddenIds = prefs.hidden[d.columns] ?? [];
   const collapsed = prefs.collapsed[d.columns] ?? [];
@@ -421,26 +411,15 @@ const BoardView = memo(function BoardView({
   );
   const show = columns.filter((c) => !hidden.includes(c));
   const rows = useMemo(() => buckets(visible, d.rows, board, visible), [visible, d.rows, board]);
-  const navColumns =
-    d.layout === "list"
-      ? [
-          show
-            .filter((c) => !collapsed.includes(c.id))
-            .flatMap((c) =>
-              buckets(c.issues, d.rows, board, c.issues).flatMap((r) =>
-                listRows(r.issues, universe, d.subIssues ? d.nested : "none").map(
-                  (row) => row.issue,
-                ),
-              ),
-            ),
-        ]
-      : show.map((c) => rows.flatMap((r) => c.issues.filter((i) => r.issues.includes(i))));
-  if (active) nav.cols = navColumns.map((c) => [...new Map(c.map((i) => [i.key, i])).values()]);
+  const order = useMemo(
+    () => issueOrder(columns, visible, board, prefs, universe),
+    [columns, visible, board, prefs, universe],
+  );
   useEffect(() => setExpanded([]), [d.emptyGroups, d.columns]);
   useEffect(() => {
     if (!active || !selected) return;
     if (!get().fullErrors.get(selected)) loadFull(selected);
-    const flat = navColumns.flat();
+    const flat = order.flat();
     const i = flat.findIndex((x) => x.key === selected);
     if (i >= 0)
       for (const offset of [-2, -1, 1, 2]) {
@@ -1816,11 +1795,8 @@ const IssueView = memo(function IssueView({
 
 /** Linear shows position, then next and previous, within the current visible view. */
 function Stepper({ issueKey }: { issueKey: string }) {
-  useStore((s) => s.issues); // re-render when the list changes; nav.cols is rebuilt by the board in the same render
-  useStore((s) => s.mine);
-  useStore((s) => s.query);
-  useStore((s) => s.preferences);
-  const flat = flatNav();
+  const order = useStore((s) => visibleOrder(s, ME.id));
+  const flat = useMemo(() => navigationIssues(order), [order]);
   const i = flat.findIndex((x) => x.key === issueKey);
   return (
     <div className="mr-1 flex items-center gap-0.5">

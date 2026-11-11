@@ -409,6 +409,29 @@ export function focusGroups(
   return groups;
 }
 
+export type InboxOrder = { base: InboxItem[]; groups: InboxGroup[]; rows: InboxItem[] };
+/** The list as shown: `rows` in on-screen order (the keys' order too), in their `groups`; `base` is the rows before filters, for the filter menu's counts. */
+export function inboxOrder(
+  items: InboxItem[],
+  local: Record<string, Local>,
+  view: InboxView,
+  now: number,
+  keep: string | null,
+  facets: (item: InboxItem) => Facets,
+): InboxOrder {
+  const base = visibleItems(items, local, { ...view, filters: {} }, now, keep, facets),
+    shown = visibleItems(items, local, view, now, keep, facets),
+    groups = view.grouping === "focus" ? focusGroups(shown, facets) : [{ label: "", rows: shown }];
+  return { base, groups, rows: groups.flatMap((g) => g.rows) };
+}
+const sameRows = (a: InboxItem[], b: InboxItem[]) =>
+  a.length === b.length && a.every((r, i) => r.id === b[i]!.id && r.unread === b[i]!.unread);
+/** Whether two orders show the same rows in the same groups. */
+export const sameInboxOrder = (a: InboxOrder, b: InboxOrder) =>
+  sameRows(a.base, b.base) &&
+  a.groups.length === b.groups.length &&
+  a.groups.every((g, i) => g.label === b.groups[i]!.label && sameRows(g.rows, b.groups[i]!.rows));
+
 /** Linear's snooze presets (generateDefaultTimeOptions, 2026-11-08): this evening only while it is an hour or more away; then "Custom…". */
 export function snoozeChoices(now = new Date()): { label: string; until: number }[] {
   const day = (days: number, hour: number, months = 0) => {

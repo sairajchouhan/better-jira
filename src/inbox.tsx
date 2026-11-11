@@ -1,4 +1,3 @@
-/* oxlint-disable react/globals -- The single mounted surface publishes current rows to the shared shortcut dispatcher. */
 /** Linear's Inbox over Jira's in-app notifications. Read state goes to Jira; delete and snooze stay in this browser, because Jira's notification API has neither. */
 import { InfiniteQueryObserver, type InfiniteData } from "@tanstack/query-core";
 import { Command } from "cmdk";
@@ -13,16 +12,18 @@ import {
   describe,
   facetsOf,
   feedCategory,
-  focusGroups,
+  inboxOrder,
   missingIssueNote,
   shortAgo,
   snoozeChoices,
   snoozeTime,
   unreadCount,
+  sameInboxOrder,
   visibleItems,
   type FilterField,
   type InboxFeed,
   type InboxItem,
+  type InboxOrder,
   type InboxView,
   type Local,
 } from "./inbox-model";
@@ -238,9 +239,37 @@ export const undoInboxToast = () => undoInbox(toastUndo);
 
 // --- actions (also the keyboard shortcuts) ---
 
-/** The rows on screen, in order; the list sets it as it renders. */
-let rows: InboxItem[] = [];
-const selectedRow = () => rows.find((r) => r.id === selectedId);
+let lastOrder: { inputs: unknown[]; order: InboxOrder } | undefined;
+/** The list's order from the feed's loaded pages, this browser's read, delete and snooze state, and the view.
+ *  Memoised; when only the mirror changed (a Jira poll) and no row did, it returns the same order, so the list needn't re-render. */
+function orderOf(
+  data: InfiniteData<Feed, string> | undefined,
+  own: Record<string, Local>,
+  v: InboxView,
+  now: number,
+  keep: string | null,
+) {
+  const inputs = [data, own, v, now, keep, get().issues],
+    last = lastOrder;
+  if (last?.inputs.every((x, i) => x === inputs[i])) return last.order;
+  let order = inboxOrder(itemsOf(data), own, v, now, keep, facets);
+  const onlyMirror = !!last && inputs.slice(0, 5).every((x, i) => x === last.inputs[i]);
+  if (onlyMirror && sameInboxOrder(last!.order, order)) order = last!.order;
+  lastOrder = { inputs, order };
+  return order;
+}
+/** The rows on screen, in order: what the inbox's keys and actions act on. */
+function shownRows() {
+  const v = viewState();
+  return orderOf(
+    queryClient.getQueryData<InfiniteData<Feed, string>>(["inbox", feedCategory(v)]),
+    localState(),
+    v,
+    get().clock,
+    selectedId,
+  ).rows;
+}
+const selectedRow = () => shownRows().find((r) => r.id === selectedId);
 
 async function send(body: object) {
   const res = await fetch("/api/inbox", {
@@ -338,7 +367,8 @@ export function selectRow(item: InboxItem | undefined, open: "side" | "page" = "
   );
 }
 export function moveRow(direction: number) {
-  const at = rows.findIndex((r) => r.id === selectedId);
+  const rows = shownRows(),
+    at = rows.findIndex((r) => r.id === selectedId);
   selectRow(rows[at < 0 ? 0 : at + direction]);
 }
 export const openRow = () => selectRow(selectedRow(), "page");
@@ -351,7 +381,7 @@ const hasFilters = (v: InboxView) => Object.values(v.filters).some((values) => v
 export function markAllRead() {
   const v = viewState();
   return markRead(
-    rows.filter((r) => r.unread),
+    shownRows().filter((r) => r.unread),
     true,
     "mark notifications as read",
     undefined,
@@ -362,7 +392,8 @@ export function markAllRead() {
 function hide(items: InboxItem[], patch: Local, label: string, toast: string) {
   if (!items.length) return;
   const before = new Map(items.map((i) => [i.head, localState()[i.head]])),
-    was = selectedRow();
+    was = selectedRow(),
+    rows = shownRows();
   const gone = new Set(items.map((i) => i.id)),
     at = rows.findIndex((r) => r.id === selectedId),
     next =
@@ -404,6 +435,7 @@ export async function deleteAll(which: "all" | "read" | "completed") {
       : which === "completed"
         ? "notifications for completed issues"
         : "notifications";
+  const rows = shownRows();
   if (
     !rows.length ||
     !confirm(`Delete all ${what}? Jira keeps them; this hides them in better-jira.`)
@@ -750,6 +782,7 @@ function SnoozeMenu({ close }: { close: () => void }) {
 
 function Menus({ base }: { base: InboxItem[] }) {
   const overlay = useStore((s) => s.overlay);
+  useStore((s) => (s.overlay === "inbox-filter" ? s.issues : null)); // the filter menu's counts read mirrored issues
   const site = useStore((s) => s.site);
   const v = useView();
   const close = () => ui.send({ type: "overlay.close" });
@@ -893,7 +926,9 @@ export function InboxList() {
   const own = useLocal();
   const selected = useSelected();
   const now = useStore((s) => s.clock);
-  useStore((s) => s.issues); // filters and grouping read mirrored issues
+  const items = itemsOf(data);
+  // Filters and grouping read mirrored issues: a store change re-renders the list only when its rows change.
+  const { base, groups, rows } = useStore(() => orderOf(data, own, v, now, selected));
   const [menu, setMenu] = useState<{ item: InboxItem; point: { x: number; y: number } } | null>(
     null,
   );
@@ -907,7 +942,7 @@ export function InboxList() {
   // A reload keeps the open issue, or a row outside the mirror, in the URL: select its row again, so U, E and H act on it.
   const issueKey = useStore((s) => (s.inbox ? s.selected : null)),
     rowId = issueKey ? null : new URLSearchParams(location.search).get(ROW_PARAM);
-  const known = itemsOf(data).some((r) => (issueKey ? r.key === issueKey : r.id === rowId));
+  const known = items.some((r) => (issueKey ? r.key === issueKey : r.id === rowId));
   useEffect(() => {
     if (selectedId || (!issueKey && !rowId)) return;
     const row = rows.find((r) => (issueKey ? r.key === issueKey : r.id === rowId));
@@ -915,7 +950,7 @@ export function InboxList() {
       selectedId = row.id;
       emit();
     }
-    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Re-select the issue when its mirror row becomes available.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Re-select the issue when its mirror row becomes available.
   }, [issueKey, rowId, known]);
   useEffect(() => {
     if (!end.current || !hasNextPage || isFetchingNextPage) return;
@@ -928,12 +963,6 @@ export function InboxList() {
     return () => observer.disconnect();
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Reobserve the load sentinel after a page appends rows.
   }, [hasNextPage, isFetchingNextPage, pages, fetchNextPage]);
-  const items = itemsOf(data);
-  const base = visibleItems(items, own, { ...v, filters: {} }, now, selected, facets);
-  const shown = visibleItems(items, own, v, now, selected, facets);
-  const groups = v.grouping === "focus" ? focusGroups(shown, facets) : [{ label: "", rows: shown }];
-  // ponytail: module-level row cache so shortcuts act on what is on screen; a store field if a second list ever renders.
-  rows = groups.flatMap((g) => g.rows);
   const filtered = hasFilters(v) || v.unreadOnly;
   return (
     <section
@@ -1101,7 +1130,7 @@ export function InboxIssueActions() {
 export function InboxPane() {
   const selected = useSelected();
   const unread = useUnreadCount().count;
-  const row = rows.find((r) => r.id === selected);
+  const row = shownRows().find((r) => r.id === selected);
   if (row)
     return (
       <div className="flex min-w-0 flex-1 flex-col">
