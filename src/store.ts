@@ -2482,7 +2482,7 @@ export function createViewDraft(
     kind,
     name: "",
     description: "",
-    icon: "filter",
+    icon: "custom-view", // Linear's new-view default (#CustomView)
     color: "gray",
     filters: p.filters,
     // Linear: a new custom view starts as a list with its details open; a tab keeps the board's layout.

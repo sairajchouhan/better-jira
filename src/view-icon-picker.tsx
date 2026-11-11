@@ -3,7 +3,7 @@ import { Command } from "cmdk";
 import { Icon, type IconName } from "./icons";
 import { MenuSurface } from "./menu-surface";
 
-/** Linear's view colours (2026-11-11 capture). Grey is stored as "gray" so it follows the theme's muted text colour. */
+/** Linear's view colours (2026-11-11 capture). Grey is stored as "gray"; Linear fills it #bec2c8 in every theme. */
 export const VIEW_COLORS = [
   ["Grey", "gray", "#bec2c8"],
   ["Dark Grey", "#95a2b3", "#95a2b3"],
@@ -18,7 +18,7 @@ export const VIEW_COLORS = [
 
 /** Every glyph in the app's icon set, grouped like Linear's picker. */
 export const GLYPH_GROUPS: [string, IconName[]][] = [
-  ["Views & layout", ["filter", "view", "layers", "board", "list", "display", "side", "search", "expand"]],
+  ["Views & layout", ["custom-view", "filter", "view", "layers", "board", "list", "display", "side", "search", "expand"]],
   [
     "Work",
     ["inbox", "status", "priority", "check", "flag", "flag-x", "label", "clipboard", "calendar", "clock", "bell", "star", "starred"],

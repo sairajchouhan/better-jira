@@ -10,7 +10,7 @@ import { directoryViews, resultFeedback, viewSummaries } from "./views-navigatio
 import "./views-navigation.css";
 
 export function SavedViewIcon({ view }: { view: Pick<SavedView, "icon" | "color"> }) {
-  return <span aria-hidden="true" className="inline-flex shrink-0" style={{ color: view.color === "gray" ? "var(--fg-3)" : view.color }}>
+  return <span aria-hidden="true" className="inline-flex shrink-0" style={{ color: view.color === "gray" ? "var(--view-gray)" : view.color }}>
     {/[^\x00-\x7F]/.test(view.icon) ? view.icon : <Icon name={view.icon as IconName} size={16} />}
   </span>;
 }

@@ -16,7 +16,8 @@ test("custom identity, directory, favorite, details, palette and tab identity", 
     expect(await page.eval(`document.querySelector('[aria-label=Breadcrumb]').textContent.includes('Directory custom')`)).toBe(true);
     await page.click('[aria-label="Add to favorites"]');
     await page.waitFor(`!!document.querySelector('nav[aria-label="Main navigation"] [aria-current="page"]')`);
-    expect(await page.eval(`document.querySelectorAll('nav[aria-label="Main navigation"] [aria-current]').length`)).toBe(1);
+    // Only the active view is marked: its Views-section row and its Favorites row, never another view or the board.
+    expect(await page.eval(`[...document.querySelectorAll('nav[aria-label="Main navigation"] [aria-current]')].map(e => e.textContent).join('|')`)).toBe('Directory custom|Directory custom');
     await page.click('[aria-label="Open details"]');
     await page.waitFor(`document.querySelector('[aria-label="View details"]').textContent.includes('Personal triage')`);
     await page.key('k','meta');

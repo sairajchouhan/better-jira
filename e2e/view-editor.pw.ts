@@ -8,7 +8,7 @@ test("draft reload, cancel, create toast, edit, duplicate and themed delete", as
     const before = await app.eval(
       `localStorage.getItem(${JSON.stringify(PREFS_KEY)})`,
     );
-    await p.getByRole("button", { name: "Views", exact: true }).click();
+    await p.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Views", exact: true }).click();
     await p.getByRole("button", { name: "New view", exact: true }).click();
     await expect(p).toHaveURL(/\/view\/new/);
     await p
@@ -22,7 +22,7 @@ test("draft reload, cancel, create toast, edit, duplicate and themed delete", as
     expect(
       await app.eval(`localStorage.getItem(${JSON.stringify(PREFS_KEY)})`),
     ).toBe(before);
-    await p.getByRole("button", { name: "Views", exact: true }).click();
+    await p.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Views", exact: true }).click();
     await p.getByRole("button", { name: "New view", exact: true }).click();
     await expect(p.getByText("Personal", { exact: true })).toHaveCount(0); // BJ-141: custom drafts have no scope line either
     await p
@@ -59,8 +59,9 @@ test("draft reload, cancel, create toast, edit, duplicate and themed delete", as
       p.getByRole("textbox", { name: "View description" }),
     ).toHaveValue("");
     await p.getByRole("button", { name: "Cancel", exact: true }).click();
-    await p.getByRole("button", { name: "Views", exact: true }).click();
-    await p.getByRole("button", { name: "Renamed", exact: true }).click();
+    await p.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Views", exact: true }).click();
+    // Every saved view is listed inline in the sidebar's Views section, like boards.
+    await p.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Renamed", exact: true }).click();
     await p.getByRole("button", { name: "Issue view options" }).click();
     await p.keyboard.type("Delete"); // Linear's menus filter as you type; the search field stays hidden until then
     await expect(p.getByPlaceholder("Search actions…")).toHaveValue("Delete");

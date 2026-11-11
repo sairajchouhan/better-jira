@@ -874,6 +874,7 @@ function QuickNavigation({ kind }: { kind: "favorites" | "views" | "boards" }) {
 function Sidebar({ boards }: { boards: Board[] }) {
   const boardId = useStore((s) => s.board);
   const activeView = useActiveView();
+  const views = useSavedViews();
   const viewsPage = useStore((s) => s.viewsPage);
   const mine = useStore((s) => s.mine);
   const hidden = useStore((s) => s.sidebarHidden);
@@ -951,7 +952,22 @@ function Sidebar({ boards }: { boards: Board[] }) {
             <span className="truncate">{b.name}</span>
           </SideItem>
         ))}
-        <SideItem active={viewsPage} onClick={() => navigate({ board: boardId, viewsPage: true, selected: null, panel: false, inbox: false })}><Icon name="layers" /> Views</SideItem>
+        {/* Views is a section like Boards: every saved view inline; the heading opens the Views directory. */}
+        <button
+          onClick={() => navigate({ board: boardId, viewsPage: true, selected: null, panel: false, inbox: false })}
+          aria-current={viewsPage || undefined}
+          className={`mt-5 mb-1 flex h-6 items-center rounded-md px-2 text-left text-[12px] hover:text-fg-2 ${viewsPage ? "text-fg-2" : "text-fg-3"}`}
+        >
+          Views
+        </button>
+        {views.map((v) => (
+          <ViewContextMenu key={v.id} view={v}>
+            <SideItem active={activeView?.id === v.id} onClick={() => timed("open view", () => openSavedView(v))}>
+              <SavedViewIcon view={v} />
+              <span className="truncate">{v.name}</span>
+            </SideItem>
+          </ViewContextMenu>
+        ))}
         <ViewFavorites />
         <button
           id="help-menu"
@@ -1206,53 +1222,64 @@ function MenuButton() {
     </button>
   );
 }
+// Linear's breadcrumb (linear.app/…/view/…, 2026-11-11 computed styles): 24px links padded 0 5px 0 4px with matching
+// negative margins, 16px icon + 6px, 13px/500 text at line-height normal, "›" with 8px sides lifted 2px; hover bg
+// --crumb-hover and primary text, only colour animates (0.15s).
+const CRUMB_LAST =
+  "-ml-1 flex h-6 min-w-0 items-center rounded-lg pr-[5px] pl-1 transition-[color] duration-150 ease-[ease] hover:bg-(--crumb-hover) hover:text-fg focus-visible:outline-2 focus-visible:outline-accent";
+const CRUMB = `-mr-[5px] ${CRUMB_LAST}`; // the current (last) crumb keeps its right padding, like Linear's current item
+const CRUMB_ICON = "mr-1.5 grid w-4 shrink-0 place-items-center";
+function CrumbSep({ className = "" }: { className?: string }) {
+  return <span aria-hidden="true" className={`mx-2 -mt-0.5 shrink-0 text-fg-3 ${className}`}>›</span>;
+}
 function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue }) {
   const mine = useStore((s) => s.mine);
   const activeView = useActiveView();
-  const custom = activeView?.kind === "custom" ? activeView : null;
+  const custom = !issue && activeView?.kind === "custom" ? activeView : null;
   const openAllIssues = () => openBoardIssues(board.id);
-  const crumb =
-    "flex h-7 min-w-0 items-center gap-2 rounded px-1 hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-accent";
   return (
     <nav
       aria-label="Breadcrumb"
-      className="flex min-w-0 items-center text-[13px] font-medium text-fg-2"
+      className="flex min-w-0 items-center text-[13px] leading-[normal] font-medium text-fg-2"
     >
       <MenuButton />
-      <button aria-label={board.name} title={board.name} onClick={openAllIssues} className={crumb}>
-        <span
-          aria-hidden="true"
-          className="grid size-4 shrink-0 place-items-center rounded-[4px] bg-accent text-[9px] font-semibold text-white"
-        >
-          {board.name[0]}
+      <button aria-label={board.name} title={board.name} onClick={openAllIssues} className={CRUMB}>
+        <span aria-hidden="true" className={CRUMB_ICON}>
+          <span className="grid size-4 place-items-center rounded-[4px] bg-accent text-[9px] font-semibold text-white">{board.name[0]}</span>
         </span>
         <span className="truncate">{board.name}</span>
       </button>
-      <span aria-hidden="true" className={`mx-1 text-fg-3 ${issue ? "max-sm:hidden" : ""}`}>
-        ›
-      </span>
-      <button
-        aria-label={custom?.name ?? (!activeView && mine ? "My issues" : "Issues")}
-        aria-current={issue ? undefined : "page"}
-        onClick={() => custom ? openSavedView(custom) : openAllIssues()}
-        className={`${crumb} shrink-0 ${issue ? "max-sm:hidden" : ""}`}
-      >
-        {custom ? <><SavedViewIcon view={custom} />{custom.name}</> : !activeView && mine ? "My issues" : "Issues"}
-      </button>
+      <CrumbSep className={issue ? "max-sm:hidden" : ""} />
+      {custom ? (
+        <>
+          <button onClick={() => navigate({ board: board.id, viewsPage: true, selected: null, panel: false, inbox: false })} className={`${CRUMB} shrink-0`}>
+            Views
+          </button>
+          <CrumbSep />
+          {/* Linear: the current view is plain text (right-click for its menu), not a link. */}
+          <ViewContextMenu view={custom}>
+            <span aria-current="page" className="flex h-6 min-w-0 items-center">
+              <span className={CRUMB_ICON}><SavedViewIcon view={custom} /></span>
+              <h2 className="truncate font-medium">{custom.name}</h2>
+            </span>
+          </ViewContextMenu>
+        </>
+      ) : (
+        <button
+          aria-label={!activeView && mine ? "My issues" : "Issues"}
+          aria-current={issue ? undefined : "page"}
+          onClick={openAllIssues}
+          className={`${CRUMB} shrink-0 ${issue ? "max-sm:hidden" : ""}`}
+        >
+          {!activeView && mine ? "My issues" : "Issues"}
+        </button>
+      )}
       {issue && (
         <>
-          <span aria-hidden="true" className="mx-1 text-fg-3">
-            ›
-          </span>
+          <CrumbSep />
           {/* The key never truncates (Opus review 4: at 390px it vanished): the title truncates, and below 640px the Issues crumb gives way. */}
-          <a
-            aria-current="page"
-            className={crumb}
-            href={issueURL(issue)}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <TypeDot type={issue.type} />
+          <a aria-current="page" className={CRUMB_LAST} href={issueURL(issue)} target="_blank" rel="noreferrer">
+            <span className={CRUMB_ICON}><TypeDot type={issue.type} /></span>
             <span data-crumb-issue className="flex min-w-0">
               <span className="mr-[5.6px] shrink-0 tracking-[-0.24px]">{issue.key}</span>
               <span className="truncate">{issue.summary}</span>
@@ -1289,18 +1316,19 @@ function BoardHeader() {
   return (
     <header className="shrink-0">
       <div className="flex h-11 items-center justify-between border-b-[0.5px] border-frame px-2">
-        <div className="flex min-w-0 items-center px-1 text-[13px] font-medium text-fg-2">
+        <div className="flex min-w-0 items-center pr-1 pl-2.5 text-[13px] font-medium text-fg-2">
           <BoardBreadcrumbs board={board!} />
-          {activeView?.kind === "custom" && <ViewMenu view={activeView}><button aria-label="Issue view options" className={COL_BTN}><Icon name="dots" /></button></ViewMenu>}
+          {/* Linear: star, then ⋯ — 28px round buttons, 14px glyphs, 4px apart; hover fills --crumb-hover and whitens the glyph. */}
           <button
             role="switch"
             aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
             aria-checked={favorite}
             onClick={() => toggleFavorite(favoriteId)}
-            className={`ml-2 grid size-7 place-items-center rounded-full hover:bg-hover ${favorite ? "text-[#f2c94c]" : "text-fg-3 hover:text-fg-2"}`}
+            className={`ml-2 grid size-7 shrink-0 place-items-center rounded-full border-[0.5px] border-transparent transition-[border-color,background-color,color,opacity] duration-150 ease-[ease] hover:bg-(--crumb-hover) ${favorite ? "text-[#f2c94c]" : "text-fg-3 hover:text-fg"}`}
           >
-            <Icon name={favorite ? "starred" : "star"} size={16} />
+            <Icon name={favorite ? "starred" : "star"} size={14} />
           </button>
+          {activeView?.kind === "custom" && <ViewMenu view={activeView}><button aria-label="Issue view options" className="ml-1 grid size-7 shrink-0 place-items-center rounded-full border-[0.5px] border-transparent transition-[border-color,background-color,color,opacity] duration-150 ease-[ease] hover:bg-(--crumb-hover) text-fg-3 hover:text-fg"><Icon name="dots" size={14} /></button></ViewMenu>}
         </div>
         <button
           aria-label="Search issues"

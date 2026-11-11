@@ -77,7 +77,7 @@ function ViewCreatedToast() {
         <Icon name="close" size={12} />
       </button>
       <p className="view-toast-name">
-        <span style={{ color: value.color === "gray" ? "var(--fg-3)" : value.color }}>
+        <span style={{ color: value.color === "gray" ? "var(--view-gray)" : value.color }}>
           <DraftIcon icon={value.icon} />
         </span>
         <span className="truncate">{value.name}</span>
@@ -141,7 +141,7 @@ function Editor({ draft }: { draft: ViewDraft }) {
           aria-label="Choose view icon and color"
           className="view-icon-button"
           style={{
-            color: draft.color === "gray" ? "var(--fg-3)" : draft.color,
+            color: draft.color === "gray" ? "var(--view-gray)" : draft.color,
           }}
           onClick={(e) => setPicker(e.currentTarget)}
         >
