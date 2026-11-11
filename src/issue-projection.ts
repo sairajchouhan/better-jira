@@ -111,6 +111,8 @@ export function issueProjection(siteFields: any[] | null) {
   };
 }
 export type IssueProjection = ReturnType<typeof issueProjection>;
+/** Bump when `slim`'s output changes: the mirror re-projects every stored issue on its next start. */
+export const SLIM_VERSION = "6";
 
 /** A mirrored issue with what enrichment stored for it (null until enriched). */
 export type PropertyRow = {

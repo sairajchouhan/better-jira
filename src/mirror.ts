@@ -10,6 +10,8 @@ import { threadParent } from "./jira-ops";
 import { statusDates, type History } from "./issue-properties";
 import {
   issueProjection,
+  SLIM_VERSION,
+  type IssueProjection,
   jiraUser,
   propertyEntries,
   remoteLinkUrls,
@@ -31,10 +33,10 @@ const g = globalThis as {
 /** Live: a board added in the app joins it, and the sync loop (which outlives a hot reload) reads the same array. */
 export const BOARDS = (g.boards ??= []);
 for (const b of configuration.boards) if (!BOARDS.includes(b)) BOARDS.push(b);
-// Custom field IDs differ per site; the projection resolves rank and story points from the site's field list.
-const projection = issueProjection(await jira<any[]>("/rest/api/3/field").catch(() => null));
-export const ESTIMATES = projection.estimates;
-const FIELDS = projection.fields;
+/** Set by `start`, from the site's fields. */
+let projection: IssueProjection;
+/** The site's story point field IDs, the preferred one first. Set by `start`. */
+export let ESTIMATES: string[] = [];
 const ACTIVE_POLL_MS = 5_000; // a tab is open and visible
 const IDLE_POLL_MS = 60_000; // no tab open: keep the mirror warm
 const OPEN_ISSUE_POLL_MS = 3_000;
@@ -85,8 +87,6 @@ export const avatar = avatarProxy({
     },
   },
 });
-// Each day, so a server left running prunes too.
-setInterval(ledger.prune, 24 * 3600_000).unref?.();
 
 const getMeta = (k: string) =>
   db.query<{ v: string }, [string]>("SELECT v FROM meta WHERE k = ?").get(k)?.v;
@@ -106,8 +106,6 @@ const upsert = db.query(
      full=CASE WHEN COALESCE(json_extract(excluded.slim,'$.updated'),'')>=COALESCE(json_extract(issues.slim,'$.updated'),'') THEN excluded.full ELSE issues.full END`,
 );
 
-const slim = projection.slim;
-
 const updatedOf = db.query<{ updated: string }, [string]>(
   "SELECT json_extract(slim,'$.updated') AS updated FROM issues WHERE key = ?",
 );
@@ -121,34 +119,19 @@ const save = db.transaction((board: number, issues: any[], seen: number) => {
       key: i.key,
       board,
       seen,
-      slim: JSON.stringify(slim(i, board)),
+      slim: JSON.stringify(projection.slim(i, board)),
       full: JSON.stringify(i),
     });
   }
   return changed;
 });
 
-// Expand existing cached rows immediately; a subsequent full sync fetches newly requested fields.
-if (getMeta("slim-version") !== "6") {
-  db.transaction(() => {
-    const rows = db
-      .query<{ key: string; board: number; full: string }, []>(
-        "SELECT key, board, full FROM issues",
-      )
-      .all();
-    const update = db.query("UPDATE issues SET slim = ? WHERE key = ?");
-    for (const row of rows)
-      update.run(JSON.stringify(slim(JSON.parse(row.full), row.board)), row.key);
-    setMeta("slim-version", "6");
-  })();
-}
-
 const page = (board: number, jql: string, startAt: number) =>
   jira(
     `/rest/agile/1.0/board/${board}/issue?` +
       new URLSearchParams({
         jql,
-        fields: FIELDS,
+        fields: projection.fields,
         startAt: String(startAt),
         maxResults: String(PAGE),
       }),
@@ -293,7 +276,7 @@ async function watchOpenIssues() {
         if (fields.updated === row.updated) continue;
         save(
           row.board,
-          [await jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=${FIELDS}`)],
+          [await jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=${projection.fields}`)],
           Date.now(),
         );
         console.log(`[sync] open issue ${key}`);
@@ -309,10 +292,35 @@ async function watchOpenIssues() {
   }
 }
 
-if (!g.syncing) {
-  g.syncing = true;
-  loop();
-  watchOpenIssues();
+/**
+ * Starts the mirror; the server awaits it before serving. Importing this module only opens the cache.
+ * Discovers the site's fields (custom field IDs differ per site), re-projects stored rows when the slim shape changed,
+ * then starts polling Jira. Under `bun --hot` the loops already running are kept.
+ */
+export async function start() {
+  projection = issueProjection(await jira<any[]>("/rest/api/3/field").catch(() => null));
+  ESTIMATES = projection.estimates;
+  // Each day, so a server left running prunes too.
+  setInterval(ledger.prune, 24 * 3600_000).unref?.();
+  // Expand existing cached rows immediately; a subsequent full sync fetches newly requested fields.
+  if (getMeta("slim-version") !== SLIM_VERSION) {
+    db.transaction(() => {
+      const rows = db
+        .query<{ key: string; board: number; full: string }, []>(
+          "SELECT key, board, full FROM issues",
+        )
+        .all();
+      const update = db.query("UPDATE issues SET slim = ? WHERE key = ?");
+      for (const row of rows)
+        update.run(JSON.stringify(projection.slim(JSON.parse(row.full), row.board)), row.key);
+      setMeta("slim-version", SLIM_VERSION);
+    })();
+  }
+  if (!g.syncing) {
+    g.syncing = true;
+    loop();
+    watchOpenIssues();
+  }
 }
 
 // --- reads (the UI only ever reads from here) ---
@@ -407,7 +415,7 @@ export async function refresh(
   watching.catch(() => {});
   let raw: any;
   try {
-    raw = await jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=${FIELDS}`);
+    raw = await jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=${projection.fields}`);
   } catch (error) {
     if ((error as { status?: number }).status === 404) {
       db.query("DELETE FROM issues WHERE key = ?").run(key);
@@ -419,7 +427,7 @@ export async function refresh(
   save(target, [raw], Date.now());
   db.query("DELETE FROM issue_details WHERE key = ?").run(raw.key);
   const [full, w] = await Promise.all([details.read(raw.key, true), watching]),
-    issue = slim(raw, target);
+    issue = projection.slim(raw, target);
   const { watchers, watchersComplete } = watcherList(w);
   const old = db
     .query<{ data: string; source_updated: string }, [string]>(

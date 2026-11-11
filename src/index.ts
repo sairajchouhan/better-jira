@@ -17,6 +17,9 @@ const localOnly =
   (req: T) =>
     localMediaRequest(req) ? handler(req) : new Response("Forbidden", { status: 403 });
 
+// Field discovery, then the poll loops; the API serves only once the mirror can project issues.
+await mirror.start();
+
 const server = serve({
   hostname: "127.0.0.1",
   port: serverConfiguration().port,
