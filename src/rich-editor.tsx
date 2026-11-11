@@ -240,6 +240,8 @@ export function RichEditor(props: RichEditorProps) {
       },
     });
     view.current = mine = editor;
+    // The first render had no view and showed the empty placeholder; render again so it reflects the loaded content.
+    refresh((n) => n + 1);
     const mountedAt = performance.now();
     if (props.autoFocus) {
       // Continue where the content ends: a restored draft, or the @mention a reply starts with.

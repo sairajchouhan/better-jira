@@ -54,6 +54,14 @@ async function edit(page: Page, words: string) {
 test("someone else's edits and refused saves while I type", async ({ open }) => {
   const page = await open("?issue=TEST-2&view=page", { setup: fakeJira() });
   await page.waitFor(`!!document.querySelector('#description h2')`);
+  await test.step("W-F2: a loaded description never shows the empty placeholder over its text", async () => {
+    await sleep(300);
+    expect(
+      await page.eval(
+        `!!document.getElementById('description').closest('.rich-editor')?.querySelector('.rich-placeholder')`,
+      ),
+    ).toBe(false);
+  });
   await test.step("R2-D4: a save Jira refuses for its content says why, doesn't hold later edits, and clears once a valid edit saves", async () => {
     await page.eval(`window.__refuse='HUGE'`);
     await edit(page, " HUGE");
