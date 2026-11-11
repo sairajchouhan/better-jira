@@ -27,6 +27,7 @@ import {
   type IssueDraft,
 } from "./store";
 import { ActionMenu, type ActionEntry } from "./action-menu";
+import { Avatar } from "./avatar";
 import { copyIcons, copyKinds, copyShortcuts, issueCopy } from "./issue-copy";
 import { Relations } from "./personal-controls";
 import { ResourceForm, createIssueDocument } from "./issue-resources";
@@ -173,12 +174,14 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
                     <span className="text-fg-3">{child.key}</span>
                     <span className="min-w-0 flex-1 truncate text-fg-2">{child.summary}</span>
                     {child.key === issue.key && <Icon name="check" size={16} />}
-                    <span
-                      title={child.assignee?.name ?? "Unassigned"}
-                      className="grid size-3.5 place-items-center rounded-full bg-sel text-[8px]"
-                    >
-                      {child.assignee?.name[0] ?? ""}
-                    </span>
+                    {child.assignee ? (
+                      <Avatar user={child.assignee} size={14} />
+                    ) : (
+                      <span
+                        title="Unassigned"
+                        className="grid size-3.5 place-items-center rounded-full bg-sel"
+                      />
+                    )}
                   </Command.Item>
                 ))}
               </Command.Group>
@@ -903,12 +906,16 @@ export function SubIssues({ issue }: { issue: Issue }) {
               control(
                 child,
                 "assignee",
-                <span
-                  title={child.assignee?.name ?? "Unassigned"}
-                  className="grid size-[18px] place-items-center rounded-full bg-sel text-[10px]"
-                >
-                  {child.assignee?.name[0] ?? <Icon name="user" size={12} />}
-                </span>,
+                child.assignee ? (
+                  <Avatar user={child.assignee} size={18} />
+                ) : (
+                  <span
+                    title="Unassigned"
+                    className="grid size-[18px] place-items-center rounded-full bg-sel text-[10px]"
+                  >
+                    <Icon name="user" size={12} />
+                  </span>
+                ),
               )}
           </div>
         ))}

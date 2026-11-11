@@ -23,6 +23,18 @@ test("@ mentions: the people picker in the description, the comment composer and
 
     await page.type("@");
     await page.waitFor(`${options}.split('|').length === 3`);
+    // Photos load through the same-origin avatar proxy; a broken avatar URL keeps the initial.
+    const face = (name: string) =>
+      `[...document.querySelectorAll('[aria-label="Mention people"] [role=option]')].find(n=>n.textContent.includes(${JSON.stringify(name)}))`;
+    await page.waitFor(
+      `(()=>{const i=${face("Alex")}.querySelector('img[src^="/api/avatar"]');return !!i&&i.complete&&i.naturalWidth>0})()`,
+    );
+    await page.waitFor(`!${face("Priya Raman")}.querySelector("img")`);
+    expect(
+      await page.eval(
+        `${face("Priya Raman")}.querySelector("[data-avatar-fallback]")?.textContent`,
+      ),
+    ).toBe("P");
     await page.key("ArrowDown");
     expect(await page.eval<string>(options)).toBe("Audit user|*Alex|Priya Raman");
     await page.key("Tab");

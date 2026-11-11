@@ -10,6 +10,7 @@ import { pullRequestCount, statusDates, type History } from "./issue-properties"
 import { serverConfiguration } from "./server-config";
 import { unseenChanged } from "./notifications";
 import { writeLedger } from "./write-ledger";
+import { avatarProxy } from "./avatar-proxy";
 
 const configuration = serverConfiguration();
 // `bun --hot` re-runs this module on every edit; the loops and the open tabs live on globalThis so they survive it.
@@ -59,6 +60,33 @@ db.run(
 
 db.run("CREATE TABLE IF NOT EXISTS attachment_media (id TEXT PRIMARY KEY, media_id TEXT NOT NULL)");
 export const ledger = writeLedger(db);
+db.run(
+  "CREATE TABLE IF NOT EXISTS avatars (url TEXT PRIMARY KEY, type TEXT NOT NULL, body BLOB NOT NULL, at INTEGER NOT NULL)",
+);
+/** Avatar images, at most 512KB each; the newest 2,000 are kept. */
+export const avatar = avatarProxy({
+  site: configuration.site,
+  auth: serverAuth(),
+  cache: {
+    get: (url) =>
+      db
+        .query<{ type: string; body: Uint8Array; at: number }, [string]>(
+          "SELECT type, body, at FROM avatars WHERE url = ?",
+        )
+        .get(url) ?? undefined,
+    set: (url, type, body) => {
+      db.query("INSERT OR REPLACE INTO avatars VALUES (?, ?, ?, ?)").run(
+        url,
+        type,
+        body,
+        Date.now(),
+      );
+      db.run(
+        "DELETE FROM avatars WHERE url NOT IN (SELECT url FROM avatars ORDER BY at DESC LIMIT 2000)",
+      );
+    },
+  },
+});
 // Each day, so a server left running prunes too.
 setInterval(ledger.prune, 24 * 3600_000).unref?.();
 

@@ -102,6 +102,7 @@ import {
   Subscribers,
 } from "./personal-controls";
 import { SubIssueOf } from "./sub-issues";
+import { Avatar } from "./avatar";
 import { Tooltips } from "./tooltip";
 import { RichEditor } from "./rich-editor-loader";
 import { matchRank } from "./search-rank";
@@ -1690,41 +1691,6 @@ const Card = memo(function Card({
     </div>
   );
 });
-
-function Avatar({ user, size = 20 }: { user: User | null; size?: number }) {
-  const [broken, setBroken] = useState(false); // Jira's default avatars need a Jira login, so they fail here
-  useEffect(() => setBroken(false), [user?.avatar]);
-  const box = { width: size, height: size };
-  if (!user)
-    return (
-      <span
-        title="Unassigned"
-        className="inline-block shrink-0 rounded-full border border-dashed border-fg-4"
-        style={box}
-      />
-    );
-  if (!user.avatar || broken)
-    return (
-      <span
-        title={user.name}
-        className="inline-grid shrink-0 place-items-center rounded-full bg-sel text-[10px] text-fg-2"
-        style={box}
-      >
-        {user.name[0]}
-      </span>
-    );
-  return (
-    <img
-      src={user.avatar}
-      onError={() => setBroken(true)}
-      title={user.name}
-      alt=""
-      width={size}
-      height={size}
-      className="inline-block shrink-0 rounded-full"
-    />
-  );
-}
 
 /** Linear's compact Activity times: "just now", "6min ago", "11h ago", "1d ago", then the date. */
 // Linear's exact-time label: "Sat Nov 7, 2026, 07:49:03" (24-hour, with seconds).

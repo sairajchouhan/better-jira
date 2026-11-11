@@ -6,6 +6,7 @@ import { attachmentGateway } from "../src/attachment-media";
 import { previewFrom } from "../src/link-preview";
 import { mapFeed } from "../src/inbox-model";
 import { boardFromInput } from "../src/config";
+import { avatarProxy, memoryAvatarCache } from "../src/avatar-proxy";
 const rich = {
   type: "doc",
   version: 1,
@@ -85,7 +86,15 @@ const board = {
   ],
 };
 const user = { id: "audit-me", name: "Audit user" };
-const people = [user, { id: "alex", name: "Alex" }, { id: "priya", name: "Priya Raman" }];
+// Absolute avatar URLs, as Jira sends them: Alex's loads through the app's avatar proxy, Priya's is broken (initials fallback).
+const origin = `http://127.0.0.1:${Number(process.env.FIXTURE_PORT ?? 3001)}`;
+const alex = { id: "alex", name: "Alex", avatar: `${origin}/__avatar/alex.png` };
+const people = [
+  user,
+  alex,
+  { id: "priya", name: "Priya Raman", avatar: `${origin}/__avatar/missing.png` },
+];
+const avatar = avatarProxy({ site: origin, cache: memoryAvatarCache() });
 const priorities = ["Normal", "Low", "High", "Urgent", "Normal", "Low"];
 // FIXTURE_ISSUES pads the board for speed measurements; tests use the default six.
 const issues = Array.from({ length: Number(process.env.FIXTURE_ISSUES ?? 6) }, (_, i) => ({
@@ -96,7 +105,7 @@ const issues = Array.from({ length: Number(process.env.FIXTURE_ISSUES ?? 6) }, (
   rank: `0|i0000${i}:`,
   type: "Task",
   priority: priorities[i],
-  assignee: i === 1 ? { id: "alex", name: "Alex" } : null,
+  assignee: i === 1 ? alex : null,
   labels: [i === 0 ? "ui" : "test"],
   comments: 0,
   updated: "2026-11-06T10:00:00Z",
@@ -840,6 +849,9 @@ const server = Bun.serve({
     "/__split-media-assets/*": splitFixture,
     "/api/*": handle,
     "/__fixture": handle,
+    "/api/avatar": avatar,
+    "/__avatar/alex.png": () =>
+      new Response(Bun.file(new URL("../e2e/fixtures/media-image.png", import.meta.url))),
     "/__link-icon.svg": () =>
       new Response(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="#fff"/></svg>',

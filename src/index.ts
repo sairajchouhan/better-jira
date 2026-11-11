@@ -169,6 +169,7 @@ const server = serve({
       }),
     },
     "/api/issues": localOnly(() => json(mirror.issues())),
+    "/api/avatar": { GET: localOnly(mirror.avatar) },
     "/api/link-preview": localOnly(async (req) =>
       Response.json(await fetchPreview(new URL(req.url).searchParams.get("url") ?? "")),
     ),

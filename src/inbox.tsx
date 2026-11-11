@@ -3,6 +3,7 @@ import { InfiniteQueryObserver, type InfiniteData } from "@tanstack/query-core";
 import { Command } from "cmdk";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ActionMenu, type ActionEntry } from "./action-menu";
+import { Avatar } from "./avatar";
 import { Icon, StatusIcon, type IconName } from "./icons";
 import {
   DEFAULT_VIEW,
@@ -494,20 +495,14 @@ const KIND_ICON: Partial<Record<InboxItem["kind"], IconName>> = {
 };
 
 function Actor({ item }: { item: InboxItem }) {
-  const [broken, setBroken] = useState(false);
   const icon = KIND_ICON[item.kind];
   return (
     <span className="relative mt-3 size-8 shrink-0">
-      {item.actor?.avatar && !broken ? (
-        <img
-          src={item.actor.avatar}
-          alt=""
-          onError={() => setBroken(true)}
-          className="size-8 rounded-full"
-        />
+      {item.actor ? (
+        <Avatar user={{ id: item.actor.name, ...item.actor }} size={32} />
       ) : (
         <span className="grid size-8 place-items-center rounded-full bg-sel text-[12px] text-fg-2">
-          {item.actor?.name[0] ?? <Icon name="bell" />}
+          <Icon name="bell" />
         </span>
       )}
       {icon && (

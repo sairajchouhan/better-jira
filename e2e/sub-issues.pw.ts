@@ -192,7 +192,7 @@ test("sub-issue row properties change locally, undo, sort and persist with no Ji
   await test.step("row assignee and label removals apply to the selected child and persist", async () => {
     await page.waitFor(`!!document.querySelector('[data-sub-issue="TEST-4"]')`);
     await page.click('[aria-label="Change assignee for TEST-4"]');
-    await page.click("text=Alex");
+    await page.page.getByRole("option", { name: "Alex", exact: true }).click(); // the detail's own assignee button also reads "Alex"
     expect(
       await page.eval(`document.querySelector('[aria-label="Change assignee for TEST-4"]').title`),
     ).toBe("Alex");

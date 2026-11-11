@@ -1,5 +1,6 @@
 import { Debouncer } from "@tanstack/pacer";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Avatar } from "./avatar";
 import { MENU_ITEM, MENU_POPUP } from "./menu-surface";
 import { queryClient, type User } from "./store";
 
@@ -135,17 +136,5 @@ export function MentionMenu({
 }
 
 function Face({ person }: { person: User }) {
-  const [broken, setBroken] = useState(false); // Jira's default avatars need a Jira login
-  return person.avatar && !broken ? (
-    <img
-      src={person.avatar}
-      alt=""
-      onError={() => setBroken(true)}
-      className="size-[18px] shrink-0 rounded-full"
-    />
-  ) : (
-    <span className="inline-grid size-[18px] shrink-0 place-items-center rounded-full bg-sel text-[10px] text-fg-2">
-      {person.name[0]}
-    </span>
-  );
+  return <Avatar user={person} size={18} />;
 }
