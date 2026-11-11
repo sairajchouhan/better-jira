@@ -108,19 +108,22 @@ function DocumentEditor({ issue, resource }: { issue: Issue; resource: IssueReso
     flush();
     session.current = crypto.randomUUID();
   };
+  // Every path flushes through `latest`, so a flush on unmount or page hide uses the current issue key and draft.
   useEffect(() => {
-    flush();
+    const flushLatest = () => latest.current();
+    flushLatest();
+    window.addEventListener("pagehide", flushLatest);
     return () => {
-      flush();
+      flushLatest();
+      window.removeEventListener("pagehide", flushLatest);
     };
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Flush uses the session closure; rerunning on render would flush pending edits before the debounce.
   }, []);
   useEffect(() => {
     if (stored === observed.current) return;
     observed.current = stored;
     if (stored === saved.current) return;
     saveSoon.cancel();
-    const next = { title: resource.title, body: normalizeDocument(resource.body) };
+    const next: Draft = JSON.parse(stored);
     pending.current = next;
     saved.current = stored;
     setDraft(next);
@@ -128,14 +131,7 @@ function DocumentEditor({ issue, resource }: { issue: Issue; resource: IssueReso
     try {
       localStorage.setItem(draftKey, JSON.stringify(next));
     } catch {}
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Flush uses the session closure; rerunning on render would flush pending edits before the debounce.
-  }, [stored]);
-  useEffect(() => {
-    const unload = () => flush();
-    window.addEventListener("pagehide", unload);
-    return () => window.removeEventListener("pagehide", unload);
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Flush uses the session closure; rerunning on render would flush pending edits before the debounce.
-  }, []);
+  }, [stored, draftKey, saveSoon]);
   useLayoutEffect(() => {
     const input = titleInput.current;
     if (!input) return;
@@ -160,6 +156,7 @@ function DocumentEditor({ issue, resource }: { issue: Issue; resource: IssueReso
       cancelAnimationFrame(frame);
       observer.disconnect();
     };
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- The title's text changes its height, so a new title resizes the input.
   }, [draft.title]);
   return (
     <div className="flex min-w-0 flex-1 flex-col" data-document={resource.id}>
