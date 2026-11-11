@@ -1,7 +1,7 @@
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
 /* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { Command } from "cmdk";
 import { RelationIcon, Icon, PriorityIcon, ProgressRing, StatusIcon } from "./icons";
@@ -27,6 +27,7 @@ import {
   set,
   toggleFavorite,
   useStore,
+  type Board,
   type Issue,
   type IssueDraft,
 } from "./store";
@@ -78,7 +79,143 @@ const button = "rounded px-2 py-1 text-fg-3 hover:bg-hover";
 export const CIRCLE =
   "grid size-7 place-items-center rounded-full bg-card text-fg-3 hover:bg-hover";
 type Field = "status" | "priority" | "assignee" | "labels";
-type Picker = { anchor: HTMLElement; field: Field; key?: string };
+type Choice = { id: string; name: string };
+
+/**
+ * One property button with its own picker, rendered on each sub-issue row and in the composer. Each instance owns its anchor and
+ * search, so typing in one picker re-renders only it. Labels stay open to pick more; the other fields close on a pick.
+ */
+function PropertyControl({
+  field,
+  label,
+  title,
+  className,
+  board,
+  choices,
+  isSelected,
+  onSelect,
+  children,
+}: {
+  field: Field;
+  label: string;
+  title?: string;
+  className: string;
+  /** The board whose status icons the picker shows. */
+  board: Board;
+  /** Read when the picker opens, so closed rows compute nothing. */
+  choices: () => Choice[];
+  isSelected: (id: string) => boolean;
+  onSelect: (id: string) => void;
+  children: ReactNode;
+}) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  return (
+    <>
+      <button
+        type="button"
+        title={title}
+        aria-haspopup="dialog"
+        aria-expanded={!!anchor}
+        aria-label={label}
+        className={className}
+        onClick={(event) => setAnchor(event.currentTarget)}
+      >
+        {children}
+      </button>
+      {anchor && (
+        <PropertyPicker
+          field={field}
+          anchor={anchor}
+          board={board}
+          choices={choices()}
+          isSelected={isSelected}
+          onSelect={onSelect}
+          close={() => setAnchor(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function PropertyPicker({
+  field,
+  anchor,
+  board,
+  choices,
+  isSelected,
+  onSelect,
+  close,
+}: {
+  field: Field;
+  anchor: HTMLElement;
+  board: Board;
+  choices: Choice[];
+  isSelected: (id: string) => boolean;
+  onSelect: (id: string) => void;
+  close: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const pick = (id: string) => {
+    onSelect(id);
+    if (field === "labels") setQuery("");
+    else close();
+  };
+  return (
+    <MenuSurface label={`Change sub-issue ${field}`} anchor={anchor} close={close} width={280}>
+      <Command loop defaultValue={choices.find((c) => isSelected(c.id))?.name}>
+        <Command.Input
+          autoFocus
+          aria-label={`Find sub-issue ${field}`}
+          placeholder="Filter…"
+          value={query}
+          onValueChange={setQuery}
+          className={MENU_INPUT}
+        />
+        <Command.List className="max-h-[40vh] overflow-y-auto p-1">
+          <Command.Empty>No matches</Command.Empty>
+          {choices.map((choice) => (
+            <Command.Item
+              key={choice.id}
+              className={MENU_ITEM}
+              value={choice.name}
+              aria-checked={isSelected(choice.id)}
+              onSelect={() => pick(choice.id)}
+            >
+              {field === "priority" && <PriorityIcon name={choice.id || undefined} />}
+              {field === "status" && (
+                <StatusIcon
+                  status={statusById(board, choice.id) ?? { name: choice.name, category: "new" }}
+                />
+              )}
+              <span className="flex-1">{choice.name}</span>
+              {isSelected(choice.id) && <Icon name="check" size={13} />}
+            </Command.Item>
+          ))}
+          {field === "labels" &&
+            query.trim() &&
+            !choices.some((c) => c.id.toLowerCase() === query.trim().toLowerCase()) && (
+              <Command.Item
+                className={MENU_ITEM}
+                value={`Create ${query}`}
+                onSelect={() => pick(query.trim())}
+              >
+                Create label "{query.trim()}"
+              </Command.Item>
+            )}
+        </Command.List>
+      </Command>
+    </MenuSurface>
+  );
+}
+/** Whether a choice is the field's current value on this issue or draft. */
+const isCurrent = (field: Field, on: IssueDraft, id: string) =>
+  field === "labels"
+    ? !!on.labels?.includes(id)
+    : field === "status"
+      ? on.status === id
+      : field === "priority"
+        ? (on.priority ?? "") === id
+        : (on.assignee?.id ?? "") === id;
 function parseDisplay(value: unknown): SubIssueDisplay {
   const base = defaultSubIssueDisplay();
   if (!value || typeof value !== "object") return base;
@@ -249,8 +386,6 @@ export function SubIssues({ issue }: { issue: Issue }) {
       key: string;
       point?: { x: number; y: number };
     } | null>(null),
-    [picker, setPicker] = useState<Picker | null>(null),
-    [query, setQuery] = useState(""),
     [confirming, setConfirming] = useState(false);
   const board = boards.find((b) => b.id === issue.board)!;
   const initial = (): IssueDraft => ({
@@ -351,9 +486,6 @@ export function SubIssues({ issue }: { issue: Issue }) {
   useEffect(() => {
     setReveal(false);
   }, [display.completed, display.nested]);
-  useEffect(() => {
-    setQuery("");
-  }, [picker?.field, picker?.key]);
   const change = (patch: Partial<SubIssueDisplay>) => {
     const next = { ...display, ...patch };
     setDisplay(next);
@@ -462,9 +594,8 @@ export function SubIssues({ issue }: { issue: Issue }) {
     ignoreInputs: false,
   });
   useHotkey("Escape", escape, { target: form, capture: true, ignoreInputs: false });
-  const target = picker?.key ? all.get(picker.key) : undefined;
-  const targetDraft = target ?? draft;
-  const select = (field: Field, value: string, on = target) => {
+  /** Sets a field on a saved sub-issue (`on`) or, without one, on the composer's draft. */
+  const select = (field: Field, value: string, on?: Issue) => {
     const base = on ?? draft;
     let patch: IssueDraft = {};
     if (field === "status") patch = { status: value };
@@ -485,19 +616,9 @@ export function SubIssues({ issue }: { issue: Issue }) {
     if (on) {
       if (field === "status") actions.status(on.key, value);
       else actions.patch(on.key, patch);
-    } else update({ properties: { ...draft, ...patch } });
-    if (field !== "labels") setPicker(null);
-    else setQuery("");
+    } else update({ properties: { ...pending.current.properties, ...patch } });
   };
-  const selected = (id: string) =>
-    picker?.field === "labels"
-      ? targetDraft.labels?.includes(id)
-      : picker?.field === "status"
-        ? targetDraft.status === id
-        : picker?.field === "priority"
-          ? (targetDraft.priority ?? "") === id
-          : (targetDraft.assignee?.id ?? "") === id;
-  const choicesFor = (field: Field | undefined, on = target) =>
+  const choicesFor = (field: Field, on?: Issue): Choice[] =>
     field === "status"
       ? statuses(on ? boards.find((b) => b.id === on.board) : board).map((s) => ({
           id: s.id,
@@ -532,10 +653,13 @@ export function SubIssues({ issue }: { issue: Issue }) {
                 ...[...all.values()].flatMap((i) => i.labels),
               ]),
             ].map((label) => ({ id: label, name: label }));
-  const choices = choicesFor(picker?.field);
   const control = (child: Issue, field: Field, content: React.ReactNode) => (
-    <button
-      type="button"
+    <PropertyControl
+      field={field}
+      board={board}
+      choices={() => choicesFor(field, child)}
+      isSelected={(id) => isCurrent(field, child, id)}
+      onSelect={(id) => select(field, id, child)}
       title={
         field === "status"
           ? status(child).name
@@ -545,14 +669,26 @@ export function SubIssues({ issue }: { issue: Issue }) {
               ? (child.assignee?.name ?? "Unassigned")
               : child.labels.join(", ")
       }
-      aria-haspopup="dialog"
-      aria-expanded={picker?.key === child.key && picker.field === field}
-      aria-label={`Change ${field} for ${child.key}`}
+      label={`Change ${field} for ${child.key}`}
       className={button}
-      onClick={(event) => setPicker({ anchor: event.currentTarget, field, key: child.key })}
     >
       {content}
-    </button>
+    </PropertyControl>
+  );
+  /** The composer's chip for a field, picking into the draft. */
+  const draftControl = (field: Field, label: string, content: React.ReactNode) => (
+    <PropertyControl
+      key={field}
+      field={field}
+      board={board}
+      choices={() => choicesFor(field)}
+      isSelected={(id) => isCurrent(field, pending.current.properties, id)}
+      onSelect={(id) => select(field, id)}
+      label={label}
+      className={button}
+    >
+      {content}
+    </PropertyControl>
   );
   const rowEntries = (child: Issue, _anchor: HTMLElement): ActionEntry[] => [
     // Linear's row menu groups, icons and hints (RAJ-52, 2026-11-08), acting on the row's issue. Convert to and Open in have no local equivalent.
@@ -975,11 +1111,9 @@ export function SubIssues({ issue }: { issue: Issue }) {
           className="sub-issue-composer outline-none mt-3 rounded-lg border border-line-2 bg-card p-3"
         >
           <div className="flex items-center gap-2">
-            <button
-              aria-label={`Sub-issue status. ${statusById(board, draft.status)?.name ?? "Todo"} is selected`}
-              className={button}
-              onClick={(e) => setPicker({ anchor: e.currentTarget, field: "status" })}
-            >
+            {draftControl(
+              "status",
+              `Sub-issue status. ${statusById(board, draft.status)?.name ?? "Todo"} is selected`,
               <StatusIcon
                 status={
                   statusById(board, draft.status) ?? {
@@ -987,8 +1121,8 @@ export function SubIssues({ issue }: { issue: Issue }) {
                     category: "new",
                   }
                 }
-              />
-            </button>
+              />,
+            )}
             <input
               ref={titleInput}
               autoFocus
@@ -1023,19 +1157,14 @@ export function SubIssues({ issue }: { issue: Issue }) {
             onCancel={cancel}
           />
           <div className="flex gap-1">
-            {(["priority", "assignee", "labels"] as const).map((field) => (
-              <button
-                key={field}
-                aria-label={
-                  field === "priority"
-                    ? `Sub-issue priority. ${draft.priority ?? noPriority} is selected`
-                    : field === "assignee"
-                      ? `Sub-issue assignee. ${draft.assignee?.name ?? "Unassigned"}`
-                      : `Sub-issue labels. ${draft.labels?.join(", ") || "No labels"}`
-                }
-                className={button}
-                onClick={(e) => setPicker({ anchor: e.currentTarget, field })}
-              >
+            {(["priority", "assignee", "labels"] as const).map((field) =>
+              draftControl(
+                field,
+                field === "priority"
+                  ? `Sub-issue priority. ${draft.priority ?? noPriority} is selected`
+                  : field === "assignee"
+                    ? `Sub-issue assignee. ${draft.assignee?.name ?? "Unassigned"}`
+                    : `Sub-issue labels. ${draft.labels?.join(", ") || "No labels"}`,
                 <span className="flex items-center gap-1.5">
                   {field === "priority" ? (
                     <PriorityIcon name={draft.priority} />
@@ -1050,9 +1179,9 @@ export function SubIssues({ issue }: { issue: Issue }) {
                       : draft.labels?.length
                         ? draft.labels.join(", ")
                         : "Labels"}
-                </span>
-              </button>
-            ))}
+                </span>,
+              ),
+            )}
           </div>
         </div>
       )}
@@ -1160,62 +1289,6 @@ export function SubIssues({ issue }: { issue: Issue }) {
               </button>
             ))}
           </div>
-        </MenuSurface>
-      )}
-      {picker && (
-        <MenuSurface
-          label={`Change sub-issue ${picker.field}`}
-          anchor={picker.anchor}
-          close={() => setPicker(null)}
-          width={280}
-        >
-          <Command loop defaultValue={choices.find((c) => selected(c.id))?.name}>
-            <Command.Input
-              autoFocus
-              aria-label={`Find sub-issue ${picker.field}`}
-              placeholder="Filter…"
-              value={query}
-              onValueChange={setQuery}
-              className={MENU_INPUT}
-            />
-            <Command.List className="max-h-[40vh] overflow-y-auto p-1">
-              <Command.Empty>No matches</Command.Empty>
-              {choices.map((choice) => (
-                <Command.Item
-                  key={choice.id}
-                  className={MENU_ITEM}
-                  value={choice.name}
-                  aria-checked={!!selected(choice.id)}
-                  onSelect={() => select(picker.field, choice.id)}
-                >
-                  {picker.field === "priority" && <PriorityIcon name={choice.id || undefined} />}
-                  {picker.field === "status" && (
-                    <StatusIcon
-                      status={
-                        statusById(board, choice.id) ?? {
-                          name: choice.name,
-                          category: "new",
-                        }
-                      }
-                    />
-                  )}
-                  <span className="flex-1">{choice.name}</span>
-                  {selected(choice.id) && <Icon name="check" size={13} />}
-                </Command.Item>
-              ))}
-              {picker.field === "labels" &&
-                query.trim() &&
-                !choices.some((c) => c.id.toLowerCase() === query.trim().toLowerCase()) && (
-                  <Command.Item
-                    className={MENU_ITEM}
-                    value={`Create ${query}`}
-                    onSelect={() => select("labels", query.trim())}
-                  >
-                    Create label "{query.trim()}"
-                  </Command.Item>
-                )}
-            </Command.List>
-          </Command>
         </MenuSurface>
       )}
     </section>
