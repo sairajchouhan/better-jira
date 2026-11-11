@@ -9,7 +9,7 @@ test("saved view has a stable route, survives reload and leaves board preference
     await page.click('[aria-label="Save current view"]');
     await page.click('[aria-label="View name"]');
     await page.type("Stable view");
-    await page.click("text=Save view");
+    await page.click("text=Create view");
     await page.waitFor(`location.pathname.startsWith('/view/')`);
     const path = await page.eval("location.pathname");
     expect(await page.eval(`localStorage.getItem(${JSON.stringify(PREFS_KEY)})`)).toBe(before);

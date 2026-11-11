@@ -1,4 +1,5 @@
-import { updateSavedView, deleteSavedView } from "./saved-views";
+import { createViewDraft } from "./saved-views";
+import { openViewEditor, ViewMenu, ViewContextMenu } from "./view-editor";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
 /* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { SubIssues, statusOf } from "./sub-issues";
@@ -35,7 +36,6 @@ import {
   navigate,
   openSavedView,
   usePreferences,
-  saveView,
   set,
   toggleFavorite,
   ui,
@@ -1542,124 +1542,45 @@ export function Relations({ issue, close: done }: { issue: Issue; close?: () => 
 }
 
 export function SaveViewButton() {
-  const [open, setOpen] = useState(false),
-    [name, setName] = useState("");
   return (
-    <>
-      <button
-        aria-label="Save current view"
-        title="Save current view"
-        onClick={() => setOpen(true)}
-        className="grid size-7 place-items-center rounded-full border-[0.5px] border-transparent text-fg-4 hover:bg-hover hover:text-fg-3"
-      >
-        <Icon name="view" size={16} />
-      </button>
-      {open && (
-        <Modal label="Save personal view" close={() => setOpen(false)}>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              saveView(name);
-              setOpen(false);
-              setName("");
-            }}
-          >
-            <label className="text-[12px]">
-              View name
-              <input
-                autoFocus
-                aria-label="View name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className={`${INPUT} mt-2`}
-              />
-            </label>
-            <p className="mt-2 text-[12px] text-fg-3">
-              Saves this board's filters, layout, and issue scope on this app server.
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button type="button" className={BUTTON} onClick={() => setOpen(false)}>
-                Cancel
-              </button>
-              <button disabled={!name.trim()} className={BUTTON}>
-                Save view
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
-    </>
+    <button
+      aria-label="Save current view"
+      title="Save current view"
+      onClick={() => openViewEditor(createViewDraft())}
+      className="grid size-7 place-items-center rounded-full text-fg-4 hover:bg-hover"
+    >
+      <Icon name="view" size={16} />
+    </button>
   );
 }
 
 export function SavedViews() {
   const views = useStore((s) => s.savedViews);
-  const [editing, setEditing] = useState<string | null>(null),
-    [name, setName] = useState("");
   if (!views.length) return null;
   return (
     <div className="mt-5">
       <div className="mb-1 px-2 text-[12px] text-fg-3">Saved views</div>
       {views.map((view) => (
-        <div key={view.id} className="group flex items-center gap-1 rounded-lg hover:bg-hover">
-          <button
-            onClick={() => openSavedView(view)}
-            className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-fg-2"
-          >
-            <Icon name="filter" />
-            <span className="truncate">{view.name}</span>
-          </button>
-          <button
-            aria-label={`Edit view ${view.name}`}
-            onClick={() => {
-              setEditing(view.id);
-              setName(view.name);
-            }}
-            className="mr-1 p-1 text-fg-3 hover:text-fg"
-          >
-            <Icon name="dots" />
-          </button>
-        </div>
-      ))}
-      {editing && (
-        <Modal label="Edit personal view" close={() => setEditing(null)}>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!name.trim()) return;
-              void updateSavedView(editing, { name: name.trim() }).catch(e => set({ perf: String(e) }));
-              setEditing(null);
-            }}
-          >
-            <input
-              aria-label="View name"
-              className={INPUT}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-            <div className="mt-3 flex gap-2">
+        <ViewContextMenu key={view.id} view={view}>
+          <div className="group flex items-center gap-1 rounded-lg hover:bg-hover">
+            <button
+              onClick={() => openSavedView(view)}
+              className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-fg-2"
+            >
+              <Icon name="filter" />
+              <span className="truncate">{view.name}</span>
+            </button>
+            <ViewMenu view={view}>
               <button
-                type="button"
-                className={`${BUTTON} mr-auto`}
-                onClick={() => {
-                  const view = views.find((v) => v.id === editing);
-                  if (!confirm(`Remove the view "${view?.name}"? This can't be undone.`)) return;
-                  void deleteSavedView(editing).catch(e => set({ perf: String(e) }));
-                  setEditing(null);
-                }}
+                aria-label={`View options for ${view.name}`}
+                className="mr-1 p-1 text-fg-3 hover:text-fg"
               >
-                Remove view
+                <Icon name="dots" />
               </button>
-              <button type="button" className={BUTTON} onClick={() => setEditing(null)}>
-                Cancel
-              </button>
-              <button disabled={!name.trim()} className={BUTTON}>
-                Save view
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
+            </ViewMenu>
+          </div>
+        </ViewContextMenu>
+      ))}
     </div>
   );
 }

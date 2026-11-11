@@ -56,12 +56,12 @@ test("the default board: My issues, board details, saved views and a fast layout
       `localStorage.removeItem(${JSON.stringify(key + ":imported")});localStorage.setItem(${JSON.stringify(key)},${JSON.stringify(JSON.stringify([view]))})`,
     );
     await page.reload();
-    await page.waitFor(`!!document.querySelector('[aria-label="Edit view Mine"]')`);
-    await page.eval(`window.confirm=()=>(window.asked=true,false)`);
-    await page.click('[aria-label="Edit view Mine"]');
-    await page.click("text=Remove view");
-    expect(await page.eval(`window.asked`)).toBe(true);
-    expect(await page.eval(`!!document.querySelector('[aria-label="Edit view Mine"]')`)).toBe(true);
+    await page.waitFor(`!!document.querySelector('[aria-label="View options for Mine"]')`);
+    await page.click('[aria-label="View options for Mine"]');
+    await page.click("text=Delete");
+    expect(await page.eval(`document.querySelector('[role=dialog]')?.textContent.includes("permanently deleted")`)).toBe(true);
+    await page.click("text=Cancel");
+    expect(await page.eval(`!!document.querySelector('[aria-label="View options for Mine"]')`)).toBe(true);
     await page.key("Escape");
   });
   await test.step("R1-D95/D96: a layout switch paints the first screenful at once and the rest right after", async () => {

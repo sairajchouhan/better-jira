@@ -1,3 +1,4 @@
+import { ViewEditorPage } from "./view-editor";
 import { useEffectiveMine } from "./saved-views";
 /* oxlint-disable react/immutability -- Session callbacks and mutable imperative models are intentionally owned outside React state. */
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
@@ -1367,6 +1368,7 @@ function BoardHeader() {
           className="mx-3 mb-2 rounded border border-line-2 bg-card px-3 py-1.5 outline-none"
         />
       )}
+      <ViewEditorPage />
       {board && <FilterChips board={board} />}
     </header>
   );

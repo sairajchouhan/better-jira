@@ -251,6 +251,7 @@ type State = {
   redoCount: number;
   fullErrors: Map<string, string>;
   savedViews: SavedView[];
+  editorDraft: ViewDraft | null;
   activeViewId: string | null;
   overlayFilters: import("./view-model").FilterGroup;
   viewPreferences: Preferences | null;
@@ -333,6 +334,7 @@ let state: State = {
   redoCount: 0,
   fullErrors: new Map(),
   savedViews: [],
+  editorDraft: null,
   activeViewId: null,
   overlayFilters: emptyOverlay(),
   viewPreferences: null,
@@ -362,9 +364,11 @@ let perfPosts = 0;
 function commit(patch: Partial<State>) {
   if (patch.perf !== undefined) perfPosts++;
   state = { ...state, ...patch };
-  if (patch.savedViews || patch.activeViewId !== undefined || patch.overlayFilters) {
+  if (patch.savedViews || patch.activeViewId !== undefined || patch.overlayFilters || patch.editorDraft !== undefined) {
     const v = state.savedViews.find((v) => v.id === state.activeViewId);
-    state.viewPreferences = v
+    state.viewPreferences = state.editorDraft
+      ? { ...defaultPreferences(), ...state.editorDraft }
+      : v
       ? {
           ...defaultPreferences(),
           scope: v.scope,
@@ -373,7 +377,7 @@ function commit(patch: Partial<State>) {
         }
       : null;
     state.effectiveViewPreferences =
-      v && state.viewPreferences
+      state.editorDraft ? state.viewPreferences : v && state.viewPreferences
         ? {
             ...state.viewPreferences,
             filters: mergeFilters(v.filters, state.overlayFilters),
@@ -410,7 +414,8 @@ function commit(patch: Partial<State>) {
   if (
     navigationReady &&
     !restoringNavigation &&
-    (patch.activeViewId !== undefined ||
+    (patch.editorDraft !== undefined ||
+      patch.activeViewId !== undefined ||
       patch.overlayFilters !== undefined ||
       patch.board !== undefined ||
       patch.selected !== undefined ||
@@ -446,6 +451,8 @@ ui.subscribe(({ context }) => {
       void updateSavedView(v.id, {
         display: { ...v.display, openIn: patch.view },
       }).catch(viewError);
+  } else if (patch.view && state.editorDraft) {
+    patch.editorDraft = { ...state.editorDraft, display: { ...state.editorDraft.display, openIn: patch.view } };
   } else if (patch.view) {
     linkView = false;
     // Each board remembers how its issues open.
@@ -485,6 +492,8 @@ export function navigate(to: {
       view: to.view ?? state.preferences[to.board ?? state.board]?.display.openIn ?? "side",
     };
   }
+  if (!restoringNavigation && state.editorDraft && (to.board !== undefined || to.inbox))
+    commit({ editorDraft: null });
   if (to.selected) to = { ...to, selected: currentKey(to.selected) };
   const view =
     to.view ??
@@ -628,6 +637,10 @@ export const useEffectivePreferences = (board: number) =>
       fallbackPreferences,
   );
 export function changePreferences(board: number, patch: Partial<Preferences>) {
+  if (state.editorDraft && board === state.board) {
+    commit({ editorDraft: { ...state.editorDraft, ...patch } });
+    return;
+  }
   if (state.activeViewId && board === state.board) {
     if (patch.filters) commit({ overlayFilters: patch.filters });
     const { display, scope } = patch;
@@ -1223,7 +1236,7 @@ function syncNavigation(replace = false) {
     url.searchParams.get("document") !== state.document
   )
     url.hash = "";
-  url.pathname = state.activeViewId ? `/view/${encodeURIComponent(state.activeViewId)}` : "/";
+  url.pathname = state.editorDraft ? (state.editorDraft.id ? `/view/${encodeURIComponent(state.editorDraft.id)}/edit` : "/view/new") : state.activeViewId ? `/view/${encodeURIComponent(state.activeViewId)}` : "/";
   if (state.activeViewId && state.overlayFilters.children.length)
     url.searchParams.set("filter", encodeOverlay(state.overlayFilters));
   else url.searchParams.delete("filter");
@@ -1242,6 +1255,9 @@ function syncNavigation(replace = false) {
   if (!state.inbox) url.searchParams.delete("notification"); // the inbox's selected row outside the mirror
   if (state.mine && !state.inbox) url.searchParams.set("mine", "1");
   else url.searchParams.delete("mine");
+  if (state.editorDraft) {
+    try { sessionStorage.setItem(`view-editor:${state.namespace}:${url.pathname}`, JSON.stringify(state.editorDraft)); } catch { /* Draft remains available until navigation. */ }
+  }
   if (url.href !== location.href) history[replace ? "replaceState" : "pushState"]({}, "", url);
 }
 function restoreNavigation() {
@@ -1249,11 +1265,21 @@ function restoreNavigation() {
     wanted = params.get("issue"),
     // A link to an issue's app key opens the issue Jira made for it, wherever it was created (sync check 7).
     issue = state.issues.get(currentKey(wanted ?? ""));
+  const editorRoute = /^\/view\/(new|[^/]+\/edit)$/.test(location.pathname);
+  let editorDraft: ViewDraft | null = null;
+  if (editorRoute) {
+    try { editorDraft = JSON.parse(sessionStorage.getItem(`view-editor:${state.namespace}:${location.pathname}`) ?? "null"); } catch { /* Start a fresh draft. */ }
+    if (!editorDraft) {
+      const id = /^\/view\/([^/]+)\/edit$/.exec(location.pathname)?.[1];
+      editorDraft = id && state.savedViews.some(v => v.id === id) ? editViewDraft(id) : createViewDraft();
+    }
+  }
   const routeId = /^\/view\/([^/]+)$/.exec(new URL(location.href).pathname)?.[1];
   const active = state.savedViews.find((v) => v.id === routeId);
-  const board = active?.board ?? issue?.board ?? Number(params.get("board"));
+  const board = editorDraft?.board ?? active?.board ?? issue?.board ?? Number(params.get("board"));
   restoringNavigation = true;
   commit({
+    editorDraft,
     activeViewId: active?.id ?? null,
     overlayFilters: active ? decodeOverlay(params.get("filter")) : emptyOverlay(),
   });
@@ -1269,8 +1295,8 @@ function restoreNavigation() {
       : {}),
   });
   // mine.set also leaves the inbox, so send it only when My issues actually changes.
-  if (!params.has("inbox") && get().mine !== (active?.mine ?? params.has("mine")))
-    ui.send({ type: "mine.set", mine: active?.mine ?? params.has("mine") });
+  if (!params.has("inbox") && get().mine !== (editorDraft?.mine ?? active?.mine ?? params.has("mine")))
+    ui.send({ type: "mine.set", mine: editorDraft?.mine ?? active?.mine ?? params.has("mine") });
   restoringNavigation = false;
   if (wanted && !issue) ui.send({ type: "toast.show", text: `Issue ${wanted} not found` });
 }
@@ -2497,9 +2523,10 @@ export function openSavedView(view: SavedView | string) {
   const v = typeof view === "string" ? state.savedViews.find((v) => v.id === view) : view;
   if (!v) return;
   // One history entry, with identity installed before UI view changes can persist defaults.
+  if (state.editorDraft) clearEditorSession();
   const previous = restoringNavigation;
   restoringNavigation = true;
-  commit({ activeViewId: v.id, overlayFilters: emptyOverlay() });
+  commit({ editorDraft: null, activeViewId: v.id, overlayFilters: emptyOverlay() });
   ui.send({
     type: "navigate",
     board: v.board,
@@ -3268,3 +3295,28 @@ export const actions = {
     });
   },
 };
+
+/** Editor routes keep a detached draft, including toolbar changes, across history and reload. */
+export function beginViewEditor(draft: ViewDraft) {
+  const previous = restoringNavigation;
+  restoringNavigation = true;
+  commit({ editorDraft: structuredClone(draft), activeViewId: null, overlayFilters: emptyOverlay() });
+  navigate({ board: draft.board, selected: null, panel: false, inbox: false });
+  ui.send({ type: "mine.set", mine: draft.mine });
+  restoringNavigation = previous;
+  syncNavigation();
+}
+function clearEditorSession() {
+  try { sessionStorage.removeItem(`view-editor:${state.namespace}:${location.pathname}`); } catch { /* Best effort. */ }
+}
+export function discardViewEditor() {
+  const draft = state.editorDraft;
+  if (!draft) return;
+  clearEditorSession();
+  const previous = restoringNavigation;
+  restoringNavigation = true;
+  commit({ editorDraft: null });
+  restoringNavigation = previous;
+  if (draft.id) openSavedView(draft.id);
+  else navigate({ board: draft.board });
+}
