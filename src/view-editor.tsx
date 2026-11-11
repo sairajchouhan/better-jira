@@ -27,6 +27,7 @@ import {
   openSavedView,
   deleteSavedView,
   toggleFavorite,
+  viewPath,
   type SavedView,
   type ViewDraft,
 } from "./saved-views";
@@ -347,7 +348,7 @@ function Management({
       () => {
         void navigator.clipboard
           .writeText(
-            new URL(`/view/${encodeURIComponent(view.id)}`, location.origin)
+            new URL(viewPath(view), location.origin)
               .href,
           )
           .catch((e) => ui.send({ type: "toast.show", text: String(e) }));

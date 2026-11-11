@@ -11,7 +11,9 @@ test("saved view has a stable route, survives reload and leaves board preference
     const draft = {board:1,kind:"custom",name:"Stable view",description:"",icon:"filter",color:"gray",filters:prefs.filters,display:prefs.display,scope:prefs.scope,mine:false};
     const saved = await page.eval(`fetch('/api/views', {method:'POST',headers:{'Content-Type':'application/json'},body:${JSON.stringify(JSON.stringify(draft))}}).then(r=>r.json())`);
     await page.goto(`/view/${saved.id}?board=1`);
-    const path = await page.eval("location.pathname");
+    // BJ-137: an old /view/<id> link lands on the slugged address.
+    const path = `/view/stable-view-${saved.id}`;
+    await page.waitFor(`location.pathname === ${JSON.stringify(path)}`);
     expect(await page.eval(`localStorage.getItem(${JSON.stringify(PREFS_KEY)})`)).toBe(before);
     await page.reload();
     expect(await page.eval("location.pathname")).toBe(path);

@@ -7,7 +7,7 @@
  */
 import { get, useStore } from "./store";
 export type { SavedView, ViewDraft } from "./saved-view-model";
-export { encodeOverlay, decodeOverlay, mergeFilters, emptyOverlay } from "./saved-view-model";
+export { encodeOverlay, decodeOverlay, mergeFilters, emptyOverlay, canMergeOverlay, MERGE_CONFLICT, viewPath } from "./saved-view-model";
 export {
   usePreferences,
   preferencesFor,

@@ -9,6 +9,9 @@ import {
   emptyOverlay,
   mergeFilters,
   validateDraft,
+  canMergeOverlay,
+  viewPath,
+  viewForRoute,
 } from "./saved-view-model";
 const p = defaultPreferences();
 const draft = {
@@ -161,4 +164,30 @@ test("merging keeps OR bases and overlays as AND operands", () => {
   expect(merged.join).toBe("and");
   expect(merged.children).toHaveLength(2);
   expect(merged.children[0]).toMatchObject({ join: "or" });
+});
+
+test("canMergeOverlay rejects same-field values the saved base excludes", () => {
+  const g = (...children: any[]) => ({ id: "g", join: "and" as const, children });
+  const r = (field: string, op: string, ...values: string[]) => ({ id: field + op + values, field, op, values }) as any;
+  const todo = g(r("status", "is", "todo"));
+  expect(canMergeOverlay(todo, g(r("status", "is", "progress")))).toBe(false);
+  expect(canMergeOverlay(todo, g(r("status", "is", "progress", "todo")))).toBe(true);
+  expect(canMergeOverlay(todo, g(r("priority", "is", "High")))).toBe(true);
+  expect(canMergeOverlay(todo, g(r("status", "isNot", "todo")))).toBe(false);
+  expect(canMergeOverlay(g(r("status", "isNot", "todo")), g(r("status", "is", "todo")))).toBe(false);
+  expect(canMergeOverlay(g(g(r("status", "is", "todo"))), g(r("status", "is", "progress")))).toBe(false);
+  // An OR base can still match through its other branch.
+  expect(canMergeOverlay({ ...g(r("status", "is", "todo"), r("labels", "is", "x")), join: "or" }, g(r("status", "is", "progress")))).toBe(true);
+  expect(canMergeOverlay(todo, g(r("status", "is")))).toBe(true);
+  expect(canMergeOverlay(emptyOverlay(), g(r("status", "is", "progress")))).toBe(true);
+});
+test("view routes: /view/<slug>-<id>, old ids and stale slugs resolve", () => {
+  const id = "0f8c2a3e-1b2c-4d5e-8f90-123456789abc";
+  const views = [{ id, name: "Ünïcode & Bugs" }, { id: "x", name: "" }];
+  expect(viewPath(views[0]!)).toBe(`/view/unicode-bugs-${id}`);
+  expect(viewPath(views[1]!)).toBe("/view/x");
+  expect(viewForRoute(views, id)?.id).toBe(id);
+  expect(viewForRoute(views, `old-name-${id}`)?.id).toBe(id);
+  expect(viewForRoute(views, `unicode-bugs-${id}`)?.id).toBe(id);
+  expect(viewForRoute(views, "nope")).toBeUndefined();
 });

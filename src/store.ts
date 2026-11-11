@@ -194,6 +194,10 @@ import {
   mergeFilters,
   encodeOverlay,
   decodeOverlay,
+  canMergeOverlay,
+  MERGE_CONFLICT,
+  viewPath,
+  viewForRoute,
 } from "./saved-view-model";
 
 export const ME: User = { id: "", name: "Me" };
@@ -428,6 +432,9 @@ function commit(patch: Partial<State>) {
       patch.document !== undefined)
   )
     syncNavigation();
+  // A rename (here or in another tab) moves the slug; the id suffix keeps the entry.
+  else if (patch.savedViews && navigationReady && !restoringNavigation && state.activeViewId)
+    syncNavigation(true);
   listeners.forEach((l) => l());
 }
 /** Selector must return a stable reference (a state field or a Map entry), never a fresh object. */
@@ -1240,7 +1247,11 @@ function syncNavigation(replace = false) {
     url.searchParams.get("document") !== state.document
   )
     url.hash = "";
-  url.pathname = state.editorDraft ? (state.editorDraft.id ? `/view/${encodeURIComponent(state.editorDraft.id)}/edit` : "/view/new") : state.activeViewId ? `/view/${encodeURIComponent(state.activeViewId)}` : state.viewsPage ? "/views" : "/";
+  const routeOf = (id: string) => {
+    const v = state.savedViews.find((v) => v.id === id);
+    return v ? viewPath(v) : `/view/${encodeURIComponent(id)}`;
+  };
+  url.pathname = state.editorDraft ? (state.editorDraft.id ? `${routeOf(state.editorDraft.id)}/edit` : "/view/new") : state.activeViewId ? routeOf(state.activeViewId) : state.viewsPage ? "/views" : "/";
   if (state.activeViewId && state.overlayFilters.children.length)
     url.searchParams.set("filter", encodeOverlay(state.overlayFilters));
   else url.searchParams.delete("filter");
@@ -1275,11 +1286,18 @@ function restoreNavigation() {
     try { editorDraft = JSON.parse(sessionStorage.getItem(`view-editor:${state.namespace}:${location.pathname}`) ?? "null"); } catch { /* Start a fresh draft. */ }
     if (!editorDraft) {
       const id = /^\/view\/([^/]+)\/edit$/.exec(location.pathname)?.[1];
-      editorDraft = id && state.savedViews.some(v => v.id === id) ? editViewDraft(id) : createViewDraft();
+      const v = id ? viewForRoute(state.savedViews, id) : undefined;
+      editorDraft = v ? editViewDraft(v.id) : createViewDraft();
     }
   }
   const routeId = /^\/view\/([^/]+)$/.exec(new URL(location.href).pathname)?.[1];
-  const active = state.savedViews.find((v) => v.id === routeId);
+  const active = routeId ? viewForRoute(state.savedViews, routeId) : undefined;
+  // Old `/view/<id>` links and stale slugs land on the view's current address.
+  if (active && location.pathname !== viewPath(active)) {
+    const url = new URL(location.href);
+    url.pathname = viewPath(active);
+    history.replaceState(history.state, "", url);
+  }
   const board = editorDraft?.board ?? active?.board ?? issue?.board ?? Number(params.get("board"));
   restoringNavigation = true;
   commit({
@@ -2438,7 +2456,8 @@ export function createViewDraft(
     icon: "filter",
     color: "gray",
     filters: p.filters,
-    display: p.display,
+    // Linear: a new custom view starts as a list with its details open; a tab keeps the board's layout.
+    display: kind === "custom" ? { ...p.display, layout: "list" } : p.display,
     scope: p.scope,
     mine: state.mine,
   });
@@ -2451,12 +2470,14 @@ export function editViewDraft(id: string): ViewDraft {
 }
 export function duplicateViewDraft(id: string): ViewDraft {
   const { id: _id, ...draft } = editViewDraft(id);
-  return { ...draft, name: "", description: "" };
+  return { ...draft, name: "", description: "", sourceId: id };
 }
 export async function createSavedView(draft: ViewDraft): Promise<string> {
-  const view = await viewRequest<SavedView>("", "POST", draft);
+  const { sourceId: _source, ...definition } = draft;
+  const view = await viewRequest<SavedView>("", "POST", definition);
   set({
     savedViews: [...state.savedViews.filter((v) => v.id !== view.id), view],
+    ...(view.kind === "custom" ? { details: true } : {}),
   });
   return view.id;
 }
@@ -2504,6 +2525,7 @@ export function clearOverlay() {
 export async function saveOverlayToView() {
   const v = state.savedViews.find((v) => v.id === state.activeViewId);
   if (!v) return;
+  if (!canMergeOverlay(v.filters, state.overlayFilters)) throw new Error(MERGE_CONFLICT);
   await updateSavedView(v.id, {
     filters: mergeFilters(v.filters, state.overlayFilters),
   });
@@ -3307,6 +3329,8 @@ export function discardViewEditor() {
   restoringNavigation = true;
   commit({ editorDraft: null });
   restoringNavigation = previous;
-  if (draft.id) openSavedView(draft.id);
+  // Edit and duplicate return to the view they came from, while it still exists.
+  const back = draft.id ?? draft.sourceId;
+  if (back && state.savedViews.some((v) => v.id === back)) openSavedView(back);
   else navigate({ board: draft.board });
 }

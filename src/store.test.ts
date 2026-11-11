@@ -890,3 +890,68 @@ test("opening saved views and changing their overlay never writes board preferen
   expect(get().activeViewId).toBeNull();
   expect(JSON.stringify(get().preferences)).toBe(before);
 });
+
+const viewFixture = async (patch: Record<string, unknown> = {}) => {
+  const { defaultPreferences } = await import("./view-model");
+  const p = defaultPreferences();
+  const at = new Date().toISOString();
+  return {id:"v-source",board:1,kind:"custom" as const,name:"Source",description:"",icon:"filter",color:"gray",filters:{...p.filters,children:[{id:"saved",field:"status" as const,op:"is" as const,values:["todo"]}]},display:p.display,scope:p.scope,mine:false,createdAt:at,updatedAt:at,...patch};
+};
+const withFetch = async (respond: (url: string, init?: RequestInit) => unknown, run: () => Promise<void>) => {
+  const original = globalThis.fetch;
+  globalThis.fetch = Object.assign(async (input: string | URL | Request, init?: RequestInit) => Response.json(respond(String(input), init)), original);
+  try { await run(); } finally { globalThis.fetch = original; }
+};
+
+test("BJ-128: Save to this view refuses an overlay the saved base excludes", async () => {
+  const { get, set, openSavedView, saveOverlayToView } = await import("./store");
+  const view = await viewFixture();
+  set({ savedViews: [view] });
+  openSavedView(view);
+  set({ overlayFilters: { id: "overlay", join: "and", children: [{ id: "o", field: "status", op: "is", values: ["progress"] }] } });
+  let writes = 0;
+  await withFetch(() => (writes++, view), async () => {
+    await expect(saveOverlayToView()).rejects.toThrow("Cannot merge these filters into the view");
+  });
+  expect(writes).toBe(0);
+  expect(get().savedViews[0]!.filters).toEqual(view.filters);
+  expect(get().overlayFilters.children).toHaveLength(1);
+});
+
+test("BJ-132: a new custom view starts as a list with details open; a tab keeps the board layout", async () => {
+  const { get, set, navigate, createViewDraft, createSavedView, changeDisplay } = await import("./store");
+  navigate({ board: 1 });
+  changeDisplay(1, { layout: "board" });
+  set({ details: false });
+  expect(createViewDraft("tab").display.layout).toBe("board");
+  const draft = createViewDraft("custom");
+  expect(draft.display.layout).toBe("list");
+  await withFetch((_url, init) => ({ ...JSON.parse(String(init?.body)), id: "fresh", createdAt: "", updatedAt: "" }), async () => {
+    await createSavedView({ ...draft, name: "Fresh" });
+  });
+  expect(get().details).toBe(true);
+});
+
+test("BJ-133: Cancel on a duplicate draft returns to the source view", async () => {
+  const { get, set, openSavedView, duplicateViewDraft, beginViewEditor, discardViewEditor } = await import("./store");
+  const view = await viewFixture();
+  set({ savedViews: [view] });
+  openSavedView(view);
+  beginViewEditor(duplicateViewDraft(view.id));
+  expect(get().activeViewId).toBeNull();
+  discardViewEditor();
+  expect(get().editorDraft).toBeNull();
+  expect(get().activeViewId).toBe(view.id);
+});
+
+test("BJ-137: the view address is /view/<slug>-<id> and follows a rename", async () => {
+  const { set, openSavedView, updateSavedView } = await import("./store");
+  const view = await viewFixture({ id: "8f1c", name: "My Triage!" });
+  set({ savedViews: [view] });
+  openSavedView(view);
+  expect(new URL(location.href).pathname).toBe("/view/my-triage-8f1c");
+  await withFetch(() => ({ ...view, name: "Bugs only" }), async () => {
+    await updateSavedView(view.id, { name: "Bugs only" });
+  });
+  expect(new URL(location.href).pathname).toBe("/view/bugs-only-8f1c");
+});

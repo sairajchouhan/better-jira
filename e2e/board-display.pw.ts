@@ -63,7 +63,7 @@ test("the default board: My issues, board details, saved views and a fast layout
     expect(await page.page.getByRole("row").filter({ hasText: "Mine" }).count()).toBe(1);
     await page.waitFor(`document.querySelector('[role=table]')?.textContent.includes('Mine')`);
     await page.click("text=Mine");
-    await page.waitFor(`location.pathname === '/view/v1'`);
+    await page.waitFor(`location.pathname === '/view/mine-v1'`);
     await page.click('[aria-label="Breadcrumb"] button[aria-label="Browser audit"]');
   });
   await test.step("R1-D95/D96: a layout switch paints the first screenful at once and the rest right after", async () => {

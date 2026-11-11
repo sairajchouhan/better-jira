@@ -1,5 +1,6 @@
 import {
   defaultPreferences,
+  type Rule,
   FIELDS,
   operatorsFor,
   parsePreferences,
@@ -25,6 +26,8 @@ export type SavedView = {
 };
 export type ViewDraft = Omit<SavedView, "id" | "createdAt" | "updatedAt"> & {
   id?: string;
+  /** A duplicate's source view: Cancel returns there. Never sent as part of the definition. */
+  sourceId?: string;
 };
 const object = (v: unknown): v is Record<string, any> =>
   !!v && typeof v === "object" && !Array.isArray(v);
@@ -114,6 +117,52 @@ export function mergeFilters(base: FilterGroup, overlay: FilterGroup): FilterGro
   };
   rekey(merged);
   return merged;
+}
+export const MERGE_CONFLICT = "Cannot merge these filters into the view";
+/** Rules every matching issue must satisfy: top-level AND rules, descending into AND (or single-child) groups. */
+function requiredRules(g: FilterGroup): Rule[] {
+  const live = g.children.filter((c) => "children" in c || c.values.length || c.op === "empty" || c.op === "notEmpty");
+  if (g.join === "or" && live.length > 1) return [];
+  return live.flatMap((c) => ("children" in c ? requiredRules(c) : [c]));
+}
+/** False when an overlay rule on a saved field asks for values the saved base excludes,
+ * e.g. saved Status is Todo + overlay Status is In Progress: the merge could match no issue. */
+export function canMergeOverlay(base: FilterGroup, overlay: FilterGroup): boolean {
+  const saved = requiredRules(base);
+  const excludes = (a: Rule, b: Rule) =>
+    (a.op === "is" && b.op === "is" && !a.values.some((v) => b.values.includes(v))) ||
+    (a.op === "is" && b.op === "isNot" && a.values.every((v) => b.values.includes(v))) ||
+    (a.op === "empty" && b.op === "notEmpty");
+  return !requiredRules(overlay).some((o) =>
+    saved.some((b) => o.field === b.field && (excludes(o, b) || excludes(b, o))),
+  );
+}
+const slug = (name: string) =>
+  name
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60)
+    .replace(/-+$/, "");
+/** `/view/<slug>-<id>`. The id suffix is canonical; the slug follows the name. */
+export const viewPath = (v: Pick<SavedView, "id" | "name">) =>
+  `/view/${encodeURIComponent(slug(v.name) ? `${slug(v.name)}-${v.id}` : v.id)}`;
+/** Resolves `<id>`, `<slug>-<id>` and stale slugs to the view. */
+export function viewForRoute<T extends Pick<SavedView, "id">>(views: T[], segment: string): T | undefined {
+  let s = segment;
+  try {
+    s = decodeURIComponent(segment);
+  } catch {
+    /* Keep the raw segment. */
+  }
+  return (
+    views.find((v) => v.id === s) ??
+    views
+      .filter((v) => s.endsWith(`-${v.id}`))
+      .sort((a, b) => b.id.length - a.id.length)[0]
+  );
 }
 export function encodeOverlay(filters: FilterGroup): string {
   if (!validFilters(filters)) throw new Error("Invalid filters");
