@@ -57,7 +57,14 @@ export function IssueDocument({ issue, id }: { issue: Issue; id: string }) {
 }
 interface DocumentContextValue {
   state: { draft: Draft; revision: number };
-  actions: { update: (patch: Partial<Draft>) => void; endSession: () => void };
+  actions: {
+    update: (patch: Partial<Draft>) => void;
+    endSession: () => void;
+    /** Merges media that finished uploading after the body was saved into Jira's current body. */
+    mergeLateMedia: (merge: (current: unknown) => AdfDocument) => void;
+    /** Saves the draft, copies the stored document and opens the copy if this one is still open. */
+    duplicate: () => Promise<void>;
+  };
   meta: { issue: Issue; resource: IssueResource };
 }
 const DocumentContext = createContext<DocumentContextValue | null>(null);
@@ -128,6 +135,30 @@ function DocumentProvider({
     flush();
     session.current = crypto.randomUUID();
   };
+  const storedResource = () =>
+    get()
+      .issues.get(issue.key)
+      ?.resources?.find((r) => r.id === resource.id);
+  const mergeLateMedia = (merge: (current: unknown) => AdfDocument) => {
+    const current = storedResource();
+    if (current) actions.editResource(issue.key, resource.id, { body: merge(current.body) });
+    void flushLocalChanges();
+  };
+  const duplicate = async () => {
+    endSession();
+    const current = storedResource();
+    if (!current) return;
+    const id = crypto.randomUUID();
+    actions.resource(issue.key, {
+      ...structuredClone(current),
+      id,
+      title: `${pending.current.title || "New document"} (copy)`,
+      updated: new Date().toISOString(),
+      history: [],
+    });
+    await flushLocalChanges();
+    if (get().document === resource.id) navigate({ document: id });
+  };
   // Every path flushes through `latest`, so a flush on unmount or page hide uses the current issue key and draft.
   useEffect(() => {
     const flushLatest = () => latest.current();
@@ -156,7 +187,7 @@ function DocumentProvider({
     <DocumentContext
       value={{
         state: { draft, revision },
-        actions: { update, endSession },
+        actions: { update, endSession, mergeLateMedia, duplicate },
         meta: { issue, resource },
       }}
     >
@@ -249,20 +280,17 @@ function DocumentTitle() {
 }
 
 function DocumentBody() {
-  const { state: { draft, revision }, actions: { update, endSession }, meta: { issue, resource } } = useDocument();
+  const {
+    state: { draft, revision },
+    actions: { update, endSession, mergeLateMedia },
+    meta: { issue, resource },
+  } = useDocument();
   return (
     <DocumentBodyEditor
       key={revision}
       id="resource-document"
       scope={`${issue.key}:document:${resource.id}`}
-      onLateMedia={(merge) => {
-        const current = get()
-          .issues.get(issue.key)
-          ?.resources?.find((r) => r.id === resource.id);
-        if (current)
-          actions.editResource(issue.key, resource.id, { body: merge(current.body) });
-        void flushLocalChanges();
-      }}
+      onLateMedia={mergeLateMedia}
       initial={draft.body}
       label="Document content"
       placeholder="Write something…"
@@ -276,7 +304,11 @@ function DocumentBody() {
 }
 
 function DocumentHeader() {
-  const { state: { draft }, actions: { endSession: flush }, meta: { issue, resource } } = useDocument();
+  const {
+    state: { draft },
+    actions: { endSession: flush, duplicate },
+    meta: { issue, resource },
+  } = useDocument();
   const favorite = useStore((s) => s.favorites.includes(`document:${resource.id}`));
   const [deleting, setDeleting] = useState(false),
     [options, setOptions] = useState<HTMLElement | null>(null),
@@ -320,23 +352,6 @@ function DocumentHeader() {
       input?.focus();
       input?.select();
     });
-  const duplicate = async () => {
-    flush();
-    const current = get()
-      .issues.get(issue.key)
-      ?.resources?.find((r) => r.id === resource.id);
-    if (!current) return;
-    const id = crypto.randomUUID();
-    actions.resource(issue.key, {
-      ...structuredClone(current),
-      id,
-      title: `${title} (copy)`,
-      updated: new Date().toISOString(),
-      history: [],
-    });
-    await flushLocalChanges();
-    if (get().document === resource.id) navigate({ document: id });
-  };
   const download = () => {
     const blob = new Blob([markdown()], { type: "text/markdown;charset=utf-8" }),
       href = URL.createObjectURL(blob),
