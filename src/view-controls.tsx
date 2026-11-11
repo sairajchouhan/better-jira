@@ -194,7 +194,8 @@ export function BoardControls({ board }: { board: Board }) {
   );
 }
 
-function Select({
+/** A display-options row: label on the left, a pill select on the right (Linear's Display menu). */
+export function Select({
   label,
   value,
   options,
@@ -223,7 +224,8 @@ function Select({
     </div>
   );
 }
-function Toggle({
+/** A display-options row: label on the left, a switch on the right. */
+export function Toggle({
   label,
   value,
   onChange,
