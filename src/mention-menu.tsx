@@ -4,7 +4,7 @@
 import { Debouncer } from "@tanstack/pacer";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Avatar } from "./avatar";
-import { MENU_ITEM, MENU_POPUP } from "./menu-surface";
+import { MENU_ITEM, MENU_POPUP, usePlacement } from "./menu-surface";
 import { queryClient, type User } from "./store";
 
 const peopleKey = (query: string, issue?: string) => [
@@ -34,13 +34,16 @@ export function MentionMenu({
   query,
   issueKey,
   at,
+  editor,
   keys,
   pick,
   dismiss,
 }: {
   query: string;
   issueKey?: string;
-  at: { left: number; top: number; bottom: number };
+  /** The caret box at the @, read fresh on every placement; `editor` is the element whose scrolls move it. */
+  at: () => { left: number; top: number; bottom: number };
+  editor: Element | null;
   keys: { current: ((event: KeyboardEvent) => boolean) | null };
   pick: (person: User) => void;
   dismiss: () => void;
@@ -100,20 +103,29 @@ export function MentionMenu({
     else return false;
     return true;
   };
+  const height = Math.min(8, Math.max(1, people.length)) * 32 + 10;
+  const style = usePlacement(
+    list,
+    editor,
+    () => {
+      const caret = at(),
+        below = innerHeight - caret.bottom - 8 >= height;
+      return {
+        left: Math.max(8, Math.min(caret.left, innerWidth - 268)),
+        top: below ? caret.bottom + 4 : Math.max(8, caret.top - 4 - height),
+        maxHeight: height,
+      };
+    },
+    !hidden && `${query} ${height}`,
+  );
   if (hidden) return null;
-  const height = Math.min(8, Math.max(1, people.length)) * 32 + 10,
-    below = innerHeight - at.bottom - 8 >= height;
   return (
     <div
       ref={list}
       role="listbox"
       aria-label="Mention people"
       className={`${MENU_POPUP} fixed z-50 w-[260px] overflow-y-auto p-1`}
-      style={{
-        left: Math.max(8, Math.min(at.left, innerWidth - 268)),
-        top: below ? at.bottom + 4 : Math.max(8, at.top - 4 - height),
-        maxHeight: height,
-      }}
+      style={style}
       onMouseDown={(event) => event.preventDefault()}
     >
       {!people.length && !settled ? (

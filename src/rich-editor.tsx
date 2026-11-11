@@ -9,7 +9,8 @@ import { mediaUploads, mergeLateMedia, type LateMedia } from "./editor-media-upl
 import { editorBindings } from "./editor-bindings";
 import { activeMention, dismissMention, insertMention, mentionPlugin } from "./mentions";
 import { MentionMenu, searchPeople } from "./mention-menu";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { usePlacement } from "./menu-surface";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { EditorState, NodeSelection, Selection, type Command } from "prosemirror-state";
 import { mediaNodeView, type MediaNodeView } from "./media-node-view";
 import type { Attachment } from "./attachment-media";
@@ -294,21 +295,11 @@ export function RichEditor(props: RichEditorProps) {
         if (view.current === editor) view.current = null;
       });
     };
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- The editor mounts once with initial props; toolbar measurement runs after each commit with a size guard.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- The editor mounts once with initial props.
   }, []);
   useEffect(() => {
     for (const media of mediaViews.current) media.updateContext();
   }, [props.issueKey, props.attachments]);
-  useEffect(() => {
-    if (!props.selectionToolbar) return;
-    const move = () => refresh((n) => n + 1);
-    addEventListener("scroll", move, true);
-    addEventListener("resize", move);
-    return () => {
-      removeEventListener("scroll", move, true);
-      removeEventListener("resize", move);
-    };
-  }, [props.selectionToolbar]);
   const run = (command: Command) => {
     const editor = view.current;
     if (editor) {
@@ -430,42 +421,35 @@ export function RichEditor(props: RichEditorProps) {
     props.variant === "comment" || /comment/i.test(props.label ?? "") ? "comment" : "description";
   const selection = view.current?.state.selection;
   // Above the selection; below it when the editor has too little room above, so it never covers the title or header. Either way both edges stay inside the viewport (a long selection can start above and end below it).
-  const floating =
-    props.selectionToolbar &&
-    view.current?.hasFocus() &&
-    selection &&
+  const selecting =
+    !!props.selectionToolbar &&
+    !!view.current?.hasFocus() &&
+    !!selection &&
     !selection.empty &&
-    !(selection instanceof NodeSelection)
-      ? (() => {
-          return floatingPlacement(
-            view.current!.coordsAtPos(selection.from),
-            view.current!.coordsAtPos(selection.to),
-            view.current!.dom.getBoundingClientRect(),
-            {
-              width: toolbar.current?.offsetWidth ?? 560,
-              height: toolbar.current?.offsetHeight ?? 40,
-            },
-            { width: innerWidth, height: innerHeight },
-          );
-        })()
-      : undefined;
-  // The first placement guesses the size; re-place once the toolbar is measured.
-  const placed = useRef("");
-  // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- The editor mounts once with initial props; toolbar measurement runs after each commit with a size guard.
-  useLayoutEffect(() => {
-    const size = `${toolbar.current?.offsetWidth}x${toolbar.current?.offsetHeight}`;
-    if (floating && size !== placed.current) {
-      placed.current = size;
-      refresh((n) => n + 1);
-    }
-  });
-  const formatting = (!props.selectionToolbar || floating) && (
+    !(selection instanceof NodeSelection);
+  const floating = usePlacement(
+    toolbar,
+    view.current?.dom,
+    (area, node) => {
+      const editor = view.current!,
+        { from, to } = editor.state.selection;
+      return floatingPlacement(
+        editor.coordsAtPos(from),
+        editor.coordsAtPos(to),
+        area!,
+        { width: node.offsetWidth, height: node.offsetHeight },
+        { width: innerWidth, height: innerHeight },
+      );
+    },
+    selecting && `${selection!.from} ${selection!.to}`,
+  );
+  const formatting = (!props.selectionToolbar || selecting) && (
     <div
       ref={toolbar}
       role="toolbar"
       aria-label={`${subject === "comment" ? "Comment" : "Description"} formatting`}
       style={floating}
-      className={`z-10 items-center gap-0.5 rounded-lg border border-line-2 bg-card p-1 shadow-lg ${floating ? "fixed flex flex-nowrap overflow-x-auto" : "absolute right-0 bottom-full mb-1 hidden max-w-full flex-nowrap overflow-x-auto group-focus-within/editor:flex"}`}
+      className={`z-10 items-center gap-0.5 rounded-lg border border-line-2 bg-card p-1 shadow-lg ${selecting ? "fixed flex flex-nowrap overflow-x-auto" : "absolute right-0 bottom-full mb-1 hidden max-w-full flex-nowrap overflow-x-auto group-focus-within/editor:flex"}`}
       onMouseDown={(e) => {
         if ((e.target as HTMLElement).closest("button")) e.preventDefault();
       }}
@@ -696,7 +680,8 @@ export function RichEditor(props: RichEditorProps) {
         <MentionMenu
           query={mention.query}
           issueKey={props.mentionIssue ?? props.issueKey}
-          at={view.current!.coordsAtPos(mention.from)}
+          at={() => view.current!.coordsAtPos(mention.from)}
+          editor={view.current!.dom}
           keys={mentionKeys}
           pick={(person) => {
             const editor = view.current!;
