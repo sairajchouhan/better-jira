@@ -1,3 +1,4 @@
+import { savedViewClient } from "./saved-view-client";
 import { useSyncExternalStore } from "react";
 import { adfToText } from "./adf";
 import {
@@ -189,7 +190,6 @@ export type { SavedView } from "./saved-view-model";
 import {
   type SavedView,
   type ViewDraft,
-  migrateLegacyViews,
   emptyOverlay,
   mergeFilters,
   encodeOverlay,
@@ -765,7 +765,7 @@ async function loadApplication() {
   const [boards, remote, savedViews] = await Promise.all([
     fetchJson<Board[]>("/api/boards"),
     fetchJson<Issue[]>("/api/issues"),
-    fetchSavedViews(true),
+    viewClient.load(true),
   ]);
   if (!boards.length)
     throw new Error("The Jira mirror is still syncing your boards. Retry in a moment.");
@@ -2443,36 +2443,20 @@ if (typeof addEventListener === "function")
   });
 const viewError = (e: unknown) =>
   set({ perf: e instanceof Error ? e.message : "Could not save view" });
-async function viewRequest<T>(path = "", method = "GET", body?: unknown): Promise<T> {
-  const response = await fetch(`/api/views${path}`, {
-    method,
-    headers: { "Content-Type": "application/json" },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
-  if (!response.ok)
-    throw new Error(
-      `Could not ${method === "GET" ? "load" : "save"} views (${response.status})`,
-    );
-  return response.status === 204 ? (undefined as T) : response.json();
-}
-async function fetchSavedViews(migrate = false) {
-  if (migrate) {
-    const key = preferenceKey("better-jira:saved-views:v1");
-    const marker = `${key}:imported`;
-    if (localStorage.getItem(marker) !== "1") {
-      const legacy = migrateLegacyViews(localStorage.getItem(key));
-      await viewRequest("/import", "POST", legacy);
-      // Retain the old source as a backup; never overwrite it with server state.
-      localStorage.setItem(marker, "1");
-    }
-  }
-  return viewRequest<SavedView[]>();
-}
+const viewClient = savedViewClient(
+  { read: () => state.savedViews, write: (savedViews) => set({ savedViews }) },
+  () => preferenceKey("better-jira:saved-views:v1"),
+  {
+    getItem: (key) => localStorage.getItem(key),
+    setItem: (key, value) => localStorage.setItem(key, value),
+  },
+  (input, init) => fetch(input, init),
+);
 const liveFavorites = (savedViews: SavedView[]) =>
   readFavorites().filter((id) => !id.startsWith("view:") || savedViews.some((v) => `view:${v.id}` === id));
 export async function refreshSavedViews() {
-  const savedViews = await fetchSavedViews();
-  if (viewWrites.size) return; // A focus read must not replace a display edit still being saved.
+  const savedViews = await viewClient.refresh();
+  if (!savedViews) return;
   set({ savedViews, favorites: liveFavorites(savedViews) });
   if (state.activeViewId && !savedViews.some((v) => v.id === state.activeViewId))
     navigate({ board: state.board });
@@ -2507,44 +2491,17 @@ export function duplicateViewDraft(id: string): ViewDraft {
   return { ...draft, name: "", description: "", sourceId: id };
 }
 export async function createSavedView(draft: ViewDraft): Promise<string> {
-  const { sourceId: _source, ...definition } = draft;
-  const view = await viewRequest<SavedView>("", "POST", definition);
+  const view = await viewClient.create(draft);
   if (view.kind === "custom") rememberViewDetails(view.id, true);
   set({ savedViews: [...state.savedViews.filter((v) => v.id !== view.id), view] });
   return view.id;
 }
-const viewWrites = new Map<string, Promise<unknown>>();
-export async function updateSavedView(id: string, patch: Partial<ViewDraft>): Promise<string> {
-  const old = state.savedViews.find((v) => v.id === id);
-  if (!old) throw new Error("View not found");
-  const optimistic = { ...old, ...patch, id };
-  set({
-    savedViews: state.savedViews.map((v) => (v.id === id ? optimistic : v)),
-  });
-  const request = (viewWrites.get(id) ?? Promise.resolve())
-    .catch(() => {})
-    .then(() => viewRequest<SavedView>(`/${encodeURIComponent(id)}`, "PUT", patch));
-  viewWrites.set(id, request);
-  try {
-    const view = await request;
-    set({
-      savedViews: state.savedViews.map((v) => (v === optimistic ? view : v)),
-    });
-    return id;
-  } catch (e) {
-    set({
-      savedViews: state.savedViews.map((v) => (v === optimistic ? old : v)),
-    });
-    throw e;
-  } finally {
-    if (viewWrites.get(id) === request) viewWrites.delete(id);
-  }
-}
+export const updateSavedView = viewClient.update;
 export async function saveViewDraft(draft: ViewDraft): Promise<string> {
   return draft.id ? updateSavedView(draft.id, draft) : createSavedView(draft);
 }
 export async function deleteSavedView(id: string) {
-  await viewRequest(`/${encodeURIComponent(id)}`, "DELETE");
+  await viewClient.remove(id);
   rememberViewDetails(id, false);
   if (state.activeViewId === id) openAllIssues(state.board);
   set({
