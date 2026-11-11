@@ -4,6 +4,7 @@ import {
   operatorsFor,
   parsePreferences,
   type FilterGroup,
+  type Rule,
   type Display,
   type Scope,
 } from "./view-model";
@@ -169,5 +170,14 @@ export function migrateLegacyViews(raw: string | null): SavedView[] {
       createdAt: v.createdAt ?? at,
       updatedAt: v.updatedAt ?? at,
     };
+  });
+}
+/** False when an overlay `is` rule contradicts a base `is` rule on the same field (Linear: "Cannot merge these filters into the view"). */
+export function canMergeOverlay(base: FilterGroup, overlay: FilterGroup): boolean {
+  const rules = (g: FilterGroup) => g.children.filter((c): c is Rule => !("children" in c) && c.op === "is");
+  const constrained = base.join === "and" || base.children.length === 1 ? rules(base) : [];
+  return rules(overlay).every((o) => {
+    const b = constrained.find((r) => r.field === o.field);
+    return !b || o.values.some((v) => b.values.includes(v));
   });
 }

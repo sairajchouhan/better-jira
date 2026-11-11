@@ -3,10 +3,14 @@ import type { Issue } from "./store";
 export function directoryViews(views: SavedView[], board: number, descending = false, sort: "name" | "owner" = "name") {
   return views.filter(v => v.board === board && v.kind === "custom").sort((a, b) => (sort === "name" && descending ? -1 : 1) * a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 }
-export function resultFeedback(count: number, baseline: number, saved: boolean, temporary: boolean) {
-  if (!count) return { text: saved && (!temporary || baseline === 0) ? "No issues matching your filters" : "No issues matching the filters", edit: saved && (!temporary || baseline === 0) };
+/** `baseline` counts the saved definition alone; `total` counts the board with no filters. Empty states keep Linear's hidden count. */
+export function resultFeedback(count: number, baseline: number, saved: boolean, temporary: boolean, total = baseline) {
+  if (!count) {
+    const edit = saved && (!temporary || baseline === 0);
+    return { text: edit ? "No issues matching your filters" : "No issues matching the filters", edit, hidden: edit ? total : baseline };
+  }
   const hidden = Math.max(0, baseline - count);
-  return hidden ? { text: `${hidden} issue${hidden === 1 ? "" : "s"} hidden by filters`, edit: false } : null;
+  return hidden ? { text: `${hidden} issue${hidden === 1 ? "" : "s"} hidden by filters`, edit: false, hidden } : null;
 }
 export function viewSummaries(issues: Issue[]) {
   const assignees = new Map<string, number>(), labels = new Map<string, number>();

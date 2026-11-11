@@ -147,7 +147,7 @@ test("display preferences: card dates, filter chips, empty views and pill menus"
     await page.waitFor(
       `document.querySelector("[role=status]")?.textContent.includes("No issues matching the filters")`,
     );
-    await page.click("text=Clear filters");
+    await page.click("text=Clear Filters");
     await page.waitFor(`${cards}===6`);
   });
   await test.step("R1-D58/D59: swimlane titles stay pinned left, and the lane + prefills the lane's property", async () => {
