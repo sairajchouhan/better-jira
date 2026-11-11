@@ -81,7 +81,7 @@ test("a document needs an open issue and closes with it; a new board resets My i
   expect(go({ selected: null, panel: true, document: "doc" }).document).toBeNull();
   const elsewhere = go({ board: 2 }, { ...start, mine: true, inbox: true });
   expect([elsewhere.mine, elsewhere.inbox]).toEqual([false, false]);
-  expect(go({ board: 1 }, { ...start, mine: true }).mine).toBe(true);
+  expect(go({ board: 1 }, { ...start, mine: true }).mine).toBe(false);
 });
 
 test("a link's view shows that issue once, then reverts without becoming a preference", () => {
@@ -121,7 +121,7 @@ test("leaving or switching a view drops its filter overlay; going to a board pic
   expect(other.screen.overlayFilters.children).toHaveLength(0);
   const left = transition(filtered.screen, { type: "go", to: { board: 1 } }, data());
   expect(left.screen).toMatchObject({ activeViewId: null, view: "side", overlayFilters: { children: [] } });
-  expect(url(left.screen)).toBe("/?board=1&mine=1");
+  expect(url(left.screen)).toBe("/?board=1");
 });
 
 test("the view editor takes display changes into its draft, keeps the board's preference, and returns on cancel", () => {
@@ -136,7 +136,7 @@ test("the view editor takes display changes into its draft, keeps the board's pr
   expect(cancelled).toMatchObject({ forgetDraft: true, screen: { editorDraft: null, activeViewId: "v1" } });
   // Leaving through another board first adds the editor's board, as it always has.
   const left = transition(editing.screen, { type: "go", to: { board: 2 } }, data());
-  expect(left.via && url(left.via)).toBe("/?board=1&mine=1");
+  expect(left.via && url(left.via)).toBe("/?board=1");
   expect(url(left.screen)).toBe("/?board=2");
   // A reload of the editor's address uses the draft kept for it, else starts a fresh one.
   const kept = run([{ type: "restore", href: "http://x/view/new?board=1", draft: { ...draft, name: "Kept" } }]);
@@ -152,4 +152,28 @@ test("the address keeps a hash only while it still points at the same issue and 
     "/?board=1&issue=B-1&view=side",
   );
   expect(url({ ...start, viewsPage: true, inbox: true }, "http://x/?notification=9")).toBe("/views?notification=9&board=1&inbox=1");
+});
+
+test("My issues is one destination; opening either board leaves it and restore never pushes", () => {
+  const mine = transition(start, { type: "go", to: { mine: true } }, data());
+  expect(url(mine.screen)).toBe("/my-issues");
+  expect(mine.history).toBe("push");
+  for (const board of [1, 2]) {
+    const opened = transition(mine.screen, { type: "go", to: { board } }, data());
+    expect(opened.screen.mine).toBe(false);
+    expect(url(opened.screen)).toBe(`/?board=${board}`);
+    const back = transition(opened.screen, { type: "restore", href: "http://x/my-issues", draft: null }, data());
+    expect(url(back.screen)).toBe("/my-issues");
+    expect(back.history).toBe("none");
+    expect(back.screen.mine).toBe(true);
+  }
+});
+
+test("legacy mine links restore My issues independently of their board", () => {
+  for (const board of [1, 2]) {
+    const restored = transition(start, { type: "restore", href: `http://x/?board=${board}&mine=1`, draft: null }, data());
+    expect(url(restored.screen)).toBe("/my-issues");
+    expect(restored.screen.mine).toBe(true);
+    expect(restored.history).toBe("none");
+  }
 });

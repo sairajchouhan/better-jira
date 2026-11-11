@@ -1,3 +1,4 @@
+import { isMyIssues } from "./navigation";
 import { navigationChoices } from "./quick-navigation";
 import { useEffectiveMine, useActiveView, useSavedViews, useOverlayFilters, createViewDraft, editViewDraft, duplicateViewDraft, saveOverlayToView } from "./saved-views";
 import { statusById } from "./board-catalog";
@@ -89,6 +90,7 @@ import { interruptedUploads } from "./jira-media";
 
 import { BoardControls, FilterChips } from "./view-controls";
 import {
+  myIssuesBoard,
   boardColumns,
   buckets,
   draftForGroup,
@@ -373,6 +375,9 @@ const BoardView = memo(function BoardView({
   selected: string | null;
 }) {
   const issues = useStore((s) => s.issues);
+  const personal = useStore(isMyIssues);
+  const boards = useStore(s => s.boards);
+  board = useMemo(() => personal ? myIssuesBoard(boards, board) : board, [personal, boards, board]);
   const activeView = useActiveView();
   const overlay = useOverlayFilters();
   const mine = useEffectiveMine();
@@ -398,10 +403,10 @@ const BoardView = memo(function BoardView({
   };
   const all = useMemo(() => [...issues.values()], [issues]);
   const visible = useMemo(
-    () => selectIssues(all, board, prefs, mine, query, ME.id),
-    [all, board, prefs, mine, query],
+    () => selectIssues(all, board, prefs, mine, query, ME.id, Date.now(), personal),
+    [all, board, prefs, mine, query, personal],
   );
-  const universe = useMemo(() => all.filter((i) => i.board === board.id), [all, board.id]);
+  const universe = useMemo(() => personal ? all : all.filter((i) => i.board === board.id), [all, board.id, personal]);
   const columns = useMemo(
     () => boardColumns(visible, board, prefs, universe),
     [visible, board, prefs, universe],
@@ -450,17 +455,17 @@ const BoardView = memo(function BoardView({
       ...draftForGroup(d.columns, bucket.id, board, universe, prefs.scope),
       ...(row ? draftForGroup(d.rows, row.id, board, universe, prefs.scope) : {}),
     });
-  const baseline = selectIssues(all, board, { ...prefs, filters: activeView && activeView.board === board.id ? activeView.filters : defaultPreferences().filters }, activeView?.mine ?? false, "", ME.id).length;
+  const baseline = selectIssues(all, board, { ...prefs, filters: activeView && activeView.board === board.id ? activeView.filters : defaultPreferences().filters }, personal || (activeView?.mine ?? false), "", ME.id, Date.now(), personal).length;
   const clearAll = () => {
     clearFilters(board.id);
     ui.send({ type: "query.set", query: "" });
-    ui.send({ type: "mine.set", mine: activeView?.mine ?? false });
+    ui.send({ type: "mine.set", mine: personal || (activeView?.mine ?? false) });
     set({ findInView: false });
   };
   return (
     <div className={`${shown ? "flex" : "hidden"} min-w-0 min-h-0 flex-1`}>
       <div className="relative flex min-w-0 min-h-0 flex-1 flex-col" data-layout={d.layout}>
-        {!visible.length && <ResultsFeedback count={0} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !activeView?.mine)} clear={clearAll} />}
+        {!visible.length && <ResultsFeedback count={0} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !personal && !activeView?.mine)} clear={clearAll} />}
         {d.layout === "list" ? (
           <div className="flex-1 overflow-auto py-1">
             {show.map((c) => (
@@ -493,7 +498,7 @@ const BoardView = memo(function BoardView({
               </section>
             ))}
             {/* Linear's list footer scrolls with the rows, right after the last one. */}
-            {visible.length > 0 && <ResultsFeedback count={visible.length} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !activeView?.mine)} clear={clearAll} />}
+            {visible.length > 0 && <ResultsFeedback count={visible.length} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !personal && !activeView?.mine)} clear={clearAll} />}
           </div>
         ) : (
           <div className="flex min-h-0 flex-1">
@@ -556,7 +561,7 @@ const BoardView = memo(function BoardView({
                           onDrop={(key, before) =>
                             actions.drop(
                               key,
-                              board.id,
+                              personal ? (issues.get(key)?.board ?? board.id) : board.id,
                               [
                                 { by: d.columns, id: col.id },
                                 ...(d.rows !== "none" ? [{ by: d.rows, id: row.id }] : []),
@@ -615,7 +620,7 @@ const BoardView = memo(function BoardView({
                 </div>
               </details>
             )}
-        {d.layout === "board" && visible.length > 0 && <ResultsFeedback count={visible.length} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !activeView?.mine)} clear={clearAll} layout="board" />}
+        {d.layout === "board" && visible.length > 0 && <ResultsFeedback count={visible.length} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !personal && !activeView?.mine)} clear={clearAll} layout="board" />}
       </div>
       {active && shown && details && !panel && (activeView ? <ViewDetails view={activeView} issues={visible} /> : <BoardDetails board={board} issues={visible} />)}
     </div>
@@ -843,7 +848,7 @@ function Sidebar({ boards }: { boards: Board[] }) {
         {/* Like Linear, My issues is a sidebar view rather than a tab beside Active/Backlog/All. */}
         <SideItem
           active={mine && !inbox && !activeView && !viewsPage}
-          onClick={() => timed("only mine", () => { navigate({ board: boardId, selected: null, panel: false }); ui.send({ type: "mine.set", mine: !mine }); })}
+          onClick={() => timed("open my issues", () => navigate({ mine: true, selected: null, panel: false }))}
         >
           <Icon name="user" /> My issues <kbd className="ml-auto">{shortcutLabel("mine")}</kbd>
         </SideItem>
@@ -862,7 +867,7 @@ function Sidebar({ boards }: { boards: Board[] }) {
         {boards.map((b) => (
           <SideItem
             key={b.id}
-            active={!inbox && !activeView && !viewsPage && b.id === boardId}
+            active={!mine && !inbox && !activeView && !viewsPage && b.id === boardId}
             onClick={() =>
               timed("switch board", () => navigate({ board: b.id, selected: null, panel: false }))
             }
@@ -1164,13 +1169,13 @@ function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue }) {
       className="flex min-w-0 items-center text-[13px] leading-[normal] font-medium text-fg-2"
     >
       <MenuButton />
-      <button aria-label={board.name} title={board.name} onClick={openAllIssues} className={CRUMB}>
+      {!mine || activeView ? <><button aria-label={board.name} title={board.name} onClick={openAllIssues} className={CRUMB}>
         <span aria-hidden="true" className={CRUMB_ICON}>
           <span className="grid size-4 place-items-center rounded-[4px] bg-accent text-[9px] font-semibold text-white">{board.name[0]}</span>
         </span>
         <span className="truncate">{board.name}</span>
       </button>
-      <CrumbSep className={issue ? "max-sm:hidden" : ""} />
+      <CrumbSep className={issue ? "max-sm:hidden" : ""} /></> : null}
       {custom ? (
         <>
           <button onClick={() => navigate({ board: board.id, viewsPage: true, selected: null, panel: false, inbox: false })} className={`${CRUMB} shrink-0`}>

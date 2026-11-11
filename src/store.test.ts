@@ -2157,3 +2157,48 @@ test("navigation: the view editor keeps its draft in the address across reload, 
     ]
   `);
 });
+
+test("navigation: My issues pushes once and Back/Forward restore exact destinations across boards", async () => {
+  const { navigate, get } = await navigationFixture();
+  navigate({ mine: true, selected: null, panel: false });
+  expect(address()).toBe("/my-issues");
+  expect(page.entries).toHaveLength(2);
+  navigate({ mine: true, selected: null, panel: false });
+  expect(page.entries).toHaveLength(2);
+  navigate({ board: 2, selected: null, panel: false });
+  expect(address()).toBe("/?board=2");
+  travel(-1);
+  expect(address()).toBe("/my-issues");
+  expect(get().mine).toBe(true);
+  expect(page.entries).toHaveLength(3);
+  travel(-1);
+  expect(address()).toBe("/?board=1");
+  expect(get().mine).toBe(false);
+  travel(1);
+  expect(address()).toBe("/my-issues");
+  travel(1);
+  expect(address()).toBe("/?board=2");
+  expect(get().mine).toBe(false);
+  navigate({ mine: true });
+  navigate({ board: 2 });
+  expect(get().mine).toBe(false);
+});
+
+test("My issues selects assigned issues across boards and keeps their visible order after restoring", async () => {
+  const { navigate, get, set, ME } = await navigationFixture();
+  const { visibleOrder } = await import("./view-model");
+  const issues = new Map(get().issues);
+  for (const key of ["NAV-1", "NAV-3"]) issues.set(key, { ...issues.get(key)!, assignee: ME });
+  issues.set("NAV-2", { ...issues.get("NAV-2")!, assignee: null });
+  set({ issues });
+  navigate({ mine: true, selected: null, panel: false });
+  const keys = () => visibleOrder(get(), ME.id).flat().map(i => i.key);
+  expect(keys()).toContain("NAV-1");
+  expect(keys()).toContain("NAV-3");
+  expect(keys()).not.toContain("NAV-2");
+  const before = keys();
+  expect(visibleOrder(get(), ME.id)).toBe(visibleOrder(get(), ME.id));
+  navigate({ board: 2 });
+  travel(-1);
+  expect(keys()).toEqual(before);
+});

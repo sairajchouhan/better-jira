@@ -22,14 +22,14 @@ test("navigation shell: sidebar, My issues URL, palettes and shortcut search", a
   });
   await test.step("R1-D56: My issues is in the URL and survives a reload", async () => {
     await page.keys("gm");
-    await page.waitFor(`new URL(location.href).searchParams.get('mine')==='1'`);
+    await page.waitFor(`location.pathname==='/my-issues'`);
     await page.cmd("Page.reload"); // no fixture issue is the audit user's, so there are no cards to wait for
     await sleep(300);
     await page.waitFor(
       `document.querySelector('nav[aria-label="Breadcrumb"] [aria-label="My issues"]')?.textContent==='My issues'`,
     );
     await page.keys("ge");
-    await page.waitFor(`!new URL(location.href).searchParams.has('mine')`);
+    await page.waitFor(`location.pathname==='/'&&!new URL(location.href).searchParams.has('mine')`);
   });
   await test.step("R1-D54: the scoped palette lists only issue commands that apply", async () => {
     await fetch(`${fixture.url}__fixture`, {

@@ -43,6 +43,8 @@ export type Destination = {
   document?: string | null;
   inbox?: boolean;
   viewsPage?: boolean;
+  /** The standalone My issues destination, not a board filter. */
+  mine?: boolean;
 };
 export type NavigationEvent =
   /** Go somewhere: a new board leaves the open view or editor, and fills in how that board opens issues. */
@@ -93,9 +95,10 @@ function move(s: Screen, to: Destination): Screen {
     panel = to.panel ?? s.panel;
   return {
     ...s,
-    ...(changed ? { board: to.board, mine: false } : {}),
+    ...(changed ? { board: to.board } : {}),
+    mine: to.mine ?? (to.board !== undefined || to.inbox || to.viewsPage ? false : s.mine),
     ...(to.view ? { view: to.view } : {}),
-    inbox: to.inbox ?? (to.board !== undefined ? false : s.inbox),
+    inbox: to.inbox ?? (to.board !== undefined || to.mine ? false : s.inbox),
     selected,
     panel,
     document:
@@ -128,10 +131,11 @@ function settle(prev: Screen, next: Screen, data: NavigationData, quiet: boolean
       };
     else {
       screen = { ...screen, linkView: false };
-      const prefs = data.preferences[next.board] ?? defaultPreferences();
+      const preferenceBoard = isMyIssues(next) ? 0 : next.board;
+      const prefs = data.preferences[preferenceBoard] ?? defaultPreferences();
       out.preferences = {
         ...data.preferences,
-        [next.board]: { ...prefs, display: { ...prefs.display, openIn: next.view } },
+        [preferenceBoard]: { ...prefs, display: { ...prefs.display, openIn: next.view } },
       };
     }
   }
@@ -145,7 +149,7 @@ function settle(prev: Screen, next: Screen, data: NavigationData, quiet: boolean
     : data.savedViews;
   const openIn =
     (screen.editorDraft ?? savedViews.find((v) => v.id === screen.activeViewId))?.display.openIn ??
-    data.preferences[screen.board]?.display.openIn ??
+    data.preferences[isMyIssues(screen) ? 0 : screen.board]?.display.openIn ??
     "side";
   if (openIn === screen.view) return;
   const after = go(out.screen, { view: openIn }, { ...data, savedViews });
@@ -158,23 +162,24 @@ function settle(prev: Screen, next: Screen, data: NavigationData, quiet: boolean
 /** `navigate`: leaving the open view or editor, the views page, renamed keys and a new board's issue view; `quiet` (a restore or a view being opened) skips the leaving. */
 function enter(screen: Screen, to: Destination, data: NavigationData, quiet: boolean, out: Transition) {
   let s = screen;
-  if (!quiet && s.activeViewId && (to.board !== undefined || to.inbox === true)) {
+  if (!quiet && s.activeViewId && (to.board !== undefined || to.inbox === true || to.mine === true)) {
     s = { ...s, activeViewId: null, overlayFilters: emptyOverlay() };
-    to = { ...to, view: to.view ?? data.preferences[to.board ?? s.board]?.display.openIn ?? "side" };
+    to = { ...to, view: to.view ?? data.preferences[to.mine ? 0 : to.board ?? s.board]?.display.openIn ?? "side" };
   }
-  if (!quiet && s.editorDraft && (to.board !== undefined || to.inbox)) {
+  if (!quiet && s.editorDraft && (to.board !== undefined || to.inbox || to.mine)) {
     s = { ...s, editorDraft: null };
-    out.via = s;
+    out.via = { ...s, mine: false };
   }
   if (!quiet)
     s = {
       ...s,
-      viewsPage: to.viewsPage ?? (to.board !== undefined || to.inbox === true ? false : s.viewsPage),
+      viewsPage: to.viewsPage ?? (to.board !== undefined || to.inbox === true || to.mine === true ? false : s.viewsPage),
     };
   if (to.selected) to = { ...to, selected: data.currentKey(to.selected) };
   const view =
     to.view ??
-    (to.board !== undefined && to.board !== s.board
+    (to.mine === true ? data.preferences[0]?.display.openIn ?? "side" : undefined) ??
+    (to.board !== undefined && (to.board !== s.board || isMyIssues(s))
       ? (data.preferences[to.board]?.display.openIn ?? data.defaults[to.board]?.openIn ?? "side")
       : undefined);
   settle(s, move(s, { ...to, ...(view ? { view } : {}) }), data, quiet, out);
@@ -192,6 +197,8 @@ export function transition(screen: Screen, event: NavigationEvent, data: Navigat
     case "go":
       return go(screen, event.to, data);
     case "moved":
+      if (event.screen.mine === true && !screen.mine && !screen.activeViewId && !screen.editorDraft)
+        return go(screen, { mine: true, selected: null, panel: false }, data);
       settle(screen, { ...screen, ...event.screen }, data, false, out);
       return out;
     case "draft":
@@ -255,6 +262,8 @@ function restore(screen: Screen, href: string, saved: ViewDraft | null, data: Na
     activeViewId: active?.id ?? null,
     overlayFilters: active ? decodeOverlay(params.get("filter")) : emptyOverlay(),
   };
+  const personal = !editorDraft && !active && pathname !== "/views" && !params.has("inbox") &&
+    (pathname === "/my-issues" || params.has("mine"));
   const view = params.get("view");
   enter(
     s,
@@ -264,6 +273,7 @@ function restore(screen: Screen, href: string, saved: ViewDraft | null, data: Na
       panel: !!issue,
       document: issue ? params.get("document") : null,
       inbox: params.has("inbox"),
+      ...(personal ? { mine: true, view: data.preferences[0]?.display.openIn ?? "side" } : {}),
       ...(active ? { view: active.display.openIn } : {}),
       ...(view === "page" || view === "side" ? { view } : {}),
     },
@@ -271,8 +281,9 @@ function restore(screen: Screen, href: string, saved: ViewDraft | null, data: Na
     true,
     out,
   );
-  const mine = editorDraft?.mine ?? active?.mine ?? params.has("mine");
+  const mine = editorDraft?.mine ?? active?.mine ?? (pathname === "/my-issues" || params.has("mine"));
   if (!params.has("inbox")) out.screen = { ...out.screen, mine, inbox: false };
+  out.history = "none"; // A restore must never push, including settle reverting a link view.
   if (wanted && !issue) out.missing = wanted;
   return out;
 }
@@ -294,10 +305,14 @@ export function screenUrl(s: Screen, href: string, savedViews: SavedView[]): str
       ? routeOf(s.activeViewId)
       : s.viewsPage
         ? "/views"
-        : "/";
+        : s.mine && !s.inbox
+          ? "/my-issues"
+          : "/";
   if (s.activeViewId && s.overlayFilters.children.length) url.searchParams.set("filter", encodeOverlay(s.overlayFilters));
   else url.searchParams.delete("filter");
-  url.searchParams.set("board", String(s.board));
+  const personal = s.mine && !s.inbox && !s.activeViewId && !s.editorDraft && !s.viewsPage;
+  if (personal) url.searchParams.delete("board");
+  else url.searchParams.set("board", String(s.board));
   if (s.panel && s.selected) {
     url.searchParams.set("issue", s.selected);
     url.searchParams.set("view", s.view);
@@ -310,7 +325,11 @@ export function screenUrl(s: Screen, href: string, savedViews: SavedView[]): str
   if (s.inbox) url.searchParams.set("inbox", "1");
   else url.searchParams.delete("inbox");
   if (!s.inbox) url.searchParams.delete("notification"); // the inbox's selected row outside the mirror
-  if (s.mine && !s.inbox) url.searchParams.set("mine", "1");
+  if (s.mine && !s.inbox && !personal) url.searchParams.set("mine", "1");
   else url.searchParams.delete("mine");
   return url.href;
 }
+
+/** Saved views may also filter by assignee; only this screen is the sidebar destination. */
+export const isMyIssues = (s: Pick<Screen, "mine" | "inbox" | "activeViewId" | "editorDraft" | "viewsPage">) =>
+  s.mine && !s.inbox && !s.activeViewId && !s.editorDraft && !s.viewsPage;

@@ -27,7 +27,7 @@ test("the default board: My issues, board details, saved views and a fast layout
     await page.eval(
       `[...document.querySelectorAll("nav button")].find(b=>b.textContent.includes("My issues")).click()`,
     );
-    await page.waitFor(`new URLSearchParams(location.search).get("mine")==="1"`);
+    await page.waitFor(`location.pathname==="/my-issues"`);
     await page.eval("location.reload()");
     await page.waitFor(
       `!!document.querySelector('[aria-label="Breadcrumb"] [aria-label="My issues"]')`,

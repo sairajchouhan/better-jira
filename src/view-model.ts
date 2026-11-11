@@ -566,12 +566,13 @@ export function selectIssues(
   query: string,
   me: string,
   now = Date.now(),
+  acrossBoards = false,
 ): Issue[] {
   const d = prefs.display;
   const q = query.trim().toLowerCase();
   const items = all.filter(
     (i) =>
-      i.board === board.id &&
+      (acrossBoards || i.board === board.id) &&
       (d.subIssues || !i.parent) &&
       (prefs.scope === "all" ||
         (prefs.scope === "backlog"
@@ -747,21 +748,26 @@ export type OrderState = {
   activeViewId: string | null;
   mine: boolean;
   query: string;
+  inbox?: boolean;
+  editorDraft?: unknown;
+  viewsPage?: boolean;
 };
 const noPreferences = defaultPreferences();
 let lastOrder: { inputs: unknown[]; order: Issue[][] } | undefined;
 /** The active board's issues in on-screen order, as the board shows them: J/K, ←/→ and the issue page's stepper all follow it.
  *  Memoised on its inputs, so a store selector can return it. */
 export function visibleOrder(state: OrderState, me: string): Issue[][] {
-  const board = state.boards.find((b) => b.id === state.board);
-  if (!board) return [];
-  const prefs = state.effectiveViewPreferences ?? state.preferences[board.id] ?? noPreferences,
+  const personal = state.mine && !state.activeViewId && !state.editorDraft && !state.inbox && !state.viewsPage;
+  const current = state.boards.find((b) => b.id === state.board);
+  if (!current) return [];
+  const board = personal ? myIssuesBoard(state.boards, current) : current;
+  const prefs = state.effectiveViewPreferences ?? state.preferences[personal ? 0 : board.id] ?? noPreferences,
     mine = state.mine || !!state.savedViews.find((v) => v.id === state.activeViewId)?.mine,
     inputs = [state.issues, board, prefs, mine, state.query, me];
   if (lastOrder?.inputs.every((x, i) => x === inputs[i])) return lastOrder.order;
   const all = [...state.issues.values()],
-    visible = selectIssues(all, board, prefs, mine, state.query, me),
-    universe = all.filter((i) => i.board === board.id),
+    visible = selectIssues(all, board, prefs, mine, state.query, me, Date.now(), personal),
+    universe = personal ? all : all.filter((i) => i.board === board.id),
     columns = boardColumns(visible, board, prefs, universe),
     order = issueOrder(columns, visible, board, prefs, universe);
   lastOrder = { inputs, order };
@@ -839,4 +845,23 @@ export function listRows(
   items.filter((i) => !i.parent || !keys.has(i.parent)).forEach((i) => visit(i, 0));
   items.forEach((i) => visit(i, 0)); // malformed parent cycles remain visible once
   return rows;
+}
+
+const personalBoards = new WeakMap<Board[], Map<Board, Board>>();
+/** My issues uses all mirrored workflows, while issue actions still use each issue's own board. */
+export function myIssuesBoard(boards: Board[], board: Board): Board {
+  let cache = personalBoards.get(boards);
+  if (!cache) personalBoards.set(boards, cache = new Map());
+  const cached = cache.get(board);
+  if (cached) return cached;
+  const columns: Board["columns"] = [];
+  for (const b of boards) for (const column of b.columns) {
+    const existing = columns.find(c => c.name === column.name);
+    if (!existing) columns.push({ ...column, statuses: [...column.statuses] });
+    else for (const status of column.statuses)
+      if (!existing.statuses.some(s => s.id === status.id)) existing.statuses.push(status);
+  }
+  const result = { ...board, name: "My issues", columns };
+  cache.set(board, result);
+  return result;
 }

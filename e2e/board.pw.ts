@@ -46,6 +46,9 @@ test("board layout: hidden columns, column titles, drag placement and My issues"
     await page.waitFor(`document.querySelectorAll("[data-key]").length===0`);
     expect(await page.eval(`${item}.getAttribute("aria-current")`)).toBe("true");
     await page.eval(`${item}.click()`);
+    expect(await page.eval(`location.pathname`)).toBe("/my-issues");
+    expect(await page.eval(`document.querySelectorAll("[data-key]").length`)).toBe(0);
+    await page.page.locator('nav[aria-label="Main navigation"]').getByRole("button", { name: /Browser audit/ }).first().click();
     await page.waitFor(`document.querySelectorAll("[data-key]").length===6`);
   });
   await test.step("B2: dropping a card places it where it was dropped, within and across columns", async () => {

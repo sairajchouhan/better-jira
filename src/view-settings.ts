@@ -1,3 +1,4 @@
+import { isMyIssues } from "./navigation";
 /** A board's view settings: filters, display, scope, hidden and collapsed groups.
  *
  * Callers say what they want ("remove this rule", "clear filters", "hide this group"); this module decides where
@@ -21,9 +22,9 @@ import { emptyOverlay } from "./saved-view-model";
 type State = ReturnType<typeof get>;
 const fallback = defaultPreferences();
 const edited = (s: State, board: number) =>
-  (board === s.board ? s.viewPreferences : null) ?? s.preferences[board] ?? fallback;
+  (board === s.board ? s.viewPreferences : null) ?? s.preferences[board === s.board && isMyIssues(s) ? 0 : board] ?? fallback;
 const effective = (s: State, board: number) =>
-  (board === s.board ? s.effectiveViewPreferences : null) ?? s.preferences[board] ?? fallback;
+  (board === s.board ? s.effectiveViewPreferences : null) ?? s.preferences[board === s.board && isMyIssues(s) ? 0 : board] ?? fallback;
 
 /** The settings the view controls show and edit. Inside a saved view, `filters` is only its overlay. */
 export const viewSettings = (board: number) => edited(get(), board);
@@ -51,7 +52,7 @@ function write(board: number, patch: Partial<Preferences>) {
     return;
   }
   const prefs = { ...viewSettings(board), ...patch };
-  set({ preferences: { ...s.preferences, [board]: prefs } });
+  set({ preferences: { ...s.preferences, [board === s.board && isMyIssues(s) ? 0 : board]: prefs } });
   if (board === s.board) navigate({ view: prefs.display.openIn });
 }
 const filters = (board: number, change: (f: FilterGroup) => FilterGroup) =>

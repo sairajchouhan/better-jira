@@ -1,3 +1,4 @@
+import { isMyIssues } from "./navigation";
 import { useEffect, useState } from "react";
 import { viewShortcutId } from "./view-shortcut";
 import { createToolbarView } from "./view-toolbar-actions";
@@ -164,8 +165,7 @@ function reorder(direction: number, edge = false) {
 }
 const manual = () => viewSettings(get().board).display.ordering === "manual";
 function scope(value: "active" | "backlog" | "all", mine = false) {
-  ui.send({ type: "mine.set", mine });
-  navigate({ panel: false, selected: null });
+  navigate({ mine, ...(!mine && isMyIssues(get()) ? { board: get().board } : {}), panel: false, selected: null });
   setScope(get().board, value);
 }
 async function copy(kind: CopyKind) {

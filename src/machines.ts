@@ -118,7 +118,8 @@ export const uiMachine = setup({
     navigate: {
       actions: enqueueActions(({ context, event, enqueue }) => {
         const { type: _, ...screen } = event;
-        const changed = screen.board !== undefined && screen.board !== context.board;
+        const changed = (screen.board !== undefined && screen.board !== context.board) ||
+          (screen.mine !== undefined && screen.mine !== context.mine);
         enqueue.assign({ ...screen, ...(changed ? { query: "", draft: {} } : {}) });
         if (changed) enqueue.raise({ type: "toolbar.close" });
       }),
