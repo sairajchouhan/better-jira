@@ -210,6 +210,7 @@ type State = {
   view: View;
   mine: boolean;
   inbox: boolean;
+  viewsPage: boolean;
   query: string;
   overlay: Overlay;
   editDesc: boolean;
@@ -307,6 +308,7 @@ let state: State = {
   view: savedValue("view") === "page" ? "page" : "side",
   mine: false,
   inbox: false,
+  viewsPage: false,
   query: "",
   overlay: null,
   editDesc: false,
@@ -471,6 +473,7 @@ export function navigate(to: {
   panel?: boolean;
   document?: string | null;
   inbox?: boolean;
+  viewsPage?: boolean;
 }) {
   if (
     !restoringNavigation &&
@@ -485,6 +488,7 @@ export function navigate(to: {
       view: to.view ?? state.preferences[to.board ?? state.board]?.display.openIn ?? "side",
     };
   }
+  if (!restoringNavigation) commit({ viewsPage: to.viewsPage ?? (to.board !== undefined || to.inbox === true ? false : state.viewsPage) });
   if (to.selected) to = { ...to, selected: currentKey(to.selected) };
   const view =
     to.view ??
@@ -1223,7 +1227,7 @@ function syncNavigation(replace = false) {
     url.searchParams.get("document") !== state.document
   )
     url.hash = "";
-  url.pathname = state.activeViewId ? `/view/${encodeURIComponent(state.activeViewId)}` : "/";
+  url.pathname = state.activeViewId ? `/view/${encodeURIComponent(state.activeViewId)}` : state.viewsPage ? "/views" : "/";
   if (state.activeViewId && state.overlayFilters.children.length)
     url.searchParams.set("filter", encodeOverlay(state.overlayFilters));
   else url.searchParams.delete("filter");
@@ -1254,6 +1258,7 @@ function restoreNavigation() {
   const board = active?.board ?? issue?.board ?? Number(params.get("board"));
   restoringNavigation = true;
   commit({
+    viewsPage: location.pathname === "/views",
     activeViewId: active?.id ?? null,
     overlayFilters: active ? decodeOverlay(params.get("filter")) : emptyOverlay(),
   });
@@ -2499,7 +2504,7 @@ export function openSavedView(view: SavedView | string) {
   // One history entry, with identity installed before UI view changes can persist defaults.
   const previous = restoringNavigation;
   restoringNavigation = true;
-  commit({ activeViewId: v.id, overlayFilters: emptyOverlay() });
+  commit({ activeViewId: v.id, viewsPage: false, overlayFilters: emptyOverlay() });
   ui.send({
     type: "navigate",
     board: v.board,

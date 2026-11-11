@@ -49,20 +49,16 @@ test("the default board: My issues, board details, saved views and a fast layout
     await page.click("text=Alex1");
     await page.waitFor(`${cards}===6`);
   });
-  await test.step("R1-D94: removing a saved view asks first", async () => {
+  await test.step("saved custom views are discoverable in the Views directory", async () => {
     const view = { id: "v1", board: 1, name: "Mine", mine: false, preferences: {} };
     const key = PREFS_KEY.replace("views:v1", "saved-views:v1");
-    await page.eval(
-      `localStorage.removeItem(${JSON.stringify(key + ":imported")});localStorage.setItem(${JSON.stringify(key)},${JSON.stringify(JSON.stringify([view]))})`,
-    );
+    await page.eval(`localStorage.removeItem(${JSON.stringify(key + ":imported")});localStorage.setItem(${JSON.stringify(key)},${JSON.stringify(JSON.stringify([view]))})`);
     await page.reload();
-    await page.waitFor(`!!document.querySelector('[aria-label="Edit view Mine"]')`);
-    await page.eval(`window.confirm=()=>(window.asked=true,false)`);
-    await page.click('[aria-label="Edit view Mine"]');
-    await page.click("text=Remove view");
-    expect(await page.eval(`window.asked`)).toBe(true);
-    expect(await page.eval(`!!document.querySelector('[aria-label="Edit view Mine"]')`)).toBe(true);
-    await page.key("Escape");
+    await page.click("text=Views");
+    await page.waitFor(`document.querySelector('[role=table]')?.textContent.includes('Mine')`);
+    await page.click("text=Mine");
+    await page.waitFor(`location.pathname === '/view/v1'`);
+    await page.click('[aria-label="Breadcrumb"] button[aria-label="Browser audit"]');
   });
   await test.step("R1-D95/D96: a layout switch paints the first screenful at once and the rest right after", async () => {
     await fixture.reset({ bulk: 90 });
@@ -143,7 +139,7 @@ test("display preferences: card dates, filter chips, empty views and pill menus"
     };
     await show(page, { 1: { filters } }, true);
     await page.waitFor(
-      `document.querySelector("[role=status]")?.textContent.includes("6 issues hidden by filters")`,
+      `document.querySelector("[role=status]")?.textContent.includes("No issues matching the filters")`,
     );
     await page.click("text=Clear filters");
     await page.waitFor(`${cards}===6`);

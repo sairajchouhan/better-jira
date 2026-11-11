@@ -1,4 +1,6 @@
-import { useEffectiveMine } from "./saved-views";
+import { useEffectiveMine, useActiveView, useSavedViews, useOverlayFilters, createViewDraft, editViewDraft, duplicateViewDraft, saveOverlayToView, deleteSavedView, clearOverlay } from "./saved-views";
+import { openViewEditor, ViewMenu, ViewContextMenu } from "./view-editor";
+import { ViewsDirectory, ViewDetails, ViewFavorites, SavedViewIcon, ResultsFeedback } from "./views-navigation";
 /* oxlint-disable react/immutability -- Session callbacks and mutable imperative models are intentionally owned outside React state. */
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
@@ -98,15 +100,12 @@ import {
   AddBoard,
   BoardDetails,
   CreateIssue,
-  Favorites,
   GroupMenu,
   IssueOptions,
   Modal,
   PersonalIssueDetails,
   PropertyPicker,
   Relations,
-  SavedViews,
-  SaveViewButton,
   Subscribers,
 } from "./personal-controls";
 import { SubIssueOf } from "./sub-issues";
@@ -273,6 +272,7 @@ export function App() {
   const current = useStore((s) => (target ? s.issues.get(target) : undefined));
   const loadError = useStore((s) => s.loadError);
   const inbox = useStore((s) => s.inbox);
+  const viewsPage = useStore((s) => s.viewsPage);
   const visited = useRef(new Set<number>());
   visited.current.add(boardId);
 
@@ -306,7 +306,7 @@ export function App() {
           tabIndex={-1}
           className="relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border-[0.5px] border-frame bg-panel shadow-(--frame-shadow)"
         >
-          {!page && !inbox && <BoardHeader />}
+          {!page && !inbox && !viewsPage && <BoardHeader />}
           <div className="flex min-h-0 flex-1">
             {/* Retain visited boards for scroll restoration; do not render unopened boards. */}
             {boards
@@ -316,10 +316,11 @@ export function App() {
                   key={b.id}
                   board={b}
                   active={b.id === boardId}
-                  shown={!page && !inbox && b.id === boardId}
+                  shown={!page && !inbox && !viewsPage && b.id === boardId}
                   selected={selected}
                 />
               ))}
+            {viewsPage && <ViewsDirectory />}
             {inbox && !page && <InboxList />}
             {open ? (
               <IssueView key={firstKey(open.key)} issue={open} page={page} fill={inbox} />
@@ -374,6 +375,8 @@ const BoardView = memo(function BoardView({
   selected: string | null;
 }) {
   const issues = useStore((s) => s.issues);
+  const activeView = useActiveView();
+  const overlay = useOverlayFilters();
   const mine = useEffectiveMine();
   const query = useStore((s) => s.query);
   const details = useStore((s) => s.details);
@@ -472,45 +475,18 @@ const BoardView = memo(function BoardView({
       ...draftForGroup(d.columns, bucket.id, board, universe, prefs.scope),
       ...(row ? draftForGroup(d.rows, row.id, board, universe, prefs.scope) : {}),
     });
-  // Linear's empty view counts what filters, search and My issues hide, and offers to clear them.
-  const filteredOut = visible.length
-    ? 0
-    : selectIssues(
-        all,
-        board,
-        { ...prefs, filters: defaultPreferences().filters },
-        false,
-        "",
-        ME.id,
-      ).length;
+  const baseline = selectIssues(all, board, { ...prefs, filters: activeView && activeView.board === board.id ? activeView.filters : defaultPreferences().filters }, activeView?.mine ?? false, "", ME.id).length;
+  const clearFilters = () => {
+    if (activeView) clearOverlay();
+    else changePreferences(board.id, { filters: defaultPreferences().filters });
+    ui.send({ type: "query.set", query: "" });
+    ui.send({ type: "mine.set", mine: activeView?.mine ?? false });
+    set({ findInView: false });
+  };
   return (
     <div className={`${shown ? "flex" : "hidden"} min-w-0 min-h-0 flex-1`}>
       <div className="flex min-w-0 min-h-0 flex-1 flex-col" data-layout={d.layout}>
-        {!visible.length && (
-          <div
-            role="status"
-            className="flex shrink-0 items-center justify-center gap-3 py-8 text-fg-3"
-          >
-            {filteredOut ? (
-              <>
-                {filteredOut} issue{filteredOut === 1 ? "" : "s"} hidden by filters
-                <button
-                  onClick={() => {
-                    changePreferences(board.id, { filters: defaultPreferences().filters });
-                    ui.send({ type: "query.set", query: "" });
-                    ui.send({ type: "mine.set", mine: false });
-                    set({ findInView: false });
-                  }}
-                  className="text-fg-2"
-                >
-                  Clear filters
-                </button>
-              </>
-            ) : (
-              "No issues in this view."
-            )}
-          </div>
-        )}
+        {!visible.length && <ResultsFeedback count={0} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !activeView?.mine)} clear={clearFilters} />}
         {d.layout === "list" ? (
           <div className="flex-1 overflow-auto py-1">
             {show.map((c) => (
@@ -663,8 +639,9 @@ const BoardView = memo(function BoardView({
                 </div>
               </details>
             )}
+        {visible.length > 0 && <ResultsFeedback count={visible.length} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !activeView?.mine)} clear={clearFilters} />}
       </div>
-      {active && shown && details && !panel && <BoardDetails board={board} issues={visible} />}
+      {active && shown && details && !panel && (activeView ? <ViewDetails view={activeView} issues={visible} /> : <BoardDetails board={board} issues={visible} />)}
     </div>
   );
 });
@@ -812,6 +789,8 @@ function QuickNavigation({ kind }: { kind: "favorites" | "views" | "boards" }) {
             run: () => openSavedView(view),
           }))
         : state.favorites.flatMap((id) => {
+            const savedView = state.savedViews.find(v => `view:${v.id}` === id);
+            if (savedView) return [{ id, name: savedView.name, run: () => openSavedView(savedView) }];
             const document = id.startsWith("document:")
               ? findIssueDocument(state.issues.values(), id.slice(9))
               : undefined;
@@ -890,6 +869,8 @@ function QuickNavigation({ kind }: { kind: "favorites" | "views" | "boards" }) {
 
 function Sidebar({ boards }: { boards: Board[] }) {
   const boardId = useStore((s) => s.board);
+  const activeView = useActiveView();
+  const viewsPage = useStore((s) => s.viewsPage);
   const mine = useStore((s) => s.mine);
   const hidden = useStore((s) => s.sidebarHidden);
   const open = useStore((s) => s.sidebarOpen);
@@ -935,8 +916,8 @@ function Sidebar({ boards }: { boards: Board[] }) {
         </SideItem>
         {/* Like Linear, My issues is a sidebar view rather than a tab beside Active/Backlog/All. */}
         <SideItem
-          active={mine && !inbox}
-          onClick={() => timed("only mine", () => ui.send({ type: "mine.set", mine: !mine }))}
+          active={mine && !inbox && !activeView && !viewsPage}
+          onClick={() => timed("only mine", () => { navigate({ board: boardId, selected: null, panel: false }); ui.send({ type: "mine.set", mine: !mine }); })}
         >
           <Icon name="user" /> My issues <kbd className="ml-auto">{shortcutLabel("mine")}</kbd>
         </SideItem>
@@ -955,7 +936,7 @@ function Sidebar({ boards }: { boards: Board[] }) {
         {boards.map((b) => (
           <SideItem
             key={b.id}
-            active={!inbox && b.id === boardId}
+            active={!inbox && !activeView && !viewsPage && b.id === boardId}
             onClick={() =>
               timed("switch board", () => navigate({ board: b.id, selected: null, panel: false }))
             }
@@ -966,8 +947,8 @@ function Sidebar({ boards }: { boards: Board[] }) {
             <span className="truncate">{b.name}</span>
           </SideItem>
         ))}
-        <SavedViews />
-        <Favorites />
+        <SideItem active={viewsPage} onClick={() => navigate({ board: boardId, viewsPage: true, selected: null, panel: false, inbox: false })}><Icon name="layers" /> Views</SideItem>
+        <ViewFavorites />
         <button
           id="help-menu"
           aria-label="Open Help menu"
@@ -1223,6 +1204,8 @@ function MenuButton() {
 }
 function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue }) {
   const mine = useStore((s) => s.mine);
+  const activeView = useActiveView();
+  const custom = activeView?.kind === "custom" ? activeView : null;
   const openAllIssues = () => {
     ui.send({ type: "mine.set", mine: false });
     ui.send({ type: "query.set", query: "" });
@@ -1251,12 +1234,12 @@ function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue }) {
         ›
       </span>
       <button
-        aria-label={mine ? "My issues" : "Issues"}
+        aria-label={custom?.name ?? (!activeView && mine ? "My issues" : "Issues")}
         aria-current={issue ? undefined : "page"}
-        onClick={openAllIssues}
+        onClick={() => custom ? openSavedView(custom) : openAllIssues()}
         className={`${crumb} shrink-0 ${issue ? "max-sm:hidden" : ""}`}
       >
-        {mine ? "My issues" : "Issues"}
+        {custom ? <><SavedViewIcon view={custom} />{custom.name}</> : !activeView && mine ? "My issues" : "Issues"}
       </button>
       {issue && (
         <>
@@ -1284,6 +1267,8 @@ function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue }) {
 }
 
 function BoardHeader() {
+  const activeView = useActiveView();
+  const savedViews = useSavedViews();
   const board = useStore((s) => s.boards.find((b) => b.id === s.board));
   const query = useStore((s) => s.query);
   const details = useStore((s) => s.details);
@@ -1299,13 +1284,14 @@ function BoardHeader() {
     },
     { target: findRef, ignoreInputs: false },
   );
-  const favoriteId = `board:${board!.id}`;
+  const favoriteId = activeView?.kind === "custom" ? `view:${activeView.id}` : `board:${board!.id}`;
   const favorite = useStore((s) => s.favorites.includes(favoriteId));
   return (
     <header className="shrink-0">
       <div className="flex h-11 items-center justify-between border-b-[0.5px] border-frame px-2">
         <div className="flex min-w-0 items-center px-1 text-[13px] font-medium text-fg-2">
           <BoardBreadcrumbs board={board!} />
+          {activeView?.kind === "custom" && <ViewMenu view={activeView}><button aria-label="Issue view options" className={COL_BTN}><Icon name="dots" /></button></ViewMenu>}
           <button
             role="switch"
             aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
@@ -1331,17 +1317,18 @@ function BoardHeader() {
         </button>
       </div>
       <div className="flex min-h-[43.5px] flex-wrap items-center gap-1 px-2 py-1">
-        {(["active", "backlog", "all"] as const).map((scope) => (
+        {activeView?.kind !== "custom" && (["active", "backlog", "all"] as const).map((scope) => (
           <button
             key={scope}
-            aria-pressed={prefs.scope === scope}
-            onClick={() => changePreferences(board!.id, { scope })}
-            className={`${PILL} ${prefs.scope === scope ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2"}`}
+            aria-pressed={!activeView && prefs.scope === scope}
+            onClick={() => { navigate({ board: board!.id, selected: null, panel: false }); changePreferences(board!.id, { scope }); }}
+            className={`${PILL} ${!activeView && prefs.scope === scope ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2"}`}
           >
             {scope === "active" ? "Active" : scope === "backlog" ? "Backlog" : "All issues"}
           </button>
         ))}
-        <SaveViewButton />
+        {activeView?.kind !== "custom" && savedViews.filter(v => v.board === board!.id && v.kind === "tab").map(view => <ViewContextMenu key={view.id} view={view}><button aria-pressed={activeView?.id === view.id} onClick={() => openSavedView(view)} className={`${PILL} ${activeView?.id === view.id ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover"}`}>{view.name}</button></ViewContextMenu>)}
+        {activeView?.kind !== "custom" && <button className={`${PILL} text-fg-3 hover:bg-hover`} onClick={() => openViewEditor(createViewDraft("tab"))}><Icon name="plus" size={14} />Add new view</button>}
         <div className="ml-auto flex items-center gap-1">
           <BoardControls board={board!} />
         </div>
@@ -2815,6 +2802,18 @@ function Palette({ searchOnly = false }: { searchOnly?: boolean }) {
   const [scope, setScope] = useState(searchOnly || get().document ? null : get().selected); // ⌘K acts on the selected issue; Backspace drops it
   const [q, setQ] = useState("");
   const scoped = scope ? issues.get(scope) : undefined;
+  const activeView = useActiveView();
+  const overlay = useOverlayFilters();
+  const favorites = useStore(s => s.favorites);
+  const [deletingView, setDeletingView] = useState(false);
+  const viewAction = (run: () => void) => () => { ui.send({ type: "overlay.close" }); run(); };
+  const viewCommands: Cmd[] = activeView && !searchOnly ? [
+    { name: "Edit view…", run: viewAction(() => openViewEditor(editViewDraft(activeView.id))) },
+    ...(overlay.children.length ? [{ name: "Save to this view", run: viewAction(() => { void saveOverlayToView().catch(e => set({ perf: String(e) })); }) }] : []),
+    { name: favorites.includes(`view:${activeView.id}`) ? "Unfavorite view" : "Favorite view", run: viewAction(() => toggleFavorite(`view:${activeView.id}`)) },
+    { name: "Make a copy…", run: viewAction(() => openViewEditor(duplicateViewDraft(activeView.id))) },
+    { name: "Delete view", run: () => setDeletingView(true) },
+  ] : [];
 
   const results = useMemo(() => {
     const words = q.toLowerCase().split(/\s+/).filter(Boolean);
@@ -2878,6 +2877,8 @@ function Palette({ searchOnly = false }: { searchOnly?: boolean }) {
       .sort(([a], [b]) => a - b);
   const groups = [
     { heading: scoped?.key ?? "", rows: ranked(issueCmds) },
+    { heading: `View · ${activeView?.name ?? ""}`, rows: ranked(viewCommands) },
+    { heading: "Views", rows: ranked(searchOnly ? [] : [{ name: "Create view…", run: viewAction(() => openViewEditor(createViewDraft("custom"))) }]) },
     { heading: "General", rows: ranked(general) },
   ]
     .filter((g) => g.rows.length)
@@ -2890,6 +2891,7 @@ function Palette({ searchOnly = false }: { searchOnly?: boolean }) {
     </Command.Item>
   );
 
+  if (deletingView && activeView) return <Confirm title={`Delete “${activeView.name}”?`} detail="This view will be permanently deleted." action="Delete view" close={() => setDeletingView(false)} onConfirm={() => { void deleteSavedView(activeView.id).then(() => ui.send({ type: "overlay.close" })).catch(e => set({ perf: String(e) })); }} />;
   return (
     <Overlay label={searchOnly ? "Search issues" : "Search issues and commands"}>
       <Command shouldFilter={false} loop className={`w-full ${MENU}`}>
