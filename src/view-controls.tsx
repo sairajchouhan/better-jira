@@ -5,22 +5,17 @@ import { clearFilters, resetDisplay, setDisplay, updateRule, useViewSettings } f
 import { canMergeOverlay } from "./saved-view-model";
 import { viewShortcutId } from "./view-shortcut";
 import { createToolbarView } from "./view-toolbar-actions";
-import { useHotkey } from "@tanstack/react-hotkeys";
 import {
   lazy,
-  useCallback,
   Suspense,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type ReactNode,
   type RefObject,
 } from "react";
-import { createPortal } from "react-dom";
-import { MenuSurface, MENU_POPUP as POPUP } from "./menu-surface";
+import { MenuSurface, MENU_POPUP as POPUP, Popover } from "./menu-surface";
 import { filterChoices, PropertyFilter } from "./property-filter";
 import { PillSelect } from "./pill-select";
 import { Icon } from "./icons";
@@ -73,92 +68,7 @@ const CIRCLE =
   "relative grid size-7 shrink-0 place-items-center rounded-full bg-btn text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg";
 
 type Placement = "bottom-left" | "bottom-right";
-
-/** A toolbar menu in a fixed popup under its trigger: focus moves in, Esc and outside clicks close it and return focus, Tab stays inside. */
-function ToolbarPopup({
-  trigger,
-  placement,
-  popup,
-  children,
-}: {
-  trigger: RefObject<HTMLElement | null>;
-  placement: Placement;
-  popup: RefObject<HTMLDivElement | null>;
-  children: ReactNode;
-}) {
-  const [rect, setRect] = useState<CSSProperties>({ visibility: "hidden" });
-  const close = () => {
-    trigger.current?.focus();
-    ui.send({ type: "toolbar.close" });
-  };
-  useHotkey("Escape", close, { target: popup, ignoreInputs: false, capture: true });
-  // Placed before paint so the menu never flashes in the wrong spot.
-  const place = useCallback(() => {
-    const r = trigger.current?.getBoundingClientRect();
-    if (!r) return;
-    // oxlint-disable-next-line react/set-state-in-effect -- Measures the trigger's layout, which render cannot read.
-    setRect(
-      placement === "bottom-left"
-        ? // Linear's menuPosition "bottom-left": 4px under the trigger, flush with its left edge.
-          { top: Math.round(r.bottom + 4), left: Math.round(r.left) }
-        : { top: r.bottom + 6, right: innerWidth - r.right },
-    );
-  }, [trigger, placement]);
-  useLayoutEffect(place, [place]);
-  // A passive effect: its cleanup runs after the popup leaves the DOM, so focus can be handed back to the trigger.
-  useEffect(() => {
-    const anchor = trigger.current;
-    const focusFrame = requestAnimationFrame(() =>
-      popup.current
-        ?.querySelector<HTMLElement>("input, [role=tab][aria-selected=true], button")
-        ?.focus(),
-    );
-    // The trigger handles its own click (it toggles), so pressing it is not an outside click.
-    const outside = (e: PointerEvent) => {
-      if (!popup.current?.contains(e.target as Node) && !anchor?.contains(e.target as Node))
-        ui.send({ type: "toolbar.close" });
-    };
-    document.addEventListener("pointerdown", outside);
-    window.addEventListener("resize", place);
-    return () => {
-      // Closing with Done or a menu choice unmounts the focused control; give focus back to the trigger, as Esc does.
-      if (document.activeElement === document.body) anchor?.focus();
-      cancelAnimationFrame(focusFrame);
-      document.removeEventListener("pointerdown", outside);
-      window.removeEventListener("resize", place);
-    };
-  }, [trigger, place, popup]);
-  return createPortal(
-    <div
-      ref={popup}
-      className="fixed z-40 max-w-[calc(100vw-24px)]"
-      style={rect}
-      onKeyDown={(e) => {
-        e.stopPropagation();
-        if (e.key === "Escape") close();
-        if (e.key === "Tab") {
-          const nodes = [
-            ...(popup.current?.querySelectorAll<HTMLElement>(
-              'button:not(:disabled), input, select, [tabindex="0"]',
-            ) ?? []),
-          ].filter((n) => n.getClientRects().length);
-          const first = nodes[0],
-            last = nodes.at(-1);
-          if (e.shiftKey && document.activeElement === first) {
-            e.preventDefault();
-            last?.focus();
-          } else if (!e.shiftKey && document.activeElement === last) {
-            e.preventDefault();
-            first?.focus();
-          }
-        }
-      }}
-    >
-      {children}
-    </div>,
-    document.body,
-  );
-}
+const closeToolbar = () => ui.send({ type: "toolbar.close" });
 
 /**
  * Linear's AddFilterButton: one component behind both the toolbar's Filter button and the chip row's "+". Each instance owns
@@ -204,7 +114,7 @@ function AddFilterButton({
         {children}
       </button>
       {open && (
-        <ToolbarPopup trigger={trigger} placement={placement} popup={popup}>
+        <Popover trigger={trigger} placement={placement} popup={popup} close={closeToolbar}>
           <Suspense
             fallback={
               <div role="status" className={`${POPUP} w-[248px] p-3`}>
@@ -214,7 +124,7 @@ function AddFilterButton({
           >
             <FilterMenu key={board.id} board={board} container={popup} footer={<PropertySyncNotice />} />
           </Suspense>
-        </ToolbarPopup>
+        </Popover>
       )}
     </>
   );
@@ -262,14 +172,15 @@ export function BoardControls({ board }: { board: Board }) {
         )}
       </button>
       {(toolbar === "display" || toolbar === "advanced") && (
-        <ToolbarPopup
+        <Popover
           key={toolbar}
           trigger={toolbar === "display" ? displayRef : filterRef}
           placement="bottom-right"
           popup={popup}
+          close={closeToolbar}
         >
           {toolbar === "display" ? <DisplayMenu board={board} /> : <AdvancedMenu board={board} />}
-        </ToolbarPopup>
+        </Popover>
       )}
     </>
   );
