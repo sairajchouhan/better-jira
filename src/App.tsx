@@ -401,7 +401,7 @@ const BoardView = memo(function BoardView({
     () => selectIssues(all, board, prefs, mine, query, ME.id),
     [all, board, prefs, mine, query],
   );
-  const universe = useMemo(() => all.filter((i) => i.board === board.id), [all, board]);
+  const universe = useMemo(() => all.filter((i) => i.board === board.id), [all, board.id]);
   const columns = useMemo(
     () => boardColumns(visible, board, prefs, universe),
     [visible, board, prefs, universe],
@@ -418,7 +418,13 @@ const BoardView = memo(function BoardView({
     () => issueOrder(columns, visible, board, prefs, universe),
     [columns, visible, board, prefs, universe],
   );
-  useEffect(() => setExpanded([]), [d.emptyGroups, d.columns]);
+  // Revealed empty groups close again when grouping or the empty-groups option changes.
+  const expandedFor = `${d.columns}:${d.emptyGroups}`;
+  const [expandedKey, setExpandedKey] = useState(expandedFor);
+  if (expandedKey !== expandedFor) {
+    setExpandedKey(expandedFor);
+    setExpanded([]);
+  }
   useEffect(() => {
     if (!active || !selected) return;
     if (!get().fullErrors.get(selected)) loadFull(selected);
@@ -1886,9 +1892,32 @@ const RELATION_SECTIONS = [
   ["duplicate", "Duplicate of"],
   ["duplicated", "Duplicated by"],
 ] as const;
+/** A related issue's pill: its status and title, or just its key when it isn't mirrored. */
+function RelatedIssue({ issueKey }: { issueKey: string }) {
+  const target = useStore((s) => s.issues.get(issueKey)),
+    status = target && statusOf(target);
+  return target ? (
+    <a
+      href={appURL(target)}
+      onClick={(e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        openRelated(target);
+      }}
+      className="relation-pill"
+    >
+      <span>{status && <StatusIcon status={status} />}</span>
+      <span className="truncate">{target.summary}</span>
+    </a>
+  ) : (
+    <span className="relation-pill">
+      <span />
+      <span className="truncate">{issueKey}</span>
+    </span>
+  );
+}
 function Properties({ issue }: { issue: Issue }) {
   const status = statusOf(issue);
-  const issues = useStore((s) => s.issues);
   // Like Linear, a pill stays highlighted while its menu is open (Opus review 4).
   const open = useStore((s) => s.overlay);
   const writable = useStore((s) => s.writable);
@@ -2089,53 +2118,31 @@ function Properties({ issue }: { issue: Issue }) {
           <Fragment key={kind}>
             {section(
               heading,
-              rows.map((r) => {
-                const target = issues.get(r.key),
-                  status = target && statusOf(target);
-                return (
-                  <div
-                    key={r.key}
-                    data-relation={`${kind}:${r.key}`}
-                    className="group/relation flex max-w-full items-center gap-2"
+              rows.map((r) => (
+                <div
+                  key={r.key}
+                  data-relation={`${kind}:${r.key}`}
+                  className="group/relation flex max-w-full items-center gap-2"
+                >
+                  <RelatedIssue issueKey={r.key} />
+                  <button
+                    aria-label="Remove relation"
+                    onClick={() => {
+                      actions.relate(issue.key, r.key, kind, true);
+                      // Focus stays in the issue, as after removing a resource: the next relation, else Issue options.
+                      requestAnimationFrame(() =>
+                        (
+                          document.querySelector<HTMLElement>("[data-relation] a") ??
+                          document.getElementById("issue-options")
+                        )?.focus(),
+                      );
+                    }}
+                    className="relation-remove"
                   >
-                    {target ? (
-                      <a
-                        href={appURL(target)}
-                        onClick={(e) => {
-                          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-                          e.preventDefault();
-                          openRelated(target);
-                        }}
-                        className="relation-pill"
-                      >
-                        <span>{status && <StatusIcon status={status} />}</span>
-                        <span className="truncate">{target.summary}</span>
-                      </a>
-                    ) : (
-                      <span className="relation-pill">
-                        <span />
-                        <span className="truncate">{r.key}</span>
-                      </span>
-                    )}
-                    <button
-                      aria-label="Remove relation"
-                      onClick={() => {
-                        actions.relate(issue.key, r.key, kind, true);
-                        // Focus stays in the issue, as after removing a resource: the next relation, else Issue options.
-                        requestAnimationFrame(() =>
-                          (
-                            document.querySelector<HTMLElement>("[data-relation] a") ??
-                            document.getElementById("issue-options")
-                          )?.focus(),
-                        );
-                      }}
-                      className="relation-remove"
-                    >
-                      <Icon name="close" size={14} />
-                    </button>
-                  </div>
-                );
-              }),
+                    <Icon name="close" size={14} />
+                  </button>
+                </div>
+              )),
             )}
           </Fragment>
         ) : null;
