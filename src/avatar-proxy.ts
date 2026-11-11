@@ -1,7 +1,9 @@
 /** Jira avatar URLs often point at Gravatar's wp.com image proxy, which Chrome blocks cross-origin (ERR_BLOCKED_BY_ORB),
  * and site-hosted avatars need a Jira login. So the browser loads every avatar through this same-origin proxy. */
+import { avatar48 } from "./avatar-url";
+
 export const avatarSrc = (url?: string) =>
-  url && /^https?:\/\//.test(url) ? `/api/avatar?url=${encodeURIComponent(url)}` : url;
+  url && /^https?:\/\//.test(url) ? `/api/avatar?url=${encodeURIComponent(avatar48(url)!)}` : url;
 
 export type AvatarCache = {
   get(url: string): { type: string; body: Uint8Array; at: number } | undefined;

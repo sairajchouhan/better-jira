@@ -1,3 +1,4 @@
+import { jiraAvatar } from "./avatar-url";
 import { Database } from "bun:sqlite";
 import { jira, JiraError } from "./jira";
 import { boardFromInput } from "./config";
@@ -114,7 +115,7 @@ function slim(i: any, board: number) {
   const text = (n: any): string =>
     typeof n === "string" ? n : [n?.text ?? "", ...(n?.content ?? []).map(text)].join(" ");
   const user = (u: any) =>
-    u ? { id: u.accountId, name: u.displayName, avatar: u.avatarUrls?.["24x24"] } : null;
+    u ? { id: u.accountId, name: u.displayName, avatar: jiraAvatar(u.avatarUrls) } : null;
   const links = new Set<string>();
   const collectLinks = (n: any) => {
     for (const m of n?.marks ?? []) if (m.type === "link" && m.attrs?.href) links.add(m.attrs.href);
@@ -134,7 +135,7 @@ function slim(i: any, board: number) {
     assignee: f.assignee && {
       id: f.assignee.accountId,
       name: f.assignee.displayName,
-      avatar: f.assignee.avatarUrls?.["24x24"],
+      avatar: jiraAvatar(f.assignee.avatarUrls),
     },
     labels: f.labels,
     attachments: issueAttachments(i),
@@ -491,7 +492,7 @@ export async function refresh(
   const watchers = (w.watchers ?? []).map((u: any) => ({
     id: u.accountId,
     name: u.displayName,
-    avatar: u.avatarUrls?.["24x24"],
+    avatar: jiraAvatar(u.avatarUrls),
   }));
   const old = db
     .query<{ data: string; source_updated: string }, [string]>(
@@ -534,7 +535,7 @@ async function profile() {
     const profile = {
       id: user.accountId,
       name: user.displayName,
-      avatar: user.avatarUrls?.["24x24"],
+      avatar: jiraAvatar(user.avatarUrls),
     };
     if (!profile.id) throw new Error("Jira did not return an account ID");
     setMeta("profile", JSON.stringify(profile));
@@ -586,7 +587,7 @@ async function enrichProjects() {
         JSON.stringify({
           synced: Date.now(),
           lead: u
-            ? { id: u.accountId, name: u.displayName, avatar: u.avatarUrls?.["24x24"] }
+            ? { id: u.accountId, name: u.displayName, avatar: jiraAvatar(u.avatarUrls) }
             : null,
         }),
       );
@@ -676,7 +677,7 @@ async function enrichProperties() {
               data.watchers = (w.watchers ?? []).map((u: any) => ({
                 id: u.accountId,
                 name: u.displayName,
-                avatar: u.avatarUrls?.["24x24"],
+                avatar: jiraAvatar(u.avatarUrls),
               }));
               data.watchersComplete = data.watchers.length === w.watchCount;
               if (!data.watchersComplete)
@@ -772,7 +773,7 @@ export async function people(query: string, issue?: string) {
     : await search("search");
   return found
     .filter((u) => u.accountType === "atlassian" && u.active !== false)
-    .map((u) => ({ id: u.accountId, name: u.displayName, avatar: u.avatarUrls?.["24x24"] }));
+    .map((u) => ({ id: u.accountId, name: u.displayName, avatar: jiraAvatar(u.avatarUrls) }));
 }
 
 /** Jira's choices for the property menus (priorities, assignable people, versions, labels). Cached for ten minutes. */
@@ -790,7 +791,7 @@ export function options() {
     const user = (u: any) => ({
       id: u.accountId,
       name: u.displayName,
-      avatar: u.avatarUrls?.["24x24"],
+      avatar: jiraAvatar(u.avatarUrls),
     });
     const [priorities, users, labels, versions, types] = await Promise.all([
       jira<any[]>("/rest/api/3/priority"),

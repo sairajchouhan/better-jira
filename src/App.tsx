@@ -1,3 +1,4 @@
+import { jiraAvatar } from "./avatar-url";
 import "@fontsource-variable/inter/opsz.css";
 import "./index.css";
 import { useHotkey } from "@tanstack/react-hotkeys";
@@ -1713,7 +1714,7 @@ const ago = (iso: string, now = Date.now()) => {
 };
 
 const author = (a: any): User | null =>
-  a && { id: a.accountId, name: a.displayName, avatar: a.avatarUrls?.["24x24"] };
+  a && { id: a.accountId, name: a.displayName, avatar: jiraAvatar(a.avatarUrls) };
 
 // --- issue view: side panel or full page ---
 

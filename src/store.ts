@@ -2812,7 +2812,7 @@ export const actions = {
         const c = {
           id: `local-${nextSeq()}`,
           ...(parentId ? { parentId } : {}),
-          author: { accountId: ME.id, displayName: ME.name, avatarUrls: { "24x24": ME.avatar } },
+          author: { accountId: ME.id, displayName: ME.name, avatarUrls: { "48x48": ME.avatar } },
           body,
           created: now(),
         };
@@ -2939,7 +2939,7 @@ export const actions = {
             reporter: {
               accountId: ME.id,
               displayName: ME.name,
-              avatarUrls: { "24x24": ME.avatar },
+              avatarUrls: { "48x48": ME.avatar },
             },
           },
         };
