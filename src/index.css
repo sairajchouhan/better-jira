@@ -58,20 +58,24 @@
     lch(0 0 0 / 0.088) 0 0 0 0.5px, lch(0 0 0 / 0.02) 0 3px 6px -2px, lch(0 0 0 / 0.04) 0 1px 1px 0;
   --card-hover: lch(96.5% 0 282); /* card bg when hovered / active */
   --card-fg-3: lch(40% 1 282); /* ID, chip text, footer inside a card */
+  /* Linear's menu theme (startup-root.CnUSfl4j.js: bgBase l+8, bgFocus, labelBase/Muted/Faint, medium shadow; .raj/qa/filter-parity.md) */
   --menu: var(--card);
-  --menu-line: var(--line-2);
-  --menu-sel: var(--sel);
-  --menu-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  --menu-line: lch(91.9% 0 282);
+  --menu-divider: lch(91.9% 0 282); /* bgBorderFaintThin */
+  --menu-sel: lch(95% 0 282);
+  --menu-shadow:
+    lch(0 0 0 / 0.02) 0 6px 18px, lch(0 0 0 / 0.04) 0 3px 9px, lch(0 0 0 / 0.04) 0 1px 1px;
   --chip-line: lch(86.5% 0 282);
   --add-hover: var(--hover);
   /* Linear breadcrumb / header icon-button hover, and the "Grey" view colour (linear.app light theme, 2026-11-11) */
   --crumb-hover: lch(94.854% 0.5 282);
   --view-gray: lch(67.969% 3.577 260.65);
   --bg-border: var(--frame); /* Linear bgBorder (--sx-1o1lnwn) */
-  --menu-fg: var(--fg);
-  --menu-fg-3: var(--fg-3);
-  --menu-placeholder: var(--fg-4);
-  /* Linear's filter menu (measured 2026-11-11, .raj/qa/filter-parity.md) */
+  --menu-fg: lch(20% 1 282); /* labelBase */
+  --menu-fg-3: lch(40% 1 282); /* labelMuted */
+  --menu-placeholder: lch(66% 1 282); /* labelFaint */
+  --menu-check: lch(54.1% 0 282); /* the multi-select checkbox border */
+  /* Linear's filter menu shell (measured 2026-11-11, .raj/qa/filter-parity.md); its rows are the shared menu's */
   --filter-line: lch(91.9% 0 282);
   --filter-divider: lch(91.9% 0 282);
   --filter-fg: lch(20% 1 282);
@@ -131,6 +135,7 @@
     --line-2: lch(14.16% 1.48 272);
     --line-3: lch(16.32% 1.48 272);
     --accent: lch(47.918% 59.303 288.421);
+    --menu-divider: lch(20.28% 1.93 272);
     --frame: lch(13.08% 1.48 272);
     --frame-shadow: lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
     --card-shadow: lch(100 0 0 / 0.083) 0 0 0 0.5px, lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
@@ -157,13 +162,7 @@
     --reaction-hover: lch(12.141% 17.792 286.445);
     --key-line: lch(17.04% 1.93 272);
     --filter-line: lch(25.68% 1.93 272);
-    --filter-divider: lch(20.28% 1.93 272);
-    --filter-fg: var(--menu-fg);
-    --filter-icon: var(--menu-fg-3);
-    --filter-dim: lch(41.778% 1.425 272);
-    --filter-sel: var(--menu-sel);
-    --filter-check: lch(55.92% 1.93 272);
-    --filter-shadow: var(--menu-shadow);
+    --menu-check: lch(55.92% 1.93 272);
     --filter-sub-shadow:
       lch(0 0 0 / 0.1) 0 4px 40px, lch(0 0 0 / 0.125) 0 3px 20px, lch(0 0 0 / 0.125) 0 3px 12px,
       lch(0 0 0 / 0.125) 0 2px 8px, lch(0 0 0 / 0.125) 0 1px 1px;
@@ -217,8 +216,7 @@
   }
 }
 
-/* Linear's filter menu: 0.5px border, 12px radius; a 36px search row over a 0.5px rule; 32px rows inset 6px with an 8px-radius highlight;
-   16px icons 8px before 13px/450 text; 12px separators with a 0.5px rule; content-sized, 175px at least. */
+/* Linear's filter menu shell: 0.5px border, 12px radius, content-sized, 175px at least. Its search, rows and separators are the shared menu's. */
 .filter-menu {
   width: max-content;
   min-width: 175px;
@@ -227,132 +225,203 @@
   border: 0.5px solid var(--filter-line);
   border-radius: 12px;
   background: var(--menu);
-  box-shadow: var(--filter-shadow);
-  color: var(--filter-fg);
-  font-size: 13px;
+  box-shadow: var(--menu-shadow);
 }
 .filter-menu.filter-sub {
   box-shadow: var(--filter-sub-shadow);
 }
-.filter-search {
+
+/* Menu (src/menu.tsx): Linear's IB, startup-root.CnUSfl4j.js (Vw, fT, aT, pT, O6e, Qw) and style-kMXsq6uH.css. The values are MENU's.
+   These are the only menu row styles: every dropdown renders its rows through Menu, so a change here reaches all of them. */
+.menu {
   display: flex;
-  height: 36.5px;
+  min-height: 0;
+  flex-direction: column;
+  font-size: 13px;
+  color: var(--menu-fg);
+}
+/* Zw: a 36px input over a hairline; 14px before, 12px after, 14px to a trailing key. */
+.menu-input {
+  display: flex;
+  flex-shrink: 0;
+  flex: 1;
   align-items: center;
-  gap: 8px;
-  border-bottom: 0.5px solid var(--filter-divider);
+  gap: 14px;
+  border-bottom: 0.5px solid var(--menu-divider);
   padding: 0 12px 0 14px;
 }
-.filter-search input {
+.menu-input input {
   min-width: 148px;
   flex: 1;
   height: 36px;
   background: transparent;
-  color: var(--filter-fg);
+  color: var(--menu-fg);
+  font-size: 13px;
   outline: none;
 }
-.filter-search input::placeholder {
-  color: var(--filter-icon);
+.menu-input input::placeholder {
+  color: var(--menu-fg-3);
 }
-.filter-sub .filter-search input {
-  color: var(--filter-icon);
-}
-.filter-sub .filter-search input::placeholder {
-  color: var(--filter-dim);
-}
-.filter-search kbd {
+.menu-input kbd {
   height: 18px;
   min-width: 18px;
-  border: 0.5px solid var(--filter-divider);
+  border: 0.5px solid var(--menu-divider);
   border-radius: 4px;
   padding: 2px;
-  color: var(--filter-icon);
+  color: var(--menu-fg-3);
   font-size: 12px;
 }
-.filter-list {
+/* N6e: 6px above and below the rows. */
+.menu-list {
+  overflow-y: auto;
   padding: 6px 0;
 }
-.filter-row {
+/* eT.getListPadding: the top padding only applies when the first row is an action, not a header or divider. */
+.menu-list:has(> [cmdk-list-sizer] > :first-child > [cmdk-group-heading]),
+  flex-shrink: 0;
+.menu-list:has(> [cmdk-list-sizer] > :first-child:is(.menu-group-header, .menu-text-divider, .menu-divider)) {
+  padding-top: 0;
+}
+  color: var(--menu-fg);
+/* v6e/S6e: a full-width 32px row owns 14px/18px padding; its highlight is inset 6px with radius 8. labelBase, labelTitle when focused. */
+  user-select: none;
+}
+.menu-item::before {
+  content: "";
+  position: absolute;
+  inset: 0 6px;
+  z-index: -1;
+  border-radius: 8px;
+}
+/* The highlighted row is cmdk's selection, except that an action menu opened by pointer highlights none until navigation (Linear's focusedIndex -1). */
+.menu-item[data-selected="true"]:is(:hover, :not([data-pristine] *))::before,
+.menu-item[aria-expanded="true"]::before {
+  background: var(--menu-sel);
+.menu-item {
+  position: relative;
+  isolation: isolate;
   display: flex;
   height: 32px;
   align-items: center;
-  gap: 8px;
-  margin: 0 6px;
-  border-radius: 8px;
-  padding: 0 12px 0 8px;
-  font-weight: 450;
+  padding: 0 18px 0 14px;
   white-space: nowrap;
   cursor: default;
 }
-.filter-row[data-selected="true"],
-.filter-row[aria-expanded="true"] {
-  background: var(--filter-sel);
+.menu-item[data-selected="true"]:is(:hover, :not([data-pristine] *)) {
   color: var(--fg);
 }
-.filter-row[data-disabled-reason] {
-  color: var(--filter-dim);
+.menu-item[aria-disabled="true"],
+.menu-item[data-disabled="true"] {
+  color: var(--menu-fg-3);
+  opacity: 0.5;
 }
-.filter-row > svg,
-.filter-row .filter-glyph {
-  color: var(--filter-icon);
+/* A multi-select row is 1px further left: its checkbox takes the first 16px, the label 6px after it. */
+.menu-item:has(> .menu-checkbox) {
+  padding-left: 13px;
 }
-.filter-arrow {
+/* E6e: label column, 8px between icon, name, checkmark and hint; 400px at most, 350 with a checkmark. */
+.menu-label {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 400px;
+  flex-grow: 1;
+  align-self: stretch;
+  align-items: center;
+  gap: 8px;
+}
+.menu-checkbox + .menu-label {
+  padding-left: 6px;
+}
+.menu-label:has(> .menu-checkmark) {
+  max-width: 350px;
+}
+.menu-icon {
   display: grid;
-  width: 16px;
+  min-width: 16px;
+  flex-shrink: 0;
   place-items: center;
-  color: var(--filter-dim);
-  font-size: 6px;
+  color: var(--menu-fg-3);
 }
-.filter-arrow::before {
-  content: "▶"; /* in CSS so the row's text stays its name */
+.menu-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 450;
 }
-.filter-row[data-selected="true"] .filter-arrow,
-.filter-row[aria-expanded="true"] .filter-arrow {
-  color: var(--filter-icon);
+.menu-checkmark {
+  display: grid;
+  flex-shrink: 0;
+  margin-right: 1px;
 }
-.filter-count {
-  margin-left: auto;
-  padding-left: 12px;
-  color: var(--filter-dim);
+/* D6e: trailing hint and the submenu arrow, 6px apart. */
+.menu-hint {
+  display: inline-flex;
+  min-height: 16px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--menu-fg-3);
   font-size: 12px;
 }
-.filter-path {
-  color: var(--filter-icon);
+/* x6e: a 16px right-aligned 6px ▶ in labelFaint; labelMuted while its submenu is open, labelTitle when focused. */
+.menu-arrow {
+  width: 16px;
+  text-align: right;
+  font-size: 6px;
+  color: var(--menu-placeholder);
 }
-.filter-separator {
-  height: 12px;
-  padding: 6px 0;
+.menu-arrow::before {
+  content: "▶"; /* in CSS so the row's text stays its name */
 }
-.filter-separator::after {
-  content: "";
-  display: block;
-  border-bottom: 0.5px solid var(--filter-divider);
+.menu-item[aria-expanded="true"] .menu-arrow {
+  color: var(--menu-fg-3);
 }
-.filter-empty {
-  padding: 2px 14px 4px;
-  line-height: 36px;
-  color: var(--filter-dim);
+.menu-item[data-selected="true"]:is(:hover, :not([data-pristine] *)) .menu-arrow {
+  color: var(--fg);
 }
-/* Linear's value checkbox: a 14px box (1px border, radius 3) in a 16px slot, shown on the active row or when checked; accent when checked. */
-.filter-check {
+/* A description row: label and a muted mini line, 8px from the top; 48px for one line. */
+.menu-item:has(.menu-description) {
+  height: auto;
+  min-height: 48px;
+  align-items: flex-start;
+  padding-block: 8px;
+}
+.menu-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+.menu-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+  color: var(--menu-fg-3);
+  font-size: 12px;
+}
+/* B4e: a 14px box (1px border, radius 3) in a 16px slot, shown on the focused or checked row; accent when checked. */
+.menu-checkbox {
+  appearance: none;
   display: grid;
   width: 14px;
   height: 14px;
   margin: 0 1px;
   flex-shrink: 0;
   place-content: center;
-  border: 1px solid var(--filter-check);
+  border: 1px solid var(--menu-check);
   border-radius: 3px;
   opacity: 0;
 }
-.filter-row[data-selected="true"] .filter-check,
-.filter-row[aria-checked="true"] .filter-check {
+.menu-item[data-selected="true"]:is(:hover, :not([data-pristine] *)) > .menu-checkbox,
+.menu-item[aria-checked="true"] > .menu-checkbox {
   opacity: 1;
 }
-.filter-row[aria-checked="true"] .filter-check {
+.menu-item[aria-checked="true"] > .menu-checkbox {
   border-color: var(--accent);
   background: var(--accent);
 }
-.filter-row[aria-checked="true"] .filter-check::after {
+.menu-item[aria-checked="true"] > .menu-checkbox::after {
   content: "";
   width: 8px;
   height: 5px;
@@ -361,13 +430,48 @@
   border-width: 0 0 1.5px 1.5px;
   transform: rotate(-45deg);
 }
-.filter-value {
+/* aT: 30px, 8px/14px padding, miniPlus (12px/500), labelMuted. */
+.menu-group [cmdk-group-heading],
+.menu-group-header {
   display: flex;
-  min-width: 0;
-  flex: 1;
+  height: 30px;
   align-items: center;
-  gap: 8px;
-  padding-left: 6px;
+  padding: 8px 14px;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: normal;
+  white-space: nowrap;
+  color: var(--menu-fg-3);
+  user-select: none;
+}
+/* pT: 12px, a hairline centred in 6px of padding. */
+.menu-divider {
+  height: 12px;
+  padding: 6px 0;
+}
+.menu-divider::after {
+  content: "";
+  display: block;
+  border-bottom: 0.5px solid var(--menu-divider);
+}
+/* O6e: a 30px caption, 4px 12px 0 14px, small (13px/450), labelMuted. */
+.menu-text-divider {
+  display: flex;
+  height: 30px;
+  align-items: center;
+  padding: 4px 12px 0 14px;
+  overflow: hidden;
+  font-weight: 450;
+  white-space: nowrap;
+  color: var(--menu-fg-3);
+}
+/* LIST_EMPTY_STATE_HEIGHT: 42px. */
+.menu-empty {
+  height: 42px;
+  padding: 2px 14px 4px;
+  line-height: 36px;
+  color: var(--menu-placeholder);
 }
 .view-select {
   height: 28px;
