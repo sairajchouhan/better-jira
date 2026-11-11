@@ -69,6 +69,7 @@ const CIRCLE =
 
 type Placement = "bottom-left" | "bottom-right";
 const closeToolbar = () => ui.send({ type: "toolbar.close" });
+const openAdvanced = () => ui.send({ type: "toolbar.open", toolbar: "advanced" });
 
 /**
  * Linear's AddFilterButton: one component behind both the toolbar's Filter button and the chip row's "+". Each instance owns
@@ -122,7 +123,14 @@ function AddFilterButton({
               </div>
             }
           >
-            <FilterMenu key={board.id} board={board} container={popup} footer={<PropertySyncNotice />} />
+            <FilterMenu
+              key={board.id}
+              board={board}
+              container={popup}
+              footer={<PropertySyncNotice />}
+              onClose={closeToolbar}
+              onAdvanced={openAdvanced}
+            />
           </Suspense>
         </Popover>
       )}

@@ -28,7 +28,7 @@ import { createPortal } from "react-dom";
 import { FilterIcon } from "./filter-icons";
 import { Icon, type IconName } from "./icons";
 import { PropertyFilter, useFieldFilter, ValueRow } from "./property-filter";
-import { ui, type Board } from "./store";
+import type { Board } from "./store";
 import { type Field } from "./view-model";
 
 /** `divider` draws Linear's separator above the entry; `glyph` is a Linear icon, `icon` ours for Jira-only fields. */
@@ -107,14 +107,19 @@ const matches = (text: string, query: string) =>
     .split(/\s+/)
     .every((word) => text.toLowerCase().includes(word));
 
+/** The filter menu's content; the control that opens it decides what closing it and "Advanced filter" do. */
 export default function FilterMenu({
   board,
   container,
   footer,
+  onClose,
+  onAdvanced,
 }: {
   board: Board;
   container: Container;
   footer?: ReactNode;
+  onClose: () => void;
+  onAdvanced: () => void;
 }) {
   // Linear: Enter on a value row picks it and closes the menu; clicks keep it open to pick more.
   useHotkey(
@@ -122,13 +127,19 @@ export default function FilterMenu({
     (event) => {
       const root = (event.target as Element | null)?.closest("[cmdk-root]");
       if (root?.querySelector("[cmdk-item][data-selected=true][aria-checked]"))
-        setTimeout(() => ui.send({ type: "toolbar.close" }));
+        setTimeout(onClose);
     },
     { target: container, ignoreInputs: false, capture: true, preventDefault: false, stopPropagation: false },
   );
   return (
     <FloatingTree>
-      <FilterLevel board={board} container={container} entries={CATEGORIES} footer={footer} />
+      <FilterLevel
+        board={board}
+        container={container}
+        entries={CATEGORIES}
+        footer={footer}
+        onAdvanced={onAdvanced}
+      />
     </FloatingTree>
   );
 }
@@ -152,12 +163,14 @@ function FilterLevel({
   entries,
   name,
   footer,
+  onAdvanced,
 }: {
   board: Board;
   container: Container;
   entries: Entry[];
   name?: string;
   footer?: ReactNode;
+  onAdvanced: () => void;
 }) {
   const command = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -207,7 +220,7 @@ function FilterLevel({
                 onSelect={() => {
                   setOpen(null);
                   if (entry.reason) setInfo(entry.reason);
-                  else ui.send({ type: "toolbar.open", toolbar: "advanced" });
+                  else onAdvanced();
                 }}
                 className="filter-row"
               >
@@ -232,6 +245,7 @@ function FilterLevel({
                     container={container}
                     entries={entry.group === "dates" ? DATE_ENTRIES : PROJECT}
                     name={entry.name}
+                    onAdvanced={onAdvanced}
                   />
                 ) : (
                   <PropertyFilter
