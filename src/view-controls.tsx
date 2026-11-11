@@ -398,19 +398,14 @@ const plural = (noun: string) =>
 
 export function FilterChips({ board }: { board: Board }) {
   const { filters } = useViewSettings(board.id);
-  const view = useActiveView();
-  const overlay = useOverlayFilters();
   // Inside the view editor these chips are the definition being edited; the editor owns Cancel/Save.
   const editing = useStore((s) => !!s.editorDraft);
-  const mergeable = !view || canMergeOverlay(view.filters, overlay);
   const issues = useStore((s) => s.issues);
   const [edit, setEdit] = useState<{
     rule: Rule;
     segment: "operator" | "value";
     anchor: HTMLElement;
   } | null>(null);
-  const [saveAnchor, setSaveAnchor] = useState<HTMLElement | null>(null);
-  const [saving, setSaving] = useState(false);
   const rule = filters.children.find(
     (c): c is Rule => !("children" in c) && c.id === edit?.rule.id,
   );
@@ -427,17 +422,6 @@ export function FilterChips({ board }: { board: Board }) {
   const choices = rule
     ? filterChoices(rule.field, board, [...issues.values()])
     : [];
-  const save = async () => {
-    setSaving(true);
-    try {
-      await saveOverlayToView();
-      setSaveAnchor(null);
-    } catch {
-      ui.send({ type: "toast.show", text: "Could not save view. Try again." });
-    } finally {
-      setSaving(false);
-    }
-  };
   return (
     <div className="view-filter-row" aria-label={editing ? "View filters" : "Temporary filters"}>
       {edit && rule && (
@@ -604,7 +588,32 @@ export function FilterChips({ board }: { board: Board }) {
         <Icon name="plus" />
       </AddFilterButton>
       </div>
-      {!editing && <div className="view-filter-actions">
+      {!editing && <FilterSaveActions board={board} />}
+    </div>
+  );
+}
+
+/** Save/create state belongs to this menu instance, independently of chip editing. */
+function FilterSaveActions({ board }: { board: Board }) {
+  const view = useActiveView();
+  const overlay = useOverlayFilters();
+  const mergeable = !view || canMergeOverlay(view.filters, overlay);
+  const [saveAnchor, setSaveAnchor] = useState<HTMLElement | null>(null);
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    setSaving(true);
+    try {
+      await saveOverlayToView();
+      setSaveAnchor(null);
+    } catch {
+      ui.send({ type: "toast.show", text: "Could not save view. Try again." });
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <>
+      <div className="view-filter-actions">
         <button
           className="view-filter-action"
           onClick={() => clearFilters(board.id)}
@@ -619,8 +628,8 @@ export function FilterChips({ board }: { board: Board }) {
         >
           Save
         </button>
-      </div>}
-      {saveAnchor && !editing && (
+      </div>
+      {saveAnchor && (
         <MenuSurface
           label="Save filters"
           anchor={saveAnchor}
@@ -671,7 +680,7 @@ export function FilterChips({ board }: { board: Board }) {
           </Command>
         </MenuSurface>
       )}
-    </div>
+    </>
   );
 }
 
