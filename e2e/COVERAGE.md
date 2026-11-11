@@ -239,6 +239,8 @@ Dropped: none.
 | nested filter keyboard navigation focuses the value field and returns through each parent | Add filter by keyboard: arrows into submenus and back, Esc out › nested filter keyboard navigation focuses the value field and returns through each parent |
 | Dropped: none. Steps on a shared page remove the filter they add before the next step.    |
 
+Added after the migration: **Filter menu looks like Linear: visible checkboxes, counts and avatar photos** checks, in dark and light, the Assignee order (No assignee, Current user, people), issue counts, Alex's photo loading through `/api/avatar`, the 14px checkbox showing only on the active or checked row with at least 3:1 contrast, and the checked fill. `mentions.pw.ts` checks that a broken avatar URL (Priya) keeps the initial.
+
 ## hierarchy.e2e.ts → hierarchy.pw.ts
 
 | Old test                                                                                                                                                                                                                                                                                                    | New flow › step                                                                                                                                                                                                                   |

@@ -67,6 +67,18 @@
   --menu-fg: var(--fg);
   --menu-fg-3: var(--fg-3);
   --menu-placeholder: var(--fg-4);
+  /* Linear's filter menu (measured 2026-11-11, .raj/qa/filter-parity.md) */
+  --filter-line: lch(91.9% 0 282);
+  --filter-divider: lch(91.9% 0 282);
+  --filter-fg: lch(20% 1 282);
+  --filter-icon: lch(40% 1 282);
+  --filter-dim: lch(66% 1 282);
+  --filter-sel: lch(95% 0 282);
+  --filter-check: lch(54.1% 0 282);
+  --filter-shadow:
+    lch(0 0 0 / 0.02) 0 6px 18px, lch(0 0 0 / 0.04) 0 3px 9px, lch(0 0 0 / 0.04) 0 1px 1px;
+  --filter-sub-shadow:
+    lch(0 0 0 / 0.08) 0 9px 48px, lch(0 0 0 / 0.1) 0 6px 24px, lch(0 0 0 / 0.04) 0 1px 1px;
   --reaction: color-mix(in lch, var(--accent) 12%, var(--panel));
   --reaction-line: color-mix(in lch, var(--accent) 30%, var(--panel));
   --reaction-hover: color-mix(in lch, var(--accent) 18%, var(--panel));
@@ -137,6 +149,17 @@
     --reaction-line: lch(19.701% 19.952 286.445);
     --reaction-hover: lch(12.141% 17.792 286.445);
     --key-line: lch(17.04% 1.93 272);
+    --filter-line: lch(25.68% 1.93 272);
+    --filter-divider: lch(20.28% 1.93 272);
+    --filter-fg: var(--menu-fg);
+    --filter-icon: var(--menu-fg-3);
+    --filter-dim: lch(41.778% 1.425 272);
+    --filter-sel: var(--menu-sel);
+    --filter-check: lch(55.92% 1.93 272);
+    --filter-shadow: var(--menu-shadow);
+    --filter-sub-shadow:
+      lch(0 0 0 / 0.1) 0 4px 40px, lch(0 0 0 / 0.125) 0 3px 20px, lch(0 0 0 / 0.125) 0 3px 12px,
+      lch(0 0 0 / 0.125) 0 2px 8px, lch(0 0 0 / 0.125) 0 1px 1px;
     --col-top: lch(2.595% 0.4 272 / 0.4);
     --col-bottom: lch(2.595% 0.4 272 / 0.1);
     --tab: lch(10.149% 0.593 272);
@@ -182,13 +205,157 @@
   }
 }
 
-.view-popup .filter-command [cmdk-item][data-selected="true"],
-.filter-command [cmdk-item][data-selected="true"] {
-  background: var(--sel);
+/* Linear's filter menu: 0.5px border, 12px radius; a 36px search row over a 0.5px rule; 32px rows inset 6px with an 8px-radius highlight;
+   16px icons 8px before 13px/450 text; 12px separators with a 0.5px rule; content-sized, 175px at least. */
+.filter-menu {
+  width: max-content;
+  min-width: 175px;
+  max-width: min(420px, calc(100vw - 24px));
+  overflow: hidden auto;
+  border: 0.5px solid var(--filter-line);
+  border-radius: 12px;
+  background: var(--menu);
+  box-shadow: var(--filter-shadow);
+  color: var(--filter-fg);
+  font-size: 13px;
+}
+.filter-menu.filter-sub {
+  box-shadow: var(--filter-sub-shadow);
+}
+.filter-search {
+  display: flex;
+  height: 36.5px;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 0.5px solid var(--filter-divider);
+  padding: 0 12px 0 14px;
+}
+.filter-search input {
+  min-width: 148px;
+  flex: 1;
+  height: 36px;
+  background: transparent;
+  color: var(--filter-fg);
+  outline: none;
+}
+.filter-search input::placeholder {
+  color: var(--filter-icon);
+}
+.filter-sub .filter-search input {
+  color: var(--filter-icon);
+}
+.filter-sub .filter-search input::placeholder {
+  color: var(--filter-dim);
+}
+.filter-search kbd {
+  height: 18px;
+  min-width: 18px;
+  border: 0.5px solid var(--filter-divider);
+  border-radius: 4px;
+  padding: 2px;
+  color: var(--filter-icon);
+  font-size: 12px;
+}
+.filter-list {
+  padding: 6px 0;
+}
+.filter-row {
+  display: flex;
+  height: 32px;
+  align-items: center;
+  gap: 8px;
+  margin: 0 6px;
+  border-radius: 8px;
+  padding: 0 12px 0 8px;
+  font-weight: 450;
+  white-space: nowrap;
+  cursor: default;
+}
+.filter-row[data-selected="true"],
+.filter-row[aria-expanded="true"] {
+  background: var(--filter-sel);
   color: var(--fg);
 }
-.filter-command [cmdk-item] {
-  cursor: default;
+.filter-row[data-disabled-reason] {
+  color: var(--filter-dim);
+}
+.filter-row > svg,
+.filter-row .filter-glyph {
+  color: var(--filter-icon);
+}
+.filter-arrow {
+  display: grid;
+  width: 16px;
+  place-items: center;
+  color: var(--filter-dim);
+  font-size: 6px;
+}
+.filter-arrow::before {
+  content: "▶"; /* in CSS so the row's text stays its name */
+}
+.filter-row[data-selected="true"] .filter-arrow,
+.filter-row[aria-expanded="true"] .filter-arrow {
+  color: var(--filter-icon);
+}
+.filter-count {
+  margin-left: auto;
+  padding-left: 12px;
+  color: var(--filter-dim);
+  font-size: 12px;
+}
+.filter-path {
+  color: var(--filter-icon);
+}
+.filter-separator {
+  height: 12px;
+  padding: 6px 0;
+}
+.filter-separator::after {
+  content: "";
+  display: block;
+  border-bottom: 0.5px solid var(--filter-divider);
+}
+.filter-empty {
+  padding: 2px 14px 4px;
+  line-height: 36px;
+  color: var(--filter-dim);
+}
+/* Linear's value checkbox: a 14px box (1px border, radius 3) in a 16px slot, shown on the active row or when checked; accent when checked. */
+.filter-check {
+  display: grid;
+  width: 14px;
+  height: 14px;
+  margin: 0 1px;
+  flex-shrink: 0;
+  place-content: center;
+  border: 1px solid var(--filter-check);
+  border-radius: 3px;
+  opacity: 0;
+}
+.filter-row[data-selected="true"] .filter-check,
+.filter-row[aria-checked="true"] .filter-check {
+  opacity: 1;
+}
+.filter-row[aria-checked="true"] .filter-check {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.filter-row[aria-checked="true"] .filter-check::after {
+  content: "";
+  width: 8px;
+  height: 5px;
+  margin-top: -2px;
+  border: solid #fff;
+  border-width: 0 0 1.5px 1.5px;
+  transform: rotate(-45deg);
+}
+.filter-value {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  padding-left: 6px;
 }
 .view-select {
   height: 28px;
@@ -1853,4 +2020,7 @@
 /* An action menu that has not been navigated yet shows no highlighted row (Linear). */
 [cmdk-root][data-pristine] [cmdk-item][data-selected="true"]:not(:hover) {
   background: transparent;
+}
+.filter-row:has(> .filter-check) {
+  gap: 0;
 }

@@ -58,7 +58,7 @@ test("Add filter by mouse: search, hover submenus, multi-select and chips", asyn
         `!!${root}&&!!document.querySelector('[aria-label="Filter Dates"]')&&!!document.querySelector('input[aria-label="Due date"]')`,
       ),
     ).toBe(true);
-    await page.click("text=No due date");
+    await page.click('[cmdk-item][data-value="No due date"]'); // the row text carries its issue count
     await page.waitFor(`!!document.querySelector('[aria-label="Remove due filter"]')&&!${root}`);
   });
   await test.step("B7: clicking a filter chip opens a small operator/value picker under the chip", async () => {
@@ -157,5 +157,72 @@ test("Add filter by keyboard: arrows into submenus and back, Esc out", async ({ 
     expect(await page.active()).toBe("Add filter");
     await page.key("j");
     await page.waitFor(`!!document.querySelector("[data-selected]")`);
+  });
+});
+
+/** Paints a CSS colour to a pixel and returns the WCAG contrast ratio of two colours (works for lch()). */
+const contrast = `((a,b)=>{const c=document.createElement("canvas").getContext("2d",{willReadFrequently:true});const lum=(x)=>{c.clearRect(0,0,1,1);c.fillStyle=x;c.fillRect(0,0,1,1);const [r,g,bl]=[...c.getImageData(0,0,1,1).data].map(v=>{v/=255;return v<=0.03928?v/12.92:((v+0.055)/1.055)**2.4});return 0.2126*r+0.7152*g+0.0722*bl};const [x,y]=[lum(a),lum(b)].sort((p,q)=>q-p);return (x+0.05)/(y+0.05)})`;
+const assignee = `document.querySelector('[aria-label="Assignee filter"]')`;
+const row = (name: string) =>
+  `[...${assignee}.querySelectorAll("[cmdk-item]")].find(r=>r.textContent.includes(${JSON.stringify(name)}))`;
+
+test("Filter menu looks like Linear: visible checkboxes, counts and avatar photos", async ({
+  open,
+}) => {
+  const page = await open();
+  for (const scheme of ["dark", "light"] as const) {
+    await test.step(`${scheme}: the Assignee submenu lists none, me, then people with photos and counts`, async () => {
+      await page.page.emulateMedia({ colorScheme: scheme });
+      await page.click('[aria-label="Add filter"]');
+      await page.hover("text=Assignee");
+      await page.waitFor(`!!document.querySelector('[aria-label="Filter Assignee"]')`);
+      const names = await page.eval(
+        `[...${assignee}.querySelectorAll("[cmdk-item]")].map(r=>r.innerText.replace(/\\s*\\d+ issues?$/,"").trim())`,
+      );
+      expect(names).toEqual(["No assignee", "Current user", "Alex"]);
+      expect(await page.eval(`${row("Alex")}.querySelector(".filter-count")?.textContent`)).toMatch(
+        /^\d+ issues?$/,
+      );
+      // Alex's photo loads through the same-origin proxy (the broken-URL fallback is checked in mentions).
+      await page.waitFor(
+        `(()=>{const i=${row("Alex")}.querySelector("img");return !!i&&i.complete&&i.naturalWidth>0&&getComputedStyle(i).opacity==="1"})()`,
+      );
+      expect(await page.eval(`${row("Alex")}.querySelector("img").getAttribute("src")`)).toMatch(
+        /^\/api\/avatar\?url=/,
+      );
+    });
+    await test.step(`${scheme}: the checkbox shows on the active row with readable contrast and fills when checked`, async () => {
+      await page.hover('[aria-label="Filter Assignee"]');
+      await page.hover(`[aria-label="Assignee filter"] [cmdk-item]:nth-of-type(3)`);
+      const box = `${row("Alex")}.querySelector(".filter-check")`;
+      await page.waitFor(`getComputedStyle(${box}).opacity==="1"`);
+      expect(
+        await page.eval(
+          `getComputedStyle(${row("Current user")}.querySelector(".filter-check")).opacity`,
+        ),
+      ).toBe("0");
+      const ratio = await page.eval(
+        `${contrast}(getComputedStyle(${box}).borderTopColor,getComputedStyle(${assignee}.querySelector(".filter-menu")??${assignee}).backgroundColor)`,
+      );
+      expect(ratio).toBeGreaterThanOrEqual(3);
+      expect((await page.rect(`[aria-label="Assignee filter"] .filter-check`)).width).toBe(14);
+      await page.click(`[aria-label="Assignee filter"] [cmdk-item]:nth-of-type(3)`);
+      await page.waitFor(`${row("Alex")}.getAttribute("aria-checked")==="true"`);
+      await page.hover('[aria-label="Filter Assignee"]'); // move off the row: a checked box stays visible
+      expect(await page.eval(`getComputedStyle(${box}).opacity`)).toBe("1");
+      expect(
+        await page.eval(
+          `${contrast}(getComputedStyle(${box}).backgroundColor,getComputedStyle(${assignee}.querySelector(".filter-menu")??${assignee}).backgroundColor)`,
+        ),
+      ).toBeGreaterThanOrEqual(3);
+      await page.key("Escape");
+      await page.click('[aria-label="Remove assignee filter"]');
+      await page.waitFor(`${cards}===6`);
+    });
+  }
+  await test.step("cards show the assignee photo, with initials when the photo fails", async () => {
+    await page.waitFor(
+      `[...document.querySelectorAll('[data-key] img[src^="/api/avatar"]')].some(i=>i.complete&&i.naturalWidth>0)`,
+    );
   });
 });
