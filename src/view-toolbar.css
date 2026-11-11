@@ -1,100 +1,179 @@
+/* Linear's filter bar (ContentViewHeaderFilterPanel): a 10px-padded card, 0.5px bgBorderFaint, 8px radius, chips left and
+   Clear/Save right; the card sits in a 0 8px 8px wrapper directly under the toolbar. */
 .view-filter-row {
-  --chip-bg: lch(100 0 282);
-  --chip-fg: lch(20 1 282);
-  --chip-muted: lch(40 1 282);
-  --chip-border: lch(0 0 0 / 0.088);
+  --filter-card-bg: lch(94.44% 0.5 282);
+  --filter-card-border: lch(89.84% 0 282);
+  --chip-border: lch(0% 0 0 / 0.09);
+  --chip-bg: lch(99.997% 0.5 282);
+  --chip-hover: lch(95.883% 0.157 282);
+  --chip-divider: lch(84.44% 0 282);
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+  align-items: flex-start;
+  justify-content: space-between;
   flex-shrink: 0;
-  /* Linear: a flat, transparent 30px row (24px chips), 8px under the toolbar and 10px above the list. */
-  margin: 8px 8px 10px;
-  padding: 3px 12px;
+  margin: 0 8px 8px;
+  padding: 10px;
+  border: 0.5px solid var(--filter-card-border);
+  border-radius: 8px;
+  background: var(--filter-card-bg);
   font-size: 12px;
 }
+.view-filter-chips {
+  display: flex;
+  flex: auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+}
+/* FilterChip: FilterButtonContainer (min-height 24, radius 8, clip) around FilterButton (0.5px border, 24px). */
 .view-filter-chip {
   display: flex;
-  align-items: center;
+  align-items: stretch;
+  flex-shrink: 1;
+  box-sizing: border-box;
   max-width: 100%;
   height: 24px;
   border: 0.5px solid var(--chip-border);
   border-radius: 8px;
   overflow: hidden;
-  background: var(--chip-bg);
-  color: var(--chip-fg);
   font-size: 12px;
+  line-height: 18px;
   font-weight: 400;
 }
+/* FilterBlockStyles section: 0 6px, gap 4, labelBase on bgBase, 0.5px divider; outer corners 7.5px. */
 .view-filter-segment {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  align-content: center;
+  justify-content: center;
   gap: 4px;
-  height: 23px;
   min-width: 0;
   padding: 0 6px;
-  white-space: nowrap;
-  border-right: 0.5px solid var(--chip-border);
+  background: var(--chip-bg);
+  color: var(--fg-2);
+  font-size: 12px;
+  --icon-replacement-color: var(--fg-3);
+}
+.view-filter-segment:first-child {
+  border-radius: 7.5px 0 0 7.5px;
 }
 .view-filter-segment:last-child {
-  border-right: 0;
+  border-radius: 0 7.5px 7.5px 0;
 }
-button.view-filter-segment:hover {
-  background: var(--hover);
+.view-filter-segment:not(:last-child) {
+  border-right: 0.5px solid var(--chip-divider);
+}
+.view-filter-segment > span {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.view-filter-segment svg {
+  width: 12px !important;
+  height: 12px !important;
+}
+button.view-filter-segment:hover,
+button.view-filter-segment:active,
+button.view-filter-segment[aria-expanded="true"] {
+  background: var(--chip-hover);
+  --icon-replacement-color: var(--fg-2);
+}
+button.view-filter-segment:focus-visible {
+  z-index: 10;
+  outline-offset: -1px;
 }
 .view-filter-operator {
-  color: var(--chip-muted);
+  flex-grow: 0;
+  color: var(--fg-3);
 }
-.view-filter-value {
-  display: inline-flex;
+.view-filter-operator:hover {
+  color: var(--fg-2);
+}
+.view-filter-remove {
+  flex-shrink: 0;
+  color: var(--icon-replacement-color);
+}
+/* imageForValues: up to three 14px icons, each overlapping the next by a quarter. */
+.view-filter-icons {
+  display: flex;
   align-items: center;
-  gap: 4px;
+  flex-shrink: 0;
 }
-.view-filter-value svg,
-.view-filter-value img {
-  width: 12px;
-  height: 12px;
+/* Each slot is Linear's 14px Ik; a user avatar is pj "micro" (14px). */
+.view-filter-icons > * {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-height: 14px;
+}
+.view-filter-icons > * > * {
+  width: 14px !important;
+  height: 14px !important;
+}
+.view-filter-icons > :not(:last-child) {
+  max-width: 14px;
+  margin-right: -3.5px;
 }
 .view-filter-add {
-  display: grid;
-  place-items: center;
-  width: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   height: 24px;
+  min-width: 24px;
+  padding: 0 2px;
+  border: 0.5px solid transparent;
   border-radius: 9999px;
+  color: var(--fg-2);
+  --icon-replacement-color: var(--fg-3);
+  transition: border 0.15s, background-color 0.15s, color 0.15s, opacity 0.15s;
 }
-.view-filter-add:hover {
-  background: var(--hover);
+.view-filter-add:hover,
+.view-filter-add:active {
+  background: var(--crumb-hover);
+  color: var(--fg);
+  --icon-replacement-color: var(--fg);
+  transition-duration: 0s;
 }
 .view-filter-actions {
   display: flex;
-  gap: 6px;
-  margin-left: auto;
+  align-items: center;
+  align-self: center;
+  margin-left: 20px;
 }
+/* Linear's small ghost button: 24px, 0 8px, 0.5px transparent border, pill, 12px/500. */
 .view-filter-action {
+  display: inline-flex;
+  align-items: center;
   height: 24px;
   padding: 0 8px;
+  border: 0.5px solid transparent;
   border-radius: 9999px;
   color: var(--fg-2);
   font-size: 12px;
   font-weight: 500;
+  transition: border 0.15s, background-color 0.15s, color 0.15s, opacity 0.15s;
 }
-.view-filter-action:hover {
-  background: var(--hover);
+.view-filter-action:hover,
+.view-filter-action:active {
+  background: var(--crumb-hover);
+  color: var(--fg);
+  transition-duration: 0s;
 }
 .view-filter-save {
-  background: var(--btn);
-  box-shadow: var(--tab-shadow);
+  background: var(--chip-bg);
 }
 @media (prefers-color-scheme: dark) {
   .view-filter-row {
-    --chip-bg: lch(13.861 1.139 272);
-    --chip-fg: lch(90.826 1.425 272);
-    --chip-muted: lch(63.304 1.425 272);
-    --chip-border: lch(100 0 0 / 0.104);
+    --filter-card-bg: lch(9.345% 0.85 272);
+    --filter-card-border: lch(13.08% 1.48 272);
+    --chip-border: lch(100% 0 0 / 0.137);
+    --chip-bg: lch(10.149% 0.689 272);
+    --chip-hover: lch(14.777% 1.075 272);
+    --chip-divider: lch(27.12% 1.48 272);
   }
 }
-.view-filter-actions { gap: 0; }
-/* Linear: 1px borders on the row buttons (Clear 48.4px, Save 60.1px). */
-.view-filter-action { border: 1px solid transparent; }
-.view-filter-save { display: inline-flex; align-items: center; gap: 2px; box-shadow: none; }
 [role="dialog"]:has(> .view-save-menu) { padding: 6px; }

@@ -23,6 +23,16 @@ test("segmented chips edit operators and values independently, Save offers creat
         `getComputedStyle(document.querySelector('.view-filter-chip')).height`,
       ),
     ).toBe("24px");
+    // Linear's AddFilterButton: the menu opens bottom-left under the +, 4px below it, even when the toolbar Filter menu is open.
+    for (const first of [null, '[aria-label="Add filter"],[title="Filter (F)"],header [aria-label="Add another filter"]:not(.view-filter-add)']) {
+      if (first) await page.click(first);
+      await page.click(".view-filter-add");
+      await page.waitFor(`!!document.querySelector('input[placeholder^="Add Filter"],input[placeholder^="Filter"]')`);
+      await page.waitFor(`(()=>{const a=document.querySelector('.view-filter-add').getBoundingClientRect();const m=document.querySelector('body > div.fixed.z-40');return m&&m.style.left===Math.round(a.left)+'px'&&m.style.top===Math.round(a.bottom+4)+'px'})()`);
+      expect(await page.eval(`document.querySelector('.view-filter-add').getAttribute('aria-expanded')`)).toBe("true");
+      await page.click(".view-filter-add");
+      await page.waitFor(`!document.querySelector('body > div.fixed.z-40')`);
+    }
     await page.click('[aria-label="priority operator"]');
     await page.click('[cmdk-item][data-value="isNot"]');
     await page.click('[aria-label="priority value"]');

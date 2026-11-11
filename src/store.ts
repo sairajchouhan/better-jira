@@ -228,7 +228,7 @@ type State = {
   } | null;
   preferences: Record<number, Preferences>;
   defaults: Record<number, Display>;
-  toolbar: "display" | "filter" | "advanced" | null;
+  toolbar: "display" | "filter" | "add-filter" | "advanced" | null;
   propertySync: {
     total: number;
     pending: number;
@@ -504,7 +504,11 @@ ui.subscribe(({ context }) => {
   commit(patch);
   if (linkView && !context.panel) {
     linkView = false;
-    const openIn = state.preferences[context.board]?.display.openIn ?? "side";
+    // Back to how the open view (or else the board) opens issues; never the board's choice written into a view.
+    const openIn =
+      (state.editorDraft ?? state.savedViews.find((v) => v.id === state.activeViewId))?.display.openIn ??
+      state.preferences[context.board]?.display.openIn ??
+      "side";
     if (openIn !== context.view) queueMicrotask(() => navigate({ view: openIn }));
   }
 });
@@ -757,9 +761,11 @@ async function loadApplication() {
   Object.assign(ME, client.user);
   const namespace = `${client.site}/${client.user.id}`;
   migratePreferences(namespace);
-  const [boards, remote] = await Promise.all([
+  // Views load with the issues, so a view route paints as the view, never the plain board first.
+  const [boards, remote, savedViews] = await Promise.all([
     fetchJson<Board[]>("/api/boards"),
     fetchJson<Issue[]>("/api/issues"),
+    fetchSavedViews(true),
   ]);
   if (!boards.length)
     throw new Error("The Jira mirror is still syncing your boards. Retry in a moment.");
@@ -894,8 +900,8 @@ async function loadApplication() {
     full,
     defaults,
     preferences,
-    savedViews: [],
-    favorites: readFavorites(),
+    savedViews,
+    favorites: liveFavorites(savedViews),
     undoCount: undo.length,
     redoCount: redo.length,
   });
@@ -991,7 +997,6 @@ async function loadApplication() {
           }),
         )
       : (othersCreating.clear(), replay()));
-  await refreshSavedViews(true);
   if (!navigationReady) {
     window.addEventListener("focus", () => {
       void refreshSavedViews().catch(viewError);
@@ -2450,7 +2455,7 @@ async function viewRequest<T>(path = "", method = "GET", body?: unknown): Promis
     );
   return response.status === 204 ? (undefined as T) : response.json();
 }
-export async function refreshSavedViews(migrate = false) {
+async function fetchSavedViews(migrate = false) {
   if (migrate) {
     const key = preferenceKey("better-jira:saved-views:v1");
     const marker = `${key}:imported`;
@@ -2461,14 +2466,14 @@ export async function refreshSavedViews(migrate = false) {
       localStorage.setItem(marker, "1");
     }
   }
-  const savedViews = await viewRequest<SavedView[]>();
+  return viewRequest<SavedView[]>();
+}
+const liveFavorites = (savedViews: SavedView[]) =>
+  readFavorites().filter((id) => !id.startsWith("view:") || savedViews.some((v) => `view:${v.id}` === id));
+export async function refreshSavedViews() {
+  const savedViews = await fetchSavedViews();
   if (viewWrites.size) return; // A focus read must not replace a display edit still being saved.
-  set({
-    savedViews,
-    favorites: readFavorites().filter(
-      (id) => !id.startsWith("view:") || savedViews.some((v) => `view:${v.id}` === id),
-    ),
-  });
+  set({ savedViews, favorites: liveFavorites(savedViews) });
   if (state.activeViewId && !savedViews.some((v) => v.id === state.activeViewId))
     navigate({ board: state.board });
 }

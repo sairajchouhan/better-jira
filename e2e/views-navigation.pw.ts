@@ -87,8 +87,9 @@ test("Linear parity: hidden counts, merge conflicts, editor chrome, draft tab, p
     const filter = Buffer.from(JSON.stringify({v:1,filters:rule(["Low"])})).toString("base64url");
     await page.page.goto(`${origin}/view/${saved.id}?board=1&filter=${filter}`);
     await page.waitFor(`/\\d+ issues? hidden by filters/.test(document.querySelector('[role=status]')?.textContent ?? '')`);
-    // BJ-145: the temporary chip row is flat: transparent, unshadowed, 30px.
-    expect(await page.eval(`(s=>[s.backgroundColor,s.boxShadow,s.height])(getComputedStyle(document.querySelector('.view-filter-row')))`)).toEqual(["rgba(0, 0, 0, 0)", "none", "30px"]);
+    // BJ-146: the chip row is Linear's filter card: 10px padding, 8px radius, bgSecondary-ish card fill, 24px chips.
+    expect(await page.eval(`(s=>[s.padding,s.borderRadius,s.boxShadow])(getComputedStyle(document.querySelector('.view-filter-row')))`)).toEqual(["10px", "8px", "none"]);
+    expect(await page.eval(`getComputedStyle(document.querySelector('.view-filter-chip')).height`)).toBe("24px");
     await page.click('.view-filter-save');
     await page.waitFor(`!!document.querySelector('[aria-label="Save filters"] [aria-disabled=true]')`);
     expect(await page.eval(`document.querySelector('[aria-label="Save filters"] [aria-disabled=true]').textContent`)).toContain("Cannot merge these filters into the view");
@@ -125,5 +126,24 @@ test("Linear parity: hidden counts, merge conflicts, editor chrome, draft tab, p
     expect(await page.eval(`document.querySelectorAll('header button[aria-pressed=true]').length`)).toBe(0);
     await page.click("text=Cancel");
     await page.eval(`fetch('/api/views/${saved.id}',{method:'DELETE'})`);
+  } finally { await page.close(); }
+});
+
+test("a view route paints as the view on reload and keeps how it opens issues", async ({ open }) => {
+  // The first pressed tab painted after load: the plain board would press its scope tab before the view arrived.
+  const setup = `addEventListener('DOMContentLoaded', () => { const o = new MutationObserver(() => { const b = document.querySelector('button[aria-pressed=true]'); if (!b) return; window.__first = b.textContent; o.disconnect(); }); o.observe(document.documentElement, { childList: true, subtree: true, attributes: true }); });`;
+  const page = await open("", { setup });
+  try {
+    const p = defaultPreferences();
+    const body = { board: 1, kind: "tab", name: "Page tab", description: "", icon: "filter", color: "gray", filters: p.filters, display: { ...p.display, openIn: "page" }, scope: p.scope, mine: false };
+    await page.eval(`fetch('/api/views', {method:'POST',headers:{'Content-Type':'application/json'},body:${JSON.stringify(JSON.stringify(body))}})`);
+    await page.reload();
+    await page.click('text=Page tab');
+    await page.waitFor(`location.pathname.startsWith('/view/')`);
+    await page.reload();
+    await page.waitFor(`window.__first !== undefined`);
+    expect(await page.eval(`window.__first`)).toBe("Page tab");
+    await page.eval(`new Promise(r => setTimeout(r, 300))`);
+    expect(await page.eval(`fetch('/api/views').then(r => r.json()).then(v => v.find(x => x.name === 'Page tab').display.openIn)`)).toBe("page");
   } finally { await page.close(); }
 });

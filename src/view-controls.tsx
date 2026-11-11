@@ -7,12 +7,16 @@ import { createToolbarView } from "./view-toolbar-actions";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import {
   lazy,
+  useCallback,
   Suspense,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import { MenuSurface, MENU_POPUP as POPUP } from "./menu-surface";
@@ -72,6 +76,154 @@ export { MENU_POPUP as POPUP } from "./menu-surface";
 const CIRCLE =
   "relative grid size-7 shrink-0 place-items-center rounded-full bg-btn text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg";
 
+type Placement = "bottom-left" | "bottom-right";
+
+/** A toolbar menu in a fixed popup under its trigger: focus moves in, Esc and outside clicks close it and return focus, Tab stays inside. */
+function ToolbarPopup({
+  trigger,
+  placement,
+  popup,
+  children,
+}: {
+  trigger: RefObject<HTMLElement | null>;
+  placement: Placement;
+  popup: RefObject<HTMLDivElement | null>;
+  children: ReactNode;
+}) {
+  const [rect, setRect] = useState<CSSProperties>({ visibility: "hidden" });
+  const close = () => {
+    trigger.current?.focus();
+    ui.send({ type: "toolbar.close" });
+  };
+  useHotkey("Escape", close, { target: popup, ignoreInputs: false, capture: true });
+  // Placed before paint so the menu never flashes in the wrong spot.
+  const place = useCallback(() => {
+    const r = trigger.current?.getBoundingClientRect();
+    if (!r) return;
+    // oxlint-disable-next-line react/set-state-in-effect -- Measures the trigger's layout, which render cannot read.
+    setRect(
+      placement === "bottom-left"
+        ? // Linear's menuPosition "bottom-left": 4px under the trigger, flush with its left edge.
+          { top: Math.round(r.bottom + 4), left: Math.round(r.left) }
+        : { top: r.bottom + 6, right: innerWidth - r.right },
+    );
+  }, [trigger, placement]);
+  useLayoutEffect(place, [place]);
+  // A passive effect: its cleanup runs after the popup leaves the DOM, so focus can be handed back to the trigger.
+  useEffect(() => {
+    const anchor = trigger.current;
+    const focusFrame = requestAnimationFrame(() =>
+      popup.current
+        ?.querySelector<HTMLElement>("input, [role=tab][aria-selected=true], button")
+        ?.focus(),
+    );
+    // The trigger handles its own click (it toggles), so pressing it is not an outside click.
+    const outside = (e: PointerEvent) => {
+      if (!popup.current?.contains(e.target as Node) && !anchor?.contains(e.target as Node))
+        ui.send({ type: "toolbar.close" });
+    };
+    document.addEventListener("pointerdown", outside);
+    window.addEventListener("resize", place);
+    return () => {
+      // Closing with Done or a menu choice unmounts the focused control; give focus back to the trigger, as Esc does.
+      if (document.activeElement === document.body) anchor?.focus();
+      cancelAnimationFrame(focusFrame);
+      document.removeEventListener("pointerdown", outside);
+      window.removeEventListener("resize", place);
+    };
+  }, [trigger, place, popup]);
+  return createPortal(
+    <div
+      ref={popup}
+      className="fixed z-40 max-w-[calc(100vw-24px)]"
+      style={rect}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === "Escape") close();
+        if (e.key === "Tab") {
+          const nodes = [
+            ...(popup.current?.querySelectorAll<HTMLElement>(
+              'button:not(:disabled), input, select, [tabindex="0"]',
+            ) ?? []),
+          ].filter((n) => n.getClientRects().length);
+          const first = nodes[0],
+            last = nodes.at(-1);
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last?.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first?.focus();
+          }
+        }
+      }}
+    >
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * Linear's AddFilterButton: one component behind both the toolbar's Filter button and the chip row's "+". Each instance owns
+ * its menu and opens it under its own trigger; `menu` names the instance in the ui machine, so only one is open at a time.
+ */
+function AddFilterButton({
+  board,
+  menu,
+  placement,
+  triggerRef,
+  expanded,
+  label,
+  title,
+  className,
+  children,
+}: {
+  board: Board;
+  menu: "filter" | "add-filter";
+  placement: Placement;
+  triggerRef?: RefObject<HTMLButtonElement | null>;
+  expanded?: boolean;
+  label: string;
+  title?: string;
+  className: string;
+  children: ReactNode;
+}) {
+  const open = useStore((s) => s.toolbar === menu);
+  const own = useRef<HTMLButtonElement>(null);
+  const trigger = triggerRef ?? own;
+  const popup = useRef<HTMLDivElement>(null);
+  return (
+    <>
+      <button
+        ref={trigger}
+        aria-label={label}
+        title={title}
+        aria-expanded={expanded ?? open}
+        onPointerEnter={() => void loadFilterMenu()}
+        onFocus={() => void loadFilterMenu()}
+        onClick={() => ui.send({ type: "toolbar.toggle", toolbar: menu })}
+        className={className}
+      >
+        {children}
+      </button>
+      {open && (
+        <ToolbarPopup trigger={trigger} placement={placement} popup={popup}>
+          <Suspense
+            fallback={
+              <div role="status" className={`${POPUP} w-[248px] p-3`}>
+                Opening filters…
+              </div>
+            }
+          >
+            <FilterMenu key={board.id} board={board} container={popup} footer={<PropertySyncNotice />} />
+          </Suspense>
+        </ToolbarPopup>
+      )}
+    </>
+  );
+}
+
 export function BoardControls({ board }: { board: Board }) {
   const view = useActiveView();
   const toolbar = useStore((s) => s.toolbar);
@@ -80,69 +232,26 @@ export function BoardControls({ board }: { board: Board }) {
   const filterRef = useRef<HTMLButtonElement>(null);
   const displayRef = useRef<HTMLButtonElement>(null);
   const popup = useRef<HTMLDivElement>(null);
-  const [rect, setRect] = useState({ top: 100, right: 16 });
-  const ref = toolbar === "display" ? displayRef : filterRef;
   const count = filterCount(preferences.filters);
   useEffect(() => {
     (window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 200)))(
       () => void loadFilterMenu(),
     );
   }, []);
-  useHotkey(
-    "Escape",
-    () => {
-      ui.send({ type: "toolbar.close" });
-      ref.current?.focus();
-    },
-    { target: popup, enabled: !!toolbar, ignoreInputs: false, capture: true },
-  );
-  useEffect(() => {
-    if (!toolbar) return;
-    const trigger = ref.current;
-    const position = () => {
-      const r = ref.current?.getBoundingClientRect();
-      if (r) setRect({ top: r.bottom + 6, right: innerWidth - r.right });
-    };
-    position();
-    const focusFrame = requestAnimationFrame(() =>
-      popup.current
-        ?.querySelector<HTMLElement>("input, [role=tab][aria-selected=true], button")
-        ?.focus(),
-    );
-    const outside = (e: PointerEvent) => {
-      if (
-        !popup.current?.contains(e.target as Node) &&
-        !filterRef.current?.contains(e.target as Node) &&
-        !displayRef.current?.contains(e.target as Node)
-      )
-        ui.send({ type: "toolbar.close" });
-    };
-    document.addEventListener("pointerdown", outside);
-    window.addEventListener("resize", position);
-    return () => {
-      // Closing with Done or a menu choice unmounts the focused control; give focus back to the trigger, as Esc does.
-      if (document.activeElement === document.body) trigger?.focus();
-      cancelAnimationFrame(focusFrame);
-      document.removeEventListener("pointerdown", outside);
-      window.removeEventListener("resize", position);
-    };
-    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Changing boards repositions the toolbar for the new trigger.
-  }, [toolbar, board.id, ref]);
   return (
     <>
-      <button
-        ref={filterRef}
-        aria-label={count ? "Add another filter" : "Add filter"}
+      <AddFilterButton
+        board={board}
+        menu="filter"
+        placement="bottom-right"
+        triggerRef={filterRef}
+        expanded={toolbar === "filter" || toolbar === "advanced"}
+        label={count ? "Add another filter" : "Add filter"}
         title={count ? "Add another filter" : "Filter (F)"}
-        aria-expanded={toolbar === "filter" || toolbar === "advanced"}
-        onPointerEnter={() => void loadFilterMenu()}
-        onFocus={() => void loadFilterMenu()}
-        onClick={() => ui.send({ type: "toolbar.toggle", toolbar: "filter" })}
         className={CIRCLE}
       >
         <Icon name="filter" />
-
-      </button>
+      </AddFilterButton>
       <button
         ref={displayRef}
         aria-label="Display options"
@@ -156,59 +265,16 @@ export function BoardControls({ board }: { board: Board }) {
           <span className="absolute top-0 right-0 size-1.5 rounded-full bg-accent" />
         )}
       </button>
-      {toolbar &&
-        createPortal(
-          <div
-            ref={popup}
-            className="fixed z-40 max-w-[calc(100vw-24px)]"
-            style={{ top: rect.top, right: rect.right }}
-            onKeyDown={(e) => {
-              e.stopPropagation();
-              if (e.key === "Escape") {
-                ui.send({ type: "toolbar.close" });
-                ref.current?.focus();
-              }
-              if (e.key === "Tab") {
-                const nodes = [
-                  ...(popup.current?.querySelectorAll<HTMLElement>(
-                    'button:not(:disabled), input, select, [tabindex="0"]',
-                  ) ?? []),
-                ].filter((n) => n.getClientRects().length);
-                const first = nodes[0],
-                  last = nodes.at(-1);
-                if (e.shiftKey && document.activeElement === first) {
-                  e.preventDefault();
-                  last?.focus();
-                } else if (!e.shiftKey && document.activeElement === last) {
-                  e.preventDefault();
-                  first?.focus();
-                }
-              }
-            }}
-          >
-            {toolbar === "display" ? (
-              <DisplayMenu board={board} />
-            ) : toolbar === "advanced" ? (
-              <AdvancedMenu board={board} />
-            ) : (
-              <Suspense
-                fallback={
-                  <div role="status" className={`${POPUP} w-[248px] p-3`}>
-                    Opening filters…
-                  </div>
-                }
-              >
-                <FilterMenu
-                  key={board.id}
-                  board={board}
-                  container={popup}
-                  footer={<PropertySyncNotice />}
-                />
-              </Suspense>
-            )}
-          </div>,
-          document.body,
-        )}
+      {(toolbar === "display" || toolbar === "advanced") && (
+        <ToolbarPopup
+          key={toolbar}
+          trigger={toolbar === "display" ? displayRef : filterRef}
+          placement="bottom-right"
+          popup={popup}
+        >
+          {toolbar === "display" ? <DisplayMenu board={board} /> : <AdvancedMenu board={board} />}
+        </ToolbarPopup>
+      )}
     </>
   );
 }
@@ -420,6 +486,10 @@ function DisplayMenu({ board }: { board: Board }) {
   );
 }
 
+/** Linear's multi-value chip label noun: "2 assignees", "3 statuses", "2 priorities". */
+const plural = (noun: string) =>
+  /[^aeiou]y$/.test(noun) ? `${noun.slice(0, -1)}ies` : /(s|x|ch|sh)$/.test(noun) ? (noun.endsWith("s") && !/(us|ss)$/.test(noun) ? noun : `${noun}es`) : `${noun}s`;
+
 export function FilterChips({ board }: { board: Board }) {
   const { filters } = usePreferences(board.id);
   const view = useActiveView();
@@ -548,6 +618,7 @@ export function FilterChips({ board }: { board: Board }) {
           )}
         </MenuSurface>
       )}
+      <div className="view-filter-chips">
       {filters.join === "or" && chips.length > 1 && (
         <button
           className="text-fg-3"
@@ -556,89 +627,82 @@ export function FilterChips({ board }: { board: Board }) {
           Any of
         </button>
       )}
-      {chips.map((c) =>
-        "children" in c ? (
-          <div key={c.id} className="view-filter-chip">
-            <button className="view-filter-segment" onClick={() => ui.send({ type: "toolbar.open", toolbar: "advanced" })}>
-              {`${c.join.toUpperCase()} group · ${filterCount(c)} rule${filterCount(c) === 1 ? "" : "s"}`}
-            </button>
-            <button className="view-filter-segment" aria-label="Remove filter group" onClick={() => changePreferences(board.id, { filters: updateFilter(filters, c.id, null) })}>
-              <Icon name="close" size={12} />
-            </button>
-          </div>
-        ) : (
-          <div key={c.id} className="view-filter-chip">
+      {chips.map((c) => {
+        const remove = () => changePreferences(board.id, { filters: updateFilter(filters, c.id, null) });
+        // Linear's chip: Backspace or Delete on a focused chip removes its filter.
+        const onKeyDown = (e: React.KeyboardEvent) => {
+          if (e.key === "Backspace" || e.key === "Delete") {
+            e.preventDefault();
+            remove();
+          }
+        };
+        if ("children" in c)
+          return (
+            <div key={c.id} className="view-filter-chip" onKeyDown={onKeyDown}>
+              <button className="view-filter-segment" onClick={() => ui.send({ type: "toolbar.open", toolbar: "advanced" })}>
+                <span>{`${c.join.toUpperCase()} group · ${filterCount(c)} rule${filterCount(c) === 1 ? "" : "s"}`}</span>
+              </button>
+              <button className="view-filter-segment view-filter-remove" aria-label="Remove filter group" onClick={remove}>
+                <Icon name="x" size={12} />
+              </button>
+            </div>
+          );
+        const name = FIELDS.find(([f]) => f === c.field)?.[1] ?? c.field;
+        const all = c.values.length ? filterChoices(c.field, board, [...issues.values()]) : [];
+        const picked = c.values.map((value) => ({ value, choice: all.find((v) => v.value === value) }));
+        const labelOf = ({ value, choice }: (typeof picked)[number]) =>
+          ["within", "next"].includes(c.op) || c.field === "statusAge"
+            ? `${value} day${Number(value) === 1 ? "" : "s"}`
+            : isDate(c.field)
+              ? value === "P0D" ? "today" : shortDate(value)
+              : (choice?.label ?? value);
+        return (
+          <div key={c.id} className="view-filter-chip" onKeyDown={onKeyDown}>
             <span className="view-filter-segment">
-              {FIELDS.find(([f]) => f === c.field)?.[1]}
+              <span>{name}</span>
             </span>
             <button
               className="view-filter-segment view-filter-operator"
               aria-label={`${c.field} operator`}
-              onClick={(e) =>
-                setEdit({
-                  rule: c,
-                  segment: "operator",
-                  anchor: e.currentTarget,
-                })
-              }
+              aria-expanded={edit?.rule.id === c.id && edit.segment === "operator"}
+              onClick={(e) => setEdit({ rule: c, segment: "operator", anchor: e.currentTarget })}
             >
-              {c.op === "within" ? "in the last" : c.op === "next" ? "in the next" : operatorsFor(c.field).find(([op]) => op === c.op)?.[1]}
+              <span>
+                {c.op === "within" ? "in the last" : c.op === "next" ? "in the next" : operatorsFor(c.field).find(([op]) => op === c.op)?.[1]}
+              </span>
             </button>
             {!["empty", "notEmpty"].includes(c.op) && (
               <button
                 className="view-filter-segment"
                 aria-label={`${c.field} value`}
-                onClick={(e) =>
-                  setEdit({
-                    rule: c,
-                    segment: "value",
-                    anchor: e.currentTarget,
-                  })
-                }
+                aria-expanded={edit?.rule.id === c.id && edit.segment === "value"}
+                title={picked.length > 1 ? picked.map(labelOf).join(", ") : undefined}
+                onClick={(e) => setEdit({ rule: c, segment: "value", anchor: e.currentTarget })}
               >
-                {c.values.map((value, index) => {
-                  const choice = filterChoices(c.field, board, [
-                    ...issues.values(),
-                  ]).find((v) => v.value === value);
-                  return (
-                    <span key={value} className="view-filter-value">
-                      {index > 0 && ", "}
-                      {choice?.icon}
-                      <span>
-                        {["within", "next"].includes(c.op) || c.field === "statusAge"
-                          ? `${value} day${Number(value) === 1 ? "" : "s"}`
-                          : isDate(c.field)
-                          ? value === "P0D"
-                            ? "today"
-                            : shortDate(value)
-                          : (choice?.label ?? value)}
-                      </span>
-                    </span>
-                  );
-                })}
+                {picked.some((p) => p.choice?.icon) && (
+                  <span className="view-filter-icons">
+                    {picked.slice(0, 3).map((p) => p.choice?.icon && <span key={p.value}>{p.choice.icon}</span>)}
+                  </span>
+                )}
+                <span>{picked.length > 1 ? `${picked.length} ${plural(name.toLowerCase())}` : picked[0] ? labelOf(picked[0]) : ""}</span>
               </button>
             )}
-            <button
-              className="view-filter-segment"
-              aria-label={`Remove ${c.field} filter`}
-              onClick={() =>
-                changePreferences(board.id, {
-                  filters: updateFilter(filters, c.id, null),
-                })
-              }
-            >
-              <Icon name="close" size={12} />
+            <button className="view-filter-segment view-filter-remove" aria-label={`Remove ${c.field} filter`} onClick={remove}>
+              <Icon name="x" size={12} />
             </button>
           </div>
-        ),
-      )}
-      <button
+        );
+      })}
+      <AddFilterButton
+        board={board}
+        menu="add-filter"
+        placement="bottom-left"
+        label="Add another filter"
         className="view-filter-add"
-        aria-label="Add another filter"
-        onClick={() => ui.send({ type: "toolbar.open", toolbar: "filter" })}
       >
         <Icon name="plus" />
-      </button>
+      </AddFilterButton>
+      </div>
       {!editing && <div className="view-filter-actions">
         <button
           className="view-filter-action"
@@ -658,7 +722,7 @@ export function FilterChips({ board }: { board: Board }) {
           aria-expanded={!!saveAnchor}
           onClick={(e) => setSaveAnchor(e.currentTarget)}
         >
-          Save <span className="rotate-90"><Icon name="chevron" size={12} /></span>
+          Save
         </button>
       </div>}
       {saveAnchor && !editing && (

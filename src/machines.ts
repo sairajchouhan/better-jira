@@ -18,7 +18,7 @@ import { assign, enqueueActions, fromPromise, setup, type InspectionEvent } from
 import type { AdfDocument } from "./document";
 import type { IssueDraft, Overlay, View } from "./store";
 
-export type Toolbar = "display" | "filter" | "advanced";
+export type Toolbar = "display" | "filter" | "add-filter" | "advanced";
 export type Toast = { text: string; key?: string; undo?: boolean | "inbox"; detail?: string };
 /** The screen state; store.ts copies it onto `get()` so components keep reading it with `useStore`. */
 export type UiContext = {
