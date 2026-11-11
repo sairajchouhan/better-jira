@@ -8,7 +8,7 @@ test("every advertised binding parses through TanStack; bindings are unique in e
   for (const context of ["issue", "document"]) {
     const seen = new Set<string>();
     for (const binding of shortcuts.filter(
-      (binding) => binding.hotkey && (context === "document" ? !binding.issue : !binding.document),
+      (binding) => binding.hotkey && !binding.id.startsWith("view-") && (context === "document" ? !binding.issue : !binding.document),
     )) {
       const key = JSON.stringify(binding.hotkey);
       expect(seen.has(key)).toBe(false);

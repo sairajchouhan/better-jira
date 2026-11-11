@@ -25,7 +25,7 @@ test("saved view has a stable route, survives reload and leaves board preference
       "base64url",
     );
     await page.goto(`${path}?filter=${encoded}`);
-    await page.waitFor(`document.body.textContent.includes("Priority is High")`);
+    await page.waitFor(`document.querySelector(".view-filter-chip")?.textContent==="PriorityisHigh"`);
     await page.reload();
     expect(await page.eval("new URL(location.href).searchParams.get('filter')")).toBe(encoded);
     expect(await page.eval(`localStorage.getItem(${JSON.stringify(PREFS_KEY)})`)).toBe(before);

@@ -8,9 +8,8 @@ test("draft reload, cancel, create toast, edit, duplicate and themed delete", as
     const before = await app.eval(
       `localStorage.getItem(${JSON.stringify(PREFS_KEY)})`,
     );
-    await p
-      .getByRole("button", { name: "Save current view", exact: true })
-      .click();
+    await p.getByRole("button", { name: "Views", exact: true }).click();
+    await p.getByRole("button", { name: "New view", exact: true }).click();
     await expect(p).toHaveURL(/\/view\/new/);
     await p
       .getByRole("textbox", { name: "View name", exact: true })
@@ -23,9 +22,8 @@ test("draft reload, cancel, create toast, edit, duplicate and themed delete", as
     expect(
       await app.eval(`localStorage.getItem(${JSON.stringify(PREFS_KEY)})`),
     ).toBe(before);
-    await p
-      .getByRole("button", { name: "Save current view", exact: true })
-      .click();
+    await p.getByRole("button", { name: "Views", exact: true }).click();
+    await p.getByRole("button", { name: "New view", exact: true }).click();
     await p
       .getByRole("textbox", { name: "View name", exact: true })
       .fill("My new view");
@@ -35,7 +33,7 @@ test("draft reload, cancel, create toast, edit, duplicate and themed delete", as
     ).toContainText("My new view");
     const route = new URL(p.url()).pathname;
     await p
-      .getByRole("button", { name: "View options for My new view" })
+      .getByRole("button", { name: "Issue view options" })
       .click();
     await p.getByRole("option", { name: "Edit…", exact: true }).click();
     await expect(p).toHaveURL(new RegExp(`${route}/edit`));
@@ -43,7 +41,7 @@ test("draft reload, cancel, create toast, edit, duplicate and themed delete", as
       .getByRole("textbox", { name: "View name", exact: true })
       .fill("Renamed");
     await p.getByRole("button", { name: "Save", exact: true }).click();
-    await p.getByRole("button", { name: "View options for Renamed" }).click();
+    await p.getByRole("button", { name: "Issue view options" }).click();
     await p.getByRole("option", { name: "Duplicate…", exact: true }).click();
     await expect(
       p.getByRole("textbox", { name: "View name", exact: true }),
@@ -52,14 +50,16 @@ test("draft reload, cancel, create toast, edit, duplicate and themed delete", as
       p.getByRole("textbox", { name: "View description" }),
     ).toHaveValue("");
     await p.getByRole("button", { name: "Cancel", exact: true }).click();
-    await p.getByRole("button", { name: "View options for Renamed" }).click();
+    await p.getByRole("button", { name: "Views", exact: true }).click();
+    await p.getByRole("button", { name: "Renamed", exact: true }).click();
+    await p.getByRole("button", { name: "Issue view options" }).click();
     await p.getByPlaceholder("Search actions…").fill("Delete");
     await p.keyboard.press("ArrowDown");
     await p.keyboard.press("Enter");
     await expect(p.getByRole("dialog")).toContainText("Renamed");
     await p.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(
-      p.getByRole("button", { name: "View options for Renamed" }),
+      p.getByRole("button", { name: "Issue view options" }),
     ).toBeVisible();
   } finally {
     await app.close();
@@ -75,9 +75,7 @@ test("draft filters, display and icon stay detached through reload and cancel", 
     const before = await app.eval(
       `localStorage.getItem(${JSON.stringify(PREFS_KEY)})`,
     );
-    await p
-      .getByRole("button", { name: "Save current view", exact: true })
-      .click();
+    await p.getByRole("button", { name: "Add new view", exact: true }).click();
     await p.getByRole("button", { name: "Choose view icon and color" }).click();
     await p.getByRole("button", { name: "Purple", exact: true }).click();
     await p.getByRole("button", { name: "Emojis", exact: true }).click();

@@ -1,5 +1,18 @@
+import "./view-toolbar.css";
+import { Command } from "cmdk";
+import { useActiveView, clearOverlay, saveOverlayToView } from "./saved-views";
+import { viewShortcutId } from "./view-shortcut";
+import { createToolbarView } from "./view-toolbar-actions";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { MenuSurface, MENU_POPUP as POPUP } from "./menu-surface";
 import { filterChoices, PropertyFilter } from "./property-filter";
@@ -59,6 +72,7 @@ const CIRCLE =
   "relative grid size-7 shrink-0 place-items-center rounded-full bg-btn text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg";
 
 export function BoardControls({ board }: { board: Board }) {
+  const view = useActiveView();
   const toolbar = useStore((s) => s.toolbar);
   const preferences = usePreferences(board.id);
   const savedDefault = useStore((s) => s.defaults[board.id]);
@@ -117,8 +131,8 @@ export function BoardControls({ board }: { board: Board }) {
     <>
       <button
         ref={filterRef}
-        aria-label="Add filter"
-        title="Filter (F)"
+        aria-label={count ? "Add another filter" : "Add filter"}
+        title={count ? "Add another filter" : "Filter (F)"}
         aria-expanded={toolbar === "filter" || toolbar === "advanced"}
         onPointerEnter={() => void loadFilterMenu()}
         onFocus={() => void loadFilterMenu()}
@@ -126,11 +140,7 @@ export function BoardControls({ board }: { board: Board }) {
         className={CIRCLE}
       >
         <Icon name="filter" />
-        {count > 0 && (
-          <span className="absolute -top-1 -right-1 grid size-3.5 place-items-center rounded-full bg-accent text-[9px] text-white">
-            {count}
-          </span>
-        )}
+
       </button>
       <button
         ref={displayRef}
@@ -141,7 +151,7 @@ export function BoardControls({ board }: { board: Board }) {
         className={CIRCLE}
       >
         <Icon name="display" />
-        {!sameDisplay(preferences.display, savedDefault ?? defaultDisplay()) && (
+        {!sameDisplay(preferences.display, view?.display ?? savedDefault ?? defaultDisplay()) && (
           <span className="absolute top-0 right-0 size-1.5 rounded-full bg-accent" />
         )}
       </button>
@@ -256,6 +266,7 @@ function Toggle({
 }
 function DisplayMenu({ board }: { board: Board }) {
   const { display: d } = usePreferences(board.id);
+  const view = useActiveView();
   const defaults = useStore((s) => s.defaults);
   const [saving, setSaving] = useState(false);
   const patch = (p: Partial<Display>) => timed("display", () => changeDisplay(board.id, p));
@@ -385,12 +396,12 @@ function DisplayMenu({ board }: { board: Board }) {
       />
       <div className="mt-3 flex justify-end gap-3 border-t border-line-2 pt-2 text-[11px]">
         <button
-          title="Reset to the saved default for this board"
-          onClick={() => changeDisplay(board.id, defaults[board.id] ?? defaultDisplay())}
+          title={view ? "Reset to this view’s saved display" : "Reset to the saved default for this board"}
+          onClick={() => changeDisplay(board.id, view?.display ?? defaults[board.id] ?? defaultDisplay())}
         >
           Reset
         </button>
-        <button
+        {!view && <button
           className="text-accent disabled:opacity-50"
           disabled={saving}
           title="Save your display default in this browser"
@@ -401,7 +412,7 @@ function DisplayMenu({ board }: { board: Board }) {
           }}
         >
           {saving ? "Saving…" : "Save my default"}
-        </button>
+        </button>}
       </div>
     </div>
   );
@@ -409,139 +420,291 @@ function DisplayMenu({ board }: { board: Board }) {
 
 export function FilterChips({ board }: { board: Board }) {
   const { filters } = usePreferences(board.id);
+  const view = useActiveView();
   const issues = useStore((s) => s.issues);
-  const labelFor = (field: Field, value: string) => {
-    if (value === "$me") return "me";
-    if (value === "$none") return "none";
-    if (isDate(field)) return value === "P0D" ? "today" : shortDate(value);
-    if (field === "status")
-      return board.columns.flatMap((c) => c.statuses).find((s) => s.id === value)?.name ?? value;
-    if (field === "assignee" || field === "creator")
-      return [...issues.values()].find((i) => i[field]?.id === value)?.[field]?.name ?? value;
-    if (field === "project")
-      return [...issues.values()].find((i) => i.project?.key === value)?.project?.name ?? value;
-    if (field === "milestone")
-      return (
-        [...issues.values()].flatMap((i) => i.milestones ?? []).find((v) => v.id === value)?.name ??
-        value
-      );
-    if (field === "watchers")
-      return (
-        [...issues.values()].flatMap((i) => i.watchers ?? []).find((u) => u.id === value)?.name ??
-        value
-      );
-    if (field === "projectLead")
-      return (
-        [...issues.values()].find((i) => i.projectLead?.id === value)?.projectLead?.name ?? value
-      );
-    if (field === "relations")
-      return (
-        (
-          {
-            parent: "Parent issues",
-            child: "Sub-issues",
-            blocked: "Blocked issues",
-            blocking: "Blocking issues",
-            related: "Issues with relations",
-            duplicate: "Duplicates",
-          } as Record<string, string>
-        )[value] ?? value
-      );
-    return value;
-  };
-  const days = (v = "") => `${v} day${Number(v) === 1 ? "" : "s"}`;
-  const chipText = (c: Rule) => {
-    const field = FIELDS.find(([f]) => f === c.field)?.[1],
-      op = operatorsFor(c.field).find(([o]) => o === c.op)?.[1];
-    if (c.op === "empty" || c.op === "notEmpty") return `${field} ${op}`;
-    if (c.field === "due" && c.op === "before" && c.values[0] === "P0D") return "Overdue";
-    if (c.op === "within") return `${field} in the last ${days(c.values[0])}`;
-    if (c.op === "next") return `${field} in the next ${days(c.values[0])}`;
-    if (c.field === "statusAge") return `${field} ${op} ${days(c.values[0])}`;
-    return `${field} ${op} ${c.values.map((v) => labelFor(c.field, v)).join(", ")}`;
-  };
-  const [edit, setEdit] = useState<{ id: string; anchor: HTMLElement } | null>(null);
-  const editing = filters.children.find((c): c is Rule => !("children" in c) && c.id === edit?.id);
-  // A chip switched from "is empty" back to "is" and closed without a value filters nothing: drop it.
-  const closeEdit = () => {
-    const current = preferencesFor(board.id).filters;
-    const rule = current.children.find((c): c is Rule => !("children" in c) && c.id === edit?.id);
-    if (rule && !rule.values.length && rule.op !== "empty" && rule.op !== "notEmpty")
-      changePreferences(board.id, { filters: updateFilter(current, rule.id, null) });
+  const [edit, setEdit] = useState<{
+    rule: Rule;
+    segment: "operator" | "value";
+    anchor: HTMLElement;
+  } | null>(null);
+  const [saveAnchor, setSaveAnchor] = useState<HTMLElement | null>(null);
+  const [saving, setSaving] = useState(false);
+  const rule = filters.children.find(
+    (c): c is Rule => !("children" in c) && c.id === edit?.rule.id,
+  );
+  const patch = (r: Rule, change: Partial<Rule>) =>
+    changePreferences(board.id, {
+      filters: updateFilter(preferencesFor(board.id).filters, r.id, change),
+    });
+  const close = () => {
+    if (rule && !rule.values.length && !["empty", "notEmpty"].includes(rule.op))
+      changePreferences(board.id, {
+        filters: updateFilter(preferencesFor(board.id).filters, rule.id, null),
+      });
     setEdit(null);
   };
-  // An empty group filters nothing, so it gets no chip.
-  const chips = filters.children.filter((c) => !("children" in c) || filterCount(c) > 0);
+  const chips = filters.children.filter(
+    (c) => !("children" in c) || filterCount(c),
+  );
   if (!chips.length) return null;
+  const choices = rule
+    ? filterChoices(rule.field, board, [...issues.values()])
+    : [];
+  const save = async () => {
+    setSaving(true);
+    try {
+      await saveOverlayToView();
+      setSaveAnchor(null);
+    } catch {
+      ui.send({ type: "toast.show", text: "Could not save view. Try again." });
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
-    <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-1.5 border-t border-line px-3 py-1.5 text-[12px]">
-      {/* Like Linear, a chip edits its own rule in a small picker under it; groups still open the advanced editor. */}
-      {edit && editing && (
+    <div className="view-filter-row" aria-label="Temporary filters">
+      {edit && rule && (
         <MenuSurface
-          label={`Edit ${FIELDS.find(([f]) => f === editing.field)?.[1]} filter`}
+          label={`${FIELDS.find(([f]) => f === rule.field)?.[1]} ${edit.segment}`}
           anchor={edit.anchor}
-          width={280}
-          close={closeEdit}
+          width={248}
+          close={close}
         >
-          <PropertyFilter
-            inline
-            field={editing.field}
-            name={FIELDS.find(([f]) => f === editing.field)?.[1] ?? editing.field}
-            board={board}
-            onBack={closeEdit}
-          />
+          {edit.segment === "operator" ? (
+            <Command loop tabIndex={0} defaultValue={rule.op}>
+              <Command.List>
+                {operatorsFor(rule.field).map(([op, label]) => (
+                  <Command.Item
+                    key={op}
+                    value={op}
+                    className="filter-row"
+                    onSelect={() => {
+                      patch(rule, {
+                        op,
+                        values: ["empty", "notEmpty"].includes(op)
+                          ? []
+                          : rule.values,
+                      });
+                      setEdit(
+                        !rule.values.length &&
+                          !["empty", "notEmpty"].includes(op)
+                          ? { ...edit, segment: "value" }
+                          : null,
+                      );
+                    }}
+                  >
+                    <span className="flex-1">{label}</span>
+                    {rule.op === op && <Icon name="check" />}
+                  </Command.Item>
+                ))}
+              </Command.List>
+            </Command>
+          ) : isDate(rule.field) ||
+            isNumeric(rule.field) ||
+            ["content", "links"].includes(rule.field) ? (
+            <PropertyFilter
+              inline
+              field={rule.field}
+              name={FIELDS.find(([f]) => f === rule.field)?.[1] ?? rule.field}
+              board={board}
+              onBack={close}
+            />
+          ) : (
+            <Command loop>
+              <Command.Input
+                autoFocus
+                aria-label={`Filter ${FIELDS.find(([f]) => f === rule.field)?.[1]}`}
+                placeholder="Filter…"
+                className="mb-1 w-full p-2 text-[12px] outline-none"
+              />
+              <Command.List className="max-h-[300px] overflow-y-auto">
+                <Command.Empty>No matches</Command.Empty>
+                {choices.map((c) => (
+                  <Command.Item
+                    key={c.value}
+                    value={`${c.label} ${c.value}`}
+                    className="filter-row"
+                    onSelect={() =>
+                      patch(rule, {
+                        values: rule.values.includes(c.value)
+                          ? rule.values.filter((v) => v !== c.value)
+                          : [...rule.values, c.value],
+                      })
+                    }
+                  >
+                    {c.icon}
+                    <span className="flex-1">{c.label}</span>
+                    {rule.values.includes(c.value) && <Icon name="check" />}
+                  </Command.Item>
+                ))}
+              </Command.List>
+            </Command>
+          )}
         </MenuSurface>
       )}
       {filters.join === "or" && chips.length > 1 && (
         <button
-          className="text-fg-3 hover:text-fg-2"
-          title="Issues match any of these filters"
+          className="text-fg-3"
           onClick={() => ui.send({ type: "toolbar.open", toolbar: "advanced" })}
         >
           Any of
         </button>
       )}
-      {chips.map((c) => (
-        <div
-          key={c.id}
-          className="flex h-6 max-w-[320px] items-center overflow-hidden rounded-md border border-line-2 bg-tab"
-        >
-          <button
-            className="truncate px-2"
-            onClick={(e) =>
-              "children" in c
-                ? ui.send({ type: "toolbar.open", toolbar: "advanced" })
-                : setEdit({ id: c.id, anchor: e.currentTarget.parentElement! })
-            }
-          >
-            {"children" in c
-              ? `${c.join.toUpperCase()} group · ${filterCount(c)} rule${filterCount(c) === 1 ? "" : "s"}`
-              : chipText(c)}
-          </button>
-          <button
-            className="mr-1 rounded hover:bg-hover"
-            aria-label={`Remove ${"children" in c ? "filter group" : c.field} filter`}
-            onClick={() =>
-              changePreferences(board.id, { filters: updateFilter(filters, c.id, null) })
-            }
-          >
-            <Icon name="close" size={12} />
-          </button>
-        </div>
-      ))}
+      {chips.map((c) =>
+        "children" in c ? (
+          <div key={c.id} className="view-filter-chip">
+            <button className="view-filter-segment" onClick={() => ui.send({ type: "toolbar.open", toolbar: "advanced" })}>
+              {`${c.join.toUpperCase()} group · ${filterCount(c)} rule${filterCount(c) === 1 ? "" : "s"}`}
+            </button>
+            <button className="view-filter-segment" aria-label="Remove filter group" onClick={() => changePreferences(board.id, { filters: updateFilter(filters, c.id, null) })}>
+              <Icon name="close" size={12} />
+            </button>
+          </div>
+        ) : (
+          <div key={c.id} className="view-filter-chip">
+            <span className="view-filter-segment">
+              {FIELDS.find(([f]) => f === c.field)?.[1]}
+            </span>
+            <button
+              className="view-filter-segment view-filter-operator"
+              aria-label={`${c.field} operator`}
+              onClick={(e) =>
+                setEdit({
+                  rule: c,
+                  segment: "operator",
+                  anchor: e.currentTarget,
+                })
+              }
+            >
+              {c.op === "within" ? "in the last" : c.op === "next" ? "in the next" : operatorsFor(c.field).find(([op]) => op === c.op)?.[1]}
+            </button>
+            {!["empty", "notEmpty"].includes(c.op) && (
+              <button
+                className="view-filter-segment"
+                aria-label={`${c.field} value`}
+                onClick={(e) =>
+                  setEdit({
+                    rule: c,
+                    segment: "value",
+                    anchor: e.currentTarget,
+                  })
+                }
+              >
+                {c.values.map((value, index) => {
+                  const choice = filterChoices(c.field, board, [
+                    ...issues.values(),
+                  ]).find((v) => v.value === value);
+                  return (
+                    <span key={value} className="view-filter-value">
+                      {index > 0 && ", "}
+                      {choice?.icon}
+                      <span>
+                        {["within", "next"].includes(c.op) || c.field === "statusAge"
+                          ? `${value} day${Number(value) === 1 ? "" : "s"}`
+                          : isDate(c.field)
+                          ? value === "P0D"
+                            ? "today"
+                            : shortDate(value)
+                          : (choice?.label ?? value)}
+                      </span>
+                    </span>
+                  );
+                })}
+              </button>
+            )}
+            <button
+              className="view-filter-segment"
+              aria-label={`Remove ${c.field} filter`}
+              onClick={() =>
+                changePreferences(board.id, {
+                  filters: updateFilter(filters, c.id, null),
+                })
+              }
+            >
+              <Icon name="close" size={12} />
+            </button>
+          </div>
+        ),
+      )}
       <button
-        onClick={() => ui.send({ type: "toolbar.open", toolbar: "filter" })}
-        className="grid size-6 place-items-center rounded hover:bg-hover"
+        className="view-filter-add"
         aria-label="Add another filter"
+        onClick={() => ui.send({ type: "toolbar.open", toolbar: "filter" })}
       >
         <Icon name="plus" />
       </button>
-      <button
-        className="ml-1 text-fg-3"
-        onClick={() => changePreferences(board.id, { filters: defaultPreferences().filters })}
-      >
-        Clear
-      </button>
+      <div className="view-filter-actions">
+        <button
+          className="view-filter-action"
+          onClick={() =>
+            view
+              ? clearOverlay()
+              : changePreferences(board.id, {
+                  filters: defaultPreferences().filters,
+                })
+          }
+        >
+          Clear
+        </button>
+        <button
+          className="view-filter-action view-filter-save"
+          aria-haspopup="dialog"
+          aria-expanded={!!saveAnchor}
+          onClick={(e) => setSaveAnchor(e.currentTarget)}
+        >
+          Save <span className="rotate-90"><Icon name="chevron" size={12} /></span>
+        </button>
+      </div>
+      {saveAnchor && (
+        <MenuSurface
+          label="Save filters"
+          anchor={saveAnchor}
+          align="end"
+          width={200}
+          close={() => setSaveAnchor(null)}
+        >
+          <Command
+            className="view-save-menu"
+            loop
+            tabIndex={0}
+            onKeyDownCapture={(event) => {
+              const id = viewShortcutId(event);
+              if (id === "view-create" || (id === "view-save" && view)) {
+                event.preventDefault();
+                event.stopPropagation();
+                if (id === "view-save") void save();
+                else {
+                  setSaveAnchor(null);
+                  createToolbarView();
+                }
+              }
+            }}
+          >
+            <Command.List>
+              {view && (
+                <Command.Item
+                  className="filter-row"
+                  disabled={saving}
+                  onSelect={() => void save()}
+                >
+                  <span className="flex-1">Save to this view</span>
+                  <kbd>⌥S</kbd>
+                </Command.Item>
+              )}
+              <Command.Item
+                className="filter-row"
+                onSelect={() => {
+                  setSaveAnchor(null);
+                  createToolbarView();
+                }}
+              >
+                <span className="flex-1">Create new view…</span>
+                <kbd>⌥V</kbd>
+              </Command.Item>
+            </Command.List>
+          </Command>
+        </MenuSurface>
+      )}
     </div>
   );
 }

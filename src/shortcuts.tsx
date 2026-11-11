@@ -1,5 +1,9 @@
 /* oxlint-disable react/globals -- The single mounted surface publishes current rows to the shared shortcut dispatcher. */
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { viewShortcutId } from "./view-shortcut";
+import { createToolbarView } from "./view-toolbar-actions";
+import { activeView, saveOverlayToView } from "./saved-views";
+import { filterCount } from "./view-model";
 import { canHaveChildren } from "./issue-properties";
 import {
   formatForDisplay,
@@ -550,6 +554,7 @@ export const shortcuts: Shortcut[] = [
       get().favorites.includes(selected()?.key ?? "") ? "Unfavorite issue" : "Mark as favorite",
     group: "Issues",
     hotkey: "Alt+F",
+    when: () => !activeView() || !boardVisible(),
     issue: true,
     run: issueAction((i) => toggleFavorite(i.key)),
   },
@@ -845,6 +850,41 @@ export const shortcuts: Shortcut[] = [
         : ui.send({ type: "toolbar.open", toolbar: "filter" }),
   },
   {
+    id: "view-create",
+    name: "Create new view…",
+    group: "Views",
+    hotkey: "Alt+V",
+    when: () => boardVisible() && !get().inbox,
+    run: createToolbarView,
+  },
+  {
+    id: "view-save",
+    name: "Save to this view",
+    group: "Views",
+    hotkey: "Alt+S",
+    when: () =>
+      boardVisible() && !!activeView() && filterCount(get().overlayFilters) > 0,
+    run: () => {
+      void saveOverlayToView().catch(() =>
+        ui.send({
+          type: "toast.show",
+          text: "Could not save view. Try again.",
+        }),
+      );
+    },
+  },
+  {
+    id: "view-favorite",
+    name: "Favorite / unfavorite view",
+    group: "Views",
+    hotkey: "Alt+F",
+    when: () => boardVisible() && !!activeView(),
+    run: () => {
+      const view = activeView();
+      if (view) toggleFavorite(`view:${view.id}`);
+    },
+  },
+  {
     id: "filter-clear",
     name: "Clear all filters",
     group: "Filters",
@@ -908,9 +948,35 @@ export function runShortcut(id: string, key?: string) {
 export function useLinearHotkeys(getColumns: () => Issue[][]) {
   columns = getColumns;
   const state = useStore((s) => s);
+  useEffect(() => {
+    const handle = (event: KeyboardEvent) => {
+      const id = viewShortcutId(event);
+      if (
+        !id ||
+        event.defaultPrevented ||
+        !get().boards.length ||
+        get().overlay ||
+        get().toolbar
+      )
+        return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest(
+          'input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"],[data-media-interactive]',
+        )
+      )
+        return;
+      if (canRunShortcut(id)) {
+        event.preventDefault();
+        runShortcut(id);
+      }
+    };
+    document.addEventListener("keydown", handle);
+    return () => document.removeEventListener("keydown", handle);
+  }, []);
   useHotkeys(
     shortcuts
-      .filter((entry) => entry.hotkey)
+      .filter((entry) => entry.hotkey && !entry.id.startsWith("view-"))
       .map(
         (entry) =>
           ({

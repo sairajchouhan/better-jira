@@ -2509,21 +2509,6 @@ export async function saveOverlayToView() {
   });
   clearOverlay();
 }
-export async function createViewFromCurrent(
-  name: string,
-  kind: SavedView["kind"] = "custom",
-): Promise<string> {
-  const id = await createSavedView({ ...createViewDraft(kind), name });
-  openSavedView(id);
-  return id;
-}
-export async function saveView(name: string) {
-  try {
-    return await createViewFromCurrent(name);
-  } catch (e) {
-    viewError(e);
-  }
-}
 export function openSavedView(view: SavedView | string) {
   const v = typeof view === "string" ? state.savedViews.find((v) => v.id === view) : view;
   if (!v) return;
@@ -3305,7 +3290,7 @@ export const actions = {
 export function beginViewEditor(draft: ViewDraft) {
   const previous = restoringNavigation;
   restoringNavigation = true;
-  commit({ editorDraft: structuredClone(draft), activeViewId: null, overlayFilters: emptyOverlay() });
+  commit({ editorDraft: structuredClone(draft), viewsPage: false, activeViewId: null, overlayFilters: emptyOverlay() });
   navigate({ board: draft.board, selected: null, panel: false, inbox: false });
   ui.send({ type: "mine.set", mine: draft.mine });
   restoringNavigation = previous;

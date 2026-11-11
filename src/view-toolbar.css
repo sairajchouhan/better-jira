@@ -1,0 +1,104 @@
+.view-filter-row {
+  --chip-bg: lch(100 0 282);
+  --chip-fg: lch(20 1 282);
+  --chip-muted: lch(40 1 282);
+  --chip-border: lch(0 0 0 / 0.088);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin: 0 8px 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow: var(--tab-shadow);
+  font-size: 12px;
+}
+.view-filter-chip {
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+  height: 24px;
+  border: 0.5px solid var(--chip-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--chip-bg);
+  color: var(--chip-fg);
+  font-size: 12px;
+  font-weight: 400;
+}
+.view-filter-segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 23px;
+  min-width: 0;
+  padding: 0 6px;
+  white-space: nowrap;
+  border-right: 0.5px solid var(--chip-border);
+}
+.view-filter-segment:last-child {
+  border-right: 0;
+}
+button.view-filter-segment:hover {
+  background: var(--hover);
+}
+.view-filter-operator {
+  color: var(--chip-muted);
+}
+.view-filter-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.view-filter-value svg,
+.view-filter-value img {
+  width: 12px;
+  height: 12px;
+}
+.view-filter-add {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 9999px;
+}
+.view-filter-add:hover {
+  background: var(--hover);
+}
+.view-filter-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.view-filter-action {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 9999px;
+  color: var(--fg-2);
+  font-size: 12px;
+  font-weight: 500;
+}
+.view-filter-action:hover {
+  background: var(--hover);
+}
+.view-filter-save {
+  background: var(--btn);
+  box-shadow: var(--tab-shadow);
+}
+@media (prefers-color-scheme: dark) {
+  .view-filter-row {
+    --chip-bg: lch(13.861 1.139 272);
+    --chip-fg: lch(90.826 1.425 272);
+    --chip-muted: lch(63.304 1.425 272);
+    --chip-border: lch(100 0 0 / 0.104);
+  }
+}
+.view-filter-actions { gap: 0; }
+.view-filter-action { border: .5px solid transparent; }
+.view-filter-save { display: inline-flex; align-items: center; gap: 4px; box-shadow: none; }
+@media (prefers-color-scheme: light) {
+  .view-filter-row { background: var(--app); }
+}
+[role="dialog"]:has(> .view-save-menu) { padding: 6px; }

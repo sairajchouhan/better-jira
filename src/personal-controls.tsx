@@ -1,9 +1,7 @@
-import { createViewDraft } from "./saved-views";
-import { openViewEditor, ViewMenu, ViewContextMenu } from "./view-editor";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
 /* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { SubIssues, statusOf } from "./sub-issues";
-import { findIssueDocument, resourceMediaIds } from "./issue-resource";
+import { resourceMediaIds } from "./issue-resource";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { Command } from "cmdk";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -34,7 +32,6 @@ import {
   hasLocalJiraChanges,
   ME,
   navigate,
-  openSavedView,
   usePreferences,
   set,
   toggleFavorite,
@@ -1538,104 +1535,6 @@ export function Relations({ issue, close: done }: { issue: Issue; close?: () => 
         </div>
       </Command>
     </Modal>
-  );
-}
-
-export function SaveViewButton() {
-  return (
-    <button
-      aria-label="Save current view"
-      title="Save current view"
-      onClick={() => openViewEditor(createViewDraft())}
-      className="grid size-7 place-items-center rounded-full text-fg-4 hover:bg-hover"
-    >
-      <Icon name="view" size={16} />
-    </button>
-  );
-}
-
-export function SavedViews() {
-  const views = useStore((s) => s.savedViews);
-  if (!views.length) return null;
-  return (
-    <div className="mt-5">
-      <div className="mb-1 px-2 text-[12px] text-fg-3">Saved views</div>
-      {views.map((view) => (
-        <ViewContextMenu key={view.id} view={view}>
-          <div className="group flex items-center gap-1 rounded-lg hover:bg-hover">
-            <button
-              onClick={() => openSavedView(view)}
-              className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-fg-2"
-            >
-              <Icon name="filter" />
-              <span className="truncate">{view.name}</span>
-            </button>
-            <ViewMenu view={view}>
-              <button
-                aria-label={`View options for ${view.name}`}
-                className="mr-1 p-1 text-fg-3 hover:text-fg"
-              >
-                <Icon name="dots" />
-              </button>
-            </ViewMenu>
-          </div>
-        </ViewContextMenu>
-      ))}
-    </div>
-  );
-}
-
-export function Favorites() {
-  const favorites = useStore((s) => s.favorites),
-    boards = useStore((s) => s.boards),
-    issues = useStore((s) => s.issues);
-  if (!favorites.length) return null;
-  return (
-    <div className="mt-5">
-      <div className="mb-1 px-2 text-[12px] text-fg-3">Favorites</div>
-      {favorites.map((id) => {
-        const document = id.startsWith("document:")
-          ? findIssueDocument(issues.values(), id.slice(9))
-          : undefined;
-        if (document)
-          return (
-            <button
-              key={id}
-              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-fg-2 hover:bg-hover"
-              onClick={() =>
-                navigate({
-                  board: document.issue.board,
-                  selected: document.issue.key,
-                  panel: true,
-                  document: document.resource.id,
-                })
-              }
-            >
-              <Icon name="file" />
-              <span className="truncate">{document.resource.title || "New document"}</span>
-            </button>
-          );
-        const [, boardId] = id.split(":"),
-          board = boards.find((b) => b.id === Number(boardId)),
-          issue = issues.get(id);
-        if (!board && !issue) return null;
-        return (
-          <button
-            key={id}
-            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-fg-2 hover:bg-hover"
-            onClick={() => {
-              if (issue) navigate({ board: issue.board, selected: issue.key, panel: true });
-              else if (board) navigate({ board: board.id, panel: false, selected: null });
-            }}
-          >
-            <span className="text-fg-3">☆</span>
-            <span className="truncate">
-              {issue ? `${issue.key} ${issue.summary}` : board!.name}
-            </span>
-          </button>
-        );
-      })}
-    </div>
   );
 }
 
