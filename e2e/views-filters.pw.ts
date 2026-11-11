@@ -2,7 +2,7 @@
 import { expect, test, sleep, PREFS_KEY } from "./app";
 
 const root = `document.querySelector('[aria-label="Add Filter…"]')`;
-const chips = `[...document.querySelectorAll("button.truncate")].map(b=>b.textContent)`;
+const chips = `[...document.querySelectorAll(".view-filter-chip")].map(b=>b.textContent)`;
 const stored = `JSON.parse(localStorage.getItem(${JSON.stringify(PREFS_KEY)})??"{}")[1]`;
 
 test("filter menu: the first F after load opens it without a loading step, and the Overdue preset saves a relative filter", async ({
@@ -28,7 +28,7 @@ test("filter menu: the first F after load opens it without a loading step, and t
     await page.hover("text=Due date");
     await page.waitFor(`!!document.querySelector('input[aria-label="Due date"]')`);
     await page.click("text=Overdue");
-    await page.waitFor(`${chips}.includes("Overdue")`);
+    await page.waitFor(`${chips}.includes("Due datebeforetoday")`);
     await page.waitFor(`${stored}?.filters?.children?.[0]?.values?.[0]==="P0D"`);
   });
 });
@@ -63,11 +63,12 @@ test("R2-D5: a chip switched from is empty back to is and closed without a value
     setup: `if(!sessionStorage.seeded){sessionStorage.seeded=1;localStorage.setItem(${JSON.stringify(PREFS_KEY)},${JSON.stringify(JSON.stringify({ 1: { filters } }))})}`,
   });
   try {
-    await page.click("text=Priority is High");
-    await page.click('[aria-label="Priority operator"] button:nth-child(3)'); // is empty
-    await page.waitFor(`${chips}.includes("Priority is empty")`);
-    await page.click('[aria-label="Priority operator"] button:nth-child(1)'); // is
-    await page.waitFor(`${chips}.includes("Priority is ")`);
+    await page.click('[aria-label="priority operator"]');
+    await page.click('[cmdk-item][data-value="empty"]'); // is empty
+    await page.waitFor(`${chips}.includes("Priorityis empty")`);
+    await page.click('[aria-label="priority operator"]');
+    await page.click('[cmdk-item][data-value="is"]'); // is
+    await page.waitFor(`${chips}.includes("Priorityis")`);
     await page.key("Escape");
     await page.waitFor(`!${chips}.some(c=>c.startsWith("Priority"))`);
     expect(await page.eval(`${stored}?.filters?.children?.length ?? 0`)).toBe(0);

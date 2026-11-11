@@ -75,21 +75,21 @@ test("Add filter by mouse: search, hover submenus, multi-select and chips", asyn
     const page = await open("", { setup });
     await page.waitFor(`${cards}===1`);
     const chip = await page.rect('[aria-label="Remove labels filter"]');
-    await page.click("text=Labels is ui");
+    await page.click('[aria-label="labels operator"]');
     await page.waitFor(
-      `!!document.querySelector('[role=dialog][aria-label="Edit Labels filter"]')`,
+      `!!document.querySelector('[role=dialog][aria-label="Labels operator"]')`,
     );
     expect(await page.eval(`!!document.querySelector('[aria-label="Advanced filter"]')`)).toBe(
       false,
     );
-    const menu = await page.rect('[role=dialog][aria-label="Edit Labels filter"]');
+    const menu = await page.rect('[role=dialog][aria-label="Labels operator"]');
     expect(menu.top).toBeGreaterThanOrEqual(chip.bottom);
     expect(menu.top - chip.bottom).toBeLessThan(40);
-    await page.click('[role=group][aria-label="Labels operator"] button:nth-child(2)');
+    await page.click('[cmdk-item][data-value="isNot"]');
     await page.waitFor(`${cards}===5`);
     expect(
       await page.eval(
-        `[...document.querySelectorAll("button")].some(b=>b.textContent==="Labels is not ui")`,
+        `document.querySelector(".view-filter-chip")?.textContent==="Labelsis notui"`,
       ),
     ).toBe(true);
   });

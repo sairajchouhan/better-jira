@@ -3,7 +3,7 @@ import { expect, test, PREFS_KEY, fixture, type App as Page } from "./app";
 
 const seed = (prefs: object, extra = "") =>
   `if(!sessionStorage.seeded){sessionStorage.seeded=1;localStorage.setItem(${JSON.stringify(PREFS_KEY)},${JSON.stringify(JSON.stringify(prefs))});${extra}}`;
-const chips = `[...document.querySelectorAll("button.truncate")].map(b=>b.textContent)`;
+const chips = `[...document.querySelectorAll(".view-filter-chip")].map(b=>b.textContent)`;
 const cards = `document.querySelectorAll("[data-key]").length`;
 /** Reloads the page with these view preferences. A view that shows no cards (`empty`) is waited for by its filter bar,
  *  since `reload` waits for a card. */
@@ -14,7 +14,7 @@ async function show(page: Page, prefs: object, empty = false) {
   if (!empty) return page.reload();
   await page.page.reload();
   await page.waitFor(
-    `!!document.querySelector('[aria-label="Add filter"]')&&!document.querySelector("[data-key]")`,
+    `!!document.querySelector('[aria-label="Add another filter"]')&&!document.querySelector("[data-key]")`,
   );
 }
 
@@ -122,17 +122,17 @@ test("display preferences: card dates, filter chips, empty views and pill menus"
       ],
     };
     await show(page, { 1: { filters } }, true);
-    await page.waitFor(`document.querySelectorAll("button.truncate").length===5`);
+    await page.waitFor(`document.querySelectorAll(".view-filter-chip").length===5`);
     expect(await page.eval(chips)).toEqual([
-      "Due date in the last 3 days",
-      "Time in current status less than 1 day",
-      "Created date before Nov 8",
-      "Priority is High",
+      "Due datein the last3 days",
+      "Time in current statusless than1 day",
+      "Created datebeforeNov 8",
+      "PriorityisHigh",
       "OR group · 1 rule",
     ]);
-    await page.click("text=Priority is High");
-    await page.click('[aria-label="Priority operator"] [aria-pressed=false]:nth-last-child(2)');
-    await page.waitFor(`${chips}.includes("Priority is empty")`);
+    await page.click('[aria-label="priority operator"]');
+    await page.click('[cmdk-item][data-value="empty"]');
+    await page.waitFor(`${chips}.includes("Priorityis empty")`);
     await page.key("Escape");
   });
   await test.step("R1-D92: an empty view counts the issues filters hide and clears them", async () => {
