@@ -1067,20 +1067,15 @@ export function IssueOptions({ issue }: { issue: Issue }) {
   );
 }
 
+/** The create form's attachments: an attach button that saves chosen files locally, then the list. */
 export function Attachments({
   attachments = [],
   onChange,
   onBusy,
-  choose,
-  issueKey,
-  hideChooser = false,
 }: {
   attachments: Issue["attachments"];
   onChange: (files: NonNullable<Issue["attachments"]>) => void;
   onBusy?: (busy: boolean) => void;
-  choose?: (files: File[]) => void;
-  issueKey?: string;
-  hideChooser?: boolean;
 }) {
   const file = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false),
@@ -1096,11 +1091,6 @@ export function Attachments({
         onChange={async (e) => {
           const input = e.currentTarget,
             selected = [...(input.files ?? [])];
-          if (choose) {
-            choose(selected);
-            input.value = "";
-            return;
-          }
           setBusy(true);
           onBusy?.(true);
           setError("");
@@ -1116,50 +1106,61 @@ export function Attachments({
           }
         }}
       />
-      {!hideChooser && (
-        <button
-          type="button"
-          disabled={busy}
-          aria-label="Attach images, files, or videos"
-          onClick={() => file.current?.click()}
-          className="text-fg-3 hover:text-fg disabled:opacity-40"
-        >
-          {busy ? "Saving file…" : "+ Attach file"}
-        </button>
-      )}
+      <button
+        type="button"
+        disabled={busy}
+        aria-label="Attach images, files, or videos"
+        onClick={() => file.current?.click()}
+        className="text-fg-3 hover:text-fg disabled:opacity-40"
+      >
+        {busy ? "Saving file…" : "+ Attach file"}
+      </button>
       {error && (
         <p role="alert" className="mt-2 text-fg-3">
           {error}
         </p>
       )}
-      {attachments.map((a) => (
-        <div key={a.id} className="relative mt-2">
-          <MediaView
-            node={{ type: "media", attrs: { id: a.id, type: "file" } }}
-            issueKey={issueKey}
-            attachments={attachments}
-          />
-          <button
-            type="button"
-            aria-label={`Remove attachment ${a.name}`}
-            className="absolute right-1 -top-2 z-10 rounded bg-card p-1"
-            onClick={(e) => {
-              const scope = e.currentTarget.closest('[role="dialog"]') ?? document;
-              onChange(attachments.filter((f) => f.id !== a.id));
-              // Focus returns to the attach button, as after removing a resource, not to <body>.
-              requestAnimationFrame(() =>
-                scope
-                  .querySelector<HTMLElement>('[aria-label="Attach images, files, or videos"]')
-                  ?.focus(),
-              );
-            }}
-          >
-            <Icon name="close" />
-          </button>
-        </div>
-      ))}
+      <AttachmentList attachments={attachments} onChange={onChange} />
     </div>
   );
+}
+
+/** Attached files, each with a remove button that returns focus to the nearest attach button. */
+function AttachmentList({
+  attachments,
+  onChange,
+  issueKey,
+}: {
+  attachments: NonNullable<Issue["attachments"]>;
+  onChange: (files: NonNullable<Issue["attachments"]>) => void;
+  issueKey?: string;
+}) {
+  return attachments.map((a) => (
+    <div key={a.id} className="relative mt-2">
+      <MediaView
+        node={{ type: "media", attrs: { id: a.id, type: "file" } }}
+        issueKey={issueKey}
+        attachments={attachments}
+      />
+      <button
+        type="button"
+        aria-label={`Remove attachment ${a.name}`}
+        className="absolute right-1 -top-2 z-10 rounded bg-card p-1"
+        onClick={(e) => {
+          const scope = e.currentTarget.closest('[role="dialog"]') ?? document;
+          onChange(attachments.filter((f) => f.id !== a.id));
+          // Focus returns to the attach button, as after removing a resource, not to <body>.
+          requestAnimationFrame(() =>
+            scope
+              .querySelector<HTMLElement>('[aria-label="Attach images, files, or videos"]')
+              ?.focus(),
+          );
+        }}
+      >
+        <Icon name="close" />
+      </button>
+    </div>
+  ));
 }
 
 export function PersonalIssueDetails({ issue }: { issue: Issue }) {
@@ -1222,14 +1223,16 @@ export function PersonalIssueDetails({ issue }: { issue: Issue }) {
           choose={toggleReaction}
         />
       )}
-      <Attachments
-        hideChooser
-        issueKey={issue.key}
-        attachments={visible}
-        onChange={(attachments) =>
-          actions.patch(issue.key, { attachments: [...embedded, ...attachments] })
-        }
-      />
+      {/* The paperclip above attaches through the description editor; this is only the list. */}
+      <div className="mt-3 text-[12px]">
+        <AttachmentList
+          issueKey={issue.key}
+          attachments={visible}
+          onChange={(attachments) =>
+            actions.patch(issue.key, { attachments: [...embedded, ...attachments] })
+          }
+        />
+      </div>
 
       <SubIssues key={issue.key} issue={issue} />
       <IssueResources issue={issue} />
