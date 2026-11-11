@@ -1,4 +1,5 @@
 import { savedViewClient } from "./saved-view-client";
+import { effectiveSettings, setScope, viewSettings } from "./view-settings";
 import { useSyncExternalStore } from "react";
 import { adfToText } from "./adf";
 import {
@@ -659,55 +660,9 @@ const fetchJson = <T>(path: string, staleTime = 0) =>
 if (typeof window !== "undefined")
   Object.assign(window, { machines: { ui, app, storage }, queryClient, loadFull });
 
-const fallbackPreferences = defaultPreferences();
-export const preferencesFor = (board: number) =>
-  (board === state.board ? state.viewPreferences : null) ??
-  state.preferences[board] ??
-  fallbackPreferences;
-export const usePreferences = (board: number) =>
-  useStore(
-    (s) =>
-      (board === s.board ? s.viewPreferences : null) ??
-      s.preferences[board] ??
-      fallbackPreferences,
-  );
-export const effectivePreferencesFor = (board: number) =>
-  (board === state.board ? state.effectiveViewPreferences : null) ?? preferencesFor(board);
-export const useEffectivePreferences = (board: number) =>
-  useStore(
-    (s) =>
-      (board === s.board ? s.effectiveViewPreferences : null) ??
-      s.preferences[board] ??
-      fallbackPreferences,
-  );
-export function changePreferences(board: number, patch: Partial<Preferences>) {
-  if (state.editorDraft && board === state.board) {
-    commit({ editorDraft: { ...state.editorDraft, ...patch } });
-    return;
-  }
-  if (state.activeViewId && board === state.board) {
-    if (patch.filters) commit({ overlayFilters: patch.filters });
-    const { display, scope } = patch;
-    if (display || scope)
-      void updateSavedView(state.activeViewId, {
-        ...(display ? { display } : {}),
-        ...(scope ? { scope } : {}),
-      }).catch(viewError);
-    return;
-  }
-  const prefs = { ...preferencesFor(board), ...patch };
-  set({ preferences: { ...state.preferences, [board]: prefs } });
-  if (board === state.board) navigate({ view: prefs.display.openIn });
-}
-export function changeDisplay(board: number, patch: Partial<Display>) {
-  const display = { ...preferencesFor(board).display, ...patch };
-  if (display.layout === "board" && display.columns === "none") display.columns = "status";
-  if (display.rows === display.columns) display.rows = "none";
-  changePreferences(board, { display });
-}
 export async function saveDefault(board: number) {
   if (state.activeViewId) return;
-  const display = preferencesFor(board).display;
+  const display = viewSettings(board).display;
   try {
     const defaults = { ...state.defaults, [board]: structuredClone(display) };
     localStorage.setItem(preferenceKey("better-jira:defaults:v1"), JSON.stringify(defaults));
@@ -2398,7 +2353,7 @@ export function beginCreate(draft: IssueDraft = {}) {
     set({ perf: "Retry local storage before creating an issue" });
     return;
   }
-  const prefs = preferencesFor(state.board),
+  const prefs = viewSettings(state.board),
     board = state.boards.find((b) => b.id === state.board);
   const status =
     prefs.scope === "active"
@@ -2465,7 +2420,7 @@ export function createViewDraft(
   kind: SavedView["kind"] = "custom",
   board = state.board,
 ): ViewDraft {
-  const p = effectivePreferencesFor(board);
+  const p = effectiveSettings(board);
   return structuredClone({
     board,
     kind,
@@ -2515,7 +2470,7 @@ export function openAllIssues(board: number) {
   ui.send({ type: "mine.set", mine: false });
   ui.send({ type: "query.set", query: "" });
   set({ details: false, findInView: false });
-  changePreferences(board, { scope: "all" });
+  setScope(board, "all");
 }
 export function clearOverlay() {
   set({ overlayFilters: emptyOverlay() });

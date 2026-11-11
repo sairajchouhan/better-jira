@@ -1,5 +1,6 @@
 import { navigationChoices } from "./quick-navigation";
-import { useEffectiveMine, useActiveView, useSavedViews, useOverlayFilters, createViewDraft, editViewDraft, duplicateViewDraft, saveOverlayToView, clearOverlay } from "./saved-views";
+import { useEffectiveMine, useActiveView, useSavedViews, useOverlayFilters, createViewDraft, editViewDraft, duplicateViewDraft, saveOverlayToView } from "./saved-views";
+import { clearFilters, hideGroup, setScope, showGroup, toggleCollapsed, useEffectiveSettings, useViewSettings } from "./view-settings";
 import { openViewEditor, ViewMenu, ViewContextMenu, ViewEditorPage, ViewDeleteDialog } from "./view-editor";
 import { canMergeOverlay } from "./saved-view-model";
 import { createToolbarView } from "./view-toolbar-actions";
@@ -62,7 +63,6 @@ import {
   openSavedView,
   openAllIssues as openBoardIssues,
   beginCreate,
-  changePreferences,
   downloadLocalBackup,
   flushLocalChanges,
   issueURL,
@@ -74,8 +74,6 @@ import {
   toggleFavorite,
   undoEdit,
   redoEdit,
-  usePreferences,
-  useEffectivePreferences,
   type Board,
   type Issue,
   type User,
@@ -386,7 +384,7 @@ const BoardView = memo(function BoardView({
   const query = useStore((s) => s.query);
   const details = useStore((s) => s.details);
   const panel = useStore((s) => s.panel);
-  const prefs = useEffectivePreferences(board.id);
+  const prefs = useEffectiveSettings(board.id);
   const d = prefs.display;
   const [expanded, setExpanded] = useState<string[]>([]);
   const [hiddenOpen, setHiddenOpen] = useState(true);
@@ -459,31 +457,20 @@ const BoardView = memo(function BoardView({
   }, [active, selected, visible]);
 
   const hide = (id: string) =>
-    changePreferences(board.id, { hidden: { ...prefs.hidden, [d.columns]: [...hiddenIds, id] } });
+    hideGroup(board.id, id);
   const reveal = (id: string) => {
-    changePreferences(board.id, {
-      hidden: { ...prefs.hidden, [d.columns]: hiddenIds.filter((x) => x !== id) },
-    });
+    showGroup(board.id, id);
     setExpanded([...expanded, id]);
   };
-  const collapse = (id: string) =>
-    changePreferences(board.id, {
-      collapsed: {
-        ...prefs.collapsed,
-        [d.columns]: collapsed.includes(id)
-          ? collapsed.filter((x) => x !== id)
-          : [...collapsed, id],
-      },
-    });
+  const collapse = (id: string) => toggleCollapsed(board.id, [id]);
   const createIn = (bucket: Bucket, row?: Bucket) =>
     beginCreate({
       ...draftForGroup(d.columns, bucket.id, board, universe, prefs.scope),
       ...(row ? draftForGroup(d.rows, row.id, board, universe, prefs.scope) : {}),
     });
   const baseline = selectIssues(all, board, { ...prefs, filters: activeView && activeView.board === board.id ? activeView.filters : defaultPreferences().filters }, activeView?.mine ?? false, "", ME.id).length;
-  const clearFilters = () => {
-    if (activeView) clearOverlay();
-    else changePreferences(board.id, { filters: defaultPreferences().filters });
+  const clearAll = () => {
+    clearFilters(board.id);
     ui.send({ type: "query.set", query: "" });
     ui.send({ type: "mine.set", mine: activeView?.mine ?? false });
     set({ findInView: false });
@@ -491,7 +478,7 @@ const BoardView = memo(function BoardView({
   return (
     <div className={`${shown ? "flex" : "hidden"} min-w-0 min-h-0 flex-1`}>
       <div className="relative flex min-w-0 min-h-0 flex-1 flex-col" data-layout={d.layout}>
-        {!visible.length && <ResultsFeedback count={0} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !activeView?.mine)} clear={clearFilters} />}
+        {!visible.length && <ResultsFeedback count={0} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !activeView?.mine)} clear={clearAll} />}
         {d.layout === "list" ? (
           <div className="flex-1 overflow-auto py-1">
             {show.map((c) => (
@@ -524,7 +511,7 @@ const BoardView = memo(function BoardView({
               </section>
             ))}
             {/* Linear's list footer scrolls with the rows, right after the last one. */}
-            {visible.length > 0 && <ResultsFeedback count={visible.length} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !activeView?.mine)} clear={clearFilters} />}
+            {visible.length > 0 && <ResultsFeedback count={visible.length} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !activeView?.mine)} clear={clearAll} />}
           </div>
         ) : (
           <div className="flex min-h-0 flex-1">
@@ -646,7 +633,7 @@ const BoardView = memo(function BoardView({
                 </div>
               </details>
             )}
-        {d.layout === "board" && visible.length > 0 && <ResultsFeedback count={visible.length} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !activeView?.mine)} clear={clearFilters} layout="board" />}
+        {d.layout === "board" && visible.length > 0 && <ResultsFeedback count={visible.length} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !activeView?.mine)} clear={clearAll} layout="board" />}
       </div>
       {active && shown && details && !panel && (activeView ? <ViewDetails view={activeView} issues={visible} /> : <BoardDetails board={board} issues={visible} />)}
     </div>
@@ -808,7 +795,7 @@ function QuickNavigation({ kind }: { kind: "favorites" | "views" | "boards" }) {
                 else {
                   const { scope, ...route } = to;
                   navigate(route);
-                  if (scope) changePreferences(to.board, { scope });
+                  if (scope) setScope(to.board, scope);
                 }
               }}
               className="p-2 data-[selected=true]:bg-sel"
@@ -1252,7 +1239,7 @@ function BoardHeader() {
   const draft = useStore((s) => s.editorDraft);
   const custom = (draft ?? activeView)?.kind === "custom";
   const details = useStore((s) => s.details);
-  const prefs = usePreferences(board!.id);
+  const prefs = useViewSettings(board!.id);
   const finding = useStore((s) => s.findInView);
   const findRef = useRef<HTMLInputElement>(null);
   useHotkey(
@@ -1304,7 +1291,7 @@ function BoardHeader() {
           <button
             key={scope}
             aria-pressed={!activeView && !draft && prefs.scope === scope}
-            onClick={() => { navigate({ board: board!.id, selected: null, panel: false }); changePreferences(board!.id, { scope }); }}
+            onClick={() => { navigate({ board: board!.id, selected: null, panel: false }); setScope(board!.id, scope); }}
             className={`${PILL} ${!activeView && !draft && prefs.scope === scope ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2"}`}
           >
             {scope === "active" ? "Active" : scope === "backlog" ? "Backlog" : "All issues"}

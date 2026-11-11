@@ -867,7 +867,8 @@ test("sync review 3-2: a write Jira can't settle yet backs off behind other issu
 }, 20_000);
 
 test("opening saved views and changing their overlay never writes board preferences", async () => {
-  const { get, set, openSavedView, changePreferences, navigate, preferencesFor, effectivePreferencesFor } = await import("./store");
+  const { get, set, openSavedView, navigate } = await import("./store");
+  const { setRule, viewSettings, effectiveSettings } = await import("./view-settings");
   const { defaultPreferences } = await import("./view-model");
   const p = defaultPreferences();
   const view = {id:"identity-test",board:1,kind:"custom" as const,name:"Identity",description:"",icon:"filter",color:"gray",filters:{...p.filters,children:[{id:"saved",field:"status" as const,op:"is" as const,values:["todo"]}]},display:{...p.display,openIn:"page" as const},scope:p.scope,mine:false,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
@@ -875,11 +876,11 @@ test("opening saved views and changing their overlay never writes board preferen
   const before = JSON.stringify(get().preferences);
   openSavedView(view);
   expect(get().activeViewId).toBe(view.id);
-  expect(preferencesFor(1).filters.children).toHaveLength(0);
-  expect(effectivePreferencesFor(1).filters.children).toHaveLength(1);
-  changePreferences(1,{filters:{...p.filters,children:[{id:"temp",field:"labels",op:"is",values:["urgent"]}]}});
+  expect(viewSettings(1).filters.children).toHaveLength(0);
+  expect(effectiveSettings(1).filters.children).toHaveLength(1);
+  setRule(1,{id:"temp",field:"labels",op:"is",values:["urgent"]});
   expect(JSON.stringify(get().preferences)).toBe(before);
-  expect(effectivePreferencesFor(1).filters.children).toHaveLength(2);
+  expect(effectiveSettings(1).filters.children).toHaveLength(2);
   const second = {...view,id:"second-identity",display:{...view.display,layout:"list" as const}};
   set({savedViews:[view,second]});
   openSavedView(second);
@@ -919,9 +920,10 @@ test("BJ-128: Save to this view refuses an overlay the saved base excludes", asy
 });
 
 test("BJ-132: a new custom view starts as a list with details open; a tab keeps the board layout", async () => {
-  const { get, set, navigate, createViewDraft, createSavedView, changeDisplay, openSavedView } = await import("./store");
+  const { get, set, navigate, createViewDraft, createSavedView, openSavedView } = await import("./store");
+  const { setDisplay } = await import("./view-settings");
   navigate({ board: 1 });
-  changeDisplay(1, { layout: "board" });
+  setDisplay(1, { layout: "board" });
   set({ details: false });
   expect(createViewDraft("tab").display.layout).toBe("board");
   const draft = createViewDraft("custom");
@@ -958,16 +960,17 @@ test("BJ-142: a custom view remembers its details panel; boards keep their own",
 });
 
 test("BJ-142: deleting the active view lands on the board's All issues", async () => {
-  const { get, set, navigate, openSavedView, deleteSavedView, changePreferences, preferencesFor } = await import("./store");
+  const { get, set, navigate, openSavedView, deleteSavedView } = await import("./store");
+  const { setScope, viewSettings } = await import("./view-settings");
   const view = await viewFixture({ id: "doomed", scope: "active" as const });
   set({ savedViews: [view] });
   navigate({ board: 1 });
-  changePreferences(1, { scope: "backlog" });
+  setScope(1, "backlog");
   openSavedView(view);
   await withFetch(() => ({}), () => deleteSavedView(view.id));
   expect(get().activeViewId).toBeNull();
   expect(get().savedViews).toHaveLength(0);
-  expect(preferencesFor(1).scope).toBe("all");
+  expect(viewSettings(1).scope).toBe("all");
   expect(new URL(location.href).pathname).toBe("/");
 });
 
@@ -993,4 +996,56 @@ test("BJ-137: the view address is /view/<slug>-<id> and follows a rename", async
     await updateSavedView(view.id, { name: "Bugs only" });
   });
   expect(new URL(location.href).pathname).toBe("/view/bugs-only-8f1c");
+});
+
+test("view settings: removing a rule on a saved view edits only its overlay", async () => {
+  const { get, set, navigate, openSavedView } = await import("./store");
+  const { setRule, updateRule, viewSettings, effectiveSettings } = await import("./view-settings");
+  const view = await viewFixture({ id: "overlay-remove" });
+  set({ savedViews: [view] });
+  navigate({ board: 1 });
+  const before = JSON.stringify(get().preferences);
+  openSavedView(view);
+  setRule(1, { id: "a", field: "labels", op: "is", values: ["urgent"] });
+  setRule(1, { id: "b", field: "priority", op: "is", values: ["High"] });
+  updateRule(1, "a", null);
+  expect(get().overlayFilters.children.map((c) => c.id)).toEqual(["b"]);
+  expect(viewSettings(1).filters.children.map((c) => c.id)).toEqual(["b"]);
+  expect(effectiveSettings(1).filters.children.map((c) => ("field" in c ? c.field : ""))).toEqual(["status", "priority"]);
+  expect(get().savedViews[0]!.filters).toEqual(view.filters);
+  expect(JSON.stringify(get().preferences)).toBe(before);
+});
+
+test("view settings: clear on a saved view keeps its base filter", async () => {
+  const { get, set, navigate, openSavedView } = await import("./store");
+  const { clearFilters, setRule, effectiveSettings } = await import("./view-settings");
+  const view = await viewFixture({ id: "overlay-clear" });
+  set({ savedViews: [view] });
+  navigate({ board: 1 });
+  openSavedView(view);
+  setRule(1, { id: "a", field: "labels", op: "is", values: ["urgent"] });
+  clearFilters(1);
+  expect(get().overlayFilters.children).toHaveLength(0);
+  expect(get().savedViews[0]!.filters).toEqual(view.filters);
+  expect(effectiveSettings(1).filters.children.map((c) => c.id)).toEqual(["saved"]);
+});
+
+test("view settings: an edit in the view editor goes to the draft", async () => {
+  const { get, set, navigate, beginViewEditor, createViewDraft, discardViewEditor } = await import("./store");
+  const { setRule, setDisplay, setScope, clearFilters, viewSettings } = await import("./view-settings");
+  navigate({ board: 1 });
+  set({ savedViews: [] });
+  const before = JSON.stringify(get().preferences);
+  beginViewEditor(createViewDraft("custom", 1));
+  setRule(1, { id: "a", field: "labels", op: "is", values: ["urgent"] });
+  setDisplay(1, { layout: "board" });
+  setScope(1, "backlog");
+  expect(get().editorDraft!.filters.children.map((c) => c.id)).toEqual(["a"]);
+  expect(get().editorDraft!.display.layout).toBe("board");
+  expect(get().editorDraft!.scope).toBe("backlog");
+  expect(viewSettings(1).filters.children.map((c) => c.id)).toEqual(["a"]);
+  clearFilters(1);
+  expect(get().editorDraft!.filters.children).toHaveLength(0);
+  expect(JSON.stringify(get().preferences)).toBe(before);
+  discardViewEditor();
 });

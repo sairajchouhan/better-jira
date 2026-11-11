@@ -25,14 +25,12 @@ import {
   addLocalFiles,
   beginCreate,
   boardOf,
-  changePreferences,
   get,
   issueURL,
   isLocalIssue,
   hasLocalJiraChanges,
   ME,
   navigate,
-  usePreferences,
   set,
   toggleFavorite,
   ui,
@@ -47,10 +45,10 @@ import {
   buckets,
   newId,
   priorityRank,
-  updateFilter,
   type Field,
   type Grouping,
 } from "./view-model";
+import { setOnlyRule, updateRule, useViewSettings } from "./view-settings";
 
 const INPUT =
   "w-full rounded-md border border-line-2 bg-card px-3 py-2 text-fg outline-none focus:border-accent";
@@ -691,7 +689,7 @@ export function PropertyPicker({
 
 export function BoardDetails({ board, issues }: { board: Board; issues: Issue[] }) {
   const [tab, setTab] = useState<Grouping>("assignee");
-  const { filters } = usePreferences(board.id);
+  const { filters } = useViewSettings(board.id);
   const tabs: [Grouping, string][] = [
     ["assignee", "Assignees"],
     ["label", "Labels"],
@@ -735,17 +733,9 @@ export function BoardDetails({ board, issues }: { board: Board; issues: Issue[] 
               aria-pressed={!!active}
               title={active ? "Clear filter" : undefined}
               onClick={() =>
-                changePreferences(board.id, {
-                  filters: active
-                    ? updateFilter(filters, active.id, null)
-                    : {
-                        ...filters,
-                        children: [
-                          ...filters.children.filter((c) => !("field" in c && c.field === field)),
-                          { id: newId(), field, op: "is", values: [group.id] },
-                        ],
-                      },
-                })
+                active
+                  ? updateRule(board.id, active.id, null)
+                  : setOnlyRule(board.id, { id: newId(), field, op: "is", values: [group.id] })
               }
               className={`mb-1 flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-[12px] hover:bg-hover ${active ? "bg-sel text-fg" : ""}`}
             >

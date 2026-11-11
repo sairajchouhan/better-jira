@@ -1,6 +1,7 @@
 import "./view-toolbar.css";
 import { Command } from "cmdk";
-import { useActiveView, useOverlayFilters, clearOverlay, saveOverlayToView } from "./saved-views";
+import { useActiveView, useOverlayFilters, saveOverlayToView } from "./saved-views";
+import { clearFilters, resetDisplay, setDisplay, updateRule, useViewSettings } from "./view-settings";
 import { canMergeOverlay } from "./saved-view-model";
 import { viewShortcutId } from "./view-shortcut";
 import { createToolbarView } from "./view-toolbar-actions";
@@ -25,14 +26,10 @@ import { PillSelect } from "./pill-select";
 import { Icon } from "./icons";
 import { shortDate } from "./due-date";
 import {
-  changeDisplay,
-  changePreferences,
   ME,
-  preferencesFor,
   saveDefault,
   timed,
   ui,
-  usePreferences,
   useStore,
   type Issue,
   type Board,
@@ -52,7 +49,6 @@ import {
   ORDERINGS,
   PROPERTIES,
   selectIssues,
-  updateFilter,
   type Display,
   type Field,
   type FilterGroup,
@@ -227,7 +223,7 @@ function AddFilterButton({
 export function BoardControls({ board }: { board: Board }) {
   const view = useActiveView();
   const toolbar = useStore((s) => s.toolbar);
-  const preferences = usePreferences(board.id);
+  const preferences = useViewSettings(board.id);
   const savedDefault = useStore((s) => s.defaults[board.id]);
   const filterRef = useRef<HTMLButtonElement>(null);
   const displayRef = useRef<HTMLButtonElement>(null);
@@ -332,12 +328,11 @@ function Toggle({
   );
 }
 function DisplayMenu({ board }: { board: Board }) {
-  const { display: d } = usePreferences(board.id);
+  const { display: d } = useViewSettings(board.id);
   // Saved views and the view editor own their display, so the board-default footer stays out (Linear).
   const inView = useStore((s) => !!s.activeViewId || !!s.editorDraft);
-  const defaults = useStore((s) => s.defaults);
   const [saving, setSaving] = useState(false);
-  const patch = (p: Partial<Display>) => timed("display", () => changeDisplay(board.id, p));
+  const patch = (p: Partial<Display>) => timed("display", () => setDisplay(board.id, p));
   return (
     <div
       role="dialog"
@@ -465,7 +460,7 @@ function DisplayMenu({ board }: { board: Board }) {
       {!inView && <div className="mt-3 flex justify-end gap-3 border-t border-line-2 pt-2 text-[11px]">
         <button
           title="Reset to the saved default for this board"
-          onClick={() => changeDisplay(board.id, defaults[board.id] ?? defaultDisplay())}
+          onClick={() => resetDisplay(board.id)}
         >
           Reset
         </button>
@@ -491,7 +486,7 @@ const plural = (noun: string) =>
   /[^aeiou]y$/.test(noun) ? `${noun.slice(0, -1)}ies` : /(s|x|ch|sh)$/.test(noun) ? (noun.endsWith("s") && !/(us|ss)$/.test(noun) ? noun : `${noun}es`) : `${noun}s`;
 
 export function FilterChips({ board }: { board: Board }) {
-  const { filters } = usePreferences(board.id);
+  const { filters } = useViewSettings(board.id);
   const view = useActiveView();
   const overlay = useOverlayFilters();
   // Inside the view editor these chips are the definition being edited; the editor owns Cancel/Save.
@@ -508,15 +503,10 @@ export function FilterChips({ board }: { board: Board }) {
   const rule = filters.children.find(
     (c): c is Rule => !("children" in c) && c.id === edit?.rule.id,
   );
-  const patch = (r: Rule, change: Partial<Rule>) =>
-    changePreferences(board.id, {
-      filters: updateFilter(preferencesFor(board.id).filters, r.id, change),
-    });
+  const patch = (r: Rule, change: Partial<Rule>) => updateRule(board.id, r.id, change);
   const close = () => {
     if (rule && !rule.values.length && !["empty", "notEmpty"].includes(rule.op))
-      changePreferences(board.id, {
-        filters: updateFilter(preferencesFor(board.id).filters, rule.id, null),
-      });
+      updateRule(board.id, rule.id, null);
     setEdit(null);
   };
   const chips = filters.children.filter(
@@ -628,7 +618,7 @@ export function FilterChips({ board }: { board: Board }) {
         </button>
       )}
       {chips.map((c) => {
-        const remove = () => changePreferences(board.id, { filters: updateFilter(filters, c.id, null) });
+        const remove = () => updateRule(board.id, c.id, null);
         // Linear's chip: Backspace or Delete on a focused chip removes its filter.
         const onKeyDown = (e: React.KeyboardEvent) => {
           if (e.key === "Backspace" || e.key === "Delete") {
@@ -706,13 +696,7 @@ export function FilterChips({ board }: { board: Board }) {
       {!editing && <div className="view-filter-actions">
         <button
           className="view-filter-action"
-          onClick={() =>
-            view
-              ? clearOverlay()
-              : changePreferences(board.id, {
-                  filters: defaultPreferences().filters,
-                })
-          }
+          onClick={() => clearFilters(board.id)}
         >
           Clear
         </button>
@@ -781,7 +765,7 @@ export function FilterChips({ board }: { board: Board }) {
 }
 
 function AdvancedMenu({ board }: { board: Board }) {
-  const preferences = usePreferences(board.id);
+  const preferences = useViewSettings(board.id);
   const { filters } = preferences;
   const issues = useStore((s) => s.issues);
   const mine = useStore((s) => s.mine);
@@ -799,12 +783,8 @@ function AdvancedMenu({ board }: { board: Board }) {
       ),
     [universe, board, preferences, mine, query],
   );
-  const patch = (id: string, change: Parameters<typeof updateFilter>[2]) =>
-    timed("filter", () =>
-      changePreferences(board.id, {
-        filters: updateFilter(preferencesFor(board.id).filters, id, change),
-      }),
-    );
+  const patch = (id: string, change: Parameters<typeof updateRule>[2]) =>
+    timed("filter", () => updateRule(board.id, id, change));
   return (
     <div
       role="dialog"
@@ -847,7 +827,7 @@ function FilterGroupEditor({
   group: FilterGroup;
   board: Board;
   issues: Issue[];
-  patch: (id: string, p: Parameters<typeof updateFilter>[2]) => void;
+  patch: (id: string, p: Parameters<typeof updateRule>[2]) => void;
   depth: number;
 }) {
   return (

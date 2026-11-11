@@ -16,8 +16,6 @@ import {
   actions,
   beginCreate,
   boardOf,
-  changeDisplay,
-  changePreferences,
   currentKey,
   get,
   issueURL,
@@ -26,7 +24,6 @@ import {
   loadFull,
   ME,
   navigate,
-  preferencesFor,
   redoEdit,
   set,
   toggleFavorite,
@@ -39,10 +36,16 @@ import {
 import {
   buckets,
   columnInScope,
-  defaultPreferences,
   rankBetween,
-  updateFilter,
 } from "./view-model";
+import {
+  clearFilters,
+  setDisplay,
+  setScope,
+  toggleCollapsed,
+  updateRule,
+  viewSettings,
+} from "./view-settings";
 import { issueCopy, type CopyKind } from "./issue-copy";
 import { editorBindings } from "./editor-bindings";
 import { MenuSurface } from "./menu-surface";
@@ -143,7 +146,7 @@ function moveColumn(direction: number) {
   const issue = selected();
   if (!issue) return;
   const board = boardOf(issue.key)!,
-    prefs = preferencesFor(issue.board);
+    prefs = viewSettings(issue.board);
   const choices = board.columns.filter((c) => columnInScope(c, prefs.scope));
   if (prefs.display.groupDescending) choices.reverse();
   const at = choices.findIndex((c) => c.statuses.some((s) => s.id === issue.status));
@@ -163,16 +166,16 @@ function reorder(direction: number, edge = false) {
         : rest.length
       : Math.max(0, Math.min(rest.length, i + direction));
   if (at === i) return;
-  const descending = preferencesFor(issue.board).display.descending;
+  const descending = viewSettings(issue.board).display.descending;
   const a = rest[at - 1]?.rank,
     b = rest[at]?.rank;
   actions.drop(issue.key, issue.board, [], descending ? rankBetween(b, a) : rankBetween(a, b));
 }
-const manual = () => preferencesFor(get().board).display.ordering === "manual";
+const manual = () => viewSettings(get().board).display.ordering === "manual";
 function scope(value: "active" | "backlog" | "all", mine = false) {
   ui.send({ type: "mine.set", mine });
   navigate({ panel: false, selected: null });
-  changePreferences(get().board, { scope: value });
+  setScope(get().board, value);
 }
 async function copy(kind: CopyKind) {
   const issue = target();
@@ -203,8 +206,7 @@ function collapse(all = false) {
   const s = get(),
     board = s.boards.find((b) => b.id === s.board);
   if (!board) return;
-  const prefs = preferencesFor(s.board),
-    by = prefs.display.columns,
+  const by = viewSettings(s.board).display.columns,
     groups = buckets(
       [...s.issues.values()].filter((i) => i.board === s.board),
       by,
@@ -214,14 +216,7 @@ function collapse(all = false) {
   const ids = all
     ? groups.map((g) => g.id)
     : groups.filter((g) => g.issues.some((i) => i.key === s.selected)).map((g) => g.id);
-  const current = prefs.collapsed[by] ?? [],
-    closed = ids.every((id) => current.includes(id));
-  changePreferences(s.board, {
-    collapsed: {
-      ...prefs.collapsed,
-      [by]: closed ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])],
-    },
-  });
+  toggleCollapsed(s.board, ids);
 }
 
 /** Live Linear Chrome reference, 6 Nov 2026. Only existing personal workflows are included. */
@@ -743,8 +738,8 @@ export const shortcuts: Shortcut[] = [
     group: "List / Board",
     hotkey: "Mod+B",
     run: () => {
-      const d = preferencesFor(get().board).display;
-      changeDisplay(get().board, {
+      const d = viewSettings(get().board).display;
+      setDisplay(get().board, {
         layout: d.layout === "board" ? "list" : "board",
       });
     },
@@ -799,7 +794,7 @@ export const shortcuts: Shortcut[] = [
     group: "List / Board",
     hotkey: "Alt+ArrowLeft",
     issue: true,
-    when: () => preferencesFor(get().board).display.columns === "status",
+    when: () => viewSettings(get().board).display.columns === "status",
     run: () => moveColumn(-1),
   },
   {
@@ -808,7 +803,7 @@ export const shortcuts: Shortcut[] = [
     group: "List / Board",
     hotkey: "Alt+ArrowRight",
     issue: true,
-    when: () => preferencesFor(get().board).display.columns === "status",
+    when: () => viewSettings(get().board).display.columns === "status",
     run: () => moveColumn(1),
   },
   {
@@ -817,7 +812,7 @@ export const shortcuts: Shortcut[] = [
     group: "List / Board",
     hotkey: "T",
     issue: true,
-    when: () => preferencesFor(get().board).display.layout === "list",
+    when: () => viewSettings(get().board).display.layout === "list",
     run: () => collapse(),
   },
   {
@@ -825,7 +820,7 @@ export const shortcuts: Shortcut[] = [
     name: "Collapse/expand all groups",
     group: "List / Board",
     hotkey: "Alt+T",
-    when: () => preferencesFor(get().board).display.layout === "list",
+    when: () => viewSettings(get().board).display.layout === "list",
     run: () => collapse(true),
   },
   {
@@ -895,7 +890,7 @@ export const shortcuts: Shortcut[] = [
     when: boardVisible,
     run: () => {
       if (get().inbox) return clearInboxFilters();
-      changePreferences(get().board, { filters: defaultPreferences().filters });
+      clearFilters(get().board);
     },
   },
   {
@@ -905,9 +900,9 @@ export const shortcuts: Shortcut[] = [
     hotkey: "Shift+F",
     when: boardVisible,
     run: () => {
-      const { filters } = preferencesFor(get().board);
+      const { filters } = viewSettings(get().board);
       const last = filters.children.at(-1);
-      if (last) changePreferences(get().board, { filters: updateFilter(filters, last.id, null) });
+      if (last) updateRule(get().board, last.id, null);
     },
   },
 ];

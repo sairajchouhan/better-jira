@@ -3,12 +3,11 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Avatar } from "./avatar";
 import { FilterIcon } from "./filter-icons";
 import { hue, PriorityIcon, StatusIcon, TypeDot } from "./icons";
+import { setRule, updateRule, useViewSettings } from "./view-settings";
 import {
-  changePreferences,
   ME,
   timed,
   ui,
-  usePreferences,
   useStore,
   type Issue,
   type Board,
@@ -23,7 +22,6 @@ import {
   parentName,
   priorityRank,
   selectIssues,
-  updateFilter,
   type Field,
   type Rule,
 } from "./view-model";
@@ -119,7 +117,7 @@ export const issueCount = (n?: number) => (n ? `${n} issue${n === 1 ? "" : "s"}`
 /** The board's issues under every filter except this field's own, its rule, its choices and the edits Linear's menu makes. */
 export function useFieldFilter(field: Field, board: Board) {
   const issuesMap = useStore((s) => s.issues);
-  const prefs = usePreferences(board.id);
+  const prefs = useViewSettings(board.id);
   const mine = useStore((s) => s.mine);
   const query = useStore((s) => s.query);
   const issues = useMemo(() => {
@@ -137,21 +135,13 @@ export function useFieldFilter(field: Field, board: Board) {
   );
   const choices = useMemo(() => filterChoices(field, board, issues), [field, board, issues]);
   function apply(values: string[], operator = rule?.op ?? "is") {
-    const next: Rule = { id: rule?.id ?? newId(), field, op: operator, values };
-    changePreferences(board.id, {
-      filters: {
-        ...prefs.filters,
-        children: rule
-          ? prefs.filters.children.map((c) => (c.id === rule.id ? next : c))
-          : [...prefs.filters.children, next],
-      },
-    });
+    setRule(board.id, { id: rule?.id ?? newId(), field, op: operator, values });
   }
   const toggle = (v: string) => {
     const vals = rule?.values ?? [];
     const next = vals.includes(v) ? vals.filter((x) => x !== v) : [...vals, v];
     if (!next.length && rule)
-      changePreferences(board.id, { filters: updateFilter(prefs.filters, rule.id, null) });
+      updateRule(board.id, rule.id, null);
     // Picking a value leaves "is empty" for "is".
     else
       timed("filter", () =>
