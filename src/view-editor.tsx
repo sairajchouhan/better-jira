@@ -177,12 +177,6 @@ function Editor({ draft }: { draft: ViewDraft }) {
         value={draft.description}
         onChange={(e) => patch({ description: e.target.value })}
       />
-      {draft.kind === "custom" && (
-        <div className="view-editor-scope">
-          <Icon name="user" />
-          Personal
-        </div>
-      )}
       {error && <p role="alert">{error}</p>}
       {picker &&
         createPortal(
@@ -215,11 +209,11 @@ function exportView(view: SavedView) {
     ME.id,
   );
   const url = URL.createObjectURL(
-    new Blob([issuesCSV(issues)], { type: "text/csv;charset=utf-8" }),
+    new Blob([issuesCSV(issues, board)], { type: "text/csv;charset=utf-8" }),
   );
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${view.name.replace(/[^\w -]/g, "_")}.csv`;
+  a.download = `${view.name.replace(/[\\/:*?"<>|]/g, "_")} issues.csv`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
@@ -258,6 +252,7 @@ export function viewActions(view: SavedView, favorite: boolean, contextMenu: boo
   const link = () =>
     void navigator.clipboard
       .writeText(new URL(viewPath(view), location.origin).href)
+      .then(() => ui.send({ type: "toast.show", text: "Copied" }))
       .catch((e) => ui.send({ type: "toast.show", text: String(e) }));
   return [
     [

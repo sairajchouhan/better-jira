@@ -1,7 +1,8 @@
 .view-editor {
   /* Linear's measured editor text colours (light; dark below). */
   --view-name: lch(10 0 282);
-  --view-description: lch(40 1 282);
+  --view-placeholder: lch(66 1 282);
+  --view-icon-fill: lch(78.2 3.6 260.7 / 0.125);
   --view-pill: lch(20 1 282);
   padding: 40px 24px 12px;
   color: var(--fg);
@@ -27,20 +28,27 @@
   font-size: 15px;
   font-weight: 500;
 }
+/* Lines up with the name: icon button (28px) + heading gap (6px). Filled text is full contrast; only the placeholder is dimmed. */
 .view-description {
   display: block;
-  margin: 8px 0 8px 24px;
-  width: calc(100% - 24px);
+  margin: 8px 0 8px 34px;
+  width: calc(100% - 34px);
   height: 32px;
   font-size: 13px;
-  color: var(--view-description);
+  color: var(--view-name);
+}
+.view-name::placeholder,
+.view-description::placeholder {
+  color: var(--view-placeholder);
 }
 .view-icon-button {
-  width: 24px;
-  height: 24px;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
-  border-radius: 6px;
+  border-radius: 4px;
+  background: var(--view-icon-fill);
 }
 .view-editor-pill {
   height: 24px;
@@ -67,18 +75,11 @@
 .view-editor-primary:disabled {
   opacity: 0.5;
 }
-.view-editor-scope {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: 30px;
-  font-size: 12px;
-  color: var(--fg-3);
-}
 @media (prefers-color-scheme: dark) {
   .view-editor {
     --view-name: lch(100 0 272);
-    --view-description: lch(63.304 1.425 272);
+    --view-placeholder: lch(39.5 1.425 272);
+    --view-icon-fill: lch(78.2 3.6 260.7 / 0.175);
     --view-pill: lch(90.826 1.425 272);
   }
   .view-editor-primary,

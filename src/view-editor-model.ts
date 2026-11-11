@@ -20,19 +20,33 @@ export function viewPlaceholder(filters: FilterGroup, board?: Board): string {
   visit(filters);
   return values.length ? values.join(", ") : "All issues";
 }
-export function issuesCSV(
-  issues: Pick<Issue, "key" | "summary" | "status" | "priority" | "assignee">[],
-): string {
+/** Linear's export columns, in its order, for the fields a Jira issue has. Status and priority are names, like Linear. */
+export function issuesCSV(issues: Issue[], board: Board): string {
+  const statuses = new Map(
+    board.columns.flatMap((c) => c.statuses).map((s) => [s.id, s.name]),
+  );
   const cell = (v: string) =>
     `"${(/^[=+@\-\t\r]/.test(v) ? "'" + v : v).replaceAll('"', '""')}"`;
   return [
-    ["Identifier", "Title", "Status", "Priority", "Assignee"],
+    ["ID", "Team", "Title", "Description", "Status", "Estimate", "Priority", "Project", "Creator", "Assignee", "Labels", "Created", "Updated", "Started", "Completed", "Due Date", "Parent issue"],
     ...issues.map((i) => [
       i.key,
+      board.name,
       i.summary,
-      i.status,
-      i.priority ?? "",
+      i.description ?? "",
+      statuses.get(i.status) ?? i.status,
+      i.estimate?.toString() ?? "",
+      i.priority ?? "No priority",
+      i.project?.name ?? "",
+      i.creator?.name ?? "",
       i.assignee?.name ?? "",
+      i.labels.join(", "),
+      i.created ?? "",
+      i.updated,
+      i.started ?? "",
+      i.resolved ?? "",
+      i.due ?? "",
+      i.parent ?? "",
     ]),
   ]
     .map((row) => row.map(cell).join(","))

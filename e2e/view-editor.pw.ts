@@ -24,6 +24,7 @@ test("draft reload, cancel, create toast, edit, duplicate and themed delete", as
     ).toBe(before);
     await p.getByRole("button", { name: "Views", exact: true }).click();
     await p.getByRole("button", { name: "New view", exact: true }).click();
+    await expect(p.getByText("Personal", { exact: true })).toHaveCount(0); // BJ-141: custom drafts have no scope line either
     await p
       .getByRole("textbox", { name: "View name", exact: true })
       .fill("My new view");
@@ -33,6 +34,13 @@ test("draft reload, cancel, create toast, edit, duplicate and themed delete", as
     ).toContainText("My new view");
     await expect(p.getByRole("button", { name: "Open view", exact: true })).toBeVisible();
     const route = new URL(p.url()).pathname;
+    await app.eval(
+      `Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async t=>{window.__copied=t}}})`,
+    );
+    await p.getByRole("button", { name: "Issue view options" }).click();
+    await p.getByRole("option", { name: "Copy link", exact: true }).click();
+    await expect(p.locator("[data-toast]").filter({ hasText: /^Copied$/ })).toBeVisible(); // BJ-145
+    expect(await app.eval("window.__copied")).toBe(new URL(route, p.url()).href);
     await p
       .getByRole("button", { name: "Issue view options" })
       .click();
