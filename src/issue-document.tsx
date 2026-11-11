@@ -1,6 +1,6 @@
 /* oxlint-disable react/immutability -- Session callbacks and mutable imperative models are intentionally owned outside React state. */
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createContext, use, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Debouncer } from "@tanstack/pacer";
 import { Command } from "cmdk";
 import { Icon, StatusIcon } from "./icons";
@@ -55,8 +55,27 @@ export function IssueDocument({ issue, id }: { issue: Issue; id: string }) {
     </div>
   );
 }
-function DocumentEditor({ issue, resource }: { issue: Issue; resource: IssueResource }) {
-  const titleInput = useRef<HTMLTextAreaElement>(null);
+interface DocumentContextValue {
+  state: { draft: Draft; revision: number };
+  actions: { update: (patch: Partial<Draft>) => void; endSession: () => void };
+  meta: { issue: Issue; resource: IssueResource };
+}
+const DocumentContext = createContext<DocumentContextValue | null>(null);
+function useDocument() {
+  const session = use(DocumentContext);
+  if (!session) throw new Error("Document components require DocumentProvider");
+  return session;
+}
+
+function DocumentProvider({
+  issue,
+  resource,
+  children,
+}: {
+  issue: Issue;
+  resource: IssueResource;
+  children: ReactNode;
+}) {
   const draftKey = `better-jira:resource-draft:${get().namespace}:${issue.key}:${resource.id}`;
   const read = (): Draft => {
     try {
@@ -133,6 +152,51 @@ function DocumentEditor({ issue, resource }: { issue: Issue; resource: IssueReso
       localStorage.setItem(draftKey, JSON.stringify(next));
     } catch {}
   }, [stored, draftKey, saveSoon]);
+  return (
+    <DocumentContext
+      value={{
+        state: { draft, revision },
+        actions: { update, endSession },
+        meta: { issue, resource },
+      }}
+    >
+      {children}
+    </DocumentContext>
+  );
+}
+
+function DocumentEditor({ issue, resource }: { issue: Issue; resource: IssueResource }) {
+  return (
+    <DocumentProvider issue={issue} resource={resource}>
+      <DocumentContent />
+    </DocumentProvider>
+  );
+}
+
+function DocumentContent() {
+  const { meta: { issue, resource } } = useDocument();
+  return (
+    <div className="flex min-w-0 flex-1 flex-col" data-document={resource.id}>
+      <DocumentHeader />
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-[854px] px-6 py-16 text-[15px]">
+          <DocumentIcon resource={resource} issue={issue} />
+          {resource.showAuthors && (
+            <p className="mb-2 text-[12px] text-fg-3" data-document-author>
+              {resource.editedBy?.name ?? resource.owner?.name ?? ME.name}
+            </p>
+          )}
+          <DocumentTitle />
+          <DocumentBody />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DocumentTitle() {
+  const { state: { draft }, actions: { update, endSession } } = useDocument();
+  const titleInput = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
     const input = titleInput.current;
     if (!input) return;
@@ -160,75 +224,59 @@ function DocumentEditor({ issue, resource }: { issue: Issue; resource: IssueReso
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- The title's text changes its height, so a new title resizes the input.
   }, [draft.title]);
   return (
-    <div className="flex min-w-0 flex-1 flex-col" data-document={resource.id}>
-      <DocumentHeader issue={issue} resource={resource} draft={draft} flush={endSession} />
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[854px] px-6 py-16 text-[15px]">
-          <DocumentIcon resource={resource} issue={issue} />
-          {resource.showAuthors && (
-            <p className="mb-2 text-[12px] text-fg-3" data-document-author>
-              {resource.editedBy?.name ?? resource.owner?.name ?? ME.name}
-            </p>
-          )}
-          <textarea
-            ref={titleInput}
-            rows={1}
-            autoFocus={!draft.title}
-            aria-label="Document title"
-            placeholder="New document"
-            value={draft.title}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                document.getElementById("resource-document")?.focus();
-              }
-              if (event.key === "Escape") {
-                event.stopPropagation();
-                event.currentTarget.blur();
-              }
-            }}
-            onChange={(event) => update({ title: event.target.value.replace(/[\r\n]+/g, " ") })}
-            onBlur={endSession}
-            className="mb-6 block w-full resize-none overflow-hidden bg-transparent text-[24px] leading-[32px] tracking-[-0.16px] [font-variation-settings:'opsz'_32] font-semibold outline-none"
-          />
-          <DocumentBodyEditor
-            key={revision}
-            id="resource-document"
-            scope={`${issue.key}:document:${resource.id}`}
-            onLateMedia={(merge) => {
-              const current = get()
-                .issues.get(issue.key)
-                ?.resources?.find((r) => r.id === resource.id);
-              if (current)
-                actions.editResource(issue.key, resource.id, { body: merge(current.body) });
-              void flushLocalChanges();
-            }}
-            initial={draft.body}
-            label="Document content"
-            placeholder="Write something…"
-            issueKey={issue.key}
-            attachments={issue.attachments}
-            onFiles={(files) => addIssueFiles(issue.key, files)}
-            onChange={(body) => update({ body })}
-            onBlur={endSession}
-          />
-        </div>
-      </div>
-    </div>
+    <textarea
+      ref={titleInput}
+      rows={1}
+      autoFocus={!draft.title}
+      aria-label="Document title"
+      placeholder="New document"
+      value={draft.title}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+          event.preventDefault();
+          document.getElementById("resource-document")?.focus();
+        }
+        if (event.key === "Escape") {
+          event.stopPropagation();
+          event.currentTarget.blur();
+        }
+      }}
+      onChange={(event) => update({ title: event.target.value.replace(/[\r\n]+/g, " ") })}
+      onBlur={endSession}
+      className="mb-6 block w-full resize-none overflow-hidden bg-transparent text-[24px] leading-[32px] tracking-[-0.16px] [font-variation-settings:'opsz'_32] font-semibold outline-none"
+    />
   );
 }
 
-function DocumentHeader({
-  issue,
-  resource,
-  draft,
-  flush,
-}: {
-  issue: Issue;
-  resource: IssueResource;
-  draft: Draft;
-  flush: () => void;
-}) {
+function DocumentBody() {
+  const { state: { draft, revision }, actions: { update, endSession }, meta: { issue, resource } } = useDocument();
+  return (
+    <DocumentBodyEditor
+      key={revision}
+      id="resource-document"
+      scope={`${issue.key}:document:${resource.id}`}
+      onLateMedia={(merge) => {
+        const current = get()
+          .issues.get(issue.key)
+          ?.resources?.find((r) => r.id === resource.id);
+        if (current)
+          actions.editResource(issue.key, resource.id, { body: merge(current.body) });
+        void flushLocalChanges();
+      }}
+      initial={draft.body}
+      label="Document content"
+      placeholder="Write something…"
+      issueKey={issue.key}
+      attachments={issue.attachments}
+      onFiles={(files) => addIssueFiles(issue.key, files)}
+      onChange={(body) => update({ body })}
+      onBlur={endSession}
+    />
+  );
+}
+
+function DocumentHeader() {
+  const { state: { draft }, actions: { endSession: flush }, meta: { issue, resource } } = useDocument();
   const favorite = useStore((s) => s.favorites.includes(`document:${resource.id}`));
   const [deleting, setDeleting] = useState(false),
     [options, setOptions] = useState<HTMLElement | null>(null),
