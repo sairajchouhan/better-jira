@@ -1,10 +1,10 @@
 import {
   defaultPreferences,
-  type Rule,
   FIELDS,
   operatorsFor,
   parsePreferences,
   type FilterGroup,
+  type Rule,
   type Display,
   type Scope,
 } from "./view-model";

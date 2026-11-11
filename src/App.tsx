@@ -1,5 +1,7 @@
-import { useEffectiveMine, useActiveView, useSavedViews, useOverlayFilters, createViewDraft, editViewDraft, duplicateViewDraft, saveOverlayToView, deleteSavedView, clearOverlay } from "./saved-views";
-import { openViewEditor, ViewMenu, ViewContextMenu, ViewEditorPage } from "./view-editor";
+import { useEffectiveMine, useActiveView, useSavedViews, useOverlayFilters, createViewDraft, editViewDraft, duplicateViewDraft, saveOverlayToView, clearOverlay } from "./saved-views";
+import { openViewEditor, ViewMenu, ViewContextMenu, ViewEditorPage, ViewDeleteDialog } from "./view-editor";
+import { canMergeOverlay } from "./saved-view-model";
+import { createToolbarView } from "./view-toolbar-actions";
 import { ViewsDirectory, ViewDetails, ViewFavorites, SavedViewIcon, ResultsFeedback } from "./views-navigation";
 /* oxlint-disable react/immutability -- Session callbacks and mutable imperative models are intentionally owned outside React state. */
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
@@ -91,6 +93,7 @@ import {
   navigationIssues,
   selectIssues,
   defaultPreferences,
+  filterCount,
   statusDuration,
   type Bucket,
   type Display,
@@ -476,6 +479,7 @@ const BoardView = memo(function BoardView({
       ...(row ? draftForGroup(d.rows, row.id, board, universe, prefs.scope) : {}),
     });
   const baseline = selectIssues(all, board, { ...prefs, filters: activeView && activeView.board === board.id ? activeView.filters : defaultPreferences().filters }, activeView?.mine ?? false, "", ME.id).length;
+  const total = visible.length || !activeView ? baseline : selectIssues(all, board, { ...prefs, filters: defaultPreferences().filters }, false, "", ME.id).length;
   const clearFilters = () => {
     if (activeView) clearOverlay();
     else changePreferences(board.id, { filters: defaultPreferences().filters });
@@ -486,7 +490,7 @@ const BoardView = memo(function BoardView({
   return (
     <div className={`${shown ? "flex" : "hidden"} min-w-0 min-h-0 flex-1`}>
       <div className="flex min-w-0 min-h-0 flex-1 flex-col" data-layout={d.layout}>
-        {!visible.length && <ResultsFeedback count={0} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !activeView?.mine)} clear={clearFilters} />}
+        {!visible.length && <ResultsFeedback count={0} baseline={baseline} total={total} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !activeView?.mine)} clear={clearFilters} />}
         {d.layout === "list" ? (
           <div className="flex-1 overflow-auto py-1">
             {show.map((c) => (
@@ -1271,6 +1275,7 @@ function BoardHeader() {
   const savedViews = useSavedViews();
   const board = useStore((s) => s.boards.find((b) => b.id === s.board));
   const query = useStore((s) => s.query);
+  const draft = useStore((s) => s.editorDraft);
   const details = useStore((s) => s.details);
   const prefs = usePreferences(board!.id);
   const finding = useStore((s) => s.findInView);
@@ -1320,15 +1325,17 @@ function BoardHeader() {
         {activeView?.kind !== "custom" && (["active", "backlog", "all"] as const).map((scope) => (
           <button
             key={scope}
-            aria-pressed={!activeView && prefs.scope === scope}
+            aria-pressed={!activeView && !draft && prefs.scope === scope}
             onClick={() => { navigate({ board: board!.id, selected: null, panel: false }); changePreferences(board!.id, { scope }); }}
-            className={`${PILL} ${!activeView && prefs.scope === scope ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2"}`}
+            className={`${PILL} ${!activeView && !draft && prefs.scope === scope ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2"}`}
           >
             {scope === "active" ? "Active" : scope === "backlog" ? "Backlog" : "All issues"}
           </button>
         ))}
-        {activeView?.kind !== "custom" && savedViews.filter(v => v.board === board!.id && v.kind === "tab").map(view => <ViewContextMenu key={view.id} view={view}><button aria-pressed={activeView?.id === view.id} onClick={() => openSavedView(view)} className={`${PILL} ${activeView?.id === view.id ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover"}`}>{view.name}</button></ViewContextMenu>)}
-        {activeView?.kind !== "custom" && <button className={`${PILL} text-fg-3 hover:bg-hover`} onClick={() => openViewEditor(createViewDraft("tab"))}><Icon name="plus" size={14} />Add new view</button>}
+        {activeView?.kind !== "custom" && savedViews.filter(v => v.board === board!.id && v.kind === "tab").map(view => { const on = activeView?.id === view.id || draft?.id === view.id; return <ViewContextMenu key={view.id} view={view}><button aria-pressed={on} onClick={() => openSavedView(view)} className={`${PILL} ${on ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover"}`}>{view.name}</button></ViewContextMenu>; })}
+        {/* Linear swaps Add new view for the draft tab while a new tab view is being made. */}
+        {draft && !draft.id && draft.kind === "tab" ? <span aria-current="page" className={`${PILL} bg-tab-on text-fg-3 shadow-(--tab-on-shadow)`}><SavedViewIcon view={draft} />{draft.name.trim() || "New view"}<Icon name="pencil" size={12} /></span>
+          : activeView?.kind !== "custom" && !draft && <button className={`${PILL} text-fg-3 hover:bg-hover`} onClick={() => openViewEditor(createViewDraft("tab"))}><Icon name="plus" size={14} />Add new view</button>}
         <div className="ml-auto flex items-center gap-1">
           <BoardControls board={board!} />
         </div>
@@ -2791,7 +2798,7 @@ function AssignPicker({ issueKey }: { issueKey: string }) {
   );
 }
 
-type Cmd = { name: string; hint?: string; icon?: ReactNode; run: () => void };
+type Cmd = { name: string; hint?: string; icon?: ReactNode; disabled?: boolean; run: () => void };
 /** A palette command that runs a shortcut, so the hint shown is the key that does the same thing. */
 
 function Palette({ searchOnly = false }: { searchOnly?: boolean }) {
@@ -2807,12 +2814,13 @@ function Palette({ searchOnly = false }: { searchOnly?: boolean }) {
   const overlay = useOverlayFilters();
   const favorites = useStore(s => s.favorites);
   const [deletingView, setDeletingView] = useState(false);
+  const [savingTo, setSavingTo] = useState(false);
   const viewAction = (run: () => void) => () => { ui.send({ type: "overlay.close" }); run(); };
   const viewCommands: Cmd[] = activeView && !searchOnly ? [
     { name: "Edit view…", run: viewAction(() => openViewEditor(editViewDraft(activeView.id))) },
-    ...(overlay.children.length ? [{ name: "Save to this view", run: viewAction(() => { void saveOverlayToView().catch(e => set({ perf: String(e) })); }) }] : []),
-    { name: favorites.includes(`view:${activeView.id}`) ? "Unfavorite view" : "Favorite view", run: viewAction(() => toggleFavorite(`view:${activeView.id}`)) },
-    { name: "Make a copy…", run: viewAction(() => openViewEditor(duplicateViewDraft(activeView.id))) },
+    { name: "Save to…", run: () => { setSavingTo(true); setQ(""); } },
+    { name: favorites.includes(`view:${activeView.id}`) ? "Unfavorite view" : "Favorite view", hint: shortcutLabel("view-favorite"), run: viewAction(() => toggleFavorite(`view:${activeView.id}`)) },
+    { name: "Make a copy as new view…", run: viewAction(() => openViewEditor(duplicateViewDraft(activeView.id))) },
     { name: "Delete view", run: () => setDeletingView(true) },
   ] : [];
 
@@ -2876,7 +2884,12 @@ function Palette({ searchOnly = false }: { searchOnly?: boolean }) {
       .map((c) => [q.trim() ? matchRank(c.name, q) : 0, c] as const)
       .filter(([r]) => r >= 0)
       .sort(([a], [b]) => a - b);
-  const groups = [
+  // Save to… mirrors the filter row's Save menu, so it is offered even before any temporary filter exists.
+  const mergeable = !!activeView && !!filterCount(overlay) && canMergeOverlay(activeView.filters, overlay);
+  const groups = savingTo && activeView ? [{ heading: "Save to", rows: ranked([
+    { name: filterCount(overlay) && !mergeable ? "Cannot merge these filters into the view" : "Save to this view", hint: shortcutLabel("view-save"), disabled: !mergeable, run: viewAction(() => { void saveOverlayToView().catch(e => set({ perf: String(e) })); }) },
+    { name: "Create new view…", hint: shortcutLabel("view-create"), run: viewAction(createToolbarView) },
+  ]) }] : [
     { heading: scoped?.key ?? "", rows: ranked(issueCmds) },
     { heading: `View · ${activeView?.name ?? ""}`, rows: ranked(viewCommands) },
     { heading: "Views", rows: ranked(searchOnly ? [] : [{ name: "Create view…", run: viewAction(() => openViewEditor(createViewDraft("custom"))) }]) },
@@ -2885,14 +2898,14 @@ function Palette({ searchOnly = false }: { searchOnly?: boolean }) {
     .filter((g) => g.rows.length)
     .sort((a, b) => a.rows[0]![0] - b.rows[0]![0]);
   const item = (c: Cmd) => (
-    <Command.Item key={c.name} value={`cmd:${c.name}`} onSelect={c.run}>
+    <Command.Item key={c.name} value={`cmd:${c.name}`} disabled={c.disabled} className="data-[disabled=true]:opacity-50" onSelect={c.run}>
       <span className="grid w-4 shrink-0 place-items-center text-fg-3">{c.icon}</span>
       <span className="flex-1 truncate">{c.name}</span>
       {c.hint && <kbd>{c.hint}</kbd>}
     </Command.Item>
   );
 
-  if (deletingView && activeView) return <Confirm title={`Delete “${activeView.name}”?`} detail="This view will be permanently deleted." action="Delete view" close={() => setDeletingView(false)} onConfirm={() => { void deleteSavedView(activeView.id).then(() => ui.send({ type: "overlay.close" })).catch(e => set({ perf: String(e) })); }} />;
+  if (deletingView && activeView) return <ViewDeleteDialog view={activeView} close={() => { setDeletingView(false); ui.send({ type: "overlay.close" }); }} />;
   return (
     <Overlay label={searchOnly ? "Search issues" : "Search issues and commands"}>
       <Command shouldFilter={false} loop className={`w-full ${MENU}`}>
@@ -2907,7 +2920,7 @@ function Palette({ searchOnly = false }: { searchOnly?: boolean }) {
             autoFocus
             value={q}
             onValueChange={setQ}
-            onKeyDown={(e) => e.key === "Backspace" && !q && setScope(null)}
+            onKeyDown={(e) => e.key === "Backspace" && !q && (savingTo ? setSavingTo(false) : setScope(null))}
             placeholder={
               scoped
                 ? "Type a command, or ⌫ to search everything…"

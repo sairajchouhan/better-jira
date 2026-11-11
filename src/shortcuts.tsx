@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { viewShortcutId } from "./view-shortcut";
 import { createToolbarView } from "./view-toolbar-actions";
 import { activeView, saveOverlayToView } from "./saved-views";
+import { canMergeOverlay } from "./saved-view-model";
 import { filterCount } from "./view-model";
 import { canHaveChildren } from "./issue-properties";
 import {
@@ -862,8 +863,10 @@ export const shortcuts: Shortcut[] = [
     name: "Save to this view",
     group: "Views",
     hotkey: "Alt+S",
-    when: () =>
-      boardVisible() && !!activeView() && filterCount(get().overlayFilters) > 0,
+    when: () => {
+      const view = activeView();
+      return boardVisible() && !!view && filterCount(get().overlayFilters) > 0 && canMergeOverlay(view.filters, get().overlayFilters);
+    },
     run: () => {
       void saveOverlayToView().catch(() =>
         ui.send({

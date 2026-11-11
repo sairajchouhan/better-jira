@@ -1,6 +1,7 @@
 import "./view-toolbar.css";
 import { Command } from "cmdk";
-import { useActiveView, clearOverlay, saveOverlayToView } from "./saved-views";
+import { useActiveView, useOverlayFilters, clearOverlay, saveOverlayToView } from "./saved-views";
+import { canMergeOverlay } from "./saved-view-model";
 import { viewShortcutId } from "./view-shortcut";
 import { createToolbarView } from "./view-toolbar-actions";
 import { useHotkey } from "@tanstack/react-hotkeys";
@@ -266,7 +267,8 @@ function Toggle({
 }
 function DisplayMenu({ board }: { board: Board }) {
   const { display: d } = usePreferences(board.id);
-  const view = useActiveView();
+  // Saved views and the view editor own their display, so the board-default footer stays out (Linear).
+  const inView = useStore((s) => !!s.activeViewId || !!s.editorDraft);
   const defaults = useStore((s) => s.defaults);
   const [saving, setSaving] = useState(false);
   const patch = (p: Partial<Display>) => timed("display", () => changeDisplay(board.id, p));
@@ -394,14 +396,14 @@ function DisplayMenu({ board }: { board: Board }) {
         ]}
         onChange={(v) => patch({ openIn: v as Display["openIn"] })}
       />
-      <div className="mt-3 flex justify-end gap-3 border-t border-line-2 pt-2 text-[11px]">
+      {!inView && <div className="mt-3 flex justify-end gap-3 border-t border-line-2 pt-2 text-[11px]">
         <button
-          title={view ? "Reset to this view’s saved display" : "Reset to the saved default for this board"}
-          onClick={() => changeDisplay(board.id, view?.display ?? defaults[board.id] ?? defaultDisplay())}
+          title="Reset to the saved default for this board"
+          onClick={() => changeDisplay(board.id, defaults[board.id] ?? defaultDisplay())}
         >
           Reset
         </button>
-        {!view && <button
+        <button
           className="text-accent disabled:opacity-50"
           disabled={saving}
           title="Save your display default in this browser"
@@ -412,8 +414,8 @@ function DisplayMenu({ board }: { board: Board }) {
           }}
         >
           {saving ? "Saving…" : "Save my default"}
-        </button>}
-      </div>
+        </button>
+      </div>}
     </div>
   );
 }
@@ -421,6 +423,10 @@ function DisplayMenu({ board }: { board: Board }) {
 export function FilterChips({ board }: { board: Board }) {
   const { filters } = usePreferences(board.id);
   const view = useActiveView();
+  const overlay = useOverlayFilters();
+  // Inside the view editor these chips are the definition being edited; the editor owns Cancel/Save.
+  const editing = useStore((s) => !!s.editorDraft);
+  const mergeable = !view || canMergeOverlay(view.filters, overlay);
   const issues = useStore((s) => s.issues);
   const [edit, setEdit] = useState<{
     rule: Rule;
@@ -462,7 +468,7 @@ export function FilterChips({ board }: { board: Board }) {
     }
   };
   return (
-    <div className="view-filter-row" aria-label="Temporary filters">
+    <div className="view-filter-row" aria-label={editing ? "View filters" : "Temporary filters"}>
       {edit && rule && (
         <MenuSurface
           label={`${FIELDS.find(([f]) => f === rule.field)?.[1]} ${edit.segment}`}
@@ -633,7 +639,7 @@ export function FilterChips({ board }: { board: Board }) {
       >
         <Icon name="plus" />
       </button>
-      <div className="view-filter-actions">
+      {!editing && <div className="view-filter-actions">
         <button
           className="view-filter-action"
           onClick={() =>
@@ -654,13 +660,13 @@ export function FilterChips({ board }: { board: Board }) {
         >
           Save <span className="rotate-90"><Icon name="chevron" size={12} /></span>
         </button>
-      </div>
-      {saveAnchor && (
+      </div>}
+      {saveAnchor && !editing && (
         <MenuSurface
           label="Save filters"
           anchor={saveAnchor}
           align="end"
-          width={200}
+          width={mergeable ? 200 : 288}
           close={() => setSaveAnchor(null)}
         >
           <Command
@@ -669,7 +675,7 @@ export function FilterChips({ board }: { board: Board }) {
             tabIndex={0}
             onKeyDownCapture={(event) => {
               const id = viewShortcutId(event);
-              if (id === "view-create" || (id === "view-save" && view)) {
+              if (id === "view-create" || (id === "view-save" && view && mergeable)) {
                 event.preventDefault();
                 event.stopPropagation();
                 if (id === "view-save") void save();
@@ -684,10 +690,11 @@ export function FilterChips({ board }: { board: Board }) {
               {view && (
                 <Command.Item
                   className="filter-row"
-                  disabled={saving}
+                  disabled={saving || !mergeable}
+                  title={mergeable ? undefined : "Cannot merge these filters into the view"}
                   onSelect={() => void save()}
                 >
-                  <span className="flex-1">Save to this view</span>
+                  <span className={`flex-1 ${mergeable ? "" : "text-fg-3"}`}>Save to this view{!mergeable && <span className="block text-[11px] leading-4">Cannot merge these filters into the view</span>}</span>
                   <kbd>⌥S</kbd>
                 </Command.Item>
               )}

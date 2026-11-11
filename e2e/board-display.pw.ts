@@ -58,7 +58,7 @@ test("the default board: My issues, board details, saved views and a fast layout
     await page.waitFor(`document.querySelector('[role=table]')?.textContent.includes('Mine')`);
     await page.page.getByRole("row").filter({ hasText: "Mine" }).click({ button: "right" });
     await page.click("text=Delete");
-    expect(await page.eval(`document.querySelector('[role=dialog]')?.textContent.includes("permanently deleted")`)).toBe(true);
+    expect(await page.eval(`document.querySelector('[role=dialog]')?.textContent.includes('Delete the view "Mine"?')`)).toBe(true);
     await page.click("text=Cancel");
     expect(await page.page.getByRole("row").filter({ hasText: "Mine" }).count()).toBe(1);
     await page.waitFor(`document.querySelector('[role=table]')?.textContent.includes('Mine')`);
@@ -147,7 +147,7 @@ test("display preferences: card dates, filter chips, empty views and pill menus"
     await page.waitFor(
       `document.querySelector("[role=status]")?.textContent.includes("No issues matching the filters")`,
     );
-    await page.click("text=Clear filters");
+    await page.click("text=Clear Filters");
     await page.waitFor(`${cards}===6`);
   });
   await test.step("R1-D58/D59: swimlane titles stay pinned left, and the lane + prefills the lane's property", async () => {

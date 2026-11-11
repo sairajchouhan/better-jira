@@ -50,7 +50,69 @@ test("empty directory and saved versus temporary empty results", async ({ open }
     const filter = Buffer.from(JSON.stringify({v:1,filters:draft.filters})).toString('base64url');
     await page.page.goto(`${new URL(page.page.url()).origin}/view/${saved.id}?board=1&filter=${filter}`);
     await page.waitFor(`document.querySelector('[role=status]')?.textContent.includes('No issues matching the filters')`);
-    await page.click('text=Clear filters');
+    await page.click('text=Clear Filters');
     await page.waitFor(`!new URL(location.href).searchParams.has('filter') && document.querySelectorAll('[data-key]').length===6`);
+  } finally { await page.close(); }
+});
+
+test("Linear parity: hidden counts, merge conflicts, editor chrome, draft tab, palette Save to…, details tabs", async ({ open }) => {
+  const page = await open();
+  try {
+    const p = defaultPreferences();
+    const rule = (values: string[]) => ({id:"root",join:"and",children:[{id:"pr",field:"priority",op:"is",values}]});
+    const draft = {board:1,kind:"custom",name:"Conflict base",description:"",icon:"filter",color:"gray",display:p.display,scope:p.scope,mine:false,filters:{id:"root",join:"and",children:[{id:"missing",field:"labels",op:"is",values:["missing-label"]}]}};
+    const saved = await page.eval<any>(`fetch('/api/views',{method:'POST',headers:{'Content-Type':'application/json'},body:${JSON.stringify(JSON.stringify(draft))}}).then(r=>r.json())`);
+    const origin = new URL(page.page.url()).origin;
+    // Saved-empty still says how many issues the definition hides.
+    await page.page.goto(`${origin}/view/${saved.id}?board=1`);
+    await page.waitFor(`/\\d+ issues? hidden by filters/.test(document.querySelector('[role=status]')?.textContent ?? '')`);
+    // Display inside a view has no footer actions.
+    await page.click('[aria-label="Display options"]');
+    const display = await page.eval<string>(`document.querySelector('[aria-label="Display options"][role=dialog]').textContent`);
+    expect(display).not.toContain("Reset");
+    expect(display).not.toContain("Save my default");
+    await page.key("Escape");
+    // Details uses an Assignees / Labels switcher.
+    await page.click('[aria-label="Open details"]');
+    await page.click('[aria-label="View details"] [role=tab]:nth-child(2)');
+    expect(await page.eval(`document.querySelector('[aria-label="View details"] [role=tab][aria-selected=true]').textContent`)).toBe("Labels");
+    // A contradicting temporary filter cannot be merged: Save menu, ⌥S and ⌘K all refuse.
+    await page.eval(`fetch('/api/views/${saved.id}',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({filters:${JSON.stringify(rule(["High"]))}})})`);
+    const filter = Buffer.from(JSON.stringify({v:1,filters:rule(["Low"])})).toString("base64url");
+    await page.page.goto(`${origin}/view/${saved.id}?board=1&filter=${filter}`);
+    await page.waitFor(`/\\d+ issues? hidden by filters/.test(document.querySelector('[role=status]')?.textContent ?? '')`);
+    await page.click('.view-filter-save');
+    await page.waitFor(`!!document.querySelector('[aria-label="Save filters"] [aria-disabled=true]')`);
+    expect(await page.eval(`document.querySelector('[aria-label="Save filters"] [aria-disabled=true]').textContent`)).toContain("Cannot merge these filters into the view");
+    await page.key("Escape");
+    await page.eval(`document.body.dispatchEvent(new KeyboardEvent('keydown',{key:'ß',code:'KeyS',altKey:true,bubbles:true}))`);
+    await page.page.waitForTimeout(300);
+    expect(await page.eval(`!!document.querySelector('.view-filter-chip')`)).toBe(true);
+    expect((await page.eval<any[]>(`fetch('/api/views').then(r=>r.json())`)).find(v => v.id === saved.id).filters.children[0].values).toEqual(["High"]);
+    await page.key("k", "meta");
+    await page.click('[cmdk-item][data-value="cmd:Save to…"]');
+    await page.waitFor(`!!document.querySelector('[cmdk-item][data-disabled=true]')`);
+    expect(await page.eval(`document.querySelector('[cmdk-item][data-disabled=true]').textContent`)).toContain("Cannot merge these filters into the view");
+    await page.key("Escape");
+    // Without an overlay ⌘K still lists Save to….
+    await page.page.goto(`${origin}/view/${saved.id}?board=1`);
+    await page.waitFor(`!!document.querySelector('[role=status]') && !document.querySelector('.view-filter-chip')`);
+    await page.key("k", "meta");
+    await page.waitFor(`!!document.querySelector('[cmdk-item][data-value="cmd:Save to…"]')`);
+    await page.key("Escape");
+    // Edit mode: base chips are the definition, not a temporary overlay.
+    await page.page.goto(`${origin}/view/${saved.id}/edit`);
+    await page.waitFor(`!!document.querySelector('.view-filter-chip')`);
+    expect(await page.eval(`document.querySelector('.view-filter-row').getAttribute('aria-label')`)).toBe("View filters");
+    expect(await page.eval(`!!document.querySelector('.view-filter-row .view-filter-actions')`)).toBe(false);
+    await page.click("text=Cancel");
+    // New tab draft replaces Add new view with the selected draft tab.
+    await page.page.goto(`${origin}/?board=1`);
+    await page.click("text=Add new view");
+    await page.waitFor(`[...document.querySelectorAll('header span[aria-current=page]')].some(e=>e.textContent.includes('New view'))`);
+    expect(await page.eval(`[...document.querySelectorAll('button')].some(b=>b.textContent.includes('Add new view'))`)).toBe(false);
+    expect(await page.eval(`document.querySelectorAll('header button[aria-pressed=true]').length`)).toBe(0);
+    await page.click("text=Cancel");
+    await page.eval(`fetch('/api/views/${saved.id}',{method:'DELETE'})`);
   } finally { await page.close(); }
 });
