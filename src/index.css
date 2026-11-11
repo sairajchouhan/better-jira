@@ -179,6 +179,11 @@
 }
 
 @layer base {
+  /* No macOS rubber-band bounce or back/forward swipe at the page edges. */
+  html,
+  body {
+    overscroll-behavior: none;
+  }
   body {
     @apply bg-app text-[13px] text-fg antialiased;
     cursor: default;
