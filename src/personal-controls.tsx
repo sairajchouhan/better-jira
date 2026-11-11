@@ -27,9 +27,7 @@ import {
   addLocalFiles,
   beginCreate,
   useAssignableUsers,
-  boardOf,
   get,
-  issueURL,
   isLocalIssue,
   hasLocalJiraChanges,
   ME,
@@ -53,7 +51,7 @@ import {
   type Field,
   type Grouping,
 } from "./view-model";
-import { knownLabels, statusById, statuses } from "./board-catalog";
+import { knownLabels, statuses } from "./board-catalog";
 import { setDisplay, setOnlyRule, updateRule, useViewSettings } from "./view-settings";
 
 const INPUT =
@@ -70,7 +68,7 @@ import { IssueResources, ResourceForm, createIssueDocument } from "./issue-resou
 import { ReactionPicker, shortcode } from "./reactions";
 import { PillSelect } from "./pill-select";
 import { canRunShortcut, shortcutLabel, runShortcut } from "./shortcuts";
-import { copyIcons, copyKinds, copyShortcuts, issueCopy, type CopyKind } from "./issue-copy";
+import { copyIcons, copyIssue, copyKinds, copyShortcuts, type CopyKind } from "./issue-copy";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { kept, post, useCommand } from "./commands";
 import { reminderPresets, reminderTime } from "./reminder-display";
@@ -812,8 +810,7 @@ export function GroupMenu({
 }
 
 export function IssueOptions({ issue }: { issue: Issue }) {
-  const full = useStore((s) => s.full.get(issue.key)),
-    parent = useStore((s) => (issue.parent ? s.issues.get(issue.parent) : undefined));
+  const parent = useStore((s) => (issue.parent ? s.issues.get(issue.parent) : undefined));
   const close = () => ui.send({ type: "overlay.close" });
   const point = useStore((s) => s.issueOptionsPoint),
     [view, setView] = useState(() => kept("issue-options-start"));
@@ -826,16 +823,7 @@ export function IssueOptions({ issue }: { issue: Issue }) {
   const linkOpen = view === "link" || view === "pull-request";
   const resourceKind = view === "pull-request" ? "pull-request" : "link";
   const copy = async (kind: CopyKind) => {
-    const status =
-      statusById(boardOf(issue.key), issue.status)?.name ?? issue.status;
-    try {
-      await navigator.clipboard.writeText(
-        issueCopy(kind, issue, full, issueURL(issue), status, ME.name),
-      );
-      set({ perf: `Copied ${kind}` });
-    } catch {
-      set({ perf: "Could not access the clipboard" });
-    }
+    await copyIssue(kind, issue);
     close();
   };
   if (historyOpen)

@@ -26,7 +26,7 @@ import {
   type InboxView,
   type Local,
 } from "./inbox-model";
-import { issueCopy, type CopyKind } from "./issue-copy";
+import { copyIssue, type CopyKind } from "./issue-copy";
 import { Menu } from "./menu";
 import { MenuSurface } from "./menu-surface";
 import { shortcutLabel } from "./shortcuts";
@@ -485,16 +485,8 @@ export const hasSelectedRow = () => !!selectedRow();
 /** Linear's ⌥1 and ⌥2: the priority inbox's tabs. */
 export const showTab = (tab: InboxView["tab"]) => changeView({ tab });
 export const priorityInbox = () => viewState().priorityInbox;
-async function copyRow(item: InboxItem, kind: CopyKind) {
-  try {
-    await navigator.clipboard.writeText(
-      issueCopy(kind, { key: item.key, summary: item.title } as Issue, undefined, item.url, ""),
-    );
-    set({ perf: `Copied ${kind}` });
-  } catch {
-    set({ perf: "Could not access the clipboard" });
-  }
-}
+const copyRow = (item: InboxItem, kind: CopyKind) =>
+  copyIssue(kind, { key: item.key, summary: item.title } as Issue, item.url);
 /** Unseen is Jira's bell count; opening the inbox clears it, as opening the bell does. */
 let clearing = false;
 async function clearUnseen() {

@@ -36,7 +36,7 @@ import {
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { Avatar } from "./avatar";
 import { statusById, statuses } from "./board-catalog";
-import { copyIcons, copyKinds, copyShortcuts, issueCopy } from "./issue-copy";
+import { copyIcons, copyIssue, copyKinds, copyShortcuts } from "./issue-copy";
 import { Relations } from "./personal-controls";
 import { ResourceForm, createIssueDocument } from "./issue-resources";
 import { duePresets, shortDate } from "./due-date";
@@ -849,15 +849,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
         name: `Copy ${kind}`,
         icon: copyIcons[kind],
         shortcut: shortcutLabel(copyShortcuts[kind] ?? "") || undefined,
-        run: () =>
-          void navigator.clipboard
-            .writeText(
-              issueCopy(kind, child, undefined, issueURL(child), status(child).name, ME.name),
-            )
-            .then(
-              () => set({ perf: `Copied ${kind}` }),
-              () => set({ perf: "Could not access the clipboard" }),
-            ),
+        run: () => void copyIssue(kind, child),
       })),
     },
     { name: "Make a copy…", icon: "copy", run: () => actions.duplicate(child.key) },

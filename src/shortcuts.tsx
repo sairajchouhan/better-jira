@@ -14,10 +14,8 @@ import {
   boardOf,
   currentKey,
   get,
-  issueURL,
   isLocalIssue,
   isWatching,
-  loadFull,
   ME,
   navigate,
   redoEdit,
@@ -41,8 +39,7 @@ import {
   updateRule,
   viewSettings,
 } from "./view-settings";
-import { issueCopy, type CopyKind } from "./issue-copy";
-import { statusById } from "./board-catalog";
+import { copyIssue, type CopyKind } from "./issue-copy";
 import { editorBindings } from "./editor-bindings";
 import { ActionMenu } from "./action-menu";
 import { MenuSurface } from "./menu-surface";
@@ -169,23 +166,9 @@ function scope(value: "active" | "backlog" | "all", mine = false) {
   navigate({ mine, ...(!mine && isMyIssues(get()) ? { board: get().board } : {}), panel: false, selected: null });
   setScope(get().board, value);
 }
-async function copy(kind: CopyKind) {
+function copy(kind: CopyKind) {
   const issue = target();
-  if (!issue) return;
-  try {
-    if (kind === "everything as Markdown" && !get().full.has(issue.key)) {
-      await loadFull(issue.key);
-      if (!get().full.has(issue.key)) throw new Error("Issue details unavailable");
-    }
-    const full = get().full.get(issue.key),
-      status = statusById(boardOf(issue.key), issue.status)?.name ?? issue.status;
-    await navigator.clipboard.writeText(
-      issueCopy(kind, issue, full, issueURL(issue), status, ME.name),
-    );
-    set({ perf: `Copied ${kind}` });
-  } catch {
-    set({ perf: "Could not access the clipboard" });
-  }
+  if (issue) void copyIssue(kind, issue);
 }
 function relation(kind: string) {
   set({ relationKind: kind });

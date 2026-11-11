@@ -1,4 +1,4 @@
-import type { Issue, Full } from "./store";
+import { ME, get, isLocalIssue, issueURL, loadFull, set, statusOf, type Full, type Issue } from "./store";
 import type { AdfNode } from "./rich-document";
 
 const escape = (text: string) => text.replace(/[\\`*_[\]<>]/g, "\\$&");
@@ -168,5 +168,22 @@ export function issueCopy(
         .join("\n\n");
       return `${base}\n\nStatus: ${status}\nAssignee: ${issue.assignee?.name ?? "Unassigned"}\nPriority: ${issue.priority ?? "None"}\nLabels: ${issue.labels.join(", ")}\n${issue.due ? `Due date: ${issue.due}\n` : ""}\n${comments}`;
     }
+  }
+}
+/** Copies one projection of the issue and says so in the status bar. "everything as Markdown" loads the comments
+ *  first. `url` is the issue's link unless the caller has a better one (an inbox notification's). */
+export async function copyIssue(kind: CopyKind, issue: Issue, url = issueURL(issue)) {
+  try {
+    if (kind === "everything as Markdown" && !get().full.has(issue.key) && !isLocalIssue(issue.key)) {
+      await loadFull(issue.key);
+      if (!get().full.has(issue.key)) throw new Error("Issue details unavailable");
+    }
+    const status = statusOf(issue)?.name ?? issue.status;
+    await navigator.clipboard.writeText(
+      issueCopy(kind, issue, get().full.get(issue.key), url, status, ME.name),
+    );
+    set({ perf: `Copied ${kind}` });
+  } catch {
+    set({ perf: "Could not access the clipboard" });
   }
 }
