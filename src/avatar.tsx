@@ -1,13 +1,16 @@
-/* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { avatarSrc } from "./avatar-proxy";
 import type { User } from "./store";
 
 /** The person's Jira photo through the same-origin proxy; their initial while it loads or if it fails; a dashed ring for nobody. */
 export function Avatar({ user, size = 20 }: { user: User | null; size?: number }) {
-  const [state, setState] = useState<"loading" | "loaded" | "broken">("loading");
-  // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Reset image loading when the person's photo URL changes.
-  useEffect(() => setState("loading"), [user?.avatar]);
+  // A new photo URL starts loading again: the state belongs to the URL it was reached for.
+  const [loading, setLoading] = useState<{
+    avatar?: string;
+    state: "loading" | "loaded" | "broken";
+  }>({ avatar: user?.avatar, state: "loading" });
+  const state = loading.avatar === user?.avatar ? loading.state : "loading";
+  const setState = (next: "loaded" | "broken") => setLoading({ avatar: user?.avatar, state: next });
   const box = { width: size, height: size };
   if (!user)
     return (
