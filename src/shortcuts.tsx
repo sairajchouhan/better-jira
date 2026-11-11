@@ -5,12 +5,7 @@ import { activeView, saveOverlayToView } from "./saved-views";
 import { canMergeOverlay } from "./saved-view-model";
 import { filterCount, visibleOrder } from "./view-model";
 import { canHaveChildren } from "./issue-properties";
-import {
-  formatForDisplay,
-  useHotkeys,
-  type Hotkey,
-  type UseHotkeyDefinition,
-} from "@tanstack/react-hotkeys";
+import { formatForDisplay, getHotkeyManager, type Hotkey } from "@tanstack/react-hotkeys";
 import {
   actions,
   beginCreate,
@@ -28,7 +23,6 @@ import {
   toggleFavorite,
   ui,
   undoEdit,
-  useStore,
   type Issue,
   type Overlay,
 } from "./store";
@@ -943,8 +937,20 @@ export function runShortcut(id: string, key?: string) {
     acting = null;
   }
 }
+/** Whether a key may run the shortcut now: an open menu or toolbar keeps the keys, except ⌘K and ⌘/ that close their own. */
+function hotkeyEnabled(entry: Shortcut) {
+  const s = get();
+  return (
+    s.boards.length > 0 &&
+    ((!s.overlay && !s.toolbar) ||
+      (entry.id === "commands" && s.overlay === "palette") ||
+      (entry.id === "shortcuts" && s.overlay === "shortcuts")) &&
+    shortcutApplies(entry)
+  );
+}
+/** Registers the keyboard map once. Which shortcuts are enabled is worked out from the store at each key press,
+ *  before the hotkey listener sees it, so a store change (a Jira poll) re-renders and re-registers nothing. */
 export function useLinearHotkeys() {
-  const state = useStore((s) => s);
   useEffect(() => {
     const handle = (event: KeyboardEvent) => {
       const id = viewShortcutId(event);
@@ -969,54 +975,57 @@ export function useLinearHotkeys() {
       }
     };
     document.addEventListener("keydown", handle);
-    return () => document.removeEventListener("keydown", handle);
-  }, []);
-  useHotkeys(
-    shortcuts
+    const bound = shortcuts
       .filter((entry) => entry.hotkey && !entry.id.startsWith("view-"))
-      .map(
-        (entry) =>
-          ({
-            hotkey: entry.hotkey!,
-            callback: (event: KeyboardEvent) => {
-              if (
-                event.target instanceof Element &&
-                event.target.closest("[data-media-interactive]") &&
-                !(
-                  (event.metaKey || event.ctrlKey) &&
-                  (entry.id === "commands" || entry.id === "shortcuts")
-                )
+      .map((entry) => ({
+        entry,
+        handle: getHotkeyManager().register(
+          entry.hotkey!,
+          (event: KeyboardEvent) => {
+            if (
+              event.target instanceof Element &&
+              event.target.closest("[data-media-interactive]") &&
+              !(
+                (event.metaKey || event.ctrlKey) &&
+                (entry.id === "commands" || entry.id === "shortcuts")
               )
-                return;
-              runShortcut(entry.id);
-            },
-            options: {
-              enabled:
-                state.boards.length > 0 &&
-                ((!state.overlay && !state.toolbar) ||
-                  (entry.id === "commands" && state.overlay === "palette") ||
-                  (entry.id === "shortcuts" && state.overlay === "shortcuts")) &&
-                shortcutApplies(entry),
-              ignoreInputs: !(
-                entry.id === "shortcuts" ||
-                entry.id === "commands" ||
-                entry.id === "sub-issue"
-              ),
-              meta: { name: entry.name, group: entry.group },
-              // Document and issue shortcuts share keys on purpose; `enabled` keeps exactly one of each pair active.
-              ...(shortcuts.some(
-                (other) =>
-                  other !== entry &&
-                  other.hotkey === entry.hotkey &&
-                  !!other.document !== !!entry.document,
-              )
-                ? { conflictBehavior: "allow" as const }
-                : {}),
-            },
-          }) as UseHotkeyDefinition,
-      ),
-    { ignoreDefaultPrevented: true },
-  );
+            )
+              return;
+            runShortcut(entry.id);
+          },
+          {
+            enabled: hotkeyEnabled(entry),
+            ignoreInputs: !(
+              entry.id === "shortcuts" ||
+              entry.id === "commands" ||
+              entry.id === "sub-issue"
+            ),
+            ignoreDefaultPrevented: true,
+            afterDelegatedHandlers: true,
+            meta: { name: entry.name, group: entry.group } as { name: string },
+            // Document and issue shortcuts share keys on purpose; `enabled` keeps exactly one of each pair active.
+            ...(shortcuts.some(
+              (other) =>
+                other !== entry &&
+                other.hotkey === entry.hotkey &&
+                !!other.document !== !!entry.document,
+            )
+              ? { conflictBehavior: "allow" as const }
+              : {}),
+          },
+        ),
+      }));
+    const sync = () => {
+      for (const { entry, handle } of bound) handle.setOptions({ enabled: hotkeyEnabled(entry) });
+    };
+    // Capture on window runs before every document listener, the hotkey manager's included.
+    window.addEventListener("keydown", sync, true);
+    return () => {
+      window.removeEventListener("keydown", sync, true);
+      document.removeEventListener("keydown", handle);
+      for (const { handle } of bound) handle.unregister();
+    };
+  }, []);
 }
 export function ShortcutHelp() {
   const [query, setQuery] = useState("");

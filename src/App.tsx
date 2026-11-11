@@ -249,7 +249,6 @@ function ActivityIcon({ row, issue }: { row: ActivityRow; issue: Issue }) {
 }
 const statusOf = (i: Issue) => statusById(boardOf(i.key), i.status);
 
-/** The keyboard map re-registers on every store change; its own component keeps that from re-rendering App. */
 function Hotkeys() {
   useLinearHotkeys();
   return null;
