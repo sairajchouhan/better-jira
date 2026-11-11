@@ -2147,6 +2147,8 @@ export const isWatching = (issue: Issue) =>
   issue.watchers ? issue.watchers.some((u) => u.id === ME.id) : !!issue.watching;
 export const boardOf = (key: string) =>
   state.boards.find((b) => b.id === state.issues.get(key)?.board);
+/** The issue's status on its own board. */
+export const statusOf = (i: Issue) => statusById(boardOf(i.key), i.status);
 
 let localSeq = 0;
 /** Local edits per issue in this tab, so a slow read can tell whether the issue was edited meanwhile. */

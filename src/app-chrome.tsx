@@ -1,0 +1,603 @@
+import { navigationChoices } from "./quick-navigation";
+import { useActiveView, useSavedViews, createViewDraft } from "./saved-views";
+import { setScope, useViewSettings } from "./view-settings";
+import { openViewEditor, ViewMenu, ViewContextMenu, ViewEditorPage } from "./view-editor";
+import { ViewFavorites, SavedViewIcon } from "./views-navigation";
+import { useHotkey } from "@tanstack/react-hotkeys";
+import { useRef, type ReactNode } from "react";
+import { Icon, TypeDot } from "./icons";
+import {
+  actions,
+  get,
+  navigate,
+  set,
+  timed,
+  ui,
+  useStore,
+  dismissRecoveryNotice,
+  openSavedView,
+  openAllIssues as openBoardIssues,
+  beginCreate,
+  downloadLocalBackup,
+  issueURL,
+  retryLocalStorage,
+  dismissWriteError,
+  toggleFavorite,
+  undoEdit,
+  redoEdit,
+  type Board,
+  type Issue,
+  currentKey,
+} from "./store";
+import { BoardControls, FilterChips } from "./view-controls";
+import { Modal } from "./personal-controls";
+import { runShortcut, shortcutLabel } from "./shortcuts";
+import { Confirm } from "./menu-surface";
+import { useCommand, focusNode } from "./commands";
+import { undoInboxToast, useInboxBadge } from "./inbox";
+import { Menu } from "./menu";
+import { FOOT_BTN, COL_BTN } from "./board-view";
+export function QuickNavigation({ kind }: { kind: "favorites" | "views" | "boards" }) {
+  const boards = useStore((s) => s.boards);
+  const savedViews = useStore((s) => s.savedViews);
+  const favorites = useStore((s) => s.favorites);
+  const issues = useStore((s) => s.issues);
+  const close = () => ui.send({ type: "overlay.close" });
+  const title =
+    kind === "views" ? "Open view" : kind === "boards" ? "Open a team / board" : "Open a favorite";
+  const choices = navigationChoices(kind, { boards, savedViews, favorites, issues });
+  return (
+    <Modal label={title} close={close} fit>
+      <Menu>
+        <Menu.Input autoFocus aria-label="Find view or favorite" placeholder="Search…" />
+        <Menu.List maxHeight="60vh">
+          <Menu.Empty>No saved {kind}</Menu.Empty>
+          {choices.map((choice) => (
+            <Menu.Item
+              key={choice.id}
+              value={choice.name}
+              onSelect={() => {
+                close();
+                const to = choice.destination;
+                if ("view" in to) openSavedView(to.view);
+                else {
+                  const { scope, ...route } = to;
+                  navigate(route);
+                  if (scope) setScope(to.board, scope);
+                }
+              }}
+            >
+              {choice.name}
+            </Menu.Item>
+          ))}
+        </Menu.List>
+      </Menu>
+    </Modal>
+  );
+}
+
+// --- chrome ---
+
+export function Sidebar({ boards }: { boards: Board[] }) {
+  const boardId = useStore((s) => s.board);
+  const activeView = useActiveView();
+  const views = useSavedViews();
+  const viewsPage = useStore((s) => s.viewsPage);
+  const mine = useStore((s) => s.mine);
+  const hidden = useStore((s) => s.sidebarHidden);
+  const open = useStore((s) => s.sidebarOpen);
+  const inbox = useStore((s) => s.inbox);
+  const badge = useInboxBadge();
+  if (hidden && !open) return null;
+  const close = () => set({ sidebarOpen: false });
+  return (
+    <>
+      {open && (
+        <button
+          aria-label="Close menu"
+          tabIndex={-1}
+          onClick={close}
+          className="fixed inset-0 z-40 bg-black/30 md:hidden"
+        />
+      )}
+      <nav
+        aria-label="Main navigation"
+        // Below 768px the sidebar opens over the page from the Menu button or [, and closes after a pick.
+        onClick={(e) => open && (e.target as Element).closest("button") && close()}
+        className={`flex w-[244px] shrink-0 flex-col gap-px overflow-y-auto p-2 font-medium ${open ? "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:bg-panel max-md:shadow-lg" : "max-md:hidden"}`}
+      >
+        <div className="mb-1 flex h-11 items-center gap-2 px-2 text-fg">
+          <span className="grid size-[18px] place-items-center rounded-[5px] bg-accent text-[10px] font-semibold text-white">
+            bj
+          </span>
+          better-jira
+        </div>
+        <SideItem active={inbox} onClick={() => timed("open inbox", () => runShortcut("inbox"))}>
+          <Icon name="inbox" /> Inbox
+          {badge > 0 && (
+            <span data-inbox-badge className="ml-auto text-[12px] text-fg-2">
+              {badge}
+            </span>
+          )}
+        </SideItem>
+        <SideItem onClick={() => runShortcut("search")}>
+          <Icon name="search" /> Search <kbd className="ml-auto">/</kbd>
+        </SideItem>
+        <SideItem onClick={() => beginCreate()}>
+          <Icon name="plus" /> New issue <kbd className="ml-auto">C</kbd>
+        </SideItem>
+        {/* Like Linear, My issues is a sidebar view rather than a tab beside Active/Backlog/All. */}
+        <SideItem
+          active={mine && !inbox && !activeView && !viewsPage}
+          onClick={() => timed("open my issues", () => navigate({ mine: true, selected: null, panel: false }))}
+        >
+          <Icon name="user" /> My issues <kbd className="ml-auto">{shortcutLabel("mine")}</kbd>
+        </SideItem>
+
+        <div className="group mt-5 mb-1 flex items-center px-2 text-[12px] text-fg-3">
+          Boards
+          <button
+            aria-label="Add board"
+            title="Add board"
+            onClick={() => ui.send({ type: "overlay.open", overlay: "add-board" })}
+            className="ml-auto grid size-5 place-items-center rounded opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-hover hover:text-fg-2"
+          >
+            <Icon name="plus" size={14} />
+          </button>
+        </div>
+        {boards.map((b) => (
+          <SideItem
+            key={b.id}
+            active={!mine && !inbox && !activeView && !viewsPage && b.id === boardId}
+            onClick={() =>
+              timed("switch board", () => navigate({ board: b.id, selected: null, panel: false }))
+            }
+          >
+            <span className="grid size-4 shrink-0 place-items-center rounded-[4px] bg-sel text-[9px] font-semibold text-fg-2">
+              {b.name[0]}
+            </span>
+            <span className="truncate">{b.name}</span>
+          </SideItem>
+        ))}
+        {/* Views is a section like Boards: every saved view inline; the heading opens the Views directory. */}
+        <button
+          onClick={() => navigate({ board: boardId, viewsPage: true, selected: null, panel: false, inbox: false })}
+          aria-current={viewsPage || undefined}
+          className={`mt-5 mb-1 flex h-6 items-center rounded-md px-2 text-left text-[12px] hover:text-fg-2 ${viewsPage ? "text-fg-2" : "text-fg-3"}`}
+        >
+          Views
+        </button>
+        {views.map((v) => (
+          <ViewContextMenu key={v.id} view={v}>
+            <SideItem active={activeView?.id === v.id} onClick={() => timed("open view", () => openSavedView(v))}>
+              <SavedViewIcon view={v} />
+              <span className="truncate">{v.name}</span>
+            </SideItem>
+          </ViewContextMenu>
+        ))}
+        <ViewFavorites />
+        <button
+          id="help-menu"
+          aria-label="Open Help menu"
+          onClick={() => runShortcut("help")}
+          className="mt-auto flex items-center justify-between rounded-lg px-2 py-2 text-fg-3 hover:bg-hover"
+        >
+          Help <kbd>?</kbd>
+        </button>
+      </nav>
+    </>
+  );
+}
+
+/** Linear's 28px bottom bar under the sidebar and panel; ours carries the perf readout and the local-only note. */
+/** Linear's delete dialog instead of a native confirm. Jira deletes the issue's subtasks with it (deleteSubtasks=true), so it names them. */
+export function DeleteConfirm() {
+  const key = useStore((s) => s.deleting),
+    issue = useStore((s) => (s.deleting ? s.issues.get(s.deleting) : undefined)),
+    issues = useStore((s) => s.issues),
+    types = useStore((s) => s.options.types);
+  if (!key || !issue) return null;
+  const levels = types?.[issue.project?.key ?? ""];
+  // Subtasks go with the issue; an epic's own children (level 0 and up) stay in Jira, unparented.
+  const subtasks = [...issues.values()].filter(
+    (i) => i.parent === key && (levels?.find((t) => t.name === i.type)?.hierarchyLevel ?? -1) < 0,
+  );
+  const close = () => set({ deleting: null });
+  return (
+    <Confirm
+      title={`Delete "${key} ‒ ${issue.summary}"?`}
+      detail={`${
+        subtasks.length
+          ? `This also deletes its ${subtasks.length} sub-issue${subtasks.length === 1 ? "" : "s"} (${subtasks.map((i) => i.key).join(", ")}). `
+          : ""
+      }Jira can't restore deleted issues, so this can't be undone.`}
+      action={subtasks.length ? `Delete ${subtasks.length + 1} issues` : "Delete"}
+      onConfirm={() => {
+        close();
+        actions.remove(key, true);
+      }}
+      close={close}
+    />
+  );
+}
+
+export function Toast() {
+  const toast = useStore((s) => s.toast);
+  if (!toast) return null;
+  return (
+    <div
+      aria-live="polite"
+      data-toast
+      className="fixed right-4 bottom-10 z-50 flex items-center gap-3 rounded-lg border border-line-2 bg-card px-3 py-2 text-[13px] text-fg shadow-lg"
+    >
+      <div>
+        {toast.text}
+        {toast.detail && <p className="mt-1 text-[12px] text-fg-3">{toast.detail}</p>}
+      </div>
+      {toast.undo && (
+        <button
+          className="text-accent hover:underline"
+          onClick={() => {
+            if (toast.undo === "inbox") undoInboxToast();
+            else undoEdit();
+            ui.send({ type: "toast.dismiss" });
+          }}
+        >
+          Undo
+        </button>
+      )}
+      {toast.key && (
+        <button
+          onClick={() => (
+            ui.send({ type: "toast.dismiss" }),
+            navigate({
+              selected: toast.key,
+              panel: true,
+              board: get().issues.get(currentKey(toast.key ?? ""))?.board,
+            })
+          )}
+          className="text-accent hover:underline"
+        >
+          View issue
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function StatusBar() {
+  const perf = useStore((s) => s.perf);
+  const undo = useStore((s) => s.undoCount),
+    redo = useStore((s) => s.redoCount);
+  const storage = useStore((s) => s.storage),
+    writable = useStore((s) => s.writable),
+    pending = useStore((s) => s.pendingWrites),
+    writeError = useStore((s) => s.writeError);
+  return (
+    <footer className="flex h-7 shrink-0 items-center gap-4 px-4 pb-2 text-[11px] whitespace-nowrap">
+      {writable ? (
+        <span
+          title="Issue edits are written to Jira."
+          className="flex min-w-0 items-center gap-1.5 text-emerald-500"
+        >
+          <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
+          <span className="truncate">Edits write to Jira</span>
+        </span>
+      ) : (
+        <span
+          title="Issue changes, files, and view preferences are saved in this browser."
+          className="flex min-w-0 items-center gap-1.5 text-amber-500"
+        >
+          <span className="size-1.5 shrink-0 rounded-full bg-amber-500" />
+          <span className="truncate">Local only: nothing is sent to Jira</span>
+        </span>
+      )}
+      {writable && (
+        <span
+          role="status"
+          aria-label="Jira save status"
+          data-jira-pending={pending}
+          title={writeError?.text}
+          className={`flex min-w-0 items-center gap-1 ${writeError && (!pending || writeError.retrying) ? "text-red-500" : "text-fg-3"}`}
+        >
+          <span className="truncate">
+            {pending && writeError?.retrying
+              ? `Still sending ${pending} to Jira: ${writeError.key}: ${writeError.text}`
+              : pending
+                ? `Sending ${pending} to Jira…`
+                : writeError
+                  ? `Not saved to Jira: ${writeError.key}: ${writeError.text}`
+                  : "Saved to Jira"}
+          </span>
+          {writeError && !pending && (
+            <button
+              aria-label="Dismiss Jira save error"
+              onClick={dismissWriteError}
+              className={FOOT_BTN}
+            >
+              <Icon name="close" />
+            </button>
+          )}
+        </span>
+      )}
+      <span
+        role="status"
+        aria-label="Local save status"
+        data-storage-status={storage.status}
+        className="text-fg-3"
+      >
+        {storage.status === "saving"
+          ? "Saving…"
+          : storage.status === "saved"
+            ? "Saved locally"
+            : storage.status === "loading"
+              ? "Opening local data…"
+              : "Not saved"}
+      </span>
+      <span className="-ml-2 flex">
+        <button
+          aria-label="Undo"
+          disabled={!undo}
+          onClick={undoEdit}
+          title="Undo (⌘Z)"
+          className={FOOT_BTN}
+        >
+          <Icon name="undo" />
+        </button>
+        <button
+          aria-label="Redo"
+          disabled={!redo}
+          onClick={redoEdit}
+          title="Redo (⌘⇧Z)"
+          className={FOOT_BTN}
+        >
+          <Icon name="redo" />
+        </button>
+        <button
+          aria-label="Download backup"
+          title="Download your local changes and files"
+          onClick={() => void downloadLocalBackup()}
+          className={FOOT_BTN}
+        >
+          <Icon name="download" />
+        </button>
+      </span>
+      <span className="ml-auto truncate font-mono text-emerald-500">{perf}</span>
+    </footer>
+  );
+}
+
+export function StorageNotice() {
+  const storage = useStore((s) => s.storage);
+  if (storage.status !== "error" && !storage.recovered) return null;
+  return (
+    <div
+      role={storage.status === "error" ? "alert" : "status"}
+      className="flex shrink-0 flex-wrap items-center gap-3 border-t border-line px-4 py-2 text-[12px] text-fg-2"
+    >
+      <span className="mr-auto">{storage.message}</span>
+      {storage.status === "error" && (
+        <button onClick={() => void retryLocalStorage()} className="text-accent">
+          Retry local storage
+        </button>
+      )}
+      <button onClick={() => void downloadLocalBackup()} className="text-accent">
+        Download local backup
+      </button>
+      {storage.recovered && storage.status !== "error" && (
+        <button aria-label="Dismiss local recovery notice" onClick={dismissRecoveryNotice}>
+          <Icon name="close" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+const SideItem = ({
+  active,
+  onClick,
+  children,
+}: {
+  active?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) => (
+  <button
+    onClick={onClick}
+    aria-current={active || undefined}
+    className={`flex h-7 items-center gap-2 rounded-lg pr-[9px] pl-2 text-left ${active ? "bg-sel text-fg" : "text-fg-2 hover:bg-hover"}`}
+  >
+    {children}
+  </button>
+);
+
+// Linear's pill button: 28px, 0.5px ring drawn as a shadow, 12px/500.
+const PILL =
+  "flex h-7 shrink-0 items-center gap-1.5 rounded-full border-[0.5px] border-transparent px-2.5 text-[12px] font-medium";
+const CIRCLE =
+  "flex h-7 min-w-7 shrink-0 items-center rounded-full bg-btn text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2";
+
+/** Linear's Menu button: below 768px it opens the hidden sidebar. */
+function MenuButton() {
+  return (
+    <button
+      aria-label="Menu"
+      onClick={() => set({ sidebarOpen: true })}
+      className={`${COL_BTN} mr-1 shrink-0 md:hidden`}
+    >
+      <Icon name="side" />
+    </button>
+  );
+}
+// Linear's breadcrumb (linear.app/…/view/…, 2026-11-11 computed styles): 24px links padded 0 5px 0 4px with matching
+// negative margins, 16px icon + 6px, 13px/500 text at line-height normal, "›" with 8px sides lifted 2px; hover bg
+// --crumb-hover and primary text, only colour animates (0.15s).
+const CRUMB_LAST =
+  "-ml-1 flex h-6 min-w-0 items-center rounded-lg pr-[5px] pl-1 transition-[color] duration-150 ease-[ease] hover:bg-(--crumb-hover) hover:text-fg focus-visible:outline-2 focus-visible:outline-accent";
+const CRUMB = `-mr-[5px] ${CRUMB_LAST}`; // the current (last) crumb keeps its right padding, like Linear's current item
+const CRUMB_ICON = "mr-1.5 grid w-4 shrink-0 place-items-center";
+function CrumbSep({ className = "" }: { className?: string }) {
+  return <span aria-hidden="true" className={`mx-2 -mt-0.5 shrink-0 text-fg-3 ${className}`}>›</span>;
+}
+export function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue }) {
+  const mine = useStore((s) => s.mine);
+  const activeView = useActiveView();
+  const custom = !issue && activeView?.kind === "custom" ? activeView : null;
+  const openAllIssues = () => openBoardIssues(board.id);
+  return (
+    <nav
+      aria-label="Breadcrumb"
+      className="flex min-w-0 items-center text-[13px] leading-[normal] font-medium text-fg-2"
+    >
+      <MenuButton />
+      {!mine || activeView ? <><button aria-label={board.name} title={board.name} onClick={openAllIssues} className={CRUMB}>
+        <span aria-hidden="true" className={CRUMB_ICON}>
+          <span className="grid size-4 place-items-center rounded-[4px] bg-accent text-[9px] font-semibold text-white">{board.name[0]}</span>
+        </span>
+        <span className="truncate">{board.name}</span>
+      </button>
+      <CrumbSep className={issue ? "max-sm:hidden" : ""} /></> : null}
+      {custom ? (
+        <>
+          <button onClick={() => navigate({ board: board.id, viewsPage: true, selected: null, panel: false, inbox: false })} className={`${CRUMB} shrink-0`}>
+            Views
+          </button>
+          <CrumbSep />
+          {/* Linear: the current view is plain text (right-click for its menu), not a link. */}
+          <ViewContextMenu view={custom}>
+            <span aria-current="page" className="flex h-6 min-w-0 items-center">
+              <span className={CRUMB_ICON}><SavedViewIcon view={custom} /></span>
+              <h2 className="truncate font-medium">{custom.name}</h2>
+            </span>
+          </ViewContextMenu>
+        </>
+      ) : (
+        <button
+          aria-label={!activeView && mine ? "My issues" : "Issues"}
+          aria-current={issue ? undefined : "page"}
+          onClick={openAllIssues}
+          className={`${CRUMB} shrink-0 ${issue ? "max-sm:hidden" : ""}`}
+        >
+          {!activeView && mine ? "My issues" : "Issues"}
+        </button>
+      )}
+      {issue && (
+        <>
+          <CrumbSep />
+          {/* The key never truncates (Opus review 4: at 390px it vanished): the title truncates, and below 640px the Issues crumb gives way. */}
+          <a aria-current="page" className={CRUMB_LAST} href={issueURL(issue)} target="_blank" rel="noreferrer">
+            <span className={CRUMB_ICON}><TypeDot type={issue.type} /></span>
+            <span data-crumb-issue className="flex min-w-0">
+              <span className="mr-[5.6px] shrink-0 tracking-[-0.24px]">{issue.key}</span>
+              <span className="truncate">{issue.summary}</span>
+            </span>
+          </a>
+        </>
+      )}
+    </nav>
+  );
+}
+
+export function BoardHeader() {
+  const activeView = useActiveView();
+  const savedViews = useSavedViews();
+  const board = useStore((s) => s.boards.find((b) => b.id === s.board));
+  const query = useStore((s) => s.query);
+  const draft = useStore((s) => s.editorDraft);
+  const custom = (draft ?? activeView)?.kind === "custom";
+  const details = useStore((s) => s.details);
+  const prefs = useViewSettings(board!.id);
+  const finding = useStore((s) => s.findInView);
+  const findRef = useRef<HTMLInputElement>(null);
+  useCommand("focus-find", () => focusNode(findRef.current));
+  useHotkey(
+    "Escape",
+    () => {
+      set({ findInView: false });
+      ui.send({ type: "query.set", query: "" });
+      findRef.current?.blur();
+    },
+    { target: findRef, ignoreInputs: false },
+  );
+  const favoriteId = activeView?.kind === "custom" ? `view:${activeView.id}` : `board:${board!.id}`;
+  const favorite = useStore((s) => s.favorites.includes(favoriteId));
+  return (
+    <header className="shrink-0">
+      <div className="flex h-11 items-center justify-between border-b-[0.5px] border-frame px-2">
+        <div className="flex min-w-0 items-center pr-1 pl-2.5 text-[13px] font-medium text-fg-2">
+          <BoardBreadcrumbs board={board!} />
+          {/* Linear: star, then ⋯ — 28px round buttons, 14px glyphs, 4px apart; hover fills --crumb-hover and whitens the glyph. */}
+          <button
+            role="switch"
+            aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
+            aria-checked={favorite}
+            onClick={() => toggleFavorite(favoriteId)}
+            className={`ml-2 grid size-7 shrink-0 place-items-center rounded-full border-[0.5px] border-transparent transition-[border-color,background-color,color,opacity] duration-150 ease-[ease] hover:bg-(--crumb-hover) ${favorite ? "text-[#f2c94c]" : "text-fg-3 hover:text-fg"}`}
+          >
+            <Icon name={favorite ? "starred" : "star"} size={14} />
+          </button>
+          {activeView?.kind === "custom" && <ViewMenu view={activeView}><button aria-label="Issue view options" className="ml-1 grid size-7 shrink-0 place-items-center rounded-full border-[0.5px] border-transparent transition-[border-color,background-color,color,opacity] duration-150 ease-[ease] hover:bg-(--crumb-hover) text-fg-3 hover:text-fg"><Icon name="dots" size={14} /></button></ViewMenu>}
+        </div>
+        <button
+          aria-label="Search issues"
+          onClick={() => runShortcut("search")}
+          className={`${COL_BTN} ml-auto md:hidden`}
+        >
+          <Icon name="search" />
+        </button>
+        <button
+          onClick={() => beginCreate()}
+          className={`${PILL} pr-2.5 pl-2 text-fg-3 hover:bg-hover hover:text-fg-2`}
+        >
+          <Icon name="plus" /> New issue
+        </button>
+      </div>
+      {/* Linear: custom views (and their editor) show only the breadcrumb, no team tabs. The editor floats this row's
+          controls into its card, so a custom draft collapses the row. */}
+      <div className={`flex flex-wrap items-center gap-1 px-2 ${custom && draft ? "" : "min-h-[43.5px] py-1"}`}>
+        {!custom && (["active", "backlog", "all"] as const).map((scope) => (
+          <button
+            key={scope}
+            aria-pressed={!activeView && !draft && prefs.scope === scope}
+            onClick={() => { navigate({ board: board!.id, selected: null, panel: false }); setScope(board!.id, scope); }}
+            className={`${PILL} ${!activeView && !draft && prefs.scope === scope ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2"}`}
+          >
+            {scope === "active" ? "Active" : scope === "backlog" ? "Backlog" : "All issues"}
+          </button>
+        ))}
+        {!custom && savedViews.filter(v => v.board === board!.id && v.kind === "tab").map(view => { const on = activeView?.id === view.id || draft?.id === view.id; return <ViewContextMenu key={view.id} view={view}><button aria-pressed={on} onClick={() => openSavedView(view)} className={`${PILL} ${on ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover"}`}>{view.name}</button></ViewContextMenu>; })}
+        {/* Linear swaps Add new view for the draft tab while a new tab view is being made. */}
+        {draft && !draft.id && draft.kind === "tab" ? <span aria-current="page" className={`${PILL} bg-tab-on text-fg-3 shadow-(--tab-on-shadow)`}><SavedViewIcon view={draft} />{draft.name.trim() || "New view"}<Icon name="pencil" size={12} /></span>
+          : !custom && !draft && <button className={`${PILL} text-fg-3 hover:bg-hover`} onClick={() => openViewEditor(createViewDraft("tab"))}><Icon name="plus" size={14} />Add new view</button>}
+        <div className="ml-auto flex items-center gap-1">
+          <BoardControls board={board!} />
+        </div>
+        <button
+          aria-label={details ? "Close details" : "Open details"}
+          aria-expanded={details}
+          title="Board details"
+          onClick={() => (set({ details: !details }), navigate({ panel: false }))}
+          className={`${CIRCLE} justify-center`}
+        >
+          <Icon name="side" />
+        </button>
+      </div>
+      {finding && (
+        <input
+          id="find-in-view"
+          ref={findRef}
+          aria-label="Find in view"
+          autoFocus
+          value={query}
+          onChange={(e) => ui.send({ type: "query.set", query: e.target.value })}
+          placeholder="Find in view…"
+          className="mx-3 mb-2 rounded border border-line-2 bg-card px-3 py-1.5 outline-none"
+        />
+      )}
+      <ViewEditorPage />
+      {board && <FilterChips board={board} />}
+    </header>
+  );
+}
+
+// --- board ---

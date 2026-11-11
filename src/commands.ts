@@ -77,3 +77,7 @@ export function useCommand<C extends Name>(command: C, handler: Handler<C>) {
   });
   useLayoutEffect(() => handle(command, (arg) => latest.current(arg)), [command]);
 }
+
+/** Focuses an owner's element for a command; takes the command only when the element is there. */
+export const focusNode = (node: HTMLElement | null | undefined) =>
+  node ? (node.focus(), true as const) : undefined;
