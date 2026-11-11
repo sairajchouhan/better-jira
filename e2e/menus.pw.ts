@@ -115,10 +115,10 @@ test("menu styling at 1272px: trigger highlight, row colours and submenu widths 
     await page.waitFor(`!!document.querySelector('[role=dialog] [cmdk-item]')`);
     await away();
     expect(await bg("#issue-options")).not.toBe(rest);
-    const row = `[...document.querySelectorAll('[role=dialog] [cmdk-item]')].find(n=>n.querySelector('[data-submenu-arrow]')&&n.querySelector('.ml-4'))`;
+    const row = `[...document.querySelectorAll('[role=dialog] [cmdk-item]')].find(n=>n.querySelector('[data-submenu-arrow]')&&n.querySelector('.menu-hint'))`;
     expect(
       await page.eval(
-        `(()=>{const r=${row};const label=[...r.querySelectorAll('span')].find(s=>!s.children.length&&s.textContent===r.textContent.replace(r.querySelector('.ml-4').textContent,'').trim());return [getComputedStyle(label).color,getComputedStyle(r.querySelector('.ml-4')).color,getComputedStyle(r.querySelector('[data-submenu-arrow]')).color,getComputedStyle(r.querySelector('[data-submenu-arrow]'),'::before').content]})()`,
+        `(()=>{const r=${row};const label=[...r.querySelectorAll('span')].find(s=>!s.children.length&&s.textContent===r.textContent.replace(r.querySelector('.menu-hint').textContent,'').trim());return [getComputedStyle(label).color,getComputedStyle(r.querySelector('.menu-hint')).color,getComputedStyle(r.querySelector('[data-submenu-arrow]')).color,getComputedStyle(r.querySelector('[data-submenu-arrow]'),'::before').content]})()`,
       ),
     ).toEqual(["lch(91.178 1.425 272)", "lch(64.714 1.425 272)", "lch(41.778 1.425 272)", '"▶"']);
   });

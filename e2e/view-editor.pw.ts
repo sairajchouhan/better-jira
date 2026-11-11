@@ -64,7 +64,7 @@ test("draft reload, cancel, create toast, edit, duplicate and themed delete", as
     await p.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Renamed", exact: true }).click();
     await p.getByRole("button", { name: "Issue view options" }).click();
     await p.keyboard.type("Delete"); // Linear's menus filter as you type; the search field stays hidden until then
-    await expect(p.getByPlaceholder("Search actions…")).toHaveValue("Delete");
+    await expect(p.getByRole("combobox", { name: "Find view options" })).toHaveValue("Delete");
     await p.keyboard.press("ArrowDown");
     await p.keyboard.press("Enter");
     await expect(p.getByRole("dialog")).toHaveText('Delete the view "Renamed"?CancelDelete');

@@ -13,7 +13,7 @@ for (const scheme of ["dark", "light"] as const) {
     await page.waitFor(`!!document.querySelector('${menu} [cmdk-item]')`);
     expect(
       await page.eval(
-        `(()=>{const p=document.querySelector('${menu}'),list=p.querySelector('[cmdk-list]'),row=p.querySelector('[cmdk-item]'),s=getComputedStyle(p),l=getComputedStyle(list),r=getComputedStyle(row),h=getComputedStyle(row,'::before'),b=p.getBoundingClientRect(),t=document.querySelector('[aria-label="Options for Todo"]').getBoundingClientRect();return {padding:s.padding,radius:s.borderRadius,listPadding:l.padding,height:row.getBoundingClientRect().height,rowPadding:r.padding,font:r.fontSize,weight:r.fontWeight,family:r.fontFamily,gap:r.gap,highlightRadius:h.borderRadius,highlightLeft:h.left,highlightRight:h.right,left:b.left-Math.round(t.left),top:b.top-Math.round(t.bottom),items:[...p.querySelectorAll('[cmdk-item]')].map(n=>n.textContent),color:getComputedStyle(row.querySelector('span span')).color,background:s.backgroundColor,border:s.borderColor}})()`,
+        `(()=>{const p=document.querySelector('${menu}'),list=p.querySelector('[cmdk-list]'),row=p.querySelector('[cmdk-item]'),s=getComputedStyle(p),l=getComputedStyle(list),r=getComputedStyle(row),h=getComputedStyle(row,'::before'),b=p.getBoundingClientRect(),t=document.querySelector('[aria-label="Options for Todo"]').getBoundingClientRect();return {padding:s.padding,radius:s.borderRadius,listPadding:l.padding,height:row.getBoundingClientRect().height,rowPadding:r.padding,font:r.fontSize,weight:getComputedStyle(row.querySelector('.menu-name')).fontWeight,family:r.fontFamily,gap:getComputedStyle(row.querySelector('.menu-label')).gap,highlightRadius:h.borderRadius,highlightLeft:h.left,highlightRight:h.right,left:b.left-Math.round(t.left),top:b.top-Math.round(t.bottom),items:[...p.querySelectorAll('[cmdk-item]')].map(n=>n.textContent),color:getComputedStyle(row.querySelector('span span')).color,background:s.backgroundColor,border:s.borderColor}})()`,
       ),
     ).toEqual({
       padding: "0px",
@@ -22,7 +22,7 @@ for (const scheme of ["dark", "light"] as const) {
       height: 32,
       rowPadding: "0px 18px 0px 14px",
       font: "13px",
-      weight: "400",
+      weight: "450", // the label's text variant `small` (sx-1nzvdvg)
       family: '"Inter Variable", ui-sans-serif, system-ui, sans-serif',
       gap: "8px",
       highlightRadius: "8px",

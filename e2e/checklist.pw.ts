@@ -68,7 +68,7 @@ test("the issue page looks and feels like Linear: timestamp tooltip, focus ring,
     }
   });
   await test.step("RAJ-52: action menus open with no row highlighted: Enter does nothing, ArrowDown highlights the first row and ArrowUp the last", async () => {
-    const lit = `[...document.querySelectorAll('[role=dialog] [cmdk-item]')].filter(n=>getComputedStyle(n).backgroundColor!=='rgba(0, 0, 0, 0)').map(n=>n.dataset.value)`;
+    const lit = `[...document.querySelectorAll('[role=dialog] [cmdk-item]')].filter(n=>getComputedStyle(n,'::before').backgroundColor!=='rgba(0, 0, 0, 0)').map(n=>n.dataset.value)`;
     const menu = async () => {
       await page.click("#issue-options");
       await page.waitFor(`!!document.querySelector('[role=dialog] [cmdk-item]')`);
@@ -294,12 +294,12 @@ test("RAJ-52: action menus sit where Linear puts them: Issue options left-aligne
         `(()=>{const d=[...document.querySelectorAll('[role=dialog]')].at(-1),D=d.getBoundingClientRect(),i=[...d.querySelectorAll('[cmdk-item]')].map(n=>n.getBoundingClientRect());return [i[0].top-D.top,i[2].top-i[1].bottom,i[3].top-i[2].bottom,D.bottom-i[3].bottom,D.height].map(Math.round)})()`,
       ),
     ).toEqual([7, 12, 12, 7, 166]);
-    // Separators are drawn in the menu border colour, as bright as Linear's, not the faint --line-2.
+    // Separators are Menu.Divider's 0.5px line in Linear's bgBorderFaintThin (fT's divider), not the faint --line-2.
     expect(
       await page.eval(
-        `[...[...document.querySelectorAll('[role=dialog]')].at(-1).querySelectorAll('[cmdk-separator]')].map(n=>getComputedStyle(n).backgroundColor)`,
+        `[...[...document.querySelectorAll('[role=dialog]')].at(-1).querySelectorAll('[cmdk-separator]')].map(n=>getComputedStyle(n,'::after').borderBottomColor)`,
       ),
-    ).toEqual(["lch(21.36 1.93 272)", "lch(21.36 1.93 272)"]);
+    ).toEqual(["lch(20.28 1.93 272)", "lch(20.28 1.93 272)"]);
     await page.key("Escape");
     await page.waitFor(`!document.querySelector('[role=dialog]')`);
   });

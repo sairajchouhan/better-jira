@@ -65,8 +65,11 @@ test("toolbar popups: Filter, Display and the chip row + open at Linear's offset
       await rect(page, '[cmdk-item][data-value="Status"]'),
       await rect(page, dialog("Status filter")),
     ];
-    near(sub.left, Math.round(row.left - 4.5 - sub.width));
-    near(sub.top, Math.round(row.top - 43));
+    // Menu.Submenu overlaps its parent's outer edge by 2px: 4.5px left of the row's highlight, which is 6.5px inside in Linear.
+    near(sub.right, (await rect(page, TOOLBAR)).left + 2);
+    // Menu.Submenu puts its first row level with the opener (43px under its top in Linear, where the 0.5px borders stay 0.5px).
+    const first = await rect(page, `${dialog("Status filter")} [cmdk-item]`);
+    near(first.top, Math.round(row.top));
     // Hover opens it without taking focus; ArrowRight on the row moves focus into its search, ArrowLeft back.
     expect(await focused(page)).toBe("Add Filter…");
     await page.key("Escape");
@@ -199,12 +202,12 @@ test("MenuSurface: below its anchor, flipped above near the bottom, centred unde
     const MENU = dialog("Issue options");
     await page.waitFor(`!!document.querySelector('${MENU}')`);
     await sleep(50);
-    // Moved by its rounded offset size, so a fractional width can overhang that 10px by a fraction.
+    // A fitted menu is placed by its exact width, so its right edge sits exactly 10px in.
     const [menu, size] = [
       await rect(page, MENU),
       await page.eval<number[]>(`(n=>[n.offsetWidth,n.scrollHeight+n.offsetHeight-n.clientHeight])(document.querySelector('${MENU}'))`),
     ];
-    near(menu.left, 1440 - size[0]! - 10);
+    near(menu.right, 1440 - 10);
     near(menu.top, 900 - size[1]! - 10);
     expect(await inside(page, MENU)).toBe(true);
     await page.key("Escape");
@@ -240,7 +243,8 @@ test("mention menu: 4px under the @, focus stays in the editor", async ({ open }
   const menu = await rect(page, MENU);
   near(menu.left, Math.max(8, Math.min(at.left, 1440 - 268)));
   near(menu.top, at.bottom + 4);
-  expect(menu.height).toBe(3 * 32 + 10);
+  // Menu's list padding (Vw.LIST_PADDING 6 above and below) plus the 1px border.
+  expect(menu.height).toBe(3 * 32 + 12 + 2);
   expect(await page.eval(`document.querySelector('#description').contains(document.activeElement)`)).toBe(true);
   await page.key("Escape");
   await page.waitFor(`!document.querySelector('${MENU}')`);

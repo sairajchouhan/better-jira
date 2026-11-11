@@ -632,7 +632,7 @@ test("document history, narrow and measured layouts, the hidden board and remind
     await page.key("ArrowDown");
     expect(
       await page.eval(
-        `(()=>{const m=document.querySelector('[role="dialog"][aria-label="Document options"]'),c=getComputedStyle(m);return [c.backgroundColor,c.borderTopColor,c.boxShadow.match(/lch\\(/g).length,getComputedStyle(m.querySelector('[cmdk-item][data-selected=true]')).backgroundColor]})()`,
+        `(()=>{const m=document.querySelector('[role="dialog"][aria-label="Document options"]'),c=getComputedStyle(m);return [c.backgroundColor,c.borderTopColor,c.boxShadow.match(/lch\\(/g).length,getComputedStyle(m.querySelector('[cmdk-item][data-selected=true]'),'::before').backgroundColor]})()`,
       ),
     ).toEqual(["lch(12.72 0.85 272)", "lch(21.36 1.93 272)", 3, "lch(20.82 1.3 272)"]);
     await page.hover('[cmdk-item][data-value="Copy"]');
@@ -659,7 +659,7 @@ test("document history, narrow and measured layouts, the hidden board and remind
     // The status picker (S) is one of the App pickers; Linear's S/P pickers share the menu surface.
     expect(
       await page.eval(
-        `(()=>{const i=document.querySelector('[cmdk-item][data-selected=true]'),m=i.closest('[role="dialog"]'),c=getComputedStyle(m);return [c.backgroundColor,c.borderTopColor,getComputedStyle(i).backgroundColor]})()`,
+        `(()=>{const i=document.querySelector('[cmdk-item][data-selected=true]'),m=i.closest('[role="dialog"]'),c=getComputedStyle(m);return [c.backgroundColor,c.borderTopColor,getComputedStyle(i,'::before').backgroundColor]})()`,
       ),
     ).toEqual(["lch(12.72 0.85 272)", "lch(21.36 1.93 272)", "lch(20.82 1.3 272)"]);
   });

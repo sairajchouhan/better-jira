@@ -190,7 +190,7 @@ test("Filter menu looks like Linear: visible checkboxes, counts and avatar photo
         `[...${assignee}.querySelectorAll("[cmdk-item]")].map(r=>r.innerText.replace(/\\s*\\d+ issues?$/,"").trim())`,
       );
       expect(names).toEqual(["No assignee", "Current user", "Alex"]);
-      expect(await page.eval(`${row("Alex")}.querySelector(".filter-count")?.textContent`)).toMatch(
+      expect(await page.eval(`${row("Alex")}.querySelector(".menu-hint")?.textContent`)).toMatch(
         /^\d+ issues?$/,
       );
       // Alex's photo loads through the same-origin proxy (the broken-URL fallback is checked in mentions).
@@ -204,18 +204,18 @@ test("Filter menu looks like Linear: visible checkboxes, counts and avatar photo
     await test.step(`${scheme}: the checkbox shows on the active row with readable contrast and fills when checked`, async () => {
       await page.hover('[aria-label="Filter Assignee"]');
       await page.hover(`[aria-label="Assignee filter"] [cmdk-item]:nth-of-type(3)`);
-      const box = `${row("Alex")}.querySelector(".filter-check")`;
+      const box = `${row("Alex")}.querySelector(".menu-checkbox")`;
       await page.waitFor(`getComputedStyle(${box}).opacity==="1"`);
       expect(
         await page.eval(
-          `getComputedStyle(${row("Current user")}.querySelector(".filter-check")).opacity`,
+          `getComputedStyle(${row("Current user")}.querySelector(".menu-checkbox")).opacity`,
         ),
       ).toBe("0");
       const ratio = await page.eval(
         `${contrast}(getComputedStyle(${box}).borderTopColor,getComputedStyle(${assignee}.querySelector(".filter-menu")??${assignee}).backgroundColor)`,
       );
       expect(ratio).toBeGreaterThanOrEqual(3);
-      expect((await page.rect(`[aria-label="Assignee filter"] .filter-check`)).width).toBe(14);
+      expect((await page.rect(`[aria-label="Assignee filter"] .menu-checkbox`)).width).toBe(14);
       await page.click(`[aria-label="Assignee filter"] [cmdk-item]:nth-of-type(3)`);
       await page.waitFor(`${row("Alex")}.getAttribute("aria-checked")==="true"`);
       await page.hover('[aria-label="Filter Assignee"]'); // move off the row: a checked box stays visible

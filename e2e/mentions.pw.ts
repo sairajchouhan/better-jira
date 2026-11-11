@@ -2,7 +2,7 @@ import { expect, test } from "./app";
 
 const chips = (editor: string) =>
   `[...document.querySelectorAll('${editor} .mention-chip')].map(n=>n.dataset.mentionId+':'+n.textContent).join('|')`;
-const options = `[...document.querySelectorAll('[aria-label="Mention people"] [role=option]')].map(n=>(n.ariaSelected==='true'?'*':'')+n.lastElementChild.textContent).join('|')`;
+const options = `[...document.querySelectorAll('[aria-label="Mention people"] [role=option]')].map(n=>(n.ariaSelected==='true'?'*':'')+n.querySelector('.menu-name').textContent).join('|')`;
 
 test("@ mentions: the people picker in the description, the comment composer and a new sub-issue", async ({
   open,

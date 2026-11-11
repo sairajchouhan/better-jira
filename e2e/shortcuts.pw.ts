@@ -22,7 +22,7 @@ test("keyboard help, Linear sequences, and no shortcuts while typing", async ({ 
     await p.key("Escape");
     await p.key("?", "shift");
     await p.waitFor(`!!document.querySelector('${dialog("Help")}')`);
-    await p.click("text=Keyboard shortcuts");
+    await p.click(`[cmdk-item][data-value="Keyboard shortcuts"]`);
     await p.waitFor(`!!document.querySelector('${dialog("Keyboard Shortcuts")}')`);
     await p.key("Escape");
     await p.waitFor(`!document.querySelector('[role=dialog]')`);

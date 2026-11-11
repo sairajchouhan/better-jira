@@ -59,7 +59,7 @@ test('a sub-issue\'s parent: the "Sub-issue of" line, its sub-issue list, and re
     expect(Math.round((pill[0]! - link![0]! - link![2]!) * 10) / 10).toBe(4); // Linear: 70 tall for one row (30 heading, 32 rows, 6 under, 2 border).
     expect(
       await page.eval(
-        `[document.querySelector('[cmdk-group-heading]').textContent,[...document.querySelectorAll('[role=dialog] [cmdk-item]')].map(i=>[i.textContent,!!i.querySelector('svg:nth-of-type(2)')])]`,
+        `[document.querySelector('[cmdk-group-heading]').textContent,[...document.querySelectorAll('[role=dialog] [cmdk-item]')].map(i=>[i.querySelector('.menu-name').textContent,!!i.querySelector('.menu-checkmark')])]`,
       ),
     ).toEqual([
       "Navigation",
@@ -392,13 +392,13 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
     );
     await page.clickAt(5, 600);
     const R = `const r=e=>{const b=e.getBoundingClientRect();return [Math.round(b.x*10)/10,Math.round(b.y*10)/10,Math.round(b.width*10)/10,Math.round(b.height*10)/10]};`;
-    const menu = `(()=>{${R}const d=document.querySelector('[role=dialog]'),box=d.getBoundingClientRect(),rel=e=>{const b=e.getBoundingClientRect();return [Math.round((b.x-box.x)*10)/10,Math.round((b.y-box.y)*10)/10,Math.round(b.width*10)/10,Math.round(b.height*10)/10]};return {box:r(d),input:rel(d.querySelector('input')),key:d.querySelector('.property-menu-key')?.textContent,rows:[...d.querySelectorAll('[cmdk-item]')].map(o=>[o.textContent,rel(o)[0],rel(o)[2],rel(o)[3],rel(o.children[0])[0],rel(o.children[1])[0],o.querySelector('.picker-number')?Math.round(rel(o.querySelector('.picker-number'))[0]+rel(o.querySelector('.picker-number'))[2]):null,o.dataset.selected]),items:[...d.querySelectorAll('[cmdk-item],[cmdk-separator],[cmdk-group-heading]')].map(n=>n.hasAttribute('cmdk-item')?n.textContent:n.hasAttribute('cmdk-separator')?'—':'#'+n.textContent)}})()`;
-    // Status: 208px under the pill, a 36px filter with S at its right, 32px rows inset 6px, icon at 15, text at 39, numbers ending 19px in, the current status active.
+    const menu = `(()=>{${R}const d=document.querySelector('[role=dialog]'),box=d.getBoundingClientRect(),rel=e=>{const b=e.getBoundingClientRect();return [Math.round((b.x-box.x)*10)/10,Math.round((b.y-box.y)*10)/10,Math.round(b.width*10)/10,Math.round(b.height*10)/10]};return {box:r(d),input:rel(d.querySelector('input')),key:d.querySelector('.menu-input kbd')?.textContent,rows:[...d.querySelectorAll('[cmdk-item]')].map(o=>[o.textContent,rel(o)[0],rel(o)[2],rel(o)[3],rel(o.querySelector('.menu-icon'))[0],rel(o.querySelector('.menu-name'))[0],o.querySelector('.menu-hint')?Math.round(rel(o.querySelector('.menu-hint'))[0]+rel(o.querySelector('.menu-hint'))[2]):null,o.dataset.selected]),items:[...d.querySelectorAll('[cmdk-item],[cmdk-separator],[cmdk-group-heading]')].map(n=>n.hasAttribute('cmdk-item')?n.textContent:n.hasAttribute('cmdk-separator')?'—':'#'+n.textContent)}})()`;
+    // Status: 208px under the pill, a 36px filter with S at its right, full-width 32px rows (Linear's IB item: the highlight is inset, not the row), icon at 15, text at 39, numbers ending 19px in, the current status active.
     const pill = await page.eval<number[]>(
       `(()=>{${R}return r(document.getElementById('prop-status'))})()`,
     );
     await page.key("s");
-    await page.waitFor(`!!document.querySelector('[role=dialog] .property-menu')`);
+    await page.waitFor(`!!document.querySelector('[role=dialog] .menu')`);
     const s = await page.eval<any>(menu);
     expect([
       s.box[0] - pill[0]!,
@@ -407,14 +407,14 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
       s.input,
       s.key,
     ]).toEqual([0, 4.5, 208, [15, 1, 148, 36], "S"]);
-    // The line under the filter is the menu border colour, as bright as Linear's (RAJ-52 2x capture), not the faint --line-2.
+    // The line under the filter is every menu input's: Linear's Qw.inputRowBorderBottom, bgBorderFaintThin.
     expect(
       await page.eval(
-        `getComputedStyle(document.querySelector('[role=dialog] .property-menu > div')).borderBottomColor`,
+        `getComputedStyle(document.querySelector('[role=dialog] .menu-input')).borderBottomColor`,
       ),
-    ).toBe("lch(21.36 1.93 272)");
+    ).toBe("lch(20.28 1.93 272)");
     expect(s.rows.map((r: any[]) => r.slice(1, 7))).toEqual(
-      s.rows.map(() => [7, 194, 32, 15, 39, 189]),
+      s.rows.map(() => [1, 206, 32, 15, 39, 189]),
     );
     expect(s.rows.map((r: any[]) => r[0].replace(/\D/g, ""))).toEqual(
       s.rows.map((_: unknown, i: number) => String(i + 1)),
@@ -422,17 +422,17 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
     expect(s.rows.map((r: any[]) => r[7])).toEqual(
       s.rows.map((r: any[]) => (r[0].startsWith("Done") ? "true" : "false")),
     );
-    // Only the current status carries Linear's 16px check, before its number.
+    // Only the current status carries Linear's 16px check, before its number: 149.5px into the row's highlight (6px inside the row).
     expect(
       await page.eval(
-        `[...document.querySelectorAll('[role=dialog] [cmdk-item]')].filter(o=>o.children[2]?.tagName==='svg').map(o=>{const b=o.getBoundingClientRect(),c=o.children[2].getBoundingClientRect();return [o.textContent.replace(/[0-9]/g,''),Math.abs(c.x-b.x-149.5)<0.5,c.width]})`,
+        `[...document.querySelectorAll('[role=dialog] [cmdk-item]')].filter(o=>o.querySelector('.menu-checkmark')).map(o=>{const b=o.getBoundingClientRect(),c=o.querySelector('.menu-checkmark svg').getBoundingClientRect();return [o.textContent.replace(/[0-9]/g,''),Math.abs(c.x-b.x-6-149.5)<0.5,c.width]})`,
       ),
     ).toEqual([["Done", true, 16]]);
     await page.key("Escape");
     // A number picks its row, as in Linear.
     await page.clickAt(5, 600);
     await page.key("p");
-    await page.waitFor(`!!document.querySelector('[role=dialog] .property-menu')`);
+    await page.waitFor(`!!document.querySelector('[role=dialog] .menu')`);
     expect((await page.eval<any>(menu)).key).toBe("P");
     await page.key("1");
     await page.waitFor(
@@ -455,7 +455,7 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
     );
     await page.clickAt(5, 600);
     await page.key("l");
-    await page.waitFor(`!!document.querySelector('[role=dialog] .property-menu')`);
+    await page.waitFor(`!!document.querySelector('[role=dialog] .menu')`);
     let l = await page.eval<any>(menu);
     expect([
       Math.round((add[0]! - l.box[0] - l.box[2]) * 10) / 10,
@@ -468,9 +468,9 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
     );
     expect(
       await page.eval(
-        `(()=>{const o=document.querySelector('.label-row'),b=o.getBoundingClientRect();return [...o.children].map(c=>c.getBoundingClientRect().x-b.x)})()`,
+        `(()=>{const o=document.querySelector('[data-label]'),b=o.getBoundingClientRect();return ['.menu-checkbox','.menu-icon','.menu-name'].map(c=>o.querySelector(c).getBoundingClientRect().x-b.x)})()`,
       ),
-    ).toEqual([8, 30, 54]);
+    ).toEqual([14, 35, 59]); // B4e: 13px in when multi-select, the 14px box centred in 16, the label 6px after it
     // Space toggles the active label and keeps the menu open; so does a checkbox click; neither reorders.
     await page.key(" ");
     await page.waitFor(`!document.querySelector('[data-label-chip]')`);
@@ -486,7 +486,7 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
       `(()=>{${R}return r(document.querySelector('[data-label-chip]'))})()`,
     );
     await page.click("[data-label-chip]");
-    await page.waitFor(`!!document.querySelector('[role=dialog] .property-menu')`);
+    await page.waitFor(`!!document.querySelector('[role=dialog] .menu')`);
     l = await page.eval<any>(menu);
     expect(Math.round((chip[0]! - l.box[0] - l.box[2]) * 10) / 10).toBe(4.5);
     await page.click('[role=dialog] [cmdk-item][data-value="ui"]');
