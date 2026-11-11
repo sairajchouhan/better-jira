@@ -10,9 +10,10 @@ test("directory is board scoped, excludes tabs, and sorts without mutating", () 
   expect(views[0]!.name).toBe("Z");
 });
 test("feedback distinguishes saved definition and temporary overlay, including partially hidden results", () => {
-  expect(resultFeedback(0,4,true,true)).toEqual({text:"No issues matching the filters",edit:false,hidden:4});
-  expect(resultFeedback(0,0,true,false,7)).toEqual({text:"No issues matching your filters",edit:true,hidden:7});
-  expect(resultFeedback(0,3,false,true)).toEqual({text:"No issues matching the filters",edit:false,hidden:3});
+  expect(resultFeedback(0,4,true,true)).toEqual({text:"No issues matching the filters",saved:false,hidden:4});
+  expect(resultFeedback(0,0,true,false)).toEqual({text:"No matching issues",saved:true,hidden:0});
+  expect(resultFeedback(0,0,true,true)).toEqual({text:"No matching issues",saved:true,hidden:0});
+  expect(resultFeedback(0,3,false,true)).toEqual({text:"No issues matching the filters",saved:false,hidden:3});
   expect(resultFeedback(2,5,true,true)?.text).toBe("3 issues hidden by filters");
   expect(resultFeedback(4,4,true,false)).toBeNull();
 });

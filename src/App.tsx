@@ -480,7 +480,6 @@ const BoardView = memo(function BoardView({
       ...(row ? draftForGroup(d.rows, row.id, board, universe, prefs.scope) : {}),
     });
   const baseline = selectIssues(all, board, { ...prefs, filters: activeView && activeView.board === board.id ? activeView.filters : defaultPreferences().filters }, activeView?.mine ?? false, "", ME.id).length;
-  const total = visible.length || !activeView ? baseline : selectIssues(all, board, { ...prefs, filters: defaultPreferences().filters }, false, "", ME.id).length;
   const clearFilters = () => {
     if (activeView) clearOverlay();
     else changePreferences(board.id, { filters: defaultPreferences().filters });
@@ -490,8 +489,8 @@ const BoardView = memo(function BoardView({
   };
   return (
     <div className={`${shown ? "flex" : "hidden"} min-w-0 min-h-0 flex-1`}>
-      <div className="flex min-w-0 min-h-0 flex-1 flex-col" data-layout={d.layout}>
-        {!visible.length && <ResultsFeedback count={0} baseline={baseline} total={total} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !activeView?.mine)} clear={clearFilters} />}
+      <div className="relative flex min-w-0 min-h-0 flex-1 flex-col" data-layout={d.layout}>
+        {!visible.length && <ResultsFeedback count={0} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !activeView?.mine)} clear={clearFilters} />}
         {d.layout === "list" ? (
           <div className="flex-1 overflow-auto py-1">
             {show.map((c) => (
@@ -1271,6 +1270,7 @@ function BoardHeader() {
   const board = useStore((s) => s.boards.find((b) => b.id === s.board));
   const query = useStore((s) => s.query);
   const draft = useStore((s) => s.editorDraft);
+  const custom = (draft ?? activeView)?.kind === "custom";
   const details = useStore((s) => s.details);
   const prefs = usePreferences(board!.id);
   const finding = useStore((s) => s.findInView);
@@ -1316,8 +1316,10 @@ function BoardHeader() {
           <Icon name="plus" /> New issue
         </button>
       </div>
-      <div className="flex min-h-[43.5px] flex-wrap items-center gap-1 px-2 py-1">
-        {activeView?.kind !== "custom" && (["active", "backlog", "all"] as const).map((scope) => (
+      {/* Linear: custom views (and their editor) show only the breadcrumb, no team tabs. The editor floats this row's
+          controls into its card, so a custom draft collapses the row. */}
+      <div className={`flex flex-wrap items-center gap-1 px-2 ${custom && draft ? "" : "min-h-[43.5px] py-1"}`}>
+        {!custom && (["active", "backlog", "all"] as const).map((scope) => (
           <button
             key={scope}
             aria-pressed={!activeView && !draft && prefs.scope === scope}
@@ -1327,10 +1329,10 @@ function BoardHeader() {
             {scope === "active" ? "Active" : scope === "backlog" ? "Backlog" : "All issues"}
           </button>
         ))}
-        {activeView?.kind !== "custom" && savedViews.filter(v => v.board === board!.id && v.kind === "tab").map(view => { const on = activeView?.id === view.id || draft?.id === view.id; return <ViewContextMenu key={view.id} view={view}><button aria-pressed={on} onClick={() => openSavedView(view)} className={`${PILL} ${on ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover"}`}>{view.name}</button></ViewContextMenu>; })}
+        {!custom && savedViews.filter(v => v.board === board!.id && v.kind === "tab").map(view => { const on = activeView?.id === view.id || draft?.id === view.id; return <ViewContextMenu key={view.id} view={view}><button aria-pressed={on} onClick={() => openSavedView(view)} className={`${PILL} ${on ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover"}`}>{view.name}</button></ViewContextMenu>; })}
         {/* Linear swaps Add new view for the draft tab while a new tab view is being made. */}
         {draft && !draft.id && draft.kind === "tab" ? <span aria-current="page" className={`${PILL} bg-tab-on text-fg-3 shadow-(--tab-on-shadow)`}><SavedViewIcon view={draft} />{draft.name.trim() || "New view"}<Icon name="pencil" size={12} /></span>
-          : activeView?.kind !== "custom" && !draft && <button className={`${PILL} text-fg-3 hover:bg-hover`} onClick={() => openViewEditor(createViewDraft("tab"))}><Icon name="plus" size={14} />Add new view</button>}
+          : !custom && !draft && <button className={`${PILL} text-fg-3 hover:bg-hover`} onClick={() => openViewEditor(createViewDraft("tab"))}><Icon name="plus" size={14} />Add new view</button>}
         <div className="ml-auto flex items-center gap-1">
           <BoardControls board={board!} />
         </div>

@@ -1,5 +1,23 @@
 import { test, expect } from "bun:test";
 import { viewPlaceholder, issuesCSV } from "./view-editor-model";
+import type { Board, Issue } from "./store";
+const board: Board = {
+  id: 1,
+  name: "SAM1 board",
+  columns: [{ statuses: [{ id: "10000", name: "To Do" }] }],
+} as Board;
+const issue = (patch: Partial<Issue> = {}): Issue => ({
+  key: "RAJ-1",
+  board: 1,
+  summary: "Title",
+  status: "10000",
+  assignee: null,
+  labels: [],
+  comments: 0,
+  updated: "2026-11-08T00:00:00.000Z",
+  resolved: null,
+  ...patch,
+});
 test("draft placeholder uses filters and defaults to All issues", () => {
   expect(viewPlaceholder({ id: "root", join: "and", children: [] })).toBe(
     "All issues",
@@ -13,14 +31,18 @@ test("draft placeholder uses filters and defaults to All issues", () => {
   ).toBe("Todo");
 });
 test("CSV quotes multiline fields and neutralizes spreadsheet formulas", () => {
-  const csv = issuesCSV([
-    {
-      key: "RAJ-1",
-      summary: '=HYPERLINK("x")\nnext',
-      status: "Todo",
-      assignee: null,
-    },
-  ]);
+  const csv = issuesCSV([issue({ summary: '=HYPERLINK("x")\nnext' })], board);
   expect(csv).toContain('"\'=HYPERLINK(""x"")\nnext"');
   expect(csv.split("\r\n")).toHaveLength(2);
+});
+
+test("BJ-139: CSV uses Linear's columns, status names and No priority", () => {
+  const [head, row] = issuesCSV(
+    [issue({ labels: ["Epic", "UI"], assignee: { id: "u", name: "Raj" } })],
+    board,
+  ).split("\r\n");
+  expect(head).toStartWith('"ID","Team","Title","Description","Status","Estimate","Priority"');
+  expect(row).toStartWith('"RAJ-1","SAM1 board","Title","","To Do","","No priority"');
+  expect(row).toContain('"Raj","Epic, UI"');
+  expect(row).not.toContain("10000");
 });

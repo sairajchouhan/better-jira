@@ -4,13 +4,14 @@ export function directoryViews(views: SavedView[], board: number, descending = f
   return views.filter(v => v.board === board && v.kind === "custom").sort((a, b) => (sort === "name" && descending ? -1 : 1) * a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 }
 /** `baseline` counts the saved definition alone; `total` counts the board with no filters. Empty states keep Linear's hidden count. */
-export function resultFeedback(count: number, baseline: number, saved: boolean, temporary: boolean, total = baseline) {
+export function resultFeedback(count: number, baseline: number, saved: boolean, temporary: boolean) {
   if (!count) {
-    const edit = saved && (!temporary || baseline === 0);
-    return { text: edit ? "No issues matching your filters" : "No issues matching the filters", edit, hidden: edit ? total : baseline };
+    // Linear: a saved view whose own definition matches nothing shows only "No matching issues".
+    if (saved && (!temporary || baseline === 0)) return { text: "No matching issues", saved: true, hidden: 0 };
+    return { text: "No issues matching the filters", saved: false, hidden: baseline };
   }
   const hidden = Math.max(0, baseline - count);
-  return hidden ? { text: `${hidden} issue${hidden === 1 ? "" : "s"} hidden by filters`, edit: false, hidden } : null;
+  return hidden ? { text: `${hidden} issue${hidden === 1 ? "" : "s"} hidden by filters`, saved: false, hidden } : null;
 }
 export function viewSummaries(issues: Issue[]) {
   const assignees = new Map<string, number>(), labels = new Map<string, number>();

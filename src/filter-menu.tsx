@@ -116,6 +116,16 @@ export default function FilterMenu({
   container: Container;
   footer?: ReactNode;
 }) {
+  // Linear: Enter on a value row picks it and closes the menu; clicks keep it open to pick more.
+  useHotkey(
+    "Enter",
+    (event) => {
+      const root = (event.target as Element | null)?.closest("[cmdk-root]");
+      if (root?.querySelector("[cmdk-item][data-selected=true][aria-checked]"))
+        setTimeout(() => ui.send({ type: "toolbar.close" }));
+    },
+    { target: container, ignoreInputs: false, capture: true, preventDefault: false, stopPropagation: false },
+  );
   return (
     <FloatingTree>
       <FilterLevel board={board} container={container} entries={CATEGORIES} footer={footer} />

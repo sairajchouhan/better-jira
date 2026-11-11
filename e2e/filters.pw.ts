@@ -20,9 +20,8 @@ test("Add filter by mouse: search, hover submenus, multi-select and chips", asyn
     await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Filter Labels"`);
     await page.type("ui");
     await page.key("Enter");
-    await page.waitFor(`${cards}===1`);
-    expect(await page.eval(`!!${root}`)).toBe(true);
-    await page.key("Escape");
+    // Enter picks the value and closes the menu (Linear); clicks keep it open, below.
+    await page.waitFor(`${cards}===1&&!${root}`);
     await page.click('[aria-label="Remove labels filter"]');
     await page.waitFor(`${cards}===6`);
   });
@@ -110,6 +109,17 @@ test("Add filter by mouse: search, hover submenus, multi-select and chips", asyn
 
 test("Add filter by keyboard: arrows into submenus and back, Esc out", async ({ open }) => {
   const page = await open();
+  await test.step("Enter on a value picks it and closes the menu, as Linear does", async () => {
+    await page.key("f");
+    await page.waitFor(`document.activeElement===${root}`);
+    await page.type("status");
+    await page.key("ArrowRight");
+    await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Filter Status"`);
+    await page.key("Enter");
+    await page.waitFor(`!${root}&&!!document.querySelector(".view-filter-chip")`);
+    await page.click("text=Clear");
+    await page.waitFor(`!document.querySelector(".view-filter-row")`);
+  });
   await test.step("filter keyboard navigation keeps the root and returns with ArrowLeft", async () => {
     await page.key("f");
     await page.waitFor(`document.activeElement===${root}`);

@@ -8,11 +8,9 @@
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  margin: 0 8px 8px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--card);
-  box-shadow: var(--tab-shadow);
+  /* Linear: a flat, transparent 30px row (24px chips), 8px under the toolbar and 10px above the list. */
+  margin: 8px 8px 10px;
+  padding: 3px 12px;
   font-size: 12px;
 }
 .view-filter-chip {
@@ -96,9 +94,7 @@ button.view-filter-segment:hover {
   }
 }
 .view-filter-actions { gap: 0; }
-.view-filter-action { border: .5px solid transparent; }
-.view-filter-save { display: inline-flex; align-items: center; gap: 4px; box-shadow: none; }
-@media (prefers-color-scheme: light) {
-  .view-filter-row { background: var(--app); }
-}
+/* Linear: 1px borders on the row buttons (Clear 48.4px, Save 60.1px). */
+.view-filter-action { border: 1px solid transparent; }
+.view-filter-save { display: inline-flex; align-items: center; gap: 2px; box-shadow: none; }
 [role="dialog"]:has(> .view-save-menu) { padding: 6px; }
