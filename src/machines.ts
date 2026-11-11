@@ -35,6 +35,10 @@ export type UiContext = {
   query: string;
   overlay: Overlay;
   toolbar: Toolbar | null;
+  /** The issue the open menu acts on (a sub-issue row, a right-clicked card); null means the selected issue. Cleared with the overlay. */
+  target: string | null;
+  /** Where a right-click on a card or list row opened Issue options; null opens it under its button. */
+  issueOptionsPoint: { x: number; y: number } | null;
   draft: IssueDraft;
   /** A one-shot request to focus the description editor once it renders. */
   editDesc: boolean;
@@ -57,7 +61,13 @@ export type UiEvent =
   | { type: "sidebar.toggle" }
   | { type: "mine.set"; mine: boolean }
   | { type: "query.set"; query: string }
-  | { type: "overlay.open"; overlay: NonNullable<Overlay>; draft?: IssueDraft }
+  | {
+      type: "overlay.open";
+      overlay: NonNullable<Overlay>;
+      draft?: IssueDraft;
+      target?: string | null;
+      point?: { x: number; y: number };
+    }
   | { type: "overlay.close" }
   /** ⌘K: opens the palette, or closes it when it is the open overlay. */
   | { type: "palette.toggle" }
@@ -71,6 +81,7 @@ export type UiEvent =
   /** Jira gave an issue created here its real key: the toast names and opens the new key, without restarting its timer. */
   | { type: "toast.rekey"; from: string; to: string };
 
+const closed = { overlay: null, target: null, issueOptionsPoint: null } as const;
 export const uiMachine = setup({
   types: {} as {
     context: UiContext;
@@ -103,6 +114,8 @@ export const uiMachine = setup({
     query: "",
     overlay: null,
     toolbar: null,
+    target: null,
+    issueOptionsPoint: null,
     draft: {},
     editDesc: false,
     toast: null,
@@ -159,6 +172,8 @@ export const uiMachine = setup({
               actions: assign(({ event }) => ({
                 overlay: event.overlay,
                 ...(event.draft ? { draft: event.draft } : {}),
+                ...(event.target !== undefined ? { target: event.target } : {}),
+                ...(event.point ? { issueOptionsPoint: event.point } : {}),
               })),
             },
             "palette.toggle": { target: "open", actions: assign({ overlay: "palette" }) },
@@ -170,11 +185,13 @@ export const uiMachine = setup({
               actions: assign(({ event }) => ({
                 overlay: event.overlay,
                 ...(event.draft ? { draft: event.draft } : {}),
+                ...(event.target !== undefined ? { target: event.target } : {}),
+                ...(event.point ? { issueOptionsPoint: event.point } : {}),
               })),
             },
-            "overlay.close": { target: "closed", actions: assign({ overlay: null }) },
+            "overlay.close": { target: "closed", actions: assign(closed) },
             "palette.toggle": [
-              { guard: "paletteOpen", target: "closed", actions: assign({ overlay: null }) },
+              { guard: "paletteOpen", target: "closed", actions: assign(closed) },
               { actions: assign({ overlay: "palette" }) },
             ],
           },

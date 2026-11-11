@@ -484,7 +484,6 @@ ui.subscribe(({ context }) => {
   for (const key of Object.keys(context) as UiKey[])
     if (context[key] !== state[key]) Object.assign(patch, { [key]: context[key] });
   if (!Object.keys(patch).length) return;
-  if (patch.overlay === null) Object.assign(patch, { target: null, issueOptionsPoint: null });
   // A link's `view` opens that issue once; it lasts until the panel closes and never becomes the board's preference (R2-D4).
   if (patch.view && restoringNavigation) linkView = true;
   else if (patch.view && state.activeViewId) {

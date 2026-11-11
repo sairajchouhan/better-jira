@@ -99,8 +99,11 @@ const issueAction = (fn: (issue: Issue) => void) => () => {
   if (issue) fn(issue);
 };
 const overlay = (value: NonNullable<Overlay>) => () => {
-  set({ target: selected() ? (acting ?? hoveredRow()?.key ?? null) : null });
-  ui.send({ type: "overlay.open", overlay: value });
+  ui.send({
+    type: "overlay.open",
+    overlay: value,
+    target: selected() ? (acting ?? hoveredRow()?.key ?? null) : null,
+  });
 };
 const focus = (id: string) =>
   issueAction((issue) => {
@@ -197,8 +200,8 @@ async function copy(kind: CopyKind) {
   }
 }
 function relation(kind: string) {
-  set({ relationKind: kind, target: hoveredRow()?.key ?? null });
-  ui.send({ type: "overlay.open", overlay: "relations" });
+  set({ relationKind: kind });
+  ui.send({ type: "overlay.open", overlay: "relations", target: hoveredRow()?.key ?? null });
 }
 function collapse(all = false) {
   const s = get(),

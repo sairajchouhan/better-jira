@@ -1966,8 +1966,7 @@ test("navigation: switching or leaving a view resets its filter overlay; closing
       },
     ]
   `);
-  set({ target: "NAV-2", issueOptionsPoint: { x: 4, y: 5 } });
-  ui.send({ type: "overlay.open", overlay: "options" });
+  ui.send({ type: "overlay.open", overlay: "options", target: "NAV-2", point: { x: 4, y: 5 } });
   expect([get().target, get().issueOptionsPoint]).toEqual(["NAV-2", { x: 4, y: 5 }]);
   ui.send({ type: "overlay.open", overlay: "status" });
   expect(get().target).toBe("NAV-2");

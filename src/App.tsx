@@ -1586,8 +1586,12 @@ const Card = memo(function Card({
         // Linear's row menu: Issue options at the pointer, on this issue, without selecting it.
         onContextMenu={(e) => {
           e.preventDefault();
-          set({ target: issue.key, issueOptionsPoint: { x: e.clientX + 3, y: e.clientY } });
-          ui.send({ type: "overlay.open", overlay: "options" });
+          ui.send({
+            type: "overlay.open",
+            overlay: "options",
+            target: issue.key,
+            point: { x: e.clientX + 3, y: e.clientY },
+          });
         }}
         className={
           list
