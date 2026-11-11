@@ -801,6 +801,171 @@ test("sync review 2: a tab never mints a new-issue number another tab of the bro
   expect(mine.filter((n) => theirs.has(n))).toEqual([]);
 });
 
+/** A stand-in for the server's write route: records each request; `reply` shapes (or holds) Jira's answer. */
+async function fakeJiraWrites(
+  reply: (key: string, body: any) => Promise<object> | object = () => ({}),
+) {
+  const { get } = await import("./store");
+  const sent: { key: string; ops: any[]; settle?: boolean }[] = [],
+    realFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const key = decodeURIComponent(String(input).match(/\/api\/issues\/([^/]+)\/ops$/)?.[1] ?? "");
+    const body = JSON.parse(String(init?.body));
+    sent.push({ key, ops: body.ops, ...("settle" in body ? { settle: body.settle } : {}) });
+    return Response.json({
+      key,
+      created: {},
+      others: [],
+      issue: get().issues.get(key),
+      ...(await reply(key, body)),
+    });
+  }) as typeof fetch;
+  const settled = async () => {
+    for (let i = 0; i < 200 && get().pendingWrites; i++) await Bun.sleep(10);
+  };
+  return { sent, settled, restore: () => void (globalThis.fetch = realFetch) };
+}
+const writableIssue = (key: string, extra: object = {}) => ({
+  key,
+  board: 1,
+  summary: key,
+  status: "todo",
+  priority: "Low",
+  assignee: null,
+  labels: [],
+  comments: 0,
+  updated: "",
+  resolved: null,
+  ...extra,
+});
+
+test("outbox: an issue's edits queued behind its write in flight merge into one write, sent after it; other issues go in order", async () => {
+  const { actions, get, set } = await import("./store");
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const jira = await fakeJiraWrites(async (key, body) => {
+    if (key === "OQ-1" && body.ops[0]?.fields?.priority === "High") await gate;
+    return {};
+  });
+  try {
+    set({
+      writable: true,
+      issues: new Map(get().issues).set("OQ-1", writableIssue("OQ-1")).set("OQ-2", writableIssue("OQ-2")),
+    });
+    actions.patch("OQ-1", { priority: "High" });
+    await Bun.sleep(5);
+    actions.patch("OQ-1", { priority: "Highest" });
+    actions.patch("OQ-1", { labels: ["one"] });
+    actions.patch("OQ-2", { priority: "High" });
+    expect(get().pendingWrites).toBe(3);
+    release();
+    await jira.settled();
+    expect(jira.sent).toEqual([
+      { key: "OQ-1", ops: [{ op: "fields", fields: { priority: "High" } }] },
+      { key: "OQ-1", ops: [{
+        op: "fields",
+        fields: { priority: "Highest", labelEdits: { add: ["one"], remove: [] } },
+      },] },
+      { key: "OQ-2", ops: [{ op: "fields", fields: { priority: "High" } }] },
+    ]);
+    expect(get().writeError).toBeNull();
+  } finally {
+    set({ writable: false });
+    jira.restore();
+  }
+});
+
+test("outbox: rapid status changes wait 400 ms and reach Jira as one transition", async () => {
+  const { actions, get, set } = await import("./store");
+  const jira = await fakeJiraWrites();
+  try {
+    set({
+      writable: true,
+      boards: get().boards.some((b) => b.id === 1)
+        ? get().boards
+        : [
+            ...get().boards,
+            {
+              id: 1,
+              name: "Personal",
+              columns: [
+                { name: "Todo", statuses: [{ id: "todo", name: "Todo", category: "new" }] },
+                { name: "Done", statuses: [{ id: "done", name: "Done", category: "done" }] },
+              ],
+            },
+          ],
+      issues: new Map(get().issues).set("OS-1", writableIssue("OS-1")),
+    });
+    const started = Date.now();
+    actions.status("OS-1", "done");
+    await Bun.sleep(100);
+    actions.status("OS-1", "todo");
+    await Bun.sleep(100);
+    actions.status("OS-1", "done");
+    expect(jira.sent).toEqual([]);
+    await jira.settled();
+    expect(Date.now() - started).toBeGreaterThanOrEqual(600);
+    expect(jira.sent.map((s) => s.ops)).toEqual([[{ op: "status", status: "done" }]]);
+  } finally {
+    set({ writable: false });
+    jira.restore();
+  }
+});
+
+test("outbox: a write Jira refuses rolls the issue back to Jira's copy and says why", async () => {
+  const { actions, get, set } = await import("./store");
+  const jira = await fakeJiraWrites((key) => ({
+    error: "Priority is locked.",
+    issue: writableIssue(key),
+  }));
+  try {
+    set({ writable: true, issues: new Map(get().issues).set("RB-1", writableIssue("RB-1")) });
+    actions.patch("RB-1", { priority: "High" });
+    expect(get().issues.get("RB-1")?.priority).toBe("High");
+    await jira.settled();
+    expect(get().issues.get("RB-1")?.priority).toBe("Low");
+    expect(get().writeError).toEqual({ key: "RB-1", text: "Priority is locked." });
+    expect(get().toast).toMatchObject({
+      text: "Jira did not save the change to RB-1",
+      detail: "Priority is locked.",
+    });
+  } finally {
+    set({ writable: false, writeError: null });
+    jira.restore();
+  }
+});
+
+test("outbox: an issue created here takes Jira's key, and writes queued under its app key follow it there", async () => {
+  const { actions, get, set, navigate, currentKey, firstKey } = await import("./store");
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const jira = await fakeJiraWrites(async (key, body) => {
+    if (body.ops[0]?.op !== "create") return {};
+    await gate;
+    return { key: "MADE-7", created: { [key]: "MADE-7" }, issue: { ...get().issues.get(key)!, key: "MADE-7" } };
+  });
+  try {
+    set({ writable: true });
+    navigate({ board: 1 });
+    const key = actions.create("Made here")!;
+    await Bun.sleep(5);
+    actions.patch(key, { priority: "Highest" });
+    release();
+    await jira.settled();
+    expect(jira.sent.map((s) => [s.key, s.ops[0].op])).toEqual([
+      [key, "create"],
+      ["MADE-7", "fields"],
+    ]);
+    expect(jira.sent[1]!.ops).toEqual([{ op: "fields", fields: { priority: "Highest" } }]);
+    expect(get().issues.has(key)).toBe(false);
+    expect(get().issues.get("MADE-7")).toMatchObject({ summary: "Made here", priority: "Highest" });
+    expect([currentKey(key), firstKey("MADE-7")]).toEqual(["MADE-7", key]);
+  } finally {
+    set({ writable: false });
+    jira.restore();
+  }
+});
+
 test("sync review 3-2: a write Jira can't settle yet backs off behind other issues' writes, keeps its issue's order, and shows after a few tries", async () => {
   const { setSystemTime } = await import("bun:test");
   const { actions, get, set } = await import("./store");
