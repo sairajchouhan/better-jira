@@ -247,33 +247,6 @@ header:has(.view-editor):has(.view-filter-row) > div:nth-child(2) > button:last-
   color: var(--fg-3);
 }
 
-/* Linear's view menus: no visible search until you type, icon rows, full-width separators between groups. */
-.view-menu {
-  padding: 6px;
-}
-.view-menu-search {
-  width: 100%;
-  height: 32px;
-  padding: 0 8px;
-  margin-bottom: 4px;
-  border-bottom: 0.5px solid var(--line-2);
-  background: transparent;
-  font-size: 13px;
-  outline: none;
-}
-.view-menu-search:placeholder-shown {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
-.view-menu [cmdk-group]:not([hidden]) ~ [cmdk-group]:not([hidden]) {
-  margin: 6px -6px 0;
-  padding: 6px 6px 0;
-  border-top: 0.5px solid var(--line-2);
-}
-
 /* Linear's delete confirmation. */
 [role="dialog"]:has(> .view-delete) {
   top: 29vh !important;

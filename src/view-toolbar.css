@@ -176,4 +176,3 @@ button.view-filter-segment:focus-visible {
     --chip-divider: lch(27.12% 1.48 272);
   }
 }
-[role="dialog"]:has(> .view-save-menu) { padding: 6px; }
