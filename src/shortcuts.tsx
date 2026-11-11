@@ -69,8 +69,13 @@ type Shortcut = {
   label?: () => string;
 };
 let columns: () => Issue[][] = () => [];
-const selected = () =>
-  !get().document && get().selected ? get().issues.get(get().selected!) : undefined;
+/** The issue a menu item runs a shortcut on (`runShortcut(id, key)`); a right-click menu's issue never becomes the selection. */
+let acting: string | null = null;
+const selected = () => {
+  const s = get(),
+    key = acting ?? (s.overlay && s.target) ?? (!s.document && s.selected);
+  return key ? s.issues.get(key) : undefined;
+};
 /** Linear: an issue shortcut acts on the sub-issue row under the pointer or keyboard focus, as its row menu's hints promise. */
 const hoveredRow = () => {
   const key = document.querySelector<HTMLElement>(
@@ -84,7 +89,7 @@ const issueAction = (fn: (issue: Issue) => void) => () => {
   if (issue) fn(issue);
 };
 const overlay = (value: NonNullable<Overlay>) => () => {
-  set({ target: selected() ? (hoveredRow()?.key ?? null) : null });
+  set({ target: selected() ? (acting ?? hoveredRow()?.key ?? null) : null });
   ui.send({ type: "overlay.open", overlay: value });
 };
 const focus = (id: string) =>
@@ -890,9 +895,14 @@ export function canRunShortcut(id: string) {
   const entry = shortcuts.find((s) => s.id === id);
   return !!entry && shortcutApplies(entry);
 }
-export function runShortcut(id: string) {
+export function runShortcut(id: string, key?: string) {
   const entry = shortcuts.find((s) => s.id === id);
-  if (entry && shortcutApplies(entry)) entry.run();
+  acting = key ?? null;
+  try {
+    if (entry && shortcutApplies(entry)) entry.run();
+  } finally {
+    acting = null;
+  }
 }
 export function useLinearHotkeys(getColumns: () => Issue[][]) {
   columns = getColumns;

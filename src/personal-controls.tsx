@@ -873,7 +873,7 @@ export function IssueOptions({ issue }: { issue: Issue }) {
     name,
     icon,
     shortcut: keys(id),
-    run: () => runShortcut(id),
+    run: () => runShortcut(id, issue.key),
   });
   const due: ActionEntry = {
     name: "Due date",
@@ -1055,7 +1055,7 @@ export function IssueOptions({ issue }: { issue: Issue }) {
     ] as const
   )
     .filter(([id]) => canRunShortcut(id))
-    .map(([id, name]) => ({ name, shortcut: keys(id), run: () => runShortcut(id) }));
+    .map(([id, name]) => ({ name, shortcut: keys(id), run: () => runShortcut(id, issue.key) }));
   const entries: ActionEntry[] = point
     ? [
         picker("Status", "status", "status"),

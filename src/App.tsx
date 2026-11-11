@@ -1489,6 +1489,9 @@ const Card = memo(function Card({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => void (selected && ref.current?.scrollIntoView({ block: "nearest" })), [selected]);
+  // A right-clicked card is highlighted only while its menu is open, as Linear does; it never becomes the selection.
+  const menu = useStore((s) => !!s.overlay && s.target === issue.key);
+  const lit = selected || menu;
   const show = (p: Property) => d.properties.includes(p);
   const clock = useStore((s) => (d.properties.includes("statusAge") ? s.clock : 0));
   const status = statusOf(issue);
@@ -1596,6 +1599,7 @@ const Card = memo(function Card({
         ref={ref}
         data-key={issue.key}
         data-selected={selected || undefined}
+        data-menu={menu || undefined}
         role="button"
         aria-label={`${issue.key} ${issue.summary}`}
         tabIndex={0}
@@ -1615,17 +1619,16 @@ const Card = memo(function Card({
         onClick={() =>
           timed(`open ${issue.key}`, () => navigate({ selected: issue.key, panel: true }))
         }
-        // Linear's row menu: Issue options at the pointer, on this issue, which stays highlighted as the selection.
+        // Linear's row menu: Issue options at the pointer, on this issue, without selecting it.
         onContextMenu={(e) => {
           e.preventDefault();
-          navigate({ selected: issue.key });
-          set({ issueOptionsPoint: { x: e.clientX + 3, y: e.clientY } });
+          set({ target: issue.key, issueOptionsPoint: { x: e.clientX + 3, y: e.clientY } });
           ui.send({ type: "overlay.open", overlay: "options" });
         }}
         className={
           list
-            ? `flex min-h-11 cursor-default items-center gap-3 border-b border-line px-5 outline-none focus-visible:ring-1 focus-visible:ring-accent ${selected ? "bg-hover shadow-[inset_2px_0_0_var(--accent)]" : "hover:bg-hover"}`
-            : `relative flex min-h-[42px] cursor-default flex-col rounded-lg p-2 shadow-(--card-shadow) outline-none focus-visible:ring-1 focus-visible:ring-accent ${selected ? "bg-card-hover ring-1 ring-accent" : "bg-card hover:bg-card-hover"}`
+            ? `flex min-h-11 cursor-default items-center gap-3 border-b border-line px-5 outline-none focus-visible:ring-1 focus-visible:ring-accent ${lit ? "bg-hover shadow-[inset_2px_0_0_var(--accent)]" : "hover:bg-hover"}`
+            : `relative flex min-h-[42px] cursor-default flex-col rounded-lg p-2 shadow-(--card-shadow) outline-none focus-visible:ring-1 focus-visible:ring-accent ${lit ? "bg-card-hover ring-1 ring-accent" : "bg-card hover:bg-card-hover"}`
         }
         style={list && depth ? { paddingLeft: 20 + depth * 20 } : undefined}
       >
