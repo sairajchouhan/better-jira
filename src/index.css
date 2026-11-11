@@ -2036,3 +2036,44 @@
 .filter-row:has(> .filter-check) {
   gap: 0;
 }
+
+/* Linear startup-root.CnUSfl4j.js: IB/B3e + fT; style-kMXsq6uH.css.
+   Action rows occupy the full width; only the highlight is inset (6px). */
+[role="dialog"]:has(> .action-menu),
+.action-menu-level {
+  max-width: min(500px, calc(100vw - 24px));
+}
+.action-menu [cmdk-item] {
+  position: relative;
+  isolation: isolate;
+  height: 32px;
+  padding: 0 18px 0 14px;
+  border-radius: 0;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 400;
+  clip-path: inset(0 6px round 8px);
+}
+.action-menu [cmdk-item]::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0 6px;
+  border-radius: 8px;
+}
+.action-menu [cmdk-item]:hover::before,
+.action-menu [cmdk-item][data-selected="true"]::before {
+  background: var(--menu-sel);
+}
+.action-menu [data-pristine] [cmdk-item]::before {
+  background: transparent;
+}
+
+@media (prefers-color-scheme: light) {
+  [role="dialog"]:has(> .action-menu) {
+    --menu-line: var(--filter-line);
+    --menu-fg: var(--filter-fg);
+    --menu-sel: var(--filter-sel);
+    --menu-shadow: var(--filter-shadow);
+  }
+}

@@ -210,6 +210,7 @@ type State = {
   full: Map<string, Full>;
   board: number;
   selected: string | null;
+  columnSelection: ReadonlySet<string>;
   panel: boolean;
   document: string | null;
   /** Open issues in a side panel or as a full page. */
@@ -311,6 +312,7 @@ let state: State = {
   full: new Map(),
   board: Number(savedValue("board")) || 0,
   selected: null,
+  columnSelection: new Set(),
   panel: false,
   document: null,
   view: savedValue("view") === "page" ? "page" : "side",

@@ -1351,7 +1351,13 @@ function ColumnHeading({
       )}
       <span className="ml-0.5 truncate font-medium text-fg-2">{bucket.name}</span>
       <span className="text-fg-3">{count}</span>
-      <GroupMenu name={bucket.name} hide={hide} />
+      <GroupMenu
+        name={bucket.name}
+        hide={hide}
+        issues={bucket.issues}
+        completed={bucket.status?.category === "done"}
+        display={display}
+      />
       <button
         aria-label={`New issue in ${bucket.name}`}
         onClick={create}
@@ -1449,11 +1455,12 @@ function IssueTarget({
   useEffect(() => void (selected && ref.current?.scrollIntoView({ block: "nearest" })), [selected]);
   // A right-clicked card is highlighted only while its menu is open, as Linear does; it never becomes the selection.
   const menu = useStore((s) => !!s.overlay && s.target === issue.key);
+  const columnSelected = useStore((s) => s.columnSelection.has(issue.key));
   return (
     <div
       ref={ref}
       data-key={issue.key}
-      data-selected={selected || undefined}
+      data-selected={selected || columnSelected || undefined}
       data-menu={menu || undefined}
       role="button"
       aria-label={`${issue.key} ${issue.summary}`}
@@ -1472,7 +1479,10 @@ function IssueTarget({
         }
       }}
       onClick={() =>
-        timed(`open ${issue.key}`, () => navigate({ selected: issue.key, panel: true }))
+        timed(`open ${issue.key}`, () => {
+          set({ columnSelection: new Set() });
+          navigate({ selected: issue.key, panel: true });
+        })
       }
       // Linear's row menu: Issue options at the pointer, on this issue, without selecting it.
       onContextMenu={(e) => {
@@ -1484,7 +1494,7 @@ function IssueTarget({
           point: { x: e.clientX + 3, y: e.clientY },
         });
       }}
-      className={className(selected || menu)}
+      className={className(selected || columnSelected || menu)}
       style={style}
     >
       {children}

@@ -26,6 +26,7 @@ export type ActionEntry = {
   children?: ActionEntry[];
   shortcut?: string;
   danger?: boolean;
+  selected?: boolean;
   icon?: IconName;
   divider?: boolean;
 };
@@ -64,10 +65,11 @@ export function ActionMenu({
       close={close}
       fit
       gap={4}
+      rounding="pixel"
       align={align}
       point={point}
     >
-      <div ref={container}>
+      <div ref={container} className="action-menu">
         <FloatingTree>
           <Level
             entries={entries}
@@ -118,7 +120,7 @@ function Level({
       loop
       shouldFilter={false}
       className={
-        nested ? `${MENU_POPUP} w-max min-w-[174px] max-w-[min(520px,calc(100vw-24px))]` : ""
+        nested ? `action-menu-level ${MENU_POPUP} w-max min-w-[174px] max-w-[min(520px,calc(100vw-24px))]` : ""
       }
       data-pristine={pristine || undefined}
       onPointerMove={() => setPristine(false)}
@@ -143,13 +145,13 @@ function Level({
       />
       {/* Linear keeps the filter focused but shows it only once typing starts. */}
       {/* Linear (RAJ-52 resource menu): 6px above and below the rows, and 12px separators with a centred 1px line in the menu border colour. */}
-      <Command.List className="max-h-[60vh] overflow-y-auto px-1 py-1.5">
+      <Command.List className="max-h-[60vh] overflow-y-auto py-1.5">
         <Command.Empty>No actions found</Command.Empty>
         {choices.map((entry) => [
           !query && entry.divider && (
             <Command.Separator
               key={`-${entry.name}`}
-              className="-mx-1 my-[5.5px] h-px bg-[var(--menu-line)]"
+              className="my-[5.5px] h-px bg-[var(--menu-line)]"
             />
           ),
           entry.children ? (
@@ -168,6 +170,7 @@ function Level({
             <Command.Item
               key={entry.name}
               value={entry.name}
+              aria-checked={entry.selected}
               className={`${MENU_ITEM} ${entry.danger ? "text-danger" : ""}`}
               onSelect={() => {
                 close();
@@ -175,6 +178,7 @@ function Level({
               }}
             >
               <Label entry={entry} />
+              {entry.selected && <Icon name="check" size={16} />}
               {entry.shortcut && (
                 <span className="ml-4 text-[11px] text-[var(--menu-fg-3)]">{entry.shortcut}</span>
               )}
@@ -235,7 +239,7 @@ function Branch({
     strategy: "fixed",
     whileElementsMounted: autoUpdate,
     middleware: [
-      offset({ mainAxis: 3, alignmentAxis: -7 }),
+      offset({ mainAxis: -1, alignmentAxis: -7 }),
       flip({ padding: 12, fallbackAxisSideDirection: "end" }),
       shift({ padding: 12 }),
     ],

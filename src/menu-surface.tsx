@@ -191,6 +191,7 @@ export function MenuSurface({
   width = 640,
   fit = false,
   gap = 5,
+  rounding = "none",
   side,
   align,
   command = false,
@@ -204,6 +205,8 @@ export function MenuSurface({
   width?: number;
   fit?: boolean;
   gap?: number;
+  /** Linear action menus round their anchor edge; property pickers retain fractional geometry. */
+  rounding?: "pixel" | "none";
   side?: "left";
   point?: { x: number; y: number };
   align?: "end";
@@ -263,7 +266,9 @@ export function MenuSurface({
             12,
             Math.min(
               innerHeight - maxHeight - 12,
-              below >= h || below >= above ? r.bottom + gap : r.top - h - gap,
+              below >= h || below >= above
+                ? (rounding === "pixel" ? Math.round(r.bottom) : r.bottom) + gap
+                : r.top - h - gap,
             ),
           ),
           maxHeight,
@@ -277,7 +282,7 @@ export function MenuSurface({
         maxHeight: "80vh",
       };
     },
-    [anchorId, anchored, width, label, gap, side, align, command, point?.x, point?.y].join(),
+    [anchorId, anchored, width, label, gap, rounding, side, align, command, point?.x, point?.y].join(),
   );
   return (
     <div

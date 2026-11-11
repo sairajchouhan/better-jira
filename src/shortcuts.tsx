@@ -265,11 +265,13 @@ export const shortcuts: Shortcut[] = [
     group: "General",
     hotkey: "Escape",
     run: () =>
-      get().sidebarOpen
-        ? set({ sidebarOpen: false })
-        : get().inbox && get().panel && get().view === "page" && !get().document
-          ? navigate({ view: "side" })
-          : ui.send({ type: "escape" }),
+      get().columnSelection.size
+        ? set({ columnSelection: new Set() })
+        : get().sidebarOpen
+          ? set({ sidebarOpen: false })
+          : get().inbox && get().panel && get().view === "page" && !get().document
+            ? navigate({ view: "side" })
+            : ui.send({ type: "escape" }),
   },
   {
     id: "undo",

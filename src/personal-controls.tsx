@@ -46,11 +46,12 @@ import {
   buckets,
   newId,
   priorityRank,
+  type Display,
   type Field,
   type Grouping,
 } from "./view-model";
 import { knownLabels, statusById, statuses } from "./board-catalog";
-import { setOnlyRule, updateRule, useViewSettings } from "./view-settings";
+import { setDisplay, setOnlyRule, updateRule, useViewSettings } from "./view-settings";
 
 const INPUT =
   "w-full rounded-md border border-line-2 bg-card px-3 py-2 text-fg outline-none focus:border-accent";
@@ -747,31 +748,70 @@ export function BoardDetails({ board, issues }: { board: Board; issues: Issue[] 
   );
 }
 
-export function GroupMenu({ name, hide }: { name: string; hide: () => void }) {
+export function GroupMenu({
+  name,
+  hide,
+  issues,
+  completed,
+  display,
+}: {
+  name: string;
+  hide: () => void;
+  issues: Issue[];
+  completed: boolean;
+  display: Display;
+}) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [keyboard, setKeyboard] = useState(false);
+  const entries: ActionEntry[] = [
+    ...(issues.length
+      ? [
+          {
+            name: "Select all in column",
+            run: () =>
+              set({
+                columnSelection: new Set(issues.map((issue) => issue.key)),
+              }),
+          },
+        ]
+      : []),
+    { name: "Hide column", run: hide },
+    ...(completed
+      ? [
+          {
+            name: "Order completed by recency",
+            selected: display.completedRecency,
+            divider: true,
+            run: () =>
+              setDisplay(get().board, {
+                completedRecency: !display.completedRecency,
+              }),
+          },
+        ]
+      : []),
+  ];
   return (
     <div className="ml-auto">
       <button
         aria-label={`Options for ${name}`}
         aria-haspopup="dialog"
         aria-expanded={!!anchor}
-        onClick={(e) => setAnchor(anchor ? null : e.currentTarget)}
+        onClick={(e) => {
+          setKeyboard(e.detail === 0);
+          setAnchor(anchor ? null : e.currentTarget);
+        }}
         className="grid size-6 place-items-center rounded-full text-fg-3 hover:bg-hover"
       >
         <Icon name="dots" />
       </button>
       {anchor && (
-        <Modal label={`Column ${name}`} close={() => setAnchor(null)} anchor={anchor} width={180}>
-          <button
-            onClick={() => {
-              hide();
-              setAnchor(null);
-            }}
-            className="w-full rounded-md px-3 py-2 text-left text-[12px] hover:bg-hover"
-          >
-            Hide column
-          </button>
-        </Modal>
+        <ActionMenu
+          label={`Column ${name}`}
+          anchor={anchor}
+          entries={entries}
+          highlight={keyboard}
+          close={() => setAnchor(null)}
+        />
       )}
     </div>
   );
