@@ -6,9 +6,10 @@ let loaded: typeof import("./rich-editor").RichEditor | undefined;
 const load = () =>
   import("./rich-editor").then((module) => ({ default: (loaded = module.RichEditor) }));
 const Editor = lazy(load);
-// Kept out of the startup payload (BJ-110): the first pointer over an issue or the first key press fetches it,
-// which is before any composer can open in practice.
-if (typeof window !== "undefined") {
+// Kept out of the board's startup payload (BJ-110). A first screen with an issue (or the inbox's) needs it at once;
+// elsewhere the first pointer over an issue or the first key press fetches it, before any composer can open in practice.
+if (typeof window !== "undefined" && /[?&](issue|inbox)\b/.test(location.search)) void load();
+else if (typeof window !== "undefined") {
   const intents = ["pointerover", "keydown"] as const;
   const intent = (event: Event) => {
     if (event.type === "pointerover" && !(event.target as Element).closest?.("[data-key]")) return;
@@ -19,12 +20,11 @@ if (typeof window !== "undefined") {
 }
 
 type Early = { focus: boolean; text: string; submit: boolean };
-/** The document as read-only ADF while the chunk loads, under the editor's id so focus commands land on it. It keeps
- *  focus, the characters typed and ⌘↵ for the editor to continue from, so input that beats the chunk is never lost. */
+/** The document as read-only ADF while the chunk loads. It keeps focus, the characters typed and ⌘↵ for the editor
+ *  to continue from, so input that beats the chunk is never lost. No id: focus commands and anchors wait for the editor. */
 function EditorStandIn({ props, early, setEarly }: { props: EditorEngineProps; early: Early; setEarly: (next: (early: Early) => Early) => void }) {
   return (
     <div
-      id={props.id}
       className="rich-content"
       role="textbox"
       aria-label={props.label ?? "Issue description"}
