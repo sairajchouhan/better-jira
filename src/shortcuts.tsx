@@ -459,9 +459,8 @@ export const shortcuts: Shortcut[] = [
     group: "Issues",
     hotkey: "V",
     run: () => {
-      beginCreate();
       // Only a composer that opened takes the full-screen intent; a refused create (storage down) leaves none behind.
-      if (get().overlay === "create") post("create-expanded", undefined);
+      if (beginCreate()) post("create-expanded", undefined);
     },
   },
   ...(

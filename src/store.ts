@@ -1965,12 +1965,13 @@ export function redoEdit() {
   set({ undoCount: undo.length, redoCount: redo.length, perf: `Redid ${edit.label}` });
   queueSave();
 }
-export function beginCreate(draft: IssueDraft = {}) {
+/** Opens the create composer; false when local storage refused it. */
+export function beginCreate(draft: IssueDraft = {}): boolean {
   if (!state.canEdit) {
     set({ perf: "Retry local storage before creating an issue" });
-    return;
+    return false;
   }
-  const prefs = viewSettings(state.board),
+  const prefs = viewSettings(state.board, state),
     board = state.boards.find((b) => b.id === state.board);
   const status =
     prefs.scope === "active"
@@ -1983,6 +1984,7 @@ export function beginCreate(draft: IssueDraft = {}) {
     overlay: "create",
     draft: { ...(status ? { status } : {}), ...(state.mine ? { assignee: ME } : {}), ...draft },
   });
+  return true;
 }
 /** Boards are favourited once, not per tab; older `board:<id>:<tab>` entries collapse into `board:<id>`. */
 function readFavorites(): string[] {
