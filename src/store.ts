@@ -220,7 +220,6 @@ type State = {
   viewsPage: boolean;
   query: string;
   overlay: Overlay;
-  editDesc: boolean;
   perf: string;
   /** A transient confirmation, e.g. after creating an issue. */
   toast: {
@@ -245,10 +244,9 @@ type State = {
   sidebarHidden: boolean;
   /** Below 768px the sidebar is hidden; Menu or [ opens it over the page. */
   sidebarOpen: boolean;
-  relationKind: string;
   /** Where a right-click on a card or list row opened Issue options; null opens it under its button. */
   issueOptionsPoint: { x: number; y: number } | null;
-  createExpanded: boolean;
+  relation: string;
   /** The sub-issue row an issue shortcut opened the open menu for; null means the selected issue. */
   target: string | null;
   /** The issue waiting for the in-app delete confirmation. */
@@ -321,7 +319,6 @@ let state: State = {
   viewsPage: false,
   query: "",
   overlay: null,
-  editDesc: false,
   perf: "",
   toast: null,
   preferences: readPreferences(),
@@ -334,9 +331,8 @@ let state: State = {
   findInView: false,
   sidebarHidden: savedValue(SIDEBAR_KEY) === "hidden", // the namespace is still empty here
   sidebarOpen: false,
-  relationKind: "related",
   issueOptionsPoint: null,
-  createExpanded: false,
+  relation: "related",
   target: null,
   deleting: null,
   draft: {},
@@ -2555,7 +2551,6 @@ export const actions = {
       queueSave();
     }
     if (JSON.stringify(document) === JSON.stringify(previous)) {
-      ui.send({ type: "description.editDone" });
       return;
     }
     timed(`edit ${key} description`, () =>
@@ -2578,7 +2573,6 @@ export const actions = {
             ? [...history, { text: adfToText(previous), document: previous, at: now() }]
             : history,
         });
-        ui.send({ type: "description.editDone" });
       }),
     );
   },

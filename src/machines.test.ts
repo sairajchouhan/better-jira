@@ -206,3 +206,13 @@ test("sync D4: a load that can't reach the server retries by itself, backing off
   clock.increment(1);
   await waitFor(app, (s) => s.matches("ready"));
 });
+
+test("relation kind travels with the overlay event and defaults on the next opening", () => {
+  const actor = createActor(uiMachine, { input: { board: 1, view: "side" } }).start();
+  actor.send({ type: "overlay.open", overlay: "relations", kind: "blocked", target: "A-1" });
+  expect(actor.getSnapshot().context).toMatchObject({ relation: "blocked", target: "A-1" });
+  actor.send({ type: "overlay.close" });
+  actor.send({ type: "overlay.open", overlay: "relations" });
+  expect(actor.getSnapshot().context.relation).toBe("related");
+  actor.stop();
+});

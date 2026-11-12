@@ -57,7 +57,7 @@ import { SubIssueOf } from "./sub-issues";
 import { Avatar } from "./avatar";
 import { DocumentBodyEditor, CommentComposer } from "./rich-editor-loader";
 import { runShortcut, shortcutLabel } from "./shortcuts";
-import { useCommand, focusNode } from "./commands";
+import { post, useCommand, focusNode } from "./commands";
 import { InboxIssueActions } from "./inbox";
 import { descriptionSession, type DescriptionPorts } from "./description-session";
 import { shortDate } from "./due-date";
@@ -695,7 +695,14 @@ const descriptionPorts: DescriptionPorts = {
 
 /** Edited in place like Linear: changes save 600ms after typing stops and on blur, so a reload never loses them. */
 function Description({ issue }: { issue: Issue }) {
-  const focus = useStore((s) => s.editDesc);
+  const [focus, setFocus] = useState(false);
+  useCommand("edit-description", () => {
+    if (get().selected !== issue.key) return;
+    const editor = section.current?.querySelector<HTMLElement>("#description");
+    if (editor) editor.focus();
+    else setFocus(true);
+    return true;
+  });
   const f = useStore((s) => s.full.get(issue.key));
   const error = useStore((s) => s.fullErrors.get(issue.key));
   // A description Jira refused stays in the editor (beside Jira's copy in the store) until a version is picked or it is edited.
@@ -718,7 +725,7 @@ function Description({ issue }: { issue: Issue }) {
   // Re-observed on focus changes too: a focused editor keeps its own text until it blurs.
   useEffect(() => {
     if (session.observe(stored, !!section.current?.contains(document.activeElement)))
-      ui.send({ type: "description.edit" });
+      post("edit-description", undefined);
   }, [stored, focused, snapshot, session]);
   useEffect(() => {
     const restore = (event: Event) => {
@@ -730,7 +737,7 @@ function Description({ issue }: { issue: Issue }) {
   const resolve = (keep: boolean) => {
     session.resolve(keep);
     // Back to the editor, not the page: typing must not run board shortcuts (R2-D5).
-    ui.send({ type: "description.edit" });
+    post("edit-description", undefined);
   };
   const loaded = !!f;
   useEffect(() => {
@@ -749,24 +756,6 @@ function Description({ issue }: { issue: Issue }) {
       });
   }, [issue.key]);
   useEffect(() => () => session.flush(), [session]);
-  // Done only once focus has held for a frame: opening the issue can remount this editor right after the first
-  // focus, and the remounted one must still see the request.
-  useEffect(() => {
-    if (!focus || !f) return;
-    let tries = 0,
-      frame = 0;
-    const go = () => {
-      const editor = document.getElementById("description");
-      if (editor && editor === document.activeElement && tries > 3)
-        return ui.send({ type: "description.editDone" });
-      editor?.focus();
-      if (tries++ < 60) frame = requestAnimationFrame(go);
-      else ui.send({ type: "description.editDone" });
-    };
-    go();
-    return () => cancelAnimationFrame(frame);
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Prefetch and draft recovery follow selection/load transitions, not render-local arrays or refreshed full issue objects.
-  }, [focus, !!f]);
   const message = conflict
     ? "Jira's copy of this description changed. Your edits aren't saved."
     : refusal === DESCRIPTION_CONFLICT
@@ -817,6 +806,7 @@ function Description({ issue }: { issue: Issue }) {
       ) : (
         <DocumentBodyEditor
           key={revision}
+          autoFocus={focus}
           id="description"
           scope={`${issue.key}:description`}
           onLateMedia={session.lateMedia}

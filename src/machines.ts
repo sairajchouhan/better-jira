@@ -41,8 +41,8 @@ export type UiContext = {
   /** Where a right-click on a card or list row opened Issue options; null opens it under its button. */
   issueOptionsPoint: { x: number; y: number } | null;
   draft: IssueDraft;
-  /** A one-shot request to focus the description editor once it renders. */
-  editDesc: boolean;
+  /** Relation operation owned by the open overlay. */
+  relation: string;
   toast: Toast | null;
 };
 export type UiEvent =
@@ -61,6 +61,7 @@ export type UiEvent =
       draft?: IssueDraft;
       target?: string | null;
       point?: { x: number; y: number };
+      kind?: string;
     }
   | { type: "overlay.close" }
   /** ⌘K: opens the palette, or closes it when it is the open overlay. */
@@ -68,8 +69,6 @@ export type UiEvent =
   | { type: "toolbar.open"; toolbar: Toolbar }
   | { type: "toolbar.toggle"; toolbar: Toolbar }
   | { type: "toolbar.close" }
-  | { type: "description.edit" }
-  | { type: "description.editDone" }
   | { type: "toast.show"; text: string; key?: string; undo?: boolean | "inbox"; detail?: string }
   | { type: "toast.dismiss" }
   /** Jira gave an issue created here its real key: the toast names and opens the new key, without restarting its timer. */
@@ -111,7 +110,7 @@ export const uiMachine = setup({
     target: null,
     issueOptionsPoint: null,
     draft: {},
-    editDesc: false,
+    relation: "related",
     toast: null,
   }),
   on: {
@@ -135,8 +134,6 @@ export const uiMachine = setup({
     },
     "mine.set": { actions: assign({ mine: ({ event }) => event.mine, inbox: false }) },
     "query.set": { actions: assign({ query: ({ event }) => event.query }) },
-    "description.edit": { actions: assign({ panel: true, editDesc: true }) },
-    "description.editDone": { actions: assign({ editDesc: false }) },
   },
   states: {
     overlay: {
@@ -148,6 +145,7 @@ export const uiMachine = setup({
               target: "open",
               actions: assign(({ event }) => ({
                 overlay: event.overlay,
+                relation: event.kind ?? "related",
                 ...(event.draft ? { draft: event.draft } : {}),
                 ...(event.target !== undefined ? { target: event.target } : {}),
                 ...(event.point ? { issueOptionsPoint: event.point } : {}),
@@ -161,6 +159,7 @@ export const uiMachine = setup({
             "overlay.open": {
               actions: assign(({ event }) => ({
                 overlay: event.overlay,
+                relation: event.kind ?? "related",
                 ...(event.draft ? { draft: event.draft } : {}),
                 ...(event.target !== undefined ? { target: event.target } : {}),
                 ...(event.point ? { issueOptionsPoint: event.point } : {}),

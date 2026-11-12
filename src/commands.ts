@@ -4,6 +4,8 @@ import { useLayoutEffect, useRef } from "react";
  *  Nothing outside the owner reaches into its DOM or its state. */
 /** What a shortcut can ask of the UI, by name: the argument, and what a handler that takes it returns. */
 export type Commands = {
+  "edit-description": { arg: void; result: true };
+  "create-expanded": { arg: void; result: true };
   /** Focus the open issue's title, caret at the end. */
   "focus-title": { arg: void; result: true };
   /** Focus the open issue's comment box. */

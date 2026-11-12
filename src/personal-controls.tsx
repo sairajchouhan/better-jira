@@ -84,10 +84,8 @@ export function CreateIssue() {
   const [draftIndex, setDraftIndex] = useState(0);
   const [labels, setLabels] = useState(initial.labels?.join(", ") ?? "");
   const [more, setMore] = useState(false);
-  const [expanded, setExpanded] = useState(get().createExpanded);
-  useEffect(() => {
-    set({ createExpanded: false });
-  }, []);
+  const [expanded, setExpanded] = useState(false);
+  useCommand("create-expanded", () => { setExpanded(true); return true; });
   const [attachments, setAttachments] = useState<Issue["attachments"]>(initial.attachments ?? []);
   const [filesBusy, setFilesBusy] = useState(false);
 
@@ -916,7 +914,7 @@ export function Relations({ issue, close: done }: { issue: Issue; close?: () => 
     boards = useStore((s) => s.boards);
   const [query, setQuery] = useState(""),
     [selected, setSelected] = useState("");
-  const kind = get().relationKind;
+  const kind = useStore((s) => s.relation);
   const close = done ?? (() => ui.send({ type: "overlay.close" }));
   const mark = MARK[kind] ?? MARK.related!;
   // Linear leaves out issues the new link would repeat or contradict; "Related issues" offers this issue's related ones first.

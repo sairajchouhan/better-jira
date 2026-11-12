@@ -5,7 +5,8 @@ import {
   toggleFavorite,
   isLocalIssue,
   hasLocalJiraChanges,
-  set,
+  ui,
+
   type Issue,
   type IssueDraft,
 } from "./store";
@@ -13,7 +14,7 @@ import { typeChoices, canHaveChildren, needsParent } from "./issue-properties";
 import { createIssueDocument } from "./issue-resources";
 import { shortcutLabel, canRunShortcut, runShortcut } from "./shortcuts";
 import { copyIssue, copyKinds, copyIcons, copyShortcuts, type CopyKind } from "./issue-copy";
-import { reminderPresets, reminderTime } from "./reminder-display";
+import { reminderEntries } from "./reminders";
 import { duePresets } from "./due-date";
 import { post } from "./commands";
 import { RELATION_ISSUE } from "./issue-activity";
@@ -65,8 +66,7 @@ export function issueMenuEntries(
     beginCreate({ related: { key: issue.key, kind }, project: issue.project });
   };
   const mark = (kind: string) => {
-    set({ relationKind: kind });
-    open("relations");
+    ui.send({ type: "overlay.open", overlay: "relations", target: issue.key, kind });
   };
   const reopen = (view: "link" | "pull-request" | "history") => {
     openDialog(view);
@@ -260,27 +260,13 @@ export function issueMenuEntries(
       name: "Remind me",
       icon: "clock",
       shortcut: keys("remind"),
-      children: [
-        ...reminderPresets().map((preset) => ({
-          name: preset.label,
-          shortcut: reminderTime(preset.at),
-          run: () => {
-            actions.remind(issue.key, preset.at);
-            close();
-          },
-        })),
-        ...(presentation === "sub-issue"
-          ? []
-          : [
-              {
-                name: "Custom…",
-                run: () => {
-                  post("issue-options-start", "reminder");
-                  open("reminder");
-                },
-              },
-            ]),
-      ],
+      children: reminderEntries((at) => {
+        actions.remind(issue.key, at);
+        close();
+      }, () => {
+        post("issue-options-start", "reminder");
+        open("reminder");
+      }),
     },
     ...(presentation === "sub-issue"
       ? []

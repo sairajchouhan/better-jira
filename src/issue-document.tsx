@@ -21,6 +21,7 @@ import {
   set,
   toggleFavorite,
   useStore,
+  usePeople,
   type Issue,
   type User,
 } from "./store";
@@ -619,21 +620,8 @@ function DocumentPeople({
   anchor: HTMLElement;
   close: () => void;
 }) {
-  const issues = useStore((s) => s.issues),
-    [query, setQuery] = useState("");
-  const users = [
-    ...new Map(
-      [
-        ME,
-        ...(resource.subscribers ?? []),
-        ...(resource.owner ? [resource.owner] : []),
-        ...[...issues.values()].flatMap((i) => [
-          ...(i.assignee ? [i.assignee] : []),
-          ...(i.watchers ?? []),
-        ]),
-      ].map((user) => [user.id, user]),
-    ).values(),
-  ];
+  const [query, setQuery] = useState("");
+  const users = usePeople([...(resource.subscribers ?? []), ...(resource.owner ? [resource.owner] : [])]);
   const owner = resource.owner?.id ?? ME.id;
   // Owner picks one and closes; subscribers toggle and stay open. Both keep a named checkbox per person.
   const pick = (user: User, checked: boolean) => {

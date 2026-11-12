@@ -47,3 +47,18 @@ test("a posted command waits for its owner; a run one reaches only a mounted own
   stop();
   expect(run("hovered-sub-issue")).toBeUndefined();
 });
+
+test("edit and expanded-create intents are delivered once when their owner mounts", async () => {
+  const { handle, kept, post } = await import("./commands");
+  for (const name of ["edit-description", "create-expanded"] as const) {
+    post(name, undefined);
+    let count = 0;
+    const stop = handle(name, () => { count++; return true; });
+    expect(count).toBe(1);
+    expect(kept(name)).toBeUndefined();
+    stop();
+    const again = handle(name, () => { count++; return true; });
+    expect(count).toBe(1);
+    again();
+  }
+});

@@ -94,16 +94,11 @@ const overlay = (value: NonNullable<Overlay>) => () => {
     target: selected() ? (acting ?? hoveredRow()?.key ?? null) : null,
   });
 };
-/** Opens the issue, then asks it to focus a field, each frame while it mounts (up to 100). */
-const focus = (name: "focus-title" | "focus-comment") =>
+/** Open the issue and retain the intent until its field owner mounts. */
+const focus = (name: "focus-title" | "focus-comment" | "edit-description") =>
   issueAction((issue) => {
     navigate({ selected: issue.key, panel: true });
-    let tries = 0;
-    const attempt = () => {
-      if (get().selected !== issue.key || !get().panel) return;
-      if (!command(name) && tries++ < 100) requestAnimationFrame(attempt);
-    };
-    requestAnimationFrame(attempt);
+    post(name, undefined);
   });
 const order = () => visibleOrder(get(), ME.id);
 function move(direction: number, horizontal = false) {
@@ -170,8 +165,7 @@ function copy(kind: CopyKind) {
   if (issue) void copyIssue(kind, issue);
 }
 function relation(kind: string) {
-  set({ relationKind: kind });
-  ui.send({ type: "overlay.open", overlay: "relations", target: hoveredRow()?.key ?? null });
+  ui.send({ type: "overlay.open", overlay: "relations", kind, target: hoveredRow()?.key ?? null });
 }
 function collapse(all = false) {
   const s = get(),
@@ -451,8 +445,8 @@ export const shortcuts: Shortcut[] = [
     group: "Issues",
     hotkey: "V",
     run: () => {
-      set({ createExpanded: true });
       beginCreate();
+      post("create-expanded", undefined);
     },
   },
   ...(
@@ -511,7 +505,7 @@ export const shortcuts: Shortcut[] = [
     group: "Issues",
     hotkey: "Control+Shift+I",
     issue: true,
-    run: () => ui.send({ type: "description.edit" }),
+    run: focus("edit-description"),
   },
   {
     id: "favorite",
