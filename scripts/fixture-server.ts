@@ -162,7 +162,10 @@ let clientFailures = 0,
   /** Board 2 was added from the app. */
   added = false,
   /** BJ-15: TEST-1's Jira links reach issues outside the board and use link types Linear has no kind for. */
-  crossLinks = false;
+  crossLinks = false,
+  /** Jira changelogs per issue key, in the server's slim shape (src/shared/jira-history.ts), and how long they take. */
+  history: Record<string, unknown[]> = {},
+  historyDelay = 0;
 /** TEST-1's links as the mirror projects them: made-up keys and text in the shape work Jira sends. */
 const crossRelations = [
   {
@@ -737,6 +740,8 @@ async function handle(req: Request) {
     crossLinks = settings.crossLinks ?? false;
     bulk = settings.bulk ?? 0;
     added = false;
+    history = settings.history ?? {};
+    historyDelay = settings.historyDelay ?? 0;
     inbox = freshInbox(settings.inboxExtra ?? 0, settings.inboxExtraUnread ?? false);
     inboxFail = settings.inboxFail ?? false;
     inboxDelay = settings.inboxDelay ?? 0;
@@ -828,6 +833,9 @@ async function handle(req: Request) {
           target,
         )
       : null;
+  } else if (path.match(/^\/api\/issues\/[^/]+\/history$/)) {
+    if (historyDelay) await Bun.sleep(historyDelay);
+    body = history[decodeURIComponent(path.split("/").at(-2)!)] ?? [];
   } else if (path.startsWith("/api/issues/")) {
     if (detailFailures-- > 0) {
       status = 503;

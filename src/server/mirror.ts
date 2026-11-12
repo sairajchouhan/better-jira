@@ -3,6 +3,7 @@ import { Database } from "bun:sqlite";
 import { jira, JiraError } from "./jira";
 import { boardFromInput, withoutAddedBoard } from "./config";
 import { detailCache } from "./detail-cache";
+import { historyCache, readHistory } from "./issue-history";
 import { recentlyTouched, storeRemoteLinks } from "./remote-links";
 import { attachmentGateway, jiraAttachmentReader } from "@/shared/attachment-media";
 import { saveAddedBoard, serverAuth } from "./server-config";
@@ -415,6 +416,17 @@ const details = detailCache(db, async (key) => {
   return detail;
 });
 export const issue = details.read;
+/** The issue's whole Jira changelog for its Activity, read apart from the details so it never holds up their first paint. */
+export const history = historyCache(
+  db,
+  (key) => readHistory(jira, key),
+  (key) =>
+    db
+      .query<{ updated: string }, [string]>(
+        "SELECT json_extract(slim,'$.updated') AS updated FROM issues WHERE key = ?",
+      )
+      .get(key)?.updated,
+);
 /** Re-read one issue from Jira after a write, so reads and the next client poll see Jira's truth. Null when it no longer exists. */
 export async function refresh(
   key: string,

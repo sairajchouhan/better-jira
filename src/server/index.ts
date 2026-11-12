@@ -206,6 +206,17 @@ const server = serve({
         );
       }
     }),
+    "/api/issues/:key/history": localOnly(async (req: BunRequest<"/api/issues/:key/history">) => {
+      try {
+        const history = await mirror.history(req.params.key);
+        return history ? json(history) : Response.json({ error: "not found" }, { status: 404 });
+      } catch {
+        return Response.json(
+          { error: "Could not read the Jira history. Retry the request." },
+          { status: 503 },
+        );
+      }
+    }),
     "/api/issues/:key/ops": {
       POST: localOnly(async (req: BunRequest<"/api/issues/:key/ops">) => {
         if (!canWrite(serverConfiguration().site))
