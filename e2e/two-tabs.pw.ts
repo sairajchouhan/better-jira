@@ -213,6 +213,8 @@ test("two tabs: BJ-23 an issue its creating tab discards takes the other tab's e
   // Jira refuses the create: tab one discards the issue, and tab two lets go of it and of its edit.
   await one.eval(`window.__release({key:'${key}',error:'Jira refused the issue',created:{},others:[]})`);
   await two.waitFor(`!document.querySelector('[data-key="${key}"]')`, 8000);
+  await two.waitFor(`document.querySelector('[data-toast]')?.textContent === "Two tabs wasn't created in Jira, so your changes to it were discarded."`);
+  expect(await two.eval(`document.body.textContent.includes("Waiting for another tab to create")`)).toBe(false);
   // Its outbox lets the waiting edit go too: nothing is sent, and nothing waits on it any more.
   expect(await two.eval(`window.__ops.length`)).toBe(0);
   expect(await two.eval(`!!document.querySelector('[data-key="TEST-2"]')`)).toBe(true);

@@ -86,7 +86,7 @@ export type OutboxEvents = {
   /** Another tab saved the Jira key of an issue it created. */
   moved(from: string, to: string): void;
   /** Another tab discarded an issue it was creating (or Jira refused it): its edits here go with it. */
-  discarded(key: string): void;
+  discarded(key: string, edited: boolean): void;
   /** A closed tab's create, now this tab's to send: show the saved copy and `queue` it. */
   takeOver(change: LocalChange): void;
 };
@@ -121,6 +121,17 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
   const drop = (key: string) => {
     for (let i = outbox.length - 1; i >= 0; i--) if (outbox[i]!.key === key) outbox.splice(i, 1);
   };
+
+  function discardCreate(key: string) {
+    if (!othersCreating.has(key)) return;
+    const edited = outbox.some(job => job.key === key);
+    othersCreating.delete(key);
+    owners.delete(key);
+    drop(key);
+    events.discarded(key, edited);
+    events.pending(outbox.length);
+    if (!othersCreating.size) events.status("");
+  }
 
   function holdCommentDeletes(key: string, board: number | undefined, ops: Op[]): Op[] {
     if (board === undefined) return ops;
@@ -177,9 +188,7 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
       if (jiraKeys.has(key)) othersCreating.delete(key);
       else if (!stored.created.has(key)) {
         // Discarded in the tab that made it (or Jira refused the create): its edits here go with it.
-        othersCreating.delete(key);
-        drop(key);
-        events.discarded(key);
+        discardCreate(key);
       }
     if (othersCreating.size && tabs.exclusive) {
       // This tab's own edits go into the saved copy first, so a create sent from that copy carries them.
@@ -455,6 +464,7 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
       return jobs.flatMap(({ key }) => (outbox.some((job) => job.key === key) ? [] : [key]));
     },
     flush,
+    discardCreate,
     /** Queued writes, including one being sent. */
     pending: () => outbox.length,
     /** Whether a write for `key` is queued or being sent. */

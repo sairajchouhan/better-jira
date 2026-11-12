@@ -44,6 +44,7 @@ const tabChannel =
     ? new BroadcastChannel("better-jira-tabs")
     : undefined;
 tabChannel?.addEventListener("message", ({ data }) => {
+  if (typeof data?.discarded === "string") writes.discardCreate(data.discarded);
   const takeOver = takeOverClosed;
   if (typeof data?.closed === "string" && takeOver)
     void navigator.locks.request(TAB_LOCK + data.closed, () => {}).then(takeOver);
@@ -116,8 +117,12 @@ const writes = createOutbox(
     moved: (from, to) => {
       if (get().issues.has(from)) rekey(from, to);
     },
-    discarded: (key) => {
-      if (get().issues.has(key)) discard(key, false);
+    discarded: (key, edited) => {
+      const issue = get().issues.get(key);
+      if (edited && issue) showNotification({
+        text: `${issue.summary} wasn't created in Jira, so your changes to it were discarded.`,
+      });
+      if (issue) discard(key, false);
     },
     takeOver: (change) => {
       set({
@@ -227,6 +232,7 @@ function discard(key: string, reopen = true) {
   set({ issues, full });
   if (get().selected === key) navigate({ selected: null, panel: false });
   queueSave();
+  if (reopen) tabChannel?.postMessage({ discarded: key });
   // The composer comes back with what was typed, so a create Jira refuses loses nothing (R2-comments-D3).
   if (reopen && issue && !get().overlay)
     beginCreate({

@@ -480,6 +480,7 @@ test("tab hand-off: an issue its tab discarded takes this tab's edits of it alon
   h.send(edit(issue("KAN-NEW9"), { priority: "High" }));
   await h.advance(0);
   expect(h.log).toContain("discarded KAN-NEW9");
+  expect(h.log).toContain("status ");
   expect([h.sent, h.outbox.pending()]).toEqual([[], 0]);
 });
 
