@@ -1,8 +1,12 @@
 /* oxlint-disable react/refs -- Layout measurements belong to the mounted collection. */
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type FocusEvent, type ReactNode } from "react";
 
-/** A measured window within the existing scroll container. Groups and lanes keep their own geometry;
- * only their visible items mount. Small collections retain their normal DOM and native tab order. */
+const keyOf = (node: EventTarget | null) =>
+  (node as HTMLElement | null)?.closest?.<HTMLElement>("[data-virtual-key]")?.dataset.virtualKey ?? null;
+
+/** A measured window within the existing scroll container (BJ-111). Groups, lanes and columns keep their own geometry;
+ *  only the items near the viewport mount. The selected, focused and dragged items always stay mounted, so selection
+ *  scrolling, menu anchors, focus and an in-flight drag keep their element. */
 export function VirtualItems<T>({ items, itemKey, selected, estimate, children }: {
   items: T[];
   itemKey: (item: T) => string;
@@ -11,52 +15,43 @@ export function VirtualItems<T>({ items, itemKey, selected, estimate, children }
   children: (item: T) => ReactNode;
 }) {
   const root = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLElement | null>(null);
   const heights = useRef(new Map<string, number>());
-  const [viewport, setViewport] = useState({ top: 0, bottom: 900 });
-  const [revision, setRevision] = useState(0);
+  // Unknown until the first layout effect measures it, so a new collection mounts no items it would drop before paint.
+  const [viewport, setViewport] = useState<{ top: number; bottom: number } | null>(null);
+  const [, setRevision] = useState(0);
+  const [focused, setFocused] = useState<string | null>(null);
   const [dragged, setDragged] = useState<string | null>(null);
-  const enabled = items.length > 20;
   const offsets = [0];
   for (const item of items) offsets.push(offsets.at(-1)! + (heights.current.get(itemKey(item)) ?? estimate));
-  const selectedIndex = items.findIndex(item => itemKey(item) === selected);
+  const measure = () => {
+    const node = root.current, parent = scroller.current;
+    if (!node || !parent) return;
+    const rect = node.getBoundingClientRect(), clip = parent.getBoundingClientRect();
+    const top = clip.top - rect.top, bottom = clip.bottom - rect.top;
+    setViewport((v) => (v?.top === top && v.bottom === bottom ? v : { top, bottom }));
+  };
   useLayoutEffect(() => {
-    const node = root.current;
-    if (!node || !enabled) return;
-    let scroller = node.parentElement;
-    while (scroller && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
-    if (!scroller) return;
-    const parent = scroller;
-    let frame = 0;
-    const update = () => {
-      frame = 0;
-      const rect = node.getBoundingClientRect(), clip = parent.getBoundingClientRect();
-      setViewport({ top: clip.top - rect.top, bottom: clip.bottom - rect.top });
-    };
-    const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
-    parent.addEventListener("scroll", schedule, { passive: true });
-    // An earlier group's measured height can move this group even without a scroll.
-    const resize = new ResizeObserver(schedule);
-    resize.observe(parent);
-    resize.observe(parent.firstElementChild ?? parent);
-    update();
-    return () => { parent.removeEventListener("scroll", schedule); resize.disconnect(); cancelAnimationFrame(frame); };
-  }, [enabled, items, revision]);
-  useLayoutEffect(() => {
-    if (!enabled || selectedIndex < 0 || !root.current) return;
-    let parent = root.current.parentElement;
+    let parent = root.current!.parentElement;
     while (parent && !/auto|scroll/.test(getComputedStyle(parent).overflowY)) parent = parent.parentElement;
     if (!parent) return;
-    const rect = root.current.getBoundingClientRect(), clip = parent.getBoundingClientRect();
-    const top = rect.top + offsets[selectedIndex]!, bottom = rect.top + offsets[selectedIndex + 1]!;
-    if (top < clip.top) parent.scrollTop += top - clip.top;
-    else if (bottom > clip.bottom) parent.scrollTop += bottom - clip.bottom;
-    const updated = root.current.getBoundingClientRect();
-    setViewport({ top: clip.top - updated.top, bottom: clip.bottom - updated.top });
-    // Selection changes trigger scrolling; measuring or scrolling must not snap back to the selection.
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies
-  }, [selected, enabled]);
+    scroller.current = parent;
+    let frame = 0;
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; measure(); }); };
+    parent.addEventListener("scroll", schedule, { passive: true });
+    // A sibling group, lane or column that measures or collapses moves this one without a scroll.
+    // ponytail: children present at mount only; a group added later is caught by the per-render measure below.
+    const resize = new ResizeObserver(schedule);
+    resize.observe(parent);
+    for (const child of parent.children) resize.observe(child);
+    return () => { parent.removeEventListener("scroll", schedule); resize.disconnect(); cancelAnimationFrame(frame); scroller.current = null; };
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- `measure` reads refs only.
+  }, []);
+  // Every render re-measures before paint: a layout switch, a collapse or new items never paint a stale window.
+  // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies
+  useLayoutEffect(measure);
   useLayoutEffect(() => {
-    if (!enabled || !root.current) return;
+    if (!root.current) return;
     const observer = new ResizeObserver(entries => {
       let changed = false;
       for (const entry of entries) {
@@ -66,25 +61,35 @@ export function VirtualItems<T>({ items, itemKey, selected, estimate, children }
       }
       if (changed) setRevision(value => value + 1);
     });
-    for (const child of root.current.querySelectorAll<HTMLElement>("[data-virtual-key]")) observer.observe(child);
+    for (const child of root.current.querySelectorAll<HTMLElement>(":scope > [data-virtual-key]")) observer.observe(child);
     return () => observer.disconnect();
   });
-  const overscan = estimate * 4;
-  let start = 0, end = items.length;
-  if (enabled) {
-    while (start < items.length && offsets[start + 1]! < viewport.top - overscan) start++;
-    end = start;
-    while (end < items.length && offsets[end]! < viewport.bottom + overscan) end++;
-  }
-  const draggedIndex = items.findIndex(item => itemKey(item) === dragged);
-  const pinned = draggedIndex >= 0 && (draggedIndex < start || draggedIndex >= end) ? draggedIndex : -1;
-  const rendered = Array.from({ length: end - start }, (_, index) => start + index);
-  if (pinned >= 0) rendered.push(pinned);
-  return <div ref={root} data-virtual-items={enabled || undefined} style={{ position: "relative", overflowAnchor: "none" }}
-    onDragStartCapture={event => setDragged((event.target as HTMLElement).closest<HTMLElement>("[data-key]")?.dataset.key ?? null)}
+  // Many groups or lanes share one viewport, so each windows itself, however short: most sit outside it.
+  const overscan = estimate * 4, top = viewport ? viewport.top - overscan : 0, bottom = viewport ? viewport.bottom + overscan : 0;
+  let start = 0;
+  while (start < items.length && offsets[start + 1]! < top) start++;
+  let end = start;
+  while (end < items.length && offsets[end]! < bottom) end++;
+  const pinned = new Set([selected, focused, dragged].map(key => items.findIndex(item => itemKey(item) === key)).filter(index => index >= 0 && (index < start || index >= end)));
+  // Pinned items keep their place in DOM order, so Tab moves on from them towards the window.
+  const rendered = [...[...pinned].filter(index => index < start).sort((a, b) => a - b), ...Array.from({ length: end - start }, (_, index) => start + index), ...[...pinned].filter(index => index >= end).sort((a, b) => a - b)];
+  // A selection made while its item was outside the window scrolls to the item's estimated place; once the window
+  // reaches it and it takes its measured place, it is scrolled to once more. Scrolling back later never snaps to it.
+  const selectedPinned = selected !== null && [...pinned].some(index => itemKey(items[index]!) === selected);
+  const settling = useRef<string | null>(null);
+  useLayoutEffect(() => { settling.current = selectedPinned ? selected : null; }, [selected]); // oxlint-disable-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies
+  useLayoutEffect(() => {
+    if (!selected || settling.current !== selected || selectedPinned) return;
+    settling.current = null;
+    root.current?.querySelector(`:scope > [data-virtual-key="${CSS.escape(selected)}"]`)?.scrollIntoView({ block: "nearest" });
+  });
+  return <div ref={root} data-virtual-items style={{ position: "relative", overflowAnchor: "none" }}
+    onFocus={(event: FocusEvent) => setFocused(keyOf(event.target))}
+    onBlur={(event: FocusEvent) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(null); }}
+    onDragStartCapture={event => setDragged(keyOf(event.target))}
     onDragEndCapture={() => setDragged(null)}>
     <div aria-hidden style={{ height: offsets[start] }} />
-    {rendered.map(index => <div key={itemKey(items[index]!)} data-virtual-key={itemKey(items[index]!)} style={index === pinned ? { position: "absolute", top: offsets[index], width: "100%" } : undefined}>{children(items[index]!)}</div>)}
+    {rendered.map(index => <div key={itemKey(items[index]!)} data-virtual-key={itemKey(items[index]!)} style={pinned.has(index) ? { position: "absolute", top: offsets[index], width: "100%" } : undefined}>{children(items[index]!)}</div>)}
     <div aria-hidden style={{ height: offsets.at(-1)! - offsets[end]! }} />
   </div>;
 }

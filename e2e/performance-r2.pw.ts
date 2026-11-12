@@ -20,11 +20,18 @@ test("BJ-110 keeps the document visible while its first editor chunk loads", asy
     await route.fulfill({ response });
   });
   await app.click("[data-key=TEST-1]");
+  const composer = app.page.locator('[aria-busy="true"][aria-label="Leave a comment…"]');
   try {
     await expect(app.page.locator('[aria-busy="true"].rich-content').first()).toBeVisible();
+    // Hovering the card already asked for the chunk; what is typed before it arrives is kept.
     expect(editorRequested).toBe(true);
+    await composer.click();
+    await app.page.keyboard.type("Typed early");
+    await expect(composer).toHaveText("Typed early");
   } finally { release(); }
   await expect(app.page.locator(".ProseMirror").first()).toBeVisible();
+  await expect(app.page.locator("#comment")).toHaveText("Typed early");
+  await expect(app.page.locator("#comment")).toBeFocused();
 });
 
 for (const layout of ["list", "board"] as const) {
@@ -46,6 +53,22 @@ for (const layout of ["list", "board"] as const) {
         await app.page.mouse.move(box.x + box.width / 2, box.y + 4, { steps: 8 });
         await app.page.mouse.up();
         await expect.poll(async () => (await fixture.log()).writes.some((w: { key: string }) => w.key === sourceKey)).toBe(true);
+        // And into a column scrolled deep into its window.
+        await columns.nth(1).locator(".overflow-y-auto").evaluate(element => { element.scrollTop = 3000; });
+        const next = columns.nth(0).locator("[data-key]").first();
+        const nextKey = (await next.getAttribute("data-key"))!;
+        // A card mounted in the scrolled window, below the column's top edge.
+        const target = await columns.nth(1).locator(".overflow-y-auto").evaluate(async element => {
+          await new Promise(requestAnimationFrame);
+          const clip = element.getBoundingClientRect();
+          const card = [...element.querySelectorAll("[data-key]")].map(c => c.getBoundingClientRect()).find(r => r.top > clip.top + 100)!;
+          return { x: card.x, y: card.y, width: card.width };
+        });
+        await next.hover();
+        await app.page.mouse.down();
+        await app.page.mouse.move(target.x + target.width / 2, target.y + 4, { steps: 8 });
+        await app.page.mouse.up();
+        await expect.poll(async () => (await fixture.log()).writes.some((w: { key: string }) => w.key === nextKey)).toBe(true);
       }
       // Native scroll containers remain in place, including the board's outer swimlane scroller.
       await root.evaluate(element => {
@@ -67,3 +90,18 @@ for (const layout of ["list", "board"] as const) {
     });
   }
 }
+
+test("BJ-111 j/k keeps the selection in view across groups and lanes", async ({ open }) => {
+  await fixture.reset({ bulk: 90 });
+  const app = await open("", { setup: `localStorage.setItem(${JSON.stringify(PREFS_KEY)}, JSON.stringify({1:{display:{layout:"list",rows:"assignee"}}}))` });
+  const root = app.page.locator("[data-layout=list]").filter({ visible: true });
+  await root.locator("[data-key]").first().click();
+  await app.key("Escape");
+  // 15 lanes of about six rows: every few presses the selection crosses into another lane's window.
+  for (const key of ["j", "k"])
+    for (let press = 0; press < 40; press++) {
+      await app.key(key);
+      await expect(root.locator('[data-selected="true"]')).toBeInViewport();
+    }
+  expect(await root.locator("[data-key]").count()).toBeLessThan(60);
+});
