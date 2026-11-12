@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Issue } from "@/shared/issue-model";
-import { describeActivity, priorityRank, titleChangeLabel } from "./activity-entry";
+import { ActivityRowWords, describeActivity, priorityRank, titleChangeLabel } from "./activity-entry";
 import { activityRows, type ActivityField, type PropertyActivity } from "./issue-activity";
 
 // Made-up shapes only (BJ-40): each Jira change kind sampled read-only from real tickets, worded as Linear's history chunk words it.
@@ -64,7 +64,10 @@ test("BJ-40: Linear's wording for the kinds Linear has (status, priority, assign
   );
   expect(words(event("team", null, "Builders"))).toBe("changed team to Builders");
   expect(words(event("team", "Builders", "Makers"))).toBe("changed team from Builders to Makers");
-  expect(words(event("labels", ["a"], ["b", "c"]))).toBe("added labels b, c and removed label a");
+  // Linear's list (`GOn`/`XOn`): "a and b", "a, b, and c"; past five added labels, "and N others".
+  expect(words(event("labels", ["a"], ["b", "c"]))).toBe("added labels b and c and removed label a");
+  expect(words(event("labels", [], ["a", "b", "c"]))).toBe("added labels a, b, and c");
+  expect(words(event("labels", [], ["a", "b", "c", "d", "e", "f", "g"]))).toBe("added labels a, b, c, d, e, and 2 others");
 });
 
 test("BJ-40: Linear's relation wording, and Jira link types Linear lacks keep their phrase", () => {
@@ -137,4 +140,69 @@ test("BJ-196: title group counts use Linear's words through twenty", () => {
   expect(titleChangeLabel(3)).toBe("changed title three times");
   expect(titleChangeLabel(20)).toBe("changed title twenty times");
   expect(titleChangeLabel(21)).toBe("changed title 21 times");
+});
+
+/** A grouped row's head as the reader sees it: actors, then Linear's grouped wording. */
+const group = (...changes: PropertyActivity[]) => {
+  const rows = activityRows(changes);
+  expect(rows).toHaveLength(1);
+  return renderToStaticMarkup(<ActivityRowWords row={rows[0]!} issue={issue} />)
+    .replace(/<[^>]+>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+const time = (minutes: number) => new Date(Date.parse("2026-03-01T09:00:00Z") + minutes * 60_000).toISOString();
+const state = (id: string) => ({ id, name: id });
+
+test("F2: Linear's grouped status wording (`so`): two moves, a round trip, and a longer run by its ends", () => {
+  expect(group(event("status", state("To Do"), state("Selected")), event("status", state("Selected"), state("Doing"), ada, time(5)))).toBe(
+    "Ada Example moved to Selected, then to Doing",
+  );
+  expect(
+    group(
+      event("status", state("Selected"), state("To Do")),
+      event("status", state("To Do"), state("Doing"), ada, time(5)),
+      event("status", state("Doing"), state("Selected"), ada, time(9)),
+    ),
+  ).toBe("Ada Example moved to Doing, then back to Selected");
+  expect(
+    group(
+      event("status", state("To Do"), state("Selected")),
+      event("status", state("Selected"), state("Doing"), ada, time(5)),
+      event("status", state("Doing"), state("Review"), ada, time(9)),
+    ),
+  ).toBe("Ada Example moved from To Do to Review");
+});
+
+test("F2: Linear's grouped priority wording (`pc`)", () => {
+  expect(group(event("priority", null, "Low"), event("priority", "Low", "High", ada, time(1)))).toBe(
+    "Ada Example set priority to Low, then set to High",
+  );
+  expect(
+    group(event("priority", null, "Low"), event("priority", "Low", "High", ada, time(1)), event("priority", "High", null, ada, time(2))),
+  ).toBe("Ada Example changed priority a few times before removing it");
+});
+
+test("F2: Linear's grouped label wording (`yc`): added, removed, and added and then removed", () => {
+  // DRFT-953's agent label: on and off again, then a new label added.
+  expect(
+    group(
+      event("labels", ["x"], ["x", "agent-working"]),
+      event("labels", ["x", "agent-working"], ["x"], ada, time(20)),
+      event("labels", ["x"], ["x", "agent-working"], ada, time(40)),
+      event("labels", ["x", "agent-working"], ["x"], ada, time(41)),
+      event("labels", ["x"], ["x", "drift"], ada, time(42)),
+    ),
+  ).toBe("Ada Example added drift, added and then removed agent-working");
+  expect(group(event("labels", ["old"], []), event("labels", [], ["old"], ada, time(3)))).toBe(
+    "Ada Example removed and then added old",
+  );
+  expect(group(event("labels", [], ["a"]), event("labels", ["a", "b"], ["a"], ada, time(3)))).toBe("Ada Example added a and removed b");
+});
+
+test("F2: a title group names every actor (`R`)", () => {
+  const grace = { id: "grace", name: "Grace Example" };
+  expect(group(event("title", "A", "B"), event("title", "B", "C", grace, time(5)))).toBe(
+    "Ada Example and Grace Example changed title twice",
+  );
 });

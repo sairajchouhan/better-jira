@@ -369,6 +369,45 @@ test("BJ-13: a long history folds its middle into Linear's \"Show N events\" row
   expect(await page.eval(`document.querySelectorAll('.issue-activity ol > .activity-event').length`)).toBe(11);
 });
 
+test("F2: every Jira change stays reachable: adjacent changes group in Linear's words and expand to each, at its own time", async ({ open }) => {
+  // DRFT-953's shape (made-up names): one person's agent toggles a label between moves; an app attaches a burst of files.
+  const at = (minutes: number, ms = 0) => new Date(Date.parse("2026-11-06T12:00:00Z") + minutes * 60_000 + ms).toISOString();
+  const ada = { id: "ada", name: "Ada Example" },
+    bot = { id: "bot", name: "Connector App", app: true };
+  const labels = (fromText: string, toText: string) => ({ field: "labels", fieldId: "labels", from: null, to: null, fromText, toText });
+  const file = (id: string, name: string) => ({ field: "Attachment", fieldId: "attachment", from: null, fromText: null, to: id, toText: name });
+  await fixture.reset({
+    history: {
+      "TEST-4": [
+        { id: "1", at: at(0), actor: ada, items: [{ field: "status", fieldId: "status", from: "todo", fromText: "Todo", to: "doing", toText: "Doing" }] },
+        { id: "2", at: at(5), actor: ada, items: [labels("test", "test agent-working")] },
+        { id: "3", at: at(20), actor: ada, items: [labels("test agent-working", "test")] },
+        { id: "4", at: at(40), actor: ada, items: [labels("test", "test drift")] },
+        { id: "5", at: at(60), actor: bot, items: [file("10", "one.png")] },
+        { id: "6", at: at(60, 280), actor: bot, items: [file("11", "two.png")] },
+      ],
+    },
+  });
+  const page = await open("?issue=TEST-4&view=page");
+  const rows = `[...document.querySelectorAll('[data-activity]')].map(n=>[n.children[1].textContent.replace(/\\s+/g,' ').replace(/ ·$/,'').trim(),n.querySelector('a[href*="#activity-"] time')?.getAttribute('datetime')])`;
+  await page.waitFor(`${rows}.length===4`, 5000);
+  expect(await page.eval(rows)).toEqual([
+    ["Ada Example moved from Todo to Doing", at(0)],
+    // Linear's grouped label row (`yc`), at the latest change's time.
+    ["Ada Example added drift, added and then removed agent-working", at(40)],
+    ["Connector App attached one.png", at(60)],
+    ["Connector App attached two.png", at(60, 280)],
+  ]);
+  await page.click('[data-activity="labels"] button');
+  const grouped = `[...document.querySelectorAll('[aria-label="Grouped changes"] li')].map(n=>[n.textContent.replace(/ · .*$/,''),n.querySelector('time').getAttribute('datetime')])`;
+  await page.waitFor(`${grouped}.length===3`);
+  expect(await page.eval(grouped)).toEqual([
+    ["Ada Example added label agent-working", at(5)],
+    ["Ada Example removed label agent-working", at(20)],
+    ["Ada Example added label drift", at(40)],
+  ]);
+});
+
 test("BJ-196: repeated title edits expand and collapse with their individual values", async ({ open }) => {
   await fixture.reset({ history: { "TEST-2": [
     { id: "title-1", at: "2026-11-07T10:00:00Z", actor: { id: "ada", name: "Ada Example" }, items: [{ field: "summary", from: null, to: null, fromText: "Original", toText: "First title" }] },

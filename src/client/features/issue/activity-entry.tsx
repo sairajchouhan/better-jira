@@ -9,14 +9,14 @@ import { fullTime, activityTime } from "./issue-dates";
 import { useState, type ReactNode } from "react";
 import type { RunPlace, TimelineEvent } from "@/client/features/comments/comment-threads";
 import { collapseLabel, partition, type SummaryItem } from "./activity-collapse";
-import { statusById } from "@/shared/board-catalog";
+import { statusById, statuses } from "@/shared/board-catalog";
 import { Avatar } from "@/client/components/avatar";
 import { Icon, type IconName, PriorityIcon, RelationIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
 import { AppLink } from "@/client/features/navigation/app-link";
 import { boardOf, get } from "@/client/state/store";
 import type { Issue, User } from "@/shared/issue-model";
 import { jiraLinkType } from "@/shared/relations";
-import type { ActivityRow, PropertyActivity, Relation } from "./issue-activity";
+import { labelDelta, type ActivityRow, type PropertyActivity, type Relation } from "./issue-activity";
 import type { FieldValue, NamedValue } from "./jira-history";
 
 const related = (target: Issue) => ({ board: target.board, selected: target.key, panel: true, view: get().view });
@@ -286,35 +286,176 @@ export function describeActivity(event: PropertyActivity, issue: Issue, then = f
   }
 }
 
-/** Linear's label entries (`As`/`js`): each label behind its 4px dot. */
+/** One label behind its 4px dot (Linear's label chip in history). */
+const LabelName = ({ name }: { name: string }) => (
+  <span>
+    <span className="mr-1 inline-block size-1 rounded-full align-middle" style={{ background: hue(name) }} />
+    {name}
+  </span>
+);
+/** Linear's spelled-out list (`GOn`): the first `spell` names, then "N {more}" with the rest on hover, unless only one
+ *  would be left over; joined "a, b, and c" (`XOn`). */
+export function LabelList({ names, spell, more = "others" }: { names: string[]; spell: number; more?: string }) {
+  const shown = names.length - spell >= 2 ? spell : names.length,
+    rest = names.slice(shown),
+    total = shown + (rest.length ? 1 : 0);
+  const separator = (i: number) => (i === total - 1 ? "" : i === total - 2 ? (total >= 3 ? ", and " : " and ") : ", ");
+  return (
+    <>
+      {names.slice(0, shown).map((name, i) => (
+        <span key={name}>
+          <LabelName name={name} />
+          {separator(i)}
+        </span>
+      ))}
+      {rest.length > 0 && (
+        <span title={rest.join(", ")} data-tip="above">
+          {rest.length} {more}
+        </span>
+      )}
+    </>
+  );
+}
+
+const plural = (word: string, count: number) => (count === 1 ? word : `${word}s`);
+/** Linear's label entries (`As` spells out 5, `js` 3); a change that does both reads "added … and removed …" (`ss`). */
 function LabelChange({ before, after }: { before: string[] | null; after: string[] | null }) {
-  const was = new Set(before ?? []),
-    now = new Set(after ?? []),
-    added = [...now].filter((l) => !was.has(l)),
-    removed = [...was].filter((l) => !now.has(l));
-  const list = (names: string[]) =>
-    names.map((l, i) => (
-      <span key={l}>
-        {i ? ", " : ""}
-        <span className="mr-1 inline-block size-1 rounded-full align-middle" style={{ background: hue(l) }} />
-        {l}
-      </span>
-    ));
+  const { added, removed } = labelDelta(before, after);
   return (
     <>
       {added.length > 0 && (
         <>
-          added label{added.length > 1 ? "s" : ""} {list(added)}
+          added {plural("label", added.length)} <LabelList names={added} spell={5} />
         </>
       )}
       {added.length > 0 && removed.length > 0 && " and "}
       {removed.length > 0 && (
         <>
-          removed label{removed.length > 1 ? "s" : ""} {list(removed)}
+          removed {plural("label", removed.length)} <LabelList names={removed} spell={3} />
         </>
       )}
     </>
   );
+}
+
+/** Linear's grouped label row (`yc`): what the run added, removed, added and then removed, or removed and then added. */
+function GroupedLabels({ changes }: { changes: PropertyActivity[] }) {
+  const first = (side: "added" | "removed") => {
+    const seen = new Map<string, number>();
+    for (const change of changes)
+      for (const label of labelDelta(change.before, change.after)[side])
+        if (!seen.has(label)) seen.set(label, Date.parse(change.at));
+    return seen;
+  };
+  const added = first("added"),
+    removed = first("removed");
+  const both = [...added.keys()].filter((label) => removed.has(label));
+  const addedOnly = [...added.keys()].filter((label) => !removed.has(label)),
+    removedOnly = [...removed.keys()].filter((label) => !added.has(label)),
+    addedThenRemoved = both.filter((label) => added.get(label)! <= removed.get(label)!),
+    removedThenAdded = both.filter((label) => added.get(label)! > removed.get(label)!);
+  const tight = addedOnly.length > 0 && removedOnly.length > 0 && both.length > 0;
+  const parts = [
+    addedOnly.length > 0 && (
+      <>
+        added <LabelList names={addedOnly} spell={removedOnly.length === 0 && both.length === 0 ? 5 : 3} more="other labels" />
+      </>
+    ),
+    removedOnly.length > 0 && (
+      <>
+        removed <LabelList names={removedOnly} spell={2} more="labels" />
+      </>
+    ),
+    addedThenRemoved.length > 0 && (
+      <>
+        {tight ? "added and removed" : "added and then removed"} <LabelList names={addedThenRemoved} spell={2} more="labels" />
+      </>
+    ),
+    removedThenAdded.length > 0 && (
+      <>
+        {tight ? "removed and added" : "removed and then added"} <LabelList names={removedThenAdded} spell={2} more="labels" />
+      </>
+    ),
+  ].filter((part) => part !== false);
+  if (!parts.length) return "made label changes";
+  const join = (i: number) =>
+    parts.length === 2
+      ? addedThenRemoved.length || removedThenAdded.length
+        ? ", "
+        : " and "
+      : i < parts.length - 2
+        ? ", "
+        : ", and ";
+  return parts.map((part, i) => (
+    <span key={i}>
+      {part}
+      {i < parts.length - 1 && join(i)}
+    </span>
+  ));
+}
+
+/** Linear's grouped status row (`so`): two moves read "moved to A, then to B"; a run back to where it started, "moved to
+ *  A, then back to B"; a longer one names its ends, "moved (back) from A to B", by the board's column order (`oo`). */
+function groupedStatus(changes: PropertyActivity[], issue: Issue): string {
+  const board = boardOf(issue.key),
+    first = changes[0]!,
+    last = changes.at(-1)!;
+  const label = (value: unknown) => statusById(board, idOf(value))?.name ?? (value === null ? "" : name(value));
+  if (first.before === null || last.after === null) return `moved from ${label(first.before)} to ${label(last.after)}`;
+  const index = (value: unknown) => statuses(board).findIndex((s) => s.id === idOf(value));
+  const from = index(first.before),
+    to = index(last.after);
+  if (idOf(first.before) === idOf(last.after) || (from >= 0 && from === to))
+    return `moved to ${label(changes.at(-2)!.after)}, then back to ${label(last.after)}`;
+  if (changes.length === 2) return `moved to ${label(first.after)}, then to ${label(last.after)}`;
+  return `${from >= 0 && to >= 0 && from > to ? "moved back" : "moved"} from ${label(first.before)} to ${label(last.after)}`;
+}
+
+/** Linear's grouped priority row (`pc`). */
+function GroupedPriority({ changes, issue }: { changes: PropertyActivity[]; issue: Issue }) {
+  const last = changes.at(-1)!;
+  if (changes.length === 2)
+    return (
+      <>
+        {describeActivity(changes[0]!, issue)},{" "}
+        {last.after === null ? "then removed priority" : <>then set to <B>{String(last.after)}</B></>}
+      </>
+    );
+  return last.after === null ? (
+    "changed priority a few times before removing it"
+  ) : (
+    <>
+      changed priority a few times before setting it to <B>{String(last.after)}</B>
+    </>
+  );
+}
+
+/** A grouped row's words without its actors: Linear's for status, priority, labels and titles; ", then …" for cycles. */
+function describeGroup(changes: PropertyActivity[], issue: Issue): ReactNode {
+  switch (changes[0]!.field) {
+    case "status":
+      return groupedStatus(changes, issue);
+    case "priority":
+      return <GroupedPriority changes={changes} issue={issue} />;
+    case "labels":
+      return <GroupedLabels changes={changes} />;
+    case "title":
+      return titleChangeLabel(changes.length);
+  }
+  return changes.map((change, i) => (
+    <span key={change.id}>
+      {i ? ", then " : ""}
+      {describeActivity(change, issue, i > 0)}
+    </span>
+  ));
+}
+
+/** Linear's grouped-row actors (`R`): "A", "A and B", "A, B and C", "A, B and 2 others". */
+export function actorNames(changes: PropertyActivity[]): string {
+  const names = [...new Map(changes.map((change) => [change.actor.id, change.actor.name])).values()];
+  if (names.length < 3) return names.join(" and ");
+  if (names.length === 3) return `${names[0]}, ${names[1]} and ${names[2]}`;
+  return `${names[0]}, ${names[1]} and ${names.length - 2} ${plural("other", names.length - 2)}`;
 }
 
 const FIELD_ICONS: Partial<Record<PropertyActivity["field"], IconName>> = {
@@ -407,14 +548,35 @@ export function ExpandActivityIcon() {
   return <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" clipRule="evenodd" d="M7.523 2.71a.75.75 0 0 1 .954 0l4.25 3.5a.75.75 0 0 1-.954 1.157L8 4.26 4.227 7.367a.75.75 0 0 1-.954-1.158l4.25-3.5Zm5.306 7.102a.75.75 0 0 1-.102 1.055l-4.25 3.5a.75.75 0 0 1-.954 0l-4.25-3.5a.75.75 0 0 1 .954-1.158L8 12.817l3.773-3.108a.75.75 0 0 1 1.056.103Z" /></svg>;
 }
 
-/** Linear B/V: a grouped row toggles its indented changes; expanded timestamps are absolute. */
+/** A row's words: its actor and change, or a grouped row's actors and Linear's grouped wording. */
+export function ActivityRowWords({ row, issue }: { row: ActivityRow; issue: Issue }) {
+  if (row.chain.length) {
+    const changes = [...row.events, ...row.chain];
+    return (
+      <>
+        <span className="font-medium">{actorNames(changes)}</span> {describeGroup(changes, issue)}
+      </>
+    );
+  }
+  return (
+    <>
+      <span className="font-medium">{row.actor.name}</span>{" "}
+      {row.events.map((change, i) => (
+        <span key={change.id}>
+          {i ? " and " : ""}
+          {describeActivity(change, issue)}
+        </span>
+      ))}
+    </>
+  );
+}
+
+/** Linear B/V: a grouped row toggles its indented changes, each with its own absolute time. */
 export function ActivityPropertyRow({ row, issue, children }: { row: ActivityRow; issue: Issue; children: ReactNode }) {
   const changes = [...row.events, ...row.chain];
   const [open, setOpen] = useState(() => changes.some((e) => location.hash === `#activity-${e.id}`));
   const grouped = row.chain.length > 0;
-  const text = <><span className="font-medium">{row.actor.name}</span>{" "}{row.field === "title" && grouped
-    ? titleChangeLabel(changes.length)
-    : <>{row.events.map((change, i) => <span key={change.id}>{i ? " and " : ""}{describeActivity(change, issue)}</span>)}{row.chain.map((change) => <span key={change.id}>, then {describeActivity(change, issue, true)}</span>)}</>}</>;
+  const text = <ActivityRowWords row={row} issue={issue} />;
   return <li id={`activity-${row.id}`} data-activity={row.field} className="activity-event">
     <span className="grid size-[14px] place-items-center"><ActivityIcon row={row} issue={issue} /></span>
     <span>{grouped ? <button type="button" className="text-left hover:text-fg-2" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{text}</button> : text}{" "}·</span>{" "}{children}
