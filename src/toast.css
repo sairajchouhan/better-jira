@@ -1,0 +1,70 @@
+@layer components {
+  /* ToastPresenter `V`/`Y`: 384px wide (never wider than the window less 32px), 24px from the right and bottom, 8px apart. */
+  .ui-toast-viewport {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 581;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 384px;
+    max-width: calc(100vw - 32px);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    pointer-events: none;
+  }
+  @media (max-width: 640px) {
+    .ui-toast-viewport {
+      right: 16px;
+      bottom: 16px;
+    }
+  }
+  /* The toast card as the "View created" toast measures it (view-editor.css): menu surface, radius 10, 13px/18px. */
+  .ui-toast {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: start;
+    column-gap: 9px;
+    row-gap: 4px;
+    padding: 13px 16px 13px 14px;
+    border: var(--thin-pixel) solid var(--menu-line);
+    border-radius: 10px;
+    background: var(--menu);
+    box-shadow: var(--menu-shadow);
+    color: var(--fg);
+    font-size: 13px;
+    line-height: 18px;
+    pointer-events: auto;
+  }
+  .ui-toast-description {
+    grid-column: 1;
+    color: var(--fg-3);
+    font-size: 12px;
+  }
+  .ui-toast-actions {
+    grid-column: 1;
+    display: flex;
+    gap: 12px;
+    margin-top: 5px;
+  }
+  .ui-toast-action {
+    color: var(--accent);
+  }
+  .ui-toast-action:hover {
+    text-decoration: underline;
+  }
+  .ui-toast-close {
+    grid-row: 1;
+    grid-column: 2;
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    color: var(--fg-3);
+  }
+  .ui-toast-close:hover {
+    color: var(--fg);
+  }
+}
