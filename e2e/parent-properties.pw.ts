@@ -499,6 +499,15 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
         `(()=>{const b=document.getElementById('prop-labels');return [b.textContent,getComputedStyle(b.querySelector('.property-wide')).display!=='none']})()`,
       ),
     ).toEqual(["Add labelLabels", true]);
+    // With no labels on the issue, Linear opens on "Frequently used": the board's three most used, most used first. The fixture has only
+    // three labels, so no "Workspace labels" section follows (labelSections' unit test covers that one).
+    await page.clickAt(5, 600);
+    await page.key("l");
+    await page.waitFor(`!!document.querySelector('[role=dialog] .menu')`);
+    const fresh = (await page.eval<any>(menu)).items as string[];
+    expect([fresh[0], fresh[1], fresh.includes("—")]).toEqual(["#Frequently used", "test", false]);
+    await page.key("Escape");
+    await page.waitFor(`!document.querySelector('[role=dialog]')`);
     // Activity: the priority and label changes share one row with the actor's avatar, the label after its 4px dot.
     const row = `document.querySelector('[data-activity="multi"]')`;
     await page.waitFor(`!!${row}`);

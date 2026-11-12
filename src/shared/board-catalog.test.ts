@@ -35,6 +35,36 @@ test("known labels: the issues' labels first, then Jira's, each once", () => {
   expect(knownLabels([issue("A-1", null, ["b", "a"])], ["a", "c"])).toEqual(["b", "a", "c"]);
 });
 
+import { frequentLabels, labelSections } from "./board-catalog";
+
+test("frequent labels: the three most used over the 100 newest issues, most used first (Linear's frequentIssueLabels)", () => {
+  const at = (key: string, created: string, labels: string[]) => ({ ...issue(key, null, labels), created });
+  const issues = [
+    at("A-1", "2026-01-03", ["bug", "ui"]),
+    at("A-2", "2026-01-02", ["bug", "api"]),
+    at("A-3", "2026-01-01", ["bug", "ui", "docs"]),
+    ...Array.from({ length: 100 }, (_, i) => at(`OLD-${i}`, "2025-01-01", ["old"])),
+  ];
+  // The 100 newest are A-1..A-3 and 97 old ones: "old" wins on count, then bug, then ui.
+  expect(frequentLabels(issues)).toEqual(["old", "bug", "ui"]);
+  expect(frequentLabels(issues.slice(0, 3))).toEqual(["bug", "ui", "api"]);
+  expect(frequentLabels([])).toEqual([]);
+});
+
+test("label sections: frequently used only while the issue has no labels, then every other label once", () => {
+  const issues = [issue("A-1", null, ["bug", "ui"]), issue("A-2", null, ["bug"])];
+  expect(labelSections(issues, ["bug", "zeta"], [])).toEqual({
+    selected: [],
+    frequent: ["bug", "ui"],
+    rest: ["zeta"],
+  });
+  expect(labelSections(issues, ["bug", "zeta"], ["ui"])).toEqual({
+    selected: ["ui"],
+    frequent: [],
+    rest: ["bug", "zeta"],
+  });
+});
+
 import { knownPeople, priorityChoices, projectChoices, milestoneChoices } from "./board-catalog";
 
 const options: JiraOptions = {

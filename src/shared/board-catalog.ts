@@ -24,6 +24,34 @@ export const knownLabels = (issues: Issue[], jiraLabels: string[]) => [
   ...new Set([...issues.flatMap((i) => i.labels), ...jiraLabels]),
 ];
 
+/**
+ * Linear's team `frequentIssueLabels`: over the 100 most recently created issues, the three labels used most, most used first.
+ * Ties keep first-seen order, as Linear's stable sort does.
+ */
+export function frequentLabels(issues: Issue[]): string[] {
+  const counts = new Map<string, number>();
+  const recent = issues
+    .slice()
+    .sort((a, b) => (b.created ?? "").localeCompare(a.created ?? ""))
+    .slice(0, 100);
+  for (const issue of recent) for (const l of issue.labels) counts.set(l, (counts.get(l) ?? 0) + 1);
+  return [...counts].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([l]) => l);
+}
+
+/**
+ * The label picker's sections, as Linear's labels action groups them: the issue's labels first (no heading); with none, the board's
+ * frequently used labels ("Frequently used"); then every other label ("Workspace labels").
+ */
+export function labelSections(issues: Issue[], jiraLabels: string[], selected: string[]) {
+  const frequent = selected.length ? [] : frequentLabels(issues);
+  const shown = new Set([...selected, ...frequent]);
+  return {
+    selected: [...selected],
+    frequent,
+    rest: knownLabels(issues, jiraLabels).filter((l) => !shown.has(l)),
+  };
+}
+
 /** Priority names in the same rank order in every property menu. */
 export function priorityChoices(
   options: JiraOptions,

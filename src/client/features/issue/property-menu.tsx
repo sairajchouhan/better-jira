@@ -3,7 +3,7 @@ import { lazy, Suspense, use, useEffect, useState } from "react";
 import { Avatar } from "@/client/components/avatar";
 import { Icon, PriorityIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
 import {
-  knownLabels,
+  labelSections,
   priorityChoices,
   projectChoices,
   milestoneChoices,
@@ -380,8 +380,8 @@ export function MilestoneMenu({
   );
 }
 /**
- * The label checkbox rows (Linear's labels action, multiSelectSubActions): the labels on the issue first, as the menu opened, then
- * "Workspace labels", then "Create new label" for a new name. One component for the L picker and Issue options › Labels.
+ * The label checkbox rows (Linear's labels action, multiSelectSubActions): the labels on the issue first, as the menu opened, or with
+ * none "Frequently used"; then "Workspace labels", then "Create new label" for a new name. One component for the L picker and Issue options › Labels.
  */
 export function LabelRows({
   board,
@@ -391,10 +391,8 @@ export function LabelRows({
 }: Omit<FieldMenuProps<string[]>, "anchor" | "close"> & { query: string }) {
   const { issues, options } = useCatalog(board);
   const surface = use(MenuSurfaceContext);
-  const [order] = useState(() => ({
-    checked: [...value],
-    rest: knownLabels(issues, options.labels).filter((l) => !value.includes(l)),
-  }));
+  // Sections are fixed as the menu opens, so a row never jumps while you toggle it.
+  const [order] = useState(() => labelSections(issues, options.labels, value));
   const toggle = (name: string) =>
     onChange(value.includes(name) ? value.filter((l) => l !== name) : [...value, name]);
   const row = (name: string) => (
@@ -412,12 +410,16 @@ export function LabelRows({
   );
   // Jira labels can't contain spaces: a new label joins its words with hyphens (R2-issue-fields-D5).
   const created = query.trim().replace(/\s+/g, "-");
-  const exact = [...order.checked, ...order.rest].some((l) => l.toLowerCase() === created.toLowerCase());
+  const all = [...order.selected, ...order.frequent, ...order.rest];
+  const exact = all.some((l) => l.toLowerCase() === created.toLowerCase());
+  const above = order.selected.length > 0 || order.frequent.length > 0;
   return (
     <>
-      {order.checked.map(row)}
-      {order.checked.length > 0 && order.rest.length > 0 && <Menu.Divider />}
-      {order.checked.length > 0 && order.rest.length > 0 ? (
+      {order.selected.map(row)}
+      {order.selected.length > 0 && order.frequent.length > 0 && <Menu.Divider />}
+      {order.frequent.length > 0 && <Menu.Group heading="Frequently used">{order.frequent.map(row)}</Menu.Group>}
+      {above && order.rest.length > 0 && <Menu.Divider />}
+      {above && order.rest.length > 0 ? (
         <Menu.Group heading="Workspace labels">{order.rest.map(row)}</Menu.Group>
       ) : (
         order.rest.map(row)
