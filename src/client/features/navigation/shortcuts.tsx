@@ -50,7 +50,7 @@ import {
   showTab,
   toggleRead,
   undoInbox,
-} from "@/client/routes/inbox";
+} from "@/client/features/inbox/inbox";
 
 type State = ReturnType<typeof get>;
 type Shortcut = {

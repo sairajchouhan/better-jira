@@ -184,6 +184,10 @@ export function startNavigation() {
   if (navigationReady) return;
   navigationReady = true;
   window.addEventListener("click", openIssueLink);
+  // The issue screens load with their route; fetch them once the board is idle so the first issue opens at once.
+  const warm = () => void import("@/client/routes/issue-view");
+  if (typeof requestIdleCallback === "function") requestIdleCallback(warm);
+  else setTimeout(warm, 1);
   // A rename (here or in another tab) moves the view's slug; the id suffix keeps the entry.
   let shown = get().savedViews;
   subscribe(() => {

@@ -27,7 +27,7 @@ import { Text } from "@/client/components/text";
 import { TextInput } from "@/client/components/field";
 import { ConfirmDialog, Dialog } from "@/client/components/dialog";
 import { useCommand, focusNode } from "./commands";
-import { useInboxBadge } from "@/client/routes/inbox";
+import { useInboxBadge } from "@/client/features/inbox/inbox";
 import { SectionDisclosure } from "@/client/components/section-disclosure";
 import { SelectRow } from "@/client/components/display-options";
 import { useStoredState } from "@/client/state/stored-state";

@@ -1,11 +1,5 @@
 /** Linear's Inbox over Jira's in-app notifications. Read state goes to Jira; delete and snooze stay in this browser, because Jira's notification API has neither. */
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { Avatar } from "@/client/components/avatar";
 import { Button, ButtonLink, IconButton } from "@/client/components/button";
@@ -16,189 +10,21 @@ import { FilterChip } from "@/client/components/filter-chip";
 import { Tabs } from "@/client/components/tabs";
 import { Text } from "@/client/components/text";
 import { Icon, StatusIcon, type IconName } from "@/client/components/icons";
-import {
-  FILTER_FIELDS,
-  describe,
-  feedCategory,
-  hasFilters,
-  missingIssueNote,
-  shortAgo,
-  snoozeChoices,
-  snoozeTime,
-  unreadCount,
-  type FilterField,
-  type InboxItem,
-  type InboxView,
-} from "@/shared/inbox-model";
+import { FILTER_FIELDS, describe, feedCategory, hasFilters, missingIssueNote, shortAgo, snoozeChoices, snoozeTime, type FilterField, type InboxItem, type InboxView } from "@/shared/inbox-model";
 import { copyIssue, type CopyKind } from "@/client/features/issue/issue-copy";
 import { Menu } from "@/client/components/menu";
 import { MenuSurface } from "@/client/components/menu-surface";
 import { hotkeyOf, runShortcut } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
-import { statusOf as issueStatusOf, get, set, isWatching, useStore, type Issue } from "@/client/state/store";
-import { queryClient } from "@/client/state/server-data";
-import { navigate, preloadOnHover, router, ui } from "@/client/features/navigation/app-navigation";
+import { get, isWatching, useStore, type Issue } from "@/client/state/store";
+import { preloadOnHover, ui } from "@/client/features/navigation/app-navigation";
 import { useSearch } from "@tanstack/react-router";
 import { toggleFavorite } from "@/client/features/navigation/favorites";
 
-import { createInboxStore, type Category } from "@/client/state/inbox-store";
+import { changeView, toggleFilter, clearFilters, selectRow, toggleRead, markAllRead, deleteRow, deleteAll, openSnooze, snoozeRow, showTab, inbox, statusOf, ROW_PARAM, useFeed, useSelected, useView, useLocal, useUnreadCount, orderOf, facets, itemsOf, clearUnseen } from "@/client/features/inbox/inbox";
 import { InboxIssuePane } from "./issue-view";
 import { firstKey } from "@/client/state/jira-sync";
-import { readStored, writeStored } from "@/client/state/stored-state";
 import { SelectRow, Toggle } from "@/client/components/display-options";
-const storageKey = (name: string) =>
-  `better-jira:inbox-${name}:v1:${get().namespace}`;
-const statusOf = (key: string) => {
-  const issue = get().issues.get(key);
-  return issue && issueStatusOf(issue);
-};
-/** A row whose issue isn't mirrored has no `issue=` in the URL; this keeps it selected over a reload (R2-inbox-D6). The store drops it outside the inbox. */
-const ROW_PARAM = "notification";
-function keepRowInUrl(id: string | null) {
-  const search = router.latestLocation.search as Record<string, string | undefined>;
-  if ((search[ROW_PARAM] ?? null) === id) return;
-  void router.navigate({ to: "/inbox", search: { ...search, [ROW_PARAM]: id ?? undefined }, replace: true } as never);
-}
-async function send(body: object) {
-  const res = await fetch("/api/inbox", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const reply = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(reply?.error ?? "Jira refused");
-  return reply as { groups?: string[] } | null;
-}
-
-const inbox = createInboxStore({
-  queryClient,
-  get,
-  set,
-  ui,
-  statusOf,
-  read: (name, fallback) =>
-    readStored(
-      storageKey(name),
-      (raw) => ({ ...fallback, ...(raw as object) }),
-      fallback,
-    ),
-  save: (name, value) => {
-    writeStored(
-      storageKey(name),
-      value,
-      "Could not save inbox state in this browser",
-    );
-  },
-  send,
-  fetchPage: async (query) => {
-    const res = await fetch(`/api/inbox${query.size ? `?${query}` : ""}`);
-    if (!res.ok)
-      throw new Error(
-        (await res.json().catch(() => null))?.error ?? "Inbox unavailable",
-      );
-    return res.json();
-  },
-  openRow: (item, open) => {
-    const issue = get().issues.get(item.key);
-    if (issue) {
-      keepRowInUrl(null);
-      navigate({
-        board: issue.board,
-        selected: issue.key,
-        panel: true,
-        view: open,
-        inbox: true,
-      });
-    } else {
-      navigate({ selected: null, panel: false, inbox: true });
-      keepRowInUrl(item.id);
-    }
-    requestAnimationFrame(() =>
-      document
-        .querySelector(`[data-inbox-row="${CSS.escape(item.id)}"]`)
-        ?.scrollIntoView({ block: "nearest" }),
-    );
-  },
-  clearSelection: () => {
-    keepRowInUrl(null);
-    navigate({ selected: null, panel: false, inbox: true });
-  },
-  confirm: (message) => confirm(message),
-});
-globalThis.addEventListener?.("storage", (event) => {
-  const key = (event as StorageEvent).key;
-  for (const name of ["local", "view"])
-    if (key === storageKey(name)) inbox.storageChanged(name);
-});
-export const {
-  changeView,
-  toggleFilter,
-  clearFilters,
-  undoInbox,
-  undoInboxToast,
-  selectRow,
-  moveRow,
-  openRow,
-  toggleRead,
-  markAllRead,
-  deleteRow,
-  deleteAll,
-  openSnooze,
-  snoozeRow,
-  hasSelectedRow,
-  showTab,
-  priorityInbox,
-} = inbox;
-const {
-  subscribe,
-  localState,
-  viewState,
-  feed,
-  itemsOf,
-  facets,
-  orderOf,
-  dropLocal,
-  markRead,
-  clearUnseen,
-} = inbox;
-const useLocal = () => useSyncExternalStore(subscribe, localState);
-const useView = () => useSyncExternalStore(subscribe, viewState);
-const useSelected = () => useSyncExternalStore(subscribe, inbox.selected);
-function useFeed(category: Category) {
-  const observer = feed(category);
-  return useSyncExternalStore(
-    useCallback((l) => observer.subscribe(l), [observer]),
-    () => observer.getCurrentResult(),
-  );
-}
-/** Unread rows, as Linear counts them: every unread notification in Jira, not just the loaded pages. */
-function useUnreadCount() {
-  const { data } = useFeed("all");
-  const own = useLocal();
-  const now = useStore((s) => s.clock); // snoozes expire
-  return {
-    count: unreadCount(data?.pages[0]?.unread, itemsOf(data), own, now),
-    data,
-    own,
-    now,
-  };
-}
-/** The sidebar badge. It is always mounted, so it also brings back expired snoozes: unread, as Linear does, and in Jira too. */
-export function useInboxBadge() {
-  const { count, data, own, now } = useUnreadCount();
-  useEffect(() => {
-    const due = itemsOf(data).filter(
-      (i) => (own[i.head]?.snoozed ?? Infinity) <= now,
-    );
-    if (!due.length) return;
-    dropLocal(
-      due.map((i) => i.head),
-      "snoozed",
-    );
-    void markRead(due, false);
-  }, [data, own, now]);
-  return count;
-}
 
 const copyRow = (item: InboxItem, kind: CopyKind) =>
   copyIssue(kind, { key: item.key, summary: item.title } as Issue, item.url);
