@@ -282,7 +282,9 @@ function DisplayMenu({ board }: { board: Board }) {
       >
         {(["list", "board"] as const).map((layout) => (
           // ponytail: gap is layout inside the segment until SegmentedControl spaces an icon from its label (Q8).
-          <SegmentedControl.Segment key={layout} value={layout} className="gap-1.5">
+          // tabIndex 0 keeps both segments tabbable: MenuSurface's Tab trap counts tabindex=-1 buttons as its ends, so a
+          // roving stop lets Shift+Tab escape the popup. Drop it once that trap skips tabindex=-1 (follow-up).
+          <SegmentedControl.Segment key={layout} value={layout} tabIndex={0} className="gap-1.5">
             <Icon name={layout} />
             {layout === "list" ? "List" : "Board"}
           </SegmentedControl.Segment>
@@ -687,6 +689,7 @@ function FilterSaveActions({ board }: { board: Board }) {
         <Button
           variant="secondary"
           size="small"
+          className="view-filter-save"
           aria-haspopup="dialog"
           aria-expanded={!!saveAnchor}
           onClick={(e) => setSaveAnchor(e.currentTarget)}
