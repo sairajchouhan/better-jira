@@ -1,16 +1,14 @@
-import { toasts } from "./toast-queue";
 import { returnRejectedComment } from "./rejected-comment";
+import { forgetLastEdit, loadHistory, record, rewriteHistoricIssue, rewriteHistory, savedHistory } from "./undo-history";
 import {
   adoptJira,
   clearLocalEdits,
-  countEdit,
   editCount,
   forgetIssue,
   installChanges,
   isLocalIssue,
   markChanged,
   markCreated,
-  markStale,
   mergeFull,
   mergeProperties,
   needsFull,
@@ -20,12 +18,11 @@ import {
   releaseJiraFields,
   renameIssue,
   resetLocalEdits,
-  restoreSnapshots,
   savedChanges,
   snapshot,
   withJiraLinks,
 } from "./local-edits";
-import { latestNotification, rekeyNotification, showNotification, NOTIFICATION_ID } from "./app-notifications";
+import { rekeyNotification, showNotification } from "./app-notifications";
 import { assignableUsers, knownPeople, statusById, statuses } from "./board-catalog";
 import { viewSettings } from "./view-settings";
 import { navigate, startNavigation, ui } from "./app-navigation";
@@ -49,8 +46,6 @@ import {
   emptyLocalState,
   LocalDatabase,
   type LocalState,
-  type Snapshot,
-  type LocalEdit,
   type LocalChange,
 } from "./local-data";
 import { createActor, fromPromise, waitFor } from "xstate";
@@ -664,8 +659,7 @@ async function loadApplication() {
   };
   install(local.changes, issues, full);
   // Undo covers this tab's own edits only, as Linear's per-client history does; a reload keeps them (R2-inbox-D3).
-  undo.splice(0, undo.length, ...local.undo.filter((e) => e.tab === undoTab));
-  redo.splice(0, redo.length, ...local.redo.filter((e) => e.tab === undoTab));
+  const history = loadHistory(local);
   localSeq = local.sequence;
   numbers = { next: 0, end: 0 };
   if (opened.type === "opened") await reserveNumbers();
@@ -681,8 +675,7 @@ async function loadApplication() {
     preferences,
     savedViews,
     favorites: liveFavorites(savedViews),
-    undoCount: undo.length,
-    redoCount: redo.length,
+    ...history,
   });
   navigate({ board, view: preferences[board]?.display.openIn ?? "side" });
   storage.send(opened);
@@ -889,19 +882,8 @@ export function timed(label: string, fn: () => void) {
 }
 
 const now = () => new Date().toISOString();
-const undo: LocalEdit[] = [],
-  redo: LocalEdit[] = [];
 let database: LocalDatabase | undefined;
 export const touch = (...keys: string[]) => writes.touch(...keys);
-/** This tab across reloads (sessionStorage is per tab), so its undo history survives a reload and never reaches another tab.
- *  ponytail: a duplicated tab copies sessionStorage and shares the history; mint a new id on `pageshow` duplicates if that matters. */
-const undoTab = (() => {
-  try {
-    return (sessionStorage["better-jira:undo-tab"] ??= crypto.randomUUID()) as string;
-  } catch {
-    return crypto.randomUUID();
-  }
-})();
 const tabId = crypto.randomUUID(),
   TAB_LOCK = "better-jira-tab:";
 /** Held while this tab is open, so other tabs know its saved changes are still being sent. */
@@ -941,8 +923,7 @@ function localSnapshot(): LocalState {
     version: 1,
     sequence: localSeq,
     changes: savedChanges(),
-    undo: [...undo],
-    redo: [...redo],
+    ...savedHistory(),
     keys: writes.keys(),
   };
 }
@@ -1027,7 +1008,7 @@ const jiraImageComments = (edits: Issue["mediaEdits"]) =>
       { ...edit, comments: edit.comments?.filter((c) => jiraCommentId(c.id)) },
     ]),
   );
-function send(changes: [string, Side, Side][]) {
+export function send(changes: [string, Side, Side][]) {
   if (!state.writable) return;
   // A change that queued no write (nothing to send, or a redo that only cancelled a held comment delete) gets no answer
   // for adopt() to settle, so its Jira fields would stay pinned over every refresh: Jira's copy owns them again (R2-comments-D1).
@@ -1046,8 +1027,7 @@ function answered({ key: sent, ops, result, created, refused, describes }: Answe
   // New comment ids too, so undo and redo address the comment Jira now has.
   const comments = new Map([...created].filter(([from]) => from !== sent));
   if (comments.size) {
-    for (const list of [undo, redo])
-      list.splice(0, list.length, ...renameCommentIds(list, comments));
+    rewriteHistory((edits) => renameCommentIds(edits, comments));
     // An image thread keeps its place on the image under the Jira comment id.
     const key = result.key ?? sent,
       issue = state.issues.get(key);
@@ -1131,14 +1111,11 @@ function rekey(from: string, to: string) {
   const { issues, full } = renameIssue(from, to);
   touch(from, to);
   const label = new RegExp(`${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\d)`, "g");
-  for (const list of [undo, redo])
-    list.splice(
-      0,
-      list.length,
-      ...list.map((edit) =>
-        mentions(edit) ? { ...renameIds(edit, ids), label: edit.label.replace(label, to) } : edit,
-      ),
-    );
+  rewriteHistory((edits) =>
+    edits.map((edit) =>
+      mentions(edit) ? { ...renameIds(edit, ids), label: edit.label.replace(label, to) } : edit,
+    ),
+  );
   writes.rename(from, to);
   set({ issues, full });
   // Saved at once: other tabs wait for this move to send their edits of the issue (sync check 7).
@@ -1282,169 +1259,6 @@ export function issueURL(issue: Issue) {
     ? appURL(issue)
     : jiraIssueURL(issue.key);
 }
-let lastEditGroup: string | undefined;
-let transaction: { label: string; before: Map<string, Snapshot> } | null = null;
-function record(
-  key: string | string[],
-  label: string,
-  fn: () => void,
-  group?: string,
-  quiet = false,
-) {
-  if (!state.canEdit) {
-    set({ perf: "Local editing is paused until saved data is available" });
-    return;
-  }
-  const keys = typeof key === "string" ? [key] : key;
-  const nested = transaction !== null;
-  transaction ??= { label, before: new Map() };
-  for (const key of keys)
-    if (!transaction.before.has(key)) transaction.before.set(key, snapshot(key));
-  if (nested) {
-    fn();
-    return;
-  }
-  try {
-    fn();
-    const changed = [...transaction.before.keys()].filter((key) => {
-      const before = transaction!.before.get(key)!,
-        after = snapshot(key);
-      return before.issue !== after.issue || before.full !== after.full;
-    });
-    if (!changed.length) return;
-    for (const key of changed) {
-      markChanged(key);
-      countEdit(key);
-    }
-    touch(...changed);
-    if (!quiet) send(changed.map((key) => [key, transaction!.before.get(key)!, snapshot(key)]));
-    const previous = undo.at(-1);
-    if (
-      group &&
-      group === lastEditGroup &&
-      previous &&
-      JSON.stringify(previous.keys) === JSON.stringify(changed)
-    )
-      previous.after = changed.map(snapshot);
-    else
-      undo.push({
-        tab: undoTab,
-        keys: changed,
-        label,
-        before: changed.map((key) => transaction!.before.get(key)!),
-        after: changed.map(snapshot),
-      });
-    lastEditGroup = group;
-    if (undo.length > 100) undo.shift();
-    redo.length = 0;
-    set({ undoCount: undo.length, redoCount: 0 });
-    queueSave();
-  } finally {
-    transaction = null;
-  }
-}
-function restore(edit: LocalEdit, snapshots: Snapshot[]) {
-  lastEditGroup = undefined;
-  // Jira gets this edit's inverse alone, so comments, labels, files or links others added since are never removed.
-  const [from, to] =
-    snapshots === edit.before ? [edit.after, edit.before] : [edit.before, edit.after];
-  const current = edit.keys.map(snapshot);
-  // With Jira writes, undo reverts only the fields this edit changed, so it never overwrites newer Jira values.
-  if (state.writable)
-    snapshots = edit.keys.map((key, index) => {
-      const target = snapshots[index]!,
-        now = current[index]!,
-        before = edit.before[index]!,
-        after = edit.after[index]!;
-      if (!target.issue || !now.issue) return target;
-      const changed = (a: any, b: any, field: string) =>
-        JSON.stringify(a?.[field]) !== JSON.stringify(b?.[field]);
-      const issue = { ...now.issue };
-      for (const field of new Set([
-        ...Object.keys(before.issue ?? {}),
-        ...Object.keys(after.issue ?? {}),
-      ]))
-        if (changed(before.issue, after.issue, field))
-          (issue as any)[field] = (target.issue as any)[field];
-      const full =
-        now.full && target.full ? { ...now.full, fields: { ...now.full.fields } } : target.full;
-      // Comment edits and deletes live in commentStates; once Jira has them, undo needs the comment list back too.
-      const commentEdit = changed(before.issue, after.issue, "commentStates");
-      if (full && now.full)
-        for (const field of new Set([
-          ...Object.keys(before.full?.fields ?? {}),
-          ...Object.keys(after.full?.fields ?? {}),
-        ]))
-          if (
-            changed(before.full?.fields, after.full?.fields, field) ||
-            (field === "comment" && commentEdit)
-          )
-            full.fields[field] = target.full!.fields[field];
-      return { ...target, issue, full };
-    });
-  for (const key of edit.keys)
-    try {
-      const prefix = `better-jira:resource-draft:${state.namespace}:${key}:`;
-      for (const name of Object.keys(localStorage))
-        if (name.startsWith(prefix)) localStorage.removeItem(name);
-    } catch {}
-  touch(...edit.keys);
-  // Undo and redo are edits too: a Restore reading Jira's version meanwhile must not discard them (sync review 7).
-  for (const key of edit.keys) countEdit(key);
-  restoreSnapshots(edit.keys, snapshots);
-  ui.send({ type: "overlay.close" });
-  send(edit.keys.map((key, index) => [key, from[index]!, to[index]!]));
-  // The write's answer brings Jira's copy; a refresh before it lands would show the undone value again (R1-D16).
-  for (const key of edit.keys)
-    if (state.issues.has(key) && !isLocalIssue(key) && !writes.has(key)) markStale(key);
-  if (state.selected && !state.issues.has(state.selected)) navigate({ selected: null, panel: false });
-}
-/** Jira can't restore a deleted issue; undo or redo would only create a copy under a new key. Issues made here (PREFIX-NEWn) can be re-created. */
-function revivesJiraIssue(edit: LocalEdit, target: Snapshot[]) {
-  const source = target === edit.before ? edit.after : edit.before;
-  return (
-    state.writable &&
-    edit.keys.some(
-      (key, index) => target[index]?.issue && !source[index]?.issue && !/-NEW\d+$/.test(key),
-    )
-  );
-}
-export function undoEdit() {
-  const edit = undo.pop();
-  if (!edit) return;
-  if (revivesJiraIssue(edit, edit.before)) {
-    set({
-      undoCount: undo.length,
-      perf: `Can't undo ${edit.label}: Jira can't restore deleted issues.`,
-    });
-    queueSave();
-    return;
-  }
-  restore(edit, edit.before);
-  redo.push(edit);
-  set({ undoCount: undo.length, redoCount: redo.length, perf: `Undid ${edit.label}` });
-  // Undoing a create removes the issue its toast offers to open.
-  const toastKey = latestNotification()?.key;
-  if (toastKey && !state.issues.has(currentKey(toastKey)))
-    toasts.dismiss(NOTIFICATION_ID);
-  queueSave();
-}
-export function redoEdit() {
-  const edit = redo.pop();
-  if (!edit) return;
-  if (revivesJiraIssue(edit, edit.after)) {
-    set({
-      redoCount: redo.length,
-      perf: `Can't redo ${edit.label}: Jira can't restore a deleted issue; create it again to get a new key.`,
-    });
-    queueSave();
-    return;
-  }
-  restore(edit, edit.after);
-  undo.push(edit);
-  set({ undoCount: undo.length, redoCount: redo.length, perf: `Redid ${edit.label}` });
-  queueSave();
-}
 /** Opens the create composer; false when local storage refused it. */
 export function beginCreate(draft: IssueDraft = {}): boolean {
   if (!state.canEdit) {
@@ -1552,9 +1366,7 @@ export const actions = {
       document
         ? { ...item, resources: item.resources?.map((r) => (r.id === document ? deliver(r) : r)) }
         : deliver(item);
-    for (const edit of [...undo, ...redo])
-      for (const entry of [...edit.before, ...edit.after])
-        if (entry.issue?.key === key) entry.issue = delivered(entry.issue);
+    rewriteHistoricIssue(key, delivered);
     const next = delivered(issue);
     patchIssue(key, document ? { resources: next.resources } : { reminder: next.reminder });
     markChanged(key);
@@ -1592,9 +1404,7 @@ export const actions = {
       ...item,
       resources: item.resources?.map((r) => (r.id === id ? { ...r, preview } : r)),
     });
-    for (const edit of [...undo, ...redo])
-      for (const entry of [...edit.before, ...edit.after])
-        if (entry.issue?.key === key) entry.issue = add(entry.issue);
+    rewriteHistoricIssue(key, add);
     set({ issues: new Map(state.issues).set(key, add(issue)) });
   },
   removeResource(key: string, id: string) {
@@ -2125,11 +1935,7 @@ export const actions = {
       if (state.selected === key) navigate({ selected: null, panel: false });
       ui.send({ type: "overlay.close" });
     });
-    if (state.writable && undo.at(-1)?.label === `delete ${key}`) {
-      undo.pop();
-      set({ undoCount: undo.length });
-      queueSave();
-    }
+    if (state.writable) forgetLastEdit(`delete ${key}`);
   },
   /** Linear's Make a copy: the composer, prefilled, saves the copy; nothing is created until then. */
   duplicate(key: string) {

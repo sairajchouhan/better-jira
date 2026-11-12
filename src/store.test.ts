@@ -76,7 +76,8 @@ const address = () => {
 };
 
 test("personal issue edits, comments, creation and deletion undo without losing issue details", async () => {
-  const { actions, get, set, undoEdit, redoEdit, ME } = await import("./store");
+  const { actions, get, set, ME } = await import("./store");
+  const { undoEdit, redoEdit } = await import("./undo-history");
   const { navigate } = await import("./app-navigation");
   Object.assign(ME, { id: "me", name: "Me" });
   const board: Board = {
@@ -262,7 +263,8 @@ test("browser history restores issue selection without pushing another navigatio
 });
 
 test("I7: local comments can be rich, edited and deleted, each step undoable; other authors remain read-only", async () => {
-  const { actions, get, set, undoEdit, ME } = await import("./store");
+  const { actions, get, set, ME } = await import("./store");
+  const { undoEdit } = await import("./undo-history");
   const { navigate } = await import("./app-navigation");
   const board: Board = {
     id: 7,
@@ -366,7 +368,8 @@ test("restoring a description keeps the version it replaces, without duplicating
 });
 
 test("undoing a reschedule cannot deliver an older reminder again", async () => {
-  const { actions, get, undoEdit } = await import("./store");
+  const { actions, get } = await import("./store");
+  const { undoEdit } = await import("./undo-history");
   const key = actions.create("Reminder history")!,
     now = Date.now;
   try {
@@ -384,7 +387,8 @@ test("undoing a reschedule cannot deliver an older reminder again", async () => 
 });
 
 test("document version checkpoints and personal settings undo independently", async () => {
-  const { actions, get, ME, undoEdit, redoEdit } = await import("./store");
+  const { actions, get, ME } = await import("./store");
+  const { undoEdit, redoEdit } = await import("./undo-history");
   const key = actions.create("Document versions")!,
     body = (text: string) => ({
       type: "doc" as const,
@@ -512,7 +516,8 @@ test("a restore never adds a version identical to the newest saved one", async (
 });
 
 test("image crops and comment counts undo and redo without changing the description", async () => {
-  const { actions, get, undoEdit, redoEdit } = await import("./store");
+  const { actions, get } = await import("./store");
+  const { undoEdit, redoEdit } = await import("./undo-history");
   const { commentCount } = await import("./media-edits");
   const key = actions.create("Image edits", { description: "Original description" })!;
   const original = get().full.get(key)?.fields.description;
@@ -537,7 +542,8 @@ test("image crops and comment counts undo and redo without changing the descript
 });
 
 test("B5: creating stays on the board with a toast, Create more toasts too, and undoing the create closes it", async () => {
-  const { actions, get, undoEdit } = await import("./store");
+  const { actions, get } = await import("./store");
+  const { undoEdit } = await import("./undo-history");
   const { navigate } = await import("./app-navigation");
   navigate({ panel: false, selected: null });
   toasts.dismiss(NOTIFICATION_ID);
@@ -765,7 +771,8 @@ test("sync review 4: learning a new issue's Jira key keeps the edits made on bot
 });
 
 test("sync review 7: an undo made while Restore reads Jira's version is not discarded by the Restore", async () => {
-  const { actions, get, set, undoEdit } = await import("./store");
+  const { actions, get, set } = await import("./store");
+  const { undoEdit } = await import("./undo-history");
   const issue = { ...[...get().issues.values()][0]!, key: "TEST-91", priority: "Low" };
   set({ issues: new Map(get().issues).set("TEST-91", issue) });
   actions.patch("TEST-91", { priority: "High" });
