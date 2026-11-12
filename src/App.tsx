@@ -14,6 +14,8 @@ import {
 } from "./personal-controls";
 import { Tooltips } from "./tooltip";
 import { ToastViewport } from "./toast";
+import { EmptyState, LoadingState } from "./empty-state";
+import { Button } from "./button";
 import { HelpMenu, ShortcutHelp, useLinearHotkeys } from "./shortcuts";
 import { InboxIssueActions, InboxList, InboxPane } from "./inbox";
 import { BoardView } from "./board-view";
@@ -55,20 +57,21 @@ export function App() {
   useEffect(() => void load(), []);
 
   if (!boards.length)
-    return (
-      <div className="p-6 text-fg-3">
-        {loadError ? (
-          <div role="alert">
-            <p>{loadError}</p>
-            <p className="mt-1">Retrying automatically…</p>
-            <button className="mt-3 rounded bg-sel px-3 py-2 text-fg" onClick={() => void load()}>
-              Retry now
-            </button>
-          </div>
-        ) : (
-          "Loading your Jira mirror…"
-        )}
-      </div>
+    return loadError ? (
+      <EmptyState
+        role="alert"
+        title={loadError}
+        actions={
+          <Button variant="secondary" size="medium" onClick={() => void load()}>
+            Retry now
+          </Button>
+        }
+        className="h-screen"
+      >
+        <p>Retrying automatically…</p>
+      </EmptyState>
+    ) : (
+      <LoadingState className="h-screen">Loading your Jira mirror…</LoadingState>
     );
   const page = !!open && (view === "page" || !!document);
 
