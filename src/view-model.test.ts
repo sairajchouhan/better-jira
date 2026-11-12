@@ -468,3 +468,18 @@ describe("board layout", () => {
     expect(resultsFeedback(all, board, prefs, { ...view, mine: true }, { ...none, mine: true }, false, "me", now)).toEqual({ baseline: 0, temporary: false });
   });
 });
+
+test("BJ-38: completed windows use resolution or status entry and preserve open issues", () => {
+  const all = [issue("open"), issue("today", { status: "done", resolved: "2026-11-06T10:00:00Z" }),
+    issue("week", { status: "done", resolved: null, statusSince: "2026-11-02T10:00:00Z" }),
+    issue("month", { status: "done", resolved: "2026-10-20T10:00:00Z" }),
+    issue("old", { status: "done", resolved: "2025-01-01T00:00:00Z" }),
+    issue("unknown", { status: "done", resolved: null })];
+  for (const [window, count] of [["all", 6], ["day", 2], ["week", 3], ["month", 4], ["none", 1]] as const) {
+    const prefs = defaultPreferences();
+    prefs.display.completedIssues = window;
+    expect(selectIssues(all, board, prefs, false, "", "me", now)).toHaveLength(count);
+    expect(parsePreferences(prefs).display.completedIssues).toBe(window);
+  }
+  expect(parsePreferences({ display: { completedIssues: "invalid" } }).display.completedIssues).toBe("all");
+});

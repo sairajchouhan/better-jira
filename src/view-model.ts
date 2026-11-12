@@ -86,6 +86,7 @@ export type Display = {
   descending: boolean;
   groupDescending: boolean;
   completedRecency: boolean;
+  completedIssues: "all" | "day" | "week" | "month" | "none";
   subIssues: boolean;
   emptyGroups: boolean;
   nested: "matching" | "all" | "none";
@@ -224,6 +225,7 @@ export const defaultDisplay = (): Display => ({
   descending: false,
   groupDescending: false,
   completedRecency: false,
+  completedIssues: "all",
   subIssues: true,
   emptyGroups: false,
   nested: "matching",
@@ -265,6 +267,7 @@ export function parsePreferences(value: unknown): Preferences {
       if (typeof d[key] === "boolean") base.display[key] = d[key];
     for (const key of ["columns", "rows"] as const)
       if (GROUPINGS.some(([v]) => v === d[key])) base.display[key] = d[key];
+    if (["all", "day", "week", "month", "none"].includes(d.completedIssues)) base.display.completedIssues = d.completedIssues;
     if (ORDERINGS.some(([v]) => v === d.ordering)) base.display.ordering = d.ordering;
     if (["board", "list"].includes(d.layout)) base.display.layout = d.layout;
     if (["side", "page"].includes(d.openIn)) base.display.openIn = d.openIn;
@@ -574,6 +577,9 @@ export function selectIssues(
     (i) =>
       (acrossBoards || i.board === board.id) &&
       (d.subIssues || !i.parent) &&
+      (statusById(board, i.status)?.category !== "done" || d.completedIssues === "all" ||
+        (d.completedIssues !== "none" && Date.parse(i.resolved ?? i.statusSince ?? "") >=
+          now - ({ day: 1, week: 7, month: 30 }[d.completedIssues] ?? 0) * 86400000)) &&
       (prefs.scope === "all" ||
         (prefs.scope === "backlog"
           ? isBacklog(i, board)

@@ -282,6 +282,12 @@ function DisplayMenu({ board }: { board: Board }) {
           <Icon name={d.descending ? "down" : "up"} />
         </IconButton>
       </SelectRow>
+      <SelectRow
+        label="Completed issues"
+        value={d.completedIssues}
+        options={[["all", "All"], ["day", "Past day"], ["week", "Past week"], ["month", "Past month"], ["none", "None"]]}
+        onChange={v => patch({ completedIssues: v as Display["completedIssues"] })}
+      />
       <Toggle
         label="Order completed by recency"
         value={d.completedRecency}
