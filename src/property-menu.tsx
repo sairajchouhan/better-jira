@@ -9,12 +9,14 @@ import {
   statuses,
 } from "./board-catalog";
 import { useStore, useAssignableUsers, type Board, type Issue, type User } from "./store";
-import { shortcutLabel } from "./shortcuts";
+import { shortcuts } from "./shortcuts";
+import { Button } from "./button";
 import { kept, useCommand } from "./commands";
 import { duePresets, shortDate } from "./due-date";
 import { MenuSurface as Modal } from "./menu-surface";
 const DateInput = lazy(() => import("./date-input").then((m) => ({ default: m.DateInput })));
-const BUTTON = "rounded-md px-3 py-1.5 text-fg-2 hover:bg-hover disabled:opacity-40";
+/** A menu's registry hotkey by shortcut id, for Menu.Input's trailing Shortcut. */
+const hotkeyOf = (id: string) => shortcuts.find((s) => s.id === id)?.hotkey;
 import type { ReactNode } from "react";
 import { Menu } from "./menu";
 import { MenuSurface } from "./menu-surface";
@@ -36,7 +38,8 @@ export function PropertyMenu({
 }: {
   label: string;
   placeholder: string;
-  hotkey?: string;
+  /** The registry chord that opens this menu, drawn at the input's right. */
+  hotkey?: string | readonly string[];
   anchor: HTMLElement | null;
   close: () => void;
   current?: string;
@@ -266,7 +269,7 @@ export function TypeMenu({
     <PropertyMenu
       label="Change issue type"
       placeholder="Change issue type to…"
-      hotkey={shortcutLabel("type")}
+      hotkey={hotkeyOf("type")}
       anchor={anchor}
       close={close}
       current={value}
@@ -492,7 +495,7 @@ export function DueMenu({ anchor, value, onChange, close }: FieldMenuProps<strin
       <PropertyMenu
         label="Due date"
         placeholder="Try: 24h, 7 days, Feb 9"
-        hotkey={shortcutLabel("due")}
+        hotkey={hotkeyOf("due")}
         anchor={anchor}
         close={close}
         query={query}
@@ -552,19 +555,19 @@ export function DueMenu({ anchor, value, onChange, close }: FieldMenuProps<strin
           </Suspense>
         </div>
         <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            className={BUTTON}
+          {/* Borderless, as before: the bundle has no footer for this picker's custom-date form. */}
+          <Button
+            variant="borderless"
             onClick={() => {
               onChange(null);
               close();
             }}
           >
             Remove due date
-          </button>
-          <button className={BUTTON} type="submit" disabled={!dateValid}>
+          </Button>
+          <Button variant="borderless" type="submit" disabled={!dateValid}>
             Save
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>

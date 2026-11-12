@@ -11,6 +11,8 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
+// Cycle by design: dialog.tsx builds on MenuSurface; Confirm only reaches ConfirmDialog at render.
+import { ConfirmDialog } from "./dialog";
 
 export const MENU_POPUP =
   "view-popup rounded-xl border border-[var(--menu-line)] bg-[var(--menu)] text-fg-2 shadow-[var(--menu-shadow)] [--sel:var(--menu-sel)]";
@@ -318,7 +320,7 @@ export function issueAnchor(id: string, key: string): HTMLElement | null {
   );
 }
 
-/** Linear's destructive confirmation: focus starts on the action, Escape or Cancel keeps things as they were. */
+/** @deprecated Use ConfirmDialog from ./dialog; this forwards to it until every caller has moved. */
 export function Confirm({
   title,
   detail,
@@ -332,27 +334,5 @@ export function Confirm({
   onConfirm: () => void;
   close: () => void;
 }) {
-  return (
-    <MenuSurface label={title} close={close} width={360}>
-      <h2 className="text-[14px] font-medium text-fg">{title}</h2>
-      <p className="mt-1 mb-4 text-[13px] text-fg-3">{detail}</p>
-      <div className="flex justify-end gap-2 text-[13px]">
-        <button
-          type="button"
-          className="rounded border border-line-2 px-3 py-1 hover:bg-hover"
-          onClick={close}
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          data-autofocus
-          className="rounded bg-red-600 px-3 py-1 text-white"
-          onClick={onConfirm}
-        >
-          {action}
-        </button>
-      </div>
-    </MenuSurface>
-  );
+  return <ConfirmDialog title={title} description={detail} confirmLabel={action} onConfirm={onConfirm} close={close} />;
 }

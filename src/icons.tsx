@@ -1,3 +1,4 @@
+import { LabelChip } from "./label-chip";
 /** Linear's workflow-state icon, copied from its DOM (linear.app board, 2026-11-06).
  *  Ring r=6; progress pie r=2 stroke 4, dash 12.19 shifted by (1 - progress); done fills r=3 and cuts a check. */
 type Look = { color: string; progress?: number; dashed?: true; done?: "check" | "x" };
@@ -151,18 +152,13 @@ const LABEL_COLORS = [
   "#e88fcf",
 ];
 export const hue = (s: string) =>
-  LABEL_COLORS[[...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 0) % LABEL_COLORS.length];
-/** Linear's label chip: 24px pill, 0.5px border, 9px dot in a 14px box, 12px/450 muted text. */
+  LABEL_COLORS[[...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 0) % LABEL_COLORS.length]!;
+/** A label on a list row or board card: Linear's compact label chip. */
 export const Label = ({ name }: { name: string }) => (
-  <span
-    title={name}
-    className="flex h-6 max-w-[224px] shrink-0 items-center rounded-full border-[0.5px] border-chip-line bg-card px-2 text-[12px] font-[450] text-card-fg-3"
-  >
-    <span className="grid size-3.5 shrink-0 place-items-center">
-      <span className="size-[9px] rounded-full" style={{ background: hue(name) }} />
-    </span>
-    <span className="mr-px ml-1.5 truncate">{name}</span>
-  </span>
+  <LabelChip size="compact" title={name} className="max-w-[224px] shrink-0">
+    <LabelChip.Dot color={hue(name)} />
+    <LabelChip.Text>{name}</LabelChip.Text>
+  </LabelChip>
 );
 
 const PATHS = {
