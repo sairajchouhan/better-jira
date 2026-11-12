@@ -76,8 +76,8 @@ test("changing an issue's type: a subtask's limits, the pill, undo/redo, Issue o
     await p.goto("?issue=TEST-3&view=page");
     await p.waitFor(typeText);
     await p.click("#issue-options");
-    await p.hover('[cmdk-item][data-value="Issue type"]');
-    await p.click('[cmdk-item][data-value="Story"]');
+    await p.click('[cmdk-item][data-value="Issue type"]');
+    await p.click('[role="dialog"][aria-label="Change issue type"] [cmdk-item][data-value="Story"]');
     await p.waitFor(`${typeText}==='Story'`);
     await p.eval(`document.activeElement?.blur()`);
     await p.key("k", "meta");

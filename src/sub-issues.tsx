@@ -431,25 +431,18 @@ export function SubIssues({ issue }: { issue: Issue }) {
     >
       {!!model.total && (
         <div className="-ml-1.5 mb-2 flex items-center gap-1.5 pr-2">
-          <Button
-            aria-label={
-              collapsed
-                ? "Expand sub-issues section"
-                : "Collapse sub-issues section"
-            }
+          {/* Linear's section disclosure is not a jv Button: caret 7px and label 24px in, measured for RAJ-53 (no matching QEe padding). */}
+          <button
+            aria-label={collapsed ? "Expand sub-issues section" : "Collapse sub-issues section"}
             aria-expanded={!collapsed}
-
+            className="flex h-6 items-center gap-0.5 rounded-full pr-[13px] pl-1.5 text-[12px] font-medium text-fg-3 hover:bg-hover"
             onClick={() => setCollapsed(!collapsed)}
-            variant="borderless"
-            size="small"
           >
-            <span
-              className={`grid size-4 place-items-center ${collapsed ? "" : "rotate-90"}`}
-            >
+            <span className={`grid size-4 place-items-center ${collapsed ? "" : "rotate-90"}`}>
               <Icon name="chevron" size={14} />
             </span>
             <span>Sub-issues</span>
-          </Button>
+          </button>
           <Text
             data-sub-progress
             className="ml-0.5 flex items-center gap-1.5"
