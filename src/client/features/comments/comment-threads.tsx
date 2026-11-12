@@ -1,3 +1,4 @@
+import { pageURL } from "@/client/features/navigation/app-navigation";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 import { Debouncer } from "@tanstack/pacer";
@@ -305,11 +306,10 @@ function Thread({
   };
   const copy = async (kind: "link" | "markdown", comment: IssueComment) => {
     try {
-      const url = new URL(location.href);
-      url.hash = `comment-${comment.id}`;
+      const url = pageURL(`comment-${comment.id}`);
       const text =
         kind === "link"
-          ? url.href
+          ? url
           : !comment.parentId && replies.length
             ? // A thread names each author first, as Linear's "Copy thread as Markdown" does.
               [comment, ...replies]

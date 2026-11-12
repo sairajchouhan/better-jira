@@ -1,3 +1,5 @@
+import { useLocation } from "@tanstack/react-router";
+import { pageURL } from "@/client/features/navigation/app-navigation";
 import { AutoResizingTextArea } from "@/client/components/field";
 import { LoadingState } from "@/client/components/empty-state";
 import { showNotification } from "@/client/state/app-notifications";
@@ -856,11 +858,11 @@ function Description({ issue }: { issue: Issue }) {
 
 /** A timestamp that links to its own Activity entry: the compact time, the exact time as its tooltip. */
 function Timestamp({ date, id }: { date: string; id: string }) {
-  const url = new URL(location.href);
-  url.hash = id;
+  useLocation({ select: (location) => location.href });
+  const url = pageURL(id);
   return (
     <a
-      href={url.href}
+      href={url}
       title={fullTime(date)}
       aria-label={fullTime(date)}
       data-tip="above"

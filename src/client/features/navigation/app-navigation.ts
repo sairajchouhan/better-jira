@@ -16,7 +16,7 @@ import { emptyOverlay, viewForRoute, type SavedView, type ViewDraft } from "@/sh
 import { defaultPreferences, type FilterGroup } from "@/shared/view-model";
 import { savedBoard, savedOpenIn, savedSidebarHidden } from "@/client/state/browser-preferences";
 import { loadFull } from "@/client/state/server-data";
-import { createAppRouter, locationOf } from "@/client/routes/tree";
+import { createAppRouter, locationOf, routeURL } from "@/client/routes/tree";
 
 type UiKey = keyof UiContext;
 
@@ -256,4 +256,13 @@ export function discardViewEditor() {
   go({ type: "discard-editor" });
   // Back on the view it edits or duplicates, as opening that view does.
   if (get().activeViewId) ui.send({ type: "toolbar.close" });
+}
+
+/** A shareable route address, independent of the browser's last committed history entry. */
+export function placeURL(place: Place) {
+  return routeURL(router, locationOf(place, { view: findView }), location.origin);
+}
+/** The screen's address, optionally pointing to one activity entry. */
+export function pageURL(hash = router.latestLocation.hash) {
+  return routeURL(router, current().target, location.origin, hash);
 }

@@ -16,7 +16,7 @@ import { actions, beginCreate } from "@/client/state/issue-actions";
 import { currentKey } from "@/client/state/jira-sync";
 import { redoEdit, undoEdit } from "@/client/state/undo-history";
 import { isLocalIssue } from "@/client/state/local-edits";
-import { navigate, ui } from "./app-navigation";
+import { navigate, ui, pageURL } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
 import {
   buckets,
@@ -734,7 +734,7 @@ export const shortcuts: Shortcut[] = [
     hotkey: "Mod+Shift+C",
     run: () => {
       void navigator.clipboard
-        .writeText(location.href)
+        .writeText(pageURL())
         .then(() => set({ perf: "Copied page URL" }))
         .catch(() => set({ perf: "Could not access the clipboard" }));
     },

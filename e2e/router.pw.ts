@@ -99,3 +99,11 @@ test("BJ-185: sidebar and breadcrumb destinations are real keyboard-accessible l
   await app.page.keyboard.press("Space");
   await expect(app.page).toHaveURL(/\/team\/1\/all$/);
 });
+
+test("BJ-187: Copy page URL uses the router screen when the browser address differs", async ({ open }) => {
+  const app = await open("/team/1/all");
+  await app.eval(`window.copied=[];navigator.clipboard.writeText=async text=>{window.copied.push(text)};history.replaceState(history.state,'','/stale-address')`);
+  await app.key("c", "meta", "shift");
+  await app.waitFor(`window.copied.length===1`);
+  expect(await app.eval(`window.copied[0]`)).toBe(`${fixture.url}team/1/all`);
+});

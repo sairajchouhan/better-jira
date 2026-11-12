@@ -3,7 +3,7 @@ import { createMemoryHistory, isNotFound } from "@tanstack/react-router";
 import { viewForRoute, type SavedView } from "@/shared/saved-view-model";
 import { defaultPreferences } from "@/shared/view-model";
 import type { Place } from "@/client/features/navigation/navigation";
-import { createAppRouter, type RouteContext } from "./tree";
+import { createAppRouter, locationOf, routeURL, type RouteContext } from "./tree";
 
 const p = defaultPreferences();
 const triage = { id: "v1", name: "Triage", board: 1, filters: p.filters, display: p.display, scope: p.scope } as SavedView;
@@ -81,4 +81,22 @@ test("hovering a link preloads its issue without showing it", async () => {
   await router.preloadRoute({ to: "/issue/$key/{-$slug}", params: { key: "B-1" } });
   expect(preloaded).toContain("B-1");
   expect(shown).toEqual({ to: "board", board: 1, scope: "all" });
+});
+
+
+test("BJ-187: copied route and timestamp URLs use the router base path, target and search", async () => {
+  const { router } = await open("/team/1/all");
+  router.update({ ...router.options, basepath: "/jira" });
+  const context = { view: (id: string) => id === triage.id ? triage : undefined };
+  const cases: [Place, string][] = [
+    [{ to: "board", board: 2, scope: "active", issue: "B-1" }, "/team/2/active?issue=B-1"],
+    [{ to: "inbox", issue: "A-1" }, "/inbox?issue=A-1"],
+    [{ to: "person", person: "alex", tab: "created" }, "/profiles/alex/created"],
+    [{ to: "view", id: triage.id }, "/view/triage-v1"],
+    [{ to: "issue", key: "A-1", document: "doc 1" }, "/issue/A-1/document/doc%201"],
+  ];
+  for (const [place, path] of cases) {
+    expect(routeURL(router, locationOf(place, context), "https://example.test", "comment-12"))
+      .toBe(`https://example.test/jira${path}#comment-12`);
+  }
 });

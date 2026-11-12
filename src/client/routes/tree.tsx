@@ -361,3 +361,8 @@ function RouteError({ error, reset }: ErrorComponentProps) {
     </EmptyState>
   );
 }
+
+/** Public URL for a typed route, including the router's base path. */
+export function routeURL(router: AppRouter, target: Omit<ReturnType<typeof locationOf>, "search"> & { search?: Record<string, unknown> }, origin: string, hash?: string) {
+  return new URL(router.buildLocation({ ...target, hash } as never).href, origin).href;
+}

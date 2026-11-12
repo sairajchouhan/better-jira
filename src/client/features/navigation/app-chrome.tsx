@@ -1,5 +1,6 @@
 import { AppLink, SavedViewLink } from "./app-link";
 import type { Destination } from "./navigation";
+import { defaultPreferences } from "@/shared/view-model";
 import { FavoriteButton } from "./favorite-button";
 import { useActiveView, useSavedViews, createViewDraft } from "@/client/features/views/saved-views";
 import { useViewSettings } from "@/client/features/views/view-settings";
@@ -18,7 +19,7 @@ import { removeBoard } from "@/client/state/server-data";
 import { dismissWriteError } from "@/client/state/jira-sync";
 import { dismissRecoveryNotice, downloadLocalBackup } from "@/client/state/local-database";
 import { undoEdit, redoEdit } from "@/client/state/undo-history";
-import { linkTo, navigate, router, ui, openSavedView } from "./app-navigation";
+import { placeURL, navigate, ui, openSavedView } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
 import { ActionMenu, ContextMenu, type ActionEntry } from "@/client/components/action-menu";
 import { showNotification } from "@/client/state/app-notifications";
@@ -280,7 +281,7 @@ export function boardEntries(board: Board): ActionEntry[] {
   const id = `board:${board.id}`,
     favorite = get().favorites.includes(id),
     url = () =>
-      new URL(router.buildLocation(linkTo({ board: board.id, selected: null, panel: false }) as never).href, location.origin).href;
+      placeURL({ to: "board", board: board.id, scope: (get().preferences[board.id] ?? defaultPreferences()).scope });
   return [
     { name: favorite ? "Unfavorite" : "Favorite", icon: favorite ? "starred" : "star", run: () => toggleFavorite(id) },
     {

@@ -16,7 +16,7 @@ import { Toast } from "@/client/components/toast";
 import { toasts } from "@/client/components/toast-queue";
 import { ViewIconPicker } from "@/client/features/views/view-icon-picker";
 import { get, useStore, ME } from "@/client/state/store";
-import { beginViewEditor, discardViewEditor, setViewDraft } from "@/client/features/navigation/app-navigation";
+import { beginViewEditor, discardViewEditor, setViewDraft, placeURL } from "@/client/features/navigation/app-navigation";
 import {
   editViewDraft,
   duplicateViewDraft,
@@ -24,7 +24,6 @@ import {
   openSavedView,
   deleteSavedView,
   toggleFavorite,
-  viewPath,
   type SavedView,
   type ViewDraft,
 } from "@/client/features/views/saved-views";
@@ -195,7 +194,7 @@ type Action = [label: string, icon: IconName, run: () => void];
 export function viewActions(view: SavedView, favorite: boolean, contextMenu: boolean): Action[][] {
   const link = () =>
     void navigator.clipboard
-      .writeText(new URL(viewPath(view), location.origin).href)
+      .writeText(placeURL({ to: "view", id: view.id }))
       .then(() => showNotification({ text: "Copied" }))
       .catch((e) => showNotification({ text: String(e) }));
   return [

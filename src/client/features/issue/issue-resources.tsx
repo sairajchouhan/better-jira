@@ -13,7 +13,7 @@ import { normalizeDocument } from "@/shared/document";
 import { get, ME, set, useStore, type Issue } from "@/client/state/store";
 import { actions } from "@/client/state/issue-actions";
 import { flushLocalChanges } from "@/client/state/local-database";
-import { navigate, ui } from "@/client/features/navigation/app-navigation";
+import { navigate, ui, placeURL } from "@/client/features/navigation/app-navigation";
 import { AppLink } from "@/client/features/navigation/app-link";
 import {
   issueResources,
@@ -448,7 +448,7 @@ export function IssueResources({ issue }: { issue: Issue }) {
 }
 /** The document's own address, for copying and opening in a new tab. */
 export function documentURL(issue: Issue, id: string) {
-  return `${location.origin}/issue/${encodeURIComponent(issue.key)}/document/${encodeURIComponent(id)}`;
+  return placeURL({ to: "issue", key: issue.key, document: id });
 }
 
 const Document = lazy(() =>
