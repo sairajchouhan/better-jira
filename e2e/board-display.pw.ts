@@ -38,7 +38,7 @@ test("the default board: My issues, board details, saved views and a fast layout
     expect(await page.eval(`new URLSearchParams(location.search).has("mine")`)).toBe(false);
   });
   await test.step("R1-D89: a board-details bucket shows as active and toggles its filter off", async () => {
-    await page.click('[aria-label="Open details"]');
+    await page.click('button[aria-label="Board details"]');
     await page.click("text=Alex1");
     await page.waitFor(`${cards}===1`);
     expect(

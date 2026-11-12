@@ -18,7 +18,7 @@ test("custom identity, directory, favorite, details, palette and tab identity", 
     await page.waitFor(`!!document.querySelector('nav[aria-label="Main navigation"] [aria-current="page"]')`);
     // Only the active view is marked: its Views-section row and its Favorites row, never another view or the board.
     expect(await page.eval(`[...document.querySelectorAll('nav[aria-label="Main navigation"] [aria-current]')].map(e => e.textContent).join('|')`)).toBe('Directory custom|Directory custom');
-    await page.click('[aria-label="Open details"]');
+    await page.click('button[aria-label="Board details"]');
     await page.waitFor(`document.querySelector('[aria-label="View details"]').textContent.includes('Personal triage')`);
     await page.key('k','meta');
     await page.waitFor(`document.body.textContent.includes('View · Directory custom')`);
@@ -77,7 +77,7 @@ test("Linear parity: hidden counts, merge conflicts, editor chrome, draft tab, p
     expect(display).not.toContain("Save my default");
     await page.key("Escape");
     // Details uses an Assignees / Labels switcher.
-    await page.click('[aria-label="Open details"]');
+    await page.click('button[aria-label="Board details"]');
     await page.click('[aria-label="View details"] [role=tab]:nth-child(2)');
     expect(await page.eval(`document.querySelector('[aria-label="View details"] [role=tab][aria-selected=true]').textContent`)).toBe("Labels");
     // BJ-145: Linear's 32px pills, sized from their labels.

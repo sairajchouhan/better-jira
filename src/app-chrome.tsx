@@ -33,12 +33,18 @@ import {
 } from "./store";
 import { BoardControls, FilterChips } from "./view-controls";
 import { Modal } from "./personal-controls";
-import { runShortcut, shortcutLabel } from "./shortcuts";
-import { Confirm } from "./menu-surface";
+import { runShortcut, shortcuts } from "./shortcuts";
+import { Button, IconButton } from "./button";
+import { Shortcut } from "./keycap";
+import { TextInput } from "./field";
+import { ConfirmDialog } from "./dialog";
 import { useCommand, focusNode } from "./commands";
 import { undoInboxToast, useInboxBadge } from "./inbox";
 import { Menu } from "./menu";
-import { FOOT_BTN, COL_BTN } from "./board-view";
+/** A shortcut's registry hotkey, for <Shortcut keys>; Help is drawn as "?", as its label always was. */
+export const hotkeyOf = (id: string) =>
+  (id === "help" ? "?" : (shortcuts.find((s) => s.id === id)?.hotkey ?? "")) as string | readonly string[];
+
 export function QuickNavigation({ kind }: { kind: "favorites" | "views" | "boards" }) {
   const boards = useStore((s) => s.boards);
   const savedViews = useStore((s) => s.savedViews);
@@ -123,29 +129,30 @@ export function Sidebar({ boards }: { boards: Board[] }) {
           )}
         </SideItem>
         <SideItem onClick={() => runShortcut("search")}>
-          <Icon name="search" /> Search <kbd className="ml-auto">/</kbd>
+          <Icon name="search" /> Search <Shortcut className="ml-auto" keys={hotkeyOf("search")} size="small" />
         </SideItem>
         <SideItem onClick={() => beginCreate()}>
-          <Icon name="plus" /> New issue <kbd className="ml-auto">C</kbd>
+          <Icon name="plus" /> New issue <Shortcut className="ml-auto" keys={hotkeyOf("create")} size="small" />
         </SideItem>
         {/* Like Linear, My issues is a sidebar view rather than a tab beside Active/Backlog/All. */}
         <SideItem
           active={mine && !inbox && !activeView && !viewsPage}
           onClick={() => timed("open my issues", () => navigate({ mine: true, selected: null, panel: false }))}
         >
-          <Icon name="user" /> My issues <kbd className="ml-auto">{shortcutLabel("mine")}</kbd>
+          <Icon name="user" /> My issues <Shortcut className="ml-auto" keys={hotkeyOf("mine")} size="small" />
         </SideItem>
 
         <div className="group mt-5 mb-1 flex items-center px-2 text-[12px] text-fg-3">
           Boards
-          <button
-            aria-label="Add board"
-            title="Add board"
+          <IconButton
+            label="Add board"
+            variant="muted"
+            size="small"
             onClick={() => ui.send({ type: "overlay.open", overlay: "add-board" })}
-            className="ml-auto grid size-5 place-items-center rounded opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-hover hover:text-fg-2"
+            className="-my-0.5 ml-auto opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
           >
-            <Icon name="plus" size={14} />
-          </button>
+            <Icon name="plus" />
+          </IconButton>
         </div>
         {boards.map((b) => (
           <SideItem
@@ -184,7 +191,7 @@ export function Sidebar({ boards }: { boards: Board[] }) {
           onClick={() => runShortcut("help")}
           className="mt-auto flex items-center justify-between rounded-lg px-2 py-2 text-fg-3 hover:bg-hover"
         >
-          Help <kbd>?</kbd>
+          Help <Shortcut keys={hotkeyOf("help")} size="small" />
         </button>
       </nav>
     </>
@@ -210,14 +217,14 @@ function DeleteDialog({ issueKey: key }: { issueKey: string }) {
   );
   const close = () => set({ deleting: null });
   return (
-    <Confirm
+    <ConfirmDialog
       title={`Delete "${key} ‒ ${issue.summary}"?`}
-      detail={`${
+      description={`${
         subtasks.length
           ? `This also deletes its ${subtasks.length} sub-issue${subtasks.length === 1 ? "" : "s"} (${subtasks.map((i) => i.key).join(", ")}). `
           : ""
       }Jira can't restore deleted issues, so this can't be undone.`}
-      action={subtasks.length ? `Delete ${subtasks.length + 1} issues` : "Delete"}
+      confirmLabel={subtasks.length ? `Delete ${subtasks.length + 1} issues` : "Delete"}
       onConfirm={() => {
         close();
         actions.remove(key, true);
@@ -327,13 +334,9 @@ export function StatusBar() {
                   : "Saved to Jira"}
           </span>
           {writeError && !pending && (
-            <button
-              aria-label="Dismiss Jira save error"
-              onClick={dismissWriteError}
-              className={FOOT_BTN}
-            >
+            <IconButton label="Dismiss Jira save error" variant="muted" onClick={dismissWriteError}>
               <Icon name="close" />
-            </button>
+            </IconButton>
           )}
         </span>
       )}
@@ -352,29 +355,18 @@ export function StatusBar() {
               : "Not saved"}
       </span>
       <span className="-ml-2 flex">
-        <button
-          aria-label="Undo"
-          disabled={!undo}
-          onClick={undoEdit}
-          title="Undo (⌘Z)"
-          className={FOOT_BTN}
-        >
+        <IconButton label="Undo" shortcut="⌘Z" variant="muted" disabled={!undo} onClick={undoEdit}>
           <Icon name="undo" />
-        </button>
-        <button
-          aria-label="Redo"
-          disabled={!redo}
-          onClick={redoEdit}
-          title="Redo (⌘⇧Z)"
-          className={FOOT_BTN}
-        >
+        </IconButton>
+        <IconButton label="Redo" shortcut="⌘⇧Z" variant="muted" disabled={!redo} onClick={redoEdit}>
           <Icon name="redo" />
-        </button>
+        </IconButton>
+        {/* Not IconButton: its tooltip says more than its name, and IconButton's tooltip is always its label. */}
         <button
           aria-label="Download backup"
           title="Download your local changes and files"
           onClick={() => void downloadLocalBackup()}
-          className={FOOT_BTN}
+          className="grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg-2"
         >
           <Icon name="download" />
         </button>
@@ -394,17 +386,17 @@ export function StorageNotice() {
     >
       <span className="mr-auto">{storage.message}</span>
       {storage.status === "error" && (
-        <button onClick={() => void retryLocalStorage()} className="text-accent">
+        <Button variant="link" size="small" onClick={() => void retryLocalStorage()}>
           Retry local storage
-        </button>
+        </Button>
       )}
-      <button onClick={() => void downloadLocalBackup()} className="text-accent">
+      <Button variant="link" size="small" onClick={() => void downloadLocalBackup()}>
         Download local backup
-      </button>
+      </Button>
       {storage.recovered && storage.status !== "error" && (
-        <button aria-label="Dismiss local recovery notice" onClick={dismissRecoveryNotice}>
+        <IconButton label="Dismiss local recovery notice" variant="muted" size="small" onClick={dismissRecoveryNotice}>
           <Icon name="close" />
-        </button>
+        </IconButton>
       )}
     </div>
   );
@@ -431,7 +423,9 @@ const SideItem = ({
 // Linear's pill button: 28px, 0.5px ring drawn as a shadow, 12px/500.
 const PILL =
   "flex h-7 shrink-0 items-center gap-1.5 rounded-full border-[0.5px] border-transparent px-2.5 text-[12px] font-medium";
-/** A team tab: the scope tabs (Active, Backlog, All issues) and saved tab views are the same pill. */
+/** A team tab: the scope tabs (Active, Backlog, All issues) and saved tab views are the same pill.
+ *  Not Tabs: these are Linear's header tab links (HeaderTabLinks), navigation pressed by aria-pressed, every one in the
+ *  tab order and none selected while a view is open; Tabs is a roving tablist with exactly one selected tab. */
 function ViewTab({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button
@@ -443,19 +437,13 @@ function ViewTab({ on, onClick, children }: { on: boolean; onClick: () => void; 
     </button>
   );
 }
-const CIRCLE =
-  "flex h-7 min-w-7 shrink-0 items-center rounded-full bg-btn text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2";
 
 /** Linear's Menu button: below 768px it opens the hidden sidebar. */
 function MenuButton() {
   return (
-    <button
-      aria-label="Menu"
-      onClick={() => set({ sidebarOpen: true })}
-      className={`${COL_BTN} mr-1 shrink-0 md:hidden`}
-    >
+    <IconButton label="Menu" variant="muted" size="small" onClick={() => set({ sidebarOpen: true })} className="mr-1 md:hidden">
       <Icon name="side" />
-    </button>
+    </IconButton>
   );
 }
 // Linear's breadcrumb (linear.app/…/view/…, 2026-11-11 computed styles): 24px links padded 0 5px 0 4px with matching
@@ -560,21 +548,20 @@ export function BoardHeader() {
             size={14}
             className="ml-2 grid size-7 shrink-0 place-items-center rounded-full border-[0.5px] border-transparent text-fg-3 transition-[border-color,background-color,color,opacity] duration-150 ease-[ease] hover:bg-(--crumb-hover) hover:text-fg"
           />
-          {activeView?.kind === "custom" && <ViewMenu view={activeView}><button aria-label="Issue view options" className="ml-1 grid size-7 shrink-0 place-items-center rounded-full border-[0.5px] border-transparent transition-[border-color,background-color,color,opacity] duration-150 ease-[ease] hover:bg-(--crumb-hover) text-fg-3 hover:text-fg"><Icon name="dots" size={14} /></button></ViewMenu>}
+          {activeView?.kind === "custom" && (
+            <ViewMenu view={activeView}>
+              <IconButton label="Issue view options" variant="muted" className="ml-1">
+                <Icon name="dots" />
+              </IconButton>
+            </ViewMenu>
+          )}
         </div>
-        <button
-          aria-label="Search issues"
-          onClick={() => runShortcut("search")}
-          className={`${COL_BTN} ml-auto md:hidden`}
-        >
+        <IconButton label="Search issues" variant="muted" size="small" onClick={() => runShortcut("search")} className="ml-auto md:hidden">
           <Icon name="search" />
-        </button>
-        <button
-          onClick={() => beginCreate()}
-          className={`${PILL} pr-2.5 pl-2 text-fg-3 hover:bg-hover hover:text-fg-2`}
-        >
-          <Icon name="plus" /> New issue
-        </button>
+        </IconButton>
+        <Button variant="muted" size="medium" icon={<Icon name="plus" />} onClick={() => beginCreate()}>
+          New issue
+        </Button>
       </div>
       {/* Linear: custom views (and their editor) show only the breadcrumb, no team tabs. The editor floats this row's
           controls into its card, so a custom draft collapses the row. */}
@@ -591,22 +578,25 @@ export function BoardHeader() {
         {!custom && savedViews.filter(v => v.board === board!.id && v.kind === "tab").map(view => <ViewContextMenu key={view.id} view={view}><ViewTab on={activeView?.id === view.id || draft?.id === view.id} onClick={() => openSavedView(view)}>{view.name}</ViewTab></ViewContextMenu>)}
         {/* Linear swaps Add new view for the draft tab while a new tab view is being made. */}
         {draft && !draft.id && draft.kind === "tab" ? <span aria-current="page" className={`${PILL} bg-tab-on text-fg-3 shadow-(--tab-on-shadow)`}><SavedViewIcon view={draft} />{draft.name.trim() || "New view"}<Icon name="pencil" size={12} /></span>
-          : !custom && !draft && <button className={`${PILL} text-fg-3 hover:bg-hover`} onClick={() => openViewEditor(createViewDraft("tab"))}><Icon name="plus" size={14} />Add new view</button>}
+          : !custom && !draft && (
+            <Button variant="muted" size="medium" icon={<Icon name="plus" />} onClick={() => openViewEditor(createViewDraft("tab"))}>
+              Add new view
+            </Button>
+          )}
         <div className="ml-auto flex items-center gap-1">
           <BoardControls board={board!} />
         </div>
-        <button
-          aria-label={details ? "Close details" : "Open details"}
+        <IconButton
+          label="Board details"
+          variant="secondary"
           aria-expanded={details}
-          title="Board details"
           onClick={() => (set({ details: !details }), navigate({ panel: false }))}
-          className={`${CIRCLE} justify-center`}
         >
           <Icon name="side" />
-        </button>
+        </IconButton>
       </div>
       {finding && (
-        <input
+        <TextInput
           id="find-in-view"
           ref={findRef}
           aria-label="Find in view"
@@ -614,7 +604,7 @@ export function BoardHeader() {
           value={query}
           onChange={(e) => ui.send({ type: "query.set", query: e.target.value })}
           placeholder="Find in view…"
-          className="mx-3 mb-2 rounded border border-line-2 bg-card px-3 py-1.5 outline-none"
+          className="mx-3 mb-2"
         />
       )}
       <ViewEditorPage />
