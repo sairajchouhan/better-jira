@@ -792,14 +792,12 @@
   color: #999;
   font: inherit;
 }
-.video-controls button:hover > .video-tooltip,
 .video-controls a:hover > .video-tooltip,
 .video-rate:hover > .video-tooltip {
   opacity: 1;
   visibility: visible;
   transition-delay: 400ms;
 }
-.video-controls button:focus-visible > .video-tooltip,
 .video-controls a:focus-visible > .video-tooltip,
 .video-rate:has(:focus-visible) > .video-tooltip {
   opacity: 1;
@@ -998,7 +996,6 @@
   margin-inline: 0;
 }
 .video-error button,
-.video-error a,
 .video-pip button {
   padding: 4px 10px;
   border: 1px solid rgb(255 255 255 / 0.2);
@@ -1710,21 +1707,6 @@
   color: var(--reply-ph);
   cursor: text;
 }
-.comment-reply-attach,
-.comment-reply-send {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 9999px;
-  color: var(--fg-3);
-}
-.comment-reply-attach {
-  margin-right: 3px;
-}
-.comment-reply-attach:hover {
-  background: var(--hover);
-}
 .comment-reply-send {
   background: var(--send);
   color: var(--card-fg-3);
@@ -1879,24 +1861,6 @@
 .relation-pill:hover {
   background: var(--add-hover);
 }
-.relation-remove {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
-  place-items: center;
-  border-radius: 9999px;
-  color: var(--fg-2);
-  opacity: 0;
-}
-.group\/relation:hover .relation-remove,
-.relation-remove:focus-visible {
-  opacity: 1;
-}
-.relation-remove:hover {
-  background: var(--add-hover);
-  color: var(--fg);
-}
 .reaction-pill {
   display: flex;
   height: 28px;
@@ -1944,28 +1908,6 @@
   padding-left: 12px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--menu-fg-3);
-}
-.mark-row {
-  position: relative;
-  display: flex;
-  height: 46px;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  font-size: 13px;
-  color: var(--fg-2);
-}
-.mark-row[data-selected="true"]::before {
-  content: "";
-  position: absolute;
-  inset: 2px 0;
-  z-index: -1;
-  border-radius: 8px;
-  background: var(--menu-sel);
-}
-.mark-row kbd {
-  font-size: 12px;
   color: var(--menu-fg-3);
 }
 .mark-footer {
