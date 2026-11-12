@@ -149,6 +149,7 @@ let clientFailures = 0,
   includeMedia = false,
   mediaInComment = false,
   threadedComments = false,
+  distinctCreator = false,
   mediaFailure = 0,
   contentFailure = 0,
   unmappedMedia = false,
@@ -196,6 +197,7 @@ const listed = () =>
     ...(added ? [{ ...issues[1]!, key: "ADD-1", board: 2, summary: "Added board issue" }] : []),
   ].map((issue) => ({
     ...issue,
+    ...(distinctCreator && issue.key === "TEST-6" ? { creator: alex } : {}),
     ...(subtask && issue.key === "TEST-6" ? { type: "Subtask", parent: "TEST-5" } : {}),
     ...(types.has(issue.key) ? { type: types.get(issue.key) } : {}),
     comments: threadedComments ? thread.length : mediaInComment ? 1 : 0, // the mirror list counts the same Jira comments the detail returns
@@ -696,6 +698,7 @@ async function handle(req: Request) {
     includeMedia = settings.includeMedia ?? false;
     mediaInComment = settings.mediaInComment ?? false;
     threadedComments = settings.threadedComments ?? false;
+    distinctCreator = settings.distinctCreator ?? false;
     mediaFailure = settings.mediaFailure ?? 0;
     contentFailure = settings.contentFailure ?? 0;
     unmappedMedia = settings.unmappedMedia ?? false;

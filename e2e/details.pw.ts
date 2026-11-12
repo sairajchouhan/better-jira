@@ -1,4 +1,4 @@
-import { expect, test, type App as Page } from "./app";
+import { expect, test, type App as Page, fixture } from "./app";
 
 async function openIssue(page: Page, key = "TEST-1") {
   await page.click(`[data-key="${key}"]`);
@@ -91,4 +91,24 @@ test("issue details: priority picker, reactions, favourites, navigation and prop
     // The address names the issue, so its screen says so, as Linear's issue route does.
     await page.waitFor(`document.body.textContent.includes("Issue NOPE-1 not found")`);
   });
+});
+
+test("BJ-14: creation uses the issue creator and mirrored timestamp, with an exact-time tooltip", async ({ open }) => {
+  await fixture.reset({ distinctCreator: true });
+  const page = await open("", { setup: `Date.now = () => Date.parse("2028-11-12T12:00:00Z")` });
+  await openIssue(page, "TEST-6");
+  expect(await page.eval(`document.querySelector('#issue-created .font-medium').textContent`)).toBe("Alex");
+  expect(await page.eval(`document.querySelector('#issue-created time').textContent`)).toBe("2y ago");
+  expect(await page.eval(`document.querySelector('#issue-created time').dateTime`)).toBe("2026-11-06T10:00:00Z");
+  expect(await page.eval(`document.querySelector('#issue-created a').getAttribute('aria-label')`)).toMatch(/^Fri Nov 6, 2026, /);
+  // The scroll event dismisses tooltips; settle it before hovering the timestamp.
+  await page.eval(`new Promise(resolve => {
+    document.querySelector('#issue-created a').scrollIntoView({block: 'center'});
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  })`);
+  await page.hover("#issue-created a");
+  await page.waitFor(`!!document.querySelector('[role=tooltip]')`);
+  expect(await page.eval(`document.querySelector('[role=tooltip]').textContent`)).toBe(
+    await page.eval(`document.querySelector('#issue-created a').getAttribute('aria-label')`),
+  );
 });

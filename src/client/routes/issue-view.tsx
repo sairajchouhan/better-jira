@@ -1,6 +1,7 @@
 import { type PropertyActivity, type Issue, type User } from "@/shared/issue-model";
 import { useLocation } from "@tanstack/react-router";
 import { pageURL } from "@/client/features/navigation/app-navigation";
+import { activityTime as ago } from "@/client/features/issue/issue-dates";
 import { AutoResizingTextArea } from "@/client/components/field";
 import { LoadingState } from "@/client/components/empty-state";
 import { showNotification } from "@/client/state/app-notifications";
@@ -163,24 +164,10 @@ function ActivityIcon({ row, issue }: { row: ActivityRow; issue: Issue }) {
   if (row.field === "assignee") return <Avatar user={last.after as User | null} size={14} />;
   return <Avatar user={row.actor} size={14} />;
 }
-/** Linear's compact Activity times: "just now", "6min ago", "11h ago", "1d ago", then the date. */
 // Linear's exact-time label: "Sat Nov 7, 2026, 07:49:03" (24-hour, with seconds).
 const fullTime = (iso: string) => {
   const d = new Date(iso);
   return `${d.toLocaleDateString("en-US", { weekday: "short" })} ${d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })}`;
-};
-const ago = (iso: string, now = Date.now()) => {
-  const m = Math.floor((now - Date.parse(iso)) / 60_000),
-    date = new Date(iso);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}min ago`;
-  if (m < 1440) return `${Math.floor(m / 60)}h ago`;
-  if (m < 43200) return `${Math.floor(m / 1440)}d ago`;
-  return date.toLocaleDateString("en", {
-    month: "short",
-    day: "numeric",
-    ...(date.getFullYear() !== new Date(now).getFullYear() ? { year: "numeric" } : {}),
-  });
 };
 
 const author = (a: any): User | null =>
@@ -1004,6 +991,8 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
   };
   if (!f) return null;
   const imageComments = imageCommentIds(issue.mediaEdits);
+  const creator = issue.creator ?? author(f.creator ?? f.reporter);
+  const created = issue.created ?? f.created;
   return (
     <section className="issue-activity mt-4 border-t border-line pt-[18px]">
       {viewing && (
@@ -1051,11 +1040,11 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
       </div>
       <ol className="space-y-3">
         <li id="issue-created" className="activity-event">
-          <Avatar user={author(f.reporter)} size={14} />
+          <Avatar user={creator} size={14} />
           <span>
-            <span className="font-medium">{f.reporter?.displayName}</span> created ·
+            <span className="font-medium">{creator?.name}</span> created ·
           </span>{" "}
-          <Timestamp date={f.created} id="issue-created" />
+          <Timestamp date={created} id="issue-created" />
         </li>
         <CommentThreads
           issue={issue}
