@@ -25,7 +25,7 @@ import {
   AssigneeMenu,
   LabelsMenu,
 } from "./property-menu";
-import { issueMenuEntries, type IssueMenuDialog } from "./issue-menu";
+import { issueMenuEntries } from "./issue-menu";
 import { InlineEditor } from "./rich-editor-loader";
 import { useCommand } from "./commands";
 import { lateMediaDiscarded } from "./document";
@@ -44,7 +44,7 @@ import {
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { Avatar } from "./avatar";
 import { statusById } from "./board-catalog";
-import { Relations, PropertyPicker } from "./personal-controls";
+import { PropertyPicker, type IssueField } from "./personal-controls";
 import { ResourceForm } from "./issue-resources";
 import { shortDate } from "./due-date";
 import { shortcutLabel } from "./shortcuts";
@@ -312,7 +312,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
     "Could not save sub-issue display settings",
   );
   const [rowDialog, setRowDialog] = useState<{
-    kind: IssueMenuDialog | "rename" | "relation";
+    kind: "rename" | "link" | "pull-request" | IssueField;
     key: string;
   } | null>(null);
   // Linear keeps each issue's section collapsed across reloads.
@@ -415,10 +415,8 @@ export function SubIssues({ issue }: { issue: Issue }) {
           });
           return;
         }
-        setRowDialog({
-          kind: kind === "relations" ? "relation" : kind,
-          key: child.key,
-        });
+        // The sub-issue menu has no "Show description history" entry.
+        if (kind !== "history") setRowDialog({ kind, key: child.key });
       },
     });
   return (
@@ -603,15 +601,11 @@ export function SubIssues({ issue }: { issue: Issue }) {
         (() => {
           const child = all.get(rowDialog.key)!,
             done = () => setRowDialog(null);
-          return rowDialog.kind === "relation" ? (
-            <Relations issue={child} close={done} />
-          ) : rowDialog.kind === "rename" ? (
+          return rowDialog.kind === "rename" ? (
             <RenameIssue issue={child} close={done} />
           ) : rowDialog.kind === "link" || rowDialog.kind === "pull-request" ? (
             <ResourceForm issue={child} kind={rowDialog.kind} close={done} />
-          ) : rowDialog.kind === "reminder" ||
-            rowDialog.kind === "history" ||
-            rowDialog.kind === "relations" ? null : (
+          ) : (
             <PropertyPicker issue={child} field={rowDialog.kind} close={done} />
           );
         })()}

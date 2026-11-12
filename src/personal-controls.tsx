@@ -1047,7 +1047,6 @@ export function Subscribers({ issue }: { issue: Issue }) {
   );
 }
 
-/** `close` lets a row menu open this for another issue (a sub-issue) without the global overlay. */
 /** Linear's "Mark as" command menu (RAJ-52): the kind comes from the menu item, so there is no type picker; its placeholder, Create row and Enter hint follow the kind. */
 const MARK: Record<
   string,
@@ -1093,20 +1092,13 @@ const INVERSE: Record<string, string> = {
   blocked: "blocking",
   blocking: "blocked",
 };
-export function Relations({
-  issue,
-  close: done,
-}: {
-  issue: Issue;
-  close?: () => void;
-}) {
+export function Relations({ issue }: { issue: Issue }) {
   const all = useStore((s) => s.issues),
     boards = useStore((s) => s.boards);
   const [query, setQuery] = useState(""),
     [selected, setSelected] = useState("");
-  const overlayKind = useStore((s) => s.relation);
-  const kind = done ? "related" : overlayKind;
-  const close = done ?? (() => ui.send({ type: "overlay.close" }));
+  const kind = useStore((s) => s.relation);
+  const close = () => ui.send({ type: "overlay.close" });
   const mark = MARK[kind] ?? MARK.related!;
   // Linear leaves out issues the new link would repeat or contradict; "Related issues" offers this issue's related ones first.
   // ponytail: "Recent" is most recently updated; Linear uses recently viewed. "More actions" (⌥↵) and "Quick look" (→) are not built.

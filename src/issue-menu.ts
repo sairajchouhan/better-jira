@@ -30,7 +30,6 @@ export type IssueMenuDialog =
   | "milestone"
   | "due"
   | "reminder"
-  | "relations"
   | "link"
   | "pull-request"
   | "history"
@@ -53,7 +52,7 @@ export function issueMenuEntries(
   const parent = issue.parent ? get().issues.get(issue.parent) : undefined;
   const favorite = get().favorites.includes(issue.key),
     keys = (id: string) => shortcutLabel(id) || undefined;
-  const open = (overlay: "due" | "reminder" | "relations") => openDialog(overlay);
+  const open = (overlay: "due" | "reminder") => openDialog(overlay);
   const related = (kind: NonNullable<IssueDraft["related"]>["kind"]) => {
     close();
     beginCreate({ related: { key: issue.key, kind }, project: issue.project });
