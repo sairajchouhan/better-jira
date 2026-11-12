@@ -13,17 +13,8 @@ import { Text } from "./text";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { ReactionPicker, ReactionPill } from "./reactions";
 import { FramedEditor, CommentComposer } from "./rich-editor-loader";
-import {
-  ME,
-  actions,
-  addIssueFiles,
-  addLocalFiles,
-  beginCreate,
-  currentKey,
-  get,
-  set,
-  type Issue,
-} from "./store";
+import { ME, actions, addIssueFiles, beginCreate, currentKey, get, set, type Issue } from "./store";
+import { addLocalFiles } from "./local-database";
 import { commentDraftKey, onRejectedComment, restoreRejectedDraft } from "./rejected-comment";
 import { readStored, writeStored } from "./stored-state";
 import { noteDraftUploads, settleDraftUploads } from "./draft-uploads";

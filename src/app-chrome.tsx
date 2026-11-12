@@ -8,7 +8,8 @@ import { useMemo, useRef, useState, type MouseEvent, type ReactNode } from "reac
 import { isMyIssues } from "./navigation";
 import { PERSON_TABS, peopleOf } from "./people";
 import { Icon, TypeDot } from "./icons";
-import { actions, set, timed, useStore, dismissRecoveryNotice, beginCreate, downloadLocalBackup, issueURL, retryLocalStorage, dismissWriteError, removeBoard, type Board, type Issue } from "./store";
+import { actions, set, timed, useStore, beginCreate, issueURL, retryLocalStorage, dismissWriteError, removeBoard, type Board, type Issue } from "./store";
+import { dismissRecoveryNotice, downloadLocalBackup } from "./local-database";
 import { undoEdit, redoEdit } from "./undo-history";
 import { navigate, ui, openSavedView, openAllIssues as openBoardIssues } from "./app-navigation";
 import { ActionMenu, ContextMenu, type ActionEntry } from "./action-menu";

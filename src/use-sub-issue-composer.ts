@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { actions, addLocalFiles, get, ME, restoreLocalFiles, set, type Board, type Issue, type IssueDraft } from "./store";
+import { actions, get, ME, set, type Board, type Issue, type IssueDraft } from "./store";
+import { addLocalFiles, restoreLocalFiles } from "./local-database";
 import { discardLateMedia, documentHasMedia, lateMediaDiscarded, normalizeDocument, type AdfDocument } from "./document";
 import { rankBetween } from "./view-model";
 import { childrenByParent } from "./sub-issue-model";

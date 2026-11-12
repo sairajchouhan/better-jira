@@ -1,4 +1,18 @@
 import { returnRejectedComment } from "./rejected-comment";
+import {
+  addLocalFiles,
+  claimChanges,
+  flushLocalChanges,
+  localDataBlocked,
+  localDataOpen,
+  localFiles,
+  nextSeq,
+  openLocalData,
+  queueSave,
+  storage,
+  storedChanges,
+  unsavedLocalChanges,
+} from "./local-database";
 import { forgetLastEdit, loadHistory, record, rewriteHistoricIssue, rewriteHistory, savedHistory } from "./undo-history";
 import {
   adoptJira,
@@ -42,14 +56,9 @@ import {
   type Preferences,
 } from "./view-model";
 import { documentHasMedia, normalizeDocument, textToAdf, type AdfDocument } from "./document";
-import {
-  emptyLocalState,
-  LocalDatabase,
-  type LocalState,
-  type LocalChange,
-} from "./local-data";
+import { type LocalChange } from "./local-data";
 import { createActor, fromPromise, waitFor } from "xstate";
-import { appMachine, inspector, storageMachine, type UiContext } from "./machines";
+import { appMachine, inspector, type UiContext } from "./machines";
 import type { Screen } from "./navigation";
 import { QueryClient, QueryObserver } from "@tanstack/query-core";
 
@@ -454,31 +463,6 @@ const app = createActor(appMachine.provide({ actors: { load: fromPromise(loadApp
 app.subscribe(({ context }) => {
   if (context.error !== state.loadError) commit({ loadError: context.error });
 });
-const storage = createActor(
-  storageMachine.provide({
-    actors: {
-      save: fromPromise(async () => {
-        localSeq = Math.max(localSeq, await database!.save(localSnapshot()));
-        learnKeys(database!.moved);
-      }),
-    },
-  }),
-  { inspect: inspector("storage") },
-).start();
-storage.subscribe((s) => {
-  const status =
-    s.matches("failed") || s.matches("blocked")
-      ? "error"
-      : (s.value as "loading" | "saving" | "saved");
-  commit({
-    canEdit: !s.matches("blocked"),
-    storage: {
-      status,
-      ...(s.context.message ? { message: s.context.message } : {}),
-      ...(s.context.recovered ? { recovered: true } : {}),
-    },
-  });
-});
 /** Server data goes through TanStack Query: it dedupes loads in flight, schedules the poll and refetches on focus. Invalidate a key to refetch it. */
 export const queryClient = new QueryClient({
   // "always": a read made offline fails at once instead of pausing and running unseen when the network returns (sync check 6).
@@ -606,37 +590,10 @@ async function loadApplication() {
   ]);
   if (!boards.length)
     throw new Error("The Jira mirror is still syncing your boards. Retry in a moment.");
-  let local = emptyLocalState(),
-    opened:
-      | { type: "opened"; message?: string; recovered?: boolean }
-      | { type: "blocked"; message: string };
-  try {
-    database?.close();
-    database = await LocalDatabase.open(namespace);
-    const result = await database.load();
-    local = result.state;
-    opened = result.readOnly
-      ? {
-          type: "blocked",
-          message:
-            "Saved data uses an unsupported version. Local editing is paused; existing data has been preserved.",
-        }
-      : {
-          type: "opened",
-          recovered: result.recovered || result.missingFiles > 0,
-          message: result.recovered
-            ? "Some local records needed recovery. A copy of the original data was kept."
-            : result.missingFiles
-              ? "Some saved files could not be restored."
-              : undefined,
-        };
-  } catch {
-    opened = {
-      type: "blocked",
-      message:
-        "Could not read saved local data. Local editing is paused. Retry local storage; existing data has not been deleted.",
-    };
-  }
+  const { local, start: startSaving } = await openLocalData(namespace, {
+    snapshot: () => ({ changes: savedChanges(), ...savedHistory(), keys: writes.keys() }),
+    moved: learnKeys,
+  });
   const defaults = savedDefaults();
   const preferences = savedViewPreferences();
   for (const b of boards)
@@ -660,9 +617,6 @@ async function loadApplication() {
   install(local.changes, issues, full);
   // Undo covers this tab's own edits only, as Linear's per-client history does; a reload keeps them (R2-inbox-D3).
   const history = loadHistory(local);
-  localSeq = local.sequence;
-  numbers = { next: 0, end: 0 };
-  if (opened.type === "opened") await reserveNumbers();
   writes.restoreKeys(local.keys);
   set({
     boards,
@@ -678,7 +632,7 @@ async function loadApplication() {
     ...history,
   });
   navigate({ board, view: preferences[board]?.display.openIn ?? "side" });
-  storage.send(opened);
+  startSaving();
   // Saved local overrides are the durable outbox: whatever Jira hasn't taken yet is sent again.
   // An override for an issue Jira no longer has is not re-created; only issues made here are. Deletes are never replayed.
   // Only changes of tabs that have closed are replayed, by one tab: an open tab is still sending its own (R1-D6, R1-D7).
@@ -744,7 +698,7 @@ async function loadApplication() {
       ),
     );
   takeOverClosed =
-    state.writable && navigator.locks && database
+    state.writable && navigator.locks && localDataOpen()
       ? () =>
           holdTabLock().then(() =>
             writes.claimClosed(async (claimed, changes) => {
@@ -768,13 +722,8 @@ async function loadApplication() {
     });
     startNavigation();
     window.addEventListener("beforeunload", (event) => {
-      const s = storage.getSnapshot();
       // Jobs waiting on another tab's create are saved, and replayed by whichever tab sends that create.
-      if (
-        s.matches("saving") ||
-        s.matches("failed") ||
-        writes.unsent()
-      ) {
+      if (unsavedLocalChanges() || writes.unsent()) {
         event.preventDefault();
         event.returnValue = "";
       }
@@ -783,7 +732,7 @@ async function loadApplication() {
   startPoll();
   if (state.writable)
     void import("./draft-uploads").then(({ keepDraftUploadsClean }) =>
-      keepDraftUploadsClean(namespace, () => JSON.stringify(localSnapshot().changes), {
+      keepDraftUploadsClean(namespace, () => JSON.stringify(savedChanges()), {
         full: async (key) => {
           const response = await fetch(`/api/issues/${encodeURIComponent(key)}`);
           if (response.status === 404) return null;
@@ -882,7 +831,6 @@ export function timed(label: string, fn: () => void) {
 }
 
 const now = () => new Date().toISOString();
-let database: LocalDatabase | undefined;
 export const touch = (...keys: string[]) => writes.touch(...keys);
 const tabId = crypto.randomUUID(),
   TAB_LOCK = "better-jira-tab:";
@@ -918,17 +866,6 @@ async function jiraLinks(key: string) {
     return new Set((full.remotelinks ?? []).map((l) => l.url));
   } catch {}
 }
-function localSnapshot(): LocalState {
-  return {
-    version: 1,
-    sequence: localSeq,
-    changes: savedChanges(),
-    ...savedHistory(),
-    keys: writes.keys(),
-  };
-}
-/** Ignored until storage has opened, and while it is blocked; see storageMachine. */
-export const queueSave = () => storage.send({ type: "change" });
 
 // --- Jira writes: each edit's before/after becomes ops, which the outbox sends one job at a time (see outbox.ts) ---
 const writes = createOutbox(
@@ -947,7 +884,7 @@ const writes = createOutbox(
     },
     tabs: {
       id: tabId,
-      stored: async () => database?.stored(),
+      stored: storedChanges,
       save: () => (queueSave(), flushLocalChanges()),
       ...(typeof navigator !== "undefined" && navigator.locks
         ? {
@@ -964,10 +901,7 @@ const writes = createOutbox(
               }),
           }
         : {}),
-      claim: async (live, only) => {
-        const claimed = await database!.claim(tabId, live, only);
-        return { claimed, changes: (await database!.stored()).changes };
-      },
+      claim: (live, only) => claimChanges(tabId, live, only),
     },
   },
   {
@@ -1131,34 +1065,14 @@ export const holdsCommentDelete = (id: string) => writes.holdsDelete(id);
 export const holdsCommentDeletes = () => writes.holdsDeletes();
 export const creatingIssue = () => writes.creating();
 export const writeTab = (key: string) => writes.tab(key);
-export const dismissRecoveryNotice = () => storage.send({ type: "dismiss" });
-export async function flushLocalChanges() {
-  await waitFor(storage, (s) => !s.matches("saving"));
-}
 export async function retryLocalStorage() {
-  if (storage.getSnapshot().matches("blocked")) {
+  if (localDataBlocked()) {
     app.send({ type: "reload" });
     await waitFor(app, settled);
   } else {
     queueSave();
     await flushLocalChanges();
   }
-}
-export async function localFileURL(id: string) {
-  return database?.fileURL(id);
-}
-export async function retainJiraFile(id: string, url: string) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error("Could not retain attachment for undo.");
-  await database?.retainFile(id, await response.blob());
-}
-export async function addLocalFiles(files: File[]) {
-  if (!database || !state.canEdit)
-    throw new Error("Local file storage is unavailable. Retry local storage first.");
-  return database.addFiles(files);
-}
-export async function addLocalFile(file: File) {
-  return (await addLocalFiles([file]))[0]!;
 }
 /** On a writable site a crop uploads as a new Jira attachment, which takes the original's place in the description. Read-only sites keep it as a local view edit. */
 export async function saveCrop(key: string, id: string, crop: ImageCrop, file: File) {
@@ -1200,49 +1114,20 @@ export async function saveCrop(key: string, id: string, crop: ImageCrop, file: F
     if (swapped) patchFields(key, () => ({ description }));
   });
 }
-export async function restoreLocalFiles(files: NonNullable<Issue["attachments"]>) {
-  return Promise.all(
-    files.map(async (file) => {
-      const url = await database?.fileURL(file.id);
-      return { ...file, url: url ?? "", missing: !url };
-    }),
-  );
-}
 /** `clients` name each upload (see draft-uploads), so cleanup can find what it made by id. */
 export async function addIssueFiles(key: string, files: File[], clients?: string[]) {
-  if (!database || !state.canEdit)
-    throw new Error("Local file storage is unavailable. Retry local storage first.");
-  const db = database,
+  const keep = localFiles(),
     // On a writable site the files go to Jira now, so a failed upload shows on the file (Retry, Discard) before anything looks saved.
     saved =
       state.writable && !isLocalIssue(key)
-        ? await uploadNow(key, files, (files) => db.addFiles(files), clients)
-        : await db.addFiles(files),
+        ? await uploadNow(key, files, keep, clients)
+        : await keep(files),
     issue = state.issues.get(key);
   if (issue)
     record(key, `attached files to ${key}`, () =>
       patchIssue(key, { attachments: [...(issue.attachments ?? []), ...saved] }),
     );
   return saved;
-}
-export async function downloadLocalBackup() {
-  try {
-    const { backupArchive } = await import("./backup-archive");
-    const data = {
-      version: 2,
-      namespace: state.namespace,
-      state: localSnapshot(),
-      recovery: await database?.recoveryCopies(),
-    };
-    const url = URL.createObjectURL(backupArchive(data, (await database?.fileBlobs()) ?? [])),
-      a = document.createElement("a");
-    a.href = url;
-    a.download = "better-jira-local-backup.tar";
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-  } catch {
-    set({ perf: "Could not export the local backup" });
-  }
 }
 export function jiraIssueURL(key: string) {
   return `${state.site}/browse/${encodeURIComponent(key)}`;
@@ -1288,37 +1173,8 @@ export const boardOf = (key: string) =>
 /** The issue's status on its own board. */
 export const statusOf = (i: Issue) => statusById(boardOf(i.key), i.status);
 
-let localSeq = 0;
 /** Submission id → the issue it created. */
 const submissions = new Map<string, string>();
-/** Local numbers (PREFIX-NEWn keys, local comment ids) come from blocks this tab reserves in IndexedDB, one transaction per
- * block, so two tabs never mint the same one (sync review 2). */
-const NUMBER_BLOCK = 50;
-let numbers = { next: 0, end: 0 },
-  reserving: Promise<void> | undefined;
-function reserveNumbers() {
-  return (reserving ??= (async () => {
-    try {
-      const first = await database!.reserve(NUMBER_BLOCK, localSeq);
-      numbers = { next: first, end: first + NUMBER_BLOCK };
-    } catch {
-    } finally {
-      reserving = undefined;
-    }
-  })());
-}
-function nextSeq() {
-  let n: number;
-  if (numbers.next < numbers.end) n = numbers.next++;
-  // No shared storage, so no other tab to clash with: count on.
-  else if (!database) n = localSeq + 1;
-  // ponytail: the block ran out before the next one arrived (dozens of creates within one IndexedDB write); a random number
-  // well past the blocks stands in. Reserve larger blocks if this ever shows.
-  else n = 1_000_000 + Math.floor(Math.random() * 9_000_000);
-  if (database && numbers.end - numbers.next < NUMBER_BLOCK / 2) void reserveNumbers();
-  localSeq = Math.max(localSeq, n);
-  return n;
-}
 
 // Local overrides are saved separately from the read-only Jira mirror.
 export const actions = {

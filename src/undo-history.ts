@@ -16,7 +16,8 @@ import {
   restoreSnapshots,
   snapshot,
 } from "./local-edits";
-import { currentKey, get, hasPendingWrite, queueSave, send, set, touch } from "./store";
+import { currentKey, get, hasPendingWrite, send, set, touch } from "./store";
+import { queueSave } from "./local-database";
 import { toasts } from "./toast-queue";
 
 const undo: LocalEdit[] = [],

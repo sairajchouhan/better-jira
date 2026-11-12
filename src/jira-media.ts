@@ -165,7 +165,7 @@ export function aliasAttachments(
 }
 
 export async function prepareOps(key: string, ops: Op[]): Promise<Op[]> {
-  const { localFileURL, retainJiraFile } = await import("./store");
+  const { localFileURL, retainJiraFile } = await import("./local-database");
   const pending = new Map<string, Promise<Uploaded>>();
   // A file uploaded for a document node gets its name from the job's attachment op, not the blob.
   const names = new Map(

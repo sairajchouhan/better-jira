@@ -15,20 +15,8 @@ import { JIRA_ISSUE_FIELDS, namesKey, renameIds } from "./jira-ops";
 import type { LocalChange, Snapshot } from "./local-data";
 import type { WriteResult } from "./outbox";
 import { navigate } from "./app-navigation";
-import {
-  creatingIssue,
-  get,
-  hasPendingWrite,
-  holdsCommentDelete,
-  holdsCommentDeletes,
-  ME,
-  queueSave,
-  set,
-  touch,
-  writeTab,
-  type Full,
-  type Issue,
-} from "./store";
+import { creatingIssue, get, hasPendingWrite, holdsCommentDelete, holdsCommentDeletes, ME, set, touch, writeTab, type Full, type Issue } from "./store";
+import { queueSave } from "./local-database";
 
 const now = () => new Date().toISOString();
 /** Issue fields (`Issue`) and record fields (`Full.fields`) edited here and not yet Jira's, per issue. */
