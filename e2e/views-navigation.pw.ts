@@ -175,7 +175,7 @@ test("editing keeps the view breadcrumb and details open", async ({ open }) => {
     await page.page.fill('[aria-label="View name"]', 'Editable view');
     await page.click('text=Create view');
     await page.waitFor(`location.pathname.startsWith('/view/') && !location.pathname.endsWith('/edit')`);
-    await page.click('button[aria-label="Board details"]');
+    await page.waitFor(`!!document.querySelector('[aria-label="View details"]')`);
     await page.click('[aria-label="Issue view options"]');
     await page.click('text=Edit…');
     await page.waitFor(`location.pathname.endsWith('/edit')`);
