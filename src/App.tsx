@@ -1,8 +1,7 @@
-/* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 import "@fontsource-variable/inter/opsz.css";
 import "./index.css";
 import { ViewsDirectory } from "./views-navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { ReminderPicker, ReminderDelivery } from "./reminders";
 import { load, useStore, firstKey } from "./store";
 import {
@@ -47,8 +46,9 @@ export function App() {
   const loadError = useStore((s) => s.loadError);
   const inbox = useStore((s) => s.inbox);
   const viewsPage = useStore((s) => s.viewsPage);
-  const visited = useRef(new Set<number>());
-  visited.current.add(boardId);
+  // Boards opened this session stay mounted (hidden) for scroll restoration; adjusted during render, not mutated.
+  const [visited, setVisited] = useState(() => new Set([boardId]));
+  if (!visited.has(boardId)) setVisited(new Set(visited).add(boardId));
 
   useEffect(() => void load(), []);
 
@@ -84,14 +84,15 @@ export function App() {
           <div className="flex min-h-0 flex-1">
             {/* Retain visited boards for scroll restoration; do not render unopened boards. */}
             {boards
-              .filter((b) => visited.current.has(b.id))
+              .filter((b) => visited.has(b.id))
               .map((b) => (
                 <BoardView
                   key={b.id}
                   board={b}
                   active={b.id === boardId}
                   shown={!page && !inbox && !viewsPage && b.id === boardId}
-                  selected={selected}
+                  // Only the active board shows the selection, so J/K re-renders one board, not every visited one.
+                  selected={b.id === boardId ? selected : null}
                 />
               ))}
             {viewsPage && <ViewsDirectory />}
