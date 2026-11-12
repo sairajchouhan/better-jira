@@ -348,7 +348,7 @@ test("triaging rows: unread-only, toast undo, other tabs, rows outside the mirro
     await p.click(`[cmdk-item][data-value="Custom…"]`);
     const setValue = (v: string) =>
       p.eval(
-        `(()=>{const i=document.querySelector('[aria-label="Snooze until"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,${JSON.stringify(v)});i.dispatchEvent(new Event('input',{bubbles:true}))})()`,
+        `(()=>{const i=[...document.querySelectorAll('[role=dialog] input')].find(i=>i.labels?.[0]?.textContent==='Snooze until');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,${JSON.stringify(v)});i.dispatchEvent(new Event('input',{bubbles:true}))})()`,
       );
     await setValue("2020-01-01T09:00");
     await p.click(`[role=dialog] button[type=submit]`);
