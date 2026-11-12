@@ -250,6 +250,11 @@ function filterEntries(base: InboxItem[], v: InboxView): ActionEntry[] {
     }
     for (const value of v.filters[field] ?? [])
       counts.set(value, counts.get(value) ?? 0);
+    const universe = field === "type" ? ["Assignments", "Mentions", "Comments and replies", "Reactions", "Status changes", "Subscriptions"]
+      : field === "from" ? get().options.users.map((u) => u.name)
+      : field === "project" ? [...get().issues.values()].flatMap((i) => i.project ? [i.project.name] : [])
+      : ORDER[field] ?? [];
+    for (const value of universe) if (!counts.has(value)) counts.set(value, 0);
     const order = ORDER[field];
     const values = [...counts.keys()].sort((a, b) =>
       order ? order.indexOf(a) - order.indexOf(b) : a.localeCompare(b),
@@ -260,6 +265,7 @@ function filterEntries(base: InboxItem[], v: InboxView): ActionEntry[] {
       children: values.map((value) => ({
         name: value,
         checkbox: !!v.filters[field]?.includes(value),
+        matchCount: counts.get(value),
         hint: `${counts.get(value)} notification${counts.get(value) === 1 ? "" : "s"}`,
         run: () => toggleFilter(field, value),
       })),

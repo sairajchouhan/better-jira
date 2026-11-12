@@ -10,6 +10,8 @@ import { MenuSurface, MenuSurfaceContext, MENU_POPUP } from "./menu-surface";
 /** One action row (Linear's action). `divider` starts a new group, drawn as a separator above the entry while the menu is unfiltered. */
 export type ActionEntry = {
   name: string;
+  /** Filter applicability count; zero-match choices are revealed by the footer. */
+  matchCount?: number;
   run?: () => void;
   children?: ActionEntry[];
   /** Draws the submenu's rows from its search instead of `children` (Linear's recalculateOnInput: a typed date, label checkboxes
@@ -145,13 +147,16 @@ function Level({
   placeholder?: string;
   highlight?: "first";
 }) {
+  const [reveal, setReveal] = useState(false);
   const [query, setQuery] = useState(""),
     [open, setOpen] = useState<string | null>(null);
   const start = usePristine(highlight ? false : undefined);
   // Linear lists a menu's actions as it opens. A row that appears while it is open (an edit adding "Restore mirrored Jira version")
   // would widen the menu under the pointer and hand the hover to another row, so it keeps the rows it opened with, each still live.
   const [opened] = useState(() => new Set(entries.map((e) => e.name)));
-  const own = entries.filter((e) => opened.has(e.name));
+  const available = entries.filter((e) => opened.has(e.name));
+  const hidden = available.filter((e) => e.matchCount === 0 && !e.checkbox);
+  const own = reveal ? available : available.filter((e) => !hidden.includes(e));
   const q = query.trim();
   const choices = rows || !q ? own : searchActions(own, q);
   return (
@@ -184,6 +189,12 @@ function Level({
               !q && entry.divider && <Menu.Divider key={`-${entry.name}`} />,
               <Row key={entry.name} entry={entry} container={container} open={open} setOpen={setOpen} />,
             ])}
+        {!reveal && hidden.length > 0 ? <>
+          <Menu.Divider />
+          <Menu.Item value={`Show ${hidden.length} option${hidden.length === 1 ? "" : "s"} with no matches`} onSelect={() => { setReveal(true); start.wake(); }}>
+            Show {hidden.length} option{hidden.length === 1 ? "" : "s"} with no matches
+          </Menu.Item>
+        </> : null}
       </Menu.List>
     </Menu>
   );

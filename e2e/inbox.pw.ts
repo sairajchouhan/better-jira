@@ -523,3 +523,18 @@ test("a long inbox: older pages on scroll, undo by Z and toast, the row menu, âŒ
     await p.waitFor(`${rows}.length === 47 && ${badge} === "45"`);
   });
 });
+
+test("BJ-192: filter submenus reveal options with no matching notifications", async ({ open }) => {
+  const p = await open("?inbox=1");
+  await p.waitFor(`${rows}.length > 0`);
+  await p.click("#inbox-filter");
+  await p.hover('[cmdk-item][data-value="Issue status type"]');
+  const footer = '[cmdk-item][data-value^="Show "][data-value$="with no matches"]';
+  await p.waitFor(`!!document.querySelector('${footer}')`);
+  const label = await p.eval<string>(`document.querySelector('${footer}').getAttribute('data-value')`);
+  expect(label).toMatch(/^Show \d+ options? with no matches$/);
+  expect(await p.eval(`!!document.querySelector('[cmdk-item][data-value="Duplicate"]')`)).toBe(false);
+  await p.click(footer);
+  await p.waitFor(`!!document.querySelector('[cmdk-item][data-value="Duplicate"]')`);
+  expect(await p.eval(`!!document.querySelector('${footer}')`)).toBe(false);
+});
