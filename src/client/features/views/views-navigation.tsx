@@ -9,7 +9,7 @@ import { SectionDisclosure } from "@/client/components/section-disclosure";
 import { findIssueDocument } from "@/shared/issue-resource";
 import { useActiveView, useSavedViews, type SavedView } from "./saved-views";
 import { FavoriteButton } from "@/client/features/navigation/favorite-button";
-import { ViewMenu, ViewContextMenu } from "@/client/routes/view-editor";
+import { ViewMenu, ViewContextMenu } from "@/client/features/views/view-editor";
 import { Button, IconButton } from "@/client/components/button";
 import { Tabs } from "@/client/components/tabs";
 import { Text } from "@/client/components/text";

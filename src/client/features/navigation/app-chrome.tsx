@@ -4,7 +4,7 @@ import { defaultPreferences } from "@/shared/view-model";
 import { FavoriteButton } from "./favorite-button";
 import { useActiveView, useSavedViews, createViewDraft } from "@/client/features/views/saved-views";
 import { useViewSettings } from "@/client/features/views/view-settings";
-import { openViewEditor, ViewMenu, ViewContextMenu, ViewEditorPage } from "@/client/routes/view-editor";
+import { openViewEditor, ViewMenu, ViewContextMenu, ViewEditorPage } from "@/client/features/views/view-editor";
 import { ViewFavorites, SavedViewIcon } from "@/client/features/views/views-navigation";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";

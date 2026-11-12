@@ -6,7 +6,7 @@ import {
   duplicateViewDraft,
   saveOverlayToView,
 } from "@/client/features/views/saved-views";
-import { openViewEditor, ViewDeleteDialog } from "@/client/routes/view-editor";
+import { openViewEditor, ViewDeleteDialog } from "@/client/features/views/view-editor";
 import { canMergeOverlay } from "@/shared/saved-view-model";
 import { createToolbarView } from "@/client/features/views/view-toolbar-actions";
 import { Command } from "cmdk";
