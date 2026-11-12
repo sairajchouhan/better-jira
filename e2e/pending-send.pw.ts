@@ -164,13 +164,14 @@ test("creating a sub-issue while its pasted image is still saving: the child kee
     await p.type("PENDING CHILD B");
     await p.click('[aria-label="Sub-issue description"]');
     await pastePng(p, '[aria-label="Sub-issue description"]');
+    // The board windows its cards (BJ-111), so the issue page's "n / total" shows what the board holds.
+    const total = `Number(document.querySelector('[aria-label="Issue position"]')?.textContent.split("/")[1])`;
+    const before = await p.eval<number>(total);
     await p.key("Enter", "meta");
     await go(p, "TEST-3");
     await p.eval("window.release()");
     // Created while TEST-3 is open: the new issue joins the board.
-    await p.waitFor(
-      `[...document.querySelectorAll('[data-key]')].some(n=>n.textContent.includes('PENDING CHILD B'))&&${saved}`,
-    );
+    await p.waitFor(`${total}===${before + 1}&&${saved}`);
     await go(p, "TEST-2");
     await p.reload();
     await p.waitFor(

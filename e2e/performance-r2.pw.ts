@@ -70,18 +70,27 @@ for (const layout of ["list", "board"] as const) {
         await app.page.mouse.up();
         await expect.poll(async () => (await fixture.log()).writes.some((w: { key: string }) => w.key === nextKey)).toBe(true);
       }
-      // Native scroll containers remain in place, including the board's outer swimlane scroller.
-      await root.evaluate(element => {
-        for (const target of [element, ...element.querySelectorAll<HTMLElement>("*")]) {
-          if (target.scrollHeight > target.clientHeight && /auto|scroll/.test(getComputedStyle(target).overflowY)) target.scrollTop = target.scrollHeight;
-        }
-      });
-      await expect.poll(async () => root.locator("[data-key]").count()).toBeLessThan(600);
-      const last = root.locator("[data-key]").last();
-      await expect(last).toBeVisible();
-      const key = await last.getAttribute("data-key");
+      // Native scroll containers remain in place, including the board's outer swimlane scroller. Measured cards can
+      // outgrow their estimate and move the end, so scroll again until the windows have caught up.
+      const windowed = root.locator('[data-virtual-key]:not([style*="absolute"]) [data-key]');
+      await expect.poll(async () => {
+        await root.evaluate(element => {
+          for (const target of [element, ...element.querySelectorAll<HTMLElement>("*")]) {
+            if (!/auto|scroll/.test(getComputedStyle(target).overflowY)) continue;
+            target.scrollTop = target.scrollHeight;
+            target.scrollLeft = target.scrollWidth;
+          }
+        });
+        // A pinned (selected) card is left out: it keeps its place wherever that is.
+        return windowed.last().evaluate(element => new Promise<boolean>(resolve => new IntersectionObserver((entries, observer) => {
+          observer.disconnect();
+          resolve(entries[0]!.intersectionRatio > 0);
+        }).observe(element)));
+      }).toBe(true);
+      expect(await root.locator("[data-key]").count()).toBeLessThan(600);
+      const key = await windowed.last().getAttribute("data-key");
       // A click selects a visible row; j/k must mount the adjacent row across the window edge.
-      await last.click();
+      await root.locator(`[data-key="${key}"]`).click();
       await app.key("Escape");
       await app.key("k");
       await expect(root.locator('[data-selected="true"]').first()).toBeInViewport();
