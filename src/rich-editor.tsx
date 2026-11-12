@@ -711,8 +711,10 @@ export function RichEditor(props: EditorEngineProps) {
                 <span className="sr-only">{props.saveLabel}</span>
               </button>
             ) : (
+              // `rich-editor-submit` is the hook the sub-issue composer's ⌘↵ clicks.
               <Button
                 size="medium"
+                className="rich-editor-submit"
                 aria-label={props.saveLabel ?? "Save description"}
                 disabled={uploadBusy || (props.required && empty)}
                 title={uploadBusy ? "Finish or discard attachments before sending" : undefined}

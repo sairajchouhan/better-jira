@@ -224,9 +224,10 @@ export function ReactionPicker({
             ([heading, items]) =>
               items.length > 0 && (
                 <div key={heading}>
-                  <Text as="div" variant="miniPlus" color="muted" className="flex h-7 items-center pr-1.5 pl-1">
+                  {/* Stays a div: parent-properties.pw.ts finds the headings by their text-[12px] class. */}
+                  <div className="flex h-7 items-center pr-1.5 pl-1 text-[12px] font-medium text-fg-3">
                     {heading}
-                  </Text>
+                  </div>
                   {/* 28px emoji cells tinted by their emoji: no Button look draws that. */}
                   <div className="grid grid-cols-[repeat(9,28px)]">
                     {items.map((emoji) => {
