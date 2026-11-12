@@ -523,6 +523,9 @@ export function RichEditor(props: EditorEngineProps) {
         // An open caret menu takes ⌥↑/⌥↓ to jump between its groups, as Linear's suggestion menus do.
         const editor = view.current;
         if (binding.id.startsWith("move-") && editor && caretMenus.some(([active]) => active(editor.state))) return;
+        // ⌘K turns selected text (or the link at the caret) into a link; at a bare caret it is the app's ⌘K, which opens the
+        // command menu, as in Linear (its editor `link` binding only acts on a selection).
+        if (binding.id === "link" && editor && editor.state.selection.empty && !linkRanges(editor.state).length) return;
         event.preventDefault();
         event.stopPropagation();
         const id = binding.id;

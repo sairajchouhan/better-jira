@@ -220,6 +220,25 @@ test("the description editor's keys: formatting, Escape and Mod+Enter", async ({
     await p.key("z", "meta");
     await p.waitFor(`!document.querySelector('#description s')`);
   });
+  await test.step("6.8: ⌘K at a bare caret opens the command menu; on selected text it makes a link", async () => {
+    await focusDescription(p);
+    // A bare caret: at the end of plain text, in no link, with nothing selected.
+    await p.eval(
+      `(()=>{const w=document.createTreeWalker(document.getElementById('description'),NodeFilter.SHOW_TEXT,{acceptNode:n=>n.textContent.trim()&&!n.parentElement.closest('a,code')?1:3});const t=w.nextNode();getSelection().collapse(t,t.textContent.length)})()`,
+    );
+    await p.waitFor(`getSelection().isCollapsed&&!getSelection().anchorNode?.parentElement?.closest('a')`);
+    await p.key("k", "meta");
+    await p.waitFor(`!!document.querySelector('${dialog("Search issues and commands")}')`);
+    expect(await p.eval(`!!document.querySelector('[aria-label="Link URL"]')`)).toBe(false);
+    await p.key("Escape");
+    await p.waitFor(`!document.querySelector('${dialog("Search issues and commands")}')`);
+    await focusDescription(p);
+    await p.key("a", "meta");
+    await p.key("k", "meta");
+    await p.waitFor(`document.activeElement?.ariaLabel==='Link URL'`);
+    expect(await p.eval(`!!document.querySelector('${dialog("Search issues and commands")}')`)).toBe(false);
+    await p.key("Escape");
+  });
   await test.step("Editor Escape returns to issue navigation; Mod+Enter submits from the editor", async () => {
     await focusDescription(p);
     await p.key("Escape");
