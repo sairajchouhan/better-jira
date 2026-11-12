@@ -4,7 +4,8 @@ import { Avatar } from "./avatar";
 import { ME, navigate, useStore, type Issue } from "./store";
 import { findIssueDocument } from "./issue-resource";
 import { createViewDraft, openSavedView, useActiveView, useSavedViews, type SavedView } from "./saved-views";
-import { openViewEditor, ViewContextMenu } from "./view-editor";
+import { FavoriteButton } from "./favorite-button";
+import { openViewEditor, ViewMenu, ViewContextMenu } from "./view-editor";
 import { MenuSurface } from "./menu-surface";
 import { Menu } from "./menu";
 import { Button, ButtonLink, IconButton } from "./button";
@@ -78,12 +79,14 @@ export function ViewDetails({ view, issues }: { view: SavedView; issues: Issue[]
   const [tab, setTab] = useState<"assignees" | "labels">("assignees");
   const rows = summaries[tab];
   return <aside aria-label="View details" className="view-details w-[320px] shrink-0 overflow-auto border-l border-line p-5 text-[13px] max-sm:absolute max-sm:inset-y-0 max-sm:right-0 max-sm:bg-panel">
-    <div className="mb-3"><SavedViewIcon view={view} /></div><Text as="h2" variant="regularPlus" color="base">{view.name}</Text>{view.description && <Text as="p" variant="small" color="muted" className="mt-2 whitespace-pre-wrap">{view.description}</Text>}
-    <dl className="my-6 grid grid-cols-[90px_1fr] gap-y-3"><dt className="text-fg-3">Visibility</dt><dd>Personal</dd><dt className="text-fg-3">Owner</dt><dd className="flex items-center gap-2"><Avatar user={ME} size={18} />{ME.name}</dd></dl>
-    <Tabs value={tab} onValueChange={value => setTab(value as typeof tab)}>
+    <div className="rounded-lg border border-line bg-col p-4" data-view-card="identity">
+    <div className="mb-3 flex items-center"><SavedViewIcon view={view} /><FavoriteButton id={`view:${view.id}`} className="ml-auto" noun="view" /><ViewMenu view={view}><IconButton label="View details options" variant="muted"><Icon name="dots" /></IconButton></ViewMenu></div><Text as="h2" variant="regularPlus" color="base">{view.name}</Text>{view.description && <Text as="p" variant="small" color="muted" className="mt-2 whitespace-pre-wrap">{view.description}</Text>}
+    </div>
+    <dl data-view-card="properties" className="my-4 grid grid-cols-[90px_1fr] gap-y-3 rounded-lg border border-line bg-col p-4"><dt className="text-fg-3">Visibility</dt><dd>Personal</dd><dt className="text-fg-3">Owner</dt><dd className="flex items-center gap-2"><Avatar user={ME} size={18} />{ME.name}</dd></dl>
+    {issues.length > 0 && <Tabs value={tab} onValueChange={value => setTab(value as typeof tab)}>
       <Tabs.List variant="summary" aria-label="Summary" className="mb-3">{(["assignees", "labels"] as const).map(key => <Tabs.Tab key={key} value={key}>{key === "assignees" ? "Assignees" : "Labels"}</Tabs.Tab>)}</Tabs.List>
       <Tabs.Panel value={tab}>{rows.length ? rows.map(([name, count]) => <div key={name} className="flex h-9 items-center justify-between px-1 text-fg-2"><span className="truncate">{name}</span><CountBadge>{count}</CountBadge></div>) : <Text as="p" variant="small" color="muted" className="px-1 py-2">{tab === "assignees" ? "No assignees" : "No labels"}</Text>}</Tabs.Panel>
-    </Tabs>
+    </Tabs>}
   </aside>;
 }
 // Linear HiddenIndicator (assets/HiddenIndicator.*.js, 2026-11-11): a flex row (so no space) of the count as Text miniPlus (12px/normal/500, labelTitle,

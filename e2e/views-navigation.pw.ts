@@ -76,8 +76,15 @@ test("Linear parity: hidden counts, merge conflicts, editor chrome, draft tab, p
     expect(display).not.toContain("Reset");
     expect(display).not.toContain("Save my default");
     await page.key("Escape");
-    // Details uses an Assignees / Labels switcher.
+    // BJ-147: no summaries for an empty result, but both cards and their actions remain.
     await page.click('button[aria-label="Board details"]');
+    expect(await page.eval(`document.querySelectorAll('[aria-label="View details"] [role=tab]').length`)).toBe(0);
+    expect(await page.eval(`document.querySelectorAll('[data-view-card]').length`)).toBe(2);
+    expect(await page.eval(`!!document.querySelector('[aria-label="View details options"]') && !!document.querySelector('[aria-label="Add view to favorites"]')`)).toBe(true);
+    // Keep the measured summary assertions on a nonempty view.
+    await page.eval(`fetch('/api/views/${saved.id}',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({filters:{id:'root',join:'and',children:[]}})})`);
+    await page.reload();
+    // Details uses an Assignees / Labels switcher.
     await page.click('[aria-label="View details"] [role=tab]:nth-child(2)');
     expect(await page.eval(`document.querySelector('[aria-label="View details"] [role=tab][aria-selected=true]').textContent`)).toBe("Labels");
     // BJ-145: Linear's 32px pills, sized from their labels.
