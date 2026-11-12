@@ -111,23 +111,20 @@ await new Promise(requestAnimationFrame);return performance.now()-t})()`,
     await expect(page.page.locator('[role="dialog"][aria-label="Change status"]')).toHaveCount(0);
   });
 
-  await test.step("Status lands a status op on the right-clicked card", async () => {
+  await test.step("BJ-26: Status › lists the statuses inline and lands a status op on the right-clicked card", async () => {
     await rightClick(page, card);
-    const before = await page.eval<string>(
-      `document.querySelector('${card}').querySelector('[title]')?.title`,
-    );
-    await page.click(`${MENU} [cmdk-item][data-value="Status"]`);
-    await page.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Change status"]')`);
+    await page.hover(`${MENU} [cmdk-item][data-value="Status"]`);
+    const STATUS = '[role="dialog"][aria-label="Status"]';
+    await page.waitFor(`!!document.querySelector('${STATUS} [cmdk-item] .menu-checkmark')`);
     const target = await page.eval<string>(
-      `[...document.querySelectorAll('[role="dialog"][aria-label="Change status"] [cmdk-item]')].map(n=>n.dataset.value).find(v=>v&&!v.includes(${JSON.stringify(before ?? "")}))`,
+      `[...document.querySelectorAll('${STATUS} [cmdk-item]')].find(n=>!n.querySelector('.menu-checkmark'))?.dataset.value`,
     );
-    await page.click(
-      `[role="dialog"][aria-label="Change status"] [cmdk-item][data-value="${target}"]`,
-    );
+    await page.click(`${STATUS} [cmdk-item][data-value="${target}"]`);
     await page.waitFor(
       `window.__ops.some(w=>w.key==='TEST-2'&&w.ops.some(o=>o.op==='status'))`,
       8000,
     );
+    await expect(page.page.locator(MENU)).toHaveCount(0);
   });
 });
 

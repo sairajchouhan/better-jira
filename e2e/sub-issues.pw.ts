@@ -319,8 +319,8 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
         `[['More properties','M13 13.5h.01'],['Create related','M10 12.5h4'],['Remove','M13.5 11.5l-3 3']].map(([v,end])=>document.querySelector('[cmdk-item][data-value="'+v+'"] svg path').getAttribute('d').endsWith(end))`,
       ),
     ).toEqual([true, true, true]);
-    await page.click('[cmdk-item][data-value="Status"]');
-    await page.click('[role="dialog"][aria-label="Change status"] [cmdk-item][data-value="Done"]');
+    await page.hover('[cmdk-item][data-value="Status"]');
+    await page.click('[role="dialog"][aria-label="Status"] [cmdk-item][data-value="Done"]');
     await page.waitFor(
       `document.querySelector('[aria-label="Change status for TEST-4"]')?.title==='Done'`,
     );
@@ -342,15 +342,16 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
         `[document.querySelectorAll('[role="dialog"][aria-label="Sub-issue actions"] [cmdk-separator]').length,...['Status','Project'].map(value=>{const row=document.querySelector('[cmdk-item][data-value="'+value+'"]');return {label:row.querySelector('.menu-name').textContent,shortcut:[...row.querySelectorAll('.ui-shortcut kbd')].map(n=>n.textContent).join(' ')};})]`,
       ),
     ).toEqual([4, { label: "Status", shortcut: "S" }, { label: "Project", shortcut: "⇧ P" }]);
-    await page.click('[cmdk-item][data-value="Labels"]');
+    await page.hover('[cmdk-item][data-value="Labels"]');
     const labelRow = page.page.locator(
-      '[role="dialog"][aria-label="Change labels"] [cmdk-item][data-value="test"]',
+      '[role="dialog"][aria-label="Labels"] [cmdk-item][data-value="test"]',
     );
-    const had = (await labelRow.getAttribute("aria-checked")) === "true";
+    await labelRow.waitFor();
+    const had = (await labelRow.locator(".menu-checkmark").count()) > 0;
     await labelRow.click();
     await menu("TEST-4");
-    await page.click('[cmdk-item][data-value="Labels"]');
-    await expect(labelRow).toHaveAttribute("aria-checked", String(!had));
+    await page.hover('[cmdk-item][data-value="Labels"]');
+    await expect(labelRow.locator(".menu-checkmark")).toHaveCount(had ? 0 : 1);
     await page.key("Escape");
     // Project uses the same controlled menu as the issue properties.
     const project = async (row: string) => {

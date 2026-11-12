@@ -1,6 +1,9 @@
+import { createElement } from "react";
 import {
   actions,
   get,
+  boardOf,
+  ME,
   beginCreate,
   toggleFavorite,
   isLocalIssue,
@@ -19,7 +22,9 @@ import { duePresets } from "./due-date";
 import { post } from "./commands";
 import { RELATION_ISSUE } from "./issue-activity";
 import type { ActionEntry } from "./action-menu";
-import type { IconName } from "./icons";
+import { Icon, PriorityIcon, StatusIcon, type IconName } from "./icons";
+import { Avatar } from "./avatar";
+import { assignableUsers, knownLabels, priorityChoices, statuses } from "./board-catalog";
 export type IssueMenuDialog =
   | "status"
   | "priority"
@@ -63,12 +68,76 @@ export function issueMenuEntries(
   const reopen = (view: "link" | "pull-request" | "history") => {
     openDialog(view);
   };
-  // A right-click on a card or list row (Linear's row menu) leads with the property pickers its shortcuts open, acting on the selected issue.
+  // A right-click on a card or list row (Linear's contextual menu) lists each property's choices in a submenu (BJ-26);
+  // the shortcut still opens the full picker.
+  const board = boardOf(issue.key),
+    boardIssues = [...get().issues.values()].filter((i) => i.board === issue.board);
+  const choose = (write: () => void) => () => {
+    write();
+    close();
+  };
+  const property = (name: string, icon: IconName, id: string, children: ActionEntry[]): ActionEntry => ({
+    name,
+    icon,
+    shortcut: hotkeyOf(id),
+    children,
+  });
+  const inline = {
+    status: property(
+      "Status",
+      "status",
+      "status",
+      statuses(board).map((s) => ({
+        name: s.name,
+        image: createElement(StatusIcon, { status: s }),
+        selected: s.id === issue.status,
+        run: choose(() => actions.status(issue.key, s.id)),
+      })),
+    ),
+    priority: property(
+      "Priority",
+      "priority",
+      "priority",
+      ["", ...priorityChoices(get().options, boardIssues, get().writable)].map((p) => ({
+        name: p || "No priority",
+        image: createElement(PriorityIcon, { name: p || undefined }),
+        selected: p === (issue.priority ?? ""),
+        run: choose(() => actions.patch(issue.key, { priority: p || undefined })),
+      })),
+    ),
+    assignee: property("Assignee", "user", "assign", [
+      { name: "No assignee", user: null },
+      ...assignableUsers(ME, get().options.users, get().issues.values()).map((u) => ({ name: u.name, user: u })),
+    ].map(({ name, user }) => ({
+      name,
+      image: createElement(Avatar, { user, size: 16 }),
+      selected: (issue.assignee?.id ?? null) === (user?.id ?? null),
+      run: choose(() => actions.assign(issue.key, user)),
+    }))),
+    labels: property(
+      "Labels",
+      "label",
+      "labels",
+      knownLabels(boardIssues, get().options.labels).map((label) => {
+        const on = issue.labels.includes(label);
+        return {
+          name: label,
+          image: createElement(Icon, { name: "label", size: 16 }),
+          selected: on,
+          run: choose(() =>
+            actions.patch(issue.key, {
+              labels: on ? issue.labels.filter((l) => l !== label) : [...issue.labels, label],
+            }),
+          ),
+        };
+      }),
+    ),
+  };
   const picker = (name: string, icon: IconName, id: string): ActionEntry => ({
     name,
     icon,
     shortcut: hotkeyOf(id),
-    run: () => openDialog(id === "assign" ? "assignee" : (id as IssueMenuDialog)),
+    run: () => openDialog(id as IssueMenuDialog),
   });
   const due: ActionEntry = {
     name: "Due date",
@@ -300,11 +369,11 @@ export function issueMenuEntries(
   const entries: ActionEntry[] =
     presentation !== "detail"
       ? [
-          picker("Status", "status", "status"),
-          picker("Priority", "priority", "priority"),
-          picker("Assignee", "user", "assign"),
+          inline.status,
+          inline.priority,
+          inline.assignee,
           due,
-          picker("Labels", "label", "labels"),
+          inline.labels,
           ...(presentation === "sub-issue" && !get().writable
             ? [picker("Project", "layers", "project")]
             : []),

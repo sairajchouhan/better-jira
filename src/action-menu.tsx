@@ -15,6 +15,8 @@ export type ActionEntry = {
   hint?: string;
   selected?: boolean;
   icon?: IconName;
+  /** A drawn icon in place of `icon` (Linear's action `image`): a status, priority or avatar. */
+  image?: ReactNode;
   divider?: boolean;
 };
 type Container = RefObject<HTMLDivElement | null>;
@@ -126,7 +128,7 @@ function Level({
               key={entry.name}
               value={entry.name}
               label={<Label name={entry.name} />}
-              icon={entry.icon && <Icon name={entry.icon} size={16} />}
+              icon={entry.image ?? (entry.icon && <Icon name={entry.icon} size={16} />)}
               shortcut={entry.shortcut}
               hint={entry.hint}
               open={open === entry.name}
@@ -147,7 +149,7 @@ function Level({
             <Menu.Item
               key={entry.name}
               value={entry.name}
-              icon={entry.icon && <Icon name={entry.icon} size={16} />}
+              icon={entry.image ?? (entry.icon && <Icon name={entry.icon} size={16} />)}
               checked={entry.selected}
               shortcut={entry.shortcut}
               hint={entry.hint}

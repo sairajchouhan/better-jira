@@ -40,21 +40,21 @@ n.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clien
 /** Sets another priority on a board card through its right-click menu. Returns the priority picked. */
 async function setPriority(page: Page, key: string) {
   await cardMenu(page, key);
-  await page.click(`${MENU} [cmdk-item][data-value="Priority"]`);
+  await page.hover(`${MENU} [cmdk-item][data-value="Priority"]`);
   const pick = await page.waitFor<string>(
-    `[...document.querySelectorAll('[role="dialog"] [cmdk-item]')].map(n=>n.dataset.value).find(v=>v&&v!=='Normal'&&v!=='Priority')`,
+    `[...document.querySelectorAll('[role="dialog"][aria-label="Priority"] [cmdk-item]')].map(n=>n.dataset.value).find(v=>v&&v!=='Normal'&&v!=='No priority')`,
   );
-  await page.click(`[role="dialog"] [cmdk-item][data-value="${pick}"]`);
+  await page.click(`[role="dialog"][aria-label="Priority"] [cmdk-item][data-value="${pick}"]`);
   return pick;
 }
 /** Moves a board card to another status through its right-click menu. */
 async function setStatus(page: Page, key: string) {
   await cardMenu(page, key);
-  await page.click(`${MENU} [cmdk-item][data-value="Status"]`);
+  await page.hover(`${MENU} [cmdk-item][data-value="Status"]`);
   const pick = await page.waitFor<string>(
-    `[...document.querySelectorAll('[role="dialog"][aria-label="Change status"] [cmdk-item]')].map(n=>n.dataset.value).find(v=>v&&!/backlog/i.test(v))`,
+    `[...document.querySelectorAll('[role="dialog"][aria-label="Status"] [cmdk-item]')].map(n=>n.dataset.value).find(v=>v&&!/backlog/i.test(v))`,
   );
-  await page.click(`[role="dialog"][aria-label="Change status"] [cmdk-item][data-value="${pick}"]`);
+  await page.click(`[role="dialog"][aria-label="Status"] [cmdk-item][data-value="${pick}"]`);
 }
 const sentTo = (key: string) => `window.__ops.filter(w=>w.key==='${key}').flatMap(w=>w.ops)`;
 
