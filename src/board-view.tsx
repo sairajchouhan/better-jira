@@ -1,3 +1,4 @@
+import { VirtualItems } from "./virtual-items";
 import { isMyIssues } from "./navigation";
 import { personIssues } from "./people";
 import { useEffectiveMine, useActiveView, useOverlayFilters } from "./saved-views";
@@ -11,7 +12,6 @@ import {
 import { ViewDetails, ResultsFeedback } from "./views-navigation";
 import {
   memo,
-  startTransition,
   useEffect,
   useMemo,
   useRef,
@@ -94,19 +94,6 @@ export const BoardView = memo(function BoardView({
   const d = prefs.display;
   const [expanded, setExpanded] = useState<string[]>([]);
   const [hiddenOpen, setHiddenOpen] = useState(true);
-  // Opening a board or switching layout paints the first screenful of cards at once and the rest in a transition:
-  // mounting ~90 cards in one task took 100–200 ms (QA D95, D96).
-  const [filled, setFilled] = useState("");
-  const cap = filled === d.layout ? Infinity : d.layout === "list" ? 30 : 10;
-  useEffect(() => {
-    if (filled !== d.layout) startTransition(() => setFilled(d.layout));
-  }, [filled, d.layout]);
-  let listBudget = cap;
-  const take = (rows: number) => {
-    const limit = Math.max(0, listBudget);
-    listBudget -= rows;
-    return limit;
-  };
   const all = useMemo(() => [...issues.values()], [issues]);
   const visible = useMemo(
     () => selectIssues(all, board, prefs, who || mine, query, ME.id, Date.now(), personal),
@@ -202,7 +189,6 @@ export const BoardView = memo(function BoardView({
                           </div>
                         )}
                         <IssueList
-                          limit={take(r.issues.length)}
                           issues={r.issues}
                           universe={universe}
                           display={d}
@@ -261,7 +247,6 @@ export const BoardView = memo(function BoardView({
                       {show.map((col, ci) => (
                         <ColumnView
                           key={col.id}
-                          limit={cap}
                           bucket={col}
                           issues={layout.cells[ri]![ci]!}
                           selected={selected}
@@ -440,30 +425,24 @@ function GroupHeading({
   );
 }
 
+const rowKey = (row: { issue: Issue }) => row.issue.key;
+const issueKey = (issue: Issue) => issue.key;
+
 function IssueList({
   issues,
   universe,
   display,
   selected,
-  limit,
 }: {
   issues: Issue[];
   universe: Issue[];
   display: Display;
   selected: string | null;
-  limit: number;
 }) {
-  return listRows(issues, universe, display.subIssues ? display.nested : "none")
-    .slice(0, limit)
-    .map(({ issue, depth }) => (
-      <IssueRow
-        key={issue.key}
-        issue={issue}
-        selected={selected === issue.key}
-        display={display}
-        depth={depth}
-      />
-    ));
+  const rows = useMemo(() => listRows(issues, universe, display.subIssues ? display.nested : "none"), [issues, universe, display.subIssues, display.nested]);
+  return <VirtualItems items={rows} itemKey={rowKey} selected={selected} estimate={44}>
+    {({ issue, depth }) => <IssueRow issue={issue} selected={selected === issue.key} display={display} depth={depth} />}
+  </VirtualItems>;
 }
 
 function ColumnHeading({
@@ -520,10 +499,8 @@ function ColumnView({
   hide,
   create,
   header = true,
-  limit,
 }: {
   bucket: Bucket;
-  limit: number;
   issues: Issue[];
   selected: string | null;
   display: Display;
@@ -565,9 +542,9 @@ function ColumnView({
         />
       )}
       <div className={`flex-1 px-[9px] pt-[9px] ${scroll ? "overflow-y-auto" : ""}`}>
-        {issues.slice(0, limit).map((i) => (
-          <BoardCard key={i.key} issue={i} selected={i.key === selected} display={display} />
-        ))}
+        <VirtualItems items={issues} itemKey={issueKey} selected={selected} estimate={124}>
+          {(issue) => <BoardCard issue={issue} selected={issue.key === selected} display={display} />}
+        </VirtualItems>
         <Button type="button" variant="borderless" size="medium" onClick={create} aria-label={`Add issue to ${bucket.name}`}>
           <Icon name="plus" size={14} /> Add issue
         </Button>
@@ -771,7 +748,7 @@ const IssueRow = memo(function IssueRow({
   const show = (p: Property) => d.properties.includes(p);
   const status = statusOf(issue);
   return (
-    <div className="[content-visibility:auto] [contain-intrinsic-size:auto_44px]">
+    <div>
       <IssueTarget
         issue={issue}
         selected={selected}
@@ -817,7 +794,7 @@ const BoardCard = memo(function BoardCard({
   const show = (p: Property) => d.properties.includes(p);
   const status = statusOf(issue);
   return (
-    <div className="pb-2 [contain-intrinsic-size:auto_124px] [content-visibility:auto] [overflow-clip-margin:4px]">
+    <div className="pb-2 [overflow-clip-margin:4px]">
       <IssueTarget
         issue={issue}
         selected={selected}

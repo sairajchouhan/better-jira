@@ -10,7 +10,18 @@ function LoadedEditor(props: EditorEngineProps) {
   // Chosen once per editor, so a later load never swaps the component (and remounts it) mid-edit.
   const [Component] = useState(() => loaded ?? Editor);
   return (
-    <Suspense fallback={<div className="rich-content" aria-busy="true"><Adf node={props.initial || props.placeholder} issueKey={props.issueKey} attachments={props.attachments} /></div>}>
+    <Suspense
+      fallback={
+        // Same anchor as the editor (id, class), so layout and links don't wait for the chunk.
+        <div id={props.id} className="rich-content" aria-busy="true">
+          {props.initial ? (
+            <Adf node={props.initial} issueKey={props.issueKey} attachments={props.attachments} />
+          ) : (
+            <p className="text-fg-4">{props.placeholder}</p>
+          )}
+        </div>
+      }
+    >
       <Component {...props} />
     </Suspense>
   );

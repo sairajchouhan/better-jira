@@ -66,17 +66,17 @@ test("the default board: My issues, board details, saved views and a fast layout
     await page.waitFor(`location.pathname === '/view/mine-v1'`);
     await page.click('[aria-label="Breadcrumb"] button[aria-label="Browser audit"]');
   });
-  await test.step("R1-D95/D96: a layout switch paints the first screenful at once and the rest right after", async () => {
+  await test.step("R1-D95/D96, BJ-111: a layout switch paints only the first screenful; the rest stays windowed", async () => {
     await fixture.reset({ bulk: 90 });
     await page.reload();
-    await page.waitFor(`${cards}===96`);
+    await page.waitFor(`!!document.querySelector("[data-virtual-items]")&&${cards}>0`);
     // Count the cards the keypress commits, before the follow-up task fills the rest.
     await page.eval(
       `new MutationObserver((_,o)=>{if(document.querySelector("[data-layout=list]")){window.firstPaint=document.querySelectorAll("[data-key]").length;o.disconnect()}}).observe(document.querySelector("main"),{subtree:true,attributes:true,attributeFilter:["data-layout"]})`,
     );
     await page.key("b", "meta");
     await page.waitFor(
-      `document.querySelector("[data-layout]").dataset.layout==="list"&&${cards}===96`,
+      `document.querySelector("[data-layout]").dataset.layout==="list"&&!!document.querySelector("[data-virtual-items]")`,
     );
     expect(await page.eval<number>(`window.firstPaint`)).toBeLessThanOrEqual(30);
   });
