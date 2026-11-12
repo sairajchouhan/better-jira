@@ -10,20 +10,22 @@ test("description block conversions keep Jira-valid structure", async ({ open })
     await page.key("Enter");
     await page.type("- QA item");
     await page.waitFor(`!!document.querySelector('#description ul li')`);
-    await page.key("a", "meta");
-    await page.click('[aria-label="Numbered list"]');
+    // The toolbar's list menu is off in a heading (as Linear's), so select the item rather than the whole document.
+    await page.key("ArrowLeft", "meta", "shift");
+    await page.click('[aria-label="List"]');
+    await page.eval(`[...document.querySelectorAll('[aria-label="List"] [cmdk-item]')].find(n=>n.querySelector('.menu-name').textContent==='Numbered list').click()`);
     expect(
       await page.waitFor<string>(`document.querySelector('#description ol li')?.textContent`),
     ).toContain("QA item");
-    expect(await page.eval(`!!document.querySelector('#description ul')`)).toBe(false);
-    await page.key("a", "meta");
+    expect(await page.eval(`[...document.querySelectorAll('#description ul li')].some(li=>li.textContent.includes('QA item'))`)).toBe(false);
+    // The item stays selected through the list change.
     await page.click('[aria-label="Code block"]');
     expect(
       await page.waitFor<string>(
         `[...document.querySelectorAll('#description pre')].map(n=>n.textContent).join('|')`,
       ),
     ).toContain("QA item");
-    expect(await page.eval(`!!document.querySelector('#description li')`)).toBe(false);
+    expect(await page.eval(`[...document.querySelectorAll('#description li')].some(li=>li.textContent.includes('QA item'))`)).toBe(false);
     await page.close();
   });
 
@@ -37,7 +39,8 @@ test("description block conversions keep Jira-valid structure", async ({ open })
     await page.type("> QA quote");
     await page.waitFor(`!!document.querySelector('#description blockquote p')`);
     await page.key("a", "meta");
-    await page.click('[aria-label="Heading 1"]');
+    await page.click('[aria-label="Text style"]');
+    await page.eval(`[...document.querySelectorAll('[aria-label="Text style"] [cmdk-item]')].find(n=>n.querySelector('.menu-name').textContent==='Heading 1').click()`);
     expect(
       await page.waitFor<string>(
         `[...document.querySelectorAll('#description h1')].map(n=>n.textContent).join('|')`,
