@@ -101,21 +101,9 @@ test("BJ-14: creation uses the issue creator and mirrored timestamp, with an exa
   expect(await page.eval(`document.querySelector('#issue-created time').textContent`)).toBe("2y ago");
   expect(await page.eval(`document.querySelector('#issue-created time').dateTime`)).toBe("2026-11-06T10:00:00Z");
   expect(await page.eval(`document.querySelector('#issue-created a').getAttribute('aria-label')`)).toMatch(/^Fri Nov 6, 2026, /);
-  // The scroll event dismisses tooltips, and the description editor rebuilds just after opening (BJ-193): hover only once the
-  // timestamp has stayed put for a few frames, so the pointer lands on it and stays there.
-  await page.eval(`new Promise(resolve => {
-    const link = () => document.querySelector('#issue-created a');
-    let last = NaN, still = 0;
-    const tick = () => {
-      link().scrollIntoView({block: 'center'});
-      const top = link().getBoundingClientRect().top;
-      still = top === last ? still + 1 : 0;
-      last = top;
-      if (still >= 40) resolve(undefined); else requestAnimationFrame(tick);
-    };
-    tick();
-  })`);
-  console.log("DBG", await page.eval(`new Promise(res => { const b=document.querySelector('.issue-detail-body'); const out=[]; const t0=performance.now(); new MutationObserver(ms=>{ for(const m of ms){ for(const n of m.removedNodes){ if(n.nodeType===1){ out.push(Math.round(performance.now()-t0)+'ms REMOVED '+n.tagName+'.'+String(n.className).slice(0,40)+' in '+String(m.target.className).slice(0,30)+' top='+b.scrollTop); } } } }).observe(b,{childList:true,subtree:true}); b.addEventListener('scroll',()=>out.push(Math.round(performance.now()-t0)+'ms scroll top='+b.scrollTop+' sh='+b.scrollHeight)); setTimeout(()=>res(out.slice(0,25).join('\\n')),1000); })`));
+  // The issue opened before the editor chunk arrived: its stand-ins differ a little in height from the editors that take
+  // over, so the timestamp settles once both are in.
+  await page.waitFor(`!!document.querySelector("#description.ProseMirror") && !!document.querySelector("#comment.ProseMirror")`);
   await page.hover("#issue-created a");
   await page.waitFor(`!!document.querySelector('[role=tooltip]')`);
   expect(await page.eval(`document.querySelector('[role=tooltip]').textContent`)).toBe(
@@ -165,4 +153,41 @@ test("BJ-193: an issue opened while its details load mounts each editor once", a
   await sleep(500);
   expect(await page.eval(`window.__editors.removed.filter((scope) => scope.startsWith("TEST-3"))`)).toEqual([]);
   expect(await page.eval(`document.querySelectorAll(".issue-description .rich-content").length`)).toBe(1);
+});
+
+test("BJ-193: the editor takes over from its stand-in in one frame, keeping a scroll made while the issue opens", async ({
+  open,
+}) => {
+  await fixture.reset();
+  const page = await open("", { height: 420, setup: WATCH_EDITORS });
+  // The editor chunk is held until the issue shows, so the stand-ins show first (BJ-110).
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  await page.page.route("**/*.js", async (route) => {
+    const response = await route.fetch();
+    if ((await response.text()).includes("Invalid content for node")) await gate;
+    await route.fulfill({ response });
+  });
+  await page.click('[data-key="TEST-1"]');
+  let top: number;
+  try {
+    await page.waitFor(`!!document.querySelector('.issue-description [aria-busy="true"].rich-content')`);
+    // Near the end, as a reader landing on the issue might scroll; not at it, since the composer's stand-in is a little
+    // taller than its editor.
+    top = await page.eval<number>(`(() => {
+      const body = document.querySelector(".issue-detail-body");
+      body.scrollTop = body.scrollHeight - body.clientHeight - 40;
+      window.__editors.tops = [];
+      return body.scrollTop;
+    })()`);
+    expect(top).toBeGreaterThan(0);
+  } finally {
+    release();
+  }
+  await page.waitFor(`!!document.querySelector("#description.ProseMirror")`);
+  await sleep(300);
+  expect(await page.eval(`window.__editors.empty`)).toBe(0);
+  expect(await page.eval(`window.__editors.removed.filter((scope) => scope !== "stand-in")`)).toEqual([]);
+  // Never clamped by an empty frame; scroll anchoring may move it down as the editor's blocks render taller.
+  expect(await page.eval(`Math.min(...window.__editors.tops)`)).toBeGreaterThanOrEqual(top);
 });

@@ -35,7 +35,7 @@ import { jiraIssueURL } from "@/client/features/issue/issue-urls";
 import { beginCreate } from "@/client/state/issue-actions";
 import { usePlacement } from "@/client/components/menu-surface";
 import { useCommand } from "@/client/features/navigation/commands";
-import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import {
   EditorState,
   NodeSelection,
@@ -246,7 +246,9 @@ export function RichEditor(props: EditorEngineProps) {
       latest.current.onSave?.(doc);
     }
   };
-  useEffect(() => {
+  // Built before paint, so the editor replaces its stand-in (or an earlier revision) in one frame: the content never
+  // collapses to an empty host, and a scroll made meanwhile is never clamped (BJ-193).
+  useLayoutEffect(() => {
     let mine: EditorView | null = null,
       detached = false;
     const uploads = mediaUploads(
@@ -392,7 +394,7 @@ export function RichEditor(props: EditorEngineProps) {
       },
     });
     view.current = mine = editor;
-    // The first render had no view and showed the empty placeholder; render again so it reflects the loaded content.
+    // The first render had no view; render again before paint so the placeholder and toolbar reflect the loaded content.
     refresh((n) => n + 1);
     const mountedAt = performance.now();
     if (props.autoFocus) {
