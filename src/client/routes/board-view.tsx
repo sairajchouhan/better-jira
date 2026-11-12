@@ -1,3 +1,4 @@
+import { fullTime } from "@/client/features/issue/issue-dates";
 import { type Board, type Issue } from "@/shared/issue-model";
 import { VirtualItems } from "@/client/components/virtual-items";
 import { isMyIssues } from "@/client/features/navigation/navigation";
@@ -678,7 +679,7 @@ function IssueProperties({
       {show("due") && issue.due && (
         <span className={CHIP}>
           <Icon name="calendar" />
-          <span className="ml-1.5">{shortDate(issue.due, undefined, true)}</span>
+          <span title={fullTime(`${issue.due}T00:00:00`)} className="ml-1.5">{shortDate(issue.due, undefined, true)}</span>
         </span>
       )}
       {show("milestone") &&
@@ -691,7 +692,7 @@ function IssueProperties({
       {show("statusAge") && issue.statusSince && (
         <span
           className={CHIP}
-          title={`In current status since ${new Date(issue.statusSince).toLocaleString()}`}
+          title={`In current status since ${fullTime(issue.statusSince)}`}
         >
           <Icon name="calendar" />
           <span className="ml-1.5">
@@ -717,10 +718,10 @@ function IssueDates({ issue, display: d, updated }: { issue: Issue; display: Dis
   return (
     <>
       {d.properties.includes("created") && issue.created && (
-        <span title={`Created ${issue.created}`}>Created {shortDate(issue.created)}</span>
+        <span title={`Created ${fullTime(issue.created)}`}>Created {shortDate(issue.created)}</span>
       )}
       {d.properties.includes("updated") && (
-        <span title={`Updated ${issue.updated}`}>
+        <span title={`Updated ${fullTime(issue.updated)}`}>
           {updated}
           {shortDate(issue.updated)}
         </span>

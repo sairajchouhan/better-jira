@@ -1,3 +1,4 @@
+import { fullTime } from "@/client/features/issue/issue-dates";
 import { type Issue, type User } from "@/shared/issue-model";
 import { useLocation } from "@tanstack/react-router";
 import { pageURL } from "@/client/features/navigation/app-navigation";
@@ -68,11 +69,6 @@ const ImageViewer = lazy(() =>
 
 const related = (target: Issue) => ({ board: target.board, selected: target.key, panel: true, view: get().view });
 
-// Linear's exact-time label: "Sat Nov 7, 2026, 07:49:03" (24-hour, with seconds).
-const fullTime = (iso: string) => {
-  const d = new Date(iso);
-  return `${d.toLocaleDateString("en-US", { weekday: "short" })} ${d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })}`;
-};
 
 const author = (a: any): User | null =>
   a && { id: a.accountId, name: a.displayName, avatar: jiraAvatar(a.avatarUrls) };

@@ -50,3 +50,9 @@ export function activityTime(iso: string, now = Date.now()): string {
   }
   return `${value}${unit} ${delta < 0 ? "from now" : "ago"}`;
 }
+
+// Linear's exact-time label: "Sat Nov 7, 2026, 07:49:03" (24-hour, with seconds).
+export const fullTime = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString("en-US", { weekday: "short" })} ${d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })}`;
+};

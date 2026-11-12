@@ -169,3 +169,16 @@ test("display preferences: card dates, filter chips, empty views and pill menus"
     });
   });
 });
+
+test("BJ-194: list and board date tooltips share the absolute timestamp formatter", async ({ open }) => {
+  const page = await open();
+  for (const layout of ["board", "list"]) {
+    await show(page, { 1: { display: { layout, properties: ["id", "created", "updated"] } } });
+    const titles = await page.eval<string[]>(`[...document.querySelector('[data-key="TEST-1"]').querySelectorAll('[title]')].map(n=>n.title).filter(t=>/^(Created|Updated) /.test(t))`);
+    expect(titles).toHaveLength(2);
+    for (const title of titles) {
+      expect(title).toMatch(/^(Created|Updated) [A-Z][a-z]{2} [A-Z][a-z]{2} \d+, \d{4}.*\d{2}:\d{2}:\d{2}$/);
+      expect(title).not.toContain("T10:00:00");
+    }
+  }
+});
