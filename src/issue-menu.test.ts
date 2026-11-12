@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { ActionEntry } from "./action-menu";
-import { get, navigate, set, ui, type Issue } from "./store";
+import { get, set, type Issue } from "./store";
+import { navigate, ui } from "./app-navigation";
 import { handle } from "./commands";
 
 import { issueMenuEntries } from "./issue-menu";

@@ -76,7 +76,8 @@ const address = () => {
 };
 
 test("personal issue edits, comments, creation and deletion undo without losing issue details", async () => {
-  const { actions, get, set, navigate, undoEdit, redoEdit, ME } = await import("./store");
+  const { actions, get, set, undoEdit, redoEdit, ME } = await import("./store");
+  const { navigate } = await import("./app-navigation");
   Object.assign(ME, { id: "me", name: "Me" });
   const board: Board = {
     id: 1,
@@ -220,7 +221,8 @@ test("failed issue details expose an error and can be retried", async () => {
 });
 
 test("browser history restores issue selection without pushing another navigation", async () => {
-  const { get, navigate, load } = await import("./store");
+  const { get, load } = await import("./store");
+  const { navigate } = await import("./app-navigation");
   const issues = [...get().issues.values()],
     boards = get().boards;
   const [first, second] = issues;
@@ -260,7 +262,8 @@ test("browser history restores issue selection without pushing another navigatio
 });
 
 test("I7: local comments can be rich, edited and deleted, each step undoable; other authors remain read-only", async () => {
-  const { actions, get, set, navigate, undoEdit, ME } = await import("./store");
+  const { actions, get, set, undoEdit, ME } = await import("./store");
+  const { navigate } = await import("./app-navigation");
   const board: Board = {
     id: 7,
     name: "Comments",
@@ -534,7 +537,8 @@ test("image crops and comment counts undo and redo without changing the descript
 });
 
 test("B5: creating stays on the board with a toast, Create more toasts too, and undoing the create closes it", async () => {
-  const { actions, get, navigate, undoEdit } = await import("./store");
+  const { actions, get, undoEdit } = await import("./store");
+  const { navigate } = await import("./app-navigation");
   navigate({ panel: false, selected: null });
   toasts.dismiss(NOTIFICATION_ID);
   const key = actions.create("Toasted")!;
@@ -551,7 +555,8 @@ test("B5: creating stays on the board with a toast, Create more toasts too, and 
   expect(latestNotification()).toBeUndefined();
 });
 test("deleting a sub-issue keeps its open parent; with Jira writes it asks in the app first", async () => {
-  const { actions, get, navigate, set } = await import("./store");
+  const { actions, get, set } = await import("./store");
+  const { navigate } = await import("./app-navigation");
   const parent = actions.create("Parent")!,
     child = actions.create("Child", { parent })!;
   navigate({ selected: parent, panel: true });
@@ -946,7 +951,8 @@ test("outbox: a write Jira refuses rolls the issue back to Jira's copy and says 
 });
 
 test("outbox: an issue created here takes Jira's key, and writes queued under its app key follow it there", async () => {
-  const { actions, get, set, navigate, currentKey, firstKey } = await import("./store");
+  const { actions, get, set, currentKey, firstKey } = await import("./store");
+  const { navigate } = await import("./app-navigation");
   let release!: () => void;
   const gate = new Promise<void>((resolve) => (release = resolve));
   const jira = await fakeJiraWrites(async (key, body) => {
@@ -977,7 +983,8 @@ test("outbox: an issue created here takes Jira's key, and writes queued under it
 });
 
 test("opening saved views and changing their overlay never writes board preferences", async () => {
-  const { get, set, openSavedView, navigate } = await import("./store");
+  const { get, set } = await import("./store");
+  const { openSavedView, navigate } = await import("./app-navigation");
   const { setRule, viewSettings, effectiveSettings } = await import("./view-settings");
   const { defaultPreferences } = await import("./view-model");
   const p = defaultPreferences();
@@ -1015,7 +1022,8 @@ const withFetch = async (respond: (url: string, init?: RequestInit) => unknown, 
 };
 
 test("BJ-128: Save to this view refuses an overlay the saved base excludes", async () => {
-  const { get, set, openSavedView, setOverlay } = await import("./store");
+  const { get, set } = await import("./store");
+  const { openSavedView, setOverlay } = await import("./app-navigation");
   const { saveOverlayToView } = await import("./saved-views");
   const view = await viewFixture();
   set({ savedViews: [view] });
@@ -1031,7 +1039,8 @@ test("BJ-128: Save to this view refuses an overlay the saved base excludes", asy
 });
 
 test("BJ-132: a new custom view starts as a list with details open; a tab keeps the board layout", async () => {
-  const { get, set, navigate, openSavedView } = await import("./store");
+  const { get, set } = await import("./store");
+  const { navigate, openSavedView } = await import("./app-navigation");
   const { createViewDraft, createSavedView } = await import("./saved-views");
   const { setDisplay } = await import("./view-settings");
   navigate({ board: 1 });
@@ -1050,7 +1059,8 @@ test("BJ-132: a new custom view starts as a list with details open; a tab keeps 
 });
 
 test("BJ-142: a custom view remembers its details panel; boards keep their own", async () => {
-  const { get, set, navigate, openSavedView } = await import("./store");
+  const { get, set } = await import("./store");
+  const { navigate, openSavedView } = await import("./app-navigation");
   const view = await viewFixture({ id: "details-view" });
   set({ savedViews: [view] });
   navigate({ board: 1 });
@@ -1072,7 +1082,8 @@ test("BJ-142: a custom view remembers its details panel; boards keep their own",
 });
 
 test("BJ-142: deleting the active view lands on the board's All issues", async () => {
-  const { get, set, navigate, openSavedView } = await import("./store");
+  const { get, set } = await import("./store");
+  const { navigate, openSavedView } = await import("./app-navigation");
   const { deleteSavedView } = await import("./saved-views");
   const { setScope, viewSettings } = await import("./view-settings");
   const view = await viewFixture({ id: "doomed", scope: "active" as const });
@@ -1088,7 +1099,8 @@ test("BJ-142: deleting the active view lands on the board's All issues", async (
 });
 
 test("BJ-133: Cancel on a duplicate draft returns to the source view", async () => {
-  const { get, set, openSavedView, beginViewEditor, discardViewEditor } = await import("./store");
+  const { get, set } = await import("./store");
+  const { openSavedView, beginViewEditor, discardViewEditor } = await import("./app-navigation");
   const { duplicateViewDraft } = await import("./saved-views");
   const view = await viewFixture();
   set({ savedViews: [view] });
@@ -1101,7 +1113,8 @@ test("BJ-133: Cancel on a duplicate draft returns to the source view", async () 
 });
 
 test("BJ-137: the view address is /view/<slug>-<id> and follows a rename", async () => {
-  const { set, openSavedView } = await import("./store");
+  const { set } = await import("./store");
+  const { openSavedView } = await import("./app-navigation");
   const { updateSavedView } = await import("./saved-views");
   const view = await viewFixture({ id: "8f1c", name: "My Triage!" });
   set({ savedViews: [view] });
@@ -1114,7 +1127,8 @@ test("BJ-137: the view address is /view/<slug>-<id> and follows a rename", async
 });
 
 test("view settings: removing a rule on a saved view edits only its overlay", async () => {
-  const { get, set, navigate, openSavedView } = await import("./store");
+  const { get, set } = await import("./store");
+  const { navigate, openSavedView } = await import("./app-navigation");
   const { setRule, updateRule, viewSettings, effectiveSettings } = await import("./view-settings");
   const view = await viewFixture({ id: "overlay-remove" });
   set({ savedViews: [view] });
@@ -1132,7 +1146,8 @@ test("view settings: removing a rule on a saved view edits only its overlay", as
 });
 
 test("view settings: clear on a saved view keeps its base filter", async () => {
-  const { get, set, navigate, openSavedView } = await import("./store");
+  const { get, set } = await import("./store");
+  const { navigate, openSavedView } = await import("./app-navigation");
   const { clearFilters, setRule, effectiveSettings } = await import("./view-settings");
   const view = await viewFixture({ id: "overlay-clear" });
   set({ savedViews: [view] });
@@ -1146,7 +1161,8 @@ test("view settings: clear on a saved view keeps its base filter", async () => {
 });
 
 test("view settings: an edit in the view editor goes to the draft", async () => {
-  const { get, set, navigate, beginViewEditor, discardViewEditor } = await import("./store");
+  const { get, set } = await import("./store");
+  const { navigate, beginViewEditor, discardViewEditor } = await import("./app-navigation");
   const { createViewDraft } = await import("./saved-views");
   const { setRule, setDisplay, setScope, clearFilters, viewSettings } = await import("./view-settings");
   navigate({ board: 1 });
@@ -1203,7 +1219,7 @@ const navigationFixture = async () => {
       boardOpenIn: `${s.preferences[1]?.display.openIn}/${s.preferences[2]?.display.openIn}`,
     };
   };
-  return { ...store, ...(await import("./saved-views")), trace };
+  return { ...store, ...(await import("./saved-views")), ...(await import("./app-navigation")), trace };
 };
 const savedView = async (patch: Record<string, unknown>) => {
   const v = await viewFixture(patch);

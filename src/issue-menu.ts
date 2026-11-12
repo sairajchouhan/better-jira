@@ -1,5 +1,6 @@
 import { createElement } from "react";
-import { actions, get, boardOf, ME, beginCreate, isLocalIssue, hasLocalJiraChanges, ui, type Issue, type IssueDraft } from "./store";
+import { actions, get, boardOf, ME, beginCreate, isLocalIssue, hasLocalJiraChanges, type Issue, type IssueDraft } from "./store";
+import { ui } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
 import { canHaveChildren, needsParent } from "./issue-properties";
 import { createIssueDocument } from "./issue-resources";

@@ -15,14 +15,8 @@ import { ConfirmDialog } from "./dialog";
 import { Toast } from "./toast";
 import { toasts } from "./toast-queue";
 import { ViewIconPicker } from "./view-icon-picker";
-import {
-  beginViewEditor,
-  discardViewEditor,
-  get,
-  setViewDraft,
-  useStore,
-  ME,
-} from "./store";
+import { get, useStore, ME } from "./store";
+import { beginViewEditor, discardViewEditor, setViewDraft } from "./app-navigation";
 import {
   editViewDraft,
   duplicateViewDraft,

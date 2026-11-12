@@ -21,21 +21,8 @@ import {
 } from "react";
 import { commentCount } from "./media-edits";
 import { Icon, Label, PriorityIcon, StatusIcon, TypeDot } from "./icons";
-import {
-  ME,
-  actions,
-  get,
-  loadFull,
-  navigate,
-  set,
-  timed,
-  ui,
-  useStore,
-  beginCreate,
-  type Board,
-  type Issue,
-  statusOf,
-} from "./store";
+import { ME, actions, get, loadFull, set, timed, useStore, beginCreate, type Board, type Issue, statusOf } from "./store";
+import { navigate, ui } from "./app-navigation";
 import {
   myIssuesBoard,
   boardColumns,

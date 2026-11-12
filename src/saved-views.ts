@@ -4,7 +4,8 @@
  * createViewDraft supplies the editor's unsaved flow.
  * Favorites use the existing toggleFavorite(`view:${id}`) and are browser/account scoped.
  */
-import { get, navigate, openAllIssues, clearOverlay, set, useStore } from "./store";
+import { get, set, useStore } from "./store";
+import { navigate, openAllIssues, clearOverlay } from "./app-navigation";
 import { savedViewClient } from "./saved-view-client";
 import { effectiveSettings } from "./view-settings";
 import { rememberViewDetails, savedViewsKey } from "./browser-preferences";
@@ -12,7 +13,7 @@ import { favoritesWithout, liveFavorites } from "./favorites";
 import { canMergeOverlay, mergeFilters, MERGE_CONFLICT, type SavedView, type ViewDraft } from "./saved-view-model";
 export type { SavedView, ViewDraft } from "./saved-view-model";
 export { encodeOverlay, decodeOverlay, mergeFilters, emptyOverlay, canMergeOverlay, MERGE_CONFLICT, viewPath } from "./saved-view-model";
-export { openSavedView, clearOverlay } from "./store";
+export { openSavedView, clearOverlay } from "./app-navigation";
 export { toggleFavorite } from "./favorites";
 export const useActiveView = () =>
   useStore((s) => s.savedViews.find((v) => v.id === s.activeViewId) ?? null);

@@ -8,27 +8,8 @@ import { useMemo, useRef, useState, type MouseEvent, type ReactNode } from "reac
 import { isMyIssues } from "./navigation";
 import { PERSON_TABS, peopleOf } from "./people";
 import { Icon, TypeDot } from "./icons";
-import {
-  actions,
-  navigate,
-  set,
-  timed,
-  ui,
-  useStore,
-  dismissRecoveryNotice,
-  openSavedView,
-  openAllIssues as openBoardIssues,
-  beginCreate,
-  downloadLocalBackup,
-  issueURL,
-  retryLocalStorage,
-  dismissWriteError,
-  undoEdit,
-  redoEdit,
-  removeBoard,
-  type Board,
-  type Issue,
-} from "./store";
+import { actions, set, timed, useStore, dismissRecoveryNotice, beginCreate, downloadLocalBackup, issueURL, retryLocalStorage, dismissWriteError, undoEdit, redoEdit, removeBoard, type Board, type Issue } from "./store";
+import { navigate, ui, openSavedView, openAllIssues as openBoardIssues } from "./app-navigation";
 import { ActionMenu, ContextMenu, type ActionEntry } from "./action-menu";
 import { showNotification } from "./app-notifications";
 import { BoardControls, FilterChips } from "./view-controls";

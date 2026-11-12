@@ -10,17 +10,8 @@ import { Icon } from "./icons";
 
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { normalizeDocument } from "./document";
-import {
-  actions,
-  flushLocalChanges,
-  get,
-  ME,
-  navigate,
-  set,
-  ui,
-  useStore,
-  type Issue,
-} from "./store";
+import { actions, flushLocalChanges, get, ME, set, useStore, type Issue } from "./store";
+import { navigate, ui } from "./app-navigation";
 import {
   issueResources,
   linkTitle,

@@ -9,15 +9,8 @@ import { Button } from "./button";
 import { TextInput } from "./field";
 import { Text } from "./text";
 import { setRule, updateRule, useViewSettings } from "./view-settings";
-import {
-  ME,
-  timed,
-  ui,
-  useStore,
-  type Issue,
-  type Board,
-  type User,
-} from "./store";
+import { ME, timed, useStore, type Issue, type Board, type User } from "./store";
+import { ui } from "./app-navigation";
 import {
   isDate,
   isNumeric,

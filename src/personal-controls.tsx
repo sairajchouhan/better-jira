@@ -43,23 +43,8 @@ import {
   MilestoneMenu,
   DueMenu,
 } from "./property-menu";
-import {
-  actions,
-  addBoard,
-  addLocalFiles,
-  beginCreate,
-  usePeople,
-  get,
-  navigate,
-  set,
-  ui,
-  useStore,
-  type Board,
-  type Issue,
-  type IssueDraft,
-  type JiraOptions,
-  type User,
-} from "./store";
+import { actions, addBoard, addLocalFiles, beginCreate, usePeople, get, set, useStore, type Board, type Issue, type IssueDraft, type JiraOptions, type User } from "./store";
+import { navigate, ui } from "./app-navigation";
 import {
   buckets,
   newId,

@@ -1,14 +1,12 @@
 import { toasts } from "./toast-queue";
 import { latestNotification, rekeyNotification, showNotification, NOTIFICATION_ID } from "./app-notifications";
 import { assignableUsers, knownPeople, statusById, statuses } from "./board-catalog";
-import { setScope, viewSettings } from "./view-settings";
+import { viewSettings } from "./view-settings";
+import { navigate, startNavigation, ui } from "./app-navigation";
 import { liveFavorites } from "./favorites";
 import {
-  createViewDraft,
-  editViewDraft,
   loadSavedViews,
   refreshSavedViews,
-  updateSavedView,
   viewError,
 } from "./saved-views";
 import { useMemo, useSyncExternalStore } from "react";
@@ -30,15 +28,8 @@ import {
   type LocalChange,
 } from "./local-data";
 import { createActor, fromPromise, waitFor } from "xstate";
-import { appMachine, inspector, storageMachine, uiMachine, type UiContext } from "./machines";
-import {
-  MACHINE_FIELDS,
-  screenUrl,
-  transition,
-  type Destination,
-  type NavigationEvent,
-  type Screen,
-} from "./navigation";
+import { appMachine, inspector, storageMachine, type UiContext } from "./machines";
+import type { Screen } from "./navigation";
 import { QueryClient, QueryObserver } from "@tanstack/query-core";
 
 import { reminderTime } from "./reminder-display";
@@ -243,7 +234,7 @@ import {
 
 export const ME: User = { id: "", name: "Me" };
 
-type State = {
+export type State = {
   boards: Board[];
   issues: Map<string, Issue>;
   full: Map<string, Full>;
@@ -373,18 +364,14 @@ let state: State = {
 };
 
 const listeners = new Set<() => void>();
-const subscribe = (l: () => void) => (listeners.add(l), () => void listeners.delete(l));
+export const subscribe = (l: () => void) => (listeners.add(l), () => void listeners.delete(l));
 export const get = () => state;
 type UiKey = keyof UiContext;
-/** Set once load has restored the address; before that nothing is written to history. */
-let navigationReady = false;
 /** Data changes. Screen state changes only through `navigate` and the view functions (navigation.ts), or `ui.send` (machines.ts). */
 export function set(
   patch: Partial<Omit<State, UiKey | keyof Screen | "loadError" | "storage" | "canEdit">>,
 ) {
   commit(patch);
-  // A rename (here or in another tab) moves the slug; the id suffix keeps the entry.
-  if (patch.savedViews && navigationReady && state.activeViewId) showAddress(true);
 }
 /** Counts footer messages, so `timed` never covers one its action posted. */
 let perfPosts = 0;
@@ -392,7 +379,8 @@ let perfPosts = 0;
 let boardDetails = false;
 const customViewId = () =>
   state.savedViews.find((v) => v.id === (state.editorDraft?.id ?? state.activeViewId) && v.kind === "custom")?.id;
-function commit(patch: Partial<State>) {
+/** Any change, screen state included: for the machines' mirrors and navigation (app-navigation.ts) only. */
+export function commit(patch: Partial<State>) {
   if (patch.perf !== undefined) perfPosts++;
   const was = customViewId(),
     wasDetails = state.details;
@@ -447,109 +435,6 @@ export function usePeople(extra?: readonly User[]): User[] {
   return useMemo(() => knownPeople(ME, jiraUsers, issues.values(), extra), [issues, jiraUsers, extra]);
 }
 
-// The running machines. Each mirrors its state onto `state` so components read it with useStore.
-export const ui = createActor(uiMachine, {
-  input: { board: state.board, view: state.view, sidebarHidden: state.sidebarHidden },
-  inspect: inspector("ui"),
-}).start();
-ui.subscribe(({ context }) => {
-  const patch: Partial<State> = {};
-  for (const key of Object.keys(context) as UiKey[])
-    if (context[key] !== state[key]) Object.assign(patch, { [key]: context[key] });
-  if (!Object.keys(patch).length) return;
-  // Escape, My issues or editing a description moved the screen; navigation settles it and shows the address.
-  const moved = MACHINE_FIELDS.filter((key) => key in patch);
-  if (moved.length) go({ type: "moved", screen: Object.fromEntries(moved.map((key) => [key, patch[key]])) });
-  for (const key of moved) delete patch[key];
-  commit(patch);
-});
-/** Goes somewhere: see navigation.ts for leaving views, how issues open and what the address shows. */
-export function navigate(to: Destination) {
-  go({ type: "go", to });
-}
-const screen = (): Screen => ({
-  board: state.board,
-  view: state.view,
-  selected: state.selected,
-  panel: state.panel,
-  document: state.document,
-  inbox: state.inbox,
-  mine: state.mine,
-  person: state.person,
-  personTab: state.personTab,
-  viewsPage: state.viewsPage,
-  activeViewId: state.activeViewId,
-  overlayFilters: state.overlayFilters,
-  editorDraft: state.editorDraft,
-  linkView: state.linkView,
-});
-/** Applies one navigation step: the screen (state, then the ui machine), the preference it changed, then the address. */
-function go(event: NavigationEvent) {
-  const t = transition(screen(), event, {
-    savedViews: state.savedViews,
-    preferences: state.preferences,
-    defaults: state.defaults,
-    boards: state.boards,
-    issue: (key) => state.issues.get(currentKey(key)),
-    currentKey,
-    draftFor: (id) => (id ? editViewDraft(id) : createViewDraft()),
-  });
-  if (t.forgetDraft) address.forgetDraft();
-  if (t.path) address.replacePath(t.path);
-  if (t.via && navigationReady) address.show(screenUrl(t.via, location.href, state.savedViews), false);
-  const patch: Partial<State> = t.preferences ? { preferences: t.preferences } : {};
-  for (const key of Object.keys(t.screen) as (keyof Screen)[])
-    if (t.screen[key] !== state[key]) Object.assign(patch, { [key]: t.screen[key] });
-  commit(patch);
-  const machine = ui.getSnapshot().context,
-    moved = MACHINE_FIELDS.filter((key) => machine[key] !== t.screen[key]);
-  if (moved.length)
-    ui.send({ type: "navigate", ...Object.fromEntries(moved.map((key) => [key, t.screen[key]])) });
-  if (navigationReady && t.history === "push") showAddress();
-  // After the push: its optimistic write re-shows the address in place.
-  if (t.viewDisplay)
-    void updateSavedView(t.viewDisplay.id, { display: t.viewDisplay.display }).catch(viewError);
-  if (t.missing) showNotification({ text: `Issue ${t.missing} not found` });
-}
-/** The address bar, history, and the view editor's draft kept per address (sessionStorage is per tab). */
-const address = {
-  draftKey: (path: string) => `view-editor:${state.namespace}:${path}`,
-  show(href: string, replace: boolean) {
-    if (href !== location.href) history[replace ? "replaceState" : "pushState"]({}, "", href);
-  },
-  replacePath(path: string) {
-    const url = new URL(location.href);
-    url.pathname = path;
-    history.replaceState(history.state, "", url);
-  },
-  draft(): ViewDraft | null {
-    try {
-      return JSON.parse(sessionStorage.getItem(address.draftKey(location.pathname)) ?? "null");
-    } catch {
-      return null; // Start a fresh draft.
-    }
-  },
-  keepDraft(href: string, draft: ViewDraft) {
-    try {
-      sessionStorage.setItem(address.draftKey(new URL(href).pathname), JSON.stringify(draft));
-    } catch {
-      /* Draft remains available until navigation. */
-    }
-  },
-  forgetDraft() {
-    try {
-      sessionStorage.removeItem(address.draftKey(location.pathname));
-    } catch {
-      /* Best effort. */
-    }
-  },
-};
-function showAddress(replace = false) {
-  const href = screenUrl(screen(), location.href, state.savedViews);
-  if (state.editorDraft) address.keepDraft(href, state.editorDraft);
-  address.show(href, replace);
-}
-const restoreNavigation = () => go({ type: "restore", href: location.href, draft: address.draft() });
 const app = createActor(appMachine.provide({ actors: { load: fromPromise(loadApplication) } }), {
   inspect: inspector("app"),
 }).start();
@@ -687,6 +572,8 @@ async function json<T>(path: string): Promise<T> {
   if (!response.ok) throw new Error(`Could not load ${path}`);
   return response.json();
 }
+/** Window listeners are added by the first load only; a storage retry loads again. */
+let listening = false;
 async function loadApplication() {
   const client = await fetchJson<{
     site: string;
@@ -908,14 +795,12 @@ async function loadApplication() {
           )
       : undefined;
   if (state.writable) void (takeOverClosed ? takeOverClosed() : (writes.reset(true), replay()));
-  if (!navigationReady) {
+  if (!listening) {
+    listening = true;
     window.addEventListener("focus", () => {
       void refreshSavedViews().catch(viewError);
     });
-    restoreNavigation();
-    navigationReady = true;
-    showAddress(true);
-    window.addEventListener("popstate", restoreNavigation);
+    startNavigation();
     window.addEventListener("beforeunload", (event) => {
       const s = storage.getSnapshot();
       // Jobs waiting on another tab's create are saved, and replayed by whichever tab sends that create.
@@ -1954,24 +1839,6 @@ export function beginCreate(draft: IssueDraft = {}): boolean {
   });
   return true;
 }
-/** The board's Issues › All. Leaves any view first, so its scope and details stay untouched. */
-export function openAllIssues(board: number) {
-  navigate({ board, selected: null, panel: false });
-  ui.send({ type: "mine.set", mine: false });
-  ui.send({ type: "query.set", query: "" });
-  set({ details: false, findInView: false });
-  setScope(board, "all");
-}
-export function setOverlay(filters: State["overlayFilters"]) {
-  go({ type: "filters", filters });
-}
-export const clearOverlay = () => setOverlay(emptyOverlay());
-export function openSavedView(view: SavedView | string) {
-  const v = typeof view === "string" ? state.savedViews.find((v) => v.id === view) : view;
-  if (!v) return;
-  go({ type: "open-view", view: v });
-  ui.send({ type: "toolbar.close" });
-}
 
 function patchIssue(key: string, patch: Partial<Issue>) {
   const i = state.issues.get(key);
@@ -2736,15 +2603,3 @@ export const actions = {
   },
 };
 
-/** Editor routes keep a detached draft, including toolbar changes, across history and reload. */
-export function beginViewEditor(draft: ViewDraft) {
-  go({ type: "edit-view", draft });
-}
-export function setViewDraft(draft: ViewDraft) {
-  go({ type: "draft", draft });
-}
-export function discardViewEditor() {
-  go({ type: "discard-editor" });
-  // Back on the view it edits or duplicates, as opening that view does.
-  if (state.activeViewId) ui.send({ type: "toolbar.close" });
-}

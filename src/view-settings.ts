@@ -7,7 +7,8 @@ import { isMyIssues } from "./navigation";
  * While the view editor is open, everything goes to the editor's draft. Any other board's settings are its own
  * preferences.
  */
-import { get, navigate, set, setOverlay, setViewDraft, useStore } from "./store";
+import { get, set, useStore } from "./store";
+import { navigate, setOverlay, setViewDraft } from "./app-navigation";
 import { updateSavedView } from "./saved-views";
 import { saveDefaults } from "./browser-preferences";
 import {

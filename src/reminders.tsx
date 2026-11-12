@@ -16,7 +16,8 @@ import { ActionMenu, type ActionEntry } from "./action-menu";
 import { Icon } from "./icons";
 import { Menu } from "./menu";
 import { MenuSurface } from "./menu-surface";
-import { actions, set, ui, useStore, type Issue } from "./store";
+import { actions, set, useStore, type Issue } from "./store";
+import { ui } from "./app-navigation";
 import { kept, useCommand } from "./commands";
 
 /** Linear's one "Remind me" menu, for an issue or a document: a typed time ("4 pm", "in 2 days"), a preset, or a custom date

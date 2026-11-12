@@ -33,7 +33,8 @@ const filter = (field: "labels" | "priority", value: string): FilterGroup => ({
 });
 
 test("the visible order follows a saved view, its temporary filters and the view editor's draft", async () => {
-  const { get, set, navigate, openSavedView, setOverlay, setViewDraft, ME } = await import("./store");
+  const { get, set, ME } = await import("./store");
+  const { navigate, openSavedView, setOverlay, setViewDraft } = await import("./app-navigation");
   const { defaultPreferences, navigationIssues, visibleOrder } = await import("./view-model");
   const board: Board = {
     id: 1,
