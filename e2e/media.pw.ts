@@ -155,7 +155,7 @@ test("media layout: reserved space, native sizes, ADF widths and wraps, inline c
     const page = await open("?issue=TEST-1&view=page");
     await page.waitFor(`${video}?.readyState>=1&&${image}?.naturalWidth===320`, 15000);
     const sizes = await page.eval<any>(
-      `(()=>{const root=document.getElementById('description'),wrap=root.querySelector('[data-media-layout="wrap-left"]'),p=wrap.parentElement.nextElementSibling,range=document.createRange();range.setStart(p.firstChild,0);range.setEnd(p.firstChild,1);return {column:root.clientWidth,image:root.querySelector('img').getBoundingClientRect().width,video:root.querySelector('video').getBoundingClientRect().width,wrap:wrap.getBoundingClientRect().width,right:wrap.getBoundingClientRect().right,text:range.getBoundingClientRect().left}})()`,
+      `(()=>{const root=document.getElementById('description'),wrap=root.querySelector('[data-media-layout="wrap-left"]'),p=wrap.closest('#description > *').nextElementSibling,range=document.createRange();range.setStart(p.firstChild,0);range.setEnd(p.firstChild,1);return {column:root.clientWidth,image:root.querySelector('img').getBoundingClientRect().width,video:root.querySelector('video').getBoundingClientRect().width,wrap:wrap.getBoundingClientRect().width,right:wrap.getBoundingClientRect().right,text:range.getBoundingClientRect().left}})()`,
     );
     expect(sizes.column).toBeGreaterThan(480);
     expect(sizes.image).toBeLessThanOrEqual(320);
@@ -186,7 +186,7 @@ test("media layout: reserved space, native sizes, ADF widths and wraps, inline c
     await mediaIssue(page);
     await page.waitFor(`!!document.querySelector('#description [data-media-layout="wrap-left"]')`);
     const dimensions = await page.eval<any>(
-      `(()=>{const root=document.getElementById('description'),wrap=root.querySelector('[data-media-layout="wrap-left"]'),pixel=root.querySelector('[data-media-layout="align-end"]'),wide=root.querySelector('[data-media-layout="wide"]'),full=root.querySelector('[data-media-layout="full-width"]');return {root:root.clientWidth,wrap:wrap.getBoundingClientRect().width,float:getComputedStyle(wrap.parentElement).float,pixel:pixel.getBoundingClientRect().width,wide:wide.getBoundingClientRect().width,full:full.getBoundingClientRect().width}})()`,
+      `(()=>{const root=document.getElementById('description'),wrap=root.querySelector('[data-media-layout="wrap-left"]'),pixel=root.querySelector('[data-media-layout="align-end"]'),wide=root.querySelector('[data-media-layout="wide"]'),full=root.querySelector('[data-media-layout="full-width"]');return {root:root.clientWidth,wrap:wrap.getBoundingClientRect().width,float:getComputedStyle(wrap.closest('#description > *')).float,pixel:pixel.getBoundingClientRect().width,wide:wide.getBoundingClientRect().width,full:full.getBoundingClientRect().width}})()`,
     );
     expect(dimensions.wrap / dimensions.root).toBeCloseTo(0.5, 1);
     expect(dimensions.float).toBe("left");

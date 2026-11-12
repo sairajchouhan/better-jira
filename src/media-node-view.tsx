@@ -29,16 +29,14 @@ export function mediaNodeView(
     Object.assign(dom.style, mediaContainerStyle(current.attrs.raw), resizable ? { position: "relative" } : {});
     root.render(<MediaView node={current.attrs.raw} {...previous} embedded />);
   };
-  /** BJ-54: Linear's width handles at the image's sides; drag, or ←/→ by 5%. Jira keeps the width as a percentage. */
+  /** BJ-54: Linear's width handles at the image's sides, for the pointer (out of the Tab order, so keyboard focus moves
+   * from the media straight on). Jira keeps the width as a percentage. */
   function resizeHandle(side: "left" | "right") {
     const handle = document.createElement("div");
     handle.className = "media-resize-handle";
     handle.dataset.side = side;
     handle.dataset.mediaAction = "resize";
-    handle.tabIndex = 0;
-    handle.setAttribute("role", "separator");
-    handle.setAttribute("aria-orientation", "vertical");
-    handle.setAttribute("aria-label", `Resize image from the ${side}`);
+    handle.setAttribute("aria-hidden", "true");
     const column = () => dom.parentElement?.getBoundingClientRect().width ?? 1;
     handle.addEventListener("pointerdown", (event) => {
       event.preventDefault();
@@ -61,14 +59,6 @@ export function mediaNodeView(
       handle.addEventListener("pointermove", move);
       handle.addEventListener("pointerup", up);
       handle.addEventListener("pointercancel", up);
-    });
-    handle.addEventListener("keydown", (event) => {
-      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-      event.preventDefault();
-      event.stopPropagation();
-      const now = Math.round((dom.getBoundingClientRect().width / column()) * 100),
-        by = (event.key === "ArrowRight") === (side === "right") ? 5 : -5;
-      resize!(resizedMedia(current.attrs.raw, Math.max(10, Math.min(100, now + by))));
     });
     return handle;
   }

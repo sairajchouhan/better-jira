@@ -106,7 +106,10 @@ test("the full-page description editor: toolbar state, tables, drops, rendering 
         `new Date(1767225600000).toLocaleDateString(undefined,{timeZone:'UTC'})`,
       ),
     );
-    expect(text).toContain("▸ More detail");
+    // BJ-68: an expand is an editable collapsible section now, its title in the section's title field.
+    expect(
+      await page.eval(`document.querySelector('#description [aria-label="Collapsible section title"]')?.value`),
+    ).toBe("More detail");
     expect(text).not.toContain("[expand]");
   });
 });

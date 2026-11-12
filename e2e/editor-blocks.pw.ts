@@ -163,12 +163,6 @@ test("BJ-54: dragging an image's width handle saves its width to Jira", async ({
     const image = doc.content.find((n: any) => n.type === "mediaSingle");
     return Number(image?.attrs?.width) > 0 && Number(image.attrs.width) < 100;
   });
-  await test.step("the handle also resizes from the keyboard", async () => {
-    const before = (await savedDescription()).content.find((n: any) => n.type === "mediaSingle").attrs.width;
-    await page.eval(`document.querySelector('${handle}').focus()`);
-    await page.key("ArrowRight");
-    await waitSaved((doc) => doc.content.find((n: any) => n.type === "mediaSingle").attrs.width === before + 5);
-  });
 });
 
 test("BJ-44 / BJ-66: a URL pasted over selected text links it; |-- starts a table", async ({ open }) => {
