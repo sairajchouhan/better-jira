@@ -409,7 +409,7 @@ export function IssueResources({ issue }: { issue: Issue }) {
               aria-expanded={options?.resource.id === resource.id}
               onClick={(e) => setOptions({ anchor: e.currentTarget, resource })}
               variant="borderless"
-              size="medium"
+              size="small"
             >
               <Icon name="dots" size={14} />
             </IconButton>

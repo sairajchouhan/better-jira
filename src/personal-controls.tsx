@@ -704,7 +704,7 @@ export function GroupMenu({
           setAnchor(anchor ? null : e.currentTarget);
         }}
         variant="borderless"
-        size="medium"
+        size="small"
       >
         <Icon name="dots" />
       </IconButton>
