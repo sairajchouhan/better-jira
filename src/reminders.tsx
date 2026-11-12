@@ -1,3 +1,4 @@
+import { TextInput } from "./field";
 import { Button, IconButton } from "./button";
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
@@ -80,7 +81,7 @@ export function ReminderMenu({
         >
           <label className="block p-2 text-[13px]">
             Custom reminder
-            <input
+            <TextInput
               autoFocus
               aria-label="Custom reminder time"
               type="datetime-local"
@@ -90,7 +91,7 @@ export function ReminderMenu({
               )
                 .toISOString()
                 .slice(0, 16)}
-              className="mt-2 w-full rounded border border-line-2 bg-card p-2"
+              className="w-full mt-2"
               onChange={(e) =>
                 setParsed(
                   e.target.value

@@ -1,3 +1,4 @@
+import { TextInput } from "./field";
 import { Button } from "./button";
 import { useState } from "react";
 import { parseDueDate } from "./due-parse";
@@ -24,7 +25,7 @@ export function DateInput({
   };
   return (
     <div className="space-y-2 text-[12px]">
-      <input
+      <TextInput
         autoFocus={autoFocus}
         aria-label="Due date"
         aria-invalid={!valid}
@@ -32,7 +33,7 @@ export function DateInput({
         placeholder="Tomorrow, next Monday, in 2 weeks…"
         value={text}
         onChange={(e) => change(e.target.value)}
-        className="w-full rounded-md border border-line-2 bg-card px-3 py-2 text-fg outline-none focus:border-accent"
+        className="w-full"
       />
       <div role="status" className="min-h-4 text-fg-3">
         {parsed
@@ -62,12 +63,12 @@ export function DateInput({
       </div>
       <label className="flex items-center gap-2 text-fg-3">
         Calendar
-        <input
+        <TextInput
           type="date"
           aria-label="Choose calendar date"
           value={parsed ?? ""}
           onChange={(e) => change(e.target.value)}
-          className="min-w-0 rounded-md border border-line-2 bg-card px-2 py-1"
+          className="min-w-0"
         />
       </label>
     </div>

@@ -1,3 +1,4 @@
+import { TextInput } from "./field";
 import { Button, IconButton } from "./button";
 import { issueMenuEntries } from "./issue-menu";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
@@ -62,9 +63,6 @@ import {
   updateRule,
   useViewSettings,
 } from "./view-settings";
-
-const INPUT =
-  "w-full rounded-md border border-line-2 bg-card px-3 py-2 text-fg outline-none focus:border-accent";
 
 export { MenuSurface as Modal } from "./menu-surface";
 import { MenuSurface as Modal, issueAnchor } from "./menu-surface";
@@ -224,7 +222,7 @@ export function CreateIssue() {
             <Icon name="close" />
           </IconButton>
         </div>
-        <input
+        <TextInput
           ref={titleRef}
           autoFocus
           aria-label="Issue title"
@@ -242,7 +240,7 @@ export function CreateIssue() {
             }
           }}
           placeholder="Issue title"
-          className="mb-2 w-full bg-transparent py-1 text-[18px] font-medium text-fg outline-none"
+          className="w-full mb-2"
         />
         <FramedEditor
           key={draftIndex}
@@ -1307,13 +1305,13 @@ export function AddBoard() {
       >
         <label className="text-[12px]">
           Jira board link or ID
-          <input
+          <TextInput
             autoFocus
             aria-label="Jira board link or ID"
             placeholder="https://your-team.atlassian.net/jira/software/projects/KAN/boards/1"
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            className={`${INPUT} mt-2`}
+            className="w-full mt-2"
           />
         </label>
         {error ? (

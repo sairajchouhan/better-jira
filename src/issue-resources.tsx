@@ -1,3 +1,4 @@
+import { Field, TextInput } from "./field";
 import { Button, IconButton } from "./button";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Icon } from "./icons";
@@ -54,8 +55,6 @@ const resourceAge = (date: string) => {
         ? `${Math.floor(minutes / 60)}h ago`
         : new Date(date).toLocaleDateString();
 };
-const INPUT =
-  "w-full rounded border border-line-2 bg-transparent px-3 py-2 outline-none focus:border-accent";
 export async function createIssueDocument(issue: Issue) {
   const id = crypto.randomUUID();
   actions.resource(issue.key, {
@@ -136,27 +135,33 @@ export function ResourceForm({
         <h2 className="mb-4 font-medium">
           {resource ? label : `${label} to ${issue.key}`}
         </h2>
-        <label className="mb-1 block text-[12px] text-fg-3">URL</label>
-        <input
-          autoFocus={!resource}
-          disabled={!!resource}
-          aria-label="Link URL"
-          placeholder={kind === "link" ? "https://…" : "Pull request URL"}
-          value={url}
-          onChange={(e) => setURL(e.target.value)}
-          className={INPUT}
-        />
-        <label className="mb-1 mt-3 block text-[12px] text-fg-3">
-          Title (optional)
-        </label>
-        <input
-          data-autofocus={resource ? true : undefined}
-          aria-label="Link title"
-          placeholder=""
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className={`${INPUT} mt-2`}
-        />
+        <Field>
+          <Field.Label className="mb-1 block text-[12px] text-fg-3">
+            URL
+          </Field.Label>
+          <TextInput
+            autoFocus={!resource}
+            disabled={!!resource}
+            aria-label="Link URL"
+            placeholder={kind === "link" ? "https://…" : "Pull request URL"}
+            value={url}
+            onChange={(e) => setURL(e.target.value)}
+            className="w-full"
+          />
+        </Field>
+        <Field className="mt-3">
+          <Field.Label className="mb-1 block text-[12px] text-fg-3">
+            Title (optional)
+          </Field.Label>
+          <TextInput
+            data-autofocus={resource ? true : undefined}
+            aria-label="Link title"
+            placeholder=""
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="w-full mt-2"
+          />
+        </Field>
         {error && (
           <p role="alert" className="mt-2 text-[12px]">
             {error}

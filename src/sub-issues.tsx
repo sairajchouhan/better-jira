@@ -1,3 +1,4 @@
+import { TextInput } from "./field";
 import { Button, IconButton } from "./button";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
@@ -527,14 +528,14 @@ export function SubIssues({ issue }: { issue: Issue }) {
                 }
               />,
             )}
-            <input
+            <TextInput
               ref={titleInput}
               autoFocus
               aria-label="Sub-issue title"
               placeholder="Issue title"
               value={title}
               onChange={(e) => update({ title: e.target.value })}
-              className="min-w-0 flex-1 bg-transparent p-1 text-[14px] outline-none"
+              className="min-w-0 flex-1"
             />
           </div>
           <InlineEditor
@@ -729,13 +730,13 @@ function RenameIssue({ issue, close }: { issue: Issue; close: () => void }) {
           close();
         }}
       >
-        <input
+        <TextInput
           autoFocus
           aria-label="Issue title"
           value={title}
           onChange={(event) => setTitle(event.target.value)}
           onFocus={(event) => event.currentTarget.select()}
-          className="w-full rounded border border-line-2 bg-transparent px-3 py-2 text-[14px] outline-none focus:border-accent"
+          className="w-full"
         />
       </form>
     </MenuSurface>
