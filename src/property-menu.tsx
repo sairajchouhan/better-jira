@@ -225,10 +225,16 @@ export function PriorityMenu({
   onChange,
   close,
   empty = "No priority",
-}: FieldMenuProps<string> & { empty?: string }) {
+  clearable = false,
+}: FieldMenuProps<string> & {
+  /** The unset row's text. */
+  empty?: string;
+  /** Offer the unset row on a writable site too: a draft may leave priority to Jira's default; an issue's can't be cleared. */
+  clearable?: boolean;
+}) {
   const { options, issues, writable } = useCatalog(board);
   const choices = [
-    ...(writable && empty !== "Default priority" ? [] : [""]),
+    ...(writable && !clearable ? [] : [""]),
     ...priorityChoices(options, issues, writable),
   ];
   return (

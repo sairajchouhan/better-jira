@@ -496,6 +496,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
                 board,
                 value: draft.priority ?? "",
                 empty: noPriority,
+                clearable: true,
                 onChange: (priority) => setProperties({ priority: priority || undefined }),
               }}
             >
