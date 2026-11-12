@@ -24,6 +24,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
+import { Shortcut } from "./keycap";
 
 /**
  * Linear's one menu primitive, `IB = Object.assign(B3e, {List, Item, GroupHeader, Divider, TextDivider, Input})` in
@@ -82,18 +83,19 @@ function MenuRoot({ className = "", ref, ...props }: ComponentProps<typeof Comma
   );
 }
 
-/** Linear's Zw: a 36px search row over a hairline, with an optional trailing key (the shortcut that opens the menu). `hideWhenEmpty`
- *  keeps it focused but visually hidden until typing starts (B3e's hideInputWhenEmpty, used by action menus). */
+/** Linear's Zw: a 36px search row over a hairline, with an optional trailing `hotkey` (the registry chord that opens the menu, drawn as
+ *  Linear's small Shortcut: ign's inputAdditionalContent). `hideWhenEmpty` keeps it focused but visually hidden until typing starts
+ *  (B3e's hideInputWhenEmpty, used by action menus). */
 function MenuInput({
   hotkey,
   hideWhenEmpty = false,
   ...props
-}: ComponentProps<typeof Command.Input> & { hotkey?: string; hideWhenEmpty?: boolean }) {
+}: ComponentProps<typeof Command.Input> & { hotkey?: string | readonly string[]; hideWhenEmpty?: boolean }) {
   const hidden = hideWhenEmpty && !props.value;
   return (
     <div className={hidden ? "sr-only" : "menu-input"}>
       <Command.Input {...props} className={hidden ? "sr-only" : undefined} />
-      {hotkey && <kbd aria-hidden>{hotkey}</kbd>}
+      {hotkey && <Shortcut aria-hidden keys={hotkey} size="small" />}
     </div>
   );
 }
@@ -113,7 +115,9 @@ type ItemSlots = {
   checkboxLabel?: string;
   /** A single-select row: the trailing checkmark when true. */
   checked?: boolean;
-  /** Trailing text: a shortcut, a number key or a count. */
+  /** The row's hotkey as a registry chord ("Shift+T", ["G", "I"]), drawn as Linear's small Shortcut (the action row's `detail`). */
+  shortcut?: string | readonly string[];
+  /** Trailing text: a number key, a count, a date. */
   hint?: ReactNode;
   /** A muted second line; the row grows to fit it. */
   description?: ReactNode;
@@ -126,6 +130,7 @@ function ItemContent({
   onCheckboxClick,
   checkboxLabel,
   checked,
+  shortcut,
   hint,
   description,
   submenu,
@@ -166,8 +171,10 @@ function ItemContent({
             <Icon name="check" size={16} />
           </span>
         )}
-        {(hint || submenu) && (
+        {(shortcut || hint || submenu) && (
           <span className="menu-hint">
+            {/* Out of the row's name, as v6e names the row by its label alone (aria-labelledby). */}
+            {shortcut && <Shortcut aria-hidden keys={shortcut} size="small" />}
             {hint}
             {submenu && <span aria-hidden data-submenu-arrow className="menu-arrow" />}
           </span>
@@ -184,6 +191,7 @@ function MenuItem({
   onCheckboxClick,
   checkboxLabel,
   checked,
+  shortcut,
   hint,
   description,
   children,
@@ -202,6 +210,7 @@ function MenuItem({
         onCheckboxClick={onCheckboxClick}
         checkboxLabel={checkboxLabel}
         checked={checked}
+        shortcut={shortcut}
         hint={hint}
         description={description}
       >

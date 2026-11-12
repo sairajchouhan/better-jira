@@ -1,5 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Debouncer } from "@tanstack/pacer";
+import { Keycap } from "./keycap";
+
+/** A title's "(keys)" display text as Linear's caps: one per modifier glyph or "+"-joined part ("⌘⇧S" → ⌘ ⇧ S, "Ctrl+K" → Ctrl K),
+ *  sequence words ("then", "/") dropped. */
+export const tipCaps = (keys: string) =>
+  keys
+    .split(/\s+/)
+    .filter((key) => key && key !== "/" && key !== "then")
+    .flatMap((key) => key.split(/(?<=[⌃⌘⌥⇧])|\+(?=.)/).filter(Boolean));
 
 /** Linear's tooltip for every `title`: after a short hover a menu-surface label sits 8px under the control (above for `data-tip="above"`, like Linear's timestamps, or when there is no room),
  *  with a trailing "(keys)" shown as key caps. The native title is parked in data-title while it shows, so the browser's own tip never doubles it. */
@@ -30,7 +39,7 @@ export function Tooltips() {
           above = target.dataset.tip === "above" || r.bottom + 48 > innerHeight;
         setTip({
           text: match ? match[1]! : raw,
-          keys: match ? match[2]!.split(/\s+/).filter((key) => key !== "/" && key !== "then") : [],
+          keys: match ? tipCaps(match[2]!) : [],
           x: r.left + r.width / 2,
           y: above ? r.top - 8 : r.bottom + 8,
           above,
@@ -88,8 +97,11 @@ export function Tooltips() {
       style={{ left: tip.x, top: tip.y, transform: tip.above ? "translateY(-100%)" : undefined }}
     >
       {tip.text}
+      {/* Linear's tooltip shortcut is the small bordered b4 (`qr` size small). */}
       {tip.keys.map((key, index) => (
-        <kbd key={index}>{key}</kbd>
+        <Keycap key={index} size="small">
+          {key}
+        </Keycap>
       ))}
     </div>
   );
