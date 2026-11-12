@@ -25,3 +25,5 @@ export const editorBindings: { id: string; name: string; hotkey: Hotkey }[] = [
   { id: "redo", name: "Redo", hotkey: "Mod+Shift+Z" },
   { id: "save", name: "Save or submit / send comment", hotkey: "Mod+Enter" },
 ];
+/** An editor binding's keys, for a control's tooltip or a menu row's caps. */
+export const editorKey = (id: string) => editorBindings.find((b) => b.id === id)?.hotkey;

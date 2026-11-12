@@ -10,7 +10,7 @@ import { Icon } from "./icons";
 import { Text } from "./text";
 import { mediaCaretPlugin } from "./media-caret";
 import { mediaUploads, mergeLateMedia, type LateMedia } from "./editor-media-upload";
-import { editorBindings } from "./editor-bindings";
+import { editorBindings, editorKey } from "./editor-bindings";
 import {
   activeMention,
   dismissMention,
@@ -474,18 +474,17 @@ export function RichEditor(props: EditorEngineProps) {
     setLinkError("");
   };
   const inTable = !!view.current && isInTable(view.current.state);
-  const hotkeyOf = (id: string) => editorBindings.find((b) => b.id === id)?.hotkey;
   const blockEntries: ActionEntry[] = [
     {
       name: "Turn into",
       children: SLASH_COMMANDS.filter((c) => c.command && !["table", "divider"].includes(c.id)).map((c) => ({
         name: c.label,
-        shortcut: hotkeyOf(c.id === "text" ? "heading-0" : c.id),
+        shortcut: editorKey(c.id === "text" ? "heading-0" : c.id),
         run: () => run(c.command!),
       })),
     },
-    { name: "Move up", icon: "up", shortcut: hotkeyOf("move-up"), run: () => run(moveBlock(-1)) },
-    { name: "Move down", icon: "down", shortcut: hotkeyOf("move-down"), run: () => run(moveBlock(1)) },
+    { name: "Move up", icon: "up", shortcut: editorKey("move-up"), run: () => run(moveBlock(-1)) },
+    { name: "Move down", icon: "down", shortcut: editorKey("move-down"), run: () => run(moveBlock(1)) },
     { name: "Duplicate", icon: "copy", divider: true, run: () => run(duplicateBlock) },
     { name: "Delete", icon: "trash", run: () => run(deleteBlock) },
   ];
@@ -588,7 +587,7 @@ export function RichEditor(props: EditorEngineProps) {
           key={name}
           aria-label={label}
           tooltip={label}
-          shortcut={editorBindings.find((b) => b.id === name)!.hotkey}
+          shortcut={editorKey(name!)}
           aria-pressed={marked(name!)}
           onClick={() => run(toggleMark(richSchema.marks[name!]!))}
         >
@@ -637,7 +636,7 @@ export function RichEditor(props: EditorEngineProps) {
       <ToolbarButton
         aria-label="Collapsible section"
         tooltip="Collapsible section"
-        shortcut={editorBindings.find((b) => b.id === "expand")!.hotkey}
+        shortcut={editorKey("expand")}
         aria-pressed={within("expand")}
         onClick={() => run(toggleExpand)}
       >
@@ -782,7 +781,7 @@ export function RichEditor(props: EditorEngineProps) {
           <IconButton
             ref={blockHandle}
             label="Block actions"
-            shortcut={hotkeyOf("block-menu")}
+            shortcut={editorKey("block-menu")}
             size="small"
             aria-haspopup="menu"
             aria-expanded={blockMenu}
