@@ -1,5 +1,4 @@
 /** Linear's Inbox over Jira's in-app notifications. Read state goes to Jira; delete and snooze stay in this browser, because Jira's notification API has neither. */
-import { InfiniteQueryObserver, type InfiniteData } from "@tanstack/query-core";
 import {
   useCallback,
   useEffect,
@@ -12,18 +11,18 @@ import { Avatar } from "./avatar";
 import { Button, IconButton } from "./button";
 import { CountBadge } from "./count-badge";
 import { EmptyState, LoadingState } from "./empty-state";
-import { Field, TextInput } from "./field";
+import { FutureTimeStep } from "./future-time-step";
 import { FilterChip } from "./filter-chip";
 import { Tabs } from "./tabs";
 import { Text } from "./text";
 import { Toast } from "./toast";
 import { toasts } from "./toast-queue";
-import { statusById } from "./board-catalog";
 import { Icon, StatusIcon, type IconName } from "./icons";
 import {
   FILTER_FIELDS,
   describe,
   feedCategory,
+  hasFilters,
   missingIssueNote,
   shortAgo,
   snoozeChoices,
@@ -38,7 +37,7 @@ import { Menu } from "./menu";
 import { MenuSurface } from "./menu-surface";
 import { shortcutLabel } from "./shortcuts";
 import {
-  boardOf,
+  statusOf as issueStatusOf,
   get,
   navigate,
   queryClient,
@@ -49,14 +48,14 @@ import {
   type Issue,
 } from "./store";
 
-import { createInboxStore, type Category, type Feed } from "./inbox-store";
+import { createInboxStore, type Category } from "./inbox-store";
 import { readStored, writeStored } from "./stored-state";
 import { Select, Toggle } from "./view-controls";
 const storageKey = (name: string) =>
   `better-jira:inbox-${name}:v1:${get().namespace}`;
 const statusOf = (key: string) => {
   const issue = get().issues.get(key);
-  return issue && statusById(boardOf(issue.key), issue.status);
+  return issue && issueStatusOf(issue);
 };
 /** A row whose issue isn't mirrored has no `issue=` in the URL; this keeps it selected over a reload (R2-inbox-D6). The store drops it outside the inbox. */
 const ROW_PARAM = "notification";
@@ -183,7 +182,7 @@ const {
   subscribe,
   localState,
   viewState,
-  options,
+  feed,
   itemsOf,
   facets,
   orderOf,
@@ -194,20 +193,8 @@ const {
 const useLocal = () => useSyncExternalStore(subscribe, localState);
 const useView = () => useSyncExternalStore(subscribe, viewState);
 const useSelected = () => useSyncExternalStore(subscribe, inbox.selected);
-const hasFilters = (v: InboxView) =>
-  Object.values(v.filters).some((values) => values?.length);
 function useFeed(category: Category) {
-  const [observer] = useState(
-    () =>
-      new InfiniteQueryObserver<
-        Feed,
-        Error,
-        InfiniteData<Feed, string>,
-        string[],
-        string
-      >(queryClient, options(category)),
-  );
-  useEffect(() => observer.setOptions(options(category)), [observer, category]);
+  const observer = feed(category);
   return useSyncExternalStore(
     useCallback((l) => observer.subscribe(l), [observer]),
     () => observer.getCurrentResult(),
@@ -250,9 +237,7 @@ function useInboxOrder() {
   const { data } = useFeed(feedCategory(v));
   const own = useLocal();
   const selected = useSelected();
-  const now = useStore((s) => s.clock);
-  const issues = useStore((s) => s.issues);
-  return orderOf(data, own, v, now, selected, issues);
+  return useStore((s) => orderOf(data, own, v, s.clock, selected, s.issues));
 }
 function useSelectedRow() {
   const selected = useSelected();
@@ -486,9 +471,6 @@ function filterEntries(base: InboxItem[], v: InboxView): ActionEntry[] {
 
 function SnoozeMenu({ close }: { close: () => void }) {
   const [custom, setCustom] = useState(inbox.startCustom());
-  const [value, setValue] = useState("");
-  // The dialog's own error, not the footer's status line: it goes with the dialog (R2-inbox-D7).
-  const [error, setError] = useState("");
   return (
     // This command surface also hosts a searchable menu; Dialog would replace its command focus behavior.
     <MenuSurface
@@ -498,39 +480,16 @@ function SnoozeMenu({ close }: { close: () => void }) {
       close={close}
     >
       {custom ? (
-        <form
-          className="flex flex-wrap items-center gap-2 p-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const until = new Date(value).getTime();
-            if (!(until > Date.now()))
-              return setError("Choose a future snooze time");
+        <FutureTimeStep
+          label="Snooze until"
+          submitLabel="Snooze"
+          errorMessage="Choose a future snooze time"
+          onBack={() => setCustom(false)}
+          onPick={(at) => {
             close();
-            snoozeRow(until);
+            snoozeRow(Date.parse(at));
           }}
-        >
-          <Field className="min-w-0 flex-1">
-            <Field.Label className="sr-only">Snooze until</Field.Label>
-            <TextInput
-              type="datetime-local"
-              required
-              autoFocus
-              value={value}
-              onChange={(e) => (setValue(e.target.value), setError(""))}
-              aria-invalid={!!error || undefined}
-              className="w-full"
-            />
-            <Field.Description
-              role={error ? "alert" : undefined}
-              className="text-[12px] text-danger"
-            >
-              {error}
-            </Field.Description>
-          </Field>
-          <Button type="submit" size="normal" variant="primary">
-            Snooze
-          </Button>
-        </form>
+        />
       ) : (
         // Linear's snooze options are an action menu (IB): the first choice is highlighted, arrows move, typing filters.
         <Menu>

@@ -219,3 +219,40 @@ test("snooze removal advances selection and undo restores prior local state and 
   expect(a.store.selected()).toBe("1");
   expect(a.store.localState()["head-1"]).toEqual({ read: true });
 });
+
+test("stale feed consumers share one observer and remounting a pane does not refetch loaded pages", async () => {
+  const a = setup(false);
+  let fetches = 0;
+  a.ports.fetchPage = async () => {
+    fetches++;
+    return { unseen: 0, items: a.items, more: false, writable: false };
+  };
+  a.ports.queryClient.setQueryDefaults(["inbox"], { staleTime: 0 });
+  const observer = a.store.feed("all");
+  const stopBadge = observer.subscribe(() => {});
+  await observer.refetch();
+  // Keep the badge mounted, as in the application, then make every page stale.
+  a.ports.queryClient.setQueryData(["inbox", "all"], observer.getCurrentResult().data, { updatedAt: 1 });
+  const before = fetches;
+  for (let i = 0; i < 3; i++) {
+    const pane = a.store.feed("all");
+    expect(pane).toBe(observer);
+    const stopPane = pane.subscribe(() => {});
+    a.store.moveRow(1);
+    stopPane();
+  }
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(fetches).toBe(before);
+  stopBadge();
+  a.ports.queryClient.clear();
+});
+
+test("a mirror poll with unchanged inbox facets preserves the order selector's identity", () => {
+  const a = setup(false);
+  const data = a.store.feed("all").getCurrentResult().data;
+  const own = a.store.localState(), view = a.store.viewState(), now = Date.now();
+  const first = a.store.orderOf(data, own, view, now, null, new Map());
+  const polled = a.store.orderOf(data, own, view, now, null, new Map());
+  expect(polled).toBe(first);
+  a.ports.queryClient.clear();
+});

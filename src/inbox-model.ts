@@ -452,3 +452,7 @@ export function snoozeChoices(now = new Date()): { label: string; until: number 
     { label: "A month from now", until: day(0, 9, 1) },
   ].sort((a, b) => a.until - b.until);
 }
+
+/** Whether any inbox property filter has selected values. */
+export const hasFilters = (view: InboxView) =>
+  Object.values(view.filters).some((values) => values?.length);

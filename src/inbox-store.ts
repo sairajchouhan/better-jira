@@ -9,6 +9,7 @@ import {
   facetsOf,
   feedCategory,
   inboxOrder,
+  hasFilters,
   sameInboxOrder,
   visibleItems,
   type FilterField,
@@ -129,6 +130,18 @@ export function createInboxStore(ports: InboxPorts) {
     refetchOnWindowFocus: true,
     refetchInterval: 5 * 60_000, // backstop; the server's unseen-count poll pushes changes sooner
   });
+  // One subscription lifecycle (and polling timer) per category, shared by every view.
+  const feeds = new Map<Category, InfiniteQueryObserver<Feed, Error, InfiniteData<Feed, string>, string[], string>>();
+  function feed(category: Category) {
+    let observer = feeds.get(category);
+    if (!observer) {
+      observer = new InfiniteQueryObserver<Feed, Error, InfiniteData<Feed, string>, string[], string>(
+        queryClient, options(category),
+      );
+      feeds.set(category, observer);
+    }
+    return observer;
+  }
   /** Every loaded page's rows; a row Jira repeats on a later page keeps its first place. */
   function itemsOf(data?: InfiniteData<Feed, string>) {
     const seen = new Set<string>();
@@ -308,8 +321,6 @@ export function createInboxStore(ports: InboxPorts) {
         row.unread ? "mark as read" : "mark as unread",
       );
   }
-  const hasFilters = (v: InboxView) =>
-    Object.values(v.filters).some((values) => values?.length);
   /** Linear's ⌥U: every row in the current view. With no tab or filter, Jira marks its whole feed. */
   function markAllRead() {
     const v = viewState();
@@ -396,13 +407,7 @@ export function createInboxStore(ports: InboxPorts) {
       toast,
     );
     const v = viewState(),
-      observer = new InfiniteQueryObserver<
-        Feed,
-        Error,
-        InfiniteData<Feed, string>,
-        string[],
-        string
-      >(queryClient, options(feedCategory(v)));
+      observer = feed(feedCategory(v));
     let result = observer.getCurrentResult();
     // ponytail: 20 pages (about 1,000 notifications) at most; anything older still shows.
     for (let i = 0; i < 20 && result.hasNextPage && !result.isError; i++)
@@ -478,7 +483,7 @@ export function createInboxStore(ports: InboxPorts) {
       emit();
     },
     storageChanged,
-    options,
+    feed,
     itemsOf,
     facets,
     orderOf,
