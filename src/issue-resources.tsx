@@ -312,7 +312,7 @@ export function IssueResources({ issue }: { issue: Issue }) {
           aria-expanded={!collapsed}
           onClick={() => setCollapsed(!collapsed)}
           variant="borderless"
-          size="medium"
+          size="small"
           className="mr-auto"
         >
           <span
