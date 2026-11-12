@@ -79,15 +79,18 @@ const ranked = (cmds: Cmd[], q: string) =>
 /** Linear's nested "Open …" command pages (`nameAsParent`, `searchShortcut.keyword` in startup-root.CnUSfl4j.js): their
  *  chord opens the palette on the page, with the parent's name as the input's chip; ⌫ in the empty input leaves it. */
 const PAGES = {
-  favorites: { parent: "Favorite", label: "Open favorite" },
-  boards: { parent: "Team", label: "Open team" },
-  views: { parent: "View", label: "Open view" },
-  issues: { parent: "Issue", label: "Open issue" },
+  favorites: { parent: "Favorite", label: "Open favorite", keyword: "f" },
+  boards: { parent: "Team", label: "Open team", keyword: "t" },
+  views: { parent: "View", label: "Open view", keyword: "v" },
+  issues: { parent: "Issue", label: "Open issue", keyword: "i" },
   /** Linear's `?` Help action (`mAt`, search input hidden) when the sidebar's Help button isn't there to anchor its menu. */
-  help: { parent: "Help", label: "Help" },
+  help: { parent: "Help", label: "Help", keyword: undefined },
 } as const;
 export type PalettePage = keyof typeof PAGES;
 export const isPalettePage = (overlay: string | null): overlay is PalettePage => !!overlay && overlay in PAGES;
+/** The page a root query's `searchShortcut.keyword` and a space ("t ") focuses search on (BJ-64). */
+export const keywordPage = (q: string) =>
+  (Object.keys(PAGES) as PalettePage[]).find((page) => PAGES[page].keyword && q === `${PAGES[page].keyword} `);
 const close = () => ui.send({ type: "overlay.close" });
 
 function openChoice({ destination: to }: NavigationChoice) {
@@ -282,9 +285,9 @@ export function CommandPalette({ page: initialPage }: { page?: PalettePage }) {
         <PageRows page={page} q={q} setQ={setQ} />
       </PaletteFrame>
     );
-  return <RootPalette />;
+  return <RootPalette openPage={(p) => (setQ(""), setPage(p))} />;
 }
-function RootPalette() {
+function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
   const issues = useStore((s) => s.issues);
   const boards = useStore((s) => s.boards);
   const boardId = useStore((s) => s.board);
@@ -361,7 +364,11 @@ function RootPalette() {
     <PaletteFrame
       label="Search issues and commands"
       q={q}
-      setQ={setQ}
+      setQ={(next) => {
+        const page = keywordPage(next);
+        if (page) openPage(page);
+        else setQ(next);
+      }}
       chip={scoped && <><TypeDot type={scoped.type} />{scoped.key}</>}
       placeholder={scoped ? "Type a command, or ⌫ to search everything…" : undefined}
       onBackspace={() => (savingTo ? setSavingTo(false) : setScopeKey(null))}

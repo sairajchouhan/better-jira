@@ -90,3 +90,16 @@ test("BJ-46: ⌘K opens the last viewed issue", async ({ open }) => {
   await p.key("Enter");
   await p.waitFor(`new URLSearchParams(location.search).get('issue')==='TEST-2'`);
 });
+
+test("BJ-64: a keyword and a space in ⌘K focuses search on that entity type", async ({ open }) => {
+  const p = await open();
+  await p.key("k", "meta");
+  await p.type("t ");
+  await p.waitFor(`!!${dialog("Open team")}&&${input}?.value===''`);
+  expect(await p.eval<string[]>(rows)).toContain("Browser audit");
+  await p.key("Backspace");
+  await p.type("i ");
+  await p.waitFor(`!!${dialog("Open issue")}`);
+  await p.type("fixture 4");
+  await p.waitFor(`document.querySelector('[cmdk-item][data-selected=true]')?.textContent.includes('TEST-4')`);
+});
