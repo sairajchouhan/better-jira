@@ -41,8 +41,12 @@ test("BJ-48: remove a pending relation before creating", async ({ open }) => {
   await page.click('#issue-options');
   await page.hover('[cmdk-item][data-value="Create related"]');
   await page.click('[cmdk-item][data-value="Blocked issue…"]');
-  await page.waitFor(`document.querySelector('[data-pending-relation]')?.textContent.includes('TEST-2')`);
-  await page.click('[aria-label="Remove pending relation"]');
+  await page.waitFor(`document.querySelector('[data-pending-relation]')?.textContent === '1 blocked'`);
+  // BJ-48: the chip opens Linear's "Open blocked issues" list, where the pending relation is removed.
+  await page.click('[data-pending-relation]');
+  await page.waitFor(`document.querySelector('[role=dialog][aria-label="Open blocked issues"]')?.textContent.includes('TEST-2')`);
+  expect(await page.eval(`document.querySelector('[role=dialog][aria-label="Open blocked issues"] [cmdk-group-heading]').textContent`)).toBe("Blocked by");
+  await page.click('[role=dialog][aria-label="Open blocked issues"] [aria-label="Remove relation"]');
   expect(await page.eval(`!!document.querySelector('[data-pending-relation]')`)).toBe(false);
 });
 

@@ -1,4 +1,3 @@
-import { LabelChip } from "./label-chip";
 import { EmptyState } from "./empty-state";
 import { resourceURL } from "./issue-resource";
 import { useStoredState, writeStored } from "./stored-state";
@@ -22,7 +21,8 @@ import { Adf } from "./adf";
 import { FramedEditor } from "./rich-editor-loader";
 import { MediaView } from "./media-loader";
 import { normalizeDocument, documentHasMedia } from "./document";
-import { Icon, StatusIcon } from "./icons";
+import { Icon, RelationIcon, StatusIcon } from "./icons";
+import { PropertyTrigger } from "./property-trigger";
 import {
   canHaveChildren,
   canParent,
@@ -87,6 +87,70 @@ import { kept, post, useCommand } from "./commands";
 const unsent = { title: "", description: normalizeDocument("") };
 type SavedComposerDraft = { id: string; title: string; fields: IssueDraft };
 const parseComposerDrafts = (raw: unknown): SavedComposerDraft[] => Array.isArray(raw) ? raw.filter(d => d && typeof d.id === "string" && typeof d.title === "string" && d.fields && typeof d.fields === "object") : [];
+/** Linear's composer relation chip ("1 blocked", startup-root `yZn`/`hZn`): it opens "Open blocked issues", the pending
+ *  relation's issue under its heading, which opens the issue or, from its × button, drops the relation before creating. */
+const PENDING_RELATION = {
+  blocked: ["blocked", "Open blocked issues", "Blocked by"],
+  blocking: ["blocking", "Open blocking issues", "Blocks"],
+  related: ["related", "Open related issues", "Related"],
+  parent: ["sub-issue", "Open sub-issues", "Sub-issues"],
+} as const;
+function PendingRelation({ related, remove }: { related: NonNullable<IssueDraft["related"]>; remove: () => void }) {
+  const issue = useStore((s) => s.issues.get(related.key)),
+    boards = useStore((s) => s.boards);
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [chip, title, heading] = PENDING_RELATION[related.kind];
+  return (
+    <>
+      <PropertyTrigger
+        data-pending-relation
+        variant="row"
+        state="value"
+        title={title}
+        aria-expanded={!!anchor}
+        onClick={(e) => setAnchor(e.currentTarget)}
+      >
+        <RelationIcon kind={related.kind} />1 {chip}
+      </PropertyTrigger>
+      {anchor && (
+        <Modal label={title} anchor={anchor} close={() => setAnchor(null)} fit>
+          <Menu style={{ width: 347 }}>
+            <Menu.List>
+              <Menu.Group heading={heading}>
+                <Menu.Item
+                  value={related.key}
+                  icon={issue && <StatusIcon status={statusOf(boards, issue)} />}
+                  hint={
+                    <IconButton
+                      type="button"
+                      tabIndex={-1}
+                      label="Remove relation"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAnchor(null);
+                        remove();
+                      }}
+                    >
+                      <Icon name="close" size={12} />
+                    </IconButton>
+                  }
+                  onSelect={() => {
+                    setAnchor(null);
+                    if (issue) navigate({ board: issue.board, selected: issue.key, panel: true, view: get().view });
+                  }}
+                >
+                  <span className="mr-2 text-[var(--menu-fg-3)]">{related.key}</span>
+                  {issue?.summary}
+                </Menu.Item>
+              </Menu.Group>
+            </Menu.List>
+          </Menu>
+        </Modal>
+      )}
+    </>
+  );
+}
+
 export function CreateIssue() {
   const boards = useStore(s => s.boards);
   const currentBoard = useStore(s => s.board);
@@ -293,12 +357,7 @@ export function CreateIssue() {
         />
         <div className="flex flex-wrap gap-2">
           {draft.related && (
-            <div className="flex items-center gap-1" data-pending-relation>
-              <LabelChip title={`${draft.related.key} · ${all.get(draft.related.key)?.summary ?? ""}`}><LabelChip.Text>1 {draft.related.kind} · {draft.related.key}</LabelChip.Text></LabelChip>
-              <IconButton type="button" label="Remove pending relation" onClick={() => setDraft(({ related: _related, ...rest }) => rest)}>
-                <Icon name="close" />
-              </IconButton>
-            </div>
+            <PendingRelation related={draft.related} remove={() => setDraft(({ related: _related, ...rest }) => rest)} />
           )}
           <PropertyPill
             label="Issue type"
