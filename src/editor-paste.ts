@@ -19,7 +19,7 @@ import {
   richSchema,
   safeLink,
 } from "./rich-document";
-import { toasts } from "./toast-queue";
+import { showNotification } from "./app-notifications";
 
 const nodes = richSchema.nodes,
   marks = richSchema.marks;
@@ -373,7 +373,7 @@ export function pastePlugin(options: {
     },
     filterTransaction(tr, state) {
       if (!tr.docChanged || withinLimit(state.doc, tr.doc)) return true;
-      toasts.show(`Jira can't store more than ${JIRA_LIMIT.toLocaleString("en-US")} characters here`, { id: "jira-length" });
+      showNotification({ text: `Jira can't store more than ${JIRA_LIMIT.toLocaleString("en-US")} characters here` });
       return false;
     },
     props: {
@@ -413,7 +413,7 @@ export function pastePlugin(options: {
           else if (!text.includes("\n"))
             pasted(view, view.state.tr.replaceSelectionWith(richSchema.text(text, [marks.code!.create()]), false).removeStoredMark(marks.code!));
           else {
-            const block = nodes.codeBlock!.create({ language: code }, richSchema.text(dedent(text).replace(/\n+$/, "")));
+            const block = nodes.codeBlock!.create({ language: code }, richSchema.text(dedent(text.replace(/\n+$/, ""))));
             pasted(view, view.state.tr.replaceSelection(new Slice(Fragment.from(block), 0, 0)));
           }
           return true;
