@@ -65,7 +65,15 @@ export function CaretMenu({
   editor,
   keys,
   dismiss,
-}: CaretAnchor & { label: string; query: string; items: CaretMenuItem[]; empty: string | null }) {
+  width,
+}: CaretAnchor & {
+  label: string;
+  query: string;
+  items: CaretMenuItem[];
+  empty: string | null;
+  /** Linear's widths (EditorComponent): slash 240, mention and emoji 350. */
+  width: number;
+}) {
   const [active, setActive] = useState(0);
   // A new query resets keyboard selection.
   const [activeQuery, setActiveQuery] = useState(query);
@@ -105,7 +113,7 @@ export function CaretMenu({
       const caret = at(),
         below = innerHeight - caret.bottom - 8 >= height;
       return {
-        left: Math.max(8, Math.min(caret.left, innerWidth - 268)),
+        left: Math.max(8, Math.min(caret.left, innerWidth - width - 8)),
         top: below ? caret.bottom + 4 : Math.max(8, caret.top - 4 - height),
         maxHeight: height,
       };
@@ -124,8 +132,8 @@ export function CaretMenu({
         const i = items.findIndex((item) => item.id === id);
         if (i >= 0) setActive(i);
       }}
-      className={`${MENU_POPUP} fixed z-50 w-[260px]`}
-      style={style}
+      className={`${MENU_POPUP} fixed z-50`}
+      style={{ ...style, width }}
       onMouseDown={(event) => event.preventDefault()}
     >
       <Menu.List>
@@ -212,6 +220,7 @@ export function MentionMenu({
     <CaretMenu
       {...anchor}
       label="Mention people"
+      width={350}
       query={query}
       items={items}
       empty={hidden ? null : settled ? "No people found" : "Searching people…"}

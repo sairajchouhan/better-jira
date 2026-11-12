@@ -125,6 +125,8 @@ const caretMenus = [
 
 /** One look for every formatting and link control: Linear's borderless small Button, pressed while its mark or block is on. */
 const ToolbarButton = (props: ComponentProps<typeof Button>) => <Button variant="borderless" size="small" {...props} />;
+/** FormattingToolbar's divider between button groups: 1×16px in bgBorder. */
+const ToolbarSeparator = () => <span role="separator" aria-orientation="vertical" className="rich-toolbar-separator" />;
 
 export type EditorPresentation = "framed" | "inline" | "document" | "comment";
 export type EditorEngineProps = RichEditorProps & {
@@ -597,7 +599,7 @@ export function RichEditor(props: EditorEngineProps) {
       role="toolbar"
       aria-label={`${subject === "comment" ? "Comment" : "Description"} formatting`}
       style={floating}
-      className={`z-10 items-center gap-0.5 rounded-lg border border-line-2 bg-card p-1 shadow-lg ${selecting ? "fixed flex flex-nowrap overflow-x-auto" : "absolute right-0 bottom-full mb-1 hidden max-w-full flex-nowrap overflow-x-auto group-focus-within/editor:flex"}`}
+      className={`z-10 items-center gap-0.5 rounded-lg border border-line-2 bg-card p-1 shadow-[var(--menu-shadow)] ${selecting ? "fixed flex flex-nowrap overflow-x-auto" : "absolute right-0 bottom-full mb-1 hidden max-w-full flex-nowrap overflow-x-auto group-focus-within/editor:flex"}`}
       onMouseDown={(e) => {
         if ((e.target as HTMLElement).closest("button")) e.preventDefault();
       }}
@@ -620,6 +622,7 @@ export function RichEditor(props: EditorEngineProps) {
           {text}
         </ToolbarButton>
       ))}
+      <ToolbarSeparator />
       {[0, 1, 2, 3, 4].map((n) => (
         <ToolbarButton
           key={n}
@@ -631,6 +634,7 @@ export function RichEditor(props: EditorEngineProps) {
           {n ? `H${n}` : "T"}
         </ToolbarButton>
       ))}
+      <ToolbarSeparator />
       <ToolbarButton
         aria-label="Bulleted list"
         aria-pressed={within("bulletList")}
@@ -668,6 +672,7 @@ export function RichEditor(props: EditorEngineProps) {
       >
         Collapse
       </ToolbarButton>
+      <ToolbarSeparator />
       <ToolbarButton
         aria-label="Insert link"
         onClick={() => {
@@ -718,6 +723,7 @@ export function RichEditor(props: EditorEngineProps) {
           Create issue
         </ToolbarButton>
       )}
+      <ToolbarSeparator />
       <ToolbarButton
         aria-label={`Undo ${subject} edit`}
         onClick={() => run(undo)}
@@ -850,6 +856,7 @@ export function RichEditor(props: EditorEngineProps) {
         <CaretMenu
           {...caretAnchor(slash.from, dismissSlash)}
           label="Insert block"
+          width={240}
           query={slash.query}
           empty={null}
           items={matchingSlashCommands(slash.query)
@@ -870,6 +877,7 @@ export function RichEditor(props: EditorEngineProps) {
         <CaretMenu
           {...caretAnchor(emoji.from, dismissEmoji)}
           label="Insert emoji"
+          width={350}
           query={emoji.query}
           empty={null}
           items={matchingEmoji(emoji.query).map((item) => ({
