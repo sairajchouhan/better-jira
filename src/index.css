@@ -1827,18 +1827,6 @@
 .label-chip:hover {
   background: var(--tab-on);
 }
-.label-add {
-  display: grid;
-  width: 25px;
-  height: 25px;
-  place-items: center;
-  border: 1px solid transparent;
-  border-radius: 9999px;
-  color: var(--fg-2);
-}
-.label-add:hover {
-  background: var(--add-hover);
-}
 .relation-pill {
   display: flex;
   height: 28px;
