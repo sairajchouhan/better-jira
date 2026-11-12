@@ -12,7 +12,6 @@ import { createToolbarView } from "@/client/features/views/view-toolbar-actions"
 import { Command } from "cmdk";
 import { useMemo, useState, type ReactNode } from "react";
 import { navigationChoices, type NavigationChoice } from "./quick-navigation";
-import { setScope } from "@/client/features/views/view-settings";
 import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { Icon, StatusIcon, TypeDot } from "@/client/components/icons";
 import { get, set, timed, useStore, type Issue, statusOf, ME } from "@/client/state/store";
@@ -104,9 +103,7 @@ const close = () => ui.send({ type: "overlay.close" });
 function openChoice({ destination: to }: NavigationChoice) {
   close();
   if ("view" in to) return openSavedView(to.view);
-  const { scope, ...route } = to;
-  navigate(route);
-  if (scope) setScope(to.board, scope);
+  navigate(to);
 }
 /** A page's rows, unfiltered. */
 function usePageRows(page: PalettePage): Cmd[] {

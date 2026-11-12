@@ -14,6 +14,7 @@ import { get, ME, set, useStore, type Issue } from "@/client/state/store";
 import { actions } from "@/client/state/issue-actions";
 import { flushLocalChanges } from "@/client/state/local-database";
 import { navigate, ui } from "@/client/features/navigation/app-navigation";
+import { AppLink } from "@/client/features/navigation/app-link";
 import {
   issueResources,
   linkTitle,
@@ -335,24 +336,13 @@ export function IssueResources({ issue }: { issue: Issue }) {
             )}
             {/* Text has no anchor/time element variant; preserve native link and timestamp semantics. */}
             {resource.kind === "document" ? (
-              <a
+              <AppLink
                 data-resource-id={resource.id}
-                href={documentURL(issue, resource.id)}
-                onClick={(event) => {
-                  if (
-                    event.metaKey ||
-                    event.ctrlKey ||
-                    event.shiftKey ||
-                    event.altKey
-                  )
-                    return;
-                  event.preventDefault();
-                  navigate({ document: resource.id, panel: true });
-                }}
+                to={{ board: issue.board, selected: issue.key, document: resource.id, panel: true }}
                 className="min-w-0 flex-1 truncate font-medium text-fg"
               >
                 {resource.title || "New document"}
-              </a>
+              </AppLink>
             ) : (
               <>
                 <a
@@ -456,12 +446,9 @@ export function IssueResources({ issue }: { issue: Issue }) {
     </section>
   );
 }
+/** The document's own address, for copying and opening in a new tab. */
 export function documentURL(issue: Issue, id: string) {
-  const url = new URL(location.origin);
-  url.searchParams.set("board", String(issue.board));
-  url.searchParams.set("issue", issue.key);
-  url.searchParams.set("document", id);
-  return url.href;
+  return `${location.origin}/issue/${encodeURIComponent(issue.key)}/document/${encodeURIComponent(id)}`;
 }
 
 const Document = lazy(() =>

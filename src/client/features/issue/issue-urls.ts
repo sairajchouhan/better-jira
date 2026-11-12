@@ -7,10 +7,7 @@ export function jiraIssueURL(key: string) {
 }
 /** The issue in this app, for links that open here (and in a new tab with ⌘-click). */
 export function appURL(issue: Issue) {
-  const url = new URL(location.origin);
-  url.searchParams.set("board", String(issue.board));
-  url.searchParams.set("issue", issue.key);
-  return url.href;
+  return `${location.origin}/issue/${encodeURIComponent(issue.key)}`;
 }
 export function issueURL(issue: Issue) {
   return isLocalIssue(issue.key) && typeof location !== "undefined"

@@ -37,10 +37,13 @@ import { hotkeyOf, runShortcut } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
 import { statusOf as issueStatusOf, get, set, isWatching, useStore, type Issue } from "@/client/state/store";
 import { queryClient } from "@/client/state/server-data";
-import { navigate, ui } from "@/client/features/navigation/app-navigation";
+import { navigate, router, ui } from "@/client/features/navigation/app-navigation";
+import { useSearch } from "@tanstack/react-router";
 import { toggleFavorite } from "@/client/features/navigation/favorites";
 
 import { createInboxStore, type Category } from "@/client/state/inbox-store";
+import { InboxIssuePane } from "./issue-view";
+import { firstKey } from "@/client/state/jira-sync";
 import { readStored, writeStored } from "@/client/state/stored-state";
 import { SelectRow, Toggle } from "@/client/components/display-options";
 const storageKey = (name: string) =>
@@ -52,10 +55,9 @@ const statusOf = (key: string) => {
 /** A row whose issue isn't mirrored has no `issue=` in the URL; this keeps it selected over a reload (R2-inbox-D6). The store drops it outside the inbox. */
 const ROW_PARAM = "notification";
 function keepRowInUrl(id: string | null) {
-  const url = new URL(location.href);
-  if (id) url.searchParams.set(ROW_PARAM, id);
-  else url.searchParams.delete(ROW_PARAM);
-  if (url.href !== location.href) history.replaceState(history.state, "", url);
+  const search = router.latestLocation.search as Record<string, string | undefined>;
+  if ((search[ROW_PARAM] ?? null) === id) return;
+  void router.navigate({ to: "/inbox", search: { ...search, [ROW_PARAM]: id ?? undefined }, replace: true } as never);
 }
 async function send(body: object) {
   const res = await fetch("/api/inbox", {
@@ -664,10 +666,11 @@ export function InboxList() {
   }, [unseen]);
   const pages = data?.pages.length ?? 0;
   // A reload keeps the open issue, or a row outside the mirror, in the URL: select its row again, so U, E and H act on it.
+  const rowParam = useSearch({ strict: false, select: (search) => (search as Record<string, string | undefined>)[ROW_PARAM] });
   const issueKey = useStore((s) => (s.inbox ? s.selected : null)),
     rowId = issueKey
       ? null
-      : new URLSearchParams(location.search).get(ROW_PARAM);
+      : (rowParam ?? null);
   const known = items.some((r) =>
     issueKey ? r.key === issueKey : r.id === rowId,
   );
@@ -884,6 +887,16 @@ export function InboxIssueActions() {
   );
 }
 
+/** The `/inbox` route: the notification list, and the open issue (or the selected notification) beside it. */
+export function InboxScreen() {
+  const open = useStore((s) => (s.panel && s.selected ? s.issues.get(s.selected) : undefined));
+  return (
+    <>
+      <InboxList />
+      {open ? <InboxIssuePane key={firstKey(open.key)} issue={open} /> : <InboxPane />}
+    </>
+  );
+}
 /** The right pane when no issue is open: Linear's empty state, or the notification itself when its issue is not in the mirror. */
 export function InboxPane() {
   const row = useSelectedRow();

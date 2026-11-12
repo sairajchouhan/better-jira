@@ -21,6 +21,7 @@
     "@tanstack/pacer": "0.23.1",
     "@tanstack/query-core": "5.107.1",
     "@tanstack/react-hotkeys": "^0.22.0",
+    "@tanstack/react-router": "1.170.46",
     "bun-plugin-tailwind": "^0.1.2",
     "chrono-node": "^2.10.3",
     "cmdk": "^1.1.1",
@@ -43,6 +44,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",
+    "@tanstack/react-router-devtools": "1.167.3",
     "@types/bun": "latest",
     "@types/react": "^19",
     "@types/react-dom": "^19",

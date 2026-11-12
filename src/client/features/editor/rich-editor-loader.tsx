@@ -8,7 +8,7 @@ const load = () =>
 const Editor = lazy(load);
 // Kept out of the board's startup payload (BJ-110). A first screen with an issue (or the inbox's) needs it at once;
 // elsewhere the first pointer over an issue or the first key press fetches it, before any composer can open in practice.
-if (typeof window !== "undefined" && /[?&](issue|inbox)\b/.test(location.search)) void load();
+if (typeof window !== "undefined" && (/^\/(issue|inbox)\b/.test(location.pathname) || /[?&]issue=/.test(location.search))) void load();
 else if (typeof window !== "undefined") {
   const intents = ["pointerover", "keydown"] as const;
   const intent = (event: Event) => {

@@ -1,20 +1,12 @@
 /**
  * Where you are, and every rule for moving: one pure transition from the current screen and an event to the next
- * screen, the address to show and the preference it changes. store.ts applies the result (state, ui machine, history);
- * nothing here touches the browser, so tests run it directly.
+ * screen and the preference it changes, and the place (what an address names) each screen shows. app-navigation.ts
+ * applies the result to the store, the ui machine and the router; nothing here touches the browser, so tests run it directly.
  */
-import { defaultPreferences, type Display, type FilterGroup, type Preferences } from "@/shared/view-model";
-import {
-  decodeOverlay,
-  emptyOverlay,
-  encodeOverlay,
-  viewForRoute,
-  viewPath,
-  type SavedView,
-  type ViewDraft,
-} from "@/shared/saved-view-model";
+import { defaultPreferences, type Display, type FilterGroup, type Preferences, type Scope } from "@/shared/view-model";
+import { decodeOverlay, emptyOverlay, encodeOverlay, type SavedView, type ViewDraft } from "@/shared/saved-view-model";
 import type { View } from "@/client/state/store";
-import { isPersonTab, type PersonTab } from "@/shared/people";
+import type { PersonTab } from "@/shared/people";
 
 export type Screen = {
   board: number;
@@ -52,6 +44,8 @@ export type Destination = {
   /** Another user's issues (with `mine`), or null for mine; a new person opens on Assigned. */
   person?: string | null;
   personTab?: PersonTab;
+  /** The board's Issues tab (all, active or backlog), part of its address. */
+  scope?: Scope;
 };
 export type NavigationEvent =
   /** Go somewhere: a new board leaves the open view or editor, and fills in how that board opens issues. */
@@ -65,7 +59,17 @@ export type NavigationEvent =
   | { type: "draft"; draft: ViewDraft }
   | { type: "filters"; filters: FilterGroup }
   /** Show what an address names: a reload, a link, Back or Forward. `draft` is the editor draft saved for that address. */
-  | { type: "restore"; href: string; draft: ViewDraft | null };
+  | { type: "restore"; place: Place; draft: ViewDraft | null };
+/** A list screen: what a board, view, My issues or the inbox shows, with the issue open beside it. */
+export type ListPlace =
+  | { to: "board"; board: number; scope: Scope; issue?: string }
+  | { to: "views"; board: number }
+  | { to: "view"; id: string; filter?: string; issue?: string }
+  | { to: "editor"; id?: string; issue?: string }
+  | { to: "person"; person: string | null; tab: PersonTab; issue?: string }
+  | { to: "inbox"; issue?: string };
+/** What an address names (routes/tree.tsx maps each to its path). An issue page keeps the list it opened over. */
+export type Place = ListPlace | { to: "issue"; key: string; document?: string; over?: ListPlace };
 export type NavigationData = {
   savedViews: SavedView[];
   preferences: Record<number, Preferences>;
@@ -81,18 +85,12 @@ export type Transition = {
   screen: Screen;
   /** "push" a new history entry when the address changes; "none" when history already shows it. */
   history: "push" | "none";
-  /** Leaving the editor through a board or the Inbox first adds this entry, as it always has. */
-  via?: Screen;
   /** The board preferences, with how a board opens issues changed. */
   preferences?: Record<number, Preferences>;
   /** The open saved view's display, with how it opens issues changed; saved to the server. */
   viewDisplay?: { id: string; display: Display };
   /** Forget the editor draft saved for the address being left. */
   forgetDraft?: boolean;
-  /** The address names its view by an old slug: replace just its path. */
-  path?: string;
-  /** The address names an issue the mirror doesn't have. */
-  missing?: string;
 };
 
 /** The ui machine's part: where you are, and which document of the open issue shows. */
@@ -196,6 +194,12 @@ function enter(screen: Screen, to: Destination, data: NavigationData, quiet: boo
 const go = (screen: Screen, to: Destination, data: NavigationData) => {
   const out: Transition = { screen, history: "push" };
   enter(screen, to, data, false, out);
+  if (to.scope) {
+    const prefs = out.preferences ?? data.preferences,
+      key = isMyIssues(out.screen) ? 0 : out.screen.board,
+      current = prefs[key] ?? defaultPreferences();
+    if (current.scope !== to.scope) out.preferences = { ...prefs, [key]: { ...current, scope: to.scope } };
+  }
   return out;
 };
 
@@ -240,110 +244,80 @@ export function transition(screen: Screen, event: NavigationEvent, data: Navigat
       return { ...result, forgetDraft: true };
     }
     case "restore":
-      return restore(screen, event.href, event.draft, data);
+      return restore(screen, event.place, event.draft, data);
   }
 }
 
-function restore(screen: Screen, href: string, saved: ViewDraft | null, data: NavigationData): Transition {
+function restore(screen: Screen, place: Place, saved: ViewDraft | null, data: NavigationData): Transition {
   const out: Transition = { screen, history: "none" };
-  const { pathname, searchParams: params } = new URL(href),
-    wanted = params.get("issue"),
+  const list = place.to === "issue" ? place.over : place,
+    key = place.to === "issue" ? place.key : list && "issue" in list ? list.issue : undefined,
     // A link to an issue's app key opens the issue Jira made for it, wherever it was created (sync check 7).
-    issue = data.issue(wanted ?? "");
-  let editorDraft: ViewDraft | null = null;
-  if (/^\/view\/(new|[^/]+\/edit)$/.test(pathname)) {
-    editorDraft = saved;
-    if (!editorDraft) {
-      const id = /^\/view\/([^/]+)\/edit$/.exec(pathname)?.[1];
-      editorDraft = data.draftFor(id ? viewForRoute(data.savedViews, id)?.id : undefined);
-    }
-  }
-  const routeId = /^\/view\/([^/]+)$/.exec(pathname)?.[1];
-  const active = routeId ? viewForRoute(data.savedViews, routeId) : undefined;
-  // Old `/view/<id>` links and stale slugs land on the view's current address.
-  if (active && pathname !== viewPath(active)) out.path = viewPath(active);
-  const board = editorDraft?.board ?? active?.board ?? issue?.board ?? Number(params.get("board"));
+    issue = key ? data.issue(key) : undefined;
+  const editorDraft = list?.to === "editor" ? (saved ?? data.draftFor(list.id)) : null;
+  const active = list?.to === "view" ? data.savedViews.find((v) => v.id === list.id) : undefined;
+  const board =
+    editorDraft?.board ?? active?.board ?? issue?.board ?? (list?.to === "board" || list?.to === "views" ? list.board : undefined);
   const s: Screen = {
     ...screen,
     editorDraft,
-    viewsPage: pathname === "/views",
+    viewsPage: list?.to === "views",
     activeViewId: active?.id ?? null,
-    overlayFilters: active ? decodeOverlay(params.get("filter")) : emptyOverlay(),
+    overlayFilters: active && list?.to === "view" ? decodeOverlay(list.filter ?? null) : emptyOverlay(),
   };
-  const route = personRoute(pathname);
-  const personal = !editorDraft && !active && pathname !== "/views" && !params.has("inbox") &&
-    (!!route || params.has("mine"));
-  const view = params.get("view");
+  const person = list?.to === "person" ? list : undefined,
+    inbox = list?.to === "inbox";
   enter(
     s,
     {
-      ...(data.boards.some((b) => b.id === board) ? { board } : {}),
+      ...(board !== undefined && data.boards.some((b) => b.id === board) ? { board } : {}),
       selected: issue?.key ?? null,
       panel: !!issue,
-      document: issue ? params.get("document") : null,
-      inbox: params.has("inbox"),
-      ...(personal ? { mine: true, view: data.preferences[0]?.display.openIn ?? "side", ...route } : {}),
+      document: issue && place.to === "issue" ? (place.document ?? null) : null,
+      inbox,
+      ...(person
+        ? { mine: true, view: data.preferences[0]?.display.openIn ?? "side", person: person.person, personTab: person.tab }
+        : {}),
       ...(active ? { view: active.display.openIn } : {}),
-      ...(view === "page" || view === "side" ? { view } : {}),
+      ...(issue ? { view: place.to === "issue" ? "page" : "side" } : {}),
     },
     data,
     true,
     out,
   );
-  const mine = editorDraft?.mine ?? active?.mine ?? (!!route || params.has("mine"));
-  if (!params.has("inbox")) out.screen = { ...out.screen, mine, inbox: false };
+  const mine = editorDraft?.mine ?? active?.mine ?? !!person;
+  if (!inbox) out.screen = { ...out.screen, mine, inbox: false };
   out.history = "none"; // A restore must never push, including settle reverting a link view.
-  if (wanted && !issue) out.missing = wanted;
+  // The board's Issues tab is part of its address (Linear's /team/KEY/all|active|backlog).
+  if (list?.to === "board" && list.board === out.screen.board) {
+    const prefs = out.preferences ?? data.preferences,
+      current = prefs[list.board] ?? defaultPreferences();
+    if (current.scope !== list.scope) out.preferences = { ...prefs, [list.board]: { ...current, scope: list.scope } };
+  }
   return out;
 }
 
-/** The address that shows a screen, starting from the current one (its hash, and params others own, stay). */
-export function screenUrl(s: Screen, href: string, savedViews: SavedView[]): string {
-  const url = new URL(href);
-  if (url.searchParams.get("issue") !== (s.panel ? s.selected : null) || url.searchParams.get("document") !== s.document)
-    url.hash = "";
-  const routeOf = (id: string) => {
-    const v = savedViews.find((v) => v.id === id);
-    return v ? viewPath(v) : `/view/${encodeURIComponent(id)}`;
-  };
-  url.pathname = s.editorDraft
-    ? s.editorDraft.id
-      ? `${routeOf(s.editorDraft.id)}/edit`
-      : "/view/new"
-    : s.activeViewId
-      ? routeOf(s.activeViewId)
-      : s.viewsPage
-        ? "/views"
-        : s.mine && !s.inbox
-          ? `${s.person ? `/user/${encodeURIComponent(s.person)}` : "/my-issues"}${s.personTab === "assigned" ? "" : `/${s.personTab}`}`
-          : "/";
-  if (s.activeViewId && s.overlayFilters.children.length) url.searchParams.set("filter", encodeOverlay(s.overlayFilters));
-  else url.searchParams.delete("filter");
-  const personal = s.mine && !s.inbox && !s.activeViewId && !s.editorDraft && !s.viewsPage;
-  if (personal) url.searchParams.delete("board");
-  else url.searchParams.set("board", String(s.board));
-  if (s.panel && s.selected) {
-    url.searchParams.set("issue", s.selected);
-    url.searchParams.set("view", s.view);
-  } else {
-    url.searchParams.delete("issue");
-    url.searchParams.delete("view");
-  }
-  if (s.document && s.panel) url.searchParams.set("document", s.document);
-  else url.searchParams.delete("document");
-  if (s.inbox) url.searchParams.set("inbox", "1");
-  else url.searchParams.delete("inbox");
-  if (!s.inbox) url.searchParams.delete("notification"); // the inbox's selected row outside the mirror
-  if (s.mine && !s.inbox && !personal) url.searchParams.set("mine", "1");
-  else url.searchParams.delete("mine");
-  return url.href;
+/** The place a screen shows: an issue page over its list, or a list with the issue open beside it. */
+export function placeOf(s: Screen, scopeOf: (board: number) => Scope): Place {
+  const open = s.panel && s.selected ? s.selected : undefined,
+    page = !!open && (s.view === "page" || !!s.document);
+  const list = listOf(s, scopeOf, page ? undefined : open);
+  return page ? { to: "issue", key: open!, ...(s.document ? { document: s.document } : {}), over: list } : list;
 }
-
-/** `/my-issues[/tab]` or `/user/<id>[/tab]`: whose issues and which tab. */
-function personRoute(pathname: string): { person: string | null; personTab: PersonTab } | undefined {
-  const m = /^\/(?:my-issues|user\/([^/]+))(?:\/([a-z]+))?$/.exec(pathname);
-  if (!m) return undefined;
-  return { person: m[1] ? decodeURIComponent(m[1]) : null, personTab: isPersonTab(m[2]) ? m[2] : "assigned" };
+function listOf(s: Screen, scopeOf: (board: number) => Scope, open: string | undefined): ListPlace {
+  const issue = open ? { issue: open } : {};
+  if (s.editorDraft) return { to: "editor", ...(s.editorDraft.id ? { id: s.editorDraft.id } : {}), ...issue };
+  if (s.activeViewId)
+    return {
+      to: "view",
+      id: s.activeViewId,
+      ...(s.overlayFilters.children.length ? { filter: encodeOverlay(s.overlayFilters) } : {}),
+      ...issue,
+    };
+  if (s.viewsPage) return { to: "views", board: s.board };
+  if (s.inbox) return { to: "inbox", ...issue };
+  if (s.mine) return { to: "person", person: s.person, tab: s.personTab, ...issue };
+  return { to: "board", board: s.board, scope: scopeOf(s.board), ...issue };
 }
 
 /** Saved views may also filter by assignee; only this screen is the sidebar destination. */

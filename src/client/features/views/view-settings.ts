@@ -95,7 +95,6 @@ export function setDisplay(board: number, patch: Partial<Display>) {
 /** Back to the display saved as this browser's default for the board, else the app's. */
 export const resetDisplay = (board: number) =>
   setDisplay(board, get().defaults[board] ?? defaultDisplay());
-export const setScope = (board: number, scope: Preferences["scope"]) => write(board, { scope });
 
 /** Hidden and collapsed groups belong to the current column grouping. */
 const grouped = (board: number, key: "hidden" | "collapsed", change: (ids: string[]) => string[]) => {

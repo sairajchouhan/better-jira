@@ -1,6 +1,6 @@
 import { FavoriteButton } from "./favorite-button";
 import { useActiveView, useSavedViews, createViewDraft } from "@/client/features/views/saved-views";
-import { setScope, useViewSettings } from "@/client/features/views/view-settings";
+import { useViewSettings } from "@/client/features/views/view-settings";
 import { openViewEditor, ViewMenu, ViewContextMenu, ViewEditorPage } from "@/client/routes/view-editor";
 import { ViewFavorites, SavedViewIcon } from "@/client/features/views/views-navigation";
 import { useHotkey } from "@tanstack/react-hotkeys";
@@ -614,7 +614,7 @@ export function BoardHeader() {
           <ViewTab
             key={scope}
             on={!activeView && !draft && prefs.scope === scope}
-            onClick={() => { navigate({ board: board!.id, selected: null, panel: false }); setScope(board!.id, scope); }}
+            onClick={() => navigate({ board: board!.id, selected: null, panel: false, scope })}
           >
             {scope === "active" ? "Active" : scope === "backlog" ? "Backlog" : "All issues"}
           </ViewTab>

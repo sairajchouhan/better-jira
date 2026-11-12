@@ -18,6 +18,7 @@ import { statusById } from "@/shared/board-catalog";
 import { adfToMarkdown } from "@/client/features/issue/issue-copy";
 import { normalizeDocument, type AdfDocument } from "@/shared/document";
 import { get, ME, set, useStore, usePeople, type Issue, type User } from "@/client/state/store";
+import { firstKey } from "@/client/state/jira-sync";
 import { actions, addIssueFiles } from "@/client/state/issue-actions";
 import { flushLocalChanges } from "@/client/state/local-database";
 import { navigate } from "@/client/features/navigation/app-navigation";
@@ -32,6 +33,12 @@ import { ReminderMenu, reminderEntries } from "@/client/features/reminders/remin
 /** The header breadcrumb, the favorite star and the icon-picker cells: no primitive yet (see the note at each). */
 const BUTTON = "rounded px-2 py-1.5 text-[13px] text-fg-2 hover:bg-hover";
 type Draft = { title: string; body: AdfDocument };
+/** The `/issue/KEY-1/document/<id>` route: the open issue's document. */
+export function DocumentScreen() {
+  const open = useStore((s) => (s.panel && s.selected ? s.issues.get(s.selected) : undefined));
+  const id = useStore((s) => s.document);
+  return open && id ? <IssueDocument key={firstKey(open.key)} issue={open} id={id} /> : null;
+}
 export function IssueDocument({ issue, id }: { issue: Issue; id: string }) {
   useEffect(
     () => () => {

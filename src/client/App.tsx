@@ -1,11 +1,11 @@
 import "@fontsource-variable/inter/opsz.css";
 import "./index.css";
-import { ViewsDirectory } from "@/client/features/views/views-navigation";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
+import { RouterProvider } from "@tanstack/react-router";
+import { router } from "@/client/features/navigation/app-navigation";
 import { ReminderPicker, ReminderDelivery } from "@/client/features/reminders/reminders";
 import { useStore } from "@/client/state/store";
 import { load } from "@/client/state/app-load";
-import { firstKey } from "@/client/state/jira-sync";
 import {
   AddBoard,
   CreateIssue,
@@ -20,7 +20,6 @@ import { EmptyState, LoadingState } from "@/client/components/empty-state";
 import { Button } from "@/client/components/button";
 import { ShortcutHelp, useLinearHotkeys } from "@/client/features/navigation/shortcuts";
 import { useRecordVisits } from "@/client/features/navigation/recents";
-import { InboxIssueActions, InboxList, InboxPane } from "@/client/routes/inbox";
 import { BoardView } from "@/client/routes/board-view";
 import {
   Sidebar,
@@ -29,8 +28,6 @@ import {
   StorageNotice,
   BoardHeader,
 } from "@/client/features/navigation/app-chrome";
-import { InboxIssuePane, IssuePage, IssueSidePanel } from "@/client/routes/issue-view";
-import { IssueDocument } from "@/client/features/issue/issue-resources";
 import { StatusPicker, AssignPicker } from "@/client/features/issue/issue-pickers";
 import { IssueSearch, CommandPalette, HelpMenu, isPalettePage } from "@/client/features/navigation/palette";
 function Hotkeys() {
@@ -38,27 +35,18 @@ function Hotkeys() {
   useRecordVisits();
   return null;
 }
+// Router devtools load in development only; production builds drop the import.
+const Devtools =
+  process.env.NODE_ENV === "production"
+    ? () => null
+    : lazy(() => import("@tanstack/react-router-devtools").then((m) => ({ default: m.TanStackRouterDevtools })));
+
+/** Waits for the boards, then hands the address to the router. */
 export function App() {
-  const boards = useStore((s) => s.boards);
-  const boardId = useStore((s) => s.board);
-  const selected = useStore((s) => s.selected);
-  const view = useStore((s) => s.view);
-  const document = useStore((s) => s.document);
-  const overlay = useStore((s) => s.overlay);
-  const open = useStore((s) => (s.panel && s.selected ? s.issues.get(s.selected) : undefined));
-  // A menu opened by a shortcut over a sub-issue row changes that row's issue.
-  const target = useStore((s) => s.target ?? s.selected);
-  const current = useStore((s) => (target ? s.issues.get(target) : undefined));
+  const ready = useStore((s) => s.boards.length > 0);
   const loadError = useStore((s) => s.loadError);
-  const inbox = useStore((s) => s.inbox);
-  const viewsPage = useStore((s) => s.viewsPage);
-  // Boards opened this session stay mounted (hidden) for scroll restoration; adjusted during render, not mutated.
-  const [visited, setVisited] = useState(() => new Set([boardId]));
-  if (!visited.has(boardId)) setVisited(new Set(visited).add(boardId));
-
   useEffect(() => void load(), []);
-
-  if (!boards.length)
+  if (!ready)
     return loadError ? (
       <EmptyState
         role="alert"
@@ -75,7 +63,24 @@ export function App() {
     ) : (
       <LoadingState className="h-screen">Loading your Jira mirror…</LoadingState>
     );
-  const page = !!open && (view === "page" || !!document);
+  return <RouterProvider router={router} InnerWrap={Shell} />;
+}
+
+/** The frame every route renders inside: sidebar, the board header, the boards kept mounted, overlays.
+ *  `children` is the matched route: a side panel, an issue page, a document, the inbox or the views list. */
+function Shell({ children }: { children: ReactNode }) {
+  const boards = useStore((s) => s.boards);
+  const boardId = useStore((s) => s.board);
+  const selected = useStore((s) => s.selected);
+  const overlay = useStore((s) => s.overlay);
+  // A menu opened by a shortcut over a sub-issue row changes that row's issue.
+  const target = useStore((s) => s.target ?? s.selected);
+  const current = useStore((s) => (target ? s.issues.get(target) : undefined));
+  // The boards show unless an issue page, the inbox or the views list covers them.
+  const covered = useStore((s) => (s.panel && !!s.selected && (s.view === "page" || !!s.document)) || s.inbox || s.viewsPage);
+  // Boards opened this session stay mounted (hidden) so switching back is instant; adjusted during render.
+  const [visited, setVisited] = useState(() => new Set([boardId]));
+  if (!visited.has(boardId)) setVisited(new Set(visited).add(boardId));
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
@@ -87,9 +92,8 @@ export function App() {
           tabIndex={-1}
           className="relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border-[0.5px] border-frame bg-panel shadow-(--frame-shadow)"
         >
-          {!page && !inbox && !viewsPage && <BoardHeader />}
+          {!covered && <BoardHeader />}
           <div className="flex min-h-0 flex-1">
-            {/* Retain visited boards for scroll restoration; do not render unopened boards. */}
             {boards
               .filter((b) => visited.has(b.id))
               .map((b) => (
@@ -97,30 +101,12 @@ export function App() {
                   key={b.id}
                   board={b}
                   active={b.id === boardId}
-                  shown={!page && !inbox && !viewsPage && b.id === boardId}
+                  shown={!covered && b.id === boardId}
                   // Only the active board shows the selection, so J/K re-renders one board, not every visited one.
                   selected={b.id === boardId ? selected : null}
                 />
               ))}
-            {viewsPage && <ViewsDirectory />}
-            {inbox && !page && <InboxList />}
-            {open ? (
-              document ? (
-                <IssueDocument key={firstKey(open.key)} issue={open} id={document} />
-              ) : page ? (
-                <IssuePage
-                  key={firstKey(open.key)}
-                  issue={open}
-                  actions={inbox && <InboxIssueActions />}
-                />
-              ) : inbox ? (
-                <InboxIssuePane key={firstKey(open.key)} issue={open} />
-              ) : (
-                <IssueSidePanel key={firstKey(open.key)} issue={open} />
-              )
-            ) : (
-              inbox && <InboxPane />
-            )}
+            {children}
           </div>
         </main>
       </div>
@@ -128,6 +114,9 @@ export function App() {
       <StorageNotice />
       <StatusBar />
       <ToastViewport />
+      <Suspense>
+        <Devtools position="bottom-right" />
+      </Suspense>
       {overlay === "palette" && <CommandPalette />}
       {overlay === "search" && <IssueSearch />}
       {overlay === "shortcuts" && <ShortcutHelp />}

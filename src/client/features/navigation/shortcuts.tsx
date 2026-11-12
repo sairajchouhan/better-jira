@@ -26,7 +26,6 @@ import {
 import {
   clearFilters,
   setDisplay,
-  setScope,
   toggleCollapsed,
   updateRule,
   viewSettings,
@@ -161,8 +160,7 @@ function reorder(direction: number, edge = false) {
 }
 const manual = (s = get()) => viewSettings(s.board, s).display.ordering === "manual";
 function scope(value: "active" | "backlog" | "all", mine = false) {
-  navigate({ mine, ...(!mine && isMyIssues(get()) ? { board: get().board } : {}), panel: false, selected: null });
-  setScope(get().board, value);
+  navigate({ mine, ...(!mine && isMyIssues(get()) ? { board: get().board } : {}), panel: false, selected: null, scope: value });
 }
 function copy(kind: CopyKind) {
   const issue = target();

@@ -33,10 +33,11 @@ import { normalizeDocument } from "@/shared/document";
 import { imageCommentIds } from "@/client/features/media/media-edits";
 import { Icon, PriorityIcon, RelationIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
 import { ME, boardOf, get, useStore, isWatching, type Issue, type User, statusOf } from "@/client/state/store";
-import { issueURL, appURL } from "@/client/features/issue/issue-urls";
+import { issueURL } from "@/client/features/issue/issue-urls";
+import { AppLink } from "@/client/features/navigation/app-link";
 import { actions, addIssueFiles } from "@/client/state/issue-actions";
 import { loadFull } from "@/client/state/server-data";
-import { currentKey } from "@/client/state/jira-sync";
+import { currentKey, firstKey } from "@/client/state/jira-sync";
 import { flushLocalChanges } from "@/client/state/local-database";
 import { isLocalIssue } from "@/client/state/local-edits";
 import { navigate, ui } from "@/client/features/navigation/app-navigation";
@@ -64,8 +65,7 @@ const ImageViewer = lazy(() =>
   import("@/client/features/media/image-viewer").then((module) => ({ default: module.ImageViewer })),
 );
 
-const openRelated = (target: Issue) =>
-  navigate({ board: target.board, selected: target.key, panel: true, view: get().view });
+const related = (target: Issue) => ({ board: target.board, selected: target.key, panel: true, view: get().view });
 
 /** Linear's wording (RAJ-52). `then` is the shorter form after ", then": "set to Medium", "moved to Done". Labels carry their 4px dot. */
 function describeActivity(event: PropertyActivity, issue: Issue, then = false): ReactNode {
@@ -93,17 +93,9 @@ function describeActivity(event: PropertyActivity, issue: Issue, then = false): 
       <>
         {verb}{" "}
         {target ? (
-          <a
-            href={appURL(target)}
-            onClick={(e) => {
-              if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-              e.preventDefault();
-              openRelated(target);
-            }}
-            className="hover:text-fg"
-          >
+          <AppLink to={related(target)} className="hover:text-fg">
             <b className="font-medium">{relation.key}</b> {target.summary}
-          </a>
+          </AppLink>
         ) : (
           <b className="font-medium">{relation.key}</b>
         )}
@@ -198,7 +190,14 @@ const ago = (iso: string, now = Date.now()) => {
 const author = (a: any): User | null =>
   a && { id: a.accountId, name: a.displayName, avatar: jiraAvatar(a.avatarUrls) };
 
-// --- issue view: a full page, a side panel, or the inbox's pane; App picks the frame ---
+// --- issue view: a full page, a side panel, or the inbox's pane; the route picks the frame ---
+
+/** The `/issue/KEY-1` route: the open issue as a page, with the notification's actions when it opened from the inbox. */
+export function IssueScreen() {
+  const open = useStore((s) => (s.panel && s.selected && !s.document ? s.issues.get(s.selected) : undefined));
+  const inbox = useStore((s) => s.inbox);
+  return open ? <IssuePage key={firstKey(open.key)} issue={open} actions={inbox && <InboxIssueActions />} /> : null;
+}
 
 const SIDE =
   "issue-detail flex flex-col bg-panel max-md:absolute max-md:inset-0 max-md:z-20 max-md:w-full";
@@ -507,18 +506,10 @@ function RelatedIssue({ issueKey }: { issueKey: string }) {
   const target = useStore((s) => s.issues.get(issueKey)),
     status = target && statusOf(target);
   return target ? (
-    <a
-      href={appURL(target)}
-      onClick={(e) => {
-        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-        e.preventDefault();
-        openRelated(target);
-      }}
-      className="relation-pill"
-    >
+    <AppLink to={related(target)} className="relation-pill">
       <span>{status && <StatusIcon status={status} />}</span>
       <span className="truncate">{target.summary}</span>
-    </a>
+    </AppLink>
   ) : (
     <span className="relation-pill">
       <span />

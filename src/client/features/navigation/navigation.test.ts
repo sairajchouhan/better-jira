@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
-import { screenUrl, transition, type NavigationData, type NavigationEvent, type Screen } from "./navigation";
-import { emptyOverlay, type SavedView, type ViewDraft } from "@/shared/saved-view-model";
+import { createMemoryHistory } from "@tanstack/react-router";
+import { placeOf, transition, type NavigationData, type NavigationEvent, type Place, type Screen } from "./navigation";
+import { emptyOverlay, viewForRoute, type SavedView, type ViewDraft } from "@/shared/saved-view-model";
 import { defaultPreferences } from "@/shared/view-model";
+import { createAppRouter, legacyPlace, locationOf, type RouteContext } from "@/client/routes/tree";
 
 const prefs = (openIn: "side" | "page") => {
   const p = defaultPreferences();
@@ -55,15 +57,31 @@ const data = (patch: Partial<NavigationData> = {}): NavigationData => ({
 /** Runs events in order, each from the screen the last one left. */
 const run = (events: NavigationEvent[], d = data(), screen = start) =>
   events.reduce((t, e) => transition(t.screen, e, d), { screen, history: "none" } as ReturnType<typeof transition>);
-const url = (s: Screen, href = "http://x/", views = [view()]) => {
-  const u = new URL(screenUrl(s, href, views));
-  return u.pathname + u.search + u.hash;
+const context: RouteContext = {
+  show: () => {},
+  preload: async () => {},
+  issue: (key) => data().issue(key),
+  currentKey: (key) => data().currentKey(key),
+  view: (segment) => viewForRoute([view()], segment),
+  hasBoard: (board) => board === 1 || board === 2,
+  scope: () => "all",
+  lastBoard: () => 1,
 };
+const router = createAppRouter(createMemoryHistory(), context);
+/** The address the screen shows. */
+const url = (s: Screen) => router.buildLocation(locationOf(placeOf(s, () => "all"), context) as never).href;
+/** The place an old address names. */
+const legacy = (href: string) => {
+  const u = new URL(href, "http://x");
+  return legacyPlace(u.pathname, Object.fromEntries(u.searchParams), context)!;
+};
+const restore = (place: Place, draft: ViewDraft | null = null) => ({ type: "restore", place, draft }) as const;
+const board1 = { to: "board", board: 1, scope: "all" } as const;
 
 test("an issue opens the way its board does; choosing page or side is remembered by the board", () => {
   const opened = run([{ type: "go", to: { selected: "OLD-1", panel: true } }]);
   expect(opened.screen).toMatchObject({ selected: "A-1", panel: true, view: "side" });
-  expect(url(opened.screen)).toBe("/?board=1&issue=A-1&view=side");
+  expect(url(opened.screen)).toBe("/team/1/all?issue=A-1");
   const page = transition(opened.screen, { type: "go", to: { view: "page" } }, data());
   expect(page.preferences?.[1]!.display.openIn).toBe("page");
   expect(page.history).toBe("push");
@@ -87,15 +105,16 @@ test("a document needs an open issue and closes with it; a new board resets My i
 });
 
 test("a link's view shows that issue once, then reverts without becoming a preference", () => {
-  const linked = run([{ type: "restore", href: "http://x/?board=1&issue=A-1&view=page", draft: null }]);
+  const linked = run([restore({ to: "issue", key: "A-1", over: board1 })]);
+  expect(url(linked.screen)).toBe("/issue/A-1");
   expect(linked).toMatchObject({ history: "none", screen: { view: "page", linkView: true, panel: true } });
   expect(linked.preferences).toBeUndefined();
   const closed = transition(linked.screen, { type: "moved", screen: { panel: false } }, data());
   expect(closed.screen).toMatchObject({ view: "side", linkView: false, panel: false });
   // Reverting rewrites the board's own choice, unchanged.
   expect(closed.preferences?.[1]!.display.openIn).toBe("side");
-  const missing = run([{ type: "restore", href: "http://x/?board=1&issue=GONE-1", draft: null }]);
-  expect(missing).toMatchObject({ missing: "GONE-1", screen: { panel: false, selected: null } });
+  const missing = run([restore({ ...board1, issue: "GONE-1" })]);
+  expect(missing.screen).toMatchObject({ panel: false, selected: null });
 });
 
 test("inside a saved view, a new openIn is saved to the view; opening or restoring it never is (BJ-155)", () => {
@@ -103,12 +122,13 @@ test("inside a saved view, a new openIn is saved to the view; opening or restori
   expect(opened.screen).toMatchObject({ activeViewId: "v1", view: "page", mine: true, linkView: false });
   expect([opened.viewDisplay, opened.preferences]).toEqual([undefined, undefined]);
   // A reload on the view's old address: the board opens issues beside it, the view as a page.
-  const restored = run([{ type: "restore", href: "http://x/view/v1?board=1", draft: null }]);
-  expect(restored).toMatchObject({ path: "/view/triage-v1", screen: { activeViewId: "v1", view: "page" } });
+  const restored = run([restore({ to: "view", id: "v1" })]);
+  expect(restored.screen).toMatchObject({ activeViewId: "v1", view: "page" });
+  expect(url(restored.screen)).toBe("/view/triage-v1");
   expect([restored.viewDisplay, restored.preferences]).toEqual([undefined, undefined]);
-  const linked = run([{ type: "restore", href: "http://x/view/triage-v1?board=1&issue=A-1&view=side", draft: null }], data(), restored.screen);
-  expect(linked.path).toBeUndefined();
+  const linked = run([restore({ to: "view", id: "v1", issue: "A-1" })], data(), restored.screen);
   expect(linked.screen).toMatchObject({ view: "side", linkView: true });
+  expect(url(linked.screen)).toBe("/view/triage-v1?issue=A-1");
   expect([linked.viewDisplay, linked.preferences]).toEqual([undefined, undefined]);
   const toggled = run([{ type: "go", to: { selected: "A-1", panel: true } }, { type: "go", to: { view: "side" } }], data(), opened.screen);
   expect(toggled.viewDisplay?.display.openIn).toBe("side");
@@ -123,14 +143,14 @@ test("leaving or switching a view drops its filter overlay; going to a board pic
   expect(other.screen.overlayFilters.children).toHaveLength(0);
   const left = transition(filtered.screen, { type: "go", to: { board: 1 } }, data());
   expect(left.screen).toMatchObject({ activeViewId: null, view: "side", overlayFilters: { children: [] } });
-  expect(url(left.screen)).toBe("/?board=1");
+  expect(url(left.screen)).toBe("/team/1/all");
 });
 
 test("the view editor takes display changes into its draft, keeps the board's preference, and returns on cancel", () => {
   const draft: ViewDraft = { ...view(), id: undefined, sourceId: "v1", name: "" };
   const editing = run([{ type: "edit-view", draft }]);
   expect(editing.screen).toMatchObject({ editorDraft: { name: "" }, activeViewId: null, mine: true });
-  expect(url(editing.screen)).toBe("/view/new?board=1&mine=1");
+  expect(url(editing.screen)).toBe("/view/new");
   const toggled = run([{ type: "go", to: { selected: "A-1", panel: true } }, { type: "go", to: { view: "page" } }], data(), editing.screen);
   expect(toggled.screen.editorDraft?.display.openIn).toBe("page");
   expect(toggled.preferences).toBeUndefined();
@@ -138,23 +158,14 @@ test("the view editor takes display changes into its draft, keeps the board's pr
   expect(cancelled).toMatchObject({ forgetDraft: true, screen: { editorDraft: null, activeViewId: "v1" } });
   // BJ-158: leaving pushes only the destination so Back returns to the editor.
   const left = transition(editing.screen, { type: "go", to: { board: 2 } }, data());
-  expect(left.via).toBeUndefined();
-  expect(transition(editing.screen, { type: "go", to: { inbox: true } }, data()).via).toBeUndefined();
-  expect(url(left.screen)).toBe("/?board=2");
+  expect(left.history).toBe("push");
+  expect(url(left.screen)).toBe("/team/2/all");
   // A reload of the editor's address uses the draft kept for it, else starts a fresh one.
-  const kept = run([{ type: "restore", href: "http://x/view/new?board=1", draft: { ...draft, name: "Kept" } }]);
+  const kept = run([restore({ to: "editor" }, { ...draft, name: "Kept" })]);
   expect(kept.screen.editorDraft?.name).toBe("Kept");
-  const fresh = run([{ type: "restore", href: "http://x/view/triage-v1/edit", draft: null }]);
+  const fresh = run([restore({ to: "editor", id: "v1" })]);
+  expect(url(fresh.screen)).toBe("/view/triage-v1/edit");
   expect(fresh.screen.editorDraft).toMatchObject({ id: "v1", name: "Triage" });
-});
-
-test("the address keeps a hash only while it still points at the same issue and document", () => {
-  const open = { ...start, selected: "A-1", panel: true };
-  expect(url(open, "http://x/?board=1&issue=A-1&view=side#comment-1")).toBe("/?board=1&issue=A-1&view=side#comment-1");
-  expect(url({ ...open, selected: "B-1" }, "http://x/?board=1&issue=A-1&view=side#comment-1")).toBe(
-    "/?board=1&issue=B-1&view=side",
-  );
-  expect(url({ ...start, viewsPage: true, inbox: true }, "http://x/?notification=9")).toBe("/views?notification=9&board=1&inbox=1");
 });
 
 test("My issues is one destination; opening either board leaves it and restore never pushes", () => {
@@ -164,8 +175,8 @@ test("My issues is one destination; opening either board leaves it and restore n
   for (const board of [1, 2]) {
     const opened = transition(mine.screen, { type: "go", to: { board } }, data());
     expect(opened.screen.mine).toBe(false);
-    expect(url(opened.screen)).toBe(`/?board=${board}`);
-    const back = transition(opened.screen, { type: "restore", href: "http://x/my-issues", draft: null }, data());
+    expect(url(opened.screen)).toBe(`/team/${board}/all`);
+    const back = transition(opened.screen, restore({ to: "person", person: null, tab: "assigned" }), data());
     expect(url(back.screen)).toBe("/my-issues");
     expect(back.history).toBe("none");
     expect(back.screen.mine).toBe(true);
@@ -174,7 +185,7 @@ test("My issues is one destination; opening either board leaves it and restore n
 
 test("legacy mine links restore My issues independently of their board", () => {
   for (const board of [1, 2]) {
-    const restored = transition(start, { type: "restore", href: `http://x/?board=${board}&mine=1`, draft: null }, data());
+    const restored = transition(start, restore(legacy(`/?board=${board}&mine=1`)), data());
     expect(url(restored.screen)).toBe("/my-issues");
     expect(restored.screen.mine).toBe(true);
     expect(restored.history).toBe("none");
@@ -187,10 +198,34 @@ test("BJ-28 / BJ-77: My issues tabs and a user's issues have their own addresses
   expect(url(created)).toBe("/my-issues/created");
   const alex = go({ mine: true, person: "alex", selected: null, panel: false }, created);
   expect(alex).toMatchObject({ person: "alex", personTab: "assigned" });
-  expect(url(alex)).toBe("/user/alex");
-  expect(url(go({ personTab: "activity" }, alex))).toBe("/user/alex/activity");
+  expect(url(alex)).toBe("/profiles/alex");
+  expect(url(go({ personTab: "activity" }, alex))).toBe("/profiles/alex/activity");
   expect(go({ mine: true }, alex)).toMatchObject({ person: null, personTab: "assigned" });
-  const restore = (href: string) => transition(start, { type: "restore", href, draft: null }, data()).screen;
-  expect(restore("http://x/user/alex/subscribed")).toMatchObject({ mine: true, person: "alex", personTab: "subscribed" });
-  expect(restore("http://x/my-issues/nope")).toMatchObject({ mine: true, person: null, personTab: "assigned" });
+  const restored = transition(start, restore(legacy("/user/alex/subscribed")), data()).screen;
+  expect(restored).toMatchObject({ mine: true, person: "alex", personTab: "subscribed" });
+});
+
+test("D7: every old address names the place it showed", () => {
+  const cases: [string, Place | undefined][] = [
+    ["/?board=2", { to: "board", board: 2, scope: "all" }],
+    ["/?board=9", board1],
+    ["/?board=1&issue=OLD-1", { ...board1, issue: "A-1" }],
+    ["/?board=1&issue=A-1&view=side", { ...board1, issue: "A-1" }],
+    ["/?board=2&issue=A-1&view=page", { to: "issue", key: "A-1", over: board1 }],
+    ["/?board=1&issue=A-1&document=d1", { to: "issue", key: "A-1", document: "d1", over: board1 }],
+    ["/?board=1&inbox=1", { to: "inbox" }],
+    ["/?board=1&inbox=1&issue=A-1", { to: "inbox", issue: "A-1" }],
+    ["/?board=1&mine=1", { to: "person", person: null, tab: "assigned" }],
+    ["/my-issues/created?board=1&mine=1", { to: "person", person: null, tab: "created" }],
+    ["/user/alex", { to: "person", person: "alex", tab: "assigned" }],
+    ["/user/alex/activity?issue=A-1", { to: "person", person: "alex", tab: "activity", issue: "A-1" }],
+    ["/views?board=2", { to: "views", board: 2 }],
+    ["/view/v1?board=1", { to: "view", id: "v1" }],
+    ["/view/old-name-v1?board=1&issue=A-1&view=page", { to: "issue", key: "A-1", over: { to: "view", id: "v1" } }],
+    ["/view/triage-v1/edit?board=1", { to: "editor", id: "v1" }],
+    ["/view/new?board=1&mine=1", { to: "editor" }],
+    ["/team/1/all?issue=A-1", undefined],
+    ["/view/triage-v1", undefined],
+  ];
+  for (const [href, place] of cases) expect([href, legacy(href)]).toEqual([href, place as Place]);
 });

@@ -1,18 +1,21 @@
 /**
- * Navigation glue: the running screen machine, the address bar and history, and the steps that move between screens.
- * navigation.ts decides what each step does (pure); this module applies it to the store, the ui machine and the address.
+ * Navigation glue: the router (it owns the address bar, history and Back/Forward), the running screen machine, and
+ * the steps that move between screens. navigation.ts decides what each step does (pure); this module applies it to the
+ * store and the ui machine, then shows its place in the address. An address the router opens (a link, Back, Forward,
+ * a reload) comes back through `show`, which restores the screen it names.
  */
 import { createActor } from "xstate";
+import { createBrowserHistory, createMemoryHistory, redirect, type ParsedLocation } from "@tanstack/react-router";
 import { uiMachine, inspector, type UiContext } from "@/client/state/machines";
-import { MACHINE_FIELDS, screenUrl, transition, type Destination, type NavigationEvent, type Screen } from "./navigation";
+import { MACHINE_FIELDS, placeOf, transition, type Destination, type NavigationEvent, type Place, type Screen } from "./navigation";
 import { commit, get, set, subscribe, type State } from "@/client/state/store";
 import { currentKey } from "@/client/state/jira-sync";
 import { createViewDraft, editViewDraft, updateSavedView, viewError } from "@/client/features/views/saved-views";
-import { emptyOverlay, type SavedView, type ViewDraft } from "@/shared/saved-view-model";
-import type { FilterGroup } from "@/shared/view-model";
+import { emptyOverlay, viewForRoute, type SavedView, type ViewDraft } from "@/shared/saved-view-model";
+import { defaultPreferences, type FilterGroup } from "@/shared/view-model";
 import { savedBoard, savedOpenIn, savedSidebarHidden } from "@/client/state/browser-preferences";
-import { showNotification } from "@/client/state/app-notifications";
-import { setScope } from "@/client/features/views/view-settings";
+import { loadFull } from "@/client/state/server-data";
+import { createAppRouter, locationOf } from "@/client/routes/tree";
 
 type UiKey = keyof UiContext;
 
@@ -33,6 +36,32 @@ ui.subscribe(({ context }) => {
   for (const key of moved) delete patch[key];
   commit(patch);
 });
+
+const scopeOf = (board: number) => (get().preferences[board] ?? defaultPreferences()).scope;
+const findView = (segment: string) => viewForRoute(get().savedViews, segment);
+/** The router. Tests (no DOM) run it on a memory history. */
+export const router = createAppRouter(typeof document === "undefined" ? createMemoryHistory() : createBrowserHistory(), {
+  show,
+  preload: (key) => Promise.all([loadFull(key), import("@/client/routes/issue-view")]),
+  issue: (key) => get().issues.get(currentKey(key)),
+  // Wrapped: jira-sync can still be loading when this module runs (app-notifications imports both).
+  currentKey: (key) => currentKey(key),
+  view: findView,
+  hasBoard: (board) => get().boards.some((b) => b.id === board),
+  scope: scopeOf,
+  lastBoard: () => get().board,
+});
+/** Where a destination is, as a link: its route, params, search and state, for `<Link>` and preloading. */
+export function linkTo(to: Destination) {
+  const t = transition(screen(), { type: "go", to }, data()),
+    preferences = t.preferences ?? get().preferences;
+  return locationOf(placeOf(t.screen, (board) => (preferences[board] ?? defaultPreferences()).scope), { view: findView });
+}
+/** Loads a destination's route ahead of time (its issue's details and screen), as hovering its link would. */
+export function preload(to: Destination) {
+  void router.preloadRoute(linkTo(to) as never).catch(() => {});
+}
+
 /** Goes somewhere: see navigation.ts for leaving views, how issues open and what the address shows. */
 export function navigate(to: Destination) {
   go({ type: "go", to });
@@ -53,20 +82,19 @@ const screen = (s = get()): Screen => ({
   editorDraft: s.editorDraft,
   linkView: s.linkView,
 });
+const data = () => ({
+  savedViews: get().savedViews,
+  preferences: get().preferences,
+  defaults: get().defaults,
+  boards: get().boards,
+  issue: (key: string) => get().issues.get(currentKey(key)),
+  currentKey,
+  draftFor: (id?: string) => (id ? editViewDraft(id) : createViewDraft()),
+});
 /** Applies one navigation step: the screen (state, then the ui machine), the preference it changed, then the address. */
 function go(event: NavigationEvent) {
-  const t = transition(screen(), event, {
-    savedViews: get().savedViews,
-    preferences: get().preferences,
-    defaults: get().defaults,
-    boards: get().boards,
-    issue: (key) => get().issues.get(currentKey(key)),
-    currentKey,
-    draftFor: (id) => (id ? editViewDraft(id) : createViewDraft()),
-  });
-  if (t.forgetDraft) address.forgetDraft();
-  if (t.path) address.replacePath(t.path);
-  if (t.via && navigationReady) address.show(screenUrl(t.via, location.href, get().savedViews), false);
+  const t = transition(screen(), event, data());
+  if (t.forgetDraft) drafts.forget(router.latestLocation.pathname);
   const patch: Partial<State> = t.preferences ? { preferences: t.preferences } : {};
   for (const key of Object.keys(t.screen) as (keyof Screen)[])
     if (t.screen[key] !== get()[key]) Object.assign(patch, { [key]: t.screen[key] });
@@ -79,64 +107,84 @@ function go(event: NavigationEvent) {
   // After the push: its optimistic write re-shows the address in place.
   if (t.viewDisplay)
     void updateSavedView(t.viewDisplay.id, { display: t.viewDisplay.display }).catch(viewError);
-  if (t.missing) showNotification({ text: `Issue ${t.missing} not found` });
 }
-/** The address bar, history, and the view editor's draft kept per address (sessionStorage is per tab). */
-const address = {
-  draftKey: (path: string) => `view-editor:${get().namespace}:${path}`,
-  show(href: string, replace: boolean) {
-    if (href !== location.href) history[replace ? "replaceState" : "pushState"]({}, "", href);
-  },
-  replacePath(path: string) {
-    const url = new URL(location.href);
-    url.pathname = path;
-    history.replaceState(history.state, "", url);
-  },
-  draft(): ViewDraft | null {
+/** The view editor's draft, kept per address in sessionStorage (per tab), so history and reload keep it. */
+const drafts = {
+  key: (path: string) => `view-editor:${get().namespace}:${path}`,
+  read(path: string): ViewDraft | null {
     try {
-      return JSON.parse(sessionStorage.getItem(address.draftKey(location.pathname)) ?? "null");
+      return JSON.parse(sessionStorage.getItem(drafts.key(path)) ?? "null");
     } catch {
       return null; // Start a fresh draft.
     }
   },
-  keepDraft(href: string, draft: ViewDraft) {
+  keep(path: string, draft: ViewDraft) {
     try {
-      sessionStorage.setItem(address.draftKey(new URL(href).pathname), JSON.stringify(draft));
+      sessionStorage.setItem(drafts.key(path), JSON.stringify(draft));
     } catch {
       /* Draft remains available until navigation. */
     }
   },
-  forgetDraft() {
+  forget(path: string) {
     try {
-      sessionStorage.removeItem(address.draftKey(location.pathname));
+      sessionStorage.removeItem(drafts.key(path));
     } catch {
       /* Best effort. */
     }
   },
 };
-function showAddress(replace = false) {
-  const { savedViews, editorDraft } = get(),
-    href = screenUrl(screen(), location.href, savedViews);
-  if (editorDraft) address.keepDraft(href, editorDraft);
-  address.show(href, replace);
+/** The screen's place and the address the router shows for it. */
+function current() {
+  const place = placeOf(screen(), scopeOf),
+    named = locationOf(place, { view: findView }),
+    // The inbox keeps a selected row whose issue isn't mirrored in its address; the screen doesn't model it.
+    note = place.to === "inbox" && !place.issue ? (router.latestLocation.search as { notification?: string }).notification : undefined;
+  const target = note ? { ...named, search: { ...named.search, notification: note } } : named;
+  const location = router.buildLocation(target as never);
+  return { place, target, location };
 }
-const restoreNavigation = () => go({ type: "restore", href: location.href, draft: address.draft() });
+/** Same address and, on an issue page, the same list under it. */
+const sameAddress = (a: ParsedLocation, b: ParsedLocation) =>
+  a.pathname === b.pathname && a.searchStr === b.searchStr && JSON.stringify(a.state.over) === JSON.stringify(b.state.over);
+/** Shows the screen's place in the address: a new history entry, or `replace` this one. */
+function showAddress(replace = false) {
+  const { target, location } = current(),
+    shown = router.latestLocation;
+  if (get().editorDraft) drafts.keep(location.pathname, get().editorDraft!);
+  if (sameAddress(location, shown)) return;
+  // The hash (a comment, an activity entry) stays while the address still shows the same issue and document.
+  const sameIssue = issueOf(location) === issueOf(shown);
+  void router.navigate({ ...(target as object), replace, ...(sameIssue ? { hash: true } : {}) } as never);
+}
+const issueOf = (l: ParsedLocation) =>
+  /^\/issue\/([^/]+)(?:\/document\/([^/]+))?/.exec(l.pathname)?.slice(1).join("/") ??
+  `${(l.search as { issue?: string }).issue}`;
+/**
+ * The router opened an address (a link, Back, Forward, a reload): show the place it names, with the editor draft kept
+ * for it. Skipped when the screen already shows it (this app's own navigation) or a newer navigation took over.
+ */
+function show(place: Place, location: ParsedLocation) {
+  if (location.href !== router.latestLocation.href) return;
+  if (navigationReady && sameAddress(current().location, location)) return;
+  go({ type: "restore", place, draft: drafts.read(location.pathname) });
+  // The address names the screen differently (an issue beside another board's list): show its own address, once.
+  const { target, location: shown } = current();
+  if (!location.state.settled && !sameAddress(shown, location))
+    throw redirect({ ...(target as object), replace: true, state: { ...(target as { state?: object }).state, settled: true } } as never);
+}
 /** Set once load has restored the address; before that nothing is written to history. */
 let navigationReady = false;
-/** Shows the screen the address names, then keeps the address and Back/Forward in step with the screen. Once. */
+/** Keeps the address in step with the screen from now on. Once, after load (the router then shows the address). */
 export function startNavigation() {
   if (navigationReady) return;
-  restoreNavigation();
   navigationReady = true;
-  showAddress(true);
-  window.addEventListener("popstate", restoreNavigation);
   window.addEventListener("click", openIssueLink);
-  // A rename (here or in another tab) moves the slug; the id suffix keeps the entry.
+  // A rename (here or in another tab) moves the view's slug; the id suffix keeps the entry.
   let shown = get().savedViews;
   subscribe(() => {
     if (get().savedViews === shown) return;
     shown = get().savedViews;
-    if (get().activeViewId) showAddress(true);
+    if (get().activeViewId && router.state.status === "idle") showAddress(true);
   });
 }
 /**
@@ -156,11 +204,10 @@ function openIssueLink(event: MouseEvent) {
 }
 /** The board's Issues › All. Leaves any view first, so its scope and details stay untouched. */
 export function openAllIssues(board: number) {
-  navigate({ board, selected: null, panel: false });
+  navigate({ board, scope: "all", selected: null, panel: false });
   ui.send({ type: "mine.set", mine: false });
   ui.send({ type: "query.set", query: "" });
   set({ details: false, findInView: false });
-  setScope(board, "all");
 }
 export function setOverlay(filters: FilterGroup) {
   go({ type: "filters", filters });

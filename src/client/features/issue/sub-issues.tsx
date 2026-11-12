@@ -32,9 +32,9 @@ import { issueMenuEntries } from "./issue-menu";
 import { InlineEditor } from "@/client/features/editor/rich-editor-loader";
 import { useCommand } from "@/client/features/navigation/commands";
 import { get, useStore, type Issue } from "@/client/state/store";
-import { issueURL } from "./issue-urls";
 import { actions } from "@/client/state/issue-actions";
 import { navigate, ui } from "@/client/features/navigation/app-navigation";
+import { AppLink } from "@/client/features/navigation/app-link";
 import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { Avatar } from "@/client/components/avatar";
 import { statusById } from "@/shared/board-catalog";
@@ -151,23 +151,17 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
     >
       <span className="mr-0.5 font-[450] text-fg-3">Sub-issue of</span>
       {/* Text has no anchor variant; preserve link semantics and keyboard navigation. */}
-      <a
+      <AppLink
         data-parent-link
         className="flex h-[26px] min-w-0 items-center gap-1 rounded-lg border border-transparent px-1 hover:bg-hover"
-        href={issueURL(parent)}
-        onClick={(event) => {
-          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
-            return;
-          event.preventDefault();
-          openIssue(parent);
-        }}
+        to={{ board: parent.board, selected: parent.key, panel: true }}
       >
         <span className="grid size-3.5 place-items-center">
           <StatusIcon status={status(parent)} />
         </span>
         <span className="font-[450] text-fg-3">{parent.key}</span>
         <span className="truncate font-medium text-fg">{parent.summary}</span>
-      </a>
+      </AppLink>
       <PropertyTrigger
         ref={progress}
         data-parent-progress
@@ -625,14 +619,6 @@ function SubIssueRow({
       {content}
     </FieldMenuButton>
   );
-  const childURL = (child: Issue) => {
-    const url = new URL(location.href);
-    url.hash = "";
-    url.searchParams.set("board", String(child.board));
-    url.searchParams.set("issue", child.key);
-    url.searchParams.delete("document");
-    return url.href;
-  };
 
   return (
     <div
@@ -703,23 +689,12 @@ function SubIssueRow({
         <span className="px-1 text-fg-3">{child.key}</span>
       )}
       {/* Text has no anchor variant; preserve the native issue link. */}
-      <a
+      <AppLink
         className="flex min-w-0 flex-1 items-center gap-2 py-1.5 text-[13px] font-medium text-fg"
-        href={childURL(child)}
-        onClick={(event) => {
-          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
-            return;
-          event.preventDefault();
-          navigate({
-            board: child.board,
-            selected: child.key,
-            panel: true,
-            view: get().view,
-          });
-        }}
+        to={{ board: child.board, selected: child.key, panel: true, view: get().view }}
       >
         <span className="truncate">{child.summary}</span>
-      </a>
+      </AppLink>
       {progress && <PropertyTrigger data-row-progress variant="row" state="value" aria-label={`Open sub-issues of ${child.key}`} aria-expanded={!!childrenMenu} onClick={e => setChildrenMenu(e.currentTarget)}><ProgressRing value={progress[0] / progress[1]} />{progress.join("/")}</PropertyTrigger>}
       {childrenMenu && <ChildrenMenu parent={child} anchor={childrenMenu} close={() => setChildrenMenu(null)} />}
 
