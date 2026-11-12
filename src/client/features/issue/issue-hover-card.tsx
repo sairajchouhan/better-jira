@@ -81,7 +81,7 @@ export function IssueHoverCard({
             id={id}
             role="tooltip"
             data-issue-hover={relation.key}
-            className="z-50 w-max min-w-[220px] max-w-[380px] rounded-lg border border-border bg-panel p-1.5 text-xs text-fg shadow-xl"
+            className="z-50 w-max min-w-[220px] max-w-[380px] rounded-lg border border-[var(--menu-line)] bg-[var(--menu)] p-1.5 text-xs text-[var(--menu-fg)] shadow-[var(--menu-shadow)]"
           >
             <div className="mb-1.5 flex items-center justify-between gap-4 text-fg-3">
               <span>{relation.key}</span>
