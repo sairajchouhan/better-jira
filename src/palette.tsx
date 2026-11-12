@@ -60,13 +60,13 @@ function Overlay({
   );
 }
 
-/** `keys`: the hotkey that does the same thing, drawn after the name. `id` keys the row when names repeat. */
+/** `keys`: the hotkey that does the same thing, drawn after the name. `id` keys the row when names repeat (its value keeps the name). */
 type Cmd = { id?: string; name: string; keys?: Keys; icon?: ReactNode; disabled?: boolean; run: () => void };
 
 /** One command row; ⌘K's commands and every nested page's choices. */
 function CommandRow({ cmd: c }: { cmd: Cmd }) {
   return (
-    <Command.Item value={`cmd:${c.id ?? c.name}`} disabled={c.disabled} className="data-[disabled=true]:opacity-50" onSelect={c.run}>
+    <Command.Item value={`cmd:${c.id ? `${c.id} ` : ""}${c.name}`} disabled={c.disabled} className="data-[disabled=true]:opacity-50" onSelect={c.run}>
       <span className="grid w-4 shrink-0 place-items-center text-fg-3">{c.icon}</span>
       <span className="flex-1 truncate">{c.name}</span>
       {c.keys?.length ? <Shortcut keys={c.keys} /> : null}
