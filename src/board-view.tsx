@@ -54,6 +54,9 @@ import {
 import { BoardDetails, GroupMenu } from "./personal-controls";
 import { Avatar } from "./avatar";
 import { shortDate } from "./due-date";
+import { Button, IconButton } from "./button";
+import { CountBadge } from "./count-badge";
+import { Text } from "./text";
 // Memoised: an overlay opening (⌘K) re-renders App, and must not re-render every board.
 export const BoardView = memo(function BoardView({
   board,
@@ -233,13 +236,14 @@ export const BoardView = memo(function BoardView({
                         <span>{row.name}</span>
                         <span>{row.issues.length}</span>
                         {show[0] && (
-                          <button
-                            aria-label={`New issue in ${row.name}`}
+                          <IconButton
+                            label={`New issue in ${row.name}`}
+                            variant="muted"
+                            size="small"
                             onClick={() => createIn(show[0]!, row)}
-                            className={COL_BTN}
                           >
                             <Icon name="plus" />
-                          </button>
+                          </IconButton>
                         )}
                       </div>
                     )}
@@ -305,16 +309,16 @@ export const BoardView = memo(function BoardView({
                 </summary>
                 <div className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-y-auto">
                   {hidden.map((c) => (
-                    <button
+                    <Button
                       key={c.id}
+                      variant="secondary"
                       aria-label={`Show ${c.name}`}
-                      className="flex h-8 items-center gap-2 rounded-lg bg-card px-3 text-fg-2 hover:bg-hover"
+                      icon={c.status && <StatusIcon status={c.status} />}
                       onClick={() => reveal(c.id)}
                     >
-                      {c.status && <StatusIcon status={c.status} />}
-                      <span>{c.name}</span>
-                      <span className="text-fg-3">{c.issues.length}</span>
-                    </button>
+                      {c.name}
+                      <CountBadge>{c.issues.length}</CountBadge>
+                    </Button>
                   ))}
                 </div>
               </details>
@@ -353,6 +357,7 @@ function HiddenColumns({
       className="mr-3 w-[338px] shrink-0 overflow-y-auto border-l border-line pl-3"
     >
       <div className="flex h-[50px] items-center">
+        {/* Not Button: the disclosure draws an 18px triangle, which a small Button would shrink to its 14px icon. */}
         <button
           aria-expanded={open}
           onClick={toggle}
@@ -414,9 +419,9 @@ function GroupHeading({
         <span>{bucket.name}</span>
         <span className="text-fg-3">{bucket.issues.length}</span>
       </button>
-      <button aria-label={`New issue in ${bucket.name}`} onClick={create} className={COL_BTN}>
+      <IconButton label={`New issue in ${bucket.name}`} variant="muted" size="small" onClick={create}>
         <Icon name="plus" />
-      </button>
+      </IconButton>
     </div>
   );
 }
@@ -447,14 +452,6 @@ function IssueList({
     ));
 }
 
-// --- keyboard ---
-
-// Linear's bottom-bar button: 28px, radius 8, fg-3.
-export const FOOT_BTN =
-  "grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg-2 disabled:opacity-30 disabled:hover:bg-transparent";
-export const COL_BTN =
-  "grid size-6 place-items-center rounded-full text-fg-3 hover:bg-hover hover:text-fg";
-
 function ColumnHeading({
   bucket,
   count,
@@ -477,8 +474,13 @@ function ColumnHeading({
       ) : (
         <Icon name="layers" />
       )}
-      <span className="ml-0.5 truncate font-medium text-fg-2">{bucket.name}</span>
-      <span className="text-fg-3">{count}</span>
+      {/* .raj/linear.md "Columns": the name 13px/500 fg-2, the count 13px/450 fg-3. */}
+      <Text variant="smallPlus" color="base" wrap="truncate" className="ml-0.5">
+        {bucket.name}
+      </Text>
+      <Text variant="small" color="muted">
+        {count}
+      </Text>
       <GroupMenu
         name={bucket.name}
         hide={hide}
@@ -486,13 +488,9 @@ function ColumnHeading({
         completed={bucket.status?.category === "done"}
         display={display}
       />
-      <button
-        aria-label={`New issue in ${bucket.name}`}
-        onClick={create}
-        className={`-ml-1.5 ${COL_BTN}`}
-      >
+      <IconButton label={`New issue in ${bucket.name}`} variant="muted" size="small" onClick={create} className="-ml-1.5">
         <Icon name="plus" />
-      </button>
+      </IconButton>
     </h2>
   );
 }
@@ -561,7 +559,8 @@ function ColumnView({
   );
 }
 
-// Linear's card chip: 24px pill, 0.5px border, 12px/450 muted text after a 14px icon.
+// Linear's card chip: 24px pill, 0.5px border, 12px/450 muted text after a 14px icon. Not PropertyTrigger: these chips
+// only show a value inside the card's own button, and PropertyTrigger is a button that opens a picker.
 const CHIP =
   "flex h-6 max-w-[224px] shrink-0 items-center rounded-full border-[0.5px] border-chip-line bg-card px-2 text-[12px] font-[450] text-card-fg-3";
 
@@ -765,10 +764,10 @@ const IssueRow = memo(function IssueRow({
         style={depth ? { paddingLeft: 20 + depth * 20 } : undefined}
       >
         {show("id") && (
-          <span className="w-[85px] shrink-0 text-[12px] text-fg-3 tabular-nums">
+          <Text variant="mini" color="muted" numeric="tabular" className="w-[85px] shrink-0">
             {depth > 0 && "↳ "}
             {issue.key}
-          </span>
+          </Text>
         )}
         {show("status") && status && (
           <span title={status.name}>
@@ -780,9 +779,9 @@ const IssueRow = memo(function IssueRow({
           <IssueProperties issue={issue} display={d} labels={1} priorityClass="text-fg-3" />
         </span>
         {show("assignee") && <Avatar user={issue.assignee} size={18} />}
-        <span className="flex shrink-0 gap-2 text-[11px] text-fg-3">
+        <Text variant="micro" color="muted" className="flex shrink-0 gap-2">
           <IssueDates issue={issue} display={d} updated="" />
-        </span>
+        </Text>
       </IssueTarget>
     </div>
   );
