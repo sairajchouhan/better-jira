@@ -1,8 +1,16 @@
-import { expect, test, sleep, fixture, type App as Page, type OpenOptions } from "./app";
+import {
+  expect,
+  test,
+  sleep,
+  fixture,
+  type App as Page,
+  type OpenOptions,
+} from "./app";
 
 const inboxCalls = async () =>
-  (await fixture.log()).requests.filter((r) => r.path === "/api/inbox" && r.method === "POST")
-    .length;
+  (await fixture.log()).requests.filter(
+    (r) => r.path === "/api/inbox" && r.method === "POST",
+  ).length;
 const rows = `[...document.querySelectorAll('[data-inbox-row]')]`;
 const rowText = `${rows}.map(r=>r.getAttribute('aria-label'))`;
 const rowKeys = `${rowText}.map(l=>l.split(" ")[1]).join()`;
@@ -13,11 +21,16 @@ const item = (menu: string, value: string) =>
   `[role=dialog][aria-label="${menu}"] [cmdk-item][data-value="${value}"]`;
 const toggle = (label: string) =>
   `[...document.querySelectorAll('label')].find(l=>l.textContent.trim().startsWith(${JSON.stringify(label)})).querySelector('input').click()`;
-const choose = (label: string, value: string) =>
-  `(()=>{const s=document.querySelector('select[aria-label="${label}"]');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(s,'${value}');s.dispatchEvent(new Event('change',{bubbles:true}))})()`;
+async function choose(p: Page, label: string, value: string) {
+  await p.click(`button[aria-label^="${label}: "]`);
+  await p.click(
+    `[role=dialog][aria-label="${label}"] [cmdk-item][data-value$=" ${value}"]`,
+  );
+}
 const rowMenu = (n: number) =>
   `(()=>{const n=document.querySelector('[data-inbox-row*="issue/${n}"]'),r=n.getBoundingClientRect();n.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:r.x+40,clientY:r.y+20}))})()`;
-const LOCAL = "better-jira:inbox-local:v1:https://example.atlassian.net/audit-me";
+const LOCAL =
+  "better-jira:inbox-local:v1:https://example.atlassian.net/audit-me";
 const jiraUnread = async (n: number) =>
   (
     (await (await fetch(`${fixture.url}api/inbox`)).json()).items as {
@@ -28,7 +41,12 @@ const jiraUnread = async (n: number) =>
 
 /** A page on a fixture reset with these settings. */
 type Open = (path?: string, options?: OpenOptions) => Promise<Page>;
-async function fresh(open: Open, settings: object, path = "?inbox=1", options?: OpenOptions) {
+async function fresh(
+  open: Open,
+  settings: object,
+  path = "?inbox=1",
+  options?: OpenOptions,
+) {
   await fixture.reset(settings);
   return open(path, options);
 }
@@ -52,23 +70,21 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
       "TEST-6",
       "OUT-9",
     ]);
-    expect(labels[0]).toContain("Unread TEST-2 Browser fixture 2 Alex assigned the issue to you");
+    expect(labels[0]).toContain(
+      "Unread TEST-2 Browser fixture 2 Alex assigned the issue to you",
+    );
     expect(labels[1]).toContain("Alex mentioned you: Can you check this?");
     expect(labels[2]).toContain("Marked as completed by Sam");
     expect(labels[3]).toStartWith("Read TEST-4");
     expect(labels[3]).toContain("Sam commented: Looks good to me");
     expect(labels[4]).toContain("Alex reacted to your comment");
     expect(labels[5]).toContain("Sam created a new issue");
-    expect(await p.eval(`${rows}.map(r=>r.innerText.split('\\n').at(-1))`)).toEqual([
-      "5m",
-      "30m",
-      "2h",
-      "1d",
-      "3d",
-      "1w",
-      "1y",
-    ]);
-    expect(await p.eval(`document.body.innerText`)).toContain("5 unread notifications");
+    expect(
+      await p.eval(`${rows}.map(r=>r.innerText.split('\\n').at(-1))`),
+    ).toEqual(["5m", "30m", "2h", "1d", "3d", "1w", "1y"]);
+    expect(await p.eval(`document.body.innerText`)).toContain(
+      "5 unread notifications",
+    );
     // Opening the inbox clears Jira's unseen count (the bell), once.
     await p.waitFor(
       `fetch('/__fixture').then(r=>r.json()).then(d=>d.requests.some(r=>r.method==='POST'&&r.path==='/api/inbox'))`,
@@ -89,15 +105,17 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
     await p.eval(toggle("Enable priority inbox"));
     await p.waitFor(`${rows}.length === 7`);
     // Focus grouping: unread rows by focus group, then the read ones.
-    await p.eval(choose("Group unreads by", "focus"));
+    await choose(p, "Group unreads by", "focus");
     await p.waitFor(
       `[...document.querySelectorAll('[data-inbox-group]')].map(g=>g.dataset.inboxGroup).join() === "Mentions,Other,Read"`,
     );
-    await p.eval(choose("Ordering", "priority"));
+    await choose(p, "Ordering", "priority");
     // TEST-4 is the only Urgent issue; it is read, so it leads the Read group.
-    await p.waitFor(`${rowKeys}.startsWith("TEST-1,") && ${rowKeys}.includes("TEST-4,TEST-5")`);
-    await p.eval(choose("Group unreads by", "none"));
-    await p.eval(choose("Ordering", "newest"));
+    await p.waitFor(
+      `${rowKeys}.startsWith("TEST-1,") && ${rowKeys}.includes("TEST-4,TEST-5")`,
+    );
+    await choose(p, "Group unreads by", "none");
+    await choose(p, "Ordering", "newest");
     await p.key("Escape");
     // F opens Linear's filter menu; each field lists the values the rows have, with counts.
     await p.key("f");
@@ -124,7 +142,9 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
     await p.click(`[aria-label="Remove Notification type filter"]`);
     await p.waitFor(`${rowKeys} === "TEST-4"`);
     await p.click(`text=Clear`);
-    await p.waitFor(`${rows}.length === 7 && !document.querySelector('[data-inbox-chip]')`);
+    await p.waitFor(
+      `${rows}.length === 7 && !document.querySelector('[data-inbox-chip]')`,
+    );
     // Filters persist across reloads, like Linear's view.
     await p.key("f");
     await p.click(`[cmdk-item][data-value="Project"]`);
@@ -133,7 +153,9 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
     await p.reload();
     await p.waitFor(`${rowKeys} === "OUT-9"`);
     await p.click(`text=Clear`);
-    await p.waitFor(`${rows}.length === 7 && !document.querySelector('[data-inbox-chip]')`);
+    await p.waitFor(
+      `${rows}.length === 7 && !document.querySelector('[data-inbox-chip]')`,
+    );
   });
   await test.step("j/k select rows, mark them read in Jira and open the issue; U, E, Enter and Escape act like Linear", async () => {
     await p.key("j");
@@ -174,9 +196,13 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
     await p.waitFor(`${snooze} === "An hour from now"`);
     await p.key("ArrowDown");
     // The second choice is "In 3 hours", or "This evening" from 15:00 (Linear's order by time), in the browser's time zone.
-    await p.waitFor(`${snooze} === document.querySelectorAll('[data-snooze]')[1]?.dataset.snooze`);
+    await p.waitFor(
+      `${snooze} === document.querySelectorAll('[data-snooze]')[1]?.dataset.snooze`,
+    );
     await p.key("Enter");
-    await p.waitFor(`${rows}.length === 5 && ${toastText}.includes("Notification snoozed")`);
+    await p.waitFor(
+      `${rows}.length === 5 && ${toastText}.includes("Notification snoozed")`,
+    );
     await p.key("z");
     await p.waitFor(`${rows}.length === 6`);
     await p.click(`[aria-label="Notification actions"]`);
@@ -190,7 +216,9 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
     // Linear's filter menu opens on its first field.
     await p.key("f");
     await p.key("Enter");
-    await p.waitFor(`!!document.querySelector('${item("Notification type", "Mentions")}')`);
+    await p.waitFor(
+      `!!document.querySelector('${item("Notification type", "Mentions")}')`,
+    );
     await p.key("Escape");
     await p.key("Escape");
     await p.waitFor(`!document.querySelector('[role=dialog]')`);
@@ -205,13 +233,17 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
     await p.click(`[data-inbox-row*="issue/1"]`);
     await p.waitFor(`${current}.includes("TEST-1")`);
     await p.key("Enter");
-    await p.waitFor(`document.querySelector('.issue-detail')?.dataset.mode === 'page'`);
+    await p.waitFor(
+      `document.querySelector('.issue-detail')?.dataset.mode === 'page'`,
+    );
   });
   await test.step("A reload keeps the selected row and shows the last feed before Jira answers", async () => {
     await p.key("Escape");
     await p.waitFor(`${rows}.length === 6 && ${current}.includes("TEST-1")`);
     await p.key("e");
-    await p.waitFor(`${rows}.length === 5 && !${rowText}.some(l=>l.includes("TEST-1"))`);
+    await p.waitFor(
+      `${rows}.length === 5 && !${rowText}.some(l=>l.includes("TEST-1"))`,
+    );
     await fixture.reset({ inboxDelay: 3000 });
     await p.reload();
     await p.waitFor(`${rows}.length === 5`, 1500);
@@ -225,14 +257,20 @@ test("triaging rows: unread-only, toast undo, other tabs, rows outside the mirro
     const p = await fresh(open, { inboxFail: true });
     await p.waitFor(`${rows}.length === 7`);
     await p.key("u", "alt");
-    await p.waitFor(`document.body.innerText.includes("Could not update Jira")`);
-    await p.waitFor(`${rowText}.filter(l=>l.startsWith("Unread")).length === 5`);
+    await p.waitFor(
+      `document.body.innerText.includes("Could not update Jira")`,
+    );
+    await p.waitFor(
+      `${rowText}.filter(l=>l.startsWith("Unread")).length === 5`,
+    );
   });
   await test.step("An expired snooze brings the row back unread, in Jira too", async () => {
     // TEST-4 is read, and its snooze ended a second ago.
     const setup = `if(!sessionStorage.seeded){sessionStorage.seeded=1;localStorage.setItem(${JSON.stringify(LOCAL)},JSON.stringify({"fixture-4-1560":{snoozed:Date.now()-1000}}))}`;
     const p = await fresh(open, {}, "?inbox=1", { setup });
-    await p.waitFor(`${rows}.length === 7 && ${rowText}.some(l=>l.startsWith("Unread TEST-4"))`);
+    await p.waitFor(
+      `${rows}.length === 7 && ${rowText}.some(l=>l.startsWith("Unread TEST-4"))`,
+    );
     await p.waitFor(`${badge} === "6"`);
     await p.reload();
     await p.waitFor(`${rowText}.some(l=>l.startsWith("Unread TEST-4"))`);
@@ -241,15 +279,21 @@ test("triaging rows: unread-only, toast undo, other tabs, rows outside the mirro
   await p.waitFor(`${rows}.length === 7`);
   await test.step("Unread-only and a notification outside the mirror", async () => {
     await p.click(`[aria-label="Show unreads only"]`);
-    await p.waitFor(`${rows}.length === 5 && ${rowText}.every(l=>l.startsWith("Unread"))`);
+    await p.waitFor(
+      `${rows}.length === 5 && ${rowText}.every(l=>l.startsWith("Unread"))`,
+    );
     await p.click(`[data-inbox-row*="issue/9"]`);
     await p.waitFor(
       `document.body.innerText.includes("Open in Jira") && document.body.innerText.includes("Outside the mirror")`,
     );
     // Unread-only keeps the selected row once read; it drops when the selection moves on.
-    await p.waitFor(`${current}.startsWith("Read OUT-9") && ${rows}.length === 5`);
+    await p.waitFor(
+      `${current}.startsWith("Read OUT-9") && ${rows}.length === 5`,
+    );
     await p.key("k");
-    await p.waitFor(`${current}.startsWith("Read TEST-6") && ${rows}.length === 4`);
+    await p.waitFor(
+      `${current}.startsWith("Read TEST-6") && ${rows}.length === 4`,
+    );
     await p.click(`[aria-label="Show read"]`);
     await p.waitFor(`${rows}.length === 7`);
   });
@@ -285,14 +329,18 @@ test("triaging rows: unread-only, toast undo, other tabs, rows outside the mirro
   });
   await test.step("R2-inbox-D6: a selected row outside the mirror stays selected over a reload", async () => {
     await p.click(`[data-inbox-row*="issue/9"]`);
-    await p.waitFor(`${current}.includes("OUT-9") && location.search.includes("notification=")`);
+    await p.waitFor(
+      `${current}.includes("OUT-9") && location.search.includes("notification=")`,
+    );
     await p.reload();
     await p.waitFor(
       `${current}.includes("OUT-9") && document.body.innerText.includes("Open in Jira")`,
     );
     // Leaving the inbox drops it from the URL.
     await p.click(`[data-inbox-row*="issue/1"]`);
-    await p.waitFor(`${current}.includes("TEST-1") && !location.search.includes("notification=")`);
+    await p.waitFor(
+      `${current}.includes("TEST-1") && !location.search.includes("notification=")`,
+    );
   });
   await test.step("R2-inbox-D7: a past custom snooze time shows its error in the dialog, which goes with it", async () => {
     await p.key("j");
@@ -309,10 +357,14 @@ test("triaging rows: unread-only, toast undo, other tabs, rows outside the mirro
     );
     await setValue("2099-01-01T09:00");
     await p.click(`[role=dialog] button[type=submit]`);
-    await p.waitFor(`${rows}.length === 6 && !document.querySelector('[role=dialog]')`);
-    expect(await p.eval(`document.body.innerText.includes("Choose a future snooze time")`)).toBe(
-      false,
+    await p.waitFor(
+      `${rows}.length === 6 && !document.querySelector('[role=dialog]')`,
     );
+    expect(
+      await p.eval(
+        `document.body.innerText.includes("Choose a future snooze time")`,
+      ),
+    ).toBe(false);
   });
   await test.step("R2-inbox-D1: U three times fast ends unread here and in Jira, though Jira would apply overlapping writes out of order", async () => {
     // The second write waits in Jira: sent at once, the read lands after the last unread.
@@ -408,16 +460,22 @@ test("a long inbox: older pages on scroll, undo by Z and toast, the row menu, âŒ
       `["Mark as read","Delete notification","Snooze","Favorite","Copy"].every(v=>document.querySelector('[role=dialog][aria-label="Notification options"] [cmdk-item][data-value="'+v+'"]'))`,
     );
     await p.click(`[cmdk-item][data-value="Favorite"]`);
-    await p.waitFor(`!document.querySelector('[aria-label="Notification options"]')`);
+    await p.waitFor(
+      `!document.querySelector('[aria-label="Notification options"]')`,
+    );
     await p.eval(rowMenu(3));
-    await p.waitFor(`!!document.querySelector('[cmdk-item][data-value="Remove from favorites"]')`);
+    await p.waitFor(
+      `!!document.querySelector('[cmdk-item][data-value="Remove from favorites"]')`,
+    );
     await p.click(`[cmdk-item][data-value="Delete notification"]`);
     await p.waitFor(
       `${rows}.length === 46 && !${rowText}.some(l=>l.includes("TEST-3")) && ${current}.includes("TEST-2")`,
     );
     // Deletes and snoozes are this browser's own (Jira has neither); they survive a reload.
     await p.reload();
-    await p.waitFor(`${rows}.length === 19 && !${rowText}.some(l=>l.includes("TEST-3"))`);
+    await p.waitFor(
+      `${rows}.length === 19 && !${rowText}.some(l=>l.includes("TEST-3"))`,
+    );
   });
   const p = await fresh(open, { inboxExtra: 40, inboxExtraUnread: true });
   await test.step("The badge counts unread rows past page 1; âŒ¥U then Z restores every one of them in Jira", async () => {
@@ -425,7 +483,9 @@ test("a long inbox: older pages on scroll, undo by Z and toast, the row menu, âŒ
     // 5 + 13 unread rows are loaded; Jira has 45.
     await p.waitFor(`${badge} === "45"`);
     await p.key("u", "alt");
-    await p.waitFor(`${badge} === "" && ${rowText}.every(l=>l.startsWith("Read"))`);
+    await p.waitFor(
+      `${badge} === "" && ${rowText}.every(l=>l.startsWith("Read"))`,
+    );
     await p.key("z");
     await p.waitFor(`${badge} === "45"`);
   });
