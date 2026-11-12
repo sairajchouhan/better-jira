@@ -1,0 +1,86 @@
+@layer components {
+  /* ry / oy / Fke: Linear's text input, 32px with 6px 12px padding and an 8px radius. */
+  .ui-input {
+    box-sizing: border-box;
+    width: 100%;
+    height: 32px;
+    padding: 6px 12px;
+    border: var(--thin-pixel) solid var(--line-3);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--fg);
+    font: inherit;
+    font-size: 13px;
+    font-feature-settings: "calt" 0;
+    outline-offset: -1px;
+    appearance: none;
+    transition: border 0.15s;
+  }
+  .ui-input::placeholder {
+    color: var(--fg-4);
+  }
+  .ui-input:disabled {
+    color: var(--fg-3);
+  }
+  .ui-input:focus-visible {
+    outline: 1px solid var(--accent);
+  }
+  .ui-input[data-size="small"] {
+    height: 26px;
+    font-size: 12px;
+  }
+  .ui-input[data-size="medium"] {
+    height: 28px;
+    font-size: 12px;
+  }
+  .ui-input:is([data-size="large"], [data-size="xlarge"]) {
+    height: 44px;
+    padding: 12px;
+    border-radius: 10px;
+  }
+  .ui-input[data-size="xlarge"] {
+    height: 48px;
+  }
+
+  /* A plain textarea: 64px, no resize handle. */
+  .ui-input:is(textarea) {
+    height: 64px;
+    resize: none;
+    line-height: 1.5;
+  }
+  .ui-input:is(textarea):is([data-size="small"], [data-size="medium"]) {
+    line-height: 1.4;
+  }
+  .ui-input:is(textarea):is([data-size="large"], [data-size="xlarge"]) {
+    border-radius: 6px;
+  }
+
+  /* AutoResizingTextarea: the textarea and a hidden copy of its text share one grid cell, so the copy sets the height.
+     Where `field-sizing: content` exists the browser sizes the textarea itself and the copy is dropped. */
+  .ui-autosize {
+    display: grid;
+  }
+  .ui-autosize > .ui-input {
+    grid-area: 1 / 1;
+    height: auto;
+    min-height: 3lh;
+    max-height: 30lh;
+    overflow-y: auto;
+    scroll-padding-block: 0.5lh;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+  .ui-autosize-sizer {
+    visibility: hidden;
+    overflow: hidden;
+    transition: none;
+  }
+  @supports (field-sizing: content) {
+    .ui-autosize > textarea {
+      field-sizing: content;
+    }
+    .ui-autosize-sizer {
+      display: none;
+    }
+  }
+}
