@@ -189,8 +189,9 @@ test("BJ-149: reopening Add filter creates a separate AND condition", async ({ o
   try {
     for (const priority of ["High", "Low"]) {
       await page.key("f");
-      await page.click('text=Priority');
-      await page.click('text=' + priority);
+      await page.hover('text=Priority');
+      await page.waitFor(`!!document.querySelector('[aria-label="Filter Priority"]')`);
+      await page.click(`[aria-label="Priority filter"] [cmdk-item][data-value="${priority} ${priority}"]`);
       await page.key("Escape");
     }
     expect(await page.eval(`document.querySelectorAll('.view-filter-chip').length`)).toBe(2);

@@ -61,7 +61,7 @@ const dot = (name: string) => (
 const person = (user: User) => <Avatar user={user} size={16} />;
 
 /** Linear's order: "No …" first, then "Current user", then the values (priorities by rank, the rest by name). */
-export function filterChoices(field: Field, board: Board, issues: Issue[]): Choice[] {
+export function filterChoices(field: Field, board: Board, issues: Issue[], matching = issues): Choice[] {
   const opts = new Map<string, Choice>();
   const add = (value: string, label: string, icon?: ReactNode) =>
     opts.set(value, { value, label, icon, count: 0 });
@@ -109,7 +109,7 @@ export function filterChoices(field: Field, board: Board, issues: Issue[]): Choi
       : a.label.localeCompare(b.label);
   if (field !== "status")
     out.sort((a, b) => special(a) - special(b) || (special(a) < 2 ? 0 : order(a, b)));
-  for (const o of out) o.count = countWhere(issues, { field, op: "is", values: [o.value] });
+  for (const o of out) o.count = countWhere(matching, { field, op: "is", values: [o.value] });
   return out;
 }
 const countWhere = (issues: Issue[], rule: Omit<Rule, "id">) =>
@@ -138,7 +138,11 @@ export function useFieldFilter(field: Field, board: Board, editingId?: string) {
   const rule = prefs.filters.children.find(
     (c): c is Rule => !("children" in c) && c.id === ruleId,
   );
-  const choices = useMemo(() => filterChoices(field, board, issues), [field, board, issues]);
+  // Keep zero-result values available when another AND condition narrows this field.
+  const choices = useMemo(
+    () => filterChoices(field, board, [...issuesMap.values()].filter(i => i.board === board.id), issues),
+    [field, board, issuesMap, issues],
+  );
   function apply(values: string[], operator = rule?.op ?? "is") {
     setRule(board.id, { id: ruleId, field, op: operator, values });
   }
