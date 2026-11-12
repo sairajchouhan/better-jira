@@ -7,6 +7,12 @@ import { createViewDraft, openSavedView, useActiveView, useSavedViews, type Save
 import { openViewEditor, ViewContextMenu } from "./view-editor";
 import { MenuSurface } from "./menu-surface";
 import { Menu } from "./menu";
+import { Button, IconButton } from "./button";
+import { Tabs } from "./tabs";
+import { Text } from "./text";
+import { CountBadge } from "./count-badge";
+import { EmptyState } from "./empty-state";
+import { Shortcut } from "./keycap";
 import { directoryViews, resultFeedback, viewSummaries } from "./views-navigation-model";
 import "./views-navigation.css";
 
@@ -25,15 +31,26 @@ export function ViewsDirectory() {
   const order = (key: "name" | "owner") => { setSort(key); setDescending(sort === key ? !descending : false); };
   const create = () => openViewEditor(createViewDraft("custom"));
   return <section aria-label="Views" className="views-directory flex min-w-0 flex-1 flex-col">
-    <header className="flex h-11 shrink-0 items-center gap-2 border-b border-frame px-4 text-[13px] font-medium text-fg-2"><span>{board?.name}</span><span className="text-fg-3">›</span><h2>Views</h2><button className="ml-auto flex h-7 items-center gap-2 rounded-full pr-2.5 pl-2 text-[12px] text-fg-3 hover:bg-hover" onClick={create}><Icon name="plus" />New view</button></header>
-    <div className="flex h-11 shrink-0 items-center px-2"><span className="rounded-full bg-tab-on px-3 py-1.5 text-[12px] font-medium">Issues</span><button aria-label="Display options" aria-expanded={!!displayAnchor} className="ml-auto grid size-7 place-items-center rounded-full bg-btn text-fg-2 shadow-(--tab-shadow) hover:bg-hover" onClick={e => setDisplayAnchor(e.currentTarget)}><Icon name="display" /></button></div>
+    <header className="flex h-11 shrink-0 items-center gap-2 border-b border-frame px-4 text-[13px] font-medium text-fg-2"><span>{board?.name}</span><span className="text-fg-3">›</span><h2>Views</h2><Button variant="muted" size="medium" icon={<Icon name="plus" />} className="ml-auto" onClick={create}>New view</Button></header>
+    <div className="flex h-11 shrink-0 items-center px-2"><Tabs value="issues" onValueChange={() => {}}><Tabs.List aria-label="View type"><Tabs.Tab value="issues">Issues</Tabs.Tab></Tabs.List></Tabs><IconButton label="Display options" variant="secondary" aria-expanded={!!displayAnchor} className="ml-auto" onClick={e => setDisplayAnchor(e.currentTarget)}><Icon name="display" /></IconButton></div>
     {displayAnchor && <MenuSurface label="Display options" anchor={displayAnchor} align="end" fit close={() => setDisplayAnchor(null)}><Menu tabIndex={0} defaultValue={sort}><Menu.List><Menu.GroupHeader>Ordering</Menu.GroupHeader>{(["name", "owner"] as const).map(key => <Menu.Item key={key} value={key} checked={sort === key} onSelect={() => { setSort(key); setDescending(false); setDisplayAnchor(null); }}>{key === "name" ? "Name" : "Owner"}</Menu.Item>)}</Menu.List></Menu></MenuSurface>}
     {rows.length ? <div role="table" aria-label="Custom views" className="overflow-auto">
       <div role="row" className="views-directory-grid border-b border-line py-1 pr-6 pl-2">
-        {(["name", "owner"] as const).map(key => <div role="columnheader" aria-sort={sort === key ? descending ? "descending" : "ascending" : "none"} key={key}><button aria-label={`Order by ${key === "name" ? "Name" : "Owner"}`} className="h-6 rounded-full px-1.5 text-[12px] font-medium text-fg-2 hover:bg-hover" onClick={() => order(key)}>{key === "name" ? "Name" : "Owner"}{sort === key && (descending ? " ↑" : " ↓")}</button></div>)}
+        {(["name", "owner"] as const).map(key => <div role="columnheader" aria-sort={sort === key ? descending ? "descending" : "ascending" : "none"} key={key}><Button variant="borderless" size="small" aria-label={`Order by ${key === "name" ? "Name" : "Owner"}`} onClick={() => order(key)}>{key === "name" ? "Name" : "Owner"}{sort === key && (descending ? " ↑" : " ↓")}</Button></div>)}
       </div>
       {rows.map(view => <ViewContextMenu key={view.id} view={view}><div role="row" className="views-directory-grid py-2.5 pr-6 pl-4 hover:bg-hover"><div role="cell"><button className="flex w-full items-start gap-3 text-left" onClick={() => openSavedView(view)}><span className="pt-0.5"><SavedViewIcon view={view} /></span><span className="min-w-0"><span className="block truncate text-[13px] font-medium text-fg">{view.name}</span>{view.description && <span className="mt-0.5 block truncate text-[13px] text-fg-3">{view.description}</span>}</span></button></div><div role="cell" className="flex items-center"><span title={ME.name} className="flex h-7 w-[120px] items-center gap-1.5 rounded-full px-1.5 text-[13px] text-fg"><Avatar user={ME} size={16} /><span className="truncate">{ME.name}</span></span></div></div></ViewContextMenu>)}
-    </div> : <div className="flex flex-1 items-center justify-center"><div className="w-[340px] max-w-full px-2 text-[13px] text-fg-3"><div className="mb-8 text-fg-3"><svg aria-hidden="true" width="72" height="88" viewBox="0 0 72 88" fill="none" stroke="currentColor" strokeWidth=".8"><path d="M4 47 35 31 68 47 36 64Z M4 52 36 69 68 52 M4 57 36 74 68 57 M4 62 36 79 68 62 M4 67 36 84 68 67" opacity=".4"/><path d="m3 43 19-34 34-6 2 3-19 34-34 6Z M6 43 25 11 55 5 M38 40 58 6"/></svg></div><h3 className="mb-2 text-[15px] font-semibold text-fg-2">Views</h3><p>Create custom views using filters to show only the issues you want to see. You can save and favorite these views for easy access and faster issue triage.</p><p className="mt-4">You can also save any existing view by clicking the <span className="inline-flex align-middle"><Icon name="view" /></span> icon or by pressing <kbd>⌥</kbd> <kbd>V</kbd>.</p><div className="mt-6 flex gap-2"><button className="views-create" onClick={create}>Create new view</button><a className="rounded-full border border-line px-3 py-1 text-[12px] text-fg-2" href="https://linear.app/docs/custom-views" target="_blank" rel="noreferrer">Documentation</a></div></div></div>}
+    </div> : <EmptyState
+      icon={<svg width="72" height="88" viewBox="0 0 72 88" fill="none" stroke="currentColor" strokeWidth=".8" className="text-fg-3"><path d="M4 47 35 31 68 47 36 64Z M4 52 36 69 68 52 M4 57 36 74 68 57 M4 62 36 79 68 62 M4 67 36 84 68 67" opacity=".4"/><path d="m3 43 19-34 34-6 2 3-19 34-34 6Z M6 43 25 11 55 5 M38 40 58 6"/></svg>}
+      title="Views"
+      actions={<>
+        <Button size="medium" onClick={create}>Create new view</Button>
+        {/* An external link, so it stays an <a>: Button only renders a <button> (follow-up for Q8). */}
+        <a className="rounded-full border border-line px-3 py-1 text-[12px] text-fg-2" href="https://linear.app/docs/custom-views" target="_blank" rel="noreferrer">Documentation</a>
+      </>}
+    >
+      <p>Create custom views using filters to show only the issues you want to see. You can save and favorite these views for easy access and faster issue triage.</p>
+      <p>You can also save any existing view by clicking the <span className="inline-flex align-middle"><Icon name="view" /></span> icon or by pressing <Shortcut keys="Alt+V" size="small" className="align-middle" />.</p>
+    </EmptyState>}
   </section>;
 }
 
@@ -53,18 +70,20 @@ export function ViewFavorites() {
     }} className={`flex h-7 w-full items-center gap-2 rounded-lg px-2 text-left ${view && active?.id === view.id ? "bg-sel text-fg" : "text-fg-2 hover:bg-hover"}`}>{view ? <SavedViewIcon view={view} /> : document ? <Icon name="file" /> : <span className="text-fg-3">☆</span>}<span className="truncate">{view?.name ?? (document ? document.resource.title || "New document" : issue ? `${issue.key} ${issue.summary}` : board?.name)}</span></button>;
     return [view ? <ViewContextMenu key={id} view={view}>{button}</ViewContextMenu> : button];
   });
-  return rows.length ? <div className="mt-5"><div className="mb-1 px-2 text-[12px] text-fg-3">Favorites</div>{rows}</div> : null;
+  return rows.length ? <div className="mt-5"><Text as="div" variant="mini" color="muted" className="mb-1 px-2">Favorites</Text>{rows}</div> : null;
 }
 export function ViewDetails({ view, issues }: { view: SavedView; issues: Issue[] }) {
   const summaries = viewSummaries(issues);
   const [tab, setTab] = useState<"assignees" | "labels">("assignees");
   const rows = summaries[tab];
   return <aside aria-label="View details" className="view-details w-[320px] shrink-0 overflow-auto border-l border-line p-5 text-[13px] max-sm:absolute max-sm:inset-y-0 max-sm:right-0 max-sm:bg-panel">
-    <div className="mb-3"><SavedViewIcon view={view} /></div><h2 className="text-[15px] leading-[23px] font-semibold text-fg-2">{view.name}</h2>{view.description && <p className="mt-2 whitespace-pre-wrap text-fg-3">{view.description}</p>}
+    <div className="mb-3"><SavedViewIcon view={view} /></div><Text as="h2" variant="regularPlus" color="base">{view.name}</Text>{view.description && <Text as="p" variant="small" color="muted" className="mt-2 whitespace-pre-wrap">{view.description}</Text>}
     <dl className="my-6 grid grid-cols-[90px_1fr] gap-y-3"><dt className="text-fg-3">Visibility</dt><dd>Personal</dd><dt className="text-fg-3">Owner</dt><dd className="flex items-center gap-2"><Avatar user={ME} size={18} />{ME.name}</dd></dl>
-    {/* Linear's summary switcher: 32px pills that grow from their label width, 8px apart; Projects has no Jira counterpart here. */}
-    <div role="tablist" aria-label="Summary" className="mb-3 flex gap-2">{(["assignees", "labels"] as const).map(key => <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={`h-8 flex-auto rounded-full border-[0.5px] border-transparent px-3 text-[12px] font-medium ${tab === key ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover"}`}>{key === "assignees" ? "Assignees" : "Labels"}</button>)}</div>
-    <div role="tabpanel" aria-label={tab === "assignees" ? "Assignees" : "Labels"}>{rows.length ? rows.map(([name, count]) => <div key={name} className="flex h-9 items-center justify-between px-1 text-fg-2"><span className="truncate">{name}</span><span className="text-fg-3">{count}</span></div>) : <p className="px-1 py-2 text-fg-3">{tab === "assignees" ? "No assignees" : "No labels"}</p>}</div>
+    {/* Linear's summary switcher: pills that grow from their label width, 8px apart; Projects has no Jira counterpart here. */}
+    <Tabs value={tab} onValueChange={value => setTab(value as typeof tab)}>
+      <Tabs.List aria-label="Summary" className="mb-3 gap-2">{(["assignees", "labels"] as const).map(key => <Tabs.Tab key={key} value={key} className="flex-auto justify-center">{key === "assignees" ? "Assignees" : "Labels"}</Tabs.Tab>)}</Tabs.List>
+      <Tabs.Panel value={tab}>{rows.length ? rows.map(([name, count]) => <div key={name} className="flex h-9 items-center justify-between px-1 text-fg-2"><span className="truncate">{name}</span><CountBadge>{count}</CountBadge></div>) : <p className="px-1 py-2 text-fg-3">{tab === "assignees" ? "No assignees" : "No labels"}</p>}</Tabs.Panel>
+    </Tabs>
   </aside>;
 }
 // Linear HiddenIndicator (assets/HiddenIndicator.*.js, 2026-11-11): a flex row (so no space) of the count as Text miniPlus (12px/normal/500, labelTitle,
@@ -73,8 +92,8 @@ export function ViewDetails({ view, issues }: { view: SavedView; issues: Issue[]
 // 0.15s out) holding "Clear Filters" and a 12px X 6px apart. Numbers use Intl.NumberFormat.
 function HiddenRow({ hidden, clear, between }: { hidden: number; clear: () => void; between?: boolean }) {
   return <div className={`flex flex-wrap items-center gap-2 ${between ? "justify-between" : "justify-center"}`}>
-    <span className="flex items-center whitespace-nowrap"><span className="rounded-[3px] px-[5px] py-[3px] text-[12px] leading-[normal] font-medium text-fg">{new Intl.NumberFormat().format(hidden)} issue{hidden === 1 ? "" : "s"}</span> <span className="text-[12px] leading-[normal] font-[450] text-fg-3">hidden by filters</span></span>
-    <div className="flex"><button onClick={clear} className="relative inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-[9999px] border-[0.5px] border-transparent px-2 text-[12px] leading-[normal] font-medium whitespace-nowrap text-fg-2 transition-[border-color,background-color,color,opacity] duration-150 ease-[ease] select-none hover:bg-(--crumb-hover) hover:text-fg hover:duration-0 active:bg-(--crumb-hover) active:text-fg"><span className="flex items-center gap-1.5"><span>Clear Filters</span><Icon name="x" size={12} /></span></button></div>
+    <span className="flex items-center whitespace-nowrap"><Text variant="miniPlus" className="rounded-[3px] px-[5px] py-[3px]">{new Intl.NumberFormat().format(hidden)} issue{hidden === 1 ? "" : "s"}</Text> <Text variant="mini" color="muted">hidden by filters</Text></span>
+    <div className="flex"><Button variant="borderless" size="small" onClick={clear}>Clear Filters<Icon name="x" size={12} /></Button></div>
   </div>;
 }
 export function ResultsFeedback({ count, baseline, view, temporary, clear, layout = "list" }: { count: number; baseline: number; view: SavedView | null; temporary: boolean; clear: () => void; layout?: "list" | "board" }) {
