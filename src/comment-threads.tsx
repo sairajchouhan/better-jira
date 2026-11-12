@@ -7,7 +7,9 @@ import { normalizeDocument, type AdfDocument } from "./document";
 import { resourceMediaIds } from "./issue-resource";
 import { adfToMarkdown } from "./issue-copy";
 import { Icon } from "./icons";
-import { Confirm } from "./menu-surface";
+import { IconButton } from "./button";
+import { ConfirmDialog } from "./dialog";
+import { Text } from "./text";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { ReactionPicker, shortcode } from "./reactions";
 import { FramedEditor, CommentComposer } from "./rich-editor-loader";
@@ -171,9 +173,9 @@ export function CommentThreads(props: Props) {
     .filter((l) => l.key === key)
     .map(({ id, body }) => (
       <li key={`lost-${id}`} className="comment-thread" data-lost-edit={id}>
-        <p role="alert" className="px-3 pt-2 text-[12px] text-fg-3">
+        <Text as="p" role="alert" variant="mini" color="muted" className="px-3 pt-2">
           This comment was deleted in Jira while you were editing it. Your text is kept here.
-        </p>
+        </Text>
         <FramedEditor
           id={`lost-${id}`}
           label="Unsaved comment edit"
@@ -390,33 +392,27 @@ function Thread({
               Date.parse(comment.updated) - Date.parse(comment.created) >= 1000) && (
               <span>· edited</span>
             )}
+          {/* Linear's comment actions are medium IconButtons; `comment-hover-action` only reveals them on hover or focus. */}
           <span className="ml-auto flex">
-            <button
-              aria-label="Add reaction"
-              title="Add reaction"
+            <IconButton
+              label="Add reaction"
               aria-expanded={reaction?.id === comment.id}
               className="comment-hover-action"
               onClick={(e) => setReaction({ anchor: e.currentTarget, id: comment.id })}
             >
-              <Icon name="smile" size={14} />
-            </button>
-            <button
-              aria-label="Reply to comment"
-              title="Reply"
-              className="comment-hover-action"
-              onClick={() => replyTo(comment)}
-            >
-              <Icon name="undo" size={14} />
-            </button>
-            <button
-              aria-label={comment.parentId ? "Reply options" : "Comment options"}
-              title="Comment options"
+              <Icon name="smile" />
+            </IconButton>
+            <IconButton label="Reply to comment" className="comment-hover-action" onClick={() => replyTo(comment)}>
+              <Icon name="undo" />
+            </IconButton>
+            <IconButton
+              label={comment.parentId ? "Reply options" : "Comment options"}
               aria-expanded={menu?.comment.id === comment.id}
               className="comment-hover-action"
               onClick={(e) => setMenu({ anchor: e.currentTarget, comment })}
             >
-              <Icon name="dots" size={14} />
-            </button>
+              <Icon name="dots" />
+            </IconButton>
           </span>
         </div>
         <div className="comment-body">
@@ -453,6 +449,7 @@ function Thread({
             <Adf node={comment.body} issueKey={issue.key} attachments={issue.attachments} />
           )}
         </div>
+        {/* Reaction pills are Linear's own emoji-count chip; no primitive draws them. */}
         {!!reactions.length && (
           <div className="mt-2 flex gap-2">
             {reactions.map((emoji) => (
@@ -479,6 +476,7 @@ function Thread({
       id={state.resolved && !expanded ? `comment-${root.id}` : undefined}
       className="comment-thread rounded-lg bg-card"
     >
+      {/* Full-width disclosure rows: no primitive covers a thread's expand and collapse rows. */}
       {state.resolved && !expanded ? (
         <button
           aria-label="Expand thread"
@@ -502,7 +500,9 @@ function Thread({
             </button>
           )}
           {root.orphanedFrom && (
-            <p className="px-3 pt-2 text-[12px] text-fg-3">Original comment removed</p>
+            <Text as="p" variant="mini" color="muted" className="px-3 pt-2">
+              Original comment removed
+            </Text>
           )}
           {rows.map(render)}
           {
@@ -536,6 +536,8 @@ function Thread({
                   onCancel={cancelReply}
                 />
               ) : (
+                // The closed composer stands in for the open one: its attach and send keep the composer's tooltips, which differ
+                // from their names, so they stay plain buttons until IconButton takes a tooltip of its own.
                 <div className="comment-reply-row">
                   {me}
                   <button
@@ -568,14 +570,14 @@ function Thread({
         </>
       )}
       {preparing && (
-        <p role="status" className="px-3 py-2 text-[12px] text-fg-3">
+        <Text as="p" role="status" variant="mini" color="muted" className="px-3 py-2">
           Copying comment attachments…
-        </p>
+        </Text>
       )}
       {copyError && (
-        <p role="alert" className="px-3 py-2 text-[12px]">
+        <Text as="p" role="alert" variant="mini" color="inherit" className="px-3 py-2">
           {copyError}
-        </p>
+        </Text>
       )}
       {reaction && (
         <ReactionPicker
@@ -672,10 +674,10 @@ function Thread({
           );
         })()}
       {deleting && (
-        <Confirm
+        <ConfirmDialog
           title="Delete this comment?"
-          detail="You cannot undo this action."
-          action="Delete"
+          description="You cannot undo this action."
+          confirmLabel="Delete"
           onConfirm={() => {
             trackEdit(deleting, null);
             actions.deleteComment(issue.key, deleting);
