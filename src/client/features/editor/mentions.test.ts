@@ -115,3 +115,19 @@ test("BJ-180: a full-width ＠ opens the mention picker too, as in Linear", () =
   expect(mentionTrigger(typed("hi ＠sai"))).toEqual({ from: 4, to: 8, query: "sai" });
   expect(query("a＠b")).toBeNull();
 });
+
+test("#10: the @ menu's Issues follow Linear's issueMentions: related then recent on a bare @, two characters to search", async () => {
+  const { mentionIssues } = await import("./mention-menu");
+  const issue = (key: string, summary = key, relations: string[] = []) =>
+    ({ key, summary, relations: relations.map((k) => ({ key: k, kind: "relates" })) }) as any;
+  const all = new Map(
+    [issue("A-1", "Login", ["A-3"]), issue("A-2", "Logout"), issue("A-3", "Signup"), issue("A-4", "Login help")].map(
+      (i) => [i.key, i],
+    ),
+  );
+  const here = all.get("A-1");
+  expect(mentionIssues(all, "", { issue: here, recent: ["A-1", "A-4", "A-3", "GONE-1"] }).map((i) => i.key)).toEqual(["A-3", "A-4"]);
+  expect(mentionIssues(all, "", { recent: ["A-4"] })).toEqual([]);
+  expect(mentionIssues(all, "l", { issue: here, recent: [] })).toEqual([]);
+  expect(mentionIssues(all, "lo", { issue: here, recent: [] }).map((i) => i.key)).toEqual(["A-2", "A-4"]);
+});

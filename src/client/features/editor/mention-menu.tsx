@@ -3,7 +3,7 @@ import { type Issue, type User } from "@/shared/issue-model";
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 /* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { Debouncer } from "@tanstack/pacer";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Avatar } from "@/client/components/avatar";
 import { Menu, MENU } from "@/client/components/menu";
 import { MENU_POPUP, usePlacement } from "@/client/components/menu-surface";
@@ -13,6 +13,7 @@ import { IssuePeek } from "@/client/features/issue/issue-peek";
 import type { Keys } from "@/client/components/keycap";
 import { get, statusOf } from "@/client/state/store";
 import { queryClient } from "@/client/state/server-data";
+import { recentIssues } from "@/client/features/navigation/recents";
 
 const peopleKey = (query: string, issue?: string) => [
   "people",
@@ -46,6 +47,28 @@ export function matchingIssues(issues: Iterable<Issue>, query: string, limit = 5
     if (found.length >= limit) break;
   }
   return found;
+}
+
+/**
+ * The @ menu's Issues (Linear's `issueMentions`), never the issue being written in. A bare "@" in an issue offers its
+ * related issues, then the five last opened; outside an issue, none. A query needs two characters (`uGn`), then matches.
+ */
+export function mentionIssues(
+  issues: ReadonlyMap<string, Issue>,
+  query: string,
+  context: { issue?: Issue; recent: readonly string[] },
+  limit = 5,
+): Issue[] {
+  const own = context.issue?.key;
+  const q = query.trim();
+  if (q) return q.length < 2 ? [] : matchingIssues([...issues.values()].filter((i) => i.key !== own), q, limit);
+  if (!context.issue) return [];
+  const keys = [...(context.issue.relations ?? []).map((r) => r.key), ...context.recent.slice(0, 5)];
+  return [...new Set(keys)]
+    .filter((key) => key !== own)
+    .map((key) => issues.get(key))
+    .filter((i): i is Issue => !!i)
+    .slice(0, limit);
 }
 
 /** Where a caret menu sits and how it is driven: the caret box at the trigger, read fresh on every placement; the
@@ -82,6 +105,7 @@ export function CaretMenu({
   keys,
   dismiss,
   width,
+  headings,
 }: CaretAnchor & {
   label: string;
   query: string;
@@ -89,6 +113,8 @@ export function CaretMenu({
   empty: string | null;
   /** Linear's widths (EditorComponent): slash 240, mention and emoji 350. */
   width: number;
+  /** Each item group's heading, drawn over its run of items with a divider between runs (the @ menu's Users, Issues). */
+  headings?: Record<string, string>;
 }) {
   const [active, setActive] = useState(0);
   // A new query resets keyboard selection.
@@ -128,10 +154,15 @@ export function CaretMenu({
     else return false;
     return true;
   };
-  // Up to eight 32px rows (or the empty state) inside the list's 6px padding and the popup's 1px border.
+  const runs = headings ? groupRuns(items) : [];
+  // Up to eight 32px rows (or the empty state), with each run's heading and the dividers between runs, inside the list's
+  // 6px padding and the popup's 1px border.
   const height =
     (items.length ? Math.min(8, items.length) * MENU.ITEM_HEIGHT : MENU.LIST_EMPTY_STATE_HEIGHT) +
-    2 * MENU.LIST_PADDING +
+    runs.length * MENU.GROUP_HEADER_HEIGHT +
+    Math.max(0, runs.length - 1) * MENU.DIVIDER_HEIGHT +
+    // A list that opens on a heading has no top padding.
+    (runs.length ? 1 : 2) * MENU.LIST_PADDING +
     2;
   const style = usePlacement(
     list,
@@ -149,6 +180,11 @@ export function CaretMenu({
   );
   if (hidden) return null;
   const peeked = peek ? items[Math.min(active, items.length - 1)] : undefined;
+  const row = (item: CaretMenuItem) => (
+    <Menu.Item key={item.id} value={item.id} icon={item.icon} shortcut={item.shortcut} onSelect={item.pick}>
+      {item.label}
+    </Menu.Item>
+  );
   // The editor keeps focus and drives the highlight through `keys`; the menu mirrors `active` and follows the pointer.
   return (
     <>
@@ -167,11 +203,14 @@ export function CaretMenu({
     >
       <Menu.List>
         {!items.length && <Menu.Empty always>{empty}</Menu.Empty>}
-        {items.map((item) => (
-          <Menu.Item key={item.id} value={item.id} icon={item.icon} shortcut={item.shortcut} onSelect={item.pick}>
-            {item.label}
-          </Menu.Item>
-        ))}
+        {headings
+          ? runs.map((run, i) => (
+              <Fragment key={run.group}>
+                {i > 0 && <Menu.Divider />}
+                <Menu.Group heading={headings[run.group] ?? run.group}>{run.items.map(row)}</Menu.Group>
+              </Fragment>
+            ))
+          : items.map(row)}
       </Menu.List>
     </Menu>
     {peeked?.peek && (
@@ -182,6 +221,20 @@ export function CaretMenu({
     </>
   );
 }
+
+/** Consecutive items of one group, in order. */
+function groupRuns(items: CaretMenuItem[]) {
+  const runs: { group: string; items: CaretMenuItem[] }[] = [];
+  for (const item of items) {
+    const group = item.group ?? "";
+    if (runs.at(-1)?.group === group) runs.at(-1)!.items.push(item);
+    else runs.push({ group, items: [item] });
+  }
+  return runs;
+}
+
+/** Linear's @ menu groups: `userMentions` "Users", then `issueMentions` "Issues". */
+const MENTION_HEADINGS = { people: "Users", issues: "Issues" };
 
 /** Linear's @ menu: people Jira lets see the issue, then issues whose key or title matches (BJ-43). */
 export function MentionMenu({
@@ -226,7 +279,8 @@ export function MentionMenu({
   }, [query, issueKey, cached, search]);
   useEffect(() => () => search.cancel(), [search]);
   const people = cached ?? last?.people.filter((p) => matches(p, query)) ?? [];
-  const issues = matchingIssues(get().issues.values(), query);
+  const all = get().issues;
+  const issues = mentionIssues(all, query, { issue: issueKey ? all.get(issueKey) : undefined, recent: recentIssues() });
   const settled = !!cached || last?.query === query;
   const items: CaretMenuItem[] = [
     ...people.map((person) => ({
@@ -259,6 +313,7 @@ export function MentionMenu({
       {...anchor}
       label="Mention people"
       width={350}
+      headings={MENTION_HEADINGS}
       query={query}
       items={items}
       empty={hidden ? null : settled ? "No people found" : "Searching people…"}

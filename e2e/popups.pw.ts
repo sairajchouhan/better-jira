@@ -1,4 +1,4 @@
-import { expect, test, PREFS_KEY, sleep, type App } from "./app";
+import { expect, fixture, test, PREFS_KEY, sleep, type App } from "./app";
 
 /** Characterization of every popup kind: where it opens (to the pixel, against its anchor) and how focus moves in, stays in and returns. */
 
@@ -243,11 +243,34 @@ test("mention menu: 4px under the @, focus stays in the editor", async ({ open }
   const menu = await rect(page, MENU);
   near(menu.left, Math.max(8, Math.min(at.left, 1440 - 268)));
   near(menu.top, at.bottom + 4);
-  // Menu's list padding (Vw.LIST_PADDING 6 above and below) plus the 1px border.
-  expect(menu.height).toBe(3 * 32 + 12 + 2);
+  // Three rows under the 30px Users heading, Menu's 6px list padding below and the 1px border.
+  // The list drops its top padding under a leading heading (Linear's GroupHeader rule).
+  expect(menu.height).toBe(3 * 32 + 30 + 6 + 2);
+  // #10: Linear's groups, each under its heading: Users first.
+  expect(await page.eval(`[...document.querySelectorAll('${MENU} [cmdk-group-heading]')].map(n=>n.textContent)`)).toEqual(["Users"]);
   expect(await page.eval(`document.querySelector('#description').contains(document.activeElement)`)).toBe(true);
   await page.key("Escape");
   await page.waitFor(`!document.querySelector('${MENU}')`);
+  await page.close();
+});
+
+test("#10: with no room under the caret the mention menu opens 4px above it, Users then Issues", async ({ open }) => {
+  await fixture.reset({ crossLinks: true });
+  const page = await open("?issue=TEST-2&view=page", { height: 700 });
+  await page.waitFor(`!!document.getElementById('comment')`);
+  await page.eval(`document.getElementById('comment').scrollIntoView({block:'end'})`);
+  await page.click("#comment");
+  // TEST-2 is cloned by TEST-1: a bare @ offers that related issue under the people.
+  await page.type("@");
+  const MENU = '[aria-label="Mention people"]';
+  await page.waitFor(`[...document.querySelectorAll('${MENU} [cmdk-group-heading]')].length===2`);
+  expect(await page.eval(`[...document.querySelectorAll('${MENU} [cmdk-group-heading]')].map(n=>n.textContent)`)).toEqual(["Users", "Issues"]);
+  const at = await page.eval<Box>(
+    `(()=>{const w=document.createTreeWalker(document.querySelector('#comment'),NodeFilter.SHOW_TEXT);let n,last;while(n=w.nextNode())if(n.data.includes('@'))last=n;const r=document.createRange(),i=last.data.lastIndexOf('@');r.setStart(last,i);r.setEnd(last,i+1);return r.getBoundingClientRect().toJSON()})()`,
+  );
+  const menu = await rect(page, MENU);
+  near(menu.top + menu.height, at.top - 4);
+  await page.key("Escape");
   await page.close();
 });
 

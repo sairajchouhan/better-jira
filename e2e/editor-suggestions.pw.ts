@@ -8,7 +8,8 @@ test("BJ-180: ⌥↑/⌥↓ jump between the @ menu's groups; → peeks the issu
   await page.waitFor(`!!document.querySelector('#description p')`);
   await page.click("#description p");
   await page.key("End");
-  await page.type(" @r");
+  // Issues need two characters (Linear's issueMentions); "ri" finds Priya and "Rich browser fixture".
+  await page.type(" @ri");
   await page.waitFor(`${rows}.some(n=>n.textContent.includes('Priya')) && ${rows}.some(n=>/TEST-\\d/.test(n.textContent))`);
   const firstIssue = await page.eval<number>(`${rows}.findIndex(n=>/TEST-\\d/.test(n.textContent))`);
   expect(firstIssue).toBeGreaterThan(0);
