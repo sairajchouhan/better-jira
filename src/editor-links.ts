@@ -51,7 +51,10 @@ export function linkSelected(state: EditorState): boolean {
 const modKey = () => (isMac() ? "Meta" : "Control");
 const anchor = (view: EditorView, event: Event) => {
   const target = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
-  return target && view.dom.contains(target) ? target : null;
+  // A media control (Download, open in Jira) keeps its own behaviour.
+  if (!target || !view.dom.contains(target) || target.hasAttribute("download") || target.closest("[data-media-interactive]"))
+    return null;
+  return target;
 };
 
 /**
@@ -107,8 +110,10 @@ export const linkPlugin = () => {
             return true;
           }
           // A drag or a double-click selected text: leave it.
-          if (event.detail > 1 || !view.state.selection.empty) return false;
-          const range = clickSelectionRange(view.state, view.state.selection.head);
+          // The editor reads the click's caret from the DOM later, so the DOM selection and the click point are the truth here.
+          const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
+          if (event.detail > 1 || getSelection()?.isCollapsed === false || !at) return false;
+          const range = clickSelectionRange(view.state, at.pos);
           if (!range) return false;
           event.preventDefault();
           view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, range.from, range.to)));

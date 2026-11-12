@@ -1,7 +1,7 @@
 import { expect, test } from "./app";
 
-const editor = `document.querySelector('#description .ProseMirror')`;
-const linkTo = (href: string) => `#description .ProseMirror a[href="${href}"]`;
+const editor = `document.querySelector('#description')`;
+const linkTo = (href: string) => `#description a[href="${href}"]`;
 const reference = "https://example.test/reference";
 const mac = `navigator.platform.includes('Mac')`;
 const opened = async (page: { eval: <T>(e: string) => Promise<T> }) =>
@@ -9,9 +9,9 @@ const opened = async (page: { eval: <T>(e: string) => Promise<T> }) =>
 
 test("BJ-179: a click on a link in the focused description selects it and shows Linear's link editor", async ({ open }) => {
   const page = await open("?issue=TEST-2&view=page");
-  await page.waitFor(`!!document.querySelector('${linkTo(reference)}')`);
   await page.eval(`window.open=(url)=>{window.__opened=url;return null}`);
   await page.click("#description h2");
+  await page.waitFor(`!!document.querySelector('${linkTo(reference)}')`);
   await page.click(linkTo(reference));
   expect(await opened(page)).toBeNull();
   expect(await page.eval(`getSelection().toString()`)).toBe("Formatted fixture");
