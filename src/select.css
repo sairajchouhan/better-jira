@@ -1,0 +1,93 @@
+@layer components {
+  /* Zke trigger: _y.base + lAe sizes. A controlSecondary field (hover controlSecondaryHover), radius 8, labelBase text
+     (labelMuted while showing the placeholder), its ring an ::after of bgBorderAlphaThin + shadowLow, bgBorderSolidAlphaThin
+     on hover. Default size: 30px, 13px text, padding 10 / 28, 1px block margin. */
+  .ui-select {
+    position: relative;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    max-width: 100%;
+    height: 30px;
+    margin-block: 1px;
+    padding: 0 28px 0 10px;
+    overflow: visible;
+    border: var(--thin-pixel) solid transparent;
+    border-radius: 8px;
+    background: var(--btn);
+    background-clip: padding-box;
+    box-shadow: none;
+    color: var(--fg-2);
+    font-size: 13px;
+    user-select: none;
+    transition-property: background-color, border, color;
+    transition-duration: 0.15s;
+  }
+  .ui-select::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: 0 0 0 var(--thin-pixel) var(--border-alpha-thin), var(--frame-shadow);
+    pointer-events: none;
+    user-select: none;
+    transition: box-shadow 0.15s;
+  }
+  .ui-select:is(:hover, :active):not(:disabled) {
+    background-color: var(--control-secondary-hover);
+    transition-duration: 0s;
+  }
+  .ui-select:is(:hover, :active):not(:disabled)::after {
+    box-shadow: 0 0 0 var(--thin-pixel) var(--border-solid-alpha-thin), var(--frame-shadow);
+    transition-duration: 0s;
+  }
+  .ui-select[aria-expanded="true"] {
+    outline: none;
+  }
+  .ui-select:disabled {
+    opacity: 0.5;
+  }
+  .ui-select-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    margin-right: 6px;
+  }
+  .ui-select-value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ui-select-value[data-placeholder] {
+    color: var(--fg-3);
+  }
+  /* py: a 10px-wide column 10px from the right (6px on small and compact), labelMuted. */
+  .ui-select-caret {
+    position: absolute;
+    top: 0;
+    right: 10px;
+    width: 10px;
+    height: 100%;
+    fill: var(--fg-3);
+  }
+  .ui-select:is([data-size="small"], [data-size="compact"]) .ui-select-caret {
+    right: 6px;
+  }
+  .ui-select[data-size="large"] {
+    height: 44px;
+  }
+  .ui-select[data-size="medium"] {
+    height: 26px;
+    font-size: 12px;
+  }
+  .ui-select[data-size="small"] {
+    height: 24px;
+    padding-right: 24px;
+    font-size: 12px;
+  }
+  .ui-select[data-size="compact"] {
+    height: 22px;
+    padding: 0 18px 0 8px;
+    font-size: 12px;
+  }
+}
