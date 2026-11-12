@@ -16,6 +16,7 @@ import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { Icon } from "@/client/components/icons";
 import { Menu } from "@/client/components/menu";
 import { MenuSurface } from "@/client/components/menu-surface";
+import { CommandMenu, CommandTarget, useCommandTarget } from "@/client/components/command-menu";
 import { set, useStore, type Issue } from "@/client/state/store";
 import { actions } from "@/client/state/issue-actions";
 import { ui } from "@/client/features/navigation/app-navigation";
@@ -41,7 +42,6 @@ export function ReminderMenu({
     [presets] = useState(() => reminderPresets(reference.current)),
     [parsed, setParsed] = useState<string | null>(null),
     [custom, setCustom] = useState(startCustom);
-  const keyboardChoice = useRef(false);
   useEffect(() => {
     let active = true;
     void import("./reminder-date").then(
@@ -65,74 +65,69 @@ export function ReminderMenu({
   const matches = presets.filter(
     (p) => !query || p.label.toLowerCase().includes(query.toLowerCase()),
   );
-  return (
-    <MenuSurface
-      label="Remind me"
-      anchorId={anchorId}
-      anchor={anchor}
-      close={close}
-      fit
-    >
-      {custom ? (
-        <FutureTimeStep
-          label="Custom reminder"
-          inputLabel="Custom reminder time"
-          submitLabel="Set reminder"
-          errorMessage="Choose a future reminder time"
-          onPick={choose}
-          onBack={() => {
-            setParsed(null);
-            setCustom(false);
-          }}
-        />
-      ) : (
-        <Menu
-          shouldFilter={false}
-          style={{ width: 320 }}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowDown" || event.key === "ArrowUp")
-              keyboardChoice.current = true;
-            if (event.key === "Enter" && !query && !keyboardChoice.current) {
-              event.preventDefault();
-              event.stopPropagation();
-            }
-          }}
-        >
-          <Menu.Input
-            autoFocus
-            aria-label="Reminder time"
-            placeholder="Try: 4 pm, 2 days, in 5 weeks…"
-            value={query}
-            onValueChange={setQuery}
-          />
-          <Menu.List>
-            {parsed ? (
-              <Menu.Item value={parsed} onSelect={() => choose(parsed)}>
-                {reminderTime(parsed)}
-              </Menu.Item>
-            ) : (
-              matches.map((p) => (
-                <Menu.Item
-                  key={p.label}
-                  value={p.label}
-                  hint={<time dateTime={p.at}>{reminderTime(p.at)}</time>}
-                  onSelect={() => choose(p.at)}
-                >
-                  {p.label}
-                </Menu.Item>
-              ))
-            )}
-            {query && !parsed && !matches.length && (
-              <div role="status">
-                <Menu.Empty always>Choose a future date and time</Menu.Empty>
-              </div>
-            )}
-            <Menu.Item value="Custom…" onSelect={() => setCustom(true)}>
-              Custom…
+  // A shortcut on an issue (Shift+H) opens Linear's command menu on it, whose keyboard placeholder is "Remind me at…" (Iq's
+  // subActionPlaceholder); a document's menu stays beside its anchor.
+  const target = useCommandTarget();
+  const menu = (
+    <Menu shouldFilter={false} style={target ? undefined : { width: 320 }}>
+      <Menu.Input
+        autoFocus
+        aria-label="Reminder time"
+        placeholder={target ? "Remind me at…" : "Try: 4 pm, 2 days, in 5 weeks…"}
+        value={query}
+        onValueChange={setQuery}
+      />
+      <Menu.List>
+        {parsed ? (
+          <Menu.Item value={parsed} icon={<Icon name="clock" />} onSelect={() => choose(parsed)}>
+            {reminderTime(parsed)}
+          </Menu.Item>
+        ) : (
+          matches.map((p) => (
+            <Menu.Item
+              key={p.label}
+              value={p.label}
+              icon={<Icon name="clock" />}
+              hint={<time dateTime={p.at}>{reminderTime(p.at)}</time>}
+              onSelect={() => choose(p.at)}
+            >
+              {p.label}
             </Menu.Item>
-          </Menu.List>
-        </Menu>
-      )}
+          ))
+        )}
+        {query && !parsed && !matches.length && (
+          <div role="status">
+            <Menu.Empty always>Choose a future date and time</Menu.Empty>
+          </div>
+        )}
+        <Menu.Item value="Custom…" icon={<Icon name="clock" />} onSelect={() => setCustom(true)}>
+          Custom…
+        </Menu.Item>
+      </Menu.List>
+    </Menu>
+  );
+  const body = custom ? (
+    <FutureTimeStep
+      label="Custom reminder"
+      inputLabel="Custom reminder time"
+      submitLabel="Set reminder"
+      errorMessage="Choose a future reminder time"
+      onPick={choose}
+      onBack={() => {
+        setParsed(null);
+        setCustom(false);
+      }}
+    />
+  ) : (
+    menu
+  );
+  return target ? (
+    <CommandMenu label="Remind me" issue={target} close={close}>
+      {body}
+    </CommandMenu>
+  ) : (
+    <MenuSurface label="Remind me" anchorId={anchorId} anchor={anchor} close={close} fit>
+      {body}
     </MenuSurface>
   );
 }
@@ -149,7 +144,8 @@ export const reminderEntries = (
   })),
   { name: "Custom…", icon: "calendar", run: custom },
 ];
-/** The open issue's reminder menu (overlay "reminder"), under Issue options; Issue options › Remind me › Custom… opens it at the custom step. */
+/** The issue's reminder menu (overlay "reminder"): Linear's command menu on the issue (Shift+H, CORE-8); Issue options › Remind me ›
+ *  Custom… opens it at the custom step, under Issue options. */
 export function ReminderPicker({ issue }: { issue: Issue }) {
   const [custom, setCustom] = useState(
     () => kept("issue-options-start") === "reminder",
@@ -159,7 +155,7 @@ export function ReminderPicker({ issue }: { issue: Issue }) {
     setCustom(true);
     return true;
   });
-  return (
+  const menu = (
     <ReminderMenu
       key={String(custom)}
       anchorId="issue-options"
@@ -177,6 +173,8 @@ export function ReminderPicker({ issue }: { issue: Issue }) {
       }}
     />
   );
+  // Issue options › Remind me › Custom… opens the custom step under Issue options; Shift+H opens the command menu on the issue.
+  return custom ? menu : <CommandTarget issue={issue}>{menu}</CommandTarget>;
 }
 export function ReminderControl({ issue }: { issue: Issue }) {
   const clock = useStore((s) => s.clock);

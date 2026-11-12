@@ -12,6 +12,7 @@ export const reminderTime = (at: string) => {
   return `${shortDate(dateOnly(date))}, ${date.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })}`;
 };
 
+/** Linear's presets in its fixed order (CORE-25), not sorted by time: "This evening" drops out once the evening has begun. */
 export function reminderPresets(reference = new Date()) {
   const day = (days: number, hour = 9) => {
     const date = new Date(reference);
@@ -31,9 +32,7 @@ export function reminderPresets(reference = new Date()) {
     { label: "Tomorrow", date: day(1) },
     { label: "Next week", date: week },
     { label: "A month from now", date: month },
-  ]
-    .sort((a, b) => +a.date - +b.date)
-    .map(({ label, date }) => ({ label, at: date.toISOString() }));
+  ].map(({ label, date }) => ({ label, at: date.toISOString() }));
 }
 
 type Reminder = { at: string; delivered?: boolean } | null | undefined;

@@ -7,10 +7,18 @@ test("reminders: schedule, reschedule, cancel, and overdue delivery after reopen
     await page.waitFor(`!!document.getElementById('comment')`);
     await page.key("h", "shift");
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Reminder time'`);
+    // CORE-8: Linear's centred "Remind me at…" command menu on the issue, whose highlighted first row Enter runs at once.
+    expect(
+      await page.eval(
+        `[document.querySelector('[role=dialog][aria-label="Remind me"]').getBoundingClientRect().width,document.querySelector('[role=dialog][aria-label="Remind me"] .command-menu-key')?.textContent,document.activeElement.placeholder]`,
+      ),
+    ).toEqual([720, "TEST-2", "Remind me at…"]);
+    expect(
+      await page.eval(`[...document.querySelectorAll('[role=dialog][aria-label="Remind me"] [cmdk-item]')].map(n=>n.dataset.value).slice(0,2)`),
+    ).toEqual(["An hour from now", "In 3 hours"]);
     await page.key("Enter");
-    expect(await page.eval(`!!document.querySelector('[aria-label="Reminder time"]')`)).toBe(true);
-    await page.click('[cmdk-item][data-value="An hour from now"]');
     await page.waitFor(`!!document.querySelector('[aria-label^="Reminder scheduled"]')`);
+    expect(await page.eval(`!!document.querySelector('[aria-label="Reminder time"]')`)).toBe(false);
     await page.waitFor(
       `document.querySelector('[aria-label="Local save status"]').textContent.includes('Saved')`,
     );
