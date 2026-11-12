@@ -144,7 +144,7 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
       ["Project", 397.8, 910.1, "13px"],
     ]);
     const pills = await page.eval<number[][]>(
-      `[...document.querySelectorAll('[data-properties] button[id^="prop-"]:not(.label-add)')].map(b=>{const r=b.getBoundingClientRect(),t=document.createRange();t.setStartAfter(b.firstChild);t.setEnd(b,b.childNodes.length);return [Math.round(r.x*10)/10,Math.round(r.y),r.height,Math.round(t.getBoundingClientRect().x*10)/10,parseFloat(getComputedStyle(b).borderRadius)>=14?1:0]})`,
+      `[...document.querySelectorAll('[data-properties] button[id^="prop-"]:not([aria-label="Add label"])')].map(b=>{const r=b.getBoundingClientRect(),t=document.createRange();t.setStartAfter(b.firstChild);t.setEnd(b,b.childNodes.length);return [Math.round(r.x*10)/10,Math.round(r.y),r.height,Math.round(t.getBoundingClientRect().x*10)/10,parseFloat(getComputedStyle(b).borderRadius)>=14?1:0]})`,
     );
     expect(pills.map((p) => p[0])).toEqual([903.1, 903.1, 903.1, 903.1, 903.1]);
     expect(pills.map((p) => p[1])).toEqual([154, 186, 218, 250, 424]);

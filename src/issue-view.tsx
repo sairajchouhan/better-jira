@@ -600,15 +600,15 @@ function Properties({ issue }: { issue: Issue }) {
                 <LabelChip.Text>{label}</LabelChip.Text>
               </LabelChip>
             ))}
-            {/* Not IconButton: Linear's add button matches the 25px label pill; IconButton is 24 or 28. */}
-            <button
+            <IconButton
+              label="Add label"
+              size="small"
               id="prop-labels"
-              aria-label="Add label"
               onClick={() => ui.send({ type: "overlay.open", overlay: "labels" })}
-              className="label-add"
+              className="size-[25px] rounded-full"
             >
               <Icon name="plus" size={14} />
-            </button>
+            </IconButton>
           </div>
         ) : (
           <PropertyPill

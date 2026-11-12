@@ -7,7 +7,7 @@ import { createViewDraft, openSavedView, useActiveView, useSavedViews, type Save
 import { openViewEditor, ViewContextMenu } from "./view-editor";
 import { MenuSurface } from "./menu-surface";
 import { Menu } from "./menu";
-import { Button, IconButton } from "./button";
+import { Button, ButtonLink, IconButton } from "./button";
 import { Tabs } from "./tabs";
 import { Text } from "./text";
 import { CountBadge } from "./count-badge";
@@ -38,14 +38,14 @@ export function ViewsDirectory() {
       <div role="row" className="views-directory-grid border-b border-line py-1 pr-6 pl-2">
         {(["name", "owner"] as const).map(key => <div role="columnheader" aria-sort={sort === key ? descending ? "descending" : "ascending" : "none"} key={key}><Button variant="borderless" size="small" aria-label={`Order by ${key === "name" ? "Name" : "Owner"}`} onClick={() => order(key)}>{key === "name" ? "Name" : "Owner"}{sort === key && (descending ? " ↑" : " ↓")}</Button></div>)}
       </div>
-      {rows.map(view => <ViewContextMenu key={view.id} view={view}><div role="row" className="views-directory-grid py-2.5 pr-6 pl-4 hover:bg-hover"><div role="cell"><button className="flex w-full items-start gap-3 text-left" onClick={() => openSavedView(view)}><span className="pt-0.5"><SavedViewIcon view={view} /></span><span className="min-w-0"><span className="block truncate text-[13px] font-medium text-fg">{view.name}</span>{view.description && <span className="mt-0.5 block truncate text-[13px] text-fg-3">{view.description}</span>}</span></button></div><div role="cell" className="flex items-center"><span title={ME.name} className="flex h-7 w-[120px] items-center gap-1.5 rounded-full px-1.5 text-[13px] text-fg"><Avatar user={ME} size={16} /><span className="truncate">{ME.name}</span></span></div></div></ViewContextMenu>)}
+      {/* Two-line directory navigation rows have no matching Button variant. */}
+      {rows.map(view => <ViewContextMenu key={view.id} view={view}><div role="row" className="views-directory-grid py-2.5 pr-6 pl-4 hover:bg-hover"><div role="cell"><button className="flex w-full items-start gap-3 text-left" onClick={() => openSavedView(view)}><span className="pt-0.5"><SavedViewIcon view={view} /></span><span className="min-w-0"><Text variant="smallPlus" wrap="truncate" className="block">{view.name}</Text>{view.description && <Text variant="small" color="muted" wrap="truncate" className="mt-0.5 block">{view.description}</Text>}</span></button></div><div role="cell" className="flex items-center"><span title={ME.name} className="flex h-7 w-[120px] items-center gap-1.5 rounded-full px-1.5 text-[13px] text-fg"><Avatar user={ME} size={16} /><span className="truncate">{ME.name}</span></span></div></div></ViewContextMenu>)}
     </div> : <EmptyState
       icon={<svg width="72" height="88" viewBox="0 0 72 88" fill="none" stroke="currentColor" strokeWidth=".8" className="text-fg-3"><path d="M4 47 35 31 68 47 36 64Z M4 52 36 69 68 52 M4 57 36 74 68 57 M4 62 36 79 68 62 M4 67 36 84 68 67" opacity=".4"/><path d="m3 43 19-34 34-6 2 3-19 34-34 6Z M6 43 25 11 55 5 M38 40 58 6"/></svg>}
       title="Views"
       actions={<>
         <Button size="medium" onClick={create}>Create new view</Button>
-        {/* An external link, so it stays an <a>: Button only renders a <button> (follow-up for Q8). */}
-        <a className="rounded-full border border-line px-3 py-1 text-[12px] text-fg-2" href="https://linear.app/docs/custom-views" target="_blank" rel="noreferrer">Documentation</a>
+        <ButtonLink variant="secondary" size="small" href="https://linear.app/docs/custom-views" target="_blank" rel="noreferrer">Documentation</ButtonLink>
       </>}
     >
       <p>Create custom views using filters to show only the issues you want to see. You can save and favorite these views for easy access and faster issue triage.</p>
@@ -62,6 +62,7 @@ export function ViewFavorites() {
     const document = id.startsWith("document:") ? findIssueDocument(issues.values(), id.slice(9)) : undefined;
     const issue = issues.get(id), board = id.startsWith("board:") ? boards.find(b => b.id === Number(id.split(":")[1])) : undefined;
     if (!view && !document && !issue && !board) return [];
+    // Sidebar navigation rows use selected-page geometry, outside the Button variants.
     const button = <button key={id} aria-current={view?.id === active?.id && !!view ? "page" : undefined} onClick={() => {
       if (view) openSavedView(view);
       else if (document) navigate({ board: document.issue.board, selected: document.issue.key, panel: true, document: document.resource.id });
@@ -79,10 +80,15 @@ export function ViewDetails({ view, issues }: { view: SavedView; issues: Issue[]
   return <aside aria-label="View details" className="view-details w-[320px] shrink-0 overflow-auto border-l border-line p-5 text-[13px] max-sm:absolute max-sm:inset-y-0 max-sm:right-0 max-sm:bg-panel">
     <div className="mb-3"><SavedViewIcon view={view} /></div><Text as="h2" variant="regularPlus" color="base">{view.name}</Text>{view.description && <Text as="p" variant="small" color="muted" className="mt-2 whitespace-pre-wrap">{view.description}</Text>}
     <dl className="my-6 grid grid-cols-[90px_1fr] gap-y-3"><dt className="text-fg-3">Visibility</dt><dd>Personal</dd><dt className="text-fg-3">Owner</dt><dd className="flex items-center gap-2"><Avatar user={ME} size={18} />{ME.name}</dd></dl>
-    {/* Linear's summary switcher: 32px pills that grow from their label width, 8px apart; Projects has no Jira counterpart here.
-        Kept hand-built: Tabs is the 28px header tab and has no 32px size yet (follow-up). */}
-    <div role="tablist" aria-label="Summary" className="mb-3 flex gap-2">{(["assignees", "labels"] as const).map(key => <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={`h-8 flex-auto rounded-full border-[0.5px] border-transparent px-3 text-[12px] font-medium ${tab === key ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover"}`}>{key === "assignees" ? "Assignees" : "Labels"}</button>)}</div>
-    <div role="tabpanel" aria-label={tab === "assignees" ? "Assignees" : "Labels"}>{rows.length ? rows.map(([name, count]) => <div key={name} className="flex h-9 items-center justify-between px-1 text-fg-2"><span className="truncate">{name}</span><CountBadge>{count}</CountBadge></div>) : <p className="px-1 py-2 text-fg-3">{tab === "assignees" ? "No assignees" : "No labels"}</p>}</div>
+    <Tabs value={tab} onValueChange={value => setTab(value as typeof tab)}>
+      <Tabs.List variant="section" width="full" aria-label="Summary" className="mb-3">
+        <Tabs.Tab value="assignees">Assignees</Tabs.Tab>
+        <Tabs.Tab value="labels">Labels</Tabs.Tab>
+      </Tabs.List>
+      {(["assignees", "labels"] as const).map(key => <Tabs.Panel key={key} value={key} aria-label={key === "assignees" ? "Assignees" : "Labels"}>
+        {key === tab && (rows.length ? rows.map(([name, count]) => <div key={name} className="flex h-9 items-center justify-between px-1 text-fg-2"><span className="truncate">{name}</span><CountBadge>{count}</CountBadge></div>) : <Text as="p" variant="small" color="muted" className="px-1 py-2">{tab === "assignees" ? "No assignees" : "No labels"}</Text>)}
+      </Tabs.Panel>)}
+    </Tabs>
   </aside>;
 }
 // Linear HiddenIndicator (assets/HiddenIndicator.*.js, 2026-11-11): a flex row (so no space) of the count as Text miniPlus (12px/normal/500, labelTitle,
