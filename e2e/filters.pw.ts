@@ -308,6 +308,18 @@ test("Add filter submenus: side, width, empty text, single and Alt selection", a
     );
     await page.key("Escape");
   });
+  await test.step("FILTER-20b: a search that matches nothing keeps the submenu in place and open under the pointer", async () => {
+    await page.click('[aria-label="Add filter"]');
+    await page.hover("text=Assignee");
+    await page.hover('[aria-label="Filter Assignee"]');
+    const before = await page.rect('[role=dialog][aria-label="Assignee filter"]');
+    await page.type("zzz");
+    await page.waitFor(`document.querySelector('[aria-label="Assignee filter"] .menu-empty')`);
+    await new Promise((done) => setTimeout(done, 300));
+    const after = await page.rect('[role=dialog][aria-label="Assignee filter"]');
+    expect([after.top, after.left, after.width]).toEqual([before.top, before.left, before.width]);
+    await page.key("Escape");
+  });
   await test.step("FILTER-22: Alt-click replaces the selection with only that value", async () => {
     await page.click('[aria-label="Add filter"]');
     await page.hover("text=Priority");

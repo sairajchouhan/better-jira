@@ -10,6 +10,7 @@ import {
   useFloatingNodeId,
   useHover,
   useInteractions,
+  type Middleware,
 } from "@floating-ui/react";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { Command } from "cmdk";
@@ -472,6 +473,19 @@ function edgeInset(row: Element, side: "right" | "left") {
   return 0;
 }
 
+/** Keeps an open submenu where it first settled while its row stays put. Typing in its search shrinks the list from the bottom, as in
+ *  Linear: re-aligning on a list with no first row, or un-shifting a shorter one, would move the search out from under the pointer
+ *  and close the menu. */
+const stay = (settled: RefObject<{ row: number; y: number } | null>): Middleware => ({
+  name: "stay",
+  fn: ({ y, rects }) => {
+    const row = rects.reference.y;
+    if (settled.current?.row === row) return { y: settled.current.y };
+    settled.current = { row, y };
+    return {};
+  },
+});
+
 /**
  * A row that opens a nested menu (Linear's Item `SubMenu`): hover intent with a safe pointer path, ArrowRight, Enter or Space opens and
  * focuses it, a keyboard highlight that rests on the row for 300ms previews it without moving focus (Linear's _6e). ArrowLeft and
@@ -508,7 +522,9 @@ function MenuSubmenu({
     focusOnOpen = useRef(false),
     // A keyboard preview keeps focus in the parent menu until → or the pointer moves in.
     previewing = useRef(false),
-    previewTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+    previewTimer = useRef<ReturnType<typeof setTimeout>>(undefined),
+    // Where the open submenu first settled, keyed by its row's top (see `stay`).
+    settled = useRef<{ row: number; y: number } | null>(null);
   const setOpen = (next: boolean) => {
     // An explicit open or close supersedes a pending keyboard preview, which would otherwise reopen a menu just closed.
     clearTimeout(previewTimer.current);
@@ -540,8 +556,12 @@ function MenuSubmenu({
       // across (over its parent when neither side fits); it never drops under its row.
       flip({ padding: 12, crossAxis: false }),
       shift({ padding: { top: 10, bottom: 10, left: 12, right: 12 }, crossAxis: true }),
+      stay(settled),
     ],
   });
+  useEffect(() => {
+    if (!open) settled.current = null;
+  }, [open]);
   const hover = useHover(context, {
     mouseOnly: true,
     // Rows crossed in under 75ms on the way to an open submenu don't open theirs (Linear blocks them with its safe triangle).
