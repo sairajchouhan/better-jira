@@ -1476,26 +1476,6 @@
 .resource-row + .resource-row {
   margin-top: 1px;
 }
-.resource-options {
-  display: grid;
-  flex-shrink: 0;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  margin-left: -4px;
-  border-radius: 9999px;
-  color: var(--fg-2);
-  opacity: 0;
-}
-.resource-row:hover .resource-options,
-.resource-options:focus,
-.resource-options[aria-expanded="true"] {
-  opacity: 1;
-}
-.resource-options:hover,
-.resource-options[aria-expanded="true"] {
-  background: var(--sel);
-}
 
 /* RAJ-52 comment card: a 0.5px line and shadow, 16px padding (replies 14px 16px), an 18px header of 13px text, then 15px/24px body 6px below.
    The resting reply row is 46px under a 0.5px line: your avatar, "Leave a reply…", and 24px attach and send buttons 12px apart, 18px from the right. */
@@ -1710,18 +1690,6 @@
 }
 .reaction-pill > :last-child {
   padding-left: 5px;
-  color: var(--fg);
-}
-.round-action {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border-radius: 9999px;
-  color: var(--fg-2);
-}
-.round-action:hover {
-  background: var(--hover);
   color: var(--fg);
 }
 /* Linear's "Mark as" command menu (RAJ-52): 30px 12px/500 headings, 46px rows whose 42px highlight is inset 2px, and a 35px hint footer. */
