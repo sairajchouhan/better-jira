@@ -23,21 +23,31 @@ test("sub-issue rows: shortcuts act on the row, collapse persists, the composer 
     // A menu shortcut opens beside the row and changes the row's issue.
     await p.hover('[data-sub-issue="TEST-4"]');
     await p.key("s");
-    await p.click('[role="dialog"][aria-label="Change status"] [cmdk-item][data-value="Review"]');
+    await p.click(
+      '[role="dialog"][aria-label="Change status"] [cmdk-item][data-value="Review"]',
+    );
     await p.waitFor(`${statusTitle("TEST-4")}==='Review'`);
-    expect(await p.eval(`document.getElementById('prop-status').textContent`)).toContain("Todo");
+    expect(
+      await p.eval(`document.getElementById('prop-status').textContent`),
+    ).toContain("Todo");
     // ⌘⌫ deletes the hovered row (local site: no confirmation) and the parent stays open.
     await p.hover('[data-sub-issue="TEST-5"]');
     await p.key("Backspace", "meta");
     await p.waitFor(`!document.querySelector('[data-sub-issue="TEST-5"]')`);
-    expect(await p.eval(`document.getElementById('summary')?.value`)).toBe("Browser fixture 2");
+    expect(await p.eval(`document.getElementById('summary')?.value`)).toBe(
+      "Browser fixture 2",
+    );
   });
 
   await test.step("R1-D66: collapse persists across a reload", async () => {
     await p.click('[aria-label="Collapse sub-issues section"]');
     await p.reload();
-    await p.waitFor(`!!document.querySelector('[aria-label="Expand sub-issues section"]')`);
-    expect(await p.eval(`document.querySelectorAll('[data-sub-issue]').length`)).toBe(0);
+    await p.waitFor(
+      `!!document.querySelector('[aria-label="Expand sub-issues section"]')`,
+    );
+    expect(
+      await p.eval(`document.querySelectorAll('[data-sub-issue]').length`),
+    ).toBe(0);
     await p.click('[aria-label="Expand sub-issues section"]');
   });
 
@@ -47,17 +57,21 @@ test("sub-issue rows: shortcuts act on the row, collapse persists, the composer 
     );
     await p.type("copy id");
     await p.click('[cmdk-item][data-value="Copy › Copy ID"]');
-    await p.waitFor(`/Copied ID|Could not access the clipboard/.test(document.body.textContent)`);
+    await p.waitFor(
+      `/Copied ID|Could not access the clipboard/.test(document.body.textContent)`,
+    );
   });
 
   await test.step("R1-D68: Linear's sub-issue composer has named chips and Cancel, and the next draft starts from the defaults", async () => {
     await p.click('[aria-label="Create new sub-issue"]');
     await p.click('[aria-label^="Sub-issue priority"]');
     await p.click(
-      '[role="dialog"][aria-label="Change sub-issue priority"] [cmdk-item][data-value="High"]',
+      '[role="dialog"][aria-label="Set priority"] [cmdk-item][data-value="High"]',
     );
     expect(
-      await p.eval(`document.querySelector('[aria-label^="Sub-issue priority"]').textContent`),
+      await p.eval(
+        `document.querySelector('[aria-label^="Sub-issue priority"]').textContent`,
+      ),
     ).toBe("High");
     await p.click('[aria-label="Sub-issue title"]');
     await p.type("Reset after create");
@@ -70,16 +84,22 @@ test("sub-issue rows: shortcuts act on the row, collapse persists, the composer 
         `[document.querySelector('[aria-label^="Sub-issue priority"]').textContent,document.querySelector('[aria-label="Create sub-issue"] .rich-editor-actions button').textContent]`,
       ),
     ).toEqual(["Priority", "Cancel"]);
-    await p.click('[aria-label="Create sub-issue"] .rich-editor-actions button');
+    await p.click(
+      '[aria-label="Create sub-issue"] .rich-editor-actions button',
+    );
   });
 
   await test.step("R1-D69–D70: relation pills open in the app (⌘-click too); removing one keeps focus in the issue", async () => {
     await p.hover("#summary");
     await p.eval("document.activeElement?.blur()");
     await p.keys("mr");
-    await p.waitFor(`document.activeElement?.getAttribute('aria-label')==='Find related issue'`);
+    await p.waitFor(
+      `document.activeElement?.getAttribute('aria-label')==='Find related issue'`,
+    );
     await p.type("TEST-1");
-    await p.waitFor(`!!document.querySelector('[cmdk-item][data-value="TEST-1"]')`);
+    await p.waitFor(
+      `!!document.querySelector('[cmdk-item][data-value="TEST-1"]')`,
+    );
     await p.key("Enter");
     const href = await p.waitFor<string>(
       `document.querySelector('[data-relation="related:TEST-1"] a')?.href`,
@@ -87,7 +107,9 @@ test("sub-issue rows: shortcuts act on the row, collapse persists, the composer 
     expect(new URL(href).origin).toBe(new URL(fixture.url).origin);
     expect(new URL(href).searchParams.get("issue")).toBe("TEST-1");
     await p.click('[data-relation="related:TEST-1"] button');
-    await p.waitFor(`!document.querySelector('[data-relation="related:TEST-1"]')`);
+    await p.waitFor(
+      `!document.querySelector('[data-relation="related:TEST-1"]')`,
+    );
     await p.waitFor(`document.activeElement?.id==='issue-options'`);
   });
 });
@@ -101,24 +123,38 @@ test("editing an issue's fields: pickers close and apply, Jira renames wait for 
   await test.step("R1-D44, R1-D45, R1-D63: label create closes, Shift+D is a click-to-apply menu, and Custom… › Back keeps the presets", async () => {
     await p.eval("document.activeElement?.blur()");
     await p.key("l");
-    await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Change labels"]')`);
+    await p.waitFor(
+      `!!document.querySelector('[role="dialog"][aria-label="Change labels"]')`,
+    );
     await p.type("brand-new");
     await p.key("Enter");
-    await p.waitFor(`!document.querySelector('[role="dialog"][aria-label="Change labels"]')`);
+    await p.waitFor(
+      `!document.querySelector('[role="dialog"][aria-label="Change labels"]')`,
+    );
     expect(
-      await p.eval(`[...document.querySelectorAll('[data-label-chip]')].map(n=>n.textContent)`),
+      await p.eval(
+        `[...document.querySelectorAll('[data-label-chip]')].map(n=>n.textContent)`,
+      ),
     ).toContain("brand-new");
     await p.eval("document.activeElement?.blur()");
     await p.key("d", "shift");
-    await p.click('[role="dialog"][aria-label="Due date"] [cmdk-item][data-value="Tomorrow"]');
-    await p.waitFor(`!document.querySelector('[role="dialog"][aria-label="Due date"]')`);
-    // Linear reads near due dates relatively (R2-issue-fields-D7).
-    expect(await p.waitFor<string>(`document.getElementById('prop-due')?.textContent`)).toBe(
-      "Tomorrow",
+    await p.click(
+      '[role="dialog"][aria-label="Due date"] [cmdk-item][data-value="Tomorrow"]',
     );
+    await p.waitFor(
+      `!document.querySelector('[role="dialog"][aria-label="Due date"]')`,
+    );
+    // Linear reads near due dates relatively (R2-issue-fields-D7).
+    expect(
+      await p.waitFor<string>(
+        `document.getElementById('prop-due')?.textContent`,
+      ),
+    ).toBe("Tomorrow");
     await p.eval("document.activeElement?.blur()");
     await p.key("h", "shift");
-    await p.click('[role="dialog"][aria-label="Remind me"] [cmdk-item][data-value="Custom…"]');
+    await p.click(
+      '[role="dialog"][aria-label="Remind me"] [cmdk-item][data-value="Custom…"]',
+    );
     await p.eval(
       `const i=document.querySelector('[aria-label="Custom reminder time"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'2020-01-01T10:00');i.dispatchEvent(new Event('input',{bubbles:true}))`,
     );
@@ -141,15 +177,21 @@ test("editing an issue's fields: pickers close and apply, Jira renames wait for 
       `document.querySelector('[data-crumb-issue]')?.textContent.includes('Renamed in Jira')`,
     );
     expect(
-      await p.eval(`[document.activeElement.id,document.getElementById('summary').value]`),
+      await p.eval(
+        `[document.activeElement.id,document.getElementById('summary').value]`,
+      ),
     ).toEqual(["summary", "my draft"]);
     await p.key("Escape");
-    await p.waitFor(`document.getElementById('summary').value==='Renamed in Jira'`);
+    await p.waitFor(
+      `document.getElementById('summary').value==='Renamed in Jira'`,
+    );
     await p.click("#summary");
     await p.key("a", "meta");
     await p.key("Backspace");
     await p.key("Enter");
-    expect(await p.eval(`document.getElementById('summary').value`)).toBe("Renamed in Jira");
+    expect(await p.eval(`document.getElementById('summary').value`)).toBe(
+      "Renamed in Jira",
+    );
   });
 
   await test.step("R1-D46: Tab leaves the composer description for the property pills", async () => {
@@ -174,7 +216,10 @@ test("R1-D4, R1-D64: with Jira writes, delete asks in the app, names the row, an
 }) => {
   await fixture.reset({ writable: true, subtask: true });
   const p = await open("?issue=TEST-5&view=page");
-  await p.waitFor(`!!document.querySelector('[data-sub-issue="TEST-6"]')`, 15000);
+  await p.waitFor(
+    `!!document.querySelector('[data-sub-issue="TEST-6"]')`,
+    15000,
+  );
   const dialog = `document.querySelector('[role="dialog"][aria-label^="Delete"]')`;
 
   await test.step("deleting the open issue names it and counts its sub-issue", async () => {
@@ -190,9 +235,9 @@ test("R1-D4, R1-D64: with Jira writes, delete asks in the app, names the row, an
   await test.step("deleting a hovered sub-issue row names that row; nothing reaches Jira", async () => {
     await p.hover('[data-sub-issue="TEST-6"]');
     await p.key("Backspace", "meta");
-    expect(await p.waitFor<string>(`${dialog}?.getAttribute('aria-label')`)).toBe(
-      `Delete "TEST-6 ‒ Browser fixture 6"?`,
-    );
+    expect(
+      await p.waitFor<string>(`${dialog}?.getAttribute('aria-label')`),
+    ).toBe(`Delete "TEST-6 ‒ Browser fixture 6"?`);
     await p.key("Escape");
     expect((await fixture.log()).writes.length).toBe(0);
   });
@@ -204,7 +249,9 @@ test("R1-D4, R1-D64: with Jira writes, delete asks in the app, names the row, an
     );
     expect((await fixture.log()).writes.length).toBe(0);
     await p.key("Enter");
-    await p.waitFor(`!${dialog} && !document.querySelector('[data-sub-issue="TEST-6"]')`);
+    await p.waitFor(
+      `!${dialog} && !document.querySelector('[data-sub-issue="TEST-6"]')`,
+    );
     await expect
       .poll(async () => (await fixture.log()).writes)
       .toContainEqual({ key: "TEST-6", ops: [{ op: "delete" }] });

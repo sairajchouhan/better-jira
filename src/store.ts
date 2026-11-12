@@ -1,3 +1,4 @@
+import { knownPeople } from "./board-catalog";
 import { savedViewClient } from "./saved-view-client";
 import { assignableUsers, statusById, statuses } from "./board-catalog";
 import { effectiveSettings, setScope, viewSettings } from "./view-settings";
@@ -467,6 +468,13 @@ export function useAssignableUsers(): User[] {
   const issues = useStore((s) => s.issues);
   const jiraUsers = useStore((s) => s.options.users);
   return useMemo(() => assignableUsers(ME, jiraUsers, issues.values()), [issues, jiraUsers]);
+}
+
+/** All known people; unlike assignable users this includes creators and watchers. */
+export function usePeople(extra?: readonly User[]): User[] {
+  const issues = useStore((s) => s.issues);
+  const jiraUsers = useStore((s) => s.options.users);
+  return useMemo(() => knownPeople(ME, jiraUsers, issues.values(), extra), [issues, jiraUsers, extra]);
 }
 
 // The running machines. Each mirrors its state onto `state` so components read it with useStore.

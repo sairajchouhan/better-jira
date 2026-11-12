@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ComponentType } from "react";
 import { Menu } from "./menu";
 import { MenuSurface } from "./menu-surface";
 
@@ -34,10 +34,19 @@ export function PillSelect({
         <span className="truncate">{current}</span>
       </button>
       {anchor && (
-        <MenuSurface label={label} anchor={anchor} fit close={() => setAnchor(null)}>
+        <MenuSurface
+          label={label}
+          anchor={anchor}
+          fit
+          close={() => setAnchor(null)}
+        >
           {/* Opens on the current choice, like Linear, not the first option. */}
           <Menu defaultValue={`${current} ${value}`}>
-            <Menu.Input autoFocus aria-label={`${label}…`} placeholder={`${label}…`} />
+            <Menu.Input
+              autoFocus
+              aria-label={`${label}…`}
+              placeholder={`${label}…`}
+            />
             <Menu.List maxHeight="300px">
               <Menu.Empty>No matches</Menu.Empty>
               {options.map(([v, l]) => (
@@ -56,6 +65,45 @@ export function PillSelect({
             </Menu.List>
           </Menu>
         </MenuSurface>
+      )}
+    </>
+  );
+}
+
+/** A chip owns only its anchor; the field menu owns choices and interaction. */
+export function PropertyPill<P>({
+  label,
+  current,
+  menu: FieldMenu,
+  menuProps,
+  className = PILL_SELECT,
+}: {
+  label: string;
+  current: string;
+  menu: ComponentType<P & { anchor: HTMLElement | null; close: () => void }>;
+  menuProps: P;
+  className?: string;
+}) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={`${label}: ${current}`}
+        aria-haspopup="dialog"
+        aria-expanded={!!anchor}
+        title={label}
+        className={className}
+        onClick={(e) => setAnchor(anchor ? null : e.currentTarget)}
+      >
+        <span className="truncate">{current}</span>
+      </button>
+      {anchor && (
+        <FieldMenu
+          {...menuProps}
+          anchor={anchor}
+          close={() => setAnchor(null)}
+        />
       )}
     </>
   );

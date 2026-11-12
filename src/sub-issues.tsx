@@ -1,12 +1,31 @@
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
 /* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { RelationIcon, Icon, PriorityIcon, ProgressRing, StatusIcon, hue } from "./icons";
+import {
+  RelationIcon,
+  Icon,
+  PriorityIcon,
+  ProgressRing,
+  StatusIcon,
+} from "./icons";
 import { Confirm, MenuSurface } from "./menu-surface";
 import { Menu } from "./menu";
-import { PickerRow, PropertyMenu } from "./property-menu";
+import {
+  StatusMenu,
+  PriorityMenu,
+  AssigneeMenu,
+  LabelsMenu,
+} from "./property-menu";
+import { issueMenuEntries, type IssueMenuDialog } from "./issue-menu";
 import { InlineEditor } from "./rich-editor-loader";
 import { useCommand } from "./commands";
 import {
@@ -19,33 +38,31 @@ import {
 import {
   actions,
   addLocalFiles,
-  beginCreate,
   get,
   issueURL,
   ME,
   navigate,
   restoreLocalFiles,
   set,
-  toggleFavorite,
   useStore,
   type Board,
   type Issue,
   type IssueDraft,
-  type User,
 } from "./store";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { Avatar } from "./avatar";
-import { statusById, statuses } from "./board-catalog";
-import { copyIcons, copyIssue, copyKinds, copyShortcuts } from "./issue-copy";
-import { Relations } from "./personal-controls";
-import { ResourceForm, createIssueDocument } from "./issue-resources";
-import { duePresets, shortDate } from "./due-date";
-import { reminderPresets, reminderTime } from "./reminder-display";
+import { statusById } from "./board-catalog";
+import { Relations, PropertyPicker } from "./personal-controls";
+import { ResourceForm } from "./issue-resources";
+import { shortDate } from "./due-date";
 import { shortcutLabel } from "./shortcuts";
-import { RELATION_ISSUE } from "./issue-activity";
-import { canHaveChildren, needsParent } from "./issue-properties";
-import { priorityRank, rankBetween, type Property } from "./view-model";
-import { defaultSubIssueDisplay, subIssueRows, type SubIssueDisplay } from "./sub-issue-model";
+import { canHaveChildren } from "./issue-properties";
+import { rankBetween, type Property } from "./view-model";
+import {
+  defaultSubIssueDisplay,
+  subIssueRows,
+  type SubIssueDisplay,
+} from "./sub-issue-model";
 import {
   emptySubIssueDraft,
   readSubIssueDraft,
@@ -81,36 +98,59 @@ const button = "rounded px-2 py-1 text-fg-3 hover:bg-hover";
 export const CIRCLE =
   "grid size-7 place-items-center rounded-full bg-card text-fg-3 hover:bg-hover";
 type Field = "status" | "priority" | "assignee" | "labels";
-type Choice = { id: string; name: string; user?: User };
-
-/**
- * One property button with its own picker, rendered on each sub-issue row and in the composer. Each instance owns its anchor and
- * search, so typing in one picker re-renders only it. Labels stay open to pick more; the other fields close on a pick.
- */
+/** Each trigger owns its anchor; the explicit field menu owns all picker behavior. */
 function PropertyControl({
   field,
   label,
   title,
   className,
   board,
-  choices,
-  isSelected,
-  onSelect,
+  value,
+  onChange,
   children,
 }: {
   field: Field;
   label: string;
   title?: string;
   className: string;
-  /** The board whose status icons the picker shows. */
   board: Board;
-  /** Read when the picker opens, so closed rows compute nothing. */
-  choices: () => Choice[];
-  isSelected: (id: string) => boolean;
-  onSelect: (id: string) => void;
+  value: IssueDraft;
+  onChange: (patch: IssueDraft) => void;
   children: ReactNode;
 }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const props = { anchor, board, close: () => setAnchor(null) };
+  const menus = {
+    status: (
+      <StatusMenu
+        {...props}
+        value={value.status ?? ""}
+        onChange={(status) => onChange({ status })}
+      />
+    ),
+    priority: (
+      <PriorityMenu
+        {...props}
+        value={value.priority ?? ""}
+        empty={"key" in value ? "No priority" : "Default priority"}
+        onChange={(priority) => onChange({ priority: priority || undefined })}
+      />
+    ),
+    assignee: (
+      <AssigneeMenu
+        {...props}
+        value={value.assignee ?? null}
+        onChange={(assignee) => onChange({ assignee })}
+      />
+    ),
+    labels: (
+      <LabelsMenu
+        {...props}
+        value={value.labels ?? []}
+        onChange={(labels) => onChange({ labels })}
+      />
+    ),
+  };
   return (
     <>
       <button
@@ -124,120 +164,29 @@ function PropertyControl({
       >
         {children}
       </button>
-      {anchor && (
-        <PropertyPicker
-          field={field}
-          anchor={anchor}
-          board={board}
-          choices={choices()}
-          isSelected={isSelected}
-          onSelect={onSelect}
-          close={() => setAnchor(null)}
-        />
-      )}
+      {anchor && menus[field]}
     </>
   );
 }
-
-function PropertyPicker({
-  field,
-  anchor,
-  board,
-  choices,
-  isSelected,
-  onSelect,
-  close,
-}: {
-  field: Field;
-  anchor: HTMLElement;
-  board: Board;
-  choices: Choice[];
-  isSelected: (id: string) => boolean;
-  onSelect: (id: string) => void;
-  close: () => void;
-}) {
-  const [query, setQuery] = useState("");
-  const pick = (id: string) => {
-    onSelect(id);
-    if (field === "labels") setQuery("");
-    else close();
-  };
-  const created = query.trim();
-  // Linear's property menu (PropertyMenu), opened beside the sub-issue row or composer chip that was clicked.
-  return (
-    <PropertyMenu
-      label={`Change sub-issue ${field}`}
-      placeholder={PLACEHOLDER[field]}
-      hotkey={shortcutLabel(field === "assignee" ? "assign" : field) || undefined}
-      anchor={anchor}
-      close={close}
-      current={choices.find((c) => isSelected(c.id))?.name}
-      query={query}
-      onQuery={setQuery}
-    >
-      {choices.map((choice) => (
-        <PickerRow
-          key={choice.id}
-          value={choice.name}
-          icon={choiceIcon(field, board, choice)}
-          current={isSelected(choice.id)}
-          onSelect={() => pick(choice.id)}
-        >
-          {choice.name}
-        </PickerRow>
-      ))}
-      {field === "labels" &&
-        created &&
-        !choices.some((c) => c.id.toLowerCase() === created.toLowerCase()) && (
-          <PickerRow
-            value={`Create ${query}`}
-            icon={<Icon name="plus" size={14} />}
-            onSelect={() => pick(created)}
-          >
-            Create label "{created}"
-          </PickerRow>
-        )}
-    </PropertyMenu>
-  );
-}
-const PLACEHOLDER: Record<Field, string> = {
-  status: "Change status…",
-  priority: "Change priority to…",
-  assignee: "Assign to…",
-  labels: "Change or add labels…",
-};
-/** The icon the issue's own property menu shows for the same choice. */
-function choiceIcon(field: Field, board: Board, choice: Choice) {
-  if (field === "priority") return <PriorityIcon name={choice.id || undefined} />;
-  if (field === "status")
-    return (
-      <StatusIcon status={statusById(board, choice.id) ?? { name: choice.name, category: "new" }} />
-    );
-  if (field === "assignee") return <Avatar user={choice.user ?? null} size={16} />;
-  return <span className="size-[9px] rounded-full" style={{ background: hue(choice.name) }} />;
-}
-/** Whether a choice is the field's current value on this issue or draft. */
-const isCurrent = (field: Field, on: IssueDraft, id: string) =>
-  field === "labels"
-    ? !!on.labels?.includes(id)
-    : field === "status"
-      ? on.status === id
-      : field === "priority"
-        ? (on.priority ?? "") === id
-        : (on.assignee?.id ?? "") === id;
 function parseDisplay(value: unknown): SubIssueDisplay {
   const base = defaultSubIssueDisplay();
   if (!value || typeof value !== "object") return base;
   const source = value as Partial<SubIssueDisplay>;
   return {
     ...base,
-    ...(orderings.some(([id]) => id === source.ordering) ? { ordering: source.ordering } : {}),
+    ...(orderings.some(([id]) => id === source.ordering)
+      ? { ordering: source.ordering }
+      : {}),
     ...(["all", "day", "week", "month", "none"].includes(source.completed ?? "")
       ? { completed: source.completed }
       : {}),
     ...(typeof source.nested === "boolean" ? { nested: source.nested } : {}),
     ...(Array.isArray(source.properties)
-      ? { properties: source.properties.filter((p) => properties.some(([id]) => id === p)) }
+      ? {
+          properties: source.properties.filter((p) =>
+            properties.some(([id]) => id === p),
+          ),
+        }
       : {}),
   } as SubIssueDisplay;
 }
@@ -249,11 +198,18 @@ export const statusOf = (boards: Boards, child: Issue) => {
   return {
     name: result?.name ?? child.status,
     category: result?.category ?? "new",
-    order: columns.findIndex((c) => c.statuses.some((s) => s.id === child.status)),
+    order: columns.findIndex((c) =>
+      c.statuses.some((s) => s.id === child.status),
+    ),
   };
 };
 const openIssue = (target: Issue) =>
-  navigate({ board: target.board, selected: target.key, panel: true, view: get().view });
+  navigate({
+    board: target.board,
+    selected: target.key,
+    panel: true,
+    view: get().view,
+  });
 
 /** Linear's "Sub-issue of" line under a child's title: the parent link, and a progress pill whose menu lists the parent's sub-issues (⌘⇧→). */
 export function SubIssueOf({ issue }: { issue: Issue }) {
@@ -269,8 +225,15 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
   const parent = issue.parent ? all.get(issue.parent) : undefined;
   if (!parent) return null;
   const status = (i: Issue) => statusOf(boards, i),
-    model = subIssueRows(parent.key, [...all.values()], defaultSubIssueDisplay(), status),
-    siblings = model.rows.filter((row) => row.depth === 0).map((row) => row.issue);
+    model = subIssueRows(
+      parent.key,
+      [...all.values()],
+      defaultSubIssueDisplay(),
+      status,
+    ),
+    siblings = model.rows
+      .filter((row) => row.depth === 0)
+      .map((row) => row.issue);
   return (
     <div className="mt-2 mb-2.5 flex h-[26px] items-center text-[13px] leading-[normal]">
       <span className="mr-0.5 font-[450] text-fg-3">Sub-issue of</span>
@@ -279,7 +242,8 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
         className="flex h-[26px] min-w-0 items-center gap-1 rounded-lg border border-transparent px-1 hover:bg-hover"
         href={issueURL(parent)}
         onClick={(event) => {
-          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+            return;
           event.preventDefault();
           openIssue(parent);
         }}
@@ -309,7 +273,11 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
           fit
         >
           <Menu style={{ width: 347 }}>
-            <Menu.Input hideWhenEmpty autoFocus aria-label={`Open sub-issues of ${parent.key}…`} />
+            <Menu.Input
+              hideWhenEmpty
+              autoFocus
+              aria-label={`Open sub-issues of ${parent.key}…`}
+            />
             <Menu.List>
               <Menu.Group heading="Navigation">
                 {siblings.map((child) => (
@@ -324,7 +292,9 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
                       if (child.key !== issue.key) openIssue(child);
                     }}
                   >
-                    <span className="mr-2 text-[var(--menu-fg-3)]">{child.key}</span>
+                    <span className="mr-2 text-[var(--menu-fg-3)]">
+                      {child.key}
+                    </span>
                     {child.summary}
                   </Menu.Item>
                 ))}
@@ -341,19 +311,20 @@ export function SubIssues({ issue }: { issue: Issue }) {
   const all = useStore((s) => s.issues),
     boards = useStore((s) => s.boards),
     namespace = useStore((s) => s.namespace),
-    writable = useStore((s) => s.writable),
-    jiraPriorities = useStore((s) => s.options.priorities);
+    writable = useStore((s) => s.writable);
   const noPriority = writable ? "Default priority" : "No priority";
   const storageKey = `better-jira:sub-issues:v1:${namespace}`;
   const [display, setDisplay] = useState(() => {
     try {
-      return parseDisplay(JSON.parse(localStorage.getItem(storageKey) ?? "null"));
+      return parseDisplay(
+        JSON.parse(localStorage.getItem(storageKey) ?? "null"),
+      );
     } catch {
       return defaultSubIssueDisplay();
     }
   });
   const [rowDialog, setRowDialog] = useState<{
-    kind: "link" | "pull-request" | "rename" | "relation";
+    kind: IssueMenuDialog | "rename" | "relation";
     key: string;
   } | null>(null);
   // Linear keeps each issue's section collapsed across reloads.
@@ -389,12 +360,19 @@ export function SubIssues({ issue }: { issue: Issue }) {
     priority: undefined,
     status:
       board.columns
-        .find((c) => !/backlog/i.test(c.name) && c.statuses.some((s) => s.category === "new"))
-        ?.statuses.find((s) => s.category === "new")?.id ?? board.columns[0]?.statuses[0]?.id,
+        .find(
+          (c) =>
+            !/backlog/i.test(c.name) &&
+            c.statuses.some((s) => s.category === "new"),
+        )
+        ?.statuses.find((s) => s.category === "new")?.id ??
+      board.columns[0]?.statuses[0]?.id,
     labels: [],
   });
   const draftKey = `better-jira:sub-issue-draft:v1:${namespace}:${issue.key}`;
-  const [value, setValue] = useState(() => readSubIssueDraft(draftKey, initial())),
+  const [value, setValue] = useState(() =>
+      readSubIssueDraft(draftKey, initial()),
+    ),
     pending = useRef(value),
     [editor, setEditor] = useState(0);
   const { title, description, files, properties: draft } = value;
@@ -417,9 +395,9 @@ export function SubIssues({ issue }: { issue: Issue }) {
     const apply = (event: Event) => {
       event.preventDefault();
       update(
-        (event as CustomEvent<(draft: SubIssueDraft) => Partial<SubIssueDraft>>).detail(
-          pending.current,
-        ),
+        (
+          event as CustomEvent<(draft: SubIssueDraft) => Partial<SubIssueDraft>>
+        ).detail(pending.current),
       );
     };
     addEventListener(`late:${draftKey}`, apply);
@@ -434,7 +412,14 @@ export function SubIssues({ issue }: { issue: Issue }) {
       update(change(pending.current));
       return;
     }
-    if (dispatchEvent(new CustomEvent(`late:${draftKey}`, { detail: change, cancelable: true }))) {
+    if (
+      dispatchEvent(
+        new CustomEvent(`late:${draftKey}`, {
+          detail: change,
+          cancelable: true,
+        }),
+      )
+    ) {
       try {
         const stored = readSubIssueDraft(draftKey, initial());
         saveSubIssueDraft(draftKey, { ...stored, ...change(stored) });
@@ -473,7 +458,15 @@ export function SubIssues({ issue }: { issue: Issue }) {
     // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
   }, [all, boards]);
   const model = useMemo(
-    () => subIssueRows(issue.key, [...all.values()], display, status, Date.now(), reveal),
+    () =>
+      subIssueRows(
+        issue.key,
+        [...all.values()],
+        display,
+        status,
+        Date.now(),
+        reveal,
+      ),
     // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
     [issue.key, all, boards, display, reveal],
   );
@@ -497,7 +490,9 @@ export function SubIssues({ issue }: { issue: Issue }) {
   const section = useRef<HTMLElement>(null);
   // ⌘⇧O does what this section's create button does, while it shows one.
   useCommand("create-sub-issue", (key) => {
-    const button = section.current?.querySelector<HTMLElement>("[data-create-child]");
+    const button = section.current?.querySelector<HTMLElement>(
+      "[data-create-child]",
+    );
     if (key !== issue.key || !button) return;
     button.click();
     return true;
@@ -566,12 +561,19 @@ export function SubIssues({ issue }: { issue: Issue }) {
     );
     if (!key) return;
     // Linear starts the next sub-issue from the defaults, not the last one's properties.
-    update({ title: "", description: normalizeDocument(""), files: [], properties: initial() });
+    update({
+      title: "",
+      description: normalizeDocument(""),
+      files: [],
+      properties: initial(),
+    });
     setEditor((n) => n + 1);
     requestAnimationFrame(() => titleInput.current?.focus());
   };
   const submitFromButton = () =>
-    form.current?.querySelector<HTMLButtonElement>(".rich-editor-submit")?.click();
+    form.current
+      ?.querySelector<HTMLButtonElement>(".rich-editor-submit")
+      ?.click();
   useHotkey("Mod+Enter", submitFromButton, {
     target: titleInput,
     capture: true,
@@ -587,73 +589,20 @@ export function SubIssues({ issue }: { issue: Issue }) {
     capture: true,
     ignoreInputs: false,
   });
-  useHotkey("Escape", escape, { target: form, capture: true, ignoreInputs: false });
-  /** Sets a field on a saved sub-issue (`on`) or, without one, on the composer's draft. */
-  const select = (field: Field, value: string, on?: Issue) => {
-    const base = on ?? draft;
-    let patch: IssueDraft = {};
-    if (field === "status") patch = { status: value };
-    if (field === "priority") patch = { priority: value || undefined };
-    if (field === "assignee")
-      patch = {
-        assignee:
-          [ME, ...[...all.values()].flatMap((i) => (i.assignee ? [i.assignee] : []))].find(
-            (u) => u.id === value,
-          ) ?? null,
-      };
-    if (field === "labels")
-      patch = {
-        labels: base.labels?.includes(value)
-          ? base.labels.filter((l) => l !== value)
-          : [...(base.labels ?? []), value],
-      };
-    if (on) {
-      if (field === "status") actions.status(on.key, value);
-      else actions.patch(on.key, patch);
-    } else update({ properties: { ...pending.current.properties, ...patch } });
-  };
-  const choicesFor = (field: Field, on?: Issue): Choice[] =>
-    field === "status"
-      ? statuses(on ? boards.find((b) => b.id === on.board) : board).map((s) => ({
-          id: s.id,
-          name: s.name,
-        }))
-      : field === "priority"
-        ? [
-            ...(writable && on ? [] : [{ id: "", name: noPriority }]),
-            ...[
-              ...new Set([
-                ...jiraPriorities.map((p) => p.name),
-                ...[...all.values()].flatMap((i) => (i.priority ? [i.priority] : [])),
-              ]),
-            ]
-              .sort((a, b) => priorityRank(a) - priorityRank(b))
-              .map((p) => ({ id: p, name: p })),
-          ]
-        : field === "assignee"
-          ? [
-              { id: "", name: "Unassigned" },
-              ...[
-                ...new Map(
-                  [ME, ...[...all.values()].flatMap((i) => (i.assignee ? [i.assignee] : []))].map(
-                    (u) => [u.id, u],
-                  ),
-                ).values(),
-              ].map((u) => ({ id: u.id, name: u.name, user: u })),
-            ]
-          : [
-              ...new Set([
-                ...((on ?? draft).labels ?? []),
-                ...[...all.values()].flatMap((i) => i.labels),
-              ]),
-            ].map((label) => ({ id: label, name: label }));
+  useHotkey("Escape", escape, {
+    target: form,
+    capture: true,
+    ignoreInputs: false,
+  });
   const control = (child: Issue, field: Field, content: React.ReactNode) => (
     <PropertyControl
       field={field}
-      board={board}
-      choices={() => choicesFor(field, child)}
-      isSelected={(id) => isCurrent(field, child, id)}
-      onSelect={(id) => select(field, id, child)}
+      board={boards.find((b) => b.id === child.board) ?? board}
+      value={child}
+      onChange={(patch) => {
+        if (patch.status) actions.status(child.key, patch.status);
+        else actions.patch(child.key, patch);
+      }}
       title={
         field === "status"
           ? status(child).name
@@ -670,214 +619,37 @@ export function SubIssues({ issue }: { issue: Issue }) {
     </PropertyControl>
   );
   /** The composer's chip for a field, picking into the draft. */
-  const draftControl = (field: Field, label: string, content: React.ReactNode) => (
+  const draftControl = (
+    field: Field,
+    label: string,
+    content: React.ReactNode,
+  ) => (
     <PropertyControl
       key={field}
       field={field}
       board={board}
-      choices={() => choicesFor(field)}
-      isSelected={(id) => isCurrent(field, pending.current.properties, id)}
-      onSelect={(id) => select(field, id)}
+      value={draft}
+      onChange={(patch) =>
+        update({ properties: { ...pending.current.properties, ...patch } })
+      }
       label={label}
       className={button}
     >
       {content}
     </PropertyControl>
   );
-  const rowEntries = (child: Issue, _anchor: HTMLElement): ActionEntry[] => [
-    // Linear's row menu groups, icons and hints (RAJ-52, 2026-11-08), acting on the row's issue. Convert to and Open in have no local equivalent.
-    ...(
-      [
-        ["status", "status", "status"],
-        ["priority", "priority", "priority"],
-        ["assignee", "user", "assign"],
-      ] as const
-    ).map(([field, icon, key]) => ({
-      name: field[0]!.toUpperCase() + field.slice(1),
-      icon,
-      shortcut: shortcutLabel(key) || undefined,
-      children: choicesFor(field, child).map((choice) => ({
-        name: choice.name,
-        run: () => select(field, choice.id, child),
-      })),
-    })),
-    {
-      name: "Due date",
-      icon: "calendar",
-      shortcut: shortcutLabel("due") || undefined,
-      children: duePresets().map((preset) => ({
-        name: preset.name,
-        shortcut: preset.label,
-        run: () => actions.patch(child.key, { due: preset.due }),
-      })),
-    },
-    {
-      name: "Labels",
-      icon: "label",
-      shortcut: shortcutLabel("labels") || undefined,
-      children: choicesFor("labels", child).map((choice) => ({
-        name: `${child.labels.includes(choice.id) ? "✓ " : ""}${choice.name}`,
-        run: () => select("labels", choice.id, child),
-      })),
-    },
-    // Jira's API can't move an issue to another project or out of one.
-    ...(writable
-      ? []
-      : ([
-          {
-            name: "Project",
-            icon: "layers",
-            shortcut: shortcutLabel("project") || undefined,
-            children: [
-              {
-                name: "No project",
-                run: () => actions.patch(child.key, { project: null, milestones: [] }),
-              },
-              ...[
-                ...new Map(
-                  [...all.values()].flatMap((i) =>
-                    i.project ? [[i.project.key, i.project] as const] : [],
-                  ),
-                ).values(),
-              ].map((project) => ({
-                name: `${child.project?.key === project.key ? "✓ " : ""}${project.name}`,
-                run: () => actions.patch(child.key, { project, milestones: [] }),
-              })),
-            ],
-          },
-        ] as ActionEntry[])),
-    {
-      name: "More properties",
-      icon: "square-dots",
-      children: [
-        {
-          name: "Add link…",
-          icon: "link",
-          shortcut: shortcutLabel("link") || undefined,
-          run: () => setRowDialog({ kind: "link", key: child.key }),
-        },
-        {
-          name: "Add pull request…",
-          icon: "branch",
-          run: () => setRowDialog({ kind: "pull-request", key: child.key }),
-        },
-        { name: "Add document…", icon: "file", run: () => void createIssueDocument(child) },
-        {
-          name: "Rename…",
-          icon: "pencil",
-          shortcut: shortcutLabel("rename") || undefined,
-          run: () => setRowDialog({ kind: "rename", key: child.key }),
-        },
-      ],
-    },
-    {
-      name: "Create related",
-      icon: "square-plus",
-      divider: true,
-      children: [
-        {
-          name: "Issue…",
-          run: () =>
-            beginCreate({ related: { key: child.key, kind: "related" }, project: child.project }),
-        },
-        ...(canHaveChildren(get(), child)
-          ? [
-              {
-                name: "Sub-issue…",
-                run: () => beginCreate({ parent: child.key, project: child.project }),
-              },
-            ]
-          : []),
-        ...(["parent", "blocked", "blocking"] as const).map((kind) => ({
-          name: `${kind === "parent" ? "Parent" : kind === "blocked" ? "Blocked" : "Blocking"} issue…`,
-          run: () => beginCreate({ related: { key: child.key, kind }, project: child.project }),
-        })),
-      ],
-    },
-    {
-      name: "Mark as",
-      icon: "flag",
-      children: (
-        [
-          ["child", "Parent of…"],
-          ["parent", "Sub-issue of…", "parent-set"],
-          ["related", "Related to…", "related"],
-          ["blocked", "Blocked by…", "blocked"],
-          ["blocking", "Blocking…", "blocking"],
-          ["duplicate", "Duplicate of…", "duplicate"],
-        ] as const
-      ).map(([kind, name, key]) => ({
-        name,
-        shortcut: key ? shortcutLabel(key) || undefined : undefined,
-        run: () => {
-          set({ relationKind: kind });
-          setRowDialog({ kind: "relation", key: child.key });
-        },
-      })),
-    },
-    // Remove sits in the Create related group and names the parent and every relation by the other issue's role, as on Issue options.
-    ...((child.parent && !needsParent(get(), child)) || child.relations?.length
-      ? [
-          {
-            name: "Remove",
-            icon: "flag-x" as const,
-            children: [
-              ...(child.parent && !needsParent(get(), child)
-                ? [
-                    {
-                      name: `Parent issue ${child.parent} ${all.get(child.parent)?.summary ?? ""}`.trim(),
-                      run: () => actions.patch(child.key, { parent: undefined }),
-                    },
-                  ]
-                : []),
-              ...(child.relations ?? []).map((r) => {
-                const role = RELATION_ISSUE[r.kind] ?? "related";
-                return {
-                  name: `${role[0]!.toUpperCase()}${role.slice(1)} issue ${r.key} ${all.get(r.key)?.summary ?? ""}`.trim(),
-                  run: () => actions.relate(child.key, r.key, r.kind, true),
-                };
-              }),
-            ],
-          },
-        ]
-      : []),
-    {
-      name: "Copy",
-      icon: "clipboard",
-      divider: true,
-      children: copyKinds.map((kind) => ({
-        name: `Copy ${kind}`,
-        icon: copyIcons[kind],
-        shortcut: shortcutLabel(copyShortcuts[kind] ?? "") || undefined,
-        run: () => void copyIssue(kind, child),
-      })),
-    },
-    { name: "Make a copy…", icon: "copy", run: () => actions.duplicate(child.key) },
-    {
-      name: get().favorites.includes(child.key) ? "Remove from favorites" : "Favorite",
-      icon: get().favorites.includes(child.key) ? "starred" : "star",
-      divider: true,
-      shortcut: shortcutLabel("favorite") || undefined,
-      run: () => toggleFavorite(child.key),
-    },
-    {
-      name: "Remind me",
-      icon: "clock",
-      shortcut: shortcutLabel("remind") || undefined,
-      children: reminderPresets().map((preset) => ({
-        name: preset.label,
-        shortcut: reminderTime(preset.at),
-        run: () => actions.remind(child.key, preset.at),
-      })),
-    },
-    {
-      name: "Delete",
-      icon: "trash",
-      divider: true,
-      shortcut: shortcutLabel("delete") || undefined,
-      run: () => actions.remove(child.key),
-    },
-  ];
+  const rowEntries = (child: Issue, _anchor: HTMLElement): ActionEntry[] =>
+    issueMenuEntries(child, {
+      presentation: "sub-issue",
+      close: () => setRowMenu(null),
+      openDialog: (kind) => {
+        setRowMenu(null);
+        setRowDialog({
+          kind: kind === "relations" ? "relation" : kind,
+          key: child.key,
+        });
+      },
+    });
   const childURL = (child: Issue) => {
     const url = new URL(location.href);
     url.hash = "";
@@ -896,12 +668,18 @@ export function SubIssues({ issue }: { issue: Issue }) {
       {!!model.total && (
         <div className="-ml-1.5 mb-2 flex items-center gap-1.5 pr-2">
           <button
-            aria-label={collapsed ? "Expand sub-issues section" : "Collapse sub-issues section"}
+            aria-label={
+              collapsed
+                ? "Expand sub-issues section"
+                : "Collapse sub-issues section"
+            }
             aria-expanded={!collapsed}
             className="flex h-6 items-center gap-0.5 rounded-full pr-[13px] pl-1.5 text-[12px] font-medium text-fg-3 hover:bg-hover"
             onClick={() => setCollapsed(!collapsed)}
           >
-            <span className={`grid size-4 place-items-center ${collapsed ? "" : "rotate-90"}`}>
+            <span
+              className={`grid size-4 place-items-center ${collapsed ? "" : "rotate-90"}`}
+            >
               <Icon name="chevron" size={14} />
             </span>
             <span>Sub-issues</span>
@@ -997,7 +775,11 @@ export function SubIssues({ issue }: { issue: Issue }) {
             {display.properties.includes("status") &&
               control(child, "status", <StatusIcon status={status(child)} />)}
             {display.properties.includes("priority") &&
-              control(child, "priority", <PriorityIcon name={child.priority} />)}
+              control(
+                child,
+                "priority",
+                <PriorityIcon name={child.priority} />,
+              )}
             {display.properties.includes("id") && (
               <span className="px-1 text-fg-3">{child.key}</span>
             )}
@@ -1005,7 +787,13 @@ export function SubIssues({ issue }: { issue: Issue }) {
               className="flex min-w-0 flex-1 items-center gap-2 py-1.5 text-[13px] font-medium text-fg"
               href={childURL(child)}
               onClick={(event) => {
-                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                if (
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey ||
+                  event.altKey
+                )
+                  return;
                 event.preventDefault();
                 navigate({
                   board: child.board,
@@ -1021,14 +809,19 @@ export function SubIssues({ issue }: { issue: Issue }) {
                   data-row-progress
                   className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border-[0.5px] border-line-2 px-2 text-[12px] font-[450] text-fg-3"
                 >
-                  <ProgressRing value={progress.get(child.key)![0] / progress.get(child.key)![1]} />
+                  <ProgressRing
+                    value={
+                      progress.get(child.key)![0] / progress.get(child.key)![1]
+                    }
+                  />
                   {progress.get(child.key)!.join("/")}
                 </span>
               )}
             </a>
             {/* Linear's row badges (RAJ-54 blocking 1, RAJ-55 blocked 1; Opus review 4): a red relation icon and how many issues. */}
             {(["blocking", "blocked"] as const).map((kind) => {
-              const count = child.relations?.filter((r) => r.kind === kind).length ?? 0;
+              const count =
+                child.relations?.filter((r) => r.kind === kind).length ?? 0;
               return (
                 count > 0 && (
                   <span
@@ -1044,7 +837,11 @@ export function SubIssues({ issue }: { issue: Issue }) {
               );
             })}
             {display.properties.includes("labels") &&
-              control(child, "labels", child.labels.join(", ") || <Icon name="label" size={13} />)}
+              control(
+                child,
+                "labels",
+                child.labels.join(", ") || <Icon name="label" size={13} />,
+              )}
             {display.properties.includes("milestone") && (
               <span className="truncate text-fg-3">
                 {child.milestones?.map((m) => m.name).join(", ")}
@@ -1123,7 +920,9 @@ export function SubIssues({ issue }: { issue: Issue }) {
             id={`sub-issue-description-${issue.key}`}
             mentionIssue={issue.key}
             scope={scope}
-            onLateMedia={(merge) => late((draft) => ({ description: merge(draft.description) }))}
+            onLateMedia={(merge) =>
+              late((draft) => ({ description: merge(draft.description) }))
+            }
             initial={description}
             label="Sub-issue description"
             placeholder="Add description…"
@@ -1154,7 +953,10 @@ export function SubIssues({ issue }: { issue: Issue }) {
                   {field === "priority" ? (
                     <PriorityIcon name={draft.priority} />
                   ) : (
-                    <Icon name={field === "labels" ? "label" : "user"} size={14} />
+                    <Icon
+                      name={field === "labels" ? "label" : "user"}
+                      size={14}
+                    />
                   )}
                   {/* Linear names the value on each chip: "Priority", the assignee, "Labels". */}
                   {field === "priority"
@@ -1179,8 +981,12 @@ export function SubIssues({ issue }: { issue: Issue }) {
             <Relations issue={child} close={done} />
           ) : rowDialog.kind === "rename" ? (
             <RenameIssue issue={child} close={done} />
-          ) : (
+          ) : rowDialog.kind === "link" || rowDialog.kind === "pull-request" ? (
             <ResourceForm issue={child} kind={rowDialog.kind} close={done} />
+          ) : rowDialog.kind === "reminder" ||
+            rowDialog.kind === "history" ||
+            rowDialog.kind === "relations" ? null : (
+            <PropertyPicker issue={child} field={rowDialog.kind} close={done} />
           );
         })()}
       {rowMenu && all.get(rowMenu.key) && (
@@ -1215,7 +1021,11 @@ export function SubIssues({ issue }: { issue: Issue }) {
               aria-label="Sub-issue ordering"
               value={display.ordering}
               className="rounded bg-card p-1"
-              onChange={(e) => change({ ordering: e.target.value as SubIssueDisplay["ordering"] })}
+              onChange={(e) =>
+                change({
+                  ordering: e.target.value as SubIssueDisplay["ordering"],
+                })
+              }
             >
               {orderings.map(([id, label]) => (
                 <option key={id} value={id}>
@@ -1231,7 +1041,9 @@ export function SubIssues({ issue }: { issue: Issue }) {
               value={display.completed}
               className="rounded bg-card p-1"
               onChange={(e) =>
-                change({ completed: e.target.value as SubIssueDisplay["completed"] })
+                change({
+                  completed: e.target.value as SubIssueDisplay["completed"],
+                })
               }
             >
               {[
@@ -1306,6 +1118,7 @@ function RenameIssue({ issue, close }: { issue: Issue; close: () => void }) {
   );
 }
 const continues = (rows: { depth: number }[], index: number, level: number) => {
-  for (const row of rows.slice(index + 1)) if (row.depth <= level) return row.depth === level;
+  for (const row of rows.slice(index + 1))
+    if (row.depth <= level) return row.depth === level;
   return false;
 };
