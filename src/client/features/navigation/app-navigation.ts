@@ -5,6 +5,7 @@
  * a reload) comes back through `show`, which restores the screen it names.
  */
 import { createActor } from "xstate";
+import { Debouncer } from "@tanstack/pacer";
 import { createBrowserHistory, createMemoryHistory, redirect, type ParsedLocation } from "@tanstack/react-router";
 import { uiMachine, inspector, type UiContext } from "@/client/state/machines";
 import { MACHINE_FIELDS, placeOf, transition, type Destination, type NavigationEvent, type Place, type Screen } from "./navigation";
@@ -61,6 +62,10 @@ export function linkTo(to: Destination) {
 export function preload(to: Destination) {
   void router.preloadRoute(linkTo(to) as never).catch(() => {});
 }
+// Linear's intent delay: a pointer resting on an issue for a moment loads it; one passing over doesn't.
+const intent = new Debouncer(preload, { wait: 50 });
+/** Preloads where an issue under the pointer opens, after the pointer rests on it; `null` when it leaves. */
+export const preloadOnHover = (to: Destination | null) => (to ? intent.maybeExecute(to) : intent.cancel());
 
 /** Goes somewhere: see navigation.ts for leaving views, how issues open and what the address shows. */
 export function navigate(to: Destination) {

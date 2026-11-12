@@ -316,7 +316,7 @@ function IssueBody({ issue }: { issue: Issue }) {
   const f = useStore((s) => s.full.get(issue.key))?.fields;
   const propertiesHidden = useStore((s) => s.issuePropertiesHidden);
   return (
-    <div className="issue-detail-body">
+    <div className="issue-detail-body" data-scroll-restoration-id="issue-body">
       <div role="toolbar" aria-label="Copy issue" className="issue-copy-toolbar">
         {COPY_ACTIONS.map(([action, label, icon]) => (
           <IconButton

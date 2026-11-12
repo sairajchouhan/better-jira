@@ -221,7 +221,7 @@ function DocumentContent() {
   return (
     <div className="flex min-w-0 flex-1 flex-col" data-document={resource.id}>
       <DocumentHeader />
-      <div className="flex-1 overflow-y-auto">
+      <div data-scroll-restoration-id="document-body" className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[854px] px-6 py-16 text-[15px]">
           <DocumentIcon resource={resource} issue={issue} />
           {resource.showAuthors && (

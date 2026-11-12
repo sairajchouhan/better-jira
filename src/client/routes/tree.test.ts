@@ -28,7 +28,7 @@ async function open(href: string, state?: Record<string, unknown>) {
   const router = createAppRouter(history, context);
   await router.load();
   while (router.state.status !== "idle" || router.state.location.href !== history.location.href) await Bun.sleep(1);
-  const notFound = router.state.matches.some((m) => m.status === "notFound" || m.globalNotFound || isNotFound(m.error));
+  const notFound = router.state.matches.some((m) => m.status === "notFound" || isNotFound(m.error));
   return { at: history.location.pathname + history.location.search, shown: shown.at(-1), notFound, preloaded, router };
 }
 

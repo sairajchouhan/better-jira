@@ -267,7 +267,7 @@ export function createAppRouter(history: RouterHistory, context: RouteContext) {
     defaultPreloadStaleTime: 0,
     // Back and Forward land where each entry was scrolled; a new navigation opens the issue at its top.
     scrollRestoration: typeof document !== "undefined",
-    scrollToTopSelectors: ['[data-scroll-restoration-id="issue-body"]'],
+    scrollToTopSelectors: ['[data-scroll-restoration-id="issue-body"]', '[data-scroll-restoration-id="document-body"]'],
     defaultPendingComponent: () => <LoadingState>Loading…</LoadingState>,
   });
 }

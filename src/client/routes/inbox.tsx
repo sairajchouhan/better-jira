@@ -37,7 +37,7 @@ import { hotkeyOf, runShortcut } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
 import { statusOf as issueStatusOf, get, set, isWatching, useStore, type Issue } from "@/client/state/store";
 import { queryClient } from "@/client/state/server-data";
-import { navigate, router, ui } from "@/client/features/navigation/app-navigation";
+import { navigate, preloadOnHover, router, ui } from "@/client/features/navigation/app-navigation";
 import { useSearch } from "@tanstack/react-router";
 import { toggleFavorite } from "@/client/features/navigation/favorites";
 
@@ -271,6 +271,8 @@ function Row({
         e.preventDefault();
         selectRow(item);
       }}
+      onPointerEnter={() => issue && preloadOnHover({ board: issue.board, selected: issue.key, panel: true, inbox: true })}
+      onPointerLeave={() => preloadOnHover(null)}
       onKeyDown={(e) => {
         // A clicked row keeps focus, and Enter on a link would click it again: open the full page, as Enter does elsewhere.
         if (
@@ -770,6 +772,7 @@ export function InboxList() {
       <div
         ref={list}
         role="list"
+        data-scroll-restoration-id="inbox-list"
         className="min-h-0 flex-1 overflow-y-auto py-1.5"
       >
         {groups.map((group) => [

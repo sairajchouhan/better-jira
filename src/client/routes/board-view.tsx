@@ -24,7 +24,7 @@ import { Icon, Label, PriorityIcon, StatusIcon, TypeDot } from "@/client/compone
 import { ME, get, set, timed, useStore, type Board, type Issue, statusOf } from "@/client/state/store";
 import { actions, beginCreate } from "@/client/state/issue-actions";
 import { loadFull } from "@/client/state/server-data";
-import { navigate, ui } from "@/client/features/navigation/app-navigation";
+import { navigate, preloadOnHover, ui } from "@/client/features/navigation/app-navigation";
 import {
   myIssuesBoard,
   boardColumns,
@@ -160,7 +160,7 @@ export const BoardView = memo(function BoardView({
       <div className="relative flex min-w-0 min-h-0 flex-1 flex-col" data-layout={d.layout}>
         {!visible.length && results}
         {d.layout === "list" ? (
-          <div className="flex-1 overflow-auto py-1">
+          <div data-scroll-restoration-id={`board-${board.id}`} className="flex-1 overflow-auto py-1">
             {show.map((c, ci) => (
               <section key={c.id} className="mb-2">
                 <GroupHeading
@@ -192,7 +192,7 @@ export const BoardView = memo(function BoardView({
           </div>
         ) : (
           <div className="flex min-h-0 flex-1">
-            <div className="min-h-0 min-w-0 flex-1 overflow-auto px-2 pt-1">
+            <div data-scroll-restoration-id={`board-${board.id}`} className="min-h-0 min-w-0 flex-1 overflow-auto px-2 pt-1">
               {d.rows !== "none" && (
                 <div className="sticky top-0 z-10 flex w-max gap-4 bg-panel">
                   {show.map((col) => (
@@ -240,7 +240,7 @@ export const BoardView = memo(function BoardView({
                           issues={layout.cells[ri]![ci]!}
                           selected={selected}
                           display={d}
-                          scroll={d.rows === "none"}
+                          scroll={d.rows === "none" ? `board-${board.id}-column-${col.id}` : undefined}
                           header={d.rows === "none"}
                           hide={() => hide(col.id)}
                           create={() => createIn(col, d.rows === "none" ? undefined : row)}
@@ -493,7 +493,8 @@ function ColumnView({
   issues: Issue[];
   selected: string | null;
   display: Display;
-  scroll: boolean;
+  /** The column scrolls on its own (no swimlanes); Back restores it under this id. */
+  scroll?: string;
   onDrop: (key: string, before?: string) => void;
   hide: () => void;
   create: () => void;
@@ -530,7 +531,10 @@ function ColumnView({
           create={create}
         />
       )}
-      <div className={`flex-1 px-[9px] pt-[9px] ${scroll ? "overflow-y-auto" : ""}`}>
+      <div
+        data-scroll-restoration-id={scroll}
+        className={`flex-1 px-[9px] pt-[9px] ${scroll ? "overflow-y-auto" : ""}`}
+      >
         <VirtualItems items={issues} itemKey={issueKey} selected={selected} estimate={124}>
           {(issue) => <BoardCard issue={issue} selected={issue.key === selected} display={display} />}
         </VirtualItems>
@@ -577,6 +581,8 @@ function IssueTarget({
       tabIndex={0}
       draggable
       onDragStart={(e) => e.dataTransfer.setData("text/plain", issue.key)}
+      onPointerEnter={() => preloadOnHover({ selected: issue.key, panel: true })}
+      onPointerLeave={() => preloadOnHover(null)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();

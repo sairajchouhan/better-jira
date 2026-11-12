@@ -16,7 +16,7 @@ import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { Icon, StatusIcon, TypeDot } from "@/client/components/icons";
 import { get, set, timed, useStore, type Issue, statusOf, ME } from "@/client/state/store";
 import { currentKey } from "@/client/state/jira-sync";
-import { navigate, openSavedView, ui } from "./app-navigation";
+import { navigate, openSavedView, preloadOnHover, ui } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
 import { peopleOf } from "@/shared/people";
 import { filterCount } from "@/shared/view-model";
@@ -182,7 +182,15 @@ function PaletteFrame({
   return (
     <Overlay label={label}>
       <div className={`w-full ${MENU}`}>
-      <Command shouldFilter={false} loop>
+      <Command
+        shouldFilter={false}
+        loop
+        // The highlighted issue (arrow keys or pointer) loads before it is picked.
+        onValueChange={(value) => {
+          const issue = get().issues.get(value);
+          preloadOnHover(issue ? { board: issue.board, selected: issue.key, panel: true } : null);
+        }}
+      >
         <div className="flex items-center gap-2 border-b border-line px-3.5">
           {chip && (
             <span className="flex h-6 shrink-0 items-center gap-1.5 rounded-md bg-sel px-2 text-[12px] text-fg-2">
