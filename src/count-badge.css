@@ -1,0 +1,19 @@
+@layer components {
+  /* sv / sEe: a count beside a heading or tab. */
+  .ui-count-badge {
+    display: inline-block;
+    padding: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--fg-3);
+    font-size: 11px;
+    font-weight: 450;
+    font-variant-numeric: tabular-nums;
+    line-height: normal;
+    white-space: nowrap;
+  }
+  .ui-count-badge[data-background="filled"] {
+    padding: 3px 6px;
+    background: var(--tab-on);
+  }
+}
