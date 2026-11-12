@@ -101,7 +101,7 @@ test("board drag between type columns keeps the hierarchy level: a Subtask never
   const setup = `localStorage.setItem(${JSON.stringify(PREFS_KEY)},JSON.stringify({1:{display:{columns:"type"}}}))`;
   const p = await open("", { setup });
   const keysIn = (name: string) =>
-    `[...([...document.querySelectorAll("section")].find(s=>s.querySelector("h2 .truncate")?.textContent===${JSON.stringify(name)})?.querySelectorAll("[data-key]")??[])].map(c=>c.dataset.key)`;
+    `[...([...document.querySelectorAll("section")].find(s=>s.querySelector("h2 [data-wrap=truncate]")?.textContent===${JSON.stringify(name)})?.querySelectorAll("[data-key]")??[])].map(c=>c.dataset.key)`;
   await p.waitFor(`${keysIn("Subtask")}.includes("TEST-6")`, 15000);
   const task = await p.rect('[data-key="TEST-1"]');
   await p.drag('[data-key="TEST-6"]', task.x + task.width / 2, task.y + 4);

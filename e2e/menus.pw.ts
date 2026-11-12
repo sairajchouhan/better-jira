@@ -110,6 +110,9 @@ test("menu styling at 1272px: trigger highlight, row colours and submenu widths 
     await page.key("Escape");
     await page.waitFor(`!document.querySelector('[role=dialog]')`);
     await away();
+    // Focus comes back to the trigger, which wears Linear's focused DetailButton fill until it blurs; the open highlight is gone.
+    expect(await page.eval(`document.activeElement.id`)).toBe("prop-status");
+    await page.eval(`document.activeElement.blur()`);
     expect(await bg("#prop-status")).toBe(rest);
     await page.click("#issue-options");
     await page.waitFor(`!!document.querySelector('[role=dialog] [cmdk-item]')`);

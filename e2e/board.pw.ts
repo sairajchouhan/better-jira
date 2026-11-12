@@ -20,7 +20,7 @@ test("board layout: hidden columns, column titles, drag placement and My issues"
     ]);
     expect(
       await page.eval(
-        `[...document.querySelectorAll("section h2 .truncate")].map(s=>s.textContent)`,
+        `[...document.querySelectorAll("section h2 [data-wrap=truncate]")].map(s=>s.textContent)`,
       ),
     ).toEqual(["Todo", "Doing"]);
   });
@@ -30,7 +30,7 @@ test("board layout: hidden columns, column titles, drag placement and My issues"
     expect(await page.eval(`${aside}.borderLeftStyle`)).toBe("solid");
   });
   await test.step("B14: column titles are medium weight in the secondary text colour, not white", async () => {
-    const title = `getComputedStyle(document.querySelector("section h2 .truncate"))`;
+    const title = `getComputedStyle(document.querySelector("section h2 [data-wrap=truncate]"))`;
     expect(await page.waitFor<string>(`${title}.fontWeight`)).toBe("500");
     expect(await page.eval(`${title}.color`)).toBe("lch(90.451 1.2 272)"); // dark --fg-2
   });
@@ -117,7 +117,7 @@ test("board layout: hidden columns, column titles, drag placement and My issues"
     const page = await open("", { setup, height: 500 });
     await page.waitFor(`document.querySelectorAll("[data-key]").length===6`);
     expect(
-      await page.eval(`[...document.querySelectorAll("h2 .truncate")].map(s=>s.textContent)`),
+      await page.eval(`[...document.querySelectorAll("h2 [data-wrap=truncate]")].map(s=>s.textContent)`),
     ).toEqual(["Todo", "Doing"]);
     const header = `document.querySelector("h2").getBoundingClientRect().top`;
     const before = await page.eval<number>(header);
@@ -127,5 +127,5 @@ test("board layout: hidden columns, column titles, drag placement and My issues"
 });
 
 const columnKeys = (name: string) =>
-  `[...document.querySelectorAll("section")].find(s=>s.querySelector("h2 .truncate")?.textContent===${JSON.stringify(name)})?.querySelectorAll("[data-key]")`;
+  `[...document.querySelectorAll("section")].find(s=>s.querySelector("h2 [data-wrap=truncate]")?.textContent===${JSON.stringify(name)})?.querySelectorAll("[data-key]")`;
 const keysIn = (name: string) => `[...(${columnKeys(name)}??[])].map(c=>c.dataset.key)`;

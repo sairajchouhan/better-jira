@@ -438,11 +438,11 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
     await page.waitFor(
       `!document.querySelector('[role=dialog]')&&document.getElementById('prop-priority').textContent==='Urgent'`,
     );
-    // Chips: 25px, 1.5px in from the heading, 9px dot 9px in, name 24px in; the round + 6px after the last chip.
+    // Chips (LabelChip, Linear's ISn): 25px, radius 30, 1.5px in from the heading, the 9px dot in a 14px box 9px in, name 29px in; the round + 6px after the last chip.
     const chips = await page.eval<any>(
       `(()=>{${R}const h=[...document.querySelectorAll('[data-properties] h3')].find(h=>h.textContent==='Labels').getBoundingClientRect(),c=document.querySelector('[data-label-chip]'),b=c.getBoundingClientRect(),dot=c.children[0].getBoundingClientRect(),name=c.children[1].getBoundingClientRect(),add=document.getElementById('prop-labels').getBoundingClientRect();return [Math.round((b.x-h.x)*10)/10,b.height,dot.x-b.x,dot.y-b.y,dot.width,name.x-b.x,add.x-b.right,add.width,add.height,getComputedStyle(c).borderRadius,c.textContent]})()`,
     );
-    expect(chips).toEqual([1.5, 25, 9, 8, 9, 24, 6, 25, 25, "9999px", "test"]);
+    expect(chips).toEqual([1.5, 25, 9, 5.5, 14, 29, 6, 25, 25, "30px", "test"]);
     // Hovering a chip lifts it to Linear's lch(16.706).
     await page.hover("[data-label-chip]");
     await page.waitFor(
