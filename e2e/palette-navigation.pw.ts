@@ -103,3 +103,27 @@ test("BJ-64: a keyword and a space in ⌘K focuses search on that entity type", 
   await p.type("fixture 4");
   await p.waitFor(`document.querySelector('[cmdk-item][data-selected=true]')?.textContent.includes('TEST-4')`);
 });
+
+test("BJ-65: search and O D find a document by its body text and open it", async ({ open }) => {
+  const p = await open("?issue=TEST-2&view=page");
+  await p.waitFor(`!!document.getElementById('comment')`);
+  await p.click("#issue-options");
+  await p.click("text=Add document…");
+  await p.waitFor(`document.activeElement?.getAttribute('aria-label')==='Document title'`);
+  await p.type("Rollout plan");
+  await p.click("#resource-document");
+  await p.type("Ship the zebra build first");
+  await p.waitFor(`document.querySelector('[aria-label="Local save status"]')?.textContent.includes('Saved')`);
+  await p.key("Escape");
+  await p.key("Escape");
+  await p.waitFor(`!new URLSearchParams(location.search).get('document')`);
+  await p.key("/");
+  await p.type("zebra");
+  await p.waitFor(`${groupRows("Documents")}.length===1`);
+  expect((await p.eval<string[]>(groupRows("Documents")))[0]).toContain("Rollout plan");
+  await p.key("Escape");
+  await p.keys("od");
+  await p.waitFor(`!!${dialog("Open document")}&&${groupRows("Documents")}.length===1`);
+  await p.key("Enter");
+  await p.waitFor(`!!new URLSearchParams(location.search).get('document')`);
+});

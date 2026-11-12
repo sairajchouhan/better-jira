@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { matchIssues, shorthandKey } from "./issue-search";
+import { matchDocuments, matchIssues, shorthandKey } from "./issue-search";
+import { plainDocument } from "./document";
 import type { Issue } from "./store";
 
 const issue = (key: string, summary: string, extra: Partial<Issue> = {}): Issue => ({
@@ -36,4 +37,17 @@ test("BJ-27: descriptions and comments match too, after title matches", () => {
   );
   expect(keys(matchIssues(issues, "staging server"))).toEqual(["A-2", "A-1", "A-3"]);
   expect(keys(matchIssues(issues, '"repro on staging"'))).toEqual(["A-3"]);
+});
+
+test("BJ-65: search finds documents by title and body text", () => {
+  const doc = (id: string, title: string, body: string, updated: string) =>
+    ({ id, kind: "document" as const, title, body: plainDocument(body), updated });
+  const issues = map(
+    issue("A-1", "Parent", { resources: [doc("d1", "Rollout plan", "Ship the beta to staging first", "2026-11-02"), { id: "l", kind: "link", title: "staging", updated: "2026-11-03" }] }),
+    issue("A-2", "Other", { resources: [doc("d2", "Staging notes", "Credentials live elsewhere", "2026-11-01")] }),
+  );
+  const ids = (q: string) => matchDocuments(issues, q).map((m) => m.resource.id);
+  expect(ids("staging")).toEqual(["d2", "d1"]); // the title match first; links never match
+  expect(ids('"beta to staging"')).toEqual(["d1"]);
+  expect(ids("")).toEqual(["d1", "d2"]); // every document, most recently updated first
 });

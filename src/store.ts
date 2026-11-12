@@ -160,6 +160,7 @@ export type Overlay =
   | "views"
   | "boards"
   | "issues"
+  | "documents"
   | "add-board"
   | "customize-sidebar"
   | "subscribers"

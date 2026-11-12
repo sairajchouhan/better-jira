@@ -310,6 +310,13 @@ export const shortcuts: Shortcut[] = [
     run: overlay("issues"),
   },
   {
+    id: "open-document",
+    name: "Open document",
+    group: "Navigation",
+    hotkey: ["O", "D"],
+    run: overlay("documents"),
+  },
+  {
     id: "active",
     name: "Go to active issues",
     group: "Navigation",

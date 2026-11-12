@@ -1,4 +1,6 @@
 import { matchRank } from "./search-rank";
+import { adfToText } from "./document";
+import type { IssueResource } from "./issue-resource";
 import type { Issue } from "./store";
 
 /** The issue key a query names, hyphen optional ("sam11", "sam 11", "SAM-11" → "SAM-11"), as Linear's
@@ -36,4 +38,23 @@ export function matchIssues(issues: Map<string, Issue>, q: string): Issue[] {
     .sort(([ra, a], [rb, b]) => ra - rb || (a.updated < b.updated ? 1 : -1))
     .slice(0, 50)
     .map(([, i]) => i);
+}
+
+export type DocumentMatch = { issue: Issue; resource: IssueResource };
+/** Documents whose title or body holds every typed word and quoted phrase (every document for an empty query): title
+ *  matches first, then the most recently updated (top 50). */
+export function matchDocuments(issues: Map<string, Issue>, q: string): DocumentMatch[] {
+  const { phrases, words } = parseQuery(q);
+  const terms = [...phrases, ...words];
+  return [...issues.values()]
+    .flatMap((issue) => (issue.resources ?? []).filter((r) => r.kind === "document").map((resource) => ({ issue, resource })))
+    .filter(({ resource }) => {
+      const text = `${resource.title}\n${adfToText(resource.body)}`.toLowerCase();
+      return terms.every((t) => text.includes(t));
+    })
+    .map((m) => [matchRank(m.resource.title, terms.join(" ")), m] as const)
+    .map(([rank, m]) => [rank < 0 ? 6 : rank, m] as const)
+    .sort(([ra, a], [rb, b]) => ra - rb || (a.resource.updated < b.resource.updated ? 1 : -1))
+    .slice(0, 50)
+    .map(([, m]) => m);
 }

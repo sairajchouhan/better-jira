@@ -32,7 +32,7 @@ import { filterCount } from "./view-model";
 import { Modal } from "./personal-controls";
 import { Avatar } from "./avatar";
 import { matchRank } from "./search-rank";
-import { matchIssues } from "./issue-search";
+import { matchDocuments, matchIssues, type DocumentMatch } from "./issue-search";
 import { recentIssues, recentSearches, recordSearch } from "./recents";
 import { hotkeyOf, runShortcut, shortcutApplies, shortcuts } from "./shortcuts";
 import { Shortcut, type Keys } from "./keycap";
@@ -83,6 +83,7 @@ const PAGES = {
   boards: { parent: "Team", label: "Open team", keyword: "t" },
   views: { parent: "View", label: "Open view", keyword: "v" },
   issues: { parent: "Issue", label: "Open issue", keyword: "i" },
+  documents: { parent: "Document", label: "Open document", keyword: "d" },
   /** Linear's `?` Help action (`mAt`, search input hidden) when the sidebar's Help button isn't there to anchor its menu. */
   help: { parent: "Help", label: "Help", keyword: undefined },
 } as const;
@@ -106,7 +107,7 @@ function usePageRows(page: PalettePage): Cmd[] {
   const savedViews = useStore((s) => s.savedViews);
   const favorites = useStore((s) => s.favorites);
   const issues = useStore((s) => s.issues);
-  if (page === "issues") return [];
+  if (page === "issues" || page === "documents") return [];
   if (page === "help")
     return [{ name: "Keyboard shortcuts", keys: hotkeyOf("shortcuts"), run: () => ui.send({ type: "overlay.open", overlay: "shortcuts" }) }];
   return navigationChoices(page, { boards, savedViews, favorites, issues }).map((choice) => ({
@@ -118,6 +119,7 @@ function usePageRows(page: PalettePage): Cmd[] {
 function PageRows({ page, q, setQ }: { page: PalettePage; q: string; setQ: (q: string) => void }) {
   const rows = ranked(usePageRows(page), q);
   if (page === "issues") return <IssueRows q={q} setQ={setQ} />;
+  if (page === "documents") return <DocumentResults q={q} />;
   return rows.map(([, c]) => <CommandRow key={c.id ?? c.name} cmd={c} />);
 }
 
@@ -215,6 +217,34 @@ function IssueResults({ results, q }: { results: Issue[]; q: string }) {
   );
 }
 
+/** The "Documents" group: documents whose title or body matches (every document on the Open document page). */
+function DocumentResults({ q }: { q: string }) {
+  const issues = useStore((s) => s.issues);
+  const results = useMemo(() => matchDocuments(issues, q), [q, issues]);
+  if (!results.length) return null;
+  return (
+    <Command.Group heading="Documents">
+      {results.map((m) => <DocumentRow key={m.resource.id} match={m} q={q} />)}
+    </Command.Group>
+  );
+}
+function DocumentRow({ match: { issue, resource }, q }: { match: DocumentMatch; q: string }) {
+  return (
+    <Command.Item
+      value={`document:${resource.id}`}
+      onSelect={() => {
+        recordSearch(q);
+        close();
+        navigate({ board: issue.board, selected: issue.key, panel: true, document: resource.id });
+      }}
+    >
+      <span className="grid w-4 shrink-0 place-items-center text-fg-3"><Icon name="file" /></span>
+      <span className="flex-1 truncate">{resource.title || "New document"}</span>
+      <span className="shrink-0 text-[12px] text-fg-3">{issue.key}</span>
+    </Command.Item>
+  );
+}
+
 /** Search (/) and Open issue (O I): matching issues; before anything is typed, Linear's Recent issues (the ten last
  *  opened, not the open one) and Recent searches, or the 20 most recently updated until any issue has been opened. */
 function IssueRows({ q, setQ }: { q: string; setQ: (q: string) => void }) {
@@ -257,12 +287,13 @@ function IssueRows({ q, setQ }: { q: string; setQ: (q: string) => void }) {
   );
 }
 
-/** Search (/): issues only. */
+/** Search (/): issues, then documents. */
 export function IssueSearch() {
   const [q, setQ] = useState("");
   return (
     <PaletteFrame label="Search issues" q={q} setQ={setQ}>
       <IssueRows q={q} setQ={setQ} />
+      {q.trim() && <DocumentResults q={q} />}
     </PaletteFrame>
   );
 }
@@ -379,6 +410,7 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
         </Command.Group>
       ))}
       <IssueResults results={results} q={q} />
+      {q.trim() && <DocumentResults q={q} />}
     </PaletteFrame>
   );
 }
