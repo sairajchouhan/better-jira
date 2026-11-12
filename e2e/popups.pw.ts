@@ -76,6 +76,8 @@ test("toolbar popups: Filter, Display and the chip row + open at Linear's offset
     await page.waitFor(`!document.querySelector(${JSON.stringify(TOOLBAR)})`);
     await page.click(FILTER);
     await page.waitFor(`document.activeElement?.placeholder==="Add Filter…"`);
+    // A click opens it pristine (FILTER-15): the first ArrowDown highlights "Advanced filter", the second Status.
+    await page.key("ArrowDown");
     await page.key("ArrowDown");
     await page.key("ArrowRight");
     await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Filter Status"`);
