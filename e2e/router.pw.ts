@@ -77,3 +77,25 @@ test("router: old addresses land on the paths that replaced them", async ({ open
     await app.waitFor(`${where}===${JSON.stringify(to)}`);
   }
 });
+
+test("BJ-185: sidebar and breadcrumb destinations are real keyboard-accessible links", async ({ open }) => {
+  const app = await open();
+  const nav = app.page.getByRole("navigation", { name: "Main navigation" });
+  const mine = nav.getByRole("link", { name: /^My issues/ });
+  await expect(mine).toHaveAttribute("href", "/my-issues");
+  const board = nav.getByRole("link", { name: /Browser audit/ });
+  await expect(board).toHaveAttribute("href", /\/team\/1\//);
+  const popup = app.context.waitForEvent("page");
+  await mine.click({ button: "middle" });
+  const tab = await popup;
+  await tab.waitForURL(/\/my-issues$/);
+  await tab.close();
+  await mine.focus();
+  await app.page.keyboard.press("Enter");
+  await expect(app.page).toHaveURL(/\/my-issues$/);
+  const crumb = app.page.getByRole("navigation", { name: "Breadcrumb", exact: true }).getByRole("link", { name: "My issues", exact: true });
+  await expect(crumb).toHaveAttribute("href", "/team/1/all");
+  await crumb.focus();
+  await app.page.keyboard.press("Space");
+  await expect(app.page).toHaveURL(/\/team\/1\/all$/);
+});

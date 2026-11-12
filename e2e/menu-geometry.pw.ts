@@ -50,7 +50,7 @@ for (const scheme of ["dark", "light"] as const) {
     await page.key("Escape");
     await page.key("Escape");
 
-    await page.page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Mine", exact: true }).click({ button: "right" });
+    await page.page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Mine", exact: true }).click({ button: "right" });
     menus.view = await measure(page);
     await page.key("Escape");
 

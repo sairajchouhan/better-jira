@@ -9,7 +9,7 @@ test("custom identity, sidebar, favorite, details, palette and tab identity", as
     await page.eval(`Promise.all(${JSON.stringify(definitions)}.map(body => fetch('/api/views', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})))`);
     await page.reload();
     // Saved views open from the sidebar's Views section; there is no views page.
-    await page.page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Directory custom", exact: true }).click();
+    await page.page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Directory custom", exact: true }).click();
     await page.waitFor(`location.pathname.startsWith('/view/')`);
     expect(await page.eval(`document.querySelector('[aria-label=Breadcrumb]').textContent.includes('Directory custom')`)).toBe(true);
     await page.click('[aria-label="Add to favorites"]');
@@ -21,7 +21,7 @@ test("custom identity, sidebar, favorite, details, palette and tab identity", as
     await page.key('k','meta');
     await page.waitFor(`document.body.textContent.includes('View · Directory custom')`);
     await page.key('Escape');
-    await page.click('[aria-label=Breadcrumb] button[aria-label="Browser audit"]');
+    await page.click('[aria-label=Breadcrumb] a[aria-label="Browser audit"]');
     await page.click('text=Named tab');
     expect(await page.eval(`document.querySelector('[aria-label=Breadcrumb]').textContent.includes('Directory custom')`)).toBe(false);
     expect(await page.eval(`document.querySelector('button[aria-pressed=true]').textContent`)).toBe('Named tab');

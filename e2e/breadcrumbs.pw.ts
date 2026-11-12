@@ -51,7 +51,7 @@ test("breadcrumbs: board crumb by keyboard, exiting panels and search, and the i
   await test.step("breadcrumb exits the side panel, My issues and text search", async () => {
     await page.click('[data-key="TEST-1"]');
     await page.waitFor(`!!document.getElementById('summary')`);
-    await page.click('nav[aria-label="Main navigation"] button:nth-of-type(4)'); // My issues, after Inbox, Search and New issue
+    await page.click('nav[aria-label="Main navigation"] a[href="/my-issues"]'); // My issues, after Inbox, Search and New issue
     await page.key("f", "meta");
     await page.waitFor(`document.activeElement?.id==='find-in-view'`);
     await page.type("no matching issue");

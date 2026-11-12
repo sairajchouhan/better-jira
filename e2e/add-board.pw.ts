@@ -40,7 +40,7 @@ test("Add board: a board from another site is refused; a board link mirrors and 
     await p.waitFor(`!!document.querySelector('[data-key="ADD-1"]')`);
     expect(
       await p.eval(
-        `[...document.querySelectorAll('nav[aria-label="Main navigation"] button')].some(b=>b.textContent.includes('Second board'))`,
+        `[...document.querySelectorAll('nav[aria-label="Main navigation"] a')].some(b=>b.textContent.includes('Second board'))`,
       ),
     ).toBe(true);
     expect(await p.eval(`window.__sameDocument`)).toBe(true);
@@ -53,13 +53,13 @@ test("Add board: a board from another site is refused; a board link mirrors and 
     );
     expect(
       await p.eval(
-        `[...document.querySelectorAll('nav[aria-label="Main navigation"] button')].filter(b=>b.textContent.includes('Second board')).length`,
+        `[...document.querySelectorAll('nav[aria-label="Main navigation"] a')].filter(b=>b.textContent.includes('Second board')).length`,
       ),
     ).toBe(1);
 
     // BJ-24: a board added in the app leaves the sidebar from its context menu; setup's board can't.
     const sidebarRow = (name: string) =>
-      `[...document.querySelectorAll('nav[aria-label="Main navigation"] button')].find(b=>b.textContent.includes('${name}'))`;
+      `[...document.querySelectorAll('nav[aria-label="Main navigation"] a')].find(b=>b.textContent.includes('${name}'))`;
     const rightClick = (name: string) =>
       p.eval(
         `(()=>{const n=${sidebarRow(name)},r=n.getBoundingClientRect();n.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:r.x+20,clientY:r.y+10}))})()`,

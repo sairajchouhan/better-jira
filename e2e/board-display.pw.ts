@@ -25,7 +25,7 @@ test("the default board: My issues, board details, saved views and a fast layout
   await page.waitFor(`${cards}===6`);
   await test.step("R1-D56: My issues lives in the URL, survives reload, and names itself in the breadcrumb", async () => {
     await page.eval(
-      `[...document.querySelectorAll("nav button")].find(b=>b.textContent.includes("My issues")).click()`,
+      `[...document.querySelectorAll("nav a")].find(b=>b.textContent.includes("My issues")).click()`,
     );
     await page.waitFor(`location.pathname==="/my-issues"`);
     await page.eval("location.reload()");
@@ -54,7 +54,7 @@ test("the default board: My issues, board details, saved views and a fast layout
     const key = PREFS_KEY.replace("views:v1", "saved-views:v1");
     await page.eval(`localStorage.removeItem(${JSON.stringify(key + ":imported")});localStorage.setItem(${JSON.stringify(key)},${JSON.stringify(JSON.stringify([view]))})`);
     await page.reload();
-    const row = page.page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Mine", exact: true });
+    const row = page.page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Mine", exact: true });
     await row.click({ button: "right" });
     await page.click("text=Delete");
     expect(await page.eval(`document.querySelector('[role=dialog]')?.textContent.includes('Delete the view "Mine"?')`)).toBe(true);
@@ -62,7 +62,7 @@ test("the default board: My issues, board details, saved views and a fast layout
     expect(await row.count()).toBe(1);
     await row.click();
     await page.waitFor(`location.pathname === '/view/mine-v1'`);
-    await page.click('[aria-label="Breadcrumb"] button[aria-label="Browser audit"]');
+    await page.click('[aria-label="Breadcrumb"] a[aria-label="Browser audit"]');
   });
   await test.step("R1-D95/D96, BJ-111: a layout switch paints only the first screenful; the rest stays windowed", async () => {
     await fixture.reset({ bulk: 90 });

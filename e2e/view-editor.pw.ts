@@ -58,7 +58,7 @@ test("draft reload, cancel, create toast, edit, duplicate and themed delete", as
     ).toHaveValue("");
     await p.getByRole("button", { name: "Cancel", exact: true }).click();
     // Every saved view is listed inline in the sidebar's Views section, like boards.
-    await p.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Renamed", exact: true }).click();
+    await p.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Renamed", exact: true }).click();
     await p.getByRole("button", { name: "Issue view options" }).click();
     await p.keyboard.type("Delete"); // Linear's menus filter as you type; the search field stays hidden until then
     await expect(p.getByRole("combobox", { name: "Find view options" })).toHaveValue("Delete");

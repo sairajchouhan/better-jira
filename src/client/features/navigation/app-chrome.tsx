@@ -1,3 +1,5 @@
+import { AppLink, SavedViewLink } from "./app-link";
+import type { Destination } from "./navigation";
 import { FavoriteButton } from "./favorite-button";
 import { useActiveView, useSavedViews, createViewDraft } from "@/client/features/views/saved-views";
 import { useViewSettings } from "@/client/features/views/view-settings";
@@ -16,7 +18,7 @@ import { removeBoard } from "@/client/state/server-data";
 import { dismissWriteError } from "@/client/state/jira-sync";
 import { dismissRecoveryNotice, downloadLocalBackup } from "@/client/state/local-database";
 import { undoEdit, redoEdit } from "@/client/state/undo-history";
-import { linkTo, navigate, router, ui, openSavedView, openAllIssues as openBoardIssues } from "./app-navigation";
+import { linkTo, navigate, router, ui, openSavedView } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
 import { ActionMenu, ContextMenu, type ActionEntry } from "@/client/components/action-menu";
 import { showNotification } from "@/client/state/app-notifications";
@@ -115,7 +117,7 @@ export function Sidebar({ boards }: { boards: Board[] }) {
       <nav
         aria-label="Main navigation"
         // Below 768px the sidebar opens over the page from the Menu button or [, and closes after a pick.
-        onClick={(e) => open && (e.target as Element).closest("button") && close()}
+        onClick={(e) => open && (e.target as Element).closest("button, a") && close()}
         className={`flex w-[244px] shrink-0 flex-col gap-px overflow-y-auto p-2 font-medium ${open ? "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:bg-panel max-md:shadow-lg" : "max-md:hidden"}`}
       >
         <div className="mb-1 flex h-11 items-center gap-2 px-2 text-fg">
@@ -125,14 +127,14 @@ export function Sidebar({ boards }: { boards: Board[] }) {
           better-jira
         </div>
         {(prefs.inbox === "Always" || inbox || (prefs.inbox === "WithNotifications" && badge > 0)) && (
-          <SideItem active={inbox} onClick={() => timed("open inbox", () => runShortcut("inbox"))}>
+          <SideLink active={inbox} to={{ inbox: true, selected: null, panel: false }}>
             <Icon name="inbox" /> Inbox
             {badge > 0 && (
               <Text data-inbox-badge variant="mini" color="base" className="ml-auto">
                 {badge}
               </Text>
             )}
-          </SideItem>
+          </SideLink>
         )}
         <SideItem onClick={() => runShortcut("search")}>
           <Icon name="search" /> Search <Shortcut className="ml-auto" keys={hotkeyOf("search")} size="small" />
@@ -142,12 +144,12 @@ export function Sidebar({ boards }: { boards: Board[] }) {
         </SideItem>
         {/* Like Linear, My issues is a sidebar view rather than a tab beside Active/Backlog/All. */}
         {prefs.myIssues === "Always" && (
-          <SideItem
+          <SideLink
             active={mine && !person && !inbox && !activeView}
-            onClick={openMyIssues}
+            to={{ mine: true, selected: null, panel: false }}
           >
             <Icon name="user" /> My issues <Shortcut className="ml-auto" keys={hotkeyOf("mine")} size="small" />
-          </SideItem>
+          </SideLink>
         )}
         <SidebarMore prefs={prefs} />
 
@@ -160,18 +162,16 @@ export function Sidebar({ boards }: { boards: Board[] }) {
         />
         {expanded("boards") && boards.map((b) => {
           const item = (
-            <SideItem
+            <SideLink
               key={b.id}
               active={!mine && !inbox && !activeView && b.id === boardId}
-              onClick={() =>
-                timed("switch board", () => navigate({ board: b.id, selected: null, panel: false }))
-              }
+              to={{ board: b.id, selected: null, panel: false }}
             >
               <span className="grid size-4 shrink-0 place-items-center rounded-[4px] bg-sel text-[9px] font-semibold text-fg-2">
                 {b.name[0]}
               </span>
               <span className="truncate">{b.name}</span>
-            </SideItem>
+            </SideLink>
           );
           return (
             <ContextMenu key={b.id} label="Board options" entries={() => boardEntries(b)}>
@@ -189,10 +189,10 @@ export function Sidebar({ boards }: { boards: Board[] }) {
         />
         {expanded("views") && views.map((v) => (
           <ViewContextMenu key={v.id} view={v}>
-            <SideItem active={activeView?.id === v.id} onClick={() => timed("open view", () => openSavedView(v))}>
+            <SavedViewLink view={v} aria-current={activeView?.id === v.id || undefined} className={sideItemClass(activeView?.id === v.id)}>
               <SavedViewIcon view={v} />
               <span className="truncate">{v.name}</span>
-            </SideItem>
+            </SavedViewLink>
           </ViewContextMenu>
         ))}
         <ViewFavorites expanded={expanded("favorites")} onToggle={() => toggle("favorites")} />
@@ -459,6 +459,10 @@ export function StorageNotice() {
   );
 }
 
+const sideItemClass = (active?: boolean) => `flex h-7 items-center gap-2 rounded-lg pr-[9px] pl-2 text-left ${active ? "bg-sel text-fg" : "text-fg-2 hover:bg-hover"}`;
+function SideLink({ active, to, children }: { active?: boolean; to: Destination; children: ReactNode }) {
+  return <AppLink to={to} aria-current={active || undefined} className={sideItemClass(active)}>{children}</AppLink>;
+}
 const SideItem = ({
   active,
   onClick,
@@ -471,7 +475,7 @@ const SideItem = ({
   <button
     onClick={onClick}
     aria-current={active || undefined}
-    className={`flex h-7 items-center gap-2 rounded-lg pr-[9px] pl-2 text-left ${active ? "bg-sel text-fg" : "text-fg-2 hover:bg-hover"}`}
+    className={sideItemClass(active)}
   >
     {children}
   </button>
@@ -527,19 +531,20 @@ export function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue
   const saved = useSavedViews().find(v => v.id === draft?.id);
   const current = draft && saved ? { ...saved, ...draft, id: saved.id } : activeView;
   const custom = !issue && current?.kind === "custom" ? current : null;
-  const openAllIssues = () => openBoardIssues(board.id);
+  const allIssues = { board: board.id, scope: "all", selected: null, panel: false } as const;
+  const clearBoardTools = () => { ui.send({ type: "query.set", query: "" }); set({ details: false, findInView: false }); };
   return (
     <nav
       aria-label="Breadcrumb"
       className="flex min-w-0 items-center text-[13px] leading-[normal] font-medium text-fg-2"
     >
       <MenuButton />
-      {!mine || activeView ? <><button aria-label={board.name} title={board.name} onClick={openAllIssues} className={CRUMB}>
+      {!mine || activeView ? <><AppLink to={allIssues} aria-label={board.name} title={board.name} onClick={clearBoardTools} className={CRUMB}>
         <span aria-hidden="true" className={CRUMB_ICON}>
           <span className="grid size-4 place-items-center rounded-[4px] bg-accent text-[9px] font-semibold text-white">{board.name[0]}</span>
         </span>
         <span className="truncate">{board.name}</span>
-      </button>
+      </AppLink>
       <CrumbSep className={issue ? "max-sm:hidden" : ""} /></> : null}
       {custom ? (
         <>
@@ -552,14 +557,15 @@ export function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue
           </ViewContextMenu>
         </>
       ) : (
-        <button
+        <AppLink
+          to={allIssues}
           aria-label={!activeView && mine ? personal : "Issues"}
           aria-current={issue ? undefined : "page"}
-          onClick={openAllIssues}
+          onClick={clearBoardTools}
           className={`${CRUMB} shrink-0 ${issue ? "max-sm:hidden" : ""}`}
         >
           {!activeView && mine ? personal : "Issues"}
-        </button>
+        </AppLink>
       )}
       {issue && (
         <>

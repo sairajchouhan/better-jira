@@ -24,7 +24,7 @@ test("BJ-75: favorites reorder by drag and leave from their context menu", async
 test("BJ-76: sidebar sections collapse and stay so; Customize sidebar hides My issues", async ({ open }) => {
   const p = await open();
   const row = (name: string) =>
-    `[...document.querySelectorAll('nav[aria-label="Main navigation"] button')].some(b=>b.textContent.includes('${name}'))`;
+    `[...document.querySelectorAll('nav[aria-label="Main navigation"] a')].some(b=>b.textContent.includes('${name}'))`;
   await p.waitFor(row("Browser audit"));
   await p.click('[aria-label="Collapse boards section"]');
   await p.waitFor(`!${row("Browser audit")}`);

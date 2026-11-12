@@ -121,7 +121,7 @@ test("navigation shell: sidebar, My issues URL, palettes and shortcut search", a
     expect(await p.eval(navShown)).toBe(false);
     await p.click('button[aria-label="Menu"]');
     await p.waitFor(navShown);
-    await p.click('nav[aria-label="Main navigation"] button:nth-of-type(4)'); // My issues closes it
+    await p.click('nav[aria-label="Main navigation"] a[href="/my-issues"]'); // My issues closes it
     await p.waitFor(`!${navShown}`);
     await p.key("[");
     await p.waitFor(navShown);

@@ -1,3 +1,4 @@
+import { AppLink } from "@/client/features/navigation/app-link";
 /* oxlint-disable react/immutability -- Session callbacks and mutable imperative models are intentionally owned outside React state. */
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 import { FavoriteButton } from "@/client/features/navigation/favorite-button";
@@ -437,15 +438,15 @@ function DocumentHeader() {
         className="document-header flex h-11 shrink-0 items-center gap-1 border-b border-line px-3 text-[13px] text-fg-3"
       >
         {/* A breadcrumb: Linear's Breadcrumbs has no primitive yet (P0 left it out), so it keeps its own frame. */}
-        <button
+        <AppLink
+          to={{ document: null }}
           aria-label="Back to issue"
           title={issue.summary}
           className={`${BUTTON} flex shrink-0 items-center gap-2`}
-          onClick={() => navigate({ document: null })}
         >
           <StatusIcon status={status} />
           {issue.key}
-        </button>
+        </AppLink>
         <span aria-hidden>›</span>
         <Icon name="file" size={14} />
         <Text variant="small" color="base" wrap="truncate" className="min-w-0">

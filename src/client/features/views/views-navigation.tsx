@@ -1,13 +1,13 @@
+import { AppLink, SavedViewLink } from "@/client/features/navigation/app-link";
 import { useState } from "react";
 import { Icon, type IconName } from "@/client/components/icons";
 import { Avatar } from "@/client/components/avatar";
 import { ME, useStore, type Issue } from "@/client/state/store";
-import { navigate } from "@/client/features/navigation/app-navigation";
 import { moveFavorite, toggleFavorite } from "@/client/features/navigation/favorites";
 import { ContextMenu } from "@/client/components/action-menu";
 import { SectionDisclosure } from "@/client/components/section-disclosure";
 import { findIssueDocument } from "@/shared/issue-resource";
-import { openSavedView, useActiveView, useSavedViews, type SavedView } from "./saved-views";
+import { useActiveView, useSavedViews, type SavedView } from "./saved-views";
 import { FavoriteButton } from "@/client/features/navigation/favorite-button";
 import { ViewMenu, ViewContextMenu } from "@/client/routes/view-editor";
 import { Button, IconButton } from "@/client/components/button";
@@ -31,12 +31,18 @@ export function ViewFavorites({ expanded, onToggle }: { expanded: boolean; onTog
     if (!view && !document && !issue && !board) return [];
     // Sidebar navigation rows use selected-page geometry, outside the Button variants.
     // Drag a favorite onto another to reorder (BJ-75).
-    const button = <button key={id} draggable data-favorite={id} onDragStart={e => e.dataTransfer.setData("text/plain", id)} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); moveFavorite(e.dataTransfer.getData("text/plain"), id); }} aria-current={view?.id === active?.id && !!view ? "page" : undefined} onClick={() => {
-      if (view) openSavedView(view);
-      else if (document) navigate({ board: document.issue.board, selected: document.issue.key, panel: true, document: document.resource.id });
-      else if (issue) navigate({ board: issue.board, selected: issue.key, panel: true });
-      else if (board) navigate({ board: board.id, panel: false, selected: null });
-    }} className={`flex h-7 w-full items-center gap-2 rounded-lg px-2 text-left ${view && active?.id === view.id ? "bg-sel text-fg" : "text-fg-2 hover:bg-hover"}`}>{view ? <SavedViewIcon view={view} /> : document ? <Icon name="file" /> : <span className="text-fg-3">☆</span>}<span className="truncate">{view?.name ?? (document ? document.resource.title || "New document" : issue ? `${issue.key} ${issue.summary}` : board?.name)}</span></button>;
+    const content = <>{view ? <SavedViewIcon view={view} /> : document ? <Icon name="file" /> : <span className="text-fg-3">☆</span>}<span className="truncate">{view?.name ?? (document ? document.resource.title || "New document" : issue ? `${issue.key} ${issue.summary}` : board?.name)}</span></>;
+    const props = {
+      draggable: true,
+      "data-favorite": id,
+      onDragStart: (e: React.DragEvent<HTMLAnchorElement>) => e.dataTransfer.setData("text/plain", id),
+      onDragOver: (e: React.DragEvent<HTMLAnchorElement>) => e.preventDefault(),
+      onDrop: (e: React.DragEvent<HTMLAnchorElement>) => { e.preventDefault(); moveFavorite(e.dataTransfer.getData("text/plain"), id); },
+      className: `flex h-7 w-full items-center gap-2 rounded-lg px-2 text-left ${view && active?.id === view.id ? "bg-sel text-fg" : "text-fg-2 hover:bg-hover"}`,
+    };
+    const button = view
+      ? <SavedViewLink view={view} aria-current={active?.id === view.id ? "page" : undefined} {...props}>{content}</SavedViewLink>
+      : <AppLink to={document ? { board: document.issue.board, selected: document.issue.key, panel: true, document: document.resource.id } : issue ? { board: issue.board, selected: issue.key, panel: true } : { board: board!.id, panel: false, selected: null }} {...props}>{content}</AppLink>;
     // A view's own menu has Unfavorite; the other rows get Remove from favorites (BJ-75).
     return [view ? <ViewContextMenu key={id} view={view}>{button}</ViewContextMenu> : <ContextMenu key={id} label="Favorite options" entries={() => [{ name: "Remove from favorites", icon: "starred", run: () => toggleFavorite(id) }]}>{button}</ContextMenu>];
   });

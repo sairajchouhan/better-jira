@@ -76,7 +76,7 @@ test("ISSUE-1 / ISSUE-13: Issue options › Labels is the L picker's checkbox ro
 
 test("CORE-7: the inbox filter's values are checkbox rows that keep the menu open", async ({ open }) => {
   const page = await open();
-  await page.click("nav button:has([data-inbox-badge])");
+  await page.click("nav a:has([data-inbox-badge])");
   await page.waitFor(`document.querySelectorAll('[data-inbox-row]').length === 7`);
   await page.click("#inbox-filter");
   await page.hover(`${dialog("Filter")} [cmdk-item][data-value="Notification type"]`);
@@ -215,9 +215,9 @@ test("CORE-18 / CORE-26: a context menu opens 4px right of and 1px above the poi
     await page.key("Escape");
   });
   await test.step("CORE-26: a sidebar board row keeps its hover background while its menu is open", async () => {
-    await page.click("nav button:has([data-inbox-badge])");
+    await page.click("nav a:has([data-inbox-badge])");
     await page.waitFor(`location.pathname === "/inbox"`);
-    const row = `[...document.querySelectorAll('nav[aria-label="Main navigation"] button')].find(b=>b.textContent.includes('Browser audit'))`;
+    const row = `[...document.querySelectorAll('nav[aria-label="Main navigation"] a')].find(b=>b.textContent.includes('Browser audit'))`;
     const r = await page.eval<{ x: number; y: number }>(`(r=>({x:r.x+20,y:r.y+10}))(${row}.getBoundingClientRect())`);
     await page.page.mouse.click(r.x, r.y, { button: "right" });
     await page.waitFor(exists(dialog("Board options")));

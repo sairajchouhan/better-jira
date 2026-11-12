@@ -437,7 +437,7 @@ test("document header, menus and shortcuts act on the document, preserve the par
     await page.waitFor(`!!document.activeElement?.dataset.resourceId`);
     expect(await page.eval(`document.activeElement.textContent`)).toContain("Favorite document");
     const opened = `document.querySelector('[aria-label="Document title"]')?.value==='Favorite document'`;
-    const sidebar = `[...document.querySelectorAll('nav[aria-label="Main navigation"] button')].find(b=>b.textContent==='Favorite document')`;
+    const sidebar = `[...document.querySelectorAll('nav[aria-label="Main navigation"] a')].find(b=>b.textContent==='Favorite document')`;
     await page.waitFor(`!!${sidebar}`);
     await page.eval(`${sidebar}.click()`);
     await page.waitFor(opened);

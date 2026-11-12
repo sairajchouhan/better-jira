@@ -41,14 +41,14 @@ test("board layout: hidden columns, column titles, drag placement and My issues"
         `[...document.querySelectorAll("header button")].some(b=>b.textContent==="My issues")`,
       ),
     ).toBe(false);
-    const item = `[...document.querySelectorAll("nav button")].find(b=>b.textContent.includes("My issues"))`;
+    const item = `[...document.querySelectorAll("nav a")].find(b=>b.textContent.includes("My issues"))`;
     await page.eval(`${item}.click()`);
     await page.waitFor(`document.querySelectorAll("[data-key]").length===0`);
     expect(await page.eval(`${item}.getAttribute("aria-current")`)).toBe("true");
     await page.eval(`${item}.click()`);
     expect(await page.eval(`location.pathname`)).toBe("/my-issues");
     expect(await page.eval(`document.querySelectorAll("[data-key]").length`)).toBe(0);
-    await page.page.locator('nav[aria-label="Main navigation"]').getByRole("button", { name: /Browser audit/ }).first().click();
+    await page.page.locator('nav[aria-label="Main navigation"]').getByRole("link", { name: /Browser audit/ }).first().click();
     await page.waitFor(`document.querySelectorAll("[data-key]").length===6`);
   });
   await test.step("B2: dropping a card places it where it was dropped, within and across columns", async () => {
@@ -87,7 +87,7 @@ test("board layout: hidden columns, column titles, drag placement and My issues"
     const setup = `if(!sessionStorage.seeded){sessionStorage.seeded=1;localStorage.setItem("better-jira:favorites:v1:https://example.atlassian.net/audit-me",JSON.stringify(["board:1:active","board:1:backlog"]));}`;
 
     const page = await open("", { setup });
-    const entries = `[...document.querySelectorAll("nav button, aside button")].filter(b=>b.textContent.includes("☆")).map(b=>b.textContent)`;
+    const entries = `[...document.querySelectorAll("nav a, aside button")].filter(b=>b.textContent.includes("☆")).map(b=>b.textContent)`;
     expect(await page.waitFor<string[]>(`(${entries}).length&&${entries}`)).toEqual([
       "☆Browser audit",
     ]);

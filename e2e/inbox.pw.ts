@@ -57,7 +57,7 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
   const p = await open();
   await test.step("Inbox lists Jira notifications per issue in Linear's words and clears the bell", async () => {
     await p.waitFor(`${badge} === "5"`);
-    await p.click("nav button:has([data-inbox-badge])");
+    await p.click("nav a:has([data-inbox-badge])");
     await p.waitFor(`${rows}.length === 7`);
     expect(await p.eval(`location.pathname`)).toBe("/inbox");
     const labels: string[] = await p.eval(rowText);
