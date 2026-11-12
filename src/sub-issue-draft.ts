@@ -23,6 +23,7 @@ export function readSubIssueDraft(key: string, initial: IssueDraft): SubIssueDra
     if (saved && typeof saved === "object") {
       if (typeof saved.status === "string") properties.status = saved.status;
       if (typeof saved.priority === "string") properties.priority = saved.priority;
+      if (saved.due === null || (typeof saved.due === "string" && /^\d{4}-\d{2}-\d{2}$/.test(saved.due))) properties.due = saved.due;
       if (
         saved.assignee === null ||
         (saved.assignee &&
