@@ -1,0 +1,34 @@
+@layer components {
+  /* _4 / d4: Linear's Text, default variant "regular" in labelTitle. */
+  .ui-text {
+    margin: 0;
+    color: var(--fg);
+    font-size: 15px;
+    font-weight: 450;
+    font-style: normal;
+    line-height: 1.4375rem;
+  }
+  .ui-text[data-variant="micro"] { font-size: 11px; font-weight: 450; line-height: normal; }
+  .ui-text[data-variant="microPlus"] { font-size: 11px; font-weight: 500; line-height: normal; }
+  .ui-text[data-variant="mini"] { font-size: 12px; font-weight: 450; line-height: normal; }
+  .ui-text[data-variant="miniPlus"] { font-size: 12px; font-weight: 500; line-height: normal; }
+  .ui-text[data-variant="small"] { font-size: 13px; font-weight: 450; line-height: normal; }
+  .ui-text[data-variant="smallPlus"] { font-size: 13px; font-weight: 500; line-height: normal; }
+  .ui-text[data-variant="regularPlus"] { font-weight: 600; }
+  .ui-text[data-variant="large"] { font-size: 18px; font-weight: 450; line-height: normal; }
+  .ui-text[data-variant="largePlus"] { font-size: 18px; font-weight: 500; line-height: normal; }
+  .ui-text[data-variant="title1"] { font-size: 36px; font-weight: 450; line-height: 2.875rem; }
+  .ui-text[data-variant="title2"] { font-size: 24px; font-weight: 500; line-height: 2rem; letter-spacing: -0.01rem; }
+  .ui-text[data-variant="title3"] { font-size: 20px; font-weight: 500; line-height: normal; letter-spacing: -0.01rem; }
+
+  .ui-text[data-color="base"] { color: var(--fg-2); }
+  .ui-text[data-color="muted"] { color: var(--fg-3); }
+  .ui-text[data-color="faint"] { color: var(--fg-4); }
+  .ui-text[data-color="inherit"] { color: inherit; }
+
+  .ui-text[data-align="center"] { text-align: center; }
+  .ui-text[data-align="right"] { text-align: right; }
+  .ui-text[data-wrap="nowrap"] { white-space: nowrap; }
+  .ui-text[data-wrap="truncate"] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ui-text[data-numeric="tabular"] { font-variant-numeric: tabular-nums; }
+}
