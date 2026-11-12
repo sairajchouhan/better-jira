@@ -84,6 +84,15 @@ test("image preview: layered Escape, zoom, pan within edges, and copying link an
     await page.waitFor(
       `document.querySelector('[aria-label="Notifications"]')?.textContent.includes('Link copied')`,
     );
+    // SOL2-2: text presence alone misses a toast hidden behind the opaque preview.
+    expect(await page.eval(`!!document.querySelector('[aria-label="Preview"]')`)).toBe(true);
+    expect(await page.eval(`document.querySelectorAll('[aria-label="Notifications"]').length`)).toBe(1);
+    expect(await page.eval(`(() => {
+      const toast = [...document.querySelectorAll('[aria-label="Notifications"] .ui-toast')]
+        .find(node => node.textContent.includes('Link copied'));
+      const rect = toast.getBoundingClientRect();
+      return toast.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
+    })()`)).toBe(true);
     expect(await page.eval(`navigator.clipboard.readText()`)).toBe(
       `${fixture.url}api/issues/TEST-2/attachments/102`,
     );

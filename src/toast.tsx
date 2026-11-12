@@ -10,13 +10,14 @@ export const TOAST = { WIDTH: 384, VIEWPORT_MARGIN: 32, OFFSET: 24, MOBILE_OFFSE
 const ToastContext = createContext<{ dismiss: () => void } | null>(null);
 
 /** One visible toast: dismisses itself after its duration and gives its slots a way to close it. */
-function Entry({ queue, id, duration, children }: { queue: ToastQueue; id: string; duration: number; children: ReactNode }) {
+function Entry({ queue, id, duration, revision, children }: { queue: ToastQueue; id: string; duration: number; revision: number; children: ReactNode }) {
   const context = useMemo(() => ({ dismiss: () => queue.dismiss(id) }), [queue, id]);
   useEffect(() => {
     if (duration === Infinity) return;
     const timer = setTimeout(context.dismiss, duration);
     return () => clearTimeout(timer);
-  }, [context, duration]);
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- show() restarts the timer via revision; update() preserves it.
+  }, [context, duration, revision]);
   return (
     <li>
       <ToastContext value={context}>{children}</ToastContext>
@@ -31,7 +32,7 @@ export function ToastViewport({ queue = toasts }: { queue?: ToastQueue }) {
   return (
     <ol aria-live="polite" aria-label="Notifications" className="ui-toast-viewport">
       {visible.map((toast) => (
-        <Entry key={toast.id} queue={queue} id={toast.id} duration={toast.duration}>
+        <Entry key={toast.id} queue={queue} id={toast.id} duration={toast.duration} revision={toast.revision}>
           {toast.content}
         </Entry>
       ))}

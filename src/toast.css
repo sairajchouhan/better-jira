@@ -4,7 +4,11 @@
     position: fixed;
     right: 24px;
     bottom: 24px;
-    z-index: 581;
+    /* ToastPresenter uses Wte.toast = 580 (startup-entry.Dt5YDWdY.js).
+       Media overlays occupy the local 1000/1001 range; lift the shared toast layer above that base. */
+    --toast-layer: 580;
+    --toast-overlay-base: 1000;
+    z-index: calc(var(--toast-overlay-base) + var(--toast-layer));
     display: flex;
     flex-direction: column;
     gap: 8px;

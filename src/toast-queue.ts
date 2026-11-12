@@ -1,17 +1,18 @@
 import type { ReactNode } from "react";
 
 /** One queued toast. `duration` is in ms; `Infinity` keeps it until dismissed. */
-export type QueuedToast = { id: string; content: ReactNode; duration: number };
+export type QueuedToast = { id: string; content: ReactNode; duration: number; revision: number };
 
 /**
  * The single toast queue behind ToastViewport. Linear's Toaster (ToastPresenter.DGg7fNYy.js) shows the newest 4
  * (`visibleToasts`); older ones wait, unshown, until a newer one leaves. Showing with an id already queued replaces it
- * in place. Shaped for useSyncExternalStore.
+ * in place with a fresh presentation revision; content-only updates preserve that revision. Shaped for useSyncExternalStore.
  */
 export function createToastQueue(limit = 4) {
   let toasts: readonly QueuedToast[] = [],
     visible: readonly QueuedToast[] = [],
-    counter = 0;
+    counter = 0,
+    revision = 0;
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
   const clearTimer = (id: string) => {
     clearTimeout(timers.get(id));
@@ -38,7 +39,7 @@ export function createToastQueue(limit = 4) {
         timer.unref?.();
         timers.set(id, timer);
       }
-      const toast = { id, content, duration };
+      const toast = { id, content, duration, revision: ++revision };
       set(toasts.some((t) => t.id === id) ? toasts.map((t) => (t.id === id ? toast : t)) : [...toasts, toast]);
       return id;
     },
