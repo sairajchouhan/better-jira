@@ -336,7 +336,6 @@ export function CreateIssue() {
               board,
               value: draft.priority ?? (writable ? "" : "Normal"),
               empty: writable ? "Default priority" : "No priority",
-              clearable: true,
               onChange: (priority: string) => setDraft({ ...draft, priority }),
             }}
           />

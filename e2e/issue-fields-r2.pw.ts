@@ -77,6 +77,10 @@ test("R2 issue fields on a writable site: remote links, watching, palette comman
     await p.key("i");
     await p.waitFor(`${ops}.some(o=>o.op==='fields'&&o.fields.assignee===null)`);
   });
+  await test.step("BJ-72: No priority clears the priority on a writable site", async () => {
+    const p = await open("?issue=TEST-2&view=page", {
+      setup: writable({ priority: "High" }),
+    });
     await p.waitFor(ready);
     await p.key("p");
     await p.click('[role="dialog"][aria-label="Set priority"] [cmdk-item][data-value="No priority"]');
