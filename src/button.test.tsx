@@ -62,13 +62,13 @@ test("shortcut props take registry chords, spelled as caps in one place (F3)", (
 test("SendButton is the one send control: the --send look, ⌘↵ and a stable reason wrapper (F5)", () => {
   const html = renderToStaticMarkup(<SendButton label="Submit reply" disabled />);
   // Disabled, it can't be hovered, so its own tooltip moves to the wrapper (C1).
-  expect(html).toStartWith('<span class="ui-tooltip-trigger" title="Submit comment (⌘ ↵)"><button');
+  expect(html).toStartWith('<span class="ui-tooltip-trigger" title="Submit reply (⌘ ↵)"><button');
   expect(html).not.toMatch(/<button[^>]*title=/);
   expect(html).toContain('data-variant="send"');
   expect(html).toContain('data-size="small"');
   const enabled = renderToStaticMarkup(<SendButton label="Submit reply" />);
   expect(enabled).toStartWith('<span class="ui-tooltip-trigger"><button');
-  expect(enabled).toMatch(/<button[^>]*title="Submit comment \(⌘ ↵\)"/);
+  expect(enabled).toMatch(/<button[^>]*title="Submit reply \(⌘ ↵\)"/);
 });
 
 test("a link button is an anchor with the button's looks", () => {

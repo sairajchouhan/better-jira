@@ -4,7 +4,7 @@ import { useHotkeys, useHotkey } from "@tanstack/react-hotkeys";
 import { adfToText } from "./adf";
 import { discardLateMedia, documentHasMedia, lateMediaDiscarded } from "./document";
 import { Button, IconButton, SendButton } from "./button";
-import { chordKeys } from "./keycap";
+import { Shortcut } from "./keycap";
 import { TextInput } from "./field";
 import { Icon } from "./icons";
 import { Text } from "./text";
@@ -74,7 +74,8 @@ export type RichEditorProps = {
   /** Save stays off while the content is empty (comment composers always are). */
   required?: boolean;
   cancelLabel?: string;
-  hint?: string;
+  /** The verbs in the "⌘↵ save · Esc cancel" hint. */
+  hint?: { save: string; cancel: string };
   onChange?: (doc: AdfDocument) => void;
   onBlur?: (doc: AdfDocument) => void;
   onSave?: (doc: AdfDocument) => void;
@@ -686,7 +687,8 @@ export function RichEditor(props: EditorEngineProps) {
         <div className="rich-editor-actions flex items-center justify-end gap-2 border-t border-line-2 p-2 text-[12px]">
           {presentation.variant === "comment" && formatting}
           {presentation.variant !== "comment" && (
-            <span className="rich-editor-hint mr-auto text-fg-3">{props.hint ?? `${chordKeys("Mod+Enter").join("")} save · Esc cancel`}</span>
+            <span className="rich-editor-hint mr-auto text-fg-3"><Shortcut keys="Mod+Enter" size="small" /> {props.hint?.save ?? "save"} ·{" "}
+              <Shortcut keys="Escape" size="small" /> {props.hint?.cancel ?? "cancel"}</span>
           )}
           {/* Linear's edit actions: a medium link Cancel beside a medium Save (Comment.*.js). */}
           {props.onCancel && (
@@ -703,6 +705,7 @@ export function RichEditor(props: EditorEngineProps) {
             (presentation.variant === "comment" ? (
               <SendButton
                 label={props.saveLabel ?? "Save description"}
+                tooltip="Submit comment"
                 disabled={uploadBusy || empty}
                 disabledReason={uploadBusy ? BUSY : undefined}
                 onClick={() => save()}

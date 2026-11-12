@@ -461,7 +461,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
             onChange={(description) => update({ description })}
             onSave={submit}
             saveLabel="Create"
-            hint="⌘↵ create · Esc close"
+            hint={{ save: "create", cancel: "close" }}
             onCancel={cancel}
           />
           <div className="flex gap-1">

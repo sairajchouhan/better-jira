@@ -202,12 +202,12 @@ export function IconButton({
 }
 
 /**
- * Linear's filled send circle, which has no Jx variant: a small round icon button painted with `--send`, hovering
- * "Submit comment" with ⌘↵. Every composer's send is this one control. It always sits in its tooltip trigger, so a
- * disabled reason can come and go without a remount.
+ * Linear's filled send circle, which has no Jx variant: a small round icon button painted with `--send`, hovering its
+ * tooltip (the label unless given; Linear's comment composers say "Submit comment") with ⌘↵. Every composer's send is
+ * this one control. It always sits in its tooltip trigger, so a disabled reason can come and go without a remount.
  */
 export function SendButton({
-  tooltip = "Submit comment",
+  tooltip,
   disabledReason = "",
   ...props
 }: Omit<IconButtonProps, "variant" | "size" | "shortcut" | "alternate" | "children">) {

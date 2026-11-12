@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { RichEditor } from "./rich-editor";
-import { chordKeys } from "./keycap";
 
 test("editor presentations retain their frame, toolbar and submit contracts", () => {
   const framed = renderToStaticMarkup(<RichEditor initial="" presentation="framed" onSave={() => {}} />);
   expect(framed).toContain("mb-3 rounded-lg border border-line-2 bg-card");
   expect(framed).toContain('aria-label="Description formatting"');
-  expect(framed).toContain(`${chordKeys("Mod+Enter").join("")} save · Esc cancel`);
+  expect(framed).toContain("rich-editor-hint");
+  expect(framed).toMatch(/rich-editor-hint[^>]*><span class="ui-shortcut[^"]*"/);
   expect(framed).toContain('aria-label="Save description"');
 
   const inline = renderToStaticMarkup(<RichEditor initial="" presentation="inline" />);
@@ -28,7 +28,7 @@ test("editor presentations retain their frame, toolbar and submit contracts", ()
   expect(comment).toMatch(/<button[^>]*aria-label="Submit reply"[^>]*disabled=""/);
   expect(comment).toContain("Submit comment (⌘ ↵)");
   expect(comment).toContain('data-variant="send"');
-  expect(comment).not.toContain(`${chordKeys("Mod+Enter").join("")} save · Esc cancel`);
+  expect(comment).not.toContain("rich-editor-hint");
 });
 
 test("each public editor wrapper loads the editor and passes its own presentation", async () => {

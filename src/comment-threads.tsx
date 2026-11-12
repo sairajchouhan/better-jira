@@ -553,7 +553,7 @@ function Thread({
                   >
                     <Icon name="paperclip" />
                   </IconButton>
-                  <SendButton label="Submit reply" onClick={() => setReplying(true)} />
+                  <SendButton label="Submit reply" tooltip="Submit comment" onClick={() => setReplying(true)} />
                 </div>
               )}
             </div>
