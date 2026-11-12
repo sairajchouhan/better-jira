@@ -1,4 +1,4 @@
-import { expect, test, sleep, type App as Page } from "./app";
+import { expect, test, fixture, sleep, type App as Page } from "./app";
 
 // Two tabs of one browser (one context: shared IndexedDB, storage and locks) on a writable site faked in each page.
 // Ops land in `window.__ops`; a create's answer waits for `window.__release()`, so the issue stays "being created".
@@ -218,4 +218,30 @@ test("two tabs: BJ-23 an issue its creating tab discards takes the other tab's e
   // Its outbox lets the waiting edit go too: nothing is sent, and nothing waits on it any more.
   expect(await two.eval(`window.__ops.length`)).toBe(0);
   expect(await two.eval(`!!document.querySelector('[data-key="TEST-2"]')`)).toBe(true);
+});
+
+
+test("BJ-169: goodbye takes over edits of an issue Jira created after this tab loaded", async ({ open }) => {
+  await fixture.reset({ writable: true, createSuccess: true });
+  const landing = `(()=>{const real=fetch;window.__ops=[];
+    window.fetch=async(input,init)=>{const m=new URL(String(input),location.href).pathname.match(/^\\/api\\/issues\\/([^/]+)\\/ops$/);
+      if(!m)return real(input,init);const {ops}=JSON.parse(init.body);window.__ops.push({key:m[1],ops});
+      if(ops[0]?.op==='create')await new Promise(r=>window.__release=r);
+      else if(window.__holdWrites)return new Promise(()=>{});
+      return real(input,init);
+    };})()`;
+  const host = await open("");
+  const one = await open("", { setup: landing, tabOf: host });
+  const key = await createHeld(one);
+  const two = await open("", { tabOf: host });
+  await two.waitFor(`!!document.querySelector('[data-key="${key}"]')`);
+  await one.eval(`window.__release()`);
+  await one.waitFor(`!!document.querySelector('[data-key="TEST-90"]')`);
+  await one.front();
+  await one.eval(`window.__holdWrites=true`);
+  const priority = await setPriority(one, "TEST-90");
+  await one.waitFor(savedPriority("TEST-90", priority));
+  await one.waitFor(saved);
+  await one.close();
+  await expect.poll(async () => (await fixture.log()).writes.some(w => w.key === "TEST-90" && w.ops.some((op: any) => op.fields?.priority === priority)), { timeout: 8000 }).toBe(true);
 });

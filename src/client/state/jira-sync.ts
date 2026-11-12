@@ -383,8 +383,16 @@ export function resumeSync(saved: LocalChange[]) {
             writes.claimClosed(async (claimed, changes) => {
               // A closed tab may have saved edits after this tab read the saved data: send and show the merged copy saved
               // now, as a takeover later on does (sync review 3-5).
-              const saved = changes.filter((c) => claimed.has(c.key)),
-                issues = new Map(get().issues),
+              const saved = changes.filter((c) => claimed.has(c.key));
+              // The mirror may now hold issues created since this tab loaded. Read their Jira baseline before
+              // installing and replaying pending edits; an issue actually deleted in Jira must still stay gone.
+              if (saved.some(c => !c.created && !loaded.inJira.has(c.key))) {
+                const response = await fetch("/api/issues");
+                if (!response.ok) throw new Error("Could not read issues for pending Jira writes");
+                const remote: Issue[] = await response.json();
+                loaded = { ...loaded, remote, inJira: new Map(remote.map(i => [i.key, i])) };
+              }
+              const issues = new Map(get().issues),
                 full = new Map(get().full);
               install(saved, issues, full);
               set({ issues, full });
