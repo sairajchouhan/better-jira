@@ -964,6 +964,8 @@ function openLink(editor: EditorView, event: MouseEvent) {
   const { selection } = editor.state;
   if (!link || event.button !== 0 || event.shiftKey || (!selection.empty && !(selection instanceof NodeSelection)))
     return false;
+  // Links inside a node view's own controls (media Download, file cards) handle their own clicks.
+  if (link.hasAttribute("download") || link.parentElement?.closest('[contenteditable="false"]')) return false;
   event.preventDefault();
   const browse = `${get().site}/browse/`;
   const issue =
