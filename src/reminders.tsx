@@ -220,10 +220,10 @@ export function ReminderControl({ issue }: { issue: Issue }) {
     </>
   );
 }
-/** A single nearest-deadline timer, including overdue reminders restored after a reload. It re-arms only when the next
- *  reminder changes, not on every poll. */
 const hasConfirmation = () => toasts.has(NOTIFICATION_ID);
 
+/** A single nearest-deadline timer, including overdue reminders restored after a reload. It re-arms only when the next
+ *  reminder changes, not on every poll. */
 export function ReminderDelivery() {
   const next = useStore((s) => nextReminder(s.issues)),
     toast = useSyncExternalStore(toasts.subscribe, hasConfirmation, hasConfirmation),

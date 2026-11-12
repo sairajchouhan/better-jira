@@ -193,10 +193,6 @@
     background: var(--red-tint);
   }
 
-
-}
-
-@layer components {
   /* SendButton: Linear's filled comment send circle (no UEe variant), the arrow in the card's fg-3. */
   .ui-button[data-variant="send"] {
     background: var(--send);
@@ -211,9 +207,6 @@
   .ui-tooltip-trigger > button:disabled {
     pointer-events: none;
   }
-}
-
-@layer components {
   /* Linear DetailLabelControl.labelIconButton: 25px square, circular. */
   .ui-button[data-shape="icon"][data-appearance="label"] {
     width: 25px;

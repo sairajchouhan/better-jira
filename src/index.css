@@ -1181,9 +1181,6 @@
   color: var(--fg-3);
   font-size: 11px;
 }
-.image-comment-meta button {
-  margin-left: auto;
-}
 .image-comment-avatar {
   display: grid;
   place-items: center;
