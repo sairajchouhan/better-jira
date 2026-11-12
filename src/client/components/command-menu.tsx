@@ -28,17 +28,28 @@ export function CommandMenu({
   children: ReactNode;
 }) {
   return (
-    <MenuSurface label={label} close={close} command width={720}>
+    <MenuSurface label={label} close={close} command width={COMMAND_MENU_WIDTH}>
       <div className="command-menu">
-        <div className="command-menu-title">
-          <span className="command-menu-chip">
-            <span className="command-menu-key">{issue.key}</span>
-            <span aria-hidden>·</span>
-            <span className="truncate">{issue.summary}</span>
-          </span>
-        </div>
+        <CommandMenuTitle issue={issue} />
         {children}
       </div>
     </MenuSurface>
+  );
+}
+
+/** VK.WIDTH: every command menu, the ⌘K palette's included, is 720px wide. */
+export const COMMAND_MENU_WIDTH = 720;
+
+/** The command menu's title (VK.TITLE_CONTAINER_HEIGHT): the targeted issue's chip, as Linear promotes its group name to the title
+ *  (`promoteToTitle` on the issue group AD). */
+export function CommandMenuTitle({ issue }: { issue: Issue }) {
+  return (
+    <div className="command-menu-title">
+      <span className="command-menu-chip">
+        <span className="command-menu-key">{issue.key}</span>
+        <span aria-hidden>·</span>
+        <span className="truncate">{issue.summary}</span>
+      </span>
+    </div>
   );
 }

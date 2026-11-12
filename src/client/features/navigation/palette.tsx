@@ -10,18 +10,19 @@ import {
 import { openViewEditor, ViewDeleteDialog } from "@/client/features/views/view-editor";
 import { canMergeOverlay } from "@/shared/saved-view-model";
 import { createToolbarView } from "@/client/features/views/view-toolbar-actions";
-import { Command } from "cmdk";
 import { useMemo, useState, type ReactNode } from "react";
 import { navigationChoices, type NavigationChoice } from "./quick-navigation";
 import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
-import { Icon, StatusIcon, TypeDot } from "@/client/components/icons";
+import { Icon, StatusIcon, TypeDot, type IconName } from "@/client/components/icons";
 import { get, set, timed, useStore, statusOf, ME } from "@/client/state/store";
 import { currentKey } from "@/client/state/jira-sync";
 import { navigate, openSavedView, preloadOnHover, ui } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
 import { peopleOf } from "@/shared/people";
 import { filterCount } from "@/shared/view-model";
-import { Modal } from "@/client/features/issue/personal-controls";
+import { MenuSurface } from "@/client/components/menu-surface";
+import { Menu } from "@/client/components/menu";
+import { COMMAND_MENU_WIDTH, CommandMenuTitle } from "@/client/components/command-menu";
 import { Avatar } from "@/client/components/avatar";
 import { matchRank } from "@/shared/search-rank";
 import {
@@ -41,40 +42,99 @@ import { useStoredState } from "@/client/state/stored-state";
 import { SelectRow } from "@/client/components/display-options";
 import { recentIssues, recentSearches, recordSearch } from "./recents";
 import { hotkeyOf, runShortcut, shortcutApplies, shortcuts } from "./shortcuts";
-import { Shortcut, type Keys } from "@/client/components/keycap";
-const MENU =
-  "overflow-hidden rounded-xl border border-[var(--menu-line)] bg-[var(--menu)] text-fg-2 shadow-[var(--menu-shadow)] " +
-  "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[12px] [&_[cmdk-group-heading]]:text-fg-3 " +
-  "[&_[cmdk-item]]:flex [&_[cmdk-item]]:h-9 [&_[cmdk-item]]:cursor-default [&_[cmdk-item]]:items-center [&_[cmdk-item]]:gap-2.5 [&_[cmdk-item]]:rounded-md [&_[cmdk-item]]:px-2 " +
-  "[&_[cmdk-item][data-selected=true]]:bg-sel [&_[cmdk-item][data-selected=true]]:text-fg";
-
-function Overlay({
-  children,
-  label = "Search issues and commands",
-}: {
-  children: ReactNode;
-  label?: string;
-}) {
-  return (
-    <Modal label={label} close={() => ui.send({ type: "overlay.close" })}>
-      {children}
-    </Modal>
-  );
-}
+import { type Keys } from "@/client/components/keycap";
+import {
+  groupPriority,
+  orderGroups,
+  paletteGroupOf,
+  TARGET_PRIORITY,
+  VIEW_PRIORITY,
+  type PaletteGroup,
+} from "./palette-groups";
 
 /** `keys`: the hotkey that does the same thing, drawn after the name. `id` keys the row when names repeat (its value keeps the name). */
 type Cmd = { id?: string; name: string; keys?: Keys; icon?: ReactNode; disabled?: boolean; run: () => void };
 
-/** One command row; ⌘K's commands and every nested page's choices. */
+/** One command row (Linear's command-menu Item, Fgn): icon, name, shortcut; ⌘K's commands and every nested page's choices. */
 function CommandRow({ cmd: c }: { cmd: Cmd }) {
   return (
-    <Command.Item value={`cmd:${c.id ? `${c.id} ` : ""}${c.name}`} disabled={c.disabled} className="data-[disabled=true]:opacity-50" onSelect={c.run}>
-      <span className="grid w-4 shrink-0 place-items-center text-fg-3">{c.icon}</span>
-      <span className="flex-1 truncate">{c.name}</span>
-      {c.keys?.length ? <Shortcut keys={c.keys} /> : null}
-    </Command.Item>
+    <Menu.Item
+      value={`cmd:${c.id ? `${c.id} ` : ""}${c.name}`}
+      disabled={c.disabled}
+      onSelect={c.run}
+      icon={c.icon}
+      shortcut={c.keys?.length ? c.keys : undefined}
+    >
+      {c.name}
+    </Menu.Item>
   );
 }
+
+/** Each command's icon, as Linear's actions carry one; a group's own image (Help's Book: mO.defaultImage) otherwise. */
+const COMMAND_ICONS: Record<string, IconName> = {
+  new: "plus",
+  "new-full": "plus",
+  search: "search",
+  find: "search",
+  undo: "undo",
+  redo: "redo",
+  "inbox-undo": "undo",
+  back: "arrow-left",
+  sidebar: "side",
+  "customize-sidebar": "side",
+  details: "side",
+  display: "display",
+  layout: "display",
+  "collapse-all": "display",
+  "copy-page": "link",
+  "dismiss-toast": "close",
+  "toast-open": "external",
+  "open-issue": "external",
+  "open-document": "file",
+  "open-user": "user",
+  mine: "user",
+  inbox: "inbox",
+  active: "board",
+  backlog: "board",
+  all: "board",
+  "team-open": "board",
+  "board-add": "plus",
+  "favorite-open": "star",
+  "view-open": "view",
+  "last-viewed": "clock",
+  help: "help",
+  shortcuts: "keyboard",
+  filter: "filter",
+  "filter-clear": "filter",
+  "filter-last": "filter",
+  "view-create": "plus",
+  "view-save": "view",
+  "view-favorite": "star",
+  "document-rename": "pencil",
+  "document-favorite": "star",
+  "document-subscribers": "bell",
+  "document-remind": "clock",
+  "document-authors": "user",
+  "document-copy-url": "link",
+  "document-copy-title": "copy",
+  "document-copy-link": "link",
+  "document-copy-markdown": "copy",
+};
+const GROUP_ICONS: Record<PaletteGroup, IconName> = {
+  Document: "file",
+  Notifications: "inbox",
+  Issues: "plus",
+  Views: "view",
+  Filter: "filter",
+  Navigation: "arrow-left",
+  "Display options": "display",
+  Miscellaneous: "dots",
+  Help: "help",
+};
+const commandIcon = (id: string, group?: PaletteGroup) => {
+  const name = COMMAND_ICONS[id] ?? (group && GROUP_ICONS[group]);
+  return name ? <Icon name={name} size={16} /> : undefined;
+};
 /** Best match first, so Enter runs the row whose name was typed; every row while the query is empty. */
 const ranked = (cmds: Cmd[], q: string) =>
   cmds
@@ -122,10 +182,12 @@ function usePageRows(page: PalettePage): Cmd[] {
       run: () => (close(), navigate({ mine: true, person: u.id === ME.id ? null : u.id, selected: null, panel: false })),
     }));
   if (page === "help")
-    return [{ name: "Keyboard shortcuts", keys: hotkeyOf("shortcuts"), run: () => ui.send({ type: "overlay.open", overlay: "shortcuts" }) }];
+    return [{ name: "Keyboard shortcuts", keys: hotkeyOf("shortcuts"), icon: commandIcon("shortcuts"), run: () => ui.send({ type: "overlay.open", overlay: "shortcuts" }) }];
+  const icon = commandIcon(page === "boards" ? "team-open" : page === "views" ? "view-open" : "favorite-open");
   return navigationChoices(page, { boards, savedViews, favorites, issues }).map((choice) => ({
     id: choice.id,
     name: choice.name,
+    icon,
     run: () => openChoice(choice),
   }));
 }
@@ -154,16 +216,16 @@ export function HelpMenu() {
   );
 }
 
-/** The palette dialog both search and ⌘K use: the input (with the scoped issue's chip), then the result groups.
- *  Not menu.tsx on purpose: Linear's ⌘K CommandMenu renders through its own large-menu compound
- *  (`WK = {List, Item, Title, GroupHeader, Divider, TextDivider, Input, Peek}` in startup-root.CnUSfl4j.js), while IB
- *  (menu.tsx) serves only its small and contextual command menus. */
+/** The palette both search and ⌘K use: Linear's command menu (WK in startup-root.CnUSfl4j.js; sizes VK, spelled out in index.css
+ *  `.command-menu`) through the same `MenuSurface command` frame and `Menu` compound every issue's command menu uses. Centred,
+ *  720px, 110px down, with no backdrop and one frame: the targeted issue's chip as its title, the 46px search, then the groups. */
 function PaletteFrame({
   label,
   q,
   setQ,
+  title,
   chip,
-  placeholder = "Search issues or type a command…",
+  placeholder = "Type a command or search…",
   onBackspace,
   footer,
   children,
@@ -171,7 +233,9 @@ function PaletteFrame({
   label: string;
   q: string;
   setQ: (q: string) => void;
-  /** What the palette acts on or is nested in: the scoped issue, or a page's parent name. */
+  /** The issue the commands act on, drawn as the menu's title chip. */
+  title?: Issue;
+  /** A nested page's parent name, before the search. */
   chip?: ReactNode;
   placeholder?: string;
   /** Runs on Backspace in an empty input. */
@@ -181,42 +245,38 @@ function PaletteFrame({
   children: ReactNode;
 }) {
   return (
-    <Overlay label={label}>
-      <div className={`w-full ${MENU}`}>
-      <Command
-        shouldFilter={false}
-        loop
-        // The highlighted issue (arrow keys or pointer) loads before it is picked.
-        onValueChange={(value) => {
-          const issue = get().issues.get(value);
-          preloadOnHover(issue ? { board: issue.board, selected: issue.key, panel: true } : null);
-        }}
-      >
-        <div className="flex items-center gap-2 border-b border-line px-3.5">
-          {chip && (
-            <span className="flex h-6 shrink-0 items-center gap-1.5 rounded-md bg-sel px-2 text-[12px] text-fg-2">
-              {chip}
-            </span>
-          )}
-          <Command.Input
+    <MenuSurface label={label} close={close} command width={COMMAND_MENU_WIDTH}>
+      <div className="command-menu palette">
+        {title && <CommandMenuTitle issue={title} />}
+        <Menu
+          shouldFilter={false}
+          // The highlighted issue (arrow keys or pointer) loads before it is picked.
+          onValueChange={(value) => {
+            const issue = get().issues.get(value);
+            preloadOnHover(issue ? { board: issue.board, selected: issue.key, panel: true } : null);
+          }}
+        >
+          <Menu.Input
             autoFocus
+            aria-label={label}
             value={q}
             onValueChange={setQ}
             onKeyDown={(e) => e.key === "Backspace" && !q && onBackspace?.()}
             placeholder={placeholder}
-            className="h-12 flex-1 bg-transparent text-fg outline-none placeholder:text-fg-4"
+            chip={chip}
           />
-        </div>
-        <Command.List className="max-h-[60vh] overflow-y-auto p-1.5">
-          <Command.Empty className="p-3 text-fg-3">No results</Command.Empty>
-          {children}
-        </Command.List>
-      </Command>
-      {footer && <div className="border-t border-line px-3.5 py-1.5">{footer}</div>}
+          <Menu.List maxHeight={`${PALETTE_LIST_HEIGHT}px`}>
+            <Menu.Empty>No results</Menu.Empty>
+            {children}
+          </Menu.List>
+        </Menu>
+        {footer && <div className="palette-footer">{footer}</div>}
       </div>
-    </Overlay>
+    </MenuSurface>
   );
 }
+/** Linear's command-menu list height without a peek (vgn in startup-root.CnUSfl4j.js). */
+const PALETTE_LIST_HEIGHT = 450;
 
 const openIssue = (i: Issue) =>
   timed(`open ${i.key}`, () => (close(), navigate({ board: i.board, selected: i.key, panel: true }), ui.send({ type: "query.set", query: "" })));
@@ -225,12 +285,15 @@ const openIssue = (i: Issue) =>
 function IssueRow({ issue: i, onOpen }: { issue: Issue; onOpen?: () => void }) {
   const s = statusOf(i);
   return (
-    <Command.Item value={i.key} onSelect={() => (onOpen?.(), openIssue(i))}>
-      {s ? <StatusIcon status={s} /> : <TypeDot type={i.type} />}
-      <span className="w-[88px] shrink-0 text-[12px] tracking-[-0.24px] text-fg-3">{i.key}</span>
-      <span className="flex-1 truncate">{i.summary}</span>
-      <Avatar user={i.assignee} size={18} />
-    </Command.Item>
+    <Menu.Item
+      value={i.key}
+      onSelect={() => (onOpen?.(), openIssue(i))}
+      icon={s ? <StatusIcon status={s} /> : <TypeDot type={i.type} />}
+      hint={<Avatar user={i.assignee} size={18} />}
+    >
+      <span className="palette-issue-key">{i.key}</span>
+      {i.summary}
+    </Menu.Item>
   );
 }
 
@@ -238,9 +301,9 @@ function IssueRow({ issue: i, onOpen }: { issue: Issue; onOpen?: () => void }) {
 function IssueResults({ results, q }: { results: Issue[]; q: string }) {
   if (!results.length) return null;
   return (
-    <Command.Group heading={`Issues (${results.length === 50 ? "top 50" : results.length})`}>
+    <Menu.Group heading={`Issues (${results.length === 50 ? "top 50" : results.length})`}>
       {results.map((i) => <IssueRow key={i.key} issue={i} onOpen={() => recordSearch(q)} />)}
-    </Command.Group>
+    </Menu.Group>
   );
 }
 
@@ -250,25 +313,25 @@ function DocumentResults({ q }: { q: string }) {
   const results = useMemo(() => matchDocuments(issues, q), [q, issues]);
   if (!results.length) return null;
   return (
-    <Command.Group heading="Documents">
+    <Menu.Group heading="Documents">
       {results.map((m) => <DocumentRow key={m.resource.id} match={m} q={q} />)}
-    </Command.Group>
+    </Menu.Group>
   );
 }
 function DocumentRow({ match: { issue, resource }, q }: { match: DocumentMatch; q: string }) {
   return (
-    <Command.Item
+    <Menu.Item
       value={`document:${resource.id}`}
       onSelect={() => {
         recordSearch(q);
         close();
         navigate({ board: issue.board, selected: issue.key, panel: true, document: resource.id });
       }}
+      icon={<Icon name="file" size={16} />}
+      hint={issue.key}
     >
-      <span className="grid w-4 shrink-0 place-items-center text-fg-3"><Icon name="file" /></span>
-      <span className="flex-1 truncate">{resource.title || "New document"}</span>
-      <span className="shrink-0 text-[12px] text-fg-3">{issue.key}</span>
-    </Command.Item>
+      {resource.title || "New document"}
+    </Menu.Item>
   );
 }
 
@@ -314,19 +377,18 @@ function IssueRows({
   return (
     <>
       {recent.length > 0 && (
-        <Command.Group heading="Recent">
+        <Menu.Group heading="Recent">
           {recent.map((i) => <IssueRow key={i.key} issue={i} />)}
-        </Command.Group>
+        </Menu.Group>
       )}
       {searches.length > 0 && (
-        <Command.Group heading="Recent searches">
+        <Menu.Group heading="Recent searches">
           {searches.map((search) => (
-            <Command.Item key={search} value={`search:${search}`} onSelect={() => setQ(search)}>
-              <span className="grid w-4 shrink-0 place-items-center text-fg-3"><Icon name="search" /></span>
-              <span className="flex-1 truncate">{search}</span>
-            </Command.Item>
+            <Menu.Item key={search} value={`search:${search}`} onSelect={() => setQ(search)} icon={<Icon name="search" size={16} />}>
+              {search}
+            </Menu.Item>
           ))}
-        </Command.Group>
+        </Menu.Group>
       )}
     </>
   );
@@ -371,7 +433,7 @@ function SearchFilterBar({
     })),
   }));
   return (
-    <div className="mb-1.5 flex flex-wrap items-center gap-1.5" aria-label="Search filters">
+    <div className="mb-1.5 flex flex-wrap items-center gap-1.5" role="group" aria-label="Search filters">
       {filters.map(({ field, values }) => {
         const name = SEARCH_FILTER_FIELDS.find(([f]) => f === field)![1];
         return (
@@ -444,6 +506,7 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
   const issues = useStore((s) => s.issues);
   const boards = useStore((s) => s.boards);
   const boardId = useStore((s) => s.board);
+  const inInbox = useStore((s) => s.inbox);
   // The ids of the shortcuts that apply now, as a string, so the palette re-renders only when that set changes.
   const applicable = useStore((s) => shortcuts.filter((e) => shortcutApplies(e, s)).map((e) => e.id).join(" "));
   const applyingIds = new Set(applicable.split(" "));
@@ -469,6 +532,7 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
   const command = (entry: (typeof shortcuts)[number]): Cmd => ({
     name: entry.label?.() ?? entry.name,
     keys: hotkeyOf(entry.id),
+    icon: commandIcon(entry.id, entry.issue ? undefined : paletteGroupOf(entry)),
     run: () => {
       ui.send({ type: "overlay.close" });
       runShortcut(entry.id);
@@ -478,39 +542,39 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
   const issueCmds: Cmd[] = scoped
     ? shortcuts.filter((s) => s.issue && applies(s)).map(command)
     : [];
-  const general: Cmd[] = [
-    ...shortcuts
-      .filter(
-        (s, i, a) =>
-          !s.issue &&
-          applies(s) &&
-          s.id !== "commands" &&
-          a.findIndex((other) => other.name === s.name) === i,
-      )
-      .map(command),
-    ...boards
-      .filter((b) => b.id !== boardId)
-      .map((b): Cmd => ({
+  // The app's commands under Linear's group for each, with nothing filed twice under one name.
+  const byGroup = new Map<PaletteGroup, Cmd[]>();
+  const file = (group: PaletteGroup, cmd: Cmd) => byGroup.set(group, [...(byGroup.get(group) ?? []), cmd]);
+  for (const [i, s] of shortcuts.entries())
+    if (!s.issue && applies(s) && s.id !== "commands" && shortcuts.findIndex((other) => other.name === s.name) === i)
+      file(paletteGroupOf(s), command(s));
+  for (const b of boards)
+    if (b.id !== boardId)
+      file("Navigation", {
         name: `Switch to ${b.name}`,
+        icon: commandIcon("team-open"),
         run: () => {
           ui.send({ type: "overlay.close" });
           navigate({ board: b.id, selected: null, panel: false });
         },
-      })),
-  ];
+      });
+  file("Views", { name: "Create view…", icon: commandIcon("view-create"), run: viewAction(() => openViewEditor(createViewDraft("custom"))) });
+  const at = { inbox: inInbox, view: !!activeView };
   // Save to… mirrors the filter row's Save menu, so it is offered even before any temporary filter exists.
   const mergeable = !!activeView && !!filterCount(overlay) && canMergeOverlay(activeView.filters, overlay);
-  const groups = savingTo && activeView ? [{ heading: "Save to", rows: ranked([
-    { name: filterCount(overlay) && !mergeable ? "Cannot merge these filters into the view" : "Save to this view", keys: hotkeyOf("view-save"), disabled: !mergeable, run: viewAction(() => { void saveOverlayToView().catch(e => set({ perf: String(e) })); }) },
-    { name: "Create new view…", keys: hotkeyOf("view-create"), run: viewAction(createToolbarView) },
+  const listed = savingTo && activeView ? [{ key: "Save to", heading: "Save to", priority: 0, rows: ranked([
+    { name: filterCount(overlay) && !mergeable ? "Cannot merge these filters into the view" : "Save to this view", keys: hotkeyOf("view-save"), icon: commandIcon("view-save"), disabled: !mergeable, run: viewAction(() => { void saveOverlayToView().catch(e => set({ perf: String(e) })); }) },
+    { name: "Create new view…", keys: hotkeyOf("view-create"), icon: commandIcon("view-create"), run: viewAction(createToolbarView) },
   ], q) }] : [
-    { heading: scoped?.key ?? "", rows: ranked(issueCmds, q) },
-    { heading: `View · ${activeView?.name ?? ""}`, rows: ranked(viewCommands, q) },
-    { heading: "Views", rows: ranked([{ name: "Create view…", run: viewAction(() => openViewEditor(createViewDraft("custom"))) }], q) },
-    { heading: "General", rows: ranked(general, q) },
-  ]
-    .filter((g) => g.rows.length)
-    .sort((a, b) => a.rows[0]![0] - b.rows[0]![0]);
+    // The targeted issue's group is headless: Linear promotes its name to the menu's title (`promoteToTitle`).
+    { key: "target", heading: undefined, priority: TARGET_PRIORITY, rows: ranked(issueCmds, q) },
+    { key: "view", heading: `View · ${activeView?.name ?? ""}`, priority: VIEW_PRIORITY, rows: ranked(viewCommands, q) },
+    ...[...byGroup].map(([group, cmds]) => ({ key: group, heading: group, priority: groupPriority(group, at), rows: ranked(cmds, q) })),
+  ];
+  const groups = orderGroups(
+    listed.filter((g) => g.rows.length).map((g) => ({ ...g, rank: g.rows[0]![0] })),
+    !!q.trim(),
+  );
 
   if (deletingView && activeView) return <ViewDeleteDialog view={activeView} close={() => { setDeletingView(false); ui.send({ type: "overlay.close" }); }} />;
   return (
@@ -522,14 +586,13 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
         if (page) openPage(page);
         else setQ(next);
       }}
-      chip={scoped && <><TypeDot type={scoped.type} />{scoped.key}</>}
-      placeholder={scoped ? "Type a command, or ⌫ to search everything…" : undefined}
+      title={scoped}
       onBackspace={() => (savingTo ? setSavingTo(false) : setScopeKey(null))}
     >
       {groups.map((g) => (
-        <Command.Group key={g.heading} heading={g.heading}>
-          {g.rows.map(([, c]) => <CommandRow key={c.name} cmd={c} />)}
-        </Command.Group>
+        <Menu.Group key={g.key} heading={g.heading}>
+          {g.rows.map(([, c]) => <CommandRow key={c.id ?? c.name} cmd={c} />)}
+        </Menu.Group>
       ))}
       <IssueResults results={results} q={q} />
       {q.trim() && <DocumentResults q={q} />}

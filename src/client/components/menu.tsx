@@ -288,11 +288,18 @@ function MenuRoot({
 function MenuInput({
   hotkey,
   hideWhenEmpty = false,
+  chip,
   ...props
-}: ComponentProps<typeof Command.Input> & { hotkey?: string | readonly string[]; hideWhenEmpty?: boolean }) {
+}: ComponentProps<typeof Command.Input> & {
+  hotkey?: string | readonly string[];
+  hideWhenEmpty?: boolean;
+  /** Drawn before the search: the nested command page's parent name (Linear's `nameAsParent` chip). */
+  chip?: ReactNode;
+}) {
   const hidden = hideWhenEmpty && !props.value;
   return (
     <div className={hidden ? "sr-only" : "menu-input"}>
+      {chip && <span className="menu-input-chip">{chip}</span>}
       <Command.Input {...props} className={hidden ? "sr-only" : undefined} />
       {hotkey && <Shortcut aria-hidden keys={hotkey} size="small" />}
     </div>

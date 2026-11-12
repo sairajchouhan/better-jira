@@ -163,6 +163,9 @@ export const Label = ({ name }: { name: string }) => (
 
 const PATHS = {
   bell: "M3 11h10l-1.5-2V6a3.5 3.5 0 0 0-7 0v3zM6.5 13a1.5 1.5 0 0 0 3 0",
+  // The ⌘K palette's Help group (Linear's mO defaultImage) and its Keyboard shortcuts row.
+  help: "M14 8A6 6 0 1 1 2 8a6 6 0 0 1 12 0M6.3 6.3a1.8 1.8 0 1 1 2.4 1.7c-.45.2-.7.55-.7 1.05M8 11.2h.01",
+  keyboard: "M1.5 4h13v8h-13zM4 6.8h.01M6.5 6.8h.01M9 6.8h.01M11.5 6.8h.01M5 9.5h6",
   clock: "M14 8A6 6 0 1 1 2 8a6 6 0 0 1 12 0M8 4v4l3 2",
   branch:
     "M4 4v8M4 4a2 2 0 1 0 0 .01M4 12a2 2 0 1 0 0 .01M12 12a2 2 0 1 0 0 .01M12 10V8c0-3-8-1-8-4",

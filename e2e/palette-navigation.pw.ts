@@ -13,7 +13,7 @@ test("BJ-165: O F / O T / O V open the ⌘K palette frame on their page; Help fa
     expect(await p.eval(`${dialog("Open team")}.textContent`)).toContain("Team");
     expect(await p.eval<string[]>(rows)).toContain("Browser audit");
     await p.key("Backspace");
-    await p.waitFor(`${input}?.placeholder==='Search issues or type a command…'`);
+    await p.waitFor(`${input}?.placeholder==='Type a command or search…'`);
     await p.key("Escape");
     await p.waitFor(`!${input}`);
   });
@@ -43,6 +43,50 @@ test("BJ-165: O F / O T / O V open the ⌘K palette frame on their page; Help fa
     await p.key("p");
     await p.waitFor(`!!${input}`);
     expect(await p.eval(`${input}.getAttribute('aria-label')`)).toBeTruthy();
+  });
+});
+
+test("6.1: ⌘K is Linear's command menu: no backdrop, one frame, icons on every command, Linear's group order", async ({ open }) => {
+  const p = await open();
+  const palette = dialog("Search issues and commands");
+  const headings = `[...document.querySelectorAll('[cmdk-group-heading]')].map(n=>n.textContent)`;
+  await test.step("unscoped: centred 720px at 110px, nothing dimmed, a single rounded frame", async () => {
+    await p.eval("document.activeElement?.blur()");
+    await p.key("k", "meta");
+    await p.waitFor(`!!${palette}&&!!${input}`);
+    expect(await p.eval(`${input}.placeholder`)).toBe("Type a command or search…");
+    expect(await p.eval(`getComputedStyle(${palette}.parentElement).backgroundColor`)).toBe("rgba(0, 0, 0, 0)");
+    expect(await p.eval(`(({width,top})=>[Math.round(width),Math.round(top)])(${palette}.getBoundingClientRect())`)).toEqual([720, 110]);
+    // One frame: nothing inside the dialog draws a second rounded, bordered or shadowed box around the menu.
+    expect(
+      await p.eval(
+        `[...${palette}.querySelectorAll('*')].filter(n=>{const s=getComputedStyle(n);return s.boxShadow!=='none'||parseFloat(s.borderRadius)>=12}).length`,
+      ),
+    ).toBe(0);
+    expect(await p.eval(`[...${palette}.querySelectorAll('[cmdk-item]')].filter(n=>!n.querySelector('.menu-icon svg')).map(n=>n.textContent)`)).toEqual([]);
+    // A row's shortcut sits at the menu's right edge, 20px in.
+    expect(
+      await p.eval(
+        `(()=>{const row=${palette}.querySelector('[cmdk-item] .menu-hint').closest('[cmdk-item]');return Math.round(row.getBoundingClientRect().right-row.querySelector('.menu-hint').getBoundingClientRect().right)})()`,
+      ),
+    ).toBe(20);
+    const shown = await p.eval<string[]>(headings);
+    const linear = ["Notifications", "Issues", "Views", "Filter", "Navigation", "Display options", "Miscellaneous", "Help"];
+    expect(shown).toEqual(linear.filter((h) => shown.includes(h)));
+    expect(shown.slice(0, 2)).toEqual(["Issues", "Views"]);
+    expect(shown.at(-1)).toBe("Help");
+    await p.key("Escape");
+    await p.waitFor(`!${palette}`);
+  });
+  await test.step("scoped: the selected issue is the title chip and its commands lead, under no heading", async () => {
+    await p.key("j");
+    await p.key("k", "meta");
+    await p.waitFor(`!!${palette}?.querySelector('.command-menu-title')`);
+    expect(await p.eval(`${palette}.querySelector('.command-menu-title').textContent`)).toMatch(/^TEST-\d+·/);
+    expect(await p.eval(`!!${palette}.querySelector('[cmdk-group]')?.querySelector('[cmdk-group-heading]')?.textContent`)).toBe(false);
+    await p.key("Backspace");
+    await p.waitFor(`!${palette}.querySelector('.command-menu-title')`);
+    await p.key("Escape");
   });
 });
 
