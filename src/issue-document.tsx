@@ -1,11 +1,19 @@
 /* oxlint-disable react/immutability -- Session callbacks and mutable imperative models are intentionally owned outside React state. */
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 import { FavoriteButton } from "./favorite-button";
-import { createContext, use, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, use, useEffect, useRef, useState, type ReactNode } from "react";
 import { Debouncer } from "@tanstack/pacer";
 import { Icon, StatusIcon } from "./icons";
 import { Menu } from "./menu";
-import { Confirm, MenuSurface } from "./menu-surface";
+import { MenuSurface } from "./menu-surface";
+import { Button, IconButton } from "./button";
+import { ConfirmDialog, Dialog } from "./dialog";
+import { EmptyState } from "./empty-state";
+import { AutoResizingTextArea } from "./field";
+import { chordKeys } from "./keycap";
+import { Tabs } from "./tabs";
+import { Text } from "./text";
+import "./issue-document.css";
 import { DocumentBodyEditor } from "./rich-editor-loader";
 import { Adf } from "./adf";
 import { statusById } from "./board-catalog";
@@ -31,7 +39,10 @@ import { ActionMenu, type ActionEntry } from "./action-menu";
 import { useCommand } from "./commands";
 import { emojiOptions } from "./reactions";
 import { ReminderMenu, reminderEntries } from "./reminders";
+/** The header breadcrumb, the favorite star and the icon-picker cells: no primitive yet (see the note at each). */
 const BUTTON = "rounded px-2 py-1.5 text-[13px] text-fg-2 hover:bg-hover";
+/** A registry hotkey as the tooltip's key text ("Mod+Shift+," → "⌘⇧,"). */
+const keys = (hotkey: string) => chordKeys(hotkey).join("");
 type Draft = { title: string; body: AdfDocument };
 export function IssueDocument({ issue, id }: { issue: Issue; id: string }) {
   useEffect(
@@ -50,12 +61,15 @@ export function IssueDocument({ issue, id }: { issue: Issue; id: string }) {
   return resource ? (
     <DocumentEditor key={id} issue={issue} resource={resource} />
   ) : (
-    <div className="flex flex-1 flex-col items-center justify-center gap-4">
-      <p role="status">Document not found</p>
-      <button className={BUTTON} onClick={() => navigate({ document: null })}>
-        Back to issue
-      </button>
-    </div>
+    <EmptyState
+      role="status"
+      title="Document not found"
+      actions={
+        <Button variant="secondary" size="medium" onClick={() => navigate({ document: null })}>
+          Back to issue
+        </Button>
+      }
+    />
   );
 }
 interface DocumentContextValue {
@@ -230,55 +244,29 @@ function DocumentContent() {
 
 function DocumentTitle() {
   const { state: { draft }, actions: { update, endSession } } = useDocument();
-  const titleInput = useRef<HTMLTextAreaElement>(null);
-  useLayoutEffect(() => {
-    const input = titleInput.current;
-    if (!input) return;
-    const resize = () => {
-      input.style.height = "0px";
-      input.style.height = `${input.scrollHeight}px`;
-      input.scrollTop = 0;
-    };
-    resize();
-    let width = -1,
-      frame = 0;
-    // Observe width only and resize outside the observer delivery, avoiding height feedback.
-    const observer = new ResizeObserver((entries) => {
-      const next = entries[0]?.contentRect.width;
-      if (next === undefined || next === width) return;
-      width = next;
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(resize);
-    });
-    if (input.parentElement) observer.observe(input.parentElement);
-    return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-    };
-    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- The title's text changes its height, so a new title resizes the input.
-  }, [draft.title]);
+  // The title is a one-line-minimum autosizing field in the document's own type (issue-document.css), not an input box.
   return (
-    <textarea
-      ref={titleInput}
-      rows={1}
-      autoFocus={!draft.title}
-      aria-label="Document title"
-      placeholder="New document"
-      value={draft.title}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-          event.preventDefault();
-          document.getElementById("resource-document")?.focus();
-        }
-        if (event.key === "Escape") {
-          event.stopPropagation();
-          event.currentTarget.blur();
-        }
-      }}
-      onChange={(event) => update({ title: event.target.value.replace(/[\r\n]+/g, " ") })}
-      onBlur={endSession}
-      className="mb-6 block w-full resize-none overflow-hidden bg-transparent text-[24px] leading-[32px] tracking-[-0.16px] [font-variation-settings:'opsz'_32] font-semibold outline-none"
-    />
+    <div className="document-title mb-6">
+      <AutoResizingTextArea
+        rows={1}
+        autoFocus={!draft.title}
+        aria-label="Document title"
+        placeholder="New document"
+        value={draft.title}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            document.getElementById("resource-document")?.focus();
+          }
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            event.currentTarget.blur();
+          }
+        }}
+        onChange={(event) => update({ title: event.target.value.replace(/[\r\n]+/g, " ") })}
+        onBlur={endSession}
+      />
+    </div>
   );
 }
 
@@ -453,6 +441,7 @@ function DocumentHeader() {
         ref={root}
         className="document-header flex h-11 shrink-0 items-center gap-1 border-b border-line px-3 text-[13px] text-fg-3"
       >
+        {/* A breadcrumb: Linear's Breadcrumbs has no primitive yet (P0 left it out), so it keeps its own frame. */}
         <button
           aria-label="Back to issue"
           title={issue.summary}
@@ -465,26 +454,29 @@ function DocumentHeader() {
         <span aria-hidden>›</span>
         <Icon name="file" size={14} />
         <span className="min-w-0 truncate text-fg-2">{title}</span>
+        {/* FavoriteButton renders its own <button> and takes a frame class; moving it onto IconButton is its owner's change. */}
         <FavoriteButton id={`document:${resource.id}`} noun="document" size={15} className={BUTTON} />
-        <button
-          aria-label="Document options"
+        <IconButton
+          label="Document options"
           aria-haspopup="dialog"
-          className={BUTTON}
+          aria-expanded={!!options}
           onClick={(e) => {
             flush();
             setOptions(e.currentTarget);
           }}
         >
           <Icon name="dots" />
-        </button>
+        </IconButton>
         <span className="min-w-0 flex-1" />
-        <button
+        <Button
+          variant="borderless"
+          size="medium"
+          icon={<Icon name="display" />}
           aria-label={`Document display options and metadata; Edited ${new Date(resource.updated).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`}
+          aria-expanded={!!metadata}
           title={`Edited by ${resource.editedBy?.name ?? resource.owner?.name ?? ME.name} at ${new Date(resource.updated).toLocaleString()}`}
-          className={`${BUTTON} flex shrink-0 items-center gap-1`}
           onClick={(e) => setMetadata(e.currentTarget)}
         >
-          <Icon name="display" size={14} />
           <span className="hidden sm:inline">
             Edited{" "}
             {new Date(resource.updated).toLocaleDateString(undefined, {
@@ -492,17 +484,18 @@ function DocumentHeader() {
               day: "numeric",
             })}
           </span>
-        </button>
-        <button aria-label="Copy document URL" className={BUTTON} onClick={() => void copy("url")}>
+        </Button>
+        <IconButton label="Copy document URL" shortcut={keys("Mod+Shift+,")} onClick={() => void copy("url")}>
           <Icon name="link" />
-        </button>
-        <button
-          aria-label="Change document subscribers"
-          className={BUTTON}
+        </IconButton>
+        <IconButton
+          label="Change document subscribers"
+          shortcut={keys("Mod+Shift+S")}
+          aria-expanded={people?.kind === "subscribers"}
           onClick={(e) => setPeople({ anchor: e.currentTarget, kind: "subscribers" })}
         >
           <Icon name="bell" />
-        </button>
+        </IconButton>
       </header>
       {options && (
         <ActionMenu
@@ -539,24 +532,30 @@ function DocumentHeader() {
             />
             Show author names
           </label>
-          <p className="px-2 pt-3 text-[12px] text-fg-3">Owned by</p>
-          <button
+          <Text as="p" variant="mini" color="muted" className="px-2 pt-3">
+            Owned by
+          </Text>
+          <Button
+            variant="borderless"
+            size="medium"
             aria-label={`Owned by: ${resource.owner?.name ?? ME.name}. Change document owner`}
-            className={`${BUTTON} w-full text-left`}
+            className="w-full justify-start"
             onClick={(e) => {
               setMetadata(null);
               setPeople({ anchor: root.current ?? e.currentTarget, kind: "owner" });
             }}
           >
             {resource.owner?.name ?? ME.name}
-          </button>
-          <p className="p-2 text-[12px] text-fg-3">
+          </Button>
+          <Text as="p" variant="mini" color="muted" className="p-2">
             Last edit by {resource.editedBy?.name ?? resource.owner?.name ?? ME.name}
             <br />
             <time dateTime={resource.updated}>{new Date(resource.updated).toLocaleString()}</time>
-          </p>
-          <button
-            className={`${BUTTON} w-full text-left`}
+          </Text>
+          <Button
+            variant="borderless"
+            size="medium"
+            className="w-full justify-start"
             onClick={() => {
               flush();
               setMetadata(null);
@@ -564,7 +563,7 @@ function DocumentHeader() {
             }}
           >
             Show document history
-          </button>
+          </Button>
         </MenuSurface>
       )}
       {people && (
@@ -590,10 +589,10 @@ function DocumentHeader() {
         />
       )}
       {deleting && (
-        <Confirm
+        <ConfirmDialog
           title={`Delete "${title}"?`}
-          detail="The document is removed from this issue. You can undo this."
-          action="Delete"
+          description="The document is removed from this issue. You can undo this."
+          confirmLabel="Delete"
           onConfirm={() => {
             setDeleting(false);
             flush();
@@ -718,6 +717,7 @@ function DocumentIcon({ resource, issue }: { resource: IssueResource; issue: Iss
   };
   return (
     <>
+      {/* An 18px glyph in a 24px box: IconButton's small size draws icons at 14px. */}
       <button
         aria-label="Document icon"
         className="mx-1 mt-1.5 mb-3 grid size-6 place-items-center rounded hover:bg-hover"
@@ -737,22 +737,19 @@ function DocumentIcon({ resource, issue }: { resource: IssueResource; issue: Iss
           close={() => setAnchor(null)}
           width={320}
         >
-          <div className="mb-2 flex gap-1" role="tablist" aria-label="Icon type">
-            {(["icons", "emojis"] as const).map((value) => (
-              <button
-                role="tab"
-                aria-selected={tab === value}
-                key={value}
-                className={`${BUTTON} aria-selected:bg-sel`}
-                onClick={() => {
-                  setTab(value);
-                  setQuery("");
-                }}
-              >
-                {value === "icons" ? "Icons" : "Emojis"}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            value={tab}
+            onValueChange={(value) => {
+              setTab(value as typeof tab);
+              setQuery("");
+            }}
+          >
+            <Tabs.List aria-label="Icon type" className="mb-2">
+              <Tabs.Tab value="icons">Icons</Tabs.Tab>
+              <Tabs.Tab value="emojis">Emojis</Tabs.Tab>
+            </Tabs.List>
+          </Tabs>
+          {/* A menu's search row (borderless, underlined), not a form field; Menu.Input needs a cmdk Menu around it. */}
           <input
             autoFocus
             aria-label="Search document icons"
@@ -783,6 +780,7 @@ function DocumentIcon({ resource, issue }: { resource: IssueResource; issue: Iss
               />
             </div>
           )}
+          {/* Picker cells: a 20px icon or a 24px emoji fills the cell, which no Button size draws. */}
           <div className="grid grid-cols-5 gap-1">
             {tab === "icons"
               ? documentIcons
@@ -840,35 +838,32 @@ function DocumentHistory({
     [selected, setSelected] = useState(0),
     version = versions[selected] ?? current;
   return (
-    <MenuSurface
-      label={`History for ${resource.title || "New document"}`}
-      close={close}
-      width={1100}
-    >
-      <div className="mb-4 flex items-center gap-2">
-        <h2 className="min-w-0 flex-1 truncate font-medium">
+    <Dialog label={`History for ${resource.title || "New document"}`} close={close} width={1100}>
+      <Dialog.Header className="mb-4">
+        <Dialog.Title className="min-w-0 flex-1 truncate">
           History for {resource.title || "New document"}
-        </h2>
-        <button aria-label="Close document history" className={BUTTON} onClick={close}>
-          <Icon name="close" />
-        </button>
-      </div>
+        </Dialog.Title>
+        <Dialog.Close label="Close document history" />
+      </Dialog.Header>
       <div className="document-history-grid grid min-h-64 grid-cols-[minmax(0,1fr)_240px] gap-4">
         <div className="min-w-0">
           <h3 className="mb-4 text-[24px] font-semibold">{version.title || "New document"}</h3>
           <div aria-label="Document version content" className="rich-content">
             <Adf node={version.body} issueKey={issue.key} attachments={issue.attachments} />
           </div>
-          <div className="mt-6 flex items-center justify-between gap-3 text-[12px] text-fg-3">
-            <time dateTime={version.at}>{new Date(version.at).toLocaleString()}</time>
-            <button
+          <div className="mt-6 flex items-center justify-between gap-3">
+            <Text variant="mini" color="muted">
+              <time dateTime={version.at}>{new Date(version.at).toLocaleString()}</time>
+            </Text>
+            <Button
+              variant="secondary"
+              size="medium"
               disabled={selected === 0}
               aria-label={
                 selected === 0
                   ? "This is the current version, you cannot restore it"
                   : "Restore this document version"
               }
-              className={`${BUTTON} border border-line-2 disabled:opacity-40`}
               onClick={() => {
                 actions.editResource(
                   issue.key,
@@ -881,10 +876,11 @@ function DocumentHistory({
               }}
             >
               Restore
-            </button>
+            </Button>
           </div>
         </div>
         <div className="space-y-1 border-l border-line-2 pl-3" aria-label="Document versions">
+          {/* Two-line version rows (time, then author): Button is a single 28px line. */}
           {versions.map((version, index) => (
             <button
               key={`${version.at}:${index}`}
@@ -893,12 +889,18 @@ function DocumentHistory({
               onClick={() => setSelected(index)}
             >
               <time dateTime={version.at}>{new Date(version.at).toLocaleString()}</time>
-              {index === 0 && <span className="ml-2 text-[11px] text-fg-3">Current</span>}
-              <span className="block text-[12px] text-fg-3">{version.author.name}</span>
+              {index === 0 && (
+                <Text variant="micro" color="muted" className="ml-2">
+                  Current
+                </Text>
+              )}
+              <Text variant="mini" color="muted" className="block">
+                {version.author.name}
+              </Text>
             </button>
           ))}
         </div>
       </div>
-    </MenuSurface>
+    </Dialog>
   );
 }

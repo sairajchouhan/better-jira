@@ -1,0 +1,19 @@
+/* The document title: AutoResizingTextArea's sizing (field-sizing, or the hidden copy) in the document's 24px heading
+   type, one line at least, no input frame. Both the textarea and its sizer copy need the same type to measure alike. */
+.document-title .ui-input {
+  min-height: 1lh;
+  max-height: none;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 32px;
+  letter-spacing: -0.16px;
+  font-variation-settings: "opsz" 32;
+}
+.document-title .ui-input:focus-visible {
+  outline: none;
+}
