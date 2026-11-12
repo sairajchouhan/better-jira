@@ -118,3 +118,10 @@ test("children index is shared by snapshot identity and never reordered by a vie
   expect(childrenByParent(next).get("ROOT")).toEqual([second]);
   expect(childrenByParent(next).get("SECOND")?.map((i) => i.key)).toEqual(["FIRST"]);
 });
+
+test("BJ-50: local manual order takes precedence over Jira rank without flattening the tree", () => {
+  const issues = [issue("P"), issue("A", "P", "todo", "a"), issue("B", "P", "todo", "b"), issue("C", "A")];
+  const rows = subIssueRows("P", issues, defaultSubIssueDisplay(), status, Date.now(), false, ["B", "A"]);
+  expect(rows.rows.map(row => [row.issue.key, row.depth])).toEqual([["B", 0], ["A", 0], ["C", 1]]);
+  expect(issues[1]!.rank).toBe("a");
+});

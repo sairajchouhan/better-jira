@@ -37,14 +37,17 @@ export function subIssueRows(
   status: Status,
   now = Date.now(),
   revealCompleted = false,
+  manualOrder: readonly string[] = [],
 ) {
   const byKey = Array.isArray(issues) ? new Map(issues.map((i) => [i.key, i])) : issues;
   const index = childrenByParent(byKey);
   const children = new Map<string, Issue[]>();
+  const positions = new Map(manualOrder.map((key, i) => [key, i]));
   const compare = (a: Issue, b: Issue) => {
     let cmp = 0;
     switch (display.ordering) {
       case "manual":
+        if (positions.has(a.key) || positions.has(b.key)) return (positions.get(a.key) ?? Infinity) - (positions.get(b.key) ?? Infinity);
         cmp = (a.rank ?? "") < (b.rank ?? "") ? -1 : (a.rank ?? "") > (b.rank ?? "") ? 1 : 0;
         break;
       case "title":

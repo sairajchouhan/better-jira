@@ -245,10 +245,11 @@ export function SubIssues({ issue }: { issue: Issue }) {
     return counts;
     // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
   }, [all, boards]);
+  const [manualOrder, setManualOrder] = useStoredState<string[]>(`${namespace}:manual-order:v1:${issue.key}`, raw => Array.isArray(raw) ? raw.filter((key): key is string => typeof key === "string") : [], []);
   const model = useMemo(
-    () => subIssueRows(issue.key, all, display, status, Date.now(), reveal),
+    () => subIssueRows(issue.key, all, display, status, Date.now(), reveal, manualOrder),
     // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
-    [issue.key, all, boards, display, reveal],
+    [issue.key, all, boards, display, reveal, manualOrder],
   );
   const change = (patch: Partial<SubIssueDisplay>) => {
     if (
@@ -355,6 +356,13 @@ export function SubIssues({ issue }: { issue: Issue }) {
             display={display}
             boards={boards}
             progress={progress.get(child.key)}
+            move={display.ordering === "manual" ? (direction) => {
+              const siblings = model.rows.filter(row => row.issue.parent === child.parent).map(row => row.issue.key);
+              const from = siblings.indexOf(child.key), to = from + direction;
+              if (to < 0 || to >= siblings.length) return;
+              [siblings[from], siblings[to]] = [siblings[to]!, siblings[from]!];
+              setManualOrder([...manualOrder.filter(key => !siblings.includes(key)), ...siblings]);
+            } : undefined}
             active={rowMenu?.key === child.key}
             openMenu={(anchor, point) =>
               setRowMenu({ anchor, key: child.key, point })
@@ -586,6 +594,7 @@ const continues = (rows: { depth: number }[], index: number, level: number) => {
 
 function SubIssueRow({
   child,
+  move,
   depth,
   contextOnly,
   index,
@@ -597,6 +606,7 @@ function SubIssueRow({
   openMenu,
 }: {
   child: Issue;
+  move?: (direction: -1 | 1) => void;
   depth: number;
   contextOnly: boolean;
   index: number;
@@ -686,6 +696,7 @@ function SubIssueRow({
           </Fragment>
         );
       })}
+      {move && <><IconButton label={`Move ${child.key} up`} onClick={() => move(-1)} size="small">↑</IconButton><IconButton label={`Move ${child.key} down`} onClick={() => move(1)} size="small">↓</IconButton></>}
       {display.properties.includes("status") &&
         control("status", status(child).name, <StatusIcon status={status(child)} />)}
       {display.properties.includes("priority") &&
