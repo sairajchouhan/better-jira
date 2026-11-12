@@ -203,15 +203,14 @@ export function CreateIssue() {
         }}
       >
         <Dialog.Header className="mb-3">
-          <span className="flex-1 truncate">
+          <Text variant="mini" color="muted" wrap="truncate" className="flex-1">
             {board.name} ›{" "}
             {initial.parent ? `Sub-issue of ${initial.parent}` : "New issue"}
-          </span>
+          </Text>
           <IconButton
             type="button"
             label={expanded ? "Collapse editor" : "Expand editor"}
             onClick={() => setExpanded(!expanded)}
-
             variant="borderless"
             size="medium"
           >
@@ -380,7 +379,6 @@ export function CreateIssue() {
           <Button
             type="submit"
             disabled={!title.trim() || filesBusy || !!noParentType}
-
             variant="primary"
             size="medium"
           >
@@ -628,7 +626,6 @@ export function BoardDetails({
                       values: [group.id],
                     })
               }
-
               variant="borderless"
               size="medium"
               className="mb-1 w-full justify-start gap-2"
@@ -638,7 +635,12 @@ export function BoardDetails({
             </Button>
           );
         })}
-      {!issues.length && <p className="text-fg-3">No issues in this view.</p>}
+      {/* This sidebar empty hint is inline copy, not a viewport EmptyState. */}
+      {!issues.length && (
+        <Text as="p" variant="small" color="muted">
+          No issues in this view.
+        </Text>
+      )}
     </aside>
   );
 }
@@ -695,7 +697,6 @@ export function GroupMenu({
           setKeyboard(e.detail === 0);
           setAnchor(anchor ? null : e.currentTarget);
         }}
-
         variant="borderless"
         size="medium"
       >
@@ -824,6 +825,7 @@ export function Attachments({
     [error, setError] = useState("");
   return (
     <Text className="mt-3" as="div" variant="mini" color="inherit">
+      {/* Native file selection is outside the text-field primitive family. */}
       <input
         ref={file}
         type="file"
@@ -857,7 +859,6 @@ export function Attachments({
         disabled={busy}
         aria-label="Attach images, files, or videos"
         onClick={() => file.current?.click()}
-
         variant="borderless"
         size="medium"
       >
@@ -1313,7 +1314,7 @@ export function AddBoard() {
             it.
           </Text>
         )}
-        <div className="mt-4 flex justify-end gap-2">
+        <Dialog.Footer>
           <Button
             type="button"
             onClick={close}
@@ -1330,7 +1331,7 @@ export function AddBoard() {
           >
             {busy ? "Adding…" : "Add board"}
           </Button>
-        </div>
+        </Dialog.Footer>
       </form>
     </Dialog>
   );

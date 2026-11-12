@@ -651,6 +651,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
           close={() => setSettings(null)}
           width={300}
         >
+          {/* Native selects have no matching primitive in this contract. */}
           <label className="mb-3 flex items-center justify-between">
             Ordering
             <select

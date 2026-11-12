@@ -54,7 +54,6 @@ export function DateInput({
             key={preset}
             type="button"
             onClick={() => change(preset)}
-
             variant="borderless"
             size="small"
           >

@@ -1,3 +1,4 @@
+import { LoadingState } from "./empty-state";
 import { Text } from "./text";
 import { Dialog, ConfirmDialog } from "./dialog";
 import { Field, TextInput } from "./field";
@@ -175,7 +176,7 @@ export function ResourceForm({
             {error}
           </Text>
         )}
-        <div className="mt-3 flex justify-end gap-2">
+        <Dialog.Footer>
           <Button
             type="button"
             onClick={close}
@@ -187,7 +188,7 @@ export function ResourceForm({
           <Button type="submit" variant="primary" size="medium">
             {resource ? "Save" : label}
           </Button>
-        </div>
+        </Dialog.Footer>
       </form>
     </Dialog>
   );
@@ -306,7 +307,6 @@ export function IssueResources({ issue }: { issue: Issue }) {
           }
           aria-expanded={!collapsed}
           onClick={() => setCollapsed(!collapsed)}
-
           variant="borderless"
           size="medium"
           className="mr-auto"
@@ -322,7 +322,6 @@ export function IssueResources({ issue }: { issue: Issue }) {
           label="Add resource to issue"
           aria-expanded={!!menu}
           onClick={(e) => setMenu(e.currentTarget)}
-
           variant="borderless"
           size="medium"
         >
@@ -401,9 +400,9 @@ export function IssueResources({ issue }: { issue: Issue }) {
             </time>
             <IconButton
               label={`Options for ${resource.title || "New document"}`}
+              className="-ml-1 shrink-0 opacity-0 group-hover/resource:opacity-100 focus:opacity-100 aria-expanded:opacity-100"
               aria-expanded={options?.resource.id === resource.id}
               onClick={(e) => setOptions({ anchor: e.currentTarget, resource })}
-
               variant="borderless"
               size="medium"
             >
@@ -489,13 +488,7 @@ const Document = lazy(() =>
 );
 export function IssueDocument(props: { issue: Issue; id: string }) {
   return (
-    <Suspense
-      fallback={
-        <p role="status" className="p-6 text-fg-3">
-          Loading document…
-        </p>
-      }
-    >
+    <Suspense fallback={<LoadingState>Loading document…</LoadingState>}>
       <Document {...props} />
     </Suspense>
   );
