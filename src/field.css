@@ -48,19 +48,6 @@
     height: 48px;
   }
 
-  /* A plain textarea: 64px, no resize handle. */
-  .ui-input:is(textarea) {
-    height: 64px;
-    resize: none;
-    line-height: 1.5;
-  }
-  .ui-input:is(textarea):is([data-size="small"], [data-size="medium"]) {
-    line-height: 1.4;
-  }
-  .ui-input:is(textarea):is([data-size="large"], [data-size="xlarge"]) {
-    border-radius: 6px;
-  }
-
   /* AutoResizingTextarea: the textarea and a hidden copy of its text share one grid cell, so the copy sets the height.
      Where `field-sizing: content` exists the browser sizes the textarea itself and the copy is dropped. */
   .ui-autosize {
@@ -76,9 +63,13 @@
     white-space: pre-wrap;
     overflow-wrap: break-word;
     line-height: 1.5;
+    resize: none;
   }
   .ui-autosize > .ui-input:is([data-size="small"], [data-size="medium"]) {
     line-height: 1.4;
+  }
+  .ui-autosize > .ui-input:is([data-size="large"], [data-size="xlarge"]) {
+    border-radius: 6px;
   }
   /* Title appearance: Linear's 24px/32px heading, shared by issue and document titles. */
   .ui-autosize[data-appearance="heading"] > .ui-input {

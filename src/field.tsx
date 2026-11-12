@@ -12,7 +12,6 @@ export const FIELD = {
   BORDER_RADIUS: 8,
   LARGE_BORDER_RADIUS: 10,
   FONT_SIZE: 13,
-  TEXTAREA_HEIGHT: 64,
   AUTOSIZE_LINES: { MIN: 3, MAX: 30 },
 } as const;
 
