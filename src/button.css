@@ -63,16 +63,16 @@
     padding: 0 18px;
   }
   /* QEe: a leading icon pulls the left padding in. */
-  .ui-button:has(> .ui-button-icon:first-child) {
+  .ui-button:not([data-shape="icon"]):has(> .ui-button-icon:first-child) {
     padding: 0 12px 0 10px;
   }
-  .ui-button[data-size="small"]:has(> .ui-button-icon:first-child) {
+  .ui-button[data-size="small"]:not([data-shape="icon"]):has(> .ui-button-icon:first-child) {
     padding: 0 8px 0 6px;
   }
-  .ui-button[data-size="medium"]:has(> .ui-button-icon:first-child) {
+  .ui-button[data-size="medium"]:not([data-shape="icon"]):has(> .ui-button-icon:first-child) {
     padding: 0 10px 0 8px;
   }
-  .ui-button[data-size="large"]:has(> .ui-button-icon:first-child) {
+  .ui-button[data-size="large"]:not([data-shape="icon"]):has(> .ui-button-icon:first-child) {
     padding: 0 16px 0 14px;
   }
   /* qEe: icon-only buttons are square. */
