@@ -9,6 +9,15 @@ import {
 } from "react";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { Avatar } from "./avatar";
+import { Button, IconButton } from "./button";
+import { CountBadge } from "./count-badge";
+import { EmptyState, LoadingState } from "./empty-state";
+import { Field, TextInput } from "./field";
+import { FilterChip } from "./filter-chip";
+import { Tabs } from "./tabs";
+import { Text } from "./text";
+import { Toast } from "./toast";
+import { toasts } from "./toast-queue";
 import { statusById } from "./board-catalog";
 import { Icon, StatusIcon, type IconName } from "./icons";
 import {
@@ -68,11 +77,34 @@ async function send(body: object) {
   return reply as { groups?: string[] } | null;
 }
 
+let inboxToastId: string | undefined;
 const inbox = createInboxStore({
   queryClient,
   get,
   set,
-  ui,
+  ui: {
+    send(event) {
+      if (event.type === "toast.show") {
+        if (inboxToastId) toasts.dismiss(inboxToastId);
+        inboxToastId = toasts.show(
+          <Toast data-toast>
+            <Toast.Title>{event.text}</Toast.Title>
+            <Toast.Actions>
+              <Toast.Action onClick={() => inbox.undoInboxToast()}>
+                Undo
+              </Toast.Action>
+              <Toast.Close />
+            </Toast.Actions>
+          </Toast>,
+          { duration: 5000 },
+        );
+      } else if (event.type === "toast.dismiss") {
+        if (inboxToastId) toasts.dismiss(inboxToastId);
+      } else {
+        ui.send(event);
+      }
+    },
+  },
   statusOf,
   read: (name, fallback) =>
     readStored(
@@ -228,8 +260,6 @@ function useSelectedRow() {
 }
 // --- UI ---
 
-const HEADER_BTN =
-  "grid size-7 place-items-center rounded-full text-fg-2 hover:bg-hover aria-pressed:bg-sel aria-pressed:text-fg aria-expanded:bg-hover";
 const KIND_ICON: Partial<Record<InboxItem["kind"], IconName>> = {
   mentioned: "at",
   comment: "comment",
@@ -272,7 +302,7 @@ function Row({
 }) {
   const issue = useStore((s) => s.issues.get(item.key));
   const status = issue && statusOf(issue.key);
-  const ink = item.unread ? "text-fg" : "text-fg-3";
+  const ink = item.unread ? "title" : "muted";
   return (
     <a
       href={item.url}
@@ -307,13 +337,15 @@ function Row({
     >
       <Actor item={item} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-2.5">
-        <span className={`flex min-w-0 items-center text-[13px] ${ink}`}>
+        <span className="flex min-w-0 items-center">
           {item.key && (
-            <span className="mr-1 shrink-0 font-[450] tracking-[-0.26px]">
+            <Text variant="small" color={ink} className="mr-1 shrink-0">
               {item.key}
-            </span>
+            </Text>
           )}
-          <span className="truncate font-medium">{item.title}</span>
+          <Text variant="smallPlus" color={ink} wrap="truncate">
+            {item.title}
+          </Text>
           <span className="ml-auto flex shrink-0 items-center gap-[5px] pl-1.5">
             {item.unread && (
               <span
@@ -331,9 +363,13 @@ function Row({
             ) : null}
           </span>
         </span>
-        <span className="flex min-w-0 gap-1.5 text-[12px] font-[450] text-fg-3">
-          <span className="truncate">{describe(item)}</span>
-          <span className="ml-auto shrink-0">{shortAgo(item.time, now)}</span>
+        <span className="flex min-w-0 gap-1.5">
+          <Text variant="mini" color="muted" wrap="truncate">
+            {describe(item)}
+          </Text>
+          <Text variant="mini" color="muted" className="ml-auto shrink-0">
+            {shortAgo(item.time, now)}
+          </Text>
         </span>
       </span>
     </a>
@@ -454,6 +490,7 @@ function SnoozeMenu({ close }: { close: () => void }) {
   // The dialog's own error, not the footer's status line: it goes with the dialog (R2-inbox-D7).
   const [error, setError] = useState("");
   return (
+    // This command surface also hosts a searchable menu; Dialog would replace its command focus behavior.
     <MenuSurface
       label="Snooze notification until…"
       command
@@ -472,32 +509,27 @@ function SnoozeMenu({ close }: { close: () => void }) {
             snoozeRow(until);
           }}
         >
-          <input
-            type="datetime-local"
-            aria-label="Snooze until"
-            required
-            autoFocus
-            value={value}
-            onChange={(e) => (setValue(e.target.value), setError(""))}
-            aria-invalid={!!error || undefined}
-            aria-describedby={error ? "snooze-error" : undefined}
-            className="flex-1 rounded border border-line-2 bg-transparent px-2 py-1 text-[13px] text-fg"
-          />
-          <button
-            type="submit"
-            className="rounded bg-accent px-3 py-1 text-[13px] text-white"
-          >
-            Snooze
-          </button>
-          {error && (
-            <p
-              id="snooze-error"
-              role="alert"
-              className="basis-full text-[12px] text-danger"
+          <Field className="min-w-0 flex-1">
+            <Field.Label className="sr-only">Snooze until</Field.Label>
+            <TextInput
+              type="datetime-local"
+              required
+              autoFocus
+              value={value}
+              onChange={(e) => (setValue(e.target.value), setError(""))}
+              aria-invalid={!!error || undefined}
+              className="w-full"
+            />
+            <Field.Description
+              role={error ? "alert" : undefined}
+              className="text-[12px] text-danger"
             >
               {error}
-            </p>
-          )}
+            </Field.Description>
+          </Field>
+          <Button type="submit" size="normal" variant="primary">
+            Snooze
+          </Button>
         </form>
       ) : (
         // Linear's snooze options are an action menu (IB): the first choice is highlighted, arrows move, typing filters.
@@ -529,7 +561,8 @@ function SnoozeMenu({ close }: { close: () => void }) {
   );
 }
 
-/** Linear keeps display controls in their own panel, separate from notification action menus. */
+/** Linear keeps display controls in their own panel, separate from notification action menus.
+ * Toggle/Select already own their control geometry; the primitive contract has no switch replacement. */
 function InboxDisplayOptions({ close }: { close: () => void }) {
   const v = useView();
   return (
@@ -647,31 +680,28 @@ function FilterChips({ v }: { v: InboxView }) {
       {active.map(([field, name]) => {
         const values = v.filters[field]!;
         return (
-          <span
-            key={field}
-            data-inbox-chip={field}
-            className="flex h-6 items-center gap-1 rounded-full border-[0.5px] border-line-2 pr-1 pl-2 text-[12px] text-fg-3"
-          >
-            {name} {values.length > 1 ? "is any of" : "is"}
-            <span className="text-fg-2">{values.join(", ")}</span>
-            <button
-              aria-label={`Remove ${name} filter`}
+          <FilterChip key={field} data-inbox-chip={field}>
+            <FilterChip.Label>
+              {name} {values.length > 1 ? "is any of" : "is"}
+            </FilterChip.Label>
+            <FilterChip.Value>{values.join(", ")}</FilterChip.Value>
+            <FilterChip.Remove
+              label={`Remove ${name} filter`}
               onClick={() =>
                 changeView({ filters: { ...v.filters, [field]: [] } })
               }
-              className="grid size-4 place-items-center rounded-full hover:bg-hover hover:text-fg"
-            >
-              <Icon name="close" size={10} />
-            </button>
-          </span>
+            />
+          </FilterChip>
         );
       })}
-      <button
+      <Button
+        variant="muted"
+        size="small"
         onClick={clearFilters}
-        className="ml-auto text-[12px] text-fg-3 hover:text-fg"
+        className="ml-auto"
       >
         Clear
-      </button>
+      </Button>
     </div>
   );
 }
@@ -736,82 +766,71 @@ export function InboxList() {
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Reobserve the load sentinel after a page appends rows.
   }, [hasNextPage, isFetchingNextPage, pages, fetchNextPage]);
   const filtered = hasFilters(v) || v.unreadOnly;
+  const overlay = useStore((s) => s.overlay);
   return (
     <section
       aria-label="Inbox"
       className="flex w-[416px] shrink-0 flex-col border-r-[0.5px] border-frame max-md:w-full"
     >
       <header className="flex h-11 shrink-0 items-center gap-1 border-b-[0.5px] border-frame px-2">
-        <h2 className="px-2.5 text-[13px] font-medium text-fg-2">Inbox</h2>
-        <button
+        <Text as="h2" variant="smallPlus" color="base" className="px-2.5">
+          Inbox
+        </Text>
+        <IconButton
           id="inbox-actions"
-          aria-label="Notification actions"
-          aria-expanded={useStore((s) => s.overlay === "inbox-actions")}
+          label="Notification actions"
+          aria-expanded={overlay === "inbox-actions"}
           onClick={() =>
             ui.send({ type: "overlay.open", overlay: "inbox-actions" })
           }
-          className={HEADER_BTN}
         >
           <Icon name="dots" />
-        </button>
+        </IconButton>
         {v.priorityInbox && (
-          <span
-            role="tablist"
-            aria-label="Priority inbox"
-            className="ml-1 flex gap-1"
+          <Tabs
+            value={v.tab}
+            onValueChange={(tab) => showTab(tab as InboxView["tab"])}
           >
-            {(
-              [
-                ["direct", "Priority", "Alt+1"],
-                ["watching", "Other", "Alt+2"],
-              ] as const
-            ).map(([tab, label, key]) => (
-              <button
-                key={tab}
-                role="tab"
-                aria-selected={v.tab === tab}
-                title={`${label} (${key.replace("Alt+", "⌥")})`}
-                onClick={() => showTab(tab)}
-                className="h-7 rounded-full px-2.5 text-[12px] font-medium text-fg-3 aria-selected:bg-sel aria-selected:text-fg"
-              >
-                {label}
-              </button>
-            ))}
-          </span>
+            <Tabs.List aria-label="Priority inbox" className="ml-1">
+              <Tabs.Tab value="direct" title="Priority (⌥1)">
+                Priority
+              </Tabs.Tab>
+              <Tabs.Tab value="watching" title="Other (⌥2)">
+                Other
+              </Tabs.Tab>
+            </Tabs.List>
+          </Tabs>
         )}
         <span className="flex-1" />
-        <button
-          aria-label={v.unreadOnly ? "Show read" : "Show unreads only"}
-          title={v.unreadOnly ? "Show read" : "Show unreads only"}
+        <IconButton
+          label={v.unreadOnly ? "Show read" : "Show unreads only"}
           aria-pressed={v.unreadOnly}
           onClick={() => changeView({ unreadOnly: !v.unreadOnly })}
-          className={HEADER_BTN}
         >
           <Icon name="inbox" />
-        </button>
-        <button
+        </IconButton>
+        <IconButton
           id="inbox-filter"
-          aria-label="Add filter"
-          title={`Add filter (${shortcutLabel("filter")})`}
+          label="Add filter"
+          shortcut={shortcutLabel("filter")}
+          aria-expanded={overlay === "inbox-filter"}
           aria-pressed={hasFilters(v)}
           onClick={() =>
             ui.send({ type: "overlay.open", overlay: "inbox-filter" })
           }
-          className={HEADER_BTN}
         >
           <Icon name="filter" />
-        </button>
-        <button
+        </IconButton>
+        <IconButton
           id="inbox-display"
-          aria-label="Display options"
-          title="Display options"
+          label="Display options"
+          aria-expanded={overlay === "inbox-display"}
           onClick={() =>
             ui.send({ type: "overlay.open", overlay: "inbox-display" })
           }
-          className={HEADER_BTN}
         >
           <Icon name="display" />
-        </button>
+        </IconButton>
       </header>
       <FilterChips v={v} />
       <div
@@ -821,14 +840,17 @@ export function InboxList() {
       >
         {groups.map((group) => [
           group.label && (
-            <div
+            <Text
+              as="div"
+              variant="miniPlus"
+              color="muted"
               key={`group-${group.label}`}
               data-inbox-group={group.label}
-              className="flex gap-1.5 px-4 pt-3 pb-1 text-[12px] font-medium text-fg-3"
+              className="flex gap-1.5 px-4 pt-3 pb-1"
             >
               {group.label}
-              <span className="font-[450]">{group.rows.length}</span>
-            </div>
+              <CountBadge>{group.rows.length}</CountBadge>
+            </Text>
           ),
           ...group.rows.map((item) => (
             <Row
@@ -840,38 +862,43 @@ export function InboxList() {
             />
           )),
         ])}
-        {!rows.length && (
-          <div
-            role="status"
-            className="grid h-full place-items-center text-[13px] text-fg-3"
-          >
-            {error ? (
-              <span className="text-center">
-                {error.message}
-                <button
-                  className="mt-2 block w-full text-fg-2 underline"
+        {!rows.length &&
+          (error ? (
+            <EmptyState
+              role="status"
+              className="h-full"
+              title={error.message}
+              actions={
+                <Button
+                  variant="secondary"
+                  size="medium"
                   onClick={() => void refetch()}
                 >
                   Retry
-                </button>
-              </span>
-            ) : isPending || isFetchingNextPage ? (
-              "Loading notifications…"
-            ) : items.length && filtered ? (
-              v.unreadOnly && !hasFilters(v) ? (
-                "No unreads"
-              ) : (
-                "No matching notifications"
-              )
-            ) : (
-              "No notifications"
-            )}
-          </div>
-        )}
+                </Button>
+              }
+            />
+          ) : isPending || isFetchingNextPage ? (
+            <LoadingState className="h-full">
+              Loading notifications…
+            </LoadingState>
+          ) : (
+            <EmptyState
+              role="status"
+              className="h-full"
+              title={
+                items.length && filtered
+                  ? v.unreadOnly && !hasFilters(v)
+                    ? "No unreads"
+                    : "No matching notifications"
+                  : "No notifications"
+              }
+            />
+          ))}
         {rows.length > 0 && isFetchingNextPage && (
-          <div role="status" className="py-2 text-center text-[12px] text-fg-3">
+          <LoadingState className="py-2">
             Loading older notifications…
-          </div>
+          </LoadingState>
         )}
         <div ref={end} data-inbox-end aria-hidden className="h-px" />
       </div>
@@ -894,22 +921,20 @@ export function InboxIssueActions() {
   if (!row) return null;
   return (
     <>
-      <button
-        aria-label="Snooze notification"
-        title={`Snooze notification (${shortcutLabel("inbox-snooze")})`}
+      <IconButton
+        label="Snooze notification"
+        shortcut={shortcutLabel("inbox-snooze")}
         onClick={() => openSnooze()}
-        className="grid size-7 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"
       >
         <Icon name="clock" />
-      </button>
-      <button
-        aria-label="Delete notification"
-        title={`Delete notification (${shortcutLabel("inbox-backspace")})`}
+      </IconButton>
+      <IconButton
+        label="Delete notification"
+        shortcut={shortcutLabel("inbox-backspace")}
         onClick={() => deleteRow()}
-        className="grid size-7 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"
       >
         <Icon name="trash" />
-      </button>
+      </IconButton>
     </>
   );
 }
@@ -921,53 +946,69 @@ export function InboxPane() {
   if (row)
     return (
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-3 text-[12px] text-fg-3">
-          {row.key}
+        <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-3">
+          <Text variant="mini" color="muted">
+            {row.key}
+          </Text>
           <InboxIssueActions />
           {COPY.slice(0, 2).map(([kind, id]) => (
-            <button
+            <IconButton
               key={kind}
-              aria-label={`Copy issue ${kind}`}
-              title={`Copy issue ${kind} (${shortcutLabel(id)})`}
+              label={`Copy issue ${kind}`}
+              shortcut={shortcutLabel(id)}
               onClick={() => void copyRow(row, kind)}
-              className="grid size-7 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"
             >
               <Icon name={kind === "URL" ? "link" : "copy"} />
-            </button>
+            </IconButton>
           ))}
           <span className="flex-1" />
+          {/* Keep native external navigation: Button has no anchor variant in the contract. */}
           <a
             href={row.url}
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-1 hover:text-fg"
           >
-            Open in Jira <Icon name="external" />
+            <Text variant="mini" color="inherit">
+              Open in Jira
+            </Text>{" "}
+            <Icon name="external" />
           </a>
         </div>
         <div className="mx-auto w-full max-w-[680px] p-8">
-          <h1 className="text-[24px] leading-8 font-medium text-fg">
+          <Text as="h1" variant="title2">
             {row.title}
-          </h1>
-          <p className="mt-3 text-[13px] text-fg-2">{row.message}</p>
+          </Text>
+          <Text as="p" variant="small" color="base" className="mt-3">
+            {row.message}
+          </Text>
           {row.preview && (
-            <blockquote className="mt-3 rounded-lg border border-line px-3 py-2 text-[13px] text-fg-2">
-              {row.preview}
+            <blockquote className="mt-3 rounded-lg border border-line px-3 py-2">
+              <Text variant="small" color="base">
+                {row.preview}
+              </Text>
             </blockquote>
           )}
-          <p className="mt-4 text-[12px] text-fg-3">
+          <Text as="p" variant="mini" color="muted" className="mt-4">
             {missingIssueNote(
               row.key,
               new Set([...get().issues.keys()].map((k) => k.split("-")[0]!)),
             )}
-          </p>
+          </Text>
         </div>
       </div>
     );
   return (
-    <div className="grid min-w-0 flex-1 place-items-center max-md:hidden">
-      <div className="flex flex-col items-center gap-4 text-fg-3">
+    <EmptyState
+      className="min-w-0 max-md:hidden"
+      title={
+        unread > 0
+          ? `${unread} unread notification${unread === 1 ? "" : "s"}`
+          : "No notification selected"
+      }
+      icon={
         <svg
+          className="text-fg-3"
           width="105"
           height="100"
           viewBox="0 0 105 100"
@@ -979,12 +1020,7 @@ export function InboxPane() {
           <path d="M12 58 24 12a8 8 0 0 1 8-6h41a8 8 0 0 1 8 6l12 46v28a8 8 0 0 1-8 8H20a8 8 0 0 1-8-8z" />
           <path d="M12 58h24l5 9h23l5-9h24" />
         </svg>
-        <span className="text-[13px]">
-          {unread > 0
-            ? `${unread} unread notification${unread === 1 ? "" : "s"}`
-            : "No notification selected"}
-        </span>
-      </div>
-    </div>
+      }
+    />
   );
 }
