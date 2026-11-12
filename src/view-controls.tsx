@@ -1,3 +1,4 @@
+import { showNotification } from "./app-notifications";
 import "./view-toolbar.css";
 import { useActiveView, useOverlayFilters, saveOverlayToView } from "./saved-views";
 import { clearFilters, resetDisplay, setDisplay, updateRule, useViewSettings } from "./view-settings";
@@ -675,7 +676,7 @@ function FilterSaveActions({ board }: { board: Board }) {
       await saveOverlayToView();
       setSaveAnchor(null);
     } catch {
-      ui.send({ type: "toast.show", text: "Could not save view. Try again." });
+      showNotification({ text: "Could not save view. Try again." });
     } finally {
       setSaving(false);
     }

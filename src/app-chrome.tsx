@@ -5,13 +5,10 @@ import { setScope, useViewSettings } from "./view-settings";
 import { openViewEditor, ViewMenu, ViewContextMenu, ViewEditorPage } from "./view-editor";
 import { ViewFavorites, SavedViewIcon } from "./views-navigation";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { useEffect, useRef, type ReactNode } from "react";
-import { Toast } from "./toast";
-import { toasts } from "./toast-queue";
+import { useRef, type ReactNode } from "react";
 import { Icon, TypeDot } from "./icons";
 import {
   actions,
-  get,
   navigate,
   set,
   timed,
@@ -29,7 +26,6 @@ import {
   redoEdit,
   type Board,
   type Issue,
-  currentKey,
 } from "./store";
 import { BoardControls, FilterChips } from "./view-controls";
 import { Modal } from "./personal-controls";
@@ -39,7 +35,7 @@ import { Shortcut } from "./keycap";
 import { TextInput } from "./field";
 import { ConfirmDialog } from "./dialog";
 import { useCommand, focusNode } from "./commands";
-import { undoInboxToast, useInboxBadge } from "./inbox";
+import { useInboxBadge } from "./inbox";
 import { Menu } from "./menu";
 /** A shortcut's registry hotkey, for <Shortcut keys>; Help is drawn as "?", as its label always was. */
 export const hotkeyOf = (id: string) =>
@@ -231,61 +227,6 @@ function DeleteDialog({ issueKey: key }: { issueKey: string }) {
       }}
       close={close}
     />
-  );
-}
-
-/** The id the `ui` machine's toast holds in the toast queue: one slot, replaced in place by each new toast. */
-const MACHINE_TOAST = "ui-machine";
-
-/**
- * Draws the `ui` machine's toast (store writes, created issues, inbox undo, reminders) through the one toast queue. The
- * machine still owns it, with its 5s timer, rekeying and the toast shortcuts; the queue only shows it, so it never
- * times out on its own.
- */
-export function MachineToast() {
-  const toast = useStore((s) => s.toast);
-  useEffect(() => {
-    if (!toast) return toasts.dismiss(MACHINE_TOAST);
-    toasts.show(<MachineToastContent toast={toast} />, { id: MACHINE_TOAST, duration: Infinity });
-  }, [toast]);
-  return null;
-}
-
-function MachineToastContent({ toast }: { toast: NonNullable<ReturnType<typeof get>["toast"]> }) {
-  return (
-    <Toast data-toast>
-      <Toast.Title>{toast.text}</Toast.Title>
-      {toast.detail && <Toast.Description>{toast.detail}</Toast.Description>}
-      {(toast.undo || toast.key) && (
-        <Toast.Actions>
-          {toast.undo && (
-            <Toast.Action
-              onClick={() => {
-                if (toast.undo === "inbox") undoInboxToast();
-                else undoEdit();
-                ui.send({ type: "toast.dismiss" });
-              }}
-            >
-              Undo
-            </Toast.Action>
-          )}
-          {toast.key && (
-            <Toast.Action
-              onClick={() => (
-                ui.send({ type: "toast.dismiss" }),
-                navigate({
-                  selected: toast.key,
-                  panel: true,
-                  board: get().issues.get(currentKey(toast.key ?? ""))?.board,
-                })
-              )}
-            >
-              View issue
-            </Toast.Action>
-          )}
-        </Toast.Actions>
-      )}
-    </Toast>
   );
 }
 

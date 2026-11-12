@@ -23,7 +23,6 @@ import {
   QuickNavigation,
   Sidebar,
   DeleteConfirm,
-  MachineToast,
   StatusBar,
   StorageNotice,
   BoardHeader,
@@ -125,7 +124,6 @@ export function App() {
       <ReminderDelivery />
       <StorageNotice />
       <StatusBar />
-      <MachineToast />
       <ToastViewport />
       {overlay === "palette" && <CommandPalette />}
       {overlay === "search" && <IssueSearch />}

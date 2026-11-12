@@ -1,3 +1,5 @@
+import { toasts } from "./toast-queue";
+import { useSyncExternalStore } from "react";
 import { IconButton } from "./button";
 import { FutureTimeStep } from "./future-time-step";
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
@@ -221,7 +223,7 @@ export function ReminderControl({ issue }: { issue: Issue }) {
  *  reminder changes, not on every poll. */
 export function ReminderDelivery() {
   const next = useStore((s) => nextReminder(s.issues)),
-    toast = useStore((s) => s.toast),
+    toast = useSyncExternalStore(toasts.subscribe, toasts.hasConfirmation, toasts.hasConfirmation),
     canEdit = useStore((s) => s.canEdit),
     clock = useStore((s) => s.clock);
   useEffect(() => {

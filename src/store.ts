@@ -1,3 +1,5 @@
+import { toasts } from "./toast-queue";
+import { latestNotification, rekeyNotification, showNotification, NOTIFICATION_ID } from "./app-notifications";
 import { savedViewClient } from "./saved-view-client";
 import { assignableUsers, knownPeople, statusById, statuses } from "./board-catalog";
 import { effectiveSettings, setScope, viewSettings } from "./view-settings";
@@ -221,13 +223,6 @@ type State = {
   query: string;
   overlay: Overlay;
   perf: string;
-  /** A transient confirmation, e.g. after creating an issue. */
-  toast: {
-    text: string;
-    key?: string;
-    undo?: boolean | "inbox";
-    detail?: string;
-  } | null;
   preferences: Record<number, Preferences>;
   defaults: Record<number, Display>;
   toolbar: "display" | "filter" | "add-filter" | "advanced" | null;
@@ -320,7 +315,6 @@ let state: State = {
   query: "",
   overlay: null,
   perf: "",
-  toast: null,
   preferences: readPreferences(),
   defaults: {},
   toolbar: null,
@@ -532,7 +526,7 @@ function go(event: NavigationEvent) {
   // After the push: its optimistic write re-shows the address in place.
   if (t.viewDisplay)
     void updateSavedView(t.viewDisplay.id, { display: t.viewDisplay.display }).catch(viewError);
-  if (t.missing) ui.send({ type: "toast.show", text: `Issue ${t.missing} not found` });
+  if (t.missing) showNotification({ text: `Issue ${t.missing} not found` });
 }
 /** The address bar, history, and the view editor's draft kept per address (sessionStorage is per tab). */
 const address = {
@@ -1090,8 +1084,7 @@ async function fetchProperties(): Promise<{ pending: number }> {
         changed = true;
         if (state.selected === key) {
           navigate({ selected: null, panel: false });
-          ui.send({
-            type: "toast.show",
+          showNotification({
             text: `${key} was deleted in Jira`,
             detail: "It is no longer on your boards.",
           });
@@ -1428,8 +1421,7 @@ function answered({ key: sent, ops, result, created, refused, describes }: Answe
           JSON.stringify(ops).includes(`"${created}"`),
         );
   if (result.error)
-    ui.send({
-      type: "toast.show",
+    showNotification({
       text: `Jira did not save the change to ${result.key ?? sent}`,
       detail: `${result.error}${orphans.length ? ` ${orphans.join(", ")} was created in Jira, but not linked.` : ""}`,
     });
@@ -1574,7 +1566,7 @@ function rekey(from: string, to: string) {
   set({ issues, full });
   // Saved at once: other tabs wait for this move to send their edits of the issue (sync check 7).
   queueSave();
-  ui.send({ type: "toast.rekey", from, to });
+  rekeyNotification(from, to);
   if (state.selected === from) navigate({ selected: to });
 }
 /** Takes up key moves another tab saved for issues it created (app key → Jira key). Returns whether any was new. */
@@ -1952,8 +1944,9 @@ export function undoEdit() {
   redo.push(edit);
   set({ undoCount: undo.length, redoCount: redo.length, perf: `Undid ${edit.label}` });
   // Undoing a create removes the issue its toast offers to open.
-  if (state.toast?.key && !state.issues.has(currentKey(state.toast.key)))
-    ui.send({ type: "toast.dismiss" });
+  const toastKey = latestNotification()?.key;
+  if (toastKey && !state.issues.has(currentKey(toastKey)))
+    toasts.dismiss(NOTIFICATION_ID);
   queueSave();
 }
 export function redoEdit() {
@@ -2206,8 +2199,7 @@ export const actions = {
           : { reminder },
       ),
     );
-    ui.send({
-      type: "toast.show",
+    showNotification({
       text: at ? "Reminder set" : "Reminder canceled",
       ...(at ? { detail: `You will receive a reminder on ${reminderTime(at)}` } : {}),
     });
@@ -2242,8 +2234,7 @@ export const actions = {
     changedKeys.add(key);
     touch(key);
     queueSave();
-    ui.send({
-      type: "toast.show",
+    showNotification({
       text: `Reminder: ${document ? (target as IssueResource).title || "New document" : issue.summary}`,
       key,
     });
@@ -2380,8 +2371,7 @@ export const actions = {
       if (!issue) throw new Error("Issue is no longer in the Jira mirror");
       // An edit made after the click is newer than the choice to restore: keep it and say so (sync check 6).
       if (editCounts.get(key) !== edits) {
-        ui.send({
-          type: "toast.show",
+        showNotification({
           text: `Didn't restore ${key}`,
           detail:
             "You edited it while Jira's version loaded. Restore again to discard your changes.",
@@ -2414,8 +2404,7 @@ export const actions = {
         true,
       );
     } catch {
-      ui.send({
-        type: "toast.show",
+      showNotification({
         text: "Could not read the Jira version",
         detail: "Nothing was restored. Your local changes are still here.",
       });
@@ -2768,7 +2757,7 @@ export const actions = {
           ui.send({ type: "overlay.close" });
         }
         // "Create more" keeps the composer open, so the toast is its only confirmation (Linear).
-        if (more || !open) ui.send({ type: "toast.show", text: `Created ${key}`, key });
+        if (more || !open) showNotification({ text: `Created ${key}`, key });
       }),
     );
     return key;

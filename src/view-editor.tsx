@@ -1,3 +1,4 @@
+import { showNotification } from "./app-notifications";
 import {
   cloneElement,
   useState,
@@ -19,7 +20,6 @@ import {
   discardViewEditor,
   get,
   setViewDraft,
-  ui,
   useStore,
   ME,
 } from "./store";
@@ -215,8 +215,8 @@ export function viewActions(view: SavedView, favorite: boolean, contextMenu: boo
   const link = () =>
     void navigator.clipboard
       .writeText(new URL(viewPath(view), location.origin).href)
-      .then(() => ui.send({ type: "toast.show", text: "Copied" }))
-      .catch((e) => ui.send({ type: "toast.show", text: String(e) }));
+      .then(() => showNotification({ text: "Copied" }))
+      .catch((e) => showNotification({ text: String(e) }));
   return [
     [
       ["Edit…", "pencil", () => openViewEditor(editViewDraft(view.id))],

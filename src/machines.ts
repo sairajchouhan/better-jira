@@ -4,8 +4,8 @@
  * Debug: run `localStorage.setItem("better-jira:debug","machines")` and reload. The console then logs
  * every event and the state it leads to, and `window.machines` holds the running actors.
  *
- *   ui       what is on screen: location (board, issue, view), overlay, toolbar, toast. Where you go is decided in
- *            navigation.ts; this machine holds the result for Escape and the toolbar, and owns overlay, toolbar and toast.
+ *   ui       what is on screen: location (board, issue, view), overlay, toolbar. Where you go is decided in
+ *            navigation.ts; this machine holds the result for Escape and the toolbar, and owns overlay and toolbar.
  *   app      loading the mirror: idle → loading → ready | failed, retry with load
  *   storage  saving local edits: loading → saved ⇄ saving → failed; blocked while read-only
  *   sync     polling Jira properties: fetching → waiting (3s warming, 30s idle, 10s after an error) → fetching
@@ -20,7 +20,6 @@ import type { AdfDocument } from "./document";
 import type { IssueDraft, Overlay, View } from "./store";
 
 export type Toolbar = "display" | "filter" | "add-filter" | "advanced";
-export type Toast = { text: string; key?: string; undo?: boolean | "inbox"; detail?: string };
 /** The screen state; store.ts copies it onto `get()` so components keep reading it with `useStore`. */
 export type UiContext = {
   board: number;
@@ -43,7 +42,6 @@ export type UiContext = {
   draft: IssueDraft;
   /** Relation operation owned by the open overlay. */
   relation: string;
-  toast: Toast | null;
 };
 export type UiEvent =
   /** Shows where navigation.ts moved you. A new board resets its search and draft, and closes the toolbar. */
@@ -68,11 +66,7 @@ export type UiEvent =
   | { type: "palette.toggle" }
   | { type: "toolbar.open"; toolbar: Toolbar }
   | { type: "toolbar.toggle"; toolbar: Toolbar }
-  | { type: "toolbar.close" }
-  | { type: "toast.show"; text: string; key?: string; undo?: boolean | "inbox"; detail?: string }
-  | { type: "toast.dismiss" }
-  /** Jira gave an issue created here its real key: the toast names and opens the new key, without restarting its timer. */
-  | { type: "toast.rekey"; from: string; to: string };
+  | { type: "toolbar.close" };
 
 const closed = { overlay: null, target: null, issueOptionsPoint: null } as const;
 export const uiMachine = setup({
@@ -111,7 +105,6 @@ export const uiMachine = setup({
     issueOptionsPoint: null,
     draft: {},
     relation: "related",
-    toast: null,
   }),
   on: {
     navigate: {
@@ -198,62 +191,6 @@ export const uiMachine = setup({
               { actions: assign({ toolbar: ({ event }) => event.toolbar }) },
             ],
             "toolbar.close": { target: "closed", actions: assign({ toolbar: null }) },
-          },
-        },
-      },
-    },
-    toast: {
-      initial: "hidden",
-      states: {
-        hidden: {
-          on: {
-            "toast.show": {
-              target: "shown",
-              actions: assign({
-                toast: ({ event }) => ({
-                  text: event.text,
-                  ...(event.key ? { key: event.key } : {}),
-                  ...(event.undo ? { undo: event.undo } : {}),
-                  ...(event.detail ? { detail: event.detail } : {}),
-                }),
-              }),
-            },
-          },
-        },
-        shown: {
-          after: { 5000: { target: "hidden", actions: assign({ toast: null }) } },
-          on: {
-            "toast.show": {
-              target: "shown",
-              reenter: true,
-              actions: assign({
-                toast: ({ event }) => ({
-                  text: event.text,
-                  ...(event.key ? { key: event.key } : {}),
-                  ...(event.undo ? { undo: event.undo } : {}),
-                  ...(event.detail ? { detail: event.detail } : {}),
-                }),
-              }),
-            },
-            "toast.dismiss": { target: "hidden", actions: assign({ toast: null }) },
-            "toast.rekey": {
-              actions: assign({
-                toast: ({ context, event }) =>
-                  context.toast?.key === event.from
-                    ? {
-                        ...context.toast,
-                        key: event.to,
-                        text: context.toast.text.replace(
-                          new RegExp(
-                            `${event.from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\d)`,
-                            "g",
-                          ),
-                          event.to,
-                        ),
-                      }
-                    : context.toast,
-              }),
-            },
           },
         },
       },

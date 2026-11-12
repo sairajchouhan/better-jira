@@ -1,3 +1,4 @@
+import { showNotification } from "./app-notifications";
 import { LoadingState } from "./empty-state";
 import { Text } from "./text";
 import { Dialog, ConfirmDialog } from "./dialog";
@@ -129,9 +130,9 @@ export function ResourceForm({
             updated: at,
             created: at,
           });
-          if (!added) ui.send({ type: "toast.show", text: "Already linked" });
+          if (!added) showNotification({ text: "Already linked" });
           else if (kind === "link")
-            ui.send({ type: "toast.show", text: "URL successfully linked." });
+            showNotification({ text: "URL successfully linked." });
           close();
         }}
       >

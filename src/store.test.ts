@@ -1,3 +1,5 @@
+import { latestNotification, NOTIFICATION_ID } from "./app-notifications";
+import { toasts } from "./toast-queue";
 import { expect, test } from "bun:test";
 import type { Board } from "./store";
 import { IDBFactory } from "fake-indexeddb";
@@ -532,19 +534,21 @@ test("image crops and comment counts undo and redo without changing the descript
 });
 
 test("B5: creating stays on the board with a toast, Create more toasts too, and undoing the create closes it", async () => {
-  const { actions, get, navigate, ui, undoEdit } = await import("./store");
+  const { actions, get, navigate, undoEdit } = await import("./store");
   navigate({ panel: false, selected: null });
-  ui.send({ type: "toast.dismiss" });
+  toasts.dismiss(NOTIFICATION_ID);
   const key = actions.create("Toasted")!;
   expect(get().panel).toBe(false);
   expect(get().selected).toBe(key);
-  expect(get().toast).toEqual({ text: `Created ${key}`, key });
-  ui.send({ type: "toast.dismiss" });
+  expect(latestNotification()).toEqual({ text: `Created ${key}`, key });
+  expect(toasts.find(NOTIFICATION_ID)).toBeDefined();
+  expect(toasts.hasConfirmation()).toBe(true);
+  toasts.dismiss(NOTIFICATION_ID);
   const more = actions.create("Created with more", {}, true)!;
-  expect(get().toast).toEqual({ text: `Created ${more}`, key: more });
+  expect(latestNotification()).toEqual({ text: `Created ${more}`, key: more });
   undoEdit();
   expect(get().issues.has(more)).toBe(false);
-  expect(get().toast).toBeNull();
+  expect(latestNotification()).toBeUndefined();
 });
 test("deleting a sub-issue keeps its open parent; with Jira writes it asks in the app first", async () => {
   const { actions, get, navigate, set } = await import("./store");
@@ -777,7 +781,7 @@ test("sync review 7: an undo made while Restore reads Jira's version is not disc
     answer();
     await restoring;
     expect(get().issues.get("TEST-91")?.priority).toBe("High");
-    expect(get().toast?.text).toBe("Didn't restore TEST-91");
+    expect(latestNotification()?.text).toBe("Didn't restore TEST-91");
   } finally {
     globalThis.fetch = previous;
   }
@@ -931,7 +935,7 @@ test("outbox: a write Jira refuses rolls the issue back to Jira's copy and says 
     await jira.settled();
     expect(get().issues.get("RB-1")?.priority).toBe("Low");
     expect(get().writeError).toEqual({ key: "RB-1", text: "Priority is locked." });
-    expect(get().toast).toMatchObject({
+    expect(latestNotification()).toMatchObject({
       text: "Jira did not save the change to RB-1",
       detail: "Priority is locked.",
     });

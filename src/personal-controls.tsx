@@ -1,3 +1,4 @@
+import { showNotification } from "./app-notifications";
 import { Text } from "./text";
 import { Tabs } from "./tabs";
 import { CountBadge } from "./count-badge";
@@ -1281,7 +1282,7 @@ export function AddBoard() {
             const { id, message } = await addBoard(value);
             close();
             navigate({ board: id, selected: null, panel: false });
-            ui.send({ type: "toast.show", text: message });
+            showNotification({ text: message });
           } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
           } finally {

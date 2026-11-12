@@ -1,3 +1,4 @@
+import { showNotification } from "./app-notifications";
 /* oxlint-disable react/no-unstable-nested-components -- Comment heads and avatars are render callbacks supplied to the activity threads. */
 import { FavoriteButton } from "./favorite-button";
 import { statusById } from "./board-catalog";
@@ -768,8 +769,7 @@ function Description({ issue }: { issue: Issue }) {
   useEffect(() => {
     const names = interruptedUploads(issue.key);
     if (names.length)
-      ui.send({
-        type: "toast.show",
+      showNotification({
         text: `${names.join(", ")} ${names.length > 1 ? "weren't" : "wasn't"} placed`,
         detail:
           "The page reloaded during the upload. Check the issue's attachments in Jira, then attach it again.",

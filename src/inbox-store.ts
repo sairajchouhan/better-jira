@@ -1,3 +1,5 @@
+import { showNotification, INBOX_NOTIFICATION_ID } from "./app-notifications";
+import { toasts } from "./toast-queue";
 /** Inbox state, ordered writes and undo. Each instance owns its caches and queues; IO enters through ports. */
 import {
   InfiniteQueryObserver,
@@ -27,12 +29,7 @@ export type InboxPorts = {
   get: () => { issues: Map<string, Issue>; clock: number };
   set: (patch: { perf: string }) => void;
   ui: {
-    send: (
-      event:
-        | { type: "toast.dismiss" }
-        | { type: "toast.show"; text: string; undo: "inbox" }
-        | { type: "overlay.open"; overlay: "snooze" },
-    ) => void;
+    send: (event: { type: "overlay.open"; overlay: "snooze" }) => void;
   };
   statusOf: (key: string) => Status | undefined;
   read: <T>(name: string, fallback: T) => T;
@@ -193,7 +190,7 @@ export function createInboxStore(ports: InboxPorts) {
     if (!entry || at < 0) return;
     undos.splice(at, 1);
     entry.run();
-    if (entry === toastUndo) ui.send({ type: "toast.dismiss" });
+    if (entry === toastUndo) toasts.dismiss(INBOX_NOTIFICATION_ID);
     set({ perf: `Undid ${entry.label}` });
   }
   const undoInboxToast = () => undoInbox(toastUndo);
@@ -364,7 +361,7 @@ export function createInboxStore(ports: InboxPorts) {
       putLocal([...before.keys()], (_, head) => before.get(head));
       if (was && gone.has(was.id)) selectRow(was);
     });
-    ui.send({ type: "toast.show", text: toast, undo: "inbox" });
+    showNotification({ text: toast, undo: undoInboxToast }, INBOX_NOTIFICATION_ID);
     return before;
   }
   /** Linear's E and ⌫. Jira notifications cannot be deleted, so this hides the row in this browser until the issue has new activity. */

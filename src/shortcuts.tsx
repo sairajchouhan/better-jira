@@ -1,3 +1,5 @@
+import { latestNotification, showNotification } from "./app-notifications";
+import { toasts } from "./toast-queue";
 import { isMyIssues } from "./navigation";
 import { useEffect, useState } from "react";
 import { viewShortcutId } from "./view-shortcut";
@@ -430,10 +432,10 @@ export const shortcuts: Shortcut[] = [
     name: "Open link from last toast",
     group: "Navigation",
     hotkey: "Mod+Alt+O",
-    when: (s) => !!s.toast?.key,
+    when: () => !!latestNotification()?.key,
     run: () => {
       // Like the toast's View issue: a key Jira has since replaced still finds the issue.
-      const issue = get().issues.get(currentKey(get().toast?.key ?? ""));
+      const issue = get().issues.get(currentKey(latestNotification()?.key ?? ""));
       if (issue) navigate({ board: issue.board, selected: issue.key, panel: true });
     },
   },
@@ -442,7 +444,7 @@ export const shortcuts: Shortcut[] = [
     name: "Dismiss all toasts",
     group: "Navigation",
     hotkey: "Mod+Alt+X",
-    run: () => ui.send({ type: "toast.dismiss" }),
+    run: () => toasts.dismissAll(),
   },
   {
     id: "new",
@@ -829,8 +831,7 @@ export const shortcuts: Shortcut[] = [
     },
     run: () => {
       void saveOverlayToView().catch(() =>
-        ui.send({
-          type: "toast.show",
+        showNotification({
           text: "Could not save view. Try again.",
         }),
       );

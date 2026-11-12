@@ -15,8 +15,6 @@ import { FutureTimeStep } from "./future-time-step";
 import { FilterChip } from "./filter-chip";
 import { Tabs } from "./tabs";
 import { Text } from "./text";
-import { Toast } from "./toast";
-import { toasts } from "./toast-queue";
 import { Icon, StatusIcon, type IconName } from "./icons";
 import {
   FILTER_FIELDS,
@@ -76,34 +74,11 @@ async function send(body: object) {
   return reply as { groups?: string[] } | null;
 }
 
-let inboxToastId: string | undefined;
 const inbox = createInboxStore({
   queryClient,
   get,
   set,
-  ui: {
-    send(event) {
-      if (event.type === "toast.show") {
-        if (inboxToastId) toasts.dismiss(inboxToastId);
-        inboxToastId = toasts.show(
-          <Toast data-toast>
-            <Toast.Title>{event.text}</Toast.Title>
-            <Toast.Actions>
-              <Toast.Action onClick={() => inbox.undoInboxToast()}>
-                Undo
-              </Toast.Action>
-              <Toast.Close />
-            </Toast.Actions>
-          </Toast>,
-          { duration: 5000 },
-        );
-      } else if (event.type === "toast.dismiss") {
-        if (inboxToastId) toasts.dismiss(inboxToastId);
-      } else {
-        ui.send(event);
-      }
-    },
-  },
+  ui,
   statusOf,
   read: (name, fallback) =>
     readStored(
