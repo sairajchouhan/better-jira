@@ -102,6 +102,34 @@ export const pasteLink =
     return insertLink(href)(state, dispatch, view);
   };
 
+/** ⌥↑ / ⌥↓: the selected blocks swap with the block before or after them. At the edge of a list item or quote the whole
+ * item or quote moves instead; table cells never swap (the row moves). Content Jira would reject is never built. */
+export const moveBlock =
+  (dir: -1 | 1): Command =>
+  (state, dispatch) => {
+    const { $from, $to } = state.selection;
+    let range = $from.blockRange($to);
+    while (range) {
+      const index = dir < 0 ? range.startIndex - 1 : range.endIndex;
+      if (range.parent.type.spec.tableRole !== "row" && index >= 0 && index < range.parent.childCount) {
+        const sibling = range.parent.child(index),
+          tr = state.tr;
+        if (dir < 0) tr.delete(range.start - sibling.nodeSize, range.start).insert(range.end - sibling.nodeSize, sibling);
+        else tr.delete(range.end, range.end + sibling.nodeSize).insert(range.start, sibling);
+        try {
+          tr.doc.check();
+          dispatch?.(tr.scrollIntoView());
+          return true;
+        } catch {
+          /* The parent's content rules forbid this order (a list item starts with its paragraph): move the parent. */
+        }
+      }
+      if (!range.depth) return false;
+      range = state.doc.resolve($from.before(range.depth)).blockRange(state.doc.resolve($to.after(range.depth)));
+    }
+    return false;
+  };
+
 /** A typed link target: a bare domain gets https://, like Linear; anything else must be an http, https or mailto link. */
 export const linkTarget = (input: string) => {
   const text = input.trim();

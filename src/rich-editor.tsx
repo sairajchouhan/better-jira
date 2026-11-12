@@ -41,6 +41,7 @@ import {
   linkRanges,
   linkTarget,
   markdownRules,
+  moveBlock,
   pasteLink,
   removeLink,
   setBlock,
@@ -382,6 +383,7 @@ export function RichEditor(props: EditorEngineProps) {
         else if (id === "bullet" || id === "ordered")
           list(id === "bullet" ? "bulletList" : "orderedList");
         else if (id === "code-block") changeBlock("codeBlock");
+        else if (id === "move-up" || id === "move-down") run(moveBlock(id === "move-up" ? -1 : 1));
         else if (id === "undo") run(undo);
         else if (id === "redo") run(redo);
         else if (id === "save") save();

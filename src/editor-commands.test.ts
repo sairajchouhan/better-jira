@@ -10,6 +10,7 @@ import {
   insertTable,
   linkTarget,
   markdownRules,
+  moveBlock,
   pasteLink,
   removeLink,
   setBlock,
@@ -481,4 +482,28 @@ test("BJ-44: a URL pasted over selected text links the text; anything else paste
   expect(run(select(9, 13), "https://a.test and more").handled).toBe(false);
   expect(run(select(9, 13), "javascript:alert(1)").handled).toBe(false);
   expect(run(select(20, 21), "https://example.test").handled).toBe(false);
+});
+
+test("BJ-55: ⌥↑ / ⌥↓ move the selected block, or its list item when it is the item's only block", () => {
+  const apply = (state: EditorState, command: Command) => {
+    let next = state;
+    command(state, (tr) => (next = state.apply(tr)));
+    return next;
+  };
+  const texts = (doc: EditorNode) => doc.content.content.map((b) => b.textContent);
+  const down = apply(state([p("a"), p("b"), p("c")], "a"), moveBlock(1));
+  expect(texts(down.doc)).toEqual(["b", "a", "c"]);
+  expect(down.selection.$from.parent.textContent).toBe("a");
+  expect(texts(apply(down, moveBlock(-1)).doc)).toEqual(["a", "b", "c"]);
+  expect(moveBlock(-1)(state([p("a"), p("b")], "a"))).toBe(false);
+  // A list item moves among its siblings, keeping the caret.
+  const list = apply(state([bullets("one", "two")], "two"), moveBlock(-1));
+  expect(list.doc.firstChild!.firstChild!.textContent).toBe("two");
+  expect(list.selection.$from.parent.textContent).toBe("two");
+  // The first item cannot move up inside its list, so the whole list swaps with the block above.
+  const out = apply(state([p("x"), bullets("one", "two")], "one"), moveBlock(-1));
+  expect(texts(out.doc)).toEqual(["onetwo", "x"]);
+  // A table row moves, never a cell.
+  const t = apply(state([table(["1", "2"], ["3", "4"])], "3"), moveBlock(-1));
+  expect(t.doc.firstChild!.firstChild!.textContent).toBe("34");
 });
