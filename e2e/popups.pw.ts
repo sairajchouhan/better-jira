@@ -105,14 +105,12 @@ test("toolbar popups: Filter, Display and the chip row + open at Linear's offset
     expect(await focused(page)).toBe("Display options");
   });
 
-  await test.step("an outside press closes it; focus goes where the press put it", async () => {
+  await test.step("FILTER-4 / CORE-4: an outside press only closes it; focus returns to the trigger", async () => {
     await page.click('[aria-label="Display options"]');
     await page.waitFor(`!!document.querySelector(${JSON.stringify(TOOLBAR)})`);
     await page.page.mouse.click(700, 600);
     await page.waitFor(`!document.querySelector(${JSON.stringify(TOOLBAR)})`);
-    expect(
-      await page.eval(`document.activeElement===document.elementFromPoint(700,600).closest("[tabindex],button,a,input")`),
-    ).toBe(true);
+    expect(await focused(page)).toBe("Display options");
   });
 
   await test.step("chip row +: bottom-left, rounded 4px under it; Esc returns to the +", async () => {

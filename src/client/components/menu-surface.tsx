@@ -1,16 +1,20 @@
 import { autoUpdate } from "@floating-ui/react";
-import { useHotkey } from "@tanstack/react-hotkeys";
 import {
+  createContext,
   useEffectEvent,
   useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent,
+  type MouseEvent,
   type ReactNode,
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
+
+/** What a popup offers the menus inside it: closing it (every level at once), as a menu's Enter or a submenu's Escape does. */
+export const MenuSurfaceContext = createContext<{ close: () => void } | null>(null);
 
 export const MENU_POPUP =
   "view-popup rounded-xl border border-[var(--menu-line)] bg-[var(--menu)] text-fg-2 shadow-[var(--menu-shadow)] [--sel:var(--menu-sel)]";
@@ -116,6 +120,12 @@ function usePopupFocus(
   return { keys, opener };
 }
 
+/** A press on a backdrop closes its popup and nothing else: no focus moves to <body> (the opener gets it back), no click lands below. */
+function outside(e: MouseEvent, close: () => void) {
+  e.preventDefault();
+  close();
+}
+
 // Keep focus a child already took (autoFocus); else prefer a text field over the first button in DOM order.
 const MENU_FOCUS = [
   "[data-autofocus]",
@@ -127,8 +137,9 @@ const POPOVER_FOCUS = ["input, [role=tab][aria-selected=true], button"];
 
 /**
  * A toolbar menu (Linear's menuPosition) in a fixed popup under its trigger: "bottom-left" 4px under it, flush and rounded;
- * "bottom-right" 6px under it, right edges flush. Esc and presses outside it (the trigger toggles itself) close it; focus moves in,
- * Tab stays inside, and closing returns focus to the trigger. `popup` is the popup node, for submenus portalled into it.
+ * "bottom-right" 6px under it, right edges flush. Esc and a press outside it close it; the press lands on a clear backdrop, so it
+ * does nothing else (not even toggle the trigger). Focus moves in, Tab stays inside, and closing returns focus to the trigger. Escape
+ * from a nested surface (a dropdown inside) closes only that one. `popup` is the popup node, for submenus portalled into it.
  */
 export function Popover({
   trigger,
@@ -156,28 +167,21 @@ export function Popover({
           : { top: r.bottom + 6, right: innerWidth - r.right },
     placement,
   );
-  useHotkey("Escape", close, { target: popup, ignoreInputs: false, capture: true });
-  const onOutside = useEffectEvent((e: PointerEvent) => {
-    if (!popup.current?.contains(e.target as Node) && !trigger.current?.contains(e.target as Node))
-      close();
-  });
-  useLayoutEffect(() => {
-    const outside = (e: PointerEvent) => onOutside(e);
-    document.addEventListener("pointerdown", outside);
-    return () => document.removeEventListener("pointerdown", outside);
-  }, []);
   return createPortal(
-    <div
-      ref={popup}
-      className="fixed z-40 max-w-[calc(100vw-24px)]"
-      style={style}
-      onKeyDown={(e) => {
-        e.stopPropagation();
-        keys(e);
-      }}
-    >
-      {children}
-    </div>,
+    <MenuSurfaceContext value={{ close }}>
+      <div className="fixed inset-0" style={{ zIndex: 40 }} onMouseDown={(e) => outside(e, close)} />
+      <div
+        ref={popup}
+        className="fixed z-40 max-w-[calc(100vw-24px)]"
+        style={style}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          keys(e);
+        }}
+      >
+        {children}
+      </div>
+    </MenuSurfaceContext>,
     document.body,
   );
 }
@@ -308,7 +312,7 @@ export function MenuSurface({
     <div
       className={`fixed inset-0 z-50 ${anchored || command ? "" : "bg-black/40"}`}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) close();
+        if (e.target === e.currentTarget) outside(e, close);
       }}
     >
       <div
@@ -324,7 +328,7 @@ export function MenuSurface({
           keys(e);
         }}
       >
-        {children}
+        <MenuSurfaceContext value={{ close }}>{children}</MenuSurfaceContext>
       </div>
     </div>
   );

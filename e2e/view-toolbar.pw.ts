@@ -24,13 +24,22 @@ test("segmented chips edit operators and values independently, Save offers creat
       ),
     ).toBe("24px");
     // Linear's AddFilterButton: the menu opens bottom-left under the +, 4px below it, even when the toolbar Filter menu is open.
+    // FILTER-4: a press outside an open menu only closes it, so the + takes a second press; a press on the + itself closes it too.
+    const press = async (selector: string) => {
+      const r = await page.rect(selector);
+      await page.clickAt(r.x + r.width / 2, r.y + r.height / 2);
+    };
     for (const first of [null, '[aria-label="Add filter"],[title="Filter (F)"],header [aria-label="Add another filter"]:not(.view-filter-add)']) {
-      if (first) await page.click(first);
+      if (first) {
+        await page.click(first);
+        await press(".view-filter-add");
+        await page.waitFor(`!document.querySelector('body > div.fixed.z-40')`);
+      }
       await page.click(".view-filter-add");
       await page.waitFor(`!!document.querySelector('input[placeholder^="Add Filter"],input[placeholder^="Filter"]')`);
       await page.waitFor(`(()=>{const a=document.querySelector('.view-filter-add').getBoundingClientRect();const m=document.querySelector('body > div.fixed.z-40');return m&&m.style.left===Math.round(a.left)+'px'&&m.style.top===Math.round(a.bottom+4)+'px'})()`);
       expect(await page.eval(`document.querySelector('.view-filter-add').getAttribute('aria-expanded')`)).toBe("true");
-      await page.click(".view-filter-add");
+      await press(".view-filter-add");
       await page.waitFor(`!document.querySelector('body > div.fixed.z-40')`);
     }
     await page.click('[aria-label="priority operator"]');
