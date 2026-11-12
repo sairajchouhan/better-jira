@@ -6,6 +6,7 @@ import type { Keys } from "./keycap";
 import { Menu } from "./menu";
 import { usePristine } from "./menu-pristine";
 import { MenuSurface, MenuSurfaceContext, MENU_POPUP } from "./menu-surface";
+import { NoMatchesFooter, splitByMatches } from "./no-matches";
 
 /** One action row (Linear's action). `divider` starts a new group, drawn as a separator above the entry while the menu is unfiltered. */
 export type ActionEntry = {
@@ -155,10 +156,15 @@ function Level({
   // would widen the menu under the pointer and hand the hover to another row, so it keeps the rows it opened with, each still live.
   const [opened] = useState(() => new Set(entries.map((e) => e.name)));
   const available = entries.filter((e) => opened.has(e.name));
-  const hidden = available.filter((e) => e.matchCount === 0 && !e.checkbox);
-  const own = reveal ? available : available.filter((e) => !hidden.includes(e));
+  const { matched: own, unmatched: hidden } = splitByMatches(
+    available,
+    (e) => e.matchCount,
+    (e) => !!e.checkbox || !!e.selected,
+  );
   const q = query.trim();
-  const choices = rows || !q ? own : searchActions(own, q);
+  // Revealed, the options with no matches follow a divider with the menu's name as its search placeholder (Linear's
+  // subActionPlaceholder); a search looks through every option.
+  const choices = rows || !q ? own : searchActions(reveal ? available : own, q);
   return (
     <Menu
       shouldFilter={!!rows}
@@ -172,7 +178,7 @@ function Level({
         hideWhenEmpty={!nested && !placeholder}
         autoFocus={!nested}
         aria-label={`Find ${label.toLowerCase()}`}
-        placeholder={placeholder ?? "Filter…"}
+        placeholder={reveal && hidden.length ? label : (placeholder ?? "Filter…")}
         value={query}
         onValueChange={(value) => {
           setQuery(value);
@@ -189,12 +195,21 @@ function Level({
               !q && entry.divider && <Menu.Divider key={`-${entry.name}`} />,
               <Row key={entry.name} entry={entry} container={container} open={open} setOpen={setOpen} />,
             ])}
-        {!reveal && hidden.length > 0 ? <>
-          <Menu.Divider />
-          <Menu.Item value={`Show ${hidden.length} option${hidden.length === 1 ? "" : "s"} with no matches`} onSelect={() => { setReveal(true); start.wake(); }}>
-            Show {hidden.length} option{hidden.length === 1 ? "" : "s"} with no matches
-          </Menu.Item>
-        </> : null}
+        {hidden.length > 0 && !reveal && (
+          <NoMatchesFooter
+            count={hidden.length}
+            onReveal={() => {
+              setReveal(true);
+              start.wake();
+            }}
+          />
+        )}
+        {hidden.length > 0 && reveal && !q && [
+          <Menu.Divider key="-no-matches" />,
+          ...hidden.map((entry) => (
+            <Row key={entry.name} entry={entry} container={container} open={open} setOpen={setOpen} />
+          )),
+        ]}
       </Menu.List>
     </Menu>
   );

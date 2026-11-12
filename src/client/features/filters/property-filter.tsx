@@ -5,6 +5,7 @@ import { statuses } from "@/shared/board-catalog";
 import { FilterIcon } from "./filter-icons";
 import { hue, PriorityIcon, StatusIcon, TypeDot } from "@/client/components/icons";
 import { Menu } from "@/client/components/menu";
+import { NoMatchesFooter, splitByMatches } from "@/client/components/no-matches";
 import { menuFilter } from "@/client/lib/fuzzy-score";
 import { Select } from "@/client/components/select";
 import { Button } from "@/client/components/button";
@@ -55,8 +56,26 @@ const dot = (name: string) => (
 );
 const person = (user: User) => <Avatar user={user} size={16} />;
 
+/** Values a field offers beyond those its issues hold: Jira's priorities and labels, as Linear lists every priority and label
+ *  rather than only those in use. */
+export type FilterCatalog = { priorities?: string[]; labels?: string[] };
+/** The catalog of the Jira site the board is on. */
+export function useFilterCatalog(): FilterCatalog {
+  const options = useStore((s) => s.options);
+  return useMemo(
+    () => ({ priorities: options.priorities.map((p) => p.name), labels: options.labels }),
+    [options],
+  );
+}
+
 /** Linear's order: "No …" first, then "Current user", then the values (priorities by rank, the rest by name). */
-export function filterChoices(field: Field, board: Board, issues: Issue[], matching = issues): Choice[] {
+export function filterChoices(
+  field: Field,
+  board: Board,
+  issues: Issue[],
+  matching = issues,
+  catalog: FilterCatalog = {},
+): Choice[] {
   const opts = new Map<string, Choice>();
   const add = (value: string, label: string, icon?: ReactNode) =>
     opts.set(value, { value, label, icon, count: 0 });
@@ -76,6 +95,8 @@ export function filterChoices(field: Field, board: Board, issues: Issue[], match
       label,
       icon: <FilterIcon name={glyph} />,
     }));
+  if (field === "priority") for (const p of catalog.priorities ?? []) add(p, p, <PriorityIcon name={p} />);
+  if (field === "labels") for (const l of catalog.labels ?? []) add(l, l, dot(l));
   for (const i of issues) {
     if (field === "assignee" || field === "creator") {
       const u = i[field];
@@ -147,10 +168,11 @@ export function useFieldFilter(field: Field, board: Board, editingId?: string) {
   const rule = prefs.filters.children.find(
     (c): c is Rule => !("children" in c) && c.id === ruleId,
   );
+  const catalog = useFilterCatalog();
   // Keep zero-result values available when another AND condition narrows this field.
   const choices = useMemo(
-    () => filterChoices(field, board, [...issuesMap.values()].filter(i => i.board === board.id), issues),
-    [field, board, issuesMap, issues],
+    () => filterChoices(field, board, [...issuesMap.values()].filter(i => i.board === board.id), issues, catalog),
+    [field, board, issuesMap, issues, catalog],
   );
   function apply(values: string[], operator = rule?.op ?? "is") {
     setRule(board.id, { id: ruleId, field, op: operator, values });
@@ -221,7 +243,7 @@ export function ValueRow({
       checkbox={multiple && !path ? checked : undefined}
       checked={!multiple && !path ? checked : undefined}
       icon={choice.icon}
-      hint={issueCount(choice.count)}
+      hint={issueCount(choice.count) || undefined}
       onPointerDown={(event) => {
         alt.current = event.altKey;
       }}
@@ -256,7 +278,12 @@ export function FieldValues({
     () => choices.toSorted((a, b) => Number(picked.has(b.value)) - Number(picked.has(a.value))),
     [choices, picked],
   );
-  return ordered.map((c) => (
+  const [reveal, setReveal] = useState(false);
+  // A root-search row (`path`) is listed whatever its count; a field's own menu splits off the values nothing matches.
+  const { matched, unmatched } = path
+    ? { matched: ordered, unmatched: [] }
+    : splitByMatches(ordered, (c) => c.count, (c) => !!rule?.values.includes(c.value));
+  const row = (c: Choice) => (
     <ValueRow
       key={c.value}
       choice={c}
@@ -267,7 +294,21 @@ export function FieldValues({
         if (select(c.value, only)) onDone();
       }}
     />
-  ));
+  );
+  return (
+    <>
+      {matched.map(row)}
+      {unmatched.length > 0 &&
+        (reveal ? (
+          <>
+            <Menu.Divider />
+            {unmatched.map(row)}
+          </>
+        ) : (
+          <NoMatchesFooter count={unmatched.length} onReveal={() => setReveal(true)} />
+        ))}
+    </>
+  );
 }
 
 /** One date preset with its issue count: Linear's typed suggestions always say "0 issues", the fixed presets hide a zero. */

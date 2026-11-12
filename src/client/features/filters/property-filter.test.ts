@@ -27,3 +27,15 @@ test("R1-D91: priority choices follow rank, like Linear, not the alphabet", () =
     "Low",
   ]);
 });
+
+test("5.3 5.4: Priority and Labels offer the site's every value, not only those in use", () => {
+  const issues = [issue("A-1", "High")];
+  const catalog = { priorities: ["Urgent", "High", "Low"], labels: ["beta", "alpha"] };
+  expect(filterChoices("priority", board, issues, issues, catalog).map((c) => [c.label, c.count])).toEqual([
+    ["No priority", 0],
+    ["Urgent", 0],
+    ["High", 1],
+    ["Low", 0],
+  ]);
+  expect(filterChoices("labels", board, issues, issues, catalog).map((c) => c.label)).toEqual(["No labels", "alpha", "beta"]);
+});

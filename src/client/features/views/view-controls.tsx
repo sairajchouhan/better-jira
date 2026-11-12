@@ -17,7 +17,7 @@ import {
   type RefObject,
 } from "react";
 import { MenuSurface, MENU_POPUP as POPUP, Popover } from "@/client/components/menu-surface";
-import { filterChoices, plural, PropertyFilter } from "@/client/features/filters/property-filter";
+import { filterChoices, plural, PropertyFilter, useFilterCatalog } from "@/client/features/filters/property-filter";
 import { Menu } from "@/client/components/menu";
 import { usePristine } from "@/client/components/menu-pristine";
 import { menuFilter } from "@/client/lib/fuzzy-score";
@@ -396,7 +396,11 @@ function RuleChip({
   remove: () => void;
 }) {
   const issues = useStore((s) => (c.values.length ? s.issues : null));
-  const all = useMemo(() => (issues ? filterChoices(c.field, board, [...issues.values()]) : []), [issues, c.field, board]);
+  const catalog = useFilterCatalog();
+  const all = useMemo(
+    () => (issues ? filterChoices(c.field, board, [...issues.values()], undefined, catalog) : []),
+    [issues, c.field, board, catalog],
+  );
   const name = FIELDS.find(([f]) => f === c.field)?.[1] ?? c.field;
   const picked = c.values.map((value) => ({ value, choice: all.find((v) => v.value === value) }));
   const labelOf = ({ value, choice }: (typeof picked)[number]) =>
@@ -819,7 +823,8 @@ function RuleEditor({
   issues: Issue[];
   patch: (p: Partial<Rule> | null) => void;
 }) {
-  const choices = useMemo(() => filterChoices(r.field, board, issues), [r.field, board, issues]);
+  const catalog = useFilterCatalog();
+  const choices = useMemo(() => filterChoices(r.field, board, issues, undefined, catalog), [r.field, board, issues, catalog]);
   const free =
     isDate(r.field) || isNumeric(r.field) || r.field === "content" || r.field === "links";
   return (

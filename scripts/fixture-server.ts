@@ -207,7 +207,9 @@ let clientFailures = 0,
   history: Record<string, unknown[]> = {},
   historyDelay = 0,
   /** BJ-16: TEST-2's description and a comment carry a smart link of every kind work Jira has. */
-  smartLinks = false;
+  smartLinks = false,
+  /** The site's priority, label and user catalog (/api/options), beyond the values the issues hold. */
+  catalog: { priorities: string[]; labels: string[]; users: string[] } = { priorities: [], labels: [], users: [] };
 /** TEST-1's links as the mirror projects them: made-up keys and text in the shape work Jira sends. */
 const crossRelations = [
   {
@@ -820,6 +822,11 @@ async function handle(req: Request) {
     history = settings.history ?? {};
     historyDelay = settings.historyDelay ?? 0;
     smartLinks = settings.smartLinks ?? false;
+    catalog = {
+      priorities: settings.catalog?.priorities ?? [],
+      labels: settings.catalog?.labels ?? [],
+      users: settings.catalog?.users ?? [],
+    };
     inbox = freshInbox(settings.inboxExtra ?? 0, settings.inboxExtraUnread ?? false);
     inboxFail = settings.inboxFail ?? false;
     inboxDelay = settings.inboxDelay ?? 0;
@@ -874,7 +881,13 @@ async function handle(req: Request) {
         : [board];
   else if (path === "/api/issues") body = listed();
   else if (path === "/api/options")
-    body = { priorities: [], users: [], labels: [], versions: {}, types: { TEST: issueTypes } };
+    body = {
+      priorities: catalog.priorities.map((name, i) => ({ id: String(i + 1), name })),
+      users: catalog.users.map((name, i) => ({ id: `catalog-${i}`, name })),
+      labels: catalog.labels,
+      versions: {},
+      types: { TEST: issueTypes },
+    };
   else if (path === "/api/view-defaults") body = {};
   else if (path === "/api/users") {
     const query = (url.searchParams.get("query") ?? "").toLowerCase();

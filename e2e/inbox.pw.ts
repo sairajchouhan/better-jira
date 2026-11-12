@@ -524,17 +524,36 @@ test("a long inbox: older pages on scroll, undo by Z and toast, the row menu, âŒ
   });
 });
 
-test("BJ-192: filter submenus reveal options with no matching notifications", async ({ open }) => {
+test("BJ-192 8.8 8.9: filter values: fewer than ten inline with no zero counts; ten or more behind Linear's footer", async ({ open }) => {
+  await fixture.reset({
+    writable: true,
+    catalog: { users: ["Ada Example", "Ben Example", "Cy Example", "Dee Example", "Eve Example", "Fay Example", "Gus Example", "Hal Example", "Ivy Example", "Jo Example"] },
+  });
   const p = await open("?inbox=1");
   await p.waitFor(`${rows}.length > 0`);
-  await p.click("#inbox-filter");
-  await p.hover('[cmdk-item][data-value="Issue status type"]');
   const footer = '[cmdk-item][data-value^="Show "][data-value$="with no matches"]';
-  await p.waitFor(`!!document.querySelector('${footer}')`);
-  const label = await p.eval<string>(`document.querySelector('${footer}').getAttribute('data-value')`);
-  expect(label).toMatch(/^Show \d+ options? with no matches$/);
-  expect(await p.eval(`!!document.querySelector('[cmdk-item][data-value="Duplicate"]')`)).toBe(false);
-  await p.click(footer);
-  await p.waitFor(`!!document.querySelector('[cmdk-item][data-value="Duplicate"]')`);
-  expect(await p.eval(`!!document.querySelector('${footer}')`)).toBe(false);
+  await test.step("Issue status type: all seven values inline; one nothing matches shows no count", async () => {
+    await p.click("#inbox-filter");
+    await p.hover('[cmdk-item][data-value="Issue status type"]');
+    await p.waitFor(`!!document.querySelector('[cmdk-item][data-value="Duplicate"]')`);
+    expect(await p.eval(`!!document.querySelector('${footer}')`)).toBe(false);
+    expect(await p.eval(`document.querySelector('[cmdk-item][data-value="Duplicate"] .menu-hint')`)).toBe(null);
+    await p.key("Escape");
+  });
+  await test.step("From: matched senders, the footer; revealed, a divider, the rest without counts and the field's name as the search placeholder", async () => {
+    await p.click("#inbox-filter");
+    await p.hover('[cmdk-item][data-value="From"]');
+    await p.waitFor(`!!document.querySelector('${footer}')`);
+    expect(await p.eval(`!!document.querySelector('[cmdk-item][data-value="Ada Example"]')`)).toBe(false);
+    await p.click(footer);
+    await p.waitFor(`!!document.querySelector('[cmdk-item][data-value="Ada Example"]')`);
+    expect(await p.eval(`!!document.querySelector('${footer}')`)).toBe(false);
+    expect(await p.eval(`document.querySelector('[cmdk-item][data-value="Ada Example"] .menu-hint')`)).toBe(null);
+    expect(
+      await p.eval(`(()=>{const items=[...document.querySelectorAll('[cmdk-item]')],ada=items.find(n=>n.dataset.value==="Ada Example");return ada.previousElementSibling?.hasAttribute('cmdk-separator')||ada.parentElement.querySelector('[cmdk-separator]')!==null})()`),
+    ).toBe(true);
+    expect(
+      await p.eval(`[...document.querySelectorAll('[cmdk-input]')].map(i=>i.placeholder).includes('From')`),
+    ).toBe(true);
+  });
 });

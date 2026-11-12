@@ -1,4 +1,4 @@
-import { expect, test, sleep, PREFS_KEY } from "./app";
+import { expect, fixture, test, sleep, PREFS_KEY } from "./app";
 
 const root = `document.querySelector('[aria-label="Add Filter…"]')`;
 const cards = `document.querySelectorAll('[data-key]').length`;
@@ -398,5 +398,42 @@ test("Filter chips: the value menu is the submenu's list, operators read like Li
     const parent = await page.rect('[aria-label="Add Filter…"]');
     const child = await page.rect('[role=dialog][aria-label="Status filter"]');
     expect(child.left).toBeGreaterThanOrEqual(parent.right - 4);
+  });
+});
+
+test("5.3 5.4: Priority and Labels list the site's every value; ten or more split off the unmatched behind Linear's footer", async ({ open }) => {
+  // The site's catalog loads on a writable site.
+  await fixture.reset({
+    writable: true,
+    catalog: {
+      priorities: ["Urgent", "High", "Normal", "Low", "Lowest"],
+      labels: ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota", "kappa"],
+    },
+  });
+  const page = await open();
+  const values = (menu: string) =>
+    `[...document.querySelectorAll('[aria-label="${menu} filter"] [cmdk-item]')].map(n=>n.querySelector('.menu-name')?.textContent)`;
+  await test.step("Priority: every priority, the unused Lowest included, inline (fewer than ten options)", async () => {
+    await page.click('[aria-label="Add filter"]');
+    await page.hover("text=Priority");
+    await page.waitFor(`${values("Priority")}.includes('Lowest')`);
+    expect(await page.eval(values("Priority"))).toEqual(["No priority", "Urgent", "High", "Normal", "Low", "Lowest"]);
+    await page.key("Escape");
+  });
+  await test.step("Labels: matched first, the rest behind the footer, then after a divider with no counts", async () => {
+    await page.click('[aria-label="Add filter"]');
+    await page.hover("text=Labels");
+    const footer = '[aria-label="Labels filter"] [cmdk-item][data-value="Show 11 options with no matches"]';
+    await page.waitFor(`!!document.querySelector('${footer}')`);
+    expect(await page.eval(values("Labels"))).toEqual(["test", "ui", "Show 11 options with no matches"]);
+    await page.click(footer);
+    await page.waitFor(`${values("Labels")}.includes('alpha')`);
+    expect(await page.eval(values("Labels"))).toEqual(
+      ["test", "ui", "No labels", "alpha", "beta", "delta", "epsilon", "eta", "gamma", "iota", "kappa", "theta", "zeta"],
+    );
+    expect(await page.eval(`!!document.querySelector('[aria-label="Labels filter"] [cmdk-separator]')`)).toBe(true);
+    expect(
+      await page.eval(`[...document.querySelectorAll('[aria-label="Labels filter"] [cmdk-item]')].find(n=>n.textContent.startsWith('alpha')).querySelector('.menu-hint')`),
+    ).toBe(null);
   });
 });

@@ -266,7 +266,8 @@ function filterEntries(base: InboxItem[], v: InboxView): ActionEntry[] {
         name: value,
         checkbox: !!v.filters[field]?.includes(value),
         matchCount: counts.get(value),
-        hint: `${counts.get(value)} notification${counts.get(value) === 1 ? "" : "s"}`,
+        // Linear shows no count for a value nothing matches.
+        hint: counts.get(value) ? `${counts.get(value)} notification${counts.get(value) === 1 ? "" : "s"}` : undefined,
         run: () => toggleFilter(field, value),
       })),
     };
