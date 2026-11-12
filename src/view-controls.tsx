@@ -812,15 +812,15 @@ function FilterGroupEditor({
     <div className="space-y-2 rounded-lg border border-line-2 p-2">
       <div className="flex items-center gap-2 text-[12px] text-fg-3">
         Match
-        <select
-          aria-label={depth === 0 ? "Match conditions" : "Match group conditions"}
+        <Select
+          label={depth === 0 ? "Match conditions" : "Match group conditions"}
+          size="medium"
           value={group.join}
-          onChange={(e) => patch(group.id, { join: e.target.value as FilterGroup["join"] })}
-          className="view-select"
+          onValueChange={(join) => patch(group.id, { join: join as FilterGroup["join"] })}
         >
-          <option value="and">all</option>
-          <option value="or">any</option>
-        </select>
+          <Select.Option value="and">all</Select.Option>
+          <Select.Option value="or">any</Select.Option>
+        </Select>
         of the following
         {depth > 0 && (
           <IconButton label="Remove filter group" variant="muted" size="small" className="ml-auto" onClick={() => patch(group.id, null)}>
@@ -881,7 +881,6 @@ function FilterGroupEditor({
     </div>
   );
 }
-/** The advanced editor's native <select>s keep index.css's `view-select`: there is no Select primitive yet. */
 function RuleEditor({
   rule: r,
   board,
@@ -898,12 +897,13 @@ function RuleEditor({
     isDate(r.field) || isNumeric(r.field) || r.field === "content" || r.field === "links";
   return (
     <div className="flex flex-wrap items-start gap-1.5">
-      <select
-        className="view-select w-32"
-        aria-label="Filter property"
+      <Select
+        label="Filter property"
+        size="medium"
+        className="w-32"
         value={r.field}
-        onChange={(e) => {
-          const field = e.target.value as Field;
+        onValueChange={(v) => {
+          const field = v as Field;
           patch({
             field,
             op: field === "content" || field === "links" ? "contains" : "is",
@@ -912,23 +912,24 @@ function RuleEditor({
         }}
       >
         {FIELDS.map(([v, l]) => (
-          <option key={v} value={v}>
+          <Select.Option key={v} value={v}>
             {l}
-          </option>
+          </Select.Option>
         ))}
-      </select>
-      <select
-        className="view-select w-32"
-        aria-label="Filter operator"
+      </Select>
+      <Select
+        label="Filter operator"
+        size="medium"
+        className="w-32"
         value={r.op}
-        onChange={(e) => patch({ op: e.target.value as Rule["op"], values: [] })}
+        onValueChange={(op) => patch({ op: op as Rule["op"], values: [] })}
       >
         {operatorsFor(r.field).map(([v, l]) => (
-          <option key={v} value={v}>
+          <Select.Option key={v} value={v}>
             {l}
-          </option>
+          </Select.Option>
         ))}
-      </select>
+      </Select>
       {!["empty", "notEmpty"].includes(r.op) &&
         (free ? (
           <TextInput
@@ -965,24 +966,22 @@ function RuleEditor({
                 <Icon name="x" size={12} />
               </Button>
             ))}
-            <select
-              aria-label="Add filter value"
+            <Select
+              label="Add filter value"
+              size="medium"
+              className="w-full"
               value=""
-              className="view-select w-full"
-              onChange={(e) => {
-                if (e.target.value && !r.values.includes(e.target.value))
-                  patch({ values: [...r.values, e.target.value] });
-              }}
+              placeholder="Select values…"
+              onValueChange={(v) => patch({ values: [...r.values, v] })}
             >
-              <option value="">Select values…</option>
               {choices
                 .filter((c) => !r.values.includes(c.value))
                 .map((c) => (
-                  <option key={c.value} value={c.value}>
+                  <Select.Option key={c.value} value={c.value} icon={c.icon}>
                     {c.label}
-                  </option>
+                  </Select.Option>
                 ))}
-            </select>
+            </Select>
           </div>
         ))}
       {Number(r.values[0]) < 0 && (isNumeric(r.field) || ["within", "next"].includes(r.op)) && (

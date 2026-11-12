@@ -464,19 +464,6 @@
   line-height: 36px;
   color: var(--menu-placeholder);
 }
-.view-select {
-  height: 28px;
-  border: 1px solid var(--line-2);
-  border-radius: 6px;
-  background: var(--tab);
-  padding: 0 7px;
-  color: var(--fg-2);
-  font-size: 12px;
-  outline: none;
-}
-.view-select:focus-visible {
-  border-color: var(--accent);
-}
 
 .rich-content {
   min-height: 120px;

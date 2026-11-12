@@ -4,6 +4,7 @@ import { statuses } from "./board-catalog";
 import { FilterIcon } from "./filter-icons";
 import { hue, PriorityIcon, StatusIcon, TypeDot } from "./icons";
 import { Menu } from "./menu";
+import { Select } from "./select";
 import { Button } from "./button";
 import { TextInput } from "./field";
 import { Text } from "./text";
@@ -315,19 +316,19 @@ export function PropertyFilter({
       }}
       className="space-y-2 p-3"
     >
-      {/* No Select primitive yet: the native select keeps index.css's `view-select`. */}
-      <select
-        aria-label={`${name} operator`}
+      <Select
+        label={`${name} operator`}
+        size="medium"
+        className="w-full"
         value={op}
-        onChange={(e) => setOp(e.target.value as Rule["op"])}
-        className="view-select w-full"
+        onValueChange={(v) => setOp(v as Rule["op"])}
       >
         {operatorsFor(field).map(([v, l]) => (
-          <option value={v} key={v}>
+          <Select.Option value={v} key={v}>
             {l}
-          </option>
+          </Select.Option>
         ))}
-      </select>
+      </Select>
       {!["empty", "notEmpty"].includes(op) && (
         <TextInput
           size="medium"
