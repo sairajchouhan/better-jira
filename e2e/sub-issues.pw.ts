@@ -37,9 +37,8 @@ test("the sub-issue tree: progress, guide lines and display preferences", async 
     await page.eval(`document.querySelector('input[type=checkbox]').click()`);
     await page.waitFor(`document.querySelector('[data-sub-issues]').textContent.includes('1/1')`);
     expect(await page.eval(`document.querySelectorAll('[data-sub-issue]').length`)).toBe(1);
-    await page.eval(
-      `const select=document.querySelector('[aria-label="Completed sub-issues"]');select.value='none';select.dispatchEvent(new Event('change',{bubbles:true}))`,
-    );
+    await page.page.getByRole("button", { name: /^Completed issues: / }).click();
+    await page.page.getByRole("dialog", { name: "Completed issues" }).getByRole("option", { name: "None" }).click();
     await page.waitFor(`document.querySelectorAll('[data-sub-issue]').length===0`);
     await page.key("Escape");
     await page.click("text=Show 1 completed");
@@ -143,11 +142,11 @@ test("the sub-issue tree: progress, guide lines and display preferences", async 
     await page.waitFor(`!!document.querySelector('[data-sub-issue]')`);
     await page.click('[aria-label="Sub-issue display options"]');
     expect(
-      await page.eval(`document.querySelector('[aria-label="Sub-issue ordering"]').value`),
-    ).toBe("manual");
+      await page.eval(`document.querySelector('[aria-label^="Ordering: "]').getAttribute('aria-label')`),
+    ).toBe("Ordering: Manual");
     expect(
-      await page.eval(`document.querySelector('[aria-label="Completed sub-issues"]').value`),
-    ).toBe("all");
+      await page.eval(`document.querySelector('[aria-label^="Completed issues: "]').getAttribute('aria-label')`),
+    ).toBe("Completed issues: All");
     expect(await page.eval(`document.querySelector('input[type="checkbox"]').checked`)).toBe(true);
     await page.click("text=ID");
     expect(
@@ -247,9 +246,8 @@ test("sub-issue row properties change locally, undo, sort and persist with no Ji
       ),
     ).toContain("ui");
     await page.click('[aria-label="Sub-issue display options"]');
-    await page.eval(
-      `const select=document.querySelector('[aria-label="Sub-issue ordering"]');select.value='priority';select.dispatchEvent(new Event('change',{bubbles:true}))`,
-    );
+    await page.page.getByRole("button", { name: /^Ordering: / }).click();
+    await page.page.getByRole("dialog", { name: "Ordering" }).getByRole("option", { name: "Priority" }).click();
     await page.key("Escape");
     expect(
       await page.eval(

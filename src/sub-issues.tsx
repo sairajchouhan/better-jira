@@ -11,6 +11,7 @@ import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSubIssueComposer } from "./use-sub-issue-composer";
 import { useStoredState } from "./stored-state";
 import { FieldMenuButton } from "./pill-select";
+import { SelectRow, Toggle } from "./view-controls";
 import {
   RelationIcon,
   Icon,
@@ -65,6 +66,13 @@ const orderings = [
   ["created", "Created"],
   ["due", "Due date"],
   ["links", "Link count"],
+] as const;
+const COMPLETED = [
+  ["all", "All"],
+  ["day", "Past day"],
+  ["week", "Past week"],
+  ["month", "Past month"],
+  ["none", "None"],
 ] as const;
 const properties: [Property, string][] = [
   ["priority", "Priority"],
@@ -556,60 +564,26 @@ export function SubIssues({ issue }: { issue: Issue }) {
           close={() => setSettings(null)}
           width={300}
         >
-          {/* Native selects have no matching primitive in this contract. */}
-          <label className="mb-3 flex items-center justify-between">
-            Ordering
-            <select
-              aria-label="Sub-issue ordering"
-              value={display.ordering}
-              className="rounded bg-card p-1"
-              onChange={(e) =>
-                change({
-                  ordering: e.target.value as SubIssueDisplay["ordering"],
-                })
-              }
-            >
-              {orderings.map(([id, label]) => (
-                <option key={id} value={id}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="mb-3 flex items-center justify-between">
-            Completed issues
-            <select
-              aria-label="Completed sub-issues"
-              value={display.completed}
-              className="rounded bg-card p-1"
-              onChange={(e) =>
-                change({
-                  completed: e.target.value as SubIssueDisplay["completed"],
-                })
-              }
-            >
-              {[
-                ["all", "All"],
-                ["day", "Past day"],
-                ["week", "Past week"],
-                ["month", "Past month"],
-                ["none", "None"],
-              ].map(([id, label]) => (
-                <option key={id} value={id}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="mb-3 flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={display.nested}
-              onChange={(e) => change({ nested: e.target.checked })}
-            />
-            Nested sub-issues
-          </label>
-          <p className="mb-2 text-fg-3">Display properties</p>
+          <SelectRow
+            label="Ordering"
+            value={display.ordering}
+            options={orderings}
+            onChange={(ordering) => change({ ordering: ordering as SubIssueDisplay["ordering"] })}
+          />
+          <SelectRow
+            label="Completed issues"
+            value={display.completed}
+            options={COMPLETED}
+            onChange={(completed) => change({ completed: completed as SubIssueDisplay["completed"] })}
+          />
+          <Toggle
+            label="Nested sub-issues"
+            value={display.nested}
+            onChange={() => change({ nested: !display.nested })}
+          />
+          <Text as="div" variant="mini" color="muted" className="mt-3 mb-2">
+            Display properties
+          </Text>
           <div className="flex flex-wrap gap-1">
             {properties.map(([id, label]) => (
               <Button
