@@ -1141,12 +1141,13 @@ export function Relations({ issue }: { issue: Issue }) {
   const all = useStore((s) => s.issues),
     boards = useStore((s) => s.boards);
   const [query, setQuery] = useState(""),
-    [selected, setSelected] = useState("");
+    [selected, setSelected] = useState(""),
+    [peek, setPeek] = useState(false);
   const kind = useStore((s) => s.relation);
   const close = () => ui.send({ type: "overlay.close" });
   const mark = MARK[kind] ?? MARK.related!;
   // Linear leaves out issues the new link would repeat or contradict; "Related issues" offers this issue's related ones first.
-  // ponytail: "Recent" is most recently updated; Linear uses recently viewed. "More actions" (⌥↵) and "Quick look" (→) are not built.
+  // ponytail: "Recent" is most recently updated; Linear uses recently viewed.
   const linked = new Set(
     (issue.relations ?? [])
       .filter(
@@ -1236,6 +1237,18 @@ export function Relations({ issue }: { issue: Issue }) {
             createSubIssue(issue);
           }
         : null;
+  // Linear's command-menu footer (BJ-53): → Quick look peeks the highlighted issue beside the list, ← closes it, and
+  // ⌥↵ More actions opens that issue's row menu. Both are this menu's own keys, like ↵, so they stay out of the registry.
+  const candidate = all.get(selected.replace(/^related:/, ""));
+  const moreActions = (target: Issue) => {
+    const rect = document.querySelector("[cmdk-item][data-selected=true]")?.getBoundingClientRect();
+    ui.send({
+      type: "overlay.open",
+      overlay: "options",
+      target: target.key,
+      point: rect ? { x: rect.right - 200, y: rect.top } : undefined,
+    });
+  };
   const row = (i: Issue, group: string) => (
     <Menu.Item
       key={`${group}${i.key}`}
@@ -1254,13 +1267,32 @@ export function Relations({ issue }: { issue: Issue }) {
   );
   return (
     // Command-style relations retain MenuSurface: Dialog has no command placement variant.
-    <Modal label="Issue relations" close={close} command width={720}>
+    <Modal label="Issue relations" close={close} command width={peek ? 720 + 415 : 720}>
       <Menu
         shouldFilter={false}
         value={selected}
         onValueChange={setSelected}
         data-kind={kind}
         className="flex min-h-0 flex-col"
+        // Capture: the menu's own ArrowRight (open a submenu) and cmdk's Enter come after.
+        onKeyDownCapture={(e) => {
+          const input = e.target as HTMLInputElement;
+          if (e.key === "Enter" && e.altKey && candidate) {
+            e.preventDefault();
+            moreActions(candidate);
+          } else if (
+            e.key === "ArrowRight" &&
+            candidate &&
+            !peek &&
+            input.selectionStart === input.value?.length
+          ) {
+            e.preventDefault();
+            setPeek(true);
+          } else if (e.key === "ArrowLeft" && peek) {
+            e.preventDefault();
+            setPeek(false);
+          }
+        }}
       >
         <div className="px-1.5 pt-1.5">
           <Menu.Input
@@ -1269,9 +1301,14 @@ export function Relations({ issue }: { issue: Issue }) {
             placeholder={mark.placeholder.replace("{key}", issue.key)}
             className="h-10 w-full rounded-xl bg-transparent px-3 text-[13px] text-[var(--menu-fg)] outline-none placeholder:text-[var(--menu-placeholder)]"
             value={query}
-            onValueChange={setQuery}
+            onValueChange={(value) => {
+              setQuery(value);
+              setPeek(false);
+            }}
           />
         </div>
+        <div className="flex min-h-0">
+        <div className="min-w-0 flex-1">
         <Menu.List>
           {relatedFirst && relatedGroup}
           {recent.length > 0 &&
@@ -1298,14 +1335,63 @@ export function Relations({ issue }: { issue: Issue }) {
           )}
           <Menu.Empty>No matching issues</Menu.Empty>
         </Menu.List>
+        </div>
+        {peek && candidate && <IssuePeek issue={candidate} />}
+        </div>
         <div className="mark-footer">
           <span>
             <Keycap size="small">↵</Keycap>
             {selected === "create" ? "Select" : mark.enter}
           </span>
+          {candidate && (
+            <div className="ml-auto flex">
+              <Button variant="borderless" size="small" onClick={() => moreActions(candidate)}>
+                <Shortcut keys="Alt+Enter" size="small" /> More actions
+              </Button>
+              {peek ? (
+                <Button variant="borderless" size="small" onClick={() => setPeek(false)}>
+                  <Shortcut keys="ArrowLeft" size="small" /> Close
+                </Button>
+              ) : (
+                <Button variant="borderless" size="small" onClick={() => setPeek(true)}>
+                  Quick look <Shortcut keys="ArrowRight" size="small" />
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </Menu>
     </Modal>
+  );
+}
+
+/** Quick look in the relations menu: the highlighted issue at Linear's 415px peek width (VK.PEEK_WIDTH). */
+function IssuePeek({ issue }: { issue: Issue }) {
+  const boards = useStore((s) => s.boards);
+  const status = statusOf(boards, issue);
+  return (
+    <aside
+      aria-label="Quick look"
+      className="w-[415px] shrink-0 overflow-y-auto border-l border-[var(--menu-line)] p-4"
+    >
+      <div className="flex items-center gap-2">
+        <StatusIcon status={status} />
+        <Text variant="mini" color="muted">
+          {issue.key}
+        </Text>
+      </div>
+      <Text as="h3" variant="regularPlus" className="mt-2">
+        {issue.summary}
+      </Text>
+      <Text as="p" variant="small" color="muted" className="mt-1">
+        {[status.name, issue.assignee?.name ?? "Unassigned", issue.priority ?? "No priority"].join(" · ")}
+      </Text>
+      {issue.description ? (
+        <Text as="p" variant="small" className="mt-3 whitespace-pre-wrap">
+          {issue.description}
+        </Text>
+      ) : null}
+    </aside>
   );
 }
 

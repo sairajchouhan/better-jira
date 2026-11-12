@@ -112,6 +112,23 @@ test("sub-issue rows: shortcuts act on the row, collapse persists, the composer 
     await p.click('[role="dialog"][aria-label="Relation options"] [cmdk-item][data-value="Remove relation"]');
     await p.waitFor(`!document.querySelector('[data-relation$=":TEST-1"]')`);
   });
+
+  await test.step("BJ-53: the relations menu peeks a candidate with → and opens its actions with ⌥↵", async () => {
+    await p.eval("document.activeElement?.blur()");
+    await p.keys("mr");
+    await p.type("TEST-1");
+    await p.waitFor(`document.querySelector('[cmdk-item][data-selected=true]')?.dataset.value==="TEST-1"`);
+    await p.key("ArrowRight");
+    await p.waitFor(`document.querySelector('[aria-label="Quick look"]')?.textContent.includes("TEST-1")`);
+    await p.key("ArrowLeft");
+    await p.waitFor(`!document.querySelector('[aria-label="Quick look"]')`);
+    await p.key("Enter", "alt");
+    await p.waitFor(
+      `!!document.querySelector('[role="dialog"][aria-label="Issue options"]')&&!document.querySelector('[role="dialog"][aria-label="Issue relations"]')`,
+    );
+    expect(await p.eval(`!!document.querySelector('[data-relation$=":TEST-1"]')`)).toBe(false);
+    await p.key("Escape");
+  });
 });
 
 test("editing an issue's fields: pickers close and apply, Jira renames wait for the draft, and Tab leaves the composer", async ({
