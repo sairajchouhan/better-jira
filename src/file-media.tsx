@@ -4,7 +4,7 @@ import "./media-primitives.css";
 import { notifyMedia } from "./media-toast";
 import { Icon } from "./icons";
 import type { Attachment } from "./attachment-media";
-import { attachmentLink } from "./media-layout";
+import { attachmentLink, downloadURL } from "./media-layout";
 export function FileMedia({ file, issueKey }: { file: Attachment; issueKey?: string }) {
   const size =
     file.size < 1024
@@ -40,7 +40,7 @@ export function FileMedia({ file, issueKey }: { file: Attachment; issueKey?: str
           size="medium"
           label={`Download ${file.name}`}
           icon={<Icon name="download" />}
-          href={file.url.startsWith("/api/") ? `${file.url}?download=1` : file.url}
+          href={downloadURL(file.url)}
           download={file.name}
         />
       </div>

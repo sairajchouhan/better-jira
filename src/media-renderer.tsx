@@ -5,12 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 import type { MediaProps } from "./media-loader";
 import type { Attachment } from "./attachment-media";
 import { Adf } from "./adf";
-import { mediaContainerStyle, mediaDimensions, safeExternalImage } from "./media-layout";
+import { downloadURL, mediaContainerStyle, mediaDimensions, safeExternalImage } from "./media-layout";
 import { VideoPlayer } from "./video-player";
 import { FileMedia } from "./file-media";
 import { ImageMedia } from "./image-media";
 import { externalMediaId } from "./media-edits";
-const downloadURL = (url: string) => (url.startsWith("/api/") ? `${url}?download=1` : url);
 
 export function MediaRenderer({ node, issueKey, attachments, embedded, onSelect }: MediaProps) {
   if (node.type === "mediaSingle" || node.type === "mediaGroup") {

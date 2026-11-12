@@ -1,3 +1,7 @@
+export function downloadURL(url: string): string {
+  return url.startsWith("/api/") ? `${url}${url.includes("?") ? "&" : "?"}download=1` : url;
+}
+
 import type { CSSProperties } from "react";
 import type { AdfNode } from "./document";
 export function mediaDimensions(node: AdfNode): { width: number; height: number } | undefined {

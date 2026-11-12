@@ -8,7 +8,7 @@ import { copyMediaImage } from "./image-media";
 import { Icon } from "./icons";
 import { ImageCropEditor } from "./image-crop";
 import type { ImageCrop } from "./media-edits";
-import { attachmentLink } from "./media-layout";
+import { attachmentLink, downloadURL } from "./media-layout";
 export function ImageViewer({
   file,
   original,
@@ -155,7 +155,7 @@ export function ImageViewer({
             size="medium"
             label="Download image"
             icon={<Icon name="download" size={16} />}
-            href={file.url.startsWith("/api/") ? `${file.url}?download=1` : file.url}
+            href={downloadURL(file.url)}
             download={
               file.url !== original.url
                 ? file.name.replace(/\.[^.]+$/, "") + ".png"

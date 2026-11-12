@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { safeExternalImage, mediaDimensions } from "./media-layout";
+import { downloadURL, safeExternalImage, mediaDimensions } from "./media-layout";
 
 test("external media only accepts HTTPS images without URL credentials", () => {
   expect(safeExternalImage("https://images.example.test/image.png")).toBe(
@@ -44,4 +44,11 @@ test("local media links address the issue attachment rather than a transient blo
       "http://localhost/?issue=TEST-2",
     ),
   ).toBe("http://localhost/api/issues/TEST-2/attachments/102");
+});
+
+test("download URLs preserve existing API query parameters and external URLs", () => {
+  expect(downloadURL("/api/issues/TEST-2/attachments/101?version=2")).toBe("/api/issues/TEST-2/attachments/101?version=2&download=1");
+  expect(downloadURL("/api/issues/TEST-2/attachments/101")).toBe("/api/issues/TEST-2/attachments/101?download=1");
+  expect(downloadURL("https://example.com/file?version=2")).toBe("https://example.com/file?version=2");
+  expect(downloadURL("blob:local-file")).toBe("blob:local-file");
 });

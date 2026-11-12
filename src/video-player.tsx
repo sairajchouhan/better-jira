@@ -9,8 +9,7 @@ import type { Attachment } from "./attachment-media";
 import { Icon } from "./icons";
 
 const RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
-const download = (url: string) =>
-  url.startsWith("/api/") ? `${url}${url.includes("?") ? "&" : "?"}download=1` : url;
+import { downloadURL } from "./media-layout";
 const time = (value: number) => {
   const seconds = Math.floor(Number.isFinite(value) ? value : 0);
   return `${Math.floor(seconds / 60)
@@ -521,7 +520,7 @@ export function VideoPlayer({
               <Button variant="secondary" size="medium" aria-label="Retry video" onClick={retry}>
                 Retry video
               </Button>
-              <ButtonLink variant="secondary" size="medium" href={download(file.url)} download={file.name}>
+              <ButtonLink variant="secondary" size="medium" href={downloadURL(file.url)} download={file.name}>
                 Download video
               </ButtonLink>
             </div>
@@ -626,7 +625,7 @@ export function VideoPlayer({
             <a
               aria-label="Download"
               aria-describedby={`${tooltipId}-download`}
-              href={download(file.url)}
+              href={downloadURL(file.url)}
               download={file.name}
             >
               <Icon name="download" size={16} />
