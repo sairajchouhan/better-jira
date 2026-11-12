@@ -99,12 +99,9 @@ function HiddenRow({ hidden, clear, between }: { hidden: number; clear: () => vo
     <div className="flex"><Button variant="borderless" size="small" onClick={clear}>Clear Filters<Icon name="x" size={12} /></Button></div>
   </div>;
 }
-export function ResultsFeedback({ count, baseline, view, temporary, clear, layout = "list" }: { count: number; baseline: number; view: SavedView | null; temporary: boolean; clear: () => void; layout?: "list" | "board" }) {
-  const feedback = resultFeedback(count, baseline, !!view, temporary);
-  if (!feedback) return null;
-  // Linear's saved-empty state: a centred filter illustration and one line, nothing to act on.
-  if (feedback.saved) return <div role="status" className="pointer-events-none absolute inset-0 z-[1] flex flex-col items-center justify-center gap-6 text-[14px] font-medium text-fg-3">
-    <svg aria-hidden="true" width="140" height="84" viewBox="0 0 140 84" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+/** Shared illustration for saved and temporary filtered empty results. */
+function FilterIllustration() {
+  return <svg aria-hidden="true" width="140" height="84" viewBox="0 0 140 84" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
       <rect width="100" height="100" rx="14" transform="matrix(.9 -.28 .46 .48 2 28)" vectorEffect="non-scaling-stroke" strokeDasharray="3 3" opacity=".6" />
       <g className="text-fg-2" transform="translate(0 6) rotate(-13 70 30)" strokeWidth="1.25">
         {[[28, 10, 66], [50, 26, 44], [70, 42, 24]].map(([x, y, w]) => <g key={y}>
@@ -112,7 +109,14 @@ export function ResultsFeedback({ count, baseline, view, temporary, clear, layou
           <path d={`M${x! + 0.5} ${y! + 5}v2.5a4 4 0 0 0 4 4h${w! - 9}a4 4 0 0 0 4 -4v-2.5`} opacity=".7" />
         </g>)}
       </g>
-    </svg>
+    </svg>;
+}
+export function ResultsFeedback({ count, baseline, view, temporary, clear, layout = "list" }: { count: number; baseline: number; view: SavedView | null; temporary: boolean; clear: () => void; layout?: "list" | "board" }) {
+  const feedback = resultFeedback(count, baseline, !!view, temporary);
+  if (!feedback) return null;
+  // Linear's saved-empty state: a centred filter illustration and one line, nothing to act on.
+  if (feedback.saved) return <div role="status" className="pointer-events-none absolute inset-0 z-[1] flex flex-col items-center justify-center gap-6 text-[14px] font-medium text-fg-3">
+    <FilterIllustration />
     {feedback.text}
   </div>;
   // Partial results: hiddenItemsContainer (full width, 12px top/bottom, wraps, centred, 20px gap) inside Linear's board
@@ -122,6 +126,6 @@ export function ResultsFeedback({ count, baseline, view, temporary, clear, layou
     return layout === "board" ? <div className="flex h-[45px] shrink-0 items-center justify-center bg-panel">{inner}</div> : <div className="flex h-[84px] justify-center px-[34px]">{inner}</div>;
   }
   // Zero state: the rows sit in a bgBorder box (0.5px, 5px radius, min 350px), each 16px padded, count left, action right.
-  return <div role="status" className="flex shrink-0 flex-col items-center justify-center gap-4 py-12 text-[13px] text-fg-3"><span className="text-[15px] font-medium">{feedback.text}</span>
+  return <div role="status" className="flex shrink-0 flex-col items-center justify-center gap-4 py-12 text-[13px] text-fg-3"><FilterIllustration /><span className="text-[15px] font-medium">{feedback.text}</span>
     {feedback.hidden ? <div className="min-w-[350px] rounded-[5px] border-[0.5px] border-(--bg-border)"><div className="p-4"><HiddenRow hidden={feedback.hidden} clear={clear} between /></div></div> : null}</div>;
 }

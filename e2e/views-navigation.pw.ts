@@ -54,6 +54,8 @@ test("empty directory and saved versus temporary empty results", async ({ open }
     const filter = Buffer.from(JSON.stringify({v:1,filters:draft.filters})).toString('base64url');
     await page.page.goto(`${new URL(page.page.url()).origin}/view/${saved.id}?board=1&filter=${filter}`);
     await page.waitFor(`document.querySelector('[role=status]')?.textContent.includes('No issues matching the filters')`);
+    // BJ-150: temporary empty filters have the illustration as well as the recovery action.
+    expect(await page.eval(`!!document.querySelector('[role=status] svg[width="140"]')`)).toBe(true);
     await page.click('text=Clear Filters');
     await page.waitFor(`!new URL(location.href).searchParams.has('filter') && document.querySelectorAll('[data-key]').length===6`);
   } finally { await page.close(); }
