@@ -210,6 +210,13 @@ function MenuRoot({
           // A checkbox row toggles from its checkbox, which keeps the menu open; any other row picks.
           const toggle = (item: HTMLElement) =>
             (item.querySelector<HTMLElement>("input.menu-checkbox") ?? item).click();
+          // A pristine menu has no highlight for cmdk's own ↓ to step from, so its first ↓, ↑ or Space lands on an end itself
+          // (and so previews a submenu row there).
+          if (pristine && (event.key === "ArrowDown" || event.key === "ArrowUp" || (event.key === " " && !search?.value))) {
+            event.preventDefault();
+            move(event.key === "ArrowUp" ? -1 : 1);
+            return;
+          }
           switch (event.key) {
             case "Tab":
               event.preventDefault();
@@ -233,7 +240,6 @@ function MenuRoot({
               }
               return;
             case " ":
-              if (pristine && !search?.value) event.preventDefault();
               if (!row || (search?.value && !(afterArrow && plain && row.hasAttribute("aria-checked")))) return;
               event.preventDefault();
               toggle(row);
