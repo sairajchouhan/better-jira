@@ -1,0 +1,32 @@
+/*
+ * Linear theme colours the shared primitives need and index.css has no token for. Each comes from `generateTheme` in
+ * startup-root.CnUSfl4j.js with the presets in .raj/linear.md (light base [97.94, 0.5, 282], dark base [5.52, 0.4, 272]).
+ * The layer statement repeats Tailwind's order so a primitive's `@layer components` never lands ahead of preflight,
+ * whichever stylesheet the bundle loads first; callers' utility classes still win over a primitive's defaults.
+ */
+@layer theme, base, components, utilities;
+
+:root {
+  --thin-pixel: 0.5px; /* wi.thinPixel */
+  --control-secondary-hover: lch(95.883% 0.157 282); /* controlSecondaryHover */
+  --control-primary-hover: lch(47% 50.26 286.91); /* controlPrimaryHover */
+  --control-primary-label: #fff; /* controlPrimaryLabel */
+  --border-alpha-thin: lch(0 0 0 / 0.09); /* bgBorderAlphaThin */
+  --border-solid-alpha-thin: lch(0 0 0 / 0.511); /* bgBorderSolidAlphaThin */
+  --red-base: lch(58% 73 29); /* redBase */
+  --red-base-hover: lch(53% 73 29); /* redBaseHover */
+  --red-text: lch(50% 80 29); /* redText */
+  --red-tint: color-mix(in lch, var(--red-base) 20%, var(--panel)); /* redTint over bgBase */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --control-secondary-hover: lch(14.778% 1.075 272);
+    --control-primary-hover: lch(52.418% 61.103 288.421);
+    --border-alpha-thin: lch(100 0 0 / 0.137);
+    --border-solid-alpha-thin: lch(100 0 0 / 0.594);
+    --red-base-hover: lch(62.5% 73 29);
+    --red-text: lch(80% 80 29);
+    --red-tint: color-mix(in lch, var(--red-base) 3%, var(--panel));
+  }
+}

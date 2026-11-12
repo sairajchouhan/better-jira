@@ -1,0 +1,60 @@
+@layer components {
+  /* D4.container */
+  .ui-shortcut {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 3px;
+  }
+
+  /* D4.key + Bbe[size] */
+  .ui-keycap {
+    display: inline-block;
+    vertical-align: baseline;
+    text-align: center;
+    line-height: 110%;
+    font-feature-settings: "cv08", "zero";
+    color: var(--fg-3);
+    border: var(--thin-pixel) solid var(--line);
+    background: transparent;
+    font-size: 11px;
+    border-radius: 3px;
+    padding: 4px;
+    min-width: 20px;
+  }
+  .ui-keycap[data-size="small"] {
+    border-radius: 4px;
+    padding: 2px;
+    min-width: 18px;
+  }
+  .ui-keycap[data-size="large"] {
+    font-size: 13px;
+    padding: 5px;
+    min-width: 24px;
+  }
+  /* D4.borderedKeyPrimary: on a primary button the caps take its label colour. */
+  .ui-keycap[data-variant="primary"] {
+    color: var(--control-primary-label);
+    border-color: color-mix(in srgb, transparent 60%, var(--control-primary-label));
+  }
+  /* D4.borderlessKey */
+  .ui-keycap[data-type="borderless"] {
+    border: 0;
+    border-radius: 0;
+    min-width: 0;
+    padding: 0;
+    font-weight: 500;
+  }
+
+  /* D4.label + Vbe[size]: the "or" / "then" between caps. */
+  .ui-shortcut-label {
+    margin: 0;
+    color: var(--fg-3);
+    font-size: 11px;
+  }
+  .ui-shortcut-label[data-size="small"] {
+    font-size: 10px;
+  }
+  .ui-shortcut-label[data-size="large"] {
+    font-size: 12px;
+  }
+}
