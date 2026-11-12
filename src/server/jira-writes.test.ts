@@ -650,3 +650,34 @@ test("BJ-15: removing a Jira link kind Linear lacks deletes that type's link fro
   expect(result.error).toContain("no link type");
   expect(calls.filter((c) => c.startsWith("DELETE"))).toEqual([]);
 });
+
+test("#2: a description with an issue chip saves whichever build made its base; only another text conflicts", async () => {
+  const chip = {
+    type: "doc",
+    version: 1,
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "see " },
+          { type: "inlineCard", attrs: { url: "https://site.atlassian.net/browse/K-1" } },
+        ],
+      },
+    ],
+  };
+  let puts = 0;
+  answer = (path, init) => {
+    if (init?.method === "PUT") return void puts++;
+    if (path.endsWith("?fields=description")) return { fields: { description: chip } };
+    return {};
+  };
+  const edit = (descriptionBase: string) =>
+    applyOps("K-50", [{ op: "fields", fields: { description: doc("mine"), descriptionBase } }]);
+  // This build's base (the chip's URL), the chip text BJ-199 builds sent, and the older URL-only form all match Jira's text.
+  for (const base of ["see https://site.atlassian.net/browse/K-1", "see K-1", "see  https://site.atlassian.net/browse/K-1 "])
+    expect((await edit(base)).error).toBe(undefined);
+  expect(puts).toBe(3);
+  // Someone else's edit still conflicts.
+  expect((await edit("see K-2")).error).toContain(DESCRIPTION_CONFLICT);
+  expect(puts).toBe(3);
+});

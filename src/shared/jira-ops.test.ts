@@ -75,6 +75,28 @@ test("descriptions come from the full record and ranks name a neighbour", () => 
       [{ op: "fields", fields: { description: doc("c"), descriptionBase: "b" } }],
     ),
   ).toEqual([{ op: "fields", fields: { description: doc("c"), descriptionBase: "a" } }]);
+  // #2: a chip in the base reads as its URL, never as its key or title, which differ between builds and loads.
+  const card = {
+    type: "doc",
+    version: 1,
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "inlineCard", attrs: { url: "https://s.test/browse/A-9", data: { name: "Title" } } },
+        ],
+      },
+    ],
+  } as any;
+  expect(
+    opsFor(
+      { issue: base, full: { key: "A-1", fields: { description: card } } as any },
+      { issue: base, full: full("b") },
+      new Map(),
+    ),
+  ).toEqual([
+    { op: "fields", fields: { description: doc("b"), descriptionBase: "https://s.test/browse/A-9" } },
+  ]);
   const peers = new Map<string, Issue>([
     ["A-2", { ...base, key: "A-2", rank: "a" }],
     ["A-3", { ...base, key: "A-3", rank: "c" }],

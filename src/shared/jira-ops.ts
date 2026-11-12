@@ -1,5 +1,5 @@
 import { type Full, type Issue, type CommentState } from "@/shared/issue-model";
-import { adfToText, textToAdf, type AdfDocument } from "./document";
+import { descriptionBaseText, textToAdf, type AdfDocument } from "./document";
 import { inwardKind, outwardKind } from "./relations";
 import type { IssueComment } from "@/client/features/comments/comment-thread";
 
@@ -265,7 +265,7 @@ export function opsFor(before: Side, after: Side, issues: Map<string, Issue>): O
   if (after.full && db !== undefined && !same(da, db)) {
     fields.description = db;
     // Unknown on replay after a reload (the base wasn't kept): sent unchecked, as before.
-    if (da !== undefined) fields.descriptionBase = adfToText(da);
+    if (da !== undefined) fields.descriptionBase = descriptionBaseText(da);
   }
   if (Object.keys(fields).length) ops.push({ op: "fields", fields });
   if (a.status !== b.status) ops.push({ op: "status", status: b.status });

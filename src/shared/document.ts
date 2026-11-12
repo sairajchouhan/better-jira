@@ -99,18 +99,42 @@ export function textToAdf(text: string): AdfDocument {
   };
 }
 
-/** Plain text of ADF: what a reader sees, without formatting or media. */
-export function adfToText(node: any, details?: (url: string) => SmartLinkDetails | undefined): string {
+const CARDS = ["inlineCard", "blockCard", "embedCard"];
+/** ADF as plain text, with each smart link read by `card`. */
+function plainText(node: any, card: (node: any) => string): string {
   if (!node) return "";
   if (typeof node === "string") return node;
   if (node.type === "text") return node.text;
   if (node.type === "hardBreak") return "\n";
   if (node.attrs?.text) return node.attrs.text;
-  if (["inlineCard", "blockCard", "embedCard"].includes(node.type))
-    return smartLinkText(node.attrs?.url, node.attrs?.data, details?.(node.attrs?.url));
-  const kids: string[] = (node.content ?? []).map((child: any) => adfToText(child, details));
+  if (CARDS.includes(node.type)) return card(node);
+  const kids: string[] = (node.content ?? []).map((child: any) => plainText(child, card));
   if (node.type === "doc") return kids.join("\n\n");
   if (node.type === "bulletList" || node.type === "orderedList")
     return kids.map((k) => `- ${k}`).join("\n");
   return kids.join(node.type === "listItem" ? "\n" : "");
 }
+
+/** Plain text of ADF: what a reader sees, without formatting or media. */
+export function adfToText(node: any, details?: (url: string) => SmartLinkDetails | undefined): string {
+  return plainText(node, (card) =>
+    smartLinkText(card.attrs?.url, card.attrs?.data, details?.(card.attrs?.url)),
+  );
+}
+
+/**
+ * The text a description edit started from, which the server compares with Jira's text to tell someone else's edit
+ * apart (DESCRIPTION_CONFLICT). A smart link reads as its URL, the one part Jira keeps as sent: how a chip reads
+ * (key, title) changes with the build and with what the mirror knows, and a base must read the same on every build
+ * (#2). Never change what this returns; the server also accepts the forms older builds sent (`descriptionBases`).
+ */
+export const descriptionBaseText = (node: unknown): string =>
+  plainText(node, (card) => String(card.attrs?.url ?? ""));
+
+/** Every form a build so far may have sent as the base of an edit of `node`: this build's, the chip text builds since
+ *  BJ-199 sent, and the URL-only inline card (with empty block cards) earlier builds sent. */
+export const descriptionBases = (node: unknown): string[] => [
+  descriptionBaseText(node),
+  adfToText(node),
+  plainText(node, (card) => (card.type === "inlineCard" ? String(card.attrs?.url ?? "") : "")),
+];

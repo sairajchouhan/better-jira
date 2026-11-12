@@ -1,7 +1,7 @@
 import { jira, JiraError } from "./jira";
 import { ESTIMATES, ledger, refresh } from "./mirror";
 import { DESCRIPTION_CONFLICT, renameCommentIds, type Op } from "@/shared/jira-ops";
-import { adfToText } from "@/shared/document";
+import { descriptionBases } from "@/shared/document";
 import { inwardKind, jiraLinkType, LINEAR_TYPES } from "@/shared/relations";
 
 const at = (key: string) => `/rest/api/3/issue/${encodeURIComponent(key)}`;
@@ -329,7 +329,8 @@ async function run(ctx: Context, op: Op) {
       if (descriptionBase !== undefined) {
         const current = (await jira(`${at(key)}?fields=description`)).fields?.description,
           squash = (text: string) => text.replace(/\s+/g, " ").trim();
-        if (squash(adfToText(current)) !== squash(descriptionBase))
+        // Bases are compared as text, not ADF: Jira rewrites ADF it stores. Any form a build may have sent counts (#2).
+        if (!descriptionBases(current).some((text) => squash(text) === squash(descriptionBase)))
           throw new UserError(DESCRIPTION_CONFLICT);
       }
       // Single adds and removes, so labels someone else added meanwhile survive.
