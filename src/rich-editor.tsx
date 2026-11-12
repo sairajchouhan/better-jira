@@ -124,7 +124,11 @@ const caretMenus = [
 const ToolbarButton = (props: ComponentProps<typeof Button>) => <Button variant="borderless" size="small" {...props} />;
 
 export type EditorPresentation = "framed" | "inline" | "document" | "comment";
-export type EditorEngineProps = RichEditorProps & { presentation: EditorPresentation };
+export type EditorEngineProps = RichEditorProps & {
+  presentation: EditorPresentation;
+  /** Input the loader's stand-in took before this chunk arrived: text continues where the content ends, then ⌘↵ saves. */
+  early?: { text: string; submit: boolean };
+};
 // Presentation policy stays private to the engine. Callers compose a named editor variant.
 const BUSY = "Finish or discard attachments before sending";
 const presentations = {
@@ -319,8 +323,10 @@ export function RichEditor(props: EditorEngineProps) {
     if (props.autoFocus) {
       // Continue where the content ends: a restored draft, or the @mention a reply starts with.
       editor.dispatch(editor.state.tr.setSelection(Selection.atEnd(editor.state.doc)));
+      if (props.early?.text) editor.dispatch(editor.state.tr.insertText(props.early.text));
       editor.focus();
     }
+    if (props.early?.submit) save();
     const input = (event: Event) => uploads.enqueue((event as CustomEvent<File[]>).detail);
     const late = (event: Event) => {
       const merged = mergeLateMedia(
