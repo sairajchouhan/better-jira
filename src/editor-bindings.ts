@@ -27,3 +27,13 @@ export const editorBindings: { id: string; name: string; hotkey: Hotkey }[] = [
 ];
 /** An editor binding's keys, for a control's tooltip or a menu row's caps. */
 export const editorKey = (id: string) => editorBindings.find((b) => b.id === id)?.hotkey;
+/** Keys inside a code block (Linear's `code_block` keys), bound by the editor's code keymap and listed in Help. */
+export const codeBlockBindings: { id: string; name: string; hotkey: Hotkey }[] = [
+  { id: "code-indent", name: "Indent code lines", hotkey: "Tab" },
+  { id: "code-outdent", name: "Outdent code lines", hotkey: "Shift+Tab" },
+  { id: "code-indent-item", name: "Indent the list item holding the code block", hotkey: "Alt+Tab" },
+  { id: "code-outdent-item", name: "Outdent the list item holding the code block", hotkey: "Alt+Shift+Tab" },
+  { id: "code-select", name: "Select the code block", hotkey: "Mod+A" },
+  { id: "code-comment", name: "Toggle line comment", hotkey: "Mod+/" },
+  { id: "code-backspace", name: "Turn an emptied code block back into text", hotkey: "Backspace" },
+];

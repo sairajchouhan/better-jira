@@ -1798,3 +1798,246 @@
   opacity: 1;
   visibility: visible;
 }
+
+/* Code blocks (package D): Linear's `.editor pre.code-block` grid, gutter, syntax colours, collapse and hover toolbar
+   (style-kMXsq6uH.css), shared by the editor's node view and the read-only ReadonlyCodeBlock. The block's own chrome
+   (border, radius, background) stays with `.rich-content pre`. */
+:root {
+  /* Linear's `MS` hljs palette (startup-root `--editor-hljs-*`), light. */
+  --hljs-red: #bf1420;
+  --hljs-orange: #a74002;
+  --hljs-green: #00755c;
+  --hljs-yellow: #8a5d00;
+  --hljs-pink: #9532a4;
+  --hljs-blue: #00264d;
+  --hljs-blue-light: #025f8c;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --hljs-red: #ec3b40;
+    --hljs-orange: #eb6e3d;
+    --hljs-green: #25f8ca;
+    --hljs-yellow: #fce27d;
+    --hljs-pink: #e394dc;
+    --hljs-blue: #2482d8;
+    --hljs-blue-light: #00c5f0;
+  }
+}
+/* `.editor pre`: the padding lives on the gutter and the code, so the gutter can sit in its own column. */
+pre.code-block {
+  --code-block-font-size: 0.875em;
+  --code-block-line-height: 1.4em;
+  --code-block-padding: 12px;
+  --code-block-side-padding: 16px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  position: relative;
+  isolation: isolate;
+  padding: 0;
+  font-size: var(--code-block-font-size);
+  white-space: pre;
+  word-break: normal;
+  tab-size: 2;
+  text-align: left;
+  direction: ltr;
+}
+pre.code-block > code,
+pre.code-block > .cb-gutter {
+  font-family: monospace;
+  font-size: inherit;
+  line-height: var(--code-block-line-height);
+  padding-top: var(--code-block-padding);
+  padding-bottom: var(--code-block-padding);
+  background: none;
+}
+pre.code-block > code {
+  grid-column: 2;
+  align-self: start;
+  padding-right: var(--code-block-side-padding);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+pre.code-block > .cb-gutter {
+  grid-column: 1;
+  box-sizing: content-box;
+  min-width: 2ch;
+  padding-left: var(--code-block-side-padding);
+  padding-right: 20px;
+  text-align: right;
+  color: var(--fg-4);
+  user-select: none;
+}
+pre.code-block[data-line-numbers="false"] > .cb-gutter {
+  display: none;
+}
+pre.code-block[data-line-numbers="false"] > code {
+  grid-column: 1 / -1;
+  padding-left: var(--code-block-side-padding);
+}
+pre.code-block[data-line-wrap="true"] {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+pre.code-block[data-line-wrap="true"] > code {
+  overflow-x: hidden;
+}
+/* Collapsible past 30 lines: room for the bar under the code, and 15 lines under a fade while collapsed. */
+pre.code-block[data-collapsible="true"]:not([data-collapsed="true"]) > code,
+pre.code-block[data-collapsible="true"]:not([data-collapsed="true"]) > .cb-gutter {
+  padding-bottom: 39px;
+}
+pre.code-block[data-collapsed="true"] {
+  overflow: hidden;
+}
+pre.code-block[data-collapsed="true"] > code,
+pre.code-block[data-collapsed="true"] > .cb-gutter {
+  max-height: calc(15 * var(--code-block-line-height) + var(--code-block-padding) * 2);
+  overflow: clip;
+  cursor: pointer;
+}
+pre.code-block[data-collapsed="true"] > code::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 70%, var(--col) 100%);
+}
+pre.code-block > .cb-controls {
+  display: contents;
+  white-space: normal;
+  font-family: var(--font-sans, inherit);
+}
+/* The hover toolbar (`.cb-copy`): top right, revealed after Linear's 0.1s toolbar delay. */
+pre.code-block .cb-copy {
+  position: absolute;
+  z-index: 10;
+  top: min(10px, 50% - 16px);
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 8%);
+  transition: opacity 40ms ease-out;
+}
+@media (hover: hover) {
+  pre.code-block .cb-copy {
+    opacity: 0;
+    pointer-events: none;
+  }
+  pre.code-block:hover .cb-copy,
+  pre.code-block .cb-copy[data-popover-open],
+  pre.code-block .cb-copy:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  pre.code-block:hover:not(:focus-within) .cb-copy {
+    transition-delay: 0.1s;
+  }
+}
+pre.code-block .cb-language {
+  gap: 3px;
+  padding-left: 8px;
+  color: var(--fg-3);
+  user-select: none;
+}
+pre.code-block .cb-language[data-readonly] {
+  cursor: default;
+}
+/* The Expand/Collapse bar (`expandCollapseControlsContainer`): centred 9px above the bottom. */
+pre.code-block .cb-ex-col {
+  position: absolute;
+  z-index: 10;
+  bottom: 9px;
+  left: 50%;
+  transform: translate(-50%);
+  display: flex;
+}
+pre.code-block .cb-ex-col button {
+  color: var(--fg-3);
+  transition: opacity 40ms ease-out;
+}
+@media (hover: hover) {
+  pre.code-block[data-collapsed="true"] .cb-ex-col button {
+    opacity: 0;
+    pointer-events: none;
+  }
+  pre.code-block:hover .cb-ex-col button,
+  pre.code-block .cb-ex-col button:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+/* Display options (`I0e`): a column of labelled switches, 4px 16px. */
+.cb-display-options {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 16px;
+  font-size: 12px;
+}
+.cb-display-options label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 32px;
+  color: var(--fg-3);
+}
+/* Syntax colours: Linear's `.editor .syntax-*` rules. */
+.code-block .syntax-comment,
+.code-block .syntax-markup-quote {
+  color: var(--fg-4);
+}
+.code-block .syntax-string,
+.code-block .syntax-markup-list {
+  color: var(--hljs-blue-light);
+}
+.code-block .syntax-constant-language,
+.code-block .syntax-markup-deleted {
+  color: var(--hljs-red);
+}
+.code-block .syntax-entity-name-function,
+.code-block .syntax-meta-embedded,
+.code-block .syntax-markup-heading,
+.code-block .syntax-markup-inserted {
+  color: var(--hljs-green);
+}
+.code-block .syntax-keyword,
+.code-block .syntax-keyword-operator,
+.code-block .syntax-support-function {
+  color: var(--hljs-pink);
+}
+.code-block .syntax-entity-other-attribute-name,
+.code-block .syntax-constant-other-symbol,
+.code-block .syntax-variable-other-property,
+.code-block .syntax-variable,
+.code-block .syntax-variable-parameter {
+  color: var(--hljs-yellow);
+}
+.code-block .syntax-entity-name-tag,
+.code-block .syntax-entity-name-type,
+.code-block .syntax-entity-other-attribute-name-id,
+.code-block .syntax-entity-other-attribute-name-class,
+.code-block .syntax-string-regexp,
+.code-block .syntax-markup-underline-link {
+  color: var(--hljs-orange);
+}
+.code-block .syntax-constant-numeric {
+  color: var(--hljs-blue);
+}
+@media print {
+  pre.code-block > .cb-gutter,
+  pre.code-block > .cb-controls {
+    display: none;
+  }
+  pre.code-block > code {
+    grid-column: 1 / -1;
+    padding-left: var(--code-block-side-padding);
+  }
+  pre.code-block[data-collapsed="true"] > code {
+    max-height: none;
+  }
+}

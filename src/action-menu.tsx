@@ -18,13 +18,18 @@ export type ActionEntry = {
   /** A drawn icon in place of `icon` (Linear's action `image`): a status, priority or avatar. */
   image?: ReactNode;
   divider?: boolean;
+  /** Other words a filter finds the entry by (a language's aliases). */
+  keywords?: string[];
 };
 type Container = RefObject<HTMLDivElement | null>;
 function searchActions(entries: ActionEntry[], query: string, prefix = ""): ActionEntry[] {
   return entries.flatMap((entry) => {
     const name = prefix + entry.name;
     if (entry.children) return searchActions(entry.children, query, name + " › ");
-    return name.toLowerCase().includes(query.toLowerCase()) ? [{ ...entry, name }] : [];
+    const q = query.toLowerCase();
+    return name.toLowerCase().includes(q) || entry.keywords?.some((k) => k.toLowerCase().includes(q))
+      ? [{ ...entry, name }]
+      : [];
   });
 }
 /** Linear opens an action menu 4px under its trigger, left-aligned (Issue options) or, with `align="end"`, right-aligned (row, resource and comment ⋯); a right-click opens it at `point`. */

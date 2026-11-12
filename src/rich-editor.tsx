@@ -39,6 +39,8 @@ import {
 } from "prosemirror-state";
 import { mediaNodeView, type MediaNodeView } from "./media-node-view";
 import { expandNodeView } from "./expand-node-view";
+import { codeBlockNodeView } from "./code-block-view";
+import { codeBlockKeys, codeHighlightPlugin } from "./code-block-editing";
 import type { Attachment } from "./attachment-media";
 import { EditorView } from "prosemirror-view";
 import "prosemirror-view/style/prosemirror.css";
@@ -224,6 +226,8 @@ export function RichEditor(props: EditorEngineProps) {
           emojiRules,
           issueReferenceRules((key) => (get().issues.has(key) ? jiraIssueURL(key) : null)),
           history(),
+          codeHighlightPlugin(),
+          keymap(codeBlockKeys),
           keymap({
             Enter: chainCommands(
               codeEnter,
@@ -241,6 +245,7 @@ export function RichEditor(props: EditorEngineProps) {
       }),
       nodeViews: {
         expand: expandNodeView,
+        codeBlock: codeBlockNodeView,
         ...Object.fromEntries(
         ["mediaSingle", "mediaGroup", "media", "mediaInline"].map((type) => [
           type,

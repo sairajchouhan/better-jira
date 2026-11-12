@@ -32,7 +32,7 @@ import {
   viewSettings,
 } from "./view-settings";
 import { copyIssue, type CopyKind } from "./issue-copy";
-import { editorBindings } from "./editor-bindings";
+import { codeBlockBindings, editorBindings } from "./editor-bindings";
 import { Dialog } from "./dialog";
 import { Field, TextInput } from "./field";
 import { Shortcut as KeyboardShortcut, type Keys } from "./keycap";
@@ -1036,6 +1036,7 @@ export function ShortcutHelp() {
       id: `editor-${b.id}`,
       group: "Editor",
     })),
+    ...codeBlockBindings.map((b) => ({ ...b, id: `editor-${b.id}`, group: "Code block" })),
   ];
   const words = query
     .toLowerCase()

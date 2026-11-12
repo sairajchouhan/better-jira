@@ -392,7 +392,9 @@ function fromEditorNode(node: EditorNode): AdfNode {
     // Jira requires a task's localId; a task made here (Enter at the end of one) has none yet.
     if (["taskList", "taskItem"].includes(node.type.name) && attrs && !attrs.localId)
       attrs.localId = crypto.randomUUID();
-    if (attrs) data.attrs = attrs;
+    // Auto detect stores no language: Jira's codeBlock language is a string or absent.
+    if (attrs?.language === null) delete attrs.language;
+    if (attrs && Object.keys(attrs).length) data.attrs = attrs;
     else delete data.attrs;
     if (node.childCount || original?.hadContent) {
       data.content = [];

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { MediaView } from "./media-loader";
 import type { Attachment } from "./attachment-media";
 import { cardText, jiraDate, safeLink } from "./document";
+import { ReadonlyCodeBlock } from "./code-block";
 export { adfToText } from "./document";
 
 /** Renders Jira's ADF (Atlassian Document Format). Unknown nodes fall through to their children. */
@@ -59,9 +60,10 @@ export function Adf({
       return <li>{kids}</li>;
     case "codeBlock":
       return (
-        <pre className="overflow-x-auto rounded bg-col border border-line-2 p-2 text-xs">
-          <code>{kids}</code>
-        </pre>
+        <ReadonlyCodeBlock
+          text={(node.content ?? []).map((c: any) => c.text ?? "").join("")}
+          language={typeof a.language === "string" ? a.language : null}
+        />
       );
     case "blockquote":
       return <blockquote className="border-l-2 border-line-3 pl-3 text-fg-3">{kids}</blockquote>;
