@@ -15,7 +15,7 @@ const go = async (p: Page, key: string) => {
     `!!document.querySelector('[data-key="${key}"]')&&!!document.getElementById('comment')`,
   );
 };
-const composerMedia = `document.querySelectorAll('#comment [contenteditable=false]').length`;
+const composerMedia = `document.querySelectorAll('#comment [contenteditable=false]:not([contenteditable=false] *)').length`;
 const saved = `document.querySelector('[aria-label="Local save status"]')?.textContent==="Saved locally"`;
 /** The comment count on TEST-2's row, which every page keeps in the DOM. */
 const commentsOnTest2 = (n: number) =>
@@ -58,7 +58,7 @@ test("sending a comment or reply while its pasted file is still saving: posted o
     await sleep(300); // no late media may land in the reopened reply
     expect(
       await p.eval(
-        `({text:document.querySelector('[id^="reply-"]')?.textContent,media:document.querySelectorAll('[id^="reply-"] [contenteditable=false]').length})`,
+        `({text:document.querySelector('[id^="reply-"]')?.textContent,media:document.querySelectorAll('[id^="reply-"] [contenteditable=false]:not([contenteditable=false] *)').length})`,
       ),
     ).toEqual({ text: "", media: 0 });
     await p.key("Escape");
@@ -121,7 +121,7 @@ const childKey = (p: Page, title: string) =>
   p.waitFor<string>(
     `[...document.querySelectorAll('[data-sub-issue]')].find(n=>n.textContent.includes(${JSON.stringify(title)}))?.dataset.subIssue`,
   );
-const subMedia = `document.querySelectorAll('[aria-label="Sub-issue description"] [contenteditable=false]').length`;
+const subMedia = `document.querySelectorAll('[aria-label="Sub-issue description"] [contenteditable=false]:not([contenteditable=false] *)').length`;
 /** Opens the child and waits for its description to carry the image. */
 async function childHasImage(p: Page, key: string) {
   await go(p, key);
