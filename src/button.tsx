@@ -58,20 +58,23 @@ const tooltipTitle = (tooltip: string | undefined, shortcut?: Keys, alternate?: 
 /**
  * A disabled button gets no pointer events, so its reason hangs on a wrapper, as under Linear's tooltip trigger
  * (`_tooltipTriggerContent > button[disabled] { pointer-events: none }`). A button given a `disabledReason` (even "")
- * always sits in the wrapper, so flipping `disabled` never remounts it; one without stands alone.
+ * always sits in the wrapper, so flipping `disabled` never remounts it; one without stands alone. While disabled the
+ * wrapper also carries the button's own `tip` when there is no reason, since the button can't be hovered.
  */
 function DisabledReason({
   reason,
+  tip,
   disabled,
   children,
 }: {
   reason: string | undefined;
+  tip: string | undefined;
   disabled: boolean | undefined;
   children: ReactElement;
 }) {
   if (reason === undefined) return children;
   return (
-    <span className="ui-tooltip-trigger" title={(disabled && reason) || undefined}>
+    <span className="ui-tooltip-trigger" title={disabled ? reason || tip : undefined}>
       {children}
     </span>
   );
@@ -94,12 +97,14 @@ export function Button({
   children,
   ...props
 }: Look & Tip & { icon?: ReactNode; tooltip?: string } & ComponentProps<"button">) {
-  const reason = (props.disabled && disabledReason) || undefined;
+  const reason = (props.disabled && disabledReason) || undefined,
+    tip = tooltipTitle(tooltip, shortcut, alternate),
+    wrapped = props.disabled && disabledReason !== undefined;
   return (
-    <DisabledReason reason={disabledReason} disabled={props.disabled}>
+    <DisabledReason reason={disabledReason} tip={tip} disabled={props.disabled}>
       <button
         type={type}
-        title={reason ? undefined : tooltipTitle(tooltip, shortcut, alternate)}
+        title={wrapped ? undefined : tip}
         aria-description={reason}
         data-variant={variant}
         data-size={size}
@@ -171,13 +176,15 @@ export function IconButton({
   children,
   ...props
 }: IconButtonProps) {
-  const reason = (props.disabled && disabledReason) || undefined;
+  const reason = (props.disabled && disabledReason) || undefined,
+    tip = tooltipTitle(tooltip || undefined, shortcut, alternate),
+    wrapped = props.disabled && disabledReason !== undefined;
   return (
-    <DisabledReason reason={disabledReason} disabled={props.disabled}>
+    <DisabledReason reason={disabledReason} tip={tip} disabled={props.disabled}>
       <button
         type={type}
         aria-label={label}
-        title={reason ? undefined : tooltipTitle(tooltip || undefined, shortcut, alternate)}
+        title={wrapped ? undefined : tip}
         aria-description={reason}
         data-variant={variant}
         data-size={size}
