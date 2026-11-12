@@ -398,11 +398,21 @@ export function activityEvents(
   comments: readonly string[] = [],
   linkActor: Actor = { id: "me", name: "Me" },
 ): ActivityEvent[] {
+  // A link Jira's history logs (written from here, or added in Jira) is that entry's row, not a second one.
+  const logged = new Set(
+    (issue.activity ?? []).flatMap((event) =>
+      event.field === "weblink" && event.after ? [(event.after as { name: string }).name] : [],
+    ),
+  );
+  const links = (issue.resources ?? []).filter(
+    (resource): resource is IssueResource & { created: string } =>
+      resource.kind === "link" && !!resource.created && !logged.has(resource.title) && !logged.has(resource.url ?? ""),
+  );
   // Comments, image threads and attached links sit between history entries, so no group spans them.
   const breaks = [
     ...comments,
     ...Object.values(issue.mediaEdits ?? {}).flatMap((edit) => edit.comments?.[0]?.at ?? []),
-    ...(issue.resources ?? []).flatMap((resource) => (resource.kind === "link" && resource.created ? [resource.created] : [])),
+    ...links.map((resource) => resource.created),
   ];
   const result: ActivityEvent[] = [
     ...Object.entries(issue.mediaEdits ?? {}).flatMap(([id, edit]) =>
@@ -423,18 +433,7 @@ export function activityEvents(
       at: row.at,
       row,
     })),
-    ...(issue.resources ?? []).flatMap((resource) =>
-      resource.kind === "link" && resource.created
-        ? [
-            {
-              kind: "link" as const,
-              id: resource.id,
-              at: resource.created,
-              resource: { ...resource, created: resource.created },
-            },
-          ]
-        : [],
-    ),
+    ...links.map((resource) => ({ kind: "link" as const, id: resource.id, at: resource.created, resource })),
   ];
   const grouped: ActivityEvent[] = [];
   const between = (a: string, b: string) => comments.some((at) => Date.parse(a) < Date.parse(at) && Date.parse(at) <= Date.parse(b));

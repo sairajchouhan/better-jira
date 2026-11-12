@@ -21,6 +21,15 @@ export type FieldValue = { name: string; value: string };
 /** A file, version, component or web link: added or removed one at a time. */
 export type NamedValue = { id: string; name: string; key?: string };
 
+/** Jira's remote link text, 'This work item links to "Fix it (Web Link)"': the link's title, then its source in brackets. */
+const REMOTE_LINK = /links to "(.*?)(?: \(([^()]*)\))?"$/s;
+/** A web link from Jira's changelog: its remote link id and title, without Jira's sentence or source suffix. */
+export function remoteLink(id: string | null, text: string | null): NamedValue | null {
+  if (id === null && text === null) return null;
+  const title = text?.match(REMOTE_LINK)?.[1] ?? text ?? id ?? "";
+  return { id: id ?? title, name: title };
+}
+
 /** Jira's link phrases ("This work item blocks X", older "This issue …") to Linear's relation kinds. Others keep their phrase. */
 const LINK_KINDS: Record<string, string> = {
   blocks: "blocking",
@@ -119,7 +128,7 @@ export function mapItem(item: HistoryItem, entry: readonly HistoryItem[]): Mappe
         delta: true,
       };
     case "RemoteWorkItemLink":
-      return { field: "weblink", before: named(from, fromText), after: named(to, toText), delta: true };
+      return { field: "weblink", before: remoteLink(from, fromText), after: remoteLink(to, toText), delta: true };
     case "Sprint":
       return { field: "cycle", before: sprints(from, fromText), after: sprints(to, toText) };
     case "Story Points":
@@ -142,7 +151,7 @@ export function mapItem(item: HistoryItem, entry: readonly HistoryItem[]): Mappe
 const UNKNOWN = { id: "unknown", name: "Someone" };
 /** The changelog as raw changes, oldest first: one per item that means something in the Activity. */
 export function historyChanges(history: readonly HistoryEntry[]): Change[] {
-  return history.flatMap((entry) => {
+  return withoutRemovedLinks(history.flatMap((entry) => {
     const actor = entry.actor ?? UNKNOWN;
     return entry.items.flatMap((item, index) => {
       const mapped = mapItem(item, entry.items);
@@ -150,7 +159,18 @@ export function historyChanges(history: readonly HistoryEntry[]): Change[] {
       if (!mapped.delta && !changed(mapped)) return [];
       return [{ id: `jira-${entry.id}-${index}`, ...mapped, actor, at: entry.at }];
     });
-  });
+  }));
+}
+
+/** Linear's link entry (`ls` in its history chunk) exists only while the link does, and it has no entry for a removal:
+ *  a removed web link drops out of the Activity, its "linked" row too. */
+function withoutRemovedLinks(changes: Change[]): Change[] {
+  const removed = new Set(
+    changes.flatMap((change) => (change.field === "weblink" && change.after === null ? [(change.before as NamedValue).id] : [])),
+  );
+  return changes.filter(
+    (change) => change.field !== "weblink" || (change.after !== null && !removed.has((change.after as NamedValue).id)),
+  );
 }
 
 /** Jira writes an edit after this browser made it; a little clock skew is allowed either way. */

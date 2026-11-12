@@ -279,3 +279,18 @@ test("BJ-202: an empty environment changelog value still records the edit", () =
   expect(activityRows(events)).toHaveLength(1);
   expect(events[0]!.at).toBe(history[0]!.at);
 });
+
+test("3.7: a web link reads as its title without Jira's sentence or source; a removed link leaves no row, as in Linear", () => {
+  const link = (id: string, title: string, remove = false) =>
+    item("RemoteWorkItemLink", remove ? { from: id, fromText: `This work item links to "${title} (Web Link)"` } : { to: id, toText: `This work item links to "${title} (Web Link)"` });
+  const changes = historyChanges([
+    entry([link("7", "https://github.com/acme/widgets/pull/1")], 0),
+    entry([link("8", "Wiki Page")], 1_000),
+    entry([link("7", "https://github.com/acme/widgets/pull/1", true)], 2_000),
+  ]);
+  expect(fields(changes as PropertyActivity[])).toEqual([["weblink", null, { id: "8", name: "Wiki Page" }]]);
+  expect(mapItem(item("RemoteWorkItemLink", { to: "4", toText: 'This work item links to "Wiki Page (Confluence)"' }), [])).toMatchObject({
+    after: { id: "4", name: "Wiki Page" },
+  });
+});
+

@@ -13,6 +13,9 @@ import { statusById, statuses } from "@/shared/board-catalog";
 import { Avatar } from "@/client/components/avatar";
 import { Icon, type IconName, PriorityIcon, RelationIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
 import { AppLink } from "@/client/features/navigation/app-link";
+import { LinkIcon } from "@/client/components/link-icon";
+import { faviconSrc } from "@/shared/smart-link";
+import { linkTitle } from "@/shared/issue-resource";
 import { boardOf, get } from "@/client/state/store";
 import type { Issue, User } from "@/shared/issue-model";
 import { LINEAR_RELATIONS, jiraLinkType } from "@/shared/relations";
@@ -74,8 +77,32 @@ function RelationTarget({ relation }: { relation: Relation }) {
   )}</IssueHoverCard>;
 }
 
-/** Jira's remote link text, 'This work item links to "Wiki Page (Confluence)"', as its title. */
-const webLinkTitle = (text: string) => text.match(/links to "(.*)"$/)?.[1] ?? text;
+/** Linear's link entry (`ds`): the link's source icon, then its title, which opens the link. One control for a link
+ *  added here and one from Jira's history; both take the title the issue's Resources row shows. */
+export function LinkedTarget({ title, url }: { title: string; url?: string }) {
+  const origin = url && URL.canParse(url) ? new URL(url).origin : undefined;
+  return (
+    <>
+      <span className="inline-flex align-[-2px]">
+        <LinkIcon src={origin && faviconSrc(origin)} size={14} className="rounded-[3px]" />
+      </span>{" "}
+      {url ? (
+        <a href={url} target="_blank" rel="noreferrer" className="font-medium">
+          {title}
+        </a>
+      ) : (
+        <B>{title}</B>
+      )}
+    </>
+  );
+}
+
+/** A Jira web link as the issue's matching link resource shows it, else by Jira's title (a URL when it has none). */
+function JiraLink({ link, issue }: { link: NamedValue; issue: Issue }) {
+  const resource = issue.resources?.find((r) => r.kind === "link" && (r.title === link.name || r.url === link.name));
+  if (resource) return <LinkedTarget title={linkTitle(resource)} url={resource.url} />;
+  return <LinkedTarget title={link.name} url={URL.canParse(link.name) ? link.name : undefined} />;
+}
 
 /** A Jira-only single value, worded like Linear's team and due date entries. */
 const plain = (label: string, before: ReactNode, after: ReactNode) =>
@@ -233,18 +260,13 @@ export function describeActivity(event: PropertyActivity, issue: Issue, then = f
           added to milestone <B>{name(after)}</B>
         </>
       );
-    case "weblink": {
-      const link = (after ?? before) as NamedValue;
+    case "weblink":
+      // Removals never reach here: Linear has no entry for them (`withoutRemovedLinks`).
       return (
         <>
-          {after ? "linked" : "removed link"}{" "}
-          <span className="inline-flex align-[-2px]">
-            <Icon name="link" size={12} />
-          </span>{" "}
-          {(link as NamedValue & { url?: string }).url ? <a href={(link as NamedValue & { url?: string }).url} target="_blank" rel="noreferrer"><B>{webLinkTitle(link.name)}</B></a> : <B>{webLinkTitle(link.name)}</B>}
+          linked <JiraLink link={after as NamedValue} issue={issue} />
         </>
       );
-    }
     case "attachment":
       return after === null ? (
         <>
@@ -518,7 +540,6 @@ const FIELD_ICONS: Partial<Record<PropertyActivity["field"], IconName>> = {
   cycle: "clock",
   parent: "branch",
   attachment: "paperclip",
-  weblink: "link",
   comment: "comment",
   flag: "flag",
   estimate: "priority",
@@ -528,6 +549,8 @@ const FIELD_ICONS: Partial<Record<PropertyActivity["field"], IconName>> = {
  *  a row of several changes, or a change Linear has no glyph for, shows the actor. */
 export function ActivityIcon({ row, issue }: { row: ActivityRow; issue: Issue }) {
   const last = row.chain.at(-1) ?? row.events[0]!;
+  // Linear's link entry shows who linked it (`ls`); a group of links, the link glyph (`Ua`).
+  if (row.field === "weblink") return row.chain.length ? <Icon name="link" /> : <ActivityActorAvatar actor={row.actor} />;
   if (row.field === "relation") return <RelationIcon kind={((last.after ?? last.before) as Relation).kind} />;
   if (row.field === "status") {
     const status = statusById(boardOf(issue.key), idOf(last.after));

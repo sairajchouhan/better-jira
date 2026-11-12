@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Issue } from "@/shared/issue-model";
-import { ActivityRowWords, describeActivity, priorityRank, titleChangeLabel } from "./activity-entry";
+import { ActivityIcon, ActivityRowWords, describeActivity, priorityRank, titleChangeLabel } from "./activity-entry";
 import { activityRows, type ActivityField, type PropertyActivity } from "./issue-activity";
 
 // Made-up shapes only (BJ-40): each Jira change kind sampled read-only from real tickets, worded as Linear's history chunk words it.
@@ -91,9 +91,7 @@ test("BJ-40: Jira-only kinds read plainly in the same pattern", () => {
   expect(words(event("component", null, { id: "5", name: "Editor" }))).toBe("added component Editor");
   expect(words(event("attachment", null, { id: "9", name: "clip.mp4" }))).toBe("attached clip.mp4");
   expect(words(event("attachment", { id: "9", name: "clip.mp4" }, null))).toBe("removed attachment clip.mp4");
-  expect(words(event("weblink", null, { id: "4", name: 'This work item links to "Wiki Page"' }))).toBe(
-    "linked Wiki Page",
-  );
+  expect(words(event("weblink", null, { id: "4", name: "Wiki Page" }))).toBe("linked Wiki Page");
   expect(words(event("comment", { id: "1", name: "" }, null))).toBe("deleted a comment");
   expect(words(event("description", "", ""))).toBe("updated the description");
   expect(words(event("flag", null, "Impediment"))).toBe("flagged the issue");
@@ -219,3 +217,16 @@ test("BJ-202: grouped links and cycles use their own summaries", () => {
   expect(group(event("cycle", sprint("1"), sprint("2")), event("cycle", sprint("2"), null, ada, time(1)))).toBe("Ada Example moved issue through one cycle and then removed it from Sprint 2");
   expect(words(event("field", { name: "environment", value: "" }, { name: "environment", value: "" }))).toBe("updated the environment");
 });
+
+test("3.7: a link row reads Linear's \"linked [source icon] title\" with the Resources row's title, behind the actor's avatar", () => {
+  const url = "https://github.com/acme/widgets/pull/1";
+  const linked = { ...issue, resources: [{ id: "r1", kind: "link", title: url, url, updated: "", preview: { title: "acme/widgets#1" } }] } as Issue;
+  const html = renderToStaticMarkup(<>{describeActivity(event("weblink", null, { id: "7", name: url }), linked)}</>);
+  expect(html.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim()).toBe("linked acme/widgets#1");
+  expect(html).toContain(`src="/api/favicon?origin=${encodeURIComponent("https://github.com")}"`);
+  expect(html).toContain(`href="${url}"`);
+  expect(html).not.toContain("Web Link");
+  const [row] = activityRows([event("weblink", null, { id: "7", name: url })]);
+  expect(renderToStaticMarkup(<ActivityIcon row={row!} issue={linked} />)).not.toContain("<svg");
+});
+

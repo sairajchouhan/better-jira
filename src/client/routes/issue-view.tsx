@@ -1,5 +1,5 @@
 import { IssueHoverCard } from "@/client/features/issue/issue-hover-card";
-import { ActivityPropertyRow } from "@/client/features/issue/activity-entry";
+import { ActivityPropertyRow, LinkedTarget } from "@/client/features/issue/activity-entry";
 import { fullTime } from "@/client/features/issue/issue-dates";
 import { type Issue, type User } from "@/shared/issue-model";
 import { useLocation } from "@tanstack/react-router";
@@ -793,13 +793,7 @@ function ActivityEventItem({
     <li id={`activity-${resource.id}`} data-activity="link" className="activity-event">
       <Avatar user={ME} size={14} />
       <span>
-        <span className="font-medium">{ME.name}</span> linked{" "}
-        <span className="inline-flex align-[-2px]">
-          <Icon name="link" size={12} />
-        </span>{" "}
-        <a href={resource.url} target="_blank" rel="noreferrer" className="font-medium">
-          {linkTitle(resource)}
-        </a>{" "}
+        <span className="font-medium">{ME.name}</span> linked <LinkedTarget title={linkTitle(resource)} url={resource.url} />{" "}
         ·
       </span>{" "}
       <Timestamp date={resource.created} id={`activity-${resource.id}`} />

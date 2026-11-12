@@ -433,6 +433,9 @@ test("BJ-202: grouped status arrows, links, cycles and relation changes retain e
     { id: "s2", actor, at: at(1), items: [change("status", "Doing", "Done", "doing", "done")] },
     { id: "l1", actor, at: at(2), items: [change("RemoteWorkItemLink", null, 'This work item links to "Guide"', null, "1")] },
     { id: "l2", actor, at: at(3), items: [change("RemoteWorkItemLink", null, 'This work item links to "Notes"', null, "2")] },
+    // 3.7: Linear lists no removal, and a link removed since has no "linked" row either.
+    { id: "l3", actor, at: at(3), items: [change("RemoteWorkItemLink", null, 'This work item links to "Draft (Web Link)"', null, "3")] },
+    { id: "l4", actor, at: at(3), items: [change("RemoteWorkItemLink", 'This work item links to "Draft (Web Link)"', null, "3")] },
     { id: "c1", actor, at: at(4), items: [change("Sprint", null, "Sprint 1", null, "1")] },
     { id: "c2", actor, at: at(5), items: [change("Sprint", "Sprint 1", "Sprint 2", "1", "2")] },
     { id: "r1", actor, at: at(6), items: [change("Link", "This issue relates to DEMO-9", null, "DEMO-9"), change("Link", null, "This issue blocks DEMO-9", null, "DEMO-9")] },
@@ -445,6 +448,7 @@ test("BJ-202: grouped status arrows, links, cycles and relation changes retain e
   expect(await page.eval(summaries)).toContain("added issue to Sprint 1 and moved to Sprint 2");
   expect(await page.eval(summaries)).toContain("changed the relation with DEMO-9 from related to blocking");
   expect(await page.eval(summaries)).toContain("updated the environment");
+  expect(await page.eval(summaries)).not.toContain("Draft");
   await page.click('[data-activity="weblink"] button');
   await page.waitFor(`document.querySelectorAll('[aria-label="Grouped changes"] li').length===2`);
   expect(await page.eval(`[...document.querySelectorAll('[aria-label="Grouped changes"] time')].map(n=>n.dateTime)`)).toEqual([at(2), at(3)]);

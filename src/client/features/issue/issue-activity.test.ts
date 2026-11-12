@@ -245,3 +245,12 @@ test("3.4: a Jira-kept history records every edit as its own event at its own ti
   ]);
   expect(jira(lowered, { priority: "Medium" }, { priority: "Medium" }, 400_000)).toBe(lowered);
 });
+
+test("3.7: a link Jira's history logs is that entry's row; the link added here is not listed a second time", () => {
+  const url = "https://github.com/acme/widgets/pull/1";
+  const resource = { id: "r1", kind: "link" as const, title: url, url, updated: at(), created: at() };
+  const logged = { id: "j1", field: "weblink" as const, before: null, after: { id: "7", name: url }, actor: me, at: at(1_000) };
+  expect(activityEvents({ resources: [resource], activity: [logged] }).map((e) => e.kind)).toEqual(["property"]);
+  expect(activityEvents({ resources: [resource] }).map((e) => e.kind)).toEqual(["link"]);
+});
+
