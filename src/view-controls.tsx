@@ -406,11 +406,106 @@ function DisplayMenu({ board }: { board: Board }) {
 const plural = (noun: string) =>
   /[^aeiou]y$/.test(noun) ? `${noun.slice(0, -1)}ies` : /(s|x|ch|sh)$/.test(noun) ? (noun.endsWith("s") && !/(us|ss)$/.test(noun) ? noun : `${noun}es`) : `${noun}s`;
 
+/** Linear's chip: Backspace or Delete on a focused chip removes its filter. */
+const removeOnKey = (remove: () => void) => (e: React.KeyboardEvent) => {
+  if (e.key === "Backspace" || e.key === "Delete") {
+    e.preventDefault();
+    remove();
+  }
+};
+
+/** One rule's chip: field, operator and values. Only a chip with values subscribes to the issues, for their labels. */
+function RuleChip({
+  rule: c,
+  board,
+  open,
+  onEdit,
+  remove,
+}: {
+  rule: Rule;
+  board: Board;
+  open: "operator" | "value" | null;
+  onEdit: (segment: "operator" | "value", anchor: HTMLElement) => void;
+  remove: () => void;
+}) {
+  const issues = useStore((s) => (c.values.length ? s.issues : null));
+  const all = useMemo(() => (issues ? filterChoices(c.field, board, [...issues.values()]) : []), [issues, c.field, board]);
+  const name = FIELDS.find(([f]) => f === c.field)?.[1] ?? c.field;
+  const picked = c.values.map((value) => ({ value, choice: all.find((v) => v.value === value) }));
+  const labelOf = ({ value, choice }: (typeof picked)[number]) =>
+    ["within", "next"].includes(c.op) || c.field === "statusAge"
+      ? `${value} day${Number(value) === 1 ? "" : "s"}`
+      : isDate(c.field)
+        ? value === "P0D" ? "today" : shortDate(value)
+        : (choice?.label ?? value);
+  return (
+    <div className="view-filter-chip" onKeyDown={removeOnKey(remove)}>
+      <span className="view-filter-segment">
+        <span>{name}</span>
+      </span>
+      <button
+        className="view-filter-segment view-filter-operator"
+        aria-label={`${c.field} operator`}
+        aria-expanded={open === "operator"}
+        onClick={(e) => onEdit("operator", e.currentTarget)}
+      >
+        <span>
+          {c.op === "within" ? "in the last" : c.op === "next" ? "in the next" : operatorsFor(c.field).find(([op]) => op === c.op)?.[1]}
+        </span>
+      </button>
+      {!["empty", "notEmpty"].includes(c.op) && (
+        <button
+          className="view-filter-segment"
+          aria-label={`${c.field} value`}
+          aria-expanded={open === "value"}
+          title={picked.length > 1 ? picked.map(labelOf).join(", ") : undefined}
+          onClick={(e) => onEdit("value", e.currentTarget)}
+        >
+          {picked.some((p) => p.choice?.icon) && (
+            <span className="view-filter-icons">
+              {picked.slice(0, 3).map((p) => p.choice?.icon && <span key={p.value}>{p.choice.icon}</span>)}
+            </span>
+          )}
+          <span>{picked.length > 1 ? `${picked.length} ${plural(name.toLowerCase())}` : picked[0] ? labelOf(picked[0]) : ""}</span>
+        </button>
+      )}
+      <button className="view-filter-segment view-filter-remove" aria-label={`Remove ${c.field} filter`} onClick={remove}>
+        <Icon name="x" size={12} />
+      </button>
+    </div>
+  );
+}
+
+/** A chip's value list. Its own component so only an open value menu subscribes to the issues (for the counts). */
+function ChipValues({ rule, board, toggle }: { rule: Rule; board: Board; toggle: (value: string) => void }) {
+  const issues = useStore((s) => s.issues);
+  const choices = useMemo(() => filterChoices(rule.field, board, [...issues.values()]), [rule.field, board, issues]);
+  return (
+    <Menu>
+      <Menu.Input
+        autoFocus
+        aria-label={`Filter ${FIELDS.find(([f]) => f === rule.field)?.[1]}`}
+        placeholder="Filter…"
+      />
+      <Menu.List maxHeight="300px">
+        <Menu.Empty>No matches</Menu.Empty>
+        {choices.map((c) => (
+          <ValueRow
+            key={c.value}
+            choice={c}
+            checked={rule.values.includes(c.value)}
+            onSelect={() => toggle(c.value)}
+          />
+        ))}
+      </Menu.List>
+    </Menu>
+  );
+}
+
 export function FilterChips({ board }: { board: Board }) {
   const { filters } = useViewSettings(board.id);
   // Inside the view editor these chips are the definition being edited; the editor owns Cancel/Save.
   const editing = useStore((s) => !!s.editorDraft);
-  const issues = useStore((s) => s.issues);
   const [edit, setEdit] = useState<{
     rule: Rule;
     segment: "operator" | "value";
@@ -429,9 +524,6 @@ export function FilterChips({ board }: { board: Board }) {
     (c) => !("children" in c) || filterCount(c),
   );
   if (!chips.length) return null;
-  const choices = rule
-    ? filterChoices(rule.field, board, [...issues.values()])
-    : [];
   // Dates, numbers and text edit through PropertyFilter's operator form rather than a value list.
   const form =
     edit?.segment === "value" &&
@@ -485,30 +577,17 @@ export function FilterChips({ board }: { board: Board }) {
               onBack={close}
             />
           ) : (
-            <Menu>
-              <Menu.Input
-                autoFocus
-                aria-label={`Filter ${FIELDS.find(([f]) => f === rule.field)?.[1]}`}
-                placeholder="Filter…"
-              />
-              <Menu.List maxHeight="300px">
-                <Menu.Empty>No matches</Menu.Empty>
-                {choices.map((c) => (
-                  <ValueRow
-                    key={c.value}
-                    choice={c}
-                    checked={rule.values.includes(c.value)}
-                    onSelect={() =>
-                      patch(rule, {
-                        values: rule.values.includes(c.value)
-                          ? rule.values.filter((v) => v !== c.value)
-                          : [...rule.values, c.value],
-                      })
-                    }
-                  />
-                ))}
-              </Menu.List>
-            </Menu>
+            <ChipValues
+              rule={rule}
+              board={board}
+              toggle={(value) =>
+                patch(rule, {
+                  values: rule.values.includes(value)
+                    ? rule.values.filter((v) => v !== value)
+                    : [...rule.values, value],
+                })
+              }
+            />
           )}
         </MenuSurface>
       )}
@@ -523,16 +602,9 @@ export function FilterChips({ board }: { board: Board }) {
       )}
       {chips.map((c) => {
         const remove = () => updateRule(board.id, c.id, null);
-        // Linear's chip: Backspace or Delete on a focused chip removes its filter.
-        const onKeyDown = (e: React.KeyboardEvent) => {
-          if (e.key === "Backspace" || e.key === "Delete") {
-            e.preventDefault();
-            remove();
-          }
-        };
         if ("children" in c)
           return (
-            <div key={c.id} className="view-filter-chip" onKeyDown={onKeyDown}>
+            <div key={c.id} className="view-filter-chip" onKeyDown={removeOnKey(remove)}>
               <button className="view-filter-segment" onClick={() => ui.send({ type: "toolbar.open", toolbar: "advanced" })}>
                 <span>{`${c.join.toUpperCase()} group · ${filterCount(c)} rule${filterCount(c) === 1 ? "" : "s"}`}</span>
               </button>
@@ -541,50 +613,15 @@ export function FilterChips({ board }: { board: Board }) {
               </button>
             </div>
           );
-        const name = FIELDS.find(([f]) => f === c.field)?.[1] ?? c.field;
-        const all = c.values.length ? filterChoices(c.field, board, [...issues.values()]) : [];
-        const picked = c.values.map((value) => ({ value, choice: all.find((v) => v.value === value) }));
-        const labelOf = ({ value, choice }: (typeof picked)[number]) =>
-          ["within", "next"].includes(c.op) || c.field === "statusAge"
-            ? `${value} day${Number(value) === 1 ? "" : "s"}`
-            : isDate(c.field)
-              ? value === "P0D" ? "today" : shortDate(value)
-              : (choice?.label ?? value);
         return (
-          <div key={c.id} className="view-filter-chip" onKeyDown={onKeyDown}>
-            <span className="view-filter-segment">
-              <span>{name}</span>
-            </span>
-            <button
-              className="view-filter-segment view-filter-operator"
-              aria-label={`${c.field} operator`}
-              aria-expanded={edit?.rule.id === c.id && edit.segment === "operator"}
-              onClick={(e) => setEdit({ rule: c, segment: "operator", anchor: e.currentTarget })}
-            >
-              <span>
-                {c.op === "within" ? "in the last" : c.op === "next" ? "in the next" : operatorsFor(c.field).find(([op]) => op === c.op)?.[1]}
-              </span>
-            </button>
-            {!["empty", "notEmpty"].includes(c.op) && (
-              <button
-                className="view-filter-segment"
-                aria-label={`${c.field} value`}
-                aria-expanded={edit?.rule.id === c.id && edit.segment === "value"}
-                title={picked.length > 1 ? picked.map(labelOf).join(", ") : undefined}
-                onClick={(e) => setEdit({ rule: c, segment: "value", anchor: e.currentTarget })}
-              >
-                {picked.some((p) => p.choice?.icon) && (
-                  <span className="view-filter-icons">
-                    {picked.slice(0, 3).map((p) => p.choice?.icon && <span key={p.value}>{p.choice.icon}</span>)}
-                  </span>
-                )}
-                <span>{picked.length > 1 ? `${picked.length} ${plural(name.toLowerCase())}` : picked[0] ? labelOf(picked[0]) : ""}</span>
-              </button>
-            )}
-            <button className="view-filter-segment view-filter-remove" aria-label={`Remove ${c.field} filter`} onClick={remove}>
-              <Icon name="x" size={12} />
-            </button>
-          </div>
+          <RuleChip
+            key={c.id}
+            rule={c}
+            board={board}
+            open={edit?.rule.id === c.id ? edit.segment : null}
+            onEdit={(segment, anchor) => setEdit({ rule: c, segment, anchor })}
+            remove={remove}
+          />
         );
       })}
       <AddFilterButton
