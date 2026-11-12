@@ -67,6 +67,21 @@ import {
   type Side,
 } from "./jira-ops";
 import type { PersonTab } from "./people";
+import {
+  persistPreferences,
+  rememberViewDetails,
+  savedBoard,
+  savedDefaults,
+  savedFavorites,
+  savedOpenIn,
+  savedSidebarHidden,
+  savedViewPreferences,
+  savedViewsKey,
+  saveDefaults,
+  scopePreferences,
+  viewDetailsOpen,
+  onFavoritesChange,
+} from "./browser-preferences";
 export type User = { id: string; name: string; avatar?: string };
 export type Issue = {
   key: string;
@@ -299,37 +314,16 @@ type State = {
   };
 };
 
-const PREF_KEY = "better-jira:views:v1";
-const SIDEBAR_KEY = "better-jira:sidebar";
-let preferenceNamespace = "";
-const preferenceKey = (key: string) =>
-  preferenceNamespace ? `${key}:${preferenceNamespace}` : key;
-function savedValue(key: string): string | null {
-  try {
-    return localStorage.getItem(preferenceKey(key));
-  } catch {
-    return null;
-  }
-}
-function readPreferences(): Record<number, Preferences> {
-  try {
-    const saved = JSON.parse(savedValue(PREF_KEY) ?? "{}");
-    return Object.fromEntries(Object.entries(saved).map(([id, p]) => [id, parsePreferences(p)]));
-  } catch {
-    return {};
-  }
-}
-
 let state: State = {
   boards: [],
   issues: new Map(),
   full: new Map(),
-  board: Number(savedValue("board")) || 0,
+  board: savedBoard() || 0,
   selected: null,
   columnSelection: new Set(),
   panel: false,
   document: null,
-  view: savedValue("view") === "page" ? "page" : "side",
+  view: savedOpenIn(),
   mine: false,
   person: null,
   personTab: "assigned",
@@ -338,7 +332,7 @@ let state: State = {
   query: "",
   overlay: null,
   perf: "",
-  preferences: readPreferences(),
+  preferences: savedViewPreferences(),
   defaults: {},
   toolbar: null,
   propertySync: { total: 0, pending: 0, completed: 0, errors: 0 },
@@ -346,7 +340,7 @@ let state: State = {
   details: false,
   issuePropertiesHidden: false,
   findInView: false,
-  sidebarHidden: savedValue(SIDEBAR_KEY) === "hidden", // the namespace is still empty here
+  sidebarHidden: savedSidebarHidden(),
   sidebarOpen: false,
   issueOptionsPoint: null,
   relation: "related",
@@ -363,7 +357,7 @@ let state: State = {
   overlayFilters: emptyOverlay(),
   viewPreferences: null,
   effectiveViewPreferences: null,
-  favorites: readFavorites(),
+  favorites: savedFavorites(),
   site: "",
   namespace: "",
   writable: false,
@@ -393,23 +387,6 @@ export function set(
 let perfPosts = 0;
 /** Details open on boards and tab views; a custom view keeps its own, as Linear does. */
 let boardDetails = false;
-const VIEW_DETAILS = "better-jira:view-details:v1";
-function detailViews(): string[] {
-  try {
-    const ids = JSON.parse(savedValue(VIEW_DETAILS) ?? "[]");
-    return Array.isArray(ids) ? ids : [];
-  } catch {
-    return [];
-  }
-}
-function rememberViewDetails(id: string, open: boolean) {
-  try {
-    const ids = detailViews().filter((v) => v !== id);
-    localStorage.setItem(preferenceKey(VIEW_DETAILS), JSON.stringify(open ? [...ids, id] : ids));
-  } catch {
-    /* Preference failure is separate from durable issue storage. */
-  }
-}
 const customViewId = () =>
   state.savedViews.find((v) => v.id === (state.editorDraft?.id ?? state.activeViewId) && v.kind === "custom")?.id;
 function commit(patch: Partial<State>) {
@@ -420,7 +397,7 @@ function commit(patch: Partial<State>) {
   const now = customViewId();
   if (was !== now) {
     if (!was) boardDetails = wasDetails;
-    state.details = now ? detailViews().includes(now) : boardDetails;
+    state.details = now ? viewDetailsOpen(now) : boardDetails;
   } else if (now && patch.details !== undefined && patch.details !== wasDetails)
     rememberViewDetails(now, patch.details);
   if (patch.savedViews || patch.activeViewId !== undefined || patch.overlayFilters || patch.editorDraft !== undefined) {
@@ -443,33 +420,11 @@ function commit(patch: Partial<State>) {
           }
         : null;
   }
-  try {
-    if (patch.board) localStorage.setItem(preferenceKey("board"), String(patch.board));
-    if (patch.view) localStorage.setItem(preferenceKey("view"), patch.view);
-    // Not per site: it is read before the site is known, so the first paint has the right layout.
-    if (patch.sidebarHidden !== undefined)
-      localStorage.setItem(SIDEBAR_KEY, patch.sidebarHidden ? "hidden" : "shown");
-  } catch {
-    /* Preference failure is separate from durable issue storage. */
+  const refused = persistPreferences(patch);
+  if (refused) {
+    perfPosts++;
+    state = { ...state, perf: refused };
   }
-  if (patch.preferences) {
-    try {
-      localStorage.setItem(preferenceKey(PREF_KEY), JSON.stringify(patch.preferences));
-    } catch {
-      perfPosts++;
-      state = { ...state, perf: "Could not save view preferences in this browser" };
-    }
-  }
-  if (patch.favorites)
-    try {
-      localStorage.setItem(
-        preferenceKey("better-jira:favorites:v1"),
-        JSON.stringify(patch.favorites),
-      );
-    } catch {
-      perfPosts++;
-      state = { ...state, perf: "Could not save favorites in this browser" };
-    }
   listeners.forEach((l) => l());
 }
 /** Selector must return a stable reference (a state field or a Map entry), never a fresh object. */
@@ -723,7 +678,7 @@ export async function saveDefault(board: number) {
   const display = viewSettings(board).display;
   try {
     const defaults = { ...state.defaults, [board]: structuredClone(display) };
-    localStorage.setItem(preferenceKey("better-jira:defaults:v1"), JSON.stringify(defaults));
+    saveDefaults(defaults);
     set({ defaults, perf: "Saved your default in this browser" });
   } catch {
     set({ perf: "Could not save your default in this browser" });
@@ -741,28 +696,6 @@ async function json<T>(path: string): Promise<T> {
   if (!response.ok) throw new Error(`Could not load ${path}`);
   return response.json();
 }
-function migratePreferences(namespace: string) {
-  preferenceNamespace = namespace;
-  try {
-    const owner = localStorage.getItem("better-jira:preferences-owner");
-    if (!owner) localStorage.setItem("better-jira:preferences-owner", namespace);
-    if (!owner || owner === namespace)
-      for (const key of [
-        PREF_KEY,
-        "board",
-        "view",
-        "better-jira:saved-views:v1",
-        "better-jira:favorites:v1",
-        "better-jira:defaults:v1",
-      ]) {
-        const old = localStorage.getItem(key);
-        if (old !== null && localStorage.getItem(preferenceKey(key)) === null)
-          localStorage.setItem(preferenceKey(key), old);
-      }
-  } catch {
-    /* The mirror can still load if browser preferences are unavailable. */
-  }
-}
 async function loadApplication() {
   const client = await fetchJson<{
     site: string;
@@ -773,7 +706,7 @@ async function loadApplication() {
     throw new Error("Jira account setup is incomplete");
   Object.assign(ME, client.user);
   const namespace = `${client.site}/${client.user.id}`;
-  migratePreferences(namespace);
+  scopePreferences(namespace);
   // Views load with the issues, so a view route paints as the view, never the plain board first.
   const [boards, remote, savedViews] = await Promise.all([
     fetchJson<Board[]>("/api/boards"),
@@ -813,30 +746,16 @@ async function loadApplication() {
         "Could not read saved local data. Local editing is paused. Retry local storage; existing data has not been deleted.",
     };
   }
-  const defaults: Record<number, Display> = (() => {
-    try {
-      const saved = JSON.parse(savedValue("better-jira:defaults:v1") ?? "{}");
-      return saved && typeof saved === "object" && !Array.isArray(saved)
-        ? Object.fromEntries(
-            Object.entries(saved).map(([id, display]) => [
-              id,
-              parsePreferences({ display }).display,
-            ]),
-          )
-        : {};
-    } catch {
-      return {};
-    }
-  })();
-  const preferences = readPreferences();
+  const defaults = savedDefaults();
+  const preferences = savedViewPreferences();
   for (const b of boards)
     if (!preferences[b.id]) {
       const display = parsePreferences({ display: defaults[b.id] }).display;
-      if (!defaults[b.id]) display.openIn = savedValue("view") === "page" ? "page" : "side";
+      if (!defaults[b.id]) display.openIn = savedOpenIn();
       preferences[b.id] = { ...defaultPreferences(), display };
     }
-  const savedBoard = Number(savedValue("board"));
-  const board = boards.some((b) => b.id === savedBoard) ? savedBoard : boards[0]!.id;
+  const last = savedBoard();
+  const board = boards.some((b) => b.id === last) ? last : boards[0]!.id;
   const issues = new Map(remote.map((i) => [i.key, i])),
     full = new Map<string, Full>();
   changedKeys.clear();
@@ -2044,33 +1963,16 @@ export function beginCreate(draft: IssueDraft = {}): boolean {
   });
   return true;
 }
-/** Boards are favourited once, not per tab; older `board:<id>:<tab>` entries collapse into `board:<id>`. */
-function readFavorites(): string[] {
-  try {
-    const values = JSON.parse(savedValue("better-jira:favorites:v1") ?? "[]");
-    return Array.isArray(values)
-      ? [
-          ...new Set(
-            values
-              .filter((v) => typeof v === "string")
-              .map((v) => v.replace(/^(board:\d+):.*$/, "$1")),
-          ),
-        ]
-      : [];
-  } catch {
-    return [];
-  }
-}
 /** Toggles against the stored list, so another tab's favorites aren't overwritten (R2-issue-fields-D1). */
 export function toggleFavorite(id: string) {
-  const favorites = readFavorites();
+  const favorites = savedFavorites();
   set({
     favorites: favorites.includes(id) ? favorites.filter((v) => v !== id) : [...favorites, id],
   });
 }
 /** A favorite dropped on another takes its place in the sidebar (BJ-75), against the stored list like toggleFavorite. */
 export function moveFavorite(id: string, target: string) {
-  const favorites = readFavorites(),
+  const favorites = savedFavorites(),
     from = favorites.indexOf(id),
     to = favorites.indexOf(target);
   if (from < 0 || to < 0 || from === to) return;
@@ -2078,16 +1980,12 @@ export function moveFavorite(id: string, target: string) {
   favorites.splice(to, 0, id);
   set({ favorites });
 }
-if (typeof addEventListener === "function")
-  addEventListener("storage", (event: StorageEvent) => {
-    if (event.key === preferenceKey("better-jira:favorites:v1"))
-      set({ favorites: readFavorites() });
-  });
+onFavoritesChange(() => set({ favorites: savedFavorites() }));
 const viewError = (e: unknown) =>
   set({ perf: e instanceof Error ? e.message : "Could not save view" });
 const viewClient = savedViewClient(
   { read: () => state.savedViews, write: (savedViews) => set({ savedViews }) },
-  () => preferenceKey("better-jira:saved-views:v1"),
+  savedViewsKey,
   {
     getItem: (key) => localStorage.getItem(key),
     setItem: (key, value) => localStorage.setItem(key, value),
@@ -2095,7 +1993,7 @@ const viewClient = savedViewClient(
   (input, init) => fetch(input, init),
 );
 const liveFavorites = (savedViews: SavedView[]) =>
-  readFavorites().filter((id) => !id.startsWith("view:") || savedViews.some((v) => `view:${v.id}` === id));
+  savedFavorites().filter((id) => !id.startsWith("view:") || savedViews.some((v) => `view:${v.id}` === id));
 export async function refreshSavedViews() {
   const savedViews = await viewClient.refresh();
   if (!savedViews) return;
@@ -2148,7 +2046,7 @@ export async function deleteSavedView(id: string) {
   if (state.activeViewId === id) openAllIssues(state.board);
   set({
     savedViews: state.savedViews.filter((v) => v.id !== id),
-    favorites: readFavorites().filter((v) => v !== `view:${id}`),
+    favorites: savedFavorites().filter((v) => v !== `view:${id}`),
   });
 }
 /** The board's Issues › All. Leaves any view first, so its scope and details stay untouched. */
