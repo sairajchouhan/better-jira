@@ -1,4 +1,4 @@
-import { Children, Fragment, isValidElement, type ComponentProps, type ReactNode } from "react";
+import { Children, Fragment, isValidElement, type ComponentProps, type ReactElement, type ReactNode } from "react";
 import "./control-tokens.css";
 import "./button.css";
 
@@ -33,6 +33,30 @@ export type ButtonVariant =
 type Look = { variant?: ButtonVariant; size?: ButtonSize };
 
 /**
+ * Linear's Tooltip (`$`) props as its toolbars build them (`Aze`). `tooltip` is the hover text, separate from the
+ * accessible name. `shortcut` is display text appended as "(keys)", which src/tooltip.tsx draws as key caps.
+ * `disabledReason` is shown instead of both while the button is disabled.
+ */
+type Tip = { shortcut?: string; disabledReason?: string };
+
+const tooltipTitle = (tooltip: string | undefined, shortcut: string | undefined) =>
+  tooltip && shortcut ? `${tooltip} (${shortcut})` : tooltip;
+
+/**
+ * A disabled button gets no pointer events, so its reason hangs on a wrapper, as under Linear's tooltip trigger
+ * (`_tooltipTriggerContent > button[disabled] { pointer-events: none }`). Enabled, the button stands alone.
+ */
+function DisabledReason({ reason, children }: { reason: string | undefined; children: ReactElement }) {
+  return reason ? (
+    <span className="ui-tooltip-trigger" title={reason}>
+      {children}
+    </span>
+  ) : (
+    children
+  );
+}
+
+/**
  * A text button, optionally with a leading `icon`. Pressed/open states come from the element itself (`aria-pressed`,
  * `aria-expanded`, `data-menu-open`), so there is no `active` prop to keep in sync.
  */
@@ -40,53 +64,77 @@ export function Button({
   variant = "primary",
   size = "normal",
   icon,
+  tooltip,
+  shortcut,
+  disabledReason,
   type = "button",
   className = "",
   children,
   ...props
-}: Look & { icon?: ReactNode } & ComponentProps<"button">) {
+}: Look & Tip & { icon?: ReactNode; tooltip?: string } & ComponentProps<"button">) {
+  const reason = props.disabled ? disabledReason : undefined;
   return (
-    <button type={type} data-variant={variant} data-size={size} className={`ui-button ${className}`} {...props}>
-      {icon && (
-        <span aria-hidden className="ui-button-icon">
-          {icon}
-        </span>
-      )}
-      {children}
-    </button>
+    <DisabledReason reason={reason}>
+      <button
+        type={type}
+        title={reason ? undefined : tooltipTitle(tooltip, shortcut)}
+        aria-description={reason}
+        data-variant={variant}
+        data-size={size}
+        className={`ui-button ${className}`}
+        {...props}
+      >
+        {icon && (
+          <span aria-hidden className="ui-button-icon">
+            {icon}
+          </span>
+        )}
+        {children}
+      </button>
+    </DisabledReason>
   );
 }
 
 /**
- * `Jx`: an icon-only button, borderless and medium by default. `label` names it for screen readers and becomes the
- * hover tooltip; `shortcut` (display text such as "⌘K" or "G then I") is appended as "(keys)", which src/tooltip.tsx
- * draws as key caps.
+ * `Jx` inside Linear's Tooltip `$`: an icon-only button, borderless and medium by default. `label` names it for screen
+ * readers; the hover `tooltip` defaults to it and may differ ("Filter" over "Add filter"), or be `false` when the owner
+ * draws its own (the video toolbar). `shortcut` and `disabledReason` follow `Aze` (see `tooltipTitle`).
  */
 export function IconButton({
   label,
+  tooltip = label,
   shortcut,
+  disabledReason,
   variant = "borderless",
   size = "medium",
   type = "button",
   className = "",
   children,
   ...props
-}: Look & { label: string; shortcut?: string; children: ReactNode } & Omit<ComponentProps<"button">, "aria-label" | "title">) {
+}: Look &
+  Tip & { label: string; tooltip?: string | false; children: ReactNode } & Omit<
+    ComponentProps<"button">,
+    "aria-label" | "title"
+  >) {
+  const reason = props.disabled ? disabledReason : undefined;
   return (
-    <button
-      type={type}
-      aria-label={label}
-      title={shortcut ? `${label} (${shortcut})` : label}
-      data-variant={variant}
-      data-size={size}
-      data-shape="icon"
-      className={`ui-button ${className}`}
-      {...props}
-    >
-      <span aria-hidden className="ui-button-icon">
-        {children}
-      </span>
-    </button>
+    <DisabledReason reason={reason}>
+      <button
+        type={type}
+        aria-label={label}
+        title={reason ? undefined : tooltipTitle(tooltip || undefined, shortcut)}
+        aria-description={reason}
+        data-variant={variant}
+        data-size={size}
+        data-shape="icon"
+        className={`ui-button ${className}`}
+        {...props}
+      >
+        <span aria-hidden className="ui-button-icon">
+          {children}
+        </span>
+      </button>
+    </DisabledReason>
   );
 }
 

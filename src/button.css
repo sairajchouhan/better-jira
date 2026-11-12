@@ -210,3 +210,15 @@
     border: 1px dashed var(--border-solid-highlight);
   }
 }
+
+@layer components {
+  /* Linear's tooltip trigger (`_tooltipTriggerContent`, a flex Q box): a disabled button inside lets the hover reach
+     the wrapper, which carries the disabled reason. */
+  .ui-tooltip-trigger {
+    display: inline-flex;
+    flex-shrink: 0;
+  }
+  .ui-tooltip-trigger > button:disabled {
+    pointer-events: none;
+  }
+}
