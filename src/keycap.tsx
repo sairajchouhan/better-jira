@@ -17,7 +17,7 @@ export const SHORTCUT = {
 } as const;
 
 type Size = keyof typeof SHORTCUT.KEY;
-type Look = { size?: Size; type?: "bordered" | "borderless"; variant?: "default" | "primary" };
+type Look = { size?: Size };
 
 /** `Lbe`: keys that already imply Shift, so no ⇧ cap is drawn for them. */
 const SHIFTED = new Set(["#", "^", "+", "?"]);
@@ -92,8 +92,8 @@ export function spokenShortcut(chords: readonly string[][], alternate?: readonly
 }
 
 /** One key cap; aria-hidden inside a Shortcut, which speaks the whole chord once. */
-export function Keycap({ size = "normal", type = "bordered", variant = "default", className = "", ...props }: Look & ComponentProps<"kbd">) {
-  return <kbd data-size={size} data-type={type} data-variant={variant} className={`ui-keycap ${className}`} {...props} />;
+export function Keycap({ size = "normal", className = "", ...props }: Look & ComponentProps<"kbd">) {
+  return <kbd data-size={size} className={`ui-keycap ${className}`} {...props} />;
 }
 
 function Caps({ chord, look }: { chord: readonly string[]; look: Look }) {
@@ -120,17 +120,15 @@ export function Shortcut({
   keys,
   alternate,
   size,
-  type,
-  variant = "default",
   className = "",
   ...props
 }: Look & { keys: string | readonly string[]; alternate?: string } & Omit<ComponentProps<"span">, "children">) {
   const mac = isMac(),
     chords = (typeof keys === "string" ? [keys] : keys).map((chord) => chordKeys(chord, mac)),
     other = alternate === undefined ? undefined : chordKeys(alternate, mac),
-    look = { size, type, variant };
+    look = { size };
   return (
-    <span data-variant={variant} className={`ui-shortcut ${className}`} {...props}>
+    <span className={`ui-shortcut ${className}`} {...props}>
       <span className="sr-only">{spokenShortcut(chords, other)}</span>
       <Caps chord={chords[0] ?? []} look={look} />
       {other && (

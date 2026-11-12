@@ -1,4 +1,4 @@
-import { IconButton, type ButtonVariant } from "./button";
+import { IconButton } from "./button";
 import { Icon } from "./icons";
 import { toggleFavorite, useStore } from "./store";
 
@@ -7,13 +7,10 @@ import { toggleFavorite, useStore } from "./store";
 export function FavoriteButton({
   id,
   noun,
-  variant = "muted",
   className = "",
 }: {
   id: string;
   noun?: string;
-  /** Linear's header star is a muted IconButton (fg-3, hover crumb-hover). */
-  variant?: ButtonVariant;
   className?: string;
 }) {
   const favorite = useStore((s) => s.favorites.includes(id));
@@ -23,7 +20,7 @@ export function FavoriteButton({
       role="switch"
       label={favorite ? `Remove${thing} from favorites` : `Add${thing} to favorites`}
       aria-checked={favorite}
-      variant={variant}
+      variant="muted"
       onClick={() => toggleFavorite(id)}
       className={`${className} ${favorite ? "text-[#f2c94c]!" : ""}`}
     >

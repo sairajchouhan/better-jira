@@ -1,9 +1,9 @@
-import { Children, Fragment, isValidElement, type ComponentProps, type ReactElement, type ReactNode } from "react";
+import { type ComponentProps, type ReactElement, type ReactNode } from "react";
 import "./control-tokens.css";
 import "./button.css";
 
 /**
- * Linear's `jv` Button, `Jx` IconButton and `wBe` ButtonGroup (startup-root.CnUSfl4j.js). Heights, min-widths and
+ * Linear's `jv` Button, `Jx` IconButton (startup-root.CnUSfl4j.js). Heights, min-widths and
  * fonts are `GEe`, text padding `ZEe`, leading-icon padding `QEe`, icon-only widths `qEe`, colours `UEe`/`WEe`.
  * button.css spells these out.
  */
@@ -177,22 +177,3 @@ export function IconButton({
   );
 }
 
-/** `wBe`: buttons joined into one pill, a hairline between each (`divider="mini"` insets it 4px). */
-export function ButtonGroup({
-  variant = "secondary",
-  divider = "full",
-  className = "",
-  children,
-  ...props
-}: { variant?: "secondary" | "ghost" | "borderless"; divider?: "full" | "mini" } & ComponentProps<"div">) {
-  return (
-    <div role="group" data-variant={variant} data-divider={divider} className={`ui-button-group ${className}`} {...props}>
-      {Children.toArray(children).map((child, index) => (
-        <Fragment key={isValidElement(child) && child.key !== null ? child.key : index}>
-          {index > 0 && <span aria-hidden className="ui-button-group-divider" />}
-          {child}
-        </Fragment>
-      ))}
-    </div>
-  );
-}

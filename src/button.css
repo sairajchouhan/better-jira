@@ -175,43 +175,7 @@
     background: var(--red-tint);
   }
 
-  /* wBe / Yx: a pill of buttons with a hairline divider between them (4px shorter with miniDivider). */
-  .ui-button-group {
-    --divider-inset: var(--thin-pixel);
-    position: relative;
-    display: inline-flex;
-    vertical-align: top;
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: center;
-    margin: 0;
-    border-radius: 9999px;
-    font-weight: 500;
-    line-height: normal;
-    white-space: nowrap;
-    user-select: none;
-  }
-  .ui-button-group[data-divider="mini"] {
-    --divider-inset: 4px;
-  }
-  .ui-button-group-divider {
-    align-self: stretch;
-    flex-shrink: 0;
-    width: var(--thin-pixel);
-    margin: var(--divider-inset) 0;
-    background: color-mix(in srgb, var(--border-alpha-thin) 50%, transparent);
-    pointer-events: none;
-  }
-  .ui-button-group[data-variant="borderless"] .ui-button-group-divider {
-    background: transparent;
-  }
-  .ui-button-group[data-variant="secondary"] {
-    background: var(--btn);
-    box-shadow: 0 0 0 var(--thin-pixel) var(--border-alpha-thin), var(--frame-shadow);
-  }
-  .ui-button-group[data-variant="ghost"] {
-    border: 1px dashed var(--border-solid-highlight);
-  }
+
 }
 
 @layer components {
