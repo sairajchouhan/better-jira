@@ -170,3 +170,21 @@ test("BJ-54: dragging an image's width handle saves its width to Jira", async ({
     await waitSaved((doc) => doc.content.find((n: any) => n.type === "mediaSingle").attrs.width === before + 5);
   });
 });
+
+test("BJ-44 / BJ-66: a URL pasted over selected text links it; |-- starts a table", async ({ open }) => {
+  await fixture.reset({ writable: true });
+  const page = await open("?issue=TEST-2&view=page");
+  await newLine(page);
+  await page.type("read the docs");
+  await page.key("ArrowLeft", "alt", "shift");
+  await page.eval(
+    `(()=>{const data=new DataTransfer();data.setData('text/plain','https://example.test/docs');document.getElementById('description').dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}))})()`,
+  );
+  await page.waitFor(`[...document.querySelectorAll('#description a')].some(a=>a.textContent==='docs'&&a.href==='https://example.test/docs')`);
+  await page.key("ArrowRight");
+  await page.key("Enter");
+  await page.type("|--");
+  await page.waitFor(`document.querySelectorAll('#description table').length===2`);
+  await page.click("#description h2");
+  await waitSaved((doc) => doc.content.filter((n: any) => n.type === "table").length === 2 && JSON.stringify(doc).includes("https://example.test/docs"));
+});
