@@ -7,7 +7,7 @@ import { TextInput } from "./field";
 import { Button, IconButton } from "./button";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
-import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useRef, useState, type ComponentProps, type ComponentType, type ReactNode } from "react";
 import { useSubIssueComposer } from "./use-sub-issue-composer";
 import { useStoredState } from "./stored-state";
 import {
@@ -35,9 +35,7 @@ import {
   navigate,
   ui,
   useStore,
-  type Board,
   type Issue,
-  type IssueDraft,
 } from "./store";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { Avatar } from "./avatar";
@@ -79,77 +77,28 @@ const properties: [Property, string][] = [
   ["pullRequests", "Pull requests"],
 ];
 const button = "rounded px-2 py-1 text-fg-3 hover:bg-hover";
-type Field = "status" | "priority" | "assignee" | "labels";
-/** Each trigger owns its anchor; the explicit field menu owns all picker behavior. */
-function PropertyControl({
-  field,
-  label,
-  title,
-  className,
-  board,
-  value,
-  priorityEmpty,
-  onChange,
-  children,
+/** A compact property button that owns only its anchor; the field menu it opens owns choices and writes. */
+function PropertyButton<P extends { anchor?: HTMLElement | null; close?: () => void }>({
+  menu: FieldMenu,
+  menuProps,
+  ...props
 }: {
-  field: Field;
-  label: string;
-  title?: string;
-  className: string;
-  board: Board;
-  value: IssueDraft;
-  priorityEmpty?: string;
-  onChange: (patch: IssueDraft) => void;
-  children: ReactNode;
-}) {
+  menu: ComponentType<P>;
+  menuProps: Omit<P, "anchor" | "close">;
+} & Omit<ComponentProps<"button">, "onClick">) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const props = { anchor, board, close: () => setAnchor(null) };
-  const menus = {
-    status: (
-      <StatusMenu
-        {...props}
-        value={value.status ?? ""}
-        onChange={(status) => onChange({ status })}
-      />
-    ),
-    priority: (
-      <PriorityMenu
-        {...props}
-        value={value.priority ?? ""}
-        empty={priorityEmpty}
-        onChange={(priority) => onChange({ priority: priority || undefined })}
-      />
-    ),
-    assignee: (
-      <AssigneeMenu
-        {...props}
-        value={value.assignee ?? null}
-        onChange={(assignee) => onChange({ assignee })}
-      />
-    ),
-    labels: (
-      <LabelsMenu
-        {...props}
-        value={value.labels ?? []}
-        onChange={(labels) => onChange({ labels })}
-      />
-    ),
-  };
   return (
     <>
       {/* Compact composer/row property geometry has no variant in the primitive contract. */}
       <button
         type="button"
-        title={title}
         aria-haspopup="dialog"
         aria-expanded={!!anchor}
-        aria-label={label}
-        className={className}
+        className={button}
+        {...props}
         onClick={(event) => setAnchor(event.currentTarget)}
-      >
-        {children}
-      </button>
-      {anchor && menus[field]}
+      />
+      {anchor && <FieldMenu {...({ ...menuProps, anchor, close: () => setAnchor(null) } as P)} />}
     </>
   );
 }
@@ -378,25 +327,6 @@ export function SubIssues({ issue }: { issue: Issue }) {
         "[data-sub-issue]:hover, [data-sub-issue]:focus-within",
       )?.dataset.subIssue,
   );
-  /** The composer's chip for a field, picking into the draft. */
-  const draftControl = (
-    field: Field,
-    label: string,
-    content: React.ReactNode,
-  ) => (
-    <PropertyControl
-      key={field}
-      field={field}
-      board={board}
-      value={draft}
-      priorityEmpty={noPriority}
-      onChange={setProperties}
-      label={label}
-      className={button}
-    >
-      {content}
-    </PropertyControl>
-  );
   const rowEntries = (child: Issue, _anchor: HTMLElement): ActionEntry[] =>
     issueMenuEntries(child, {
       presentation: "sub-issue",
@@ -486,7 +416,6 @@ export function SubIssues({ issue }: { issue: Issue }) {
             rows={model.rows}
             display={display}
             boards={boards}
-            board={board}
             progress={progress.get(child.key)}
             active={rowMenu?.key === child.key}
             openMenu={(anchor, point) =>
@@ -513,9 +442,15 @@ export function SubIssues({ issue }: { issue: Issue }) {
           className="sub-issue-composer outline-none mt-3 rounded-lg border border-line-2 bg-card p-3"
         >
           <div className="flex items-center gap-2">
-            {draftControl(
-              "status",
-              `Sub-issue status. ${statusById(board, draft.status)?.name ?? "Todo"} is selected`,
+            <PropertyButton
+              aria-label={`Sub-issue status. ${statusById(board, draft.status)?.name ?? "Todo"} is selected`}
+              menu={StatusMenu}
+              menuProps={{
+                board,
+                value: draft.status ?? "",
+                onChange: (status) => setProperties({ status }),
+              }}
+            >
               <StatusIcon
                 status={
                   statusById(board, draft.status) ?? {
@@ -523,8 +458,8 @@ export function SubIssues({ issue }: { issue: Issue }) {
                     category: "new",
                   }
                 }
-              />,
-            )}
+              />
+            </PropertyButton>
             <TextInput
               ref={titleInput}
               autoFocus
@@ -553,34 +488,50 @@ export function SubIssues({ issue }: { issue: Issue }) {
             onCancel={cancel}
           />
           <div className="flex gap-1">
-            {(["priority", "assignee", "labels"] as const).map((field) =>
-              draftControl(
-                field,
-                field === "priority"
-                  ? `Sub-issue priority. ${draft.priority ?? noPriority} is selected`
-                  : field === "assignee"
-                    ? `Sub-issue assignee. ${draft.assignee?.name ?? "Unassigned"}`
-                    : `Sub-issue labels. ${draft.labels?.join(", ") || "No labels"}`,
-                <span className="flex items-center gap-1.5">
-                  {field === "priority" ? (
-                    <PriorityIcon name={draft.priority} />
-                  ) : (
-                    <Icon
-                      name={field === "labels" ? "label" : "user"}
-                      size={14}
-                    />
-                  )}
-                  {/* Linear names the value on each chip: "Priority", the assignee, "Labels". */}
-                  {field === "priority"
-                    ? (draft.priority ?? "Priority")
-                    : field === "assignee"
-                      ? (draft.assignee?.name ?? "Assignee")
-                      : draft.labels?.length
-                        ? draft.labels.join(", ")
-                        : "Labels"}
-                </span>,
-              ),
-            )}
+            {/* Linear names the value on each chip: "Priority", the assignee, "Labels". */}
+            <PropertyButton
+              aria-label={`Sub-issue priority. ${draft.priority ?? noPriority} is selected`}
+              menu={PriorityMenu}
+              menuProps={{
+                board,
+                value: draft.priority ?? "",
+                empty: noPriority,
+                onChange: (priority) => setProperties({ priority: priority || undefined }),
+              }}
+            >
+              <span className="flex items-center gap-1.5">
+                <PriorityIcon name={draft.priority} />
+                {draft.priority ?? "Priority"}
+              </span>
+            </PropertyButton>
+            <PropertyButton
+              aria-label={`Sub-issue assignee. ${draft.assignee?.name ?? "Unassigned"}`}
+              menu={AssigneeMenu}
+              menuProps={{
+                board,
+                value: draft.assignee ?? null,
+                onChange: (assignee) => setProperties({ assignee }),
+              }}
+            >
+              <span className="flex items-center gap-1.5">
+                <Icon name="user" size={14} />
+                {draft.assignee?.name ?? "Assignee"}
+              </span>
+            </PropertyButton>
+            <PropertyButton
+              aria-label={`Sub-issue labels. ${draft.labels?.join(", ") || "No labels"}`}
+              menu={LabelsMenu}
+              menuProps={{
+                board,
+                value: draft.labels ?? [],
+                onChange: (labels) => setProperties({ labels }),
+              }}
+            >
+              <span className="flex items-center gap-1.5">
+                <Icon name="label" size={14} />
+                {draft.labels?.length ? draft.labels.join(", ") : "Labels"}
+              </span>
+            </PropertyButton>
           </div>
         </div>
       )}
@@ -741,7 +692,6 @@ function SubIssueRow({
   rows,
   display,
   boards,
-  board,
   progress,
   active,
   openMenu,
@@ -753,35 +703,21 @@ function SubIssueRow({
   rows: { depth: number }[];
   display: SubIssueDisplay;
   boards: Boards;
-  board: Board;
   progress?: [number, number];
   active: boolean;
   openMenu: (anchor: HTMLElement, point: { x: number; y: number }) => void;
 }) {
   const status = (child: Issue) => statusOf(boards, child);
-  const control = (child: Issue, field: Field, content: React.ReactNode) => (
-    <PropertyControl
-      field={field}
-      board={boards.find((b) => b.id === child.board) ?? board}
-      value={child}
-      onChange={(patch) => {
-        if (patch.status) actions.status(child.key, patch.status);
-        else actions.patch(child.key, patch);
-      }}
-      title={
-        field === "status"
-          ? status(child).name
-          : field === "priority"
-            ? (child.priority ?? "No priority")
-            : field === "assignee"
-              ? (child.assignee?.name ?? "Unassigned")
-              : child.labels.join(", ")
-      }
-      label={`Change ${field} for ${child.key}`}
-      className={button}
+  // Rows pick through PropertyPicker, the one field→write path every issue picker shares.
+  const control = (field: IssueField, title: string, content: ReactNode) => (
+    <PropertyButton
+      title={title}
+      aria-label={`Change ${field} for ${child.key}`}
+      menu={PropertyPicker}
+      menuProps={{ issue: child, field }}
     >
       {content}
-    </PropertyControl>
+    </PropertyButton>
   );
   const childURL = (child: Issue) => {
     const url = new URL(location.href);
@@ -849,9 +785,13 @@ function SubIssueRow({
         );
       })}
       {display.properties.includes("status") &&
-        control(child, "status", <StatusIcon status={status(child)} />)}
+        control("status", status(child).name, <StatusIcon status={status(child)} />)}
       {display.properties.includes("priority") &&
-        control(child, "priority", <PriorityIcon name={child.priority} />)}
+        control(
+          "priority",
+          child.priority ?? "No priority",
+          <PriorityIcon name={child.priority} />,
+        )}
       {display.properties.includes("id") && (
         <span className="px-1 text-fg-3">{child.key}</span>
       )}
@@ -904,8 +844,8 @@ function SubIssueRow({
       })}
       {display.properties.includes("labels") &&
         control(
-          child,
           "labels",
+          child.labels.join(", "),
           child.labels.join(", ") || <Icon name="label" size={13} />,
         )}
       {display.properties.includes("milestone") && (
@@ -930,8 +870,8 @@ function SubIssueRow({
       )}
       {display.properties.includes("assignee") &&
         control(
-          child,
           "assignee",
+          child.assignee?.name ?? "Unassigned",
           child.assignee ? (
             <Avatar user={child.assignee} size={18} />
           ) : (
