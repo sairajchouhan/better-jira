@@ -29,10 +29,16 @@ export function savedViewClient(
       const key = legacyKey();
       const marker = `${key}:imported`;
       if (storage.getItem(marker) !== "1") {
-        const legacy = migrateLegacyViews(storage.getItem(key));
-        await viewRequest("/import", "POST", legacy);
-        // Retain the old source as a backup; never overwrite it with server state.
-        storage.setItem(marker, "1");
+        try {
+          const legacy = migrateLegacyViews(storage.getItem(key));
+          // Nothing saved in this browser before the server kept views: there is nothing to import, so starting needs no write.
+          if (legacy.length) await viewRequest("/import", "POST", legacy);
+          // Retain the old source as a backup; never overwrite it with server state.
+          storage.setItem(marker, "1");
+        } catch (error) {
+          // A failed import is retried on the next start; it must not keep the app from loading the views the server has.
+          console.warn(error);
+        }
       }
     }
     return viewRequest<SavedView[]>();

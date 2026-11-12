@@ -81,26 +81,42 @@ test("different views write independently; missing ids never send a request", as
   expect(f.views().map((v) => v.name)).toEqual(["A", "B"]);
 });
 
-test("legacy import is marked only after success and retains the source", async () => {
+test("legacy import is marked only after success, retains the source, and a failure still loads the server's views", async () => {
   const f = fixture();
-  f.storage.set("legacy", "[]");
+  const legacy = JSON.stringify([view()]);
+  f.storage.set("legacy", legacy);
+  const warn = console.warn;
+  console.warn = () => {};
   const failed = f.client.load(true);
-  const failure = failed.catch((e: Error) => e);
   f.calls[0]!.resolve(new Response(null, { status: 500 }));
-  expect(await failure).toMatchObject({ message: "Could not save views (500)" });
+  await turn();
+  expect(f.calls[1]!.path).toBe("/api/views");
+  f.calls[1]!.resolve(Response.json([view()]));
+  expect(await failed).toEqual([view()]);
+  console.warn = warn;
   expect(f.storage.has("legacy:imported")).toBe(false);
   const load = f.client.load(true);
-  expect(f.calls[1]!.path).toBe("/api/views/import");
-  f.calls[1]!.resolve(Response.json([]));
+  expect(f.calls[2]!.path).toBe("/api/views/import");
+  f.calls[2]!.resolve(Response.json([]));
   await turn();
-  f.calls[2]!.resolve(Response.json([view()]));
+  f.calls[3]!.resolve(Response.json([view()]));
   expect(await load).toEqual([view()]);
-  expect(f.storage.get("legacy")).toBe("[]");
+  expect(f.storage.get("legacy")).toBe(legacy);
   expect(f.storage.get("legacy:imported")).toBe("1");
   const again = f.client.load(true);
-  expect(f.calls[3]!.path).toBe("/api/views");
-  f.calls[3]!.resolve(Response.json([]));
+  expect(f.calls[4]!.path).toBe("/api/views");
+  f.calls[4]!.resolve(Response.json([]));
   await again;
+});
+
+test("a browser with no legacy views starts without any write", async () => {
+  const f = fixture();
+  const load = f.client.load(true);
+  expect(f.calls[0]!.path).toBe("/api/views");
+  expect(f.calls[0]!.init?.method).toBe("GET");
+  f.calls[0]!.resolve(Response.json([]));
+  expect(await load).toEqual([]);
+  expect(f.storage.get("legacy:imported")).toBe("1");
 });
 
 test("creation drops duplicate source metadata and deletion accepts an empty response", async () => {
