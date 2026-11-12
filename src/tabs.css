@@ -1,0 +1,36 @@
+@layer components {
+  /* Linear's header view tabs (.raj/linear.md "Tabs", computed styles): 28px pills, 0 10px, 12px/500, a 0.5px ring. */
+  .ui-tabs-list {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .ui-tab {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    border: var(--thin-pixel) solid transparent;
+    border-radius: 9999px;
+    background: var(--tab);
+    box-shadow: var(--tab-shadow);
+    color: var(--fg-3);
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .ui-tab:hover {
+    background: var(--hover);
+    color: var(--fg-2);
+  }
+  .ui-tab[aria-selected="true"] {
+    background: var(--tab-on);
+    box-shadow: var(--tab-on-shadow);
+    color: var(--fg);
+  }
+  .ui-tab:disabled {
+    opacity: 0.6;
+  }
+}

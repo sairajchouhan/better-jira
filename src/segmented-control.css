@@ -1,0 +1,71 @@
+@layer components {
+  /* J4 list: a pill track, controlTertiarySelected in light and controlTertiary in dark. */
+  .ui-segmented {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    align-items: center;
+    border-radius: 9999px;
+    background: var(--tab-on);
+  }
+  .ui-segmented[data-width="full"] {
+    width: 100%;
+  }
+  /* $Tr.trigger + eEr sizes (the Button table). */
+  .ui-segment {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    flex: 1 0 auto;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    min-width: 32px;
+    padding: 0 12px;
+    border-radius: 9999px;
+    color: var(--fg-3);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .ui-segment:not([data-active]):is(:hover, :active):not(:disabled) {
+    color: var(--fg-2);
+  }
+  /* The selected segment wears $Tr.indicator: the opposite tertiary fill plus a thin ring and low shadow. */
+  .ui-segment[data-active] {
+    background: var(--tab);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--frame), var(--frame-shadow);
+    color: var(--fg-2);
+  }
+  .ui-segment:disabled {
+    pointer-events: none;
+    opacity: 0.6;
+  }
+  .ui-segmented[data-size="small"] .ui-segment {
+    height: 24px;
+    min-width: 24px;
+    padding: 0 8px;
+    font-size: 12px;
+  }
+  .ui-segmented[data-size="medium"] .ui-segment {
+    height: 28px;
+    min-width: 28px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+  .ui-segmented[data-size="large"] .ui-segment {
+    height: 44px;
+    padding: 0 18px;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  @layer components {
+    .ui-segmented {
+      background: var(--tab);
+    }
+    .ui-segment[data-active] {
+      background: var(--tab-on);
+    }
+  }
+}
