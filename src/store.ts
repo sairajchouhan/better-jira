@@ -116,7 +116,13 @@ export type Issue = {
 };
 export type Status = { id: string; name: string; category: string };
 export type Column = { name: string; statuses: Status[] };
-export type Board = { id: number; name: string; columns: Column[] };
+export type Board = {
+  id: number;
+  name: string;
+  columns: Column[];
+  /** Added in the app, so the sidebar can remove it (BJ-24). */
+  removable?: boolean;
+};
 /** Raw Jira issue: { key, fields: { description, comment, reporter, created, ... } } */
 export type Full = {
   key: string;
@@ -646,7 +652,8 @@ function listen() {
         ? refreshBoards().catch(() => {})
         : poll.refetch());
 }
-/** Boards added on the server since load, by this tab or another: the list, the new boards' issues, and their default view. */
+/** Boards added or removed on the server since load, by this tab or another: the list, the new boards' issues (a removed
+ *  board's leave), and their default view. */
 async function refreshBoards() {
   const [boards, remote] = await Promise.all([
     json<Board[]>("/api/boards"),
@@ -657,12 +664,25 @@ async function refreshBoards() {
     preferences = { ...state.preferences };
   for (const issue of remote)
     if (!known.has(issue.board) && !issues.has(issue.key)) issues.set(issue.key, issue);
+  const removed = new Set([...known].filter((id) => !boards.some((b) => b.id === id)));
+  if (removed.size) for (const [key, issue] of issues) if (removed.has(issue.board)) issues.delete(key);
   for (const b of boards)
     preferences[b.id] ??= {
       ...defaultPreferences(),
       display: parsePreferences({ display: state.defaults[b.id] }).display,
     };
   set({ boards, issues, preferences });
+  if (removed.has(state.board) && boards[0])
+    navigate({ board: boards[0].id, selected: null, panel: false });
+}
+/** Removes a board added in the app from the sidebar, in every tab (BJ-24). */
+export async function removeBoard(id: number) {
+  const response = await fetch(`/api/boards/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error ?? "Could not remove the board. Retry in a moment.");
+  }
+  await refreshBoards();
 }
 /** Adds a Jira board by link or ID; the server checks it with Jira and mirrors it. Throws Jira's refusal in words. */
 export async function addBoard(input: string): Promise<{ id: number; message: string }> {

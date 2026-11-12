@@ -24,9 +24,12 @@ import {
   dismissWriteError,
   undoEdit,
   redoEdit,
+  removeBoard,
   type Board,
   type Issue,
 } from "./store";
+import { ContextMenu, type ActionEntry } from "./action-menu";
+import { showNotification } from "./app-notifications";
 import { BoardControls, FilterChips } from "./view-controls";
 import { Modal } from "./personal-controls";
 import { hotkeyOf, runShortcut } from "./shortcuts";
@@ -148,20 +151,30 @@ export function Sidebar({ boards }: { boards: Board[] }) {
             <Icon name="plus" />
           </IconButton>
         </Text>
-        {boards.map((b) => (
-          <SideItem
-            key={b.id}
-            active={!mine && !inbox && !activeView && !viewsPage && b.id === boardId}
-            onClick={() =>
-              timed("switch board", () => navigate({ board: b.id, selected: null, panel: false }))
-            }
-          >
-            <span className="grid size-4 shrink-0 place-items-center rounded-[4px] bg-sel text-[9px] font-semibold text-fg-2">
-              {b.name[0]}
-            </span>
-            <span className="truncate">{b.name}</span>
-          </SideItem>
-        ))}
+        {boards.map((b) => {
+          const item = (
+            <SideItem
+              key={b.id}
+              active={!mine && !inbox && !activeView && !viewsPage && b.id === boardId}
+              onClick={() =>
+                timed("switch board", () => navigate({ board: b.id, selected: null, panel: false }))
+              }
+            >
+              <span className="grid size-4 shrink-0 place-items-center rounded-[4px] bg-sel text-[9px] font-semibold text-fg-2">
+                {b.name[0]}
+              </span>
+              <span className="truncate">{b.name}</span>
+            </SideItem>
+          );
+          // A board added in the app can leave the sidebar again (BJ-24); setup's boards can't.
+          return b.removable ? (
+            <ContextMenu key={b.id} label="Board options" entries={() => boardEntries(b)}>
+              {item}
+            </ContextMenu>
+          ) : (
+            item
+          );
+        })}
         {/* Views is a section like Boards: every saved view inline; the heading opens the Views directory. */}
         {/* Navigation section heading uses aria-current styling; Button has no navigation variant. */}
         <button
@@ -193,6 +206,18 @@ export function Sidebar({ boards }: { boards: Board[] }) {
     </>
   );
 }
+
+const boardEntries = (board: Board): ActionEntry[] => [
+  {
+    name: "Remove from sidebar",
+    icon: "close",
+    run: () =>
+      void removeBoard(board.id).then(
+        () => showNotification({ text: `Removed ${board.name}`, detail: "Add it again from Add board." }),
+        (error: Error) => set({ perf: error.message }),
+      ),
+  },
+];
 
 /** Linear's 28px bottom bar under the sidebar and panel; ours carries the perf readout and the local-only note. */
 /** Linear's delete dialog instead of a native confirm. Jira deletes the issue's subtasks with it (deleteSubtasks=true), so it names them. */

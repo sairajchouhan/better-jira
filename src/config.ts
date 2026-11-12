@@ -1,5 +1,11 @@
 export type JiraAuth = { site: string; email: string; token: string };
-export type Configuration = JiraAuth & { boards: number[]; cachePath: string; port: number };
+export type Configuration = JiraAuth & {
+  boards: number[];
+  /** The boards setup names (JIRA_BOARDS or saved `boards`); the rest of `boards` were added in the app and may be removed. */
+  setupBoards: number[];
+  cachePath: string;
+  port: number;
+};
 export type LocalSettings = {
   site?: string;
   boards?: number[];
@@ -53,10 +59,8 @@ export function configuration(env: Environment, local: LocalSettings = {}): Conf
   // Saved boards, port and cache belong to the saved site; another site in env must not reuse them.
   const auth = jiraAuth(env, local),
     own = !local.site || siteURL(local.site) === auth.site ? local : {};
-  const boards = boardIDs([
-      ...(env.JIRA_BOARDS ? boardIDs(env.JIRA_BOARDS) : (own.boards ?? [])),
-      ...(local.addedBoards?.[auth.site] ?? []),
-    ]),
+  const setupBoards = env.JIRA_BOARDS ? boardIDs(env.JIRA_BOARDS) : (own.boards ?? []);
+  const boards = boardIDs([...setupBoards, ...(local.addedBoards?.[auth.site] ?? [])]),
     port = Number(env.PORT || own.port || 3000);
   if (!Number.isSafeInteger(port) || port < 1 || port > 65535)
     throw new Error("PORT must be between 1 and 65535.");
@@ -65,6 +69,7 @@ export function configuration(env: Environment, local: LocalSettings = {}): Conf
   return {
     ...auth,
     boards,
+    setupBoards,
     port,
     cachePath: env.JIRA_CACHE || own.cachePath || `cache-${source}-${identity}.db`,
   };
@@ -79,6 +84,18 @@ export const withAddedBoard = (
   addedBoards: {
     ...local.addedBoards,
     [site]: [...new Set([...(local.addedBoards?.[site] ?? []), board])],
+  },
+});
+/** The settings without `board` among `site`'s added boards (BJ-24). */
+export const withoutAddedBoard = (
+  local: LocalSettings,
+  site: string,
+  board: number,
+): LocalSettings => ({
+  ...local,
+  addedBoards: {
+    ...local.addedBoards,
+    [site]: (local.addedBoards?.[site] ?? []).filter((b) => b !== board),
   },
 });
 /** A board ID from what the user pasted: a bare ID, or a board link on `site` (…/boards/12, RapidBoard.jspa?rapidView=12). */

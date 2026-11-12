@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test";
-import { boardFromInput, boardIDs, configuration, siteURL, withAddedBoard } from "./config";
+import {
+  boardFromInput,
+  boardIDs,
+  configuration,
+  siteURL,
+  withAddedBoard,
+  withoutAddedBoard,
+} from "./config";
 const env = {
   JIRA_URL: "https://example.atlassian.net/",
   JIRA_EMAIL: "person@example.invalid",
@@ -70,4 +77,12 @@ test("board links and IDs parse to a board on the connected site", () => {
   );
   for (const bad of ["", "0", "KAN", `${site}/browse/KAN-1`, `${site}/jira/boards/1x`])
     expect(() => boardFromInput(bad, site)).toThrow();
+});
+test("BJ-24: a board added in the app can be removed again; setup's boards stay", () => {
+  const site = "https://example.atlassian.net";
+  const local = withAddedBoard(withAddedBoard({}, site, 7), site, 12);
+  expect(configuration(env, local).setupBoards).toEqual([12, 34]);
+  const removed = withoutAddedBoard(local, site, 7);
+  expect(removed.addedBoards).toEqual({ [site]: [12] });
+  expect(configuration(env, removed).boards).toEqual([12, 34]);
 });

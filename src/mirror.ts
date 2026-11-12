@@ -1,7 +1,7 @@
 import { viewRepository } from "./view-repository";
 import { Database } from "bun:sqlite";
 import { jira, JiraError } from "./jira";
-import { boardFromInput } from "./config";
+import { boardFromInput, withoutAddedBoard } from "./config";
 import { detailCache } from "./detail-cache";
 import { recentlyTouched, storeRemoteLinks } from "./remote-links";
 import { attachmentGateway, jiraAttachmentReader } from "./attachment-media";
@@ -325,8 +325,12 @@ export async function start() {
 
 // --- reads (the UI only ever reads from here) ---
 
+/** `removable` marks a board added in the app, which the sidebar can remove (BJ-24). */
 export const boards = () =>
-  BOARDS.map((b) => JSON.parse(getMeta(`config:${b}`) ?? "null")).filter(Boolean);
+  BOARDS.map((b) => {
+    const board = JSON.parse(getMeta(`config:${b}`) ?? "null");
+    return board && !configuration.setupBoards.includes(b) ? { ...board, removable: true } : board;
+  }).filter(Boolean);
 
 /** Adds a board from a pasted link or ID: checked against Jira (reads only), mirrored, then saved for this site and pushed to open tabs. */
 export async function addBoard(input: string) {
@@ -351,6 +355,15 @@ export async function addBoard(input: string) {
   if (!BOARDS.includes(id)) BOARDS.push(id);
   notify("boards");
   return { id, message: `Added ${boards().find((b) => b.id === id)?.name ?? `board ${id}`}.` };
+}
+
+/** Removes a board added in the app from this site's sidebar (BJ-24). Setup's boards stay; cached rows stay, unread. */
+export async function removeBoard(id: number) {
+  if (!BOARDS.includes(id) || configuration.setupBoards.includes(id))
+    throw new Error("Only a board added in the app can be removed.");
+  await saveAddedBoard(id, withoutAddedBoard);
+  BOARDS.splice(BOARDS.indexOf(id), 1);
+  notify("boards");
 }
 
 /** All issues on both boards, slim. ~3k rows, ~1MB: the UI keeps them all in memory for instant search. */

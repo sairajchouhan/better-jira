@@ -738,6 +738,11 @@ async function handle(req: Request) {
       return Response.json({ error: (error as Error).message }, { status: 422 });
     }
   }
+  // Stands in for removeBoard: only the board added from the app can go (BJ-24).
+  if (path === "/api/boards/2" && req.method === "DELETE" && added) {
+    added = false;
+    return new Response(null, { status: 204 });
+  }
   if (req.method !== "GET") {
     status = 405;
     body = { error: "Fixture API is read-only" };
@@ -747,7 +752,10 @@ async function handle(req: Request) {
       body = { error: "Test unavailable" };
     } else body = { site: "https://example.atlassian.net", user, writable };
   } else if (path === "/api/boards")
-    body = bulk || added ? [board, { ...board, id: 2, name: "Second board" }] : [board];
+    body =
+      bulk || added
+        ? [board, { ...board, id: 2, name: "Second board", ...(added ? { removable: true } : {}) }]
+        : [board];
   else if (path === "/api/issues") body = listed();
   else if (path === "/api/options")
     body = { priorities: [], users: [], labels: [], versions: {}, types: { TEST: issueTypes } };

@@ -43,6 +43,21 @@ const server = serve({
         }
       }),
     },
+    "/api/boards/:id": {
+      DELETE: localOnly(async (req: BunRequest<"/api/boards/:id">) => {
+        if (req.headers.get("origin") && req.headers.get("origin") !== new URL(req.url).origin)
+          return new Response("Forbidden", { status: 403 });
+        try {
+          await mirror.removeBoard(Number(req.params.id));
+          return new Response(null, { status: 204 });
+        } catch (e) {
+          return Response.json(
+            { error: e instanceof Error ? e.message : "Could not remove the board." },
+            { status: 422 },
+          );
+        }
+      }),
+    },
     // Server-sent events: one "changed" message whenever the mirror took in something new from Jira.
     "/api/events": localOnly((req) => {
       server.timeout(req, 0);

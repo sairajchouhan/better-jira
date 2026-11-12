@@ -56,6 +56,21 @@ test("Add board: a board from another site is refused; a board link mirrors and 
         `[...document.querySelectorAll('nav[aria-label="Main navigation"] button')].filter(b=>b.textContent.includes('Second board')).length`,
       ),
     ).toBe(1);
+
+    // BJ-24: a board added in the app leaves the sidebar from its context menu; setup's board has none.
+    const sidebarRow = (name: string) =>
+      `[...document.querySelectorAll('nav[aria-label="Main navigation"] button')].find(b=>b.textContent.includes('${name}'))`;
+    const rightClick = (name: string) =>
+      p.eval(
+        `(()=>{const n=${sidebarRow(name)},r=n.getBoundingClientRect();n.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:r.x+20,clientY:r.y+10}))})()`,
+      );
+    await rightClick("Browser audit");
+    expect(await p.eval(`!!document.querySelector('[role="dialog"][aria-label="Board options"]')`)).toBe(false);
+    await rightClick("Second board");
+    await p.click('[role="dialog"][aria-label="Board options"] [cmdk-item][data-value="Remove from sidebar"]');
+    await p.waitFor(`!${sidebarRow("Second board")}`);
+    await p.waitFor(`new URL(location.href).searchParams.get('board')==='1'`);
+    await p.waitFor(`!document.querySelector('[data-key="ADD-1"]')`);
   } finally {
     await p.close();
   }
