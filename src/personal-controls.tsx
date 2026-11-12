@@ -1,3 +1,4 @@
+import { Button, IconButton } from "./button";
 import { issueMenuEntries } from "./issue-menu";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
 /* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
@@ -47,13 +48,23 @@ import {
   type JiraOptions,
   type User,
 } from "./store";
-import { buckets, newId, type Display, type Field, type Grouping } from "./view-model";
+import {
+  buckets,
+  newId,
+  type Display,
+  type Field,
+  type Grouping,
+} from "./view-model";
 import { statuses, projectChoices } from "./board-catalog";
-import { setDisplay, setOnlyRule, updateRule, useViewSettings } from "./view-settings";
+import {
+  setDisplay,
+  setOnlyRule,
+  updateRule,
+  useViewSettings,
+} from "./view-settings";
 
 const INPUT =
   "w-full rounded-md border border-line-2 bg-card px-3 py-2 text-fg outline-none focus:border-accent";
-const BUTTON = "rounded-md px-3 py-1.5 text-fg-2 hover:bg-hover disabled:opacity-40";
 
 export { MenuSurface as Modal } from "./menu-surface";
 import { MenuSurface as Modal, issueAnchor } from "./menu-surface";
@@ -85,8 +96,13 @@ export function CreateIssue() {
   const [labels, setLabels] = useState(initial.labels?.join(", ") ?? "");
   const [more, setMore] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  useCommand("create-expanded", () => { setExpanded(true); return true; });
-  const [attachments, setAttachments] = useState<Issue["attachments"]>(initial.attachments ?? []);
+  useCommand("create-expanded", () => {
+    setExpanded(true);
+    return true;
+  });
+  const [attachments, setAttachments] = useState<Issue["attachments"]>(
+    initial.attachments ?? [],
+  );
   const [filesBusy, setFilesBusy] = useState(false);
 
   const titleRef = useRef<HTMLInputElement>(null);
@@ -96,12 +112,17 @@ export function CreateIssue() {
   const options = useStore((s) => s.options),
     writable = useStore((s) => s.writable);
   // Create related › Parent issue: only a type one level above the source's in Jira's hierarchy can be its parent (a Task's is an Epic).
-  const source = draft.related?.kind === "parent" ? all.get(draft.related.key) : undefined,
+  const source =
+      draft.related?.kind === "parent" ? all.get(draft.related.key) : undefined,
     jiraTypes = options.types?.[draft.project?.key ?? projects[0]?.key ?? ""];
-  const sourceLevel = jiraTypes?.find((t) => t.name === source?.type)?.hierarchyLevel;
+  const sourceLevel = jiraTypes?.find(
+    (t) => t.name === source?.type,
+  )?.hierarchyLevel;
   const parentTypes =
     source && sourceLevel !== undefined
-      ? jiraTypes!.filter((t) => t.hierarchyLevel === sourceLevel + 1).map((t) => t.name)
+      ? jiraTypes!
+          .filter((t) => t.hierarchyLevel === sourceLevel + 1)
+          .map((t) => t.name)
       : undefined;
   const project = draft.project ?? projects[0],
     parentIssue = draft.parent ? all.get(draft.parent) : undefined;
@@ -115,10 +136,13 @@ export function CreateIssue() {
   const types =
     parentTypes ??
     (parentIssue && childTypes(get(), parentIssue)) ??
-    [...new Set(["Task", ...issues.flatMap((i) => (i.type ? [i.type] : []))])].filter(
-      (type) => draft.parent || !needsParent(get(), { type, project }),
-    );
-  const type = draft.type && types.includes(draft.type) ? draft.type : (types[0] ?? "Task");
+    [
+      ...new Set(["Task", ...issues.flatMap((i) => (i.type ? [i.type] : []))]),
+    ].filter((type) => draft.parent || !needsParent(get(), { type, project }));
+  const type =
+    draft.type && types.includes(draft.type)
+      ? draft.type
+      : (types[0] ?? "Task");
   const close = () => ui.send({ type: "overlay.close" });
   // One id per draft, read from this render: a second submit before React re-renders (a double click) makes no second issue.
   // oxlint-disable-next-line react-hooks/exhaustive-deps -- Memo invalidation follows draft identity or relation inputs; render-local helpers would invalidate every render.
@@ -177,19 +201,28 @@ export function CreateIssue() {
       >
         <div className="mb-3 flex items-center gap-2 text-[12px] text-fg-3">
           <span className="flex-1 truncate">
-            {board.name} › {initial.parent ? `Sub-issue of ${initial.parent}` : "New issue"}
+            {board.name} ›{" "}
+            {initial.parent ? `Sub-issue of ${initial.parent}` : "New issue"}
           </span>
-          <button
+          <IconButton
             type="button"
-            aria-label={expanded ? "Collapse editor" : "Expand editor"}
+            label={expanded ? "Collapse editor" : "Expand editor"}
             onClick={() => setExpanded(!expanded)}
-            className={BUTTON}
+
+            variant="borderless"
+            size="medium"
           >
             <Icon name="expand" />
-          </button>
-          <button type="button" aria-label="Close" onClick={close} className={BUTTON}>
+          </IconButton>
+          <IconButton
+            type="button"
+            label="Close"
+            onClick={close}
+            variant="borderless"
+            size="medium"
+          >
             <Icon name="close" />
-          </button>
+          </IconButton>
         </div>
         <input
           ref={titleRef}
@@ -198,7 +231,12 @@ export function CreateIssue() {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.nativeEvent.isComposing) {
+            if (
+              e.key === "Enter" &&
+              !e.metaKey &&
+              !e.ctrlKey &&
+              !e.nativeEvent.isComposing
+            ) {
               e.preventDefault();
               document.getElementById("create-description")?.focus();
             }
@@ -231,7 +269,8 @@ export function CreateIssue() {
             label="Status"
             current={
               statuses(board).find(
-                (s) => s.id === (draft.status ?? board.columns[0]?.statuses[0]?.id),
+                (s) =>
+                  s.id === (draft.status ?? board.columns[0]?.statuses[0]?.id),
               )?.name ?? ""
             }
             menu={StatusMenu}
@@ -243,7 +282,9 @@ export function CreateIssue() {
           />
           <PropertyPill
             label="Priority"
-            current={draft.priority ?? (writable ? "Default priority" : "Normal")}
+            current={
+              draft.priority ?? (writable ? "Default priority" : "Normal")
+            }
             menu={PriorityMenu}
             menuProps={{
               board,
@@ -259,13 +300,16 @@ export function CreateIssue() {
             menuProps={{
               board,
               value: draft.assignee ?? null,
-              onChange: (assignee: User | null) => setDraft({ ...draft, assignee }),
+              onChange: (assignee: User | null) =>
+                setDraft({ ...draft, assignee }),
             }}
           />
           <PropertyPill
             label="Project"
             current={
-              draft.project === null && !writable ? "No project" : (project?.name ?? "No project")
+              draft.project === null && !writable
+                ? "No project"
+                : (project?.name ?? "No project")
             }
             menu={ProjectMenu}
             menuProps={{
@@ -316,22 +360,37 @@ export function CreateIssue() {
             {noParentType}
           </p>
         )}
-        <Attachments attachments={attachments} onChange={setAttachments} onBusy={setFilesBusy} />
+        <Attachments
+          attachments={attachments}
+          onChange={setAttachments}
+          onBusy={setFilesBusy}
+        />
         <div className="mt-4 flex items-center gap-2 border-t border-line pt-3">
           <label className="mr-auto flex items-center gap-2 text-[12px]">
-            <input type="checkbox" checked={more} onChange={(e) => setMore(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={more}
+              onChange={(e) => setMore(e.target.checked)}
+            />
             Create more
           </label>
-          <button type="button" onClick={close} className={BUTTON}>
+          <Button
+            type="button"
+            onClick={close}
+            variant="borderless"
+            size="medium"
+          >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="submit"
             disabled={!title.trim() || filesBusy || !!noParentType}
-            className="rounded-md bg-accent px-3 py-1.5 text-white disabled:opacity-40"
+
+            variant="primary"
+            size="medium"
           >
             {initial.copy ? "Save copy" : "Create issue"}
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>
@@ -343,11 +402,26 @@ const issueTypes = (issue: Issue, options: JiraOptions, issues: Issue[]) =>
   typeChoices(
     issue.type,
     options.types?.[issue.project?.key ?? ""],
-    issues.flatMap((i) => (i.board === issue.board && i.type && i.project?.key === issue.project?.key ? [i.type] : [])),
+    issues.flatMap((i) =>
+      i.board === issue.board && i.type && i.project?.key === issue.project?.key
+        ? [i.type]
+        : [],
+    ),
   );
 export type IssueField =
-  "status" | "assignee" | "priority" | "type" | "labels" | "project" | "milestone" | "due";
-type IssueMenuProps = { issue: Issue; anchor: HTMLElement | null; close: () => void };
+  | "status"
+  | "assignee"
+  | "priority"
+  | "type"
+  | "labels"
+  | "project"
+  | "milestone"
+  | "due";
+type IssueMenuProps = {
+  issue: Issue;
+  anchor: HTMLElement | null;
+  close: () => void;
+};
 const issueFieldMenus = {
   status: IssueStatusMenu,
   assignee: IssueAssigneeMenu,
@@ -359,8 +433,16 @@ const issueFieldMenus = {
   due: IssueDueMenu,
 };
 /** Route before mounting the adapter so only the selected field subscribes. */
-export function PropertyPicker({ issue, field, anchor: trigger, close: done }: {
-  issue: Issue; field: IssueField; anchor?: HTMLElement; close?: () => void;
+export function PropertyPicker({
+  issue,
+  field,
+  anchor: trigger,
+  close: done,
+}: {
+  issue: Issue;
+  field: IssueField;
+  anchor?: HTMLElement;
+  close?: () => void;
 }) {
   const [anchor] = useState(
     () =>
@@ -372,38 +454,50 @@ export function PropertyPicker({ issue, field, anchor: trigger, close: done }: {
         : issueAnchor(`prop-${field}`, issue.key)),
   );
   const FieldMenu = issueFieldMenus[field];
-  return <FieldMenu issue={issue} anchor={anchor} close={done ?? (() => ui.send({ type: "overlay.close" }))} />;
+  return (
+    <FieldMenu
+      issue={issue}
+      anchor={anchor}
+      close={done ?? (() => ui.send({ type: "overlay.close" }))}
+    />
+  );
 }
 
 function IssueStatusMenu({ issue, anchor, close }: IssueMenuProps) {
   const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
   const props = { board, anchor, close };
-  return (<StatusMenu
-        {...props}
-        value={issue.status}
-        onChange={(status) => actions.status(issue.key, status)}
-      />);
+  return (
+    <StatusMenu
+      {...props}
+      value={issue.status}
+      onChange={(status) => actions.status(issue.key, status)}
+    />
+  );
 }
 
 function IssueAssigneeMenu({ issue, anchor, close }: IssueMenuProps) {
   const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
   const props = { board, anchor, close };
-  return (<AssigneeMenu
-        {...props}
-        value={issue.assignee ?? null}
-        onChange={(assignee) => actions.assign(issue.key, assignee)}
-      />);
+  return (
+    <AssigneeMenu
+      {...props}
+      value={issue.assignee ?? null}
+      onChange={(assignee) => actions.assign(issue.key, assignee)}
+    />
+  );
 }
 
 function IssuePriorityMenu({ issue, anchor, close }: IssueMenuProps) {
   const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
   const props = { board, anchor, close };
   const patch = (value: Partial<Issue>) => actions.patch(issue.key, value);
-  return (<PriorityMenu
-        {...props}
-        value={issue.priority ?? ""}
-        onChange={(priority) => patch({ priority: priority || undefined })}
-      />);
+  return (
+    <PriorityMenu
+      {...props}
+      value={issue.priority ?? ""}
+      onChange={(priority) => patch({ priority: priority || undefined })}
+    />
+  );
 }
 
 function IssueTypeMenu({ issue, anchor, close }: IssueMenuProps) {
@@ -412,25 +506,29 @@ function IssueTypeMenu({ issue, anchor, close }: IssueMenuProps) {
   const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
   const props = { board, anchor, close };
   const patch = (value: Partial<Issue>) => actions.patch(issue.key, value);
-  return (<TypeMenu
-        {...props}
-        value={issue.type ?? ""}
-        choices={issueTypes(
-          issue,
-          options,
-          [...all.values()],
-        )}
-        onChange={(type) => {
-          if (type !== issue.type) patch({ type });
-        }}
-      />);
+  return (
+    <TypeMenu
+      {...props}
+      value={issue.type ?? ""}
+      choices={issueTypes(issue, options, [...all.values()])}
+      onChange={(type) => {
+        if (type !== issue.type) patch({ type });
+      }}
+    />
+  );
 }
 
 function IssueLabelsMenu({ issue, anchor, close }: IssueMenuProps) {
   const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
   const props = { board, anchor, close };
   const patch = (value: Partial<Issue>) => actions.patch(issue.key, value);
-  return (<LabelsMenu {...props} value={issue.labels} onChange={(labels) => patch({ labels })} />);
+  return (
+    <LabelsMenu
+      {...props}
+      value={issue.labels}
+      onChange={(labels) => patch({ labels })}
+    />
+  );
 }
 
 function IssueProjectMenu({ issue, anchor, close }: IssueMenuProps) {
@@ -438,36 +536,53 @@ function IssueProjectMenu({ issue, anchor, close }: IssueMenuProps) {
   const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
   const props = { board, anchor, close };
   const patch = (value: Partial<Issue>) => actions.patch(issue.key, value);
-  return (<ProjectMenu
-        {...props}
-        value={issue.project}
-        choices={writable ? (issue.project ? [issue.project] : []) : undefined}
-        onChange={(project) => {
-          if (project?.key !== issue.project?.key) patch({ project, milestones: [] });
-        }}
-      />);
+  return (
+    <ProjectMenu
+      {...props}
+      value={issue.project}
+      choices={writable ? (issue.project ? [issue.project] : []) : undefined}
+      onChange={(project) => {
+        if (project?.key !== issue.project?.key)
+          patch({ project, milestones: [] });
+      }}
+    />
+  );
 }
 
 function IssueMilestoneMenu({ issue, anchor, close }: IssueMenuProps) {
   const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
   const props = { board, anchor, close };
   const patch = (value: Partial<Issue>) => actions.patch(issue.key, value);
-  return (<MilestoneMenu
-        {...props}
-        project={issue.project?.key}
-        value={issue.milestones ?? []}
-        onChange={(milestones) => patch({ milestones })}
-      />);
+  return (
+    <MilestoneMenu
+      {...props}
+      project={issue.project?.key}
+      value={issue.milestones ?? []}
+      onChange={(milestones) => patch({ milestones })}
+    />
+  );
 }
 
 function IssueDueMenu({ issue, anchor, close }: IssueMenuProps) {
   const board = undefined;
   const props = { board, anchor, close };
   const patch = (value: Partial<Issue>) => actions.patch(issue.key, value);
-  return (<DueMenu {...props} value={issue.due ?? null} onChange={(due) => patch({ due })} />);
+  return (
+    <DueMenu
+      {...props}
+      value={issue.due ?? null}
+      onChange={(due) => patch({ due })}
+    />
+  );
 }
 
-export function BoardDetails({ board, issues }: { board: Board; issues: Issue[] }) {
+export function BoardDetails({
+  board,
+  issues,
+}: {
+  board: Board;
+  issues: Issue[];
+}) {
   const [tab, setTab] = useState<Grouping>("assignee");
   const { filters } = useViewSettings(board.id);
   const tabs: [Grouping, string][] = [
@@ -481,7 +596,11 @@ export function BoardDetails({ board, issues }: { board: Board; issues: Issue[] 
       aria-label="Board details"
       className="w-[300px] shrink-0 overflow-y-auto border-l border-line p-3"
     >
-      <div role="tablist" aria-label="Board summary" className="mb-4 flex gap-1">
+      <div
+        role="tablist"
+        aria-label="Board summary"
+        className="mb-4 flex gap-1"
+      >
         {tabs.map(([id, label]) => (
           <button
             role="tab"
@@ -508,7 +627,7 @@ export function BoardDetails({ board, issues }: { board: Board; issues: Issue[] 
               c.values[0] === group.id,
           );
           return (
-            <button
+            <Button
               key={group.id}
               aria-pressed={!!active}
               title={active ? "Clear filter" : undefined}
@@ -522,11 +641,16 @@ export function BoardDetails({ board, issues }: { board: Board; issues: Issue[] 
                       values: [group.id],
                     })
               }
-              className={`mb-1 flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-[12px] hover:bg-hover ${active ? "bg-sel text-fg" : ""}`}
+
+              variant="borderless"
+              size="medium"
+              className="mb-1 w-full justify-start gap-2"
             >
               <span className="flex-1 truncate">{group.name}</span>
-              <span className="rounded-md bg-sel px-2 tabular-nums">{group.issues.length}</span>
-            </button>
+              <span className="rounded-md bg-sel px-2 tabular-nums">
+                {group.issues.length}
+              </span>
+            </Button>
           );
         })}
       {!issues.length && <p className="text-fg-3">No issues in this view.</p>}
@@ -578,18 +702,20 @@ export function GroupMenu({
   ];
   return (
     <div className="ml-auto">
-      <button
-        aria-label={`Options for ${name}`}
+      <IconButton
+        label={`Options for ${name}`}
         aria-haspopup="dialog"
         aria-expanded={!!anchor}
         onClick={(e) => {
           setKeyboard(e.detail === 0);
           setAnchor(anchor ? null : e.currentTarget);
         }}
-        className="grid size-6 place-items-center rounded-full text-fg-3 hover:bg-hover"
+
+        variant="borderless"
+        size="medium"
       >
         <Icon name="dots" />
-      </button>
+      </IconButton>
       {anchor && (
         <ActionMenu
           label={`Column ${name}`}
@@ -619,35 +745,55 @@ export function IssueOptions({ issue }: { issue: Issue }) {
     return (
       <Modal label="Description history" close={close}>
         <h3 className="mb-3 font-medium">Description history</h3>
-        <p className="mb-3 text-[12px] text-fg-3">Your locally saved description revisions.</p>
+        <p className="mb-3 text-[12px] text-fg-3">
+          Your locally saved description revisions.
+        </p>
         {[...(issue.descriptionHistory ?? [])].reverse().map((entry, index) => (
           <div key={index} className="mb-3 rounded-md border border-line-2 p-3">
-            <div className="mb-2 text-[11px] text-fg-3">{new Date(entry.at).toLocaleString()}</div>
+            <div className="mb-2 text-[11px] text-fg-3">
+              {new Date(entry.at).toLocaleString()}
+            </div>
             <div>
               {entry.document ? (
                 <Adf node={entry.document} />
               ) : (
-                <p className="whitespace-pre-wrap">{entry.text || "Empty description"}</p>
+                <p className="whitespace-pre-wrap">
+                  {entry.text || "Empty description"}
+                </p>
               )}
             </div>
-            <button
-              className={`${BUTTON} mt-2`}
+            <Button
               onClick={() => {
-                actions.description(issue.key, entry.document ?? entry.text, true);
+                actions.description(
+                  issue.key,
+                  entry.document ?? entry.text,
+                  true,
+                );
                 close();
               }}
+              variant="borderless"
+              size="medium"
+              className="mt-2"
             >
               Restore this description
-            </button>
+            </Button>
           </div>
         ))}
-        {!issue.descriptionHistory?.length && <p>No local description changes yet.</p>}
-        <button onClick={close} className={`${BUTTON} mt-3`}>
+        {!issue.descriptionHistory?.length && (
+          <p>No local description changes yet.</p>
+        )}
+        <Button
+          onClick={close}
+          variant="borderless"
+          size="medium"
+          className="mt-3"
+        >
           Close
-        </button>
+        </Button>
       </Modal>
     );
-  if (linkOpen) return <ResourceForm issue={issue} kind={resourceKind} close={close} />;
+  if (linkOpen)
+    return <ResourceForm issue={issue} kind={resourceKind} close={close} />;
   const entries = issueMenuEntries(issue, {
     close,
     presentation: point ? "row" : "detail",
@@ -709,7 +855,11 @@ export function Attachments({
             const files = await addLocalFiles(selected);
             onChange([...attachments, ...files]);
           } catch (error) {
-            setError(error instanceof Error ? error.message : "Could not save this file locally");
+            setError(
+              error instanceof Error
+                ? error.message
+                : "Could not save this file locally",
+            );
           } finally {
             input.value = "";
             setBusy(false);
@@ -717,15 +867,17 @@ export function Attachments({
           }
         }}
       />
-      <button
+      <Button
         type="button"
         disabled={busy}
         aria-label="Attach images, files, or videos"
         onClick={() => file.current?.click()}
-        className="text-fg-3 hover:text-fg disabled:opacity-40"
+
+        variant="borderless"
+        size="medium"
       >
         {busy ? "Saving file…" : "+ Attach file"}
-      </button>
+      </Button>
       {error && (
         <p role="alert" className="mt-2 text-fg-3">
           {error}
@@ -753,29 +905,36 @@ function AttachmentList({
         issueKey={issueKey}
         attachments={attachments}
       />
-      <button
+      <IconButton
         type="button"
-        aria-label={`Remove attachment ${a.name}`}
-        className="absolute right-1 -top-2 z-10 rounded bg-card p-1"
+        label={`Remove attachment ${a.name}`}
+
         onClick={(e) => {
           const scope = e.currentTarget.closest('[role="dialog"]') ?? document;
           onChange(attachments.filter((f) => f.id !== a.id));
           // Focus returns to the attach button, as after removing a resource, not to <body>.
           requestAnimationFrame(() =>
             scope
-              .querySelector<HTMLElement>('[aria-label="Attach images, files, or videos"]')
+              .querySelector<HTMLElement>(
+                '[label="Attach images, files, or videos"]',
+              )
               ?.focus(),
           );
         }}
+        variant="borderless"
+        size="medium"
+        className="absolute right-1 -top-2 z-10"
       >
         <Icon name="close" />
-      </button>
+      </IconButton>
     </div>
   ));
 }
 
 export function PersonalIssueDetails({ issue }: { issue: Issue }) {
-  const [reactionAnchor, setReactionAnchor] = useState<HTMLElement | null>(null);
+  const [reactionAnchor, setReactionAnchor] = useState<HTMLElement | null>(
+    null,
+  );
   const toggleReaction = (emoji: string) =>
     actions.patch(issue.key, {
       reactions: issue.reactions?.includes(emoji)
@@ -855,7 +1014,8 @@ export function PersonalIssueDetails({ issue }: { issue: Issue }) {
 
 export function Subscribers({ issue }: { issue: Issue }) {
   const people = usePeople(issue.watchers);
-  const watching = (user: User) => !!issue.watchers?.some((u) => u.id === user.id);
+  const watching = (user: User) =>
+    !!issue.watchers?.some((u) => u.id === user.id);
   // Linear's subscribers menu: a multi-select people menu that stays open while you toggle.
   return (
     <Modal
@@ -865,7 +1025,11 @@ export function Subscribers({ issue }: { issue: Issue }) {
       close={() => ui.send({ type: "overlay.close" })}
     >
       <Menu>
-        <Menu.Input autoFocus aria-label="Change subscribers" placeholder="Change subscribers…" />
+        <Menu.Input
+          autoFocus
+          aria-label="Change subscribers"
+          placeholder="Change subscribers…"
+        />
         <Menu.List maxHeight="40vh">
           <Menu.Empty>No people found</Menu.Empty>
           {people.map((user) => (
@@ -938,7 +1102,13 @@ const INVERSE: Record<string, string> = {
   blocked: "blocking",
   blocking: "blocked",
 };
-export function Relations({ issue, close: done }: { issue: Issue; close?: () => void }) {
+export function Relations({
+  issue,
+  close: done,
+}: {
+  issue: Issue;
+  close?: () => void;
+}) {
   const all = useStore((s) => s.issues),
     boards = useStore((s) => s.boards);
   const [query, setQuery] = useState(""),
@@ -951,7 +1121,10 @@ export function Relations({ issue, close: done }: { issue: Issue; close?: () => 
   // ponytail: "Recent" is most recently updated; Linear uses recently viewed. "More actions" (⌥↵) and "Quick look" (→) are not built.
   const linked = new Set(
     (issue.relations ?? [])
-      .filter((r) => kind === "related" || r.kind === kind || r.kind === INVERSE[kind])
+      .filter(
+        (r) =>
+          kind === "related" || r.kind === kind || r.kind === INVERSE[kind],
+      )
       .map((r) => r.key),
   );
   if (kind === "parent" || kind === "child")
@@ -982,17 +1155,17 @@ export function Relations({ issue, close: done }: { issue: Issue; close?: () => 
     : [];
   const recent = useMemo(
     () =>
-      ranked([...all.values()].filter((i) => fits(i) && !relatedIssues.includes(i))).slice(
-        0,
-        query ? 40 : 8,
-      ),
+      ranked(
+        [...all.values()].filter((i) => fits(i) && !relatedIssues.includes(i)),
+      ).slice(0, query ? 40 : 8),
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- Memo invalidation follows draft identity or relation inputs; render-local helpers would invalidate every render.
     [all, query, kind, issue],
   );
   // cmdk selects the first row as the query changes, so the group holding the best match goes first.
   const relatedFirst =
     !recent[0] ||
-    (!!relatedIssues[0] && matchRank(query, relatedIssues[0]) <= matchRank(query, recent[0]));
+    (!!relatedIssues[0] &&
+      matchRank(query, relatedIssues[0]) <= matchRank(query, recent[0]));
   const add = (target: Issue) => {
     if (kind === "parent") {
       let ancestor: Issue | undefined = target;
@@ -1047,7 +1220,9 @@ export function Relations({ issue, close: done }: { issue: Issue; close?: () => 
     </Menu.Item>
   );
   const relatedGroup = relatedIssues.length > 0 && (
-    <Menu.Group heading="Related issues">{relatedIssues.map((i) => row(i, "related"))}</Menu.Group>
+    <Menu.Group heading="Related issues">
+      {relatedIssues.map((i) => row(i, "related"))}
+    </Menu.Group>
   );
   return (
     <Modal label="Issue relations" close={close} command width={720}>
@@ -1084,7 +1259,9 @@ export function Relations({ issue, close: done }: { issue: Issue; close?: () => 
               <Menu.Item value="create" onSelect={create}>
                 <Icon name="plus" size={16} />
                 <span className="flex-1 truncate text-[var(--menu-fg)]">
-                  {kind === "child" ? "Add sub-issue…" : `${mark.create} ${issue.key}…`}
+                  {kind === "child"
+                    ? "Add sub-issue…"
+                    : `${mark.create} ${issue.key}…`}
                 </span>
                 {kind === "child" && <kbd>{shortcutLabel("sub-issue")}</kbd>}
               </Menu.Item>
@@ -1145,16 +1322,27 @@ export function AddBoard() {
           </p>
         ) : (
           <p className="mt-2 text-[12px] text-fg-3">
-            Open the board in Jira and copy its address. Better-jira only reads it.
+            Open the board in Jira and copy its address. Better-jira only reads
+            it.
           </p>
         )}
         <div className="mt-4 flex justify-end gap-2">
-          <button type="button" className={BUTTON} onClick={close}>
+          <Button
+            type="button"
+            onClick={close}
+            variant="borderless"
+            size="medium"
+          >
             Cancel
-          </button>
-          <button disabled={!value.trim() || busy} className={BUTTON}>
+          </Button>
+          <Button
+            disabled={!value.trim() || busy}
+            type="submit"
+            variant="borderless"
+            size="medium"
+          >
             {busy ? "Adding…" : "Add board"}
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>

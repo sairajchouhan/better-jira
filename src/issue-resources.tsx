@@ -1,3 +1,4 @@
+import { Button, IconButton } from "./button";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Icon } from "./icons";
 import { Confirm, MenuSurface } from "./menu-surface";
@@ -41,7 +42,10 @@ function LinkIcon({ src }: { src?: string }) {
 }
 
 const resourceAge = (date: string) => {
-  const minutes = Math.max(0, Math.floor((Date.now() - Date.parse(date)) / 60000));
+  const minutes = Math.max(
+    0,
+    Math.floor((Date.now() - Date.parse(date)) / 60000),
+  );
   return minutes < 1
     ? "Just now"
     : minutes < 60
@@ -50,7 +54,6 @@ const resourceAge = (date: string) => {
         ? `${Math.floor(minutes / 60)}h ago`
         : new Date(date).toLocaleDateString();
 };
-const BUTTON = "rounded px-2 py-1.5 text-[13px] text-fg-2 hover:bg-hover";
 const INPUT =
   "w-full rounded border border-line-2 bg-transparent px-3 py-2 outline-none focus:border-accent";
 export async function createIssueDocument(issue: Issue) {
@@ -84,14 +87,20 @@ export function ResourceForm({
 }) {
   useEffect(
     () => () => {
-      requestAnimationFrame(() => document.getElementById("issue-options")?.focus());
+      requestAnimationFrame(() =>
+        document.getElementById("issue-options")?.focus(),
+      );
     },
     [],
   );
   const [url, setURL] = useState(resource?.url ?? ""),
     [title, setTitle] = useState(resource?.title ?? ""),
     [error, setError] = useState("");
-  const label = resource ? "Edit link" : kind === "link" ? "Add link" : "Add pull request";
+  const label = resource
+    ? "Edit link"
+    : kind === "link"
+      ? "Add link"
+      : "Add pull request";
   return (
     <MenuSurface label={label} close={close} width={480}>
       <form
@@ -124,7 +133,9 @@ export function ResourceForm({
           close();
         }}
       >
-        <h2 className="mb-4 font-medium">{resource ? label : `${label} to ${issue.key}`}</h2>
+        <h2 className="mb-4 font-medium">
+          {resource ? label : `${label} to ${issue.key}`}
+        </h2>
         <label className="mb-1 block text-[12px] text-fg-3">URL</label>
         <input
           autoFocus={!resource}
@@ -135,7 +146,9 @@ export function ResourceForm({
           onChange={(e) => setURL(e.target.value)}
           className={INPUT}
         />
-        <label className="mb-1 mt-3 block text-[12px] text-fg-3">Title (optional)</label>
+        <label className="mb-1 mt-3 block text-[12px] text-fg-3">
+          Title (optional)
+        </label>
         <input
           data-autofocus={resource ? true : undefined}
           aria-label="Link title"
@@ -150,12 +163,17 @@ export function ResourceForm({
           </p>
         )}
         <div className="mt-3 flex justify-end gap-2">
-          <button type="button" onClick={close} className={BUTTON}>
+          <Button
+            type="button"
+            onClick={close}
+            variant="borderless"
+            size="medium"
+          >
             Cancel
-          </button>
-          <button type="submit" className={`${BUTTON} bg-accent text-white`}>
+          </Button>
+          <Button type="submit" variant="primary" size="medium">
             {resource ? "Save" : label}
-          </button>
+          </Button>
         </div>
       </form>
     </MenuSurface>
@@ -176,14 +194,17 @@ export function IssueResources({ issue }: { issue: Issue }) {
   const resources = issueResources(issue);
   const remove = (resource: IssueResource) => {
     if (resource.id.startsWith("legacy:"))
-      actions.patch(issue.key, { links: issue.links?.filter((url) => url !== resource.url) });
+      actions.patch(issue.key, {
+        links: issue.links?.filter((url) => url !== resource.url),
+      });
     else actions.removeResource(issue.key, resource.id);
     setOptions(null);
     setRemoving(null);
     requestAnimationFrame(() =>
       (
-        document.querySelector<HTMLElement>('[aria-label="Add resource to issue"]') ??
-        document.getElementById("issue-options")
+        document.querySelector<HTMLElement>(
+          '[aria-label="Add resource to issue"]',
+        ) ?? document.getElementById("issue-options")
       )?.focus(),
     );
   };
@@ -212,7 +233,9 @@ export function IssueResources({ issue }: { issue: Issue }) {
       ) {
         previewRequested.add(r.id);
         void fetch(`/api/link-preview?url=${encodeURIComponent(r.url)}`)
-          .then((response) => (response.ok ? response.json() : Promise.reject()))
+          .then((response) =>
+            response.ok ? response.json() : Promise.reject(),
+          )
           .then((preview: LinkPreview | null) =>
             actions.linkPreview(issue.key, r.id, preview ?? {}),
           )
@@ -262,25 +285,36 @@ export function IssueResources({ issue }: { issue: Issue }) {
   return (
     <section aria-label="Resources" className="issue-resources">
       <div className="-ml-1.5 flex items-center pr-2 text-fg-3">
-        <button
-          aria-label={collapsed ? "Expand resources section" : "Collapse resources section"}
+        <Button
+          aria-label={
+            collapsed
+              ? "Expand resources section"
+              : "Collapse resources section"
+          }
           aria-expanded={!collapsed}
           onClick={() => setCollapsed(!collapsed)}
-          className="mr-auto flex h-6 items-center gap-0.5 rounded-full pr-[13px] pl-1.5 text-[12px] font-medium text-fg-3 hover:bg-hover"
+
+          variant="borderless"
+          size="medium"
+          className="mr-auto"
         >
-          <span className={`grid size-4 place-items-center ${collapsed ? "" : "rotate-90"}`}>
+          <span
+            className={`grid size-4 place-items-center ${collapsed ? "" : "rotate-90"}`}
+          >
             <Icon name="chevron" size={14} />
           </span>
           <span>Resources</span>
-        </button>
-        <button
-          aria-label="Add resource to issue"
+        </Button>
+        <IconButton
+          label="Add resource to issue"
           aria-expanded={!!menu}
           onClick={(e) => setMenu(e.currentTarget)}
-          className="grid size-7 place-items-center rounded-full bg-card text-fg-3 hover:bg-hover"
+
+          variant="borderless"
+          size="medium"
         >
           <Icon name="plus" />
-        </button>
+        </IconButton>
       </div>
       {!collapsed &&
         resources.map((resource) => (
@@ -290,8 +324,9 @@ export function IssueResources({ issue }: { issue: Issue }) {
               event.preventDefault();
               setOptions({
                 anchor:
-                  event.currentTarget.querySelector<HTMLElement>('[aria-label^="Options for "]') ??
-                  event.currentTarget,
+                  event.currentTarget.querySelector<HTMLElement>(
+                    '[aria-label^="Options for "]',
+                  ) ?? event.currentTarget,
                 resource,
                 point: { x: event.clientX + 4, y: event.clientY - 1 },
               });
@@ -309,7 +344,13 @@ export function IssueResources({ issue }: { issue: Issue }) {
                 data-resource-id={resource.id}
                 href={documentURL(issue, resource.id)}
                 onClick={(event) => {
-                  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                  if (
+                    event.metaKey ||
+                    event.ctrlKey ||
+                    event.shiftKey ||
+                    event.altKey
+                  )
+                    return;
                   event.preventDefault();
                   navigate({ document: resource.id, panel: true });
                 }}
@@ -328,7 +369,10 @@ export function IssueResources({ issue }: { issue: Issue }) {
                   {linkTitle(resource)}
                 </a>
                 {resource.preview?.description && (
-                  <span data-link-description className="min-w-0 flex-1 truncate text-fg-3">
+                  <span
+                    data-link-description
+                    className="min-w-0 flex-1 truncate text-fg-3"
+                  >
                     {resource.preview.description}
                   </span>
                 )}
@@ -342,14 +386,16 @@ export function IssueResources({ issue }: { issue: Issue }) {
             >
               {resourceAge(resource.updated)}
             </time>
-            <button
-              aria-label={`Options for ${resource.title || "New document"}`}
+            <IconButton
+              label={`Options for ${resource.title || "New document"}`}
               aria-expanded={options?.resource.id === resource.id}
               onClick={(e) => setOptions({ anchor: e.currentTarget, resource })}
-              className="resource-options"
+
+              variant="borderless"
+              size="medium"
             >
               <Icon name="dots" size={14} />
-            </button>
+            </IconButton>
           </div>
         ))}
       {menu && (
@@ -360,8 +406,16 @@ export function IssueResources({ issue }: { issue: Issue }) {
           close={() => setMenu(null)}
           entries={[
             { name: "Add link…", icon: "link", run: () => setForm("link") },
-            { name: "Link pull request…", icon: "branch", run: () => setForm("pull-request") },
-            { name: "Add document…", icon: "file", run: () => createIssueDocument(issue) },
+            {
+              name: "Link pull request…",
+              icon: "branch",
+              run: () => setForm("pull-request"),
+            },
+            {
+              name: "Add document…",
+              icon: "file",
+              run: () => createIssueDocument(issue),
+            },
           ]}
         />
       )}
@@ -401,7 +455,9 @@ export function IssueResources({ issue }: { issue: Issue }) {
           close={() => setEditing(null)}
         />
       )}
-      {form && <ResourceForm issue={issue} kind={form} close={() => setForm(null)} />}
+      {form && (
+        <ResourceForm issue={issue} kind={form} close={() => setForm(null)} />
+      )}
     </section>
   );
 }
@@ -414,7 +470,9 @@ export function documentURL(issue: Issue, id: string) {
 }
 
 const Document = lazy(() =>
-  import("./issue-document").then((module) => ({ default: module.IssueDocument })),
+  import("./issue-document").then((module) => ({
+    default: module.IssueDocument,
+  })),
 );
 export function IssueDocument(props: { issue: Issue; id: string }) {
   return (

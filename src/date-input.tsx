@@ -1,3 +1,4 @@
+import { Button } from "./button";
 import { useState } from "react";
 import { parseDueDate } from "./due-parse";
 
@@ -47,14 +48,16 @@ export function DateInput({
       </div>
       <div className="flex flex-wrap gap-1">
         {["Today", "Tomorrow", "Next Monday", "End of week"].map((preset) => (
-          <button
+          <Button
             key={preset}
             type="button"
             onClick={() => change(preset)}
-            className="rounded-md px-2 py-1 text-fg-3 hover:bg-hover"
+
+            variant="borderless"
+            size="small"
           >
             {preset}
-          </button>
+          </Button>
         ))}
       </div>
       <label className="flex items-center gap-2 text-fg-3">

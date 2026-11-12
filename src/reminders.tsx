@@ -1,7 +1,13 @@
+import { Button, IconButton } from "./button";
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 import { useEffect, useRef, useState } from "react";
-import { nextReminder, reminderDistance, reminderPresets, reminderTime } from "./reminder-display";
+import {
+  nextReminder,
+  reminderDistance,
+  reminderPresets,
+  reminderTime,
+} from "./reminder-display";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { Icon } from "./icons";
 import { Menu } from "./menu";
@@ -10,7 +16,6 @@ import { actions, set, ui, useStore, type Issue } from "./store";
 import { kept, useCommand } from "./commands";
 
 type Preset = { label: string; at: string };
-const BUTTON = "rounded-md px-2 py-1.5 text-[13px] text-fg-2 hover:bg-hover disabled:opacity-40";
 
 /** Linear's one "Remind me" menu, for an issue or a document: a typed time ("4 pm", "in 2 days"), a preset, or a custom date
  *  and time. The typed-time parser (chrono) loads with the menu. `onPick` gets a future ISO time; the menu then closes. */
@@ -35,11 +40,13 @@ export function ReminderMenu({
   const keyboardChoice = useRef(false);
   useEffect(() => {
     let active = true;
-    void import("./reminder-date").then(({ reminderPresets, parseReminder }) => {
-      if (!active) return;
-      setPresets(reminderPresets(reference.current));
-      setParsed(query ? parseReminder(query, reference.current) : null);
-    });
+    void import("./reminder-date").then(
+      ({ reminderPresets, parseReminder }) => {
+        if (!active) return;
+        setPresets(reminderPresets(reference.current));
+        setParsed(query ? parseReminder(query, reference.current) : null);
+      },
+    );
     return () => {
       active = false;
     };
@@ -56,7 +63,13 @@ export function ReminderMenu({
     (p) => !query || p.label.toLowerCase().includes(query.toLowerCase()),
   );
   return (
-    <MenuSurface label="Remind me" anchorId={anchorId} anchor={anchor} close={close} fit>
+    <MenuSurface
+      label="Remind me"
+      anchorId={anchorId}
+      anchor={anchor}
+      close={close}
+      fit
+    >
       {custom ? (
         <form
           className="w-[320px]"
@@ -72,31 +85,43 @@ export function ReminderMenu({
               aria-label="Custom reminder time"
               type="datetime-local"
               min={new Date(
-                reference.current.getTime() - reference.current.getTimezoneOffset() * 60000,
+                reference.current.getTime() -
+                  reference.current.getTimezoneOffset() * 60000,
               )
                 .toISOString()
                 .slice(0, 16)}
               className="mt-2 w-full rounded border border-line-2 bg-card p-2"
               onChange={(e) =>
-                setParsed(e.target.value ? new Date(e.target.value).toISOString() : null)
+                setParsed(
+                  e.target.value
+                    ? new Date(e.target.value).toISOString()
+                    : null,
+                )
               }
             />
           </label>
           <div className="flex justify-end gap-2 p-2">
-            <button
+            <Button
               type="button"
-              className={BUTTON}
+
               // The custom time isn't a typed query: Back shows the presets again, not that time.
               onClick={() => {
                 setParsed(null);
                 setCustom(false);
               }}
+              variant="borderless"
+              size="medium"
             >
               Back
-            </button>
-            <button disabled={!parsed} className={BUTTON}>
+            </Button>
+            <Button
+              disabled={!parsed}
+              type="submit"
+              variant="primary"
+              size="medium"
+            >
               Set reminder
-            </button>
+            </Button>
           </div>
         </form>
       ) : (
@@ -104,7 +129,8 @@ export function ReminderMenu({
           shouldFilter={false}
           style={{ width: 320 }}
           onKeyDown={(event) => {
-            if (event.key === "ArrowDown" || event.key === "ArrowUp") keyboardChoice.current = true;
+            if (event.key === "ArrowDown" || event.key === "ArrowUp")
+              keyboardChoice.current = true;
             if (event.key === "Enter" && !query && !keyboardChoice.current) {
               event.preventDefault();
               event.stopPropagation();
@@ -150,7 +176,10 @@ export function ReminderMenu({
   );
 }
 /** The "Remind me" submenu rows of an options menu: the presets, then Custom…, which opens the ReminderMenu's custom step. */
-export const reminderEntries = (pick: (at: string) => void, custom: () => void): ActionEntry[] => [
+export const reminderEntries = (
+  pick: (at: string) => void,
+  custom: () => void,
+): ActionEntry[] => [
   ...reminderPresets().map((preset) => ({
     name: preset.label,
     icon: "clock" as const,
@@ -161,7 +190,9 @@ export const reminderEntries = (pick: (at: string) => void, custom: () => void):
 ];
 /** The open issue's reminder menu (overlay "reminder"), under Issue options; Issue options › Remind me › Custom… opens it at the custom step. */
 export function ReminderPicker({ issue }: { issue: Issue }) {
-  const [custom, setCustom] = useState(() => kept("issue-options-start") === "reminder");
+  const [custom, setCustom] = useState(
+    () => kept("issue-options-start") === "reminder",
+  );
   useCommand("issue-options-start", (start) => {
     if (start !== "reminder") return;
     setCustom(true);
@@ -177,8 +208,9 @@ export function ReminderPicker({ issue }: { issue: Issue }) {
         ui.send({ type: "overlay.close" });
         requestAnimationFrame(() =>
           (
-            document.querySelector<HTMLElement>('[aria-label^="Reminder scheduled"]') ??
-            document.getElementById("issue-options")
+            document.querySelector<HTMLElement>(
+              '[aria-label^="Reminder scheduled"]',
+            ) ?? document.getElementById("issue-options")
           )?.focus(),
         );
       }}
@@ -192,14 +224,15 @@ export function ReminderControl({ issue }: { issue: Issue }) {
   const label = `Reminder scheduled ${reminderDistance(issue.reminder.at, Math.max(clock, Date.now()))}`;
   return (
     <>
-      <button
-        aria-label={label}
-        title={label}
-        className="grid size-7 shrink-0 place-items-center rounded text-accent hover:bg-hover"
+      <IconButton
+        label={label}
+
         onClick={(e) => setAnchor(e.currentTarget)}
+        variant="borderless"
+        size="medium"
       >
         <Icon name="clock" size={15} />
-      </button>
+      </IconButton>
       {/* An action menu takes focus, so Esc closes it and not the issue (R2-issue-fields-D4). */}
       {anchor && (
         <ActionMenu
@@ -218,7 +251,9 @@ export function ReminderControl({ issue }: { issue: Issue }) {
               name: "Cancel reminder",
               run: () => {
                 actions.remind(issue.key, null);
-                requestAnimationFrame(() => document.getElementById("issue-options")?.focus());
+                requestAnimationFrame(() =>
+                  document.getElementById("issue-options")?.focus(),
+                );
               },
             },
           ]}
@@ -242,7 +277,9 @@ export function ReminderDelivery() {
       const remaining = Date.parse(at) - Date.now();
       timer = setTimeout(
         () =>
-          remaining > 2147483647 ? check() : actions.deliverReminder(key, document || undefined),
+          remaining > 2147483647
+            ? check()
+            : actions.deliverReminder(key, document || undefined),
         Math.max(0, Math.min(2147483647, remaining)),
       );
     };

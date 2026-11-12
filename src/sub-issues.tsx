@@ -1,18 +1,28 @@
+import { Button, IconButton } from "./button";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
 import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSubIssueComposer } from "./use-sub-issue-composer";
 import { useStoredState } from "./stored-state";
-import { RelationIcon, Icon, PriorityIcon, ProgressRing, StatusIcon } from "./icons";
+import {
+  RelationIcon,
+  Icon,
+  PriorityIcon,
+  ProgressRing,
+  StatusIcon,
+} from "./icons";
 import { Confirm, MenuSurface } from "./menu-surface";
 import { Menu } from "./menu";
-import { StatusMenu, PriorityMenu, AssigneeMenu, LabelsMenu } from "./property-menu";
+import {
+  StatusMenu,
+  PriorityMenu,
+  AssigneeMenu,
+  LabelsMenu,
+} from "./property-menu";
 import { issueMenuEntries, type IssueMenuDialog } from "./issue-menu";
 import { InlineEditor } from "./rich-editor-loader";
 import { useCommand } from "./commands";
-import {
-  lateMediaDiscarded,
-} from "./document";
+import { lateMediaDiscarded } from "./document";
 import {
   actions,
   addLocalFiles,
@@ -34,8 +44,12 @@ import { shortDate } from "./due-date";
 import { shortcutLabel } from "./shortcuts";
 import { canHaveChildren } from "./issue-properties";
 import { type Property } from "./view-model";
-import { childrenByParent, defaultSubIssueDisplay, subIssueRows, type SubIssueDisplay } from "./sub-issue-model";
-
+import {
+  childrenByParent,
+  defaultSubIssueDisplay,
+  subIssueRows,
+  type SubIssueDisplay,
+} from "./sub-issue-model";
 
 const orderings = [
   ["manual", "Manual"],
@@ -143,14 +157,18 @@ function parseDisplay(value: unknown): SubIssueDisplay {
   const source = value as Partial<SubIssueDisplay>;
   return {
     ...base,
-    ...(orderings.some(([id]) => id === source.ordering) ? { ordering: source.ordering } : {}),
+    ...(orderings.some(([id]) => id === source.ordering)
+      ? { ordering: source.ordering }
+      : {}),
     ...(["all", "day", "week", "month", "none"].includes(source.completed ?? "")
       ? { completed: source.completed }
       : {}),
     ...(typeof source.nested === "boolean" ? { nested: source.nested } : {}),
     ...(Array.isArray(source.properties)
       ? {
-          properties: source.properties.filter((p) => properties.some(([id]) => id === p)),
+          properties: source.properties.filter((p) =>
+            properties.some(([id]) => id === p),
+          ),
         }
       : {}),
   } as SubIssueDisplay;
@@ -163,7 +181,9 @@ export const statusOf = (boards: Boards, child: Issue) => {
   return {
     name: result?.name ?? child.status,
     category: result?.category ?? "new",
-    order: columns.findIndex((c) => c.statuses.some((s) => s.id === child.status)),
+    order: columns.findIndex((c) =>
+      c.statuses.some((s) => s.id === child.status),
+    ),
   };
 };
 const openIssue = (target: Issue) =>
@@ -189,7 +209,9 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
   if (!parent) return null;
   const status = (i: Issue) => statusOf(boards, i),
     model = subIssueRows(parent.key, all, defaultSubIssueDisplay(), status),
-    siblings = model.rows.filter((row) => row.depth === 0).map((row) => row.issue);
+    siblings = model.rows
+      .filter((row) => row.depth === 0)
+      .map((row) => row.issue);
   return (
     <div className="mt-2 mb-2.5 flex h-[26px] items-center text-[13px] leading-[normal]">
       <span className="mr-0.5 font-[450] text-fg-3">Sub-issue of</span>
@@ -198,7 +220,8 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
         className="flex h-[26px] min-w-0 items-center gap-1 rounded-lg border border-transparent px-1 hover:bg-hover"
         href={issueURL(parent)}
         onClick={(event) => {
-          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+            return;
           event.preventDefault();
           openIssue(parent);
         }}
@@ -209,17 +232,19 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
         <span className="font-[450] text-fg-3">{parent.key}</span>
         <span className="truncate font-medium text-fg">{parent.summary}</span>
       </a>
-      <button
+      <Button
         ref={progress}
         data-parent-progress
         title={`Open sub-issues of ${parent.key} (${shortcutLabel("sub-issues-of-parent")})`}
         aria-label={`Open sub-issues of ${parent.key}`}
-        className="ml-1 flex h-[26px] shrink-0 items-center gap-1.5 rounded-full border border-line-3 px-2 text-[12px] font-[450] text-fg-3 hover:bg-hover"
+
         onClick={(event) => setMenu(event.currentTarget)}
+        variant="borderless"
+        size="small"
       >
         <ProgressRing value={model.total ? model.completed / model.total : 0} />
         {model.completed}/{model.total}
-      </button>
+      </Button>
       {menu && (
         <MenuSurface
           label={`Open sub-issues of ${parent.key}`}
@@ -228,7 +253,11 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
           fit
         >
           <Menu style={{ width: 347 }}>
-            <Menu.Input hideWhenEmpty autoFocus aria-label={`Open sub-issues of ${parent.key}…`} />
+            <Menu.Input
+              hideWhenEmpty
+              autoFocus
+              aria-label={`Open sub-issues of ${parent.key}…`}
+            />
             <Menu.List>
               <Menu.Group heading="Navigation">
                 {siblings.map((child) => (
@@ -243,7 +272,9 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
                       if (child.key !== issue.key) openIssue(child);
                     }}
                   >
-                    <span className="mr-2 text-[var(--menu-fg-3)]">{child.key}</span>
+                    <span className="mr-2 text-[var(--menu-fg-3)]">
+                      {child.key}
+                    </span>
                     {child.summary}
                   </Menu.Item>
                 ))}
@@ -263,14 +294,23 @@ export function SubIssues({ issue }: { issue: Issue }) {
     writable = useStore((s) => s.writable);
   const noPriority = writable ? "Default priority" : "No priority";
   const storageKey = `better-jira:sub-issues:v1:${namespace}`;
-  const [display, setDisplay] = useStoredState(storageKey, parseDisplay, defaultSubIssueDisplay(), "Could not save sub-issue display settings");
+  const [display, setDisplay] = useStoredState(
+    storageKey,
+    parseDisplay,
+    defaultSubIssueDisplay(),
+    "Could not save sub-issue display settings",
+  );
   const [rowDialog, setRowDialog] = useState<{
     kind: IssueMenuDialog | "rename" | "relation";
     key: string;
   } | null>(null);
   // Linear keeps each issue's section collapsed across reloads.
   const collapseKey = `better-jira:sub-issues-collapsed:v1:${namespace}:${issue.key}`;
-  const [collapsed, setCollapsed] = useStoredState(collapseKey, (raw) => raw === 1 || raw === true, false);
+  const [collapsed, setCollapsed] = useStoredState(
+    collapseKey,
+    (raw) => raw === 1 || raw === true,
+    false,
+  );
   const [reveal, setReveal] = useState(false),
     [settings, setSettings] = useState<HTMLElement | null>(null),
     [rowMenu, setRowMenu] = useState<{
@@ -280,15 +320,20 @@ export function SubIssues({ issue }: { issue: Issue }) {
     } | null>(null);
 
   const board = boards.find((b) => b.id === issue.board)!;
-  const { state: { title, description, files, draft, editor, creating, confirming },
+  const {
+    state: { title, description, files, draft, editor, creating, confirming },
     actions: { update, late, start, discard, cancel, submit, setConfirming },
-    meta: { form, titleInput, scope, pending } } = useSubIssueComposer(issue, board, namespace, setCollapsed);
+    meta: { form, titleInput, scope, pending },
+  } = useSubIssueComposer(issue, board, namespace, setCollapsed);
   const status = (child: Issue) => statusOf(boards, child);
   // Direct children per row, for Linear's "0/2" progress pill.
   const progress = useMemo(() => {
     const counts = new Map<string, [number, number]>();
     for (const [parent, children] of childrenByParent(all)) {
-      counts.set(parent, [children.filter((i) => status(i).category === "done").length, children.length]);
+      counts.set(parent, [
+        children.filter((i) => status(i).category === "done").length,
+        children.length,
+      ]);
     }
     return counts;
     // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
@@ -299,14 +344,20 @@ export function SubIssues({ issue }: { issue: Issue }) {
     [issue.key, all, boards, display, reveal],
   );
   const change = (patch: Partial<SubIssueDisplay>) => {
-    if ((patch.completed !== undefined && patch.completed !== display.completed) ||
-        (patch.nested !== undefined && patch.nested !== display.nested)) setReveal(false);
+    if (
+      (patch.completed !== undefined &&
+        patch.completed !== display.completed) ||
+      (patch.nested !== undefined && patch.nested !== display.nested)
+    )
+      setReveal(false);
     setDisplay({ ...display, ...patch });
   };
   const section = useRef<HTMLElement>(null);
   // ⌘⇧O does what this section's create button does, while it shows one.
   useCommand("create-sub-issue", (key) => {
-    const button = section.current?.querySelector<HTMLElement>("[data-create-child]");
+    const button = section.current?.querySelector<HTMLElement>(
+      "[data-create-child]",
+    );
     if (key !== issue.key || !button) return;
     button.click();
     return true;
@@ -319,14 +370,20 @@ export function SubIssues({ issue }: { issue: Issue }) {
       )?.dataset.subIssue,
   );
   /** The composer's chip for a field, picking into the draft. */
-  const draftControl = (field: Field, label: string, content: React.ReactNode) => (
+  const draftControl = (
+    field: Field,
+    label: string,
+    content: React.ReactNode,
+  ) => (
     <PropertyControl
       key={field}
       field={field}
       board={board}
       value={draft}
       priorityEmpty={noPriority}
-      onChange={(patch) => update({ properties: { ...pending.current.properties, ...patch } })}
+      onChange={(patch) =>
+        update({ properties: { ...pending.current.properties, ...patch } })
+      }
       label={label}
       className={button}
     >
@@ -340,7 +397,11 @@ export function SubIssues({ issue }: { issue: Issue }) {
       openDialog: (kind) => {
         setRowMenu(null);
         if (kind === "reminder") {
-          ui.send({ type: "overlay.open", overlay: "reminder", target: child.key });
+          ui.send({
+            type: "overlay.open",
+            overlay: "reminder",
+            target: child.key,
+          });
           return;
         }
         setRowDialog({
@@ -358,17 +419,25 @@ export function SubIssues({ issue }: { issue: Issue }) {
     >
       {!!model.total && (
         <div className="-ml-1.5 mb-2 flex items-center gap-1.5 pr-2">
-          <button
-            aria-label={collapsed ? "Expand sub-issues section" : "Collapse sub-issues section"}
+          <Button
+            aria-label={
+              collapsed
+                ? "Expand sub-issues section"
+                : "Collapse sub-issues section"
+            }
             aria-expanded={!collapsed}
-            className="flex h-6 items-center gap-0.5 rounded-full pr-[13px] pl-1.5 text-[12px] font-medium text-fg-3 hover:bg-hover"
+
             onClick={() => setCollapsed(!collapsed)}
+            variant="borderless"
+            size="small"
           >
-            <span className={`grid size-4 place-items-center ${collapsed ? "" : "rotate-90"}`}>
+            <span
+              className={`grid size-4 place-items-center ${collapsed ? "" : "rotate-90"}`}
+            >
               <Icon name="chevron" size={14} />
             </span>
             <span>Sub-issues</span>
-          </button>
+          </Button>
           <span
             data-sub-progress
             className="ml-0.5 flex items-center gap-1.5 text-[12px] text-fg-3"
@@ -378,43 +447,65 @@ export function SubIssues({ issue }: { issue: Issue }) {
           </span>
           <span className="flex-1" />
           {model.hiddenCompleted > 0 && (
-            <button className={button} onClick={() => setReveal(!reveal)}>
+            <Button
+              onClick={() => setReveal(!reveal)}
+              variant="borderless"
+              size="small"
+            >
               {reveal ? "Hide" : "Show"} {model.hiddenCompleted} completed
-            </button>
+            </Button>
           )}
-          <button
-            aria-label="Sub-issue display options"
-            className={CIRCLE}
+          <IconButton
+            label="Sub-issue display options"
+
             onClick={(e) => setSettings(e.currentTarget)}
+            variant="borderless"
+            size="medium"
           >
             <Icon name="display" size={14} />
-          </button>
-          <button
+          </IconButton>
+          <IconButton
             data-create-child
-            aria-label="Create new sub-issue"
-            className={CIRCLE}
+            label="Create new sub-issue"
+
             onClick={start}
+            variant="borderless"
+            size="medium"
           >
             <Icon name="plus" size={14} />
-          </button>
+          </IconButton>
         </div>
       )}
       {!collapsed &&
         model.rows.map(({ issue: child, depth, contextOnly }, index) => (
-          <SubIssueRow key={child.key} child={child} depth={depth} contextOnly={contextOnly}
-            index={index} rows={model.rows} display={display} boards={boards} board={board}
-            progress={progress.get(child.key)} active={rowMenu?.key === child.key}
-            openMenu={(anchor, point) => setRowMenu({ anchor, key: child.key, point })} />
+          <SubIssueRow
+            key={child.key}
+            child={child}
+            depth={depth}
+            contextOnly={contextOnly}
+            index={index}
+            rows={model.rows}
+            display={display}
+            boards={boards}
+            board={board}
+            progress={progress.get(child.key)}
+            active={rowMenu?.key === child.key}
+            openMenu={(anchor, point) =>
+              setRowMenu({ anchor, key: child.key, point })
+            }
+          />
         ))}
       {!model.total && !creating && canHaveChildren(get(), issue) && (
-        <button
+        <Button
           data-create-child
           aria-label="Add sub-issues"
-          className={`${button} px-0`}
+
           onClick={start}
+          variant="borderless"
+          size="small"
         >
           + Add sub-issues
-        </button>
+        </Button>
       )}
       {creating && (
         <div
@@ -451,7 +542,9 @@ export function SubIssues({ issue }: { issue: Issue }) {
             id={`sub-issue-description-${issue.key}`}
             mentionIssue={issue.key}
             scope={scope}
-            onLateMedia={(merge) => late((draft) => ({ description: merge(draft.description) }))}
+            onLateMedia={(merge) =>
+              late((draft) => ({ description: merge(draft.description) }))
+            }
             initial={description}
             label="Sub-issue description"
             placeholder="Add description…"
@@ -482,7 +575,10 @@ export function SubIssues({ issue }: { issue: Issue }) {
                   {field === "priority" ? (
                     <PriorityIcon name={draft.priority} />
                   ) : (
-                    <Icon name={field === "labels" ? "label" : "user"} size={14} />
+                    <Icon
+                      name={field === "labels" ? "label" : "user"}
+                      size={14}
+                    />
                   )}
                   {/* Linear names the value on each chip: "Priority", the assignee, "Labels". */}
                   {field === "priority"
@@ -596,10 +692,10 @@ export function SubIssues({ issue }: { issue: Issue }) {
           <p className="mb-2 text-fg-3">Display properties</p>
           <div className="flex flex-wrap gap-1">
             {properties.map(([id, label]) => (
-              <button
+              <Button
                 key={id}
                 aria-pressed={display.properties.includes(id)}
-                className={`${button} border border-line-2 aria-pressed:bg-sel`}
+
                 onClick={() =>
                   change({
                     properties: display.properties.includes(id)
@@ -607,9 +703,11 @@ export function SubIssues({ issue }: { issue: Issue }) {
                       : [...display.properties, id],
                   })
                 }
+                variant="secondary"
+                size="small"
               >
                 {label}
-              </button>
+              </Button>
             ))}
           </div>
         </MenuSurface>
@@ -644,13 +742,34 @@ function RenameIssue({ issue, close }: { issue: Issue; close: () => void }) {
   );
 }
 const continues = (rows: { depth: number }[], index: number, level: number) => {
-  for (const row of rows.slice(index + 1)) if (row.depth <= level) return row.depth === level;
+  for (const row of rows.slice(index + 1))
+    if (row.depth <= level) return row.depth === level;
   return false;
 };
 
-function SubIssueRow({ child, depth, contextOnly, index, rows, display, boards, board, progress, active, openMenu }: {
-  child: Issue; depth: number; contextOnly: boolean; index: number; rows: { depth: number }[];
-  display: SubIssueDisplay; boards: Boards; board: Board; progress?: [number, number]; active: boolean;
+function SubIssueRow({
+  child,
+  depth,
+  contextOnly,
+  index,
+  rows,
+  display,
+  boards,
+  board,
+  progress,
+  active,
+  openMenu,
+}: {
+  child: Issue;
+  depth: number;
+  contextOnly: boolean;
+  index: number;
+  rows: { depth: number }[];
+  display: SubIssueDisplay;
+  boards: Boards;
+  board: Board;
+  progress?: [number, number];
+  active: boolean;
   openMenu: (anchor: HTMLElement, point: { x: number; y: number }) => void;
 }) {
   const status = (child: Issue) => statusOf(boards, child);
@@ -687,139 +806,150 @@ function SubIssueRow({ child, depth, contextOnly, index, rows, display, boards, 
     return url.href;
   };
 
-  return (          <div
-            key={child.key}
-            data-sub-issue={child.key}
-            data-depth={depth}
-            data-context-only={contextOnly || undefined}
-            className={`relative -ml-1.5 flex min-h-9 items-center gap-px rounded-lg pr-1 hover:bg-hover ${active ? "bg-hover" : ""}`}
-            style={{ paddingLeft: 31 + depth * 24 }}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              openMenu(event.currentTarget, { x: event.clientX + 3, y: event.clientY });
-            }}
-          >
-            {Array.from({ length: depth }, (_, level) => {
-              level++;
-              const left = level * 24 + 21.5,
-                more = continues(
-                  rows,
-                  index,
-                  level,
-                ); /* Linear's tree: a line under each open branch, ending in a curved elbow beside the row's own icon */
-              return level < depth ? (
-                more && (
-                  <span
-                    key={level}
-                    aria-hidden
-                    data-guide
-                    className="absolute inset-y-0 w-px bg-line-3"
-                    style={{ left }}
-                  />
-                )
-              ) : (
-                <Fragment key={level}>
-                  <span
-                    aria-hidden
-                    data-guide
-                    className="absolute top-0 w-px bg-line-3"
-                    style={{ left, height: more ? "100%" : 12 }}
-                  />
-                  <svg
-                    aria-hidden
-                    data-elbow
-                    width="10"
-                    height="9"
-                    viewBox="0 0 10 9"
-                    className="absolute fill-line-3"
-                    style={{ left, top: 10 }}
-                  >
-                    <path d="M0 0h1v1c0 2.5 2.212 3.546 2.212 3.546L9.737 8.06c.568.306.094 1.186-.474.88l-6.48-3.488S0 4 0 1V0Z" />
-                  </svg>
-                </Fragment>
-              );
-            })}
-            {display.properties.includes("status") &&
-              control(child, "status", <StatusIcon status={status(child)} />)}
-            {display.properties.includes("priority") &&
-              control(child, "priority", <PriorityIcon name={child.priority} />)}
-            {display.properties.includes("id") && (
-              <span className="px-1 text-fg-3">{child.key}</span>
-            )}
-            <a
-              className="flex min-w-0 flex-1 items-center gap-2 py-1.5 text-[13px] font-medium text-fg"
-              href={childURL(child)}
-              onClick={(event) => {
-                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-                event.preventDefault();
-                navigate({
-                  board: child.board,
-                  selected: child.key,
-                  panel: true,
-                  view: get().view,
-                });
-              }}
+  return (
+    <div
+      key={child.key}
+      data-sub-issue={child.key}
+      data-depth={depth}
+      data-context-only={contextOnly || undefined}
+      className={`relative -ml-1.5 flex min-h-9 items-center gap-px rounded-lg pr-1 hover:bg-hover ${active ? "bg-hover" : ""}`}
+      style={{ paddingLeft: 31 + depth * 24 }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        openMenu(event.currentTarget, {
+          x: event.clientX + 3,
+          y: event.clientY,
+        });
+      }}
+    >
+      {Array.from({ length: depth }, (_, level) => {
+        level++;
+        const left = level * 24 + 21.5,
+          more = continues(
+            rows,
+            index,
+            level,
+          ); /* Linear's tree: a line under each open branch, ending in a curved elbow beside the row's own icon */
+        return level < depth ? (
+          more && (
+            <span
+              key={level}
+              aria-hidden
+              data-guide
+              className="absolute inset-y-0 w-px bg-line-3"
+              style={{ left }}
+            />
+          )
+        ) : (
+          <Fragment key={level}>
+            <span
+              aria-hidden
+              data-guide
+              className="absolute top-0 w-px bg-line-3"
+              style={{ left, height: more ? "100%" : 12 }}
+            />
+            <svg
+              aria-hidden
+              data-elbow
+              width="10"
+              height="9"
+              viewBox="0 0 10 9"
+              className="absolute fill-line-3"
+              style={{ left, top: 10 }}
             >
-              <span className="truncate">{child.summary}</span>
-              {progress && (
-                <span
-                  data-row-progress
-                  className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border-[0.5px] border-line-2 px-2 text-[12px] font-[450] text-fg-3"
-                >
-                  <ProgressRing value={progress![0] / progress![1]} />
-                  {progress!.join("/")}
-                </span>
-              )}
-            </a>
-            {/* Linear's row badges (RAJ-54 blocking 1, RAJ-55 blocked 1; Opus review 4): a red relation icon and how many issues. */}
-            {(["blocking", "blocked"] as const).map((kind) => {
-              const count = child.relations?.filter((r) => r.kind === kind).length ?? 0;
-              return (
-                count > 0 && (
-                  <span
-                    key={kind}
-                    data-row-relation={kind}
-                    title={`${kind === "blocked" ? "Blocked by" : "Blocking"} ${count} ${count === 1 ? "issue" : "issues"}`}
-                    className="flex shrink-0 items-center gap-1 text-[12px] font-[450] text-fg-3"
-                  >
-                    <RelationIcon kind={kind} />
-                    {count}
-                  </span>
-                )
-              );
-            })}
-            {display.properties.includes("labels") &&
-              control(child, "labels", child.labels.join(", ") || <Icon name="label" size={13} />)}
-            {display.properties.includes("milestone") && (
-              <span className="truncate text-fg-3">
-                {child.milestones?.map((m) => m.name).join(", ")}
-              </span>
-            )}
-            {display.properties.includes("due") && child.due && (
-              <time dateTime={child.due} className="text-fg-3">
-                {shortDate(child.due, undefined, true)}
-              </time>
-            )}
-            {display.properties.includes("links") && !!child.links?.length && (
-              <span title="Links">{child.links.length}</span>
-            )}
-            {display.properties.includes("pullRequests") && !!child.prCount && (
-              <span title="Pull requests">{child.prCount}</span>
-            )}
-            {display.properties.includes("assignee") &&
-              control(
-                child,
-                "assignee",
-                child.assignee ? (
-                  <Avatar user={child.assignee} size={18} />
-                ) : (
-                  <span
-                    title="Unassigned"
-                    className="grid size-[18px] place-items-center rounded-full bg-sel text-[10px]"
-                  >
-                    <Icon name="user" size={12} />
-                  </span>
-                ),
-              )}
-          </div>);
+              <path d="M0 0h1v1c0 2.5 2.212 3.546 2.212 3.546L9.737 8.06c.568.306.094 1.186-.474.88l-6.48-3.488S0 4 0 1V0Z" />
+            </svg>
+          </Fragment>
+        );
+      })}
+      {display.properties.includes("status") &&
+        control(child, "status", <StatusIcon status={status(child)} />)}
+      {display.properties.includes("priority") &&
+        control(child, "priority", <PriorityIcon name={child.priority} />)}
+      {display.properties.includes("id") && (
+        <span className="px-1 text-fg-3">{child.key}</span>
+      )}
+      <a
+        className="flex min-w-0 flex-1 items-center gap-2 py-1.5 text-[13px] font-medium text-fg"
+        href={childURL(child)}
+        onClick={(event) => {
+          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+            return;
+          event.preventDefault();
+          navigate({
+            board: child.board,
+            selected: child.key,
+            panel: true,
+            view: get().view,
+          });
+        }}
+      >
+        <span className="truncate">{child.summary}</span>
+        {progress && (
+          <span
+            data-row-progress
+            className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border-[0.5px] border-line-2 px-2 text-[12px] font-[450] text-fg-3"
+          >
+            <ProgressRing value={progress![0] / progress![1]} />
+            {progress!.join("/")}
+          </span>
+        )}
+      </a>
+      {/* Linear's row badges (RAJ-54 blocking 1, RAJ-55 blocked 1; Opus review 4): a red relation icon and how many issues. */}
+      {(["blocking", "blocked"] as const).map((kind) => {
+        const count =
+          child.relations?.filter((r) => r.kind === kind).length ?? 0;
+        return (
+          count > 0 && (
+            <span
+              key={kind}
+              data-row-relation={kind}
+              title={`${kind === "blocked" ? "Blocked by" : "Blocking"} ${count} ${count === 1 ? "issue" : "issues"}`}
+              className="flex shrink-0 items-center gap-1 text-[12px] font-[450] text-fg-3"
+            >
+              <RelationIcon kind={kind} />
+              {count}
+            </span>
+          )
+        );
+      })}
+      {display.properties.includes("labels") &&
+        control(
+          child,
+          "labels",
+          child.labels.join(", ") || <Icon name="label" size={13} />,
+        )}
+      {display.properties.includes("milestone") && (
+        <span className="truncate text-fg-3">
+          {child.milestones?.map((m) => m.name).join(", ")}
+        </span>
+      )}
+      {display.properties.includes("due") && child.due && (
+        <time dateTime={child.due} className="text-fg-3">
+          {shortDate(child.due, undefined, true)}
+        </time>
+      )}
+      {display.properties.includes("links") && !!child.links?.length && (
+        <span title="Links">{child.links.length}</span>
+      )}
+      {display.properties.includes("pullRequests") && !!child.prCount && (
+        <span title="Pull requests">{child.prCount}</span>
+      )}
+      {display.properties.includes("assignee") &&
+        control(
+          child,
+          "assignee",
+          child.assignee ? (
+            <Avatar user={child.assignee} size={18} />
+          ) : (
+            <span
+              title="Unassigned"
+              className="grid size-[18px] place-items-center rounded-full bg-sel text-[10px]"
+            >
+              <Icon name="user" size={12} />
+            </span>
+          ),
+        )}
+    </div>
+  );
 }
