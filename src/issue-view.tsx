@@ -1,3 +1,4 @@
+import { LoadingState } from "./empty-state";
 import { showNotification } from "./app-notifications";
 /* oxlint-disable react/no-unstable-nested-components -- Comment heads and avatars are render callbacks supplied to the activity threads. */
 import { FavoriteButton } from "./favorite-button";
@@ -805,18 +806,14 @@ function Description({ issue }: { issue: Issue }) {
         </div>
       )}
       {!f ? (
-        <p role="status" className="text-fg-4">
-          {error ? (
-            <>
-              {error}.{" "}
-              <Button variant="link" size="small" onClick={() => void loadFull(issue.key)}>
-                Retry
-              </Button>
-            </>
-          ) : (
-            "Loading…"
-          )}
-        </p>
+        error ? (
+          <Text as="p" role="status" variant="small" color="faint">
+            {error}.{" "}
+            <Button variant="link" size="small" onClick={() => void loadFull(issue.key)}>
+              Retry
+            </Button>
+          </Text>
+        ) : <LoadingState />
       ) : (
         <DocumentBodyEditor
           key={revision}

@@ -11,6 +11,7 @@ import {
 import { useStore, useAssignableUsers, type Board, type Issue, type User } from "./store";
 import { shortcuts } from "./shortcuts";
 import { Button } from "./button";
+import { LoadingState } from "./empty-state";
 import { kept, useCommand } from "./commands";
 import { duePresets, shortDate } from "./due-date";
 import { MenuSurface as Modal } from "./menu-surface";
@@ -556,7 +557,7 @@ export function DueMenu({ anchor, value, onChange, close }: FieldMenuProps<strin
         }}
       >
         <div className="mb-3">
-          <Suspense fallback={<p>Loading dates…</p>}>
+          <Suspense fallback={<LoadingState>Loading dates…</LoadingState>}>
             <DateInput autoFocus value={date} onChange={setDate} onValidity={setDateValid} />
           </Suspense>
         </div>
