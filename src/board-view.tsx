@@ -166,7 +166,10 @@ export const BoardView = memo(function BoardView({
     set({ findInView: false });
   };
   // One feedback, placed by layout: the zero state above the groups, else the list's last row or the board's footer.
-  const displayHidden = displayHiddenCount(all, board, prefs, mine, query, ME.id, Date.now(), personal);
+  const displayHidden = useMemo(
+    () => displayHiddenCount(all, board, prefs, mine, query, ME.id, Date.now(), personal),
+    [all, board, prefs, mine, query, personal],
+  );
   const results = <ResultsFeedback count={visible.length} {...feedback} view={activeView} clear={clearAll} layout={d.layout} />;
   return (
     <div className={`${shown ? "flex" : "hidden"} min-w-0 min-h-0 flex-1`}>
