@@ -434,6 +434,26 @@ describe("QA round 1 (G7)", () => {
     expect(matchesRule(due("2026-11-08"), overdue, [], "me", day("2026-11-08"))).toBe(false);
     expect(matchesRule(due("2026-11-08"), overdue, [], "me", day("2026-11-09"))).toBe(true);
   });
+  test("FILTER-12: operators read by value count and field kind, and labels match any or all of their values", () => {
+    const label = (f: Rule["field"], count: number) => operatorsFor(f, count).map(([, l]) => l);
+    expect(label("status", 1)).toEqual(["is", "is not"]);
+    expect(label("status", 2)).toEqual(["is any of", "is not"]);
+    expect(label("labels", 1)).toEqual(["include", "do not include", "is empty", "is not empty"]);
+    expect(label("labels", 2)).toEqual([
+      "include all of",
+      "include any of",
+      "exclude if any of",
+      "exclude if all",
+      "is empty",
+      "is not empty",
+    ]);
+    const both = issue("L-1", { labels: ["ui", "api"] }),
+      one = issue("L-2", { labels: ["ui"] });
+    const all = rule("labels", ["ui", "api"], "isAll"),
+      notAll = rule("labels", ["ui", "api"], "notAll");
+    expect([both, one].map((i) => matchesRule(i, all, [], "me"))).toEqual([true, false]);
+    expect([both, one].map((i) => matchesRule(i, notAll, [], "me"))).toEqual([false, true]);
+  });
   test("R2-D5: issue type is never empty in Jira, so it offers no empty operators", () => {
     expect(operatorsFor("type").map(([op]) => op)).toEqual(["is", "isNot"]);
   });

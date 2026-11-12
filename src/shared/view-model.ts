@@ -76,7 +76,9 @@ export type Operator =
   | "empty"
   | "notEmpty"
   | "gt"
-  | "lt";
+  | "lt"
+  | "isAll"
+  | "notAll";
 export type Rule = { id: string; field: Field; op: Operator; values: string[] };
 export type FilterGroup = { id: string; join: "and" | "or"; children: (Rule | FilterGroup)[] };
 export type Display = {
@@ -186,11 +188,14 @@ export const OPERATORS: [Operator, string][] = [
 ];
 export const isDate = (field: Field) =>
   ["created", "updated", "due", "resolved", "started"].includes(field);
-OPERATORS.push(["gt", "greater than"], ["lt", "less than"]);
+OPERATORS.push(["gt", "greater than"], ["lt", "less than"], ["isAll", "include all of"], ["notAll", "exclude if all"]);
 export const isNumeric = (field: Field) =>
   field === "statusAge" || field === "pullRequests" || field === "estimate";
-/** Linear's operators per kind: choices are/aren't one of a list, text contains, dates and numbers compare. Status and type are never empty. */
-export const operatorsFor = (field: Field) => {
+/** Linear's `collection` fields (FilterBlockHelper): an issue has several values, so a rule asks for any or all of them. */
+const isCollection = (field: Field) => field === "labels" || field === "watchers";
+/** Linear's operators per kind: choices are/aren't one of a list, text contains, dates and numbers compare. Status and type are never empty.
+ *  `count` is how many values the rule has: collections offer their all-of operators only for several (pass Infinity for every operator). */
+export const operatorsFor = (field: Field, count = 1): [Operator, string][] => {
   const ops: Operator[] = isNumeric(field)
     ? [
         "is",
@@ -205,14 +210,34 @@ export const operatorsFor = (field: Field) => {
         ? ["contains", "notContains"]
         : field === "links"
           ? ["contains", "notContains", "empty", "notEmpty"]
-          : [
-              "is",
-              "isNot",
-              // Jira always sets a status and an issue type.
-              ...(field === "status" || field === "type" ? [] : (["empty", "notEmpty"] as const)),
-            ];
-  return OPERATORS.filter(([op]) => ops.includes(op));
+          : isCollection(field) && count > 1
+            ? ["isAll", "is", "isNot", "notAll", "empty", "notEmpty"]
+            : [
+                "is",
+                "isNot",
+                // Jira always sets a status and an issue type.
+                ...(field === "status" || field === "type" ? [] : (["empty", "notEmpty"] as const)),
+              ];
+  // Linear lists a collection's several-value operators in its own order; every other list keeps OPERATORS' order.
+  const ordered = ops.includes("isAll") ? ops : OPERATORS.map(([op]) => op).filter((op) => ops.includes(op));
+  return ordered.map((op) => [op, operatorLabel(field, op, count)]);
 };
+/** Linear's operator wording (FilterBlockHelper `J`), by field kind and value count: "is any of" for several values; a collection
+ *  "include"s ("Labels include ui") and with several values reads "include any of", "include all of", "exclude if any of" or "exclude if all". */
+export function operatorLabel(field: Field, op: Operator, count: number) {
+  const many = count > 1;
+  const plain = OPERATORS.find(([o]) => o === op)?.[1] ?? op;
+  if (isNumeric(field) || isDate(field) || field === "content" || field === "links") return plain;
+  if (isCollection(field))
+    return op === "is"
+      ? many ? "include any of" : "include"
+      : op === "isAll"
+        ? many ? "include all of" : "include"
+        : op === "isNot"
+          ? many ? "exclude if any of" : "do not include"
+          : plain;
+  return op === "is" && many ? "is any of" : plain;
+}
 /** Display settings equal, ignoring the order properties were toggled in. */
 export const sameDisplay = (a: Display, b: Display) =>
   JSON.stringify({ ...a, properties: [...a.properties].sort() }) ===
@@ -431,15 +456,16 @@ export function matchesRule(
     const same = day(date) === day(wanted);
     return r.op === "isNot" ? !same : same;
   }
-  const hit = values.some((v) =>
+  const has = (v: string) =>
     v === "$none"
       ? !actual.length
       : actual.some((a) =>
           ["contains", "notContains"].includes(r.op)
             ? a.toLowerCase().includes(v.toLowerCase())
             : a === v,
-        ),
-  );
+        );
+  if (r.op === "isAll" || r.op === "notAll") return values.every(has) === (r.op === "isAll");
+  const hit = values.some(has);
   return ["isNot", "notContains"].includes(r.op) ? !hit : hit;
 }
 

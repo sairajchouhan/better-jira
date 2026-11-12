@@ -48,7 +48,7 @@ export function validFilters(value: unknown): value is FilterGroup {
       );
     return (
       FIELDS.some(([f]) => f === v.field) &&
-      operatorsFor(v.field).some(([op]) => op === v.op) &&
+      operatorsFor(v.field, Infinity).some(([op]) => op === v.op) &&
       Array.isArray(v.values) &&
       v.values.length <= 100 &&
       v.values.every((s: unknown) => text(s))
