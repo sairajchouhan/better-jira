@@ -38,13 +38,12 @@ import {
 import {
   myIssuesBoard,
   boardColumns,
-  buckets,
   draftForGroup,
-  issueOrder,
+  groupLayout,
+  layoutOrder,
   rankBetween,
   listRows,
   selectIssues,
-  boardCells,
   resultsFeedback,
   statusDuration,
   type Bucket,
@@ -115,16 +114,11 @@ export const BoardView = memo(function BoardView({
         hiddenIds.includes(c.id) || (!d.emptyGroups && !c.issues.length && !expanded.includes(c.id)),
     );
     const show = columns.filter((c) => !hidden.includes(c));
-    if (d.layout === "list")
-      return { hidden, show, rows: [], cells: [], sections: show.map((c) => buckets(c.issues, d.rows, board, c.issues).filter((r) => r.issues.length)) };
-    const rows = buckets(visible, d.rows, board, visible);
-    return { hidden, show, rows, cells: boardCells(show, rows), sections: [] };
-  }, [columns, prefs.hidden, d.columns, d.emptyGroups, d.layout, d.rows, expanded, visible, board]);
+    return { hidden, show, ...groupLayout(show, visible, board, d) };
+  }, [columns, prefs.hidden, d, expanded, visible, board]);
   const { hidden, show } = layout;
-  const order = useMemo(
-    () => issueOrder(columns, visible, board, prefs, universe),
-    [columns, visible, board, prefs, universe],
-  );
+  // The prefetch order follows the cards and rows just laid out, so which groups show is decided once.
+  const order = useMemo(() => layoutOrder(layout.show, layout, prefs, universe), [layout, prefs, universe]);
   // Revealed empty groups close again when grouping or the empty-groups option changes.
   const expandedFor = `${d.columns}:${d.emptyGroups}`;
   const [expandedKey, setExpandedKey] = useState(expandedFor);

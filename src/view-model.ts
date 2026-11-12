@@ -735,34 +735,40 @@ export function resultsFeedback(
   };
 }
 
-/** The on-screen order, one array per column: a list is one column of its rows (nested sub-issues included), a board its cards row by row.
- *  Hidden groups, and a list's collapsed groups, drop out; a card a label grouping repeats in a column is visited once. */
-export function issueOrder(
-  columns: Bucket[],
-  visible: Issue[],
-  board: Board,
+/** A view's shown groups bucketed once: a list's non-empty rows per group, or a board's swimlanes and cards per lane and column. */
+export function groupLayout(shown: Bucket[], visible: Issue[], board: Board, d: Display) {
+  if (d.layout === "list")
+    return {
+      rows: [] as Bucket[],
+      cells: [] as Issue[][][],
+      sections: shown.map((c) => buckets(c.issues, d.rows, board, c.issues).filter((r) => r.issues.length)),
+    };
+  const rows = buckets(visible, d.rows, board, visible);
+  return { rows, cells: boardCells(shown, rows), sections: [] as Bucket[][] };
+}
+
+/** The on-screen order of a laid-out view, one array per column: a list is one column of its rows (nested sub-issues
+ *  included), a board its cards row by row. A list's collapsed groups drop out; a card a label grouping repeats in a column is visited once. */
+export function layoutOrder(
+  shown: Bucket[],
+  layout: ReturnType<typeof groupLayout>,
   prefs: Preferences,
   universe: Issue[],
 ): Issue[][] {
   const d = prefs.display,
-    hidden = prefs.hidden[d.columns] ?? [],
-    collapsed = prefs.collapsed[d.columns] ?? [],
-    shown = columns.filter((c) => !hidden.includes(c.id));
-  let order: Issue[][];
-  if (d.layout === "list")
-    order = [
-      shown
-        .filter((c) => !collapsed.includes(c.id))
-        .flatMap((c) =>
-          buckets(c.issues, d.rows, board, c.issues).flatMap((r) =>
-            listRows(r.issues, universe, d.subIssues ? d.nested : "none").map((row) => row.issue),
+    collapsed = prefs.collapsed[d.columns] ?? [];
+  const order =
+    d.layout === "list"
+      ? [
+          shown.flatMap((c, i) =>
+            collapsed.includes(c.id)
+              ? []
+              : layout.sections[i]!.flatMap((r) =>
+                  listRows(r.issues, universe, d.subIssues ? d.nested : "none").map((row) => row.issue),
+                ),
           ),
-        ),
-    ];
-  else {
-    const cells = boardCells(shown, buckets(visible, d.rows, board, visible));
-    order = shown.map((_, c) => cells.flatMap((lane) => lane[c]!));
-  }
+        ]
+      : shown.map((_, c) => layout.cells.flatMap((lane) => lane[c]!));
   return order.map((c) => [...new Map(c.map((i) => [i.key, i])).values()]);
 }
 
@@ -798,8 +804,9 @@ export function visibleOrder(state: OrderState, me: string): Issue[][] {
   const all = [...state.issues.values()],
     visible = selectIssues(all, board, prefs, mine, state.query, me, Date.now(), personal),
     universe = personal ? all : all.filter((i) => i.board === board.id),
-    columns = boardColumns(visible, board, prefs, universe),
-    order = issueOrder(columns, visible, board, prefs, universe);
+    hidden = prefs.hidden[prefs.display.columns] ?? [],
+    shown = boardColumns(visible, board, prefs, universe).filter((c) => !hidden.includes(c.id)),
+    order = layoutOrder(shown, groupLayout(shown, visible, board, prefs.display), prefs, universe);
   lastOrder = { inputs, order };
   return order;
 }
