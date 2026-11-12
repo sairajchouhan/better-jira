@@ -74,7 +74,7 @@ const rootRoute = createRootRouteWithContext<RouteContext>()({
     const place = legacyPlace(location.pathname, location.search as Record<string, string>, context);
     if (place) throw redirect({ ...locationOf(place, context), replace: true });
   },
-  notFoundComponent: PageNotFound,
+  notFoundComponent: NotFound,
   errorComponent: RouteError,
 });
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/" });
@@ -225,7 +225,6 @@ const issueRoute = createRoute({
   },
   loader: ({ context, params, preload }) => issueLoader(context, params.key, preload),
   component: lazyRouteComponent(() => import("./issue-view"), "IssueScreen"),
-  notFoundComponent: IssueNotFound,
 });
 const documentRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -237,7 +236,6 @@ const documentRoute = createRoute({
   },
   loader: ({ context, params, preload }) => issueLoader(context, params.key, preload),
   component: lazyRouteComponent(() => import("./issue-document"), "DocumentScreen"),
-  notFoundComponent: IssueNotFound,
 });
 
 export const routeTree = rootRoute.addChildren([
@@ -355,19 +353,16 @@ export function legacyPlace(
 
 /** Linear's `fk` button look on a router link. */
 const RouteButton = createLink(ButtonLink);
-function PageNotFound() {
-  return (
-    <EmptyState title="Page not found" actions={<RouteButton to="/" variant="secondary" size="medium">Go to your board</RouteButton>} className="absolute inset-0 z-10 bg-panel">
-      <p>This address doesn't name a board, view or issue.</p>
-    </EmptyState>
-  );
-}
-function IssueNotFound({ data }: NotFoundRouteProps) {
+/** An address that names nothing, or an issue none of the boards has. Covers the boards the shell keeps mounted. */
+function NotFound({ data }: NotFoundRouteProps) {
   const issue = (data as { issue?: string } | undefined)?.issue;
   return (
-    // Covers the boards the shell keeps mounted behind the page.
-    <EmptyState title={issue ? `Issue ${issue} not found` : "Issue not found"} actions={<RouteButton to="/" variant="secondary" size="medium">Go to your board</RouteButton>} className="absolute inset-0 z-10 bg-panel">
-      <p>It isn't on any of your boards. It may have been deleted or moved in Jira.</p>
+    <EmptyState
+      title={issue ? `Issue ${issue} not found` : "Page not found"}
+      actions={<RouteButton to="/" variant="secondary" size="medium">Go to your board</RouteButton>}
+      className="absolute inset-0 z-10 bg-panel"
+    >
+      <p>{issue ? "It isn't on any of your boards. It may have been deleted or moved in Jira." : "This address doesn't name a board, view or issue."}</p>
     </EmptyState>
   );
 }
