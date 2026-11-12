@@ -44,6 +44,7 @@ import {
   rankBetween,
   listRows,
   selectIssues,
+  displayHiddenCount,
   resultsFeedback,
   statusDuration,
   type Bucket,
@@ -165,6 +166,7 @@ export const BoardView = memo(function BoardView({
     set({ findInView: false });
   };
   // One feedback, placed by layout: the zero state above the groups, else the list's last row or the board's footer.
+  const displayHidden = displayHiddenCount(all, board, prefs, mine, query, ME.id, Date.now(), personal);
   const results = <ResultsFeedback count={visible.length} {...feedback} view={activeView} clear={clearAll} layout={d.layout} />;
   return (
     <div className={`${shown ? "flex" : "hidden"} min-w-0 min-h-0 flex-1`}>
@@ -321,6 +323,10 @@ export const BoardView = memo(function BoardView({
               </details>
             )}
         {d.layout === "board" && visible.length > 0 && results}
+        {displayHidden > 0 && <div role="status" className="flex shrink-0 items-center justify-center gap-2 py-3">
+          <Text variant="mini" color="muted">{displayHidden} issue{displayHidden === 1 ? "" : "s"} hidden by display options</Text>
+          <Button variant="borderless" size="small" onClick={() => ui.send({ type: "toolbar.open", toolbar: "display" })}>Show options</Button>
+        </div>}
       </div>
       {active && shown && details && !panel && (detailView ? <ViewDetails view={detailView} issues={visible} /> : <BoardDetails board={board} issues={visible} />)}
     </div>

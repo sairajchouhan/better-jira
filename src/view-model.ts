@@ -908,3 +908,12 @@ export function myIssuesBoard(boards: Board[], board: Board): Board {
   cache.set(board, result);
   return result;
 }
+
+/** Count unique matching issues suppressed by display settings; filters and scope stay intact. */
+export function displayHiddenCount(all: Issue[], board: Board, prefs: Preferences, mine: boolean, query: string, me: string, now = Date.now(), acrossBoards = false): number {
+  const eligible = selectIssues(all, board, { ...prefs, display: { ...prefs.display, subIssues: true, completedIssues: "all" } }, mine, query, me, now, acrossBoards);
+  const visible = selectIssues(all, board, prefs, mine, query, me, now, acrossBoards);
+  const hidden = prefs.hidden[prefs.display.columns] ?? [];
+  const shown = new Set(boardColumns(visible, board, prefs, all).filter(c => !hidden.includes(c.id)).flatMap(c => c.issues.map(i => i.key)));
+  return eligible.filter(i => !shown.has(i.key)).length;
+}

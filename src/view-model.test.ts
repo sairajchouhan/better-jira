@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   boardCells,
+  displayHiddenCount,
   buckets,
   defaultPreferences,
   rankBetween,
@@ -482,4 +483,18 @@ test("BJ-38: completed windows use resolution or status entry and preserve open 
     expect(parsePreferences(prefs).display.completedIssues).toBe(window);
   }
   expect(parsePreferences({ display: { completedIssues: "invalid" } }).display.completedIssues).toBe("all");
+});
+
+test("BJ-61: display hidden counts respect filters and reveal duplicate label groups once", () => {
+  const all = [issue("open"), issue("child", {parent:"open"}), issue("done", {status:"done"})];
+  const prefs = defaultPreferences();
+  prefs.display.subIssues = false;
+  prefs.display.completedIssues = "none";
+  expect(displayHiddenCount(all, board, prefs, false, "", "me", now)).toBe(2);
+  expect(displayHiddenCount(all, board, prefs, false, "open", "me", now)).toBe(0);
+  prefs.display.subIssues = true;
+  prefs.display.completedIssues = "all";
+  expect(displayHiddenCount(all, board, prefs, false, "", "me", now)).toBe(0);
+  prefs.hidden.status = ["Todo"];
+  expect(displayHiddenCount(all, board, prefs, false, "", "me", now)).toBe(2);
 });

@@ -189,3 +189,19 @@ test("BJ-149: reopening Add filter creates a separate AND condition", async ({ o
     expect(await page.eval(`document.querySelectorAll('[data-key]').length`)).toBe(0);
   } finally { await page.close(); }
 });
+
+test("BJ-61: hidden display feedback opens options and reveals completed issues", async ({ open }) => {
+  const page = await open();
+  try {
+    await page.click('[aria-label="Display options"]');
+    await page.click('[aria-label="Completed issues: All"]');
+    await page.click('[cmdk-item][data-value="None none"]');
+    await page.key('Escape');
+    await page.waitFor(`document.body.textContent.includes('hidden by display options')`);
+    await page.click('text=Show options');
+    await page.click('[aria-label="Completed issues: None"]');
+    await page.click('[cmdk-item][data-value="All all"]');
+    await page.key('Escape');
+    await page.waitFor(`!document.body.textContent.includes('hidden by display options')`);
+  } finally { await page.close(); }
+});
