@@ -693,7 +693,7 @@ test("RAJ-52: relations: Mark as menus, sidebar pills, Activity rows and Issue o
         `document.activeElement?.getAttribute('aria-label')==='Find related issue'`,
       );
     };
-    const look = `(()=>{const d=${D};return [d.querySelector('input').placeholder,[...d.querySelectorAll('[cmdk-group-heading]')].map(h=>h.textContent),d.querySelector('[cmdk-item][data-value="create"]')?.textContent??null,d.querySelector('.mark-footer').textContent,!!d.querySelector('select')]})()`;
+    const look = `(()=>{const d=${D};return [d.querySelector('input').placeholder,[...d.querySelectorAll('[cmdk-group-heading]')].map(h=>h.textContent),d.querySelector('[cmdk-item][data-value="create"]')?.textContent??null,d.querySelector('.mark-footer > span').textContent,!!d.querySelector('select')]})()`;
     await markAs("Related to…");
     // Relations now renders the shared Menu input, heading and row geometry.
     expect(
@@ -728,7 +728,7 @@ test("RAJ-52: relations: Mark as menus, sidebar pills, Activity rows and Issue o
     ).toEqual(["lch(20.82 1.3 272)", "32px", "8px"]);
     await page.key("ArrowUp");
     await page.key("ArrowUp");
-    await page.waitFor(`${D}.querySelector('.mark-footer').textContent==='↵Select'`);
+    await page.waitFor(`${D}.querySelector('.mark-footer > span').textContent==='↵Select'`);
     await page.type("TEST-1");
     await page.waitFor(
       `!${D}.querySelector('[cmdk-item][data-value="create"]')&&[...${D}.querySelectorAll('[cmdk-group-heading]')].map(h=>h.textContent).join()==='Issues'`,
