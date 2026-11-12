@@ -1880,17 +1880,3 @@
   font-weight: 500;
   color: var(--menu-fg);
 }
-/* Kept until personal-controls.tsx passes the footer's Keycap size="small" (Q9f follow-up). */
-.mark-footer kbd {
-  display: grid;
-  width: 18px;
-  height: 19.2px;
-  place-items: center;
-  padding: 2px;
-  border: 1px solid var(--key-line);
-  border-radius: 4px;
-  color: var(--menu-fg-3);
-  font-size: 12px;
-  font-weight: 500;
-}
-

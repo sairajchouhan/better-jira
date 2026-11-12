@@ -1257,7 +1257,7 @@ export function Relations({ issue }: { issue: Issue }) {
         </Menu.List>
         <div className="mark-footer">
           <span>
-            <Keycap>↵</Keycap>
+            <Keycap size="small">↵</Keycap>
             {selected === "create" ? "Select" : mark.enter}
           </span>
         </div>

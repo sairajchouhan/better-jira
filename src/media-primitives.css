@@ -62,17 +62,6 @@
 .media-comment-action[aria-expanded="true"] {
   opacity: 1;
 }
-.video-tooltip .ui-keycap {
-  display: revert-layer;
-  align-items: revert-layer;
-  align-self: revert-layer;
-  height: revert-layer;
-  padding: revert-layer;
-  border: revert-layer;
-  border-radius: revert-layer;
-  color: revert-layer;
-  font: revert-layer;
-}
 .video-controls .ui-button:hover .video-tooltip {
   opacity: 1;
   visibility: visible;
