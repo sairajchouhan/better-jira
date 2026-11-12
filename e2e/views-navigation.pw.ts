@@ -78,6 +78,12 @@ test("Linear parity: hidden counts, merge conflicts, editor chrome, draft tab, p
     expect(await page.eval(`document.querySelectorAll('[aria-label="View details"] [role=tab]').length`)).toBe(0);
     expect(await page.eval(`document.querySelectorAll('[data-view-card]').length`)).toBe(2);
     expect(await page.eval(`!!document.querySelector('[aria-label="View details options"]') && !!document.querySelector('[aria-label="Add view to favorites"]')`)).toBe(true);
+    // CORE-19: the view ⋯ menu opens end-aligned, its right edge flush with the trigger's (Linear's bottom-right).
+    await page.click('[aria-label="View details options"]');
+    await page.waitFor(`!!document.querySelector('[role=dialog][aria-label="View options"]')`);
+    expect(await page.eval(`Math.round(document.querySelector('[role=dialog][aria-label="View options"]').getBoundingClientRect().right-document.querySelector('[aria-label="View details options"]').getBoundingClientRect().right)`)).toBe(0);
+    await page.key("Escape");
+    await page.waitFor(`!document.querySelector('[role=dialog][aria-label="View options"]')`);
     // Keep the measured summary assertions on a nonempty view.
     await page.eval(`fetch('/api/views/${saved.id}',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({filters:{id:'root',join:'and',children:[]}})})`);
     await page.reload();

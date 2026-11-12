@@ -57,16 +57,22 @@ test("Add board: a board from another site is refused; a board link mirrors and 
       ),
     ).toBe(1);
 
-    // BJ-24: a board added in the app leaves the sidebar from its context menu; setup's board has none.
+    // BJ-24: a board added in the app leaves the sidebar from its context menu; setup's board can't.
     const sidebarRow = (name: string) =>
       `[...document.querySelectorAll('nav[aria-label="Main navigation"] button')].find(b=>b.textContent.includes('${name}'))`;
     const rightClick = (name: string) =>
       p.eval(
         `(()=>{const n=${sidebarRow(name)},r=n.getBoundingClientRect();n.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:r.x+20,clientY:r.y+10}))})()`,
       );
+    // CORE-15: every board has Linear's team menu; only a board added in the app can be removed.
+    const options = `[...document.querySelectorAll('[role="dialog"][aria-label="Board options"] [cmdk-item]')].map(n=>n.dataset.value)`;
     await rightClick("Browser audit");
-    expect(await p.eval(`!!document.querySelector('[role="dialog"][aria-label="Board options"]')`)).toBe(false);
+    await p.waitFor(`${options}.length > 0`);
+    expect(await p.eval(options)).toEqual(["Favorite", "Copy URL", "Open in new tab"]);
+    await p.key("Escape");
+    await p.waitFor(`!document.querySelector('[role="dialog"][aria-label="Board options"]')`);
     await rightClick("Second board");
+    await p.waitFor(`${options}.join() === "Favorite,Copy URL,Open in new tab,Remove from sidebar"`);
     await p.click('[role="dialog"][aria-label="Board options"] [cmdk-item][data-value="Remove from sidebar"]');
     await p.waitFor(`!${sidebarRow("Second board")}`);
     await p.waitFor(`location.pathname.startsWith('/team/1/')`);

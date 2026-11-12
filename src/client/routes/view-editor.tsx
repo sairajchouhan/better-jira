@@ -239,6 +239,8 @@ function ViewOptions({
     <ActionMenu
       label="View options"
       anchor={target.anchor}
+      // Linear's view ⋯ (bottom-right): right edges flush under the trigger (CORE-19).
+      align="end"
       point={target.point}
       entries={entries}
       close={close}

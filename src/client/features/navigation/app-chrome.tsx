@@ -8,7 +8,7 @@ import { useMemo, useRef, useState, type MouseEvent, type ReactNode } from "reac
 import { isMyIssues } from "./navigation";
 import { PERSON_TABS, peopleOf } from "@/shared/people";
 import { Icon, TypeDot } from "@/client/components/icons";
-import { set, timed, useStore, type Board, type Issue } from "@/client/state/store";
+import { get, set, timed, useStore, type Board, type Issue } from "@/client/state/store";
 import { issueURL } from "@/client/features/issue/issue-urls";
 import { actions, beginCreate } from "@/client/state/issue-actions";
 import { retryLocalStorage } from "@/client/state/app-load";
@@ -16,7 +16,8 @@ import { removeBoard } from "@/client/state/server-data";
 import { dismissWriteError } from "@/client/state/jira-sync";
 import { dismissRecoveryNotice, downloadLocalBackup } from "@/client/state/local-database";
 import { undoEdit, redoEdit } from "@/client/state/undo-history";
-import { navigate, ui, openSavedView, openAllIssues as openBoardIssues } from "./app-navigation";
+import { linkTo, navigate, router, ui, openSavedView, openAllIssues as openBoardIssues } from "./app-navigation";
+import { toggleFavorite } from "./favorites";
 import { ActionMenu, ContextMenu, type ActionEntry } from "@/client/components/action-menu";
 import { showNotification } from "@/client/state/app-notifications";
 import { BoardControls, FilterChips } from "@/client/features/views/view-controls";
@@ -172,13 +173,10 @@ export function Sidebar({ boards }: { boards: Board[] }) {
               <span className="truncate">{b.name}</span>
             </SideItem>
           );
-          // A board added in the app can leave the sidebar again (BJ-24); setup's boards can't.
-          return b.removable ? (
+          return (
             <ContextMenu key={b.id} label="Board options" entries={() => boardEntries(b)}>
               {item}
             </ContextMenu>
-          ) : (
-            item
           );
         })}
         {/* Views is a section like Boards: every saved view inline, edited from its row's menu. */}
@@ -276,17 +274,42 @@ function CustomizeSidebar({
   );
 }
 
-const boardEntries = (board: Board): ActionEntry[] => [
-  {
-    name: "Remove from sidebar",
-    icon: "close",
-    run: () =>
-      void removeBoard(board.id).then(
-        () => showNotification({ text: `Removed ${board.name}`, detail: "Add it again from Add board." }),
-        (error: Error) => set({ perf: error.message }),
-      ),
-  },
-];
+/** Every sidebar board's right-click menu, as Linear's team menu (CORE-15): Favorite, Copy URL, Open in new tab, and Remove
+ *  only for a board added in the app (BJ-24), which setup's boards can't. */
+export function boardEntries(board: Board): ActionEntry[] {
+  const id = `board:${board.id}`,
+    favorite = get().favorites.includes(id),
+    url = () =>
+      new URL(router.buildLocation(linkTo({ board: board.id, selected: null, panel: false }) as never).href, location.origin).href;
+  return [
+    { name: favorite ? "Unfavorite" : "Favorite", icon: favorite ? "starred" : "star", run: () => toggleFavorite(id) },
+    {
+      name: "Copy URL",
+      icon: "link",
+      divider: true,
+      run: () =>
+        void navigator.clipboard.writeText(url()).then(
+          () => showNotification({ text: "Copied" }),
+          (e) => showNotification({ text: String(e) }),
+        ),
+    },
+    { name: "Open in new tab", icon: "external", run: () => window.open(url(), "_blank", "noopener") },
+    ...(board.removable
+      ? [
+          {
+            name: "Remove from sidebar",
+            icon: "close",
+            divider: true,
+            run: () =>
+              void removeBoard(board.id).then(
+                () => showNotification({ text: `Removed ${board.name}`, detail: "Add it again from Add board." }),
+                (error: Error) => set({ perf: error.message }),
+              ),
+          } satisfies ActionEntry,
+        ]
+      : []),
+  ];
+}
 
 /** Linear's 28px bottom bar under the sidebar and panel; ours carries the perf readout and the local-only note. */
 /** Linear's delete dialog instead of a native confirm. Jira deletes the issue's subtasks with it (deleteSubtasks=true), so it names them. */
