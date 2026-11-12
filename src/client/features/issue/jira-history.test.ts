@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { HistoryEntry, HistoryItem } from "@/shared/jira-history";
-import { activityRows, type PropertyActivity } from "./issue-activity";
+import { activityRows, recordActivity, type PropertyActivity } from "./issue-activity";
 import { historyChanges, linkRelation, mapItem, mergeHistory } from "./jira-history";
 
 // Made-up fixtures with the shapes Jira's changelog uses (sampled read-only from real tickets, BJ-40).
@@ -224,6 +224,23 @@ test("BJ-13: an edit made here appears once: Jira's echo replaces it, an unsent 
   // Someone else's matching change, or one from before the edit, is not an echo.
   const other = mergeHistory(local.slice(0, 1), [entry([status("To Do", "In Progress")], -3_600_000)]);
   expect(other.map((e) => e.id)).toContain("l1");
+});
+
+test("#3: a description edit made later never brings back a status or label edit Jira already has", () => {
+  let k = 0;
+  const id = () => `l${++k}`,
+    issue = { status: "to do", labels: [] as string[], description: "a" };
+  // A status move and a label add, sent and echoed by Jira seconds later.
+  let local = recordActivity([], issue, { status: "in progress", labels: ["qa"] }, ada, at(), id);
+  // Six minutes on, a description edit (a save, or Keep mine after a conflict) moves the open group to its time.
+  local = recordActivity(local, { ...issue, status: "in progress", labels: ["qa"] }, { description: "b" }, ada, at(360_000), id);
+  expect(local.every((event) => event.at === at(360_000))).toBe(true);
+  const events = mergeHistory(local, [
+    entry([status("To Do", "In Progress")], 2_000),
+    entry([item("labels", { fromText: "", toText: "qa" }, "labels")], 2_000),
+  ]);
+  // Only Jira's two entries: the local copies are its echo, not new edits "just now".
+  expect(events.map((e) => e.id).filter((e) => e.startsWith("l"))).toEqual([]);
 });
 
 test("BJ-13: an app's change keeps its actor; an entry with no author reads as someone", () => {

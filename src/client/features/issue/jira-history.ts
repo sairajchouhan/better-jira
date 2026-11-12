@@ -161,7 +161,7 @@ const echoed = (event: PropertyActivity, jira: readonly Change[]) =>
     (change) =>
       change.actor.id === event.actor.id &&
       change.field === event.field &&
-      Date.parse(change.at) >= Date.parse(event.at) - ECHO_SKEW_MS &&
+      Date.parse(change.at) >= Date.parse(event.made ?? event.at) - ECHO_SKEW_MS &&
       (event.field === "relation"
         ? sameValue(change.after, event.after) && sameValue(change.before, event.before)
         : sameValue(change.after, event.after)),

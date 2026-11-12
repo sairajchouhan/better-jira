@@ -171,6 +171,7 @@ const isIssue = (v: unknown, key: string): v is Issue =>
       (activityFields.includes(e.field) || e.field === "relation") &&
       typeof e.at === "string" &&
       (e.updated === undefined || typeof e.updated === "string") &&
+      (e.made === undefined || typeof e.made === "string") &&
       object(e.actor) &&
       user(e.actor),
   ) &&

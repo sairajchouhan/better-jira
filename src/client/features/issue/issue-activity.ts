@@ -97,7 +97,9 @@ export function recordActivity(
   if (!changes.length && !bump) return events;
   const at = open && !bump ? last!.at : now;
   let next = open
-    ? events.map((event) => (group.includes(event) ? { ...event, at, updated: now } : event))
+    ? events.map((event) =>
+        group.includes(event) ? { ...event, made: event.made ?? event.at, at, updated: now } : event,
+      )
     : [...events];
   for (const field of changes) {
     const index = next.findIndex(
@@ -113,8 +115,9 @@ export function recordActivity(
         actor: { ...actor },
         at,
         updated: now,
+        made: now,
       });
-    else next[index] = { ...next[index]!, after, updated: now };
+    else next[index] = { ...next[index]!, after, updated: now, made: now };
   }
   return next;
 }

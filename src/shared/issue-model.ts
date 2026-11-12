@@ -56,6 +56,9 @@ export type PropertyActivity = {
   actor: Actor;
   at: string;
   updated?: string;
+  /** When this edit set its value. A later description edit moves the open group's `at` (where the row sits), never
+   *  this, so Jira's changelog entry for the edit is still matched to it (#3). Absent on events from older builds. */
+  made?: string;
 };
 
 export type User = { id: string; name: string; avatar?: string };

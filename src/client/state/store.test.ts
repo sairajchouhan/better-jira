@@ -2199,3 +2199,68 @@ test("My issues selects assigned issues across boards and keeps their visible or
   await travel(-1);
   expect(keys()).toEqual(before);
 });
+
+test("#3: a refused description and Keep mine send the description again, never the status or labels Jira already took", async () => {
+  const { get, set } = await import("./store");
+  const { actions } = await import("./issue-actions");
+  const { DESCRIPTION_CONFLICT } = await import("@/shared/jira-ops");
+  const doc = (text: string) => ({
+    type: "doc" as const,
+    version: 1 as const,
+    content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+  });
+  const key = "PH-1",
+    sent: any[][] = [],
+    realFetch = globalThis.fetch;
+  // Jira's copy: what each write leaves there. The first description save meets someone else's text.
+  let jira = { key, board: 1, summary: key, status: "todo", assignee: null, labels: [] as string[], comments: 0, updated: "", resolved: null },
+    description = doc("theirs"),
+    refuse = true;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (!String(input).endsWith(`/api/issues/${key}/ops`)) return realFetch(input, init);
+    const { ops } = JSON.parse(String(init?.body));
+    sent.push(ops);
+    const fields = ops.find((op: any) => op.op === "fields")?.fields;
+    if (fields?.description && refuse) {
+      refuse = false;
+      return Response.json(
+        { error: DESCRIPTION_CONFLICT, key, created: {}, others: [], issue: jira, full: { key, fields: { description } } },
+        { status: 422 },
+      );
+    }
+    for (const op of ops)
+      if (op.op === "status") jira = { ...jira, status: op.status };
+      else if (op.op === "fields" && op.fields.labelEdits) jira = { ...jira, labels: [...jira.labels, ...op.fields.labelEdits.add] };
+      else if (op.op === "fields" && op.fields.labels) jira = { ...jira, labels: op.fields.labels };
+    if (fields?.description) description = fields.description;
+    return Response.json({ key, created: {}, others: [], issue: jira, full: { key, fields: { description } } });
+  }) as typeof fetch;
+  const settled = async () => {
+    for (let i = 0; i < 100 && get().pendingWrites; i++) await Bun.sleep(10);
+  };
+  try {
+    set({
+      writable: true,
+      issues: new Map(get().issues).set(key, { ...jira }),
+      full: new Map(get().full).set(key, { key, fields: { description: doc("mine") } } as any),
+    });
+    actions.patch(key, { status: "doing", labels: ["qa"] });
+    await settled();
+    actions.description(key, doc("mine, edited"));
+    await settled();
+    expect(get().full.get(key)?.descriptionError).toBe(DESCRIPTION_CONFLICT);
+    // Keep mine.
+    actions.description(key, doc("mine, edited"));
+    await settled();
+    const kinds = sent.flat().map((op) => (op.op === "fields" ? Object.keys(op.fields).sort().join("+") : op.op));
+    expect(kinds.filter((kind) => kind === "status")).toHaveLength(1);
+    expect(kinds.filter((kind) => kind.includes("label"))).toHaveLength(1);
+    expect(sent.at(-1)).toEqual([
+      { op: "fields", fields: { description: doc("mine, edited"), descriptionBase: "theirs" } },
+    ]);
+    expect(description).toEqual(doc("mine, edited"));
+  } finally {
+    set({ writable: false });
+    globalThis.fetch = realFetch;
+  }
+});
