@@ -1,6 +1,6 @@
 import { useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { createPortal } from "react-dom";
-import { useHotkeys } from "@tanstack/react-hotkeys";
+import { useHotkey, useHotkeys } from "@tanstack/react-hotkeys";
 import type { ImageComment } from "./media-edits";
 import { ActionMenu } from "./action-menu";
 import { ConfirmDialog } from "./dialog";
@@ -97,13 +97,6 @@ export function ImageThread({
           aria-label="Image comment"
           value={text}
           onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            // The send button's ⌘↵.
-            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-              event.preventDefault();
-              form.current?.requestSubmit();
-            }
-          }}
           placeholder="Add a comment…"
         />
         <SendButton
@@ -189,6 +182,7 @@ export function ImageCommentCard({
     [text, setText] = useState(""),
     [reply, setReply] = useState("");
   const root = useRef<HTMLLIElement>(null),
+    replyForm = useRef<HTMLFormElement>(null),
     done = (id: string) => {
       setEditing(undefined);
       requestAnimationFrame(() =>
@@ -207,6 +201,8 @@ export function ImageCommentCard({
     ]);
     setReply("");
   };
+  // The send button's ⌘↵, the same registry chord the image comment's form uses.
+  useHotkey("Mod+Enter", () => replyForm.current?.requestSubmit(), { target: replyForm, ignoreInputs: false });
   return (
     <li ref={root} data-image-thread className="comment-thread rounded-lg bg-card">
       {src && (
@@ -281,6 +277,7 @@ export function ImageCommentCard({
       </Button>
       <div className="comment-reply-composer">
         <form
+          ref={replyForm}
           className="comment-reply-row"
           onSubmit={(e) => {
             e.preventDefault();
@@ -294,12 +291,6 @@ export function ImageCommentCard({
             placeholder="Leave a reply…"
             value={reply}
             onChange={(e) => setReply(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                send();
-              }
-            }}
           />
           <SendButton
             type="submit"
