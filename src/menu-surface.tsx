@@ -188,6 +188,8 @@ export function Popover({
 /** `fit` sizes the surface to its content, like Linear's action menus. */
 /** `command` places Linear's command menu (RAJ-52 "Mark as"): centred, 110px from the top, no backdrop or padding. */
 /** `point` opens a right-click menu there (already offset by the caller), moved up or left to stay 10px inside the window (Linear, RAJ-52). */
+/** Unanchored, it sits 12vh from the top; `placement="third"` is Linear's DialogPresenter instead (`uo.show`, styles `jY`): spacers
+ *  growing 1 and 2 above and below put the dialog a third of the free height down, 16px inside the window at the least. */
 /** `gap` is the space under the anchor; `side="left"` opens beside it instead, top 5.5px above its top (Linear's label menu, RAJ-52); `align="end"` lines up the right edges (its reaction picker). */
 export function MenuSurface({
   label,
@@ -203,6 +205,7 @@ export function MenuSurface({
   align,
   command = false,
   point,
+  placement = "top",
 }: {
   label: string;
   children: ReactNode;
@@ -218,6 +221,7 @@ export function MenuSurface({
   point?: { x: number; y: number };
   align?: "end";
   command?: boolean;
+  placement?: "top" | "third";
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const { keys, opener } = usePopupFocus(ref, close, MENU_FOCUS);
@@ -281,6 +285,17 @@ export function MenuSurface({
           maxHeight,
         };
       }
+      if (placement === "third") {
+        const dw = Math.min(fit ? node.getBoundingClientRect().width : width, innerWidth - 32),
+          dh = Math.min(h, innerHeight - 32);
+        return {
+          position: "fixed",
+          width: fit ? undefined : dw,
+          left: (innerWidth - dw) / 2,
+          top: Math.max(16, (innerHeight - dh) / 3),
+          maxHeight: innerHeight - 32,
+        };
+      }
       return {
         position: "fixed",
         width: fit ? undefined : w,
@@ -289,7 +304,7 @@ export function MenuSurface({
         maxHeight: "80vh",
       };
     },
-    [anchorId, anchored, width, label, gap, rounding, side, align, command, point?.x, point?.y].join(),
+    [anchorId, anchored, width, label, gap, rounding, side, align, command, placement, point?.x, point?.y].join(),
   );
   return (
     <div

@@ -14,12 +14,18 @@ export const DIALOG = { WIDTH: 640, CONFIRM_WIDTH: 360 } as const;
 
 const DialogContext = createContext<{ close: () => void } | null>(null);
 
+type Placement = {
+  /** `top`: 12vh down (the default). `third`: Linear's DialogPresenter, a third of the free height down (see MenuSurface). */
+  placement?: "top" | "third";
+};
+
 function DialogRoot({
   label,
   close,
   width = DIALOG.WIDTH,
+  placement,
   children,
-}: {
+}: Placement & {
   /** The dialog's accessible name; usually its title text. */
   label: string;
   close: () => void;
@@ -28,7 +34,7 @@ function DialogRoot({
 }) {
   const context = useMemo(() => ({ close }), [close]);
   return (
-    <MenuSurface label={label} close={close} width={width}>
+    <MenuSurface label={label} close={close} width={width} placement={placement}>
       <DialogContext value={context}>{children}</DialogContext>
     </MenuSurface>
   );
@@ -64,9 +70,10 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel = "Cancel",
   tone = "dangerous",
+  placement,
   onConfirm,
   close,
-}: {
+}: Placement & {
   title: string;
   description: ReactNode;
   confirmLabel: string;
@@ -77,7 +84,7 @@ export function ConfirmDialog({
   close: () => void;
 }) {
   return (
-    <Dialog label={title} close={close} width={DIALOG.CONFIRM_WIDTH}>
+    <Dialog label={title} close={close} width={DIALOG.CONFIRM_WIDTH} placement={placement}>
       <Dialog.Title>{title}</Dialog.Title>
       <Dialog.Description>{description}</Dialog.Description>
       <Dialog.Footer>
