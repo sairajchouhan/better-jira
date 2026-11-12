@@ -183,6 +183,20 @@ test("creates, deletes, comments and links become Jira ops", () => {
       both,
     ),
   ).toEqual([]);
+  // BJ-15: a Jira link kind Linear lacks follows its ends: the outward side ("causes") sends its removal, the inward side
+  // ("is caused by") only when the other issue isn't loaded, so one removal deletes the one Jira link.
+  const caused = [{ key: "A-2", kind: "inward:Problem/Incident", label: "is caused by" }];
+  expect(opsFor({ issue: { ...base, relations: caused } }, { issue: base }, both)).toEqual([]);
+  expect(opsFor({ issue: { ...base, relations: caused } }, { issue: base }, new Map())).toEqual([
+    { op: "link", target: "A-2", kind: "inward:Problem/Incident", remove: true },
+  ]);
+  expect(
+    opsFor(
+      { issue: { ...base, key: "A-2", relations: [{ key: "A-1", kind: "outward:Problem/Incident" }] } },
+      { issue: { ...base, key: "A-2" } },
+      both,
+    ),
+  ).toEqual([{ op: "link", target: "A-1", kind: "outward:Problem/Incident", remove: true }]);
   const comment = (id: string, text: string, parentId?: string) => ({
     id,
     body: doc(text),

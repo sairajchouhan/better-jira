@@ -619,3 +619,34 @@ test("BJ-20: a replayed create whose description Jira rewrote past recognising k
   expect(result.created).toEqual({ "K-NEW34": "K-34" });
   expect(result.error).toContain(DESCRIPTION_CONFLICT);
 });
+
+test("BJ-15: removing a Jira link kind Linear lacks deletes that type's link from this issue's end, never a Relates link", async () => {
+  const issuelinks = [
+    { id: "501", type: { name: "Relates" }, inwardIssue: { key: "K-2" } },
+    { id: "502", type: { name: "Problem/Incident" }, outwardIssue: { key: "K-2" } },
+    { id: "503", type: { name: "Problem/Incident" }, inwardIssue: { key: "K-2" } },
+  ];
+  answer = (path) =>
+    path === "/rest/api/3/issueLinkType"
+      ? {
+          issueLinkTypes: [
+            { name: "Relates", inward: "relates to", outward: "relates to" },
+            { name: "Problem/Incident", inward: "is caused by", outward: "causes" },
+          ],
+        }
+      : path.endsWith("?fields=issuelinks")
+        ? { fields: { issuelinks } }
+        : {};
+  calls.length = 0;
+  // K-1 "is caused by" K-2: Jira lists K-2 as the link's inward issue on K-1.
+  await applyOps("K-1", [{ op: "link", target: "K-2", kind: "inward:Problem/Incident", remove: true }]);
+  expect(calls.filter((c) => c.startsWith("DELETE"))).toEqual(["DELETE /rest/api/3/issueLink/503"]);
+  calls.length = 0;
+  await applyOps("K-1", [{ op: "link", target: "K-2", kind: "outward:Problem/Incident", remove: true }]);
+  expect(calls.filter((c) => c.startsWith("DELETE"))).toEqual(["DELETE /rest/api/3/issueLink/502"]);
+  // A site without that link type refuses it rather than touching another type's link.
+  calls.length = 0;
+  const result = await applyOps("K-1", [{ op: "link", target: "K-2", kind: "inward:Cloners", remove: true }]);
+  expect(result.error).toContain("no link type");
+  expect(calls.filter((c) => c.startsWith("DELETE"))).toEqual([]);
+});

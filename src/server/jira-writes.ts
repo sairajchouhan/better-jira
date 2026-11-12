@@ -2,6 +2,7 @@ import { jira, JiraError } from "./jira";
 import { ESTIMATES, ledger, refresh } from "./mirror";
 import { DESCRIPTION_CONFLICT, renameCommentIds, type Op } from "@/shared/jira-ops";
 import { adfToText } from "@/shared/document";
+import { inwardKind, jiraLinkType, LINEAR_TYPES } from "@/shared/relations";
 
 const at = (key: string) => `/rest/api/3/issue/${encodeURIComponent(key)}`;
 
@@ -30,8 +31,8 @@ function fieldPayload(fields: Fields) {
 export class UserError extends Error {}
 
 let linkTypes: Promise<{ name: string; inward: string; outward: string }[]> | undefined;
-/** Jira's link type for an app relation kind. */
-async function linkType(kind: string) {
+/** Jira's link type for an app relation kind; a type missing from the cached list is looked up once more. */
+async function linkType(kind: string, fresh = false): Promise<{ name: string; inward: string; outward: string }> {
   const types = await (linkTypes ??= jira<{ issueLinkTypes: any[] }>(
     "/rest/api/3/issueLinkType",
   ).then(
@@ -41,14 +42,20 @@ async function linkType(kind: string) {
       throw e;
     },
   ));
-  const pattern = /block/.test(kind) ? /block/i : /duplicat/.test(kind) ? /duplicat/i : /relat/i;
-  const type = types.find((t) => pattern.test(t.name));
+  // A Jira link type Linear has no kind for is named in the kind itself; Linear's kinds use the site's matching type.
+  const named = jiraLinkType(kind),
+    linear = LINEAR_TYPES.find((t) => t.outward === kind || t.inward === kind) ?? LINEAR_TYPES[2];
+  const type = types.find((t) => (named ? t.name === named : linear.pattern.test(t.name)));
+  if (!type && !fresh) {
+    linkTypes = undefined;
+    return linkType(kind, true);
+  }
   if (!type) throw new UserError(`This Jira site has no link type for "${kind}".`);
   return type;
 }
 /** `from` blocks/duplicates/relates to `to`: Jira shows the outward description on the inward issue's side. */
 const linkEnds = (key: string, target: string, kind: string) =>
-  kind === "blocked" || kind === "duplicated"
+  inwardKind(kind)
     ? { outward: target, inward: key }
     : { outward: key, inward: target };
 

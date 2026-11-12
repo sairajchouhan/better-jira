@@ -1,6 +1,6 @@
 import { type Full, type Issue, type CommentState } from "@/shared/issue-model";
 import { adfToText, textToAdf, type AdfDocument } from "./document";
-
+import { inwardKind, outwardKind } from "./relations";
 import type { IssueComment } from "@/client/features/comments/comment-thread";
 
 /** `labels` sets the whole list (create); `labelEdits` adds and removes single labels so others' labels survive. */
@@ -108,8 +108,8 @@ function fieldChanges(a: Issue, b: Issue): Fields {
 const relationId = (r: { key: string; kind: string }) => `${r.kind} ${r.key}`;
 /** relate() edits both issues; only one side sends the Jira link. */
 function sendsLink(key: string, r: { key: string; kind: string }, issues: Map<string, Issue>) {
-  if (r.kind === "blocking" || r.kind === "duplicate") return true;
-  if (r.kind === "blocked" || r.kind === "duplicated") return !issues.has(r.key);
+  if (outwardKind(r.kind)) return true;
+  if (inwardKind(r.kind)) return !issues.has(r.key);
   return key < r.key || !issues.has(r.key);
 }
 function linkOps(
