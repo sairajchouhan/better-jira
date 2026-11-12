@@ -9,6 +9,7 @@ import { MENU_POPUP, usePlacement } from "./menu-surface";
 import { StatusIcon } from "./icons";
 import { CaretPeek, groupStep } from "./caret-peek";
 import { IssuePeek } from "./issue-peek";
+import type { Keys } from "./keycap";
 import { get, statusOf, type Issue, type User } from "./store";
 import { queryClient } from "./server-data";
 
@@ -62,7 +63,7 @@ export type CaretMenuItem = {
   id: string;
   label: ReactNode;
   icon?: ReactNode;
-  shortcut?: string;
+  shortcut?: Keys;
   pick: () => void;
   group?: string;
   peek?: ReactNode;

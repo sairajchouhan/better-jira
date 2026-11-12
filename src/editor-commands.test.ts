@@ -10,8 +10,6 @@ import {
   insertTable,
   linkTarget,
   markdownRules,
-  duplicateBlock,
-  deleteBlock,
   issueFromText,
   referenceSelection,
   toggleExpand,
@@ -454,19 +452,6 @@ test("R2-D8: near the viewport's bottom the selection toolbar goes above the sel
   expect(place.left).toBe(880);
 });
 
-test("BJ-67: `***` or `---` then Space puts a divider above the caret's paragraph", () => {
-  for (const marker of ["***", "---"]) {
-    const after = typeInto(empty(), `${marker} next`);
-    expect(after.doc.childCount).toBe(2);
-    expect(after.doc.firstChild!.type.name).toBe("rule");
-    expect(after.doc.lastChild!.textContent).toBe("next");
-    expect(fromEditorDocument(after.doc).content![0]).toEqual({ type: "rule" });
-  }
-  // Inside a list item, where Jira allows no rule, the text stays.
-  const list = typeInto(empty(), "- --- ");
-  expect(list.doc.textContent).toBe("--- ");
-});
-
 test("BJ-66: `|--` starts a table, taking a Markdown header row typed just above", () => {
   const plain = typeInto(empty(), "|--x");
   expect(plain.doc.firstChild!.type.name).toBe("table");
@@ -593,21 +578,4 @@ test("BJ-69: the created issue replaces the text it was made from with a referen
     attrs: { url: "https://x.test/browse/KAN-12" },
   });
   expect(referenceSelection(before, { from: 5, to: 14, text: "the logon" }, "https://x.test/browse/KAN-12")).toBeNull();
-});
-
-test("BJ-56: the block menu's Duplicate and Delete act on the selected block, or its list item", () => {
-  const apply = (s0: EditorState, command: Command) => {
-    let next = s0;
-    expect(command(s0, (tr) => (next = s0.apply(tr)))).toBe(true);
-    return next;
-  };
-  const texts = (doc: EditorNode) => doc.content.content.map((b) => b.textContent);
-  expect(texts(apply(state([p("a"), p("b")], "a"), duplicateBlock).doc)).toEqual(["a", "a", "b"]);
-  expect(texts(apply(state([p("a"), p("b")], "a"), deleteBlock).doc)).toEqual(["b"]);
-  expect(texts(apply(state([p("a")], "a"), deleteBlock).doc)).toEqual([""]);
-  const list = apply(state([bullets("one", "two")], "two"), duplicateBlock);
-  expect(list.doc.firstChild!.childCount).toBe(3);
-  const removed = apply(state([bullets("one", "two")], "two"), deleteBlock);
-  expect(removed.doc.firstChild!.textContent).toBe("one");
-  expect(jiraErrors(fromEditorDocument(removed.doc))).toEqual([]);
 });

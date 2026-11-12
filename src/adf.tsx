@@ -13,15 +13,18 @@ export function Adf({
   node,
   issueKey,
   attachments,
+  onTask,
 }: {
   node: any;
   issueKey?: string;
   attachments?: Attachment[];
+  /** Ticks or unticks a checklist item (the node itself); without it the checkboxes are read-only. */
+  onTask?: (task: any) => void;
 }): ReactNode {
   if (!node) return null;
   if (typeof node === "string") return <div className="whitespace-pre-wrap">{node}</div>;
   const kids = node.content?.map((c: any, i: number) => (
-    <Adf key={i} node={c} issueKey={issueKey} attachments={attachments} />
+    <Adf key={i} node={c} issueKey={issueKey} attachments={attachments} onTask={onTask} />
   ));
   const a = node.attrs ?? {};
   switch (node.type) {
@@ -49,11 +52,28 @@ export function Adf({
       return (
         <ol start={Number(a.order) || 1}>{kids}</ol>
       );
+    // The editor's checklist markup (editor-checklist.ts), so both look the same.
     case "taskList":
       return <ul data-task-list="true">{kids}</ul>;
     case "taskItem":
       return (
-        <li data-task-state={a.state === "DONE" ? "DONE" : "TODO"}>{kids}</li>
+        <li data-task-state={a.state} data-done={String(a.state === "DONE")}>
+          <div className="todo-checkbox-container">
+            <div
+              className="todo-checkbox"
+              role="checkbox"
+              aria-label="Checklist item"
+              aria-checked={a.state === "DONE"}
+              aria-disabled={!onTask || undefined}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={(event) => {
+                event.stopPropagation();
+                onTask?.(node);
+              }}
+            />
+          </div>
+          <div className="todo-content">{kids}</div>
+        </li>
       );
     case "listItem":
       return <li>{kids}</li>;
@@ -246,6 +266,14 @@ function mark(inner: ReactNode, m: any): ReactNode {
     default:
       return inner;
   }
+}
+
+/** The document with one checklist item (found by identity) ticked or unticked; everything else is shared, untouched. */
+export function withTaskToggled(node: any, task: any): any {
+  if (node === task) return { ...node, attrs: { ...node.attrs, state: node.attrs?.state === "DONE" ? "TODO" : "DONE" } };
+  if (!node?.content) return node;
+  const content = node.content.map((child: any) => withTaskToggled(child, task));
+  return content.some((child: any, i: number) => child !== node.content[i]) ? { ...node, content } : node;
 }
 
 /** Text projection for search and previews. Rich editing retains the original document. */

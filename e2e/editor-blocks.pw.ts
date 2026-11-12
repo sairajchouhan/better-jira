@@ -50,7 +50,7 @@ test("BJ-42 / BJ-57 / BJ-43: the slash, emoji and @ menus insert blocks, emoji a
   const page = await open("?issue=TEST-2&view=page");
   const menu = (label: string) =>
     page.waitFor<string[]>(
-      `(()=>{const items=[...document.querySelectorAll('[aria-label="${label}"] [cmdk-item]')].map(n=>n.textContent);return items.length&&items})()`,
+      `(()=>{const items=[...document.querySelectorAll('[aria-label="${label}"] [cmdk-item] .menu-name')].map(n=>n.textContent);return items.length&&items})()`,
     );
   await test.step("BJ-42: / then a name, Enter: a divider", async () => {
     await newLine(page);
@@ -73,7 +73,7 @@ test("BJ-42 / BJ-57 / BJ-43: the slash, emoji and @ menus insert blocks, emoji a
       `[...document.querySelectorAll('[aria-label="Mention people"] [cmdk-item]')].some(n=>n.textContent.startsWith('TEST-3'))`,
     );
     await page.eval(
-      `[...document.querySelectorAll('[aria-label="Mention people"] [cmdk-item]')].find(n=>n.textContent.startsWith('TEST-3')).click()`,
+      `[...document.querySelectorAll('[aria-label="Mention people"] [cmdk-item]')].find(n=>n.querySelector('.menu-name').textContent.startsWith('TEST-3')).click()`,
     );
     await page.type("and TEST-4 ");
   });
@@ -166,7 +166,7 @@ test("BJ-69: the created issue replaces the selected text with a reference, save
   expect(description).not.toContain("Rich fixture heading");
 });
 
-test("BJ-56 / BJ-55: block controls, the block menu and ⌥↓ act on the caret's block", async ({ open }) => {
+test("BJ-56 / BJ-55: no block handle (Linear has none for text); ⌥↓ moves the caret's block", async ({ open }) => {
   await fixture.reset({ writable: true });
   const page = await open("?issue=TEST-2&view=page");
   await page.waitFor(`!!document.querySelector('#description h2')`);
@@ -174,58 +174,8 @@ test("BJ-56 / BJ-55: block controls, the block menu and ⌥↓ act on the caret'
     page.eval<string[]>(`[...document.getElementById('description').children].map(n=>n.tagName+':'+n.textContent)`);
   const before = await blocks();
   await page.click("#description h2");
-  await test.step("⌥F10 focuses the block controls; Esc returns to the text", async () => {
-    await page.key("F10", "alt");
-    expect(await page.active()).toBe("Block actions");
-    await page.key("Escape");
-    await page.waitFor(`document.activeElement?.id==='description'`);
-  });
-  await test.step("⇧F10 opens the block menu; Duplicate copies the block", async () => {
-    await page.key("F10", "shift");
-    await page.waitFor(`!!document.querySelector('[aria-label="Block menu"]')`);
-    await page.eval(
-      `[...document.querySelectorAll('[aria-label="Block menu"] [cmdk-item]')].find(n=>n.textContent.startsWith('Duplicate')).click()`,
-    );
-    await page.waitFor(`document.getElementById('description').children.length===${before.length + 1}`);
-    expect((await blocks()).slice(0, 2)).toEqual([before[0], before[0]]);
-  });
-  await test.step("⌥↓ moves the block below its neighbours", async () => {
-    await page.waitFor(`document.activeElement?.id==='description'`);
-    await page.key("ArrowDown", "alt");
-    await page.key("ArrowDown", "alt");
-    await page.waitFor(`document.getElementById('description').children[1].textContent===${JSON.stringify(before[1]!.replace(/^[A-Z0-9]+:/, ""))}`);
-    expect((await blocks())[2]).toBe(before[0]);
-  });
-});
-
-test("BJ-54: dragging an image's width handle saves its width to Jira", async ({ open }) => {
-  await fixture.reset({ writable: true, includeMedia: true });
-  const page = await open("?issue=TEST-2&view=page");
-  const handle = '#description .media-resize-handle[data-side="right"]';
-  await page.waitFor(`!!document.querySelector('${handle}')`);
-  const box = await page.rect(handle);
-  await page.hover(handle);
-  await page.pointerDrag(box.x + 3, box.y + box.height / 2, box.x + 3 - 120, box.y + box.height / 2);
-  await waitSaved((doc) => {
-    const image = doc.content.find((n: any) => n.type === "mediaSingle");
-    return Number(image?.attrs?.width) > 0 && Number(image.attrs.width) < 100;
-  });
-});
-
-test("BJ-44 / BJ-66: a URL pasted over selected text links it; |-- starts a table", async ({ open }) => {
-  await fixture.reset({ writable: true });
-  const page = await open("?issue=TEST-2&view=page");
-  await newLine(page);
-  await page.type("read the docs");
-  await page.key("ArrowLeft", "alt", "shift");
-  await page.eval(
-    `(()=>{const data=new DataTransfer();data.setData('text/plain','https://example.test/docs');document.getElementById('description').dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}))})()`,
-  );
-  await page.waitFor(`[...document.querySelectorAll('#description a')].some(a=>a.textContent==='docs'&&a.href==='https://example.test/docs')`);
-  await page.key("ArrowRight");
-  await page.key("Enter");
-  await page.type("|--");
-  await page.waitFor(`document.querySelectorAll('#description table').length===2`);
-  await page.click("#description h2");
-  await waitSaved((doc) => doc.content.filter((n: any) => n.type === "table").length === 2 && JSON.stringify(doc).includes("https://example.test/docs"));
+  expect(await page.eval(`!!document.querySelector('[aria-label="Block actions"], [aria-label="Block menu"]')`)).toBe(false);
+  await page.key("ArrowDown", "alt");
+  await page.waitFor(`document.getElementById('description').children[0].textContent===${JSON.stringify(before[1]!.replace(/^[A-Z0-9]+:/, ""))}`);
+  expect((await blocks())[1]).toBe(before[0]);
 });

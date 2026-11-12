@@ -130,7 +130,7 @@ export function startNavigation() {
   navigationReady = true;
   showAddress(true);
   window.addEventListener("popstate", restoreNavigation);
-  document.addEventListener("click", openIssueLink);
+  window.addEventListener("click", openIssueLink);
   // A rename (here or in another tab) moves the slug; the id suffix keeps the entry.
   let shown = get().savedViews;
   subscribe(() => {

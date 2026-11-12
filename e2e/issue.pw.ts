@@ -44,7 +44,7 @@ test("issue page editing: description autosave, code block Tab, toolbar rows, co
     await page.waitFor(`${toolbar}>0`);
     const before = await page.eval<number>(toolbar);
     await select("#description td");
-    await page.waitFor(`!!document.querySelector('[aria-label="Add table row"]')`);
+    await page.waitFor(`${toolbar}>0`);
     expect(await page.eval<number>(toolbar)).toBe(before);
     expect(before).toBeLessThan(40);
   });

@@ -20,38 +20,35 @@ test("the full-page description editor: toolbar state, tables, drops, rendering 
   open,
 }) => {
   const page = await open("?issue=TEST-2&view=page");
-  await test.step("R1-D81: the toolbar shows the block the selection is in as pressed", async () => {
-    await page.click("#description pre");
+  await test.step("R1-D81: the toolbar's style and list menus name the block the selection is in", async () => {
+    const shows = (label: string) => page.eval(`document.querySelector('[aria-label="${label}"]')?.textContent`);
+    await page.click("#description h2");
     await page.key("End");
     await page.key("ArrowLeft", "shift");
-    const pressed = (label: string) =>
-      page.eval(`document.querySelector('[aria-label="${label}"]')?.getAttribute('aria-pressed')`);
-    await page.waitFor(`!!document.querySelector('[aria-label="Code block"]')`);
-    expect(await pressed("Code block")).toBe("true");
-    expect(await pressed("Text")).toBe("false");
+    await page.waitFor(`!!document.querySelector('[aria-label="Text style"]')`);
+    expect(await shows("Text style")).toBe("Heading 2");
     // Collapse the selection so the toolbar (over the list since BJ-176's 22px rhythm) closes before the click.
     await page.key("ArrowRight");
     await page.click("#description li p");
     await page.key("End");
     await page.key("ArrowLeft", "shift");
-    await page.waitFor(`!!document.querySelector('[aria-label="Bulleted list"]')`);
-    expect(await pressed("Bulleted list")).toBe("true");
-    expect(await pressed("Text")).toBe("true");
+    await page.waitFor(`document.querySelector('[aria-label="Text style"]')?.disabled===true`);
+    await page.click('[aria-label="List"]');
+    expect(
+      await page.eval(`[...document.querySelectorAll('[aria-label="List"] [cmdk-item] .menu-name')].map(n=>n.textContent)`),
+    ).toEqual(expect.arrayContaining(["List", "Numbered list", "Checklist"]));
+    await page.key("Escape");
   });
-  await test.step("R1-D12: after Insert table the selection toolbar no longer covers the new table", async () => {
-    // The paragraph is all link, and a selection inside a link shows the link editor (BJ-179): select on into the next block.
+  await test.step("R1-D12: after the slash Table the selection toolbar does not cover the new table", async () => {
     await page.click("#description p");
     await page.key("End");
-    await page.key("ArrowRight", "shift");
-    await page.click('[aria-label="Insert table"]');
+    await page.key("Enter");
+    await page.type("/table");
+    await page.key("Enter");
     await page.waitFor(`document.querySelectorAll('#description table').length===2`);
-    await sleep(100); // the toolbar must not come back in this window
-    expect(
-      await page.eval(`!!document.querySelector('[aria-label="Description formatting"]')`),
-    ).toBe(false);
-    expect(await page.eval(`document.querySelector('#description p').textContent`)).toBe(
-      "Formatted fixture",
-    );
+    await sleep(100);
+    expect(await page.eval(`!!document.querySelector('[aria-label="Description formatting"]')`)).toBe(false);
+    expect(await page.eval(`document.querySelector('#description p').textContent`)).toBe("Formatted fixture");
   });
   await test.step("R1-D20: a file dropped at a block's start goes before it, leaving no empty block", async () => {
     await page.eval(
@@ -79,9 +76,7 @@ test("the full-page description editor: toolbar state, tables, drops, rendering 
       expect(await p.eval(`document.querySelector('${toolbar}').getAttribute('aria-label')`)).toBe(
         "Comment formatting",
       );
-      expect(
-        await p.eval(`!!document.querySelector('${toolbar} [aria-label="Undo comment edit"]')`),
-      ).toBe(true);
+      expect(await p.eval(`!!document.querySelector('${toolbar} [aria-label="Bold"]')`)).toBe(true);
       expect(
         await p.eval(
           `(()=>{const b=document.querySelector('.rich-editor:has(#comment) [aria-label="Attach images, files, or videos"]'),r=b.getBoundingClientRect();return b.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))})()`,
