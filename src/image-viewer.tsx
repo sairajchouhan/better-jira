@@ -1,4 +1,3 @@
-/* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys";
@@ -39,11 +38,9 @@ export function ImageViewer({
     [zoomed, setZoomed] = useState(false),
     [pan, setPan] = useState({ x: 0, y: 0 }),
     [notice, setNotice] = useState(""),
-    [failed, setFailed] = useState(false);
-  useEffect(() => {
-    setFailed(false);
-    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- A new image URL resets a previous load failure.
-  }, [file.url]);
+    // A failure belongs to the URL that failed, so a new image URL shows again without a reset.
+    [failedURL, setFailedURL] = useState<string>(),
+    failed = failedURL === file.url;
   const fit = size.width
       ? Math.min(
           (viewport.width - 16) / (2 * size.width),
@@ -242,7 +239,7 @@ export function ImageViewer({
                 height: event.currentTarget.naturalHeight,
               })
             }
-            onError={() => setFailed(true)}
+            onError={() => setFailedURL(file.url)}
             style={{
               width: size.width ? size.width * scale : undefined,
               height: size.height ? size.height * scale : undefined,

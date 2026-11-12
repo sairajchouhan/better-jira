@@ -1,4 +1,3 @@
-/* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { useEffect, useMemo, useState } from "react";
 import type { MediaProps } from "./media-loader";
 import type { Attachment } from "./attachment-media";
@@ -52,7 +51,6 @@ export function MediaRenderer({ node, issueKey, attachments, embedded, onSelect 
 }
 function MediaFile({ node, issueKey, attachments, onSelect }: MediaProps) {
   const id = String(node.attrs?.id ?? ""),
-    inline = node.type === "mediaInline",
     external = node.attrs?.type === "external";
   const externalURL = external ? safeExternalImage(node.attrs?.url) : undefined;
   useEffect(() => {
@@ -75,25 +73,49 @@ function MediaFile({ node, issueKey, attachments, onSelect }: MediaProps) {
         : attachments?.find((file) => file.id === id || file.mediaId === id),
     [externalURL, node.attrs?.alt, attachments, id],
   );
+  const [attempt, retry] = useState(0);
+  // A new file or a retry starts over with fresh state; a replaced mirror object with the same URL does not.
+  return (
+    <LoadedMedia
+      key={`${issueKey}:${id}:${local?.url}:${external}:${attempt}`}
+      node={node}
+      issueKey={issueKey}
+      onSelect={onSelect}
+      local={local}
+      externalURL={externalURL}
+      retry={() => retry((n) => n + 1)}
+    />
+  );
+}
+function LoadedMedia({
+  node,
+  issueKey,
+  onSelect,
+  local,
+  externalURL,
+  retry,
+}: Omit<MediaProps, "attachments" | "embedded"> & {
+  local: Attachment | undefined;
+  externalURL: string | undefined;
+  retry: () => void;
+}) {
+  const id = String(node.attrs?.id ?? ""),
+    inline = node.type === "mediaInline",
+    external = node.attrs?.type === "external";
   const [remote, setRemote] = useState<Attachment>(),
-    [error, setError] = useState("");
-  const [attempt, retry] = useState(0),
+    [error, setError] = useState(() =>
+      local
+        ? ""
+        : external
+          ? "External images require an HTTPS URL"
+          : !issueKey || !id
+            ? "Attachment unavailable"
+            : "",
+    ),
     [failed, setFailed] = useState(false),
     [intrinsic, setIntrinsic] = useState<{ width: number; height: number }>();
   useEffect(() => {
-    setRemote(undefined);
-    setError("");
-    setFailed(false);
-    setIntrinsic(undefined);
-    if (local) return;
-    if (external) {
-      setError("External images require an HTTPS URL");
-      return;
-    }
-    if (!issueKey || !id) {
-      setError("Attachment unavailable");
-      return;
-    }
+    if (local || external || !issueKey || !id) return;
     const abort = new AbortController();
     void fetch(`/api/issues/${encodeURIComponent(issueKey)}/media/${encodeURIComponent(id)}`, {
       signal: abort.signal,
@@ -115,17 +137,13 @@ function MediaFile({ node, issueKey, attachments, onSelect }: MediaProps) {
           setError(reason instanceof Error ? reason.message : "Could not load attachment");
       });
     return () => abort.abort();
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Only a changed local URL should restart the request, not mirror object replacements.
-  }, [id, issueKey, local?.url, attempt, external]);
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- The key remounts this for a new file or retry; mirror object replacements must not refetch.
+  }, []);
   const file = local ?? remote,
     size = intrinsic ?? mediaDimensions(node),
     Wrapper = inline ? "span" : "div",
     Status = inline ? "span" : "div";
   const reserved = !inline && size ? { aspectRatio: `${size.width}/${size.height}` } : undefined;
-  const reset = () => {
-    setFailed(false);
-    retry((n) => n + 1);
-  };
   return (
     <Wrapper
       contentEditable={false}
@@ -151,7 +169,7 @@ function MediaFile({ node, issueKey, attachments, onSelect }: MediaProps) {
             (file?.missing
               ? "This local file is unavailable"
               : "Could not display this attachment")}{" "}
-          <button className="ml-2 text-fg-2 hover:text-fg" onClick={reset}>
+          <button className="ml-2 text-fg-2 hover:text-fg" onClick={retry}>
             Retry attachment
           </button>
           {file && !file.missing && (
@@ -187,7 +205,7 @@ function MediaFile({ node, issueKey, attachments, onSelect }: MediaProps) {
         <VideoPlayer key={file.url} file={file} onSize={setIntrinsic} onSelect={onSelect} />
       ) : external || /^image\/(png|jpeg|gif|webp|avif|bmp)$/.test(file.type) ? (
         <ImageMedia
-          key={`${file.url}:${attempt}`}
+          key={file.url}
           file={file}
           external={external}
           issueKey={issueKey}
@@ -197,7 +215,7 @@ function MediaFile({ node, issueKey, attachments, onSelect }: MediaProps) {
         />
       ) : file.type.startsWith("audio/") ? (
         <audio
-          key={`${file.url}:${attempt}`}
+          key={file.url}
           data-attachment-id={file.id}
           aria-label={file.name}
           src={file.url}
