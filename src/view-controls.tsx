@@ -18,7 +18,8 @@ import {
 import { MenuSurface, MENU_POPUP as POPUP, Popover } from "./menu-surface";
 import { filterChoices, PropertyFilter, ValueRow } from "./property-filter";
 import { Menu } from "./menu";
-import { PillSelect } from "./pill-select";
+import { Select } from "./select";
+import { Switch } from "./switch";
 import { Icon } from "./icons";
 import { Button, IconButton, type ButtonSize, type ButtonVariant } from "./button";
 import { SegmentedControl } from "./segmented-control";
@@ -211,8 +212,8 @@ export function BoardControls({ board }: { board: Board }) {
   );
 }
 
-/** A display-options row: label on the left, a pill select on the right (Linear's Display menu). */
-export function Select({
+/** A display-options row: label on the left, Linear's compact Select on the right (Linear's Display menu). */
+export function SelectRow({
   label,
   value,
   options,
@@ -230,19 +231,18 @@ export function Select({
       <Text variant="mini" color="muted">{label}</Text>
       <span className="flex w-[170px] items-center gap-2">
         {children}
-        {/* PillSelect (P0's file) owns its trigger's look; this keeps the display menu's compact size until it renders a Button. */}
-        <PillSelect
-          label={label}
-          value={value}
-          options={options}
-          onChange={onChange}
-          className="flex h-6 min-w-0 flex-1 items-center rounded-md border border-line-2 bg-tab px-2 text-left text-[12px] text-fg-2 hover:bg-hover"
-        />
+        <Select label={label} size="compact" value={value} onValueChange={onChange} className="min-w-0 flex-1">
+          {options.map(([v, l]) => (
+            <Select.Option key={v} value={v}>
+              {l}
+            </Select.Option>
+          ))}
+        </Select>
       </span>
     </div>
   );
 }
-/** A display-options row: label on the left, a switch on the right. No Switch primitive exists yet, so the input keeps `view-toggle`. */
+/** A display-options row: label on the left, a small Switch on the right. */
 export function Toggle({
   label,
   value,
@@ -255,14 +255,7 @@ export function Toggle({
   return (
     <label className="flex min-h-8 cursor-default items-center justify-between gap-4">
       <Text variant="mini" color="muted">{label}</Text>
-      <input
-        type="checkbox"
-        role="switch"
-        aria-label={label}
-        checked={value}
-        onChange={onChange}
-        className="view-toggle"
-      />
+      <Switch size="small" aria-label={label} checked={value} onChange={onChange} />
     </label>
   );
 }
@@ -287,16 +280,14 @@ function DisplayMenu({ board }: { board: Board }) {
         className="mb-4"
       >
         {(["list", "board"] as const).map((layout) => (
-          // ponytail: gap is layout inside the segment until SegmentedControl spaces an icon from its label (Q8).
-          // tabIndex 0 keeps both segments tabbable: MenuSurface's Tab trap counts tabindex=-1 buttons as its ends, so a
-          // roving stop lets Shift+Tab escape the popup. Drop it once that trap skips tabindex=-1 (follow-up).
-          <SegmentedControl.Segment key={layout} value={layout} tabIndex={0} className="gap-1.5">
+          // `J4` sets no icon/label gap and no bundle trigger pairs them, so the gap stays layout at the call site.
+          <SegmentedControl.Segment key={layout} value={layout} className="gap-1.5">
             <Icon name={layout} />
             {layout === "list" ? "List" : "Board"}
           </SegmentedControl.Segment>
         ))}
       </SegmentedControl>
-      <Select
+      <SelectRow
         label={d.layout === "board" ? "Columns" : "Grouping"}
         value={d.columns}
         options={GROUPINGS.filter(([v]) => d.layout === "list" || v !== "none")}
@@ -312,14 +303,14 @@ function DisplayMenu({ board }: { board: Board }) {
         >
           <Icon name={d.groupDescending ? "down" : "up"} />
         </IconButton>
-      </Select>
-      <Select
+      </SelectRow>
+      <SelectRow
         label={d.layout === "board" ? "Rows" : "Sub-grouping"}
         value={d.rows}
         options={GROUPINGS.filter(([v]) => v === "none" || v !== d.columns)}
         onChange={(v) => patch({ rows: v as Display["rows"] })}
       />
-      <Select
+      <SelectRow
         label="Ordering"
         value={d.ordering}
         options={ORDERINGS}
@@ -335,7 +326,7 @@ function DisplayMenu({ board }: { board: Board }) {
         >
           <Icon name={d.descending ? "down" : "up"} />
         </IconButton>
-      </Select>
+      </SelectRow>
       <Toggle
         label="Order completed by recency"
         value={d.completedRecency}
@@ -352,7 +343,7 @@ function DisplayMenu({ board }: { board: Board }) {
         {d.layout === "board" ? "Board" : "List"} options
       </Text>
       {d.layout === "list" && (
-        <Select
+        <SelectRow
           label="Nested sub-issues"
           value={d.nested}
           options={[
@@ -392,7 +383,7 @@ function DisplayMenu({ board }: { board: Board }) {
       </div>
       <PropertySyncNotice />
       <div className="my-3 border-t border-line-2" />
-      <Select
+      <SelectRow
         label="Open issues in"
         value={d.openIn}
         options={[

@@ -477,36 +477,6 @@
 .view-select:focus-visible {
   border-color: var(--accent);
 }
-.view-toggle {
-  appearance: none;
-  width: 22px;
-  height: 13px;
-  border-radius: 20px;
-  background: var(--fg-4);
-  cursor: default;
-  position: relative;
-  flex-shrink: 0;
-}
-.view-toggle::after {
-  content: "";
-  width: 9px;
-  height: 9px;
-  background: white;
-  border-radius: 50%;
-  position: absolute;
-  left: 2px;
-  top: 2px;
-}
-.view-toggle:checked {
-  background: var(--accent);
-}
-.view-toggle:checked::after {
-  left: 11px;
-}
-.view-toggle:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-}
 
 .rich-content {
   min-height: 120px;
@@ -651,6 +621,7 @@
   flex: 0 0 180px;
   width: 180px;
 }
+
 .rich-content {
   display: flow-root;
 }

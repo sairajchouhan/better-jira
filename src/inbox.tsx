@@ -48,7 +48,7 @@ import {
 
 import { createInboxStore, type Category } from "./inbox-store";
 import { readStored, writeStored } from "./stored-state";
-import { Select, Toggle } from "./view-controls";
+import { SelectRow, Toggle } from "./view-controls";
 const storageKey = (name: string) =>
   `better-jira:inbox-${name}:v1:${get().namespace}`;
 const statusOf = (key: string) => {
@@ -495,8 +495,7 @@ function SnoozeMenu({ close }: { close: () => void }) {
   );
 }
 
-/** Linear keeps display controls in their own panel, separate from notification action menus.
- * Toggle/Select already own their control geometry; the primitive contract has no switch replacement. */
+/** Linear keeps display controls in their own panel, separate from notification action menus. */
 function InboxDisplayOptions({ close }: { close: () => void }) {
   const v = useView();
   return (
@@ -511,7 +510,7 @@ function InboxDisplayOptions({ close }: { close: () => void }) {
         value={v.priorityInbox}
         onChange={() => changeView({ priorityInbox: !v.priorityInbox })}
       />
-      <Select
+      <SelectRow
         label="Group unreads by"
         value={v.grouping}
         options={[
@@ -522,7 +521,7 @@ function InboxDisplayOptions({ close }: { close: () => void }) {
           changeView({ grouping: value as InboxView["grouping"] })
         }
       />
-      <Select
+      <SelectRow
         label="Ordering"
         value={v.ordering}
         options={[
