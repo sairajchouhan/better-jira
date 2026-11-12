@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { MediaView } from "./media-loader";
 import type { Attachment } from "./attachment-media";
-import { jiraDate, safeLink } from "./document";
+import { cardText, jiraDate, safeLink } from "./document";
 export { adfToText } from "./document";
 
 /** Renders Jira's ADF (Atlassian Document Format). Unknown nodes fall through to their children. */
@@ -98,7 +98,7 @@ export function Adf({
           target="_blank"
           rel="noreferrer"
         >
-          {a.url}
+          {cardText(a.url)}
         </a>
       );
     case "table":

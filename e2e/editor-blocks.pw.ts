@@ -44,3 +44,51 @@ test("BJ-68: a collapsible section from >>> saves as Jira's expand with its titl
   await page.waitFor(`document.querySelector('#description .rich-expand')?.dataset.open==='true'`);
   expect(await page.eval(`document.querySelector('[aria-label="Collapsible section title"]').value`)).toBe("Details");
 });
+
+test("BJ-42 / BJ-57 / BJ-43: the slash, emoji and @ menus insert blocks, emoji and issue references", async ({ open }) => {
+  await fixture.reset({ writable: true });
+  const page = await open("?issue=TEST-2&view=page");
+  const menu = (label: string) =>
+    page.waitFor<string[]>(
+      `(()=>{const items=[...document.querySelectorAll('[aria-label="${label}"] [cmdk-item]')].map(n=>n.textContent);return items.length&&items})()`,
+    );
+  await test.step("BJ-42: / then a name, Enter: a divider", async () => {
+    await newLine(page);
+    await page.type("/");
+    expect(await menu("Insert block")).toContain("Collapsible section");
+    await page.type("divi");
+    expect(await menu("Insert block")).toEqual(["Divider"]);
+    await page.key("Enter");
+    await page.waitFor(`!document.querySelector('[aria-label="Insert block"]')`);
+    expect(await page.eval(`document.getElementById('description').textContent.includes('/divi')`)).toBe(false);
+  });
+  await test.step("BJ-57: :tad then Enter inserts 🎉", async () => {
+    await page.type("Shipped :tad");
+    expect((await menu("Insert emoji"))[0]).toContain(":tada:");
+    await page.key("Enter");
+  });
+  await test.step("BJ-43: @ an issue key picks the issue; a typed key becomes a reference too", async () => {
+    await page.type(" see @TEST-3");
+    await page.waitFor(
+      `[...document.querySelectorAll('[aria-label="Mention people"] [cmdk-item]')].some(n=>n.textContent.startsWith('TEST-3'))`,
+    );
+    await page.eval(
+      `[...document.querySelectorAll('[aria-label="Mention people"] [cmdk-item]')].find(n=>n.textContent.startsWith('TEST-3')).click()`,
+    );
+    await page.type("and TEST-4 ");
+  });
+  await page.click("#description h2");
+  await waitSaved((doc) => {
+    const json = JSON.stringify(doc);
+    return (
+      doc.content.some((n: any) => n.type === "rule") &&
+      json.includes('"shortName":":tada:"') &&
+      json.includes("/browse/TEST-3") &&
+      json.includes("/browse/TEST-4")
+    );
+  });
+  expect(await page.eval(`[...document.querySelectorAll('#description a.rich-token')].map(n=>n.textContent)`)).toEqual([
+    "TEST-3",
+    "TEST-4",
+  ]);
+});

@@ -231,6 +231,23 @@ export const toggleExpand: Command = (state, dispatch) => {
   return true;
 };
 
+/** A divider above the caret's paragraph, where Jira allows one (not in a list item). */
+function ruleAbove(tr: Transaction) {
+  const { $from } = tr.selection,
+    rule = richSchema.nodes.rule!,
+    index = $from.index(-1);
+  if ($from.parent.type !== richSchema.nodes.paragraph || !$from.node(-1).canReplaceWith(index, index, rule))
+    return false;
+  tr.insert($from.before(), rule.create());
+  return true;
+}
+export const insertRule: Command = (state, dispatch) => {
+  const tr = state.tr;
+  if (!ruleAbove(tr)) return false;
+  dispatch?.(tr.scrollIntoView());
+  return true;
+};
+
 const markRule = (pattern: RegExp, mark: string) =>
   new InputRule(pattern, (state, match, start, end) => {
     const type = richSchema.marks[mark]!,
@@ -274,12 +291,8 @@ export const markdownRules = inputRules({
     }),
     // `***` or `---` then Space at a paragraph's start: a divider above, the caret stays in the paragraph (Linear's horizontal rule).
     new InputRule(/^(?:\*\*\*|---)\s$/, (state, _match, start, end) => {
-      const $start = state.doc.resolve(start),
-        rule = richSchema.nodes.rule!,
-        index = $start.index(-1);
-      if ($start.parent.type !== paragraph || !$start.node(-1).canReplaceWith(index, index, rule))
-        return null;
-      return state.tr.delete(start, end).insert($start.before(), rule.create());
+      const tr = state.tr.delete(start, end);
+      return ruleAbove(tr) ? tr : null;
     }),
     markRule(/\*\*([^*\s][^*]*)\*\*$/, "strong"),
     markRule(/(?<![*\w])\*([^*\s][^*]*)\*$/, "em"),

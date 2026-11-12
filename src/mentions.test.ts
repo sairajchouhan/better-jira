@@ -65,3 +65,48 @@ test("picking a person writes Jira's mention node, which round-trips unchanged",
   expect(next.selection.from).toBe(next.doc.content.size - 1);
   expect(fromEditorDocument(toEditorDocument(adf))).toEqual(adf);
 });
+
+test("BJ-43: @ lists matching issues and inserts Jira's smart link to one; a typed issue key becomes one", async () => {
+  const { matchingIssues } = await import("./mention-menu");
+  const { insertIssueReference, issueReferenceRules } = await import("./mentions");
+  const issues = [
+    { key: "KAN-1", summary: "Login page" },
+    { key: "KAN-12", summary: "Fix logout" },
+    { key: "OPS-3", summary: "Rotate keys" },
+  ] as any[];
+  expect(matchingIssues(issues, "").map((i) => i.key)).toEqual([]);
+  expect(matchingIssues(issues, "kan-1").map((i) => i.key)).toEqual(["KAN-1", "KAN-12"]);
+  expect(matchingIssues(issues, "log").map((i) => i.key)).toEqual(["KAN-1", "KAN-12"]);
+
+  const at = typed("see @kan");
+  const card = at.apply(insertIssueReference(at, mentionTrigger(at)!, "https://x.test/browse/KAN-12"));
+  expect(fromEditorDocument(card.doc).content![0]!.content).toEqual([
+    { type: "text", text: "see " },
+    { type: "inlineCard", attrs: { url: "https://x.test/browse/KAN-12" } },
+    { type: "text", text: " " },
+  ]);
+
+  const rules = issueReferenceRules((key) => (key === "KAN-12" ? `https://x.test/browse/${key}` : null));
+  const typeIn = (text: string) => {
+    const doc = richSchema.nodes.doc!.create(null, richSchema.nodes.paragraph!.create());
+    const view: any = {
+      state: EditorState.create({ doc, selection: TextSelection.create(doc, 1) }),
+      composing: false,
+      dispatch(tr: any) {
+        view.state = view.state.apply(tr);
+      },
+    };
+    for (const char of text) {
+      const { from, to } = view.state.selection;
+      if (!rules.props.handleTextInput!.call(rules, view, from, to, char, () => view.state.tr))
+        view.dispatch(view.state.tr.insertText(char, from, to));
+    }
+    return fromEditorDocument(view.state.doc).content![0]!.content;
+  };
+  expect(typeIn("fixed in KAN-12 today")).toEqual([
+    { type: "text", text: "fixed in " },
+    { type: "inlineCard", attrs: { url: "https://x.test/browse/KAN-12" } },
+    { type: "text", text: " today" },
+  ]);
+  expect(typeIn("see KAN-99 ")).toEqual([{ type: "text", text: "see KAN-99 " }]);
+});

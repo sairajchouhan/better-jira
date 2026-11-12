@@ -2,11 +2,12 @@
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 /* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { Debouncer } from "@tanstack/pacer";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Avatar } from "./avatar";
 import { Menu, MENU } from "./menu";
 import { MENU_POPUP, usePlacement } from "./menu-surface";
-import { queryClient, type User } from "./store";
+import { StatusIcon } from "./icons";
+import { get, queryClient, statusOf, type Issue, type User } from "./store";
 
 const peopleKey = (query: string, issue?: string) => [
   "people",
@@ -30,29 +31,130 @@ export const searchPeople = (query: string, issue?: string) =>
 const matches = (person: User, query: string) =>
   person.name.toLowerCase().includes(query.trim().toLowerCase());
 
-/** Linear's @mention menu under the caret. Focus stays in the editor, which forwards its keys through `keys`. */
-export function MentionMenu({
-  query,
-  issueKey,
-  at,
-  editor,
-  keys,
-  pick,
-  dismiss,
-}: {
-  query: string;
-  issueKey?: string;
-  /** The caret box at the @, read fresh on every placement; `editor` is the element whose scrolls move it. */
+/** Issues an @query refers to: by key prefix ("@KAN-1") or by words of the title; none for a bare "@". */
+export function matchingIssues(issues: Iterable<Issue>, query: string, limit = 5): Issue[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const found: Issue[] = [];
+  for (const issue of issues) {
+    if (issue.key.toLowerCase().startsWith(q) || issue.summary.toLowerCase().includes(q)) found.push(issue);
+    if (found.length >= limit) break;
+  }
+  return found;
+}
+
+/** Where a caret menu sits and how it is driven: the caret box at the trigger, read fresh on every placement; the
+ * editor element whose scrolls move it; the editor's key forwarding; and Esc. */
+export type CaretAnchor = {
   at: () => { left: number; top: number; bottom: number };
   editor: Element | null;
   keys: { current: ((event: KeyboardEvent) => boolean) | null };
-  pick: (person: User) => void;
   dismiss: () => void;
+};
+export type CaretMenuItem = { id: string; label: ReactNode; icon?: ReactNode; pick: () => void };
+
+/** Linear's caret menu (@ people and issues, / blocks, : emoji) under the caret. Focus stays in the editor, which forwards
+ * its keys through `keys`. With no items it shows `empty`, or steps aside when `empty` is null. */
+export function CaretMenu({
+  label,
+  query,
+  items,
+  empty,
+  at,
+  editor,
+  keys,
+  dismiss,
+}: CaretAnchor & { label: string; query: string; items: CaretMenuItem[]; empty: string | null }) {
+  const [active, setActive] = useState(0);
+  // A new query resets keyboard selection.
+  const [activeQuery, setActiveQuery] = useState(query);
+  if (activeQuery !== query) {
+    setActiveQuery(query);
+    setActive(0);
+  }
+  const list = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Scroll the newly active result into view.
+  }, [active]);
+  const hidden = !items.length && empty === null;
+  keys.current = (event) => {
+    if (event.key === "Escape") {
+      dismiss();
+      return true;
+    }
+    if (!items.length) return false;
+    const move = (by: number) => setActive((i) => (i + by + items.length) % items.length);
+    if (event.key === "ArrowDown" || (event.ctrlKey && event.key === "n")) move(1);
+    else if (event.key === "ArrowUp" || (event.ctrlKey && event.key === "p")) move(-1);
+    else if ((event.key === "Enter" || event.key === "Tab") && !event.shiftKey && !event.metaKey)
+      items[Math.min(active, items.length - 1)]!.pick();
+    else return false;
+    return true;
+  };
+  // Up to eight 32px rows (or the empty state) inside the list's 6px padding and the popup's 1px border.
+  const height =
+    (items.length ? Math.min(8, items.length) * MENU.ITEM_HEIGHT : MENU.LIST_EMPTY_STATE_HEIGHT) +
+    2 * MENU.LIST_PADDING +
+    2;
+  const style = usePlacement(
+    list,
+    editor,
+    () => {
+      const caret = at(),
+        below = innerHeight - caret.bottom - 8 >= height;
+      return {
+        left: Math.max(8, Math.min(caret.left, innerWidth - 268)),
+        top: below ? caret.bottom + 4 : Math.max(8, caret.top - 4 - height),
+        maxHeight: height,
+      };
+    },
+    !hidden && `${query} ${height}`,
+  );
+  if (hidden) return null;
+  // The editor keeps focus and drives the highlight through `keys`; the menu mirrors `active` and follows the pointer.
+  return (
+    <Menu
+      ref={list}
+      aria-label={label}
+      shouldFilter={false}
+      value={items[Math.min(active, items.length - 1)]?.id ?? ""}
+      onValueChange={(id) => {
+        const i = items.findIndex((item) => item.id === id);
+        if (i >= 0) setActive(i);
+      }}
+      className={`${MENU_POPUP} fixed z-50 w-[260px]`}
+      style={style}
+      onMouseDown={(event) => event.preventDefault()}
+    >
+      <Menu.List>
+        {!items.length && <Menu.Empty always>{empty}</Menu.Empty>}
+        {items.map((item) => (
+          <Menu.Item key={item.id} value={item.id} icon={item.icon} onSelect={item.pick}>
+            {item.label}
+          </Menu.Item>
+        ))}
+      </Menu.List>
+    </Menu>
+  );
+}
+
+/** Linear's @ menu: people Jira lets see the issue, then issues whose key or title matches (BJ-43). */
+export function MentionMenu({
+  query,
+  issueKey,
+  pick,
+  pickIssue,
+  ...anchor
+}: CaretAnchor & {
+  query: string;
+  issueKey?: string;
+  pick: (person: User) => void;
+  pickIssue: (issue: Issue) => void;
 }) {
   // A cached answer shows at once; otherwise the last list narrows locally while Jira is asked (debounced).
   const cached = queryClient.getQueryData<User[]>(peopleKey(query, issueKey));
   const [last, setLast] = useState<{ query: string; people: User[] } | null>(null);
-  const [active, setActive] = useState(0);
   const latest = useRef(query);
   latest.current = query;
   const [search] = useState(
@@ -79,85 +181,39 @@ export function MentionMenu({
     } else search.maybeExecute(query, issueKey);
   }, [query, issueKey, cached, search]);
   useEffect(() => () => search.cancel(), [search]);
-  // A new query resets keyboard selection.
-  const [activeQuery, setActiveQuery] = useState(query);
-  if (activeQuery !== query) {
-    setActiveQuery(query);
-    setActive(0);
-  }
   const people = cached ?? last?.people.filter((p) => matches(p, query)) ?? [];
+  const issues = matchingIssues(get().issues.values(), query);
   const settled = !!cached || last?.query === query;
-  const list = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
-    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Scroll the newly active result into view.
-  }, [active]);
-  // A typed name with a space that matches no one is ordinary text: the menu steps aside.
-  const hidden = !people.length && (settled ? /\s/.test(query) : !!query);
-  keys.current = (event) => {
-    if (event.key === "Escape") {
-      dismiss();
-      return true;
-    }
-    if (hidden || !people.length) return false;
-    const move = (by: number) => setActive((i) => (i + by + people.length) % people.length);
-    if (event.key === "ArrowDown" || (event.ctrlKey && event.key === "n")) move(1);
-    else if (event.key === "ArrowUp" || (event.ctrlKey && event.key === "p")) move(-1);
-    else if ((event.key === "Enter" || event.key === "Tab") && !event.shiftKey && !event.metaKey)
-      pick(people[Math.min(active, people.length - 1)]!);
-    else return false;
-    return true;
-  };
-  // Up to eight 32px rows (or the empty state) inside the list's 6px padding and the popup's 1px border.
-  const height =
-    (people.length ? Math.min(8, people.length) * MENU.ITEM_HEIGHT : MENU.LIST_EMPTY_STATE_HEIGHT) +
-    2 * MENU.LIST_PADDING +
-    2;
-  const style = usePlacement(
-    list,
-    editor,
-    () => {
-      const caret = at(),
-        below = innerHeight - caret.bottom - 8 >= height;
+  const items: CaretMenuItem[] = [
+    ...people.map((person) => ({
+      id: person.id,
+      label: person.name,
+      icon: <Avatar user={person} size={16} />,
+      pick: () => pick(person),
+    })),
+    ...issues.map((issue) => {
+      const status = statusOf(issue);
       return {
-        left: Math.max(8, Math.min(caret.left, innerWidth - 268)),
-        top: below ? caret.bottom + 4 : Math.max(8, caret.top - 4 - height),
-        maxHeight: height,
+        id: `issue:${issue.key}`,
+        label: (
+          <>
+            <span className="text-fg-3">{issue.key}</span> {issue.summary}
+          </>
+        ),
+        icon: status && <StatusIcon status={status} />,
+        pick: () => pickIssue(issue),
       };
-    },
-    !hidden && `${query} ${height}`,
-  );
-  if (hidden) return null;
-  // The editor keeps focus and drives the highlight through `keys`; the menu mirrors `active` and follows the pointer.
+    }),
+  ];
+  // A typed name with a space that matches no one is ordinary text: the menu steps aside.
+  const hidden = !items.length && (settled ? /\s/.test(query) : !!query);
   return (
-    <Menu
-      ref={list}
-      aria-label="Mention people"
-      shouldFilter={false}
-      value={people[Math.min(active, people.length - 1)]?.id ?? ""}
-      onValueChange={(id) => {
-        const i = people.findIndex((p) => p.id === id);
-        if (i >= 0) setActive(i);
-      }}
-      className={`${MENU_POPUP} fixed z-50 w-[260px]`}
-      style={style}
-      onMouseDown={(event) => event.preventDefault()}
-    >
-      <Menu.List>
-        {!people.length && (
-          <Menu.Empty always>{settled ? "No people found" : "Searching people…"}</Menu.Empty>
-        )}
-        {people.map((person) => (
-          <Menu.Item
-            key={person.id}
-            value={person.id}
-            icon={<Avatar user={person} size={16} />}
-            onSelect={() => pick(person)}
-          >
-            {person.name}
-          </Menu.Item>
-        ))}
-      </Menu.List>
-    </Menu>
+    <CaretMenu
+      {...anchor}
+      label="Mention people"
+      query={query}
+      items={items}
+      empty={hidden ? null : settled ? "No people found" : "Searching people…"}
+    />
   );
 }

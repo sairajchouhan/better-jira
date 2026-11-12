@@ -6,6 +6,7 @@ import {
   normalizeDocument,
   safeLink,
   jiraDate,
+  cardText,
   type AdfMark,
   type AdfNode,
   type AdfDocument,
@@ -101,7 +102,7 @@ const card = (block: boolean): NodeSpec => ({
         target: "_blank",
         rel: "noreferrer",
       },
-      String(url ?? "Link"),
+      cardText(url),
     ];
   },
 });
@@ -435,6 +436,26 @@ export const mentionNode = (person: { id: string; name: string }) =>
   richSchema.nodes.mention!.create({
     original: {
       data: { type: "mention", attrs: { id: person.id, text: `@${person.name}`, accessLevel: "" } },
+      hadContent: false,
+    },
+  });
+/** Jira's smart link (an issue reference is one to the issue's /browse/ URL). */
+export const inlineCardNode = (url: string) =>
+  richSchema.nodes.inlineCard!.create({
+    original: { data: { type: "inlineCard", attrs: { url } }, hadContent: false },
+  });
+/** Jira's emoji node: its short name, the code points as its id, and the character Jira shows. */
+export const emojiNode = (emoji: { name: string; char: string }) =>
+  richSchema.nodes.emoji!.create({
+    original: {
+      data: {
+        type: "emoji",
+        attrs: {
+          shortName: `:${emoji.name}:`,
+          id: [...emoji.char].map((c) => c.codePointAt(0)!.toString(16)).filter((c) => c !== "fe0f").join("-"),
+          text: emoji.char,
+        },
+      },
       hadContent: false,
     },
   });

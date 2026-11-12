@@ -11,11 +11,27 @@ import { Text } from "./text";
 import { mediaCaretPlugin } from "./media-caret";
 import { mediaUploads, mergeLateMedia, type LateMedia } from "./editor-media-upload";
 import { editorBindings } from "./editor-bindings";
-import { activeMention, dismissMention, insertMention, mentionPlugin } from "./mentions";
-import { MentionMenu, searchPeople } from "./mention-menu";
+import {
+  activeMention,
+  dismissMention,
+  insertIssueReference,
+  insertMention,
+  issueReferenceRules,
+  mentionPlugin,
+} from "./mentions";
+import { CaretMenu, MentionMenu, searchPeople } from "./mention-menu";
+import { activeEmoji, dismissEmoji, emojiPlugin, emojiRules, insertEmoji, matchingEmoji } from "./emoji";
+import { activeSlash, dismissSlash, matchingSlashCommands, slashPlugin } from "./slash-commands";
+import { get, jiraIssueURL } from "./store";
 import { usePlacement } from "./menu-surface";
 import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
-import { EditorState, NodeSelection, Selection, type Command } from "prosemirror-state";
+import {
+  EditorState,
+  NodeSelection,
+  Selection,
+  type Command,
+  type Transaction,
+} from "prosemirror-state";
 import { mediaNodeView, type MediaNodeView } from "./media-node-view";
 import { expandNodeView } from "./expand-node-view";
 import type { Attachment } from "./attachment-media";
@@ -90,6 +106,13 @@ export type RichEditorProps = {
   ) => void;
   /** Tab outside a list, table or code block moves focus on (Linear's create composer) instead of staying in the editor. */ tabLeaves?: boolean;
 };
+
+/** The menus that open at the caret, each with its Esc. */
+const caretMenus = [
+  [activeMention, dismissMention],
+  [activeSlash, dismissSlash],
+  [activeEmoji, dismissEmoji],
+] as const;
 
 /** One look for every formatting and link control: Linear's borderless small Button, pressed while its mark or block is on. */
 const ToolbarButton = (props: ComponentProps<typeof Button>) => <Button variant="borderless" size="small" {...props} />;
@@ -173,10 +196,15 @@ export function RichEditor(props: EditorEngineProps) {
         schema: richSchema,
         doc: toEditorDocument(latest.current.initial),
         plugins: [
+          // One menu at a caret at a time, so the three triggers share the menu's key forwarding.
           mentionPlugin((_view, event) => mentionKeys.current?.(event) ?? false),
+          slashPlugin((_view, event) => mentionKeys.current?.(event) ?? false),
+          emojiPlugin((_view, event) => mentionKeys.current?.(event) ?? false),
           mediaCaretPlugin(),
           uploads.plugin,
           markdownRules,
+          emojiRules,
+          issueReferenceRules((key) => (get().issues.has(key) ? jiraIssueURL(key) : null)),
           history(),
           keymap({
             Enter: chainCommands(
@@ -354,7 +382,8 @@ export function RichEditor(props: EditorEngineProps) {
       event.preventDefault();
       event.stopPropagation();
       const editor = view.current;
-      if (editor && activeMention(editor.state)) editor.dispatch(dismissMention(editor.state));
+      const dismiss = editor && caretMenus.find(([active]) => active(editor.state))?.[1];
+      if (editor && dismiss) editor.dispatch(dismiss(editor.state));
       else if (latest.current.onCancel) latest.current.onCancel();
       else view.current?.dom.blur();
     },
@@ -393,14 +422,7 @@ export function RichEditor(props: EditorEngineProps) {
         else if (id === "undo") run(undo);
         else if (id === "redo") run(redo);
         else if (id === "save") save();
-        else if (id === "attach") {
-          if (fileInput.current) {
-            fileInput.current.click();
-            return;
-          }
-          const scope = host.current?.closest('[role="dialog"]') ?? document.querySelector("main");
-          scope?.querySelector<HTMLInputElement>('input[type="file"]')?.click();
-        }
+        else if (id === "attach") attach();
       },
       options: {
         enabled: binding.id !== "save" || !!props.onSave,
@@ -416,6 +438,14 @@ export function RichEditor(props: EditorEngineProps) {
       stopPropagation: false,
     },
   );
+  const attach = () => {
+    if (fileInput.current) {
+      fileInput.current.click();
+      return;
+    }
+    const scope = host.current?.closest('[role="dialog"]') ?? document.querySelector("main");
+    scope?.querySelector<HTMLInputElement>('input[type="file"]')?.click();
+  };
   const addLink = () => {
     const href = linkTarget(url);
     if (!href) {
@@ -428,7 +458,16 @@ export function RichEditor(props: EditorEngineProps) {
     setLinkError("");
   };
   const inTable = !!view.current && isInTable(view.current.state);
-  const mention = view.current?.hasFocus() ? activeMention(view.current.state) : null;
+  const focused = view.current?.hasFocus() ? view.current.state : null;
+  const mention = focused && activeMention(focused),
+    slash = focused && activeSlash(focused),
+    emoji = focused && activeEmoji(focused);
+  const caretAnchor = (from: number, dismiss: (state: EditorState) => Transaction) => ({
+    at: () => view.current!.coordsAtPos(from),
+    editor: view.current!.dom,
+    keys: mentionKeys,
+    dismiss: () => view.current?.dispatch(dismiss(view.current.state)),
+  });
   const doc = view.current?.state.doc;
   const empty = useMemo(() => {
     if (!doc) return true;
@@ -685,19 +724,59 @@ export function RichEditor(props: EditorEngineProps) {
         )}
         <div ref={host} />
       </div>
+      {slash && (
+        <CaretMenu
+          {...caretAnchor(slash.from, dismissSlash)}
+          label="Insert block"
+          query={slash.query}
+          empty={null}
+          items={matchingSlashCommands(slash.query)
+            .filter((item) => item.command || props.onFiles)
+            .map((item) => ({
+              id: item.id,
+              label: item.label,
+              pick: () => {
+                const editor = view.current!;
+                editor.dispatch(editor.state.tr.delete(slash.from, slash.to));
+                if (item.command) run(item.command);
+                else attach();
+              },
+            }))}
+        />
+      )}
+      {emoji && (
+        <CaretMenu
+          {...caretAnchor(emoji.from, dismissEmoji)}
+          label="Insert emoji"
+          query={emoji.query}
+          empty={null}
+          items={matchingEmoji(emoji.query).map((item) => ({
+            id: item.name,
+            label: `:${item.name}:`,
+            icon: <span aria-hidden>{item.char}</span>,
+            pick: () => {
+              const editor = view.current!;
+              editor.dispatch(insertEmoji(editor.state, emoji, item));
+              editor.focus();
+            },
+          }))}
+        />
+      )}
       {mention && (
         <MentionMenu
+          {...caretAnchor(mention.from, dismissMention)}
           query={mention.query}
           issueKey={props.mentionIssue ?? props.issueKey}
-          at={() => view.current!.coordsAtPos(mention.from)}
-          editor={view.current!.dom}
-          keys={mentionKeys}
+          pickIssue={(issue) => {
+            const editor = view.current!;
+            editor.dispatch(insertIssueReference(editor.state, mention, jiraIssueURL(issue.key)));
+            editor.focus();
+          }}
           pick={(person) => {
             const editor = view.current!;
             editor.dispatch(insertMention(editor.state, mention, person));
             editor.focus();
           }}
-          dismiss={() => view.current?.dispatch(dismissMention(view.current.state))}
         />
       )}
       {uploadNotice && (
