@@ -46,6 +46,8 @@ import { baseKeymap, chainCommands, toggleMark } from "prosemirror-commands";
 import { keymap } from "prosemirror-keymap";
 import { history, redo, undo } from "prosemirror-history";
 import { splitListItem } from "prosemirror-schema-list";
+import { moveColumn, moveRow, tableResizing } from "./editor-table";
+import { TableControls } from "./table-controls";
 import {
   addColumnAfter,
   addRowAfter,
@@ -236,6 +238,7 @@ export function RichEditor(props: EditorEngineProps) {
               latest.current.tabLeaves ? shiftTabInside(...args) : shiftTab(...args),
           }),
           keymap(baseKeymap),
+          tableResizing(),
           tableEditing(),
         ],
       }),
@@ -458,6 +461,8 @@ export function RichEditor(props: EditorEngineProps) {
         else if (id === "block-menu") setBlockMenu(true);
         else if (id === "block-controls") blockHandle.current?.focus();
         else if (id === "move-up" || id === "move-down") run(moveBlock(id === "move-up" ? -1 : 1));
+        else if (id === "table-move-up" || id === "table-move-down") run(moveRow(id === "table-move-up" ? "up" : "down"));
+        else if (id === "table-move-left" || id === "table-move-right") run(moveColumn(id === "table-move-left" ? "left" : "right"));
         else if (id === "undo") run(undo);
         else if (id === "redo") run(redo);
         else if (id === "save") save();
@@ -517,6 +522,8 @@ export function RichEditor(props: EditorEngineProps) {
       box = frame.current;
     if (!editor || !box || !(editor.hasFocus() || handleFocused || blockMenu)) return null;
     const { $from } = editor.state.selection;
+    // A table has its own gutter button (TableControls); the block handle comes back with its menu.
+    if (!blockMenu && $from.depth && $from.node(1).type.spec.tableRole === "table") return null;
     try {
       return editor.coordsAtPos($from.depth ? $from.start(1) : $from.pos).top - box.getBoundingClientRect().top;
     } catch {
@@ -845,6 +852,7 @@ export function RichEditor(props: EditorEngineProps) {
           </p>
         )}
         <div ref={host} />
+        {view.current && <TableControls view={view.current} frame={frame} />}
       </div>
       {slash && (
         <CaretMenu

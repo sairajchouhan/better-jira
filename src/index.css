@@ -595,6 +595,71 @@
 .rich-block-handle[aria-expanded="true"] {
   opacity: 1;
 }
+/* Linear's table controls (BJ-181): column resize handle, row/column handles, gutter menu button, edge add bars. */
+.rich-content .tableWrapper {
+  overflow-x: auto;
+}
+.rich-content .column-resize-handle {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  right: -1.5px;
+  z-index: 10;
+  width: 2px;
+  background: var(--fg-4);
+  pointer-events: none;
+}
+.rich-content.resize-cursor {
+  cursor: col-resize;
+}
+.rich-table-handle {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rich-table-handle[data-table-cell-control="row"] {
+  width: 8px;
+}
+.rich-table-handle[data-table-cell-control="column"] {
+  height: 8px;
+}
+/* Linear's 3×20 pill, faint until hovered or its menu is open. */
+.rich-table-handle::after {
+  content: "";
+  width: 3px;
+  height: 20px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--fg-4) 50%, transparent);
+}
+.rich-table-handle[data-table-cell-control="column"]::after {
+  width: 20px;
+  height: 3px;
+}
+.rich-table-handle:hover::after,
+.rich-table-handle[aria-expanded="true"]::after {
+  background: var(--accent);
+}
+.rich-table-add {
+  position: absolute;
+  z-index: 1;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--fg-4) 20%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  min-height: 18px;
+  color: var(--fg-3);
+  opacity: 0;
+}
+.rich-editor:hover .rich-table-add {
+  opacity: 1;
+}
+.rich-table-add:hover {
+  background: color-mix(in srgb, var(--fg-4) 60%, transparent);
+}
 .rich-content .rich-expand {
   border: 1px solid var(--line-2);
   border-radius: 6px;

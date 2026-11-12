@@ -18,6 +18,11 @@ export const editorBindings: { id: string; name: string; hotkey: Hotkey }[] = [
   { id: "expand", name: "Collapsible section", hotkey: "Mod+Shift+6" },
   { id: "move-up", name: "Move block up", hotkey: "Alt+ArrowUp" },
   { id: "move-down", name: "Move block down", hotkey: "Alt+ArrowDown" },
+  // Linear's table keys (`Shift-Alt-Meta-Arrow…`): the caret's row or column, or the selected ones, move one place.
+  { id: "table-move-up", name: "Move table row up", hotkey: "Mod+Alt+Shift+ArrowUp" },
+  { id: "table-move-down", name: "Move table row down", hotkey: "Mod+Alt+Shift+ArrowDown" },
+  { id: "table-move-left", name: "Move table column left", hotkey: "Mod+Alt+Shift+ArrowLeft" },
+  { id: "table-move-right", name: "Move table column right", hotkey: "Mod+Alt+Shift+ArrowRight" },
   { id: "block-menu", name: "Open block menu", hotkey: "Shift+F10" },
   { id: "block-controls", name: "Focus block controls", hotkey: "Alt+F10" },
   { id: "attach", name: "Attach image/file", hotkey: "Mod+Shift+U" },
