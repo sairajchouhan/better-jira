@@ -521,7 +521,7 @@ function PropertyPill({
 function PropertySection({ name, children }: { name: string; children: ReactNode }) {
   return (
     <section className="flex flex-col items-start gap-1 [&+section]:mt-[33px]">
-      <h3 className="mb-1.5 px-2 text-[13px] leading-[normal] font-medium text-fg-3">{name}</h3>
+      <Text as="h3" variant="smallPlus" color="muted" className="mb-1.5 px-2">{name}</Text>
       {children}
     </section>
   );

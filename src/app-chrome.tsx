@@ -32,6 +32,7 @@ import { Modal } from "./personal-controls";
 import { runShortcut, shortcuts } from "./shortcuts";
 import { Button, IconButton } from "./button";
 import { Shortcut } from "./keycap";
+import { Text } from "./text";
 import { TextInput } from "./field";
 import { ConfirmDialog } from "./dialog";
 import { useCommand, focusNode } from "./commands";
@@ -119,9 +120,9 @@ export function Sidebar({ boards }: { boards: Board[] }) {
         <SideItem active={inbox} onClick={() => timed("open inbox", () => runShortcut("inbox"))}>
           <Icon name="inbox" /> Inbox
           {badge > 0 && (
-            <span data-inbox-badge className="ml-auto text-[12px] text-fg-2">
+            <Text data-inbox-badge variant="mini" color="base" className="ml-auto">
               {badge}
-            </span>
+            </Text>
           )}
         </SideItem>
         <SideItem onClick={() => runShortcut("search")}>
@@ -138,7 +139,7 @@ export function Sidebar({ boards }: { boards: Board[] }) {
           <Icon name="user" /> My issues <Shortcut className="ml-auto" keys={hotkeyOf("mine")} size="small" />
         </SideItem>
 
-        <div className="group mt-5 mb-1 flex items-center px-2 text-[12px] text-fg-3">
+        <Text as="div" variant="mini" color="muted" className="group mt-5 mb-1 flex items-center px-2">
           Boards
           <IconButton
             label="Add board"
@@ -149,7 +150,7 @@ export function Sidebar({ boards }: { boards: Board[] }) {
           >
             <Icon name="plus" />
           </IconButton>
-        </div>
+        </Text>
         {boards.map((b) => (
           <SideItem
             key={b.id}
@@ -165,6 +166,7 @@ export function Sidebar({ boards }: { boards: Board[] }) {
           </SideItem>
         ))}
         {/* Views is a section like Boards: every saved view inline; the heading opens the Views directory. */}
+        {/* Navigation section heading uses aria-current styling; Button has no navigation variant. */}
         <button
           onClick={() => navigate({ board: boardId, viewsPage: true, selected: null, panel: false, inbox: false })}
           aria-current={viewsPage || undefined}
@@ -181,14 +183,15 @@ export function Sidebar({ boards }: { boards: Board[] }) {
           </ViewContextMenu>
         ))}
         <ViewFavorites />
-        <button
+        <Button
+          variant="muted"
           id="help-menu"
           aria-label="Open Help menu"
           onClick={() => runShortcut("help")}
-          className="mt-auto flex items-center justify-between rounded-lg px-2 py-2 text-fg-3 hover:bg-hover"
+          className="mt-auto justify-between"
         >
           Help <Shortcut keys={hotkeyOf("help")} size="small" />
-        </button>
+        </Button>
       </nav>
     </>
   );
