@@ -1,0 +1,25 @@
+@layer components {
+  .ui-dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .ui-dialog-title {
+    margin: 0;
+    color: var(--fg);
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .ui-dialog-description {
+    margin: 4px 0 0;
+    color: var(--fg-3);
+    font-size: 13px;
+  }
+  .ui-dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+  }
+}
