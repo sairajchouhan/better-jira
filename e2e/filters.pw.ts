@@ -277,6 +277,24 @@ test("Add filter root search ranks every row and opens like Linear's", async ({ 
     await page.type("overdu");
     await page.waitFor(`${items("")}[0]?.startsWith("DatesDue dateOverdue")`);
   });
+  await test.step("5.10: a field's name lists its values by their breadcrumb, Status › Todo, and one click applies one", async () => {
+    await page.key("a", "Meta");
+    await page.type("status");
+    await page.waitFor(`${items("")}.filter(t=>t.startsWith("Status")).length>2`);
+    const rows = await page.eval<string[]>(items(""));
+    expect(rows[0]).toBe("Status");
+    expect(rows).toEqual(expect.arrayContaining([expect.stringMatching(/^StatusTodo/), expect.stringMatching(/^StatusDone/)]));
+    const todo = await page.eval<{ x: number; y: number }>(
+      `(()=>{const r=[...document.querySelectorAll("[cmdk-item]")].find(r=>r.textContent.startsWith("StatusTodo")).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`,
+    );
+    await page.clickAt(todo.x, todo.y);
+    await page.waitFor(`!${root}&&!!document.querySelector('[aria-label="Remove status filter"]')`);
+    expect(await page.eval(chipText("status"))).toMatch(/Todo$/);
+    await page.click('[aria-label="Remove status filter"]');
+    await page.waitFor(`!document.querySelector('[aria-label="Remove status filter"]')`);
+    await page.click('[aria-label="Add filter"]');
+    await page.waitFor(`document.activeElement===${root}`);
+  });
   await test.step("FILTER-3: a search that matches nothing says so", async () => {
     await page.key("a", "Meta");
     await page.type("zzqx");

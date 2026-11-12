@@ -6,7 +6,7 @@ import { FilterIcon } from "./filter-icons";
 import { hue, PriorityIcon, StatusIcon, TypeDot } from "@/client/components/icons";
 import { Menu } from "@/client/components/menu";
 import { NoMatchesFooter, splitByMatches } from "@/client/components/no-matches";
-import { menuFilter } from "@/client/lib/fuzzy-score";
+import { breadcrumbKeywords, menuFilter } from "@/client/lib/fuzzy-score";
 import { Select } from "@/client/components/select";
 import { Button } from "@/client/components/button";
 import { TextInput } from "@/client/components/field";
@@ -238,7 +238,7 @@ export function ValueRow({
   return (
     <Menu.Item
       value={`${path?.join(" ") ?? ""} ${choice.label} ${choice.value}`.trim()}
-      keywords={[choice.label]}
+      keywords={path ? breadcrumbKeywords(choice.label, path) : [choice.label]}
       aria-checked={multiple ? checked : undefined}
       checkbox={multiple && !path ? checked : undefined}
       checked={!multiple && !path ? checked : undefined}
@@ -291,7 +291,8 @@ export function FieldValues({
       selection={isSingle(field) ? "single" : "multiple"}
       checked={rule?.values.includes(c.value) ?? false}
       onSelect={(only) => {
-        if (select(c.value, only)) onDone();
+        // A root-search row is a plain action, as Linear's hoisted rows are: it applies its value and closes the menu.
+        if (select(c.value, only) || path) onDone();
       }}
     />
   );
@@ -330,7 +331,7 @@ export function PresetRow({
   return (
     <Menu.Item
       value={[...(path ?? []), p.label].join(" ")}
-      keywords={[p.label]}
+      keywords={path ? breadcrumbKeywords(p.label, path) : [p.label]}
       hint={p.typed ? `${count} issue${count === 1 ? "" : "s"}` : issueCount(count)}
       onSelect={onSelect}
     >

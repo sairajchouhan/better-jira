@@ -173,5 +173,32 @@ export const deprioritize = (score: number, by = 1) => score * 0.99 ** by;
  * A row's `keywords`, when given, are the text it is searched by instead of its value, so a value can stay a unique id
  * ("Status To Do 3") while the row matches on its label ("To Do") alone.
  */
-export const menuFilter = (value: string, search: string, keywords?: string[]) =>
-  fuzzyScore(keywords?.length ? keywords : value, search);
+export const menuFilter = (value: string, search: string, keywords?: string[]) => {
+  const crumbs = keywords?.find((k) => k.startsWith(CRUMBS));
+  if (crumbs) return breadcrumbScore(keywords!.filter((k) => k !== crumbs), crumbs.slice(CRUMBS.length), search);
+  return fuzzyScore(keywords?.length ? keywords : value, search);
+};
+
+/** Linear's DEFAULT_MIN_APPLICABILITY_SCORE: below it a hit is weak. */
+export const MIN_APPLICABILITY = 0.24;
+const SECONDARY = 0.85,
+  // `parentAction in n && (s -= t5)`: a hoisted child ranks under an equally good row of the menu itself.
+  HOISTED = 0.15,
+  CRUMBS = "\u0000";
+/**
+ * Linear's score for a row hoisted from a parent into the root search, "Status › Todo" (startup-entry `scoreAction` and
+ * `applyScoreCorrections`): the better of its own labels (mainString) and its breadcrumb with its label (secondaryString) ×0.85,
+ * less 0.15; a weak hit on a query of 3+ characters scores 0.34 when its label contains the query, else 0.29 when the breadcrumb
+ * does. So "status" finds every status by its breadcrumb.
+ */
+export function breadcrumbScore(labels: string[], breadcrumb: string, search: string): number {
+  const q = search.trim().toLowerCase();
+  const score = Math.max(fuzzyScore(labels, search), fuzzyScore(breadcrumb, search) * SECONDARY) - HOISTED;
+  if (score < MIN_APPLICABILITY && q.length > 2) {
+    if (labels.some((l) => l.toLowerCase().includes(q))) return MIN_APPLICABILITY + 0.1;
+    if (breadcrumb.toLowerCase().includes(q)) return MIN_APPLICABILITY + 0.05;
+  }
+  return Math.max(score, 0);
+}
+/** A hoisted row's cmdk `keywords`: its label, and its breadcrumb (`path` then the label) marked for menuFilter's breadcrumbScore. */
+export const breadcrumbKeywords = (label: string, path: string[]) => [label, CRUMBS + [...path, label].join(" ")];
