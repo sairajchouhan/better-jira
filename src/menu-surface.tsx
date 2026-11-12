@@ -11,8 +11,6 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
-// Cycle by design: dialog.tsx builds on MenuSurface; Confirm only reaches ConfirmDialog at render.
-import { ConfirmDialog } from "./dialog";
 
 export const MENU_POPUP =
   "view-popup rounded-xl border border-[var(--menu-line)] bg-[var(--menu)] text-fg-2 shadow-[var(--menu-shadow)] [--sel:var(--menu-sel)]";
@@ -342,21 +340,4 @@ export function issueAnchor(id: string, key: string): HTMLElement | null {
     ) ??
     null
   );
-}
-
-/** @deprecated Use ConfirmDialog from ./dialog; this forwards to it until every caller has moved. */
-export function Confirm({
-  title,
-  detail,
-  action,
-  onConfirm,
-  close,
-}: {
-  title: string;
-  detail: string;
-  action: string;
-  onConfirm: () => void;
-  close: () => void;
-}) {
-  return <ConfirmDialog title={title} description={detail} confirmLabel={action} onConfirm={onConfirm} close={close} />;
 }

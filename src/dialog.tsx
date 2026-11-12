@@ -63,14 +63,15 @@ export const Dialog = Object.assign(DialogRoot, {
   Close,
 });
 
-/** Linear's confirmation (`gi`): Cancel and a confirm button that takes focus; Escape or Cancel changes nothing. */
+/** Linear's confirmation (`gi`): Cancel and a confirm button that takes focus; Escape or Cancel changes nothing.
+ *  It opens through DialogPresenter, so it sits a third of the way down (`placement="third"`) unlike Dialog's 12vh. */
 export function ConfirmDialog({
   title,
   description,
   confirmLabel,
   cancelLabel = "Cancel",
   tone = "dangerous",
-  placement,
+  placement = "third",
   onConfirm,
   close,
 }: Placement & {
