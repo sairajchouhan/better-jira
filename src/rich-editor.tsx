@@ -278,7 +278,7 @@ export function RichEditor(props: EditorEngineProps) {
         "aria-label": props.label ?? "Issue description",
         "aria-multiline": "true",
         id: props.id ?? "",
-        class: "rich-content",
+        class: "rich-content rich-doc",
       },
       handlePaste(editor, event) {
         const files = [...(event.clipboardData?.files ?? [])];

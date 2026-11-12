@@ -177,7 +177,7 @@ export const richSchema = new Schema({
       ...block("div", PANEL),
       isolating: true,
       parseDOM: [],
-      toDOM: () => ["div", { class: "rich-panel" }, 0],
+      toDOM: (node) => ["div", { class: "rich-panel", "data-panel-type": node.attrs.original?.data.attrs?.panelType ?? "info" }, 0],
     },
     expand: {
       content: EXPAND,
@@ -200,7 +200,14 @@ export const richSchema = new Schema({
         String(node.attrs.original?.data.attrs?.text || "@Unknown"),
       ],
     },
-    emoji: inlineAtom("emoji"),
+    emoji: {
+      ...inlineAtom("emoji"),
+      toDOM: (node) => [
+        "span",
+        { contenteditable: "false", class: "rich-emoji" },
+        String(node.attrs.original?.data.attrs?.text ?? node.attrs.original?.data.attrs?.shortName ?? "emoji"),
+      ],
+    },
     status: inlineAtom("status"),
     date: {
       ...inlineAtom("date"),

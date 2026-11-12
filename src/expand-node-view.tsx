@@ -41,21 +41,20 @@ export function expandNodeView(
           label={open ? "Collapse section" : "Expand section"}
           aria-expanded={open}
           size="small"
+          className="rich-expand-toggle"
           onClick={() => {
             open = !open;
             render();
           }}
         >
-          <span className={`grid place-items-center ${open ? "rotate-90" : ""}`}>
-            <Icon name="chevron" size={14} />
-          </span>
+          <Icon name="chevron" size={14} />
         </IconButton>
         {/* A bare title line, like a heading in the document, not a boxed form field. */}
         <input
           key={revision}
           className="rich-expand-title"
           aria-label="Collapsible section title"
-          placeholder="Collapsible section"
+          placeholder="Add section title…"
           defaultValue={current.attrs.title}
           onChange={(event) => setTitle(event.currentTarget.value)}
           onKeyDown={(event) => {
