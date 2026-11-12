@@ -1,6 +1,5 @@
-import { Text } from "./text";
-import { TextInput } from "./field";
-import { Button, IconButton } from "./button";
+import { IconButton } from "./button";
+import { FutureTimeStep } from "./future-time-step";
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 import { useEffect, useRef, useState } from "react";
@@ -16,8 +15,6 @@ import { Menu } from "./menu";
 import { MenuSurface } from "./menu-surface";
 import { actions, set, ui, useStore, type Issue } from "./store";
 import { kept, useCommand } from "./commands";
-
-type Preset = { label: string; at: string };
 
 /** Linear's one "Remind me" menu, for an issue or a document: a typed time ("4 pm", "in 2 days"), a preset, or a custom date
  *  and time. The typed-time parser (chrono) loads with the menu. `onPick` gets a future ISO time; the menu then closes. */
@@ -36,16 +33,15 @@ export function ReminderMenu({
 }) {
   const reference = useRef(new Date()),
     [query, setQuery] = useState(""),
-    [presets, setPresets] = useState<Preset[]>([]),
+    [presets] = useState(() => reminderPresets(reference.current)),
     [parsed, setParsed] = useState<string | null>(null),
     [custom, setCustom] = useState(startCustom);
   const keyboardChoice = useRef(false);
   useEffect(() => {
     let active = true;
     void import("./reminder-date").then(
-      ({ reminderPresets, parseReminder }) => {
+      ({ parseReminder }) => {
         if (!active) return;
-        setPresets(reminderPresets(reference.current));
         setParsed(query ? parseReminder(query, reference.current) : null);
       },
     );
@@ -73,64 +69,17 @@ export function ReminderMenu({
       fit
     >
       {custom ? (
-        <form
-          className="w-[320px]"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (parsed) choose(parsed);
+        <FutureTimeStep
+          label="Custom reminder"
+          inputLabel="Custom reminder time"
+          submitLabel="Set reminder"
+          errorMessage="Choose a future reminder time"
+          onPick={choose}
+          onBack={() => {
+            setParsed(null);
+            setCustom(false);
           }}
-        >
-          <Text
-            as="label"
-            variant="small"
-            color="inherit"
-            className="block p-2"
-          >
-            Custom reminder
-            <TextInput
-              autoFocus
-              aria-label="Custom reminder time"
-              type="datetime-local"
-              min={new Date(
-                reference.current.getTime() -
-                  reference.current.getTimezoneOffset() * 60000,
-              )
-                .toISOString()
-                .slice(0, 16)}
-              className="w-full mt-2"
-              onChange={(e) =>
-                setParsed(
-                  e.target.value
-                    ? new Date(e.target.value).toISOString()
-                    : null,
-                )
-              }
-            />
-          </Text>
-          <div className="flex justify-end gap-2 p-2">
-            <Button
-              type="button"
-
-              // The custom time isn't a typed query: Back shows the presets again, not that time.
-              onClick={() => {
-                setParsed(null);
-                setCustom(false);
-              }}
-              variant="borderless"
-              size="medium"
-            >
-              Back
-            </Button>
-            <Button
-              disabled={!parsed}
-              type="submit"
-              variant="primary"
-              size="medium"
-            >
-              Set reminder
-            </Button>
-          </div>
-        </form>
+        />
       ) : (
         <Menu
           shouldFilter={false}
