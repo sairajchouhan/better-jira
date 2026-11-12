@@ -428,3 +428,16 @@ test("R2-D8: near the viewport's bottom the selection toolbar goes above the sel
   expect(place.maxWidth).toBe(520);
   expect(place.left).toBe(880);
 });
+
+test("BJ-67: `***` or `---` then Space puts a divider above the caret's paragraph", () => {
+  for (const marker of ["***", "---"]) {
+    const after = typeInto(empty(), `${marker} next`);
+    expect(after.doc.childCount).toBe(2);
+    expect(after.doc.firstChild!.type.name).toBe("rule");
+    expect(after.doc.lastChild!.textContent).toBe("next");
+    expect(fromEditorDocument(after.doc).content![0]).toEqual({ type: "rule" });
+  }
+  // Inside a list item, where Jira allows no rule, the text stays.
+  const list = typeInto(empty(), "- --- ");
+  expect(list.doc.textContent).toBe("--- ");
+});

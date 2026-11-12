@@ -183,6 +183,15 @@ export const markdownRules = inputRules({
     ),
     wrappingInputRule(/^\s*>\s$/, richSchema.nodes.blockquote!),
     textblockTypeInputRule(/^```$/, richSchema.nodes.codeBlock!),
+    // `***` or `---` then Space at a paragraph's start: a divider above, the caret stays in the paragraph (Linear's horizontal rule).
+    new InputRule(/^(?:\*\*\*|---)\s$/, (state, _match, start, end) => {
+      const $start = state.doc.resolve(start),
+        rule = richSchema.nodes.rule!,
+        index = $start.index(-1);
+      if ($start.parent.type !== paragraph || !$start.node(-1).canReplaceWith(index, index, rule))
+        return null;
+      return state.tr.delete(start, end).insert($start.before(), rule.create());
+    }),
     markRule(/\*\*([^*\s][^*]*)\*\*$/, "strong"),
     markRule(/(?<![*\w])\*([^*\s][^*]*)\*$/, "em"),
     markRule(/`([^`\s][^`]*)`$/, "code"),
