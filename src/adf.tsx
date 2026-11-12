@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { MediaView } from "./media-loader";
 import type { Attachment } from "./attachment-media";
 import { cardText, jiraDate, safeLink } from "./document";
+import { embedFrame, embedSource } from "./embed";
 export { adfToText } from "./document";
 
 /** Renders Jira's ADF (Atlassian Document Format). Unknown nodes fall through to their children. */
@@ -101,6 +102,16 @@ export function Adf({
           {cardText(a.url)}
         </a>
       );
+    case "embedCard": {
+      const src = embedSource(String(a.url ?? ""));
+      if (!src) return <Adf node={{ ...node, type: "blockCard" }} />;
+      const { allowfullscreen: _, referrerpolicy, sandbox, ...frame } = embedFrame(src);
+      return (
+        <div className="rich-embed">
+          <iframe {...frame} sandbox={sandbox} allowFullScreen referrerPolicy={referrerpolicy} />
+        </div>
+      );
+    }
     case "table":
       return (
         <table className="w-full border-collapse text-xs">

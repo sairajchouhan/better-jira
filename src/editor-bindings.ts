@@ -21,6 +21,9 @@ export const editorBindings: { id: string; name: string; hotkey: Hotkey }[] = [
   { id: "block-menu", name: "Open block menu", hotkey: "Shift+F10" },
   { id: "block-controls", name: "Focus block controls", hotkey: "Alt+F10" },
   { id: "attach", name: "Attach image/file", hotkey: "Mod+Shift+U" },
+  // Chrome's keys (Linear's `pasteAndMatchStyle` / `pasteWithoutFormatting`); other browsers swap them.
+  { id: "paste-match", name: "Paste and match style", hotkey: "Mod+Shift+V" },
+  { id: "paste-plain", name: "Paste without formatting", hotkey: "Mod+Alt+Shift+V" },
   { id: "undo", name: "Undo", hotkey: "Mod+Z" },
   { id: "redo", name: "Redo", hotkey: "Mod+Shift+Z" },
   { id: "save", name: "Save or submit / send comment", hotkey: "Mod+Enter" },

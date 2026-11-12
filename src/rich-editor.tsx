@@ -23,6 +23,7 @@ import { CaretMenu, MentionMenu, searchPeople } from "./mention-menu";
 import { activeEmoji, dismissEmoji, emojiPlugin, emojiRules, insertEmoji, matchingEmoji } from "./emoji";
 import { activeSlash, dismissSlash, matchingSlashCommands, slashPlugin, SLASH_COMMANDS } from "./slash-commands";
 import { ActionMenu, type ActionEntry } from "./action-menu";
+import { activeLinkPaste, dismissLinkPaste, linkPasteActions, pastePlugin } from "./editor-paste";
 import { get } from "./store";
 import { navigate } from "./app-navigation";
 import { jiraIssueURL } from "./issue-urls";
@@ -121,6 +122,7 @@ const caretMenus = [
   [activeMention, dismissMention],
   [activeSlash, dismissSlash],
   [activeEmoji, dismissEmoji],
+  [activeLinkPaste, dismissLinkPaste],
 ] as const;
 
 /** One look for every formatting and link control: Linear's borderless small Button, pressed while its mark or block is on. */
@@ -218,6 +220,11 @@ export function RichEditor(props: EditorEngineProps) {
           mentionPlugin((_view, event) => mentionKeys.current?.(event) ?? false),
           slashPlugin((_view, event) => mentionKeys.current?.(event) ?? false),
           emojiPlugin((_view, event) => mentionKeys.current?.(event) ?? false),
+          pastePlugin({
+            keys: (_view, event) => mentionKeys.current?.(event) ?? false,
+            upload: () => (latest.current.onFiles ? uploads.enqueue : null),
+            site: () => get().site,
+          }),
           mediaCaretPlugin(),
           uploads.plugin,
           markdownRules,
@@ -437,6 +444,8 @@ export function RichEditor(props: EditorEngineProps) {
     editorBindings.map((binding) => ({
       hotkey: binding.hotkey,
       callback: (event: KeyboardEvent) => {
+        // The paste keys stay the browser's; the paste plugin reads which one it was.
+        if (binding.id.startsWith("paste-")) return;
         if (event.target instanceof Element && event.target.closest("[data-media-interactive]"))
           return;
         event.preventDefault();
@@ -542,7 +551,8 @@ export function RichEditor(props: EditorEngineProps) {
   const focused = view.current?.hasFocus() ? view.current.state : null;
   const mention = focused && activeMention(focused),
     slash = focused && activeSlash(focused),
-    emoji = focused && activeEmoji(focused);
+    emoji = focused && activeEmoji(focused),
+    linkPaste = focused && activeLinkPaste(focused);
   const caretAnchor = (from: number, dismiss: (state: EditorState) => Transaction) => ({
     at: () => view.current!.coordsAtPos(from),
     editor: view.current!.dom,
@@ -881,6 +891,18 @@ export function RichEditor(props: EditorEngineProps) {
               editor.dispatch(insertEmoji(editor.state, emoji, item));
               editor.focus();
             },
+          }))}
+        />
+      )}
+      {linkPaste && (
+        <CaretMenu
+          {...caretAnchor(linkPaste.to, dismissLinkPaste)}
+          label="Pasted link"
+          query={linkPaste.href}
+          empty={null}
+          items={linkPasteActions(linkPaste, view.current!).map((item) => ({
+            ...item,
+            icon: <Icon name={item.id === "keep" ? "link" : "expand"} />,
           }))}
         />
       )}

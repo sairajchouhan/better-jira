@@ -1,6 +1,7 @@
 import { mediaCaretDocument } from "./media-caret";
 import { Schema, type MarkSpec, type Node as EditorNode, type NodeSpec } from "prosemirror-model";
 import { tableNodes } from "prosemirror-tables";
+import { embedFrame, embedSource } from "./embed";
 
 import {
   normalizeDocument,
@@ -212,6 +213,21 @@ export const richSchema = new Schema({
     },
     inlineCard: card(false),
     blockCard: card(true),
+    // Jira's embedCard: Linear's embed frame (100% × 400px), or the link when it can't be framed.
+    embedCard: {
+      group: "block",
+      atom: true,
+      attrs,
+      toDOM: (node) => {
+        const url = node.attrs.original?.data.attrs?.url,
+          src = embedSource(String(url ?? ""));
+        return [
+          "div",
+          { class: "rich-embed", contenteditable: "false", "data-url": String(url ?? "") },
+          src ? ["iframe", embedFrame(src)] : ["a", { href: safeLink(url) ?? "", target: "_blank", rel: "noreferrer" }, cardText(url)],
+        ];
+      },
+    },
     table: tableNode("table", "table"),
     tableRow: tableNode("table_row", "row"),
     tableCell: tableNode("table_cell", "cell"),
@@ -443,6 +459,11 @@ export const mentionNode = (person: { id: string; name: string }) =>
 export const inlineCardNode = (url: string) =>
   richSchema.nodes.inlineCard!.create({
     original: { data: { type: "inlineCard", attrs: { url } }, hadContent: false },
+  });
+/** Jira's embedCard (layout is required) for an embed made from a pasted link. */
+export const embedCardNode = (url: string) =>
+  richSchema.nodes.embedCard!.create({
+    original: { data: { type: "embedCard", attrs: { url, layout: "center" } }, hadContent: false },
   });
 /** Jira's emoji node: its short name, the code points as its id, and the character Jira shows. */
 export const emojiNode = (emoji: { name: string; char: string }) =>

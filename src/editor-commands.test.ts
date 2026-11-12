@@ -183,6 +183,7 @@ const JIRA: Record<string, string[]> = {
     "rule",
     "table",
     "blockCard",
+    "embedCard",
     ...MEDIA,
   ],
   blockquote: ["paragraph", "bulletList", "orderedList", "codeBlock", ...MEDIA],

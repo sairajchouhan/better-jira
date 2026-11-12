@@ -52,7 +52,8 @@ export type CaretAnchor = {
   keys: { current: ((event: KeyboardEvent) => boolean) | null };
   dismiss: () => void;
 };
-export type CaretMenuItem = { id: string; label: ReactNode; icon?: ReactNode; pick: () => void };
+/** `shortcut` is a key that picks the item from anywhere in the list (the paste-link menu's Tab), drawn as its cap. */
+export type CaretMenuItem = { id: string; label: ReactNode; icon?: ReactNode; shortcut?: string; pick: () => void };
 
 /** Linear's caret menu (@ people and issues, / blocks, : emoji) under the caret. Focus stays in the editor, which forwards
  * its keys through `keys`. With no items it shows `empty`, or steps aside when `empty` is null. */
@@ -85,6 +86,11 @@ export function CaretMenu({
       return true;
     }
     if (!items.length) return false;
+    const keyed = items.find((item) => item.shortcut === event.key);
+    if (keyed && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      keyed.pick();
+      return true;
+    }
     const move = (by: number) => setActive((i) => (i + by + items.length) % items.length);
     if (event.key === "ArrowDown" || (event.ctrlKey && event.key === "n")) move(1);
     else if (event.key === "ArrowUp" || (event.ctrlKey && event.key === "p")) move(-1);
@@ -131,7 +137,7 @@ export function CaretMenu({
       <Menu.List>
         {!items.length && <Menu.Empty always>{empty}</Menu.Empty>}
         {items.map((item) => (
-          <Menu.Item key={item.id} value={item.id} icon={item.icon} onSelect={item.pick}>
+          <Menu.Item key={item.id} value={item.id} icon={item.icon} shortcut={item.shortcut} onSelect={item.pick}>
             {item.label}
           </Menu.Item>
         ))}

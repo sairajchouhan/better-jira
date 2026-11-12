@@ -5,6 +5,7 @@ import * as mirror from "./mirror";
 import { parsePreferences } from "./view-model";
 import { serverConfiguration } from "./server-config";
 import { fetchPreview } from "./link-preview";
+import { remoteImage } from "./remote-image";
 import { applyOps, uploadAttachment } from "./jira-writes";
 import { jira, JiraError, canWrite } from "./jira";
 import * as inbox from "./notifications";
@@ -188,6 +189,7 @@ const server = serve({
         }
       }),
     },
+    "/api/remote-image": localOnly((req) => remoteImage(new URL(req.url).searchParams.get("url") ?? "")),
     "/api/issues": localOnly(() => json(mirror.issues())),
     "/api/avatar": { GET: localOnly(mirror.avatar) },
     "/api/link-preview": localOnly(async (req) =>
