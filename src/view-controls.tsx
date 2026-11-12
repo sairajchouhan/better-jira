@@ -86,6 +86,7 @@ function AddFilterButton({
   triggerRef,
   expanded,
   label,
+  tooltip,
   shortcut,
   variant,
   size,
@@ -98,6 +99,8 @@ function AddFilterButton({
   triggerRef?: RefObject<HTMLButtonElement | null>;
   expanded?: boolean;
   label: string;
+  /** Hover text when it differs from the name: the toolbar's "Add filter" shows "Filter (F)", as Linear's does. */
+  tooltip?: string;
   shortcut?: string;
   variant: ButtonVariant;
   size: ButtonSize;
@@ -113,6 +116,7 @@ function AddFilterButton({
       <IconButton
         ref={trigger}
         label={label}
+        tooltip={tooltip}
         shortcut={shortcut}
         variant={variant}
         size={size}
@@ -171,6 +175,7 @@ export function BoardControls({ board }: { board: Board }) {
         triggerRef={filterRef}
         expanded={toolbar === "filter" || toolbar === "advanced"}
         label={count ? "Add another filter" : "Add filter"}
+        tooltip={count ? undefined : "Filter"}
         shortcut={count ? undefined : "F"}
         variant="secondary"
         size="medium"

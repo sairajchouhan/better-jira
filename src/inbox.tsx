@@ -746,6 +746,7 @@ export function InboxList() {
         <IconButton
           id="inbox-filter"
           label="Add filter"
+          tooltip="Filter"
           shortcut={shortcutLabel("filter")}
           aria-expanded={overlay === "inbox-filter"}
           aria-pressed={hasFilters(v)}
