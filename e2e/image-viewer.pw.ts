@@ -223,6 +223,16 @@ test("image cropping: keyboard and pointer geometry, unreadable sources, local p
     await page.click("text=View image");
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Image comment'`);
     expect(await page.eval(`${thread}.textContent`)).toContain("First image review");
+    // Escape closes only the comment menu, not the thread (BJ-163).
+    await page.click('[aria-label="Image comment options"]');
+    await page.waitFor(
+      `!!document.querySelector('[role="dialog"][aria-label="Image comment options"]')`,
+    );
+    await page.key("Escape");
+    await page.waitFor(
+      `!document.querySelector('[role="dialog"][aria-label="Image comment options"]')`,
+    );
+    expect(await page.eval(`!!document.querySelector('.image-comment-thread')`)).toBe(true);
     await page.click('[aria-label="Image comment options"]');
     await page.click("text=Edit image comment");
     await page.key("a", "meta");
