@@ -70,6 +70,14 @@ test("an issue link in a rendered comment opens the issue here", async ({ open }
   const page = await open("?issue=TEST-2&view=page", { setup });
   const link = `.rich-doc a[href="https://example.atlassian.net/browse/TEST-4"]:not(#description *)`;
   await page.waitFor(`!!document.querySelector(${JSON.stringify(link)})`);
+  // 4.5: the comment's issue chip opens the shared issue card above it, as Linear's `Hft` does by default.
+  await page.hover(link);
+  await page.waitFor(`!!document.querySelector('[data-issue-hover="TEST-4"]')`);
+  const chip = (await page.page.locator(link).boundingBox())!,
+    hover = (await page.page.locator('[data-issue-hover="TEST-4"]').boundingBox())!;
+  expect(hover.y + hover.height).toBeLessThanOrEqual(chip.y);
+  await page.page.mouse.move(0, 0);
+  await page.waitFor(`!document.querySelector('[data-issue-hover="TEST-4"]')`);
   await page.eval(`window.open=()=>{window.__opened=true}`);
   await page.click(link);
   await page.waitFor(`${shownIssue}==='TEST-4'`);
@@ -119,6 +127,10 @@ test("BJ-16: Jira smart links of every kind show as Linear's mention chips, and 
     await page.hover('#description a.smart-link[href$="/browse/TEST-3"]');
     await page.waitFor(`!!document.querySelector('[data-issue-hover="TEST-3"]')`);
     expect(await page.eval(`document.querySelector('[data-issue-hover="TEST-3"]').textContent`)).toContain("TEST-3");
+    // 4.5: above the chip, as Linear's issue card (`Hft`) opens by default; relation pills keep theirs on the left.
+    const chip = (await page.page.locator('#description a.smart-link[href$="/browse/TEST-3"]').boundingBox())!,
+      hover = (await page.page.locator('[data-issue-hover="TEST-3"]').boundingBox())!;
+    expect(hover.y + hover.height).toBeLessThanOrEqual(chip.y);
     await page.page.mouse.move(0, 0);
   });
   await test.step("a comment's smart link is the same chip", async () => {

@@ -378,7 +378,7 @@ function RelatedIssue({ relation }: { relation: Relation }) {
   if (target) {
     const status = statusOf(target);
     return (
-      <IssueHoverCard relation={relation} issue={target}><AppLink to={related(target)} className="relation-pill">
+      <IssueHoverCard relation={relation} issue={target} placement="left"><AppLink to={related(target)} className="relation-pill">
         <span>{status && <StatusIcon status={status} />}</span>
         <span className="truncate">{target.summary}</span>
       </AppLink></IssueHoverCard>
@@ -386,7 +386,7 @@ function RelatedIssue({ relation }: { relation: Relation }) {
   }
   const linked = relation.issue;
   return (
-    <IssueHoverCard relation={relation}><a
+    <IssueHoverCard relation={relation} placement="left"><a
       href={jiraIssueURL(relation.key)}
       target="_blank"
       rel="noreferrer"

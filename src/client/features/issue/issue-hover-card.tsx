@@ -20,17 +20,27 @@ import { get, statusOf } from "@/client/state/store";
 import type { Issue } from "@/shared/issue-model";
 import type { Relation } from "@/shared/relations";
 
-/** Linear Hft/Wft/Kft: interactive issue card, 550ms, left beside relation pills.
- * The body uses mirror data already in memory; external links use Jira's linked-issue projection. */
+/** Where the card opens: Linear's issue card (`Hft`) opens above by default, as on an issue mention chip; relation pills
+ *  pass `left`. */
+const PLACEMENTS = {
+  top: { placement: "top", fallbacks: ["bottom"] },
+  left: { placement: "left", fallbacks: ["left-start", "left-end"] },
+} as const;
+
+/** Linear Hft/Wft/Kft: interactive issue card, 550ms. One card for relation pills, Activity's relation rows and issue
+ *  mention chips. The body uses mirror data already in memory; external links use Jira's linked-issue projection. */
 export function IssueHoverCard({
   relation,
   issue,
+  placement = "top",
   children,
 }: {
   relation: Relation;
   issue?: Issue;
+  placement?: keyof typeof PLACEMENTS;
   children: ReactNode;
 }) {
+  const side = PLACEMENTS[placement];
   const [open, setOpen] = useState(false);
   const id = useId();
   const {
@@ -40,12 +50,12 @@ export function IssueHoverCard({
   } = useFloating({
     open,
     onOpenChange: setOpen,
-    placement: "left",
+    placement: side.placement,
     strategy: "fixed",
     whileElementsMounted: autoUpdate,
     middleware: [
       offset(8),
-      flip({ fallbackPlacements: ["left-start", "left-end"] }),
+      flip({ fallbackPlacements: [...side.fallbacks] }),
       shift({ padding: 10 }),
     ],
   });

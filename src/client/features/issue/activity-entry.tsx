@@ -65,7 +65,7 @@ const RELATION_REMOVED: Record<string, string> = {
 
 function RelationTarget({ relation }: { relation: Relation }) {
   const target = get().issues.get(relation.key);
-  return <IssueHoverCard relation={relation} issue={target}>{target ? (
+  return <IssueHoverCard relation={relation} issue={target} placement="left">{target ? (
     <AppLink to={related(target)} className="hover:text-fg">
       <b className="font-medium">{relation.key}</b> {target.summary}
     </AppLink>
