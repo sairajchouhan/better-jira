@@ -100,9 +100,15 @@ function MenuInput({
   );
 }
 
-/** Linear's N6e: the scrolling rows, 6px above and below. */
+/** Linear's N6e: the scrolling rows, 6px above and below. Keyboard scrolling keeps ITEM_SCROLL_MARGIN of context past the highlight. */
 function MenuList({ maxHeight, ...props }: ComponentProps<typeof Command.List> & { maxHeight?: string }) {
-  return <Command.List {...props} className="menu-list" style={{ maxHeight }} />;
+  return (
+    <Command.List
+      {...props}
+      className="menu-list"
+      style={{ maxHeight, scrollPaddingBlock: MENU.ITEM_SCROLL_MARGIN }}
+    />
+  );
 }
 
 type ItemSlots = {
@@ -318,8 +324,10 @@ function MenuSubmenu({
             : 0,
         };
       }),
-      flip({ padding: 12, fallbackAxisSideDirection: "end" }),
-      shift({ padding: 12 }),
+      // Linear's x3e: a submenu keeps to a side, only swapping right and left, and is clamped 10px inside the window down and 12px
+      // across (over its parent when neither side fits); it never drops under its row.
+      flip({ padding: 12, crossAxis: false }),
+      shift({ padding: { top: 10, bottom: 10, left: 12, right: 12 }, crossAxis: true }),
     ],
   });
   const hover = useHover(context, {
