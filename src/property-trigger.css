@@ -1,0 +1,90 @@
+@layer components {
+  /* DetailButton `k.detailButton` (DetailButton.B6DQogHG.js) on Nv.base + buttonReset. */
+  .ui-property-trigger {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 1;
+    align-items: center;
+    justify-content: flex-start;
+    column-gap: 6px;
+    height: 28px;
+    min-width: 0;
+    max-width: 100%;
+    padding: 0 10px 0 6px;
+    border: 0;
+    border-radius: 9999px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--fg-2);
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+  }
+  /* a.moreHitArea(4, 4, 4, 8) */
+  .ui-property-trigger::before {
+    content: "";
+    position: absolute;
+    inset: -4px -4px -4px -8px;
+  }
+  .ui-property-trigger:is(:hover, [aria-expanded="true"], [data-menu-open="true"]) {
+    background: var(--crumb-hover);
+  }
+  .ui-property-trigger:is(:active, :focus-visible) {
+    background: var(--tab-on);
+  }
+  .ui-property-trigger[data-state="empty"] {
+    color: var(--fg-3);
+  }
+  .ui-property-trigger:disabled {
+    opacity: 0.6;
+  }
+  .ui-property-trigger svg {
+    flex-shrink: 0;
+  }
+  .ui-property-trigger-icon {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+  }
+  .ui-property-trigger-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ui-property-trigger-trailing {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+  }
+
+  /* The list/board property chip (.raj/linear.md "Board", computed styles): 24px pill, 0.5px chipLine, 14px icon, text 6px after it. */
+  .ui-property-trigger[data-variant="row"] {
+    column-gap: 0;
+    height: 24px;
+    padding: 0 8px;
+    border: var(--thin-pixel) solid var(--chip-line);
+    background: var(--card);
+    color: var(--card-fg-3);
+    font-size: 12px;
+    font-weight: 450;
+  }
+  .ui-property-trigger[data-variant="row"]::before {
+    content: none;
+  }
+  .ui-property-trigger[data-variant="row"] .ui-property-trigger-icon {
+    width: 14px;
+    height: 14px;
+  }
+  .ui-property-trigger[data-variant="row"] .ui-property-trigger-label {
+    margin: 0 1px 0 6px;
+  }
+  .ui-property-trigger[data-variant="row"]:not(:has(.ui-property-trigger-label)) {
+    padding: 0 4.5px;
+  }
+  .ui-property-trigger[data-variant="row"]:is(:hover, [aria-expanded="true"]) {
+    background: var(--card-hover);
+  }
+}
