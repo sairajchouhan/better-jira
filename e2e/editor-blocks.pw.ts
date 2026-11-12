@@ -113,7 +113,7 @@ test("links in the description open on click: other sites in a new tab, an issue
 test("BJ-69: Create issue from selection opens the composer titled with the selected text, related to this issue", async ({
   open,
 }) => {
-  await fixture.reset({ writable: true });
+  await fixture.reset({ writable: true, createSuccess: true });
   const page = await open("?issue=TEST-2&view=page");
   await page.waitFor(`!!document.querySelector('#description h2')`);
   await page.click("#description h2");
@@ -137,18 +137,9 @@ test("BJ-69: Create issue from selection opens the composer titled with the sele
     ]);
 });
 
-// The fixture refuses creates; this site lands them as TEST-90 and passes every other write through.
-const landing = `(()=>{const real=fetch;window.__ops=[];
-window.fetch=async(input,init)=>{const m=new URL(String(input),location.href).pathname.match(/^\\/api\\/issues\\/([^/]+)\\/ops$/);
- if(!m)return real(input,init);
- const {ops}=JSON.parse(init.body);window.__ops.push({key:m[1],ops});
- if(ops[0]?.op!=='create')return real(input,init);
- const f=ops[0].fields;return Response.json({key:'TEST-90',created:{[m[1]]:'TEST-90'},others:[],issue:{key:'TEST-90',board:1,summary:f.summary,status:f.status,type:'Task',assignee:null,labels:[],comments:0,updated:'2026-11-08T10:00:00Z',resolved:null,project:{key:'TEST',name:'Audit'}}});
-};})()`;
-
 test("BJ-69: the created issue replaces the selected text with a reference, saved under its Jira key", async ({ open }) => {
-  await fixture.reset({ writable: true });
-  const page = await open("?issue=TEST-2&view=page", { setup: landing });
+  await fixture.reset({ writable: true, createSuccess: true });
+  const page = await open("?issue=TEST-2&view=page");
   await page.waitFor(`!!document.querySelector('#description h2')`);
   await page.click("#description h2");
   await page.key("End");
@@ -158,12 +149,13 @@ test("BJ-69: the created issue replaces the selected text with a reference, save
   await page.key("Enter", "meta");
   // The heading's text is now Jira's smart link to the new issue.
   await page.waitFor(`!document.querySelector('#description h2')?.textContent.includes("Rich fixture heading")`);
-  const description = await page.waitFor<string>(
-    `JSON.stringify(window.__ops.filter(w=>w.key==='TEST-2').flatMap(w=>w.ops).find(op=>op.fields?.description)?.fields.description ?? "")`,
-    8000,
-  );
+  await waitSaved(doc => JSON.stringify(doc).includes("/browse/TEST-90"));
+  const description = JSON.stringify(await savedDescription());
   expect(description).toMatch(/"type":"inlineCard","attrs":\{"url":"[^"]*\/browse\/TEST-90"\}/);
   expect(description).not.toContain("Rich fixture heading");
+  await page.reload();
+  await page.waitFor(`!!document.querySelector('#description a[href$="/browse/TEST-90"]')`);
+  expect(await page.eval(`document.body.textContent.includes("TEST-90")`)).toBe(true);
 });
 
 test("BJ-56 / BJ-55: no block handle (Linear has none for text); ⌥↓ moves the caret's block", async ({ open }) => {

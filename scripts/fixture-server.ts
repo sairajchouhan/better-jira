@@ -201,6 +201,8 @@ let clientFailures = 0,
   added = false,
   /** BJ-15: TEST-1's Jira links reach issues outside the board and use link types Linear has no kind for. */
   crossLinks = false,
+  /** BJ-171: opt into successful, durable Jira creates. */
+  createSuccess = false,
   /** Jira changelogs per issue key, in the server's slim shape (src/shared/jira-history.ts), and how long they take. */
   history: Record<string, unknown[]> = {},
   historyDelay = 0,
@@ -225,6 +227,8 @@ const requests: { method: string; path: string; status: number }[] = [];
 /** Writable mode: ops the app sent, and the types they changed (reset with the fixture). */
 const writes: { key: string; ops: any[] }[] = [],
   types = new Map<string, string>(),
+  createdIssues = new Map<string, any>(),
+  descriptions = new Map<string, any>(),
   /** Links the app removed, from either end (see `pair`). */
   unlinked = new Set<string>();
 const pair = (a: string, b: string) => [a, b].sort().join(" ");
@@ -256,6 +260,7 @@ const bulkIssues = () =>
 const listed = () =>
   [
     ...issues,
+    ...createdIssues.values(),
     ...bulkIssues(),
     ...(added ? [{ ...issues[1]!, key: "ADD-1", board: 2, summary: "Added board issue" }] : []),
   ].map((issue) => ({
@@ -274,6 +279,22 @@ const listed = () =>
 /** Stands in for the server's applyOps: type changes follow live Jira, which refuses Subtask ↔ standard types. */
 function applyOps(key: string, ops: any[]) {
   writes.push({ key, ops });
+  const create = ops.find((op) => op.op === "create");
+  const created: Record<string, string> = {};
+  if (create) {
+    if (!createSuccess) return Response.json({ key, created, others: [], error: "Jira refused the new issue." }, { status: 422 });
+    const next = `TEST-${90 + createdIssues.size}`;
+    created[key] = next;
+    key = next;
+    const { description, ...fields } = create.fields;
+    createdIssues.set(key, { ...issues[1]!, ...fields, key });
+    if (description) descriptions.set(key, description);
+  }
+  for (const op of ops) {
+    if (op.op === "fields" && createdIssues.has(key))
+      createdIssues.set(key, { ...createdIssues.get(key), ...op.fields });
+    if (op.op === "fields" && op.fields.description) descriptions.set(key, op.fields.description);
+  }
   const issue = listed().find((i) => i.key === key)!,
     type = ops.find((op) => op.op === "fields" && op.fields.type)?.fields.type;
   if (type && (issue.type === "Subtask") !== (type === "Subtask"))
@@ -292,8 +313,9 @@ function applyOps(key: string, ops: any[]) {
     if (op.op === "link" && op.remove) unlinked.add(pair(key, op.target));
   return Response.json({
     key,
-    created: {},
+    created,
     others: [],
+    full: full(key),
     issue: listed().find((i) => i.key === key),
   });
 }
@@ -646,7 +668,7 @@ function full(key: string): any {
   return {
     key,
     fields: {
-      description: {
+      description: descriptions.get(key) ?? {
         ...rich,
         content: mediaVariant.startsWith("nested-")
           ? [nested]
@@ -790,6 +812,9 @@ async function handle(req: Request) {
     writable = settings.writable ?? false;
     subtask = settings.subtask ?? false;
     crossLinks = settings.crossLinks ?? false;
+    createSuccess = settings.createSuccess ?? false;
+    createdIssues.clear();
+    descriptions.clear();
     bulk = settings.bulk ?? 0;
     added = false;
     history = settings.history ?? {};
