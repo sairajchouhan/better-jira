@@ -54,9 +54,10 @@ test("issue options follow Linear's action tree, with descendant search and subm
     await page.waitFor(
       `!!document.querySelector('[cmdk-item][data-value="Create related › Blocked issue…"]')`,
     );
+    // Ranked by score (ISSUE-8): the shorter "Blocked by…" matches better.
     expect(await page.eval(optionValues)).toEqual([
-      "Create related › Blocked issue…",
       "Mark as › Blocked by…",
+      "Create related › Blocked issue…",
     ]);
     expect(await page.eval<{ input: boolean; separators: number }>(look)).toMatchObject({
       input: true,

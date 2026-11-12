@@ -8,10 +8,10 @@ import { canHaveChildren, needsParent } from "@/shared/issue-properties";
 import { createIssueDocument } from "./issue-resources";
 import { canRunShortcut, runShortcut, hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { copyIssue, copyKinds, copyIcons, copyShortcuts } from "./issue-copy";
-import { reminderEntries } from "@/client/features/reminders/reminders";
-import { duePresets } from "@/client/lib/due-date";
+import { reminderSubmenu } from "@/client/features/reminders/reminders";
 import { post } from "@/client/features/navigation/commands";
 import { RELATION_ISSUE } from "./issue-activity";
+import { DueRows, IssueLabelRows } from "./property-menu";
 import type { ActionEntry } from "@/client/components/action-menu";
 import { Icon, PriorityIcon, StatusIcon, type IconName } from "@/client/components/icons";
 import { Avatar } from "@/client/components/avatar";
@@ -67,49 +67,62 @@ export function issueMenuEntries(
     write();
     close();
   };
-  const property = (name: string, icon: IconName, id: string, children: ActionEntry[]): ActionEntry => ({
+  // Each submenu matches its picker (S, P, A, L, Shift+D): Linear's placeholder, number keys, and the same rows.
+  const property = (name: string, icon: IconName, id: string, entry: Omit<ActionEntry, "name" | "icon">): ActionEntry => ({
     name,
     icon,
     shortcut: hotkeyOf(id),
-    children,
+    ...entry,
+  });
+  const numbered = (from: number) => (entry: ActionEntry, i: number) => ({
+    ...entry,
+    number: i + from <= 9 ? i + from : undefined,
   });
   const inline = {
-    status: property(
-      "Status",
-      "status",
-      "status",
-      statuses(board).map((s) => ({
-        name: s.name,
-        image: createElement(StatusIcon, { status: s }),
-        selected: s.id === issue.status,
-        run: choose(() => actions.status(issue.key, s.id)),
-      })),
-    ),
-    priority: property(
-      "Priority",
-      "priority",
-      "priority",
-      ["", ...priorityChoices(get().options, boardIssues, get().writable)].map((p) => ({
+    status: property("Status", "status", "status", {
+      placeholder: "Change status…",
+      children: statuses(board)
+        .map((s) => ({
+          name: s.name,
+          image: createElement(StatusIcon, { status: s }),
+          selected: s.id === issue.status,
+          run: choose(() => actions.status(issue.key, s.id)),
+        }))
+        .map(numbered(1)),
+    }),
+    priority: property("Priority", "priority", "priority", {
+      placeholder: issue.priority ? "Change priority to…" : "Set priority to…",
+      nameAsParent: issue.priority ? "Change priority to" : "Set priority to",
+      children: ["", ...priorityChoices(get().options, boardIssues, get().writable)].map((p, i) => ({
         name: p || "No priority",
         image: createElement(PriorityIcon, { name: p || undefined }),
         selected: p === (issue.priority ?? ""),
+        number: i,
         run: choose(() => actions.patch(issue.key, { priority: p || undefined })),
       })),
-    ),
-    assignee: property("Assignee", "user", "assign", [
-      { name: "No assignee", user: null },
-      ...assignableUsers(ME, get().options.users, get().issues.values()).map((u) => ({ name: u.name, user: u })),
-    ].map(({ name, user }) => ({
-      name,
-      image: createElement(Avatar, { user, size: 16 }),
-      selected: (issue.assignee?.id ?? null) === (user?.id ?? null),
-      run: choose(() => actions.assign(issue.key, user)),
-    }))),
-    labels: property(
-      "Labels",
-      "label",
-      "labels",
-      knownLabels(boardIssues, get().options.labels).map((label) => {
+    }),
+    assignee: property("Assignee", "user", "assign", {
+      placeholder: "Assign to…",
+      hoistFrom: 3,
+      children: [
+        { name: "No assignee", user: null },
+        ...assignableUsers(ME, get().options.users, get().issues.values()).map((u) => ({ name: u.name, user: u })),
+      ]
+        .map(({ name, user }) => ({
+          name,
+          image: createElement(Avatar, { user, size: 16 }),
+          selected: (issue.assignee?.id ?? null) === (user?.id ?? null),
+          run: choose(() => actions.assign(issue.key, user)),
+        }))
+        .map(numbered(0)),
+    }),
+    // The submenu is the L picker's checkbox rows on the issue's live labels; these children are the root search's "Add label › x".
+    labels: property("Labels", "label", "labels", {
+      placeholder: issue.labels.length ? "Change or add labels…" : "Add labels…",
+      hoistFrom: 3,
+      nameAsParent: (label) => (label.selected ? "Change label" : "Add label"),
+      rows: (query) => createElement(IssueLabelRows, { issue: issue.key, query }),
+      children: knownLabels(boardIssues, get().options.labels).map((label) => {
         const on = issue.labels.includes(label);
         return {
           name: label,
@@ -122,7 +135,7 @@ export function issueMenuEntries(
           ),
         };
       }),
-    ),
+    }),
   };
   const picker = (name: string, icon: IconName, id: string): ActionEntry => ({
     name,
@@ -130,28 +143,23 @@ export function issueMenuEntries(
     shortcut: hotkeyOf(id),
     run: () => openDialog(id as IssueMenuDialog),
   });
-  const due: ActionEntry = {
-    name: "Due date",
-    icon: "calendar",
-    shortcut: hotkeyOf("due"),
-    children: [
-      {
-        name: "Custom…",
-        run: () => {
+  const due = property("Due date", "calendar", "due", {
+    placeholder: "Try: 24h, 7 days, Feb 9",
+    hoistFrom: Infinity,
+    rows: (query) =>
+      createElement(DueRows, {
+        query,
+        value: issue.due ?? null,
+        onPick: (at) => {
+          actions.patch(issue.key, { due: at });
+          close();
+        },
+        onCustom: () => {
           post("issue-options-start", "due");
           open("due");
         },
-      },
-      ...duePresets().map((preset) => ({
-        name: preset.name,
-        hint: preset.label,
-        run: () => {
-          actions.patch(issue.key, { due: preset.due });
-          close();
-        },
-      })),
-    ],
-  };
+      }),
+  });
   const properties: ActionEntry[] = [
     {
       name: "Issue type",
@@ -305,13 +313,16 @@ export function issueMenuEntries(
       name: "Remind me",
       icon: "clock",
       shortcut: hotkeyOf("remind"),
-      children: reminderEntries((at) => {
-        actions.remind(issue.key, at);
-        close();
-      }, () => {
-        post("issue-options-start", "reminder");
-        open("reminder");
-      }),
+      ...reminderSubmenu(
+        (at) => {
+          actions.remind(issue.key, at);
+          close();
+        },
+        () => {
+          post("issue-options-start", "reminder");
+          open("reminder");
+        },
+      ),
     },
     ...(presentation === "sub-issue"
       ? []

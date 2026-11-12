@@ -206,7 +206,7 @@ export function CodeBlockControls({
         <ActionMenu
           label="Language"
           anchor={languageButton.current}
-          highlight
+          highlight="first"
           entries={languageEntries(language, setLanguage)}
           close={() => setMenu(null)}
         />

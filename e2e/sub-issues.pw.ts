@@ -346,11 +346,13 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
       '[role="dialog"][aria-label="Labels"] [cmdk-item][data-value="test"]',
     );
     await labelRow.waitFor();
-    const had = (await labelRow.locator(".menu-checkmark").count()) > 0;
+    // ISSUE-1: Labels › is the L picker's checkbox rows; a checked label offers to remove it.
+    const checked = labelRow.locator('[aria-label="Remove label test"]');
+    const had = (await checked.count()) > 0;
     await labelRow.click();
     await menu("TEST-4");
     await page.hover('[cmdk-item][data-value="Labels"]');
-    await expect(labelRow.locator(".menu-checkmark")).toHaveCount(had ? 0 : 1);
+    await expect(checked).toHaveCount(had ? 0 : 1);
     await page.key("Escape");
     // Project uses the same controlled menu as the issue properties.
     const project = async (row: string) => {
@@ -372,14 +374,13 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
     await page.key("Escape");
     // Due date › Tomorrow and Remind me › An hour from now act on the child, not the open issue.
     const tomorrow = "Tomorrow"; // Linear reads near due dates relatively (R2-issue-fields-D7).
+    // Linear lists neither submenu's rows in the root search (no subActionsHoisting), so each is picked from its submenu.
     await menu("TEST-4");
-    await page.type("tomorrow");
-    await page.waitFor(`${names}.includes('Due date › Tomorrow')`);
-    await page.click('[cmdk-item][data-value="Due date › Tomorrow"]');
+    await page.hover('[cmdk-item][data-value="Due date"]');
+    await page.click('[role="dialog"][aria-label="Due date"] [cmdk-item][data-value="Tomorrow"]');
     await menu("TEST-4");
-    await page.type("hour from");
-    await page.waitFor(`${names}.includes('Remind me › An hour from now')`);
-    await page.click('[cmdk-item][data-value="Remind me › An hour from now"]');
+    await page.hover('[cmdk-item][data-value="Remind me"]');
+    await page.click('[role="dialog"][aria-label="Remind me"] [cmdk-item][data-value="An hour from now"]');
     await page.waitFor(`!document.querySelector('[aria-label="Sub-issue actions"]')`);
     expect(
       await page.eval(
@@ -440,7 +441,7 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
       await page.eval(
         `[!!document.querySelector('[cmdk-item][data-value="Copy › Copy title as link"] svg'),{label:document.querySelector('[cmdk-item][data-value="Copy › Copy title as link"] .menu-name').textContent,shortcut:[...document.querySelectorAll('[cmdk-item][data-value="Copy › Copy title as link"] .ui-shortcut kbd')].map(n=>n.textContent).join(' ')}]`,
       ),
-    ).toEqual([true, { label: "Copy ›Copy title as link", shortcut: "⌘ C" }]);
+    ).toEqual([true, { label: "CopyCopy title as link", shortcut: "⌘ C" }]);
     await page.key("Escape");
     await menu("TEST-4", "rename", "More properties › Rename…");
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Issue title'`);

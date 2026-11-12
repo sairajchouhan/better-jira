@@ -168,7 +168,7 @@ function ToolbarDropdown({
         <ActionMenu
           label={label}
           anchor={button.current}
-          highlight
+          highlight="first"
           close={() => onOpenChange(false)}
           entries={options.map((option) => ({
             name: option.name,

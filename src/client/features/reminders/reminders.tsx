@@ -5,7 +5,7 @@ import { IconButton } from "@/client/components/button";
 import { FutureTimeStep } from "./future-time-step";
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   nextReminder,
   reminderDistance,
@@ -37,23 +37,8 @@ export function ReminderMenu({
   onPick: (at: string) => void;
   close: () => void;
 }) {
-  const reference = useRef(new Date()),
-    [query, setQuery] = useState(""),
-    [presets] = useState(() => reminderPresets(reference.current)),
-    [parsed, setParsed] = useState<string | null>(null),
-    [custom, setCustom] = useState(startCustom);
-  useEffect(() => {
-    let active = true;
-    void import("./reminder-date").then(
-      ({ parseReminder }) => {
-        if (!active) return;
-        setParsed(query ? parseReminder(query, reference.current) : null);
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, [query]);
+  const [custom, setCustom] = useState(startCustom);
+  const [query, setQuery] = useState("");
   const choose = (at: string) => {
     if (Date.parse(at) <= Date.now()) {
       set({ perf: "Choose a future reminder time" });
@@ -62,9 +47,6 @@ export function ReminderMenu({
     onPick(at);
     close();
   };
-  const matches = presets.filter(
-    (p) => !query || p.label.toLowerCase().includes(query.toLowerCase()),
-  );
   // A shortcut on an issue (Shift+H) opens Linear's command menu on it, whose keyboard placeholder is "Remind me at…" (Iq's
   // subActionPlaceholder); a document's menu stays beside its anchor.
   const target = useCommandTarget();
@@ -73,36 +55,12 @@ export function ReminderMenu({
       <Menu.Input
         autoFocus
         aria-label="Reminder time"
-        placeholder={target ? "Remind me at…" : "Try: 4 pm, 2 days, in 5 weeks…"}
+        placeholder={target ? "Remind me at…" : REMIND_PLACEHOLDER}
         value={query}
         onValueChange={setQuery}
       />
       <Menu.List>
-        {parsed ? (
-          <Menu.Item value={parsed} icon={<Icon name="clock" />} onSelect={() => choose(parsed)}>
-            {reminderTime(parsed)}
-          </Menu.Item>
-        ) : (
-          matches.map((p) => (
-            <Menu.Item
-              key={p.label}
-              value={p.label}
-              icon={<Icon name="clock" />}
-              hint={<time dateTime={p.at}>{reminderTime(p.at)}</time>}
-              onSelect={() => choose(p.at)}
-            >
-              {p.label}
-            </Menu.Item>
-          ))
-        )}
-        {query && !parsed && !matches.length && (
-          <div role="status">
-            <Menu.Empty always>Choose a future date and time</Menu.Empty>
-          </div>
-        )}
-        <Menu.Item value="Custom…" icon={<Icon name="clock" />} onSelect={() => setCustom(true)}>
-          Custom…
-        </Menu.Item>
+        <ReminderRows query={query} onPick={choose} onCustom={() => setCustom(true)} />
       </Menu.List>
     </Menu>
   );
@@ -113,10 +71,7 @@ export function ReminderMenu({
       submitLabel="Set reminder"
       errorMessage="Choose a future reminder time"
       onPick={choose}
-      onBack={() => {
-        setParsed(null);
-        setCustom(false);
-      }}
+      onBack={() => setCustom(false)}
     />
   ) : (
     menu
@@ -131,19 +86,72 @@ export function ReminderMenu({
     </MenuSurface>
   );
 }
-/** The "Remind me" submenu rows of an options menu: the presets, then Custom…, which opens the ReminderMenu's custom step. */
-export const reminderEntries = (
+export const REMIND_PLACEHOLDER = "Try: 4 pm, 2 days, in 5 weeks…";
+/** The reminder rows (Linear's Remind me action, recalculateOnInput): a typed time ("4 pm", "in 2 days") or the presets it matches,
+ *  then Custom…. One component for ReminderMenu and Issue options › Remind me. The typed-time parser (chrono) loads with it. The
+ *  typed rows match whatever was typed, so a filtering menu keeps them. */
+export function ReminderRows({
+  query,
+  onPick,
+  onCustom,
+}: {
+  query: string;
+  onPick: (at: string) => void;
+  onCustom: () => void;
+}) {
+  const [reference] = useState(() => new Date()),
+    [presets] = useState(() => reminderPresets(reference)),
+    [parsed, setParsed] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    void import("./reminder-date").then(({ parseReminder }) => {
+      if (active) setParsed(query ? parseReminder(query, reference) : null);
+    });
+    return () => {
+      active = false;
+    };
+  }, [query, reference]);
+  const matches = presets.filter((p) => !query || p.label.toLowerCase().includes(query.toLowerCase()));
+  return (
+    <>
+      {parsed ? (
+        <Menu.Item value={parsed} keywords={[query]} icon={<Icon name="clock" />} onSelect={() => onPick(parsed)}>
+          {reminderTime(parsed)}
+        </Menu.Item>
+      ) : (
+        matches.map((p) => (
+          <Menu.Item
+            key={p.label}
+            value={p.label}
+            icon={<Icon name="clock" />}
+            hint={<time dateTime={p.at}>{reminderTime(p.at)}</time>}
+            onSelect={() => onPick(p.at)}
+          >
+            {p.label}
+          </Menu.Item>
+        ))
+      )}
+      {query && !parsed && !matches.length && (
+        <div role="status">
+          <Menu.Empty always>Choose a future date and time</Menu.Empty>
+        </div>
+      )}
+      <Menu.Item value="Custom…" keywords={query ? [query] : undefined} icon={<Icon name="clock" />} onSelect={onCustom}>
+        Custom…
+      </Menu.Item>
+    </>
+  );
+}
+/** An options menu's "Remind me" submenu: ReminderRows under Linear's placeholder, never listed in the root search (its
+ *  subActionsHoisting is off). `pick` runs on a chosen time; `custom` opens the ReminderMenu's custom step. */
+export const reminderSubmenu = (
   pick: (at: string) => void,
   custom: () => void,
-): ActionEntry[] => [
-  ...reminderPresets().map((preset) => ({
-    name: preset.label,
-    icon: "clock" as const,
-    hint: reminderTime(preset.at),
-    run: () => pick(preset.at),
-  })),
-  { name: "Custom…", icon: "calendar", run: custom },
-];
+): Pick<ActionEntry, "placeholder" | "hoistFrom" | "rows"> => ({
+  placeholder: REMIND_PLACEHOLDER,
+  hoistFrom: Infinity,
+  rows: (query) => <ReminderRows query={query} onPick={pick} onCustom={custom} />,
+});
 /** The issue's reminder menu (overlay "reminder"): Linear's command menu on the issue (Shift+H, CORE-8); Issue options › Remind me ›
  *  Custom… opens it at the custom step, under Issue options. */
 export function ReminderPicker({ issue }: { issue: Issue }) {

@@ -206,8 +206,9 @@ test("document header, menus and shortcuts act on the document, preserve the par
     expect(link).toContain("/issue/TEST-2/document/");
     const download = page.page.waitForEvent("download");
     await page.click('[aria-label="Document options"]');
+    // Ranked by score (ISSUE-8), the search starts on Download as markdown.
     await page.type("Markdown");
-    await page.key("ArrowDown");
+    await page.waitFor(`document.querySelector('[cmdk-item][aria-selected="true"]')?.dataset.value==='Download › Download as markdown'`);
     await page.key("Enter");
     const file = await downloaded(download, "Reference document.md");
     expect(await file.text()).toBe("# Reference document\n\nA durable document body");
@@ -236,7 +237,7 @@ test("document header, menus and shortcuts act on the document, preserve the par
     const download = page.page.waitForEvent("download");
     await page.click('[aria-label="Document options"]');
     await page.type("Markdown");
-    await page.key("ArrowDown");
+    await page.waitFor(`document.querySelector('[cmdk-item][aria-selected="true"]')?.dataset.value==='Download › Download as markdown'`);
     await page.key("Enter");
     expect(await (await downloaded(download, "Spec [v2] a-b-c-d--.md")).text()).toBe(
       `# ${title}\n\nBody`,

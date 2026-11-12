@@ -258,9 +258,7 @@ function filterEntries(base: InboxItem[], v: InboxView): ActionEntry[] {
       icon: FIELD_ICON[field],
       children: values.map((value) => ({
         name: value,
-        icon: v.filters[field]?.includes(value)
-          ? ("check" as const)
-          : undefined,
+        checkbox: !!v.filters[field]?.includes(value),
         hint: `${counts.get(value)} notification${counts.get(value) === 1 ? "" : "s"}`,
         run: () => toggleFilter(field, value),
       })),
@@ -371,22 +369,11 @@ function InboxDisplayOptions({ close }: { close: () => void }) {
   );
 }
 
-/** Linear's inbox Filter (CORE-17): left-aligned under its button with the "Add Filter…" search showing. A click opens it with no
- *  row highlighted; F (the pointer elsewhere) highlights the first, so Enter opens it. Read once, as it opens. */
+/** Linear's inbox Filter (CORE-17): left-aligned under its button with the "Add Filter…" search showing; each field's values are
+ *  checkbox rows that keep the menu open. Read once, as it opens. */
 function FilterMenu({ entries, close }: { entries: ActionEntry[]; close: () => void }) {
   const [anchor] = useState(() => document.getElementById("inbox-filter"));
-  // ponytail: pointer-vs-key from :hover; ActionMenu's own keyboard-open rule (P2, ISSUE-15) replaces it once it lands.
-  const [keyboard] = useState(() => !anchor?.matches(":hover"));
-  return (
-    <ActionMenu
-      label="Filter"
-      anchor={anchor}
-      placeholder="Add Filter…"
-      highlight={keyboard}
-      entries={entries}
-      close={close}
-    />
-  );
+  return <ActionMenu label="Filter" anchor={anchor} placeholder="Add Filter…" entries={entries} close={close} />;
 }
 
 function Menus({ base }: { base: InboxItem[] }) {

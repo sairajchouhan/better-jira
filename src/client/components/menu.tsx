@@ -89,6 +89,7 @@ const MenuLevelContext = createContext<MenuLevel | null>(null);
  * - Space, with the search empty (or mid-search right after ↑/↓ on a checkbox row), opens a submenu row, toggles a checkbox row
  *   and keeps the menu open, or picks any other row.
  * - Enter on a checkbox row picks it and closes the menu; Shift+Enter toggles it and keeps the menu open.
+ * - With the search empty, a digit picks the row whose `data-number` it is.
  */
 function MenuRoot({
   className = "",
@@ -215,6 +216,15 @@ function MenuRoot({
           if (pristine && (event.key === "ArrowDown" || event.key === "ArrowUp" || (event.key === " " && !search?.value))) {
             event.preventDefault();
             move(event.key === "ArrowUp" ? -1 : 1);
+            return;
+          }
+          // With the search empty, a number key picks the row showing it (Linear's picker numbers: 0 for "No priority").
+          if (/^\d$/.test(event.key) && plain && !search?.value) {
+            const numbered = rows().find((item) => item.dataset.number === event.key);
+            if (numbered) {
+              event.preventDefault();
+              numbered.click();
+            }
             return;
           }
           switch (event.key) {

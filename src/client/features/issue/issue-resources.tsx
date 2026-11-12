@@ -387,7 +387,7 @@ export function IssueResources({ issue }: { issue: Issue }) {
         <ActionMenu
           label="Add resource"
           anchor={menu}
-          highlight
+          highlight="first"
           close={() => setMenu(null)}
           entries={[
             { name: "Add link…", icon: "link", run: () => setForm("link") },

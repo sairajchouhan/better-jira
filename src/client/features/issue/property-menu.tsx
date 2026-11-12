@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, use, useEffect, useState } from "react";
 import { Avatar } from "@/client/components/avatar";
 import { Icon, PriorityIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
 import {
@@ -18,7 +18,9 @@ import { MenuSurface as Modal } from "@/client/components/menu-surface";
 const DateInput = lazy(() => import("./date-input").then((m) => ({ default: m.DateInput })));
 import type { ReactNode } from "react";
 import { Menu } from "@/client/components/menu";
-import { MenuSurface } from "@/client/components/menu-surface";
+import { MenuSurface, MenuSurfaceContext } from "@/client/components/menu-surface";
+import { CheckRow } from "@/client/components/action-menu";
+import { actions } from "@/client/state/issue-actions";
 import { CommandMenu, useCommandTarget } from "@/client/components/command-menu";
 
 /** Linear's property menu (RAJ-52 status, priority, assignee and labels): 208px wide beside the open issue's property button, a 36px
@@ -55,27 +57,7 @@ export function PropertyMenu({
     <Menu
       defaultValue={current}
       style={target ? undefined : { width: 206 }}
-      onKeyDown={(event) => {
-        onKeyDown?.(event);
-        if (event.defaultPrevented) return;
-        const input = event.target instanceof HTMLInputElement ? event.target : null;
-        if (
-          /^\d$/.test(event.key) &&
-          !event.metaKey &&
-          !event.ctrlKey &&
-          !event.altKey &&
-          input &&
-          !input.value
-        ) {
-          const row = event.currentTarget.querySelector<HTMLElement>(
-            `[cmdk-item][data-number="${event.key}"]`,
-          );
-          if (row) {
-            event.preventDefault();
-            row.click();
-          }
-        }
-      }}
+      onKeyDown={onKeyDown}
     >
       <Menu.Input
         autoFocus
@@ -396,61 +378,42 @@ export function MilestoneMenu({
     </PropertyMenu>
   );
 }
-export function LabelsMenu({ anchor, board, value, onChange, close }: FieldMenuProps<string[]>) {
+/**
+ * The label checkbox rows (Linear's labels action, multiSelectSubActions): the labels on the issue first, as the menu opened, then
+ * "Workspace labels", then "Create new label" for a new name. One component for the L picker and Issue options › Labels.
+ */
+export function LabelRows({
+  board,
+  value,
+  onChange,
+  query,
+}: Omit<FieldMenuProps<string[]>, "anchor" | "close"> & { query: string }) {
   const { issues, options } = useCatalog(board);
-  const [query, setQuery] = useState("");
+  const surface = use(MenuSurfaceContext);
   const [order] = useState(() => ({
     checked: [...value],
     rest: knownLabels(issues, options.labels).filter((l) => !value.includes(l)),
   }));
   const toggle = (name: string) =>
     onChange(value.includes(name) ? value.filter((l) => l !== name) : [...value, name]);
-  const row = (name: string) => {
-    const on = value.includes(name);
-    return (
-      <Menu.Item
-        key={name}
-        value={name}
-        data-label={name}
-        checkbox={on}
-        checkboxLabel={`${on ? "Remove" : "Add"} label ${name}`}
-        onCheckboxClick={() => toggle(name)}
-        icon={<span className="size-[9px] rounded-full" style={{ background: hue(name) }} />}
-        onSelect={() => {
-          toggle(name);
-          close();
-        }}
-      >
-        {name}
-      </Menu.Item>
-    );
-  };
+  const row = (name: string) => (
+    <CheckRow
+      key={name}
+      value={name}
+      data-label={name}
+      checked={value.includes(name)}
+      checkboxLabel={`${value.includes(name) ? "Remove" : "Add"} label ${name}`}
+      onToggle={() => toggle(name)}
+      icon={<span className="size-[9px] rounded-full" style={{ background: hue(name) }} />}
+    >
+      {name}
+    </CheckRow>
+  );
   // Jira labels can't contain spaces: a new label joins its words with hyphens (R2-issue-fields-D5).
   const created = query.trim().replace(/\s+/g, "-");
-  const exact = [...order.checked, ...order.rest].some(
-    (l) => l.toLowerCase() === created.toLowerCase(),
-  );
+  const exact = [...order.checked, ...order.rest].some((l) => l.toLowerCase() === created.toLowerCase());
   return (
-    <PropertyMenu
-      label="Change labels"
-      placeholder={value.length ? "Change or add labels…" : "Add labels…"}
-      hotkey="L"
-      anchor={anchor}
-      side={anchor?.closest("[data-properties]") ? "left" : undefined}
-      close={close}
-      query={query}
-      onQuery={setQuery}
-      onKeyDown={(event) => {
-        if (event.key !== " " || query) return;
-        const name = event.currentTarget.querySelector<HTMLElement>(
-          "[cmdk-item][data-selected=true]",
-        )?.dataset.label;
-        if (name) {
-          event.preventDefault();
-          toggle(name);
-        }
-      }}
-    >
+    <>
       {order.checked.map(row)}
       {order.checked.length > 0 && order.rest.length > 0 && <Menu.Divider />}
       {order.checked.length > 0 && order.rest.length > 0 ? (
@@ -465,20 +428,58 @@ export function LabelsMenu({ anchor, board, value, onChange, close }: FieldMenuP
           // Like Enter on an existing label: apply it and close, so the menu never shows a list without it.
           onSelect={() => {
             toggle(created);
-            close();
+            surface?.close();
           }}
         >
           Create new label: "{created}"
         </Menu.Item>
       )}
+    </>
+  );
+}
+/** Issue options › Labels: LabelRows on the issue's live labels, so a checkbox reflects each toggle while the menu stays open. */
+export function IssueLabelRows({ issue, query }: { issue: string; query: string }) {
+  const labels = useStore((s) => s.issues.get(issue)?.labels) ?? [];
+  const board = useStore((s) => s.boards.find((b) => b.id === s.issues.get(issue)?.board));
+  return (
+    <LabelRows
+      board={board}
+      value={labels}
+      onChange={(next) => actions.patch(issue, { labels: next })}
+      query={query}
+    />
+  );
+}
+export function LabelsMenu({ anchor, board, value, onChange, close }: FieldMenuProps<string[]>) {
+  const [query, setQuery] = useState("");
+  return (
+    <PropertyMenu
+      label="Change labels"
+      placeholder={value.length ? "Change or add labels…" : "Add labels…"}
+      hotkey="L"
+      anchor={anchor}
+      side={anchor?.closest("[data-properties]") ? "left" : undefined}
+      close={close}
+      query={query}
+      onQuery={setQuery}
+    >
+      <LabelRows board={board} value={value} onChange={onChange} query={query} />
     </PropertyMenu>
   );
 }
-export function DueMenu({ anchor, value, onChange, close }: FieldMenuProps<string | null>) {
-  const [query, setQuery] = useState("");
-  const [date, setDate] = useState(value ?? "");
-  const [dateValid, setDateValid] = useState(true);
-  const [custom, setCustom] = useState(() => kept("issue-options-start") === "due");
+/** The due-date rows (Linear's due action, recalculateOnInput): a typed date like "24h" or "Feb 9" first, then Custom…, the presets and,
+ *  with a date set, Remove. One component for the Shift+D picker and Issue options › Due date. The parser (chrono) loads with it. */
+export function DueRows({
+  query,
+  value,
+  onPick,
+  onCustom,
+}: {
+  query: string;
+  value: string | null;
+  onPick: (due: string | null) => void;
+  onCustom: () => void;
+}) {
   const [parseDue, setParseDue] = useState<typeof import("@/client/lib/due-parse").parseDueDate>();
   useEffect(() => {
     let active = true;
@@ -489,18 +490,55 @@ export function DueMenu({ anchor, value, onChange, close }: FieldMenuProps<strin
       active = false;
     };
   }, []);
+  const parsed = parseDue?.(query) ?? null;
+  return (
+    <>
+      {parsed && (
+        <PickerRow
+          value={`Due ${query}`}
+          keywords={[query]}
+          icon={<Icon name="calendar" />}
+          hint={shortDate(parsed)}
+          onSelect={() => onPick(parsed)}
+        >
+          Due
+        </PickerRow>
+      )}
+      <PickerRow value="Custom…" icon={<Icon name="calendar" />} onSelect={onCustom}>
+        Custom…
+      </PickerRow>
+      {duePresets().map((preset) => (
+        <PickerRow
+          key={preset.name}
+          value={preset.name}
+          icon={<Icon name="calendar" />}
+          current={value === preset.due}
+          hint={shortDate(preset.due)}
+          onSelect={() => onPick(preset.due)}
+        >
+          {preset.name}
+        </PickerRow>
+      ))}
+      {value && (
+        <PickerRow value="Remove due date" icon={<Icon name="close" />} onSelect={() => onPick(null)}>
+          Remove due date
+        </PickerRow>
+      )}
+    </>
+  );
+}
+export function DueMenu({ anchor, value, onChange, close }: FieldMenuProps<string | null>) {
+  const [query, setQuery] = useState("");
+  const [date, setDate] = useState(value ?? "");
+  const [dateValid, setDateValid] = useState(true);
+  const [custom, setCustom] = useState(() => kept("issue-options-start") === "due");
   useCommand("issue-options-start", (start) => {
     if (start !== "due") return;
     setCustom(true);
     return true;
   });
-  if (!custom) {
+  if (!custom)
     // Linear (RAJ-61): a click or Enter applies at once; typed text like "24h" or "Feb 9" offers that date.
-    const parsed = parseDue?.(query) ?? null,
-      apply = (due: string | null) => {
-        onChange(due);
-        close();
-      };
     return (
       <PropertyMenu
         label="Due date"
@@ -511,44 +549,17 @@ export function DueMenu({ anchor, value, onChange, close }: FieldMenuProps<strin
         query={query}
         onQuery={setQuery}
       >
-        {parsed && (
-          <PickerRow
-            value={`Due ${query}`}
-            keywords={[query]}
-            icon={<Icon name="calendar" />}
-            hint={shortDate(parsed)}
-            onSelect={() => apply(parsed)}
-          >
-            Due
-          </PickerRow>
-        )}
-        <PickerRow value="Custom…" icon={<Icon name="calendar" />} onSelect={() => setCustom(true)}>
-          Custom…
-        </PickerRow>
-        {duePresets().map((preset) => (
-          <PickerRow
-            key={preset.name}
-            value={preset.name}
-            icon={<Icon name="calendar" />}
-            current={value === preset.due}
-            hint={shortDate(preset.due)}
-            onSelect={() => apply(preset.due)}
-          >
-            {preset.name}
-          </PickerRow>
-        ))}
-        {value && (
-          <PickerRow
-            value="Remove due date"
-            icon={<Icon name="close" />}
-            onSelect={() => apply(null)}
-          >
-            Remove due date
-          </PickerRow>
-        )}
+        <DueRows
+          query={query}
+          value={value}
+          onPick={(due) => {
+            onChange(due);
+            close();
+          }}
+          onCustom={() => setCustom(true)}
+        />
       </PropertyMenu>
     );
-  }
   return (
     <Modal label="Due date" close={close} anchor={anchor} width={360}>
       <form

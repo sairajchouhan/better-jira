@@ -29,7 +29,7 @@ import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { useCommand } from "@/client/features/navigation/commands";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { emojiOptions } from "@/client/features/comments/reactions";
-import { ReminderMenu, reminderEntries } from "@/client/features/reminders/reminders";
+import { ReminderMenu, reminderSubmenu } from "@/client/features/reminders/reminders";
 /** The header breadcrumb, the favorite star and the icon-picker cells: no primitive yet (see the note at each). */
 const BUTTON = "rounded px-2 py-1.5 text-[13px] text-fg-2 hover:bg-hover";
 type Draft = { title: string; body: AdfDocument };
@@ -385,7 +385,7 @@ function DocumentHeader() {
       name: "Remind me",
       icon: "clock",
       shortcut: hotkeyOf("document-remind"),
-      children: reminderEntries(remind, () => setReminding("custom")),
+      ...reminderSubmenu(remind, () => setReminding("custom")),
     },
     {
       name: resource.showAuthors ? "Hide author names" : "Show author names",

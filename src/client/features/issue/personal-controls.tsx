@@ -779,7 +779,6 @@ export function GroupMenu({
   display: Display;
 }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const [keyboard, setKeyboard] = useState(false);
   const entries: ActionEntry[] = [
     ...(issues.length
       ? [
@@ -814,7 +813,6 @@ export function GroupMenu({
         aria-haspopup="dialog"
         aria-expanded={!!anchor}
         onClick={(e) => {
-          setKeyboard(e.detail === 0);
           setAnchor(anchor ? null : e.currentTarget);
         }}
         variant="borderless"
@@ -827,7 +825,6 @@ export function GroupMenu({
           label={`Column ${name}`}
           anchor={anchor}
           entries={entries}
-          highlight={keyboard}
           close={() => setAnchor(null)}
         />
       )}
