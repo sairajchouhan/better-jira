@@ -145,6 +145,21 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
     await p.waitFor(
       `${rows}.length === 7 && !document.querySelector('[data-inbox-chip]')`,
     );
+    // CORE-17: a click opens Linear's filter menu left-aligned under Filter, its "Add Filter…" search showing, no row highlighted.
+    await p.click("#inbox-filter");
+    const FILTER_MENU = '[role=dialog][aria-label="Filter"]';
+    await p.waitFor(`document.activeElement?.placeholder === "Add Filter…"`);
+    expect(
+      await p.eval(
+        `(()=>{const b=document.getElementById("inbox-filter").getBoundingClientRect(),m=document.querySelector('${FILTER_MENU}'),i=m.querySelector("input");return [Math.round(m.getBoundingClientRect().left-b.left),!i.closest(".sr-only")&&i.getBoundingClientRect().width>100,m.querySelector("[data-pristine]")!==null]})()`,
+      ),
+    ).toEqual([0, true, true]);
+    await p.type("prio");
+    await p.waitFor(
+      `(v=>v.length>0&&v.every(x=>x.startsWith("Issue priority")))([...document.querySelectorAll('${FILTER_MENU} [cmdk-item]')].map(n=>n.dataset.value))`,
+    );
+    await p.key("Escape");
+    await p.waitFor(`!document.querySelector('${FILTER_MENU}')`);
     // Filters persist across reloads, like Linear's view.
     await p.key("f");
     await p.click(`[cmdk-item][data-value="Project"]`);

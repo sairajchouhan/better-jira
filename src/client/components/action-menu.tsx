@@ -41,6 +41,7 @@ export function ActionMenu({
   align,
   point,
   highlight = false,
+  placeholder,
 }: {
   anchor?: HTMLElement | null;
   entries: ActionEntry[];
@@ -50,6 +51,9 @@ export function ActionMenu({
   point?: { x: number; y: number };
   /** Open with the first row highlighted, as Linear's filter menu does, instead of its row menus' none. */
   highlight?: boolean;
+  /** Shows the root search from the start with this placeholder, as Linear's filter menus do ("Add Filter…"); without it the
+   *  search stays hidden until typing starts. */
+  placeholder?: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
   return (
@@ -71,6 +75,7 @@ export function ActionMenu({
             container={container}
             close={close}
             highlight={highlight}
+            placeholder={placeholder}
           />
         </FloatingTree>
       </div>
@@ -84,6 +89,7 @@ function Level({
   close,
   nested = false,
   highlight = false,
+  placeholder,
 }: {
   entries: ActionEntry[];
   label: string;
@@ -91,6 +97,7 @@ function Level({
   close: () => void;
   nested?: boolean;
   highlight?: boolean;
+  placeholder?: string;
 }) {
   const [query, setQuery] = useState(""),
     [open, setOpen] = useState<string | null>(null);
@@ -113,10 +120,10 @@ function Level({
     >
       {/* Linear keeps the filter focused but shows it only once typing starts. */}
       <Menu.Input
-        hideWhenEmpty
+        hideWhenEmpty={!placeholder}
         autoFocus={!nested}
         aria-label={`Find ${label.toLowerCase()}`}
-        placeholder="Filter…"
+        placeholder={placeholder ?? "Filter…"}
         value={query}
         onValueChange={(value) => {
           setQuery(value);

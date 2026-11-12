@@ -371,6 +371,24 @@ function InboxDisplayOptions({ close }: { close: () => void }) {
   );
 }
 
+/** Linear's inbox Filter (CORE-17): left-aligned under its button with the "Add Filter…" search showing. A click opens it with no
+ *  row highlighted; F (the pointer elsewhere) highlights the first, so Enter opens it. Read once, as it opens. */
+function FilterMenu({ entries, close }: { entries: ActionEntry[]; close: () => void }) {
+  const [anchor] = useState(() => document.getElementById("inbox-filter"));
+  // ponytail: pointer-vs-key from :hover; ActionMenu's own keyboard-open rule (P2, ISSUE-15) replaces it once it lands.
+  const [keyboard] = useState(() => !anchor?.matches(":hover"));
+  return (
+    <ActionMenu
+      label="Filter"
+      anchor={anchor}
+      placeholder="Add Filter…"
+      highlight={keyboard}
+      entries={entries}
+      close={close}
+    />
+  );
+}
+
 function Menus({ base }: { base: InboxItem[] }) {
   const overlay = useStore((s) => s.overlay);
 
@@ -410,16 +428,7 @@ function Menus({ base }: { base: InboxItem[] }) {
       />
     );
   if (overlay === "inbox-filter")
-    return (
-      <ActionMenu
-        label="Filter"
-        anchor={document.getElementById("inbox-filter")}
-        align="end"
-        highlight
-        entries={filterEntries(base, v)}
-        close={close}
-      />
-    );
+    return <FilterMenu entries={filterEntries(base, v)} close={close} />;
   if (overlay === "inbox-display") return <InboxDisplayOptions close={close} />;
   if (overlay === "snooze") return <SnoozeMenu close={close} />;
   return null;
