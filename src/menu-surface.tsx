@@ -48,8 +48,17 @@ export function usePlacement<T extends HTMLElement>(
   return key === false ? undefined : style;
 }
 
-const FOCUSABLE =
-  'button:not(:disabled),input:not([type="file"]),textarea,select,[contenteditable="true"],[tabindex="0"]';
+// Tab stops only: a roving tablist's other tabs (tabindex -1) are reached with arrows, so they are not the trap's ends.
+const FOCUSABLE = [
+  "button:not(:disabled)",
+  'input:not([type="file"])',
+  "textarea",
+  "select",
+  '[contenteditable="true"]',
+  '[tabindex="0"]',
+]
+  .map((selector) => `${selector}:not([tabindex="-1"])`)
+  .join();
 const returnTargets = new WeakMap<Element, HTMLElement | null>();
 
 /**
