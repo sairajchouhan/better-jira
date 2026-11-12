@@ -69,6 +69,19 @@ test("R2 issue fields on a writable site: remote links, watching, palette comman
     expect(commands).not.toContain("cmd:Assign to me");
     expect(commands).not.toContain("cmd:Remove due date");
   });
+  await test.step("BJ-45: I un-assigns me when the issue is already mine", async () => {
+    const p = await open("?issue=TEST-2&view=page", {
+      setup: writable({ assignee: { id: "audit-me", name: "Audit user" } }),
+    });
+    await p.waitFor(ready);
+    await p.key("i");
+    await p.waitFor(`${ops}.some(o=>o.op==='fields'&&o.fields.assignee===null)`);
+  });
+    await p.waitFor(ready);
+    await p.key("p");
+    await p.click('[role="dialog"][aria-label="Set priority"] [cmdk-item][data-value="No priority"]');
+    await p.waitFor(`${ops}.some(o=>o.op==='fields'&&o.fields.priority===null)`);
+  });
 });
 
 test("R2 issue fields on a read-only site: reminder pill, hyphenated labels, Shift+R caret", async ({
