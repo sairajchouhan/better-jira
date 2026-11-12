@@ -46,3 +46,9 @@ test("BJ-139: CSV uses Linear's columns, status names and No priority", () => {
   expect(row).toContain('"Raj","Epic, UI"');
   expect(row).not.toContain("10000");
 });
+
+test("BJ-151: CSV timestamps use UTC while due dates remain calendar dates", () => {
+  const csv = issuesCSV([issue({ created: "2026-11-08T05:30:00+05:30", updated: "2026-11-08T00:00:00Z", started: "2026-11-07T19:00:00-05:00", resolved: "2026-11-08T00:00:00.000Z", due: "2026-11-09" })], board);
+  expect(csv.match(/2026-11-08T00:00:00.000Z/g)).toHaveLength(4);
+  expect(csv).toContain('"2026-11-09"');
+});

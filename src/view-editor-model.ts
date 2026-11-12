@@ -26,6 +26,12 @@ export function issuesCSV(issues: Issue[], board: Board): string {
   );
   const cell = (v: string) =>
     `"${(/^[=+@\-\t\r]/.test(v) ? "'" + v : v).replaceAll('"', '""')}"`;
+  // Timestamp columns all use UTC; Due Date remains a calendar date.
+  const timestamp = (value: string | null | undefined) => {
+    if (!value) return "";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toISOString();
+  };
   return [
     ["ID", "Team", "Title", "Description", "Status", "Estimate", "Priority", "Project", "Creator", "Assignee", "Labels", "Created", "Updated", "Started", "Completed", "Due Date", "Parent issue"],
     ...issues.map((i) => [
@@ -40,10 +46,10 @@ export function issuesCSV(issues: Issue[], board: Board): string {
       i.creator?.name ?? "",
       i.assignee?.name ?? "",
       i.labels.join(", "),
-      i.created ?? "",
-      i.updated,
-      i.started ?? "",
-      i.resolved ?? "",
+      timestamp(i.created),
+      timestamp(i.updated),
+      timestamp(i.started),
+      timestamp(i.resolved),
       i.due ?? "",
       i.parent ?? "",
     ]),
