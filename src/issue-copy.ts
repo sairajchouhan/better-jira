@@ -1,4 +1,5 @@
-import { ME, get, issueURL, loadFull, set, statusOf, type Full, type Issue } from "./store";
+import { ME, get, issueURL, set, statusOf, type Full, type Issue } from "./store";
+import { loadFull } from "./server-data";
 import { isLocalIssue } from "./local-edits";
 import type { AdfNode } from "./rich-document";
 

@@ -8,7 +8,8 @@ import { useMemo, useRef, useState, type MouseEvent, type ReactNode } from "reac
 import { isMyIssues } from "./navigation";
 import { PERSON_TABS, peopleOf } from "./people";
 import { Icon, TypeDot } from "./icons";
-import { actions, set, timed, useStore, beginCreate, issueURL, retryLocalStorage, removeBoard, type Board, type Issue } from "./store";
+import { actions, set, timed, useStore, beginCreate, issueURL, retryLocalStorage, type Board, type Issue } from "./store";
+import { removeBoard } from "./server-data";
 import { dismissWriteError } from "./jira-sync";
 import { dismissRecoveryNotice, downloadLocalBackup } from "./local-database";
 import { undoEdit, redoEdit } from "./undo-history";

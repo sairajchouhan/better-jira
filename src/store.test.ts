@@ -193,7 +193,8 @@ test("personal issue edits, comments, creation and deletion undo without losing 
 });
 
 test("failed issue details expose an error and can be retried", async () => {
-  const { get, set, loadFull } = await import("./store");
+  const { get, set } = await import("./store");
+  const { loadFull } = await import("./server-data");
   const key = "REMOTE-1",
     template = [...get().issues.values()][0]!;
   const full = new Map(get().full);
@@ -635,7 +636,7 @@ test("deleting a document keeps attachments that another document still shows", 
 });
 
 test("the property poll comes back in 3s while Jira syncs, 30s once settled and 10s after a failure", async () => {
-  const { pollDelay } = await import("./store");
+  const { pollDelay } = await import("./server-data");
   expect([pollDelay(false, 5), pollDelay(false, 0), pollDelay(true, 5)]).toEqual([
     3000, 30000, 10000,
   ]);

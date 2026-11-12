@@ -35,7 +35,8 @@ import { Menu } from "./menu";
 import { MenuSurface } from "./menu-surface";
 import { hotkeyOf, runShortcut } from "./shortcuts";
 import { shortcutTitle } from "./keycap";
-import { statusOf as issueStatusOf, get, queryClient, set, isWatching, useStore, type Issue } from "./store";
+import { statusOf as issueStatusOf, get, set, isWatching, useStore, type Issue } from "./store";
+import { queryClient } from "./server-data";
 import { navigate, ui } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
 

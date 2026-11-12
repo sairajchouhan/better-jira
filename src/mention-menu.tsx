@@ -7,7 +7,8 @@ import { Avatar } from "./avatar";
 import { Menu, MENU } from "./menu";
 import { MENU_POPUP, usePlacement } from "./menu-surface";
 import { StatusIcon } from "./icons";
-import { get, queryClient, statusOf, type Issue, type User } from "./store";
+import { get, statusOf, type Issue, type User } from "./store";
+import { queryClient } from "./server-data";
 
 const peopleKey = (query: string, issue?: string) => [
   "people",
