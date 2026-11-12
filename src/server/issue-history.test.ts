@@ -22,9 +22,9 @@ test("BJ-13: the changelog is slimmed: document text dropped, long values cut, a
     }),
   ]);
   expect(a!.at).toBe("2026-01-02T11:04:05.000Z");
-  expect(a!.items[0]).toMatchObject({ field: "description", fromString: "", toString: "" });
-  expect(a!.items[1]!.fromString).toHaveLength(MAX_VALUE);
-  expect(a!.items[1]!.toString).toBe("Short");
+  expect(a!.items[0]).toMatchObject({ field: "description", fromText: "", toText: "" });
+  expect(a!.items[1]!.fromText).toHaveLength(MAX_VALUE);
+  expect(a!.items[1]!.toText).toBe("Short");
   expect(a!.actor?.app).toBeUndefined();
   expect(b!.actor).toMatchObject({ id: "bot", app: true });
   expect(b!.items[0]).toMatchObject({ custom: true, from: null, to: "team-1" });

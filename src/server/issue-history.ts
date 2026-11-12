@@ -3,7 +3,7 @@ import { jiraAvatar } from "@/shared/avatar-url";
 import type { HistoryEntry, HistoryItem } from "@/shared/jira-history";
 
 /** Bump when the stored shape changes, so old rows are read again. */
-export const HISTORY_CACHE_VERSION = "1";
+export const HISTORY_CACHE_VERSION = "2";
 /** Jira's page cap for the changelog endpoint. */
 const PAGE = 100;
 /** Text fields whose values are whole documents: the Activity says they changed, never what to (Linear shows one line). */
@@ -16,6 +16,9 @@ const cut = (value: unknown): string | null => {
   const text = String(value);
   return text.length > MAX_VALUE ? `${text.slice(0, MAX_VALUE - 1)}…` : text;
 };
+
+/** A display value; a document's is only whether it was there. */
+const text = (value: unknown, document: boolean) => (document ? (value ? "" : null) : cut(value));
 
 /** Jira's changelog entries, slimmed for the client: actor, time and each item's raw and display values, long text cut. */
 export function slimHistory(values: readonly any[]): HistoryEntry[] {
@@ -37,9 +40,10 @@ export function slimHistory(values: readonly any[]): HistoryEntry[] {
         ...(item.fieldId ? { fieldId: item.fieldId } : {}),
         ...(item.fieldtype === "custom" ? { custom: true } : {}),
         from: cut(item.from),
-        fromString: document ? (item.fromString ? "" : null) : cut(item.fromString),
+        fromText: text(item.fromString, document),
         to: cut(item.to),
-        toString: document ? (item.toString ? "" : null) : cut(item.toString),
+        // Jira's toString read as an own key: a missing one is Object.prototype's function, not a value.
+        toText: text(Object.hasOwn(item, "toString") ? item.toString : null, document),
       };
     }),
   }));
