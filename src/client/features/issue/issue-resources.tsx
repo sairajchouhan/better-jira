@@ -20,6 +20,7 @@ import { AppLink } from "@/client/features/navigation/app-link";
 import {
   issueResources,
   linkTitle,
+  linkDescription,
   resourceURL,
   typedResourceURL,
   type IssueResource,
@@ -58,6 +59,29 @@ export async function createIssueDocument(issue: Issue) {
   navigate({ selected: issue.key, panel: true, document: id });
 }
 /** With `resource`, edits its title like Linear's Edit… (the URL is read-only). */
+
+/** A link row's title, and beside it the unfurled page's description when Linear would show one. */
+function LinkText({ resource }: { resource: IssueResource }) {
+  const description = linkDescription(resource);
+  return (
+    <>
+      <a
+        href={resourceURL(resource.url ?? "") ?? undefined}
+        target="_blank"
+        rel="noreferrer"
+        className={`min-w-0 truncate font-medium text-fg ${description ? "max-w-[60%] shrink-0" : "flex-1"}`}
+      >
+        {linkTitle(resource)}
+      </a>
+      {description && (
+        <span data-link-description className="min-w-0 flex-1 truncate text-fg-3">
+          {description}
+        </span>
+      )}
+    </>
+  );
+}
+
 export function ResourceForm({
   issue,
   kind,
@@ -330,24 +354,7 @@ export function IssueResources({ issue }: { issue: Issue }) {
                 {resource.title || "New document"}
               </AppLink>
             ) : (
-              <>
-                <a
-                  href={resourceURL(resource.url ?? "") ?? undefined}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={`min-w-0 truncate font-medium text-fg ${resource.preview?.description ? "max-w-[60%] shrink-0" : "flex-1"}`}
-                >
-                  {linkTitle(resource)}
-                </a>
-                {resource.preview?.description && (
-                  <span
-                    data-link-description
-                    className="min-w-0 flex-1 truncate text-fg-3"
-                  >
-                    {resource.preview.description}
-                  </span>
-                )}
-              </>
+              <LinkText resource={resource} />
             )}
             <time
               aria-label={`Updated at ${new Date(resource.updated).toLocaleString()}`}

@@ -1,5 +1,6 @@
 import { type Issue, type User } from "@/shared/issue-model";
 import type { AdfDocument } from "./document";
+import { githubName } from "./smart-link";
 
 export type DocumentRevision = { title: string; body: AdfDocument; at: string; author: User };
 export type DocumentProperties = {
@@ -21,11 +22,17 @@ export type IssueResource = DocumentProperties & {
   body?: AdfDocument;
   /** A link's unfurled page, fetched after it is added. */ preview?: LinkPreview;
 };
-/** A link added without its own title shows the page title once it is unfurled, like Linear. */
+/** A link added without its own title shows the page title once it is unfurled, like Linear; a GitHub pull request,
+ *  issue, release or repository reads as Linear names it (`owner/repo#1`, #8). */
 export const linkTitle = (resource: IssueResource) =>
-  resource.title === resource.url && resource.preview?.title
-    ? resource.preview.title
-    : resource.title;
+  resource.title !== resource.url
+    ? resource.title
+    : ((resource.url && githubName(resource.url)) ?? resource.preview?.title ?? resource.title);
+/** The unfurled page's description beside a link's title; none for a link named from its URL alone, as Linear shows none. */
+export const linkDescription = (resource: IssueResource) =>
+  resource.title === resource.url && resource.url && githubName(resource.url)
+    ? undefined
+    : resource.preview?.description;
 export type LinkPreview = { title?: string; description?: string; icon?: string };
 export const validLinkPreview = (value: unknown) =>
   value === undefined ||

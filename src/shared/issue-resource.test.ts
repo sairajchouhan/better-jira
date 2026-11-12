@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { issueResources, typedResourceURL, type IssueResource } from "./issue-resource";
+import { issueResources, linkDescription, linkTitle, typedResourceURL, type IssueResource } from "./issue-resource";
 
 test("R2-issue-fields-D10: a typed bare domain links over https; other schemes stay rejected", () => {
   expect(typedResourceURL("example.com/qa-if2")).toBe("https://example.com/qa-if2");
@@ -46,4 +46,23 @@ test("F3: mirrored URLs and titled Jira resources display once while pending loc
   expect(issueResources({ ...issue, resources: [jira, pending, doc], links: [jira.url!] })).toEqual(
     [jira, pending, doc],
   );
+});
+
+test("#8: a GitHub link reads as Linear names it, without the page's text; other links show the unfurled page", () => {
+  const link = (url: string, title = url): IssueResource => ({
+    id: url,
+    kind: "link",
+    title,
+    url,
+    updated: "",
+    preview: { title: "Fix ?? operator · Issue #1 · oven-sh/bun", description: "Page text" },
+  });
+  const shown = (r: IssueResource) => [linkTitle(r), linkDescription(r)];
+  expect(shown(link("https://github.com/oven-sh/bun/pull/1"))).toEqual(["oven-sh/bun#1", undefined]);
+  expect(shown(link("https://github.com/oven-sh/bun/issues/22"))).toEqual(["oven-sh/bun#22", undefined]);
+  expect(shown(link("https://github.com/oven-sh/bun/releases/tag/bun-v1.2"))).toEqual(["oven-sh/bun bun-v1.2", undefined]);
+  expect(shown(link("https://github.com/oven-sh/bun"))).toEqual(["oven-sh/bun", undefined]);
+  // A title someone gave the link stays, and a page elsewhere keeps its unfurl.
+  expect(shown(link("https://github.com/oven-sh/bun/pull/1", "Mine"))).toEqual(["Mine", "Page text"]);
+  expect(shown(link("https://example.com/a"))).toEqual(["Fix ?? operator · Issue #1 · oven-sh/bun", "Page text"]);
 });

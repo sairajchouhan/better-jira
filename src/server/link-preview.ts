@@ -1,4 +1,18 @@
 import { resourceURL, type LinkPreview } from "@/shared/issue-resource";
+/** Named references pages use in titles and descriptions; numeric ones are read by number. */
+const NAMED: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", hellip: "…", mdash: "—", ndash: "–",
+  lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”", laquo: "«", raquo: "»", middot: "·", bull: "•",
+  copy: "©", reg: "®", trade: "™", times: "×",
+};
+/** HTMLRewriter hands text and attributes over as written: `&quot;` stays `&quot;` unless read here (#8). */
+export function decodeEntities(text: string): string {
+  return text.replace(/&(#x[\da-f]+|#\d+|[a-z]+);/gi, (whole, name: string) => {
+    if (name[0] !== "#") return NAMED[name.toLowerCase()] ?? whole;
+    const code = name[1] === "x" || name[1] === "X" ? parseInt(name.slice(2), 16) : Number(name.slice(1));
+    return code > 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff) ? String.fromCodePoint(code) : whole;
+  });
+}
 /** Like Linear's link unfurl: the page title, a description (meta, else the first paragraph) and its icon. Server side only (HTMLRewriter). */
 export async function previewFrom(html: string, base: string): Promise<LinkPreview> {
   const meta: Record<string, string> = {};
@@ -48,10 +62,10 @@ export async function previewFrom(html: string, base: string): Promise<LinkPrevi
     .transform(new Response(html))
     .text();
   const clean = (value: string | undefined) =>
-    value?.replace(/\s+/g, " ").trim().slice(0, 300) || undefined;
+    value && decodeEntities(value).replace(/\s+/g, " ").trim().slice(0, 300) || undefined;
   let iconURL: string | null = null;
   try {
-    iconURL = resourceURL(new URL(icon || "/favicon.ico", base).href);
+    iconURL = resourceURL(new URL(decodeEntities(icon) || "/favicon.ico", base).href);
   } catch {}
   return {
     title: clean(meta["og:title"] ?? title),

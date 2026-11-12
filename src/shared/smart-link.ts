@@ -67,16 +67,38 @@ function confluence(url: URL, href: string, data: unknown): SmartLink | undefine
   return { kind: "confluence", url: href, site: url.origin, ...(pageId && /^\d+$/.test(pageId) ? { pageId } : {}), title };
 }
 
+/** Linear's name for a GitHub pull request, issue, release or repository (`getGithubFullUrlMetadata`): `owner/repo#1`,
+ *  `owner/repo v1.0`, `owner/repo`. Undefined for any other URL. */
+export function githubName(value: string | URL): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return;
+  }
+  if (url.hostname.replace(/^www\./, "") !== "github.com") return;
+  const path = url.pathname.split("/").filter(Boolean);
+  if (path.length < 2) return;
+  const repo = `${path[0]}/${path[1]}`;
+  if (/^(pull|issues)$/.test(path[2] ?? "") && /^\d+$/.test(path[3] ?? "")) return `${repo}#${path[3]}`;
+  if (path[2] === "releases" && path[3] === "tag" && path[4]) {
+    try {
+      return `${repo} ${decodeURIComponent(path[4])}`;
+    } catch {
+      return `${repo} ${path[4]}`;
+    }
+  }
+  if (path.length === 2) return repo;
+}
+
 /** A readable name for a link to any other site: what the URL itself says, never fetched. */
 export function externalTitle(url: URL): string {
   const host = url.hostname.replace(/^www\./, ""),
     path = url.pathname.split("/").filter(Boolean);
-  if (host === "github.com" && path.length >= 2) {
-    const repo = `${path[0]}/${path[1]}`;
-    if (/^(pull|issues)$/.test(path[2] ?? "") && /^\d+$/.test(path[3] ?? "")) return `${repo}#${path[3]}`;
-    if (path[2] === "commit" && path[3]) return `${repo}@${path[3].slice(0, 7)}`;
-    if (path.length === 2) return repo;
-  }
+  const github = githubName(url);
+  if (github) return github;
+  if (host === "github.com" && path[2] === "commit" && path[3])
+    return `${path[0]}/${path[1]}@${path[3].slice(0, 7)}`;
   if (host === "docs.google.com") {
     const app: Record<string, string> = {
       document: "Google Doc",
