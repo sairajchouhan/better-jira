@@ -29,9 +29,9 @@
 }
 
 @layer components {
-  /* Oh → dQ → XHn.text; restrict this to issue titles, leaving other heading appearances alone. */
+  /* Oh → dQ → XHn.text; restrict this to issue titles, leaving other heading appearances alone. The heading keeps its
+     -0.16px tracking: live Linear (RAJ-52) measures the title 466px wide, which XHn's -0.1px would not give. */
   .issue-detail-title .ui-autosize[data-appearance="heading"] > .ui-input {
-    letter-spacing: -0.00625rem;
     font-feature-settings: "calt";
     text-wrap: pretty;
   }

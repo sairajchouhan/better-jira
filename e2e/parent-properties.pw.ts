@@ -823,7 +823,7 @@ test("bundle header geometry and colours are shared by page and side panel", asy
       [["7","2","round","lch(13.08 1.48 272)"],["7","2","round","lch(48 59.31 288.43)"]],
       "lch(5.52 0.4 272)","lch(61.803 1.2 272)","lch(16.32 1.48 272)","24px"]);
     expect(await page.eval(`(() => {const arcs=document.querySelector('[data-parent-progress] svg').children;return [arcs[0].getAttribute('stroke-dasharray'),arcs[1].getAttribute('transform'),Number(arcs[1].getAttribute('stroke-dashoffset'))]})()`)).toEqual([String(2*Math.PI*7),"rotate(-76 8 8)",3+2*Math.PI*7-(2*Math.PI*7-3)*(.085+.25*(.915+3/(2*Math.PI*7)))]);
-    expect(await page.eval(`(() => {const s=getComputedStyle(document.getElementById('summary'));return [s.fontSize,s.fontWeight,s.lineHeight,s.letterSpacing,s.fontFeatureSettings,s.textWrap]})()`)).toEqual(["24px","600","32px","-0.1px",'"calt"',"pretty"]);
+    expect(await page.eval(`(() => {const s=getComputedStyle(document.getElementById('summary'));return [s.fontSize,s.fontWeight,s.lineHeight,s.letterSpacing,s.fontFeatureSettings,s.textWrap]})()`)).toEqual(["24px","600","32px","-0.16px",'"calt"',"pretty"]);
     await page.hover('[data-parent-progress]');
     await page.waitFor(`getComputedStyle(document.querySelector('[data-parent-progress]')).backgroundColor==='lch(7.32 0.85 272)'`);
     await page.click('[data-parent-progress]');
