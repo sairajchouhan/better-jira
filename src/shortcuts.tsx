@@ -11,7 +11,8 @@ import { filterCount, visibleOrder } from "./view-model";
 import { forgetIssueIntents, post, run as command } from "./commands";
 import { canHaveChildren } from "./issue-properties";
 import { formatForDisplay, getHotkeyManager, type Hotkey } from "@tanstack/react-hotkeys";
-import { actions, beginCreate, boardOf, currentKey, get, isLocalIssue, isWatching, ME, redoEdit, set, undoEdit, useStore, type Issue, type Overlay } from "./store";
+import { actions, beginCreate, boardOf, currentKey, get, isWatching, ME, redoEdit, set, undoEdit, useStore, type Issue, type Overlay } from "./store";
+import { isLocalIssue } from "./local-edits";
 import { navigate, ui } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
 import {

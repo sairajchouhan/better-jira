@@ -1,4 +1,5 @@
-import { ME, get, isLocalIssue, issueURL, loadFull, set, statusOf, type Full, type Issue } from "./store";
+import { ME, get, issueURL, loadFull, set, statusOf, type Full, type Issue } from "./store";
+import { isLocalIssue } from "./local-edits";
 import type { AdfNode } from "./rich-document";
 
 const escape = (text: string) => text.replace(/[\\`*_[\]<>]/g, "\\$&");

@@ -1,5 +1,30 @@
 import { toasts } from "./toast-queue";
 import { returnRejectedComment } from "./rejected-comment";
+import {
+  adoptJira,
+  clearLocalEdits,
+  countEdit,
+  editCount,
+  forgetIssue,
+  installChanges,
+  isLocalIssue,
+  markChanged,
+  markCreated,
+  markStale,
+  mergeFull,
+  mergeProperties,
+  needsFull,
+  patchFields,
+  patchIssue,
+  releaseAttachments,
+  releaseJiraFields,
+  renameIssue,
+  resetLocalEdits,
+  restoreSnapshots,
+  savedChanges,
+  snapshot,
+  withJiraLinks,
+} from "./local-edits";
 import { latestNotification, rekeyNotification, showNotification, NOTIFICATION_ID } from "./app-notifications";
 import { assignableUsers, knownPeople, statusById, statuses } from "./board-catalog";
 import { viewSettings } from "./view-settings";
@@ -44,23 +69,15 @@ import {
   type IssueResource,
   type LinkPreview,
 } from "./issue-resource";
-import {
-  RELATION_ISSUE,
-  recordActivity,
-  recordRelation,
-  rollbackActivity,
-  type PropertyActivity,
-} from "./issue-activity";
-import { createOutbox, type Answer, type WriteResult } from "./outbox";
+import { RELATION_ISSUE, recordRelation, type PropertyActivity } from "./issue-activity";
+import { createOutbox, type Answer } from "./outbox";
 import {
   prepareOps,
-  uploadedAttachments,
   aliasAttachments,
   settleUploads,
   uploadNow,
 } from "./jira-media";
 import {
-  JIRA_ISSUE_FIELDS,
   renameCommentIds,
   namesKey,
   renameIds,
@@ -637,58 +654,13 @@ async function loadApplication() {
   const board = boards.some((b) => b.id === last) ? last : boards[0]!.id;
   const issues = new Map(remote.map((i) => [i.key, i])),
     full = new Map<string, Full>();
-  changedKeys.clear();
-  createdKeys.clear();
+  resetLocalEdits();
   writes.reset();
-  localFields.clear();
-  fullFields.clear();
-  needsFullRefresh.clear();
   const inJira = new Map(remote.map((i) => [i.key, i]));
-  /** Puts saved changes over Jira's copies, into `issues` and `full`. */
+  /** Puts saved changes over Jira's copies, into `issues` and `full`; each stays with the tab that saved it. */
   const install = (changes: LocalChange[], issues: Map<string, Issue>, full: Map<string, Full>) => {
-    for (const change of changes) {
-      // With Jira writes, an override for an issue Jira no longer has is dropped: the issue was deleted there.
-      if (client.writable === true && !change.created && !inJira.has(change.key)) continue;
-      // Older builds saved a link's preview as a local edit, which replayed the link to Jira on every load (R1-D1).
-      if (
-        client.writable === true &&
-        !change.created &&
-        !change.fullFields.length &&
-        change.issueFields.every((f) => f === "resources" || f === "updated") &&
-        change.issue?.resources?.every((r) => r.kind === "link")
-      )
-        continue;
-      changedKeys.add(change.key);
+    for (const change of installChanges(changes, issues, full, inJira, client.writable === true))
       writes.own(change.key, change.tab ?? "", change.created);
-      if (change.created) createdKeys.add(change.key);
-      localFields.set(change.key, new Set(change.issueFields));
-      fullFields.set(change.key, new Set(change.fullFields));
-      if (change.issue === null) issues.delete(change.key);
-      else if (change.created || !inJira.has(change.key)) issues.set(change.key, change.issue);
-      else {
-        const base = inJira.get(change.key)!;
-        const patch = Object.fromEntries(
-          change.issueFields.map((field) => [field, (change.issue as any)[field]]),
-        );
-        if (
-          change.full?.fields.comment &&
-          (change.fullFields.includes("comment") || change.issue.commentStates)
-        )
-          patch.comments = visibleCommentTotal(
-            base.comments +
-              (change.full?.fields.comment?.comments ?? []).filter((c: any) =>
-                String(c.id).startsWith("local-"),
-              ).length,
-            change.full?.fields.comment?.comments ?? [],
-            change.issue.commentStates,
-          );
-        issues.set(change.key, { ...base, ...patch });
-      }
-      if (change.full) {
-        full.set(change.key, change.full);
-        if (!change.created) needsFullRefresh.add(change.key);
-      }
-    }
   };
   install(local.changes, issues, full);
   // Undo covers this tab's own edits only, as Linear's per-client history does; a reload keeps them (R2-inbox-D3).
@@ -854,82 +826,22 @@ async function loadApplication() {
 }
 
 let clockTimer: ReturnType<typeof setInterval> | undefined;
-const lastProperties = new Map<string, string>();
 /** One property poll; the poll query schedules the next. */
 async function fetchProperties(): Promise<{ pending: number }> {
   const res = await fetch("/api/properties");
   if (!res.ok) throw new Error("Properties unavailable");
   const data = await res.json();
-  const issues = new Map(state.issues);
-  let changed = false;
-  const stale: string[] = [];
-  for (const [key, entry] of Object.entries(data.entries) as [string, any][]) {
-    const issue = issues.get(key);
-    const signature = JSON.stringify(entry);
-    if (lastProperties.get(key) === signature) continue;
-    const { errors, ...extra } = entry;
-    // Read-only sites keep their local attachments; only a writable site's list comes from Jira.
-    if (state.writable && extra.attachments)
-      extra.attachments = aliasAttachments(key, extra.attachments, issue?.attachments);
-    else delete extra.attachments;
-    if (!issue) {
-      // A new Jira issue; with local-only editing, a missing key may be a local delete.
-      // While a create is in flight its new key may arrive here first; the write's answer adds it with the local fields intact.
-      if (
-        state.writable &&
-        !changedKeys.has(key) &&
-        extra.key === key &&
-        !writes.creating()
-      ) {
-        issues.set(key, extra);
-        changed = true;
-        lastProperties.set(key, signature);
-      }
-      continue;
-    }
-    lastProperties.set(key, signature);
-    // Edited in Jira: the cached description and comments are stale, so a later edit would overwrite Jira's newer text.
-    if (state.writable && state.full.has(key) && extra.updated && extra.updated !== issue.updated) {
-      // With a local edit still unsent, look again once its write lands (the write's refresh notifies), or the change is never read (R2-D1).
-      if (fullFields.get(key)?.size) lastProperties.delete(key);
-      else stale.push(key);
-    }
-    const local = localFields.get(key) ?? new Set();
-    for (const field of local) delete extra[field];
-    if (local.has("status")) {
-      delete extra.statusSince;
-      delete extra.started;
-    }
-    issues.set(key, { ...issue, ...extra });
-    changed = true;
+  const { issues, deleted, stale } = mergeProperties(data.entries);
+  if (state.selected && deleted.includes(state.selected)) {
+    const key = state.selected;
+    navigate({ selected: null, panel: false });
+    showNotification({
+      text: `${key} was deleted in Jira`,
+      detail: "It is no longer on your boards.",
+    });
   }
-  // Issues deleted in Jira, or moved off every board. Writes still in flight keep theirs.
-  if (state.writable && Object.keys(data.entries).length)
-    for (const key of issues.keys())
-      if (
-        !(key in data.entries) &&
-        !createdKeys.has(key) &&
-        !writes.has(key)
-      ) {
-        // Gone from Jira, so its local overrides go too; a saved tombstone would otherwise send a delete after reload.
-        issues.delete(key);
-        lastProperties.delete(key);
-        changedKeys.delete(key);
-        touch(key);
-        localFields.delete(key);
-        fullFields.delete(key);
-        changed = true;
-        if (state.selected === key) {
-          navigate({ selected: null, panel: false });
-          showNotification({
-            text: `${key} was deleted in Jira`,
-            detail: "It is no longer on your boards.",
-          });
-        }
-      }
-  set({ propertySync: data.progress, ...(changed ? { issues } : {}) });
-  for (const key of stale) {
-    needsFullRefresh.add(key);
+  set({ propertySync: data.progress, ...(issues ? { issues } : {}) });
+  for (const key of stale)
     // The focused description takes Jira's newer text too: it asks before replacing what is being typed.
     if (
       key === state.selected &&
@@ -937,12 +849,11 @@ async function fetchProperties(): Promise<{ pending: number }> {
         document.activeElement.id === "description")
     )
       void loadFull(key);
-  }
   return data.progress;
 }
 
 export async function loadFull(key: string, force = false) {
-  if (createdKeys.has(key) || (state.full.has(key) && !needsFullRefresh.has(key) && !force)) return;
+  if (!needsFull(key, force)) return;
   const error = (text: string) => {
     if ((state.fullErrors.get(key) ?? "") !== text)
       set({ fullErrors: new Map(state.fullErrors).set(key, text) });
@@ -958,99 +869,11 @@ export async function loadFull(key: string, force = false) {
     error("Could not load issue details");
   }
 }
-/** Jira's remote links as link resources. A writable site takes Jira's set (unless a write is queued); a read-only one only adds links it lacks. */
-export function withJiraLinks(
-  resources: Issue["resources"] = [],
-  links: { url: string; title: string }[] | undefined,
-  replace: boolean,
-): Issue["resources"] {
-  if (!links) return resources;
-  const jira = new Map(links.map((l) => [l.url, l])),
-    have = new Set<string>();
-  const kept = resources.flatMap((r) => {
-    if (r.kind === "document" || !r.url) return [r];
-    const link = jira.get(r.url);
-    if (!link) return replace ? [] : [r];
-    have.add(r.url);
-    return [{ ...r, title: link.title }];
-  });
-  const at = now();
-  return [
-    ...kept,
-    ...links
-      .filter((l) => !have.has(l.url))
-      .map((l) => ({
-        id: crypto.randomUUID(),
-        kind: "link" as const,
-        url: l.url,
-        title: l.title,
-        updated: at,
-        created: at,
-      })),
-  ];
-}
 /** Loads an issue's Jira record and keeps local field edits on top. */
 async function fetchFull(key: string) {
   const res = await fetch(`/api/issues/${encodeURIComponent(key)}`);
   if (!res.ok) throw new Error("Could not load issue details");
-  let full = await res.json();
-  // A comment whose delete waits out the undo window (an undone add) stays hidden until Jira drops it.
-  if (writes.holdsDeletes() && Array.isArray(full.fields?.comment?.comments))
-    full.fields.comment.comments = full.fields.comment.comments.filter(
-      (c: any) => !writes.holdsDelete(String(c.id)),
-    );
-  const local = state.full.get(key);
-  if (local)
-    for (const field of fullFields.get(key) ?? []) {
-      if (field === "comment") {
-        const comments = [
-          ...(full.fields.comment?.comments ?? []),
-          ...(local.fields.comment?.comments ?? []).filter((c: any) =>
-            String(c.id).startsWith("local-"),
-          ),
-        ];
-        full = {
-          ...full,
-          fields: {
-            ...full.fields,
-            comment: { ...full.fields.comment, comments, total: comments.length },
-          },
-        };
-      } else full = { ...full, fields: { ...full.fields, [field]: local.fields[field] } };
-    }
-  // A refused description, and the base of one still unsent, outlive Jira's copy.
-  if (local?.descriptionRejected)
-    full = {
-      ...full,
-      descriptionRejected: local.descriptionRejected,
-      descriptionError: local.descriptionError,
-    };
-  if (local?.descriptionBase && fullFields.get(key)?.has("description"))
-    full = { ...full, descriptionBase: local.descriptionBase };
-  needsFullRefresh.delete(key);
-  const issue = state.issues.get(key);
-  if (issue)
-    set({
-      full: new Map(state.full).set(key, full),
-      issues: new Map(state.issues).set(key, {
-        ...issue,
-        ...(writes.has(key)
-          ? {}
-          : { resources: withJiraLinks(issue.resources, full.remotelinks, state.writable) }),
-        ...(full.fields.comment
-          ? {
-              comments: visibleCommentTotal(
-                full.fields.comment.total,
-                full.fields.comment.comments ?? [],
-                issue.commentStates,
-              ),
-            }
-          : {}),
-        ...(!localFields.get(key)?.has("description")
-          ? { description: adfToText(full.fields.description) }
-          : {}),
-      }),
-    });
+  mergeFull(key, await res.json());
 }
 
 /** Time from the action to the next painted frame, shown in the header. */
@@ -1066,15 +889,10 @@ export function timed(label: string, fn: () => void) {
 }
 
 const now = () => new Date().toISOString();
-const localFields = new Map<string, Set<string>>(),
-  fullFields = new Map<string, Set<string>>();
-const changedKeys = new Set<string>(),
-  createdKeys = new Set<string>(),
-  needsFullRefresh = new Set<string>();
 const undo: LocalEdit[] = [],
   redo: LocalEdit[] = [];
 let database: LocalDatabase | undefined;
-const touch = (...keys: string[]) => writes.touch(...keys);
+export const touch = (...keys: string[]) => writes.touch(...keys);
 /** This tab across reloads (sessionStorage is per tab), so its undo history survives a reload and never reaches another tab.
  *  ponytail: a duplicated tab copies sessionStorage and shares the history; mint a new id on `pageshow` duplicates if that matters. */
 const undoTab = (() => {
@@ -1122,30 +940,14 @@ function localSnapshot(): LocalState {
   return {
     version: 1,
     sequence: localSeq,
-    changes: [...changedKeys]
-      .filter(
-        (key) =>
-          createdKeys.has(key) ||
-          !state.issues.has(key) ||
-          localFields.get(key)?.size ||
-          fullFields.get(key)?.size,
-      )
-      .map((key) => ({
-        key,
-        issue: state.issues.get(key) ?? null,
-        full: state.full.get(key),
-        issueFields: [...(localFields.get(key) ?? [])],
-        fullFields: [...(fullFields.get(key) ?? [])],
-        created: createdKeys.has(key),
-        tab: writes.tab(key),
-      })),
+    changes: savedChanges(),
     undo: [...undo],
     redo: [...redo],
     keys: writes.keys(),
   };
 }
 /** Ignored until storage has opened, and while it is blocked; see storageMachine. */
-const queueSave = () => storage.send({ type: "change" });
+export const queueSave = () => storage.send({ type: "change" });
 
 // --- Jira writes: each edit's before/after becomes ops, which the outbox sends one job at a time (see outbox.ts) ---
 const writes = createOutbox(
@@ -1195,7 +997,7 @@ const writes = createOutbox(
         perf: text,
         ...(shown ? { writeError: { key, text, retrying: true } } : {}),
       }),
-    uploadsOnly: (key) => localFields.get(key)?.delete("attachments"),
+    uploadsOnly: releaseAttachments,
     answered,
     moved: (from, to) => {
       if (state.issues.has(from)) rekey(from, to);
@@ -1230,14 +1032,7 @@ function send(changes: [string, Side, Side][]) {
   // A change that queued no write (nothing to send, or a redo that only cancelled a held comment delete) gets no answer
   // for adopt() to settle, so its Jira fields would stay pinned over every refresh: Jira's copy owns them again (R2-comments-D1).
   for (const key of writes.queue(changes, state.issues))
-    if (
-      !createdKeys.has(key) &&
-      (fullFields.get(key)?.size ||
-        JIRA_ISSUE_FIELDS.some((field) => localFields.get(key)?.has(field)))
-    ) {
-      fullFields.delete(key);
-      for (const field of JIRA_ISSUE_FIELDS) localFields.get(key)?.delete(field);
-      needsFullRefresh.add(key);
+    if (releaseJiraFields(key)) {
       touch(key);
       queueSave();
     }
@@ -1284,9 +1079,9 @@ function answered({ key: sent, ops, result, created, refused, describes }: Answe
     for (const op of ops)
       if (op.op === "comment" && !created.has(op.ref))
         returnRejectedComment({ key: result.key ?? sent, parentId: op.parentId, body: op.body });
-  adopt(result.key ?? sent, result, !!result.error, created, describes);
+  adoptJira(result.key ?? sent, result, !!result.error, created, describes);
   for (const other of result.others ?? [])
-    adopt(other.key, { issue: other, error: result.error }, false, created);
+    adoptJira(other.key, { issue: other, error: result.error }, false, created);
   if (refused) discard(sent);
   const key = result.key ?? sent;
   set({
@@ -1306,10 +1101,7 @@ function discard(key: string, reopen = true) {
     full = new Map(state.full);
   issues.delete(key);
   full.delete(key);
-  changedKeys.delete(key);
-  createdKeys.delete(key);
-  localFields.delete(key);
-  fullFields.delete(key);
+  forgetIssue(key);
   touch(key);
   set({ issues, full });
   if (state.selected === key) navigate({ selected: null, panel: false });
@@ -1336,50 +1128,8 @@ export const dismissWriteError = () => set({ writeError: null });
 function rekey(from: string, to: string) {
   const ids = new Map([[from, to]]),
     mentions = (v: unknown) => namesKey(v, from);
-  const issues = new Map<string, Issue>(),
-    full = new Map<string, Full>();
-  // The issue under its app key carries the local edits: it wins over a copy the poll already brought under the Jira key,
-  // except for fields edited on that copy before this tab learnt the move (sync review 4).
-  const edited = <T>(value: T, copy: any, fields?: Set<string>, nested?: "fields"): T => {
-    if (!copy || !fields?.size) return value;
-    const picked = Object.fromEntries(
-      [...fields].map((f) => [f, (nested ? copy[nested] : copy)[f]]),
-    );
-    return (
-      nested
-        ? { ...value, fields: { ...(value as any).fields, ...picked } }
-        : { ...value, ...picked }
-    ) as T;
-  };
-  for (const [k, v] of state.issues)
-    if (k !== to || !state.issues.has(from))
-      issues.set(
-        ids.get(k) ?? k,
-        edited(
-          mentions(v) ? renameIds(v, ids) : v,
-          k === from && state.issues.get(to),
-          localFields.get(to),
-        ),
-      );
-  for (const [k, v] of state.full)
-    if (k !== to || !state.full.has(from))
-      full.set(
-        ids.get(k) ?? k,
-        k === from
-          ? edited(renameIds(v, ids), state.full.get(to), fullFields.get(to), "fields")
-          : v,
-      );
-  for (const map of [localFields, fullFields] as Map<string, Set<string>>[]) {
-    const v = map.get(from);
-    if (v) {
-      map.delete(from);
-      map.set(to, new Set([...v, ...(map.get(to) ?? [])]));
-    }
-  }
-  if (changedKeys.delete(from)) changedKeys.add(to);
-  createdKeys.delete(from);
+  const { issues, full } = renameIssue(from, to);
   touch(from, to);
-  lastProperties.delete(from);
   const label = new RegExp(`${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\d)`, "g");
   for (const list of [undo, redo])
     list.splice(
@@ -1398,90 +1148,12 @@ function rekey(from: string, to: string) {
 }
 /** Takes up key moves another tab saved for issues it created (app key → Jira key). Returns whether any was new. */
 export const learnKeys = (keys?: Record<string, string>) => writes.learnKeys(keys);
-/** Takes Jira's copy of what Jira owns, once no later write for the issue waits. `force` rolls a failed write back. */
-function adopt(
-  key: string,
-  result: WriteResult,
-  force: boolean,
-  created = new Map<string, string>(),
-  describes = false,
-) {
-  if (result.issue === undefined || (!force && writes.has(key))) return;
-  touch(key);
-  const issue = state.issues.get(key);
-  if (result.issue === null) {
-    // Gone from Jira (deleted there, or by this write).
-    if (issue && !createdKeys.has(key)) {
-      const issues = new Map(state.issues);
-      issues.delete(key);
-      set({ issues });
-      if (state.selected === key) navigate({ selected: null, panel: false });
-    }
-    return;
-  }
-  if (!issue) return;
-  if (result.full)
-    result.issue.attachments = uploadedAttachments(key, result.full, issue.attachments);
-  const local = localFields.get(key) ?? new Set(),
-    fields: Record<string, unknown> = {};
-  // Status dates come from the next property poll; keep the optimistic ones until then.
-  for (const field of JIRA_ISSUE_FIELDS) {
-    if (field in result.issue) fields[field] = (result.issue as any)[field];
-    else if (!["statusSince", "started"].includes(field)) fields[field] = undefined;
-    local.delete(field);
-  }
-  localFields.set(key, local);
-  const next: Issue = { ...issue, ...fields } as Issue;
-  // A rejected write's Activity entries go with it.
-  if (result.error && issue.activity) {
-    const activity = rollbackActivity(issue.activity, issue, fields, ME.id);
-    if (activity !== issue.activity) next.activity = [...activity];
-  }
-  const full = state.full.get(key),
-    patch: { issues: Map<string, Issue>; full?: Map<string, Full> } = {
-      issues: new Map(state.issues),
-    };
-  if (result.full?.remotelinks)
-    next.resources = withJiraLinks(issue.resources, result.full.remotelinks, true);
-  if (full && result.full) {
-    for (const field of ["description", "comment"]) fullFields.get(key)?.delete(field);
-    const comment = result.full.fields?.comment,
-      description = result.full.fields?.description,
-      mine = full.fields.description;
-    // Jira refused this description: keep it beside Jira's copy, so it's never silently lost, even unfocused or after a reload (R2-D2, R2-D4).
-    const refused =
-      !!result.error &&
-      describes &&
-      mine !== undefined &&
-      JSON.stringify(normalizeDocument(mine)) !== JSON.stringify(normalizeDocument(description));
-    patch.full = new Map(state.full).set(key, {
-      ...full,
-      fields: { ...full.fields, description, comment },
-      descriptionBase: undefined,
-      ...(refused ? { descriptionRejected: mine, descriptionError: result.error } : {}),
-    });
-    // Bodies and deletions now live in Jira; resolved, subscribed and reactions stay local.
-    const states: Record<string, CommentState> = {};
-    for (const [id, { body: _b, updated: _u, deleted, ...rest }] of Object.entries(
-      issue.commentStates ?? {},
-    )) {
-      // A delete still held for undo has not reached Jira yet.
-      const kept = writes.holdsDelete(id) ? { ...rest, deleted } : rest;
-      if (Object.keys(kept).length) states[created.get(id) ?? id] = kept;
-    }
-    next.commentStates = states;
-    next.comments = visibleCommentTotal(comment?.total ?? 0, comment?.comments ?? [], states);
-  }
-  patch.issues.set(key, next);
-  set(patch);
-  queueSave();
-}
 export const pendingJiraWrites = () => writes.pending();
-/** Whether the issue has edits Jira doesn't have yet, so restoring Jira's copy would change something. */
-export const hasLocalJiraChanges = (key: string) =>
-  [...(localFields.get(key) ?? [])].some((field) => JIRA_ISSUE_FIELDS.includes(field as never)) ||
-  !!fullFields.get(key)?.size ||
-  writes.has(key);
+export const hasPendingWrite = (key: string) => writes.has(key);
+export const holdsCommentDelete = (id: string) => writes.holdsDelete(id);
+export const holdsCommentDeletes = () => writes.holdsDeletes();
+export const creatingIssue = () => writes.creating();
+export const writeTab = (key: string) => writes.tab(key);
 export const dismissRecoveryNotice = () => storage.send({ type: "dismiss" });
 export async function flushLocalChanges() {
   await waitFor(storage, (s) => !s.matches("saving"));
@@ -1566,7 +1238,7 @@ export async function addIssueFiles(key: string, files: File[], clients?: string
   const db = database,
     // On a writable site the files go to Jira now, so a failed upload shows on the file (Retry, Discard) before anything looks saved.
     saved =
-      state.writable && !createdKeys.has(key)
+      state.writable && !isLocalIssue(key)
         ? await uploadNow(key, files, (files) => db.addFiles(files), clients)
         : await db.addFiles(files),
     issue = state.issues.get(key);
@@ -1606,17 +1278,10 @@ export function appURL(issue: Issue) {
   return url.href;
 }
 export function issueURL(issue: Issue) {
-  return createdKeys.has(issue.key) && typeof location !== "undefined"
+  return isLocalIssue(issue.key) && typeof location !== "undefined"
     ? appURL(issue)
     : jiraIssueURL(issue.key);
 }
-export const isLocalIssue = (key: string) => createdKeys.has(key);
-const snapshot = (key: string): Snapshot => ({
-  issue: state.issues.get(key),
-  full: state.full.get(key),
-  issueFields: [...(localFields.get(key) ?? [])],
-  fullFields: [...(fullFields.get(key) ?? [])],
-});
 let lastEditGroup: string | undefined;
 let transaction: { label: string; before: Map<string, Snapshot> } | null = null;
 function record(
@@ -1648,8 +1313,8 @@ function record(
     });
     if (!changed.length) return;
     for (const key of changed) {
-      changedKeys.add(key);
-      editCounts.set(key, (editCounts.get(key) ?? 0) + 1);
+      markChanged(key);
+      countEdit(key);
     }
     touch(...changed);
     if (!quiet) send(changed.map((key) => [key, transaction!.before.get(key)!, snapshot(key)]));
@@ -1723,28 +1388,16 @@ function restore(edit: LocalEdit, snapshots: Snapshot[]) {
       for (const name of Object.keys(localStorage))
         if (name.startsWith(prefix)) localStorage.removeItem(name);
     } catch {}
-  const issues = new Map(state.issues),
-    full = new Map(state.full);
   touch(...edit.keys);
   // Undo and redo are edits too: a Restore reading Jira's version meanwhile must not discard them (sync review 7).
-  for (const key of edit.keys) editCounts.set(key, (editCounts.get(key) ?? 0) + 1);
-  edit.keys.forEach((key, index) => {
-    const snapshot = snapshots[index]!;
-    if (snapshot.issue) issues.set(key, snapshot.issue);
-    else issues.delete(key);
-    if (snapshot.full) full.set(key, snapshot.full);
-    else full.delete(key);
-    if (snapshot.issueFields) localFields.set(key, new Set(snapshot.issueFields));
-    if (snapshot.fullFields) fullFields.set(key, new Set(snapshot.fullFields));
-  });
-  set({ issues, full });
+  for (const key of edit.keys) countEdit(key);
+  restoreSnapshots(edit.keys, snapshots);
   ui.send({ type: "overlay.close" });
   send(edit.keys.map((key, index) => [key, from[index]!, to[index]!]));
   // The write's answer brings Jira's copy; a refresh before it lands would show the undone value again (R1-D16).
   for (const key of edit.keys)
-    if (state.issues.has(key) && !createdKeys.has(key) && !writes.has(key))
-      needsFullRefresh.add(key);
-  if (state.selected && !issues.has(state.selected)) navigate({ selected: null, panel: false });
+    if (state.issues.has(key) && !isLocalIssue(key) && !writes.has(key)) markStale(key);
+  if (state.selected && !state.issues.has(state.selected)) navigate({ selected: null, panel: false });
 }
 /** Jira can't restore a deleted issue; undo or redo would only create a copy under a new key. Issues made here (PREFIX-NEWn) can be re-created. */
 function revivesJiraIssue(edit: LocalEdit, target: Snapshot[]) {
@@ -1814,36 +1467,6 @@ export function beginCreate(draft: IssueDraft = {}): boolean {
   return true;
 }
 
-function patchIssue(key: string, patch: Partial<Issue>) {
-  const i = state.issues.get(key);
-  if (i) {
-    const prior = i.activity ?? [],
-      activity = recordActivity(prior, i, patch, ME, now(), () => crypto.randomUUID());
-    if (activity !== prior) patch = { ...patch, activity: [...activity] };
-    localFields.set(
-      key,
-      new Set([...(localFields.get(key) ?? []), ...Object.keys(patch), "updated"]),
-    );
-    set({ issues: new Map(state.issues).set(key, { ...i, ...patch, updated: now() }) });
-  }
-}
-
-function patchFields(key: string, fn: (fields: any) => object) {
-  const f = state.full.get(key);
-  if (f) {
-    const patch = fn(f.fields),
-      // The first unsent description edit remembers Jira's text it started from.
-      base =
-        "description" in patch && !fullFields.get(key)?.has("description")
-          ? { descriptionBase: f.fields.description }
-          : {};
-    fullFields.set(key, new Set([...(fullFields.get(key) ?? []), ...Object.keys(patch)]));
-    set({
-      full: new Map(state.full).set(key, { ...f, ...base, fields: { ...f.fields, ...patch } }),
-    });
-  }
-}
-
 export const isWatching = (issue: Issue) =>
   issue.watchers ? issue.watchers.some((u) => u.id === ME.id) : !!issue.watching;
 export const boardOf = (key: string) =>
@@ -1852,8 +1475,6 @@ export const boardOf = (key: string) =>
 export const statusOf = (i: Issue) => statusById(boardOf(i.key), i.status);
 
 let localSeq = 0;
-/** Local edits per issue in this tab, so a slow read can tell whether the issue was edited meanwhile. */
-const editCounts = new Map<string, number>();
 /** Submission id → the issue it created. */
 const submissions = new Map<string, string>();
 /** Local numbers (PREFIX-NEWn keys, local comment ids) come from blocks this tab reserves in IndexedDB, one transaction per
@@ -1936,7 +1557,7 @@ export const actions = {
         if (entry.issue?.key === key) entry.issue = delivered(entry.issue);
     const next = delivered(issue);
     patchIssue(key, document ? { resources: next.resources } : { reminder: next.reminder });
-    changedKeys.add(key);
+    markChanged(key);
     touch(key);
     queueSave();
     showNotification({
@@ -2065,8 +1686,8 @@ export const actions = {
     );
   },
   async restoreJira(key: string) {
-    if (createdKeys.has(key) || !state.canEdit) return;
-    const edits = editCounts.get(key);
+    if (isLocalIssue(key) || !state.canEdit) return;
+    const edits = editCount(key);
     try {
       const [remote, full] = await Promise.all([
         fetchJson<Issue[]>("/api/issues"),
@@ -2075,7 +1696,7 @@ export const actions = {
       const issue = remote.find((i) => i.key === key);
       if (!issue) throw new Error("Issue is no longer in the Jira mirror");
       // An edit made after the click is newer than the choice to restore: keep it and say so (sync check 6).
-      if (editCounts.get(key) !== edits) {
+      if (editCount(key) !== edits) {
         showNotification({
           text: `Didn't restore ${key}`,
           detail:
@@ -2089,9 +1710,7 @@ export const actions = {
         key,
         `restore Jira version of ${key}`,
         () => {
-          localFields.set(key, new Set());
-          fullFields.set(key, new Set());
-          needsFullRefresh.delete(key);
+          clearLocalEdits(key);
           // The mirror's list carries no remote links: take them from the full record, or the restore would delete them in Jira (R2-issue-fields-D2).
           const current = state.issues.get(key);
           set({
@@ -2281,7 +1900,7 @@ export const actions = {
     }
     if (issue && dropped && adfToText(dropped) !== adfToText(f?.fields.description)) {
       const doc = normalizeDocument(dropped);
-      changedKeys.add(key);
+      markChanged(key);
       set({
         issues: new Map(state.issues).set(key, {
           ...issue,
@@ -2398,7 +2017,7 @@ export const actions = {
     const prefix =
       [...state.issues.values()].find((i) => i.board === board.id)?.key.split("-")[0] ?? "LOCAL";
     const key = `${prefix}-NEW${nextSeq()}`;
-    createdKeys.add(key);
+    markCreated(key);
     if (draft.submission) submissions.set(draft.submission, key);
     const {
       descriptionDoc,

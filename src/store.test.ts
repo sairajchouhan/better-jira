@@ -636,7 +636,7 @@ test("the property poll comes back in 3s while Jira syncs, 30s once settled and 
 });
 
 test("Jira's remote links become link resources: a writable site takes Jira's set, a read-only one only adds", async () => {
-  const { withJiraLinks } = await import("./store");
+  const { withJiraLinks } = await import("./local-edits");
   const doc = { id: "d", kind: "document" as const, title: "Doc", updated: "" },
     link = (url: string, title: string) => ({
       id: url,
