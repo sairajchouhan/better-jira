@@ -158,7 +158,7 @@ test("issue comments: card outsets, timestamps and deep links, whitespace and su
     await page.type(" ");
     expect(
       await page.eval(
-        `document.querySelector('.rich-editor:has(#comment) .rich-editor-submit').disabled`,
+        `document.querySelector('.rich-editor:has(#comment) [data-variant="send"]').disabled`,
       ),
     ).toBe(true);
     await page.key("Escape");

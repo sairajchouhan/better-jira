@@ -47,7 +47,7 @@ import { editorBindings } from "./editor-bindings";
 import { ActionMenu } from "./action-menu";
 import { Dialog } from "./dialog";
 import { Field, TextInput } from "./field";
-import { Shortcut as KeyboardShortcut } from "./keycap";
+import { Shortcut as KeyboardShortcut, type Keys } from "./keycap";
 import { Text } from "./text";
 import { EmptyState } from "./empty-state";
 import {
@@ -872,18 +872,9 @@ export const shortcuts: Shortcut[] = [
 function boardVisible(s = get()) {
   return !s.document && (!s.panel || s.view !== "page");
 }
-const labels = new Map<string, string>();
-const keyText = (hotkey: Hotkey | string) =>
-  formatForDisplay(hotkey as Hotkey, { sequenceSeparator: " then " });
-export function shortcutLabel(id: string) {
-  let label = labels.get(id);
-  if (label === undefined) {
-    const entry = shortcuts.find((s) => s.id === id);
-    label = entry?.hotkey ? keyText(id === "help" ? "?" : entry.hotkey) : "";
-    labels.set(id, label);
-  }
-  return label;
-}
+/** A shortcut's registry hotkey by id, for every `shortcut`/`keys` prop; "" when it has none. Caps come from
+ *  `chordKeys`, which already draws Help's "Shift+?" as "?". */
+export const hotkeyOf = (id: string): Keys => shortcuts.find((s) => s.id === id)?.hotkey ?? "";
 /** Whether the shortcut would do something in `state` on `issue`, reading nothing else, so a store selector can call it.
  *  `issue` defaults to the selection; keys, clicks and menus pass `target()`, which the sub-issue row under the pointer can change. */
 export function shortcutApplies(entry: Shortcut, state: State = get(), issue = selected(state)) {
@@ -1024,8 +1015,8 @@ export function ShortcutHelp() {
   const matches = catalog.filter((s) => {
     const names = formatForDisplay(s.hotkey, { useSymbols: false, sequenceSeparator: " then " });
     const raw = Array.isArray(s.hotkey) ? s.hotkey.join(" ") : s.hotkey;
-    const text =
-      `${s.name} ${s.group} ${names} ${raw} ${keyText(s.id === "help" ? "?" : s.hotkey)}`.toLowerCase();
+    const glyphs = formatForDisplay(s.hotkey, { sequenceSeparator: " then " });
+    const text = `${s.name} ${s.group} ${names} ${raw} ${glyphs}`.toLowerCase();
     const tokens = text.split(/[^\p{L}\p{N}]+/u);
     // A single letter is a key name, so it must be a whole word: "shift d" is not every name with a d in it.
     return words.every((word) =>
@@ -1071,7 +1062,7 @@ export function ShortcutHelp() {
                       <Text variant="mini" color="inherit">{s.name}</Text>
                     </dt>
                     <dd>
-                      <KeyboardShortcut keys={s.id === "help" ? "?" : s.hotkey} />
+                      <KeyboardShortcut keys={s.hotkey} />
                     </dd>
                   </div>
                 ))}
@@ -1091,7 +1082,7 @@ export function HelpMenu() {
       label="Help"
       anchor={anchor}
       close={() => ui.send({ type: "overlay.close" })}
-      entries={[{ name: "Keyboard shortcuts", shortcut: shortcutLabel("shortcuts"), run: overlay("shortcuts") }]}
+      entries={[{ name: "Keyboard shortcuts", shortcut: hotkeyOf("shortcuts"), run: overlay("shortcuts") }]}
     />
   );
 }

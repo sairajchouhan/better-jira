@@ -227,7 +227,7 @@ test("files in replies: a failed file blocks send until retry, and a file still 
     );
     expect(
       await page.eval(
-        `document.querySelector('.rich-editor-submit[aria-label="Submit reply"]').disabled`,
+        `document.querySelector('.rich-editor [data-variant="send"][aria-label="Submit reply"]').disabled`,
       ),
     ).toBe(true);
     await page.key("Enter", "meta");

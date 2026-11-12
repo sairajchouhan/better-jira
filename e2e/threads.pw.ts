@@ -93,7 +93,7 @@ test("one thread's life: draft, send, Linear's card and menus, react, resolve, r
       .toEqual([28, 28, 12, 12, "1"]);
     expect(
       await page.eval(
-        `(()=>{const b=document.querySelector('.rich-editor[data-variant=comment]:has(#comment) .rich-editor-submit')??document.getElementById('comment').closest('.rich-editor').querySelector('.rich-editor-submit'),c=getComputedStyle(b);return [c.backgroundColor,c.color]})()`,
+        `(()=>{const b=document.getElementById('comment').closest('.rich-editor').querySelector('[data-variant="send"]'),c=getComputedStyle(b);return [c.backgroundColor,c.color]})()`,
       ),
     ).toEqual(["lch(13.861 1.139 272)", "lch(63.304 1.425 272)"]);
     await page.click('[aria-label="Submit reply"]');

@@ -27,9 +27,8 @@ import { filterCount } from "./view-model";
 import { Modal } from "./personal-controls";
 import { Avatar } from "./avatar";
 import { matchRank } from "./search-rank";
-import { runShortcut, shortcutApplies, shortcuts } from "./shortcuts";
+import { hotkeyOf, runShortcut, shortcutApplies, shortcuts } from "./shortcuts";
 import { Shortcut } from "./keycap";
-import { hotkeyOf } from "./app-chrome";
 const MENU =
   "overflow-hidden rounded-xl border border-[var(--menu-line)] bg-[var(--menu)] text-fg-2 shadow-[var(--menu-shadow)] " +
   "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[12px] [&_[cmdk-group-heading]]:text-fg-3 " +

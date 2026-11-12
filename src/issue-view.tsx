@@ -59,7 +59,8 @@ import { PersonalIssueDetails } from "./personal-controls";
 import { SubIssueOf } from "./sub-issues";
 import { Avatar } from "./avatar";
 import { DocumentBodyEditor, CommentComposer } from "./rich-editor-loader";
-import { runShortcut, shortcutLabel } from "./shortcuts";
+import { hotkeyOf, runShortcut } from "./shortcuts";
+import { shortcutTitle } from "./keycap";
 import { post, useCommand, focusNode } from "./commands";
 import { InboxIssueActions } from "./inbox";
 import { descriptionSession, type DescriptionPorts } from "./description-session";
@@ -309,7 +310,7 @@ function IssueHeader({
       >
         <Icon name={switchTo === "side" ? "side" : "expand"} />
       </IconButton>
-      <IconButton label="Close" shortcut="esc" variant="muted" onClick={() => navigate({ panel: false })}>
+      <IconButton label="Close" shortcut="Escape" variant="muted" onClick={() => navigate({ panel: false })}>
         <Icon name="close" />
       </IconButton>
     </div>
@@ -332,7 +333,7 @@ function IssueBody({ issue }: { issue: Issue }) {
           <IconButton
             key={action}
             label={label}
-            shortcut={shortcutLabel(action)}
+            shortcut={hotkeyOf(action)}
             variant="muted"
             onClick={() => runShortcut(action)}
           >
@@ -378,14 +379,15 @@ function Stepper({ issueKey }: { issueKey: string }) {
       )}
       <IconButton
         label="Next"
-        shortcut="J / ↓"
+        shortcut="J"
+        alternate="ArrowDown"
         variant="muted"
         disabled={i < 0 || i >= flat.length - 1}
         onClick={() => runShortcut("down")}
       >
         <Icon name="down" />
       </IconButton>
-      <IconButton label="Previous" shortcut="K / ↑" variant="muted" disabled={i <= 0} onClick={() => runShortcut("up")}>
+      <IconButton label="Previous" shortcut="K" alternate="ArrowUp" variant="muted" disabled={i <= 0} onClick={() => runShortcut("up")}>
         <Icon name="up" />
       </IconButton>
     </div>
@@ -508,7 +510,7 @@ function PropertyPill({
       id={id}
       state={state}
       aria-expanded={open}
-      title={tip ? `${tip} (${shortcutLabel(overlay)})` : undefined}
+      title={tip ? shortcutTitle(tip, hotkeyOf(overlay)) : undefined}
       onClick={() => ui.send({ type: "overlay.open", overlay })}
       className="ml-px"
     >
@@ -1009,7 +1011,8 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
           variant="muted"
           size="medium"
           aria-label={subscribed ? "Unsubscribe from issue" : "Subscribe to issue"}
-          title={`${subscribed ? "Unsubscribe" : "Subscribe"} (${shortcutLabel("subscribe")})`}
+          tooltip={subscribed ? "Unsubscribe" : "Subscribe"}
+          shortcut={hotkeyOf("subscribe")}
           onClick={() => runShortcut("subscribe")}
         >
           {subscribed ? "Unsubscribe" : "Subscribe"}
@@ -1019,7 +1022,7 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
           ref={subscribersRef}
           id="issue-subscribers"
           aria-label="Change subscribers"
-          title={`Change subscribers (${shortcutLabel("subscribers")})`}
+          title={shortcutTitle("Change subscribers", hotkeyOf("subscribers"))}
           onClick={() => ui.send({ type: "overlay.open", overlay: "subscribers" })}
           className="flex min-w-6 items-center -space-x-1 rounded-full"
         >

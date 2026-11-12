@@ -46,7 +46,8 @@ import { statusById } from "./board-catalog";
 import { PropertyPicker, type IssueField } from "./personal-controls";
 import { ResourceForm } from "./issue-resources";
 import { shortDate } from "./due-date";
-import { shortcutLabel } from "./shortcuts";
+import { hotkeyOf } from "./shortcuts";
+import { shortcutTitle } from "./keycap";
 import { canHaveChildren } from "./issue-properties";
 import { type Property } from "./view-model";
 import {
@@ -178,7 +179,7 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
       <PropertyTrigger
         ref={progress}
         data-parent-progress
-        title={`Open sub-issues of ${parent.key} (${shortcutLabel("sub-issues-of-parent")})`}
+        title={shortcutTitle(`Open sub-issues of ${parent.key}`, hotkeyOf("sub-issues-of-parent"))}
         aria-label={`Open sub-issues of ${parent.key}`}
         onClick={(event) => setMenu(event.currentTarget)}
         variant="row"

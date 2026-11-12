@@ -10,7 +10,6 @@ import { Button, IconButton } from "./button";
 import { ConfirmDialog, Dialog } from "./dialog";
 import { EmptyState } from "./empty-state";
 import { AutoResizingTextArea } from "./field";
-import { chordKeys } from "./keycap";
 import { Tabs } from "./tabs";
 import { Text } from "./text";
 import { DocumentBodyEditor } from "./rich-editor-loader";
@@ -36,12 +35,11 @@ import type { DocumentRevision, IssueResource } from "./issue-resource";
 import { documentURL } from "./issue-resources";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { useCommand } from "./commands";
+import { hotkeyOf } from "./shortcuts";
 import { emojiOptions } from "./reactions";
 import { ReminderMenu, reminderEntries } from "./reminders";
 /** The header breadcrumb, the favorite star and the icon-picker cells: no primitive yet (see the note at each). */
 const BUTTON = "rounded px-2 py-1.5 text-[13px] text-fg-2 hover:bg-hover";
-/** A registry hotkey as the tooltip's key text ("Mod+Shift+," → "⌘⇧,"). */
-const keys = (hotkey: string) => chordKeys(hotkey).join("");
 type Draft = { title: string; body: AdfDocument };
 export function IssueDocument({ issue, id }: { issue: Issue; id: string }) {
   useEffect(
@@ -354,25 +352,25 @@ function DocumentHeader() {
   const remind = (at: string) => actions.remind(issue.key, at, resource.id);
   const entries: ActionEntry[] = [
     { name: "Duplicate", icon: "copy", run: () => void duplicate() },
-    { name: "Rename…", icon: "pencil", shortcut: "⇧R", run: rename },
+    { name: "Rename…", icon: "pencil", shortcut: hotkeyOf("document-rename"), run: rename },
     {
       name: favorite ? "Remove from favorites" : "Favorite",
       icon: favorite ? "starred" : "star",
       divider: true,
-      shortcut: "⌥F",
+      shortcut: hotkeyOf("document-favorite"),
       run: () => toggleFavorite(`document:${resource.id}`),
     },
     {
       name: "Copy",
       icon: "copy",
       children: [
-        { name: "Copy URL", icon: "link", shortcut: "⌘⇧,", run: () => void copy("url") },
-        { name: "Copy title", icon: "copy", shortcut: "⌘⇧'", run: () => void copy("title") },
-        { name: "Copy title as link", icon: "link", shortcut: "⌘C", run: () => void copy("link") },
+        { name: "Copy URL", icon: "link", shortcut: hotkeyOf("document-copy-url"), run: () => void copy("url") },
+        { name: "Copy title", icon: "copy", shortcut: hotkeyOf("document-copy-title"), run: () => void copy("title") },
+        { name: "Copy title as link", icon: "link", shortcut: hotkeyOf("document-copy-link"), run: () => void copy("link") },
         {
           name: "Copy content as Markdown",
           icon: "file",
-          shortcut: "⌘⌥C",
+          shortcut: hotkeyOf("document-copy-markdown"),
           run: () => void copy("markdown"),
         },
       ],
@@ -388,14 +386,14 @@ function DocumentHeader() {
     {
       name: "Remind me",
       icon: "clock",
-      shortcut: "⇧H",
+      shortcut: hotkeyOf("document-remind"),
       children: reminderEntries(remind, () => setReminding("custom")),
     },
     {
       name: resource.showAuthors ? "Hide author names" : "Show author names",
       icon: "user",
       divider: true,
-      shortcut: "⇧A",
+      shortcut: hotkeyOf("document-authors"),
       run: () =>
         actions.documentProperties(issue.key, resource.id, { showAuthors: !resource.showAuthors }),
     },
@@ -485,12 +483,12 @@ function DocumentHeader() {
             })}
           </span>
         </Button>
-        <IconButton label="Copy document URL" shortcut={keys("Mod+Shift+,")} onClick={() => void copy("url")}>
+        <IconButton label="Copy document URL" shortcut={hotkeyOf("document-copy-url")} onClick={() => void copy("url")}>
           <Icon name="link" />
         </IconButton>
         <IconButton
           label="Change document subscribers"
-          shortcut={keys("Mod+Shift+S")}
+          shortcut={hotkeyOf("document-subscribers")}
           aria-expanded={people?.kind === "subscribers"}
           onClick={(e) => setPeople({ anchor: e.currentTarget, kind: "subscribers" })}
         >

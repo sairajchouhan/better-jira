@@ -25,7 +25,8 @@ test("editor presentations retain their frame, toolbar and submit contracts", ()
   expect(comment).toContain('aria-label="Comment formatting"');
   expect(comment.indexOf("rich-editor-actions")).toBeLessThan(comment.indexOf('role="toolbar"'));
   expect(comment).toMatch(/<button[^>]*aria-label="Submit reply"[^>]*disabled=""/);
-  expect(comment).toContain("Submit comment (⌘↵)");
+  expect(comment).toContain("Submit comment (⌘ ↵)");
+  expect(comment).toContain('data-variant="send"');
   expect(comment).not.toContain("⌘↵ save · Esc cancel");
 });
 

@@ -197,6 +197,11 @@
 }
 
 @layer components {
+  /* SendButton: Linear's filled comment send circle (no UEe variant), the arrow in the card's fg-3. */
+  .ui-button[data-variant="send"] {
+    background: var(--send);
+    color: var(--card-fg-3);
+  }
   /* Linear's tooltip trigger (`_tooltipTriggerContent`, a flex Q box): a disabled button inside lets the hover reach
      the wrapper, which carries the disabled reason. */
   .ui-tooltip-trigger {

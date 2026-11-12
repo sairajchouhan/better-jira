@@ -78,6 +78,25 @@ export function chordKeys(chord: string, mac = isMac()): string[] {
   return caps;
 }
 
+/** A `shortcut`/`keys` prop: one registry chord ("Mod+Shift+.") or a sequence (["G", "I"]). */
+export type Keys = string | readonly string[];
+
+/**
+ * The one place a `title` spells a shortcut: "text (keys)" from registry chords. src/tooltip.tsx draws the brackets
+ * back as caps (`tipCaps`), so caps are space-separated, a sequence says "then" and an `alternate` follows "/". ⌘ sits
+ * just before the key ("⇧ ⌘ ."), the order the tooltips have always shown; b4's own caps put it first.
+ */
+export function shortcutTitle(text: string, keys?: Keys, alternate?: string, mac = isMac()): string {
+  if (!keys?.length) return text;
+  const caps = (chord: string) => {
+    const all = chordKeys(chord, mac),
+      key = all.pop()!;
+    return [...all.filter((cap) => cap !== "⌘"), ...all.filter((cap) => cap === "⌘"), key].join(" ");
+  };
+  const spelled = (typeof keys === "string" ? [keys] : keys).map(caps).join(" then ");
+  return `${text} (${alternate ? `${spelled} / ${caps(alternate)}` : spelled})`;
+}
+
 const spoken = (cap: string) => SPOKEN[cap] ?? cap.toUpperCase();
 
 /** The hidden text b4 reads out: caps joined by spaces, " or " before the alternate, ", then " between a sequence's chords. */
@@ -122,7 +141,7 @@ export function Shortcut({
   size,
   className = "",
   ...props
-}: Look & { keys: string | readonly string[]; alternate?: string } & Omit<ComponentProps<"span">, "children">) {
+}: Look & { keys: Keys; alternate?: string } & Omit<ComponentProps<"span">, "children">) {
   const mac = isMac(),
     chords = (typeof keys === "string" ? [keys] : keys).map((chord) => chordKeys(chord, mac)),
     other = alternate === undefined ? undefined : chordKeys(alternate, mac),

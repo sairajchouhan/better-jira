@@ -1,6 +1,7 @@
 import { FloatingTree } from "@floating-ui/react";
 import { useRef, useState, type RefObject } from "react";
 import { Icon, type IconName } from "./icons";
+import type { Keys } from "./keycap";
 import { Menu } from "./menu";
 import { MenuSurface, MENU_POPUP } from "./menu-surface";
 
@@ -9,7 +10,8 @@ export type ActionEntry = {
   name: string;
   run?: () => void;
   children?: ActionEntry[];
-  shortcut?: string | readonly string[];
+  /** A registry chord or sequence, drawn as caps; `hint` is any other trailing text (a date, a count). */
+  shortcut?: Keys;
   hint?: string;
   selected?: boolean;
   icon?: IconName;
@@ -125,7 +127,8 @@ function Level({
               value={entry.name}
               label={<Label name={entry.name} />}
               icon={entry.icon && <Icon name={entry.icon} size={16} />}
-              {...actionDetails(entry)}
+              shortcut={entry.shortcut}
+              hint={entry.hint}
               open={open === entry.name}
               onOpenChange={(next) =>
                 setOpen((cur) => (next ? entry.name : cur === entry.name ? null : cur))
@@ -146,7 +149,8 @@ function Level({
               value={entry.name}
               icon={entry.icon && <Icon name={entry.icon} size={16} />}
               checked={entry.selected}
-              {...actionDetails(entry)}
+              shortcut={entry.shortcut}
+              hint={entry.hint}
               onSelect={() => {
                 close();
                 entry.run?.();
@@ -174,16 +178,4 @@ function Label({ name }: { name: string }) {
       {last}
     </>
   );
-}
-
-/** Dates and counts from legacy callers remain plain hints; keyboard chords use Menu’s shared slot. */
-function actionDetails(entry: ActionEntry): { shortcut?: string | readonly string[]; hint?: string } {
-  if (typeof entry.shortcut !== "string") return { shortcut: entry.shortcut, hint: entry.hint };
-  const chords = entry.shortcut.split(/ (?:then|or) /);
-  const keyboard = chords.every((chord) =>
-    /^(?:(?:Mod|Ctrl|Control|Alt|Shift|Meta|⌘|⌥|⇧|⌃)[+ ]*)*(?:[A-Z0-9]|[^\w\s]|Esc|Escape|Enter|Tab|Space|Backspace|Delete|ArrowUp|ArrowDown|ArrowLeft|ArrowRight)$/.test(chord),
-  );
-  if (!keyboard) return { hint: entry.hint ?? entry.shortcut };
-  const normalized = chords.map((chord) => chord.replace(/[⌘⌥⇧⌃]/g, (key) => ({ "⌘": "Mod+", "⌥": "Alt+", "⇧": "Shift+", "⌃": "Control+" })[key]!).replace(/ (?=[A-Z])/g, "+"));
-  return { shortcut: normalized.length === 1 ? normalized[0] : normalized, hint: entry.hint };
 }

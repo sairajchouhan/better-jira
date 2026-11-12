@@ -1,4 +1,6 @@
 import { type ComponentProps, type ReactElement, type ReactNode } from "react";
+import { Icon } from "./icons";
+import { shortcutTitle, type Keys } from "./keycap";
 import "./control-tokens.css";
 import "./button.css";
 
@@ -32,28 +34,46 @@ export type ButtonVariant =
   | "dangerous-borderless";
 
 type Look = { variant?: ButtonVariant; size?: ButtonSize };
+type IconButtonProps = Omit<Look, "variant"> &
+  Tip & {
+    /** `send` is SendButton's look only. */
+    variant?: ButtonVariant | "send";
+    appearance?: "comment-action" | "label";
+    label: string;
+    tooltip?: string | false;
+    children: ReactNode;
+  } & Omit<ComponentProps<"button">, "aria-label" | "title">;
 
 /**
  * Linear's Tooltip (`$`) props as its toolbars build them (`Aze`). `tooltip` is the hover text, separate from the
- * accessible name. `shortcut` is display text appended as "(keys)", which src/tooltip.tsx draws as key caps.
+ * accessible name. `shortcut` is a registry chord or sequence (`hotkeyOf(id)` for a registered one), with an optional
+ * `alternate` chord; `shortcutTitle` spells them as "(keys)", which src/tooltip.tsx draws as key caps.
  * `disabledReason` is shown instead of both while the button is disabled.
  */
-type Tip = { shortcut?: string; disabledReason?: string };
+type Tip = { shortcut?: Keys; alternate?: string; disabledReason?: string };
 
-const tooltipTitle = (tooltip: string | undefined, shortcut: string | undefined) =>
-  tooltip && shortcut ? `${tooltip} (${shortcut})` : tooltip;
+const tooltipTitle = (tooltip: string | undefined, shortcut?: Keys, alternate?: string) =>
+  tooltip && shortcutTitle(tooltip, shortcut, alternate);
 
 /**
  * A disabled button gets no pointer events, so its reason hangs on a wrapper, as under Linear's tooltip trigger
- * (`_tooltipTriggerContent > button[disabled] { pointer-events: none }`). Enabled, the button stands alone.
+ * (`_tooltipTriggerContent > button[disabled] { pointer-events: none }`). A button given a `disabledReason` (even "")
+ * always sits in the wrapper, so flipping `disabled` never remounts it; one without stands alone.
  */
-function DisabledReason({ reason, children }: { reason: string | undefined; children: ReactElement }) {
-  return reason ? (
-    <span className="ui-tooltip-trigger" title={reason}>
+function DisabledReason({
+  reason,
+  disabled,
+  children,
+}: {
+  reason: string | undefined;
+  disabled: boolean | undefined;
+  children: ReactElement;
+}) {
+  if (reason === undefined) return children;
+  return (
+    <span className="ui-tooltip-trigger" title={(disabled && reason) || undefined}>
       {children}
     </span>
-  ) : (
-    children
   );
 }
 
@@ -67,18 +87,19 @@ export function Button({
   icon,
   tooltip,
   shortcut,
+  alternate,
   disabledReason,
   type = "button",
   className = "",
   children,
   ...props
 }: Look & Tip & { icon?: ReactNode; tooltip?: string } & ComponentProps<"button">) {
-  const reason = props.disabled ? disabledReason : undefined;
+  const reason = (props.disabled && disabledReason) || undefined;
   return (
-    <DisabledReason reason={reason}>
+    <DisabledReason reason={disabledReason} disabled={props.disabled}>
       <button
         type={type}
-        title={reason ? undefined : tooltipTitle(tooltip, shortcut)}
+        title={reason ? undefined : tooltipTitle(tooltip, shortcut, alternate)}
         aria-description={reason}
         data-variant={variant}
         data-size={size}
@@ -141,6 +162,7 @@ export function IconButton({
   appearance,
   tooltip = label,
   shortcut,
+  alternate,
   disabledReason,
   variant = "borderless",
   size = "medium",
@@ -148,20 +170,14 @@ export function IconButton({
   className = "",
   children,
   ...props
-}: Look &
-  Tip & {
-    appearance?: "comment-action" | "label";
-    label: string;
-    tooltip?: string | false;
-    children: ReactNode;
-  } & Omit<ComponentProps<"button">, "aria-label" | "title">) {
-  const reason = props.disabled ? disabledReason : undefined;
+}: IconButtonProps) {
+  const reason = (props.disabled && disabledReason) || undefined;
   return (
-    <DisabledReason reason={reason}>
+    <DisabledReason reason={disabledReason} disabled={props.disabled}>
       <button
         type={type}
         aria-label={label}
-        title={reason ? undefined : tooltipTitle(tooltip || undefined, shortcut)}
+        title={reason ? undefined : tooltipTitle(tooltip || undefined, shortcut, alternate)}
         aria-description={reason}
         data-variant={variant}
         data-size={size}
@@ -175,6 +191,30 @@ export function IconButton({
         </span>
       </button>
     </DisabledReason>
+  );
+}
+
+/**
+ * Linear's filled send circle, which has no Jx variant: a small round icon button painted with `--send`, hovering
+ * "Submit comment" with ⌘↵. Every composer's send is this one control. It always sits in its tooltip trigger, so a
+ * disabled reason can come and go without a remount.
+ */
+export function SendButton({
+  tooltip = "Submit comment",
+  disabledReason = "",
+  ...props
+}: Omit<IconButtonProps, "variant" | "size" | "shortcut" | "alternate" | "children">) {
+  return (
+    <IconButton
+      tooltip={tooltip}
+      shortcut="Mod+Enter"
+      variant="send"
+      size="small"
+      disabledReason={disabledReason}
+      {...props}
+    >
+      <Icon name="up" />
+    </IconButton>
   );
 }
 

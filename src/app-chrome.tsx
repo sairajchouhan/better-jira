@@ -29,7 +29,7 @@ import {
 } from "./store";
 import { BoardControls, FilterChips } from "./view-controls";
 import { Modal } from "./personal-controls";
-import { runShortcut, shortcuts } from "./shortcuts";
+import { hotkeyOf, runShortcut } from "./shortcuts";
 import { Button, IconButton } from "./button";
 import { Shortcut } from "./keycap";
 import { Text } from "./text";
@@ -38,9 +38,6 @@ import { ConfirmDialog } from "./dialog";
 import { useCommand, focusNode } from "./commands";
 import { useInboxBadge } from "./inbox";
 import { Menu } from "./menu";
-/** A shortcut's registry hotkey, for <Shortcut keys>; Help is drawn as "?", as its label always was. */
-export const hotkeyOf = (id: string) =>
-  (id === "help" ? "?" : (shortcuts.find((s) => s.id === id)?.hotkey ?? "")) as string | readonly string[];
 
 export function QuickNavigation({ kind }: { kind: "favorites" | "views" | "boards" }) {
   const boards = useStore((s) => s.boards);
@@ -299,10 +296,10 @@ export function StatusBar() {
               : "Not saved"}
       </span>
       <span className="-ml-2 flex">
-        <IconButton label="Undo" shortcut="⌘Z" variant="muted" disabled={!undo} onClick={undoEdit}>
+        <IconButton label="Undo" shortcut={hotkeyOf("undo")} variant="muted" disabled={!undo} onClick={undoEdit}>
           <Icon name="undo" />
         </IconButton>
-        <IconButton label="Redo" shortcut="⌘⇧Z" variant="muted" disabled={!redo} onClick={redoEdit}>
+        <IconButton label="Redo" shortcut={hotkeyOf("redo")} variant="muted" disabled={!redo} onClick={redoEdit}>
           <Icon name="redo" />
         </IconButton>
         <IconButton

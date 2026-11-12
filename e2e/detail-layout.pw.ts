@@ -74,7 +74,7 @@ test("issue page layout: narrow pills, copy toolbar, compact comment drafts and 
     expect((await page.rect(".rich-editor:has(#comment)")).height).toBeLessThanOrEqual(100);
     expect(
       await page.eval(
-        `document.querySelector('.rich-editor:has(#comment) .rich-editor-submit').disabled`,
+        `document.querySelector('.rich-editor:has(#comment) [data-variant="send"]').disabled`,
       ),
     ).toBe(true);
     await page.click("#comment");

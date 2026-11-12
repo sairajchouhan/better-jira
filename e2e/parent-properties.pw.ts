@@ -170,17 +170,17 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
       ),
     ).toEqual([8, ["⇧", "⌘", "."]]);
     // An icon button keeps its own accessible name while its title is parked, and gets its own markup back after.
-    await page.hover('[title="Close (esc)"]');
+    await page.hover('[title="Close (Esc)"]');
     await page.waitFor(`!!document.querySelector('.app-tooltip')`, 2000);
     expect(
       await page.eval(
-        `(()=>{const b=document.querySelector('[data-title="Close (esc)"]');return [b.getAttribute('aria-label'),b.hasAttribute('title')]})()`,
+        `(()=>{const b=document.querySelector('[data-title="Close (Esc)"]');return [b.getAttribute('aria-label'),b.hasAttribute('title')]})()`,
       ),
     ).toEqual(["Close", false]);
     await page.hover("#prop-status");
     expect(
       await page.eval(
-        `(()=>{const b=document.querySelector('[title="Close (esc)"]');return [b.getAttribute('aria-label'),b.hasAttribute('data-tip-label')]})()`,
+        `(()=>{const b=document.querySelector('[title="Close (Esc)"]');return [b.getAttribute('aria-label'),b.hasAttribute('data-tip-label')]})()`,
       ),
     ).toEqual(["Close", false]);
     // Project has no tooltip in Linear.

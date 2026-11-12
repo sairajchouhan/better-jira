@@ -9,15 +9,13 @@ import {
   statuses,
 } from "./board-catalog";
 import { useStore, useAssignableUsers, type Board, type Issue, type User } from "./store";
-import { shortcuts } from "./shortcuts";
+import { hotkeyOf } from "./shortcuts";
 import { Button } from "./button";
 import { LoadingState } from "./empty-state";
 import { kept, useCommand } from "./commands";
 import { duePresets, shortDate } from "./due-date";
 import { MenuSurface as Modal } from "./menu-surface";
 const DateInput = lazy(() => import("./date-input").then((m) => ({ default: m.DateInput })));
-/** A menu's registry hotkey by shortcut id, for Menu.Input's trailing Shortcut. */
-const hotkeyOf = (id: string) => shortcuts.find((s) => s.id === id)?.hotkey;
 import type { ReactNode } from "react";
 import { Menu } from "./menu";
 import { MenuSurface } from "./menu-surface";

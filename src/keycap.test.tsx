@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { chordKeys, Shortcut, spokenShortcut } from "./keycap";
+import { chordKeys, Shortcut, shortcutTitle, spokenShortcut } from "./keycap";
 
 test("chords follow b4's order and platform modifiers", () => {
   expect(chordKeys("Mod+Shift+S", true)).toEqual(["⌘", "⇧", "S"]);
@@ -32,4 +32,14 @@ test("Shortcut hides the caps and speaks the chord once", () => {
   expect(html).toContain('<span class="sr-only">G, then I</span>');
   expect(html.match(/<kbd[^>]*aria-hidden="true"/g)).toHaveLength(2);
   expect(html).toContain(">then</span>");
+});
+
+test("a title spells registry chords as the tooltip's caps, on every platform (F3)", () => {
+  expect(shortcutTitle("Copy git branch name", "Mod+Shift+.", undefined, true)).toBe("Copy git branch name (⇧ ⌘ .)");
+  expect(shortcutTitle("Redo", "Mod+Shift+Z", undefined, false)).toBe("Redo (Ctrl ⇧ Z)");
+  expect(shortcutTitle("Close", "Escape", undefined, true)).toBe("Close (Esc)");
+  expect(shortcutTitle("Go to inbox", ["G", "I"], undefined, true)).toBe("Go to inbox (G then I)");
+  expect(shortcutTitle("Previous", "K", "ArrowUp", true)).toBe("Previous (K / ↑)");
+  expect(shortcutTitle("Help", "Shift+?", undefined, true)).toBe("Help (?)");
+  expect(shortcutTitle("Plain", "")).toBe("Plain");
 });

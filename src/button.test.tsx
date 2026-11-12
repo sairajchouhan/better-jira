@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Button, ButtonLink, IconButton } from "./button";
+import { Button, ButtonLink, IconButton, SendButton } from "./button";
 
 test("an icon button's tooltip may differ from its accessible name", () => {
   const html = renderToStaticMarkup(
@@ -25,24 +25,46 @@ test("the tooltip defaults to the label, and false leaves it to the owner", () =
 
 test("a disabled reason replaces the tooltip and shortcut on a hoverable wrapper (Aze)", () => {
   const html = renderToStaticMarkup(
-    <IconButton label="Send" shortcut="⌘↵" disabledReason="Write a comment first" disabled>
+    <IconButton label="Send" shortcut="Mod+Enter" disabledReason="Write a comment first" disabled>
       x
     </IconButton>,
   );
   expect(html).toStartWith('<span class="ui-tooltip-trigger" title="Write a comment first"><button');
   expect(html).toContain('aria-description="Write a comment first"');
-  expect(html).not.toContain("⌘↵");
+  expect(html).not.toContain("↵");
 });
 
-test("an enabled button ignores its disabled reason", () => {
+test("an enabled button keeps its reason's wrapper, untitled, so toggling disabled never remounts it (F16b)", () => {
   const html = renderToStaticMarkup(
-    <Button tooltip="Send" shortcut="⌘↵" disabledReason="Write a comment first">
+    <Button tooltip="Send" shortcut="Mod+Enter" disabledReason="Write a comment first">
       Send
     </Button>,
   );
-  expect(html).toStartWith("<button");
-  expect(html).toContain('title="Send (⌘↵)"');
+  expect(html).toStartWith('<span class="ui-tooltip-trigger"><button');
+  expect(html).toContain('title="Send (⌘ ↵)"');
   expect(html).not.toContain("Write a comment first");
+});
+
+test("shortcut props take registry chords, spelled as caps in one place (F3)", () => {
+  // "Shift+V" used to reach the tooltip as display text and showed the caps "Shift" "V".
+  expect(renderToStaticMarkup(<IconButton label="Display options" shortcut="Shift+V">x</IconButton>)).toContain(
+    'title="Display options (⇧ V)"',
+  );
+  expect(
+    renderToStaticMarkup(
+      <IconButton label="Next" shortcut="J" alternate="ArrowDown">
+        x
+      </IconButton>,
+    ),
+  ).toContain('title="Next (J / ↓)"');
+});
+
+test("SendButton is the one send control: the --send look, ⌘↵ and a stable reason wrapper (F5)", () => {
+  const html = renderToStaticMarkup(<SendButton label="Submit reply" disabled />);
+  expect(html).toStartWith('<span class="ui-tooltip-trigger"><button');
+  expect(html).toContain('data-variant="send"');
+  expect(html).toContain('data-size="small"');
+  expect(html).toContain('title="Submit comment (⌘ ↵)"');
 });
 
 test("a link button is an anchor with the button's looks", () => {

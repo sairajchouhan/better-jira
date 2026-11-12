@@ -33,7 +33,8 @@ import {
 import { copyIssue, type CopyKind } from "./issue-copy";
 import { Menu } from "./menu";
 import { MenuSurface } from "./menu-surface";
-import { shortcutLabel } from "./shortcuts";
+import { hotkeyOf } from "./shortcuts";
+import { shortcutTitle } from "./keycap";
 import {
   statusOf as issueStatusOf,
   get,
@@ -350,23 +351,23 @@ function rowEntries(item: InboxItem): ActionEntry[] {
     {
       name: item.unread ? "Mark as read" : "Mark as unread",
       icon: "check",
-      shortcut: shortcutLabel("inbox-read"),
+      shortcut: hotkeyOf("inbox-read"),
       run: () => toggleRead(item),
     },
     {
       name: "Delete notification",
       icon: "trash",
-      shortcut: shortcutLabel("inbox-backspace"),
+      shortcut: hotkeyOf("inbox-backspace"),
       run: () => deleteRow(item),
     },
     {
       name: "Snooze",
       icon: "clock",
-      shortcut: shortcutLabel("inbox-snooze"),
+      shortcut: hotkeyOf("inbox-snooze"),
       children: [
         ...snoozeChoices().map((c) => ({
           name: c.label,
-          shortcut: snoozeTime(c.until),
+          hint: snoozeTime(c.until),
           run: () => snoozeRow(c.until, item),
         })),
         { name: "Custom…", run: () => openSnooze(item, true) },
@@ -377,7 +378,7 @@ function rowEntries(item: InboxItem): ActionEntry[] {
           {
             name: favorite ? "Remove from favorites" : "Favorite",
             icon: (favorite ? "starred" : "star") as IconName,
-            shortcut: shortcutLabel("favorite"),
+            shortcut: hotkeyOf("favorite"),
             divider: true,
             run: () => toggleFavorite(item.key),
           },
@@ -389,7 +390,7 @@ function rowEntries(item: InboxItem): ActionEntry[] {
       divider: !mirrored,
       children: COPY.map(([kind, id]) => ({
         name: `Copy ${kind}`,
-        shortcut: shortcutLabel(id),
+        shortcut: hotkeyOf(id),
         run: () => void copyRow(item, kind),
       })),
     },
@@ -437,7 +438,7 @@ function filterEntries(base: InboxItem[], v: InboxView): ActionEntry[] {
         icon: v.filters[field]?.includes(value)
           ? ("check" as const)
           : undefined,
-        shortcut: `${counts.get(value)} notification${counts.get(value) === 1 ? "" : "s"}`,
+        hint: `${counts.get(value)} notification${counts.get(value) === 1 ? "" : "s"}`,
         run: () => toggleFilter(field, value),
       })),
     };
@@ -561,13 +562,13 @@ function Menus({ base }: { base: InboxItem[] }) {
         entries={[
           {
             name: "Mark all as read",
-            shortcut: shortcutLabel("inbox-read-all"),
+            shortcut: hotkeyOf("inbox-read-all"),
             run: () => void markAllRead(),
           },
           { name: "Delete all", run: () => deleteAll("all") },
           {
             name: "Delete all read",
-            shortcut: shortcutLabel("inbox-delete-read"),
+            shortcut: hotkeyOf("inbox-delete-read"),
             run: () => deleteAll("read"),
           },
           { name: "Delete all completed", run: () => deleteAll("completed") },
@@ -728,10 +729,10 @@ export function InboxList() {
             onValueChange={(tab) => showTab(tab as InboxView["tab"])}
           >
             <Tabs.List aria-label="Priority inbox" className="ml-1">
-              <Tabs.Tab value="direct" title="Priority (⌥1)">
+              <Tabs.Tab value="direct" title={shortcutTitle("Priority", hotkeyOf("inbox-priority"))}>
                 Priority
               </Tabs.Tab>
-              <Tabs.Tab value="watching" title="Other (⌥2)">
+              <Tabs.Tab value="watching" title={shortcutTitle("Other", hotkeyOf("inbox-other"))}>
                 Other
               </Tabs.Tab>
             </Tabs.List>
@@ -749,7 +750,7 @@ export function InboxList() {
           id="inbox-filter"
           label="Add filter"
           tooltip="Filter"
-          shortcut={shortcutLabel("filter")}
+          shortcut={hotkeyOf("filter")}
           aria-expanded={filterOpen}
           aria-pressed={hasFilters(v)}
           onClick={() =>
@@ -860,14 +861,14 @@ export function InboxIssueActions() {
     <>
       <IconButton
         label="Snooze notification"
-        shortcut={shortcutLabel("inbox-snooze")}
+        shortcut={hotkeyOf("inbox-snooze")}
         onClick={() => openSnooze()}
       >
         <Icon name="clock" />
       </IconButton>
       <IconButton
         label="Delete notification"
-        shortcut={shortcutLabel("inbox-backspace")}
+        shortcut={hotkeyOf("inbox-backspace")}
         onClick={() => deleteRow()}
       >
         <Icon name="trash" />
@@ -892,7 +893,7 @@ export function InboxPane() {
             <IconButton
               key={kind}
               label={`Copy issue ${kind}`}
-              shortcut={shortcutLabel(id)}
+              shortcut={hotkeyOf(id)}
               onClick={() => void copyRow(row, kind)}
             >
               <Icon name={kind === "URL" ? "link" : "copy"} />

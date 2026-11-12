@@ -142,7 +142,7 @@ export const reminderEntries = (
   ...reminderPresets().map((preset) => ({
     name: preset.label,
     icon: "clock" as const,
-    shortcut: reminderTime(preset.at),
+    hint: reminderTime(preset.at),
     run: () => pick(preset.at),
   })),
   { name: "Custom…", icon: "calendar", run: custom },

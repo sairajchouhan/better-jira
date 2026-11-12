@@ -1104,7 +1104,9 @@
 .image-comment-thread p {
   margin: 4px 0 12px;
 }
-.image-comment-thread span {
+/* The author and avatar only: a bare `span` also reached the buttons' icon spans. */
+.image-comment-meta > span,
+.image-comment-avatar {
   color: var(--fg-3);
   font-size: 11px;
 }
@@ -1402,22 +1404,12 @@
   border: 0;
   padding: 0;
 }
-.rich-editor[data-variant="comment"] > .rich-editor-actions > button:not(.rich-editor-submit) {
+.rich-editor[data-variant="comment"] > .rich-editor-actions > button {
   display: grid;
   place-items: center;
   width: 24px;
   height: 24px;
   padding: 0;
-}
-.rich-editor[data-variant="comment"] .rich-editor-submit {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border-radius: 50%;
-  background: var(--send);
-  color: var(--card-fg-3);
 }
 .issue-activity:target,
 .issue-activity li:target,
@@ -1533,10 +1525,6 @@
   color: var(--reply-ph);
   cursor: text;
 }
-.comment-reply-send {
-  background: var(--send);
-  color: var(--card-fg-3);
-}
 .comment-hover-action {
   margin: -5px 0;
   opacity: 0;
@@ -1584,7 +1572,7 @@
   box-shadow: none;
   background: var(--card);
 }
-.sub-issue-composer .rich-editor:focus-within .rich-editor-actions > span {
+.sub-issue-composer .rich-editor:focus-within .rich-editor-hint {
   visibility: hidden;
 }
 .sub-issue-composer .rich-content {

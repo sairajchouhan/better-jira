@@ -1,9 +1,9 @@
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 /* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
-import { useHotkeys, useHotkey, formatForDisplay } from "@tanstack/react-hotkeys";
+import { useHotkeys, useHotkey } from "@tanstack/react-hotkeys";
 import { adfToText } from "./adf";
 import { discardLateMedia, documentHasMedia, lateMediaDiscarded } from "./document";
-import { Button, IconButton } from "./button";
+import { Button, IconButton, SendButton } from "./button";
 import { TextInput } from "./field";
 import { Icon } from "./icons";
 import { Text } from "./text";
@@ -91,6 +91,7 @@ const ToolbarButton = (props: ComponentProps<typeof Button>) => <Button variant=
 export type EditorPresentation = "framed" | "inline" | "document" | "comment";
 export type EditorEngineProps = RichEditorProps & { presentation: EditorPresentation };
 // Presentation policy stays private to the engine. Callers compose a named editor variant.
+const BUSY = "Finish or discard attachments before sending";
 const presentations = {
   framed: { inline: false, selectionToolbar: false, variant: undefined },
   inline: { inline: true, selectionToolbar: false, variant: undefined },
@@ -476,7 +477,8 @@ export function RichEditor(props: EditorEngineProps) {
         <ToolbarButton
           key={name}
           aria-label={label}
-          title={`${label} (${formatForDisplay(editorBindings.find((b) => b.id === name)!.hotkey)})`}
+          tooltip={label}
+          shortcut={editorBindings.find((b) => b.id === name)!.hotkey}
           aria-pressed={marked(name!)}
           onClick={() => run(toggleMark(richSchema.marks[name!]!))}
         >
@@ -683,7 +685,7 @@ export function RichEditor(props: EditorEngineProps) {
         <div className="rich-editor-actions flex items-center justify-end gap-2 border-t border-line-2 p-2 text-[12px]">
           {presentation.variant === "comment" && formatting}
           {presentation.variant !== "comment" && (
-            <span className="mr-auto text-fg-3">{props.hint ?? "⌘↵ save · Esc cancel"}</span>
+            <span className="rich-editor-hint mr-auto text-fg-3">{props.hint ?? "⌘↵ save · Esc cancel"}</span>
           )}
           {/* Linear's edit actions: a medium link Cancel beside a medium Save (Comment.*.js). */}
           {props.onCancel && (
@@ -698,27 +700,21 @@ export function RichEditor(props: EditorEngineProps) {
           )}
           {props.onSave &&
             (presentation.variant === "comment" ? (
-              // Linear's filled send circle has no Jx variant; `rich-editor-submit` paints it (index.css).
-              <IconButton
+              <SendButton
                 label={props.saveLabel ?? "Save description"}
-                tooltip="Submit comment"
-                shortcut="⌘↵"
-                size="small"
                 disabled={uploadBusy || empty}
-                disabledReason={uploadBusy ? "Finish or discard attachments before sending" : undefined}
-                className="rich-editor-submit"
+                disabledReason={uploadBusy ? BUSY : undefined}
                 onClick={() => save()}
-              >
-                <Icon name="up" />
-              </IconButton>
+              />
             ) : (
-              // `rich-editor-submit` is the hook the sub-issue composer's ⌘↵ clicks.
+              // `rich-editor-submit` is the hook the sub-issue composer's ⌘↵ clicks. "" keeps the reason's wrapper
+              // while there is no reason, so the button is not remounted when uploads start or finish.
               <Button
                 size="medium"
                 className="rich-editor-submit"
                 aria-label={props.saveLabel ?? "Save description"}
                 disabled={uploadBusy || (props.required && empty)}
-                title={uploadBusy ? "Finish or discard attachments before sending" : undefined}
+                disabledReason={uploadBusy ? BUSY : ""}
                 onClick={() => save()}
               >
                 {props.saveLabel ?? "Save description"}

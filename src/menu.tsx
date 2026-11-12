@@ -24,7 +24,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
-import { Shortcut } from "./keycap";
+import { Shortcut, type Keys } from "./keycap";
 
 /**
  * Linear's one menu primitive, `IB = Object.assign(B3e, {List, Item, GroupHeader, Divider, TextDivider, Input})` in
@@ -116,7 +116,7 @@ type ItemSlots = {
   /** A single-select row: the trailing checkmark when true. */
   checked?: boolean;
   /** The row's hotkey as a registry chord ("Shift+T", ["G", "I"]), drawn as Linear's small Shortcut (the action row's `detail`). */
-  shortcut?: string | readonly string[];
+  shortcut?: Keys;
   /** Trailing text: a number key, a count, a date. */
   hint?: ReactNode;
   /** A muted second line; the row grows to fit it. */

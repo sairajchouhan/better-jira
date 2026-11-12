@@ -7,7 +7,7 @@ import { normalizeDocument, type AdfDocument } from "./document";
 import { resourceMediaIds } from "./issue-resource";
 import { adfToMarkdown } from "./issue-copy";
 import { Icon } from "./icons";
-import { IconButton } from "./button";
+import { IconButton, SendButton } from "./button";
 import { ConfirmDialog } from "./dialog";
 import { Text } from "./text";
 import { ActionMenu, type ActionEntry } from "./action-menu";
@@ -553,17 +553,7 @@ function Thread({
                   >
                     <Icon name="paperclip" />
                   </IconButton>
-                  {/* Linear's filled send circle has no Jx variant; `comment-reply-send` paints it, as rich-editor-submit does. */}
-                  <IconButton
-                    label="Submit reply"
-                    tooltip="Submit comment"
-                    shortcut="⌘↵"
-                    size="small"
-                    className="comment-reply-send"
-                    onClick={() => setReplying(true)}
-                  >
-                    <Icon name="up" />
-                  </IconButton>
+                  <SendButton label="Submit reply" onClick={() => setReplying(true)} />
                 </div>
               )}
             </div>

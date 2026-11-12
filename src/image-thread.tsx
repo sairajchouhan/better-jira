@@ -4,7 +4,7 @@ import { useHotkeys } from "@tanstack/react-hotkeys";
 import type { ImageComment } from "./media-edits";
 import { ActionMenu } from "./action-menu";
 import { ConfirmDialog } from "./dialog";
-import { Button, IconButton } from "./button";
+import { Button, IconButton, SendButton } from "./button";
 import { AutoResizingTextArea } from "./field";
 import { notifyMedia } from "./media-toast";
 import { Icon } from "./icons";
@@ -97,16 +97,21 @@ export function ImageThread({
           aria-label="Image comment"
           value={text}
           onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            // The send button's ⌘↵.
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              form.current?.requestSubmit();
+            }
+          }}
           placeholder="Add a comment…"
         />
-        <IconButton
+        <SendButton
           type="submit"
           disabled={!text.trim()}
           disabledReason="Write a comment first"
           label={editing ? "Save image comment" : "Submit image comment"}
-        >
-          <Icon name="up" />
-        </IconButton>
+        />
       </form>
       {editing && (
         <Button
@@ -296,17 +301,12 @@ export function ImageCommentCard({
               }
             }}
           />
-          <IconButton
+          <SendButton
             type="submit"
             label="Submit image reply"
-            shortcut="⌘↵"
-            variant="primary"
-            size="small"
             disabled={!reply.trim()}
             disabledReason="Write a reply first"
-          >
-            <Icon name="up" />
-          </IconButton>
+          />
         </form>
       </div>
       {menu && (
