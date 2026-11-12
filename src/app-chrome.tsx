@@ -37,10 +37,33 @@ import { Button, IconButton } from "./button";
 import { Shortcut } from "./keycap";
 import { Text } from "./text";
 import { TextInput } from "./field";
-import { ConfirmDialog } from "./dialog";
+import { ConfirmDialog, Dialog } from "./dialog";
 import { useCommand, focusNode } from "./commands";
 import { useInboxBadge } from "./inbox";
 import { Menu } from "./menu";
+import { SectionDisclosure } from "./section-disclosure";
+import { SelectRow } from "./display-options";
+import { useStoredState } from "./stored-state";
+
+/** Linear's sidebar preferences (BJ-76): collapsed sections, and when Inbox and My issues show (Customize sidebar). */
+const VISIBILITY = {
+  Always: "Always show",
+  WithNotifications: "Show when badged",
+  MoreMenu: "Don't show",
+} as const;
+type Visibility = keyof typeof VISIBILITY;
+type SidebarPrefs = { collapsed: string[]; inbox: Visibility; myIssues: Visibility };
+const SIDEBAR_PREFS: SidebarPrefs = { collapsed: [], inbox: "Always", myIssues: "Always" };
+const visibility = (v: unknown): Visibility =>
+  typeof v === "string" && v in VISIBILITY ? (v as Visibility) : "Always";
+const parseSidebarPrefs = (raw: unknown): SidebarPrefs => {
+  const r = (raw ?? {}) as Partial<Record<keyof SidebarPrefs, unknown>>;
+  return {
+    collapsed: Array.isArray(r.collapsed) ? r.collapsed.filter((c) => typeof c === "string") : [],
+    inbox: visibility(r.inbox),
+    myIssues: visibility(r.myIssues) === "WithNotifications" ? "Always" : visibility(r.myIssues),
+  };
+};
 
 export function QuickNavigation({ kind }: { kind: "favorites" | "views" | "boards" }) {
   const boards = useStore((s) => s.boards);
@@ -93,8 +116,19 @@ export function Sidebar({ boards }: { boards: Board[] }) {
   const open = useStore((s) => s.sidebarOpen);
   const inbox = useStore((s) => s.inbox);
   const badge = useInboxBadge();
-  if (hidden && !open) return null;
+  const [prefs, setPrefs] = useStoredState("better-jira:sidebar:v1", parseSidebarPrefs, SIDEBAR_PREFS);
+  const customizing = useStore((s) => s.overlay === "customize-sidebar");
+  const dialog = customizing && <CustomizeSidebar prefs={prefs} setPrefs={setPrefs} />;
+  if (hidden && !open) return dialog || null;
   const close = () => set({ sidebarOpen: false });
+  const expanded = (section: string) => !prefs.collapsed.includes(section);
+  const toggle = (section: string) =>
+    setPrefs({
+      ...prefs,
+      collapsed: expanded(section)
+        ? [...prefs.collapsed, section]
+        : prefs.collapsed.filter((c) => c !== section),
+    });
   return (
     <>
       {open && (
@@ -117,14 +151,16 @@ export function Sidebar({ boards }: { boards: Board[] }) {
           </span>
           better-jira
         </div>
-        <SideItem active={inbox} onClick={() => timed("open inbox", () => runShortcut("inbox"))}>
-          <Icon name="inbox" /> Inbox
-          {badge > 0 && (
-            <Text data-inbox-badge variant="mini" color="base" className="ml-auto">
-              {badge}
-            </Text>
-          )}
-        </SideItem>
+        {(prefs.inbox === "Always" || inbox || (prefs.inbox === "WithNotifications" && badge > 0)) && (
+          <SideItem active={inbox} onClick={() => timed("open inbox", () => runShortcut("inbox"))}>
+            <Icon name="inbox" /> Inbox
+            {badge > 0 && (
+              <Text data-inbox-badge variant="mini" color="base" className="ml-auto">
+                {badge}
+              </Text>
+            )}
+          </SideItem>
+        )}
         <SideItem onClick={() => runShortcut("search")}>
           <Icon name="search" /> Search <Shortcut className="ml-auto" keys={hotkeyOf("search")} size="small" />
         </SideItem>
@@ -132,15 +168,17 @@ export function Sidebar({ boards }: { boards: Board[] }) {
           <Icon name="plus" /> New issue <Shortcut className="ml-auto" keys={hotkeyOf("new")} size="small" />
         </SideItem>
         {/* Like Linear, My issues is a sidebar view rather than a tab beside Active/Backlog/All. */}
-        <SideItem
-          active={mine && !inbox && !activeView && !viewsPage}
-          onClick={() => timed("open my issues", () => navigate({ mine: true, selected: null, panel: false }))}
-        >
-          <Icon name="user" /> My issues <Shortcut className="ml-auto" keys={hotkeyOf("mine")} size="small" />
-        </SideItem>
+        {prefs.myIssues === "Always" && (
+          <SideItem
+            active={mine && !inbox && !activeView && !viewsPage}
+            onClick={() => timed("open my issues", () => navigate({ mine: true, selected: null, panel: false }))}
+          >
+            <Icon name="user" /> My issues <Shortcut className="ml-auto" keys={hotkeyOf("mine")} size="small" />
+          </SideItem>
+        )}
 
-        <Text as="div" variant="mini" color="muted" className="group mt-5 mb-1 flex items-center px-2">
-          Boards
+        <div className="group mt-5 mb-1 flex items-center">
+          <SectionDisclosure label="Boards" expanded={expanded("boards")} onToggle={() => toggle("boards")} />
           <IconButton
             label="Add board"
             variant="muted"
@@ -150,8 +188,8 @@ export function Sidebar({ boards }: { boards: Board[] }) {
           >
             <Icon name="plus" />
           </IconButton>
-        </Text>
-        {boards.map((b) => {
+        </div>
+        {expanded("boards") && boards.map((b) => {
           const item = (
             <SideItem
               key={b.id}
@@ -192,7 +230,7 @@ export function Sidebar({ boards }: { boards: Board[] }) {
             </SideItem>
           </ViewContextMenu>
         ))}
-        <ViewFavorites />
+        <ViewFavorites expanded={expanded("favorites")} onToggle={() => toggle("favorites")} />
         <Button
           variant="muted"
           id="help-menu"
@@ -203,7 +241,45 @@ export function Sidebar({ boards }: { boards: Board[] }) {
           Help <Shortcut keys={hotkeyOf("help")} size="small" />
         </Button>
       </nav>
+      {dialog}
     </>
+  );
+}
+
+/** Linear's Customize sidebar, for the items this app has: when Inbox and My issues show. Their shortcuts still work. */
+function CustomizeSidebar({
+  prefs,
+  setPrefs,
+}: {
+  prefs: SidebarPrefs;
+  setPrefs: (prefs: SidebarPrefs) => void;
+}) {
+  const close = () => ui.send({ type: "overlay.close" });
+  const options = Object.entries(VISIBILITY);
+  return (
+    <Dialog label="Customize sidebar" close={close} width={440}>
+      <Dialog.Header>
+        <Dialog.Title>Customize sidebar</Dialog.Title>
+        <Dialog.Close />
+      </Dialog.Header>
+      <Dialog.Body>
+        <Text as="h3" variant="smallPlus" className="mb-2">
+          Personal
+        </Text>
+        <SelectRow
+          label="Inbox"
+          value={prefs.inbox}
+          options={options}
+          onChange={(inbox) => setPrefs({ ...prefs, inbox: visibility(inbox) })}
+        />
+        <SelectRow
+          label="My issues"
+          value={prefs.myIssues}
+          options={options.filter(([v]) => v !== "WithNotifications")}
+          onChange={(myIssues) => setPrefs({ ...prefs, myIssues: visibility(myIssues) })}
+        />
+      </Dialog.Body>
+    </Dialog>
   );
 }
 

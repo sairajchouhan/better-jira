@@ -158,6 +158,7 @@ export type Overlay =
   | "views"
   | "boards"
   | "add-board"
+  | "customize-sidebar"
   | "subscribers"
   | "reminder"
   | "inbox-actions"

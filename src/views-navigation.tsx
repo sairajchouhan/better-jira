@@ -3,6 +3,7 @@ import { Icon, type IconName } from "./icons";
 import { Avatar } from "./avatar";
 import { ME, moveFavorite, navigate, toggleFavorite, useStore, type Issue } from "./store";
 import { ContextMenu } from "./action-menu";
+import { SectionDisclosure } from "./section-disclosure";
 import { findIssueDocument } from "./issue-resource";
 import { createViewDraft, openSavedView, useActiveView, useSavedViews, type SavedView } from "./saved-views";
 import { FavoriteButton } from "./favorite-button";
@@ -56,7 +57,7 @@ export function ViewsDirectory() {
   </section>;
 }
 
-export function ViewFavorites() {
+export function ViewFavorites({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
   const favorites = useStore(s => s.favorites), views = useSavedViews(), active = useActiveView();
   const boards = useStore(s => s.boards), issues = useStore(s => s.issues);
   const rows = favorites.flatMap(id => {
@@ -75,7 +76,7 @@ export function ViewFavorites() {
     // A view's own menu has Unfavorite; the other rows get Remove from favorites (BJ-75).
     return [view ? <ViewContextMenu key={id} view={view}>{button}</ViewContextMenu> : <ContextMenu key={id} label="Favorite options" entries={() => [{ name: "Remove from favorites", icon: "starred", run: () => toggleFavorite(id) }]}>{button}</ContextMenu>];
   });
-  return rows.length ? <div className="mt-5"><Text as="div" variant="mini" color="muted" className="mb-1 px-2">Favorites</Text>{rows}</div> : null;
+  return rows.length ? <div className="mt-5"><div className="mb-1"><SectionDisclosure label="Favorites" expanded={expanded} onToggle={onToggle} /></div>{expanded && rows}</div> : null;
 }
 export function ViewDetails({ view, issues }: { view: SavedView; issues: Issue[] }) {
   const summaries = viewSummaries(issues);
