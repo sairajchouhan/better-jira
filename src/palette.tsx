@@ -27,6 +27,7 @@ import { filterCount } from "./view-model";
 import { Modal } from "./personal-controls";
 import { Avatar } from "./avatar";
 import { matchRank } from "./search-rank";
+import { matchIssues } from "./issue-search";
 import { hotkeyOf, runShortcut, shortcutApplies, shortcuts } from "./shortcuts";
 import { Shortcut } from "./keycap";
 const MENU =
@@ -51,22 +52,6 @@ function Overlay({
 
 /** `keys`: the hotkey that does the same thing, drawn after the name. */
 type Cmd = { name: string; keys?: string | readonly string[]; icon?: ReactNode; disabled?: boolean; run: () => void };
-
-/** Issues matching every typed word: an exact key first, then title matches, then the most recently updated (top 50). */
-const matchIssues = (issues: Map<string, Issue>, q: string) => {
-  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-  const exact = q.trim().toUpperCase();
-  const rank = (i: Issue) => {
-    const title = matchRank(i.summary, q);
-    return i.key === exact ? -1 : title < 0 ? 6 : title;
-  };
-  return [...issues.values()]
-    .filter((i) => words.every((w) => `${i.key} ${i.summary}`.toLowerCase().includes(w)))
-    .map((i) => [rank(i), i] as const)
-    .sort(([ra, a], [rb, b]) => ra - rb || (a.updated < b.updated ? 1 : -1))
-    .slice(0, 50)
-    .map(([, i]) => i);
-};
 
 /** The palette dialog both search and ⌘K use: the input (with the scoped issue's chip), then the result groups.
  *  Not menu.tsx on purpose: Linear's ⌘K CommandMenu renders through its own large-menu compound
