@@ -341,9 +341,9 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
     await menu("TEST-4");
     expect(
       await page.eval(
-        `[document.querySelectorAll('[role="dialog"][aria-label="Sub-issue actions"] [cmdk-separator]').length,document.querySelector('[cmdk-item][data-value="Status"]').textContent,document.querySelector('[cmdk-item][data-value="Project"]').textContent]`,
+        `[document.querySelectorAll('[role="dialog"][aria-label="Sub-issue actions"] [cmdk-separator]').length,...['Status','Project'].map(value=>{const row=document.querySelector('[cmdk-item][data-value="'+value+'"]');return {label:row.querySelector('.menu-name').textContent,shortcut:[...row.querySelectorAll('.ui-shortcut kbd')].map(n=>n.textContent).join(' ')};})]`,
       ),
-    ).toEqual([4, "StatusS", "Project⇧ P"]);
+    ).toEqual([4, { label: "Status", shortcut: "S" }, { label: "Project", shortcut: "⇧ P" }]);
     await page.click('[cmdk-item][data-value="Labels"]');
     const labelRow = page.page.locator(
       '[role="dialog"][aria-label="Change labels"] [cmdk-item][data-value="test"]',
@@ -440,9 +440,9 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
     );
     expect(
       await page.eval(
-        `[!!document.querySelector('[cmdk-item][data-value="Copy › Copy title as link"] svg'),document.querySelector('[cmdk-item][data-value="Copy › Copy title as link"]').textContent]`,
+        `[!!document.querySelector('[cmdk-item][data-value="Copy › Copy title as link"] svg'),{label:document.querySelector('[cmdk-item][data-value="Copy › Copy title as link"] .menu-name').textContent,shortcut:[...document.querySelectorAll('[cmdk-item][data-value="Copy › Copy title as link"] .ui-shortcut kbd')].map(n=>n.textContent).join(' ')}]`,
       ),
-    ).toEqual([true, "Copy ›Copy title as link⌘ C"]);
+    ).toEqual([true, { label: "Copy ›Copy title as link", shortcut: "⌘ C" }]);
     await page.key("Escape");
     await menu("TEST-4", "rename", "More properties › Rename…");
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Issue title'`);

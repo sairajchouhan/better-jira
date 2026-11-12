@@ -9,7 +9,7 @@ test("issue options follow Linear's action tree, with descendant search and subm
   const page = await open("?issue=TEST-2&view=page");
   await page.waitFor(`!!document.getElementById('comment')`);
   // Linear's look: filter focused but hidden until typing, grouped with separators, an icon per item, shortcut hints on submenus, content-fitted width.
-  const look = `(()=>{const m=document.querySelector('${OPTIONS}'),input=m.querySelector('input'),items=[...m.querySelectorAll('[cmdk-item]')];return {input:input.getBoundingClientRect().width>1,separators:m.querySelectorAll('[cmdk-separator]').length,icons:items.filter(n=>n.querySelector('svg:not(:last-child)')||n.firstElementChild?.querySelector('svg')).length,items:items.length,due:items[0].textContent,width:Math.round(m.getBoundingClientRect().width)}})()`;
+  const look = `(()=>{const m=document.querySelector('${OPTIONS}'),input=m.querySelector('input'),items=[...m.querySelectorAll('[cmdk-item]')];return {input:input.getBoundingClientRect().width>1,separators:m.querySelectorAll('[cmdk-separator]').length,icons:items.filter(n=>n.querySelector('svg:not(:last-child)')||n.firstElementChild?.querySelector('svg')).length,items:items.length,due:{label:items[0].querySelector('.menu-name').textContent,shortcut:[...items[0].querySelectorAll('.ui-shortcut kbd')].map(n=>n.textContent).join('')},width:Math.round(m.getBoundingClientRect().width)}})()`;
 
   await test.step("the menu lists Linear's action tree, with its glyphs, groups, hints and fitted width", async () => {
     await page.click("#issue-options");
@@ -40,11 +40,11 @@ test("issue options follow Linear's action tree, with descendant search and subm
       separators: number;
       icons: number;
       items: number;
-      due: string;
+      due: { label: string; shortcut: string };
       width: number;
     }>(look);
     expect(before).toMatchObject({ input: false, separators: 4, icons: before.items });
-    expect(before.due.replace(/\s/g, "")).toBe("Duedate⇧D");
+    expect(before.due).toEqual({ label: "Due date", shortcut: "⇧D" });
     expect(before.width).toBeGreaterThanOrEqual(200);
     expect(before.width).toBeLessThan(280);
   });
@@ -89,9 +89,9 @@ test("issue options follow Linear's action tree, with descendant search and subm
     );
     expect(
       await page.eval(
-        `(()=>{const m=document.querySelector('[role="dialog"][aria-label="Copy"]');return [[...m.querySelectorAll('[cmdk-item]')].every(n=>n.querySelector('svg')),m.querySelector('[cmdk-item][data-value="Copy title as link"]').textContent]})()`,
+        `(()=>{const m=document.querySelector('[role="dialog"][aria-label="Copy"]');return [[...m.querySelectorAll('[cmdk-item]')].every(n=>n.querySelector('svg')),{label:m.querySelector('[cmdk-item][data-value="Copy title as link"] .menu-name').textContent,shortcut:[...m.querySelectorAll('[cmdk-item][data-value="Copy title as link"] .ui-shortcut kbd')].map(n=>n.textContent).join(' ')}]})()`,
       ),
-    ).toEqual([true, "Copy title as link⌘ C"]);
+    ).toEqual([true, { label: "Copy title as link", shortcut: "⌘ C" }]);
     await page.key("Escape");
     await page.waitFor(`!document.querySelector('[role="dialog"][aria-label="Copy"]')`);
     if (await page.eval(`!!document.querySelector('${OPTIONS}')`)) await page.key("Escape");

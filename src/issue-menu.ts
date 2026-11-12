@@ -12,7 +12,7 @@ import {
 } from "./store";
 import { canHaveChildren, needsParent } from "./issue-properties";
 import { createIssueDocument } from "./issue-resources";
-import { shortcutLabel, canRunShortcut, runShortcut } from "./shortcuts";
+import { shortcuts, canRunShortcut, runShortcut } from "./shortcuts";
 import { copyIssue, copyKinds, copyIcons, copyShortcuts } from "./issue-copy";
 import { reminderEntries } from "./reminders";
 import { duePresets } from "./due-date";
@@ -51,7 +51,7 @@ export function issueMenuEntries(
 ): ActionEntry[] {
   const parent = issue.parent ? get().issues.get(issue.parent) : undefined;
   const favorite = get().favorites.includes(issue.key),
-    keys = (id: string) => shortcutLabel(id) || undefined;
+    keys = (id: string) => shortcuts.find((entry) => entry.id === id)?.hotkey;
   const open = (overlay: "due" | "reminder") => openDialog(overlay);
   const related = (kind: NonNullable<IssueDraft["related"]>["kind"]) => {
     close();
@@ -85,7 +85,7 @@ export function issueMenuEntries(
       },
       ...duePresets().map((preset) => ({
         name: preset.name,
-        shortcut: preset.label,
+        hint: preset.label,
         run: () => {
           actions.patch(issue.key, { due: preset.due });
           close();

@@ -728,7 +728,7 @@ function FilterSaveActions({ board }: { board: Board }) {
                   disabled={saving || !mergeable}
                   title={mergeable ? undefined : "Cannot merge these filters into the view"}
                   description={mergeable ? undefined : "Cannot merge these filters into the view"}
-                  hint="⌥S"
+                  shortcut="Alt+S"
                   onSelect={() => void save()}
                 >
                   Save to this view
@@ -736,7 +736,7 @@ function FilterSaveActions({ board }: { board: Board }) {
               )}
               <Menu.Item
                 value="create"
-                hint="⌥V"
+                shortcut="Alt+V"
                 onSelect={() => {
                   setSaveAnchor(null);
                   createToolbarView();

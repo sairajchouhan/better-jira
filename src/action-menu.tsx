@@ -2,7 +2,6 @@ import { FloatingTree } from "@floating-ui/react";
 import { useRef, useState, type RefObject } from "react";
 import { Icon, type IconName } from "./icons";
 import { Menu } from "./menu";
-import { Keycap } from "./keycap";
 import { MenuSurface, MENU_POPUP } from "./menu-surface";
 
 /** `divider` starts a new group, drawn as a separator above the entry while the menu is unfiltered. */
@@ -10,7 +9,8 @@ export type ActionEntry = {
   name: string;
   run?: () => void;
   children?: ActionEntry[];
-  shortcut?: string;
+  shortcut?: string | readonly string[];
+  hint?: string;
   selected?: boolean;
   icon?: IconName;
   divider?: boolean;
@@ -125,7 +125,7 @@ function Level({
               value={entry.name}
               label={<Label name={entry.name} />}
               icon={entry.icon && <Icon name={entry.icon} size={16} />}
-              hint={entry.shortcut && <ActionHint hint={entry.shortcut} />}
+              {...actionDetails(entry)}
               open={open === entry.name}
               onOpenChange={(next) =>
                 setOpen((cur) => (next ? entry.name : cur === entry.name ? null : cur))
@@ -146,7 +146,7 @@ function Level({
               value={entry.name}
               icon={entry.icon && <Icon name={entry.icon} size={16} />}
               checked={entry.selected}
-              hint={entry.shortcut && <ActionHint hint={entry.shortcut} />}
+              {...actionDetails(entry)}
               onSelect={() => {
                 close();
                 entry.run?.();
@@ -176,11 +176,14 @@ function Label({ name }: { name: string }) {
   );
 }
 
-/** The legacy shortcut slot also carries dates and counts; only keyboard hints get caps. */
-function ActionHint({ hint }: { hint: string }) {
-  const chords = hint.split(/ (?:then|or) /);
+/** Dates and counts from legacy callers remain plain hints; keyboard chords use Menu’s shared slot. */
+function actionDetails(entry: ActionEntry): { shortcut?: string | readonly string[]; hint?: string } {
+  if (typeof entry.shortcut !== "string") return { shortcut: entry.shortcut, hint: entry.hint };
+  const chords = entry.shortcut.split(/ (?:then|or) /);
   const keyboard = chords.every((chord) =>
-    /^(?:(?:Ctrl|Control|Alt|Shift|Meta|⌘|⌥|⇧|⌃)[+ ]*)*(?:[A-Z0-9]|[^\w\s]|Esc|Enter|Tab|Space|Backspace|Delete)$/.test(chord),
+    /^(?:(?:Mod|Ctrl|Control|Alt|Shift|Meta|⌘|⌥|⇧|⌃)[+ ]*)*(?:[A-Z0-9]|[^\w\s]|Esc|Escape|Enter|Tab|Space|Backspace|Delete|ArrowUp|ArrowDown|ArrowLeft|ArrowRight)$/.test(chord),
   );
-  return keyboard ? <Keycap size="small" type="borderless">{hint}</Keycap> : hint;
+  if (!keyboard) return { hint: entry.hint ?? entry.shortcut };
+  const normalized = chords.map((chord) => chord.replace(/[⌘⌥⇧⌃]/g, (key) => ({ "⌘": "Mod+", "⌥": "Alt+", "⇧": "Shift+", "⌃": "Control+" })[key]!).replace(/ (?=[A-Z])/g, "+"));
+  return { shortcut: normalized.length === 1 ? normalized[0] : normalized, hint: entry.hint };
 }
