@@ -509,3 +509,39 @@ test("BJ-19: a create queued after jobs that name it goes first, so they get its
     ["TO-1", { op: "fields", fields: { parent: "KAN-63" } }],
   ]);
 });
+
+test("BJ-22: a takeover saves this tab's edits first, then builds the create from the saved copy every tab merged into", async () => {
+  // The browser's saved data: the closed tab's new issue, with its summary edit.
+  const saved: LocalChange = {
+    key: "KAN-NEW12",
+    issue: issue("KAN-NEW12", { summary: "Closed tab's title" }),
+    issueFields: ["summary"],
+    fullFields: [],
+    created: true,
+    tab: "closed-tab",
+  };
+  const steps: string[] = [];
+  const h = harness({
+    tabs: {
+      stored: async () => ({ keys: {}, created: new Set([saved.key]) }),
+      // Saving merges this tab's priority edit into the shared copy, as LocalDatabase.save does.
+      save: async () => {
+        steps.push("save");
+        saved.issue = { ...saved.issue!, priority: "High" };
+      },
+      exclusive: async (fn) => fn(new Set(["this-tab"])),
+      claim: async () => (steps.push("claim"), { claimed: new Set([saved.key]), changes: [structuredClone(saved)] }),
+    },
+    reply: (key, body) => (body.ops[0]?.op === "create" ? { created: { [key]: "KAN-64" } } : {}),
+  });
+  h.onTakeOver((change) => h.send([change.key, {}, { issue: change.issue! }]));
+  h.outbox.own(saved.key, "closed-tab", true);
+  // This tab's edit of the new issue waits for the create.
+  h.send(edit(issue(saved.key, { summary: "Closed tab's title" }), { priority: "High" }));
+  await h.advance(0);
+  expect(steps).toEqual(["save", "claim"]);
+  expect(h.sent[0]?.ops[0]).toMatchObject({
+    op: "create",
+    fields: { summary: "Closed tab's title", priority: "High" },
+  });
+});
