@@ -4,7 +4,7 @@
  * The layer statement repeats Tailwind's order so a primitive's `@layer components` never lands ahead of preflight,
  * whichever stylesheet the bundle loads first; callers' utility classes still win over a primitive's defaults.
  */
-@layer theme, base, components, utilities;
+@layer properties, theme, base, components, utilities;
 
 :root {
   --thin-pixel: 0.5px; /* wi.thinPixel */

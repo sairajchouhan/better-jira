@@ -1,3 +1,6 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
 @layer components {
   /* Linear's header view tabs (.raj/linear.md "Tabs", computed styles): 28px pills, 0 10px, 12px/500, a 0.5px ring. */
   .ui-tabs-list {

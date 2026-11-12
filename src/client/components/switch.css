@@ -1,3 +1,6 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
 @layer components {
   /* _w.toggleBase + A0e.normal: a 30x20 pill (radius 72), the knob an ::after pinned by left/right so hovering widens
      it toward the free side (k0e.hover: the far inset 13 → 11). Track: mix(bgBase, labelBase, .4) at rest, .5 hovered,

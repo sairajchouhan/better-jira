@@ -1,3 +1,6 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
 @layer components {
   .ui-dialog-header {
     display: flex;
