@@ -101,12 +101,26 @@ export function Adf({
           {cardText(a.url)}
         </a>
       );
-    case "table":
+    case "table": {
+      // Column widths as the editor's TableView lays them out (prosemirror-tables, 50px for a column without one), so a resized table reads the same.
+      const widths: number[] = (node.content?.[0]?.content ?? []).flatMap((cell: any) =>
+          Array.from({ length: Number(cell.attrs?.colspan) || 1 }, (_, i) => Number(cell.attrs?.colwidth?.[i]) || 0),
+        ),
+        total = widths.reduce((sum, w) => sum + (w || 50), 0),
+        fixed = widths.length > 0 && widths.every(Boolean);
       return (
-        <table className="w-full border-collapse text-xs">
-          <tbody>{kids}</tbody>
-        </table>
+        <div className="tableWrapper overflow-x-auto">
+          <table className="w-full border-collapse text-xs" style={fixed ? { width: total } : { minWidth: total }}>
+            <colgroup>
+              {widths.map((w, i) => (
+                <col key={i} style={w ? { width: w } : undefined} />
+              ))}
+            </colgroup>
+            <tbody>{kids}</tbody>
+          </table>
+        </div>
       );
+    }
     case "tableRow":
       return <tr>{kids}</tr>;
     case "tableHeader":
