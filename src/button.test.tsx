@@ -88,3 +88,17 @@ test("an icon-only ButtonLink is IconButton's square, named and titled by its la
   expect(html).toContain('aria-label="Download image"');
   expect(html).toContain('title="Download image"');
 });
+
+test("a passed disabledReason keeps the wrapper while it is undefined, so a reason coming and going never remounts (SOLC-01)", () => {
+  const shape = (reason: string | undefined) =>
+    renderToStaticMarkup(
+      <IconButton label="Send" disabledReason={reason}>
+        x
+      </IconButton>,
+    ).slice(0, 34);
+  expect(shape(undefined)).toBe('<span class="ui-tooltip-trigger"><');
+  expect(shape("Busy")).toBe(shape(undefined));
+  expect(
+    renderToStaticMarkup(<IconButton label="Send">x</IconButton>),
+  ).toStartWith("<button");
+});

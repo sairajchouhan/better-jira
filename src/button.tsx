@@ -57,22 +57,25 @@ const tooltipTitle = (tooltip: string | undefined, shortcut?: Keys, alternate?: 
 
 /**
  * A disabled button gets no pointer events, so its reason hangs on a wrapper, as under Linear's tooltip trigger
- * (`_tooltipTriggerContent > button[disabled] { pointer-events: none }`). A button given a `disabledReason` (even "")
- * always sits in the wrapper, so flipping `disabled` never remounts it; one without stands alone. While disabled the
- * wrapper also carries the button's own `tip` when there is no reason, since the button can't be hovered.
+ * (`_tooltipTriggerContent > button[disabled] { pointer-events: none }`). A button that is passed a `disabledReason`
+ * prop at all (even `undefined`) always sits in the wrapper, so neither `disabled` nor the reason coming and going
+ * remounts it; one without the prop stands alone. While disabled the wrapper also carries the button's own `tip` when
+ * there is no reason, since the button can't be hovered.
  */
 function DisabledReason({
+  wrap,
   reason,
   tip,
   disabled,
   children,
 }: {
+  wrap: boolean;
   reason: string | undefined;
   tip: string | undefined;
   disabled: boolean | undefined;
   children: ReactElement;
 }) {
-  if (reason === undefined) return children;
+  if (!wrap) return children;
   return (
     <span className="ui-tooltip-trigger" title={disabled ? reason || tip : undefined}>
       {children}
@@ -84,24 +87,26 @@ function DisabledReason({
  * A text button, optionally with a leading `icon`. Pressed/open states come from the element itself (`aria-pressed`,
  * `aria-expanded`, `data-menu-open`), so there is no `active` prop to keep in sync.
  */
-export function Button({
-  variant = "primary",
-  size = "normal",
-  icon,
-  tooltip,
-  shortcut,
-  alternate,
-  disabledReason,
-  type = "button",
-  className = "",
-  children,
-  ...props
-}: Look & Tip & { icon?: ReactNode; tooltip?: string } & ComponentProps<"button">) {
+export function Button(all: Look & Tip & { icon?: ReactNode; tooltip?: string } & ComponentProps<"button">) {
+  const hasReason = "disabledReason" in all;
+  const {
+    variant = "primary",
+    size = "normal",
+    icon,
+    tooltip,
+    shortcut,
+    alternate,
+    disabledReason,
+    type = "button",
+    className = "",
+    children,
+    ...props
+  } = all;
   const reason = (props.disabled && disabledReason) || undefined,
     tip = tooltipTitle(tooltip, shortcut, alternate),
-    wrapped = props.disabled && disabledReason !== undefined;
+    wrapped = props.disabled && hasReason;
   return (
-    <DisabledReason reason={disabledReason} tip={tip} disabled={props.disabled}>
+    <DisabledReason wrap={hasReason} reason={disabledReason} tip={tip} disabled={props.disabled}>
       <button
         type={type}
         title={wrapped ? undefined : tip}
@@ -162,25 +167,27 @@ export function ButtonLink({
  * readers; the hover `tooltip` defaults to it and may differ ("Filter" over "Add filter"), or be `false` when the owner
  * draws its own (the video toolbar). `shortcut` and `disabledReason` follow `Aze` (see `tooltipTitle`).
  */
-export function IconButton({
-  label,
-  appearance,
-  tooltip = label,
-  shortcut,
-  alternate,
-  disabledReason,
-  variant = "borderless",
-  size = "medium",
-  type = "button",
-  className = "",
-  children,
-  ...props
-}: IconButtonProps) {
+export function IconButton(all: IconButtonProps) {
+  const hasReason = "disabledReason" in all;
+  const {
+    label,
+    appearance,
+    tooltip = label,
+    shortcut,
+    alternate,
+    disabledReason,
+    variant = "borderless",
+    size = "medium",
+    type = "button",
+    className = "",
+    children,
+    ...props
+  } = all;
   const reason = (props.disabled && disabledReason) || undefined,
     tip = tooltipTitle(tooltip || undefined, shortcut, alternate),
-    wrapped = props.disabled && disabledReason !== undefined;
+    wrapped = props.disabled && hasReason;
   return (
-    <DisabledReason reason={disabledReason} tip={tip} disabled={props.disabled}>
+    <DisabledReason wrap={hasReason} reason={disabledReason} tip={tip} disabled={props.disabled}>
       <button
         type={type}
         aria-label={label}
@@ -208,7 +215,7 @@ export function IconButton({
  */
 export function SendButton({
   tooltip,
-  disabledReason = "",
+  disabledReason,
   ...props
 }: Omit<IconButtonProps, "variant" | "size" | "shortcut" | "alternate" | "children">) {
   return (

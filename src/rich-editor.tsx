@@ -711,14 +711,14 @@ export function RichEditor(props: EditorEngineProps) {
                 onClick={() => save()}
               />
             ) : (
-              // `rich-editor-submit` is the hook the sub-issue composer's ⌘↵ clicks. "" keeps the reason's wrapper
-              // while there is no reason, so the button is not remounted when uploads start or finish.
+              // `rich-editor-submit` is the hook the sub-issue composer's ⌘↵ clicks. Passing `disabledReason` (even
+              // undefined) keeps the reason's wrapper, so the button is not remounted when uploads start or finish.
               <Button
                 size="medium"
                 className="rich-editor-submit"
                 aria-label={props.saveLabel ?? "Save description"}
                 disabled={uploadBusy || (props.required && empty)}
-                disabledReason={uploadBusy ? BUSY : ""}
+                disabledReason={uploadBusy ? BUSY : undefined}
                 onClick={() => save()}
               >
                 {props.saveLabel ?? "Save description"}
