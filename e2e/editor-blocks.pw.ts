@@ -92,3 +92,29 @@ test("BJ-42 / BJ-57 / BJ-43: the slash, emoji and @ menus insert blocks, emoji a
     "TEST-4",
   ]);
 });
+
+test("BJ-69: Create issue from selection opens the composer titled with the selected text, related to this issue", async ({
+  open,
+}) => {
+  await fixture.reset({ writable: true });
+  const page = await open("?issue=TEST-2&view=page");
+  await page.waitFor(`!!document.querySelector('#description h2')`);
+  await page.click("#description h2");
+  await page.key("End");
+  await page.key("Home", "shift");
+  await page.click('[aria-label="Create issue from selection"]');
+  expect(await page.waitFor<string>(`document.querySelector('[role="dialog"] [aria-label="Issue title"]')?.value`)).toBe(
+    "Rich fixture heading",
+  );
+  await page.eval(
+    `[...document.querySelectorAll('[role="dialog"] button')].find(b=>b.textContent==='Create issue').click()`,
+  );
+  await expect
+    .poll(async () => (await fixture.log()).writes.flatMap((w: any) => w.ops.map((op: any) => [w.key, op.op, op.fields?.summary ?? op.kind])), {
+      timeout: 8000,
+    })
+    .toEqual([
+      ["TEST-NEW1", "create", "Rich fixture heading"],
+      ["TEST-2", "link", "related"],
+    ]);
+});

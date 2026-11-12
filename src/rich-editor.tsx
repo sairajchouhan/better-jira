@@ -22,7 +22,7 @@ import {
 import { CaretMenu, MentionMenu, searchPeople } from "./mention-menu";
 import { activeEmoji, dismissEmoji, emojiPlugin, emojiRules, insertEmoji, matchingEmoji } from "./emoji";
 import { activeSlash, dismissSlash, matchingSlashCommands, slashPlugin } from "./slash-commands";
-import { get, jiraIssueURL } from "./store";
+import { beginCreate, get, jiraIssueURL } from "./store";
 import { usePlacement } from "./menu-surface";
 import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import {
@@ -54,6 +54,7 @@ import {
   floatingPlacement,
   insertLink,
   insertTable,
+  issueFromText,
   linkHref,
   linkRanges,
   linkTarget,
@@ -458,6 +459,19 @@ export function RichEditor(props: EditorEngineProps) {
     setLinkError("");
   };
   const inTable = !!view.current && isInTable(view.current.state);
+  // Linear's "Create issue from selection": the selected text starts a new issue related to this one.
+  const selectedText =
+    !!props.issueKey && view.current && !view.current.state.selection.empty
+      ? view.current.state.doc.textBetween(view.current.state.selection.from, view.current.state.selection.to, "\n")
+      : "";
+  const createFromSelection = () => {
+    const key = latest.current.issueKey!,
+      issue = get().issues.get(key);
+    beginCreate({
+      ...issueFromText(selectedText),
+      ...(issue ? { related: { key, kind: "related" as const }, project: issue.project } : {}),
+    });
+  };
   const focused = view.current?.hasFocus() ? view.current.state : null;
   const mention = focused && activeMention(focused),
     slash = focused && activeSlash(focused),
@@ -631,6 +645,11 @@ export function RichEditor(props: EditorEngineProps) {
             Remove table
           </ToolbarButton>
         </>
+      )}
+      {subject === "description" && selectedText.trim() && (
+        <ToolbarButton aria-label="Create issue from selection" tooltip="Create issue from selection" onClick={createFromSelection}>
+          Create issue
+        </ToolbarButton>
       )}
       <ToolbarButton
         aria-label={`Undo ${subject} edit`}

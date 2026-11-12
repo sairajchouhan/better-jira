@@ -438,6 +438,14 @@ export const toggleQuote: Command = (state, dispatch) => {
   return true;
 };
 
+/** The new issue "Create issue from selection" starts: the first line is its title (Jira's 255 characters at most);
+ * any further lines become its description. */
+export function issueFromText(text: string): { title: string; description?: string } {
+  const [first = "", ...rest] = text.trim().split(/\n+/),
+    description = rest.join("\n\n").trim();
+  return { title: first.trim().slice(0, 255), ...(description ? { description } : {}) };
+}
+
 type Box = { top: number; bottom: number; left: number };
 /** Where the selection toolbar floats: above the selection, or below it when the editor has too little room above (so it never covers
  * the title or header) and below fits. It stays within the editor's column (the side panel), scrolling when narrower (R2-D8). */

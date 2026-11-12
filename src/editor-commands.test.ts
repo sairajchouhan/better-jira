@@ -10,6 +10,7 @@ import {
   insertTable,
   linkTarget,
   markdownRules,
+  issueFromText,
   toggleExpand,
   moveBlock,
   pasteLink,
@@ -563,4 +564,13 @@ test("BJ-68: a collapsible section wraps top-level blocks, round-trips as Jira's
   toggleExpand(list, (tr) => (listed = list.apply(tr)));
   expect(listed.doc.firstChild!.firstChild!.type.name).toBe("bulletList");
   expect(jiraErrors(fromEditorDocument(wrapped.doc))).toEqual([]);
+});
+
+test("BJ-69: selected text starts an issue: first line the title, the rest its description", () => {
+  expect(issueFromText("  Fix the login  ")).toEqual({ title: "Fix the login" });
+  expect(issueFromText("Fix login\nSteps:\n\n1. open")).toEqual({
+    title: "Fix login",
+    description: "Steps:\n\n1. open",
+  });
+  expect(issueFromText("x".repeat(300)).title.length).toBe(255);
 });
