@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { MenuSurface } from "./menu-surface";
+import { Text } from "./text";
 import { get } from "./store";
 
 // Linear's picker (RAJ-52): "Frequently used" first, then categories. ponytail: a curated set, not the full Unicode catalogue; add a dataset if search misses matter.
@@ -190,6 +191,7 @@ export function ReactionPicker({
   return (
     <MenuSurface label="Choose reaction" anchor={anchor} close={close} fit gap={3.6} align="end">
       <div className="w-[272px]">
+        {/* A menu's search row, not a form field: the cells move under it while it keeps focus. */}
         <div className="border-b border-[var(--key-line)] px-[5px] py-1">
           <input
             autoFocus
@@ -222,9 +224,10 @@ export function ReactionPicker({
             ([heading, items]) =>
               items.length > 0 && (
                 <div key={heading}>
-                  <div className="flex h-7 items-center pr-1.5 pl-1 text-[12px] font-medium text-fg-3">
+                  <Text as="div" variant="miniPlus" color="muted" className="flex h-7 items-center pr-1.5 pl-1">
                     {heading}
-                  </div>
+                  </Text>
+                  {/* 28px emoji cells tinted by their emoji: no Button look draws that. */}
                   <div className="grid grid-cols-[repeat(9,28px)]">
                     {items.map((emoji) => {
                       const i = ++index;
@@ -250,7 +253,11 @@ export function ReactionPicker({
                 </div>
               ),
           )}
-          {!flat.length && <p className="px-1 py-2 text-[13px] text-fg-3">No emoji found</p>}
+          {!flat.length && (
+            <Text as="p" variant="small" color="muted" className="px-1 py-2">
+              No emoji found
+            </Text>
+          )}
         </div>
       </div>
     </MenuSurface>

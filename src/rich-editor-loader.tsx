@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from "react";
+import { LoadingState } from "./empty-state";
 import type { EditorEngineProps, RichEditorProps } from "./rich-editor";
 
 let loaded: typeof import("./rich-editor").RichEditor | undefined;
@@ -12,13 +13,7 @@ function LoadedEditor(props: EditorEngineProps) {
   // Chosen once per editor, so a later load never swaps the component (and remounts it) mid-edit.
   const [Component] = useState(() => loaded ?? Editor);
   return (
-    <Suspense
-      fallback={
-        <p role="status" className="p-3 text-fg-3">
-          Loading editor…
-        </p>
-      }
-    >
+    <Suspense fallback={<LoadingState>Loading editor…</LoadingState>}>
       <Component {...props} />
     </Suspense>
   );
