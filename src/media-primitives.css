@@ -5,7 +5,6 @@
     .image-preview-toolbar,
     .image-crop-actions,
     .file-media-actions,
-    .video-controls,
     .video-error,
     .video-pip,
     .image-comment-meta
@@ -28,15 +27,16 @@
     .image-actions,
     .image-preview-toolbar,
     .image-crop-actions,
-    .file-media-actions,
-    .video-controls
+    .file-media-actions
   )
   .ui-button:disabled {
   opacity: revert-layer;
 }
-.video-controls .ui-button:focus-visible {
-  outline: revert-layer;
-  outline-offset: revert-layer;
+/* The video toolbar keeps its own player chrome (index.css `.video-controls button`): Linear's player isn't in
+   the bundle, so there is no value to move it to. Its glyphs stay 16px inside the medium IconButton. */
+.video-controls .ui-button-icon > svg {
+  width: 16px;
+  height: 16px;
 }
 .image-comment-thread .ui-autosize,
 .comment-reply-row .ui-autosize {

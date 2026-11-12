@@ -1,4 +1,4 @@
-import { Button, IconButton } from "./button";
+import { Button, ButtonLink, IconButton } from "./button";
 import { Keycap, Shortcut } from "./keycap";
 import { notifyMedia } from "./media-toast";
 import "./media-primitives.css";
@@ -521,13 +521,13 @@ export function VideoPlayer({
               <Button variant="secondary" size="medium" aria-label="Retry video" onClick={retry}>
                 Retry video
               </Button>
-              <a href={download(file.url)} download={file.name}>
+              <ButtonLink variant="secondary" size="medium" href={download(file.url)} download={file.name}>
                 Download video
-              </a>
+              </ButtonLink>
             </div>
           </div>
         )}
-        {/* Custom video tooltips are title-less; IconButton needs a tooltip opt-out variant (Q8). */}
+        {/* The toolbar draws its own `.video-tooltip`s, so its IconButtons take no title (tooltip={false}). */}
         {!error && (
           <div
             className="video-controls"
@@ -537,9 +537,10 @@ export function VideoPlayer({
               reveal();
             }}
           >
-            <button
+            <IconButton
               ref={playButton}
-              aria-label={`${playLabel} (keyboard shortcut k)`}
+              label={`${playLabel} (keyboard shortcut k)`}
+              tooltip={false}
               aria-describedby={`${tooltipId}-play`}
               disabled={!!error}
               onClick={play}
@@ -564,16 +565,17 @@ export function VideoPlayer({
                 <Glyph name={playing ? "pause" : "play"} />
               )}
               {tip("play", playLabel, "Space")}
-            </button>
+            </IconButton>
             <div className="video-volume">
-              <button
-                aria-label={`${muted ? "Unmute" : "Mute"} (keyboard shortcut m)`}
+              <IconButton
+                label={`${muted ? "Unmute" : "Mute"} (keyboard shortcut m)`}
+                tooltip={false}
                 aria-describedby={`${tooltipId}-mute`}
                 onClick={mute}
               >
                 <Glyph name={muted || volume === 0 ? "muted" : "volume"} />
                 {tip("mute", muted ? "Unmute" : "Mute", "M")}
-              </button>
+              </IconButton>
               <div className="video-volume-popup">
                 <input
                   aria-label="Volume"
@@ -620,6 +622,7 @@ export function VideoPlayer({
               </select>
               {tip("rate", "Change playback rate", "< >")}
             </div>
+            {/* Icon-only, so not ButtonLink yet: it lacks Linear's `fk` onlyIcon shape (Ist.onlyIcon, padding-inline 2px). */}
             <a
               aria-label="Download"
               aria-describedby={`${tooltipId}-download`}
@@ -629,24 +632,26 @@ export function VideoPlayer({
               <Icon name="download" size={16} />
               {tip("download", "Download")}
             </a>
-            <button
-              aria-label="Picture-in-Picture (keyboard shortcut p)"
+            <IconButton
+              label="Picture-in-Picture (keyboard shortcut p)"
+              tooltip={false}
               aria-describedby={`${tooltipId}-pip`}
               disabled={!document.pictureInPictureEnabled || !duration}
               onClick={() => void picture()}
             >
               <Glyph name="pip" />
               {tip("pip", "Picture-in-picture", "P")}
-            </button>
-            <button
+            </IconButton>
+            <IconButton
               ref={expand}
-              aria-label={`${expanded ? "Exit full window" : "Full window"} (keyboard shortcut f)`}
+              label={`${expanded ? "Exit full window" : "Full window"} (keyboard shortcut f)`}
+              tooltip={false}
               aria-describedby={`${tooltipId}-expand`}
               onClick={toggleExpanded}
             >
               <Icon name="expand" size={16} />
               {tip("expand", expanded ? "Exit full window" : "Full window", "F")}
-            </button>
+            </IconButton>
           </div>
         )}
       </div>
