@@ -137,10 +137,25 @@ export const removeLink: Command = (state, dispatch) => {
 };
 
 /** A 2×2 table after the selected block, caret in its first cell: the selected text stays, and no mark spreads to the table. */
+/** A table of empty cells, or with a header row holding `header`'s texts. */
+function tableOf(columns: number, rows: number, header?: string[]) {
+  const cell = (type: string, text = "") =>
+    richSchema.nodes[type]!.create(
+      null,
+      richSchema.nodes.paragraph!.create(null, text ? richSchema.text(text) : null),
+    );
+  const row = (type: string, texts: string[] = []) =>
+    richSchema.nodes.tableRow!.create(
+      null,
+      Array.from({ length: columns }, (_, i) => cell(type, texts[i])),
+    );
+  return richSchema.nodes.table!.create(null, [
+    ...(header ? [row("tableHeader", header)] : []),
+    ...Array.from({ length: rows }, () => row("tableCell")),
+  ]);
+}
 export const insertTable: Command = (state, dispatch) => {
-  const cell = () => richSchema.nodes.tableCell!.createAndFill()!;
-  const row = () => richSchema.nodes.tableRow!.create(null, [cell(), cell()]);
-  const table = richSchema.nodes.table!.create(null, [row(), row()]);
+  const table = tableOf(2, 2);
   const { $to } = state.selection;
   // The nearest block that may have a table after it (a list item or quote cannot hold one).
   let depth = $to.depth;
@@ -183,6 +198,23 @@ export const markdownRules = inputRules({
     ),
     wrappingInputRule(/^\s*>\s$/, richSchema.nodes.blockquote!),
     textblockTypeInputRule(/^```$/, richSchema.nodes.codeBlock!),
+    // `|--` in a paragraph starts a table. A Markdown header row just above (`| a | b |`) becomes its header; otherwise it is 2×2, like the toolbar's.
+    new InputRule(/^\|--$/, (state, _match, start) => {
+      const $start = state.doc.resolve(start),
+        parent = $start.node(-1),
+        index = $start.index(-1);
+      if ($start.parent.type !== paragraph || !parent.canReplaceWith(index, index + 1, richSchema.nodes.table!))
+        return null;
+      const above = index ? parent.child(index - 1) : null,
+        row = above?.type === paragraph ? /^\|(.+)\|$/.exec(above.textContent.trim()) : null,
+        header = row?.[1]!.split("|").map((text) => text.trim()),
+        table = header ? tableOf(header.length, 1, header) : tableOf(2, 2),
+        from = header ? $start.before() - above!.nodeSize : $start.before(),
+        tr = state.tr.replaceWith(from, $start.after(), table);
+      // The first cell below the header (or the first cell).
+      const first = header ? from + 1 + table.firstChild!.nodeSize : from;
+      return tr.setSelection(TextSelection.near(tr.doc.resolve(first + 1)));
+    }),
     // `***` or `---` then Space at a paragraph's start: a divider above, the caret stays in the paragraph (Linear's horizontal rule).
     new InputRule(/^(?:\*\*\*|---)\s$/, (state, _match, start, end) => {
       const $start = state.doc.resolve(start),

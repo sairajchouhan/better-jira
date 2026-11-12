@@ -441,3 +441,22 @@ test("BJ-67: `***` or `---` then Space puts a divider above the caret's paragrap
   const list = typeInto(empty(), "- --- ");
   expect(list.doc.textContent).toBe("--- ");
 });
+
+test("BJ-66: `|--` starts a table, taking a Markdown header row typed just above", () => {
+  const plain = typeInto(empty(), "|--x");
+  expect(plain.doc.firstChild!.type.name).toBe("table");
+  expect(plain.doc.firstChild!.childCount).toBe(2);
+  expect(plain.doc.firstChild!.firstChild!.childCount).toBe(2);
+  expect(plain.doc.firstChild!.firstChild!.firstChild!.textContent).toBe("x");
+
+  const doc = n.doc!.create(null, [p("| Name | Owner | Due |"), p()]);
+  const after = typeInto(EditorState.create({ doc, selection: TextSelection.atEnd(doc) }), "|--a");
+  expect(after.doc.childCount).toBe(1);
+  const t = after.doc.firstChild!;
+  expect(t.childCount).toBe(2);
+  expect(t.firstChild!.firstChild!.type.name).toBe("tableHeader");
+  expect(t.firstChild!.textContent).toBe("NameOwnerDue");
+  expect(t.child(1).childCount).toBe(3);
+  expect(t.child(1).firstChild!.textContent).toBe("a");
+  expect(jiraErrors(fromEditorDocument(after.doc))).toEqual([]);
+});
