@@ -88,17 +88,15 @@ test("toolbar popups: Filter, Display and the chip row + open at Linear's offset
     expect(await focused(page)).toBe("Add another filter");
   });
 
-  await test.step("Display: bottom-right, focus on the first layout tab, Esc returns to the trigger", async () => {
+  await test.step("Display: bottom-right, focus on the popup, Esc returns to the trigger", async () => {
     await page.click('[aria-label="Display options"]');
     await page.waitFor(`!!document.querySelector(${JSON.stringify(TOOLBAR)})`);
     await sleep(50);
     const [trigger, popup] = [await rect(page, '[aria-label="Display options"]'), await rect(page, TOOLBAR)];
     near(popup.top, trigger.bottom + 6);
     near(popup.right, trigger.right);
-    // The first match in DOM order of "input, selected tab, button": the first layout tab, whichever is selected.
-    expect(
-      await page.eval(`document.activeElement===document.querySelector('${TOOLBAR} [role=tab]')`),
-    ).toBe(true);
+    // CORE-22: with no search, focus lands on the popup itself, so no control is ringed until Tab (Linear's focus-trap start).
+    expect(await page.eval(`document.activeElement===document.querySelector('${TOOLBAR}')`)).toBe(true);
     await trapsTab(page, TOOLBAR);
     await page.key("Escape");
     await page.waitFor(`!document.querySelector(${JSON.stringify(TOOLBAR)})`);

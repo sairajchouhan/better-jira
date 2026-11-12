@@ -87,7 +87,7 @@ function usePopupFocus(
     const frame = requestAnimationFrame(() => {
       if (!node || node.contains(document.activeElement)) return;
       for (const selector of initialFocus) {
-        const first = node.querySelector<HTMLElement>(selector);
+        const first = node.matches(selector) ? node : node.querySelector<HTMLElement>(selector);
         if (first) {
           first.focus();
           return;
@@ -96,7 +96,24 @@ function usePopupFocus(
     });
     return () => {
       cancelAnimationFrame(frame);
-      (target?.isConnected ? target : fallback?.isConnected ? fallback : null)?.focus();
+      const back = target?.isConnected ? target : fallback?.isConnected ? fallback : null;
+      back?.focus();
+      // The opener may re-render away as the menu's action lands (a card moved to another column), now or a few frames on:
+      // while focus is lost to the body, give it to the opener's new node, found by its key.
+      const key = (target ?? fallback)?.closest<HTMLElement>("[data-key]")?.dataset.key;
+      if (!key) return;
+      const until = performance.now() + 500;
+      const refocus = () => {
+        const active = document.activeElement;
+        if (active === document.body) {
+          const node = [...document.querySelectorAll<HTMLElement>(`[data-key="${CSS.escape(key)}"]`)].find(
+            (node) => node.getClientRects().length,
+          );
+          if (node) return node.focus();
+        } else if (active !== back) return;
+        if (performance.now() < until) requestAnimationFrame(refocus);
+      };
+      requestAnimationFrame(refocus);
     };
   }, [ref, opener, fallback, returnTo, initialFocus]);
   const keys = (e: KeyboardEvent) => {
@@ -109,7 +126,7 @@ function usePopupFocus(
       (n) => n.getClientRects().length,
     );
     if (!nodes.length) e.preventDefault();
-    else if (e.shiftKey && document.activeElement === nodes[0]) {
+    else if (e.shiftKey && (document.activeElement === nodes[0] || document.activeElement === ref.current)) {
       e.preventDefault();
       nodes.at(-1)?.focus();
     } else if (!e.shiftKey && document.activeElement === nodes.at(-1)) {
@@ -132,8 +149,8 @@ const MENU_FOCUS = [
   'input:not([type="file"]):not([type="checkbox"]),textarea,[contenteditable="true"]',
   'button,[tabindex="0"]',
 ];
-// The first of these in DOM order.
-const POPOVER_FOCUS = ["input, [role=tab][aria-selected=true], button"];
+// A search when there is one; else the popup itself, so no control shows a focus ring until Tab (Linear's focus-trap start).
+const POPOVER_FOCUS = ['input:not([type="checkbox"])', "[data-popover]"];
 
 /**
  * A toolbar menu (Linear's menuPosition) in a fixed popup under its trigger: "bottom-left" 4px under it, flush and rounded;
@@ -172,7 +189,9 @@ export function Popover({
       <div className="fixed inset-0" style={{ zIndex: 40 }} onMouseDown={(e) => outside(e, close)} />
       <div
         ref={popup}
-        className="fixed z-40 max-w-[calc(100vw-24px)]"
+        data-popover
+        tabIndex={-1}
+        className="fixed z-40 max-w-[calc(100vw-24px)] outline-none"
         style={style}
         onKeyDown={(e) => {
           e.stopPropagation();
