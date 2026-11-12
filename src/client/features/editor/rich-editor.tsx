@@ -185,7 +185,7 @@ function ToolbarDropdown({
   );
 }
 
-export type EditorPresentation = "framed" | "inline" | "document" | "comment";
+export type EditorPresentation = "framed" | "inline" | "document" | "comment" | "composer";
 export type EditorEngineProps = RichEditorProps & {
   presentation: EditorPresentation;
   /** Input the loader's stand-in took before this chunk arrived: text continues where the content ends, then ⌘↵ saves. */
@@ -506,7 +506,10 @@ export function RichEditor(props: EditorEngineProps) {
       ignoreInputs: false,
       preventDefault: false,
       stopPropagation: false,
-      enabled: !!presentation.inline || !!props.onCancel || presentation.variant === "comment",
+      enabled:
+        (!!presentation.inline && presentation.variant !== "composer") ||
+        !!props.onCancel ||
+        presentation.variant === "comment",
     },
   );
   useHotkeys(

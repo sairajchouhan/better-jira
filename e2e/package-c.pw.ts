@@ -63,13 +63,15 @@ test("BJ-29: save, list, finish and delete composer drafts", async ({ open }) =>
   const page = await open();
   await page.key("c");
   await page.type("Saved parent");
-  await page.click('text=Save draft');
+  await page.key("Escape");
+  await page.page.getByRole("dialog", { name: "Save to drafts?" }).getByRole("button", { name: "Save", exact: true }).click();
   await page.waitFor(`!document.querySelector('[aria-label="Issue title"]')`);
   await page.key("c");
   await page.click('text=Saved drafts (1)');
   await page.click('text=Finish Saved parent');
   expect(await page.eval(`document.querySelector('[aria-label="Issue title"]').value`)).toBe("Saved parent");
-  await page.click('text=Save draft');
+  await page.key("Escape");
+  await page.page.getByRole("dialog", { name: "Save to drafts?" }).getByRole("button", { name: "Save", exact: true }).click();
   await page.waitFor(`!document.querySelector('[aria-label="Issue title"]')`);
   await page.key("c");
   await page.click('text=Saved drafts (1)');
@@ -95,9 +97,11 @@ test("BJ-30: closing a filled composer offers save, cancel and discard", async (
 test("BJ-58: add and remove a pending link in the composer", async ({ open }) => {
   const page = await open();
   await page.key("c");
-  await page.click('text=Add link…');
+  // #5: Linear keeps the composer's extra actions under the chip row's More actions.
+  await page.click('[role=dialog][aria-label="Create issue"] [aria-label="More actions"]');
+  await page.click('[cmdk-item][data-value="Add link…"]');
   await page.page.getByRole("textbox", { name: "New issue link URL" }).fill("https://example.com/reference");
-  await page.click('text=Add link');
+  await page.page.getByRole("button", { name: "Add link", exact: true }).click();
   await page.waitFor(`!!document.querySelector('[aria-label="Remove link https://example.com/reference"]')`);
   await page.click('[aria-label="Remove link https://example.com/reference"]');
   expect(await page.eval(`!!document.querySelector('[aria-label="Remove link https://example.com/reference"]')`)).toBe(false);
@@ -107,7 +111,8 @@ test("BJ-59: compose sub-issues before creating their parent", async ({ open }) 
   const page = await open();
   await page.key("c");
   await page.type("Pending family");
-  await page.click('text=Add sub-issue');
+  await page.click('[role=dialog][aria-label="Create issue"] [aria-label="More actions"]');
+  await page.click('[cmdk-item][data-value="Add sub-issue"]');
   await page.page.getByRole("textbox", { name: "Pending sub-issue 1" }).fill("Pending child");
   await page.eval(`(() => { const submit = document.querySelector('[role=dialog][aria-label="Create issue"] button[type=submit]'); submit.click(); submit.click(); })()`);
   await page.waitFor(`!document.querySelector('[aria-label="Issue title"]')`);

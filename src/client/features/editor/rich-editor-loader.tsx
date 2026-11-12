@@ -120,6 +120,10 @@ export function FramedEditor(props: RichEditorProps) {
 export function InlineEditor(props: RichEditorProps) {
   return <LoadedEditor {...props} presentation="inline" />;
 }
+/** The create modal's frameless description: formatting over a selection; Escape is the modal's. */
+export function ComposerEditor(props: RichEditorProps) {
+  return <LoadedEditor {...props} presentation="composer" />;
+}
 /** Persistent document content with formatting above a text selection. */
 export function DocumentBodyEditor(props: RichEditorProps) {
   return <LoadedEditor {...props} presentation="document" />;

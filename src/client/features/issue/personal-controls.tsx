@@ -18,12 +18,14 @@ import { createSubIssue, issueMenuEntries, type IssueMenuDialog } from "./issue-
 import { SubIssues, statusOf } from "./sub-issues";
 import { attachmentSplit } from "./issue-attachments";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { createContext, use, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Adf } from "@/client/features/editor/adf";
-import { FramedEditor } from "@/client/features/editor/rich-editor-loader";
+import { ComposerEditor } from "@/client/features/editor/rich-editor-loader";
 import { MediaView } from "@/client/features/media/media-loader";
 import { normalizeDocument, documentHasMedia } from "@/shared/document";
-import { Icon, RelationIcon, StatusIcon } from "@/client/components/icons";
+import { Icon, PriorityIcon, RelationIcon, StatusIcon, TypeDot } from "@/client/components/icons";
+import { Switch } from "@/client/components/switch";
+import "./create-issue.css";
 import { PropertyTrigger } from "@/client/components/property-trigger";
 import {
   canHaveChildren,
@@ -278,7 +280,7 @@ export function CreateIssue() {
   if (draftsOpen) return <Dialog label="Saved drafts" close={() => setDraftsOpen(false)}>
     <Dialog.Header><Dialog.Title>Saved drafts</Dialog.Title><Dialog.Close /></Dialog.Header>
     {saved.length ? saved.map(item => <div key={item.id} className="flex items-center gap-2">
-      <Button onClick={() => { setDraft(item.fields); setTitle(item.title); setDescription(normalizeDocument(item.fields.descriptionDoc)); setAttachments(item.fields.attachments ?? []); setLabels(item.fields.labels?.join(", ") ?? ""); setSavedId(item.id); setDraftIndex(n => n + 1); setDraftsOpen(false); }}>Finish {item.title || "Untitled issue"}</Button>
+      <Button variant="secondary" onClick={() => { setDraft(item.fields); setTitle(item.title); setDescription(normalizeDocument(item.fields.descriptionDoc)); setAttachments(item.fields.attachments ?? []); setLabels(item.fields.labels?.join(", ") ?? ""); setSavedId(item.id); setDraftIndex(n => n + 1); setDraftsOpen(false); }}>Finish {item.title || "Untitled issue"}</Button>
       <IconButton label={`Delete draft ${item.title || "Untitled issue"}`} onClick={() => setSaved(saved.filter(d => d.id !== item.id))}><Icon name="trash" /></IconButton>
     </div>) : <EmptyState title="No saved drafts" />}
   </Dialog>;
@@ -286,27 +288,58 @@ export function CreateIssue() {
     <Dialog.Title>Save to drafts?</Dialog.Title><Dialog.Description>You can finish this issue later from your drafts.</Dialog.Description>
     <Dialog.Footer>
       <Button variant="dangerous" onClick={() => { if (savedId) setSaved(saved.filter(d => d.id !== savedId)); unsent.title = ""; unsent.description = normalizeDocument(""); closeNow(); }}>Discard</Button>
-      <Button onClick={() => setConfirmClose(false)}>Cancel</Button><Button variant="primary" onClick={saveDraft} disabled={filesBusy}>Save</Button>
+      <Button variant="secondary" onClick={() => setConfirmClose(false)}>Cancel</Button><Button variant="primary" onClick={saveDraft} disabled={filesBusy}>Save</Button>
     </Dialog.Footer>
   </Dialog>;
+  const statusId = draft.status ?? board.columns[0]?.statuses[0]?.id ?? "";
+  const status = statuses(board).find((s) => s.id === statusId);
+  const labelList = labels
+    .split(",")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const projectValue = draft.project === null && !writable ? null : project;
+  // Linear's "…" after the chips (More actions): what the modal can add besides properties.
+  const extraActions: ActionEntry[] = [
+    ...(canHaveChildren(get(), { type, project })
+      ? [{ name: "Add sub-issue", icon: "plus" as const, run: () => setDraft((d) => ({ ...d, subIssues: [...(d.subIssues ?? []), ""] })) }]
+      : []),
+    { name: "Add link…", icon: "link", run: () => setLinkInput("") },
+  ];
   return (
     <Dialog
       label="Create issue"
       close={close}
       width={expanded ? Math.max(640, window.innerWidth - 48) : 640}
     >
+      <Attachments attachments={attachments} onChange={setAttachments} onBusy={setFilesBusy}>
       <form
         ref={formRef}
+        className="create-issue"
         onSubmit={(e) => {
           e.preventDefault();
           submit();
         }}
       >
-        <Dialog.Header className="mb-3">
-          <Text variant="mini" color="muted" wrap="truncate" className="flex-1">
-            <PropertyPill label="Board" current={board.name} menu={ComposerBoardMenu} menuProps={{ boards, value: board.id, onChange: (board: number) => setDraft({ board }) }} /> ›{" "}
-            {initial.parent ? `Sub-issue of ${initial.parent}` : "New issue"}
+        <Dialog.Header className="mb-2">
+          <Text variant="mini" color="muted" wrap="truncate" className="flex flex-1 items-center gap-1.5">
+            <PropertyPill
+              label="Board"
+              current={board.name}
+              value={board.name}
+              icon={<Icon name="board" size={14} />}
+              menu={ComposerBoardMenu}
+              menuProps={{ boards, value: board.id, onChange: (board: number) => setDraft({ board }) }}
+            />
+            <Icon name="chevron" size={10} />
+            <Text variant="mini" color="inherit" className="text-fg">
+              {initial.parent ? `Sub-issue of ${initial.parent}` : "New issue"}
+            </Text>
           </Text>
+          {saved.length > 0 && (
+            <Button type="button" variant="borderless" size="small" onClick={() => setDraftsOpen(true)}>
+              Saved drafts ({saved.length})
+            </Button>
+          )}
           <IconButton
             type="button"
             label={expanded ? "Collapse editor" : "Expand editor"}
@@ -316,13 +349,14 @@ export function CreateIssue() {
           >
             <Icon name="expand" />
           </IconButton>
-          <Button type="button" onClick={() => setDraftsOpen(true)}>Saved drafts ({saved.length})</Button>
           <Dialog.Close />
         </Dialog.Header>
-        <TextInput
+        {/* Linear's fast-create title (dQ, size regular): borderless, 18px semibold. */}
+        <input
           ref={titleRef}
           autoFocus
           aria-label="Issue title"
+          className="create-issue-title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => {
@@ -337,52 +371,39 @@ export function CreateIssue() {
             }
           }}
           placeholder="Issue title"
-          className="w-full mb-2"
         />
-        <FramedEditor
+        <ComposerEditor
           key={draftIndex}
           id="create-description"
+          placeholder="Add description…"
           initial={description}
           onChange={setDescription}
           attachments={attachments}
           expanded={expanded}
           tabLeaves
         />
-        <div className="flex flex-wrap gap-2">
+        {/* One row of chips, as Linear's: it scrolls sideways rather than wrapping. */}
+        <div className="create-issue-properties" data-create-properties>
           {draft.related && (
             <PendingRelation related={draft.related} remove={() => setDraft(({ related: _related, ...rest }) => rest)} />
           )}
           <PropertyPill
-            label="Issue type"
-            current={type}
-            menu={TypeMenu}
-            menuProps={{
-              board,
-              value: type,
-              choices: types,
-              onChange: (type: string) => setDraft({ ...draft, type }),
-            }}
-          />
-          <PropertyPill
             label="Status"
-            current={
-              statuses(board).find(
-                (s) =>
-                  s.id === (draft.status ?? board.columns[0]?.statuses[0]?.id),
-              )?.name ?? ""
-            }
+            current={status?.name ?? ""}
+            value={status?.name ?? ""}
+            icon={status && <StatusIcon status={status} />}
             menu={StatusMenu}
             menuProps={{
               board,
-              value: draft.status ?? board.columns[0]?.statuses[0]?.id ?? "",
+              value: statusId,
               onChange: (status: string) => setDraft({ ...draft, status }),
             }}
           />
           <PropertyPill
             label="Priority"
-            current={
-              draft.priority ?? (writable ? "Default priority" : "Normal")
-            }
+            current={draft.priority || (writable ? "Default priority" : "Normal")}
+            value={draft.priority || (writable ? undefined : "Normal")}
+            icon={<PriorityIcon name={draft.priority || (writable ? undefined : "Normal")} />}
             menu={PriorityMenu}
             menuProps={{
               board,
@@ -394,6 +415,8 @@ export function CreateIssue() {
           <PropertyPill
             label="Assignee"
             current={draft.assignee?.name ?? "Unassigned"}
+            value={draft.assignee?.name}
+            icon={<Avatar user={draft.assignee ?? null} size={14} />}
             menu={AssigneeMenu}
             menuProps={{
               board,
@@ -404,22 +427,47 @@ export function CreateIssue() {
           />
           <PropertyPill
             label="Project"
-            current={
-              draft.project === null && !writable
-                ? "No project"
-                : (project?.name ?? "No project")
-            }
+            current={projectValue?.name ?? "No project"}
+            value={projectValue?.name}
+            icon={<Icon name="layers" size={14} />}
             menu={ProjectMenu}
             menuProps={{
               board,
-              value: draft.project === null && !writable ? null : project,
+              value: projectValue,
               onChange: (project: Issue["project"]) =>
                 setDraft({ ...draft, project, milestones: [] }),
             }}
           />
           <PropertyPill
+            label="Labels"
+            current={labels || "No labels"}
+            value={labels || undefined}
+            icon={<Icon name="label" size={14} />}
+            menu={LabelsMenu}
+            menuProps={{
+              board,
+              value: labelList,
+              onChange: (value: string[]) => setLabels(value.join(", ")),
+            }}
+          />
+          <PropertyPill
+            label="Issue type"
+            current={type}
+            value={type}
+            icon={<TypeDot type={type} />}
+            menu={TypeMenu}
+            menuProps={{
+              board,
+              value: type,
+              choices: types,
+              onChange: (type: string) => setDraft({ ...draft, type }),
+            }}
+          />
+          <PropertyPill
             label="Milestone"
             current={draft.milestones?.[0]?.name ?? "No milestone"}
+            value={draft.milestones?.[0]?.name}
+            icon={<Icon name="flag" size={14} />}
             menu={MilestoneMenu}
             menuProps={{
               board,
@@ -432,6 +480,8 @@ export function CreateIssue() {
           <PropertyPill
             label="Due date"
             current={draft.due ?? "No due date"}
+            value={draft.due ?? undefined}
+            icon={<Icon name="calendar" size={14} />}
             menu={DueMenu}
             menuProps={{
               board,
@@ -439,19 +489,7 @@ export function CreateIssue() {
               onChange: (due: string | null) => setDraft({ ...draft, due }),
             }}
           />
-          <PropertyPill
-            label="Labels"
-            current={labels || "No labels"}
-            menu={LabelsMenu}
-            menuProps={{
-              board,
-              value: labels
-                .split(",")
-                .map((l) => l.trim())
-                .filter(Boolean),
-              onChange: (value: string[]) => setLabels(value.join(", ")),
-            }}
-          />
+          <ComposerMore entries={extraActions} />
         </div>
         {/* Text has no semantic danger color; keep the validation alert styling. */}
         {noParentType && (
@@ -459,39 +497,19 @@ export function CreateIssue() {
             {noParentType}
           </p>
         )}
-        <Button type="button" disabled={!canHaveChildren(get(), { type, project })} onClick={() => setDraft(d => ({ ...d, subIssues: [...(d.subIssues ?? []), ""] }))}>Add sub-issue</Button>
-        {draft.subIssues?.map((summary, index) => <div key={index} className="flex items-center gap-2"><TextInput aria-label={`Pending sub-issue ${index + 1}`} value={summary} onChange={e => setDraft(d => ({ ...d, subIssues: d.subIssues?.map((title, i) => i === index ? e.target.value : title) }))} placeholder="Sub-issue title" /><IconButton type="button" label={`Remove pending sub-issue ${index + 1}`} onClick={() => setDraft(d => ({ ...d, subIssues: d.subIssues?.filter((_, i) => i !== index) }))}><Icon name="close" /></IconButton></div>)}
-        <Button type="button" onClick={() => setLinkInput("")}>Add link…</Button>
-        {linkInput !== null && <div className="flex items-center gap-2"><TextInput aria-label="New issue link URL" value={linkInput} onChange={e => setLinkInput(e.target.value)} placeholder="https://" /><Button type="button" disabled={!resourceURL(linkInput)} onClick={() => { const url = resourceURL(linkInput); if (!url) return; setDraft(d => ({ ...d, resources: [...(d.resources ?? []), { id: crypto.randomUUID(), kind: "link", title: url, url, updated: new Date().toISOString() }] })); setLinkInput(null); }}>Add link</Button><Button type="button" onClick={() => setLinkInput(null)}>Cancel link</Button></div>}
-        {draft.resources?.map(resource => <div key={resource.id} className="flex items-center gap-2"><Text variant="mini">{resource.title}</Text><IconButton type="button" label={`Remove link ${resource.title}`} onClick={() => setDraft(d => ({ ...d, resources: d.resources?.filter(r => r.id !== resource.id) }))}><Icon name="close" /></IconButton></div>)}
-        <Attachments
-          attachments={attachments}
-          onChange={setAttachments}
-          onBusy={setFilesBusy}
-        />
-        <div className="mt-4 flex items-center gap-2 border-t border-line pt-3">
-          <Text
-            as="label"
-            variant="mini"
-            color="inherit"
-            className="mr-auto flex items-center gap-2"
-          >
-            <input
-              type="checkbox"
-              checked={more}
-              onChange={(e) => setMore(e.target.checked)}
-            />
+        {draft.subIssues?.map((summary, index) => <div key={index} className="mt-2 flex items-center gap-2"><TextInput aria-label={`Pending sub-issue ${index + 1}`} value={summary} onChange={e => setDraft(d => ({ ...d, subIssues: d.subIssues?.map((title, i) => i === index ? e.target.value : title) }))} placeholder="Sub-issue title" /><IconButton type="button" label={`Remove pending sub-issue ${index + 1}`} onClick={() => setDraft(d => ({ ...d, subIssues: d.subIssues?.filter((_, i) => i !== index) }))}><Icon name="close" /></IconButton></div>)}
+        {linkInput !== null && <div className="mt-2 flex items-center gap-2"><TextInput autoFocus aria-label="New issue link URL" value={linkInput} onChange={e => setLinkInput(e.target.value)} placeholder="https://" /><Button type="button" variant="secondary" size="medium" disabled={!resourceURL(linkInput)} onClick={() => { const url = resourceURL(linkInput); if (!url) return; setDraft(d => ({ ...d, resources: [...(d.resources ?? []), { id: crypto.randomUUID(), kind: "link", title: url, url, updated: new Date().toISOString() }] })); setLinkInput(null); }}>Add link</Button><Button type="button" variant="borderless" size="medium" onClick={() => setLinkInput(null)}>Cancel link</Button></div>}
+        {draft.resources?.map(resource => <div key={resource.id} className="mt-2 flex items-center gap-2"><Text variant="mini">{resource.title}</Text><IconButton type="button" label={`Remove link ${resource.title}`} onClick={() => setDraft(d => ({ ...d, resources: d.resources?.filter(r => r.id !== resource.id) }))}><Icon name="close" /></IconButton></div>)}
+        <Attachments.List />
+        {/* Linear's footer: the paperclip (secondary, medium) at the left, then Create more (small switch) and Create issue. */}
+        <div className="mt-3 flex items-center gap-3">
+          <span className="mr-auto">
+            <Attachments.Button />
+          </span>
+          <Text as="label" variant="mini" color="inherit" className="flex items-center gap-1.5" title="Create more issues">
+            <Switch size="small" checked={more} onChange={(e) => setMore(e.target.checked)} />
             Create more
           </Text>
-          <Button type="button" onClick={saveDraft} disabled={!hasContent || filesBusy}>Save draft</Button>
-          <Button
-            type="button"
-            onClick={close}
-            variant="borderless"
-            size="medium"
-          >
-            Cancel
-          </Button>
           <Button
             type="submit"
             disabled={!title.trim() || filesBusy || !!noParentType}
@@ -502,7 +520,27 @@ export function CreateIssue() {
           </Button>
         </div>
       </form>
+      </Attachments>
     </Dialog>
+  );
+}
+
+/** Linear's "…" after the composer chips (More actions, secondary small): what the modal adds besides properties. */
+function ComposerMore({ entries }: { entries: ActionEntry[] }) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  return (
+    <>
+      <IconButton
+        label="More actions"
+        variant="secondary"
+        size="small"
+        aria-expanded={!!anchor}
+        onClick={(e) => setAnchor(anchor ? null : e.currentTarget)}
+      >
+        <Icon name="dots" />
+      </IconButton>
+      {anchor && <ActionMenu label="More actions" anchor={anchor} entries={entries} close={() => setAnchor(null)} />}
+    </>
   );
 }
 
@@ -922,22 +960,39 @@ export function IssueOptions({ issue }: { issue: Issue }) {
   );
 }
 
-/** The create form's attachments: an attach button that saves chosen files locally, then the list. */
-export function Attachments({
+const AttachmentsContext = createContext<{
+  attachments: NonNullable<Issue["attachments"]>;
+  onChange: (files: NonNullable<Issue["attachments"]>) => void;
+  pick: () => void;
+  busy: boolean;
+  error: string;
+  attach: RefObject<HTMLButtonElement | null>;
+} | null>(null);
+const useAttachments = () => {
+  const context = use(AttachmentsContext);
+  if (!context) throw new Error("Attachments parts need an <Attachments> around them.");
+  return context;
+};
+
+/** The create form's attachments: chosen files are saved locally. The provider owns the file input and its state; the form
+ *  places `Attachments.Button` (Linear's paperclip) and `Attachments.List` where its layout wants them. */
+function AttachmentsRoot({
   attachments = [],
   onChange,
   onBusy,
+  children,
 }: {
   attachments: Issue["attachments"];
   onChange: (files: NonNullable<Issue["attachments"]>) => void;
   onBusy?: (busy: boolean) => void;
+  children: ReactNode;
 }) {
   const file = useRef<HTMLInputElement>(null),
     attach = useRef<HTMLButtonElement>(null);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   return (
-    <Text className="mt-3" as="div" variant="mini" color="inherit">
+    <AttachmentsContext value={{ attachments, onChange, busy, error, attach, pick: () => file.current?.click() }}>
       {/* Native file selection is outside the text-field primitive family. */}
       <input
         ref={file}
@@ -967,17 +1022,30 @@ export function Attachments({
           }
         }}
       />
-      <Button
-        ref={attach}
-        type="button"
-        disabled={busy}
-        aria-label="Attach images, files, or videos"
-        onClick={() => file.current?.click()}
-        variant="borderless"
-        size="medium"
-      >
-        {busy ? "Saving file…" : "+ Attach file"}
-      </Button>
+      {children}
+    </AttachmentsContext>
+  );
+}
+function AttachButton() {
+  const { pick, busy, attach } = useAttachments();
+  return (
+    <IconButton
+      ref={attach}
+      label="Attach images, files, or videos"
+      tooltip={busy ? "Saving file…" : undefined}
+      disabled={busy}
+      variant="secondary"
+      size="medium"
+      onClick={pick}
+    >
+      <Icon name="paperclip" />
+    </IconButton>
+  );
+}
+function AttachmentsBody() {
+  const { attachments, onChange, error, attach } = useAttachments();
+  return (
+    <Text as="div" variant="mini" color="inherit">
       {error && (
         <p role="alert" className="mt-2 text-fg-3">
           {error}
@@ -987,6 +1055,7 @@ export function Attachments({
     </Text>
   );
 }
+export const Attachments = Object.assign(AttachmentsRoot, { Button: AttachButton, List: AttachmentsBody });
 
 /** Attached files, each with a remove button that returns focus to the owner's attach button. */
 function AttachmentList({

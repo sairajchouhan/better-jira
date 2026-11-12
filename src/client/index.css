@@ -514,6 +514,21 @@
   top: 2px;
   left: 0;
 }
+/* The create modal's description, Linear's fast-create editor at size regular (startup-root WQ): padding 6px 0 12px,
+   --editor-line-height 1.5, and min-height calc(2 * (1.5 * 1rem) + 12px + --editor-block-spacing). */
+.rich-editor[data-variant="composer"] .rich-content {
+  min-height: calc(2 * 1.5rem + 12px + 16px);
+  padding: 6px 0 12px;
+  line-height: 1.5;
+}
+.rich-editor[data-variant="composer"][data-expanded] .rich-content {
+  min-height: 300px;
+}
+.rich-editor[data-variant="composer"] .rich-placeholder {
+  top: 6px;
+  left: 0;
+  line-height: 1.5;
+}
 /* The issue description is borderless inline text on St.editorSurface (startup-root zrn.editorSurface):
    margin 0 -14px, padding 10px 14px 16px, so its text lines up with the title. */
 .issue-description > .rich-content,

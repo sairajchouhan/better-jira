@@ -14,6 +14,31 @@ test("create composer: a draft written, closed, reopened, given properties and c
     expect(await page.eval(`document.activeElement?.id`)).toBe("create-description");
     expect(await page.eval(`!!${title}`)).toBe(true);
   });
+  await test.step("#5: Linear's create modal: borderless title, boxless description, one row of icon chips, one primary button", async () => {
+    const look = await page.eval<Record<string, unknown>>(`(() => {
+      const dialog = document.querySelector('[role=dialog][aria-label="Create issue"]');
+      const t = getComputedStyle(${title});
+      const boxed = (el) => { for (; el && el !== dialog; el = el.parentElement) { const s = getComputedStyle(el); if (parseFloat(s.borderTopWidth) || parseFloat(s.borderBottomWidth)) return true; } return false; };
+      const row = dialog.querySelector('[data-create-properties]');
+      const chips = [...row.children].filter((c) => c.matches('button'));
+      return {
+        title: [t.borderTopWidth, t.borderBottomWidth, t.fontSize, t.fontWeight],
+        description: boxed(document.getElementById('create-description')),
+        wrap: getComputedStyle(row).flexWrap,
+        oneRow: new Set(chips.map((c) => c.getBoundingClientRect().top)).size,
+        iconless: chips.filter((c) => !c.querySelector('.ui-property-trigger-icon > *, .ui-button-icon > *')).map((c) => c.getAttribute('aria-label')),
+        primary: [...dialog.querySelectorAll('[data-variant=primary]')].map((b) => b.textContent),
+      };
+    })()`);
+    expect(look).toEqual({
+      title: ["0px", "0px", "18px", "600"],
+      description: false,
+      wrap: "nowrap",
+      oneRow: 1,
+      iconless: [],
+      primary: ["Create issue"],
+    });
+  });
   await test.step("B3: closing the composer keeps the unsent title and description for the next C", async () => {
     await page.type("Draft body");
     await page.key("Escape");

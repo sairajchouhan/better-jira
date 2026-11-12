@@ -9,6 +9,9 @@ export const presentations = {
   framed: { inline: false, selectionToolbar: false, variant: undefined },
   inline: { inline: true, selectionToolbar: false, variant: undefined },
   document: { inline: true, selectionToolbar: true, variant: undefined },
+  /** The create modal's description (Linear's fast-create editor, size regular): no box, formatting over a selection, and
+   *  Escape left to the modal, which offers to save a draft. */
+  composer: { inline: true, selectionToolbar: true, variant: "composer" },
   comment: { inline: false, selectionToolbar: false, variant: "comment" },
 } as const;
 
