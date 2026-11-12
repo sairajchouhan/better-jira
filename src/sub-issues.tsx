@@ -1,3 +1,6 @@
+import { PropertyTrigger } from "./property-trigger";
+import { LabelChip } from "./label-chip";
+import { CountBadge } from "./count-badge";
 import { Dialog, ConfirmDialog } from "./dialog";
 import { TextInput } from "./field";
 import { Button, IconButton } from "./button";
@@ -77,9 +80,6 @@ const properties: [Property, string][] = [
   ["pullRequests", "Pull requests"],
 ];
 const button = "rounded px-2 py-1 text-fg-3 hover:bg-hover";
-/** Linear's round 28px section buttons (Display options, Create new sub-issue). */
-export const CIRCLE =
-  "grid size-7 place-items-center rounded-full bg-card text-fg-3 hover:bg-hover";
 type Field = "status" | "priority" | "assignee" | "labels";
 /** Each trigger owns its anchor; the explicit field menu owns all picker behavior. */
 function PropertyControl({
@@ -138,6 +138,7 @@ function PropertyControl({
   };
   return (
     <>
+      {/* Compact composer/row property geometry has no variant in the primitive contract. */}
       <button
         type="button"
         title={title}
@@ -234,19 +235,21 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
         <span className="font-[450] text-fg-3">{parent.key}</span>
         <span className="truncate font-medium text-fg">{parent.summary}</span>
       </a>
-      <Button
+      <PropertyTrigger
         ref={progress}
         data-parent-progress
         title={`Open sub-issues of ${parent.key} (${shortcutLabel("sub-issues-of-parent")})`}
         aria-label={`Open sub-issues of ${parent.key}`}
 
         onClick={(event) => setMenu(event.currentTarget)}
-        variant="borderless"
-        size="small"
+        variant="row"
+        state="value"
+        aria-expanded={!!menu}
+        className="ml-1 shrink-0"
       >
         <ProgressRing value={model.total ? model.completed / model.total : 0} />
         {model.completed}/{model.total}
-      </Button>
+      </PropertyTrigger>
       {menu && (
         <MenuSurface
           label={`Open sub-issues of ${parent.key}`}
@@ -888,13 +891,12 @@ function SubIssueRow({
       >
         <span className="truncate">{child.summary}</span>
         {progress && (
-          <span
-            data-row-progress
-            className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border-[0.5px] border-line-2 px-2 text-[12px] font-[450] text-fg-3"
-          >
-            <ProgressRing value={progress![0] / progress![1]} />
-            {progress!.join("/")}
-          </span>
+          <LabelChip size="compact" data-row-progress className="shrink-0">
+            <LabelChip.Icon>
+              <ProgressRing value={progress![0] / progress![1]} />
+            </LabelChip.Icon>
+            <LabelChip.Text>{progress!.join("/")}</LabelChip.Text>
+          </LabelChip>
         )}
       </a>
       {/* Linear's row badges (RAJ-54 blocking 1, RAJ-55 blocked 1; Opus review 4): a red relation icon and how many issues. */}
@@ -932,10 +934,14 @@ function SubIssueRow({
         </time>
       )}
       {display.properties.includes("links") && !!child.links?.length && (
-        <span title="Links">{child.links.length}</span>
+        <span title="Links">
+          <CountBadge>{child.links.length}</CountBadge>
+        </span>
       )}
       {display.properties.includes("pullRequests") && !!child.prCount && (
-        <span title="Pull requests">{child.prCount}</span>
+        <span title="Pull requests">
+          <CountBadge>{child.prCount}</CountBadge>
+        </span>
       )}
       {display.properties.includes("assignee") &&
         control(

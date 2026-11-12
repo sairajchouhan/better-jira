@@ -1,3 +1,6 @@
+import { Tabs } from "./tabs";
+import { CountBadge } from "./count-badge";
+import { Shortcut, Keycap } from "./keycap";
 import { Dialog } from "./dialog";
 import { TextInput } from "./field";
 import { Button, IconButton } from "./button";
@@ -70,7 +73,7 @@ import { MenuSurface as Modal, issueAnchor } from "./menu-surface";
 import { IssueResources, ResourceForm } from "./issue-resources";
 import { ReactionPicker, shortcode } from "./reactions";
 import { PropertyPill } from "./pill-select";
-import { shortcutLabel, runShortcut } from "./shortcuts";
+import { runShortcut } from "./shortcuts";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { kept, post, useCommand } from "./commands";
 
@@ -587,23 +590,15 @@ export function BoardDetails({
       aria-label="Board details"
       className="w-[300px] shrink-0 overflow-y-auto border-l border-line p-3"
     >
-      <div
-        role="tablist"
-        aria-label="Board summary"
-        className="mb-4 flex gap-1"
-      >
-        {tabs.map(([id, label]) => (
-          <button
-            role="tab"
-            key={id}
-            aria-selected={id === tab}
-            onClick={() => setTab(id)}
-            className={`rounded-md px-2 py-1.5 text-[11px] ${id === tab ? "bg-sel" : "text-fg-3 hover:bg-hover"}`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <Tabs value={tab} onValueChange={(value) => setTab(value as Grouping)}>
+        <Tabs.List aria-label="Board summary" className="mb-4">
+          {tabs.map(([id, label]) => (
+            <Tabs.Tab key={id} value={id}>
+              {label}
+            </Tabs.Tab>
+          ))}
+        </Tabs.List>
+      </Tabs>
       {buckets(issues, tab, board, issues)
         .filter((g) => g.issues.length)
         .map((group) => {
@@ -638,9 +633,7 @@ export function BoardDetails({
               className="mb-1 w-full justify-start gap-2"
             >
               <span className="flex-1 truncate">{group.name}</span>
-              <span className="rounded-md bg-sel px-2 tabular-nums">
-                {group.issues.length}
-              </span>
+              <CountBadge background="filled">{group.issues.length}</CountBadge>
             </Button>
           );
         })}
@@ -937,6 +930,7 @@ export function PersonalIssueDetails({ issue }: { issue: Issue }) {
   return (
     <div className="mt-5 space-y-3 text-[12px]">
       {/* Linear (RAJ-52): 26px below the last paragraph, 6px left of the text and 16px above the sub-issues header, reaction pills 8px apart, then the round add-reaction and attach buttons. */}
+      {/* Reaction pills and circular actions retain their bundle geometry; the contract has no matching variants. */}
       <div data-reactions className="-ml-1.5 flex flex-wrap items-center">
         <div className="flex flex-wrap items-center gap-2 empty:hidden [&:not(:empty)]:mr-2">
           {issue.reactions?.map((emoji) => (
@@ -1216,6 +1210,7 @@ export function Relations({
     </Menu.Group>
   );
   return (
+    // Command-style relations retain MenuSurface: Dialog has no command placement variant.
     <Modal label="Issue relations" close={close} command width={720}>
       <Menu
         shouldFilter={false}
@@ -1254,7 +1249,7 @@ export function Relations({
                     ? "Add sub-issue…"
                     : `${mark.create} ${issue.key}…`}
                 </span>
-                {kind === "child" && <kbd>{shortcutLabel("sub-issue")}</kbd>}
+                {kind === "child" && <Shortcut keys="Mod+Shift+O" />}
               </Menu.Item>
             </Menu.Group>
           )}
@@ -1262,7 +1257,7 @@ export function Relations({
         </Menu.List>
         <div className="mark-footer">
           <span>
-            <kbd>↵</kbd>
+            <Keycap>↵</Keycap>
             {selected === "create" ? "Select" : mark.enter}
           </span>
         </div>
