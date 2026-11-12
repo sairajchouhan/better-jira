@@ -28,12 +28,15 @@ function harness({
   storage = new Map<string, string>(),
   moved = new Map<string, string>(),
   refused = false,
+  loaded = true,
 }: {
   key?: string;
   stored?: AdfDocument;
   storage?: Map<string, string>;
   moved?: Map<string, string>;
   refused?: boolean;
+  /** False: the session is made while the issue's details are still loading, as an issue opened from the board is. */
+  loaded?: boolean;
 } = {}) {
   let now = 0,
     persisted: () => void = () => {};
@@ -50,7 +53,7 @@ function harness({
   const writes: [string, AdfDocument][] = [],
     discards: [string, AdfDocument | undefined][] = [];
   const session = descriptionSession(
-    { key, namespace: "ns", stored: json(stored) },
+    { key, namespace: "ns", stored: loaded ? json(stored) : "" },
     {
       storage: {
         getItem: (name) => storage.get(name) ?? null,
@@ -209,6 +212,26 @@ test("with nothing unsaved, Jira's text replaces the editor; a focused one gets 
   h.setJira(doc("again"));
   expect(h.session.observe(h.stored(), true)).toBe(true);
   expect(h.session.getSnapshot().revision).toBe(2);
+});
+
+test("BJ-193: an issue that loads after its session opened keeps the editor it mounted with", () => {
+  const h = harness({ loaded: false });
+  h.session.recover(h.stored());
+  expect(h.session.observe(h.stored(), false)).toBe(false);
+  expect(h.session.getSnapshot()).toEqual({ revision: 0, draft: undefined, conflict: false });
+  // Jira's text changing later still replaces it.
+  h.setJira(doc("theirs"));
+  h.session.observe(h.stored(), false);
+  expect(h.session.getSnapshot().revision).toBe(1);
+});
+
+test("BJ-193: typing in an editor that opened before the load saves against the loaded text", async () => {
+  const h = harness({ loaded: false });
+  h.session.observe(h.stored(), false);
+  h.session.edit(doc("mine"));
+  h.advance(600);
+  expect(h.writes).toEqual([["BJ-1", doc("mine")]]);
+  expect(h.session.getSnapshot().revision).toBe(0);
 });
 
 test("a media id swap after the editor's own save waits for blur", () => {

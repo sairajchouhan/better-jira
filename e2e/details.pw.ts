@@ -1,4 +1,4 @@
-import { expect, test, type App as Page, fixture } from "./app";
+import { expect, test, type App as Page, fixture, sleep } from "./app";
 
 async function openIssue(page: Page, key = "TEST-1") {
   await page.click(`[data-key="${key}"]`);
@@ -121,4 +121,48 @@ test("BJ-14: creation uses the issue creator and mirrored timestamp, with an exa
   expect(await page.eval(`document.querySelector('[role=tooltip]').textContent`)).toBe(
     await page.eval(`document.querySelector('#issue-created a').getAttribute('aria-label')`),
   );
+});
+
+/** From before the first paint: each `.rich-content` removed (by its scope, or "stand-in" for the loader's), how many
+ *  mutation batches left an issue's description without one once it had shown one, and, once `tops` is set, the issue
+ *  body's scroll position after each batch and each frame. Reading it lays out the page, as anything measuring would. */
+const WATCH_EDITORS = `
+  window.__editors = { removed: [], empty: 0, seen: false, tops: null };
+  const scrolled = () => {
+    const log = window.__editors, body = document.querySelector(".issue-detail-body");
+    if (log.tops && body) log.tops.push(body.scrollTop);
+  };
+  new MutationObserver((records) => {
+    const log = window.__editors;
+    for (const record of records)
+      for (const node of record.removedNodes) {
+        if (node.nodeType !== 1) continue;
+        for (const editor of node.matches(".rich-content") ? [node] : node.querySelectorAll(".rich-content"))
+          log.removed.push(editor.dataset.scope ?? (editor.getAttribute("aria-busy") ? "stand-in" : "unscoped"));
+      }
+    const description = document.querySelector(".issue-description");
+    if (description?.querySelector(".rich-content")) log.seen = true;
+    else if (description && log.seen) log.empty++;
+    scrolled();
+  }).observe(document, { childList: true, subtree: true });
+  const frame = () => (scrolled(), requestAnimationFrame(frame));
+  requestAnimationFrame(frame);
+`;
+
+test("BJ-193: an issue opened while its details load mounts each editor once", async ({ open }) => {
+  await fixture.reset();
+  // An issue in the address loads the editor chunk at once; the next issue opens with that chunk ready.
+  const page = await open("?issue=TEST-2", { setup: WATCH_EDITORS });
+  await page.waitFor(`!!document.querySelector("#description.ProseMirror")`);
+  // Jira's details arrive after the issue opened, as they do for an issue not read yet (TEST-2's neighbours were).
+  await page.page.route(/\/api\/issues\/TEST-3$/, async (route) => {
+    await sleep(300);
+    await route.continue();
+  });
+  expect((await fixture.log()).requests.map((r) => r.path)).not.toContain("/api/issues/TEST-3");
+  await page.click('[data-key="TEST-3"]');
+  await page.waitFor(`document.querySelector("#description")?.dataset.scope === "TEST-3:description"`);
+  await sleep(500);
+  expect(await page.eval(`window.__editors.removed.filter((scope) => scope.startsWith("TEST-3"))`)).toEqual([]);
+  expect(await page.eval(`document.querySelectorAll(".issue-description .rich-content").length`)).toBe(1);
 });

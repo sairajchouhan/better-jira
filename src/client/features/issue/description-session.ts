@@ -39,15 +39,18 @@ const stringify = (doc: unknown) => JSON.stringify(normalizeDocument(doc as AdfD
 
 /**
  * `key` is the issue's key when the editor opened; it stays the session's key (and draft key) after the issue moves to
- * Jira's key. `stored` is the store's normalized description JSON, or "" before the issue loaded.
+ * Jira's key. `stored` is the store's normalized description JSON, or "" before the issue loaded. A session made before
+ * the load takes the first text it is given as the one the editor shows: the editor mounts with it, so it is never
+ * remounted for it (BJ-193).
  */
 export function descriptionSession(
   { key, namespace, stored }: { key: string; namespace: string; stored: string },
   ports: DescriptionPorts,
 ) {
   const draftKey = `better-jira:description-draft:${namespace}:${key}`;
-  // `shown` is the text the editor started from (the base of unsaved typing); `typed` is the typing not yet saved.
-  let shown = stored,
+  // `shown` is the text the editor started from (the base of unsaved typing), undefined until the issue loaded; `typed`
+  // is the typing not yet saved.
+  let shown: string | undefined = stored || undefined,
     typed: AdfDocument | null = null,
     conflict = false,
     resolving = false,
@@ -61,6 +64,10 @@ export function descriptionSession(
   const show = (doc: string) => {
     shown = doc;
     remount();
+  };
+  // The editor mounted with the store's first text when the issue loaded, so that is what it shows.
+  const opened = (stored: string) => {
+    if (shown === undefined && stored) shown = stored;
   };
   const held = () => resolving || conflict || ports.refused(ports.currentKey(key));
   const forget = () => {
@@ -120,7 +127,7 @@ export function descriptionSession(
       autosave.send({ type: "flush" });
       const at = ports.currentKey(key);
       if (keep) {
-        const doc = typed ?? normalizeDocument(JSON.parse(shown));
+        const doc = typed ?? normalizeDocument(JSON.parse(shown ?? "null"));
         shown = stringify(doc);
         typed = null;
         conflict = false;
@@ -146,12 +153,13 @@ export function descriptionSession(
      * focused editor was replaced and should get focus back. Safe to call again with the same input.
      */
     observe(stored: string, inside: boolean): boolean {
+      opened(stored);
       if (!stored || stored === shown || conflict) return false;
-      if (autosave.getSnapshot().matches("dirty") && textOf(stored) !== textOf(shown)) {
+      if (autosave.getSnapshot().matches("dirty") && textOf(stored) !== textOf(shown ?? "")) {
         conflict = true;
         publish();
       } else if (!inside) show(stored);
-      else if (textOf(stored) !== textOf(shown)) {
+      else if (textOf(stored) !== textOf(shown ?? "")) {
         show(stored);
         return true;
       }
@@ -169,6 +177,7 @@ export function descriptionSession(
      * text changed since it started (R2-D1, R2-D2).
      */
     recover(stored: string) {
+      opened(stored);
       try {
         const raw = ports.storage.getItem(draftKey);
         if (!raw) return;
