@@ -2,8 +2,7 @@ import { createContext, use, useId, useMemo, type KeyboardEvent, type MouseEvent
 
 /**
  * The selection and keyboard model Tabs and SegmentedControl share: one selected value, roving tab stop, arrows wrap and
- * skip disabled tabs, Home/End jump to the ends. `activation="automatic"` selects on focus (Linear's default, `J4`'s
- * activationMode); "manual" moves focus only and Enter/Space select.
+ * skip disabled tabs, Home/End jump to the ends. Selection follows keyboard focus.
  */
 export function rovingIndex(
   key: string,
@@ -31,7 +30,6 @@ export function rovingIndex(
 type Tablist = {
   value: string;
   onValueChange: (value: string) => void;
-  activation: "automatic" | "manual";
   id: string;
 };
 
@@ -40,11 +38,10 @@ const TablistContext = createContext<Tablist | null>(null);
 export function TablistProvider({
   value,
   onValueChange,
-  activation = "automatic",
   children,
-}: Omit<Tablist, "id" | "activation"> & { activation?: Tablist["activation"]; children: ReactNode }) {
+}: Omit<Tablist, "id"> & { children: ReactNode }) {
   const id = useId(),
-    context = useMemo(() => ({ value, onValueChange, activation, id }), [value, onValueChange, activation, id]);
+    context = useMemo(() => ({ value, onValueChange, id }), [value, onValueChange, id]);
   return <TablistContext value={context}>{children}</TablistContext>;
 }
 
@@ -56,7 +53,6 @@ function useTablist() {
 
 /** Props for the element holding the tabs. */
 export function useTablistProps(orientation: "horizontal" | "vertical" = "horizontal") {
-  const { activation } = useTablist();
   return {
     role: "tablist",
     "aria-orientation": orientation,
@@ -71,7 +67,7 @@ export function useTablistProps(orientation: "horizontal" | "vertical" = "horizo
       if (next === null) return;
       event.preventDefault();
       tabs[next]!.focus();
-      if (activation === "automatic") tabs[next]!.click();
+      tabs[next]!.click();
     },
   } as const;
 }

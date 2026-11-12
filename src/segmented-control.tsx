@@ -13,17 +13,16 @@ import "./segmented-control.css";
 function SegmentedControlRoot({
   value,
   onValueChange,
-  activation,
   size = "normal",
   width = "content",
   className = "",
   ...props
-}: Pick<ComponentProps<typeof TablistProvider>, "value" | "onValueChange" | "activation"> & {
+}: Pick<ComponentProps<typeof TablistProvider>, "value" | "onValueChange"> & {
   size?: ButtonSize;
   width?: "content" | "full";
 } & ComponentProps<"div">) {
   return (
-    <TablistProvider value={value} onValueChange={onValueChange} activation={activation}>
+    <TablistProvider value={value} onValueChange={onValueChange}>
       <SegmentList data-size={size} data-width={width} className={`ui-segmented ${className}`} {...props} />
     </TablistProvider>
   );

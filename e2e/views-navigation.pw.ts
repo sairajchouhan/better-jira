@@ -82,6 +82,15 @@ test("Linear parity: hidden counts, merge conflicts, editor chrome, draft tab, p
     expect(await page.eval(`document.querySelector('[aria-label="View details"] [role=tab][aria-selected=true]').textContent`)).toBe("Labels");
     // BJ-145: Linear's 32px pills, sized from their labels.
     expect(await page.eval(`[...document.querySelectorAll('[aria-label="View details"] [role=tab]')].map(t=>t.getBoundingClientRect().height)`)).toEqual([32, 32]);
+    // SOLF-03: summary tabs use one roving tab stop and the shared keyboard model.
+    const selectedSummary = `document.querySelector('[aria-label="View details"] [role=tab][aria-selected=true]')`;
+    for (const [key, label] of [["ArrowRight", "Assignees"], ["End", "Labels"], ["Home", "Assignees"], ["ArrowLeft", "Labels"]]) {
+      await page.key(key!);
+      expect(await page.eval(`${selectedSummary}.textContent`)).toBe(label);
+      expect(await page.eval(`document.activeElement === ${selectedSummary}`)).toBe(true);
+      expect(await page.eval(`document.querySelectorAll('[aria-label="View details"] [role=tab][tabindex="0"]').length`)).toBe(1);
+      expect(await page.eval(`document.querySelector('[aria-label="View details"] [role=tabpanel]').getAttribute('aria-labelledby') === ${selectedSummary}.id`)).toBe(true);
+    }
     // A contradicting temporary filter cannot be merged: Save menu, ⌥S and ⌘K all refuse.
     await page.eval(`fetch('/api/views/${saved.id}',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({filters:${JSON.stringify(rule(["High"]))}})})`);
     const filter = Buffer.from(JSON.stringify({v:1,filters:rule(["Low"])})).toString("base64url");

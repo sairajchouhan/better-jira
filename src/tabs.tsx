@@ -4,9 +4,8 @@ import "./control-tokens.css";
 import "./tabs.css";
 
 /**
- * Two looks. `header`: Linear's header view tabs, measured in .raj/linear.md ("Tabs"): 28px full-radius pills, 4px apart.
- * `section`: Linear's Tabs `sq` (startup-root.CnUSfl4j.js, styles `cq`), used by the view summary and PR header: 28px
- * triggers (`Mv` tab/medium) with 12px padding and a 2px margin on a 5px-radius bgBase track, so each row is 32px.
+ * `header`: Linear's header view tabs, measured in .raj/linear.md: 28px pills, 4px apart.
+ * `summary`: ViewDetails' measured 32px triggers, sharing the full row with an 8px gap.
  */
 export const TABS = {
   HEIGHT: 28,
@@ -14,34 +13,31 @@ export const TABS = {
   GAP: 4,
   FONT_SIZE: 12,
   FONT_WEIGHT: 500,
-  SECTION: { PADDING_INLINE: 12, MARGIN: 2, LIST_GAP: 2, LIST_RADIUS: 5, MAX_WIDTH: 200, ROW_HEIGHT: 32 },
+  SUMMARY: { HEIGHT: 32, PADDING_INLINE: 12, GAP: 8 },
 } as const;
 
 /** Arrow keys move between tabs (wrapping, skipping disabled), Home/End jump to the ends. */
 function TabsRoot({
   value,
   onValueChange,
-  activation,
   children,
-}: Pick<ComponentProps<typeof TablistProvider>, "value" | "onValueChange" | "activation" | "children">) {
+}: Pick<ComponentProps<typeof TablistProvider>, "value" | "onValueChange" | "children">) {
   return (
-    <TablistProvider value={value} onValueChange={onValueChange} activation={activation}>
+    <TablistProvider value={value} onValueChange={onValueChange}>
       {children}
     </TablistProvider>
   );
 }
 
 export const Tabs = Object.assign(TabsRoot, {
-  /** Name it with `aria-label`. `width="full"` (section only, `sq.List fullWidth`) stretches the tabs to share the row. */
+  /** Name it with `aria-label`. Summary tabs share the full row. */
   List: ({
     variant = "header",
-    width = "content",
     className = "",
     ...props
-  }: { variant?: "header" | "section"; width?: "content" | "full" } & ComponentProps<"div">) => (
+  }: { variant?: "header" | "summary" } & ComponentProps<"div">) => (
     <div
       data-variant={variant}
-      data-width={width}
       className={`ui-tabs-list ${className}`}
       {...useTablistProps()}
       {...props}

@@ -80,9 +80,10 @@ export function ViewDetails({ view, issues }: { view: SavedView; issues: Issue[]
   return <aside aria-label="View details" className="view-details w-[320px] shrink-0 overflow-auto border-l border-line p-5 text-[13px] max-sm:absolute max-sm:inset-y-0 max-sm:right-0 max-sm:bg-panel">
     <div className="mb-3"><SavedViewIcon view={view} /></div><Text as="h2" variant="regularPlus" color="base">{view.name}</Text>{view.description && <Text as="p" variant="small" color="muted" className="mt-2 whitespace-pre-wrap">{view.description}</Text>}
     <dl className="my-6 grid grid-cols-[90px_1fr] gap-y-3"><dt className="text-fg-3">Visibility</dt><dd>Personal</dd><dt className="text-fg-3">Owner</dt><dd className="flex items-center gap-2"><Avatar user={ME} size={18} />{ME.name}</dd></dl>
-    {/* Live Linear requires 32px summary triggers (views-navigation.pw.ts); Tabs section renders 28px triggers. */}
-    <div role="tablist" aria-label="Summary" className="mb-3 flex gap-2">{(["assignees", "labels"] as const).map(key => <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={`h-8 flex-auto rounded-full border-[0.5px] border-transparent px-3 text-[12px] font-medium ${tab === key ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover"}`}>{key === "assignees" ? "Assignees" : "Labels"}</button>)}</div>
-    <div role="tabpanel" aria-label={tab === "assignees" ? "Assignees" : "Labels"}>{rows.length ? rows.map(([name, count]) => <div key={name} className="flex h-9 items-center justify-between px-1 text-fg-2"><span className="truncate">{name}</span><CountBadge>{count}</CountBadge></div>) : <Text as="p" variant="small" color="muted" className="px-1 py-2">{tab === "assignees" ? "No assignees" : "No labels"}</Text>}</div>
+    <Tabs value={tab} onValueChange={value => setTab(value as typeof tab)}>
+      <Tabs.List variant="summary" aria-label="Summary" className="mb-3">{(["assignees", "labels"] as const).map(key => <Tabs.Tab key={key} value={key}>{key === "assignees" ? "Assignees" : "Labels"}</Tabs.Tab>)}</Tabs.List>
+      <Tabs.Panel value={tab}>{rows.length ? rows.map(([name, count]) => <div key={name} className="flex h-9 items-center justify-between px-1 text-fg-2"><span className="truncate">{name}</span><CountBadge>{count}</CountBadge></div>) : <Text as="p" variant="small" color="muted" className="px-1 py-2">{tab === "assignees" ? "No assignees" : "No labels"}</Text>}</Tabs.Panel>
+    </Tabs>
   </aside>;
 }
 // Linear HiddenIndicator (assets/HiddenIndicator.*.js, 2026-11-11): a flex row (so no space) of the count as Text miniPlus (12px/normal/500, labelTitle,
