@@ -26,6 +26,9 @@ window.fetch=async(input,init)=>{const path=new URL(String(input),location.href)
 async function openFilter(page: App) {
   await page.click('[aria-label="Add filter"]');
   await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Add Filter…"`);
+  // A clicked filter menu opens pristine (FILTER-15): the first ArrowDown only reveals the first row, as a keyboard open starts.
+  await page.key("ArrowDown");
+  await page.waitFor(`document.querySelector('${ROOT}')?.closest("[cmdk-root]")?.querySelector("[cmdk-item][data-selected=true]")?.dataset.value === "Advanced filter"`);
 }
 
 async function rightClick(page: App, selector: string) {
