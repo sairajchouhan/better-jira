@@ -516,6 +516,20 @@
 }
 /* The create modal's description, Linear's fast-create editor at size regular (startup-root WQ): padding 6px 0 12px,
    --editor-line-height 1.5, and min-height calc(2 * (1.5 * 1rem) + 12px + --editor-block-spacing). */
+/* A comment edited in place (Linear's EditComment editorContent): min-height 23px, no padding, so the text keeps the
+   comment body's place and type. */
+.rich-editor[data-variant="edit"] .rich-content {
+  min-height: 23px;
+  padding: 0;
+  font-size: inherit;
+  line-height: inherit;
+}
+.rich-editor[data-variant="edit"] .rich-placeholder {
+  top: 0;
+  left: 0;
+  font-size: inherit;
+  line-height: inherit;
+}
 .rich-editor[data-variant="composer"] .rich-content {
   min-height: calc(2 * 1.5rem + 12px + 16px);
   padding: 6px 0 12px;

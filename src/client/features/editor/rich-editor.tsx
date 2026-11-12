@@ -185,7 +185,7 @@ function ToolbarDropdown({
   );
 }
 
-export type EditorPresentation = "framed" | "inline" | "document" | "comment" | "composer";
+export type EditorPresentation = "framed" | "inline" | "document" | "comment" | "composer" | "edit";
 export type EditorEngineProps = RichEditorProps & {
   presentation: EditorPresentation;
   /** Input the loader's stand-in took before this chunk arrived: text continues where the content ends, then ⌘↵ saves. */

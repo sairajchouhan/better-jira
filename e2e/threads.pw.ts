@@ -235,7 +235,7 @@ test("mirrored comment edits and thread state survive a fresh Jira detail respon
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Edit comment'`);
     await page.key("a", "meta");
     await page.type("Edited mirror comment locally");
-    await page.click("text=Save comment");
+    await page.click(`[aria-label="Save comment"]`);
     await page.waitFor(
       `document.querySelector('[data-thread]').textContent.includes('Edited mirror comment locally')`,
     );

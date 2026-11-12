@@ -125,6 +125,11 @@ export function ComposerEditor(props: RichEditorProps) {
   return <LoadedEditor {...props} presentation="composer" />;
 }
 /** Persistent document content with formatting above a text selection. */
+/** A comment edited where it is shown, as Linear edits one. */
+export function CommentEditEditor(props: RichEditorProps) {
+  return <LoadedEditor {...props} presentation="edit" />;
+}
+
 export function DocumentBodyEditor(props: RichEditorProps) {
   return <LoadedEditor {...props} presentation="document" />;
 }

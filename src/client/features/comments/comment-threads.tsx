@@ -14,7 +14,7 @@ import { ConfirmDialog } from "@/client/components/dialog";
 import { Text } from "@/client/components/text";
 import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { ReactionPicker, ReactionPill } from "./reactions";
-import { FramedEditor, CommentComposer } from "@/client/features/editor/rich-editor-loader";
+import { CommentEditEditor, FramedEditor, CommentComposer } from "@/client/features/editor/rich-editor-loader";
 import { ME, get, set } from "@/client/state/store";
 import { actions, addIssueFiles, beginCreate } from "@/client/state/issue-actions";
 import { currentKey } from "@/client/state/jira-sync";
@@ -439,7 +439,7 @@ function Thread({
         </div>
         <div className="comment-body">
           {editing === comment.id ? (
-            <FramedEditor
+            <CommentEditEditor
               id={`edit-${comment.id}`}
               label="Edit comment"
               autoFocus

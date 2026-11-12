@@ -63,9 +63,34 @@ test("issue page editing: description autosave, code block Tab, toolbar rows, co
     await page.click('[data-comment] [aria-label="Comment options"]');
     await page.click("text=Edit");
     await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Edit comment"`);
+    // #9: Linear edits a comment in place: no box or standing toolbar, the text where it was, Cancel and Save below.
+    expect(
+      await page.eval(`(() => {
+        const body = document.querySelector("[data-comment] .comment-body");
+        const frame = body.querySelector(".rich-editor"), text = body.querySelector(".rich-content");
+        const s = getComputedStyle(frame), row = frame.querySelector(":scope > .rich-editor-actions");
+        return {
+          boxed: [s.borderTopWidth, s.backgroundColor],
+          inPlace: text.getBoundingClientRect().left === body.getBoundingClientRect().left,
+          toolbar: !!frame.querySelector('[role=toolbar]'),
+          below: row.getBoundingClientRect().top - text.getBoundingClientRect().bottom,
+          buttons: [...row.querySelectorAll("button")].map((b) => [b.textContent, b.dataset.variant]),
+        };
+      })()`),
+    ).toEqual({
+      boxed: ["0px", "rgba(0, 0, 0, 0)"],
+      inPlace: true,
+      toolbar: false,
+      below: 16,
+      buttons: [
+        ["", "borderless"], // the paperclip, on the left
+        ["Cancel", "link"],
+        ["Save", "secondary"],
+      ],
+    });
     await page.key("End");
     await page.type(" again");
-    await page.click("text=Save comment");
+    await page.click(`[aria-label="Save comment"]`);
     await page.waitFor(
       `document.querySelector("[data-comment]")?.textContent.includes("first again")`,
     );

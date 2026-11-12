@@ -13,6 +13,9 @@ export const presentations = {
    *  Escape left to the modal, which offers to save a draft. */
   composer: { inline: true, selectionToolbar: true, variant: "composer" },
   comment: { inline: false, selectionToolbar: false, variant: "comment" },
+  /** A comment edited in place (Linear's EditComment form, `Cr`): the text where it was, no box, formatting over a
+   *  selection, and below it the paperclip, then Cancel and Save. */
+  edit: { inline: true, selectionToolbar: true, variant: "edit" },
 } as const;
 
 /** The editor's box. The editor and the loader's stand-in both draw it (with an `EditorArea` and `EditorActions` inside),
@@ -76,7 +79,9 @@ export function EditorActions({
   inert?: boolean;
 }) {
   if (!props.onSave && !props.onCancel) return null;
-  const comment = presentations[presentation].variant === "comment";
+  const { variant } = presentations[presentation];
+  if (variant === "edit") return <EditActions props={props} attach={attach} save={save} busy={busy} empty={empty} inert={inert} />;
+  const comment = variant === "comment";
   return (
     <div className="rich-editor-actions flex items-center justify-end gap-2 border-t border-line-2 p-2 text-[12px]" inert={inert}>
       {comment ? (
@@ -121,6 +126,49 @@ export function EditorActions({
             {props.saveLabel ?? "Save description"}
           </Button>
         ))}
+    </div>
+  );
+}
+
+/** Linear's comment edit footer (`Cr`): 16px below the text, the paperclip on the left; on the right a medium link
+ *  Cancel and a medium secondary Save whose tooltip is "Save comment" with ⌘↵. */
+function EditActions({
+  props,
+  attach,
+  save,
+  busy,
+  empty,
+  inert,
+}: Omit<Parameters<typeof EditorActions>[0], "presentation" | "formatting">) {
+  return (
+    <div className="rich-editor-actions mt-4 flex items-center gap-2" inert={inert}>
+      {props.onFiles && (
+        <IconButton label="Attach images, files, or videos" size="small" onClick={attach}>
+          <Icon name="paperclip" />
+        </IconButton>
+      )}
+      <span className="ml-auto flex gap-2">
+        {props.onCancel && (
+          <Button variant="link" size="medium" onClick={props.onCancel}>
+            {props.cancelLabel ?? "Cancel"}
+          </Button>
+        )}
+        {props.onSave && (
+          <Button
+            variant="secondary"
+            size="medium"
+            className="rich-editor-submit"
+            aria-label={props.saveLabel}
+            tooltip={props.saveLabel}
+            shortcut="Mod+Enter"
+            disabled={busy || (props.required && empty)}
+            disabledReason={busy ? BUSY : undefined}
+            onClick={save}
+          >
+            Save
+          </Button>
+        )}
+      </span>
     </div>
   );
 }
