@@ -1,5 +1,6 @@
 import { Text } from "./text";
-import { MediaIconButton } from "./media-action";
+import { IconButton } from "./button";
+import "./media-primitives.css";
 import { notifyMedia } from "./media-toast";
 import { Icon } from "./icons";
 import type { Attachment } from "./attachment-media";
@@ -21,7 +22,7 @@ export function FileMedia({ file, issueKey }: { file: Attachment; issueKey?: str
         </Text>
       </div>
       <div className="file-media-actions" role="toolbar" aria-label="File actions">
-        <MediaIconButton
+        <IconButton
           label="Copy attachment link"
           disabled={!issueKey && file.url.startsWith("blob:")}
           disabledReason="Create the issue before copying its attachment link"
@@ -33,8 +34,8 @@ export function FileMedia({ file, issueKey }: { file: Attachment; issueKey?: str
           }}
         >
           <Icon name="link" />
-        </MediaIconButton>
-        {/* Download remains a native link; Button/IconButton only render buttons. */}
+        </IconButton>
+        {/* Icon-only, so not ButtonLink yet: it lacks Linear's `fk` onlyIcon shape (Ist.onlyIcon, padding-inline 2px). */}
         <a
           aria-label={`Download ${file.name}`}
           href={file.url.startsWith("/api/") ? `${file.url}?download=1` : file.url}

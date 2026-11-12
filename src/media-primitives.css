@@ -38,12 +38,6 @@
   outline: revert-layer;
   outline-offset: revert-layer;
 }
-.media-disabled-action {
-  display: inline-flex;
-}
-.media-disabled-action > .ui-button {
-  pointer-events: none;
-}
 .image-comment-thread .ui-autosize,
 .comment-reply-row .ui-autosize {
   flex: 1;

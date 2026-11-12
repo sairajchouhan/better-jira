@@ -1,4 +1,4 @@
-import { MediaIconButton } from "./media-action";
+import { IconButton } from "./button";
 import { notifyMedia } from "./media-toast";
 import { LoadingState } from "./empty-state";
 /* oxlint-disable react/immutability -- Session callbacks and mutable imperative models are intentionally owned outside React state. */
@@ -192,7 +192,7 @@ export function ImageMedia({
         onError={onError}
       />
       <div role="toolbar" aria-label="Image actions" className="image-actions">
-        <MediaIconButton
+        <IconButton
           label="Copy image"
           disabled={!editable}
           disabledReason={readReason}
@@ -203,9 +203,9 @@ export function ImageMedia({
           }}
         >
           <Icon name="copy" />
-        </MediaIconButton>
+        </IconButton>
         {issueKey && (
-          <MediaIconButton
+          <IconButton
             label="Crop image"
             disabled={!editable}
             disabledReason={readReason}
@@ -215,9 +215,9 @@ export function ImageMedia({
             }}
           >
             <Icon name="crop" />
-          </MediaIconButton>
+          </IconButton>
         )}
-        <MediaIconButton
+        <IconButton
           ref={trigger}
           label="Full screen"
           onClick={() => {
@@ -226,9 +226,9 @@ export function ImageMedia({
           }}
         >
           <Icon name="expand" />
-        </MediaIconButton>
+        </IconButton>
         {issueKey && (
-          <MediaIconButton
+          <IconButton
             ref={commentTrigger}
             label={thread ? "Hide image comments" : "Add image comment"}
             onClick={() => {
@@ -237,7 +237,7 @@ export function ImageMedia({
             }}
           >
             <Icon name="comment" />
-          </MediaIconButton>
+          </IconButton>
         )}
       </div>
       {thread && issueKey && (

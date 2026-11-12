@@ -1,5 +1,4 @@
-import { Button } from "./button";
-import { MediaIconButton } from "./media-action";
+import { Button, IconButton } from "./button";
 import { notifyMedia } from "./media-toast";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -147,10 +146,11 @@ export function ImageViewer({
         </Button>
         <div className="image-preview-tools">
           {onCrop && (
-            <MediaIconButton label="Crop image" onClick={() => setCropping(true)}>
+            <IconButton label="Crop image" onClick={() => setCropping(true)}>
               <Icon name="crop" size={16} />
-            </MediaIconButton>
+            </IconButton>
           )}
+          {/* Icon-only, so not ButtonLink yet: it lacks Linear's `fk` onlyIcon shape (Ist.onlyIcon, padding-inline 2px). */}
           <a
             aria-label="Download image"
             href={file.url.startsWith("/api/") ? `${file.url}?download=1` : file.url}
@@ -166,7 +166,7 @@ export function ImageViewer({
           >
             <Icon name="download" size={16} />
           </a>
-          <MediaIconButton
+          <IconButton
             label="Copy image"
             disabled={!editable}
             disabledReason={readReason}
@@ -177,8 +177,8 @@ export function ImageViewer({
             }}
           >
             <Icon name="copy" size={16} />
-          </MediaIconButton>
-          <MediaIconButton
+          </IconButton>
+          <IconButton
             label="Copy link"
             disabled={!issueKey && original.url.startsWith("blob:")}
             disabledReason="Create the issue before copying its attachment link"
@@ -190,10 +190,10 @@ export function ImageViewer({
             }}
           >
             <Icon name="link" size={16} />
-          </MediaIconButton>
-          <MediaIconButton label="Close" onClick={close}>
+          </IconButton>
+          <IconButton label="Close" onClick={close}>
             <Icon name="close" size={18} />
-          </MediaIconButton>
+          </IconButton>
         </div>
       </div>
       <div
