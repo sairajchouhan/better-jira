@@ -37,7 +37,7 @@ const FIELD_ORDER: readonly ActivityField[] = [
 const SMALL_FIELDS: ReadonlySet<ActivityField> = new Set(["assignee", "project", "priority", "estimate", "labels"]);
 const order = (field: ActivityField) => FIELD_ORDER.indexOf(field);
 /** The kinds whose next lone change joins the row before it (Linear's grouped entries `Xc`: state, priority, labels, cycle). */
-const CHAINED_FIELDS: ReadonlySet<ActivityField> = new Set(["status", "priority", "labels", "cycle"]);
+const CHAINED_FIELDS: ReadonlySet<ActivityField> = new Set(["status", "priority", "labels", "cycle", "title"]);
 import type { Relation } from "@/shared/relations";
 export type { Relation };
 /** The other issue's role, as Linear's Issue options › Remove names it (RAJ-52): a blocked-by relation lists the "Blocking issue". */
@@ -173,6 +173,16 @@ export function groupChanges(changes: readonly Change[]): PropertyActivity[] {
       at,
       slot,
     });
+    if (change.field === "title") {
+      // Linear La: retain title edits for its separate one-minute coalescing rule.
+      const last = events.at(-1);
+      if (last?.field === "title" && last.actor.id === change.actor.id && time - Date.parse(last.updated ?? last.at) <= 60_000) {
+        last.after = change.after;
+        last.at = change.at;
+        last.updated = change.at;
+      } else events.push(event(change.at));
+      continue;
+    }
     if (change.field === "relation") {
       const added =
         change.after === null

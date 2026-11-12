@@ -212,3 +212,24 @@ test("BJ-13: an app's change keeps its actor; an entry with no author reads as s
   ]);
   expect(changes.map((c) => c.actor)).toEqual([bot, { id: "unknown", name: "Someone" }]);
 });
+
+test("BJ-196: time tracking uses Jira working durations and project moves keep both issue keys", () => {
+  for (const fieldId of ["timeestimate", "timespent", "timeoriginalestimate"]) {
+    expect(mapItem({ field: "Time", fieldId, from: "7200", fromText: "7200", to: "43200", toText: "43200" }, [])).toMatchObject({
+      before: { value: "2h" }, after: { value: "1d 4h" },
+    });
+  }
+  const move = { field: "project", from: "1", fromText: "Old", to: "2", toText: "New" };
+  expect(mapItem(move, [move, { field: "Key", from: null, to: null, fromText: "OLD-1", toText: "NEW-1" }])).toMatchObject({
+    before: { key: "OLD-1" }, after: { key: "NEW-1" },
+  });
+});
+
+test("BJ-196: title changes coalesce up to one minute, then remain expandable history", () => {
+  const title = (id: string, ms: number, fromText: string, toText: string): HistoryEntry => ({ id, actor: ada, at: at(ms), items: [{ field: "summary", from: null, to: null, fromText, toText }] });
+  const rows = activityRows(mergeHistory([], [title("1", 0, "A", "B"), title("2", 60_000, "B", "C"), title("3", 120_001, "C", "D")]));
+  expect(rows).toHaveLength(1);
+  expect(rows[0]!.events[0]).toMatchObject({ before: "A", after: "C", at: at(60_000) });
+  expect(rows[0]!.chain).toHaveLength(1);
+  expect(rows[0]!.chain[0]).toMatchObject({ before: "C", after: "D" });
+});

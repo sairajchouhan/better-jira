@@ -1,3 +1,4 @@
+import { ActivityPropertyRow } from "@/client/features/issue/activity-entry";
 import { fullTime } from "@/client/features/issue/issue-dates";
 import { type Issue, type User } from "@/shared/issue-model";
 import { useLocation } from "@tanstack/react-router";
@@ -26,7 +27,7 @@ import { CommentThreads, useCommentDraft, useDraftFiles } from "@/client/feature
 import { ImageCommentCard } from "@/client/features/media/image-thread";
 import { linkTitle } from "@/shared/issue-resource";
 import { activityEvents, type ActivityEvent, type Relation } from "@/client/features/issue/issue-activity";
-import { ActivityIcon, ActivityRun, describeActivity, type ActivityItem } from "@/client/features/issue/activity-entry";
+import { ActivityRun, type ActivityItem } from "@/client/features/issue/activity-entry";
 import { summaryItems } from "@/client/features/issue/activity-collapse";
 import { mergeHistory } from "@/client/features/issue/jira-history";
 import { useIssueHistory } from "@/client/features/issue/use-issue-history";
@@ -783,25 +784,9 @@ function ActivityEventItem({
   if (event.kind === "property") {
     const { row } = event;
     return (
-      <li id={`activity-${row.id}`} data-activity={row.field} className="activity-event">
-        <span className="grid size-[14px] place-items-center">
-          <ActivityIcon row={row} issue={issue} />
-        </span>
-        <span>
-          <span className="font-medium">{row.actor.name}</span>{" "}
-          {row.events.map((change, i) => (
-            <span key={change.id}>
-              {i ? " and " : ""}
-              {describeActivity(change, issue)}
-            </span>
-          ))}
-          {row.chain.map((change) => (
-            <span key={change.id}>, then {describeActivity(change, issue, true)}</span>
-          ))}{" "}
-          ·
-        </span>{" "}
+      <ActivityPropertyRow row={row} issue={issue}>
         <Timestamp date={row.at} id={`activity-${row.id}`} />
-      </li>
+      </ActivityPropertyRow>
     );
   }
   const { resource } = event;

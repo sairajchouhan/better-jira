@@ -354,6 +354,7 @@ test("BJ-13: a long history folds its middle into Linear's \"Show N events\" row
   const page = await open("?issue=TEST-4&view=page");
   const folded = `document.querySelector('[data-activity-collapsed]')`;
   await page.waitFor(`!!${folded}`, 5000);
+  expect(await page.eval(`${folded}.querySelector("svg path").getAttribute("d")`)).toContain("M7.523 2.71");
   expect(await page.eval(`${folded}.textContent`)).toBe(
     "Show 5 events: changed status, priority, labels, and related issues…",
   );
@@ -366,4 +367,20 @@ test("BJ-13: a long history folds its middle into Linear's \"Show N events\" row
   await page.click('[aria-label="Expand all activity"]');
   await page.waitFor(`!${folded}`);
   expect(await page.eval(`document.querySelectorAll('.issue-activity ol > .activity-event').length`)).toBe(11);
+});
+
+test("BJ-196: repeated title edits expand and collapse with their individual values", async ({ open }) => {
+  await fixture.reset({ history: { "TEST-2": [
+    { id: "title-1", at: "2026-11-07T10:00:00Z", actor: { id: "ada", name: "Ada Example" }, items: [{ field: "summary", from: null, to: null, fromText: "Original", toText: "First title" }] },
+    { id: "title-2", at: "2026-11-07T12:00:00Z", actor: { id: "ada", name: "Ada Example" }, items: [{ field: "summary", from: null, to: null, fromText: "First title", toText: "Second title" }] },
+  ] } });
+  const page = await open("?issue=TEST-2");
+  const group = '[data-activity="title"] button';
+  await page.waitFor(`document.querySelector('${group}')?.textContent.includes('changed title twice')`);
+  expect(await page.eval(`!!document.querySelector('[aria-label="Grouped changes"]')`)).toBe(false);
+  await page.click(group);
+  await page.waitFor(`document.querySelector('[aria-label="Grouped changes"]')?.textContent.includes('First title')`);
+  expect(await page.eval(`document.querySelector('[aria-label="Grouped changes"]')?.textContent`)).toContain("Second title");
+  await page.key("Enter");
+  await page.waitFor(`!document.querySelector('[aria-label="Grouped changes"]')`);
 });

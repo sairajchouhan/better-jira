@@ -4,6 +4,7 @@
  * `ic` (due date), `Us` (parent), `Ws` (team), `Js` (cycle), `Qs` (project), `ec` (milestone) and `Hs` (relations).
  * Jira-only kinds (resolution, component, files, custom fields) read plainly in the same pattern: "changed Fix version from A to B".
  */
+import { fullTime, activityTime } from "./issue-dates";
 import { useState, type ReactNode } from "react";
 import type { RunPlace, TimelineEvent } from "@/client/features/comments/comment-threads";
 import { collapseLabel, partition, type SummaryItem } from "./activity-collapse";
@@ -187,7 +188,7 @@ export function describeActivity(event: PropertyActivity, issue: Issue, then = f
         </>
       ) : (
         <>
-          changed project from <B>{name(before)}</B> to <B>{name(after)}</B>
+          changed project from <B title={(before as NamedValue)?.key}>{name(before)}</B> to <B title={(after as NamedValue)?.key}>{name(after)}</B>
         </>
       );
     case "cycle": {
@@ -389,7 +390,7 @@ export function ActivityRun({ events, place }: { events: ActivityItem[]; place: 
           onClick={() => setOpen(true)}
           className="grid size-[14px] place-items-center text-fg-3 hover:text-fg-2"
         >
-          <Icon name="dots" />
+          <ExpandActivityIcon />
         </button>
         <button type="button" onClick={() => setOpen(true)} className="text-left hover:text-fg-2">
           {label}
@@ -398,4 +399,30 @@ export function ActivityRun({ events, place }: { events: ActivityItem[]; place: 
       {after.map((event) => event.node)}
     </>
   );
+}
+
+/** Linear ExpandChevronIconLarge: opposing chevrons, 16px viewbox. */
+export function ExpandActivityIcon() {
+  return <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" clipRule="evenodd" d="M7.523 2.71a.75.75 0 0 1 .954 0l4.25 3.5a.75.75 0 0 1-.954 1.157L8 4.26 4.227 7.367a.75.75 0 0 1-.954-1.158l4.25-3.5Zm5.306 7.102a.75.75 0 0 1-.102 1.055l-4.25 3.5a.75.75 0 0 1-.954 0l-4.25-3.5a.75.75 0 0 1 .954-1.158L8 12.817l3.773-3.108a.75.75 0 0 1 1.056.103Z" /></svg>;
+}
+
+/** Linear B/V: a grouped row toggles its indented changes; expanded timestamps are absolute. */
+export function ActivityPropertyRow({ row, issue, children }: { row: ActivityRow; issue: Issue; children: ReactNode }) {
+  const changes = [...row.events, ...row.chain];
+  const [open, setOpen] = useState(() => changes.some((e) => location.hash === `#activity-${e.id}`));
+  const grouped = row.chain.length > 0;
+  const text = <><span className="font-medium">{row.actor.name}</span>{" "}{row.field === "title" && grouped
+    ? titleChangeLabel(changes.length)
+    : <>{row.events.map((change, i) => <span key={change.id}>{i ? " and " : ""}{describeActivity(change, issue)}</span>)}{row.chain.map((change) => <span key={change.id}>, then {describeActivity(change, issue, true)}</span>)}</>}</>;
+  return <li id={`activity-${row.id}`} data-activity={row.field} className="activity-event">
+    <span className="grid size-[14px] place-items-center"><ActivityIcon row={row} issue={issue} /></span>
+    <span>{grouped ? <button type="button" className="text-left hover:text-fg-2" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{text}</button> : text}{" "}·</span>{" "}{children}
+    {grouped && open ? <ol className="col-start-2 col-end-[-1] border-l border-border pl-6" aria-label="Grouped changes">{changes.map((change) => <li key={change.id} id={`activity-change-${change.id}`} className="py-2"><span className="font-medium">{change.actor.name}</span>{" "}{describeActivity(change, issue)} · <time dateTime={change.at} title={activityTime(change.at)}>{fullTime(change.at)}</time></li>)}</ol> : null}
+  </li>;
+}
+
+/** Linear L spells counts through twenty in grouped-history descriptions. */
+export function titleChangeLabel(count: number): string {
+  const words = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"];
+  return `changed title ${count === 2 ? "twice" : `${words[count] ?? count} times`}`;
 }

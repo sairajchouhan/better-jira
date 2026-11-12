@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Issue } from "@/shared/issue-model";
-import { describeActivity, priorityRank } from "./activity-entry";
+import { describeActivity, priorityRank, titleChangeLabel } from "./activity-entry";
 import { activityRows, type ActivityField, type PropertyActivity } from "./issue-activity";
 
 // Made-up shapes only (BJ-40): each Jira change kind sampled read-only from real tickets, worded as Linear's history chunk words it.
@@ -124,4 +124,17 @@ test("BJ-13: one record's changes split like Linear's: small kinds two to a row,
     ["title", ["title"]],
     ["due", ["due"]],
   ]);
+});
+
+test("BJ-196: project names expose the old and new issue keys", () => {
+  const markup = renderToStaticMarkup(<>{describeActivity(event("project", { id: "1", name: "Old", key: "OLD-1" }, { id: "2", name: "New", key: "NEW-1" }), issue)}</>);
+  expect(markup).toContain('title="OLD-1"');
+  expect(markup).toContain('title="NEW-1"');
+});
+
+test("BJ-196: title group counts use Linear's words through twenty", () => {
+  expect(titleChangeLabel(2)).toBe("changed title twice");
+  expect(titleChangeLabel(3)).toBe("changed title three times");
+  expect(titleChangeLabel(20)).toBe("changed title twenty times");
+  expect(titleChangeLabel(21)).toBe("changed title 21 times");
 });

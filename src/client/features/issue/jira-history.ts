@@ -18,7 +18,7 @@ import {
 /** A Jira field with no Linear property: its name and display value. */
 export type FieldValue = { name: string; value: string };
 /** A file, version, component or web link: added or removed one at a time. */
-export type NamedValue = { id: string; name: string };
+export type NamedValue = { id: string; name: string; key?: string };
 
 /** Jira's link phrases ("This work item blocks X", older "This issue …") to Linear's relation kinds. Others keep their phrase. */
 const LINK_KINDS: Record<string, string> = {
@@ -76,8 +76,17 @@ export function mapItem(item: HistoryItem, entry: readonly HistoryItem[]): Mappe
       return { field: "title", before: fromText, after: toText };
     case "description":
       return { field: "description", before: fromText, after: toText };
-    case "project":
-      return { field: "project", before: named(from, fromText), after: named(to, toText) };
+    case "project": {
+      const key = entry.find((other) => other.field === "Key" || other.fieldId === "key");
+      return { field: "project", before: from || fromText ? { ...named(from, fromText)!, key: key?.fromText ?? key?.from ?? undefined } : null,
+        after: to || toText ? { ...named(to, toText)!, key: key?.toText ?? key?.to ?? undefined } : null };
+    }
+    case "timeestimate":
+    case "timespent":
+    case "timeoriginalestimate": {
+      const value = (text: string | null) => text === null || text === "" ? null : { name: field, value: jiraDuration(text) };
+      return { field: "field", before: value(fromText ?? from), after: value(toText ?? to) };
+    }
     case "resolution":
       // A resolution set by the transition it came with is that status change; Linear has no resolution.
       return entry.some((other) => (other.fieldId ?? other.field) === "status")
@@ -178,4 +187,19 @@ export function mergeHistory(
   const jira = historyChanges(history);
   if (!jira.length) return [...local];
   return [...groupChanges(jira), ...local.filter((event) => !echoed(event, jira))];
+}
+
+/** Jira's default time tracking uses 5 working days/week and 8 working hours/day.
+ * Keep minutes (Jira's smallest input/display unit), rather than treating a day as 24 elapsed hours. */
+export function jiraDuration(value: string): string {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds < 0) return value;
+  let minutes = Math.round(seconds / 60);
+  const parts: string[] = [];
+  for (const [unit, size] of [["w", 2400], ["d", 480], ["h", 60], ["m", 1]] as const) {
+    const count = Math.floor(minutes / size);
+    if (count) parts.push(`${count}${unit}`);
+    minutes %= size;
+  }
+  return parts.join(" ") || "0m";
 }
