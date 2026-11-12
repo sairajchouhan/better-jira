@@ -77,7 +77,8 @@ export function useCommand<C extends Name>(command: C, handler: Handler<C>) {
   useLayoutEffect(() => {
     latest.current = handler;
   });
-  useLayoutEffect(() => handle(command, (arg) => latest.current(arg)), [command]);
+  // A declined pending command is retried when this owner commits new DOM (for example, after detail loading).
+  useLayoutEffect(() => handle(command, (arg) => latest.current(arg)));
 }
 
 /** Focuses an owner's element for a command; takes the command only when the element is there. */

@@ -696,12 +696,22 @@ const descriptionPorts: DescriptionPorts = {
 
 /** Edited in place like Linear: changes save 600ms after typing stops and on blur, so a reload never loses them. */
 function Description({ issue }: { issue: Issue }) {
-  const [focus, setFocus] = useState(false);
+  const [focusRevision, setFocusRevision] = useState<number | null>(null);
+  const focusObserver = useRef<MutationObserver | null>(null);
+  useEffect(() => () => focusObserver.current?.disconnect(), []);
   useCommand("edit-description", () => {
     if (get().selected !== issue.key) return;
     const editor = section.current?.querySelector<HTMLElement>("#description");
+    setFocusRevision(session.getSnapshot().revision);
+    focusObserver.current?.disconnect();
     if (editor) editor.focus();
-    else setFocus(true);
+    else if (section.current) {
+      const observer = new MutationObserver(() => {
+        if (focusNode(section.current?.querySelector<HTMLElement>("#description"))) observer.disconnect();
+      });
+      observer.observe(section.current, { childList: true, subtree: true });
+      focusObserver.current = observer;
+    }
     return true;
   });
   const f = useStore((s) => s.full.get(issue.key));
@@ -807,7 +817,7 @@ function Description({ issue }: { issue: Issue }) {
       ) : (
         <DocumentBodyEditor
           key={revision}
-          autoFocus={focus}
+          autoFocus={focusRevision === revision}
           id="description"
           scope={`${issue.key}:description`}
           onLateMedia={session.lateMedia}
