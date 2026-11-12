@@ -1,0 +1,96 @@
+@layer components {
+  /* _w.toggleBase + A0e.normal: a 30x20 pill (radius 72), the knob an ::after pinned by left/right so hovering widens
+     it toward the free side (k0e.hover: the far inset 13 → 11). Track: mix(bgBase, labelBase, .4) at rest, .5 hovered,
+     controlPrimary / controlPrimaryHover when checked; knob controlPrimaryLabel. */
+  .ui-switch {
+    --knob: 14px;
+    --knob-radius: 7px;
+    --near: 3px;
+    --far: 13px;
+    --far-hover: 11px;
+    --track: color-mix(in lch, var(--fg-2) 40%, var(--panel));
+    --track-hover: color-mix(in lch, var(--fg-2) 50%, var(--panel));
+    --left: var(--near);
+    --right: var(--far);
+    /* The knob's leading edge moves first, the trailing one 50ms later: it stretches, then settles. */
+    --left-delay: 0s;
+    --right-delay: 50ms;
+    position: relative;
+    flex-shrink: 0;
+    width: 30px;
+    height: 20px;
+    margin: 0;
+    border: 0;
+    border-radius: 72px;
+    appearance: none;
+    background: var(--track);
+    transition-property: background-color, opacity;
+    transition-duration: 0.15s;
+    transition-timing-function: ease-out;
+  }
+  .ui-switch:checked {
+    --track: var(--accent);
+    --track-hover: var(--control-primary-hover);
+    --left: var(--far);
+    --right: var(--near);
+    --left-delay: 50ms;
+    --right-delay: 0s;
+  }
+  .ui-switch:is(:hover, :active):not(:disabled) {
+    background: var(--track-hover);
+  }
+  .ui-switch:not(:checked):is(:hover, :active):not(:disabled) {
+    --right: var(--far-hover);
+  }
+  .ui-switch:checked:is(:hover, :active):not(:disabled) {
+    --left: var(--far-hover);
+  }
+  .ui-switch::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: var(--left);
+    right: var(--right);
+    height: var(--knob);
+    border-radius: var(--knob-radius);
+    background: var(--control-primary-label);
+    transform: translateY(-50%);
+    pointer-events: none;
+    transition-property: left, right;
+    transition-duration: 0.1s;
+    transition-timing-function: ease-out;
+    transition-delay: var(--left-delay), var(--right-delay);
+  }
+  /* Cf.moreHitArea(6, 6, 6, 6). */
+  .ui-switch::before {
+    content: "";
+    position: absolute;
+    inset: -6px;
+  }
+  .ui-switch:focus-visible {
+    outline-offset: 2px;
+  }
+  .ui-switch:disabled {
+    opacity: 0.5;
+  }
+  /* A0e.small: 22x14, knob 10 (radius 5), insets 2 / 10, hovered 9. */
+  .ui-switch[data-size="small"] {
+    --knob: 10px;
+    --knob-radius: 5px;
+    --near: 2px;
+    --far: 10px;
+    --far-hover: 9px;
+    width: 22px;
+    height: 14px;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  @layer components {
+    /* gw: the track mixes .2 / .3 of labelBase in dark. */
+    .ui-switch {
+      --track: color-mix(in lch, var(--fg-2) 20%, var(--panel));
+      --track-hover: color-mix(in lch, var(--fg-2) 30%, var(--panel));
+    }
+  }
+}
