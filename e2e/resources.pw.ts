@@ -389,6 +389,12 @@ test("resource rows and open-menu triggers follow Linear (RAJ-52): 36px rows 1px
         4,
         "0",
       ]);
+    // Expanded is the resting state, so the section disclosure paints no selected fill (Linear's section header button).
+    expect(
+      await page.eval(
+        `getComputedStyle(document.querySelector('[aria-label="Collapse resources section"]')).backgroundColor`,
+      ),
+    ).toBe("rgba(0, 0, 0, 0)");
   });
 
   await test.step("a hovered row lights up, and its ⋯ stays lit while its menu is open", async () => {

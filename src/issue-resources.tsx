@@ -4,6 +4,7 @@ import { Text } from "./text";
 import { Dialog, ConfirmDialog } from "./dialog";
 import { Field, TextInput } from "./field";
 import { Button, IconButton } from "./button";
+import { SectionDisclosure } from "./section-disclosure";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Icon } from "./icons";
 
@@ -304,25 +305,8 @@ export function IssueResources({ issue }: { issue: Issue }) {
   return (
     <section aria-label="Resources" className="issue-resources">
       <div className="-ml-1.5 flex items-center pr-2 text-fg-3">
-        <Button
-          aria-label={
-            collapsed
-              ? "Expand resources section"
-              : "Collapse resources section"
-          }
-          aria-expanded={!collapsed}
-          onClick={() => setCollapsed(!collapsed)}
-          variant="borderless"
-          size="small"
-          className="mr-auto"
-        >
-          <span
-            className={`grid size-4 place-items-center ${collapsed ? "" : "rotate-90"}`}
-          >
-            <Icon name="chevron" size={14} />
-          </span>
-          <span>Resources</span>
-        </Button>
+        <SectionDisclosure label="Resources" expanded={!collapsed} onToggle={() => setCollapsed(!collapsed)} />
+        <span className="flex-1" />
         <IconButton
           label="Add resource to issue"
           aria-expanded={!!menu}

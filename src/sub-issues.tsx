@@ -5,6 +5,7 @@ import { CountBadge } from "./count-badge";
 import { Dialog, ConfirmDialog } from "./dialog";
 import { TextInput } from "./field";
 import { Button, IconButton } from "./button";
+import { SectionDisclosure } from "./section-disclosure";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
 import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
@@ -339,18 +340,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
     >
       {!!model.total && (
         <div className="-ml-1.5 mb-2 flex items-center gap-1.5 pr-2">
-          {/* Linear's section disclosure is not a jv Button: caret 7px and label 24px in, measured for RAJ-53 (no matching QEe padding). */}
-          <button
-            aria-label={collapsed ? "Expand sub-issues section" : "Collapse sub-issues section"}
-            aria-expanded={!collapsed}
-            className="flex h-6 items-center gap-0.5 rounded-full pr-[13px] pl-1.5 text-[12px] font-medium text-fg-3 hover:bg-hover"
-            onClick={() => setCollapsed(!collapsed)}
-          >
-            <span className={`grid size-4 place-items-center ${collapsed ? "" : "rotate-90"}`}>
-              <Icon name="chevron" size={14} />
-            </span>
-            <span>Sub-issues</span>
-          </button>
+          <SectionDisclosure label="Sub-issues" expanded={!collapsed} onToggle={() => setCollapsed(!collapsed)} />
           <Text
             data-sub-progress
             className="ml-0.5 flex items-center gap-1.5"
