@@ -169,20 +169,20 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
         `(()=>{const t=document.querySelector('.app-tooltip');return [innerWidth-Math.round(t.getBoundingClientRect().right),[...t.querySelectorAll('kbd')].map(k=>k.textContent)]})()`,
       ),
     ).toEqual([8, ["⇧", "⌘", "."]]);
-    // An icon-only control keeps its accessible name while its title is parked, and gets its own markup back after.
+    // An icon button keeps its own accessible name while its title is parked, and gets its own markup back after.
     await page.hover('[title="Close (esc)"]');
     await page.waitFor(`!!document.querySelector('.app-tooltip')`, 2000);
     expect(
       await page.eval(
         `(()=>{const b=document.querySelector('[data-title="Close (esc)"]');return [b.getAttribute('aria-label'),b.hasAttribute('title')]})()`,
       ),
-    ).toEqual(["Close (esc)", false]);
+    ).toEqual(["Close", false]);
     await page.hover("#prop-status");
     expect(
       await page.eval(
-        `(()=>{const b=document.querySelector('[title="Close (esc)"]');return [b.hasAttribute('aria-label'),b.hasAttribute('data-tip-label')]})()`,
+        `(()=>{const b=document.querySelector('[title="Close (esc)"]');return [b.getAttribute('aria-label'),b.hasAttribute('data-tip-label')]})()`,
       ),
-    ).toEqual([false, false]);
+    ).toEqual(["Close", false]);
     // Project has no tooltip in Linear.
     expect(await page.eval(`document.getElementById('prop-project').hasAttribute('title')`)).toBe(
       false,

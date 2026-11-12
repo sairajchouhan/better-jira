@@ -62,6 +62,10 @@ import { InboxIssueActions } from "./inbox";
 import { descriptionSession, type DescriptionPorts } from "./description-session";
 import { shortDate } from "./due-date";
 import { BoardBreadcrumbs } from "./app-chrome";
+import { Button, IconButton } from "./button";
+import { PropertyTrigger } from "./property-trigger";
+import { LabelChip } from "./label-chip";
+import { Text } from "./text";
 const ImageViewer = lazy(() =>
   import("./image-viewer").then((module) => ({ default: module.ImageViewer })),
 );
@@ -202,6 +206,7 @@ const author = (a: any): User | null =>
 
 // --- issue view: a full page, a side panel, or the inbox's pane; App picks the frame ---
 
+// Only for FavoriteButton, which draws its own button; the header's other icon buttons are IconButton.
 const ICON_BTN =
   "grid size-7 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg";
 const SIDE =
@@ -284,29 +289,29 @@ function IssueHeader({
     <div className="issue-detail-header flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-3 text-[12px] text-fg-3">
       {children}
       <FavoriteButton id={issue.key} noun="issue" size={16} className={ICON_BTN} />
-      <button
+      <IconButton
         id="issue-options"
-        aria-label="Issue options"
+        label="Issue options"
+        variant="muted"
         aria-expanded={optionsOpen}
         onClick={() => ui.send({ type: "overlay.open", overlay: "options" })}
-        className={`${ICON_BTN} aria-expanded:bg-hover aria-expanded:text-fg`}
       >
         <Icon name="dots" />
-      </button>
+      </IconButton>
       <ReminderControl issue={issue} />
       {actions}
       <span className="flex-1" />
       <Stepper issueKey={issue.key} />
-      <button
-        title={switchTo === "side" ? "Open in side panel" : "Open as full page"}
+      <IconButton
+        label={switchTo === "side" ? "Open in side panel" : "Open as full page"}
+        variant="muted"
         onClick={() => navigate({ view: switchTo })}
-        className={ICON_BTN}
       >
         <Icon name={switchTo === "side" ? "side" : "expand"} />
-      </button>
-      <button title="Close (esc)" onClick={() => navigate({ panel: false })} className={ICON_BTN}>
+      </IconButton>
+      <IconButton label="Close" shortcut="esc" variant="muted" onClick={() => navigate({ panel: false })}>
         <Icon name="close" />
-      </button>
+      </IconButton>
     </div>
   );
 }
@@ -324,15 +329,15 @@ function IssueBody({ issue }: { issue: Issue }) {
     <div className="issue-detail-body">
       <div role="toolbar" aria-label="Copy issue" className="issue-copy-toolbar">
         {COPY_ACTIONS.map(([action, label, icon]) => (
-          <button
+          <IconButton
             key={action}
-            aria-label={label}
-            title={`${label} (${shortcutLabel(action)})`}
+            label={label}
+            shortcut={shortcutLabel(action)}
+            variant="muted"
             onClick={() => runShortcut(action)}
-            className={ICON_BTN}
           >
             <Icon name={icon} />
-          </button>
+          </IconButton>
         ))}
       </div>
       <div className="issue-detail-grid" data-properties-hidden={propertiesHidden || undefined}>
@@ -374,27 +379,24 @@ function Stepper({ issueKey }: { issueKey: string }) {
           <span className="text-fg-4"> / {flat.length}</span>
         </span>
       )}
-      <button
+      <IconButton
+        label="Next"
+        shortcut="J / ↓"
+        variant="muted"
         disabled={i < 0 || i >= flat.length - 1}
-        title="Next (J / ↓)"
         onClick={() => runShortcut("down")}
-        className={`${ICON_BTN} disabled:opacity-30`}
       >
         <Icon name="down" />
-      </button>
-      <button
-        disabled={i <= 0}
-        title="Previous (K / ↑)"
-        onClick={() => runShortcut("up")}
-        className={`${ICON_BTN} disabled:opacity-30`}
-      >
+      </IconButton>
+      <IconButton label="Previous" shortcut="K / ↑" variant="muted" disabled={i <= 0} onClick={() => runShortcut("up")}>
         <Icon name="up" />
-      </button>
+      </IconButton>
     </div>
   );
 }
 
-/** A Jira-side rename shows at once unless the title is being edited (Linear keeps a focused draft); leaving it saves only typed text. */
+/** A Jira-side rename shows at once unless the title is being edited (Linear keeps a focused draft); leaving it saves only typed text.
+ *  Not AutoResizingTextArea: the title is a borderless heading that sizes itself with `field-sizing`, not a form field. */
 function Title({ issue, className }: { issue: Issue; className: string }) {
   const ref = useRef<HTMLTextAreaElement>(null),
     start = useRef("");
@@ -474,15 +476,17 @@ function RelatedIssue({ issueKey }: { issueKey: string }) {
 }
 type PropertyOverlay =
   "status" | "assign" | "priority" | "type" | "labels" | "project" | "milestone" | "due";
-const PILL =
+/** A read-only property (Jira can't change it): the trigger's text and icon box without the button. */
+const READ_ONLY =
   "ml-px flex h-7 max-w-full items-center gap-1.5 rounded-full pr-2.5 pl-1.5 text-fg-2 [&>:first-child]:grid [&>:first-child]:size-4 [&>:first-child]:place-items-center";
-/** Linear's property pill: content-width, 28px, its icon in a 16px box 6px in. With `overlay` it opens that menu, stays
- *  highlighted while it is open (Opus review 4), and its tooltip names the action and its key; without, it is read-only. */
+/** Linear's DetailButton: with `overlay` it opens that menu, stays highlighted while it is open (Opus review 4), and its
+ *  tooltip names the action and its key; without, it is read-only text. `children` is the value or placeholder. */
 function PropertyPill({
   id,
   overlay,
   tip,
   title,
+  state = "value",
   icon,
   children,
 }: {
@@ -490,28 +494,30 @@ function PropertyPill({
   overlay?: PropertyOverlay;
   tip?: string;
   title?: string;
+  state?: "empty" | "value";
   icon: ReactNode;
   children: ReactNode;
 }) {
   const open = useStore((s) => !!overlay && s.overlay === overlay);
   if (!overlay)
     return (
-      <span id={id} title={title} className={PILL}>
+      <span id={id} title={title} className={READ_ONLY}>
         <span>{icon}</span>
-        {children}
+        <span className="truncate">{children}</span>
       </span>
     );
   return (
-    <button
+    <PropertyTrigger
       id={id}
+      state={state}
       aria-expanded={open}
       title={tip ? `${tip} (${shortcutLabel(overlay)})` : undefined}
       onClick={() => ui.send({ type: "overlay.open", overlay })}
-      className={`${PILL} text-left hover:bg-hover hover:text-fg aria-expanded:bg-hover aria-expanded:text-fg [&>svg]:shrink-0`}
+      className="ml-px"
     >
-      <span>{icon}</span>
-      {children}
-    </button>
+      <PropertyTrigger.Icon>{icon}</PropertyTrigger.Icon>
+      <PropertyTrigger.Label>{children}</PropertyTrigger.Label>
+    </PropertyTrigger>
   );
 }
 function PropertySection({ name, children }: { name: string; children: ReactNode }) {
@@ -541,12 +547,13 @@ function Properties({ issue }: { issue: Issue }) {
           tip="Change status"
           icon={status && <StatusIcon status={status} />}
         >
-          <span className="truncate">{status?.name}</span>
+          {status?.name}
         </PropertyPill>
         <PropertyPill
           id="prop-priority"
           overlay="priority"
           tip={issue.priority ? "Change priority" : "Set priority"}
+          state={issue.priority ? "value" : "empty"}
           icon={<PriorityIcon name={issue.priority} />}
         >
           {issue.priority ?? <Placeholder wide="Set priority" short="Priority" />}
@@ -555,19 +562,19 @@ function Properties({ issue }: { issue: Issue }) {
           id="prop-assignee"
           overlay="assign"
           tip="Assign to"
+          state={issue.assignee ? "value" : "empty"}
           icon={<Avatar user={issue.assignee} size={16} />}
         >
-          <span className="truncate">{issue.assignee?.name ?? "Unassigned"}</span>
+          {issue.assignee?.name ?? "Unassigned"}
         </PropertyPill>
         <PropertyPill
           id="prop-type"
           overlay="type"
           tip="Change issue type"
+          state={issue.type ? "value" : "empty"}
           icon={<TypeDot type={issue.type} />}
         >
-          <span className={`truncate ${issue.type ? "" : "text-fg-3"}`}>
-            {issue.type ?? "Issue type"}
-          </span>
+          {issue.type ?? "Issue type"}
         </PropertyPill>
         {issue.due && (
           <PropertyPill
@@ -576,7 +583,7 @@ function Properties({ issue }: { issue: Issue }) {
             tip="Change due date"
             icon={<Icon name="calendar" />}
           >
-            <span>{shortDate(issue.due, undefined, true)}</span>
+            {shortDate(issue.due, undefined, true)}
           </PropertyPill>
         )}
       </PropertySection>
@@ -585,19 +592,17 @@ function Properties({ issue }: { issue: Issue }) {
         {issue.labels.length ? (
           <div className="flex min-h-7 max-w-full flex-wrap gap-1.5 pt-0.5 pl-[1.5px]">
             {issue.labels.map((label) => (
-              <button
+              <LabelChip
                 key={label}
+                as="button"
                 data-label-chip
                 onClick={() => ui.send({ type: "overlay.open", overlay: "labels" })}
-                className="label-chip"
               >
-                <span
-                  className="size-[9px] shrink-0 rounded-full"
-                  style={{ background: hue(label) }}
-                />
-                <span className="truncate">{label}</span>
-              </button>
+                <LabelChip.Dot color={hue(label)!} />
+                <LabelChip.Text>{label}</LabelChip.Text>
+              </LabelChip>
             ))}
+            {/* Not IconButton: Linear's add button matches the 25px label pill; IconButton is 24 or 28. */}
             <button
               id="prop-labels"
               aria-label="Add label"
@@ -612,21 +617,23 @@ function Properties({ issue }: { issue: Issue }) {
             id="prop-labels"
             overlay="labels"
             tip="Add labels"
+            state="empty"
             icon={<Icon name="label" />}
           >
-            <span className="truncate text-fg-3">
-              <Placeholder wide="Add label" short="Labels" />
-            </span>
+            <Placeholder wide="Add label" short="Labels" />
           </PropertyPill>
         )}
       </PropertySection>
       <PropertySection name="Project">
         {/* Jira can't move an issue between projects, so with Jira writes an issue already in Jira shows its project read-only (R2-issue-fields-D8). */}
         {!writable || isLocalIssue(issue.key) ? (
-          <PropertyPill id="prop-project" overlay="project" icon={<Icon name="layers" />}>
-            <span className="truncate">
-              {issue.project?.name ?? <Placeholder wide="Add to project" short="Project" />}
-            </span>
+          <PropertyPill
+            id="prop-project"
+            overlay="project"
+            state={issue.project ? "value" : "empty"}
+            icon={<Icon name="layers" />}
+          >
+            {issue.project?.name ?? <Placeholder wide="Add to project" short="Project" />}
           </PropertyPill>
         ) : (
           <PropertyPill
@@ -634,12 +641,12 @@ function Properties({ issue }: { issue: Issue }) {
             title="Jira can't move an issue to another project"
             icon={<Icon name="layers" />}
           >
-            <span className="truncate">{issue.project?.name ?? "No project"}</span>
+            {issue.project?.name ?? "No project"}
           </PropertyPill>
         )}
         {issue.milestones?.length ? (
           <PropertyPill id="prop-milestone" overlay="milestone" icon={<Icon name="calendar" />}>
-            <span className="truncate">{issue.milestones.map((m) => m.name).join(", ")}</span>
+            {issue.milestones.map((m) => m.name).join(", ")}
           </PropertyPill>
         ) : null}
       </PropertySection>
@@ -655,8 +662,11 @@ function Properties({ issue }: { issue: Issue }) {
                 className="group/relation flex max-w-full items-center gap-2"
               >
                 <RelatedIssue issueKey={r.key} />
-                <button
-                  aria-label="Remove relation"
+                <IconButton
+                  label="Remove relation"
+                  variant="borderless"
+                  size="small"
+                  className="opacity-0 group-hover/relation:opacity-100 focus-visible:opacity-100"
                   onClick={() => {
                     actions.relate(issue.key, r.key, kind, true);
                     // Focus stays in the issue, as after removing a resource: the next relation, else Issue options.
@@ -667,10 +677,9 @@ function Properties({ issue }: { issue: Issue }) {
                       )?.focus(),
                     );
                   }}
-                  className="relation-remove"
                 >
-                  <Icon name="close" size={14} />
-                </button>
+                  <Icon name="close" />
+                </IconButton>
               </div>
             ))}
           </PropertySection>
@@ -788,16 +797,13 @@ function Description({ issue }: { issue: Issue }) {
           className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-line-2 bg-card px-3 py-2 text-[13px]"
         >
           <span className="mr-auto">{message}</span>
-          <button className="rounded px-2 py-0.5 hover:bg-hover" onClick={() => resolve(false)}>
+          <Button variant="secondary" size="small" onClick={() => resolve(false)}>
             Use Jira's version
-          </button>
+          </Button>
           {held && (
-            <button
-              className="rounded bg-accent px-2 py-0.5 text-white"
-              onClick={() => resolve(true)}
-            >
+            <Button size="small" onClick={() => resolve(true)}>
               Keep mine
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -806,9 +812,9 @@ function Description({ issue }: { issue: Issue }) {
           {error ? (
             <>
               {error}.{" "}
-              <button onClick={() => void loadFull(issue.key)} className="text-accent">
+              <Button variant="link" size="small" onClick={() => void loadFull(issue.key)}>
                 Retry
-              </button>
+              </Button>
             </>
           ) : (
             "Loading…"
@@ -999,15 +1005,19 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
         </Suspense>
       )}
       <div className="mb-[14px] flex h-8 items-center gap-3">
-        <h3 className="mr-auto text-[15px] leading-[23px] font-semibold text-fg">Activity</h3>
-        <button
+        <Text as="h3" variant="regularPlus" className="mr-auto">
+          Activity
+        </Text>
+        <Button
+          variant="muted"
+          size="medium"
           aria-label={subscribed ? "Unsubscribe from issue" : "Subscribe to issue"}
           title={`${subscribed ? "Unsubscribe" : "Subscribe"} (${shortcutLabel("subscribe")})`}
           onClick={() => runShortcut("subscribe")}
-          className="text-[13px] text-fg-3 hover:text-fg"
         >
           {subscribed ? "Unsubscribe" : "Subscribe"}
-        </button>
+        </Button>
+        {/* Not IconButton: an avatar stack (Linear's avatar group), not one icon. */}
         <button
           ref={subscribersRef}
           id="issue-subscribers"
