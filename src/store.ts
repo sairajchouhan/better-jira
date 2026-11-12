@@ -2033,6 +2033,16 @@ export function toggleFavorite(id: string) {
     favorites: favorites.includes(id) ? favorites.filter((v) => v !== id) : [...favorites, id],
   });
 }
+/** A favorite dropped on another takes its place in the sidebar (BJ-75), against the stored list like toggleFavorite. */
+export function moveFavorite(id: string, target: string) {
+  const favorites = readFavorites(),
+    from = favorites.indexOf(id),
+    to = favorites.indexOf(target);
+  if (from < 0 || to < 0 || from === to) return;
+  favorites.splice(from, 1);
+  favorites.splice(to, 0, id);
+  set({ favorites });
+}
 if (typeof addEventListener === "function")
   addEventListener("storage", (event: StorageEvent) => {
     if (event.key === preferenceKey("better-jira:favorites:v1"))

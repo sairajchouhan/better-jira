@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Icon, type IconName } from "./icons";
 import { Avatar } from "./avatar";
-import { ME, navigate, useStore, type Issue } from "./store";
+import { ME, moveFavorite, navigate, toggleFavorite, useStore, type Issue } from "./store";
+import { ContextMenu } from "./action-menu";
 import { findIssueDocument } from "./issue-resource";
 import { createViewDraft, openSavedView, useActiveView, useSavedViews, type SavedView } from "./saved-views";
 import { FavoriteButton } from "./favorite-button";
@@ -64,13 +65,15 @@ export function ViewFavorites() {
     const issue = issues.get(id), board = id.startsWith("board:") ? boards.find(b => b.id === Number(id.split(":")[1])) : undefined;
     if (!view && !document && !issue && !board) return [];
     // Sidebar navigation rows use selected-page geometry, outside the Button variants.
-    const button = <button key={id} aria-current={view?.id === active?.id && !!view ? "page" : undefined} onClick={() => {
+    // Drag a favorite onto another to reorder (BJ-75).
+    const button = <button key={id} draggable data-favorite={id} onDragStart={e => e.dataTransfer.setData("text/plain", id)} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); moveFavorite(e.dataTransfer.getData("text/plain"), id); }} aria-current={view?.id === active?.id && !!view ? "page" : undefined} onClick={() => {
       if (view) openSavedView(view);
       else if (document) navigate({ board: document.issue.board, selected: document.issue.key, panel: true, document: document.resource.id });
       else if (issue) navigate({ board: issue.board, selected: issue.key, panel: true });
       else if (board) navigate({ board: board.id, panel: false, selected: null });
     }} className={`flex h-7 w-full items-center gap-2 rounded-lg px-2 text-left ${view && active?.id === view.id ? "bg-sel text-fg" : "text-fg-2 hover:bg-hover"}`}>{view ? <SavedViewIcon view={view} /> : document ? <Icon name="file" /> : <span className="text-fg-3">☆</span>}<span className="truncate">{view?.name ?? (document ? document.resource.title || "New document" : issue ? `${issue.key} ${issue.summary}` : board?.name)}</span></button>;
-    return [view ? <ViewContextMenu key={id} view={view}>{button}</ViewContextMenu> : button];
+    // A view's own menu has Unfavorite; the other rows get Remove from favorites (BJ-75).
+    return [view ? <ViewContextMenu key={id} view={view}>{button}</ViewContextMenu> : <ContextMenu key={id} label="Favorite options" entries={() => [{ name: "Remove from favorites", icon: "starred", run: () => toggleFavorite(id) }]}>{button}</ContextMenu>];
   });
   return rows.length ? <div className="mt-5"><Text as="div" variant="mini" color="muted" className="mb-1 px-2">Favorites</Text>{rows}</div> : null;
 }
