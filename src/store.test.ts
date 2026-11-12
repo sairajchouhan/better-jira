@@ -1015,7 +1015,8 @@ const withFetch = async (respond: (url: string, init?: RequestInit) => unknown, 
 };
 
 test("BJ-128: Save to this view refuses an overlay the saved base excludes", async () => {
-  const { get, set, openSavedView, saveOverlayToView, setOverlay } = await import("./store");
+  const { get, set, openSavedView, setOverlay } = await import("./store");
+  const { saveOverlayToView } = await import("./saved-views");
   const view = await viewFixture();
   set({ savedViews: [view] });
   openSavedView(view);
@@ -1030,7 +1031,8 @@ test("BJ-128: Save to this view refuses an overlay the saved base excludes", asy
 });
 
 test("BJ-132: a new custom view starts as a list with details open; a tab keeps the board layout", async () => {
-  const { get, set, navigate, createViewDraft, createSavedView, openSavedView } = await import("./store");
+  const { get, set, navigate, openSavedView } = await import("./store");
+  const { createViewDraft, createSavedView } = await import("./saved-views");
   const { setDisplay } = await import("./view-settings");
   navigate({ board: 1 });
   setDisplay(1, { layout: "board" });
@@ -1070,7 +1072,8 @@ test("BJ-142: a custom view remembers its details panel; boards keep their own",
 });
 
 test("BJ-142: deleting the active view lands on the board's All issues", async () => {
-  const { get, set, navigate, openSavedView, deleteSavedView } = await import("./store");
+  const { get, set, navigate, openSavedView } = await import("./store");
+  const { deleteSavedView } = await import("./saved-views");
   const { setScope, viewSettings } = await import("./view-settings");
   const view = await viewFixture({ id: "doomed", scope: "active" as const });
   set({ savedViews: [view] });
@@ -1085,7 +1088,8 @@ test("BJ-142: deleting the active view lands on the board's All issues", async (
 });
 
 test("BJ-133: Cancel on a duplicate draft returns to the source view", async () => {
-  const { get, set, openSavedView, duplicateViewDraft, beginViewEditor, discardViewEditor } = await import("./store");
+  const { get, set, openSavedView, beginViewEditor, discardViewEditor } = await import("./store");
+  const { duplicateViewDraft } = await import("./saved-views");
   const view = await viewFixture();
   set({ savedViews: [view] });
   openSavedView(view);
@@ -1097,7 +1101,8 @@ test("BJ-133: Cancel on a duplicate draft returns to the source view", async () 
 });
 
 test("BJ-137: the view address is /view/<slug>-<id> and follows a rename", async () => {
-  const { set, openSavedView, updateSavedView } = await import("./store");
+  const { set, openSavedView } = await import("./store");
+  const { updateSavedView } = await import("./saved-views");
   const view = await viewFixture({ id: "8f1c", name: "My Triage!" });
   set({ savedViews: [view] });
   openSavedView(view);
@@ -1141,7 +1146,8 @@ test("view settings: clear on a saved view keeps its base filter", async () => {
 });
 
 test("view settings: an edit in the view editor goes to the draft", async () => {
-  const { get, set, navigate, beginViewEditor, createViewDraft, discardViewEditor } = await import("./store");
+  const { get, set, navigate, beginViewEditor, discardViewEditor } = await import("./store");
+  const { createViewDraft } = await import("./saved-views");
   const { setRule, setDisplay, setScope, clearFilters, viewSettings } = await import("./view-settings");
   navigate({ board: 1 });
   set({ savedViews: [] });
@@ -1197,7 +1203,7 @@ const navigationFixture = async () => {
       boardOpenIn: `${s.preferences[1]?.display.openIn}/${s.preferences[2]?.display.openIn}`,
     };
   };
-  return { ...store, trace };
+  return { ...store, ...(await import("./saved-views")), trace };
 };
 const savedView = async (patch: Record<string, unknown>) => {
   const v = await viewFixture(patch);

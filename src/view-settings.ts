@@ -7,7 +7,9 @@ import { isMyIssues } from "./navigation";
  * While the view editor is open, everything goes to the editor's draft. Any other board's settings are its own
  * preferences.
  */
-import { get, navigate, set, setOverlay, setViewDraft, updateSavedView, useStore } from "./store";
+import { get, navigate, set, setOverlay, setViewDraft, useStore } from "./store";
+import { updateSavedView } from "./saved-views";
+import { saveDefaults } from "./browser-preferences";
 import {
   defaultDisplay,
   defaultPreferences,
@@ -110,3 +112,15 @@ export const toggleCollapsed = (board: number, groups: string[]) =>
       ? ids.filter((id) => !groups.includes(id))
       : [...new Set([...ids, ...groups])],
   );
+/** "Save as default": the board's display becomes its default in this browser. Not while a view is open. */
+export async function saveDefault(board: number) {
+  if (get().activeViewId) return;
+  const display = viewSettings(board).display;
+  try {
+    const defaults = { ...get().defaults, [board]: structuredClone(display) };
+    saveDefaults(defaults);
+    set({ defaults, perf: "Saved your default in this browser" });
+  } catch {
+    set({ perf: "Could not save your default in this browser" });
+  }
+}

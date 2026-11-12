@@ -1,6 +1,7 @@
 import { IconButton } from "./button";
 import { Icon } from "./icons";
-import { toggleFavorite, useStore } from "./store";
+import { useStore } from "./store";
+import { toggleFavorite } from "./favorites";
 
 /** The star that favorites a board, view, issue or document: an IconButton switch that reads and toggles `id` in favorites itself.
  *  `noun` names the thing in the label ("Add issue to favorites"); `className` places it. The gold "on" colour is the star's own. */

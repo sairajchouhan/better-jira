@@ -1,8 +1,16 @@
 import { toasts } from "./toast-queue";
 import { latestNotification, rekeyNotification, showNotification, NOTIFICATION_ID } from "./app-notifications";
-import { savedViewClient } from "./saved-view-client";
 import { assignableUsers, knownPeople, statusById, statuses } from "./board-catalog";
-import { effectiveSettings, setScope, viewSettings } from "./view-settings";
+import { setScope, viewSettings } from "./view-settings";
+import { liveFavorites } from "./favorites";
+import {
+  createViewDraft,
+  editViewDraft,
+  loadSavedViews,
+  refreshSavedViews,
+  updateSavedView,
+  viewError,
+} from "./saved-views";
 import { useMemo, useSyncExternalStore } from "react";
 import { adfToText } from "./adf";
 import {
@@ -76,11 +84,8 @@ import {
   savedOpenIn,
   savedSidebarHidden,
   savedViewPreferences,
-  savedViewsKey,
-  saveDefaults,
   scopePreferences,
   viewDetailsOpen,
-  onFavoritesChange,
 } from "./browser-preferences";
 export type User = { id: string; name: string; avatar?: string };
 export type Issue = {
@@ -234,8 +239,6 @@ import {
   type ViewDraft,
   emptyOverlay,
   mergeFilters,
-  canMergeOverlay,
-  MERGE_CONFLICT,
 } from "./saved-view-model";
 
 export const ME: User = { id: "", name: "Me" };
@@ -673,18 +676,6 @@ const fetchJson = <T>(path: string, staleTime = 0) =>
 if (typeof window !== "undefined")
   Object.assign(window, { machines: { ui, app, storage }, queryClient, loadFull });
 
-export async function saveDefault(board: number) {
-  if (state.activeViewId) return;
-  const display = viewSettings(board).display;
-  try {
-    const defaults = { ...state.defaults, [board]: structuredClone(display) };
-    saveDefaults(defaults);
-    set({ defaults, perf: "Saved your default in this browser" });
-  } catch {
-    set({ perf: "Could not save your default in this browser" });
-  }
-}
-
 const settled = (s: ReturnType<typeof app.getSnapshot>) =>
   s.matches("ready") || s.matches("failed");
 export async function load() {
@@ -711,7 +702,7 @@ async function loadApplication() {
   const [boards, remote, savedViews] = await Promise.all([
     fetchJson<Board[]>("/api/boards"),
     fetchJson<Issue[]>("/api/issues"),
-    viewClient.load(true),
+    loadSavedViews(),
   ]);
   if (!boards.length)
     throw new Error("The Jira mirror is still syncing your boards. Retry in a moment.");
@@ -1963,92 +1954,6 @@ export function beginCreate(draft: IssueDraft = {}): boolean {
   });
   return true;
 }
-/** Toggles against the stored list, so another tab's favorites aren't overwritten (R2-issue-fields-D1). */
-export function toggleFavorite(id: string) {
-  const favorites = savedFavorites();
-  set({
-    favorites: favorites.includes(id) ? favorites.filter((v) => v !== id) : [...favorites, id],
-  });
-}
-/** A favorite dropped on another takes its place in the sidebar (BJ-75), against the stored list like toggleFavorite. */
-export function moveFavorite(id: string, target: string) {
-  const favorites = savedFavorites(),
-    from = favorites.indexOf(id),
-    to = favorites.indexOf(target);
-  if (from < 0 || to < 0 || from === to) return;
-  favorites.splice(from, 1);
-  favorites.splice(to, 0, id);
-  set({ favorites });
-}
-onFavoritesChange(() => set({ favorites: savedFavorites() }));
-const viewError = (e: unknown) =>
-  set({ perf: e instanceof Error ? e.message : "Could not save view" });
-const viewClient = savedViewClient(
-  { read: () => state.savedViews, write: (savedViews) => set({ savedViews }) },
-  savedViewsKey,
-  {
-    getItem: (key) => localStorage.getItem(key),
-    setItem: (key, value) => localStorage.setItem(key, value),
-  },
-  (input, init) => fetch(input, init),
-);
-const liveFavorites = (savedViews: SavedView[]) =>
-  savedFavorites().filter((id) => !id.startsWith("view:") || savedViews.some((v) => `view:${v.id}` === id));
-export async function refreshSavedViews() {
-  const savedViews = await viewClient.refresh();
-  if (!savedViews) return;
-  set({ savedViews, favorites: liveFavorites(savedViews) });
-  if (state.activeViewId && !savedViews.some((v) => v.id === state.activeViewId))
-    navigate({ board: state.board });
-}
-export function createViewDraft(
-  kind: SavedView["kind"] = "custom",
-  board = state.board,
-): ViewDraft {
-  const p = effectiveSettings(board);
-  return structuredClone({
-    board,
-    kind,
-    name: "",
-    description: "",
-    icon: "custom-view", // Linear's new-view default (#CustomView)
-    color: "gray",
-    filters: p.filters,
-    // Linear: a new custom view starts as a list with its details open; a tab keeps the board's layout.
-    display: kind === "custom" ? { ...p.display, layout: "list" } : p.display,
-    scope: p.scope,
-    mine: state.mine,
-  });
-}
-export function editViewDraft(id: string): ViewDraft {
-  const v = state.savedViews.find((v) => v.id === id);
-  if (!v) throw new Error("View not found");
-  const { createdAt: _created, updatedAt: _updated, ...draft } = structuredClone(v);
-  return draft;
-}
-export function duplicateViewDraft(id: string): ViewDraft {
-  const { id: _id, ...draft } = editViewDraft(id);
-  return { ...draft, name: "", description: "", sourceId: id };
-}
-export async function createSavedView(draft: ViewDraft): Promise<string> {
-  const view = await viewClient.create(draft);
-  if (view.kind === "custom") rememberViewDetails(view.id, true);
-  set({ savedViews: [...state.savedViews.filter((v) => v.id !== view.id), view] });
-  return view.id;
-}
-export const updateSavedView = viewClient.update;
-export async function saveViewDraft(draft: ViewDraft): Promise<string> {
-  return draft.id ? updateSavedView(draft.id, draft) : createSavedView(draft);
-}
-export async function deleteSavedView(id: string) {
-  await viewClient.remove(id);
-  rememberViewDetails(id, false);
-  if (state.activeViewId === id) openAllIssues(state.board);
-  set({
-    savedViews: state.savedViews.filter((v) => v.id !== id),
-    favorites: savedFavorites().filter((v) => v !== `view:${id}`),
-  });
-}
 /** The board's Issues › All. Leaves any view first, so its scope and details stay untouched. */
 export function openAllIssues(board: number) {
   navigate({ board, selected: null, panel: false });
@@ -2061,15 +1966,6 @@ export function setOverlay(filters: State["overlayFilters"]) {
   go({ type: "filters", filters });
 }
 export const clearOverlay = () => setOverlay(emptyOverlay());
-export async function saveOverlayToView() {
-  const v = state.savedViews.find((v) => v.id === state.activeViewId);
-  if (!v) return;
-  if (!canMergeOverlay(v.filters, state.overlayFilters)) throw new Error(MERGE_CONFLICT);
-  await updateSavedView(v.id, {
-    filters: mergeFilters(v.filters, state.overlayFilters),
-  });
-  clearOverlay();
-}
 export function openSavedView(view: SavedView | string) {
   const v = typeof view === "string" ? state.savedViews.find((v) => v.id === view) : view;
   if (!v) return;

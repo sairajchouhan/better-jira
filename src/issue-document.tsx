@@ -17,20 +17,8 @@ import { Adf } from "./adf";
 import { statusById } from "./board-catalog";
 import { adfToMarkdown } from "./issue-copy";
 import { normalizeDocument, type AdfDocument } from "./document";
-import {
-  actions,
-  addIssueFiles,
-  flushLocalChanges,
-  get,
-  ME,
-  navigate,
-  set,
-  toggleFavorite,
-  useStore,
-  usePeople,
-  type Issue,
-  type User,
-} from "./store";
+import { actions, addIssueFiles, flushLocalChanges, get, ME, navigate, set, useStore, usePeople, type Issue, type User } from "./store";
+import { toggleFavorite } from "./favorites";
 import type { DocumentRevision, IssueResource } from "./issue-resource";
 import { documentURL } from "./issue-resources";
 import { ActionMenu, type ActionEntry } from "./action-menu";

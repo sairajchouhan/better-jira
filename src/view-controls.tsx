@@ -29,15 +29,8 @@ import { LoadingState } from "./empty-state";
 import { hotkeyOf } from "./shortcuts";
 import type { Keys } from "./keycap";
 import { shortDate } from "./due-date";
-import {
-  ME,
-  saveDefault,
-  timed,
-  ui,
-  useStore,
-  type Issue,
-  type Board,
-} from "./store";
+import { ME, timed, ui, useStore, type Issue, type Board } from "./store";
+import { saveDefault } from "./view-settings";
 import {
   defaultDisplay,
   defaultPreferences,

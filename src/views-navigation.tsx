@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Icon, type IconName } from "./icons";
 import { Avatar } from "./avatar";
-import { ME, moveFavorite, navigate, toggleFavorite, useStore, type Issue } from "./store";
+import { ME, navigate, useStore, type Issue } from "./store";
+import { moveFavorite, toggleFavorite } from "./favorites";
 import { ContextMenu } from "./action-menu";
 import { SectionDisclosure } from "./section-disclosure";
 import { findIssueDocument } from "./issue-resource";
