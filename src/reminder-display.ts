@@ -35,3 +35,28 @@ export function reminderPresets(reference = new Date()) {
     .sort((a, b) => +a.date - +b.date)
     .map(({ label, date }) => ({ label, at: date.toISOString() }));
 }
+
+type Reminder = { at: string; delivered?: boolean } | null | undefined;
+type Reminded = {
+  key: string;
+  reminder?: Reminder;
+  resources?: readonly { id: string; reminder?: Reminder }[];
+};
+let last: { issues: unknown; next: string } | undefined;
+/** The undelivered issue or document reminder due first, as "at\nkey\ndocument" (a primitive, so a store selector only
+ *  changes when the next reminder does). Computed once per `issues` map. */
+export function nextReminder(issues: ReadonlyMap<string, Reminded>): string {
+  if (last?.issues === issues) return last.next;
+  let next: { at: string; key: string; document: string } | undefined;
+  const consider = (reminder: Reminder, key: string, document = "") => {
+    if (reminder && !reminder.delivered && (!next || Date.parse(reminder.at) < Date.parse(next.at)))
+      next = { at: reminder.at, key, document };
+  };
+  for (const issue of issues.values()) {
+    consider(issue.reminder, issue.key);
+    for (const resource of issue.resources ?? [])
+      consider(resource.reminder, issue.key, resource.id);
+  }
+  last = { issues, next: next ? `${next.at}\n${next.key}\n${next.document}` : "" };
+  return last.next;
+}

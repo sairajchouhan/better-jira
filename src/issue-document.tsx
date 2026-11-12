@@ -29,7 +29,7 @@ import { documentURL } from "./issue-resources";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { useCommand } from "./commands";
 import { emojiOptions } from "./reactions";
-import { reminderPresets, reminderTime } from "./reminder-display";
+import { ReminderMenu, reminderEntries } from "./reminders";
 const BUTTON = "rounded px-2 py-1.5 text-[13px] text-fg-2 hover:bg-hover";
 type Draft = { title: string; body: AdfDocument };
 export function IssueDocument({ issue, id }: { issue: Issue; id: string }) {
@@ -363,15 +363,7 @@ function DocumentHeader() {
     a.click();
     setTimeout(() => URL.revokeObjectURL(href), 60000);
   };
-  const reminders: ActionEntry[] = [
-    ...reminderPresets().map((preset) => ({
-      name: preset.label,
-      icon: "clock" as const,
-      shortcut: reminderTime(preset.at),
-      run: () => actions.remind(issue.key, preset.at, resource.id),
-    })),
-    { name: "Custom…", icon: "calendar", run: () => setReminding("custom") },
-  ];
+  const remind = (at: string) => actions.remind(issue.key, at, resource.id);
   const entries: ActionEntry[] = [
     { name: "Duplicate", icon: "copy", run: () => void duplicate() },
     { name: "Rename…", icon: "pencil", shortcut: "⇧R", run: rename },
@@ -405,7 +397,12 @@ function DocumentHeader() {
         { name: "Download as PDF", icon: "download", run: () => window.print() },
       ],
     },
-    { name: "Remind me", icon: "clock", shortcut: "⇧H", children: reminders },
+    {
+      name: "Remind me",
+      icon: "clock",
+      shortcut: "⇧H",
+      children: reminderEntries(remind, () => setReminding("custom")),
+    },
     {
       name: resource.showAuthors ? "Hide author names" : "Show author names",
       icon: "user",
@@ -514,48 +511,13 @@ function DocumentHeader() {
           close={() => setOptions(null)}
         />
       )}
-      {reminding === "presets" && (
-        <ActionMenu
+      {reminding && (
+        <ReminderMenu
           anchor={root.current?.querySelector<HTMLElement>('[aria-label="Document options"]')}
-          entries={reminders}
-          label="Remind me"
-          close={() => setReminding((r) => (r === "presets" ? null : r))}
-        />
-      )}
-      {reminding === "custom" && (
-        <MenuSurface
-          label="Remind me"
-          anchor={
-            root.current?.querySelector<HTMLElement>('[aria-label="Document options"]') ?? undefined
-          }
+          startCustom={reminding === "custom"}
+          onPick={remind}
           close={() => setReminding(null)}
-          width={320}
-        >
-          <form
-            className="p-2 text-[13px]"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const value = new FormData(event.currentTarget).get("at");
-              if (typeof value === "string" && Date.parse(value) > Date.now()) {
-                actions.remind(issue.key, new Date(value).toISOString(), resource.id);
-                setReminding(null);
-              }
-            }}
-          >
-            <label className="block">
-              Custom reminder
-              <input
-                autoFocus
-                name="at"
-                aria-label="Custom reminder time"
-                type="datetime-local"
-                required
-                className="mt-2 w-full rounded border border-line-2 bg-card p-2"
-              />
-            </label>
-            <button className="mt-2 rounded bg-accent px-3 py-1 text-white">Set reminder</button>
-          </form>
-        </MenuSurface>
+        />
       )}
       {metadata && (
         <MenuSurface

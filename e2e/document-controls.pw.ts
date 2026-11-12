@@ -703,7 +703,7 @@ test("document history, narrow and measured layouts, the hidden board and remind
     await create(page);
     await page.eval("document.activeElement?.blur()");
     await page.key("h", "shift");
-    await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Find remind me'`);
+    await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Reminder time'`);
     await page.type("custom");
     await page.key("Enter");
     await page.waitFor(

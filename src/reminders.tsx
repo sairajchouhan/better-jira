@@ -1,8 +1,8 @@
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 import { useEffect, useRef, useState } from "react";
-import { reminderDistance, reminderTime } from "./reminder-display";
-import { ActionMenu } from "./action-menu";
+import { nextReminder, reminderDistance, reminderPresets, reminderTime } from "./reminder-display";
+import { ActionMenu, type ActionEntry } from "./action-menu";
 import { Icon } from "./icons";
 import { Menu } from "./menu";
 import { MenuSurface } from "./menu-surface";
@@ -11,27 +11,28 @@ import { kept, useCommand } from "./commands";
 
 type Preset = { label: string; at: string };
 const BUTTON = "rounded-md px-2 py-1.5 text-[13px] text-fg-2 hover:bg-hover disabled:opacity-40";
-export function ReminderPicker({ issue }: { issue: Issue }) {
+
+/** Linear's one "Remind me" menu, for an issue or a document: a typed time ("4 pm", "in 2 days"), a preset, or a custom date
+ *  and time. The typed-time parser (chrono) loads with the menu. `onPick` gets a future ISO time; the menu then closes. */
+export function ReminderMenu({
+  anchor,
+  anchorId,
+  startCustom = false,
+  onPick,
+  close,
+}: {
+  anchor?: HTMLElement | null;
+  anchorId?: string;
+  startCustom?: boolean;
+  onPick: (at: string) => void;
+  close: () => void;
+}) {
   const reference = useRef(new Date()),
     [query, setQuery] = useState(""),
     [presets, setPresets] = useState<Preset[]>([]),
     [parsed, setParsed] = useState<string | null>(null),
-    [custom, setCustom] = useState(() => kept("issue-options-start") === "reminder");
-  useCommand("issue-options-start", (start) => {
-    if (start !== "reminder") return;
-    setCustom(true);
-    return true;
-  });
+    [custom, setCustom] = useState(startCustom);
   const keyboardChoice = useRef(false);
-  const close = () => {
-    ui.send({ type: "overlay.close" });
-    requestAnimationFrame(() =>
-      (
-        document.querySelector<HTMLElement>('[aria-label^="Reminder scheduled"]') ??
-        document.getElementById("issue-options")
-      )?.focus(),
-    );
-  };
   useEffect(() => {
     let active = true;
     void import("./reminder-date").then(({ reminderPresets, parseReminder }) => {
@@ -48,14 +49,14 @@ export function ReminderPicker({ issue }: { issue: Issue }) {
       set({ perf: "Choose a future reminder time" });
       return;
     }
-    actions.remind(issue.key, at);
+    onPick(at);
     close();
   };
   const matches = presets.filter(
     (p) => !query || p.label.toLowerCase().includes(query.toLowerCase()),
   );
   return (
-    <MenuSurface label="Remind me" anchorId="issue-options" close={close} fit>
+    <MenuSurface label="Remind me" anchorId={anchorId} anchor={anchor} close={close} fit>
       {custom ? (
         <form
           className="w-[320px]"
@@ -148,6 +149,42 @@ export function ReminderPicker({ issue }: { issue: Issue }) {
     </MenuSurface>
   );
 }
+/** The "Remind me" submenu rows of an options menu: the presets, then Custom…, which opens the ReminderMenu's custom step. */
+export const reminderEntries = (pick: (at: string) => void, custom: () => void): ActionEntry[] => [
+  ...reminderPresets().map((preset) => ({
+    name: preset.label,
+    icon: "clock" as const,
+    shortcut: reminderTime(preset.at),
+    run: () => pick(preset.at),
+  })),
+  { name: "Custom…", icon: "calendar", run: custom },
+];
+/** The open issue's reminder menu (overlay "reminder"), under Issue options; Issue options › Remind me › Custom… opens it at the custom step. */
+export function ReminderPicker({ issue }: { issue: Issue }) {
+  const [custom, setCustom] = useState(() => kept("issue-options-start") === "reminder");
+  useCommand("issue-options-start", (start) => {
+    if (start !== "reminder") return;
+    setCustom(true);
+    return true;
+  });
+  return (
+    <ReminderMenu
+      key={String(custom)}
+      anchorId="issue-options"
+      startCustom={custom}
+      onPick={(at) => actions.remind(issue.key, at)}
+      close={() => {
+        ui.send({ type: "overlay.close" });
+        requestAnimationFrame(() =>
+          (
+            document.querySelector<HTMLElement>('[aria-label^="Reminder scheduled"]') ??
+            document.getElementById("issue-options")
+          )?.focus(),
+        );
+      }}
+    />
+  );
+}
 export function ReminderControl({ issue }: { issue: Issue }) {
   const clock = useStore((s) => s.clock);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -190,39 +227,28 @@ export function ReminderControl({ issue }: { issue: Issue }) {
     </>
   );
 }
-/** A single nearest-deadline timer, including overdue reminders restored after a reload. */
+/** A single nearest-deadline timer, including overdue reminders restored after a reload. It re-arms only when the next
+ *  reminder changes, not on every poll. */
 export function ReminderDelivery() {
-  const issues = useStore((s) => s.issues),
+  const next = useStore((s) => nextReminder(s.issues)),
     toast = useStore((s) => s.toast),
     canEdit = useStore((s) => s.canEdit),
     clock = useStore((s) => s.clock);
   useEffect(() => {
-    if (toast || !canEdit) return;
-    const pending = [...issues.values()]
-      .flatMap((i) => [
-        ...(i.reminder && !i.reminder.delivered
-          ? [{ at: i.reminder.at, key: i.key, document: undefined as string | undefined }]
-          : []),
-        ...(i.resources ?? []).flatMap((r) =>
-          r.reminder && !r.reminder.delivered
-            ? [{ at: r.reminder.at, key: i.key, document: r.id }]
-            : [],
-        ),
-      ])
-      .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
-    const next = pending[0];
-    if (!next) return;
+    if (toast || !canEdit || !next) return;
+    const [at = "", key = "", document] = next.split("\n");
     let timer: ReturnType<typeof setTimeout>;
     const check = () => {
-      const remaining = Date.parse(next.at) - Date.now();
+      const remaining = Date.parse(at) - Date.now();
       timer = setTimeout(
-        () => (remaining > 2147483647 ? check() : actions.deliverReminder(next.key, next.document)),
+        () =>
+          remaining > 2147483647 ? check() : actions.deliverReminder(key, document || undefined),
         Math.max(0, Math.min(2147483647, remaining)),
       );
     };
     check();
     return () => clearTimeout(timer);
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Clock changes reschedule reminders after the tab wakes.
-  }, [issues, toast, canEdit, clock]);
+  }, [next, toast, canEdit, clock]);
   return null;
 }
