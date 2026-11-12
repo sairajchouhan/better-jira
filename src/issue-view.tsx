@@ -67,7 +67,7 @@ import { descriptionSession, type DescriptionPorts } from "./description-session
 import { shortDate } from "./due-date";
 import { BoardBreadcrumbs } from "./app-chrome";
 import { Button, IconButton } from "./button";
-import { ActionMenu, type ActionEntry } from "./action-menu";
+import { ContextMenu, type ActionEntry } from "./action-menu";
 import { copyIssue } from "./issue-copy";
 import { PropertyTrigger } from "./property-trigger";
 import { LabelChip } from "./label-chip";
@@ -462,7 +462,6 @@ function RelationRow({
   relatedKey: string;
   kind: (typeof RELATION_SECTIONS)[number][0];
 }) {
-  const [point, setPoint] = useState<{ x: number; y: number } | null>(null);
   const remove = () => {
     actions.relate(issueKey, relatedKey, kind, true);
     // Focus stays in the issue, as after removing a resource: the next relation, else Issue options.
@@ -487,37 +486,32 @@ function RelationRow({
       { name: "Remove relation", icon: "close", run: remove },
     ];
     if (related)
-      items.push({ name: "Copy link", icon: "link", divider: true, run: () => void copyIssue("URL", related) });
+      items.push({
+        name: "Copy link",
+        icon: "link",
+        divider: true,
+        run: () => void copyIssue("URL", related),
+      });
     return items;
   };
   return (
-    <div
-      data-relation={`${kind}:${relatedKey}`}
-      className="group/relation flex max-w-full items-center gap-2"
-      onContextMenu={(event) => {
-        event.preventDefault();
-        setPoint({ x: event.clientX + 3, y: event.clientY });
-      }}
-    >
-      <RelatedIssue issueKey={relatedKey} />
-      <IconButton
-        label="Remove relation"
-        variant="borderless"
-        size="small"
-        className="opacity-0 group-hover/relation:opacity-100 focus-visible:opacity-100"
-        onClick={remove}
+    <ContextMenu label="Relation options" entries={entries}>
+      <div
+        data-relation={`${kind}:${relatedKey}`}
+        className="group/relation flex max-w-full items-center gap-2"
       >
-        <Icon name="close" />
-      </IconButton>
-      {point && (
-        <ActionMenu
-          label="Relation options"
-          point={point}
-          entries={entries()}
-          close={() => setPoint(null)}
-        />
-      )}
-    </div>
+        <RelatedIssue issueKey={relatedKey} />
+        <IconButton
+          label="Remove relation"
+          variant="borderless"
+          size="small"
+          className="opacity-0 group-hover/relation:opacity-100 focus-visible:opacity-100"
+          onClick={remove}
+        >
+          <Icon name="close" />
+        </IconButton>
+      </div>
+    </ContextMenu>
   );
 }
 /** A related issue's pill: its status and title, or just its key when it isn't mirrored. */

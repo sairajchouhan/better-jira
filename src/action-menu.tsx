@@ -1,5 +1,5 @@
 import { FloatingTree } from "@floating-ui/react";
-import { useRef, useState, type RefObject } from "react";
+import { useRef, useState, type ReactNode, type RefObject } from "react";
 import { Icon, type IconName } from "./icons";
 import type { Keys } from "./keycap";
 import { Menu } from "./menu";
@@ -162,6 +162,33 @@ function Level({
         ])}
       </Menu.List>
     </Menu>
+  );
+}
+/** A right-click on `children` opens an ActionMenu at the pointer, as Linear's row menus do; `entries` is read as it opens. */
+export function ContextMenu({
+  label,
+  entries,
+  children,
+}: {
+  label: string;
+  entries: () => ActionEntry[];
+  children: ReactNode;
+}) {
+  const [point, setPoint] = useState<{ x: number; y: number } | null>(null);
+  return (
+    <div
+      className="contents"
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setPoint({ x: event.clientX + 3, y: event.clientY });
+      }}
+    >
+      {children}
+      {point && (
+        <ActionMenu label={label} point={point} entries={entries()} close={() => setPoint(null)} />
+      )}
+    </div>
   );
 }
 /** Searched descendants read "Parent › Child", with the path dimmed as in Linear (M4e's labelMuted breadcrumbs). */
