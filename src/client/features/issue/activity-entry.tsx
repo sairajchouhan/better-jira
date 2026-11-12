@@ -196,8 +196,14 @@ export function describeActivity(event: PropertyActivity, issue: Issue, then = f
         const text = name(value);
         return /cycle|sprint/i.test(text) ? <B>{text}</B> : <><B>{text}</B> cycle</>;
       };
-      if (after === null) return <>removed issue from {cycle(before)}</>;
-      return before === null ? <>added issue to {cycle(after)}</> : <>moved issue to {cycle(after)}</>;
+      // Jira lists every sprint an unfinished issue rolled through; only the change is news. Sprints match by id, as names change.
+      const was = (before as NamedValue[] | null) ?? [],
+        now = (after as NamedValue[] | null) ?? [],
+        added = now.filter((s) => !was.some((w) => w.id === s.id)),
+        removed = was.filter((s) => !now.some((n) => n.id === s.id));
+      const names = (list: NamedValue[]) => list.map((s) => s.name).join(", ");
+      if (!added.length) return <>removed issue from {cycle(names(removed))}</>;
+      return removed.length ? <>moved issue to {cycle(names(added))}</> : <>added issue to {cycle(names(added))}</>;
     }
     case "team":
       if (after === null)

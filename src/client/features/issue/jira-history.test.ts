@@ -76,7 +76,17 @@ test("BJ-40: each sampled Jira change kind maps to its Linear field", () => {
   expect(one(item("Sprint", { from: "", fromText: "", to: "3", toText: "Sprint 10" }, "customfield_1"))).toMatchObject({
     field: "cycle",
     before: null,
-    after: "Sprint 10",
+    after: [{ id: "3", name: "Sprint 10" }],
+  });
+  // An issue carried into the next sprint lists both, ids and names in step.
+  expect(
+    one(item("Sprint", { from: "3", fromText: "Sprint 10", to: "3, 4", toText: "Sprint 10, Sprint 11" }, "customfield_1")),
+  ).toMatchObject({
+    before: [{ id: "3", name: "Sprint 10" }],
+    after: [
+      { id: "3", name: "Sprint 10" },
+      { id: "4", name: "Sprint 11" },
+    ],
   });
   expect(one(item("Story Points", { fromText: "2", toText: "" }, "customfield_2"))).toMatchObject({
     field: "estimate",

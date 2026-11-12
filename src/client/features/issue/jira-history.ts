@@ -45,6 +45,12 @@ const SKIPPED = new Set(["Rank", "Epic Color", "Issue color", "Key", "Epic Statu
 const split = (text: string | null) => (text ? text.split(" ").filter(Boolean) : []);
 const named = (id: string | null, name: string | null): NamedValue | null =>
   id === null && name === null ? null : { id: id ?? name ?? "", name: name ?? id ?? "" };
+/** Jira's Sprint value lists every sprint an unfinished issue rolled through: ids "1, 2" and names "Sprint 1, Sprint 2". */
+const sprints = (ids: string | null, names: string | null): NamedValue[] | null => {
+  const idList = ids ? ids.split(", ").filter(Boolean) : [],
+    nameList = names ? names.split(", ") : [];
+  return idList.length ? idList.map((id, i) => ({ id, name: nameList[i] ?? id })) : null;
+};
 const nonEmpty = (text: string | null) => (text === null || text === "" ? null : text);
 
 type Mapped = { field: ActivityField; before: unknown; after: unknown; delta?: boolean };
@@ -105,7 +111,7 @@ export function mapItem(item: HistoryItem, entry: readonly HistoryItem[]): Mappe
     case "RemoteWorkItemLink":
       return { field: "weblink", before: named(from, fromText), after: named(to, toText), delta: true };
     case "Sprint":
-      return { field: "cycle", before: nonEmpty(fromText), after: nonEmpty(toText) };
+      return { field: "cycle", before: sprints(from, fromText), after: sprints(to, toText) };
     case "Story Points":
     case "Story point estimate":
       return {

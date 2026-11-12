@@ -1,4 +1,4 @@
-import { type PropertyActivity, type Issue, type User } from "@/shared/issue-model";
+import { type Issue, type User } from "@/shared/issue-model";
 import { useLocation } from "@tanstack/react-router";
 import { pageURL } from "@/client/features/navigation/app-navigation";
 import { activityTime as ago } from "@/client/features/issue/issue-dates";
@@ -31,10 +31,10 @@ import { mergeHistory } from "@/client/features/issue/jira-history";
 import { useIssueHistory } from "@/client/features/issue/use-issue-history";
 import { normalizeDocument } from "@/shared/document";
 import { imageCommentIds } from "@/client/features/media/media-edits";
-import { Icon, PriorityIcon, RelationIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
+import { Icon, PriorityIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
 import { ME, boardOf, get, useStore, isWatching, statusOf } from "@/client/state/store";
 import { issueURL, jiraIssueURL } from "@/client/features/issue/issue-urls";
-import { LINEAR_RELATIONS, RELATION_ISSUE, jiraLinkType, relationSections } from "@/shared/relations";
+import { LINEAR_RELATIONS, relationSections } from "@/shared/relations";
 import { AppLink } from "@/client/features/navigation/app-link";
 import { actions, addIssueFiles } from "@/client/state/issue-actions";
 import { loadFull } from "@/client/state/server-data";

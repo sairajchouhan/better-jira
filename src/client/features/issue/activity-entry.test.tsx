@@ -52,9 +52,16 @@ test("BJ-40: Linear's wording for the kinds Linear has (status, priority, assign
   expect(words(event("project", { id: "1", name: "Old" }, { id: "2", name: "New" }))).toBe(
     "changed project from Old to New",
   );
-  expect(words(event("cycle", null, "Auto Draft Sprint 10"))).toBe("added issue to Auto Draft Sprint 10");
-  expect(words(event("cycle", "Sprint 9", "Sprint 10"))).toBe("moved issue to Sprint 10");
-  expect(words(event("cycle", "Sprint 10", null))).toBe("removed issue from Sprint 10");
+  const sprint = (...names: string[]) => names.map((name) => ({ id: name.replace(/\D/g, ""), name }));
+  expect(words(event("cycle", null, sprint("Auto Draft Sprint 10")))).toBe("added issue to Auto Draft Sprint 10");
+  expect(words(event("cycle", sprint("Sprint 9"), sprint("Sprint 10")))).toBe("moved issue to Sprint 10");
+  expect(words(event("cycle", sprint("Sprint 10"), null))).toBe("removed issue from Sprint 10");
+  expect(words(event("cycle", null, sprint("Q3")))).toBe("added issue to Q3 cycle");
+  // An unfinished issue carried into the next sprint: Jira lists both.
+  expect(words(event("cycle", sprint("Sprint 9"), sprint("Sprint 9", "Sprint 10")))).toBe("added issue to Sprint 10");
+  expect(words(event("cycle", sprint("Sprint 9", "Sprint 10"), sprint("Sprint 9")))).toBe(
+    "removed issue from Sprint 10",
+  );
   expect(words(event("team", null, "Builders"))).toBe("changed team to Builders");
   expect(words(event("team", "Builders", "Makers"))).toBe("changed team from Builders to Makers");
   expect(words(event("labels", ["a"], ["b", "c"]))).toBe("added labels b, c and removed label a");
