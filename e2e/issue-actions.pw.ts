@@ -311,3 +311,59 @@ test("BJ-13: Jira's whole history joins Activity after the details paint, in Lin
     await page.eval(`[...document.querySelectorAll('[data-activity] a[href*="#activity-"]')].every(a=>/\\d{2}:\\d{2}:\\d{2}$/.test(a.getAttribute('aria-label')))`),
   ).toBe(true);
 });
+
+test("BJ-13: a long history folds its middle into Linear's \"Show N events\" row, which unfolds it", async ({ open }) => {
+  // After the fixture issue's creation (2026-11-06T10:00Z), three hours apart.
+  const after = (hours: number) => new Date(Date.parse("2026-11-06T12:00:00Z") + hours * 3_600_000).toISOString();
+  const people = [
+    { id: "ada", name: "Ada Example" },
+    { id: "bot", name: "Automation for Jira", app: true },
+  ];
+  const item = (field: string, sides: object, fieldId?: string) => ({
+    field,
+    ...(fieldId ? { fieldId } : {}),
+    from: null,
+    fromText: null,
+    to: null,
+    toText: null,
+    ...sides,
+  });
+  const status = (i: number) =>
+    i % 2
+      ? item("status", { from: "doing", fromText: "Doing", to: "todo", toText: "Todo" }, "status")
+      : item("status", { from: "todo", fromText: "Todo", to: "doing", toText: "Doing" }, "status");
+  // Ten changes by alternating actors, so none group: created + 10 rows, 5 of them in the middle.
+  const middle = [
+    status(3),
+    item("priority", { fromText: "Low", toText: "High" }, "priority"),
+    item("Link", { to: "TEST-1", toText: "This work item blocks TEST-1" }),
+    item("labels", { fromText: "test", toText: "test ui" }, "labels"),
+    item("Link", { to: "TEST-3", toText: "This work item relates to TEST-3" }),
+  ];
+  const items = [status(1), status(2), ...middle, status(8), status(9), status(10)];
+  await fixture.reset({
+    history: {
+      "TEST-4": items.map((change, i) => ({
+        id: String(i + 1),
+        at: after(3 * i),
+        actor: people[i % 2],
+        items: [change],
+      })),
+    },
+  });
+  const page = await open("?issue=TEST-4&view=page");
+  const folded = `document.querySelector('[data-activity-collapsed]')`;
+  await page.waitFor(`!!${folded}`, 5000);
+  expect(await page.eval(`${folded}.textContent`)).toBe(
+    "Show 5 events: changed status, priority, labels, and related issues…",
+  );
+  // Created and the next 2 before it, the last 3 after it.
+  expect(
+    await page.eval(
+      `(()=>{const rows=[...document.querySelectorAll('.issue-activity ol > .activity-event')];const i=rows.indexOf(${folded});return [i,rows.length-i-1]})()`,
+    ),
+  ).toEqual([3, 3]);
+  await page.click('[aria-label="Expand all activity"]');
+  await page.waitFor(`!${folded}`);
+  expect(await page.eval(`document.querySelectorAll('.issue-activity ol > .activity-event').length`)).toBe(11);
+});

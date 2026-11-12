@@ -25,7 +25,8 @@ import { CommentThreads, useCommentDraft, useDraftFiles } from "@/client/feature
 import { ImageCommentCard } from "@/client/features/media/image-thread";
 import { linkTitle } from "@/shared/issue-resource";
 import { activityEvents, type ActivityEvent, type Relation } from "@/client/features/issue/issue-activity";
-import { ActivityIcon, describeActivity } from "@/client/features/issue/activity-entry";
+import { ActivityIcon, ActivityRun, describeActivity, type ActivityItem } from "@/client/features/issue/activity-entry";
+import { summaryItems } from "@/client/features/issue/activity-collapse";
 import { mergeHistory } from "@/client/features/issue/jira-history";
 import { useIssueHistory } from "@/client/features/issue/use-issue-history";
 import { normalizeDocument } from "@/shared/document";
@@ -893,10 +894,41 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
     () => activityEvents({ ...issue, activity: mergeHistory(issue.activity ?? [], history) }),
     [issue, history],
   );
+  // Linear's Activity starts with "created"; it opens the first run, so a long history folds after it.
+  // BJ-14: the issue's creator (not its reporter) and the mirrored created time.
+  const creator = f ? (issue.creator ?? author(f.creator ?? f.reporter)) : null;
+  const created = issue.created ?? f?.created;
+  const items: ActivityItem[] = f
+    ? [
+        {
+          at: created,
+          anchor: "issue-created",
+          summary: [],
+          node: (
+            <li key="issue-created" id="issue-created" className="activity-event">
+              <Avatar user={creator} size={14} />
+              <span>
+                <span className="font-medium">{creator?.name}</span> created ·
+              </span>{" "}
+              <Timestamp date={created} id="issue-created" />
+            </li>
+          ),
+        },
+        ...events.map((event) => ({
+          at: event.at,
+          anchor: `activity-${event.id}`,
+          summary:
+            event.kind === "property"
+              ? summaryItems([...event.row.events, ...event.row.chain])
+              : event.kind === "link"
+                ? [{ action: "added" as const, value: "links", weight: 2 as const }]
+                : [],
+          node: <ActivityEventItem key={event.id} event={event} issue={issue} viewImage={viewImage} />,
+        })),
+      ]
+    : [];
   if (!f) return null;
   const imageComments = imageCommentIds(issue.mediaEdits);
-  const creator = issue.creator ?? author(f.creator ?? f.reporter);
-  const created = issue.created ?? f.created;
   return (
     <section className="issue-activity mt-4 border-t border-line pt-[18px]">
       {viewing && (
@@ -943,25 +975,14 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
         </button>
       </div>
       <ol className="space-y-3">
-        <li id="issue-created" className="activity-event">
-          <Avatar user={creator} size={14} />
-          <span>
-            <span className="font-medium">{creator?.name}</span> created ·
-          </span>{" "}
-          <Timestamp date={created} id="issue-created" />
-        </li>
         <CommentThreads
           issue={issue}
           comments={(f.comment?.comments ?? []).filter((c: any) => !imageComments.has(c.id))}
           avatar={(c) => <Avatar user={author(c.author)} size={18} />}
           me={<Avatar user={ME} size={18} />}
           timestamp={timestamp}
-          events={events.map((event) => ({
-            at: event.at,
-            node: (
-              <ActivityEventItem key={event.id} event={event} issue={issue} viewImage={viewImage} />
-            ),
-          }))}
+          events={items}
+          run={(run, place) => <ActivityRun key={run[0]!.anchor} events={run} place={place} />}
         />
       </ol>
       <div ref={commentRef} className="mt-[14px]">

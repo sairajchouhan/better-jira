@@ -131,17 +131,23 @@ export function useCommentDraft(issueKey: string) {
   };
 }
 
-type Props = {
+/** An Activity entry that is not a comment thread, at its time. */
+export type TimelineEvent = { at: string; node: ReactNode };
+/** Where a run of entries sits among the threads, and when the thread after it starts. */
+export type RunPlace = { position: "only" | "first" | "last" | "middle"; nextThread?: string };
+type Props<E extends TimelineEvent = TimelineEvent> = {
   issue: Issue;
   comments: IssueComment[];
   avatar: (comment: IssueComment) => ReactNode;
   me: ReactNode;
   timestamp: (date: string, id: string) => ReactNode;
-  events?: { at: string; node: ReactNode }[];
+  events?: E[];
+  /** Renders each run of events between threads (Linear folds a long one); by default every event as it is. */
+  run?: (events: E[], place: RunPlace) => ReactNode;
   /** Keeps the text of an open edit; `null` when the edit closes. */
   trackEdit?: (id: string, body: AdfDocument | null) => void;
 };
-export function CommentThreads(props: Props) {
+export function CommentThreads<E extends TimelineEvent>(props: Props<E>) {
   const comments = visibleComments(props.comments, props.issue.commentStates);
   const key = props.issue.key;
   // An edit open on a comment deleted elsewhere keeps its text here, with a note, instead of vanishing (R2-comments-D4).
@@ -180,6 +186,7 @@ export function CommentThreads(props: Props) {
         />
       </li>
     ));
+  const { events: _events, run: _run, ...threadProps } = props;
   const threads = comments
     .filter((c) => !c.parentId)
     .map((root) => ({
@@ -187,20 +194,37 @@ export function CommentThreads(props: Props) {
       node: (
         <Thread
           key={root.id}
-          {...props}
+          {...threadProps}
           trackEdit={trackEdit}
           root={root}
           replies={comments.filter((c) => c.parentId === root.id)}
         />
       ),
     }));
-  // Property history interleaves with threads by time, as in Linear's Activity.
-  return [
-    ...[...threads, ...(props.events ?? [])]
-      .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
-      .map((item) => item.node),
-    ...kept,
-  ];
+  // Property history interleaves with threads by time, as in Linear's Activity; each run between threads renders together.
+  const timeline = [
+    ...threads.map((thread) => ({ ...thread, thread: true as const })),
+    ...(props.events ?? []).map((event) => ({ at: event.at, event })),
+  ].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  const nodes: ReactNode[] = [];
+  let run: E[] = [];
+  const close = (nextThread?: string) => {
+    if (!run.length) return;
+    const first = nodes.length === 0,
+      last = nextThread === undefined;
+    const position = first ? (last ? "only" : "first") : last ? "last" : "middle";
+    nodes.push(props.run ? props.run(run, { position, nextThread }) : run.map((event) => event.node));
+    run = [];
+  };
+  for (const item of timeline) {
+    if ("event" in item) run.push(item.event);
+    else {
+      close(item.at);
+      nodes.push(item.node);
+    }
+  }
+  close();
+  return [...nodes, ...kept];
 }
 function Thread({
   issue,

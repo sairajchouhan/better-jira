@@ -4,7 +4,9 @@
  * `ic` (due date), `Us` (parent), `Ws` (team), `Js` (cycle), `Qs` (project), `ec` (milestone) and `Hs` (relations).
  * Jira-only kinds (resolution, component, files, custom fields) read plainly in the same pattern: "changed Fix version from A to B".
  */
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import type { RunPlace, TimelineEvent } from "@/client/features/comments/comment-threads";
+import { collapseLabel, partition, type SummaryItem } from "./activity-collapse";
 import { statusById } from "@/shared/board-catalog";
 import { Avatar } from "@/client/components/avatar";
 import { Icon, type IconName, PriorityIcon, RelationIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
@@ -350,4 +352,44 @@ const assignee = (value: unknown): User | null => {
 /** A person's or app's (Jira Automation) avatar, from Jira's history when it gave one. */
 export function ActivityActorAvatar({ actor }: { actor: ActivityRow["actor"] }) {
   return <Avatar user={actor as User} size={14} />;
+}
+
+/** An Activity entry other than a comment thread: its DOM id (for links to it) and its part in a folded row's summary. */
+export type ActivityItem = TimelineEvent & { anchor: string; summary: SummaryItem[] };
+
+/** A run of entries between comment threads, folded the way Linear folds a long one (`ActivityHistoryCollapse`): the
+ *  middle becomes one "Show N events: …" row that unfolds the whole run. A link to a folded entry opens it. */
+export function ActivityRun({ events, place }: { events: ActivityItem[]; place: RunPlace }) {
+  const [now] = useState(Date.now);
+  const [open, setOpen] = useState(() => events.some((event) => location.hash === `#${event.anchor}`));
+  const { before, hidden, after } = partition(events, {
+    position: place.position,
+    now,
+    at: (event) => event.at,
+    nextDiscussion: place.nextThread,
+  });
+  if (open || !hidden.length) return events.map((event) => event.node);
+  const label = collapseLabel(
+    hidden.length,
+    hidden.flatMap((event) => event.summary),
+  );
+  return (
+    <>
+      {before.map((event) => event.node)}
+      <li data-activity-collapsed className="activity-event">
+        <button
+          type="button"
+          aria-label="Expand all activity"
+          onClick={() => setOpen(true)}
+          className="grid size-[14px] place-items-center text-fg-3 hover:text-fg-2"
+        >
+          <Icon name="dots" />
+        </button>
+        <button type="button" onClick={() => setOpen(true)} className="text-left hover:text-fg-2">
+          {label}
+        </button>
+      </li>
+      {after.map((event) => event.node)}
+    </>
+  );
 }
