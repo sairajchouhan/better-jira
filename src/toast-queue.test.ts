@@ -48,3 +48,14 @@ test("show starts a fresh presentation lifetime for the same id; update preserve
   queue.update("view-created", "renamed second view");
   expect(queue.find("view-created")).toEqual({ ...replacement, content: "renamed second view" });
 });
+
+test("has looks up caller-owned ids including waiting toasts", () => {
+  const queue = createToastQueue(1);
+  expect(queue.has("first")).toBe(false);
+  queue.show("one", { id: "first" });
+  queue.show("two", { id: "second" });
+  expect(queue.has("first")).toBe(true);
+  expect(queue.has("second")).toBe(true);
+  queue.dismiss("first");
+  expect(queue.has("first")).toBe(false);
+});

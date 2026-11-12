@@ -49,20 +49,20 @@ test("the queued undo toast runs the action belonging to that toast", () => {
 test("reminder deferral follows the queue confirmation slot through replace, rekey, expiry and dismissal", () => {
   jest.useFakeTimers();
   const deferrals: boolean[] = [];
-  const stop = toasts.subscribe(() => deferrals.push(toasts.hasConfirmation()));
-  expect(toasts.hasConfirmation()).toBe(false);
+  const stop = toasts.subscribe(() => deferrals.push(toasts.has(NOTIFICATION_ID)));
+  expect(toasts.has(NOTIFICATION_ID)).toBe(false);
   toasts.show("View created", { id: "view", duration: Infinity });
-  expect(toasts.hasConfirmation()).toBe(false);
+  expect(toasts.has(NOTIFICATION_ID)).toBe(false);
   showNotification({ text: "Created A-NEW1", key: "A-NEW1" });
-  expect(toasts.hasConfirmation()).toBe(true);
+  expect(toasts.has(NOTIFICATION_ID)).toBe(true);
   rekeyNotification("A-NEW1", "A-1");
-  expect(toasts.hasConfirmation()).toBe(true);
+  expect(toasts.has(NOTIFICATION_ID)).toBe(true);
   showNotification({ text: "Copied" });
   jest.advanceTimersByTime(5000);
-  expect(toasts.hasConfirmation()).toBe(false);
+  expect(toasts.has(NOTIFICATION_ID)).toBe(false);
   showNotification({ text: "Copied again" });
   toasts.dismiss(NOTIFICATION_ID);
-  expect(toasts.hasConfirmation()).toBe(false);
+  expect(toasts.has(NOTIFICATION_ID)).toBe(false);
   expect(deferrals).toEqual([false, true, true, true, false, true, false]);
   stop();
 });
@@ -76,4 +76,14 @@ test("dismissed queue lifetimes cannot remove a later toast reusing that id", ()
   jest.advanceTimersByTime(1000);
   expect(queue.find("a")?.content).toBe("second");
   queue.dismissAll();
+});
+
+test("View issue dismisses the toast that owns the action", () => {
+  showNotification({ text: "Keep this confirmation" });
+  const id = showNotification({ text: "An inbox issue", key: "TEST-2" }, "inbox");
+  const content = toasts.find(id)!.content as ReactElement<{ notice: unknown; id: string }>;
+  const body = (content.type as (props: typeof content.props) => ReactNode)(content.props);
+  actionIn(body)!.props.onClick();
+  expect(toasts.has(id)).toBe(false);
+  expect(toasts.has(NOTIFICATION_ID)).toBe(true);
 });

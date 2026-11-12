@@ -43,8 +43,7 @@ export function createToastQueue(limit = 4) {
       set(toasts.some((t) => t.id === id) ? toasts.map((t) => (t.id === id ? toast : t)) : [...toasts, toast]);
       return id;
     },
-    /** Reminder delivery waits for the replacing confirmation slot, exactly as it did for the UI toast. */
-    hasConfirmation: () => toasts.some((toast) => toast.id === "ui-machine"),
+    has: (id: string) => toasts.some((toast) => toast.id === id),
     /** Read or update content in place, preserving its lifetime and queue position. */
     find: (id: string) => toasts.find((toast) => toast.id === id),
     update(id: string, content: ReactNode) {

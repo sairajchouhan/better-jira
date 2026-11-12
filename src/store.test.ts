@@ -542,7 +542,7 @@ test("B5: creating stays on the board with a toast, Create more toasts too, and 
   expect(get().selected).toBe(key);
   expect(latestNotification()).toEqual({ text: `Created ${key}`, key });
   expect(toasts.find(NOTIFICATION_ID)).toBeDefined();
-  expect(toasts.hasConfirmation()).toBe(true);
+  expect(toasts.has(NOTIFICATION_ID)).toBe(true);
   toasts.dismiss(NOTIFICATION_ID);
   const more = actions.create("Created with more", {}, true)!;
   expect(latestNotification()).toEqual({ text: `Created ${more}`, key: more });

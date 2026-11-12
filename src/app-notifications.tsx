@@ -8,7 +8,7 @@ export const NOTIFICATION_ID = "ui-machine";
 export const INBOX_NOTIFICATION_ID = "inbox";
 export type Notification = { text: string; detail?: string; key?: string; undo?: () => void };
 
-function NotificationContent({ notice }: { notice: Notification }) {
+function NotificationContent({ notice, id }: { notice: Notification; id: string }) {
   return (
     <Toast data-toast>
       <Toast.Title>{notice.text}</Toast.Title>
@@ -18,7 +18,7 @@ function NotificationContent({ notice }: { notice: Notification }) {
           {notice.undo && <Toast.Action onClick={notice.undo}>Undo</Toast.Action>}
           {notice.key && (
             <Toast.Action onClick={() => {
-              toasts.dismiss(NOTIFICATION_ID);
+              toasts.dismiss(id);
               const key = currentKey(notice.key!);
               navigate({ selected: key, panel: true, board: get().issues.get(key)?.board });
             }}>
@@ -34,7 +34,7 @@ function NotificationContent({ notice }: { notice: Notification }) {
 
 /** Queue-owned lifetime keeps the existing 5s confirmations independent of presenter mounting. */
 export function showNotification(notice: Notification, id = NOTIFICATION_ID) {
-  return toasts.show(<NotificationContent notice={notice} />, { id, duration: Infinity, expiresIn: 5000 });
+  return toasts.show(<NotificationContent notice={notice} id={id} />, { id, duration: Infinity, expiresIn: 5000 });
 }
 
 export function latestNotification(): Notification | undefined {
@@ -49,5 +49,5 @@ export function rekeyNotification(from: string, to: string) {
   const notice = latestNotification();
   if (notice?.key !== from) return;
   const text = notice.text.replace(new RegExp(`${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\d)`, "g"), to);
-  toasts.update(NOTIFICATION_ID, <NotificationContent notice={{ ...notice, key: to, text }} />);
+  toasts.update(NOTIFICATION_ID, <NotificationContent notice={{ ...notice, key: to, text }} id={NOTIFICATION_ID} />);
 }

@@ -1,3 +1,4 @@
+import { NOTIFICATION_ID } from "./app-notifications";
 import { toasts } from "./toast-queue";
 import { useSyncExternalStore } from "react";
 import { IconButton } from "./button";
@@ -221,9 +222,11 @@ export function ReminderControl({ issue }: { issue: Issue }) {
 }
 /** A single nearest-deadline timer, including overdue reminders restored after a reload. It re-arms only when the next
  *  reminder changes, not on every poll. */
+const hasConfirmation = () => toasts.has(NOTIFICATION_ID);
+
 export function ReminderDelivery() {
   const next = useStore((s) => nextReminder(s.issues)),
-    toast = useSyncExternalStore(toasts.subscribe, toasts.hasConfirmation, toasts.hasConfirmation),
+    toast = useSyncExternalStore(toasts.subscribe, hasConfirmation, hasConfirmation),
     canEdit = useStore((s) => s.canEdit),
     clock = useStore((s) => s.clock);
   useEffect(() => {
