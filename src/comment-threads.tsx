@@ -407,6 +407,7 @@ function Thread({
             </IconButton>
             <IconButton
               label={comment.parentId ? "Reply options" : "Comment options"}
+              tooltip="Comment options"
               aria-expanded={menu?.comment.id === comment.id}
               className="comment-hover-action"
               onClick={(e) => setMenu({ anchor: e.currentTarget, comment })}
@@ -536,8 +537,8 @@ function Thread({
                   onCancel={cancelReply}
                 />
               ) : (
-                // The closed composer stands in for the open one: its attach and send keep the composer's tooltips, which differ
-                // from their names, so they stay plain buttons until IconButton takes a tooltip of its own.
+                // The closed composer stands in for the open one, so its attach and send wear the composer's tooltips. Send stays
+                // enabled: with nothing to send yet, it opens the composer (RAJ-52, e2e/threads.pw.ts).
                 <div className="comment-reply-row">
                   {me}
                   <button
@@ -547,22 +548,26 @@ function Thread({
                   >
                     Leave a reply…
                   </button>
-                  <button
-                    aria-label="Attach to reply"
-                    title="Attach images, files, or videos"
-                    className="comment-reply-attach"
+                  <IconButton
+                    label="Attach to reply"
+                    tooltip="Attach images, files, or videos"
+                    size="small"
+                    className="mr-[3px]"
                     onClick={attachReply}
                   >
-                    <Icon name="paperclip" size={14} />
-                  </button>
-                  <button
-                    aria-label="Submit reply"
-                    title="Submit comment (⌘↵)"
+                    <Icon name="paperclip" />
+                  </IconButton>
+                  {/* Linear's filled send circle has no Jx variant; `comment-reply-send` paints it, as rich-editor-submit does. */}
+                  <IconButton
+                    label="Submit reply"
+                    tooltip="Submit comment"
+                    shortcut="⌘↵"
+                    size="small"
                     className="comment-reply-send"
                     onClick={() => setReplying(true)}
                   >
-                    <Icon name="up" size={14} />
-                  </button>
+                    <Icon name="up" />
+                  </IconButton>
                 </div>
               )}
             </div>

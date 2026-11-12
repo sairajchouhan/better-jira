@@ -103,6 +103,7 @@ export function ImageThread({
         <IconButton
           type="submit"
           disabled={!text.trim()}
+          disabledReason="Write a comment first"
           label={editing ? "Save image comment" : "Submit image comment"}
         >
           <Icon name="up" />
@@ -303,6 +304,7 @@ export function ImageCommentCard({
             variant="primary"
             size="small"
             disabled={!reply.trim()}
+            disabledReason="Write a reply first"
           >
             <Icon name="up" />
           </IconButton>
