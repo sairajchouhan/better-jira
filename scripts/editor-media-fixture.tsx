@@ -1,9 +1,9 @@
 /** Isolated prop-update fixture. This entry is served only by the disposable browser test server. */
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
-import { RichEditor } from "../src/rich-editor";
-import type { Attachment } from "../src/attachment-media";
-import "../src/index.css";
+import { RichEditor } from "../src/client/features/editor/rich-editor";
+import type { Attachment } from "../src/shared/attachment-media";
+import "../src/client/index.css";
 const document = {
   type: "doc",
   version: 1,

@@ -1,16 +1,16 @@
 import { Database } from "bun:sqlite";
-import { viewRepository } from "../src/view-repository";
+import { viewRepository } from "../src/server/view-repository";
 const viewDb = new Database(":memory:");
 const views = viewRepository(viewDb);
 /** Disposable browser-test data. No Jira client, credentials, or cache are imported. */
-import index from "../src/index.html";
+import index from "../src/client/index.html";
 import editorMediaFixture from "./editor-media-fixture.html";
 import tailwind from "bun-plugin-tailwind";
-import { attachmentGateway } from "../src/attachment-media";
-import { previewFrom } from "../src/link-preview";
-import { mapFeed } from "../src/inbox-model";
-import { boardFromInput } from "../src/config";
-import { avatarProxy, memoryAvatarCache } from "../src/avatar-proxy";
+import { attachmentGateway } from "../src/shared/attachment-media";
+import { previewFrom } from "../src/server/link-preview";
+import { mapFeed } from "../src/shared/inbox-model";
+import { boardFromInput } from "../src/server/config";
+import { avatarProxy, memoryAvatarCache } from "../src/shared/avatar-proxy";
 
 /** A file in e2e/fixtures, from the repo root the suite runs in, so the built copy in dist/ finds it too. */
 const fixtureFile = (name: string) => Bun.file(`e2e/fixtures/${name}`);

@@ -1,5 +1,5 @@
 import { expect, test } from "./app";
-import { defaultPreferences } from "../src/view-model";
+import { defaultPreferences } from "../src/shared/view-model";
 
 test("custom identity, directory, favorite, details, palette and tab identity", async ({ open }) => {
   const page = await open();

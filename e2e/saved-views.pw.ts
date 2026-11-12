@@ -1,5 +1,5 @@
 import { expect, test, PREFS_KEY } from "./app";
-import { defaultPreferences } from "../src/view-model";
+import { defaultPreferences } from "../src/shared/view-model";
 
 test("saved view has a stable route, survives reload and leaves board preferences unchanged", async ({
   open,

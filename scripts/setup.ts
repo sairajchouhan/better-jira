@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import { chmod } from "node:fs/promises";
-import { boardIDs, configuration, siteURL, type LocalSettings } from "../src/config";
+import { boardIDs, configuration, siteURL, type LocalSettings } from "../src/server/config";
 
 const settingsPath = ".better-jira.local.json";
 const local: LocalSettings = await Bun.file(settingsPath)

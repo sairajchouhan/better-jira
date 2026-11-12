@@ -1,5 +1,5 @@
 import { expect, test } from "./app";
-import { defaultPreferences } from "../src/view-model";
+import { defaultPreferences } from "../src/shared/view-model";
 
 const position = `document.querySelector('[aria-label="Issue position"]')?.textContent`;
 

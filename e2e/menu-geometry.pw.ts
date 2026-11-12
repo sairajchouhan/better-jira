@@ -1,6 +1,6 @@
 import { expect, test, PREFS_KEY, type App } from "./app";
 
-// Every dropdown renders through src/menu.tsx, Linear's one menu primitive (startup-root.CnUSfl4j.js: IB/B3e, Vw, fT).
+// Every dropdown renders through src/client/components/menu.tsx, Linear's one menu primitive (startup-root.CnUSfl4j.js: IB/B3e, Vw, fT).
 // One geometry for all of them, so a per-menu drift fails here.
 const probe = `(()=>{const m=[...document.querySelectorAll('.menu')].at(-1),list=m.querySelector('.menu-list'),items=[...m.querySelectorAll('[cmdk-item]')],row=items.find(n=>!n.querySelector('.menu-checkbox'))??items[0],r=getComputedStyle(row),h=getComputedStyle(row,'::before'),hovered=items.find(n=>n.matches('[data-selected=true]'));return {list:getComputedStyle(list).padding,height:row.getBoundingClientRect().height,padding:r.padding,font:r.fontSize,highlight:[h.left,h.right,h.borderRadius],selected:hovered?getComputedStyle(hovered,'::before').backgroundColor:null,shared:items.every(n=>n.classList.contains('menu-item'))}})()`;
 

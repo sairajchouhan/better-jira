@@ -35,8 +35,8 @@ test("hello world", () => {
 
 Use `bun check` to type check the project. It reads `tsconfig.json` and reports the same errors as `tsc`.
 
-- `bun check src/index.ts` checks one file and what it imports
-- `bun --check src/index.ts`, `bun test --check` and `bun build --check` type check first, and do nothing else if there is an error
+- `bun check src/server/index.ts` checks one file and what it imports
+- `bun --check src/server/index.ts`, `bun test --check` and `bun build --check` type check first, and do nothing else if there is an error
 
 ## Frontend
 

@@ -1,4 +1,4 @@
-/** Regenerates src/emoji-data.json from Linear's native emoji chunk (`Cv.initialize` imports it): each emoji's short name,
+/** Regenerates src/client/features/editor/emoji-data.json from Linear's native emoji chunk (`Cv.initialize` imports it): each emoji's short name,
  *  character, search keywords and emoticons. `bun scripts/emoji-data.ts [chunk URL]`. The chunk is parsed, never run. */
 const url = process.argv[2] ?? "https://static.linear.app/client/assets/emojis.mKI6SeEG.js";
 const source = await (await fetch(url)).text();
@@ -14,5 +14,5 @@ const data = {
   keywords,
   emojis: emojis.map((e) => (e.e?.length ? [e.n, e.s, e.k, e.e] : [e.n, e.s, e.k])),
 };
-await Bun.write("src/emoji-data.json", JSON.stringify(data));
+await Bun.write("src/client/features/editor/emoji-data.json", JSON.stringify(data));
 console.log(`${emojis.length} emoji, ${keywords.length} keywords`);

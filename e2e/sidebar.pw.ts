@@ -1,5 +1,5 @@
 import { expect, test } from "./app";
-import { defaultPreferences } from "../src/view-model";
+import { defaultPreferences } from "../src/shared/view-model";
 
 const FAVORITES = "better-jira:favorites:v1:https://example.atlassian.net/audit-me";
 const order = `[...document.querySelectorAll('[data-favorite]')].map(n=>n.dataset.favorite)`;

@@ -1,0 +1,2588 @@
+@import "tailwindcss";
+
+/* Linear's own theme output, read from linear.app on 2026-11-06 (see .raj/linear.md, "Colors").
+   Linear generates these in JS (generateTheme in startup-root.*.js) from a preset:
+   dark  base lch(5.52 0.4 272), accent lch(47.92 59.30 288.42), contrast 27
+   light base lch(97.94 0.5 282), accent lch(53 52.26 286.91), contrast 30
+   Each token notes the Linear name it copies. */
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-fg-3: var(--fg-3);
+  --color-fg-4: var(--fg-4);
+  --color-app: var(--app);
+  --color-panel: var(--panel);
+  --color-col: var(--col);
+  --color-card: var(--card);
+  --color-hover: var(--hover);
+  --color-sel: var(--sel);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-line-3: var(--line-3);
+  --color-accent: var(--accent);
+  --color-frame: var(--frame);
+  --color-card-hover: var(--card-hover);
+  --color-card-fg-3: var(--card-fg-3);
+  --color-chip-line: var(--chip-line);
+  --color-hidden-line: var(--hidden-line);
+  --color-tab: var(--tab);
+  --color-tab-on: var(--tab-on);
+  --color-btn: var(--btn);
+}
+
+:root {
+  color-scheme: light;
+  --fg: lch(9.794% 0 282); /* --color-text-primary */
+  --fg-2: lch(19.588% 1.25 282); /* --color-text-secondary */
+  --fg-3: lch(39.176% 1.25 282); /* --color-text-tertiary */
+  --fg-4: lch(64.64% 1.25 282); /* --color-text-quaternary */
+  --app: lch(94.44% 0.5 282); /* --bg-sidebar-color */
+  --panel: lch(97.94% 0.5 282); /* --color-bg-primary */
+  --col: lch(92.44% 0.5 282); /* --color-bg-secondary */
+  --card: lch(100% 0 282); /* elevated theme bgBase (menus, popovers) */
+  --editor-todo-checked-opacity: 0.75;
+  --hover: lch(90.94% 0.5 282);
+  --row-hover: var(--hover);
+  --card-pressed: var(--card-hover); /* --color-bg-tertiary (bgShadeHover) */
+  --sel: lch(
+    91.354% 0.157 282
+  ); /* sidebar theme controlSecondarySelected (main area's 94.854 vanishes on the sidebar) */
+  --line: lch(95.24% 0 282); /* --color-border-primary */
+  --line-2: lch(88.49% 0 282); /* --color-border-secondary */
+  --line-3: lch(84.44% 0 282); /* --color-border-tertiary */
+  --accent: lch(53% 52.26 286.91);
+  /* Board page, read from computed styles on linear.app/…/active (see .raj/linear.md, "Board") */
+  --frame: lch(89.84% 0 282); /* <main> border, header row border */
+  --frame-shadow: lch(0 0 0 / 0.02) 0 3px 6px -2px, lch(0 0 0 / 0.04) 0 1px 1px 0;
+  --card-shadow:
+    lch(0 0 0 / 0.088) 0 0 0 0.5px, lch(0 0 0 / 0.02) 0 3px 6px -2px, lch(0 0 0 / 0.04) 0 1px 1px 0;
+  --card-hover: lch(96.5% 0 282); /* card bg when hovered / active */
+  --card-fg-3: lch(40% 1 282); /* ID, chip text, footer inside a card */
+  /* Linear's menu theme (startup-root.CnUSfl4j.js: bgBase l+8, bgFocus, labelBase/Muted/Faint, medium shadow; .raj/qa/filter-parity.md) */
+  --menu: var(--card);
+  --menu-line: lch(91.9% 0 282);
+  --menu-divider: lch(91.9% 0 282); /* bgBorderFaintThin */
+  --menu-sel: lch(95% 0 282);
+  --menu-shadow:
+    lch(0 0 0 / 0.02) 0 6px 18px, lch(0 0 0 / 0.04) 0 3px 9px, lch(0 0 0 / 0.04) 0 1px 1px;
+  --chip-line: lch(86.5% 0 282);
+  --add-hover: var(--hover);
+  /* Linear breadcrumb / header icon-button hover, and the "Grey" view colour (linear.app light theme, 2026-11-11) */
+  --crumb-hover: lch(94.854% 0.5 282);
+  --view-gray: lch(67.969% 3.577 260.65);
+  --bg-border: var(--frame); /* Linear bgBorder (--sx-1o1lnwn) */
+  --menu-fg: lch(20% 1 282); /* labelBase */
+  --menu-fg-3: lch(40% 1 282); /* labelMuted */
+  --menu-placeholder: lch(66% 1 282); /* labelFaint */
+  --menu-check: lch(54.1% 0 282); /* the multi-select checkbox border */
+  /* Linear's filter menu shell (measured 2026-11-11, .raj/qa/filter-parity.md); its rows are the shared menu's */
+  --filter-line: lch(91.9% 0 282);
+  --filter-sub-shadow:
+    lch(0 0 0 / 0.08) 0 9px 48px, lch(0 0 0 / 0.1) 0 6px 24px, lch(0 0 0 / 0.04) 0 1px 1px;
+  --reaction: color-mix(in lch, var(--accent) 12%, var(--panel));
+  --reaction-line: color-mix(in lch, var(--accent) 30%, var(--panel));
+  --reaction-hover: color-mix(in lch, var(--accent) 18%, var(--panel));
+  --key-line: var(--line-3);
+  --col-top: lch(94.44% 0.5 282 / 0.4); /* column strip: gradient of the sidebar color */
+  --col-bottom: lch(94.44% 0.5 282 / 0.1);
+  --tab: lch(99.997% 0.5 282);
+  --tab-on: lch(93.483% 0.5 282);
+  --btn: lch(99.997% 0.5 282);
+  --tab-shadow:
+    lch(0 0 0 / 0.09) 0 0 0 0.5px, lch(0 0 0 / 0.02) 0 3px 6px -2px, lch(0 0 0 / 0.04) 0 1px 1px 0;
+  --tab-on-shadow: lch(0 0 0 / 0.09) 0 0 0 0.5px;
+  --hidden-line: lch(91.9% 0 282); /* "Hidden columns" row */
+  --hidden-shadow: lch(0 0 0 / 0.02) 0 3px 6px -2px, lch(0 0 0 / 0.04) 0 1px 1px 0;
+  --comment-fg: var(--fg-2);
+  --reply-ph: var(--fg-4);
+  --send: var(--hover);
+  /* Workflow-state colors from Linear's status SVGs. canceled/qa/hold are not in this workspace: Linear's
+     default canceled grey, and our own teal/orange for Jira-only states. */
+  --st-backlog: lch(67.969% 3.577 260.65);
+  --st-todo: lch(67.969% 0 139.088);
+  --st-progress: lch(80% 90 85);
+  --st-review: lch(68% 64.37 141.95);
+  --st-done: lch(48% 59.31 288.43);
+  --st-canceled: #95a2b3;
+  --st-qa: #26b5ce;
+  --st-hold: #f2994a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --editor-todo-checked-opacity: 0.65;
+    --fg: lch(100% 0 272);
+    --fg-2: lch(90.451% 1.2 272);
+    --fg-3: lch(61.803% 1.2 272);
+    --fg-4: lch(36.975% 1.2 272);
+    --app: lch(2.595% 0.4 272);
+    --panel: lch(5.52% 0.4 272);
+    --col: lch(7.32% 0.85 272);
+    --card: lch(9.232% 0.85 272);
+    --hover: lch(8.22% 1.3 272);
+    --row-hover: lch(9.345% 0.85 272); /* --color-bg-quaternary: resource rows (RAJ-52) */
+    --card-pressed: lch(22.347% 1.525 272); /* a comment's ⋯ while its menu is open (RAJ-52) */
+    --sel: lch(18.634% 1.075 272);
+    --line: lch(9.84% 1.48 272);
+    --line-2: lch(14.16% 1.48 272);
+    --line-3: lch(16.32% 1.48 272);
+    --accent: lch(47.918% 59.303 288.421);
+    --frame: lch(13.08% 1.48 272);
+    --frame-shadow: lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
+    --card-shadow: lch(100 0 0 / 0.083) 0 0 0 0.5px, lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
+    --card-hover: lch(13.058% 1.3 272);
+    --card-fg-3: lch(63.304% 1.425 272);
+    /* Linear's menu surface (RAJ-52 document options) */
+    --menu: lch(12.72% 0.85 272);
+    --menu-line: lch(21.36% 1.93 272);
+    --menu-divider: lch(20.28% 1.93 272);
+    --menu-sel: lch(20.82% 1.3 272);
+    --menu-shadow:
+      lch(0 0 0 / 0.125) 0 3px 8px, lch(0 0 0 / 0.125) 0 2px 5px, lch(0 0 0 / 0.125) 0 1px 1px;
+    --chip-line: lch(20.032% 1.93 272);
+    --add-hover: lch(14.006% 0.593 272);
+    --crumb-hover: lch(14.006% 0.593 272);
+    --view-gray: #bec2c8;
+    --bg-border: lch(18.48% 1.48 272);
+    --menu-fg: lch(91.178% 1.425 272);
+    --menu-fg-3: lch(64.714% 1.425 272);
+    --menu-placeholder: lch(
+      41.778% 1.425 272
+    ); /* Linear's command-menu text, keys and placeholder */
+    --reaction: lch(14.391% 19.592 286.445);
+    --reaction-line: lch(19.701% 19.952 286.445);
+    --reaction-hover: lch(12.141% 17.792 286.445);
+    --key-line: lch(17.04% 1.93 272);
+    --filter-line: lch(25.68% 1.93 272);
+    --menu-check: lch(55.92% 1.93 272);
+    --filter-sub-shadow:
+      lch(0 0 0 / 0.1) 0 4px 40px, lch(0 0 0 / 0.125) 0 3px 20px, lch(0 0 0 / 0.125) 0 3px 12px,
+      lch(0 0 0 / 0.125) 0 2px 8px, lch(0 0 0 / 0.125) 0 1px 1px;
+    --col-top: lch(2.595% 0.4 272 / 0.4);
+    --col-bottom: lch(2.595% 0.4 272 / 0.1);
+    --tab: lch(10.149% 0.593 272);
+    --tab-on: lch(16.706% 0.979 272);
+    --btn: lch(10.149% 0.689 272);
+    --tab-shadow: lch(100 0 0 / 0.137) 0 0 0 0.5px, lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
+    --tab-on-shadow: lch(100 0 0 / 0.137) 0 0 0 0.5px;
+    --hidden-line: lch(16.793% 1.93 272);
+    --hidden-shadow: lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
+    --comment-fg: lch(90.826% 1.425 272);
+    --reply-ph: lch(39.452% 1.425 272);
+    --send: lch(13.861% 1.139 272); /* RAJ-52 comment body, reply placeholder, send button */
+    --st-backlog: #bec2c8;
+    --st-todo: #e2e2e2;
+    --st-review: lch(60% 64.37 141.95);
+  }
+}
+
+@layer base {
+  /* No macOS rubber-band bounce at the top/bottom; the horizontal axis stays default so a two-finger swipe still goes back/forward. */
+  html,
+  body {
+    overscroll-behavior-y: none;
+  }
+  body {
+    @apply bg-app text-[13px] text-fg antialiased;
+    cursor: default;
+  }
+  a {
+    cursor: inherit;
+  }
+  /* Linear's keyboard ring: 1px accent outline on controls, 1px off links; zero specificity so a control's own focus style wins. */
+  :where(button, a[href], [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible {
+    outline: 1px solid var(--accent);
+    outline-offset: 0;
+  }
+  :where(a[href]):focus-visible {
+    outline-offset: 1px;
+  }
+  [contenteditable="true"] {
+    cursor: text;
+  }
+  [data-media-interactive] {
+    cursor: default;
+  }
+}
+
+/* Linear's filter menu shell: 0.5px border, 12px radius, content-sized, 175px at least. Its search, rows and separators are the shared menu's. */
+.filter-menu {
+  width: max-content;
+  min-width: 175px;
+  max-width: min(420px, calc(100vw - 24px));
+  overflow: hidden auto;
+  border: 0.5px solid var(--filter-line);
+  border-radius: 12px;
+  background: var(--menu);
+  box-shadow: var(--menu-shadow);
+}
+.filter-menu.filter-sub {
+  box-shadow: var(--filter-sub-shadow);
+}
+
+/* Menu (src/client/components/menu.tsx): Linear's IB, startup-root.CnUSfl4j.js (Vw, fT, aT, pT, O6e, Qw) and style-kMXsq6uH.css. The values are MENU's.
+   These are the only menu row styles: every dropdown renders its rows through Menu, so a change here reaches all of them. */
+.menu {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  font-size: 13px;
+  color: var(--menu-fg);
+}
+/* Zw: a 36px input over a hairline; 14px before, 12px after, 14px to a trailing key. */
+.menu-input {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 0.5px solid var(--menu-divider);
+  padding: 0 12px 0 14px;
+}
+.menu-input input {
+  min-width: 148px;
+  height: 36px;
+  flex: 1;
+  background: transparent;
+  color: var(--menu-fg);
+  font-size: 13px;
+  outline: none;
+}
+.menu-input input::placeholder {
+  color: var(--menu-fg-3);
+}
+/* N6e: 6px above and below the rows. */
+.menu-list {
+  overflow-y: auto;
+  padding: 6px 0;
+}
+/* eT.getListPadding: the top padding only applies when the first row is an action, not a header or divider. */
+.menu-list:has(> [cmdk-list-sizer] > :first-child > [cmdk-group-heading]),
+.menu-list:has(> [cmdk-list-sizer] > :first-child:is(.menu-group-header, .menu-text-divider, .menu-divider)) {
+  padding-top: 0;
+}
+/* v6e/S6e: a full-width 32px row owns 14px/18px padding; its highlight is inset 6px with radius 8. labelBase, labelTitle when focused. */
+.menu-item {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  height: 32px;
+  flex-shrink: 0;
+  align-items: center;
+  padding: 0 18px 0 14px;
+  white-space: nowrap;
+  color: var(--menu-fg);
+  cursor: default;
+  user-select: none;
+}
+.menu-item::before {
+  content: "";
+  position: absolute;
+  inset: 0 6px;
+  z-index: -1;
+  border-radius: 8px;
+}
+/* The highlighted row is cmdk's selection, except that an action menu opened by pointer highlights none until navigation (Linear's focusedIndex -1). */
+.menu-item[data-selected="true"]:is(:hover, :not([data-pristine] *))::before,
+.menu-item[aria-expanded="true"]::before {
+  background: var(--menu-sel);
+}
+.menu-item[data-selected="true"]:is(:hover, :not([data-pristine] *)) {
+  color: var(--fg);
+}
+.menu-item[aria-disabled="true"],
+.menu-item[data-disabled="true"] {
+  color: var(--menu-fg-3);
+  opacity: 0.5;
+}
+/* A multi-select row is 1px further left: its checkbox takes the first 16px, the label 6px after it. */
+.menu-item:has(> .menu-checkbox) {
+  padding-left: 13px;
+}
+/* E6e: label column, 8px between icon, name, checkmark and hint; 400px at most, 350 with a checkmark. */
+.menu-label {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 400px;
+  flex-grow: 1;
+  align-self: stretch;
+  align-items: center;
+  gap: 8px;
+}
+.menu-checkbox + .menu-label {
+  padding-left: 6px;
+}
+.menu-label:has(> .menu-checkmark) {
+  max-width: 350px;
+}
+.menu-icon {
+  display: grid;
+  min-width: 16px;
+  flex-shrink: 0;
+  place-items: center;
+  color: var(--menu-fg-3);
+}
+.menu-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 450;
+}
+.menu-checkmark {
+  display: grid;
+  flex-shrink: 0;
+  margin-right: 1px;
+}
+/* D6e: trailing hint and the submenu arrow, 6px apart. */
+.menu-hint {
+  display: inline-flex;
+  min-height: 16px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--menu-fg-3);
+  font-size: 12px;
+}
+/* x6e: a 16px right-aligned 6px ▶ in labelFaint; labelMuted while its submenu is open, labelTitle when focused. */
+.menu-arrow {
+  width: 16px;
+  text-align: right;
+  font-size: 6px;
+  color: var(--menu-placeholder);
+}
+.menu-arrow::before {
+  content: "▶"; /* in CSS so the row's text stays its name */
+}
+.menu-item[aria-expanded="true"] .menu-arrow {
+  color: var(--menu-fg-3);
+}
+.menu-item[data-selected="true"]:is(:hover, :not([data-pristine] *)) .menu-arrow {
+  color: var(--fg);
+}
+/* A description row: label and a muted mini line, 8px from the top; 48px for one line. */
+.menu-item:has(.menu-description) {
+  height: auto;
+  min-height: 48px;
+  align-items: flex-start;
+  padding-block: 8px;
+}
+.menu-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+.menu-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+  color: var(--menu-fg-3);
+  font-size: 12px;
+}
+/* B4e: a 14px box (1px border, radius 3) in a 16px slot, shown on the focused or checked row; accent when checked. */
+.menu-checkbox {
+  appearance: none;
+  display: grid;
+  width: 14px;
+  height: 14px;
+  margin: 0 1px;
+  flex-shrink: 0;
+  place-content: center;
+  border: 1px solid var(--menu-check);
+  border-radius: 3px;
+  opacity: 0;
+}
+.menu-item[data-selected="true"]:is(:hover, :not([data-pristine] *)) > .menu-checkbox,
+.menu-item[aria-checked="true"] > .menu-checkbox {
+  opacity: 1;
+}
+.menu-item[aria-checked="true"] > .menu-checkbox {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.menu-item[aria-checked="true"] > .menu-checkbox::after {
+  content: "";
+  width: 8px;
+  height: 5px;
+  margin-top: -2px;
+  border: solid #fff;
+  border-width: 0 0 1.5px 1.5px;
+  transform: rotate(-45deg);
+}
+/* aT: 30px, 8px/14px padding, miniPlus (12px/500), labelMuted. */
+.menu-group [cmdk-group-heading],
+.menu-group-header {
+  display: flex;
+  height: 30px;
+  align-items: center;
+  padding: 8px 14px;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: normal;
+  white-space: nowrap;
+  color: var(--menu-fg-3);
+  user-select: none;
+}
+/* pT: 12px, a hairline centred in 6px of padding. */
+.menu-divider {
+  height: 12px;
+  padding: 6px 0;
+}
+.menu-divider::after {
+  content: "";
+  display: block;
+  border-bottom: 0.5px solid var(--menu-divider);
+}
+/* O6e: a 30px caption, 4px 12px 0 14px, small (13px/450), labelMuted. */
+.menu-text-divider {
+  display: flex;
+  height: 30px;
+  align-items: center;
+  padding: 4px 12px 0 14px;
+  overflow: hidden;
+  font-weight: 450;
+  white-space: nowrap;
+  color: var(--menu-fg-3);
+}
+/* LIST_EMPTY_STATE_HEIGHT: 42px. */
+.menu-empty {
+  height: 42px;
+  padding: 2px 14px 4px;
+  line-height: 36px;
+  color: var(--menu-placeholder);
+}
+
+/* Linear's editor, BJ-176. `.rich-doc` is Linear's `.editor` / `._sharedEditorRoot_1t2fc_1` (R): the editable
+   `.rich-content` carries it, and so does adf.tsx's read-only doc, so both look the same. Values come from
+   style-kMXsq6uH.css and FS() in startup-root.CnUSfl4j.js; the theme colours were read with getComputedStyle on a
+   linear.app issue description (2026-11-12) and map onto our tokens: labelTitle --fg, labelBase --fg-2,
+   labelMuted --fg-3, labelFaint --fg-4, bgShade --col, bgSub --app, bgBorderSolid --line-3,
+   bgBorderThin --bg-border, bgBorderSolidThin --border-solid-thin, editorHairline --thin-pixel. */
+:root {
+  --editor-link: lch(50% 80 288.43); /* --editor-label-link: purpleText */
+  --editor-code-bg: lch(20% 50 286.91 / 0.05); /* --editor-inline-code-background: [20, 50, controlPrimary hue, .05] */
+  --editor-callout-bg-mix: 5%; /* --editor-callout-bg-mix */
+  --editor-callout-border-mix: 28%; /* --editor-callout-border-mix */
+  /* --font-monospace and --font-emoji */
+  --editor-mono: "Berkeley Mono", "SFMono Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  --editor-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Segoe UI", "Twemoji Mozilla",
+    "Noto Color Emoji", "Android Emoji";
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --editor-link: lch(80% 80 288.43);
+    --editor-code-bg: rgb(255 255 255 / 0.075);
+    --editor-callout-bg-mix: 2%;
+    --editor-callout-border-mix: 20%;
+  }
+}
+
+.rich-content {
+  min-height: 120px;
+  padding: 12px;
+  outline: none;
+}
+/* R: font-size var(--editor-font-size) (15px), line-height var(--editor-line-height) (1.6). */
+.rich-content,
+.rich-doc {
+  font-size: 15px;
+  line-height: 1.6;
+}
+.rich-editor[data-expanded] .rich-content {
+  min-height: 300px;
+}
+.rich-editor[data-inline] .rich-content {
+  min-height: 32px;
+  padding: 2px 0;
+}
+.rich-placeholder {
+  top: 12px;
+  left: 12px;
+  font-size: 15px;
+  line-height: 1.6;
+  font-weight: 450;
+  letter-spacing: -0.00666667em;
+}
+.rich-editor[data-inline] .rich-placeholder {
+  top: 2px;
+  left: 0;
+}
+/* The issue description is borderless inline text on St.editorSurface (startup-root zrn.editorSurface):
+   margin 0 -14px, padding 10px 14px 16px, so its text lines up with the title. */
+.issue-description > .rich-content,
+.issue-description .rich-editor .rich-content {
+  min-height: 0;
+  margin: 0 -14px;
+  padding: 10px 14px 16px;
+}
+.issue-description .rich-editor .rich-placeholder {
+  top: 10px;
+  left: 0;
+}
+/* R p{line-height;overflow-wrap:break-word;font-size} + R .text-node{letter-spacing;font-weight} (margin 0 from preflight, so the :where() rhythm below wins) */
+.rich-doc p {
+  overflow-wrap: break-word;
+  font-weight: 450;
+  letter-spacing: -0.00666667em;
+}
+/* R .ProseMirror-focused:not(.readonly):not(.ProseMirror-hideselection)::selection: focusColor at .4 */
+.rich-content.ProseMirror-focused:not(.ProseMirror-hideselection)::selection,
+.rich-content.ProseMirror-focused:not(.ProseMirror-hideselection) ::selection {
+  background: color-mix(in lch, var(--accent) 40%, transparent);
+}
+
+/* Block rhythm (R :is(.text-node,…)+.text-node etc.): text→text 16px, text→list 6px, block→text 22px.
+   text-node = p, list-node = ul/ol, block-node = code, quote, callout, rule, media, table (prosemirror-tables wraps it in .tableWrapper), preserved content. */
+.rich-doc :where(p, ul, ol, .rich-expand) + :where(p, .rich-expand),
+.rich-doc :where(ul, ol) + :where(ul, ol),
+.rich-doc :where(h3) + :where(pre, blockquote, .rich-panel, hr, .media-frame, .rich-preserved, table, .tableWrapper) {
+  margin-top: 16px; /* var(--editor-block-spacing) */
+}
+.rich-doc :where(p) + :where(ul, ol),
+.rich-doc :where(h4) + :where(pre, blockquote, .rich-panel, hr, .media-frame, .rich-preserved, table, .tableWrapper) {
+  margin-top: 6px; /* var(--editor-block-spacing-small) */
+}
+.rich-doc :where(pre, blockquote, .rich-panel, hr, .media-frame, .rich-preserved, table, .tableWrapper) + :where(p, ul, ol, .rich-expand),
+.rich-doc
+  :where(p, ul, ol, pre, blockquote, .rich-panel, hr, .media-frame, .rich-preserved, table, .tableWrapper, .rich-expand, h1, h2)
+  + :where(pre, blockquote, .rich-panel, hr, .media-frame, .rich-preserved, table, .tableWrapper) {
+  margin-top: 22px; /* var(--editor-block-spacing-large) */
+}
+/* R ul.list-node li :is(.text-node,.block-node)+.block-node */
+.rich-doc li :where(p, pre, blockquote, .rich-panel, .media-frame, .rich-preserved) + :where(pre, blockquote, .rich-panel, .media-frame, .rich-preserved) {
+  margin-top: 16px;
+}
+
+/* .editor{--editor-h1-font-size…} + .editor .heading-node{font-weight:semibold;color:labelTitle;font-feature-settings:"calt"} */
+.rich-doc :is(h1, h2, h3, h4, h5, h6) {
+  font-weight: 600;
+  color: var(--fg);
+  font-feature-settings: "calt";
+  overflow-wrap: break-word;
+}
+.rich-doc h1 {
+  font-size: 1.375rem;
+  line-height: 1.85rem;
+  letter-spacing: -0.004375rem;
+  margin: 48px 0 16px; /* R h1: block-spacing * 3, block-spacing */
+}
+.rich-doc h2 {
+  font-size: 1.1875rem;
+  line-height: 1.75rem;
+  letter-spacing: 0.003125rem;
+  margin: 32px 0 16px; /* R h2: block-spacing * 2 */
+}
+.rich-doc h3 {
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  letter-spacing: 0.00625rem;
+  margin: 24px 0 6px; /* R h3: block-spacing * 1.5, block-spacing-small */
+}
+.rich-doc h4 {
+  font-size: 0.9375rem;
+  line-height: 1.5rem;
+}
+.rich-doc :is(h5, h6) {
+  font-size: 0.875rem;
+  color: var(--fg-3); /* labelMuted */
+}
+.rich-doc :is(h4, h5, h6) {
+  margin: 22px 0 6px; /* R h4,R h5,R h6 */
+}
+/* R .editor>.heading-node:first-child, .cell-content>.heading-node, blockquote>.heading-node:first-child */
+.rich-doc > :is(h1, h2, h3, h4, h5, h6):first-child,
+.rich-doc :is(td, th, blockquote, .rich-panel, .rich-expand-body) > :is(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
+}
+.rich-doc .rich-panel > :is(h1, h2, h3, h4, h5, h6):last-child {
+  margin-bottom: 0;
+}
+
+/* R b,R strong{font-weight:var(--font-weight-semibold)} */
+.rich-doc :is(b, strong) {
+  font-weight: 600;
+}
+/* .editor u{text-underline-offset:2px;text-decoration-thickness:1px} */
+.rich-doc u {
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
+/* .editor ul:not([data-type=todo_list]): a 1.5rem inset and a ::before bullet .5em wide, .25em into the gutter;
+   disc → circle → disc by depth. */
+.rich-doc ul:not([data-task-list]) {
+  counter-reset: editor-ul;
+  list-style: none;
+  padding-left: 1.5rem;
+}
+.rich-doc ul:not([data-task-list]) > li {
+  counter-increment: editor-ul;
+  position: relative;
+}
+.rich-doc ul:not([data-task-list]) > li::before {
+  content: counter(editor-ul, disc);
+  position: absolute;
+  left: calc(-1.5rem + 0.25em);
+  width: 0.5em;
+  text-align: center;
+  font-feature-settings: "case";
+}
+.rich-doc ul:not([data-task-list]) ul > li::before {
+  content: counter(editor-ul, circle);
+}
+.rich-doc ul:not([data-task-list]) ul ul > li::before {
+  content: counter(editor-ul, disc);
+}
+.rich-doc ul:not([data-task-list]) ul ul ul > li::before {
+  content: counter(editor-ul, circle);
+}
+/* .editor ol>li:before{content:counter(editor-ol) ". ";text-align:end;min-width:1.5rem;tabular-nums;translate(-.55em)}:
+   decimal → lower-alpha → lower-roman. Native markers end at the content edge, so .55em of item padding puts the
+   number where Linear's does and keeps the content at 1.5rem.
+   ponytail: a fixed 1.5rem column; Linear's grid widens it for 3-digit numbers, which overflow the gutter here. */
+.rich-doc ol {
+  list-style: decimal;
+  padding-left: calc(1.5rem - 0.55em);
+}
+.rich-doc ol > li {
+  padding-left: 0.55em;
+}
+.rich-doc ol > li::marker {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.00666667em;
+}
+.rich-doc ol ol {
+  list-style-type: lower-alpha;
+}
+.rich-doc ol ol ol {
+  list-style-type: lower-roman;
+}
+/* .editor li>ol,.editor li>ul,.editor li+li{margin-top:var(--editor-block-spacing-small)} */
+.rich-doc :is(li > ol, li > ul, li + li) {
+  margin-top: 6px;
+}
+
+/* .editor blockquote{padding-left:var(--editor-block-spacing)} + :before{4px bar, radius 2px, editor-border-solid} */
+.rich-doc blockquote {
+  position: relative;
+  padding-left: 16px;
+}
+.rich-doc blockquote::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--line-3);
+}
+
+/* .editor pre{--code-block-font-size:.875em;--code-block-line-height:1.4em;--code-block-padding:12px;
+   --code-block-side-padding:16px;background:bgSub;border:hairline bgBorderThin;radius 6px;white-space:pre;tab-size:2}
+   + .editor pre code{overflow-x:auto}. */
+.rich-doc pre {
+  position: relative;
+  display: grid;
+  background: var(--app);
+  border: var(--thin-pixel) solid var(--bg-border);
+  border-radius: 6px;
+  font-family: var(--editor-mono);
+  text-align: left;
+  white-space: pre;
+  word-spacing: normal;
+  word-break: normal;
+  tab-size: 2;
+  hyphens: none;
+  direction: ltr;
+}
+/* prosemirror-view's .ProseMirror pre{white-space:pre-wrap} ties with the rule above; Linear never wraps (code scrolls). */
+.ProseMirror.rich-doc pre {
+  white-space: pre;
+}
+.rich-doc pre code {
+  padding: 12px 16px;
+  overflow-x: auto;
+  font-family: var(--editor-mono);
+  font-size: 0.875em;
+  line-height: 1.4em;
+}
+/* .editor code.inline{font-family:mono;background:inline-code-background;box-shadow:0 0 0 hairline
+   inline-code-border-color inset;border-radius:.2em;padding:0 .25em;font-size:.9375em;line-height:1.3} */
+.rich-doc :not(pre) > code {
+  font-family: var(--editor-mono);
+  box-decoration-break: clone;
+  background-color: var(--editor-code-bg);
+  box-shadow: 0 0 0 var(--thin-pixel) var(--border-solid-thin) inset;
+  border-radius: 0.2em;
+  padding: 0 0.25em;
+  font-size: 0.9375em;
+  line-height: 1.3;
+}
+
+/* .editor a{color:var(--editor-label-link);text-decoration-line:none;underline-offset 2px;thickness 1px}, underlined on
+   hover; a focused editor keeps the text cursor and no hover underline. Media controls keep their own links. */
+.rich-doc a:not(.ui-button, [data-media-interactive] *) {
+  color: var(--editor-link);
+  text-decoration-line: none;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+@media (hover: hover) {
+  .rich-doc a:not(.ui-button, [data-media-interactive] *):hover {
+    text-decoration-line: underline;
+  }
+  .rich-content.ProseMirror-focused a:not(.ui-button, [data-media-interactive] *):hover {
+    text-decoration-line: none;
+  }
+}
+.rich-content.ProseMirror-focused a:not(.ui-button, [data-media-interactive] *) {
+  cursor: text;
+}
+
+/* .editor hr{background:editor-border-solid;border:none;height:1px} + R hr{margin:var(--editor-block-spacing-large) 0} */
+.rich-doc hr {
+  width: 100%;
+  height: 1px;
+  margin: 22px 0;
+  border: none;
+  background: var(--line-3);
+}
+
+/* .editor table{table-layout:fixed;border-radius:6px;border:hairline bgBorderThin;border-collapse:separate} with
+   hairline column rules (th,td{border-left}), cells padded 5px 8px (.cell-content), a header row in bgShade. */
+.rich-doc table {
+/* Linear's LinkSelection: with Mod held, a link under the pointer in the focused editor shows that a click opens it. */
+.ProseMirror-focused.link-active a[href]:hover {
+  cursor: pointer;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+  table-layout: fixed;
+  width: 100%;
+  border: var(--thin-pixel) solid var(--bg-border);
+  border-radius: 6px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.rich-doc :is(td, th) {
+  position: relative;
+  min-width: 40px;
+  padding: 5px 8px;
+  border-left: var(--thin-pixel) solid var(--bg-border);
+  text-align: left;
+  vertical-align: top;
+  font-weight: inherit;
+}
+.rich-doc :is(td, th):first-child {
+  border-left: none;
+}
+.rich-doc tr + tr > :is(td, th) {
+  border-top: var(--thin-pixel) solid var(--bg-border);
+}
+.rich-doc tr:has(+ tr) > th {
+  background-color: var(--col);
+}
+.rich-doc tr:first-of-type > :first-child {
+  border-top-left-radius: 6px;
+}
+.rich-doc tr:first-of-type > :last-child {
+  border-top-right-radius: 6px;
+}
+.rich-doc tr:last-of-type > :first-child {
+  border-bottom-left-radius: 6px;
+}
+.rich-doc tr:last-of-type > :last-child {
+  border-bottom-right-radius: 6px;
+}
+/* .editor.ProseMirror-focused td.selectedCell: the surface (th: bgShade) mixed with 5% #5e68d0 */
+.rich-content td.selectedCell {
+  background: color-mix(in srgb, var(--panel), #5e68d0 5%);
+}
+.rich-content th.selectedCell {
+  background: color-mix(in srgb, var(--col), #5e68d0 5%);
+}
+.rich-content .rich-token {
+  border-radius: 4px;
+  background: var(--sel);
+  padding: 0 3px;
+}
+/* ._mentionChip_i34q1_15: the text colour, no background at rest, bgShadeHover on hover, the selection colour when
+   selected. */
+.mention-chip {
+  border-radius: 4px;
+  color: inherit;
+  font-weight: 500;
+  padding: 0 3px;
+  white-space: nowrap;
+}
+@media (any-hover: hover) and (any-pointer: fine) {
+  .mention-chip:hover {
+    background-color: var(--card-pressed);
+  }
+}
+.ProseMirror-focused .mention-chip.ProseMirror-selectednode {
+  background-color: color-mix(in lch, var(--accent) 40%, transparent);
+}
+/* .editor .emoji:not(.custom-emoji){font-family:var(--font-emoji);font-style:normal} */
+.rich-doc .rich-emoji {
+  font-family: var(--editor-emoji);
+  font-style: normal;
+}
+/* --editor-image-max-height: 600px; R img{object-fit:contain} */
+.rich-doc .media-frame,
+.rich-doc .media-visual {
+  max-height: 600px;
+}
+.rich-doc .media-visual {
+  object-fit: contain;
+}
+.rich-content .rich-preserved {
+  color: var(--fg-3);
+  background: var(--col);
+  border: 1px solid var(--line-2);
+  padding: 8px;
+  border-radius: 6px;
+}
+/* Linear's image width handles, on the image's sides while it is hovered. */
+.media-resize-handle {
+  position: absolute;
+  top: 50%;
+  width: 6px;
+  height: 40px;
+  max-height: 50%;
+  translate: 0 -50%;
+  border-radius: 3px;
+  background: var(--fg-3);
+  border: 1px solid var(--card);
+  cursor: ew-resize;
+  opacity: 0;
+  touch-action: none;
+}
+.media-resize-handle[data-side="left"] {
+  left: 6px;
+}
+.media-resize-handle[data-side="right"] {
+  right: 6px;
+}
+:hover > .media-resize-handle {
+  opacity: 1;
+}
+/* Linear's block handle, in the gutter left of the caret's block; only the keyboard or a hover brings it forward.
+   --editor-block-menu-size 20px at --editor-block-menu-offset 28px; it fades in over --editor-toolbar-fade-duration
+   (40ms) after --editor-toolbar-reveal-delay (.1s). */
+.rich-block-handle {
+  position: absolute;
+  left: -28px;
+  z-index: 1;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 40ms ease-out;
+}
+.rich-editor:hover .rich-block-handle {
+  transition-delay: 0.1s;
+}
+.rich-editor:hover .rich-block-handle,
+.rich-block-handle:focus-visible,
+.rich-block-handle[aria-expanded="true"] {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rich-block-handle {
+    transition-duration: 0s;
+  }
+}
+/* FormattingToolbar's separator: 1×16px in bgBorder with 2px inline margin. */
+.rich-toolbar-separator {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: var(--bg-border);
+}
+
+/* Collapsible section (Jira's expand) as Linear's .collapsible-section: no box, its content one list inset in, the
+   title line pulled back into the gutter where a 20px toggle sits at -5px; the chevron turns 90° over .15s. */
+.rich-doc .rich-expand {
+  position: relative;
+  padding-left: 1.5rem; /* var(--editor-list-inset) */
+}
+.rich-doc .rich-expand-header {
+  position: relative;
+  display: flex;
+  min-height: 1lh;
+  margin-left: -1.5rem;
+  padding-left: 1.5rem;
+  border-radius: 6px;
+  list-style: none;
+}
+.rich-doc .rich-expand-header::-webkit-details-marker {
+  display: none;
+}
+.rich-doc .rich-expand-toggle {
+  position: absolute;
+  top: calc((1lh - 20px) / 2);
+  left: -5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 2px;
+  color: var(--fg-3); /* labelMuted */
+  cursor: pointer;
+}
+.rich-doc .rich-expand-toggle svg {
+  transition: transform 0.15s;
+}
+.rich-doc .rich-expand:is([data-open="true"], [open]) > .rich-expand-header .rich-expand-toggle svg {
+  transform: rotate(90deg);
+}
+.rich-doc .rich-expand-title {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  font-weight: 450;
+  letter-spacing: -0.00666667em;
+  outline: none;
+}
+.rich-doc .rich-expand-title::placeholder,
+.rich-doc .rich-expand-title[data-empty] {
+  color: var(--fg-4); /* labelFaint: "Add section title…", "Section" when read-only */
+}
+.rich-doc .rich-expand-body {
+  padding-left: 0;
+}
+.rich-doc .rich-expand:is([data-open="true"], [open]) > .rich-expand-body {
+  margin-top: 16px;
+}
+
+/* .editor div.callout-node{--callout-accent:var(--callout-color,#26b5ce);hairline border at the border mix, background at
+   the bg mix, radius 8px, padding 10px 16px 10px 38px, margin 22px 0} with its icon in a 28px column at 10px/8px.
+   Jira's panelType picks the accent. */
+.rich-doc .rich-panel {
+  --callout-accent: var(--callout-color, #26b5ce);
+  position: relative;
+  margin: 22px 0;
+  padding: 10px 16px 10px 38px;
+  border: var(--thin-pixel) solid
+    color-mix(in srgb, var(--callout-accent) var(--editor-callout-border-mix), transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--callout-accent) var(--editor-callout-bg-mix), transparent);
+}
+.rich-doc .rich-panel::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  left: 8px;
+  width: 28px;
+  height: calc(15px * 1.6);
+  background: var(--callout-accent);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13Zm0 5.25a.75.75 0 0 0-.75.75v3.5a.75.75 0 0 0 1.5 0V7.5A.75.75 0 0 0 8 6.75Zm0-2.5a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8Z'/%3E%3C/svg%3E")
+    center / 16px no-repeat;
+}
+.rich-doc .rich-panel[data-panel-type="note"] {
+  --callout-color: #5e6ad2;
+}
+.rich-doc .rich-panel[data-panel-type="success"],
+.rich-doc .rich-panel[data-panel-type="tip"] {
+  --callout-color: #4cb782;
+}
+.rich-doc .rich-panel[data-panel-type="warning"] {
+  --callout-color: #f2994a;
+}
+.rich-doc .rich-panel[data-panel-type="error"] {
+  --callout-color: #eb5757;
+}
+.rich-doc .rich-panel[data-panel-type="info"] {
+  --callout-color: #4ea7fc;
+}
+.rich-panel[data-panel-type="success"] {
+  --callout-color: #4cb782;
+}
+.rich-panel[data-panel-type="note"] {
+  --callout-color: var(--accent);
+}
+.rich-panel[data-panel-type="warning"] {
+  --callout-color: #f2994a;
+}
+.rich-panel[data-panel-type="error"] {
+  --callout-color: #eb5757;
+}
+/* Linear's checklist (editor and read-only view alike): the checkbox and drag handle sit in the list's inset. */
+ul[data-task-list] {
+  list-style: none;
+  padding-left: 1.5rem;
+}
+ul[data-task-list] > li {
+  position: relative;
+}
+.todo-checkbox-container {
+  position: absolute;
+  left: -1.5rem;
+  display: flex;
+  align-items: center;
+  height: 1lh;
+}
+.todo-drag-handle {
+  position: absolute;
+  left: -12px;
+  display: flex;
+  align-items: center;
+  width: 14px;
+  height: 100%;
+  padding: 0 6px 0 2px;
+  color: var(--fg-4);
+  cursor: move;
+  opacity: 0;
+  user-select: none;
+}
+.todo-drag-handle:hover {
+  color: var(--fg-3);
+}
+ul[data-task-list] > li:hover > .todo-checkbox-container > .todo-drag-handle {
+  opacity: 1;
+}
+.todo-checkbox {
+  position: relative;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 1px solid var(--fg-4);
+  border-radius: 3px;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color 80ms ease-out,
+    border-color 80ms ease-out;
+}
+.todo-checkbox::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+}
+.todo-checkbox[aria-disabled="true"] {
+  cursor: default;
+}
+.todo-checkbox[aria-checked="true"] {
+  opacity: 0.9;
+  border-color: var(--fg);
+  background: var(--fg)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='9' viewBox='0 0 10 8'%3E%3Cpath fill='white' d='M3.46975 5.70757L1.88358 4.1225C1.65832 3.8974 1.29423 3.8974 1.06897 4.1225C0.843675 4.34765 0.843675 4.7116 1.06897 4.93674L3.0648 6.93117C3.29006 7.15628 3.65414 7.15628 3.8794 6.93117L8.93103 1.88306C9.15633 1.65792 9.15633 1.29397 8.93103 1.06883C8.70578 0.843736 8.34172 0.843724 8.11646 1.06879L3.46975 5.70757Z'/%3E%3C/svg%3E")
+    1px 2px no-repeat;
+}
+@media (prefers-color-scheme: dark) {
+  .todo-checkbox[aria-checked="true"] {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='9' viewBox='0 0 10 8'%3E%3Cpath fill='black' d='M3.46975 5.70757L1.88358 4.1225C1.65832 3.8974 1.29423 3.8974 1.06897 4.1225C0.843675 4.34765 0.843675 4.7116 1.06897 4.93674L3.0648 6.93117C3.29006 7.15628 3.65414 7.15628 3.8794 6.93117L8.93103 1.88306C9.15633 1.65792 9.15633 1.29397 8.93103 1.06883C8.70578 0.843736 8.34172 0.843724 8.11646 1.06879L3.46975 5.70757Z'/%3E%3C/svg%3E");
+  }
+}
+.todo-content {
+  min-width: 0;
+}
+li[data-done="true"] > .todo-content {
+  opacity: var(--editor-todo-checked-opacity);
+}
+/* Linear's tip on the caret's empty line (EC `Uc`). */
+.ProseMirror-focused .rich-slash-tip::before {
+  content: "Type / for commands…";
+  float: left;
+  height: 0;
+  color: var(--fg-4);
+  pointer-events: none;
+}
+
+/* Reserve the ADF frame before metadata, then use the loaded media's intrinsic ratio. */
+.media-frame[style*="aspect-ratio"] > .media-message {
+  display: grid;
+  align-content: center;
+  min-height: 100%;
+}
+.media-frame[style*="aspect-ratio"] > .media-visual {
+  height: 100%;
+  object-fit: contain;
+}
+.media-filmstrip {
+  display: flex !important;
+  align-items: start;
+  gap: 8px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.media-filmstrip > .media-frame {
+  flex: 0 0 180px;
+  width: 180px;
+}
+
+.rich-content {
+  display: flow-root;
+}
+.rich-content .media-caption p {
+  margin: 0;
+}
+
+.video-player {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  background: #171719;
+  color: rgb(255 255 255 / 0.75);
+  outline: none;
+  container-type: inline-size;
+}
+.video-player:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.video-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.video-stage > video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 6px;
+}
+.video-controls {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 36px;
+  padding: 4px;
+  border-radius: 24px;
+  background: rgb(0 0 0 / 0.4);
+  backdrop-filter: blur(16px);
+  opacity: 0;
+  transition: opacity 150ms ease;
+  pointer-events: none;
+  font:
+    12px/1.2 Inter,
+    sans-serif;
+}
+.video-player[data-controls-visible="true"] .video-controls,
+.video-player[data-keyboard-controls="true"] .video-controls:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+.video-controls button,
+.video-controls a {
+  position: relative;
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 6px;
+  color: inherit;
+  background: transparent;
+  text-decoration: none !important;
+  border: 0;
+}
+.video-controls button:hover,
+.video-controls a:hover,
+.video-controls select:hover {
+  background: rgb(255 255 255 / 0.12);
+  color: #fff;
+}
+.video-controls button:disabled {
+  opacity: 0.35;
+}
+.video-controls :focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+}
+.video-time {
+  flex-shrink: 0;
+  min-width: 37px;
+  margin: 0 3px;
+  font-variant-numeric: tabular-nums;
+}
+.video-controls select {
+  flex: 0 0 48px;
+  width: 48px;
+  height: 28px;
+  padding: 0 2px;
+  color: inherit;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  appearance: none;
+  text-align: center;
+  outline: none;
+  font: inherit;
+}
+.video-controls select option {
+  color: #eee;
+  background: #242426;
+}
+.video-rate {
+  position: relative;
+  flex: 0 0 48px;
+  height: 28px;
+}
+/* Linear's tooltip (RAJ-52 property hover): menu surface, 5px 8px, 12px/450, bordered key caps. */
+.app-tooltip {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 5px 8px;
+  border: 1px solid var(--menu-line);
+  border-radius: 8px;
+  background: var(--menu);
+  box-shadow: lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
+  color: var(--fg-2);
+  font-size: 12px;
+  font-weight: 450;
+  line-height: 18px;
+  pointer-events: none;
+}
+.video-tooltip {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  border: 1px solid rgb(255 255 255 / 0.15);
+  border-radius: 8px;
+  background: #262627;
+  color: #ddd;
+  padding: 4px 8px;
+  font:
+    12px/20px Inter,
+    sans-serif;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 100ms,
+    visibility 100ms;
+}
+.video-controls a:hover > .video-tooltip,
+.video-rate:hover > .video-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 400ms;
+}
+.video-controls a:focus-visible > .video-tooltip,
+.video-rate:has(:focus-visible) > .video-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+.video-controls input[type="range"] {
+  display: block;
+  appearance: none;
+  min-width: 12px;
+  flex: 1;
+  height: 4px;
+  margin: 0 4px;
+  border-radius: 4px;
+  outline: none;
+  background: linear-gradient(
+    to right,
+    rgb(255 255 255 / 0.95) var(--video-progress),
+    rgb(255 255 255 / 0.22) var(--video-progress)
+  );
+}
+.video-controls input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 2px;
+  height: 12px;
+  border-radius: 1px;
+  background: white;
+}
+.video-controls input[type="range"]::-moz-range-thumb {
+  width: 2px;
+  height: 12px;
+  border: 0;
+  border-radius: 1px;
+  background: white;
+}
+.video-volume {
+  position: relative;
+  flex-shrink: 0;
+}
+.video-volume-popup {
+  position: absolute;
+  bottom: 36px;
+  left: -2px;
+  display: none;
+  width: 32px;
+  height: 80px;
+  padding: 12px 0;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 0.4);
+  backdrop-filter: blur(16px);
+}
+.video-volume-popup::after {
+  position: absolute;
+  content: "";
+  top: 100%;
+  width: 100%;
+  height: 10px;
+}
+.video-volume:hover .video-volume-popup,
+.video-volume:focus-within .video-volume-popup {
+  display: grid;
+  place-items: center;
+}
+.video-volume-popup input[type="range"] {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  min-width: 0;
+  flex: none;
+  width: 4px;
+  height: 56px;
+  margin: 0;
+  background: linear-gradient(
+    to top,
+    white var(--video-progress),
+    rgb(255 255 255 / 0.22) var(--video-progress)
+  );
+}
+.video-volume-popup input[type="range"]::-webkit-slider-thumb {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.video-volume-popup input[type="range"]::-moz-range-thumb {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.video-player.video-expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  width: 100vw;
+  height: 100dvh;
+  border-radius: 0;
+  background: #1a1a1a;
+}
+.video-expanded .video-stage {
+  height: auto;
+  max-height: calc(100dvh - 64px);
+}
+.video-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms;
+}
+.video-player[data-controls-visible="true"] > .video-close,
+.video-close:focus-visible,
+.video-player[data-keyboard-controls="true"]:has(.video-controls:focus-within) > .video-close {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.video-select {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  opacity: 0;
+}
+.video-select {
+  pointer-events: none;
+}
+.rich-editor:has(.rich-content:focus) .video-select,
+.video-select:focus {
+  opacity: 1;
+  pointer-events: auto;
+}
+.rich-editor:has([data-media-interactive]:focus-within) > [role="toolbar"],
+.rich-editor:has([data-media-interactive]:focus-within) > .rich-editor-actions > [role="toolbar"] {
+  display: none;
+}
+.video-waiting,
+.video-error,
+.video-pip {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 6px;
+  background: rgb(20 20 22 / 0.8);
+  text-align: center;
+  font-size: 12px;
+}
+.video-waiting {
+  pointer-events: none;
+  background: rgb(0 0 0 / 0.2);
+}
+.video-error {
+  gap: 6px;
+  padding: 8px;
+  overflow: auto;
+}
+.video-error p {
+  margin: 0;
+  line-height: 1.3;
+}
+.video-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.video-error-short {
+  display: none;
+}
+.media-filmstrip .media-message {
+  text-align: center;
+  justify-items: center;
+  padding: 8px;
+}
+.media-filmstrip .media-message button,
+.media-filmstrip .media-message a {
+  margin-inline: 0;
+}
+
+.video-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgb(255 255 255 / 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: video-spin 0.8s linear infinite;
+}
+@keyframes video-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@container (max-width: 420px) {
+  .video-controls .video-time {
+    display: none;
+  }
+}
+@container (max-width: 280px) {
+  .video-controls {
+    left: 4px;
+    right: 4px;
+    bottom: 4px;
+  }
+  .video-controls > a,
+  .video-rate,
+  .video-volume,
+  .video-controls > button[aria-label^="Picture-in"] {
+    display: none;
+  }
+}
+@container (max-width: 280px) {
+  .video-error {
+    padding: 4px;
+    gap: 4px;
+    font-size: 11px;
+  }
+  .video-error-full {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .video-error-short {
+    display: inline;
+  }
+
+}
+@media (prefers-reduced-motion: reduce) {
+  .video-controls {
+    transition: none;
+  }
+}
+
+.image-media {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.image-media > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.image-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--fg-2);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.2);
+}
+.image-media:hover > .image-actions,
+.image-media[data-image-selected="true"] > .image-actions,
+.image-media:focus-within > .image-actions {
+  display: flex;
+}
+
+.image-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--panel);
+  color: var(--fg-2);
+  outline: none;
+}
+.image-preview-toolbar {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  right: 12px;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 28px;
+  font-size: 12px;
+}
+.image-preview-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.image-preview-stage {
+  position: absolute;
+  inset: 44px 0 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  touch-action: none;
+}
+.image-preview-stage img {
+  max-width: none;
+  user-select: none;
+}
+.image-preview-notice {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--card);
+  font-size: 12px;
+}
+.image-comment-thread {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 15;
+  min-width: 260px;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.3);
+  font-size: 12px;
+}
+.image-comment-thread form {
+  display: flex;
+  gap: 8px;
+}
+
+.image-comment-thread p {
+  margin: 4px 0 12px;
+}
+/* The author and avatar only: a bare `span` also reached the buttons' icon spans. */
+.image-comment-meta > span,
+.image-comment-avatar {
+  color: var(--fg-3);
+  font-size: 11px;
+}
+.image-crop-editor {
+  position: fixed;
+  inset: 0;
+  z-index: 1001;
+  display: grid;
+  place-items: center;
+  background: var(--panel);
+  color: var(--fg);
+}
+.image-crop-actions {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.image-crop-stage {
+  position: relative;
+  max-height: calc(100vh - 100px);
+  user-select: none;
+  touch-action: none;
+}
+.image-crop-stage > img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.image-crop-selection {
+  position: absolute;
+  border: 1px solid white;
+  box-shadow: 0 0 0 200vmax rgb(0 0 0 / 0.55);
+  outline: none;
+}
+.image-crop-selection::before,
+.image-crop-selection::after {
+  content: "";
+  position: absolute;
+  inset: 33.333% 0;
+  border-block: 1px solid rgb(255 255 255 / 0.3);
+  pointer-events: none;
+}
+.image-crop-selection::after {
+  inset: 0 33.333%;
+  border-block: 0;
+  border-inline: 1px solid rgb(255 255 255 / 0.3);
+}
+.image-crop-selection button {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: white;
+  z-index: 1;
+}
+.image-crop-selection button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.image-comment-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.image-comment-meta time {
+  color: var(--fg-3);
+  font-size: 11px;
+}
+.image-comment-avatar {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--hover);
+}
+
+.media-upload {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  margin: 8px 0;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--fg-3);
+  font-size: 12px;
+}
+.media-upload button {
+  color: var(--fg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--hover);
+}
+
+.file-media {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--fg-2);
+  font-size: 13px;
+}
+.file-media-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0;
+}
+.file-media:hover .file-media-actions,
+.file-media:focus-within .file-media-actions {
+  opacity: 1;
+}
+
+.file-media {
+  min-height: 60px;
+  line-height: 20px;
+}
+.file-media > div > div:last-child {
+  line-height: 16px;
+}
+
+.rich-content p[data-media-caret] {
+  margin: 0;
+  min-height: 1px;
+  line-height: 1px;
+}
+
+.issue-detail {
+  container-type: inline-size;
+  container-name: issue-detail;
+}
+.issue-detail-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.issue-copy-toolbar {
+  position: sticky;
+  top: 8px;
+  z-index: 5;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  height: 0;
+  padding-right: 12px;
+}
+.issue-copy-toolbar button {
+  border: 1px solid var(--line-2);
+  border-radius: 50%;
+  background: var(--panel);
+}
+.issue-detail-grid {
+  display: grid;
+  grid-template-columns:
+    1fr minmax(0, 80ch) minmax(0, clamp(280px, 26.087cqw + 66.087px, 400px))
+    1fr;
+  column-gap: clamp(16px, 8.696cqw - 55.304px, 56px);
+  align-content: start;
+  padding-block: 59.5px 80px;
+  font-size: 16px;
+} /* title at y 112.5 like Linear (RAJ-52, 1272x846) */
+.issue-detail-title {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  padding-left: 14px;
+}
+.issue-detail-content {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+  padding-left: 14px;
+  font-size: 15px;
+}
+.issue-detail-properties {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  min-width: 0;
+  align-self: start;
+  position: sticky;
+  top: 59.5px;
+  padding: 15.3px 0 0 4px;
+}
+.issue-detail-properties [data-properties] {
+  max-width: 280px;
+}
+.property-short {
+  display: none;
+}
+.issue-detail-grid[data-properties-hidden] {
+  grid-template-columns: 1fr minmax(0, 80ch) 1fr;
+}
+@container issue-detail (width < 820px) {
+  .issue-detail-grid {
+    display: flex;
+    flex-direction: column;
+    padding: 56px 14px 48px;
+  }
+  .issue-detail-title,
+  .issue-detail-content {
+    padding-left: 0;
+  }
+  .issue-detail-properties {
+    margin-top: 12px;
+    padding: 0 6px;
+    position: static;
+  }
+  .issue-detail-properties [data-properties] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-width: none;
+  }
+  .issue-detail-properties section {
+    display: contents;
+  }
+  .issue-detail-properties h3 {
+    display: none;
+  }
+  .issue-detail-properties section > button {
+    width: auto;
+    max-width: 100%;
+    margin-left: 0;
+    border: 1px solid var(--line-2);
+    border-radius: 20px;
+    padding-inline: 10px;
+    height: 28px;
+    font-size: 12px;
+  }
+  .issue-detail-properties .property-wide {
+    display: none;
+  }
+  .issue-detail-properties .property-short {
+    display: inline;
+  }
+  #prop-status {
+    order: 0;
+  }
+  #prop-priority {
+    order: 1;
+  }
+  #prop-assignee,
+  #prop-type {
+    order: 2;
+  }
+  #prop-project {
+    order: 3;
+  }
+  #prop-labels {
+    order: 4;
+  }
+  #prop-due {
+    order: 5;
+  }
+  #prop-milestone {
+    order: 6;
+  }
+}
+/* RAJ-52 composer: 84px with its border, 15px/24px text 16px in, 24px buttons 12px apart 14px from the bottom and 18px from the right. */
+.rich-editor[data-variant="comment"] .rich-content {
+  min-height: 82px;
+  padding: 12px 16px 46px;
+  font-size: 15px;
+  line-height: 24px;
+}
+.rich-editor[data-variant="comment"] .rich-placeholder {
+  top: 12px;
+  left: 16px;
+  font-size: 15px;
+  line-height: 24px;
+}
+.rich-editor[data-variant="comment"] > .rich-editor-actions {
+  position: absolute;
+  bottom: 14px;
+  right: 18px;
+  gap: 12px;
+  border: 0;
+  padding: 0;
+}
+.rich-editor[data-variant="comment"] > .rich-editor-actions > button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+}
+.issue-activity:target,
+.issue-activity li:target,
+.issue-activity [data-comment]:target {
+  scroll-margin-top: 24px;
+}
+
+.issue-activity [data-thread],
+.issue-activity > div:last-child {
+  margin-inline: -8px;
+}
+/* RAJ-52/53 event rows (created, property, link): 24.8px tall, 4px apart, a 14px avatar 11px in and the name 36px in. */
+.activity-event {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 24.8px;
+  padding: 0 4px 0 11px;
+  font-size: 12px;
+  color: var(--fg-3);
+}
+.activity-event > :first-child {
+  margin-right: 5px;
+}
+.activity-event:has(+ .activity-event) {
+  margin-bottom: 4px;
+}
+.issue-activity > div:first-child > button {
+  font-size: 12px;
+}
+
+.issue-resources {
+  margin-top: 24px;
+}
+/* Linear's resource row (RAJ-52): 36px, inset 8px left and 10px right, 1px apart, 11px under the header toggle; ⋯ 4px after the time stays lit while its menu is open. */
+.issue-resources {
+  font-size: 13px;
+}
+.resource-row {
+  display: flex;
+  height: 36px;
+  margin-left: -6px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 8px;
+  border-radius: 8px;
+}
+.resource-row:hover,
+.resource-row[data-open] {
+  background: var(--row-hover);
+}
+.issue-resources > div:first-child + .resource-row {
+  margin-top: 9px;
+}
+.resource-row + .resource-row {
+  margin-top: 1px;
+}
+
+/* RAJ-52 comment card: a 0.5px line and shadow, 16px padding (replies 14px 16px), an 18px header of 13px text, then 15px/24px body 6px below.
+   The resting reply row is 46px under a 0.5px line: your avatar, "Leave a reply…", and 24px attach and send buttons 12px apart, 18px from the right. */
+.comment-thread {
+  border: 0.5px solid var(--hidden-line);
+  box-shadow: var(--hidden-shadow);
+}
+.comment-message {
+  padding: 16px;
+}
+.comment-reply {
+  padding: 14px 16px;
+  border-top: 0.5px solid var(--hidden-line);
+}
+.comment-head {
+  display: flex;
+  height: 18px;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  line-height: normal;
+  font-weight: 450;
+  color: var(--card-fg-3);
+}
+.comment-head > :first-child {
+  margin-right: 1px;
+}
+.comment-body {
+  margin-top: 6px;
+  font-size: 15px;
+  line-height: 24px;
+  font-weight: 450;
+  color: var(--comment-fg);
+}
+.comment-body :where(p, li) {
+  line-height: 24px;
+}
+.comment-reply-composer {
+  border-top: 0.5px solid var(--hidden-line);
+}
+.comment-reply-row {
+  display: flex;
+  height: 46px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 18px 0 16px;
+}
+.comment-reply-open {
+  flex: 1;
+  height: 24px;
+  text-align: left;
+  font-size: 15px;
+  line-height: 24px;
+  font-weight: 450;
+  color: var(--reply-ph);
+  cursor: text;
+}
+.comment-hover-action {
+  margin: -5px 0;
+  opacity: 0;
+}
+.comment-head > span:last-child {
+  margin-right: -5px;
+}
+.comment-message:hover .comment-hover-action,
+.comment-message:focus-within .comment-hover-action,
+.comment-message:has(> .comment-head [aria-expanded="true"]) .comment-hover-action {
+  opacity: 1;
+}
+
+.comment-reply-composer .rich-editor {
+  border: 0;
+  background: transparent;
+}
+/* Comment formatting sits in the composer's action row, left of its buttons, so it never covers the paperclip or the reply row above. */
+.rich-editor[data-variant="comment"] > .rich-editor-actions {
+  left: 8px;
+}
+.rich-editor[data-variant="comment"] .rich-editor-actions > [role="toolbar"] {
+  position: static;
+  min-width: 0;
+  margin: 0 auto 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+/* 24px tall like the row's other buttons, so it stays inside the composer's bottom padding. */
+.rich-editor[data-variant="comment"] .rich-editor-actions > [role="toolbar"] > button {
+  padding-block: 0;
+  line-height: 24px;
+}
+
+/* Keep inline formatting beside the composer actions, clear of the title. */
+.sub-issue-composer .rich-editor > [role="toolbar"] {
+  bottom: 4px;
+  left: 8px;
+  right: 245px;
+  margin-bottom: 0;
+  border: 0;
+  box-shadow: none;
+  background: var(--card);
+}
+.sub-issue-composer .rich-editor:focus-within .rich-editor-hint {
+  visibility: hidden;
+}
+.sub-issue-composer .rich-content {
+  font-size: 15px;
+  line-height: 24px;
+}
+@media (max-width: 700px) {
+  .document-history-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .document-history-grid > [aria-label="Document versions"] {
+    border-left: 0;
+    border-top: 1px solid var(--line-2);
+    padding-left: 0;
+    padding-top: 12px;
+  }
+}
+
+/* Download as PDF prints only the open document, like Linear's export. */
+@media print {
+  :where(body:has([data-document])) * {
+    visibility: hidden;
+  }
+  [data-document],
+  [data-document] * {
+    visibility: visible;
+  }
+  [data-document] {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+  }
+  [data-document] button {
+    display: none;
+  }
+  [data-document] .overflow-y-auto {
+    overflow: visible;
+  }
+}
+
+/* Linear's label chip in the issue sidebar (RAJ-52): 25px, 1px border, panel fill, 9px dot 9px in, name 6px after it, 13px/500. */
+.label-chip {
+  display: flex;
+  height: 25px;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 9999px;
+  background: var(--panel);
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-2);
+}
+.label-chip:hover {
+  background: var(--tab-on);
+}
+.relation-pill {
+  display: flex;
+  height: 28px;
+  max-width: 100%;
+  min-width: 0;
+  margin-left: 1px;
+  align-items: center;
+  gap: 6px;
+  border-radius: 9999px;
+  padding: 0 10px 0 6px;
+  color: var(--fg-2);
+}
+.relation-pill > :first-child {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  place-items: center;
+}
+.relation-pill:hover {
+  background: var(--add-hover);
+}
+.reaction-pill {
+  display: flex;
+  height: 28px;
+  align-items: center;
+  border: 1px solid var(--reaction-line);
+  border-radius: 9999px;
+  background: var(--reaction);
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg-3);
+}
+.reaction-pill:hover {
+  background: var(--reaction-hover);
+}
+.reaction-pill > :first-child {
+  display: grid;
+  width: 14px;
+  height: 14px;
+  place-items: center;
+  font-size: 11px;
+  line-height: 1;
+}
+.reaction-pill > :last-child {
+  padding-left: 5px;
+  color: var(--fg);
+}
+/* Linear's "Mark as" command menu (RAJ-52): 30px 12px/500 headings, 46px rows whose 42px highlight is inset 2px, and a 35px hint footer. */
+.mark-list [cmdk-group-heading] {
+  display: flex;
+  height: 30px;
+  align-items: center;
+  padding-left: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--menu-fg-3);
+}
+.mark-footer {
+  display: flex;
+  height: 35px;
+  flex-shrink: 0;
+  align-items: center;
+  border-top: 1px solid var(--menu-line);
+  padding: 0 4px;
+}
+.mark-footer > span {
+  display: flex;
+  height: 24px;
+  align-items: center;
+  gap: 6px;
+  border-radius: 9999px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--menu-fg);
+}
+
+/* The video toolbar keeps its own player chrome (index.css `.video-controls button`): Linear's player isn't in
+   the bundle, so there is no value to move it to. Its glyphs stay 16px inside the medium IconButton. */
+.video-controls .ui-button-icon > svg {
+  width: 16px;
+  height: 16px;
+}
+.image-comment-thread .ui-autosize,
+.comment-reply-row .ui-autosize {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The autosizing reply needs room to grow beyond the old single-line row. */
+.comment-reply-row:has(.ui-autosize) {
+  height: auto;
+  min-height: 46px;
+}
+.media-comment-action {
+  margin: -5px 0;
+  opacity: 0;
+}
+.comment-thread:hover .media-comment-action,
+.comment-thread:focus-within .media-comment-action,
+.media-comment-action[aria-expanded="true"] {
+  opacity: 1;
+}
+.video-controls .ui-button:hover .video-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 400ms;
+}
+.video-controls .ui-button:focus-visible .video-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+/* Jira's embedCard as Linear's embed frame: 100% wide, 400px tall (startup-entry `embed` node). Editor and read-only view. */
+.rich-embed {
+  margin: 6px 0;
+}
+.rich-embed iframe {
+  display: block;
+  width: 100%;
+  height: 400px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--col);
+}
+
+/* Code blocks (package D): Linear's `.editor pre.code-block` grid, gutter, syntax colours, collapse and hover toolbar
+   (style-kMXsq6uH.css), shared by the editor's node view and the read-only ReadonlyCodeBlock. The block's own chrome
+   (border, radius, background) stays with `.rich-content pre`. */
+:root {
+  /* Linear's `MS` hljs palette (startup-root `--editor-hljs-*`), light. */
+  --hljs-red: #bf1420;
+  --hljs-orange: #a74002;
+  --hljs-green: #00755c;
+  --hljs-yellow: #8a5d00;
+  --hljs-pink: #9532a4;
+  --hljs-blue: #00264d;
+  --hljs-blue-light: #025f8c;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --hljs-red: #ec3b40;
+    --hljs-orange: #eb6e3d;
+    --hljs-green: #25f8ca;
+    --hljs-yellow: #fce27d;
+    --hljs-pink: #e394dc;
+    --hljs-blue: #2482d8;
+    --hljs-blue-light: #00c5f0;
+  }
+}
+/* `.editor pre`: the padding lives on the gutter and the code, so the gutter can sit in its own column. */
+pre.code-block {
+  --code-block-font-size: 0.875em;
+  --code-block-line-height: 1.4em;
+  --code-block-padding: 12px;
+  --code-block-side-padding: 16px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  position: relative;
+  isolation: isolate;
+  padding: 0;
+  font-size: var(--code-block-font-size);
+  white-space: pre;
+  word-break: normal;
+  tab-size: 2;
+  text-align: left;
+  direction: ltr;
+}
+pre.code-block > code,
+pre.code-block > .cb-gutter {
+  font-family: monospace;
+  font-size: inherit;
+  line-height: var(--code-block-line-height);
+  padding-top: var(--code-block-padding);
+  padding-bottom: var(--code-block-padding);
+  background: none;
+}
+pre.code-block > code {
+  grid-column: 2;
+  align-self: start;
+  padding-right: var(--code-block-side-padding);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+pre.code-block > .cb-gutter {
+  grid-column: 1;
+  box-sizing: content-box;
+  min-width: 2ch;
+  padding-left: var(--code-block-side-padding);
+  padding-right: 20px;
+  text-align: right;
+  color: var(--fg-4);
+  user-select: none;
+}
+pre.code-block[data-line-numbers="false"] > .cb-gutter {
+  display: none;
+}
+pre.code-block[data-line-numbers="false"] > code {
+  grid-column: 1 / -1;
+  padding-left: var(--code-block-side-padding);
+}
+pre.code-block[data-line-wrap="true"] {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+pre.code-block[data-line-wrap="true"] > code {
+  overflow-x: hidden;
+}
+/* Collapsible past 30 lines: room for the bar under the code, and 15 lines under a fade while collapsed. */
+pre.code-block[data-collapsible="true"]:not([data-collapsed="true"]) > code,
+pre.code-block[data-collapsible="true"]:not([data-collapsed="true"]) > .cb-gutter {
+  padding-bottom: 39px;
+}
+pre.code-block[data-collapsed="true"] {
+  overflow: hidden;
+}
+pre.code-block[data-collapsed="true"] > code,
+pre.code-block[data-collapsed="true"] > .cb-gutter {
+  max-height: calc(15 * var(--code-block-line-height) + var(--code-block-padding) * 2);
+  overflow: clip;
+  cursor: pointer;
+}
+pre.code-block[data-collapsed="true"] > code::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 70%, var(--col) 100%);
+}
+pre.code-block > .cb-controls {
+  display: contents;
+  white-space: normal;
+  font-family: var(--font-sans, inherit);
+}
+/* The hover toolbar (`.cb-copy`): top right, revealed after Linear's 0.1s toolbar delay. */
+pre.code-block .cb-copy {
+  position: absolute;
+  z-index: 10;
+  top: min(10px, 50% - 16px);
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 8%);
+  transition: opacity 40ms ease-out;
+}
+@media (hover: hover) {
+  pre.code-block .cb-copy {
+    opacity: 0;
+    pointer-events: none;
+  }
+  pre.code-block:hover .cb-copy,
+  pre.code-block .cb-copy[data-popover-open],
+  pre.code-block .cb-copy:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  pre.code-block:hover:not(:focus-within) .cb-copy {
+    transition-delay: 0.1s;
+  }
+}
+pre.code-block .cb-language {
+  gap: 3px;
+  padding-left: 8px;
+  color: var(--fg-3);
+  user-select: none;
+}
+pre.code-block .cb-language[data-readonly] {
+  cursor: default;
+}
+/* The Expand/Collapse bar (`expandCollapseControlsContainer`): centred 9px above the bottom. */
+pre.code-block .cb-ex-col {
+  position: absolute;
+  z-index: 10;
+  bottom: 9px;
+  left: 50%;
+  transform: translate(-50%);
+  display: flex;
+}
+pre.code-block .cb-ex-col button {
+  color: var(--fg-3);
+  transition: opacity 40ms ease-out;
+}
+@media (hover: hover) {
+  pre.code-block[data-collapsed="true"] .cb-ex-col button {
+    opacity: 0;
+    pointer-events: none;
+  }
+  pre.code-block:hover .cb-ex-col button,
+  pre.code-block .cb-ex-col button:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+/* Display options (`I0e`): a column of labelled switches, 4px 16px. */
+.cb-display-options {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 16px;
+  font-size: 12px;
+}
+.cb-display-options label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 32px;
+  color: var(--fg-3);
+}
+/* Syntax colours: Linear's `.editor .syntax-*` rules. */
+.code-block .syntax-comment,
+.code-block .syntax-markup-quote {
+  color: var(--fg-4);
+}
+.code-block .syntax-string,
+.code-block .syntax-markup-list {
+  color: var(--hljs-blue-light);
+}
+.code-block .syntax-constant-language,
+.code-block .syntax-markup-deleted {
+  color: var(--hljs-red);
+}
+.code-block .syntax-entity-name-function,
+.code-block .syntax-meta-embedded,
+.code-block .syntax-markup-heading,
+.code-block .syntax-markup-inserted {
+  color: var(--hljs-green);
+}
+.code-block .syntax-keyword,
+.code-block .syntax-keyword-operator,
+.code-block .syntax-support-function {
+  color: var(--hljs-pink);
+}
+.code-block .syntax-entity-other-attribute-name,
+.code-block .syntax-constant-other-symbol,
+.code-block .syntax-variable-other-property,
+.code-block .syntax-variable,
+.code-block .syntax-variable-parameter {
+  color: var(--hljs-yellow);
+}
+.code-block .syntax-entity-name-tag,
+.code-block .syntax-entity-name-type,
+.code-block .syntax-entity-other-attribute-name-id,
+.code-block .syntax-entity-other-attribute-name-class,
+.code-block .syntax-string-regexp,
+.code-block .syntax-markup-underline-link {
+  color: var(--hljs-orange);
+}
+.code-block .syntax-constant-numeric {
+  color: var(--hljs-blue);
+}
+@media print {
+  pre.code-block > .cb-gutter,
+  pre.code-block > .cb-controls {
+    display: none;
+  }
+  pre.code-block > code {
+    grid-column: 1 / -1;
+    padding-left: var(--code-block-side-padding);
+  }
+  pre.code-block[data-collapsed="true"] > code {
+    max-height: none;
+  }
+}
+/* Linear's table controls (BJ-181): column resize handle, row/column handles, gutter menu button, edge add bars. */
+.rich-content .tableWrapper {
+  overflow-x: auto;
+}
+.rich-content .column-resize-handle {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  right: -1.5px;
+  z-index: 10;
+  width: 2px;
+  background: var(--fg-4);
+  pointer-events: none;
+}
+.rich-content.resize-cursor {
+  cursor: col-resize;
+}
+.rich-table-handle {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rich-table-handle[data-table-cell-control="row"] {
+  width: 8px;
+}
+.rich-table-handle[data-table-cell-control="column"] {
+  height: 8px;
+}
+/* Linear's 3×20 pill, faint until hovered or its menu is open. */
+.rich-table-handle::after {
+  content: "";
+  width: 3px;
+  height: 20px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--fg-4) 50%, transparent);
+}
+.rich-table-handle[data-table-cell-control="column"]::after {
+  width: 20px;
+  height: 3px;
+}
+.rich-table-handle:hover::after,
+.rich-table-handle[aria-expanded="true"]::after {
+  background: var(--accent);
+}
+.rich-table-add {
+  position: absolute;
+  z-index: 1;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--fg-4) 20%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  min-height: 18px;
+  color: var(--fg-3);
+  opacity: 0;
+}
+.rich-editor:hover .rich-table-add {
+  opacity: 1;
+}
+.rich-table-add:hover {
+  background: color-mix(in srgb, var(--fg-4) 60%, transparent);
+}
