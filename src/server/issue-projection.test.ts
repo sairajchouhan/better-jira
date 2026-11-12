@@ -51,6 +51,19 @@ const story = {
       { type: { name: "Duplicate" }, inwardIssue: { key: "CS-152" } },
       { type: { name: "Relates" }, inwardIssue: { key: "CS-153" } },
       { type: { name: "Relates" } }, // a link to an issue this account can't see
+      // An issue outside the board, with the fields Jira sends inside the link; and a link type Linear has no kind for.
+      {
+        type: { name: "Problem/Incident", inward: "is caused by", outward: "causes" },
+        inwardIssue: {
+          key: "OPS-12",
+          fields: {
+            summary: "Importer outage on staging",
+            status: { id: "3", name: "In Progress", statusCategory: { key: "indeterminate" } },
+            priority: { name: "Normal" },
+            issuetype: { name: "Bug" },
+          },
+        },
+      },
     ],
     fixVersions: [{ id: "20001", name: "v2.4", released: false }],
     watches: { watchCount: 3, isWatching: true },
@@ -136,6 +149,12 @@ test("projects a full Jira record into the board's slim issue", () => {
       { key: "CS-151", kind: "duplicate" },
       { key: "CS-152", kind: "duplicated" },
       { key: "CS-153", kind: "related" },
+      {
+        key: "OPS-12",
+        kind: "inward:Problem/Incident",
+        label: "is caused by",
+        issue: { summary: "Importer outage on staging", status: { name: "In Progress", category: "indeterminate" } },
+      },
     ],
   });
 });

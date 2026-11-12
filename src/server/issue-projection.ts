@@ -1,6 +1,7 @@
 import { jiraAvatar } from "@/shared/avatar-url";
 import { issueAttachments } from "@/shared/attachment-media";
 import { pullRequestCount } from "@/shared/issue-properties";
+import { linkRelation } from "@/shared/relations";
 
 /** Pure: raw Jira records in, the app's issue and property shapes out. No I/O. */
 
@@ -94,27 +95,14 @@ export function issueProjection(siteFields: any[] | null) {
         prCount: pullRequestCount(f.customfield_10000),
         estimate: estimates.map((id) => f[id]).find((v) => typeof v === "number"),
         links: [...links],
-        relations: (f.issuelinks ?? [])
-          .map((r: any) => ({
-            key: (r.outwardIssue ?? r.inwardIssue)?.key,
-            kind: /block/i.test(r.type?.name ?? "")
-              ? r.outwardIssue
-                ? "blocking"
-                : "blocked"
-              : /duplicat/i.test(r.type?.name ?? "")
-                ? r.outwardIssue
-                  ? "duplicate"
-                  : "duplicated"
-                : "related",
-          }))
-          .filter((r: any) => r.key),
+        relations: (f.issuelinks ?? []).flatMap((link: any) => linkRelation(link) ?? []),
       };
     },
   };
 }
 export type IssueProjection = ReturnType<typeof issueProjection>;
 /** Bump when `slim`'s output changes: the mirror re-projects every stored issue on its next start. */
-export const SLIM_VERSION = "7";
+export const SLIM_VERSION = "8";
 
 /** A mirrored issue with what enrichment stored for it (null until enriched). */
 export type PropertyRow = {
