@@ -1,5 +1,4 @@
 import { FavoriteButton } from "./favorite-button";
-import { navigationChoices } from "./quick-navigation";
 import { useActiveView, useSavedViews, createViewDraft } from "./saved-views";
 import { setScope, useViewSettings } from "./view-settings";
 import { openViewEditor, ViewMenu, ViewContextMenu, ViewEditorPage } from "./view-editor";
@@ -31,7 +30,6 @@ import {
 import { ContextMenu, type ActionEntry } from "./action-menu";
 import { showNotification } from "./app-notifications";
 import { BoardControls, FilterChips } from "./view-controls";
-import { Modal } from "./personal-controls";
 import { hotkeyOf, runShortcut } from "./shortcuts";
 import { Button, IconButton } from "./button";
 import { Shortcut } from "./keycap";
@@ -40,7 +38,6 @@ import { TextInput } from "./field";
 import { ConfirmDialog, Dialog } from "./dialog";
 import { useCommand, focusNode } from "./commands";
 import { useInboxBadge } from "./inbox";
-import { Menu } from "./menu";
 import { SectionDisclosure } from "./section-disclosure";
 import { SelectRow } from "./display-options";
 import { useStoredState } from "./stored-state";
@@ -64,45 +61,6 @@ const parseSidebarPrefs = (raw: unknown): SidebarPrefs => {
     myIssues: visibility(r.myIssues) === "WithNotifications" ? "Always" : visibility(r.myIssues),
   };
 };
-
-export function QuickNavigation({ kind }: { kind: "favorites" | "views" | "boards" }) {
-  const boards = useStore((s) => s.boards);
-  const savedViews = useStore((s) => s.savedViews);
-  const favorites = useStore((s) => s.favorites);
-  const issues = useStore((s) => s.issues);
-  const close = () => ui.send({ type: "overlay.close" });
-  const title =
-    kind === "views" ? "Open view" : kind === "boards" ? "Open a team / board" : "Open a favorite";
-  const choices = navigationChoices(kind, { boards, savedViews, favorites, issues });
-  return (
-    <Modal label={title} close={close} fit>
-      <Menu>
-        <Menu.Input autoFocus aria-label="Find view or favorite" placeholder="Search…" />
-        <Menu.List maxHeight="60vh">
-          <Menu.Empty>No saved {kind}</Menu.Empty>
-          {choices.map((choice) => (
-            <Menu.Item
-              key={choice.id}
-              value={choice.name}
-              onSelect={() => {
-                close();
-                const to = choice.destination;
-                if ("view" in to) openSavedView(to.view);
-                else {
-                  const { scope, ...route } = to;
-                  navigate(route);
-                  if (scope) setScope(to.board, scope);
-                }
-              }}
-            >
-              {choice.name}
-            </Menu.Item>
-          ))}
-        </Menu.List>
-      </Menu>
-    </Modal>
-  );
-}
 
 // --- chrome ---
 

@@ -16,11 +16,10 @@ import { Tooltips } from "./tooltip";
 import { ToastViewport } from "./toast";
 import { EmptyState, LoadingState } from "./empty-state";
 import { Button } from "./button";
-import { HelpMenu, ShortcutHelp, useLinearHotkeys } from "./shortcuts";
+import { ShortcutHelp, useLinearHotkeys } from "./shortcuts";
 import { InboxIssueActions, InboxList, InboxPane } from "./inbox";
 import { BoardView } from "./board-view";
 import {
-  QuickNavigation,
   Sidebar,
   DeleteConfirm,
   StatusBar,
@@ -30,7 +29,7 @@ import {
 import { InboxIssuePane, IssuePage, IssueSidePanel } from "./issue-view";
 import { IssueDocument } from "./issue-resources";
 import { StatusPicker, AssignPicker } from "./issue-pickers";
-import { IssueSearch, CommandPalette } from "./palette";
+import { IssueSearch, CommandPalette, HelpMenu, isPalettePage } from "./palette";
 function Hotkeys() {
   useLinearHotkeys();
   return null;
@@ -130,9 +129,7 @@ export function App() {
       {overlay === "shortcuts" && <ShortcutHelp />}
       {overlay === "add-board" && <AddBoard />}
       {overlay === "help" && <HelpMenu />}
-      {(overlay === "favorites" || overlay === "views" || overlay === "boards") && (
-        <QuickNavigation kind={overlay} />
-      )}
+      {overlay !== "help" && isPalettePage(overlay) && <CommandPalette page={overlay} />}
       {overlay === "assign" && target && <AssignPicker issueKey={target} />}
       {overlay === "status" && target && <StatusPicker issueKey={target} />}
       {overlay === "create" && <CreateIssue />}

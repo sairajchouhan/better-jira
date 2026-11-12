@@ -11,10 +11,14 @@ import { canMergeOverlay } from "./saved-view-model";
 import { createToolbarView } from "./view-toolbar-actions";
 import { Command } from "cmdk";
 import { useMemo, useState, type ReactNode } from "react";
+import { navigationChoices, type NavigationChoice } from "./quick-navigation";
+import { setScope } from "./view-settings";
+import { ActionMenu } from "./action-menu";
 import { StatusIcon, TypeDot } from "./icons";
 import {
   get,
   navigate,
+  openSavedView,
   set,
   timed,
   ui,
@@ -29,7 +33,7 @@ import { Avatar } from "./avatar";
 import { matchRank } from "./search-rank";
 import { matchIssues } from "./issue-search";
 import { hotkeyOf, runShortcut, shortcutApplies, shortcuts } from "./shortcuts";
-import { Shortcut } from "./keycap";
+import { Shortcut, type Keys } from "./keycap";
 const MENU =
   "overflow-hidden rounded-xl border border-[var(--menu-line)] bg-[var(--menu)] text-fg-2 shadow-[var(--menu-shadow)] " +
   "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[12px] [&_[cmdk-group-heading]]:text-fg-3 " +
@@ -50,8 +54,82 @@ function Overlay({
   );
 }
 
-/** `keys`: the hotkey that does the same thing, drawn after the name. */
-type Cmd = { name: string; keys?: string | readonly string[]; icon?: ReactNode; disabled?: boolean; run: () => void };
+/** `keys`: the hotkey that does the same thing, drawn after the name. `id` keys the row when names repeat. */
+type Cmd = { id?: string; name: string; keys?: Keys; icon?: ReactNode; disabled?: boolean; run: () => void };
+
+/** One command row; ⌘K's commands and every nested page's choices. */
+function CommandRow({ cmd: c }: { cmd: Cmd }) {
+  return (
+    <Command.Item value={`cmd:${c.id ?? c.name}`} disabled={c.disabled} className="data-[disabled=true]:opacity-50" onSelect={c.run}>
+      <span className="grid w-4 shrink-0 place-items-center text-fg-3">{c.icon}</span>
+      <span className="flex-1 truncate">{c.name}</span>
+      {c.keys?.length ? <Shortcut keys={c.keys} /> : null}
+    </Command.Item>
+  );
+}
+/** Best match first, so Enter runs the row whose name was typed; every row while the query is empty. */
+const ranked = (cmds: Cmd[], q: string) =>
+  cmds
+    .map((c) => [q.trim() ? matchRank(c.name, q) : 0, c] as const)
+    .filter(([r]) => r >= 0)
+    .sort(([a], [b]) => a - b);
+
+/** Linear's nested "Open …" command pages (`nameAsParent`, `searchShortcut.keyword` in startup-root.CnUSfl4j.js): their
+ *  chord opens the palette on the page, with the parent's name as the input's chip; ⌫ in the empty input leaves it. */
+const PAGES = {
+  favorites: { parent: "Favorite", label: "Open favorite" },
+  boards: { parent: "Team", label: "Open team" },
+  views: { parent: "View", label: "Open view" },
+  /** Linear's `?` Help action (`mAt`, search input hidden) when the sidebar's Help button isn't there to anchor its menu. */
+  help: { parent: "Help", label: "Help" },
+} as const;
+export type PalettePage = keyof typeof PAGES;
+export const isPalettePage = (overlay: string | null): overlay is PalettePage => !!overlay && overlay in PAGES;
+const close = () => ui.send({ type: "overlay.close" });
+
+function openChoice({ destination: to }: NavigationChoice) {
+  close();
+  if ("view" in to) return openSavedView(to.view);
+  const { scope, ...route } = to;
+  navigate(route);
+  if (scope) setScope(to.board, scope);
+}
+/** A page's rows, unfiltered. */
+function usePageRows(page: PalettePage): Cmd[] {
+  const boards = useStore((s) => s.boards);
+  const savedViews = useStore((s) => s.savedViews);
+  const favorites = useStore((s) => s.favorites);
+  const issues = useStore((s) => s.issues);
+  if (page === "help")
+    return [{ name: "Keyboard shortcuts", keys: hotkeyOf("shortcuts"), run: () => ui.send({ type: "overlay.open", overlay: "shortcuts" }) }];
+  return navigationChoices(page, { boards, savedViews, favorites, issues }).map((choice) => ({
+    id: choice.id,
+    name: choice.name,
+    run: () => openChoice(choice),
+  }));
+}
+function PageRows({ page, q }: { page: PalettePage; q: string }) {
+  const rows = ranked(usePageRows(page), q);
+  return rows.map(([, c]) => <CommandRow key={c.id ?? c.name} cmd={c} />);
+}
+
+/** Linear's Help menu under the sidebar's Help button; the same entries in the palette when that button is hidden. */
+export function HelpMenu() {
+  const [anchor] = useState(() => {
+    const node = document.getElementById("help-menu");
+    return node?.getClientRects().length ? node : null;
+  });
+  const rows = usePageRows("help");
+  if (!anchor) return <CommandPalette page="help" />;
+  return (
+    <ActionMenu
+      label="Help"
+      anchor={anchor}
+      close={close}
+      entries={rows.map((c) => ({ name: c.name, shortcut: c.keys, run: c.run }))}
+    />
+  );
+}
 
 /** The palette dialog both search and ⌘K use: the input (with the scoped issue's chip), then the result groups.
  *  Not menu.tsx on purpose: Linear's ⌘K CommandMenu renders through its own large-menu compound
@@ -61,14 +139,17 @@ function PaletteFrame({
   label,
   q,
   setQ,
-  scoped,
+  chip,
+  placeholder = "Search issues or type a command…",
   onBackspace,
   children,
 }: {
   label: string;
   q: string;
   setQ: (q: string) => void;
-  scoped?: Issue;
+  /** What the palette acts on or is nested in: the scoped issue, or a page's parent name. */
+  chip?: ReactNode;
+  placeholder?: string;
   /** Runs on Backspace in an empty input. */
   onBackspace?: () => void;
   children: ReactNode;
@@ -77,10 +158,9 @@ function PaletteFrame({
     <Overlay label={label}>
       <Command shouldFilter={false} loop className={`w-full ${MENU}`}>
         <div className="flex items-center gap-2 border-b border-line px-3.5">
-          {scoped && (
+          {chip && (
             <span className="flex h-6 shrink-0 items-center gap-1.5 rounded-md bg-sel px-2 text-[12px] text-fg-2">
-              <TypeDot type={scoped.type} />
-              {scoped.key}
+              {chip}
             </span>
           )}
           <Command.Input
@@ -88,11 +168,7 @@ function PaletteFrame({
             value={q}
             onValueChange={setQ}
             onKeyDown={(e) => e.key === "Backspace" && !q && onBackspace?.()}
-            placeholder={
-              scoped
-                ? "Type a command, or ⌫ to search everything…"
-                : "Search issues or type a command…"
-            }
+            placeholder={placeholder}
             className="h-12 flex-1 bg-transparent text-fg outline-none placeholder:text-fg-4"
           />
         </div>
@@ -158,8 +234,27 @@ export function IssueSearch() {
   );
 }
 
-/** ⌘K: commands for the selected issue (Backspace drops it), the open view and the app, then matching issues. */
-export function CommandPalette() {
+/** ⌘K: commands for the selected issue (Backspace drops it), the open view and the app, then matching issues; or one of
+ *  its nested pages. */
+export function CommandPalette({ page: initialPage }: { page?: PalettePage }) {
+  const [page, setPage] = useState(initialPage ?? null);
+  const [q, setQ] = useState("");
+  if (page)
+    return (
+      <PaletteFrame
+        label={PAGES[page].label}
+        q={q}
+        setQ={setQ}
+        chip={PAGES[page].parent}
+        placeholder="Search…"
+        onBackspace={() => setPage(null)}
+      >
+        <PageRows page={page} q={q} />
+      </PaletteFrame>
+    );
+  return <RootPalette />;
+}
+function RootPalette() {
   const issues = useStore((s) => s.issues);
   const boards = useStore((s) => s.boards);
   const boardId = useStore((s) => s.board);
@@ -167,7 +262,7 @@ export function CommandPalette() {
   const applicable = useStore((s) => shortcuts.filter((e) => shortcutApplies(e, s)).map((e) => e.id).join(" "));
   const applyingIds = new Set(applicable.split(" "));
   const applies = (entry: (typeof shortcuts)[number]) => applyingIds.has(entry.id);
-  const [scope, setScope] = useState(get().document ? null : get().selected);
+  const [scope, setScopeKey] = useState(get().document ? null : get().selected);
   const [q, setQ] = useState("");
   const scoped = scope ? issues.get(scope) : undefined;
   const activeView = useActiveView();
@@ -217,32 +312,19 @@ export function CommandPalette() {
         },
       })),
   ];
-  // Best match first, so Enter runs the command whose name was typed.
-  const ranked = (cmds: Cmd[]) =>
-    cmds
-      .map((c) => [q.trim() ? matchRank(c.name, q) : 0, c] as const)
-      .filter(([r]) => r >= 0)
-      .sort(([a], [b]) => a - b);
   // Save to… mirrors the filter row's Save menu, so it is offered even before any temporary filter exists.
   const mergeable = !!activeView && !!filterCount(overlay) && canMergeOverlay(activeView.filters, overlay);
   const groups = savingTo && activeView ? [{ heading: "Save to", rows: ranked([
     { name: filterCount(overlay) && !mergeable ? "Cannot merge these filters into the view" : "Save to this view", keys: hotkeyOf("view-save"), disabled: !mergeable, run: viewAction(() => { void saveOverlayToView().catch(e => set({ perf: String(e) })); }) },
     { name: "Create new view…", keys: hotkeyOf("view-create"), run: viewAction(createToolbarView) },
-  ]) }] : [
-    { heading: scoped?.key ?? "", rows: ranked(issueCmds) },
-    { heading: `View · ${activeView?.name ?? ""}`, rows: ranked(viewCommands) },
-    { heading: "Views", rows: ranked([{ name: "Create view…", run: viewAction(() => openViewEditor(createViewDraft("custom"))) }]) },
-    { heading: "General", rows: ranked(general) },
+  ], q) }] : [
+    { heading: scoped?.key ?? "", rows: ranked(issueCmds, q) },
+    { heading: `View · ${activeView?.name ?? ""}`, rows: ranked(viewCommands, q) },
+    { heading: "Views", rows: ranked([{ name: "Create view…", run: viewAction(() => openViewEditor(createViewDraft("custom"))) }], q) },
+    { heading: "General", rows: ranked(general, q) },
   ]
     .filter((g) => g.rows.length)
     .sort((a, b) => a.rows[0]![0] - b.rows[0]![0]);
-  const item = (c: Cmd) => (
-    <Command.Item key={c.name} value={`cmd:${c.name}`} disabled={c.disabled} className="data-[disabled=true]:opacity-50" onSelect={c.run}>
-      <span className="grid w-4 shrink-0 place-items-center text-fg-3">{c.icon}</span>
-      <span className="flex-1 truncate">{c.name}</span>
-      {c.keys?.length ? <Shortcut keys={c.keys} /> : null}
-    </Command.Item>
-  );
 
   if (deletingView && activeView) return <ViewDeleteDialog view={activeView} close={() => { setDeletingView(false); ui.send({ type: "overlay.close" }); }} />;
   return (
@@ -250,12 +332,13 @@ export function CommandPalette() {
       label="Search issues and commands"
       q={q}
       setQ={setQ}
-      scoped={scoped}
-      onBackspace={() => (savingTo ? setSavingTo(false) : setScope(null))}
+      chip={scoped && <><TypeDot type={scoped.type} />{scoped.key}</>}
+      placeholder={scoped ? "Type a command, or ⌫ to search everything…" : undefined}
+      onBackspace={() => (savingTo ? setSavingTo(false) : setScopeKey(null))}
     >
       {groups.map((g) => (
         <Command.Group key={g.heading} heading={g.heading}>
-          {g.rows.map(([, c]) => item(c))}
+          {g.rows.map(([, c]) => <CommandRow key={c.name} cmd={c} />)}
         </Command.Group>
       ))}
       <IssueResults results={results} />

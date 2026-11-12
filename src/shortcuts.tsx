@@ -2,7 +2,7 @@ import { latestNotification, showNotification } from "./app-notifications";
 import { toasts } from "./toast-queue";
 import { isMyIssues } from "./navigation";
 import { useEffect, useState } from "react";
-import { viewShortcutId } from "./view-shortcut";
+import { VIEW_SHORTCUT_IDS, viewShortcutId } from "./view-shortcut";
 import { createToolbarView } from "./view-toolbar-actions";
 import { activeView, saveOverlayToView } from "./saved-views";
 import { canMergeOverlay } from "./saved-view-model";
@@ -44,7 +44,6 @@ import {
 } from "./view-settings";
 import { copyIssue, type CopyKind } from "./issue-copy";
 import { editorBindings } from "./editor-bindings";
-import { ActionMenu } from "./action-menu";
 import { Dialog } from "./dialog";
 import { Field, TextInput } from "./field";
 import { Shortcut as KeyboardShortcut, type Keys } from "./keycap";
@@ -946,7 +945,7 @@ export function useLinearHotkeys() {
     };
     document.addEventListener("keydown", handle);
     const bound = shortcuts
-      .filter((entry) => entry.hotkey && !entry.id.startsWith("view-"))
+      .filter((entry) => entry.hotkey && !VIEW_SHORTCUT_IDS.includes(entry.id))
       .map((entry) => ({
         entry,
         handle: getHotkeyManager().register(
@@ -1078,17 +1077,5 @@ export function ShortcutHelp() {
         {!matches.length && <EmptyState title="No shortcuts found" />}
       </Dialog.Body>
     </Dialog>
-  );
-}
-/** Linear's Help menu is an action menu under the sidebar's Help button. */
-export function HelpMenu() {
-  const [anchor] = useState(() => document.getElementById("help-menu"));
-  return (
-    <ActionMenu
-      label="Help"
-      anchor={anchor}
-      close={() => ui.send({ type: "overlay.close" })}
-      entries={[{ name: "Keyboard shortcuts", shortcut: hotkeyOf("shortcuts"), run: overlay("shortcuts") }]}
-    />
   );
 }

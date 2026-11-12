@@ -78,6 +78,7 @@ export function PropertyMenu({
         <Menu.Input
           autoFocus
           placeholder={placeholder}
+          aria-label={placeholder}
           hotkey={hotkey}
           value={query}
           onValueChange={onQuery}
