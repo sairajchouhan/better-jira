@@ -118,7 +118,9 @@ const countWhere = (issues: Issue[], rule: Omit<Rule, "id">) =>
 export const issueCount = (n?: number) => (n ? `${n} issue${n === 1 ? "" : "s"}` : "");
 
 /** The board's issues under every filter except this field's own, its rule, its choices and the edits Linear's menu makes. */
-export function useFieldFilter(field: Field, board: Board) {
+export function useFieldFilter(field: Field, board: Board, editingId?: string) {
+  const [newRuleId] = useState(newId);
+  const ruleId = editingId ?? newRuleId;
   const issuesMap = useStore((s) => s.issues);
   const prefs = useViewSettings(board.id);
   const mine = useStore((s) => s.mine);
@@ -128,17 +130,17 @@ export function useFieldFilter(field: Field, board: Board) {
       ...prefs,
       filters: {
         ...prefs.filters,
-        children: prefs.filters.children.filter((c) => "children" in c || c.field !== field),
+        children: prefs.filters.children.filter((c) => c.id !== ruleId),
       },
     };
     return selectIssues([...issuesMap.values()], board, base, mine, query, ME.id);
-  }, [issuesMap, board, mine, query, prefs, field]);
+  }, [issuesMap, board, mine, query, prefs, ruleId]);
   const rule = prefs.filters.children.find(
-    (c): c is Rule => !("children" in c) && c.field === field,
+    (c): c is Rule => !("children" in c) && c.id === ruleId,
   );
   const choices = useMemo(() => filterChoices(field, board, issues), [field, board, issues]);
   function apply(values: string[], operator = rule?.op ?? "is") {
-    setRule(board.id, { id: rule?.id ?? newId(), field, op: operator, values });
+    setRule(board.id, { id: ruleId, field, op: operator, values });
   }
   const toggle = (v: string) => {
     const vals = rule?.values ?? [];
@@ -277,6 +279,7 @@ export function datePresets(field: Field, query: string): Preset[] {
 /** `inline`: opened from a filter chip, with the operator as pills and no back button. */
 export function PropertyFilter({
   field,
+  ruleId,
   name,
   board,
   onBack,
@@ -284,13 +287,14 @@ export function PropertyFilter({
   autoFocus = true,
 }: {
   field: Field;
+  ruleId?: string;
   name: string;
   board: Board;
   onBack: () => void;
   inline?: boolean;
   autoFocus?: boolean;
 }) {
-  const { issues, rule, choices, apply, toggle } = useFieldFilter(field, board);
+  const { issues, rule, choices, apply, toggle } = useFieldFilter(field, board, ruleId);
   const [value, setValue] = useState(rule?.values[0] ?? "");
   const [op, setOp] = useState<Rule["op"]>(
     rule?.op ?? (field === "content" || field === "links" ? "contains" : "is"),

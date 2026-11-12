@@ -174,3 +174,18 @@ test("editing keeps the view breadcrumb and details open", async ({ open }) => {
     expect(await page.eval(`!!document.querySelector('[aria-label="View details"]')`)).toBe(true);
   } finally { await page.close(); }
 });
+
+test("BJ-149: reopening Add filter creates a separate AND condition", async ({ open }) => {
+  const page = await open();
+  try {
+    for (const priority of ["High", "Low"]) {
+      await page.key("f");
+      await page.click('text=Priority');
+      await page.click('text=' + priority);
+      await page.key("Escape");
+    }
+    expect(await page.eval(`document.querySelectorAll('.view-filter-chip').length`)).toBe(2);
+    expect(await page.eval(`[...document.querySelectorAll('.view-filter-chip')].map(c=>c.textContent).join('|')`)).toContain("High");
+    expect(await page.eval(`document.querySelectorAll('[data-key]').length`)).toBe(0);
+  } finally { await page.close(); }
+});

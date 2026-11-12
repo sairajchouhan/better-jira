@@ -529,6 +529,7 @@ export function FilterChips({ board }: { board: Board }) {
             </Menu>
           ) : form ? (
             <PropertyFilter
+              ruleId={rule.id}
               inline
               field={rule.field}
               name={FIELDS.find(([f]) => f === rule.field)?.[1] ?? rule.field}
