@@ -302,15 +302,14 @@ export function StatusBar() {
         <IconButton label="Redo" shortcut="⌘⇧Z" variant="muted" disabled={!redo} onClick={redoEdit}>
           <Icon name="redo" />
         </IconButton>
-        {/* Not IconButton: its tooltip says more than its name, and IconButton's tooltip is always its label. */}
-        <button
-          aria-label="Download backup"
-          title="Download your local changes and files"
+        <IconButton
+          label="Download backup"
+          tooltip="Download your local changes and files"
+          variant="muted"
           onClick={() => void downloadLocalBackup()}
-          className="grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg-2"
         >
           <Icon name="download" />
-        </button>
+        </IconButton>
       </span>
       <span className="ml-auto truncate font-mono text-emerald-500">{perf}</span>
     </footer>
@@ -484,11 +483,7 @@ export function BoardHeader() {
         <div className="flex min-w-0 items-center pr-1 pl-2.5 text-[13px] font-medium text-fg-2">
           <BoardBreadcrumbs board={board!} />
           {/* Linear: star, then ⋯ — 28px round buttons, 14px glyphs, 4px apart; hover fills --crumb-hover and whitens the glyph. */}
-          <FavoriteButton
-            id={favoriteId}
-            size={14}
-            className="ml-2 grid size-7 shrink-0 place-items-center rounded-full border-[0.5px] border-transparent text-fg-3 transition-[border-color,background-color,color,opacity] duration-150 ease-[ease] hover:bg-(--crumb-hover) hover:text-fg"
-          />
+          <FavoriteButton id={favoriteId} className="ml-2 shrink-0" />
           {activeView?.kind === "custom" && (
             <ViewMenu view={activeView}>
               <IconButton label="Issue view options" variant="muted" className="ml-1">
