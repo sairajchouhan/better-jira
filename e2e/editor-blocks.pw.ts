@@ -150,3 +150,23 @@ test("BJ-56 / BJ-55: block controls, the block menu and ⌥↓ act on the caret'
     expect((await blocks())[2]).toBe(before[0]);
   });
 });
+
+test("BJ-54: dragging an image's width handle saves its width to Jira", async ({ open }) => {
+  await fixture.reset({ writable: true, includeMedia: true });
+  const page = await open("?issue=TEST-2&view=page");
+  const handle = '#description .media-resize-handle[data-side="right"]';
+  await page.waitFor(`!!document.querySelector('${handle}')`);
+  const box = await page.rect(handle);
+  await page.hover(handle);
+  await page.pointerDrag(box.x + 3, box.y + box.height / 2, box.x + 3 - 120, box.y + box.height / 2);
+  await waitSaved((doc) => {
+    const image = doc.content.find((n: any) => n.type === "mediaSingle");
+    return Number(image?.attrs?.width) > 0 && Number(image.attrs.width) < 100;
+  });
+  await test.step("the handle also resizes from the keyboard", async () => {
+    const before = (await savedDescription()).content.find((n: any) => n.type === "mediaSingle").attrs.width;
+    await page.eval(`document.querySelector('${handle}').focus()`);
+    await page.key("ArrowRight");
+    await waitSaved((doc) => doc.content.find((n: any) => n.type === "mediaSingle").attrs.width === before + 5);
+  });
+});

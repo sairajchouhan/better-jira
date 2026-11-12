@@ -44,6 +44,31 @@ export function mediaContainerStyle(node: AdfNode): CSSProperties {
   } else style.marginInline = "auto";
   return style;
 }
+/** The width, as Jira's percentage of the column (10–100), that dragging a resize handle `dx` pixels gives an image `start`
+ * pixels wide. A centred image grows on both sides, so it grows twice the drag. */
+export function dragWidth(
+  start: number,
+  dx: number,
+  side: "left" | "right",
+  layout: unknown,
+  column: number,
+): number {
+  const centred = !["align-start", "align-end", "wrap-left", "wrap-right"].includes(String(layout ?? "center"));
+  const grow = (side === "right" ? dx : -dx) * (centred ? 2 : 1);
+  return Math.max(10, Math.min(100, Math.round(((start + grow) / Math.max(1, column)) * 100)));
+}
+/** A mediaSingle at `width` percent, as Jira stores a resized image; a wide or full-width one becomes centred. */
+export function resizedMedia(node: AdfNode, width: number): AdfNode {
+  const { widthType: _type, ...attrs } = node.attrs ?? {};
+  return {
+    ...node,
+    attrs: {
+      ...attrs,
+      layout: ["wide", "full-width"].includes(String(attrs.layout)) ? "center" : (attrs.layout ?? "center"),
+      width,
+    },
+  };
+}
 export function safeExternalImage(value: unknown): string | undefined {
   if (typeof value !== "string") return;
   try {

@@ -559,6 +559,31 @@
   padding: 8px;
   border-radius: 6px;
 }
+/* Linear's image width handles, on the image's sides while it is hovered or a handle has focus. */
+.media-resize-handle {
+  position: absolute;
+  top: 50%;
+  width: 6px;
+  height: 40px;
+  max-height: 50%;
+  translate: 0 -50%;
+  border-radius: 3px;
+  background: var(--fg-3);
+  border: 1px solid var(--card);
+  cursor: ew-resize;
+  opacity: 0;
+  touch-action: none;
+}
+.media-resize-handle[data-side="left"] {
+  left: 6px;
+}
+.media-resize-handle[data-side="right"] {
+  right: 6px;
+}
+:hover > .media-resize-handle,
+.media-resize-handle:focus-visible {
+  opacity: 1;
+}
 /* Linear's block handle, in the gutter left of the caret's block; only the keyboard or a hover brings it forward. */
 .rich-block-handle {
   position: absolute;

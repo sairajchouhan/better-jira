@@ -251,6 +251,11 @@ export function RichEditor(props: EditorEngineProps) {
                 },
               }),
               () => mediaViews.current.delete(media),
+              (raw) => {
+                const pos = getPos();
+                if (pos !== undefined)
+                  editor.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { raw }));
+              },
             );
             mediaViews.current.add(media);
             return media;
