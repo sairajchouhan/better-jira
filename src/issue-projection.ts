@@ -44,7 +44,7 @@ export function issueProjection(siteFields: any[] | null) {
       rank,
       ...estimates,
     ].join(","),
-    /** What the board and search need for every issue; description and comments stay in the raw record. */
+    /** What the board and search need for every issue; the rich description and comments stay in the raw record. */
     slim(i: any, board: number) {
       const f = i.fields;
       const text = (n: any): string =>
@@ -88,6 +88,8 @@ export function issueProjection(siteFields: any[] | null) {
           ? { key: f.project.key, name: f.project.name }
           : { key: i.key.split("-")[0], name: i.key.split("-")[0] },
         description: text(f.description),
+        /** Every comment's text, for search only (BJ-27); absent without comments. */
+        commentText: (f.comment?.comments ?? []).map((c: any) => text(c.body)).join("\n").trim() || undefined,
         milestones: f.fixVersions?.map((v: any) => ({ id: v.id, name: v.name })),
         prCount: pullRequestCount(f.customfield_10000),
         estimate: estimates.map((id) => f[id]).find((v) => typeof v === "number"),
@@ -112,7 +114,7 @@ export function issueProjection(siteFields: any[] | null) {
 }
 export type IssueProjection = ReturnType<typeof issueProjection>;
 /** Bump when `slim`'s output changes: the mirror re-projects every stored issue on its next start. */
-export const SLIM_VERSION = "6";
+export const SLIM_VERSION = "7";
 
 /** A mirrored issue with what enrichment stored for it (null until enriched). */
 export type PropertyRow = {

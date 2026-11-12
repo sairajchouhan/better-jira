@@ -124,6 +124,7 @@ test("projects a full Jira record into the board's slim issue", () => {
     watching: true,
     project: { key: "CS", name: "Content Stack" },
     description: "  See  the spec  and https://ci.test/run/9).    ",
+    commentText: undefined,
     milestones: [{ id: "20001", name: "v2.4" }],
     prCount: 2,
     // "Story Points" (shorter name) is preferred but empty, so the estimate falls back to "Story point estimate".
@@ -167,6 +168,7 @@ test("a sparse record: missing optional fields project to the app's empty values
     watching: false,
     project: { key: "OPS", name: "OPS" },
     description: "",
+    commentText: undefined,
     milestones: undefined,
     prCount: undefined,
     estimate: undefined,
@@ -198,6 +200,10 @@ test("creator falls back to the reporter; an unassigned issue keeps Jira's null;
   expect(issue.assignee).toBeNull();
   expect(issue.resolved).toBe("2026-11-01T08:00:00.000+0000");
   expect(issue.description).toBe("Legacy string body with https://plain.test/x");
+  expect(issueProjection(siteFields).slim({ ...story, fields: { ...story.fields, comment: { total: 2, comments: [
+    { body: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Repro on staging" }] }] } },
+    { body: "Legacy plain comment" },
+  ] } } }, 7).commentText).toBe("Repro on staging\nLegacy plain comment");
   expect(issue.links).toEqual(["https://plain.test/x"]);
 });
 

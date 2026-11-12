@@ -17,8 +17,11 @@ export function parseQuery(q: string) {
   };
 }
 
-/** Issues matching every typed word and quoted phrase: the key the query names first, then title matches, then the most
- *  recently updated (top 50). */
+/** Issues whose key, title, description or comments hold every typed word and quoted phrase: the key the query names
+ *  first, then title matches, then the most recently updated (top 50). */
+const haystack = (i: Issue) =>
+  `${i.key} ${i.summary}\n${i.description ?? ""}\n${i.commentText ?? ""}`.toLowerCase();
+
 export function matchIssues(issues: Map<string, Issue>, q: string): Issue[] {
   const { phrases, words } = parseQuery(q);
   const terms = [...phrases, ...words];
@@ -28,7 +31,7 @@ export function matchIssues(issues: Map<string, Issue>, q: string): Issue[] {
     return i.key === exact ? -1 : title < 0 ? 6 : title;
   };
   return [...issues.values()]
-    .filter((i) => i.key === exact || terms.every((t) => `${i.key} ${i.summary}`.toLowerCase().includes(t)))
+    .filter((i) => i.key === exact || terms.every((t) => haystack(i).includes(t)))
     .map((i) => [rank(i), i] as const)
     .sort(([ra, a], [rb, b]) => ra - rb || (a.updated < b.updated ? 1 : -1))
     .slice(0, 50)

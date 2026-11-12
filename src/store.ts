@@ -85,6 +85,8 @@ export type Issue = {
   due?: string | null;
   project?: { key: string; name: string } | null;
   description?: string;
+  /** Every comment's text, for search (BJ-27). */
+  commentText?: string;
   links?: string[];
   resources?: IssueResource[];
   commentStates?: Record<string, CommentState>;

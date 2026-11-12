@@ -26,3 +26,14 @@ test("BJ-37: a quoted phrase matches only those words in that order", () => {
   expect(keys(matchIssues(issues, 'broken "login page"')).sort()).toEqual(["A-1", "A-2"]);
   expect(keys(matchIssues(issues, "page login")).sort()).toEqual(["A-1", "A-2", "A-3"]);
 });
+
+test("BJ-27: descriptions and comments match too, after title matches", () => {
+  const issues = map(
+    issue("A-1", "Checkout", { description: "Fails on the staging server", updated: "2026-11-05T00:00:00Z" }),
+    issue("A-2", "Staging server down"),
+    issue("A-3", "Payments", { commentText: "Repro on staging server too" }),
+    issue("A-4", "Unrelated"),
+  );
+  expect(keys(matchIssues(issues, "staging server"))).toEqual(["A-2", "A-1", "A-3"]);
+  expect(keys(matchIssues(issues, '"repro on staging"'))).toEqual(["A-3"]);
+});
