@@ -23,3 +23,15 @@ test("BJ-51: nested progress opens the child's own children", async ({ open }) =
   expect(await page.eval(`document.querySelector('[role=dialog][aria-label="Open sub-issues of TEST-3"]').textContent`)).toContain("TEST-4");
   expect(await page.eval(`new URL(location.href).searchParams.get("issue")`)).toBe("TEST-2");
 });
+
+test("BJ-31: composer creates and removes new labels", async ({ open }) => {
+  const page = await open();
+  await page.key("c");
+  await page.click('[aria-label="Labels: No labels"]');
+  await page.type("brand new label");
+  await page.key("Enter");
+  await page.waitFor(`!!document.querySelector('[aria-label="Labels: brand-new-label"]')`);
+  await page.click('[aria-label="Labels: brand-new-label"]');
+  await page.key("Enter");
+  expect(await page.eval(`!!document.querySelector('[aria-label="Labels: No labels"]')`)).toBe(true);
+});
