@@ -1,4 +1,5 @@
 import { expect, test } from "./app";
+import { defaultPreferences } from "../src/view-model";
 
 const FAVORITES = "better-jira:favorites:v1:https://example.atlassian.net/audit-me";
 const order = `[...document.querySelectorAll('[data-favorite]')].map(n=>n.dataset.favorite)`;
@@ -45,4 +46,37 @@ test("BJ-76: sidebar sections collapse and stay so; Customize sidebar hides My i
   await p.key("Escape");
   await p.reload();
   expect(await p.eval(row("My issues"))).toBe(false);
+});
+
+test("BJ-76: rows set to Don't show stay reachable from More; the Views section collapses", async ({ open }) => {
+  const p = await open();
+  const nav = `document.querySelector('nav[aria-label="Main navigation"]')`;
+  await p.eval(
+    `fetch('/api/views',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({board:1,kind:'custom',name:'Sidebar view',description:'',icon:'filter',color:'gray',filters:{id:'root',join:'and',children:[]},display:${JSON.stringify(defaultPreferences().display)},scope:'all',mine:false})})`,
+  );
+  try {
+    await p.reload();
+    await p.waitFor(`${nav}.textContent.includes('Sidebar view')`);
+    await p.click('[aria-label="Collapse views section"]');
+    await p.waitFor(`!${nav}.textContent.includes('Sidebar view')`);
+    await p.reload();
+    await p.waitFor(`!!document.querySelector('[aria-label="Expand views section"]')`);
+    expect(await p.eval(`${nav}.textContent.includes('Sidebar view')`)).toBe(false);
+
+    expect(await p.eval(`[...${nav}.querySelectorAll('button')].some(b=>b.textContent.trim()==='More')`)).toBe(false);
+    await p.key("k", "meta");
+    await p.type("Customize sidebar");
+    await p.waitFor(`document.querySelector('[cmdk-item][data-selected=true]')?.textContent?.includes('Customize sidebar')`);
+    await p.key("Enter");
+    await p.click('[role="dialog"][aria-label="Customize sidebar"] [aria-label="My issues: Always show"]');
+    await p.click("text=Don't show");
+    await p.key("Escape");
+    await p.waitFor(`!document.querySelector('[role="dialog"][aria-label="Customize sidebar"]')`);
+    await p.eval(`[...${nav}.querySelectorAll('button')].find(b=>b.textContent.trim()==='More').click()`);
+    await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="More"] [cmdk-item][data-value="My issues"]')`);
+    await p.click('[role="dialog"][aria-label="More"] [cmdk-item][data-value="My issues"]');
+    await p.waitFor(`location.pathname.startsWith('/my-issues')`);
+  } finally {
+    await p.eval(`fetch('/api/views').then(r=>r.json()).then(views=>Promise.all(views.filter(v=>v.name==='Sidebar view').map(v=>fetch('/api/views/'+v.id,{method:'DELETE'}))))`);
+  }
 });

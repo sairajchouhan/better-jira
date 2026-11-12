@@ -4,7 +4,7 @@ import { setScope, useViewSettings } from "./view-settings";
 import { openViewEditor, ViewMenu, ViewContextMenu, ViewEditorPage } from "./view-editor";
 import { ViewFavorites, SavedViewIcon } from "./views-navigation";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { useMemo, useRef, type ReactNode } from "react";
+import { useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { isMyIssues } from "./navigation";
 import { PERSON_TABS, peopleOf } from "./people";
 import { Icon, TypeDot } from "./icons";
@@ -29,7 +29,7 @@ import {
   type Board,
   type Issue,
 } from "./store";
-import { ContextMenu, type ActionEntry } from "./action-menu";
+import { ActionMenu, ContextMenu, type ActionEntry } from "./action-menu";
 import { showNotification } from "./app-notifications";
 import { BoardControls, FilterChips } from "./view-controls";
 import { hotkeyOf, runShortcut } from "./shortcuts";
@@ -132,11 +132,12 @@ export function Sidebar({ boards }: { boards: Board[] }) {
         {prefs.myIssues === "Always" && (
           <SideItem
             active={mine && !person && !inbox && !activeView && !viewsPage}
-            onClick={() => timed("open my issues", () => navigate({ mine: true, selected: null, panel: false }))}
+            onClick={openMyIssues}
           >
             <Icon name="user" /> My issues <Shortcut className="ml-auto" keys={hotkeyOf("mine")} size="small" />
           </SideItem>
         )}
+        <SidebarMore prefs={prefs} />
 
         <div className="group mt-5 mb-1 flex items-center">
           <SectionDisclosure label="Boards" expanded={expanded("boards")} onToggle={() => toggle("boards")} />
@@ -174,16 +175,29 @@ export function Sidebar({ boards }: { boards: Board[] }) {
             item
           );
         })}
-        {/* Views is a section like Boards: every saved view inline; the heading opens the Views directory. */}
-        {/* Navigation section heading uses aria-current styling; Button has no navigation variant. */}
-        <button
-          onClick={() => navigate({ board: boardId, viewsPage: true, selected: null, panel: false, inbox: false })}
-          aria-current={viewsPage || undefined}
-          className={`mt-5 mb-1 flex h-6 items-center rounded-md px-2 text-left text-[12px] hover:text-fg-2 ${viewsPage ? "text-fg-2" : "text-fg-3"}`}
-        >
-          Views
-        </button>
-        {views.map((v) => (
+        {/* Views is a section like Boards: every saved view inline; its caret collapses it and the heading opens the Views directory. */}
+        <div className="mt-5 mb-1 flex items-center">
+          <IconButton
+            label={`${expanded("views") ? "Collapse" : "Expand"} views section`}
+            aria-expanded={expanded("views")}
+            variant="muted"
+            size="small"
+            onClick={() => toggle("views")}
+          >
+            <span className={`grid place-items-center ${expanded("views") ? "rotate-90" : ""}`}>
+              <Icon name="chevron" size={14} />
+            </span>
+          </IconButton>
+          {/* Navigation section heading uses aria-current styling; Button has no navigation variant. */}
+          <button
+            onClick={() => navigate({ board: boardId, viewsPage: true, selected: null, panel: false, inbox: false })}
+            aria-current={viewsPage || undefined}
+            className={`flex h-6 items-center rounded-md px-1 text-left text-[12px] hover:text-fg-2 ${viewsPage ? "text-fg-2" : "text-fg-3"}`}
+          >
+            Views
+          </button>
+        </div>
+        {expanded("views") && views.map((v) => (
           <ViewContextMenu key={v.id} view={v}>
             <SideItem active={activeView?.id === v.id} onClick={() => timed("open view", () => openSavedView(v))}>
               <SavedViewIcon view={v} />
@@ -203,6 +217,32 @@ export function Sidebar({ boards }: { boards: Board[] }) {
         </Button>
       </nav>
       {dialog}
+    </>
+  );
+}
+
+const openMyIssues = () => timed("open my issues", () => navigate({ mine: true, selected: null, panel: false }));
+
+/** Linear's sidebar "More" (`Jp.more_workspace`): shown while an item is set to "Don't show", it lists those items so they
+ *  stay one click away. */
+function SidebarMore({ prefs }: { prefs: SidebarPrefs }) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const entries: ActionEntry[] = [
+    ...(prefs.inbox === "MoreMenu"
+      ? [{ name: "Inbox", icon: "inbox", shortcut: hotkeyOf("inbox"), run: () => runShortcut("inbox") } as const]
+      : []),
+    ...(prefs.myIssues === "MoreMenu"
+      ? [{ name: "My issues", icon: "user", shortcut: hotkeyOf("mine"), run: openMyIssues } as const]
+      : []),
+  ];
+  if (!entries.length) return null;
+  return (
+    <>
+      {/* Below 768px a pick closes the sidebar; this one opens a menu inside it, so it keeps the sidebar open. */}
+      <SideItem onClick={(e) => (e.stopPropagation(), setAnchor(e.currentTarget))}>
+        <Icon name="dots" /> More
+      </SideItem>
+      {anchor && <ActionMenu label="More" anchor={anchor} entries={entries} close={() => setAnchor(null)} />}
     </>
   );
 }
@@ -410,7 +450,7 @@ const SideItem = ({
   children,
 }: {
   active?: boolean;
-  onClick: () => void;
+  onClick: (e: MouseEvent<HTMLButtonElement>) => void;
   children: ReactNode;
 }) => (
   <button
