@@ -1,6 +1,5 @@
 import { Text } from "./text";
 import { PropertyTrigger } from "./property-trigger";
-import { LabelChip } from "./label-chip";
 import { CountBadge } from "./count-badge";
 import { Dialog, ConfirmDialog } from "./dialog";
 import { TextInput } from "./field";
@@ -147,10 +146,7 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
   const parent = issue.parent ? all.get(issue.parent) : undefined;
   if (!parent) return null;
   const status = (i: Issue) => statusOf(boards, i),
-    model = subIssueRows(parent.key, all, defaultSubIssueDisplay(), status),
-    siblings = model.rows
-      .filter((row) => row.depth === 0)
-      .map((row) => row.issue);
+    model = subIssueRows(parent.key, all, defaultSubIssueDisplay(), status);
   return (
     <Text
       className="mt-2 mb-2.5 flex h-[26px] items-center leading-[normal]"
@@ -192,42 +188,7 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
         {model.completed}/{model.total}
       </PropertyTrigger>
       {menu && (
-        <MenuSurface
-          label={`Open sub-issues of ${parent.key}`}
-          anchor={menu}
-          close={() => setMenu(null)}
-          fit
-        >
-          <Menu style={{ width: 347 }}>
-            <Menu.Input
-              hideWhenEmpty
-              autoFocus
-              aria-label={`Open sub-issues of ${parent.key}…`}
-            />
-            <Menu.List>
-              <Menu.Group heading="Navigation">
-                {siblings.map((child) => (
-                  <Menu.Item
-                    key={child.key}
-                    value={`${child.key} ${child.summary}`}
-                    icon={<StatusIcon status={status(child)} />}
-                    checked={child.key === issue.key}
-                    hint={<Avatar user={child.assignee ?? null} size={14} />}
-                    onSelect={() => {
-                      setMenu(null);
-                      if (child.key !== issue.key) openIssue(child);
-                    }}
-                  >
-                    <span className="mr-2 text-[var(--menu-fg-3)]">
-                      {child.key}
-                    </span>
-                    {child.summary}
-                  </Menu.Item>
-                ))}
-              </Menu.Group>
-            </Menu.List>
-          </Menu>
-        </MenuSurface>
+        <ChildrenMenu parent={parent} current={issue.key} anchor={menu} close={() => setMenu(null)} />
       )}
     </Text>
   );
@@ -646,6 +607,7 @@ function SubIssueRow({
   active: boolean;
   openMenu: (anchor: HTMLElement, point: { x: number; y: number }) => void;
 }) {
+  const [childrenMenu, setChildrenMenu] = useState<HTMLElement | null>(null);
   const status = (child: Issue) => statusOf(boards, child);
   // Rows pick through PropertyPicker, the one field→write path every issue picker shares.
   const control = (field: IssueField, title: string, content: ReactNode) => (
@@ -752,15 +714,10 @@ function SubIssueRow({
         }}
       >
         <span className="truncate">{child.summary}</span>
-        {progress && (
-          <LabelChip size="compact" data-row-progress className="shrink-0">
-            <LabelChip.Icon>
-              <ProgressRing value={progress![0] / progress![1]} />
-            </LabelChip.Icon>
-            <LabelChip.Text>{progress!.join("/")}</LabelChip.Text>
-          </LabelChip>
-        )}
       </a>
+      {progress && <PropertyTrigger data-row-progress variant="row" state="value" aria-label={`Open sub-issues of ${child.key}`} aria-expanded={!!childrenMenu} onClick={e => setChildrenMenu(e.currentTarget)}><ProgressRing value={progress[0] / progress[1]} />{progress.join("/")}</PropertyTrigger>}
+      {childrenMenu && <ChildrenMenu parent={child} anchor={childrenMenu} close={() => setChildrenMenu(null)} />}
+
       {/* Linear's row badges (RAJ-54 blocking 1, RAJ-55 blocked 1; Opus review 4): a red relation icon and how many issues. */}
       {(["blocking", "blocked"] as const).map((kind) => {
         const count =
@@ -825,4 +782,46 @@ function SubIssueRow({
         )}
     </div>
   );
+}
+
+function ChildrenMenu({ parent, current, anchor, close }: { parent: Issue; current?: string; anchor: HTMLElement; close: () => void }) {
+ const all = useStore(s => s.issues), boards = useStore(s => s.boards);
+ const status = (i: Issue) => statusOf(boards, i);
+ const siblings = subIssueRows(parent.key, all, defaultSubIssueDisplay(), status).rows.filter(row => row.depth === 0).map(row => row.issue);
+ return (        <MenuSurface
+          label={`Open sub-issues of ${parent.key}`}
+          anchor={anchor}
+          close={() => close()}
+          fit
+        >
+          <Menu style={{ width: 347 }}>
+            <Menu.Input
+              hideWhenEmpty
+              autoFocus
+              aria-label={`Open sub-issues of ${parent.key}…`}
+            />
+            <Menu.List>
+              <Menu.Group heading="Navigation">
+                {siblings.map((child) => (
+                  <Menu.Item
+                    key={child.key}
+                    value={`${child.key} ${child.summary}`}
+                    icon={<StatusIcon status={status(child)} />}
+                    checked={child.key === current}
+                    hint={<Avatar user={child.assignee ?? null} size={14} />}
+                    onSelect={() => {
+                      close();
+                      if (child.key !== current) openIssue(child);
+                    }}
+                  >
+                    <span className="mr-2 text-[var(--menu-fg-3)]">
+                      {child.key}
+                    </span>
+                    {child.summary}
+                  </Menu.Item>
+                ))}
+              </Menu.Group>
+            </Menu.List>
+          </Menu>
+        </MenuSurface>);
 }
