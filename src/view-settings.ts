@@ -27,7 +27,7 @@ const effective = (s: State, board: number) =>
   (board === s.board ? s.effectiveViewPreferences : null) ?? s.preferences[board === s.board && isMyIssues(s) ? 0 : board] ?? fallback;
 
 /** The settings the view controls show and edit. Inside a saved view, `filters` is only its overlay. */
-export const viewSettings = (board: number) => edited(get(), board);
+export const viewSettings = (board: number, s = get()) => edited(s, board);
 export const useViewSettings = (board: number) => useStore((s) => edited(s, board));
 /** The settings the issues are selected with. Inside a saved view, `filters` is its base AND its overlay. */
 export const effectiveSettings = (board: number) => effective(get(), board);

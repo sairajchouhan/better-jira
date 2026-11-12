@@ -167,7 +167,7 @@ function reorder(direction: number, edge = false) {
     b = rest[at]?.rank;
   actions.drop(issue.key, issue.board, [], descending ? rankBetween(b, a) : rankBetween(a, b));
 }
-const manual = (s = get()) => viewSettings(s.board).display.ordering === "manual";
+const manual = (s = get()) => viewSettings(s.board, s).display.ordering === "manual";
 function scope(value: "active" | "backlog" | "all", mine = false) {
   navigate({ mine, ...(!mine && isMyIssues(get()) ? { board: get().board } : {}), panel: false, selected: null });
   setScope(get().board, value);
@@ -183,7 +183,7 @@ function collapse(all = false) {
   const s = get(),
     board = s.boards.find((b) => b.id === s.board);
   if (!board) return;
-  const by = viewSettings(s.board).display.columns,
+  const by = viewSettings(s.board, s).display.columns,
     groups = buckets(
       [...s.issues.values()].filter((i) => i.board === s.board),
       by,
@@ -759,7 +759,7 @@ export const shortcuts: Shortcut[] = [
     group: "List / Board",
     hotkey: "Alt+ArrowLeft",
     issue: true,
-    when: (s) => viewSettings(s.board).display.columns === "status",
+    when: (s) => viewSettings(s.board, s).display.columns === "status",
     run: () => moveColumn(-1),
   },
   {
@@ -768,7 +768,7 @@ export const shortcuts: Shortcut[] = [
     group: "List / Board",
     hotkey: "Alt+ArrowRight",
     issue: true,
-    when: (s) => viewSettings(s.board).display.columns === "status",
+    when: (s) => viewSettings(s.board, s).display.columns === "status",
     run: () => moveColumn(1),
   },
   {
@@ -777,7 +777,7 @@ export const shortcuts: Shortcut[] = [
     group: "List / Board",
     hotkey: "T",
     issue: true,
-    when: (s) => viewSettings(s.board).display.layout === "list",
+    when: (s) => viewSettings(s.board, s).display.layout === "list",
     run: () => collapse(),
   },
   {
@@ -785,7 +785,7 @@ export const shortcuts: Shortcut[] = [
     name: "Collapse/expand all groups",
     group: "List / Board",
     hotkey: "Alt+T",
-    when: (s) => viewSettings(s.board).display.layout === "list",
+    when: (s) => viewSettings(s.board, s).display.layout === "list",
     run: () => collapse(true),
   },
   {

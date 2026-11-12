@@ -151,8 +151,8 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
     boards = useStore((s) => s.boards),
     [menu, setMenu] = useState<HTMLElement | null>(null),
     progress = useRef<HTMLButtonElement>(null);
-  useCommand("open-parent-sub-issues", () => {
-    if (!progress.current) return;
+  useCommand("open-parent-sub-issues", (key) => {
+    if (key !== issue.key || !progress.current) return;
     setMenu(progress.current);
     return true;
   });
