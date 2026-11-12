@@ -15,7 +15,7 @@ import { Icon, type IconName, PriorityIcon, RelationIcon, StatusIcon, TypeDot, h
 import { AppLink } from "@/client/features/navigation/app-link";
 import { boardOf, get } from "@/client/state/store";
 import type { Issue, User } from "@/shared/issue-model";
-import { jiraLinkType } from "@/shared/relations";
+import { LINEAR_RELATIONS, jiraLinkType } from "@/shared/relations";
 import { labelDelta, type ActivityRow, type PropertyActivity, type Relation } from "./issue-activity";
 import type { FieldValue, NamedValue } from "./jira-history";
 
@@ -241,7 +241,7 @@ export function describeActivity(event: PropertyActivity, issue: Issue, then = f
           <span className="inline-flex align-[-2px]">
             <Icon name="link" size={12} />
           </span>{" "}
-          <B>{webLinkTitle(link.name)}</B>
+          {(link as NamedValue & { url?: string }).url ? <a href={(link as NamedValue & { url?: string }).url} target="_blank" rel="noreferrer"><B>{webLinkTitle(link.name)}</B></a> : <B>{webLinkTitle(link.name)}</B>}
         </>
       );
     }
@@ -277,6 +277,7 @@ export function describeActivity(event: PropertyActivity, issue: Issue, then = f
       return plain("resolution", before as string | null, after as string | null);
     case "field": {
       const value = (after ?? before) as FieldValue;
+      if (value.name === "environment" && !(before as FieldValue | null)?.value && !(after as FieldValue | null)?.value) return "updated the environment";
       return plain(
         value.name,
         (before as FieldValue | null)?.value ?? null,
@@ -441,6 +442,19 @@ function describeGroup(changes: PropertyActivity[], issue: Issue): ReactNode {
       return <GroupedLabels changes={changes} />;
     case "title":
       return titleChangeLabel(changes.length);
+    case "weblink":
+      return `added ${changes.length} links`;
+    case "cycle":
+      return <GroupedCycles changes={changes} />;
+    case "relation": {
+      const first = changes[0]!, last = changes.at(-1)!;
+      const before = first.before as Relation | null, after = last.after as Relation | null;
+      if (changes.length === 2 && before && after && before.key === after.key && before.kind !== after.kind) {
+        const label = (relation: Relation) => LINEAR_RELATIONS.find(([kind]) => kind === relation.kind)?.[1].toLowerCase() ?? relation.label ?? relation.kind;
+        return <>changed the relation with <B>{after.key}</B> from <B>{label(before)}</B> to <B>{label(after)}</B></>;
+      }
+      return <GroupedRelations changes={changes} />;
+    }
   }
   return changes.map((change, i) => (
     <span key={change.id}>
@@ -448,6 +462,42 @@ function describeGroup(changes: PropertyActivity[], issue: Issue): ReactNode {
       {describeActivity(change, issue, i > 0)}
     </span>
   ));
+}
+
+/** Linear eo/to: name the first cycle and count moves, retaining each underlying change. */
+function GroupedCycles({ changes }: { changes: PropertyActivity[] }) {
+  const delta = (event: PropertyActivity) => {
+    const before = (event.before as NamedValue[] | null) ?? [], after = (event.after as NamedValue[] | null) ?? [];
+    return { added: after.filter((s) => !before.some((b) => b.id === s.id)), removed: before.filter((s) => !after.some((a) => a.id === s.id)) };
+  };
+  const first = delta(changes[0]!), last = delta(changes.at(-1)!);
+  const moves = changes.filter((e) => { const d = delta(e); return d.added.length && d.removed.length; }).length;
+  const cycle = (items: NamedValue[]) => <B>{items.map((s) => s.name).join(", ")}</B>;
+  const added = first.added.length > 0 && first.removed.length === 0;
+  const removed = last.added.length === 0;
+  if (added && moves) return <>added issue to {cycle(first.added)} and {removed ? <>moved through {countWord(moves)} cycles and then removed it from {cycle(last.removed)}</> : moves === 1 ? <>moved to {cycle(last.added)}</> : <>moved through {countWord(moves)} cycles to {cycle(last.added)}</>}</>;
+  if (removed) return moves ? <>moved issue through {countWord(moves)} {plural("cycle", moves)} and then removed it from {cycle(last.removed)}</> : <>removed issue from {cycle(last.removed)}</>;
+  return <>moved issue through {countWord(changes.length)} cycles to {cycle(last.added)}</>;
+}
+
+/** Linear mo: collapse related/duplicate additions and removals by target. */
+function GroupedRelations({ changes }: { changes: PropertyActivity[] }) {
+  const targets = new Map<string, boolean[]>();
+  const kind = ((changes[0]!.after ?? changes[0]!.before) as Relation).kind === "related" ? "related" : "duplicate";
+  for (const change of changes) {
+    const key = ((change.after ?? change.before) as Relation).key;
+    targets.set(key, [...(targets.get(key) ?? []), !!change.after]);
+  }
+  if (targets.size === 1) {
+    const [key, actions] = [...targets][0]!;
+    const verb = actions.length === 2 && actions[0] !== actions[1] ? actions[0] ? "added and then removed from" : "removed and then restored to" : actions.at(-1) ? "added to" : "removed from";
+    return <><B>{key}</B> {verb} {kind} issues</>;
+  }
+  const added = [...targets].filter(([, actions]) => actions.at(-1)).map(([key]) => key).reverse();
+  const removed = targets.size - added.length;
+  if (added.length && removed) return <>Added {countWord(added.length)} {kind} {plural("issue", added.length)} and removed {countWord(removed)}</>;
+  const keys = added.length ? added : [...targets.keys()].reverse();
+  return keys.length <= 2 ? <>{added.length ? "" : "Removed "}{keys.join(" and ")} {added.length ? "added to" : "from"} {kind} issues</> : <>{added.length ? "Added" : "Removed"} {countWord(keys.length)} {kind} issues</>;
 }
 
 /** Linear's grouped-row actors (`R`): "A", "A and B", "A, B and C", "A, B and 2 others". */
@@ -481,7 +531,14 @@ export function ActivityIcon({ row, issue }: { row: ActivityRow; issue: Issue })
   if (row.field === "relation") return <RelationIcon kind={((last.after ?? last.before) as Relation).kind} />;
   if (row.field === "status") {
     const status = statusById(boardOf(issue.key), idOf(last.after));
-    if (status) return <StatusIcon status={status} />;
+    if (status) {
+      if (row.chain.length) {
+        const from = statuses(boardOf(issue.key)).findIndex((s) => s.id === idOf(row.events[0]!.before));
+        const to = statuses(boardOf(issue.key)).findIndex((s) => s.id === idOf(last.after));
+        return <span className="relative inline-flex" data-grouped-status-direction={from > to ? "backward" : "forward"}><StatusIcon status={status} /><svg className="absolute top-0" style={from > to ? { right: -5 } : { left: -5, transform: "rotate(180deg)" }} width="8" height="14" viewBox="0 0 8 14" fill="currentColor" aria-hidden="true"><path d="M3.22598 11.4783C2.60746 12.4742 1.78878 13.3328 0.826172 13.9979C0.88385 13.9993 0.941698 14 0.999713 14C4.86571 14 7.99971 10.866 7.99971 7C7.99971 3.13401 4.86571 0 0.999713 0C0.941783 0 0.884016 0.000703812 0.826422 0.00210309C1.78901 0.66726 2.60765 1.5259 3.22615 2.52183C4.87022 3.3408 5.99971 5.0385 5.99971 7C5.99971 8.96157 4.87014 10.6593 3.22598 11.4783Z" /></svg></span>;
+      }
+      return <StatusIcon status={status} />;
+    }
   }
   if (row.field === "priority") return <PriorityIcon name={(last.after as string | null) ?? undefined} />;
   if (row.field === "type" && last.after) return <TypeDot type={last.after as string} />;
@@ -585,7 +642,10 @@ export function ActivityPropertyRow({ row, issue, children }: { row: ActivityRow
 }
 
 /** Linear L spells counts through twenty in grouped-history descriptions. */
-export function titleChangeLabel(count: number): string {
+function countWord(count: number): string | number {
   const words = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"];
-  return `changed title ${count === 2 ? "twice" : `${words[count] ?? count} times`}`;
+  return words[count] ?? count;
+}
+export function titleChangeLabel(count: number): string {
+  return `changed title ${count === 2 ? "twice" : `${countWord(count)} times`}`;
 }

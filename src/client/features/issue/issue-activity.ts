@@ -45,6 +45,8 @@ const GROUPED: Partial<Record<ActivityField, { sameActor: boolean }>> = {
   labels: { sameActor: true },
   cycle: { sameActor: false },
   title: { sameActor: false },
+  weblink: { sameActor: false },
+  relation: { sameActor: false },
 };
 /** The labels a change added and removed. */
 export function labelDelta(before: unknown, after: unknown) {
@@ -170,7 +172,7 @@ export type Change = {
 const EDITS: ReadonlySet<ActivityField> = new Set(["description"]);
 /** Whether an event changed anything a reader can see. */
 export const changed = (event: { field: ActivityField; before: unknown; after: unknown }) =>
-  EDITS.has(event.field) || !sameValue(event.before, event.after);
+  EDITS.has(event.field) || (event.field === "field" && [event.before, event.after].some((value) => value && typeof value === "object" && "name" in value && value.name === "environment")) || !sameValue(event.before, event.after);
 
 /** Linear's title coalescing (`La`, `Ia = 6e4`): one actor's title edits under a minute apart read as one, at the last. */
 const TITLE_MS = 60_000;
@@ -220,6 +222,12 @@ function groupKind(row: ActivityRow): ActivityField | undefined {
     const { added, removed } = labelDelta(event.before, event.after);
     if (added.length && removed.length) return;
   }
+  if (event.field === "weblink" && !event.after) return;
+  if (event.field === "relation") {
+    if (row.chain.some((change) => ((change.after ?? change.before) as Relation).kind !== ((event.after ?? event.before) as Relation).kind)) return;
+    const relation = (event.after ?? event.before) as Relation;
+    if (!["related", "duplicated"].includes(relation.kind)) return;
+  }
   return event.field;
 }
 /** The rows of the issue's events. `breaks` are the times of entries between them that are not history (comments,
@@ -227,6 +235,7 @@ function groupKind(row: ActivityRow): ActivityField | undefined {
 export function activityRows(
   events: readonly PropertyActivity[],
   breaks: readonly string[] = [],
+  now = Date.now(),
 ): ActivityRow[] {
   const records = new Map<string, PropertyActivity[]>();
   for (const event of [...visibleActivity(events)].sort(
@@ -266,14 +275,45 @@ export function activityRows(
         previous &&
         groupKind(previous) === kind &&
         (!GROUPED[kind]!.sameActor || previous.actor.id === row.actor.id) &&
-        !between(previous.at, row.at)
+        !between(previous.at, row.at) &&
+        (kind !== "relation" || ((previous.events[0]!.after ?? previous.events[0]!.before) as Relation).kind === ((row.events[0]!.after ?? row.events[0]!.before) as Relation).kind)
       ) {
         previous.chain.push(row.events[0]!);
         previous.at = row.at;
-      } else rows.push(row);
+      } else {
+        const first = previous?.events[0], next = row.events[0];
+        // Linear _o: a remove/add pair within one history record changes the relation's type.
+        if (previous?.field === "relation" && row.field === "relation" && !previous.chain.length && first?.before && !first.after && !next?.before && next?.after && first.at === next.at && (!first.id.startsWith("jira-") || first.id.slice(0, first.id.lastIndexOf("-")) === next.id.slice(0, next.id.lastIndexOf("-"))) && first.actor.id === next.actor.id && (first.before as Relation).key === (next.after as Relation).key && (first.before as Relation).kind !== (next.after as Relation).kind) {
+          previous.chain.push(next);
+        } else rows.push(row);
+      }
     }
   }
-  return rows;
+  // Linear Qc aggressively groups selected kinds in runs before a discussion, unless any entry is today/yesterday.
+  const yesterday = new Date(now);
+  yesterday.setHours(0, 0, 0, 0);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const runs: ActivityRow[][] = [];
+  for (const row of rows) {
+    const run = runs.at(-1);
+    if (!run || between(run.at(-1)!.at, row.at)) runs.push([row]);
+    else run.push(row);
+  }
+  return runs.flatMap((run) => {
+    if (!breaks.some((at) => Date.parse(at) >= Date.parse(run.at(-1)!.at)) || run.some((row) => Date.parse(row.at) >= +yesterday)) return run;
+    let result = run;
+    for (const kind of ["cycle", "title", "weblink", "related", "duplicated"]) {
+      const matches = (row: ActivityRow) => kind === "related" || kind === "duplicated"
+        ? row.field === "relation" && groupKind(row) === "relation" && ((row.events[0]!.after ?? row.events[0]!.before) as Relation).kind === kind
+        : row.field === kind && groupKind(row) === kind;
+      const matching = result.filter(matches);
+      if (matching.length < 2) continue;
+      const last = matching.at(-1)!;
+      const changes = matching.flatMap((row) => [...row.events, ...row.chain]);
+      result = result.flatMap((row) => row === last ? [{ ...last, events: [changes[0]!], chain: changes.slice(1) }] : matches(row) ? [] : [row]);
+    }
+    return result;
+  });
 }
 
 /** Jira rejected a write and the issue rolled back from `local` to `jira`: the actor's events for the rejected changes are undone,
@@ -332,6 +372,7 @@ export function activityEvents(
     resources?: readonly IssueResource[];
   },
   comments: readonly string[] = [],
+  linkActor: Actor = { id: "me", name: "Me" },
 ): ActivityEvent[] {
   // Comments, image threads and attached links sit between history entries, so no group spans them.
   const breaks = [
@@ -339,7 +380,7 @@ export function activityEvents(
     ...Object.values(issue.mediaEdits ?? {}).flatMap((edit) => edit.comments?.[0]?.at ?? []),
     ...(issue.resources ?? []).flatMap((resource) => (resource.kind === "link" && resource.created ? [resource.created] : [])),
   ];
-  return [
+  const result: ActivityEvent[] = [
     ...Object.entries(issue.mediaEdits ?? {}).flatMap(([id, edit]) =>
       edit.comments?.length
         ? [
@@ -371,4 +412,32 @@ export function activityEvents(
         : [],
     ),
   ];
+  const grouped: ActivityEvent[] = [];
+  const between = (a: string, b: string) => comments.some((at) => Date.parse(a) < Date.parse(at) && Date.parse(at) <= Date.parse(b));
+  const ordered = result.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  const runs: ActivityEvent[][] = [];
+  for (const event of ordered) {
+    const run = runs.at(-1);
+    if (!run || between(run.at(-1)!.at, event.at) || event.kind === "image-thread" || run.at(-1)!.kind === "image-thread") runs.push([event]);
+    else run.push(event);
+  }
+  const yesterday = new Date();
+  yesterday.setHours(0, 0, 0, 0);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const entries = runs.flatMap((run) => {
+    if (!comments.some((at) => Date.parse(at) >= Date.parse(run.at(-1)!.at)) || run.some((event) => Date.parse(event.at) >= +yesterday)) return run;
+    const links = run.filter((event) => event.kind === "link");
+    if (links.length < 2) return run;
+    return run.flatMap<ActivityEvent>((event) => event === links.at(-1) ? links : event.kind === "link" ? [] : [event]);
+  });
+  for (const event of entries) {
+    const previous = grouped.at(-1);
+    if (event.kind === "link" && previous && !between(previous.at, event.at) && (previous.kind === "link" || previous.kind === "property" && previous.id.startsWith("links-"))) {
+      const change = (e: Extract<ActivityEvent, { kind: "link" }>): PropertyActivity => ({ id: e.id, field: "weblink", before: null, after: { id: e.id, name: e.resource.title, url: e.resource.url }, actor: linkActor, at: e.at });
+      const changes = previous.kind === "link" ? [change(previous), change(event)] : [...previous.row.events, ...previous.row.chain, change(event)];
+      const id = previous.kind === "link" ? `links-${previous.id}` : previous.id;
+      grouped[grouped.length - 1] = { kind: "property", id, at: event.at, row: { id, field: "weblink", at: event.at, actor: linkActor, events: [changes[0]!], chain: changes.slice(1) } };
+    } else grouped.push(event);
+  }
+  return grouped;
 }

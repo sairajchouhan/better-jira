@@ -135,7 +135,7 @@ export function mapItem(item: HistoryItem, entry: readonly HistoryItem[]): Mappe
       return { field: "flag", before: nonEmpty(fromText), after: nonEmpty(toText) };
   }
   const value = (text: string | null): FieldValue | null =>
-    text === null || text === "" ? null : { name: field, value: text };
+    text === null ? null : { name: field, value: text };
   return { field: "field", before: value(fromText), after: value(toText) };
 }
 

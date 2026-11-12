@@ -1,4 +1,4 @@
-import { type PropertyActivity } from "@/shared/issue-model";
+import { type ActivityField, type PropertyActivity } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
 import { GROUP_MS, activityEvents, activityRows, recordActivity, recordRelation, rollbackActivity, visibleActivity } from "./issue-activity";
 const me = { id: "me", name: "Me" },
@@ -151,7 +151,7 @@ test("each relation change is its own row, never joined to the property group, a
     [null, { key: "RAJ-54", kind: "blocked" }],
     [{ key: "RAJ-54", kind: "blocked" }, null],
   ]);
-  // Two relations recorded in the same instant are still two rows.
+  // Xc in the shipped bundle groups adjacent related entries; both remain reachable.
   const same = recordRelation(
     recordRelation([], { key: "A", kind: "related" }, false, me, at(), id),
     { key: "B", kind: "related" },
@@ -160,7 +160,7 @@ test("each relation change is its own row, never joined to the property group, a
     at(),
     id,
   );
-  expect(activityRows(same).map((row) => row.events.length)).toEqual([1, 1]);
+  expect(activityRows(same).map((row) => [...row.events, ...row.chain].length)).toEqual([2]);
 });
 
 test("a write Jira rejected takes its Activity entries with it; earlier saved changes in the group stay", () => {
@@ -208,8 +208,27 @@ test("activityEvents lists image threads at their first comment, property rows, 
     ],
   });
   expect(events.map((e) => [e.kind, e.id, e.at])).toEqual([
-    ["image-thread", "img", at(5)],
     ["property", expect.any(String), at()],
+    ["image-thread", "img", at(5)],
     ["link", "l1", at(9)],
   ]);
+});
+
+test("BJ-202: older runs aggressively group cycles across other fields, preserving every time", () => {
+  const make = (id: string, field: ActivityField, at: string) => ({ id, field, before: null, after: field === "cycle" ? [{ id, name: id }] : id, actor: me, at });
+  const events = [make("a", "cycle", at()), make("b", "description", at(1)), make("c", "cycle", at(2))];
+  const rows = activityRows(events, [at(3)], Date.parse(at()) + 10 * 86400000);
+  expect(rows.map((row) => row.field)).toEqual(["description", "cycle"]);
+  expect(rows[1]!.events.concat(rows[1]!.chain).map((event) => event.at)).toEqual([at(), at(2)]);
+  expect(activityRows(events, [], Date.parse(at()) + 10 * 86400000)).toHaveLength(3);
+  expect(activityRows(events, [at(3)], Date.parse(at(4)))).toHaveLength(3);
+});
+
+test("BJ-202: attached links group and comments keep groups apart", () => {
+  const resources = [0, 1].map((i) => ({ id: `link-${i}`, kind: "link" as const, title: `Link ${i}`, url: `https://example.test/${i}`, created: at(i), updated: at(i) }));
+  const grouped = activityEvents({ resources });
+  expect(grouped).toHaveLength(1);
+  expect(grouped[0]!.kind).toBe("property");
+  if (grouped[0]!.kind === "property") expect([...grouped[0]!.row.events, ...grouped[0]!.row.chain].map((event) => event.at)).toEqual([at(), at(1)]);
+  expect(activityEvents({ resources }, [at(1)])).toHaveLength(2);
 });

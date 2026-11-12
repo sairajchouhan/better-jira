@@ -206,3 +206,16 @@ test("F2: a title group names every actor (`R`)", () => {
     "Ada Example and Grace Example changed title twice",
   );
 });
+
+test("BJ-202: relation type changes within one record use Linear's wording", () => {
+  expect(group(event("relation", { key: "ABC-9", kind: "related" }, null), event("relation", null, { key: "ABC-9", kind: "blocking" }))).toBe("Ada Example changed the relation with ABC-9 from related to blocking");
+  expect(activityRows([event("relation", { key: "ABC-9", kind: "related" }, null), event("relation", null, { key: "ABC-9", kind: "blocking" }, ada, time(5))])).toHaveLength(2);
+});
+
+test("BJ-202: grouped links and cycles use their own summaries", () => {
+  expect(group(event("weblink", null, { id: "1", name: "One" }), event("weblink", null, { id: "2", name: "Two" }, ada, time(1)))).toBe("Ada Example added 2 links");
+  const sprint = (id: string) => [{ id, name: `Sprint ${id}` }];
+  expect(group(event("cycle", null, sprint("1")), event("cycle", sprint("1"), sprint("2"), ada, time(1)))).toBe("Ada Example added issue to Sprint 1 and moved to Sprint 2");
+  expect(group(event("cycle", sprint("1"), sprint("2")), event("cycle", sprint("2"), null, ada, time(1)))).toBe("Ada Example moved issue through one cycle and then removed it from Sprint 2");
+  expect(words(event("field", { name: "environment", value: "" }, { name: "environment", value: "" }))).toBe("updated the environment");
+});

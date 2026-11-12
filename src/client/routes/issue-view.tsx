@@ -877,6 +877,7 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
         { ...issue, activity: mergeHistory(issue.activity ?? [], history) },
         // Linear groups only adjacent history entries, so a comment thread between two changes keeps them apart.
         (comments ?? []).flatMap((comment) => (comment.parentId ? [] : [comment.created])),
+        ME,
       ),
     [issue, history, comments],
   );

@@ -423,3 +423,29 @@ test("BJ-196: repeated title edits expand and collapse with their individual val
   await page.key("Enter");
   await page.waitFor(`!document.querySelector('[aria-label="Grouped changes"]')`);
 });
+
+test("BJ-202: grouped status arrows, links, cycles and relation changes retain expandable entries", async ({ open }) => {
+  const actor = { id: "ada", name: "Ada Example" };
+  const change = (field: string, fromText: string | null, toText: string | null, from: string | null = null, to: string | null = null) => ({ field, fieldId: field, from, to, fromText, toText });
+  const at = (n: number) => `2026-11-06T${String(10 + n).padStart(2, "0")}:00:00Z`;
+  await fixture.reset({ history: { "TEST-4": [
+    { id: "s1", actor, at: at(0), items: [change("status", "Todo", "Doing", "todo", "doing")] },
+    { id: "s2", actor, at: at(1), items: [change("status", "Doing", "Done", "doing", "done")] },
+    { id: "l1", actor, at: at(2), items: [change("RemoteWorkItemLink", null, 'This work item links to "Guide"', null, "1")] },
+    { id: "l2", actor, at: at(3), items: [change("RemoteWorkItemLink", null, 'This work item links to "Notes"', null, "2")] },
+    { id: "c1", actor, at: at(4), items: [change("Sprint", null, "Sprint 1", null, "1")] },
+    { id: "c2", actor, at: at(5), items: [change("Sprint", "Sprint 1", "Sprint 2", "1", "2")] },
+    { id: "r1", actor, at: at(6), items: [change("Link", "This issue relates to DEMO-9", null, "DEMO-9"), change("Link", null, "This issue blocks DEMO-9", null, "DEMO-9")] },
+    { id: "e1", actor, at: at(7), items: [change("environment", "", "")] },
+  ] } });
+  const page = await open("?issue=TEST-4&view=page");
+  await page.waitFor(`!!document.querySelector('[data-grouped-status-direction="forward"]')`);
+  const summaries = `[...document.querySelectorAll('[data-activity]')].map(n=>n.textContent).join(' ')`;
+  expect(await page.eval(summaries)).toContain("added 2 links");
+  expect(await page.eval(summaries)).toContain("added issue to Sprint 1 and moved to Sprint 2");
+  expect(await page.eval(summaries)).toContain("changed the relation with DEMO-9 from related to blocking");
+  expect(await page.eval(summaries)).toContain("updated the environment");
+  await page.click('[data-activity="weblink"] button');
+  await page.waitFor(`document.querySelectorAll('[aria-label="Grouped changes"] li').length===2`);
+  expect(await page.eval(`[...document.querySelectorAll('[aria-label="Grouped changes"] time')].map(n=>n.dateTime)`)).toEqual([at(2), at(3)]);
+});

@@ -254,3 +254,11 @@ test("BJ-196: title changes coalesce up to one minute, then remain expandable hi
   expect(rows[0]!.chain).toHaveLength(1);
   expect(rows[0]!.chain[0]).toMatchObject({ before: "C", after: "D" });
 });
+
+test("BJ-202: an empty environment changelog value still records the edit", () => {
+  const history = [entry([item("environment", { fromText: "", toText: "" })])];
+  const events = mergeHistory([], history);
+  expect(events).toHaveLength(1);
+  expect(activityRows(events)).toHaveLength(1);
+  expect(events[0]!.at).toBe(history[0]!.at);
+});
