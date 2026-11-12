@@ -313,6 +313,8 @@ test("BJ-195: related issue hover cards and external Copy link", async ({ open }
   await p.context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await p.page.locator(related).click({ button: "right" });
   await p.click('[cmdk-item][data-value="Copy link"]');
-  await p.waitFor(`document.body.textContent.includes('Copied URL')`);
+  // #13: Linear's toast, with the copy icon and a close button.
+  await p.waitFor(`document.querySelector('[data-toast]')?.textContent==='Copied issue link to clipboard'`);
+  expect(await p.eval(`!!document.querySelector('[data-toast] .ui-toast-icon svg')&&!!document.querySelector('[data-toast] [aria-label="Dismiss"]')`)).toBe(true);
   expect(await p.eval(`navigator.clipboard.readText()`)).toBe("https://example.atlassian.net/browse/OTHER-41");
 });

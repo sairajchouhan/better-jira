@@ -3,6 +3,7 @@ import { ME, get, set, statusOf } from "@/client/state/store";
 import { issueURL } from "./issue-urls";
 import { loadFull } from "@/client/state/server-data";
 import { isLocalIssue } from "@/client/state/local-edits";
+import { showNotification } from "@/client/state/app-notifications";
 import type { AdfNode } from "@/client/features/editor/rich-document";
 
 const escape = (text: string) => text.replace(/[\\`*_[\]<>]/g, "\\$&");
@@ -200,7 +201,8 @@ export async function copyIssue(kind: CopyKind, issue: Issue, url = issueURL(iss
 export async function copyIssueLink(url: string) {
   try {
     await navigator.clipboard.writeText(url);
-    set({ perf: "Copied URL" });
+    // Linear's Copy URL action: an info toast with the copy icon (`Copied ${model} link to clipboard`).
+    showNotification({ text: "Copied issue link to clipboard", icon: "copy" });
   } catch {
     set({ perf: "Could not access the clipboard" });
   }
