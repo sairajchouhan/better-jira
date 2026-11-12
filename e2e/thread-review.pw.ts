@@ -306,7 +306,7 @@ test("Jira comments with media: copying them into issues, and local replies when
     await page.click("text=New issue from comment…");
     await page.waitFor("window.copyWaiting");
     await page.eval(
-      `history.pushState(null,'','?issue=TEST-3&view=page&board=1');dispatchEvent(new PopStateEvent('popstate'));window.releaseCopy()`,
+      `history.pushState(null,'','/issue/TEST-3');dispatchEvent(new PopStateEvent('popstate'));window.releaseCopy()`,
     );
     await page.waitFor("window.copySaved");
     await page.eval(

@@ -13,7 +13,7 @@ test("My issues is one active destination, including repeat clicks and opening t
   await mine.click();
   await expect(app.page).toHaveURL(`${fixture.url}my-issues`);
   await app.page.locator(nav).getByRole("button", { name: "Browser audit", exact: false }).click();
-  await expect(app.page).toHaveURL(`${fixture.url}?board=1`);
+  await expect(app.page).toHaveURL(`${fixture.url}team/1/all`);
   await expect(app.page.locator(active)).toHaveCount(1);
   await expect(mine).not.toHaveAttribute("aria-current");
   await app.page.goBack();
@@ -21,7 +21,7 @@ test("My issues is one active destination, including repeat clicks and opening t
   await expect(app.page.locator(active)).toHaveCount(1);
   await expect(app.page.locator(active)).toContainText("My issues");
   await app.page.goBack();
-  await expect(app.page).toHaveURL(`${fixture.url}?board=1`);
+  await expect(app.page).toHaveURL(`${fixture.url}team/1/all`);
 });
 
 test("another board then Back restores My issues without creating a board-plus-mine entry", async ({ open }) => {
@@ -33,7 +33,7 @@ test("another board then Back restores My issues without creating a board-plus-m
   await expect(app.page.locator('[data-key="BULK-1"]:visible')).toHaveCount(1);
   await expect(app.page.locator('[data-key="TWO-1"]:visible')).toHaveCount(1);
   await app.page.locator(nav).getByRole("button", { name: /Second board/ }).click();
-  await expect(app.page).toHaveURL(`${fixture.url}?board=2`);
+  await expect(app.page).toHaveURL(`${fixture.url}team/2/all`);
   await expect(app.page.locator(active)).toHaveCount(1);
   await expect(mine).not.toHaveAttribute("aria-current");
   await app.page.goBack();
@@ -41,7 +41,7 @@ test("another board then Back restores My issues without creating a board-plus-m
   await expect(app.page.locator(active)).toHaveCount(1);
   await expect(app.page.locator(active)).toContainText("My issues");
   await app.page.goForward();
-  await expect(app.page).toHaveURL(`${fixture.url}?board=2`);
+  await expect(app.page).toHaveURL(`${fixture.url}team/2/all`);
   await expect(app.page.locator(active)).toHaveCount(1);
   await expect(app.page.locator(active)).toContainText("Second board");
 });

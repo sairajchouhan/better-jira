@@ -1,4 +1,4 @@
-import { expect, test, sleep, fixture } from "./app";
+import { expect, test, sleep, fixture, shownIssue } from "./app";
 
 // A writable site, faked in the page: the fixture server never reaches Jira. The first write is rejected, later ones accepted.
 const setup = `(()=>{const real=fetch;window.__ops=[];let calls=0;
@@ -78,7 +78,7 @@ test("Jira writes: a rejected write rolls back, created issues open by their Jir
       ),
     ).toBe("Created TEST-90View issue");
     await p.key("o", "meta", "alt");
-    await p.waitFor(`new URL(location.href).searchParams.get('issue')==='TEST-90'`);
+    await p.waitFor(`${shownIssue}==='TEST-90'`);
   });
 
   await test.step("Create related › Parent issue defaults to the type above the source; a rejected parent says which issue was left and leaves no Activity", async () => {
@@ -114,7 +114,7 @@ test("Jira writes: a rejected write rolls back, created issues open by their Jir
     });
     await p.eval(`window.machines.ui.send({type:'navigate',selected:'TEST-2',panel:true})`);
     await p.waitFor(
-      `!!document.querySelector('.issue-activity')&&location.search.includes('issue=TEST-2')`,
+      `!!document.querySelector('.issue-activity')&&${shownIssue}==='TEST-2'`,
     );
     expect(
       await p.eval<string>(`document.querySelector('.issue-activity').textContent`),

@@ -1,4 +1,4 @@
-import { expect, test } from "./app";
+import { expect, test, shownIssue } from "./app";
 
 for (const parent of ["Browser audit", "Issues"]) {
   test(`issue breadcrumb ${parent} returns to All issues on the current board`, async ({
@@ -16,8 +16,8 @@ for (const parent of ["Browser audit", "Issues"]) {
       );
       await page.click(`[aria-label="Breadcrumb"] [aria-label="${parent}"]`);
       await page.waitFor(`!document.getElementById('summary')`);
-      expect(await page.eval(`new URLSearchParams(location.search).get('board')`)).toBe("1");
-      expect(await page.eval(`new URLSearchParams(location.search).has('issue')`)).toBe(false);
+      expect(await page.eval(`location.pathname`)).toBe("/team/1/all");
+      expect(await page.eval(`!!${shownIssue}`)).toBe(false);
       expect(
         await page.eval(
           `[...document.querySelectorAll('button[aria-pressed=true]')].some(b=>b.textContent==='All issues')`,
@@ -25,7 +25,7 @@ for (const parent of ["Browser audit", "Issues"]) {
       ).toBe(true);
       await page.eval("history.back()");
       await page.waitFor(`!!document.getElementById('summary')`);
-      expect(await page.eval(`new URLSearchParams(location.search).get('issue')`)).toBe("TEST-1");
+      expect(await page.eval(`${shownIssue}`)).toBe("TEST-1");
     } finally {
       await page.close();
     }

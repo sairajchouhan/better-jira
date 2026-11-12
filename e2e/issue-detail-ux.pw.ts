@@ -1,4 +1,4 @@
-import { expect, test, fixture } from "./app";
+import { expect, test, fixture, issueOfHref } from "./app";
 
 // TEST-3 is TEST-2's sub-issue, with TEST-4 and TEST-5 under it.
 const tree = `const read=fetch;window.fetch=async(...args)=>{const response=await read(...args);if(new URL(String(args[0]),location.href).pathname!=='/api/issues')return response;const issues=await response.json();issues.find(i=>i.key==='TEST-3').parent='TEST-2';for(const key of ['TEST-4','TEST-5'])issues.find(i=>i.key===key).parent='TEST-3';return Response.json(issues)}`;
@@ -85,7 +85,7 @@ test("sub-issue rows: shortcuts act on the row, collapse persists, the composer 
       `document.querySelector('[data-relation="related:TEST-1"] a')?.href`,
     );
     expect(new URL(href).origin).toBe(new URL(fixture.url).origin);
-    expect(new URL(href).searchParams.get("issue")).toBe("TEST-1");
+    expect(issueOfHref(href)).toBe("TEST-1");
     await p.click('[data-relation="related:TEST-1"] button');
     await p.waitFor(`!document.querySelector('[data-relation="related:TEST-1"]')`);
     await p.waitFor(`document.activeElement?.id==='issue-options'`);

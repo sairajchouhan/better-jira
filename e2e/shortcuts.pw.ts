@@ -1,4 +1,4 @@
-import { expect, test, sleep, type App as Page } from "./app";
+import { expect, test, sleep, type App as Page, shownView } from "./app";
 
 const dialog = (label: string) => `[role=dialog][aria-label="${label}"]`;
 /** Ctrl+Shift+I focuses the description, and the app keeps re-focusing it for a few frames (an issue opening can remount the
@@ -78,11 +78,11 @@ test("a selected card: issue commands, copy chords, layout and focus scopes", as
     await p.key("j");
     await p.key(" ");
     await p.waitFor(`!!document.querySelector('#summary')`);
-    expect(await p.eval(`new URL(location.href).searchParams.get('view')`)).toBe("side");
+    expect(await p.eval(`${shownView}`)).toBe("side");
     await p.key("Escape");
     await p.eval("document.activeElement?.blur()");
     await p.key("Enter");
-    await p.waitFor(`new URL(location.href).searchParams.get('view')==='page'`);
+    await p.waitFor(`${shownView}==='page'`);
   });
   await test.step("Linear issue commands, relation sequences and copy chords work on a selected card", async () => {
     await p.goto("");

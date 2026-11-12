@@ -1,4 +1,4 @@
-import { expect, test, sleep, fixture, type App as Page } from "./app";
+import { expect, test, sleep, fixture, type App as Page, shownIssue, shownView } from "./app";
 const tree = `const read=fetch;window.fetch=async(...args)=>{const response=await read(...args);if(new URL(String(args[0]),location.href).pathname!=='/api/issues')return response;const issues=await response.json();Object.assign(issues.find(i=>i.key==='TEST-3'),{parent:'TEST-2',status:'done',resolved:new Date().toISOString()});for(const key of ['TEST-4','TEST-5'])issues.find(i=>i.key===key).parent='TEST-3';return Response.json(issues)}`;
 /** Turns on these sub-issue display properties in the open display menu, leaving any already on. */
 const show = async (page: Page, ...names: string[]) => {
@@ -181,8 +181,7 @@ test("the sub-issue tree: progress, guide lines and display preferences", async 
     await page.key("Escape");
     await page.click('[data-sub-issue="TEST-4"] a');
     await page.waitFor(`document.getElementById('summary')?.value==='Browser fixture 4'`);
-    expect(await page.eval(`new URLSearchParams(location.search).get('view')`)).toBe("page");
-    expect(await page.eval(`new URLSearchParams(location.search).get('board')`)).toBe("2");
+    expect(await page.eval(`${shownView}`)).toBe("page");
   });
 });
 
@@ -694,10 +693,10 @@ test("a sub-issue draft's late upload or file save never loses newer edits or re
   await test.step("a sub-issue upload that finishes after leaving keeps newer draft edits, and a discarded draft stays discarded", async () => {
     const go = async (key: string) => {
       await page.eval(
-        `history.pushState({},'','?issue=${key}&view=page');dispatchEvent(new PopStateEvent('popstate'))`,
+        `history.pushState({},'','/issue/${key}');dispatchEvent(new PopStateEvent('popstate'))`,
       );
       await page.waitFor(
-        `new URL(location.href).searchParams.get('issue')==='${key}'&&!!document.getElementById('comment')`,
+        `${shownIssue}==='${key}'&&!!document.getElementById('comment')`,
       );
     };
     const paste = (name: string) =>
@@ -762,10 +761,10 @@ test("a sub-issue draft's late upload or file save never loses newer edits or re
     await page.reload(); // a closed composer, as on a fresh page
     const go = async (key: string) => {
       await page.eval(
-        `history.pushState({},'','?issue=${key}&view=page');dispatchEvent(new PopStateEvent('popstate'))`,
+        `history.pushState({},'','/issue/${key}');dispatchEvent(new PopStateEvent('popstate'))`,
       );
       await page.waitFor(
-        `new URL(location.href).searchParams.get('issue')==='${key}'&&!!document.getElementById('comment')`,
+        `${shownIssue}==='${key}'&&!!document.getElementById('comment')`,
       );
     };
     // Hold the local file save (the IndexedDB transaction) until releaseFiles().

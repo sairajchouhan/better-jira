@@ -1,4 +1,4 @@
-import { expect, test, fixture, type App as Page } from "./app";
+import { expect, test, fixture, type App as Page, shownIssue } from "./app";
 
 // Package E (backlog round 2026-11-12): editor blocks, menus and references, checked through what reaches Jira.
 
@@ -107,7 +107,7 @@ test("links in the description open on click: other sites in a new tab, an issue
   await page.type("see TEST-4 ");
   await page.waitFor(`[...document.querySelectorAll('#description a.rich-token')].some(n=>n.textContent==='TEST-4')`);
   await page.eval(`[...document.querySelectorAll('#description a.rich-token')].find(n=>n.textContent==='TEST-4').click()`);
-  await page.waitFor(`new URLSearchParams(location.search).get('issue')==='TEST-4'`);
+  await page.waitFor(`${shownIssue}==='TEST-4'`);
 });
 
 test("BJ-69: Create issue from selection opens the composer titled with the selected text, related to this issue", async ({

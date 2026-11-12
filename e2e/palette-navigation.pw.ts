@@ -1,4 +1,4 @@
-import { expect, test } from "./app";
+import { expect, test, shownDocument, shownIssue } from "./app";
 
 /** Package P (palette, search, navigation): Linear's nested "Open …" pages, recents and search. */
 const dialog = (label: string) => `document.querySelector('[role=dialog][aria-label="${label}"]')`;
@@ -54,17 +54,17 @@ test("BJ-35: search and O I list recently opened issues and recent searches", as
   const p = await open();
   for (const key of ["TEST-2", "TEST-3"]) {
     await p.click(`[data-key="${key}"]`);
-    await p.waitFor(`new URLSearchParams(location.search).get('issue')==='${key}'`);
+    await p.waitFor(`${shownIssue}==='${key}'`);
   }
   await p.key("Escape");
-  await p.waitFor(`!new URLSearchParams(location.search).get('issue')`);
+  await p.waitFor(`!${shownIssue}`);
   await p.key("/");
   await p.waitFor(`${groupRows("Recent")}.length===2`);
   expect((await p.eval<string[]>(groupRows("Recent"))).map((t) => t.slice(0, 6))).toEqual(["TEST-3", "TEST-2"]);
   await p.type("fixture 4");
   await p.waitFor(`document.querySelector('[cmdk-item][data-selected=true]')?.textContent.includes('TEST-4')`);
   await p.key("Enter");
-  await p.waitFor(`new URLSearchParams(location.search).get('issue')==='TEST-4'`);
+  await p.waitFor(`${shownIssue}==='TEST-4'`);
   await p.key("Escape");
   await p.keys("oi");
   await p.waitFor(`!!document.querySelector('[role=dialog][aria-label="Open issue"]')&&${groupRows("Recent searches")}.length===1`);
@@ -81,14 +81,14 @@ test("BJ-46: ⌘K opens the last viewed issue", async ({ open }) => {
   await p.key("Escape");
   for (const key of ["TEST-2", "TEST-3"]) {
     await p.click(`[data-key="${key}"]`);
-    await p.waitFor(`new URLSearchParams(location.search).get('issue')==='${key}'`);
+    await p.waitFor(`${shownIssue}==='${key}'`);
   }
   await p.key("Escape");
   await p.key("k", "meta");
   await p.type("last viewed");
   await p.waitFor(`document.querySelector('[cmdk-item][data-selected=true]')?.textContent==='Open last viewed issue'`);
   await p.key("Enter");
-  await p.waitFor(`new URLSearchParams(location.search).get('issue')==='TEST-2'`);
+  await p.waitFor(`${shownIssue}==='TEST-2'`);
 });
 
 test("BJ-64: a keyword and a space in ⌘K focuses search on that entity type", async ({ open }) => {
@@ -116,7 +116,7 @@ test("BJ-65: search and O D find a document by its body text and open it", async
   await p.waitFor(`document.querySelector('[aria-label="Local save status"]')?.textContent.includes('Saved')`);
   await p.key("Escape");
   await p.key("Escape");
-  await p.waitFor(`!new URLSearchParams(location.search).get('document')`);
+  await p.waitFor(`!${shownDocument}`);
   await p.key("/");
   await p.type("zebra");
   await p.waitFor(`${groupRows("Documents")}.length===1`);
@@ -125,13 +125,13 @@ test("BJ-65: search and O D find a document by its body text and open it", async
   await p.keys("od");
   await p.waitFor(`!!${dialog("Open document")}&&${groupRows("Documents")}.length===1`);
   await p.key("Enter");
-  await p.waitFor(`!!new URLSearchParams(location.search).get('document')`);
+  await p.waitFor(`!!${shownDocument}`);
 });
 
 test("BJ-80: G U goes to the views page", async ({ open }) => {
   const p = await open();
   await p.keys("gu");
-  await p.waitFor(`location.pathname==='/views'`);
+  await p.waitFor(`location.pathname==='/team/1/views'`);
 });
 
 test("BJ-63: search remembers its chosen ordering", async ({ open }) => {
@@ -157,11 +157,11 @@ test("BJ-77: O U opens a user's issues, with their Assigned and Created tabs", a
   await p.waitFor(`!!${dialog("Open user")}`);
   await p.type("alex");
   await p.key("Enter");
-  await p.waitFor(`location.pathname==='/user/alex'`);
+  await p.waitFor(`location.pathname==='/profiles/alex'`);
   await p.waitFor(`${cards}.join()==='TEST-2'`);
   await p.waitFor(`!!document.querySelector('nav[aria-label=Breadcrumb] [aria-label="Alex"]')`);
   await p.eval(`${tab("Created")}.click()`);
-  await p.waitFor(`location.pathname==='/user/alex/created'&&${cards}.length===0`);
+  await p.waitFor(`location.pathname==='/profiles/alex/created'&&${cards}.length===0`);
 });
 
 test("BJ-28: My issues has Assigned, Created, Subscribed and Activity tabs, each with its own address", async ({ open }) => {

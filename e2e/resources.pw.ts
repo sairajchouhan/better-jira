@@ -1,4 +1,4 @@
-import { expect, test, fixture, sleep, type App as Page } from "./app";
+import { expect, test, fixture, sleep, type App as Page, documentOfHref, shownDocument } from "./app";
 
 async function options(page: Page, name: string) {
   await page.click("#issue-options");
@@ -91,7 +91,7 @@ test("issue resources: documents and links are created, kept, removed and undone
     await options(page, "Add document…");
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Document title'`);
     const url = await page.eval<string>("location.href");
-    expect(new URL(url).searchParams.get("document")).toBeTruthy();
+    expect(documentOfHref(url)).toBeTruthy();
     expect(new URL(url).hash).toBe("");
     expect(await page.eval(`document.querySelector('[aria-label="Document title"]').value`)).toBe(
       "",
@@ -277,7 +277,7 @@ test("resource rows: Linear's row menus, and link unfurls kept across undo and r
     await page.click('[cmdk-item][data-value="Add document…"]');
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Document title'`);
     await page.type("Row doc");
-    const id = await page.eval<string>(`new URL(location.href).searchParams.get('document')`);
+    const id = await page.eval<string>(`${shownDocument}`);
     await page.click('[aria-label="Back to issue"]');
     await page.waitFor(`!!document.getElementById('comment')`);
     await menu("Row doc");
@@ -285,13 +285,13 @@ test("resource rows: Linear's row menus, and link unfurls kept across undo and r
     expect(await page.eval(menuLook)).toEqual([0, true]);
     await page.click('[cmdk-item][data-value="Copy URL"]');
     await page.waitFor(`window.copied.length===2`);
-    expect(new URL(await page.eval<string>("window.copied[1]")).searchParams.get("document")).toBe(
+    expect(documentOfHref(await page.eval<string>("window.copied[1]"))).toBe(
       id,
     );
     await menu("Row doc");
     await page.click('[cmdk-item][data-value="Open document"]');
     await page.waitFor(
-      `new URL(location.href).searchParams.get('document')==='${id}'&&!!document.getElementById('resource-document')`,
+      `${shownDocument}==='${id}'&&!!document.getElementById('resource-document')`,
     );
     await page.click('[aria-label="Back to issue"]');
     await page.waitFor(`!!document.getElementById('comment')`);

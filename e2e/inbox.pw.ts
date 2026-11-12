@@ -59,7 +59,7 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
     await p.waitFor(`${badge} === "5"`);
     await p.click("nav button:has([data-inbox-badge])");
     await p.waitFor(`${rows}.length === 7`);
-    expect(await p.eval(`location.search`)).toContain("inbox=1");
+    expect(await p.eval(`location.pathname`)).toBe("/inbox");
     const labels: string[] = await p.eval(rowText);
     expect(labels.map((l) => l.split(" ")[1])).toEqual([
       "TEST-2",

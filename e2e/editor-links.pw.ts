@@ -1,4 +1,4 @@
-import { expect, test } from "./app";
+import { expect, test, shownIssue } from "./app";
 
 const editor = `document.querySelector('#description')`;
 const linkTo = (href: string) => `#description a[href="${href}"]`;
@@ -72,6 +72,6 @@ test("an issue link in a rendered comment opens the issue here", async ({ open }
   await page.waitFor(`!!document.querySelector(${JSON.stringify(link)})`);
   await page.eval(`window.open=()=>{window.__opened=true}`);
   await page.click(link);
-  await page.waitFor(`location.search.includes('issue=TEST-4')`);
+  await page.waitFor(`${shownIssue}==='TEST-4'`);
   expect(await page.eval(`!!window.__opened`)).toBe(false);
 });

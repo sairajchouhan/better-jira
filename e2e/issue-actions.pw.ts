@@ -1,4 +1,4 @@
-import { expect, test } from "./app";
+import { expect, test, shownIssue } from "./app";
 
 const OPTIONS = '[role="dialog"][aria-label="Issue options"]';
 const optionValues = `[...document.querySelectorAll('${OPTIONS} [cmdk-item]')].map(n=>n.getAttribute('data-value'))`;
@@ -123,7 +123,7 @@ test("issue options follow Linear's action tree, with descendant search and subm
     await page.type("Blocked follow-up");
     await page.key("Enter", "meta");
     await page.waitFor(`!!document.querySelector('[data-relation="blocked:TEST-2"]')`);
-    const created = await page.eval<string>(`new URL(location.href).searchParams.get('issue')`);
+    const created = await page.eval<string>(`${shownIssue}`);
     expect(created).not.toBe("TEST-2");
     expect(
       await page.eval(

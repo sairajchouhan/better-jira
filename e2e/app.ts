@@ -302,3 +302,12 @@ export const test = base.extend<
     await Promise.all(contexts.map((c) => c.close().catch(() => {})));
   },
 });
+
+/** Page expressions for what the address shows: an issue page is `/issue/KEY`, a panel beside a list `?issue=KEY`. */
+export const shownIssue = `(location.pathname.match(/^\\/issue\\/([^/]+)/)?.[1]??new URLSearchParams(location.search).get('issue'))`;
+export const shownDocument = `(location.pathname.match(/\\/document\\/([^/]+)/)?.[1]??null)`;
+export const shownView = `(location.pathname.startsWith('/issue/')?'page':new URLSearchParams(location.search).has('issue')?'side':null)`;
+/** The issue and document an app link names. */
+export const issueOfHref = (href: string) =>
+  new URL(href).pathname.match(/^\/issue\/([^/]+)/)?.[1] ?? new URL(href).searchParams.get("issue");
+export const documentOfHref = (href: string) => new URL(href).pathname.match(/\/document\/([^/]+)/)?.[1] ?? null;

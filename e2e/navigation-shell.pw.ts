@@ -1,4 +1,4 @@
-import { expect, test, sleep, type App as Page, fixture } from "./app";
+import { expect, test, sleep, type App as Page, fixture, shownDocument, shownIssue, shownView } from "./app";
 
 const nav = `document.querySelector('nav[aria-label="Main navigation"]')`;
 const navShown = `(()=>{const n=${nav};return !!n&&n.getClientRects().length>0})()`;
@@ -29,7 +29,7 @@ test("navigation shell: sidebar, My issues URL, palettes and shortcut search", a
       `document.querySelector('nav[aria-label="Breadcrumb"] [aria-label="My issues"]')?.textContent==='My issues'`,
     );
     await page.keys("ge");
-    await page.waitFor(`location.pathname==='/'&&!new URL(location.href).searchParams.has('mine')`);
+    await page.waitFor(`location.pathname.startsWith('/team/')`);
   });
   await test.step("R1-D54: the scoped palette lists only issue commands that apply", async () => {
     await fetch(`${fixture.url}__fixture`, {
@@ -83,9 +83,9 @@ test("navigation shell: sidebar, My issues URL, palettes and shortcut search", a
     await page.click('[data-key="TEST-1"]');
     await page.waitFor(`!!document.getElementById('description')`);
     await page.key("Enter");
-    await page.waitFor(`new URL(location.href).searchParams.get('view')==='page'`);
+    await page.waitFor(`${shownView}==='page'`);
     await page.key("Escape");
-    await page.waitFor(`!new URL(location.href).searchParams.get('issue')`);
+    await page.waitFor(`!${shownIssue}`);
     await page.key("i", "ctrl", "shift");
     await page.waitFor(`document.activeElement?.id==='description'`);
     await sleep(300);
@@ -114,7 +114,7 @@ test("navigation shell: sidebar, My issues URL, palettes and shortcut search", a
     await p.key("Escape");
     await p.key("f");
     await p.key("Escape");
-    await p.waitFor(`!new URL(location.href).searchParams.has('document')`);
+    await p.waitFor(`!!!${shownDocument}`);
   });
   await test.step("R1-D38: below 768px the Menu button and [ open the sidebar over the page", async () => {
     const p = await open("", { width: 700, height: 800 });

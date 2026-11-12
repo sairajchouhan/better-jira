@@ -1,4 +1,4 @@
-import { expect, test } from "./app";
+import { expect, test, shownIssue } from "./app";
 
 test("BJ-39: bottom of column creates with that column's status", async ({ open }) => {
   const page = await open();
@@ -21,7 +21,7 @@ test("BJ-51: nested progress opens the child's own children", async ({ open }) =
   await page.click('[data-sub-issue="TEST-3"] [data-row-progress]');
   await page.waitFor(`!!document.querySelector('[role=dialog][aria-label="Open sub-issues of TEST-3"]')`);
   expect(await page.eval(`document.querySelector('[role=dialog][aria-label="Open sub-issues of TEST-3"]').textContent`)).toContain("TEST-4");
-  expect(await page.eval(`new URL(location.href).searchParams.get("issue")`)).toBe("TEST-2");
+  expect(await page.eval(`${shownIssue}`)).toBe("TEST-2");
 });
 
 test("BJ-31: composer creates and removes new labels", async ({ open }) => {

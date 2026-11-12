@@ -1,11 +1,11 @@
-import { expect, test, sleep, fixture, type App as Page } from "./app";
+import { expect, test, sleep, fixture, type App as Page, shownIssue } from "./app";
 
 const go = async (page: Page, key: string) => {
   await page.eval(
-    `history.pushState({},'','?issue=${key}&view=page');dispatchEvent(new PopStateEvent('popstate'))`,
+    `history.pushState({},'','/issue/${key}');dispatchEvent(new PopStateEvent('popstate'))`,
   );
   await page.waitFor(
-    `new URL(location.href).searchParams.get('issue')==='${key}'&&!!document.getElementById('comment')`,
+    `${shownIssue}==='${key}'&&!!document.getElementById('comment')`,
   );
 };
 

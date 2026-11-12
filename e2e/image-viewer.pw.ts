@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { expect, test, sleep, fixture, type App as Page, savedAs } from "./app";
+import { expect, test, sleep, fixture, type App as Page, savedAs, issueOfHref, shownIssue } from "./app";
 
 const media = (patch: object = {}) => fixture.reset({ includeMedia: true, ...patch });
 const image = `document.querySelector('#description img')`;
@@ -24,7 +24,7 @@ test("image preview: layered Escape, zoom, pan within edges, and copying link an
     await page.click("#description img");
     await page.click('#description [aria-label="Full screen"]');
     await page.waitFor(`!!${preview}`);
-    expect(await page.eval(`new URLSearchParams(location.search).get('issue')`)).toBe("TEST-2");
+    expect(await page.eval(`${shownIssue}`)).toBe("TEST-2");
     await page.key("Tab", "shift");
     expect(await page.active()).toBe("Close");
     await page.key("Tab");
@@ -190,7 +190,7 @@ test("image cropping: keyboard and pointer geometry, unreadable sources, local p
     await page.key("Escape");
     await page.waitFor(`!!document.querySelector('[aria-label="Preview"]')`);
     await page.key("Escape");
-    expect(await page.eval(`new URLSearchParams(location.search).get('issue')`)).toBe("TEST-2");
+    expect(await page.eval(`${shownIssue}`)).toBe("TEST-2");
     await page.reload();
     await page.waitFor(`!!${image}`, 15000);
     expect(await page.eval(`${image}.getAttribute('src')`)).toBe(
@@ -356,7 +356,7 @@ test("image comment threads: drafts, Escape after mouse Submit, and external ima
     await page.key("Escape");
     await page.waitFor(`!document.querySelector('.image-comment-thread')`);
     expect(await page.active()).toBe("Add image comment");
-    expect(new URL(await page.eval("location.href")).searchParams.get("issue")).toBe("TEST-2");
+    expect(issueOfHref(await page.eval("location.href"))).toBe("TEST-2");
     expect(
       await page.eval(`document.querySelector('[id^="image-comment-"]').textContent`),
     ).toContain("Mouse submitted");

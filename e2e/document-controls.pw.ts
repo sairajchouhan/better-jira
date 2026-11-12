@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { Download } from "@playwright/test";
-import { expect, test, sleep, PREFS_KEY, type App as Page, savedAs } from "./app";
+import { expect, test, sleep, PREFS_KEY, type App as Page, savedAs, documentOfHref, shownDocument, shownIssue } from "./app";
 
 const DOC_PAGE = "?issue=TEST-2&view=page";
 const SAVED = `document.querySelector('[aria-label="Local save status"]').textContent.includes('Saved')`;
@@ -78,7 +78,7 @@ test("document header, menus and shortcuts act on the document, preserve the par
     await page.click("text=Renamed reference");
     await page.waitFor(`!!document.getElementById('resource-document')`);
     expect(await page.eval("location.href")).toBe(url);
-    await page.goto(new URL(url).search);
+    await page.goto(new URL(url).pathname + new URL(url).search);
     await page.waitFor(
       `document.querySelector('[aria-label="Document title"]')?.value==='Renamed reference'`,
     );
@@ -203,7 +203,7 @@ test("document header, menus and shortcuts act on the document, preserve the par
     await page.click('[cmdk-item][data-value="Copy title as link"]');
     const link = await page.eval<string>("navigator.clipboard.readText()");
     expect(link).toContain("[Reference document](http://127.0.0.1:");
-    expect(link).toContain("document=");
+    expect(link).toContain("/issue/TEST-2/document/");
     const download = page.page.waitForEvent("download");
     await page.click('[aria-label="Document options"]');
     await page.type("Markdown");
@@ -216,19 +216,19 @@ test("document header, menus and shortcuts act on the document, preserve the par
   await test.step("URL, link and filename escaping, owner check, emoji search and filtered submenus behave like Linear", async () => {
     const title = "Spec [v2] a\\b/c:d*?";
     await fresh(page, title, "Body");
-    const id = await page.eval<string>(`new URL(location.href).searchParams.get('document')`),
+    const id = await page.eval<string>(`${shownDocument}`),
       copied = async () => {
         const text = await page.eval<string>("navigator.clipboard.readText()");
         await page.eval(`navigator.clipboard.writeText('')`);
         return text;
       };
     await page.click('[aria-label="Copy document URL"]');
-    expect(new URL(await copied()).searchParams.get("document")).toBe(id);
+    expect(documentOfHref(await copied())).toBe(id);
     await page.click('[aria-label="Document options"]');
     await page.type("copy URL");
     await page.waitFor(`!!document.querySelector('[cmdk-item][data-value="Copy › Copy URL"]')`);
     await page.key("Enter");
-    expect(new URL(await copied()).searchParams.get("document")).toBe(id);
+    expect(documentOfHref(await copied())).toBe(id);
     await page.click('[aria-label="Document options"]');
     await page.hover('[cmdk-item][data-value="Copy"]');
     await page.click('[cmdk-item][data-value="Copy title as link"]');
@@ -284,10 +284,10 @@ test("document header, menus and shortcuts act on the document, preserve the par
     await page.eval(
       `document.activeElement?.blur();window.copied=[];navigator.clipboard.writeText=async text=>{window.copied.push(text)}`,
     );
-    const id = await page.eval<string>(`new URL(location.href).searchParams.get('document')`);
+    const id = await page.eval<string>(`${shownDocument}`);
     await page.key(",", "meta", "shift");
     await page.waitFor("window.copied.length===1");
-    expect(new URL(await page.eval<string>("window.copied[0]")).searchParams.get("document")).toBe(
+    expect(documentOfHref(await page.eval<string>("window.copied[0]"))).toBe(
       id,
     );
     await page.key("'", "meta", "shift");
@@ -296,7 +296,7 @@ test("document header, menus and shortcuts act on the document, preserve the par
     await page.key("c", "meta");
     await page.waitFor("window.copied.length===3");
     expect(await page.eval<string>("window.copied[2]")).toMatch(
-      /^\[Reference document v2\]\(http.+document=/,
+      /^\[Reference document v2\]\(http.+\/document\//,
     );
     await page.key("c", "meta", "alt");
     await page.waitFor("window.copied.length===4");
@@ -418,12 +418,12 @@ test("document header, menus and shortcuts act on the document, preserve the par
       await page.click(field);
       await page.key("Escape");
       await page.waitFor(`document.activeElement===document.body`);
-      expect(await page.eval(`new URLSearchParams(location.search).has('document')`)).toBe(true);
+      expect(await page.eval(`!!${shownDocument}`)).toBe(true);
       await page.key("Escape");
       await page.waitFor(
-        `!new URLSearchParams(location.search).has('document')&&!!document.getElementById('summary')`,
+        `!!!${shownDocument}&&!!document.getElementById('summary')`,
       );
-      expect(await page.eval(`new URLSearchParams(location.search).get('issue')`)).toBe("TEST-2");
+      expect(await page.eval(`${shownIssue}`)).toBe("TEST-2");
       await page.click("text=Escape document");
       await page.waitFor(`!!document.getElementById('resource-document')`);
     }
@@ -695,7 +695,7 @@ test("document history, narrow and measured layouts, the hidden board and remind
       expect(await page.eval(filters)).toBe(2);
       expect(await page.eval(`!!document.querySelector('[role=dialog]')`)).toBe(false);
     }
-    expect(await page.eval(`new URLSearchParams(location.search).has('document')`)).toBe(true);
+    expect(await page.eval(`!!${shownDocument}`)).toBe(true);
   });
 
   await test.step("Remind me schedules from the menu and Shift+H, accepts a custom time, and delivers once", async () => {
@@ -750,7 +750,7 @@ test("a paste that finishes after leaving, switching issues or reopening lands w
   const page = await open(DOC_PAGE);
   const go = (key: string) =>
     page.eval(
-      `history.pushState({},'','?issue=${key}&view=page');dispatchEvent(new PopStateEvent('popstate'))`,
+      `history.pushState({},'','/issue/${key}');dispatchEvent(new PopStateEvent('popstate'))`,
     );
 
   await test.step("a document paste that finishes after leaving and reopening the document adds its file without dropping the newer edits", async () => {
@@ -829,11 +829,11 @@ test("a paste that finishes after leaving, switching issues or reopening lands w
     await page.waitFor(`typeof window.releaseBitmap==='function'`);
     await go("TEST-3");
     await page.waitFor(
-      `new URL(location.href).searchParams.get('issue')==='TEST-3'&&!!document.getElementById('description')`,
+      `${shownIssue}==='TEST-3'&&!!document.getElementById('description')`,
     );
     await go("TEST-2");
     await page.waitFor(
-      `new URL(location.href).searchParams.get('issue')==='TEST-2'&&!!document.getElementById('description')`,
+      `${shownIssue}==='TEST-2'&&!!document.getElementById('description')`,
     );
     await page.click("#description");
     await page.key("End", "meta");
@@ -857,13 +857,13 @@ test("a paste that finishes after leaving, switching issues or reopening lands w
     await page.waitFor(`${savedDescriptionMedia}.then(n=>n===1)`); // the first late file is saved
     await go("TEST-3");
     await page.waitFor(
-      `new URL(location.href).searchParams.get('issue')==='TEST-3'&&!!document.getElementById('description')`,
+      `${shownIssue}==='TEST-3'&&!!document.getElementById('description')`,
     );
     await page.eval("window.releaseBitmap()");
     await page.waitFor(`${savedDescriptionMedia}.then(n=>n===2)`); // merged while away
     await go("TEST-2");
     await page.waitFor(
-      `new URL(location.href).searchParams.get('issue')==='TEST-2'&&${media}>${count}`,
+      `${shownIssue}==='TEST-2'&&${media}>${count}`,
       8000,
     );
     // Returning briefly renders a transitional description; the merged file must still be there once it settles.
@@ -878,7 +878,7 @@ test("a paste that finishes after leaving, switching issues or reopening lands w
     const back = async (key: string) => {
       await go(key);
       await page.waitFor(
-        `new URL(location.href).searchParams.get('issue')==='${key}'&&!!document.getElementById('comment')`,
+        `${shownIssue}==='${key}'&&!!document.getElementById('comment')`,
       );
     };
     const paste = (name: string) =>

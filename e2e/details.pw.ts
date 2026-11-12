@@ -88,8 +88,7 @@ test("issue details: priority picker, reactions, favourites, navigation and prop
   });
   await test.step("I15: a link to an unknown issue says it was not found", async () => {
     const page = await open("?issue=NOPE-1");
-    expect(await page.waitFor<string>(`document.querySelector("[data-toast]")?.textContent`)).toBe(
-      "Issue NOPE-1 not found",
-    );
+    // The address names the issue, so its screen says so, as Linear's issue route does.
+    await page.waitFor(`document.body.textContent.includes("Issue NOPE-1 not found")`);
   });
 });

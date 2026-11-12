@@ -9,7 +9,7 @@ test("custom identity, directory, favorite, details, palette and tab identity", 
     await page.eval(`Promise.all(${JSON.stringify(definitions)}.map(body => fetch('/api/views', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})))`);
     await page.reload();
     await page.click('text=Views');
-    await page.waitFor(`location.pathname === '/views'`);
+    await page.waitFor(`location.pathname === '/team/1/views'`);
     expect(await page.eval(`document.querySelector('[role=table]').textContent.includes('Named tab')`)).toBe(false);
     await page.click('text=Directory customPersonal triage');
     await page.waitFor(`location.pathname.startsWith('/view/')`);

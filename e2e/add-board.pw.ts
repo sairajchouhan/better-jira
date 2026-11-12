@@ -36,7 +36,7 @@ test("Add board: a board from another site is refused; a board link mirrors and 
 
     await enter(p, "https://example.atlassian.net/jira/software/projects/ADD/boards/2");
     await p.waitFor(`!${input}`);
-    await p.waitFor(`new URL(location.href).searchParams.get('board')==='2'`);
+    await p.waitFor(`location.pathname.startsWith('/team/2/')`);
     await p.waitFor(`!!document.querySelector('[data-key="ADD-1"]')`);
     expect(
       await p.eval(
@@ -69,7 +69,7 @@ test("Add board: a board from another site is refused; a board link mirrors and 
     await rightClick("Second board");
     await p.click('[role="dialog"][aria-label="Board options"] [cmdk-item][data-value="Remove from sidebar"]');
     await p.waitFor(`!${sidebarRow("Second board")}`);
-    await p.waitFor(`new URL(location.href).searchParams.get('board')==='1'`);
+    await p.waitFor(`location.pathname.startsWith('/team/1/')`);
     await p.waitFor(`!document.querySelector('[data-key="ADD-1"]')`);
   } finally {
     await p.close();

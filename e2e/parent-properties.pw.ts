@@ -1,4 +1,4 @@
-import { expect, test, sleep } from "./app";
+import { expect, test, sleep, shownIssue } from "./app";
 // RAJ-52 ▸ RAJ-53 (done) ▸ RAJ-54/55 in Linear; here TEST-2 ▸ TEST-3 (done) ▸ TEST-4/5, plus TEST-6 as a second sibling. TEST-2 and TEST-3 get a one-paragraph description like RAJ-53.
 const tree = `const read=fetch;const para={type:'doc',version:1,content:[{type:'paragraph',content:[{type:'text',text:'Disposable sub-issue for the parity audit.'}]}]};window.fetch=async(...args)=>{const response=await read(...args),path=new URL(String(args[0]),location.href).pathname;
  if(path==='/api/issues/TEST-2'||path==='/api/issues/TEST-3'){const full=await response.json();full.fields.description=para;return Response.json(full)}
@@ -73,7 +73,7 @@ test('a sub-issue\'s parent: the "Sub-issue of" line, its sub-issue list, and re
     await page.waitFor(`document.querySelectorAll('[role=dialog] [cmdk-item]').length===1`);
     await page.key("Enter");
     await page.waitFor(
-      `new URL(location.href).searchParams.get('issue')==='TEST-6'&&document.querySelector('[data-parent-link]')?.textContent.includes('TEST-2')`,
+      `${shownIssue}==='TEST-6'&&document.querySelector('[data-parent-link]')?.textContent.includes('TEST-2')`,
     );
     await page.eval(`document.activeElement.blur()`);
     await page.key("ArrowRight", "meta", "shift");
@@ -82,18 +82,18 @@ test('a sub-issue\'s parent: the "Sub-issue of" line, its sub-issue list, and re
     );
     await page.key("Escape");
     await page.waitFor(`!document.querySelector('[role=dialog]')`);
-    expect(await page.eval(`new URL(location.href).searchParams.get('issue')`)).toBe("TEST-6");
+    expect(await page.eval(`${shownIssue}`)).toBe("TEST-6");
     // The link opens the parent in place; ⌘⇧↑ does the same from the keyboard.
     await page.click("[data-parent-link]");
-    await page.waitFor(`new URL(location.href).searchParams.get('issue')==='TEST-2'`);
+    await page.waitFor(`${shownIssue}==='TEST-2'`);
     expect(await page.eval(`!!document.querySelector('[data-parent-link]')`)).toBe(false);
     await page.eval(`history.back()`);
     await page.waitFor(
-      `new URL(location.href).searchParams.get('issue')==='TEST-6'&&!!document.querySelector('[data-parent-link]')`,
+      `${shownIssue}==='TEST-6'&&!!document.querySelector('[data-parent-link]')`,
     );
     await page.eval(`document.activeElement.blur()`);
     await page.key("ArrowUp", "meta", "shift");
-    await page.waitFor(`new URL(location.href).searchParams.get('issue')==='TEST-2'`);
+    await page.waitFor(`${shownIssue}==='TEST-2'`);
   });
   await test.step("Issue options › Remove › Parent issue detaches the sub-issue, and the line stays gone after a reload", async () => {
     await page.goto("?issue=TEST-6&view=page");
@@ -669,7 +669,7 @@ test("RAJ-52: relations: Mark as menus, sidebar pills, Activity rows and Issue o
     // A pill opens the related issue; there the inverse relation and its Activity row are listed, and both survive a reload.
     await page.click('[data-relation="related:TEST-1"] a');
     await page.waitFor(
-      `new URL(location.href).searchParams.get('issue')==='TEST-1'&&!!document.querySelector('[data-relation="related:TEST-3"]')`,
+      `${shownIssue}==='TEST-1'&&!!document.querySelector('[data-relation="related:TEST-3"]')`,
     );
     await page.goto("?issue=TEST-1&view=page");
     await page.waitFor(
@@ -796,7 +796,7 @@ test("RAJ-52: relations: Mark as menus, sidebar pills, Activity rows and Issue o
     await page.type("Blocker follow-up");
     await page.key("Enter", "meta");
     const created = await page.eval<string>(
-      `new Promise(r=>{const t=setInterval(()=>{const k=new URL(location.href).searchParams.get('issue');if(k!=='TEST-2'){clearInterval(t);r(k)}},40)})`,
+      `new Promise(r=>{const t=setInterval(()=>{const k=${shownIssue};if(k!=='TEST-2'){clearInterval(t);r(k)}},40)})`,
     );
     await page.waitFor(`!!document.querySelector('[data-relation="blocking:TEST-2"]')`);
     await page.goto("?issue=TEST-2&view=page");
