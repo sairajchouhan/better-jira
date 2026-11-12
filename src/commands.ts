@@ -2,18 +2,21 @@ import { useLayoutEffect, useRef } from "react";
 
 /** The shortcut command channel: a shortcut sends an intent by name, and the module that owns the element registers the handler.
  *  Nothing outside the owner reaches into its DOM or its state. */
-/** What a shortcut can ask of the UI, by name: the argument, and what a handler that takes it returns. */
+/** What a shortcut can ask of the UI, by name: the argument, and what a handler that takes it returns.
+ *  An issue intent's argument is the key of the open issue it is for; only that issue's owner takes it. */
 export type Commands = {
-  "edit-description": { arg: void; result: true };
+  /** Edit the issue's description. */
+  "edit-description": { arg: string; result: true };
   "create-expanded": { arg: void; result: true };
-  /** Focus the open issue's title, caret at the end. */
-  "focus-title": { arg: void; result: true };
-  /** Focus the open issue's comment box. */
-  "focus-comment": { arg: void; result: true };
-  "focus-subscribers": { arg: void; result: true };
+  /** Focus the issue's title, caret at the end. */
+  "focus-title": { arg: string; result: true };
+  /** Focus the issue's comment box. */
+  "focus-comment": { arg: string; result: true };
+  /** Open the issue's subscribers menu from its subscribers button, which keeps focus. */
+  "change-subscribers": { arg: string; result: true };
   "focus-find": { arg: void; result: true };
-  /** Open the "Sub-issue of" pill's menu of the parent's sub-issues. */
-  "open-parent-sub-issues": { arg: void; result: true };
+  /** Open the issue's "Sub-issue of" pill menu of its parent's sub-issues. */
+  "open-parent-sub-issues": { arg: string; result: true };
   /** Start an inline sub-issue under this issue; untaken, the shortcut opens the create dialog. */
   "create-sub-issue": { arg: string; result: true };
   /** The sub-issue row under the pointer or keyboard focus; issue shortcuts act on it. */
@@ -56,6 +59,18 @@ export function run<C extends Name>(
 export function post<C extends Name>(command: C, arg: Commands[C]["arg"]) {
   if (deliver(command, arg) === undefined) pending.set(command, arg);
   else pending.delete(command);
+}
+const issueIntents: Name[] = [
+  "edit-description",
+  "focus-title",
+  "focus-comment",
+  "change-subscribers",
+  "open-parent-sub-issues",
+];
+/** Drops the waiting issue intents for any issue but `open`, the issue now open (null when none is):
+ *  an intent lapses when its issue is left before its owner could take it. */
+export function forgetIssueIntents(open: string | null) {
+  for (const name of issueIntents) if (pending.has(name) && pending.get(name) !== open) pending.delete(name);
 }
 /** The posted command waiting for its owner, for that owner's first render; its handler takes it once mounted. */
 export const kept = <C extends Name>(command: C) =>

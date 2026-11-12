@@ -400,8 +400,8 @@ function Stepper({ issueKey }: { issueKey: string }) {
 function Title({ issue, className }: { issue: Issue; className: string }) {
   const ref = useRef<HTMLTextAreaElement>(null),
     start = useRef("");
-  useCommand("focus-title", () => {
-    if (get().selected !== issue.key) return;
+  useCommand("focus-title", (key) => {
+    if (key !== issue.key) return;
     const node = ref.current;
     if (!node) return;
     node.focus();
@@ -708,8 +708,8 @@ function Description({ issue }: { issue: Issue }) {
   const [focusRevision, setFocusRevision] = useState<number | null>(null);
   const focusObserver = useRef<MutationObserver | null>(null);
   useEffect(() => () => focusObserver.current?.disconnect(), []);
-  useCommand("edit-description", () => {
-    if (get().selected !== issue.key) return;
+  useCommand("edit-description", (key) => {
+    if (key !== issue.key) return;
     const editor = section.current?.querySelector<HTMLElement>("#description");
     setFocusRevision(session.getSnapshot().revision);
     focusObserver.current?.disconnect();
@@ -745,8 +745,8 @@ function Description({ issue }: { issue: Issue }) {
   // Re-observed on focus changes too: a focused editor keeps its own text until it blurs.
   useEffect(() => {
     if (session.observe(stored, !!section.current?.contains(document.activeElement)))
-      post("edit-description", undefined);
-  }, [stored, focused, snapshot, session]);
+      post("edit-description", issue.key);
+  }, [stored, focused, snapshot, session, issue.key]);
   useEffect(() => {
     const restore = (event: Event) => {
       if ((event as CustomEvent<string>).detail === issue.key) session.restored();
@@ -757,7 +757,7 @@ function Description({ issue }: { issue: Issue }) {
   const resolve = (keep: boolean) => {
     session.resolve(keep);
     // Back to the editor, not the page: typing must not run board shortcuts (R2-D5).
-    post("edit-description", undefined);
+    post("edit-description", issue.key);
   };
   const loaded = !!f;
   useEffect(() => {
@@ -936,11 +936,16 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
     draft = useCommentDraft(issue.key);
   const subscribersRef = useRef<HTMLButtonElement>(null),
     commentRef = useRef<HTMLDivElement>(null);
-  useCommand("focus-subscribers", () => focusNode(subscribersRef.current));
+  useCommand("change-subscribers", (key) => {
+    if (key !== issue.key || !focusNode(subscribersRef.current)) return;
+    // Opened after the focus, so the menu anchors on the button and hands focus back to it.
+    ui.send({ type: "overlay.open", overlay: "subscribers" });
+    return true;
+  });
   const commentFocus = useRef<MutationObserver | null>(null);
   useEffect(() => () => commentFocus.current?.disconnect(), []);
-  useCommand("focus-comment", () => {
-    if (get().selected !== issue.key || !commentRef.current) return;
+  useCommand("focus-comment", (key) => {
+    if (key !== issue.key || !commentRef.current) return;
     commentFocus.current?.disconnect();
     if (focusNode(commentRef.current.querySelector<HTMLElement>("#comment"))) return true;
     // The lazy editor owns its DOM after it loads; observe that mount rather than polling frames.

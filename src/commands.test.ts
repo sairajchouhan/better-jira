@@ -51,7 +51,7 @@ test("a posted command waits for its owner; a run one reaches only a mounted own
 test("edit and expanded-create intents are delivered once when their owner mounts", async () => {
   const { handle, kept, post } = await import("./commands");
   for (const name of ["edit-description", "create-expanded"] as const) {
-    post(name, undefined);
+    post(name, "A-1" as never);
     let count = 0;
     const stop = handle(name, () => { count++; return true; });
     expect(count).toBe(1);
@@ -61,4 +61,24 @@ test("edit and expanded-create intents are delivered once when their owner mount
     expect(count).toBe(1);
     again();
   }
+});
+
+test("an issue intent lapses once its issue is left, so it never reaches another issue's owner", async () => {
+  const { forgetIssueIntents, handle, kept, post } = await import("./commands");
+  // Ctrl+M on A-1 while its details load: the comment box is not there yet.
+  post("focus-comment", "A-1");
+  forgetIssueIntents("A-1");
+  expect(kept("focus-comment")).toBe("A-1");
+  // Esc, then B-2 opens and its comment box mounts.
+  forgetIssueIntents(null);
+  forgetIssueIntents("B-2");
+  let taken: string | undefined;
+  const stop = handle("focus-comment", (key) => (key === "B-2" ? ((taken = key), true) : undefined));
+  expect([taken, kept("focus-comment")]).toEqual([undefined, undefined]);
+  stop();
+  // Board intents are not issue intents.
+  post("issue-options-start", "due");
+  forgetIssueIntents(null);
+  expect(kept("issue-options-start")).toBe("due");
+  forgetIssueIntents(null);
 });

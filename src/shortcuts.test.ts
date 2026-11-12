@@ -45,3 +45,16 @@ test("whether a shortcut applies is read from the state it is given, never the D
   expect(domReads).toBe(0);
   stop();
 });
+test("V leaves no full-screen intent behind when the composer refuses to open", async () => {
+  const { get, set } = await import("./store");
+  const { handle } = await import("./commands");
+  const { runShortcut } = await import("./shortcuts");
+  set({ canEdit: false } as never);
+  runShortcut("new-full");
+  set({ canEdit: true } as never);
+  // The next composer to mount (C, once storage recovers) must open as a dialog.
+  let expanded = false;
+  const stop = handle("create-expanded", () => (expanded = true));
+  expect([get().overlay, expanded]).toEqual([null, false]);
+  stop();
+});

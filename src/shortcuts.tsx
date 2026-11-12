@@ -5,7 +5,7 @@ import { createToolbarView } from "./view-toolbar-actions";
 import { activeView, saveOverlayToView } from "./saved-views";
 import { canMergeOverlay } from "./saved-view-model";
 import { filterCount, visibleOrder } from "./view-model";
-import { post, run as command } from "./commands";
+import { forgetIssueIntents, post, run as command } from "./commands";
 import { canHaveChildren } from "./issue-properties";
 import { formatForDisplay, getHotkeyManager, type Hotkey } from "@tanstack/react-hotkeys";
 import {
@@ -23,6 +23,7 @@ import {
   toggleFavorite,
   ui,
   undoEdit,
+  useStore,
   type Issue,
   type Overlay,
 } from "./store";
@@ -101,11 +102,11 @@ const overlay = (value: NonNullable<Overlay>) => () => {
     target: selected() ? (acting ?? hoveredRow()?.key ?? null) : null,
   });
 };
-/** Open the issue and retain the intent until its field owner mounts. */
+/** Open the issue and keep the intent, for that issue only, until its field owner mounts. */
 const focus = (name: "focus-title" | "focus-comment" | "edit-description") =>
   issueAction((issue) => {
     navigate({ selected: issue.key, panel: true });
-    post(name, undefined);
+    post(name, issue.key);
   });
 const order = () => visibleOrder(get(), ME.id);
 function move(direction: number, horizontal = false) {
@@ -453,7 +454,8 @@ export const shortcuts: Shortcut[] = [
     hotkey: "V",
     run: () => {
       beginCreate();
-      post("create-expanded", undefined);
+      // Only a composer that opened takes the full-screen intent; a refused create (storage down) leaves none behind.
+      if (get().overlay === "create") post("create-expanded", undefined);
     },
   },
   ...(
@@ -541,10 +543,7 @@ export const shortcuts: Shortcut[] = [
     issue: true,
     run: issueAction(() => {
       navigate({ panel: true });
-      requestAnimationFrame(() => {
-        command("focus-subscribers");
-        overlay("subscribers")();
-      });
+      post("change-subscribers", get().selected!);
     }),
   },
   {
@@ -634,7 +633,7 @@ export const shortcuts: Shortcut[] = [
     // The parent's sub-issue menu lives in the open issue.
     run: () => {
       navigate({ panel: true });
-      requestAnimationFrame(() => command("open-parent-sub-issues"));
+      post("open-parent-sub-issues", get().selected!);
     },
   },
   {
@@ -793,7 +792,7 @@ export const shortcuts: Shortcut[] = [
     when: boardVisible,
     run: () => {
       set({ findInView: true });
-      requestAnimationFrame(() => command("focus-find"));
+      post("focus-find", undefined);
     },
   },
   {
@@ -921,6 +920,9 @@ function hotkeyEnabled(entry: Shortcut, s: State, issue: Issue | undefined) {
 /** Registers the keyboard map once. Which shortcuts are enabled is worked out from the store at each key press,
  *  before the hotkey listener sees it, so a store change (a Jira poll) re-renders and re-registers nothing. */
 export function useLinearHotkeys() {
+  // An intent for an issue lapses once that issue is no longer the open one.
+  const open = useStore((s) => (s.panel && !s.document ? s.selected : null));
+  useEffect(() => forgetIssueIntents(open), [open]);
   useEffect(() => {
     const handle = (event: KeyboardEvent) => {
       const id = viewShortcutId(event);
