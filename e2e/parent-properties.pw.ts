@@ -358,7 +358,7 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
     // Activity: the rule 16px under the list, the heading 22.5px under it, event rows 24.8px tall with a 14px avatar 11px in and the name 36px in, the 84px composer 14px below.
     expect(
       await page.eval(
-        `(()=>{${r}const s=document.querySelector('.issue-activity'),c=document.getElementById('issue-created'),ed=document.getElementById('comment').closest('.rich-editor');return [r(s)[1],r(s.querySelector('h3'))[1],r(c),r(c.firstElementChild),r(c.querySelector('.font-medium'))[0],r(ed),r(ed.querySelector('.rich-placeholder')).slice(0,2),getComputedStyle(ed.querySelector('.rich-placeholder')).fontSize,[...ed.querySelectorAll('.rich-editor-actions > button')].map(b=>r(b))]})()`,
+        `(()=>{${r}const s=document.querySelector('.issue-activity'),c=document.getElementById('issue-created'),ed=document.getElementById('comment').closest('.rich-editor');return [r(s)[1],r(s.querySelector('h3'))[1],r(c),r(c.firstElementChild),r(c.querySelector('.font-medium'))[0],r(ed),r(ed.querySelector('.rich-placeholder')).slice(0,2),getComputedStyle(ed.querySelector('.rich-placeholder')).fontSize,[...ed.querySelectorAll('.rich-editor-actions > button, .rich-editor-actions > .ui-tooltip-trigger > button')].map(b=>r(b))]})()`,
       ),
     ).toEqual([
       428.5,
