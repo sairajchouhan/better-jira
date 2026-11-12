@@ -148,7 +148,21 @@ test("BJ-63: search remembers its chosen ordering", async ({ open }) => {
   await p.waitFor(`!!document.querySelector('[aria-label="Ordering: Last updated"]')`);
 });
 
+const cards = `[...document.querySelectorAll('main [data-key]')].map(n=>n.dataset.key)`;
 const tab = (name: string) => `[...document.querySelectorAll('button[aria-pressed]')].find(b=>b.textContent===${JSON.stringify(name)})`;
+
+test("BJ-77: O U opens a user's issues, with their Assigned and Created tabs", async ({ open }) => {
+  const p = await open();
+  await p.keys("ou");
+  await p.waitFor(`!!${dialog("Open user")}`);
+  await p.type("alex");
+  await p.key("Enter");
+  await p.waitFor(`location.pathname==='/user/alex'`);
+  await p.waitFor(`${cards}.join()==='TEST-2'`);
+  await p.waitFor(`!!document.querySelector('nav[aria-label=Breadcrumb] [aria-label="Alex"]')`);
+  await p.eval(`${tab("Created")}.click()`);
+  await p.waitFor(`location.pathname==='/user/alex/created'&&${cards}.length===0`);
+});
 
 test("BJ-28: My issues has Assigned, Created, Subscribed and Activity tabs, each with its own address", async ({ open }) => {
   const p = await open();

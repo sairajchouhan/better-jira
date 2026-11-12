@@ -162,6 +162,7 @@ export type Overlay =
   | "boards"
   | "issues"
   | "documents"
+  | "users"
   | "add-board"
   | "customize-sidebar"
   | "subscribers"

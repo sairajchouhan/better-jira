@@ -27,7 +27,9 @@ import {
   toggleFavorite,
   type Issue,
   statusOf,
+  ME,
 } from "./store";
+import { peopleOf } from "./people";
 import { filterCount } from "./view-model";
 import { Modal } from "./personal-controls";
 import { Avatar } from "./avatar";
@@ -86,6 +88,7 @@ const PAGES = {
   views: { parent: "View", label: "Open view", keyword: "v" },
   issues: { parent: "Issue", label: "Open issue", keyword: "i" },
   documents: { parent: "Document", label: "Open document", keyword: "d" },
+  users: { parent: "User", label: "Open user", keyword: "u" },
   /** Linear's `?` Help action (`mAt`, search input hidden) when the sidebar's Help button isn't there to anchor its menu. */
   help: { parent: "Help", label: "Help", keyword: undefined },
 } as const;
@@ -110,6 +113,14 @@ function usePageRows(page: PalettePage): Cmd[] {
   const favorites = useStore((s) => s.favorites);
   const issues = useStore((s) => s.issues);
   if (page === "issues" || page === "documents") return [];
+  if (page === "users")
+    return peopleOf(issues.values()).map((u) => ({
+      id: u.id,
+      name: u.name,
+      icon: <Avatar user={u} size={16} />,
+      // A user's issues (BJ-77); choosing myself is My issues.
+      run: () => (close(), navigate({ mine: true, person: u.id === ME.id ? null : u.id, selected: null, panel: false })),
+    }));
   if (page === "help")
     return [{ name: "Keyboard shortcuts", keys: hotkeyOf("shortcuts"), run: () => ui.send({ type: "overlay.open", overlay: "shortcuts" }) }];
   return navigationChoices(page, { boards, savedViews, favorites, issues }).map((choice) => ({
