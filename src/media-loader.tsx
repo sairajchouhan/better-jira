@@ -1,8 +1,14 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import type { AdfNode } from "./document";
 import type { Attachment } from "./attachment-media";
 import { mediaContainerStyle, mediaDimensions } from "./media-layout";
-const Renderer = lazy(() => import("./media-renderer").then((m) => ({ default: m.MediaRenderer })));
+let loaded: typeof import("./media-renderer").MediaRenderer | undefined;
+const load = () =>
+  import("./media-renderer").then((m) => ({ default: (loaded = m.MediaRenderer) }));
+const Renderer = lazy(load);
+// Fetched once the page is idle, like the editor, so media renders without "Loading attachment…" once it is in.
+if (typeof window !== "undefined")
+  (window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 200)))(() => void load());
 export type MediaProps = {
   node: AdfNode;
   issueKey?: string;
@@ -54,9 +60,11 @@ function LoadingMedia({ node, embedded }: MediaProps) {
   );
 }
 export function MediaView(props: MediaProps) {
+  // A loaded renderer mounts directly; chosen once, so a later load never remounts the media.
+  const [Component] = useState(() => loaded ?? Renderer);
   return (
     <Suspense fallback={<LoadingMedia {...props} />}>
-      <Renderer {...props} />
+      <Component {...props} />
     </Suspense>
   );
 }
