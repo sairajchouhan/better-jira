@@ -40,11 +40,9 @@ export const LabelChip = Object.assign(LabelChipRoot, {
   Icon: ({ className = "", ...props }: ComponentProps<"span">) => (
     <span aria-hidden className={`ui-label-chip-icon ${className}`} {...props} />
   ),
-  /** The label's colour, as Linear's 9px dot. */
+  /** The label's colour, as Linear's bare 9px dot: live Linear puts it 9px in and the name 24px in (RAJ-53), so no 14px icon box. */
   Dot: ({ color }: { color: string }) => (
-    <span aria-hidden className="ui-label-chip-icon">
-      <span className="ui-label-chip-dot" style={{ background: color }} />
-    </span>
+    <span aria-hidden className="ui-label-chip-dot shrink-0" style={{ background: color }} />
   ),
   Text: ({ className = "", ...props }: ComponentProps<"span">) => (
     <span className={`ui-label-chip-text ${className}`} {...props} />
