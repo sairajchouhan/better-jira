@@ -520,9 +520,8 @@
   top: 10px;
   left: 0;
 }
-/* R p{line-height;overflow-wrap:break-word;font-size} + R .text-node{letter-spacing;font-weight} + R p…{margin:0} */
+/* R p{line-height;overflow-wrap:break-word;font-size} + R .text-node{letter-spacing;font-weight} (margin 0 from preflight, so the :where() rhythm below wins) */
 .rich-doc p {
-  margin: 0;
   overflow-wrap: break-word;
   font-weight: 450;
   letter-spacing: -0.00666667em;
@@ -667,7 +666,6 @@
 /* .editor blockquote{padding-left:var(--editor-block-spacing)} + :before{4px bar, radius 2px, editor-border-solid} */
 .rich-doc blockquote {
   position: relative;
-  margin: 0;
   padding-left: 16px;
 }
 .rich-doc blockquote::before {
@@ -687,7 +685,6 @@
 .rich-doc pre {
   position: relative;
   display: grid;
-  margin: 0;
   background: var(--app);
   border: var(--thin-pixel) solid var(--bg-border);
   border-radius: 6px;
@@ -699,6 +696,10 @@
   tab-size: 2;
   hyphens: none;
   direction: ltr;
+}
+/* prosemirror-view's .ProseMirror pre{white-space:pre-wrap} ties with the rule above; Linear never wraps (code scrolls). */
+.ProseMirror.rich-doc pre {
+  white-space: pre;
 }
 .rich-doc pre code {
   padding: 12px 16px;

@@ -23,13 +23,13 @@ test("BJ-176: the description reads like Linear's: 15px/450 text on a borderless
     "-0.1px",
   ]);
   // St.editorSurface: margin 0 -14px, padding 10px 14px 16px; no card around it.
-  expect(await styleOf(page, "#description", ["marginLeft", "marginRight", "padding", "borderTopStyle"])).toEqual([
+  expect(await styleOf(page, "#description", ["marginLeft", "marginRight", "padding", "borderTopWidth"])).toEqual([
     "-14px",
     "-14px",
     "10px 14px 16px",
-    "none",
+    "0px",
   ]);
-  expect(await styleOf(page, ".issue-description .rich-editor", ["borderTopStyle"])).toEqual(["none"]);
+  expect(await styleOf(page, ".issue-description .rich-editor", ["borderTopWidth"])).toEqual(["0px"]);
   // h2 (first block): 19px/28px, 600, labelTitle; no top margin as the first block, 16px under it.
   expect(await styleOf(page, "#description > h2", ["fontSize", "lineHeight", "fontWeight", "marginTop", "marginBottom"])).toEqual([
     "19px",
@@ -51,18 +51,19 @@ test("BJ-176: the description reads like Linear's: 15px/450 text on a borderless
     "absolute",
     "counter(editor-ul, disc)",
   ]);
-  // Code block chrome: radius 6px, a hairline, no wrapping, 12px/16px padding and its own horizontal scroll.
-  expect(await styleOf(page, "#description pre", ["borderTopLeftRadius", "borderTopWidth", "whiteSpace"])).toEqual([
+  // Code block chrome: radius 6px, a hairline (0.5px; Chromium draws it 1px at DPR 1), no wrapping, 12px/16px padding
+  // and its own horizontal scroll.
+  expect(await styleOf(page, "#description pre", ["borderTopLeftRadius", "borderTopStyle", "whiteSpace"])).toEqual([
     "6px",
-    "0.5px",
+    "solid",
     "pre",
   ]);
   expect(await styleOf(page, "#description pre code", ["padding", "overflowX"])).toEqual(["12px 16px", "auto"]);
   // Table frame: rounded hairline, separate borders, cells 5px 8px.
-  expect(await styleOf(page, "#description table", ["borderTopLeftRadius", "borderCollapse", "borderTopWidth"])).toEqual([
+  expect(await styleOf(page, "#description table", ["borderTopLeftRadius", "borderCollapse", "borderTopStyle"])).toEqual([
     "6px",
     "separate",
-    "0.5px",
+    "solid",
   ]);
   expect(await styleOf(page, "#description th", ["padding"])).toEqual(["5px 8px"]);
 });
@@ -109,7 +110,7 @@ test("BJ-176: menus, the block handle, the toolbar and collapsible sections take
     await page.key("Enter");
     await page.type(">>> ");
     await page.waitFor(`!!document.querySelector('#description .rich-expand')`);
-    expect(await styleOf(page, "#description .rich-expand", ["borderTopStyle", "paddingLeft"])).toEqual(["none", "24px"]);
+    expect(await styleOf(page, "#description .rich-expand", ["borderTopWidth", "paddingLeft"])).toEqual(["0px", "24px"]);
     expect(
       await page.eval(`document.querySelector('[aria-label="Collapsible section title"]').placeholder`),
     ).toBe("Add section title…");

@@ -93,7 +93,7 @@ test("issue comments: card outsets, timestamps and deep links, whitespace and su
     await page.key("Enter", "meta");
     await page.waitFor(`!!document.querySelector('[data-thread]')`);
     const geometry = await page.eval<{ card: number; composer: number; font: string }>(
-      `(()=>{const text=document.getElementById('description').getBoundingClientRect().left;return {card:text-document.querySelector('[data-thread]').getBoundingClientRect().left,composer:text-document.querySelector('.issue-activity > div:last-child').getBoundingClientRect().left,font:getComputedStyle(document.getElementById('issue-subscribers').previousElementSibling).fontSize}})()`,
+      `(()=>{const text=document.querySelector('#description > *').getBoundingClientRect().left;return {card:text-document.querySelector('[data-thread]').getBoundingClientRect().left,composer:text-document.querySelector('.issue-activity > div:last-child').getBoundingClientRect().left,font:getComputedStyle(document.getElementById('issue-subscribers').previousElementSibling).fontSize}})()`,
     );
     expect(geometry.card).toBeCloseTo(8, 1);
     expect(geometry.composer).toBeCloseTo(8, 1);

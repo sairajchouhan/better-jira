@@ -812,7 +812,7 @@ function Description({ issue }: { issue: Issue }) {
   return (
     <section
       ref={section}
-      className="issue-description mt-[22px] leading-[1.6] text-fg-2"
+      className="issue-description mt-[14px] leading-[1.6] text-fg-2"
       onFocus={() => setFocused(true)}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(false);
