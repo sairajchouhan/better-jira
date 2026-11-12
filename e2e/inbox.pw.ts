@@ -454,6 +454,11 @@ test("a long inbox: older pages on scroll, undo by Z and toast, the row menu, ‚å
     await p.waitFor(`${rows}.length === 46 && ${current}.includes("TEST-1")`);
     await p.key("z");
     await p.waitFor(`${rows}.length === 47`);
+    // BJ-47: the header's bell toggles the subscription to the open issue.
+    const bell = `document.querySelector(':is([aria-label="Unsubscribe from issue"],[aria-label="Subscribe to issue"]):not(.issue-activity *)')?.getAttribute("aria-label")`;
+    const before = await p.waitFor<string>(bell);
+    await p.click(`[aria-label="${before}"]:not(.issue-activity *)`);
+    await p.waitFor(`${bell} && ${bell} !== ${JSON.stringify(before)}`);
     // Right-click: Linear's row menu, acting on that row without selecting it.
     await p.eval(rowMenu(3));
     await p.waitFor(

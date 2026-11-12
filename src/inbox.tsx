@@ -33,7 +33,7 @@ import {
 import { copyIssue, type CopyKind } from "./issue-copy";
 import { Menu } from "./menu";
 import { MenuSurface } from "./menu-surface";
-import { hotkeyOf } from "./shortcuts";
+import { hotkeyOf, runShortcut } from "./shortcuts";
 import { shortcutTitle } from "./keycap";
 import {
   statusOf as issueStatusOf,
@@ -41,6 +41,7 @@ import {
   navigate,
   queryClient,
   set,
+  isWatching,
   toggleFavorite,
   ui,
   useStore,
@@ -856,9 +857,23 @@ export function InboxList() {
 /** Linear's notification actions in the open issue's header, while the inbox is open. */
 export function InboxIssueActions() {
   const row = useSelectedRow();
+  // Linear leads with the subscription toggle when the notification has an issue (BJ-47); null when it isn't mirrored.
+  const subscribed = useStore((s) => {
+    const issue = row && s.issues.get(row.key);
+    return issue ? isWatching(issue) : null;
+  });
   if (!row) return null;
   return (
     <>
+      {subscribed !== null && (
+        <IconButton
+          label={subscribed ? "Unsubscribe from issue" : "Subscribe to issue"}
+          shortcut={hotkeyOf("subscribe")}
+          onClick={() => runShortcut("subscribe", row.key)}
+        >
+          <Icon name="bell" />
+        </IconButton>
+      )}
       <IconButton
         label="Snooze notification"
         shortcut={hotkeyOf("inbox-snooze")}
