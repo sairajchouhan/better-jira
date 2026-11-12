@@ -3,7 +3,6 @@
   --view-name: lch(10 0 282);
   --view-placeholder: lch(66 1 282);
   --view-icon-fill: lch(78.2 3.6 260.7 / 0.125);
-  --view-pill: lch(20 1 282);
   padding: 40px 24px 12px;
   color: var(--fg);
   border-bottom: 1px solid var(--line-2);
@@ -50,43 +49,14 @@
   border-radius: 4px;
   background: var(--view-icon-fill);
 }
-.view-editor-pill {
-  height: 24px;
-  padding: 0 8px;
-  border-radius: 9999px;
-  border: 0.5px solid transparent;
-  color: var(--view-pill);
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-.view-editor-pill:hover,
 .view-icon-button:hover {
   background: var(--hover);
-}
-.view-editor-primary,
-.view-editor-primary:hover {
-  background: lch(53 52.26 286.91);
-  color: lch(100 5 286.91);
-  box-shadow:
-    0 3px 6px -2px lch(0 0 0 / 0.02),
-    0 1px 1px lch(0 0 0 / 0.04);
-}
-.view-editor-primary:disabled {
-  opacity: 0.5;
 }
 @media (prefers-color-scheme: dark) {
   .view-editor {
     --view-name: lch(100 0 272);
     --view-placeholder: lch(39.5 1.425 272);
     --view-icon-fill: lch(78.2 3.6 260.7 / 0.175);
-    --view-pill: lch(90.826 1.425 272);
-  }
-  .view-editor-primary,
-  .view-editor-primary:hover {
-    background: lch(47.918 59.303 288.421);
-    color: lch(100 5 288.421);
-    box-shadow: 0 0.5px 1px 1px lch(0 0 0 / 0.3);
   }
 }
 /* Keep the existing toolbar live, positioned beneath the editor metadata. */
@@ -247,74 +217,17 @@ header:has(.view-editor):has(.view-filter-row) > div:nth-child(2) > button:last-
   color: var(--fg-3);
 }
 
-/* Linear's delete confirmation. */
+/* Linear's delete confirmation sits lower and roomier than Dialog's default (follow-up: a Dialog placement variant). */
 [role="dialog"]:has(> .view-delete) {
   top: 29vh !important;
   padding: 24px;
-  border-radius: 12px;
-}
-.view-delete h2 {
-  color: var(--fg);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 22px;
-}
-.view-delete p {
-  margin-top: 8px;
-  color: var(--fg-3);
-  font-size: 13px;
-}
-.view-delete > div {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 28px;
-}
-.view-delete button {
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 9999px;
-  font-size: 13px;
-  font-weight: 500;
-}
-.view-delete-cancel {
-  border: 0.5px solid var(--line-2);
-  background: var(--btn, var(--card));
-  color: var(--fg-2);
-}
-.view-delete-cancel:hover {
-  background: var(--hover);
-}
-.view-delete-confirm {
-  background: #f14549;
-  color: #fff;
-}
-.view-delete-confirm:focus-visible {
-  outline: 1px solid #f14549;
-  outline-offset: 2px;
 }
 
-/* Linear's "View created" toast: 382px, 24px from the right, 52px from the bottom. */
-.view-created-toast {
-  position: fixed;
-  right: 24px;
-  bottom: 52px;
-  z-index: 50;
-  display: grid;
-  grid-template-columns: 14px 1fr 16px;
+/* The "View created" toast's check badge; the name and action line up after it. */
+.view-toast-title {
+  display: flex;
   align-items: center;
-  column-gap: 9px;
-  row-gap: 7px;
-  width: 382px;
-  max-width: calc(100vw - 32px);
-  padding: 13px 16px 13px 14px;
-  border: 0.5px solid var(--menu-line);
-  border-radius: 10px;
-  background: var(--menu);
-  box-shadow: var(--menu-shadow);
-  color: var(--fg);
-  font-size: 13px;
-  line-height: 18px;
+  gap: 9px;
 }
 .view-toast-check {
   display: grid;
@@ -325,30 +238,13 @@ header:has(.view-editor):has(.view-filter-row) > div:nth-child(2) > button:last-
   background: #4cb782;
   color: #fff;
 }
-.view-toast-close {
-  display: grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  color: var(--fg-3);
-}
-.view-toast-close:hover {
-  color: var(--fg);
+.view-toast-indent {
+  padding-left: 23px;
 }
 .view-toast-name {
-  grid-column: 2 / 4;
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
   color: var(--fg-2);
-}
-.view-toast-open {
-  grid-column: 2;
-  justify-self: start;
-  margin-top: 5px;
-  color: var(--accent);
-}
-.view-toast-open:hover {
-  text-decoration: underline;
 }

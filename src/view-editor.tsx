@@ -1,7 +1,6 @@
 import {
   cloneElement,
   useState,
-  useSyncExternalStore,
   type ReactElement,
   type ReactNode,
   type JSX,
@@ -10,7 +9,10 @@ import {
 import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./icons";
 import { ActionMenu, type ActionEntry } from "./action-menu";
-import { MenuSurface } from "./menu-surface";
+import { Button } from "./button";
+import { Dialog } from "./dialog";
+import { Toast } from "./toast";
+import { toasts } from "./toast-queue";
 import { ViewIconPicker } from "./view-icon-picker";
 import {
   beginViewEditor,
@@ -42,68 +44,33 @@ export function openViewEditor(draft: ViewDraft): void {
 function DraftIcon({ icon }: { icon: string }) {
   return /[^\x00-\x7F]/.test(icon) ? <span>{icon}</span> : <Icon name={icon as IconName} size={16} />;
 }
-type Created = { id: string; name: string; icon: string; color: string };
-const createdListeners = new Set<() => void>();
-let created: Created | null = null;
-let toastTimer: ReturnType<typeof setTimeout>;
-function showCreated(value: Created | null) {
-  created = value;
-  createdListeners.forEach((fn) => fn());
-}
-function createdToast(value: Created) {
-  showCreated(value);
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => showCreated(null), 8000);
-}
-/** Linear's "View created" toast: bottom right, check + title, the view's icon and name, then Open view. */
-function ViewCreatedToast() {
-  const value = useSyncExternalStore(
-    (fn) => {
-      createdListeners.add(fn);
-      return () => {
-        createdListeners.delete(fn);
-      };
-    },
-    () => created,
-  );
-  if (!value) return null;
-  return createPortal(
-    <div role="status" data-toast className="view-created-toast">
-      <span className="view-toast-check">
-        <Icon name="check" size={10} />
-      </span>
-      <p className="view-toast-title">View created</p>
-      <button type="button" aria-label="Dismiss" className="view-toast-close" onClick={() => showCreated(null)}>
-        <Icon name="close" size={12} />
-      </button>
-      <p className="view-toast-name">
-        <span style={{ color: value.color === "gray" ? "var(--view-gray)" : value.color }}>
-          <DraftIcon icon={value.icon} />
+/** Linear's "View created" toast: check + title, the view's icon and name, then Open view; 8s like Linear's. */
+function createdToast({ id, name, icon, color }: { id: string; name: string; icon: string; color: string }) {
+  toasts.show(
+    <Toast role="status" data-toast>
+      <Toast.Title className="view-toast-title">
+        <span className="view-toast-check">
+          <Icon name="check" size={10} />
         </span>
-        <span className="truncate">{value.name}</span>
+        View created
+      </Toast.Title>
+      <Toast.Close />
+      <p className="view-toast-name view-toast-indent">
+        <span style={{ color: color === "gray" ? "var(--view-gray)" : color }}>
+          <DraftIcon icon={icon} />
+        </span>
+        <span className="truncate">{name}</span>
       </p>
-      <button
-        type="button"
-        className="view-toast-open"
-        onClick={() => {
-          openSavedView(value.id);
-          showCreated(null);
-        }}
-      >
-        Open view
-      </button>
-    </div>,
-    document.body,
+      <Toast.Actions className="view-toast-indent">
+        <Toast.Action onClick={() => openSavedView(id)}>Open view</Toast.Action>
+      </Toast.Actions>
+    </Toast>,
+    { id: "view-created", duration: 8000 },
   );
 }
 export function ViewEditorPage() {
   const draft = useStore((s) => s.editorDraft);
-  return (
-    <>
-      <ViewCreatedToast />
-      {draft && <Editor key={draft.id ?? "new"} draft={draft} />}
-    </>
-  );
+  return draft && <Editor key={draft.id ?? "new"} draft={draft} />;
 }
 function Editor({ draft }: { draft: ViewDraft }) {
   const [picker, setPicker] = useState<HTMLElement | null>(null),
@@ -136,6 +103,7 @@ function Editor({ draft }: { draft: ViewDraft }) {
       }}
     >
       <div className="view-editor-heading">
+        {/* Linear's view icon well: a 4px-radius tinted square, no Button variant matches it. */}
         <button
           type="button"
           aria-label="Choose view icon and color"
@@ -147,6 +115,7 @@ function Editor({ draft }: { draft: ViewDraft }) {
         >
           <DraftIcon icon={draft.icon} />
         </button>
+        {/* Linear edits the name and description as borderless inline text, not its framed input (`ry`), so TextInput doesn't fit. */}
         <input
           autoFocus
           aria-label="View name"
@@ -156,19 +125,12 @@ function Editor({ draft }: { draft: ViewDraft }) {
           maxLength={200}
           onChange={(e) => patch({ name: e.target.value })}
         />
-        <button
-          type="button"
-          className="view-editor-pill"
-          onClick={discardViewEditor}
-        >
+        <Button variant="borderless" size="small" onClick={discardViewEditor}>
           Cancel
-        </button>
-        <button
-          disabled={busy}
-          className="view-editor-pill view-editor-primary"
-        >
+        </Button>
+        <Button type="submit" size="small" disabled={busy}>
           {draft.id ? "Save" : "Create view"}
-        </button>
+        </Button>
       </div>
       <input
         aria-label="View description"
@@ -221,18 +183,19 @@ function exportView(view: SavedView) {
 export function ViewDeleteDialog({ view, close }: { view: SavedView; close: () => void }) {
   const [error, setError] = useState("");
   return (
-    <MenuSurface label={`Delete view ${view.name}`} close={close} width={480}>
-      <div className="view-delete">
-        <h2>Delete the view "{view.name}"?</h2>
-        {error && <p role="alert">{error}</p>}
-        <div>
-          <button type="button" className="view-delete-cancel" onClick={close}>
+    <Dialog label={`Delete view ${view.name}`} close={close} width={480}>
+      <Dialog.Body className="view-delete">
+        <Dialog.Title>Delete the view "{view.name}"?</Dialog.Title>
+        {error && (
+          <Dialog.Description role="alert">{error}</Dialog.Description>
+        )}
+        <Dialog.Footer>
+          <Button variant="secondary" onClick={close}>
             Cancel
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="dangerous"
             data-autofocus
-            className="view-delete-confirm"
             onClick={() => {
               void deleteSavedView(view.id)
                 .then(close)
@@ -240,10 +203,10 @@ export function ViewDeleteDialog({ view, close }: { view: SavedView; close: () =
             }}
           >
             {view.kind === "tab" ? "Delete view" : "Delete"}
-          </button>
-        </div>
-      </div>
-    </MenuSurface>
+          </Button>
+        </Dialog.Footer>
+      </Dialog.Body>
+    </Dialog>
   );
 }
 type Action = [label: string, icon: IconName, run: () => void];

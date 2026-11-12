@@ -105,6 +105,7 @@ export function ViewIconPicker({
   return (
     <MenuSurface label="View icon" anchor={anchor} fit close={close}>
       <div className="view-icon-picker">
+        {/* Linear's picker tabs are underlined, not the pill Tabs, so they keep their own markup. */}
         <div className="view-icon-tabs">
           {(["Icons", "Emojis"] as const).map((t) => (
             <button key={t} type="button" aria-pressed={tab === t} onClick={() => setTab(t)}>
