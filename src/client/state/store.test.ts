@@ -566,12 +566,12 @@ test("B5: creating stays on the board with a toast, Create more toasts too, and 
   const key = actions.create("Toasted")!;
   expect(get().panel).toBe(false);
   expect(get().selected).toBe(key);
-  expect(latestNotification()).toEqual({ text: `Created ${key}`, key });
+  expect(latestNotification()).toEqual({ text: "Issue created", key });
   expect(toasts.find(NOTIFICATION_ID)).toBeDefined();
   expect(toasts.has(NOTIFICATION_ID)).toBe(true);
   toasts.dismiss(NOTIFICATION_ID);
   const more = actions.create("Created with more", {}, true)!;
-  expect(latestNotification()).toEqual({ text: `Created ${more}`, key: more });
+  expect(latestNotification()).toEqual({ text: "Issue created", key: more });
   undoEdit();
   expect(get().issues.has(more)).toBe(false);
   expect(latestNotification()).toBeUndefined();

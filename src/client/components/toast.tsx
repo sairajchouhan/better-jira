@@ -51,6 +51,11 @@ function ToastRoot({ className = "", ...props }: ComponentProps<"div">) {
   return <div className={`ui-toast ${className}`} {...props} />;
 }
 
+/** The 14px image before a toast's title (Linear's toast `icon`); the lines under the title then start under its text. */
+function ToastIcon({ className = "", ...props }: ComponentProps<"span">) {
+  return <span aria-hidden className={`ui-toast-icon ${className}`} {...props} />;
+}
+
 function Close({ label = "Dismiss" }: { label?: string }) {
   const { dismiss } = useToast();
   return (
@@ -62,7 +67,20 @@ function Close({ label = "Dismiss" }: { label?: string }) {
 
 /** A toast's content, passed to `toasts.show(<Toast>…</Toast>)`. */
 export const Toast = Object.assign(ToastRoot, {
-  Title: (props: ComponentProps<"p">) => <p {...props} />,
+  Title: ({ className = "", ...props }: ComponentProps<"p">) => (
+    <p className={`ui-toast-title ${className}`} {...props} />
+  ),
+  Icon: ToastIcon,
+  /** Linear's success image: a white check on a green disc. */
+  Check: () => (
+    <ToastIcon className="ui-toast-check">
+      <Icon name="check" size={10} />
+    </ToastIcon>
+  ),
+  /** What the toast is about, under the title: an issue's icon, key and title, a view's icon and name. */
+  Subject: ({ className = "", ...props }: ComponentProps<"p">) => (
+    <p className={`ui-toast-subject ${className}`} {...props} />
+  ),
   Description: ({ className = "", ...props }: ComponentProps<"p">) => (
     <p className={`ui-toast-description ${className}`} {...props} />
   ),

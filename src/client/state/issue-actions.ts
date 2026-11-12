@@ -23,7 +23,7 @@ import {
   patchIssue,
   withJiraLinks,
 } from "./local-edits";
-import { showNotification } from "./app-notifications";
+import { showIssueCreated, showNotification } from "./app-notifications";
 import { statusById, statuses } from "@/shared/board-catalog";
 import { viewSettings } from "@/client/features/views/view-settings";
 import { navigate, ui } from "@/client/features/navigation/app-navigation";
@@ -707,7 +707,7 @@ export const actions = {
           ui.send({ type: "overlay.close" });
         }
         // "Create more" keeps the composer open, so the toast is its only confirmation (Linear).
-        if (more || !open) showNotification({ text: `Created ${key}`, key });
+        if (more || !open) showIssueCreated(key);
       }),
     );
     return key;

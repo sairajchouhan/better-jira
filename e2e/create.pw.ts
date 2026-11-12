@@ -58,7 +58,8 @@ test("create composer: a draft written, closed, reopened, given properties and c
     await page.waitFor(`!${title}`);
     expect(
       await page.waitFor<string>(`document.querySelector("[data-toast]")?.textContent`),
-    ).toMatch(/^Created TEST-NEW\d+View issue$/);
+    ).toMatch(/^Issue createdTEST-NEW\d+ – .+View issue$/); // #20: Linear's "Issue created", the key and title, View issue and close
+    expect(await page.eval(`!!document.querySelector('[data-toast] .ui-toast-check')&&!!document.querySelector('[data-toast] [aria-label="Dismiss"]')`)).toBe(true);
     expect(await page.eval(`!!document.getElementById("summary")`)).toBe(false);
     await page.click("text=View issue");
     expect(

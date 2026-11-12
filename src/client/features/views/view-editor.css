@@ -218,27 +218,3 @@ header:has(.view-editor):has(.view-filter-row) > div:nth-child(2) > button:last-
 }
 
 /* The "View created" toast's check badge; the name and action line up after it. */
-.view-toast-title {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-.view-toast-check {
-  display: grid;
-  place-items: center;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #4cb782;
-  color: #fff;
-}
-.view-toast-indent {
-  padding-left: 23px;
-}
-.view-toast-name {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  color: var(--fg-2);
-}

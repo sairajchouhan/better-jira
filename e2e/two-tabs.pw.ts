@@ -26,8 +26,9 @@ async function createHeld(page: Page) {
   );
   await page.type("Two tabs");
   await page.key("Enter", "meta");
-  const toast = await page.waitFor<string>(`document.querySelector("[data-toast]")?.textContent`);
-  const key = toast.match(/^Created (TEST-NEW\d+)/)![1]!;
+  // Until Jira answers, the toast shows the title alone; its subject carries the app key.
+  const key = await page.waitFor<string>(`document.querySelector("[data-toast-subject]")?.dataset.toastSubject`);
+  expect(await page.eval(`document.querySelector("[data-toast]").textContent`)).toBe("Issue createdTwo tabsView issue");
   await page.waitFor(`window.__ops.some(w=>w.ops[0]?.op==='create')`);
   await page.waitFor(saved);
   return key;
@@ -155,7 +156,7 @@ test("two tabs: a taken-over create keeps its order and the closed tab's latest 
     await two.type("Related");
     await two.key("Enter", "meta");
     await two.waitFor(
-      `/^Created TEST-NEW\\d+/.test(document.querySelector("[data-toast]")?.textContent??"")`,
+      `/^TEST-NEW\\d+$/.test(document.querySelector("[data-toast-subject]")?.dataset.toastSubject??"")`,
     );
     await sleep(1500); // nothing is sent while the creating tab is open
     expect(await two.eval(`window.__ops.length`)).toBe(0);

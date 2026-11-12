@@ -76,7 +76,7 @@ test("Jira writes: a rejected write rolls back, created issues open by their Jir
       await p.waitFor<string>(
         `(()=>{const t=document.querySelector("[data-toast]")?.textContent;return t?.includes('TEST-90')&&t})()`,
       ),
-    ).toBe("Created TEST-90View issue");
+    ).toBe("Issue createdTEST-90 – [QA] toastView issue");
     await p.key("o", "meta", "alt");
     await p.waitFor(`${shownIssue}==='TEST-90'`);
   });

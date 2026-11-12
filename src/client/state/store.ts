@@ -242,8 +242,11 @@ export function commit(patch: Partial<State>) {
   listeners.forEach((l) => l());
 }
 /** Selector must return a stable reference (a state field or a Map entry), never a fresh object. */
-export const useStore = <T>(sel: (s: State) => T) =>
-  useSyncExternalStore(subscribe, () => sel(state));
+export const useStore = <T>(sel: (s: State) => T) => {
+  const read = () => sel(state);
+  // The same snapshot for a static render, so a component reading the store renders in a unit test too.
+  return useSyncExternalStore(subscribe, read, read);
+};
 /** The assignee choices every picker offers, Assign and Create alike. */
 export function useAssignableUsers(): User[] {
   const issues = useStore((s) => s.issues);

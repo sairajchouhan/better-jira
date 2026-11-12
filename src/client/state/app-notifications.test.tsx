@@ -87,3 +87,41 @@ test("View issue dismisses the toast that owns the action", () => {
   expect(toasts.has(id)).toBe(false);
   expect(toasts.has(NOTIFICATION_ID)).toBe(true);
 });
+
+import { renderToStaticMarkup } from "react-dom/server";
+import { ToastViewport } from "@/client/components/toast";
+import { showIssueCreated } from "./app-notifications";
+import { get, set } from "./store";
+import { markCreated } from "./local-edits";
+import type { Issue } from "@/shared/issue-model";
+
+const shown = () => renderToStaticMarkup(<ToastViewport queue={toasts} />).replace(/<[^>]+>/g, "|");
+const words = () => shown().split("|").filter(Boolean);
+
+test("#20: Issue created names the issue by Jira's key and title, with View issue and close, and follows a rekey", () => {
+  const before = { issues: get().issues, writable: get().writable };
+  const issue = (key: string) => ({ key, board: 1, summary: "Fix the toast", status: "1", labels: [] }) as unknown as Issue;
+  try {
+    // While Jira has not answered, the app key is not shown: just the title.
+    markCreated("A-NEW7");
+    set({ writable: true, issues: new Map([["A-NEW7", issue("A-NEW7")]]) });
+    showIssueCreated("A-NEW7");
+    expect(words()).toEqual(["Issue created", "Fix the toast", "View issue"]);
+    expect(renderToStaticMarkup(<ToastViewport queue={toasts} />)).toContain("ui-toast-check");
+    expect(renderToStaticMarkup(<ToastViewport queue={toasts} />)).toContain('aria-label="Dismiss"');
+    // Jira's key arrives: the same toast now reads "A-37 – title", and Open link from last toast follows it.
+    set({ issues: new Map([["A-37", issue("A-37")]]) });
+    rekeyNotification("A-NEW7", "A-37");
+    expect(latestNotification()).toEqual({ text: "Issue created", key: "A-37" });
+    expect(words()).toEqual(["Issue created", "A-37 – Fix the toast", "View issue"]);
+  } finally {
+    set(before);
+  }
+});
+
+test("#13: a notification with an icon draws it before its text, and every confirmation has Linear's close button", () => {
+  showNotification({ text: "Copied issue link to clipboard", icon: "copy" });
+  const html = renderToStaticMarkup(<ToastViewport queue={toasts} />);
+  expect(html).toMatch(/ui-toast-icon[^]*<svg[^]*Copied issue link to clipboard/);
+  expect(html).toContain('aria-label="Dismiss"');
+});

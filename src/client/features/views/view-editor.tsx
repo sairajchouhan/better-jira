@@ -41,20 +41,18 @@ function DraftIcon({ icon }: { icon: string }) {
 function createdToast({ id, name, icon, color }: { id: string; name: string; icon: string; color: string }) {
   toasts.show(
     <Toast role="status" data-toast>
-      <Toast.Title className="view-toast-title">
-        <span className="view-toast-check">
-          <Icon name="check" size={10} />
-        </span>
+      <Toast.Title>
+        <Toast.Check />
         View created
       </Toast.Title>
       <Toast.Close />
-      <p className="view-toast-name view-toast-indent">
+      <Toast.Subject>
         <span style={{ color: color === "gray" ? "var(--view-gray)" : color }}>
           <DraftIcon icon={icon} />
         </span>
-        <span className="truncate">{name}</span>
-      </p>
-      <Toast.Actions className="view-toast-indent">
+        <span>{name}</span>
+      </Toast.Subject>
+      <Toast.Actions>
         <Toast.Action onClick={() => openSavedView(id)}>Open view</Toast.Action>
       </Toast.Actions>
     </Toast>,
