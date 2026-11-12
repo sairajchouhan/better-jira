@@ -73,9 +73,8 @@ type Shortcut = {
 };
 /** The issue a menu item runs a shortcut on (`runShortcut(id, key)`); a right-click menu's issue never becomes the selection. */
 let acting: string | null = null;
-const selected = () => {
-  const s = get(),
-    key = acting ?? (s.overlay && s.target) ?? (!s.document && s.selected);
+const selected = (s = get()) => {
+  const key = acting ?? (s.overlay && s.target) ?? (!s.document && s.selected);
   return key ? s.issues.get(key) : undefined;
 };
 /** Linear: an issue shortcut acts on the sub-issue row under the pointer or keyboard focus, as its row menu's hints promise. */
@@ -887,10 +886,11 @@ export function shortcutLabel(id: string) {
   return label;
 }
 /** Whether a shortcut would act now; keys, ⌘K and clicks all go through this. */
-export function shortcutApplies(entry: Shortcut) {
+/** Whether the shortcut would do something in `state`; a selector can pass the state it is given. */
+export function shortcutApplies(entry: Shortcut, state: ReturnType<typeof get> = get()) {
   return (
-    (!get().document || (!entry.issue && entry.group !== "List / Board")) &&
-    (!entry.issue || !!selected()) &&
+    (!state.document || (!entry.issue && entry.group !== "List / Board")) &&
+    (!entry.issue || !!selected(state)) &&
     (!entry.when || entry.when())
   );
 }

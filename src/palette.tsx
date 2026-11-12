@@ -174,8 +174,10 @@ export function CommandPalette() {
   const issues = useStore((s) => s.issues);
   const boards = useStore((s) => s.boards);
   const boardId = useStore((s) => s.board);
-  useStore((s) => s.mine);
-  useStore((s) => s.view);
+  // The ids of the shortcuts that apply now, as a string, so the palette re-renders only when that set changes.
+  const applicable = useStore((s) => shortcuts.filter((e) => shortcutApplies(e, s)).map((e) => e.id).join(" "));
+  const applyingIds = new Set(applicable.split(" "));
+  const applies = (entry: (typeof shortcuts)[number]) => applyingIds.has(entry.id);
   const [scope, setScope] = useState(get().document ? null : get().selected);
   const [q, setQ] = useState("");
   const scoped = scope ? issues.get(scope) : undefined;
@@ -204,14 +206,14 @@ export function CommandPalette() {
   });
   // Only commands that would do something now, as Linear lists them.
   const issueCmds: Cmd[] = scoped
-    ? shortcuts.filter((s) => s.issue && shortcutApplies(s)).map(command)
+    ? shortcuts.filter((s) => s.issue && applies(s)).map(command)
     : [];
   const general: Cmd[] = [
     ...shortcuts
       .filter(
         (s, i, a) =>
           !s.issue &&
-          shortcutApplies(s) &&
+          applies(s) &&
           s.id !== "commands" &&
           a.findIndex((other) => other.name === s.name) === i,
       )
