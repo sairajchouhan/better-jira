@@ -437,6 +437,9 @@ export function RichEditor(props: EditorEngineProps) {
       callback: (event: KeyboardEvent) => {
         if (event.target instanceof Element && event.target.closest("[data-media-interactive]"))
           return;
+        // An open caret menu takes ⌥↑/⌥↓ to jump between its groups, as Linear's suggestion menus do.
+        const editor = view.current;
+        if (binding.id.startsWith("move-") && editor && caretMenus.some(([active]) => active(editor.state))) return;
         event.preventDefault();
         event.stopPropagation();
         const id = binding.id;
