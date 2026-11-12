@@ -33,6 +33,7 @@ test("board menus: status, create, due date, palette toggle and selection look",
       "Typed straight away",
     );
     await page.key("Escape");
+    await page.click("text=Discard");
     await page.waitFor(`!document.querySelector('[aria-label="Issue title"]')`);
   });
   await test.step("I13: the due-date picker focuses the date text field, not the first preset button", async () => {

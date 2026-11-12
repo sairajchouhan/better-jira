@@ -646,7 +646,7 @@ function SubIssueRow({
       data-sub-issue={child.key}
       data-depth={depth}
       data-context-only={contextOnly || undefined}
-      className={`relative -ml-1.5 flex min-h-9 items-center gap-px rounded-lg pr-1 hover:bg-hover ${active ? "bg-hover" : ""}`}
+      className={`group relative -ml-1.5 flex min-h-9 items-center gap-px rounded-lg pr-1 hover:bg-hover ${active ? "bg-hover" : ""}`}
       style={{ paddingLeft: 31 + depth * 24 }}
       onContextMenu={(event) => {
         event.preventDefault();
@@ -696,7 +696,7 @@ function SubIssueRow({
           </Fragment>
         );
       })}
-      {move && <><IconButton label={`Move ${child.key} up`} onClick={() => move(-1)} size="small">↑</IconButton><IconButton label={`Move ${child.key} down`} onClick={() => move(1)} size="small">↓</IconButton></>}
+      {move && <span className="absolute left-0 inset-y-0 flex flex-col opacity-0 group-hover:opacity-100 focus-within:opacity-100"><IconButton label={`Move ${child.key} up`} onClick={() => move(-1)} size="small" className="h-[18px] w-[18px]">↑</IconButton><IconButton label={`Move ${child.key} down`} onClick={() => move(1)} size="small" className="h-[18px] w-[18px]">↓</IconButton></span>}
       {display.properties.includes("status") &&
         control("status", status(child).name, <StatusIcon status={status(child)} />)}
       {display.properties.includes("priority") &&

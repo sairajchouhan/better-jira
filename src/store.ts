@@ -34,7 +34,7 @@ import {
 import { QueryClient, QueryObserver } from "@tanstack/query-core";
 
 import { reminderTime } from "./reminder-display";
-import { typeChoices } from "./issue-properties";
+import { typeChoices, childTypes, canHaveChildren } from "./issue-properties";
 import { replyParent, visibleCommentTotal, type CommentState } from "./comment-thread";
 import { jiraCommentId, type ImageCrop, type MediaEdit } from "./media-edits";
 
@@ -2694,7 +2694,7 @@ export const actions = {
     if (made) return made;
     const board = state.boards.find((b) => b.id === (draft.board ?? state.board));
     const status = statusById(board, draft.status) ?? statuses(board)[0];
-    if (!board || !status || !summary.trim()) return;
+    if (!board || !status || !summary.trim() || (draft.subIssues?.some(title => title.trim()) && !canHaveChildren(state, draft))) return;
     const prefix =
       [...state.issues.values()].find((i) => i.board === board.id)?.key.split("-")[0] ?? "LOCAL";
     const key = `${prefix}-NEW${nextSeq()}`;
@@ -2703,7 +2703,7 @@ export const actions = {
     const {
       descriptionDoc,
       related,
-      subIssues: _subIssues,
+      subIssues,
       title: _title,
       copy: _copy,
       submission: _submission,
@@ -2756,6 +2756,15 @@ export const actions = {
         if (related && state.issues.has(related.key)) {
           if (related.kind === "parent") actions.patch(related.key, { parent: key });
           else actions.relate(key, related.key, related.kind);
+        }
+        for (const [index, title] of (subIssues ?? []).entries()) {
+          if (title.trim()) actions.create(title, {
+            submission: draft.submission ? `${draft.submission}:child:${index}` : undefined,
+            board: board.id,
+            parent: key,
+            project: issue.project,
+            type: childTypes(state, issue)?.[0] ?? "Task",
+          }, true);
         }
         // "Create more" keeps the composer open; otherwise open the issue, or stay on the board with a toast.
         if (!more) {

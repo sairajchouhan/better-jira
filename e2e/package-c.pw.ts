@@ -2,16 +2,16 @@ import { expect, test } from "./app";
 
 test("BJ-39: bottom of column creates with that column's status", async ({ open }) => {
   const page = await open();
-  await page.click('[aria-label="Add issue to In Progress"]');
+  await page.click('[aria-label="Add issue to Doing"]');
   await page.waitFor(`!!document.querySelector('[aria-label="Issue title"]')`);
-  expect(await page.eval(`!!document.querySelector('[aria-label="Status: In Progress"]')`)).toBe(true);
+  expect(await page.eval(`!!document.querySelector('[aria-label="Status: Doing"]')`)).toBe(true);
 });
 
 test("BJ-49: inline sub-issue composer offers a due date", async ({ open }) => {
-  const page = await open("?issue=TEST-2&panel=true");
-  await page.click('[aria-label="Create new sub-issue"]');
+  const page = await open("?issue=TEST-2&view=page");
+  await page.click('[data-create-child]');
   await page.click('[aria-label="Sub-issue due date. No due date"]');
-  await page.click('text=Tomorrow');
+  await page.click('[cmdk-item][data-value="Tomorrow"]');
   expect(await page.eval(`document.querySelector('[aria-label^="Sub-issue due date."]').textContent`)).toMatch(/\d{4}-\d{2}-\d{2}/);
 });
 
@@ -105,7 +105,22 @@ test("BJ-59: compose sub-issues before creating their parent", async ({ open }) 
   await page.type("Pending family");
   await page.click('text=Add sub-issue');
   await page.page.getByRole("textbox", { name: "Pending sub-issue 1" }).fill("Pending child");
-  await page.click('text=Create issue');
+  await page.eval(`(() => { const submit = document.querySelector('[role=dialog][aria-label="Create issue"] button[type=submit]'); submit.click(); submit.click(); })()`);
   await page.waitFor(`!document.querySelector('[aria-label="Issue title"]')`);
   expect(await page.eval(`[...document.querySelectorAll('[data-key]')].some(n => n.textContent.includes('Pending child'))`)).toBe(true);
+  expect(await page.eval(`[...document.querySelectorAll('[data-key]')].filter(n => n.textContent.includes('Pending family') || n.textContent.includes('Pending child')).length`)).toBe(2);
+  await page.key("z", "meta");
+  await page.waitFor(`![...document.querySelectorAll('[data-key]')].some(n => n.textContent.includes('Pending family') || n.textContent.includes('Pending child'))`);
+});
+
+test("BJ-50: manual sibling order survives a reload", async ({ open }) => {
+  const setup = `const read=fetch;window.fetch=async(...args)=>{const r=await read(...args);if(new URL(String(args[0]),location.href).pathname!=="/api/issues")return r;const issues=await r.json();for(const key of ["TEST-3","TEST-4"])issues.find(i=>i.key===key).parent="TEST-2";return Response.json(issues)}`;
+  const page = await open("?issue=TEST-2&view=page", { setup });
+  await page.page.getByRole("button", { name: "Move TEST-3 down" }).focus();
+  await page.key("Enter");
+  const order = `[...document.querySelectorAll('[data-sub-issue]')].map(n=>n.dataset.subIssue)`;
+  expect(await page.eval(order)).toEqual(["TEST-4", "TEST-3"]);
+  await page.reload();
+  await page.waitFor(`document.querySelectorAll('[data-sub-issue]').length===2`);
+  expect(await page.eval(order)).toEqual(["TEST-4", "TEST-3"]);
 });

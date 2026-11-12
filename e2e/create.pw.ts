@@ -17,8 +17,12 @@ test("create composer: a draft written, closed, reopened, given properties and c
   await test.step("B3: closing the composer keeps the unsent title and description for the next C", async () => {
     await page.type("Draft body");
     await page.key("Escape");
+    await page.waitFor(`!!document.querySelector('[aria-label="Save to drafts?"]')`);
+    await page.click("text=Save");
     await page.waitFor(`!${title}`);
     await page.key("c");
+    await page.click("text=Saved drafts (1)");
+    await page.click("text=Finish Draft title");
     expect(await page.waitFor<string>(`${title}?.value`)).toBe("Draft title");
     expect(await page.eval(`document.getElementById("create-description").textContent`)).toBe(
       "Draft body",

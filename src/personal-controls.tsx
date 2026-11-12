@@ -1,5 +1,7 @@
+import { LabelChip } from "./label-chip";
+import { EmptyState } from "./empty-state";
 import { resourceURL } from "./issue-resource";
-import { useStoredState } from "./stored-state";
+import { useStoredState, writeStored } from "./stored-state";
 import { adfToText } from "./adf";
 import { showNotification } from "./app-notifications";
 import { Text } from "./text";
@@ -19,7 +21,7 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Adf } from "./adf";
 import { FramedEditor } from "./rich-editor-loader";
 import { MediaView } from "./media-loader";
-import { normalizeDocument } from "./document";
+import { normalizeDocument, documentHasMedia } from "./document";
 import { Icon, StatusIcon } from "./icons";
 import {
   canHaveChildren,
@@ -114,7 +116,7 @@ export function CreateIssue() {
     initial.attachments ?? [],
   );
   const [filesBusy, setFilesBusy] = useState(false);
-  const account = useStore(s => s.site);
+  const account = useStore(s => s.namespace);
   const [saved, setSaved] = useStoredState<SavedComposerDraft[]>(`better-jira:composer-drafts:v1:${account}`, parseComposerDrafts, [], "Could not save drafts locally");
   const [savedId, setSavedId] = useState<string | null>(null);
   const [draftsOpen, setDraftsOpen] = useState(false);
@@ -160,11 +162,13 @@ export function CreateIssue() {
       ? draft.type
       : (types[0] ?? "Task");
   const closeNow = () => ui.send({ type: "overlay.close" });
-  const hasContent = !!title.trim() || !!adfToText(description).trim() || !!attachments?.length;
+  const hasContent = !!title.trim() || !!adfToText(description).trim() || !!attachments?.length || documentHasMedia(description) || !!draft.resources?.length || !!draft.subIssues?.some(t => t.trim());
   const close = () => hasContent && !initial.copy ? setConfirmClose(true) : closeNow();
   const saveDraft = () => {
     const id = savedId ?? crypto.randomUUID();
-    setSaved([...saved.filter(d => d.id !== id), { id, title, fields: { ...draft, board: board.id, type, title, descriptionDoc: description, attachments, labels: labels.split(",").map(l => l.trim()).filter(Boolean) } }]);
+    const next = [...saved.filter(d => d.id !== id), { id, title, fields: { ...draft, board: board.id, type, title, descriptionDoc: description, attachments, labels: labels.split(",").map(l => l.trim()).filter(Boolean) } }];
+    if (!writeStored(`better-jira:composer-drafts:v1:${account}`, next, "Could not save drafts locally")) return;
+    setSaved(next);
     unsent.title = "";
     unsent.description = normalizeDocument("");
     closeNow();
@@ -195,9 +199,6 @@ export function CreateIssue() {
       more,
     );
     if (key) {
-      for (const summary of draft.subIssues ?? []) {
-        if (summary.trim()) actions.create(summary, { board: board.id, project, parent: key, type: childTypes(get(), { type, project })?.[0] ?? "Task" }, true);
-      }
       if (savedId) setSaved(saved.filter(d => d.id !== savedId));
       setSavedId(null);
       unsent.title = "";
@@ -222,7 +223,7 @@ export function CreateIssue() {
     {saved.length ? saved.map(item => <div key={item.id} className="flex items-center gap-2">
       <Button onClick={() => { setDraft(item.fields); setTitle(item.title); setDescription(normalizeDocument(item.fields.descriptionDoc)); setAttachments(item.fields.attachments ?? []); setLabels(item.fields.labels?.join(", ") ?? ""); setSavedId(item.id); setDraftIndex(n => n + 1); setDraftsOpen(false); }}>Finish {item.title || "Untitled issue"}</Button>
       <IconButton label={`Delete draft ${item.title || "Untitled issue"}`} onClick={() => setSaved(saved.filter(d => d.id !== item.id))}><Icon name="trash" /></IconButton>
-    </div>) : <Text variant="mini">No saved drafts</Text>}
+    </div>) : <EmptyState title="No saved drafts" />}
   </Dialog>;
   if (confirmClose) return <Dialog label="Save to drafts?" close={() => setConfirmClose(false)} width={360}>
     <Dialog.Title>Save to drafts?</Dialog.Title><Dialog.Description>You can finish this issue later from your drafts.</Dialog.Description>
@@ -293,7 +294,7 @@ export function CreateIssue() {
         <div className="flex flex-wrap gap-2">
           {draft.related && (
             <div className="flex items-center gap-1" data-pending-relation>
-              <Text variant="mini">{draft.related.kind}: {draft.related.key} · {all.get(draft.related.key)?.summary}</Text>
+              <LabelChip title={`${draft.related.key} · ${all.get(draft.related.key)?.summary ?? ""}`}><LabelChip.Text>1 {draft.related.kind} · {draft.related.key}</LabelChip.Text></LabelChip>
               <IconButton type="button" label="Remove pending relation" onClick={() => setDraft(({ related: _related, ...rest }) => rest)}>
                 <Icon name="close" />
               </IconButton>
