@@ -20,7 +20,8 @@ import {
   mentionPlugin,
 } from "./mentions";
 import { CaretMenu, MentionMenu, searchPeople } from "./mention-menu";
-import { activeEmoji, dismissEmoji, emojiPlugin, emojiRules, insertEmoji, matchingEmoji } from "./emoji";
+import { activeEmoji, dismissEmoji, emojiPlugin, emojiRules, insertEmoji } from "./emoji";
+import { EmojiMenu } from "./emoji-menu";
 import { activeSlash, dismissSlash, matchingSlashCommands, slashPlugin, SLASH_COMMANDS } from "./slash-commands";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { get } from "./store";
@@ -867,21 +868,14 @@ export function RichEditor(props: EditorEngineProps) {
         />
       )}
       {emoji && (
-        <CaretMenu
+        <EmojiMenu
           {...caretAnchor(emoji.from, dismissEmoji)}
-          label="Insert emoji"
           query={emoji.query}
-          empty={null}
-          items={matchingEmoji(emoji.query).map((item) => ({
-            id: item.name,
-            label: `:${item.name}:`,
-            icon: <span aria-hidden>{item.char}</span>,
-            pick: () => {
-              const editor = view.current!;
-              editor.dispatch(insertEmoji(editor.state, emoji, item));
-              editor.focus();
-            },
-          }))}
+          pick={(item) => {
+            const editor = view.current!;
+            editor.dispatch(insertEmoji(editor.state, emoji, item));
+            editor.focus();
+          }}
         />
       )}
       {mention && (

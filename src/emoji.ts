@@ -1,42 +1,142 @@
 import { InputRule, inputRules } from "prosemirror-inputrules";
 import { caretTrigger, type CaretTrigger } from "./caret-trigger";
+import { deprioritize, fuzzyScore, prioritize } from "./fuzzy-score";
 import { emojiNode } from "./rich-document";
 import type { EditorState, Transaction } from "prosemirror-state";
 
-export type Emoji = { name: string; char: string };
-// ponytail: a hand-picked set of common emoji, not Unicode's full list; swap in a full dataset if people miss names.
-const LIST =
-  "smile 😄,smiley 😃,grinning 😀,grin 😁,laughing 😆,sweat_smile 😅,joy 😂,rofl 🤣,slightly_smiling_face 🙂,upside_down_face 🙃,wink 😉,blush 😊,innocent 😇,heart_eyes 😍,star_struck 🤩,kissing_heart 😘,yum 😋,stuck_out_tongue 😛,thinking 🤔,hugs 🤗,shushing_face 🤫,neutral_face 😐,expressionless 😑,no_mouth 😶,smirk 😏,unamused 😒,roll_eyes 🙄,grimacing 😬,relieved 😌,pensive 😔,sleepy 😪,sleeping 😴,mask 😷,nauseated_face 🤢,sneezing_face 🤧,hot_face 🥵,cold_face 🥶,dizzy_face 😵,exploding_head 🤯,cowboy_hat_face 🤠,partying_face 🥳,sunglasses 😎,nerd_face 🤓,confused 😕,worried 😟,slightly_frowning_face 🙁,open_mouth 😮,astonished 😲,flushed 😳,pleading_face 🥺,fearful 😨,cold_sweat 😰,cry 😢,sob 😭,scream 😱,confounded 😖,disappointed 😞,sweat 😓,weary 😩,tired_face 😫,yawning_face 🥱,triumph 😤,rage 😡,angry 😠,skull 💀,poop 💩,clown_face 🤡,ghost 👻,alien 👽,robot 🤖,see_no_evil 🙈,hear_no_evil 🙉,speak_no_evil 🙊,wave 👋,raised_hand ✋,ok_hand 👌,pinched_fingers 🤌,v ✌️,crossed_fingers 🤞,metal 🤘,call_me_hand 🤙,point_left 👈,point_right 👉,point_up 👆,point_down 👇,thumbsup 👍,+1 👍,thumbsdown 👎,-1 👎,fist 👊,clap 👏,raised_hands 🙌,open_hands 👐,handshake 🤝,pray 🙏,writing_hand ✍️,muscle 💪,eyes 👀,brain 🧠,heart ❤️,orange_heart 🧡,yellow_heart 💛,green_heart 💚,blue_heart 💙,purple_heart 💜,black_heart 🖤,broken_heart 💔,sparkling_heart 💖,100 💯,boom 💥,sparkles ✨,star ⭐,star2 🌟,zap ⚡,fire 🔥,rainbow 🌈,sunny ☀️,cloud ☁️,snowflake ❄️,umbrella ☔,coffee ☕,tea 🍵,beer 🍺,beers 🍻,wine_glass 🍷,pizza 🍕,hamburger 🍔,cake 🍰,birthday 🎂,cookie 🍪,apple 🍎,tada 🎉,confetti_ball 🎊,balloon 🎈,gift 🎁,trophy 🏆,medal 🏅,dart 🎯,video_game 🎮,art 🎨,musical_note 🎵,bell 🔔,mega 📣,loudspeaker 📢,bulb 💡,mag 🔍,lock 🔒,unlock 🔓,key 🔑,hammer 🔨,wrench 🔧,gear ⚙️,link 🔗,paperclip 📎,pushpin 📌,memo 📝,pencil2 ✏️,book 📖,books 📚,calendar 📅,date 📆,clipboard 📋,chart_with_upwards_trend 📈,chart_with_downwards_trend 📉,bar_chart 📊,email 📧,inbox_tray 📥,outbox_tray 📤,package 📦,computer 💻,keyboard ⌨️,desktop_computer 🖥️,iphone 📱,phone ☎️,hourglass ⌛,alarm_clock ⏰,stopwatch ⏱️,rocket 🚀,airplane ✈️,car 🚗,ship 🚢,construction 🚧,rotating_light 🚨,warning ⚠️,no_entry ⛔,x ❌,heavy_check_mark ✔️,white_check_mark ✅,ballot_box_with_check ☑️,question ❓,exclamation ❗,bangbang ‼️,heavy_plus_sign ➕,heavy_minus_sign ➖,arrow_right ➡️,arrow_left ⬅️,arrow_up ⬆️,arrow_down ⬇️,recycle ♻️,red_circle 🔴,large_blue_circle 🔵,green_circle 🟢,yellow_circle 🟡,white_circle ⚪,black_circle ⚫,bug 🐛,ant 🐜,bee 🐝,snail 🐌,turtle 🐢,snake 🐍,dog 🐶,cat 🐱,unicorn 🦄,monkey 🐒,bird 🐦,penguin 🐧,fish 🐟,whale 🐳,octopus 🐙,seedling 🌱,evergreen_tree 🌲,palm_tree 🌴,cactus 🌵,four_leaf_clover 🍀,rose 🌹,sunflower 🌻,earth_americas 🌎,moon 🌙,money_with_wings 💸,moneybag 💰,dollar 💵,gem 💎,crown 👑,ring 💍,wave_dash 〰️,shrug 🤷,facepalm 🤦,man_technologist 👨‍💻,woman_technologist 👩‍💻,ninja 🥷,zombie 🧟,santa 🎅,ok 🆗,new 🆕,free 🆓,cool 🆒,sos 🆘,soon 🔜,top 🔝";
-export const EMOJI: Emoji[] = LIST.split(",").map((entry) => {
-  const at = entry.indexOf(" ");
-  return { name: entry.slice(0, at), char: entry.slice(at + 1) };
-});
+export type Emoji = { name: string; char: string; keywords: string[]; emoticons: string[] };
+type EmojiData = { keywords: string[]; emojis: [string, string, number[], string[]?][] };
 
-/** Emoji whose short name has a word starting with the query: an exact name first, then names starting with it. */
-export function matchingEmoji(query: string, limit = 20): Emoji[] {
-  const q = query.toLowerCase();
-  const starts = EMOJI.filter((e) => e.name.startsWith(q)).sort((a, b) => +(b.name === q) - +(a.name === q)),
-    words = EMOJI.filter((e) => !e.name.startsWith(q) && e.name.split("_").some((w) => w.startsWith(q)));
-  return [...starts, ...words].slice(0, limit);
+/** Linear's native emoji set (`Cv.getNativeEmojis`), shipped as its own chunk and fetched once an editor first needs it. */
+let emojis: Emoji[] = [];
+let byName = new Map<string, Emoji>(),
+  bySymbol = new Map<string, Emoji>();
+let loading: Promise<Emoji[]> | undefined;
+export const loadEmoji = () =>
+  (loading ??= import("./emoji-data.json").then(({ default: json }) => {
+    const data = json as unknown as EmojiData;
+    emojis = data.emojis.map(([name, char, k, emoticons = []]) => ({
+      name,
+      char,
+      keywords: k.map((i) => data.keywords[i]!),
+      emoticons,
+    }));
+    byName = new Map(emojis.map((e) => [e.name, e]));
+    bySymbol = new Map(emojis.map((e) => [e.char, e]));
+    return emojis;
+  }));
+
+// Linear's search (`Cv.score`, `Cv.getCandidates`): common emoji rank first, then a name, emoticon or keyword match.
+const COMMON = ["+1", "ok_hand", "pray", "joy", "heart", "eyes", "white_check_mark", "slightly_smiling_face", "smiley", "smile", "grinning", "thinking_face", "sweat_smile", "warning", "eyes", "confused", "x", "raised_hands", "tada", "wink", "blush", "shrug", "wave", "question"];
+const SHORTCUTS = new Map([[":)", "slightly_smiling_face"], [":(", "disappointed"]]);
+const normalize = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[&+]/g, "and")
+    .replace(/[\s-]/g, " ")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[¡-¿]/g, "")
+    .trim();
+/** Each word of a name, keyword or emoticon, and the term joined up ("thumbs_up" → thumbs, up, thumbsup). */
+function tokens(term: string) {
+  const out: string[] = [];
+  let word = "",
+    joined = "";
+  for (const char of normalize(term)) {
+    const code = char.charCodeAt(0);
+    if ((code >= 48 && code <= 57) || (code >= 97 && code <= 122) || code >= 128) {
+      word += char;
+      joined += char;
+    } else if (word) {
+      out.push(word);
+      word = "";
+    }
+  }
+  if (word) out.push(word);
+  if (joined && !out.includes(joined)) out.push(joined);
+  return out;
+}
+const searchText = new WeakMap<Emoji, { prefixes: Set<string>; text: string }>();
+function indexOf(emoji: Emoji) {
+  let entry = searchText.get(emoji);
+  if (!entry) {
+    const words = [...new Set([emoji.name, ...emoji.keywords, ...emoji.emoticons].flatMap(tokens))];
+    entry = { prefixes: new Set(words.flatMap((w) => [w.charAt(0), w.slice(0, 2)])), text: words.join(" ") };
+    searchText.set(emoji, entry);
+  }
+  return entry;
+}
+function candidates(query: string): Emoji[] {
+  const shortcut = SHORTCUTS.get(`:${query}`);
+  if (shortcut) return byName.has(shortcut) ? [byName.get(shortcut)!] : [];
+  const [first, ...rest] = normalize(query).split(" ").filter(Boolean);
+  if (!first) return [];
+  const prefix = first.slice(0, 2);
+  return emojis.filter((emoji) => {
+    const { prefixes, text } = indexOf(emoji);
+    return (prefixes.has(prefix) || (first.length > 3 && text.includes(first))) && rest.every((w) => text.includes(w));
+  });
+}
+function score(emoji: Emoji, query: string) {
+  const emoticon = query.length <= 3 ? fuzzyScore(emoji.emoticons, `:${query}`) : 0;
+  const best = Math.max(
+    fuzzyScore(emoji.name, query),
+    prioritize(emoticon, 1000),
+    deprioritize(fuzzyScore(emoji.keywords, query), 2),
+  );
+  if (emoji.name === query) return prioritize(best, 1000);
+  const common = COMMON.indexOf(emoji.name);
+  return common > -1 ? prioritize(best, 50 + COMMON.length - common) : best;
 }
 
-// ":" at a word start, then two or more of a short name's characters ("12:30" and "Note: x" open nothing).
-const trigger = caretTrigger("emoji", /(?:^|[\s(]):([\w+-]{2,30})$/);
+/** The emoji menu's results for `query`, best first: Linear keeps a short query's matches above 0.15 and shows 12 (`cQ`). */
+export function matchingEmoji(query: string, limit = 12): Emoji[] {
+  return candidates(query)
+    .map((emoji) => ({ emoji, score: score(emoji, query) }))
+    .filter((e) => (query.length < 5 ? e.score > 0.15 : e.score > 0))
+    .sort((a, b) => b.score - a.score || a.emoji.name.localeCompare(b.emoji.name))
+    .slice(0, limit)
+    .map((e) => e.emoji);
+}
+
+// ":" at a word start (or after "("), then one or more of a short name's characters; a space cancels it ("12:30" and "Note: x" open nothing).
+const trigger = caretTrigger("emoji", /(?:^|[\s(]):([\w+-]{1,30})$/);
 export const activeEmoji = trigger.active;
 export const dismissEmoji = trigger.dismiss;
-export const emojiPlugin = trigger.plugin;
+export const emojiPlugin = (keys: Parameters<typeof trigger.plugin>[0]) => {
+  void loadEmoji();
+  return trigger.plugin(keys);
+};
 export const insertEmoji = (state: EditorState, at: CaretTrigger, emoji: Emoji): Transaction =>
   state.tr.replaceWith(at.from, at.to, emojiNode(emoji));
 
-/** A whole known `:name:` typed out becomes its emoji, like Linear. */
+// Linear's emoticons (`AMe`), each typed then a space; on by default in Linear's settings ("Convert text emoticons into emojis").
+const EMOTICONS: Record<string, string> = { "<3": "❤️", "</3": "💔", ":)": "🙂", ":-)": "🙂", "=)": "🙂", "=-)": "🙂", "(:": "🙂", ":(": "🙁", ":-(": "🙁", ":D": "😀", ":-D": "😀", "=D": "😀", "=-D": "😀", ":P": "😛", ":-P": "😛", ":p": "😛", ":-p": "😛", "=P": "😛", "=-P": "😛", "=p": "😛", "=-p": "😛", ":b": "😛", ":-b": "😛", ";)": "😉", ";-)": "😉", ";P": "😜", ";-P": "😜", ";p": "😜", ";-p": "😜", ";b": "😜", ";-b": "😜", ":/": "😕", ":-/": "😕", ":\\": "😕", ":-\\": "😕", ":|": "😐", ":-|": "😐", "-_-": "😑", "8)": "😎", "8-)": "😎", "B)": "😎", "B-)": "😎", ":O": "😮", ":-O": "😮", ":o": "😮", ":-o": "😮", ":0": "😮", ":-0": "😮", ":*": "😗", ":-*": "😗", ":3": "😺", ":-3": "😺", ":>": "😆", "D:": "😧", ";(": "😢", ";-(": "😢", ":'(": "😢", ":'-(": "😢", "):": "😞", ">:(": "😠", ">:-(": "😠", ":')": "😂", ":'-)": "😂", ":o)": "🐵", "^_^": "😊", "^.^": "😊", T_T: "😭", "T.T": "😭", ";_;": "😭", ";-;": "😭", ">_<": "😣", o_O: "🤨", O_o: "🤨", O_O: "😳", o_o: "😳" };
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const emoticonPattern = new RegExp(
+  `(?:^|\\s)(${Object.keys(EMOTICONS).sort((a, b) => b.length - a.length).map(escape).join("|")}) $`,
+);
+
+/** A whole known `:name:` typed out becomes its emoji, and so does an emoticon followed by a space, like Linear. Never in code. */
 export const emojiRules = inputRules({
   rules: [
     new InputRule(
       /(?:^|[\s(]):([\w+-]+):$/,
       (state, match, _start, end) => {
-        const emoji = EMOJI.find((e) => e.name === match[1]);
+        const emoji = byName.get(match[1]!);
         // The rule fires before the final ":" is inserted, so the name and its first ":" are what is replaced.
         return emoji ? state.tr.replaceWith(end - match[1]!.length - 1, end, emojiNode(emoji)) : null;
+      },
+      { inCodeMark: false },
+    ),
+    new InputRule(
+      emoticonPattern,
+      (state, match, _start, end) => {
+        const emoji = bySymbol.get(EMOTICONS[match[1]!]!);
+        if (!emoji) return null;
+        // The space is typed, not yet in the document: the emoticon is replaced and the space follows the emoji.
+        return state.tr.replaceWith(end - match[1]!.length, end, [emojiNode(emoji), state.schema.text(" ")]);
       },
       { inCodeMark: false },
     ),
