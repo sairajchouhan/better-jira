@@ -1,5 +1,6 @@
 import { useEffect, useState, useSyncExternalStore, type MouseEvent, type ReactNode } from "react";
 import { QueryObserver } from "@tanstack/query-core";
+import { IssueHoverCard } from "@/client/features/issue/issue-hover-card";
 import { Icon, StatusIcon } from "@/client/components/icons";
 import { LinkIcon } from "@/client/components/link-icon";
 import { navigate } from "@/client/features/navigation/app-navigation";
@@ -31,21 +32,19 @@ function useServerDetails(url: string, enabled: boolean) {
 
 /** Linear's mention chip (startup-root `jE`): an image kept on the first line with its text, then a muted prefix (an issue's
  *  key) and the label. One chip for every smart link kind, in read-only documents and the editor alike. */
-function MentionChip({
+export function MentionChip(props: { kind: "person"; id: string; label: string } | {
+  kind: Target["kind"]; href: string; image: ReactNode; prefix?: string; label?: string;
+  onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
+}) {
+  if (props.kind === "person") return <span className="mention-chip" data-mention-id={props.id}>{props.label}</span>;
+  const {
   kind,
   href,
   image,
   prefix,
   label,
   onClick,
-}: {
-  kind: Target["kind"];
-  href: string;
-  image: ReactNode;
-  prefix?: string;
-  label?: string;
-  onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
-}) {
+} = props;
   return (
     <a
       className="mention-chip smart-link"
@@ -75,6 +74,7 @@ function IssueLink({ link }: { link: Extract<Target, { kind: "issue" }> }) {
   const details = useServerDetails(link.url, !mirrored && link.site === get().site);
   const status = mirrored ? statusOf(mirrored) : details?.status;
   return (
+    <IssueHoverCard relation={{ kind: "related", key: link.key, issue: { summary: mirrored?.summary ?? details?.title ?? link.key, status: status ?? { name: "", category: "new" } } }} issue={mirrored}>
     <MentionChip
       kind="issue"
       href={link.url}
@@ -91,6 +91,7 @@ function IssueLink({ link }: { link: Extract<Target, { kind: "issue" }> }) {
           : undefined
       }
     />
+    </IssueHoverCard>
   );
 }
 

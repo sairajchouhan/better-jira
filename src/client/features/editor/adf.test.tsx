@@ -126,3 +126,20 @@ test("BJ-16: smart links render as Linear's mention chip: issue status, key and 
   expect(html).toContain('<p class="smart-link-block"><a class="mention-chip smart-link" data-smart-link="external" href="https://docs.google.com');
   expect(html.match(/<span class="smart-link-node">/g)).toHaveLength(3);
 });
+
+test("BJ-199: plain text uses chip titles from metadata, mirror and cached page reads", async () => {
+  const { adfToText } = await import("./document-text");
+  const { set } = await import("@/client/state/store");
+  const { queryClient } = await import("@/client/state/server-data");
+  set({ site: "https://example.atlassian.net", issues: new Map([["TEST-2", { summary: "Second fixture" } as any]]) });
+  const url = "https://example.atlassian.net/wiki/x/abc";
+  queryClient.setQueryData(["smart-link", url], { title: "Page from cache" });
+  expect(adfToText(doc({ type: "paragraph", content: [
+    { type: "inlineCard", attrs: { url: "https://example.atlassian.net/browse/TEST-2" } },
+    { type: "text", text: " / " },
+    { type: "inlineCard", attrs: { url } },
+  ] }))).toBe("TEST-2 Second fixture / Page from cache");
+  const rich = toEditorDocument(doc({ type: "paragraph", content: [{ type: "inlineCard", attrs: { url: "https://example.atlassian.net/browse/TEST-2" } }] }));
+  expect(rich.textBetween(0, rich.content.size)).toBe("TEST-2 Second fixture");
+  expect(adfToText({ type: "inlineCard", attrs: { url: "https://github.com/acme/widgets/pull/42", data: { name: "Fix widget" } } })).toBe("Fix widget");
+});

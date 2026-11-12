@@ -1,5 +1,6 @@
+import { adfToText } from "@/client/features/editor/document-text";
 import { createActor, type ActorOptions, type AnyActorLogic } from "xstate";
-import { adfToText, normalizeDocument, type AdfDocument } from "@/shared/document";
+import { normalizeDocument, type AdfDocument } from "@/shared/document";
 import { autosaveMachine, inspector } from "@/client/state/machines";
 
 /**

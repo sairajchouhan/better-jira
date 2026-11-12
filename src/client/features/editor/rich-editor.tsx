@@ -308,6 +308,7 @@ export function RichEditor(props: EditorEngineProps) {
         expand: expandNodeView,
         codeBlock: codeBlockNodeView,
         taskItem: taskItemView,
+        mention: smartLinkNodeView as NodeViewConstructor,
         inlineCard: smartLinkNodeView as NodeViewConstructor,
         blockCard: smartLinkNodeView as NodeViewConstructor,
         embedCard: smartLinkNodeView as NodeViewConstructor,

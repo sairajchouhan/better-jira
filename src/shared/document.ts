@@ -1,3 +1,4 @@
+import { smartLinkText, type SmartLinkDetails } from "./smart-link";
 export type AdfMark = { type: string; attrs?: Record<string, unknown>; [key: string]: unknown };
 export type AdfNode = {
   type: string;
@@ -99,14 +100,15 @@ export function textToAdf(text: string): AdfDocument {
 }
 
 /** Plain text of ADF: what a reader sees, without formatting or media. */
-export function adfToText(node: any): string {
+export function adfToText(node: any, details?: (url: string) => SmartLinkDetails | undefined): string {
   if (!node) return "";
   if (typeof node === "string") return node;
   if (node.type === "text") return node.text;
   if (node.type === "hardBreak") return "\n";
   if (node.attrs?.text) return node.attrs.text;
-  if (node.type === "inlineCard") return node.attrs?.url ?? "";
-  const kids: string[] = (node.content ?? []).map(adfToText);
+  if (["inlineCard", "blockCard", "embedCard"].includes(node.type))
+    return smartLinkText(node.attrs?.url, node.attrs?.data, details?.(node.attrs?.url));
+  const kids: string[] = (node.content ?? []).map((child: any) => adfToText(child, details));
   if (node.type === "doc") return kids.join("\n\n");
   if (node.type === "bulletList" || node.type === "orderedList")
     return kids.map((k) => `- ${k}`).join("\n");

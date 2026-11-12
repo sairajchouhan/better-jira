@@ -1,6 +1,6 @@
+import { adfToText } from "@/client/features/editor/document-text";
 import { type Issue } from "@/shared/issue-model";
 import { matchRank } from "@/shared/search-rank";
-import { adfToText } from "@/shared/document";
 import type { IssueResource } from "@/shared/issue-resource";
 
 import { valuesFor } from "@/shared/view-model";

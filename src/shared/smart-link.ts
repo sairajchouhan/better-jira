@@ -121,9 +121,11 @@ export function smartLink(url: unknown, data?: unknown): SmartLink | null {
 }
 
 /** What a reader sees for a smart link in plain text (search, previews): the issue key, else its title, else the URL. */
-export function smartLinkText(url: unknown, data?: unknown): string {
+export function smartLinkText(url: unknown, data?: unknown, details?: SmartLinkDetails): string {
   const link = smartLink(url, data);
-  return !link ? String(url ?? "Link") : link.kind === "issue" ? link.key : link.title;
+  if (!link) return String(url ?? "Link");
+  const title = details?.title ?? dataTitle(data);
+  return link.kind === "issue" ? [link.key, title].filter(Boolean).join(" ") : title || link.title;
 }
 
 /** What the server read behind a smart link on the configured site: an issue's summary and status, or a page's title. */

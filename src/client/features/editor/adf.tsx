@@ -5,9 +5,9 @@ import { jiraDate, safeLink } from "@/shared/document";
 import { Icon } from "@/client/components/icons";
 import { ReadonlyCodeBlock } from "./code-block";
 import { embedFrame, embedSource } from "./embed";
-import { SmartLink, smartLinkWrapper } from "./smart-link";
+import { MentionChip, SmartLink, smartLinkWrapper } from "./smart-link";
 import { preservedLabel } from "./editor-shape";
-export { adfToText } from "@/shared/document";
+export { adfToText } from "./document-text";
 
 /** Renders Jira's ADF (Atlassian Document Format) with the editor's DOM and classes, so `.rich-doc` styles both the
  *  same (BJ-176). Unknown nodes fall through to their children. */
@@ -123,9 +123,7 @@ export function Adf({
       return <hr />;
     case "mention":
       return (
-        <span className="mention-chip" data-mention-id={a.id}>
-          {a.text || "@Unknown"}
-        </span>
+        <MentionChip kind="person" id={a.id} label={a.text || "@Unknown"} />
       );
     case "emoji":
       return <span className="rich-emoji">{a.text ?? a.shortName}</span>;

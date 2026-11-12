@@ -115,6 +115,12 @@ test("BJ-16: Jira smart links of every kind show as Linear's mention chips, and 
     // The block card keeps its own line.
     expect(await page.eval(`document.querySelector('#description p.smart-link-block a')?.textContent.includes('acme/widgets#7')`)).toBe(true);
   });
+  await test.step("BJ-199: an issue mention opens the shared issue hover card", async () => {
+    await page.hover('#description a.smart-link[href$="/browse/TEST-3"]');
+    await page.waitFor(`!!document.querySelector('[data-issue-hover="TEST-3"]')`);
+    expect(await page.eval(`document.querySelector('[data-issue-hover="TEST-3"]').textContent`)).toContain("TEST-3");
+    await page.page.mouse.move(0, 0);
+  });
   await test.step("a comment's smart link is the same chip", async () => {
     await page.waitFor(`JSON.stringify(${chips(".rich-doc:not(#description *):not(#description)")})==='[["external","acme/widgets#42"]]'`);
   });

@@ -1,3 +1,4 @@
+import { adfToText } from "./document-text";
 import { mediaCaretDocument } from "./media-caret";
 import { preservedLabel } from "./editor-shape";
 import { Schema, type MarkSpec, type Node as EditorNode, type NodeSpec } from "prosemirror-model";
@@ -92,6 +93,7 @@ const card = (block: boolean): NodeSpec => ({
   ...(block ? { group: "block" } : { inline: true, group: "inline" }),
   atom: true,
   attrs,
+  leafText: (node) => adfToText(node.attrs.original?.data),
   toDOM: (node) => {
     const data = node.attrs.original?.data;
     return [
@@ -100,7 +102,7 @@ const card = (block: boolean): NodeSpec => ({
       [
         "a",
         { class: "mention-chip smart-link", href: safeLink(data?.attrs?.url) ?? "", target: "_blank", rel: "noreferrer" },
-        smartLinkText(data?.attrs?.url, data?.attrs?.data),
+        adfToText(data),
       ],
     ];
   },
