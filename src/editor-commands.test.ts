@@ -25,6 +25,7 @@ import {
   toggleQuote,
 } from "./editor-commands";
 import { fromEditorDocument, richSchema as s, toEditorDocument, type AdfNode } from "./rich-document";
+import { inlineRules } from "./editor-inline-rules";
 
 const n = s.nodes;
 const p = (text = "") => n.paragraph!.create(null, text ? s.text(text) : null);
@@ -105,11 +106,12 @@ function typeInto(before: EditorState, text: string) {
       view.state = view.state.apply(tr);
     },
   };
-  const handle = markdownRules.props.handleTextInput!;
   for (const char of text) {
     const { from, to } = view.state.selection;
-    if (!handle.call(markdownRules, view, from, to, char, () => view.state.tr))
-      view.dispatch(view.state.tr.insertText(char, from, to));
+    const handled = [markdownRules, inlineRules].some((rules) =>
+      rules.props.handleTextInput!.call(rules, view, from, to, char, () => view.state.tr),
+    );
+    if (!handled) view.dispatch(view.state.tr.insertText(char, from, to));
   }
   return view.state as EditorState;
 }

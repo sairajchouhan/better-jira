@@ -22,6 +22,7 @@ import {
 import { CaretMenu, MentionMenu, searchPeople } from "./mention-menu";
 import { activeEmoji, dismissEmoji, emojiPlugin, emojiRules, insertEmoji } from "./emoji";
 import { EmojiMenu } from "./emoji-menu";
+import { inlineRules } from "./editor-inline-rules";
 import { activeSlash, dismissSlash, matchingSlashCommands, slashPlugin, SLASH_COMMANDS } from "./slash-commands";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { get } from "./store";
@@ -222,6 +223,7 @@ export function RichEditor(props: EditorEngineProps) {
           mediaCaretPlugin(),
           uploads.plugin,
           markdownRules,
+          inlineRules,
           emojiRules,
           issueReferenceRules((key) => (get().issues.has(key) ? jiraIssueURL(key) : null)),
           history(),
