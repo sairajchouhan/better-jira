@@ -559,6 +559,18 @@
   padding: 8px;
   border-radius: 6px;
 }
+/* Linear's block handle, in the gutter left of the caret's block; only the keyboard or a hover brings it forward. */
+.rich-block-handle {
+  position: absolute;
+  left: -28px;
+  z-index: 1;
+  opacity: 0;
+}
+.rich-editor:hover .rich-block-handle,
+.rich-block-handle:focus-visible,
+.rich-block-handle[aria-expanded="true"] {
+  opacity: 1;
+}
 .rich-content .rich-expand {
   border: 1px solid var(--line-2);
   border-radius: 6px;

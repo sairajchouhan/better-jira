@@ -10,6 +10,8 @@ import {
   insertTable,
   linkTarget,
   markdownRules,
+  duplicateBlock,
+  deleteBlock,
   issueFromText,
   toggleExpand,
   moveBlock,
@@ -573,4 +575,21 @@ test("BJ-69: selected text starts an issue: first line the title, the rest its d
     description: "Steps:\n\n1. open",
   });
   expect(issueFromText("x".repeat(300)).title.length).toBe(255);
+});
+
+test("BJ-56: the block menu's Duplicate and Delete act on the selected block, or its list item", () => {
+  const apply = (s0: EditorState, command: Command) => {
+    let next = s0;
+    expect(command(s0, (tr) => (next = s0.apply(tr)))).toBe(true);
+    return next;
+  };
+  const texts = (doc: EditorNode) => doc.content.content.map((b) => b.textContent);
+  expect(texts(apply(state([p("a"), p("b")], "a"), duplicateBlock).doc)).toEqual(["a", "a", "b"]);
+  expect(texts(apply(state([p("a"), p("b")], "a"), deleteBlock).doc)).toEqual(["b"]);
+  expect(texts(apply(state([p("a")], "a"), deleteBlock).doc)).toEqual([""]);
+  const list = apply(state([bullets("one", "two")], "two"), duplicateBlock);
+  expect(list.doc.firstChild!.childCount).toBe(3);
+  const removed = apply(state([bullets("one", "two")], "two"), deleteBlock);
+  expect(removed.doc.firstChild!.textContent).toBe("one");
+  expect(jiraErrors(fromEditorDocument(removed.doc))).toEqual([]);
 });

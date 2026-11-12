@@ -5,7 +5,7 @@ import {
   textblockTypeInputRule,
   wrappingInputRule,
 } from "prosemirror-inputrules";
-import type { Node as EditorNode } from "prosemirror-model";
+import type { Node as EditorNode, NodeRange } from "prosemirror-model";
 import { liftListItem, sinkListItem, wrapInList } from "prosemirror-schema-list";
 import { EditorState, TextSelection, type Command, type Transaction } from "prosemirror-state";
 import { findWrapping, liftTarget } from "prosemirror-transform";
@@ -102,33 +102,53 @@ export const pasteLink =
     return insertLink(href)(state, dispatch, view);
   };
 
-/** ⌥↑ / ⌥↓: the selected blocks swap with the block before or after them. At the edge of a list item or quote the whole
- * item or quote moves instead; table cells never swap (the row moves). Content Jira would reject is never built. */
-export const moveBlock =
-  (dir: -1 | 1): Command =>
+/** Edits the selected blocks with `edit`, which returns false when it cannot apply at that level. When the result is
+ * content Jira would reject (a list item without its first paragraph, an empty document), the parent block is
+ * edited instead (the whole list item, then the list, then the quote). A list item's first paragraph always means the item. Table cells are never edited apart (the row is). */
+const blockEdit =
+  (edit: (tr: Transaction, range: NodeRange) => boolean): Command =>
   (state, dispatch) => {
     const { $from, $to } = state.selection;
     let range = $from.blockRange($to);
     while (range) {
-      const index = dir < 0 ? range.startIndex - 1 : range.endIndex;
-      if (range.parent.type.spec.tableRole !== "row" && index >= 0 && index < range.parent.childCount) {
-        const sibling = range.parent.child(index),
-          tr = state.tr;
-        if (dir < 0) tr.delete(range.start - sibling.nodeSize, range.start).insert(range.end - sibling.nodeSize, sibling);
-        else tr.delete(range.end, range.end + sibling.nodeSize).insert(range.start, sibling);
+      const tr = state.tr;
+      // A list item's own first paragraph stands for the item.
+      const itemText = range.parent.type === richSchema.nodes.listItem && range.startIndex === 0;
+      if (range.parent.type.spec.tableRole !== "row" && !itemText && edit(tr, range))
         try {
           tr.doc.check();
           dispatch?.(tr.scrollIntoView());
           return true;
         } catch {
-          /* The parent's content rules forbid this order (a list item starts with its paragraph): move the parent. */
+          /* The parent's content rules forbid this: edit the parent. */
         }
-      }
       if (!range.depth) return false;
       range = state.doc.resolve($from.before(range.depth)).blockRange(state.doc.resolve($to.after(range.depth)));
     }
     return false;
   };
+/** ⌥↑ / ⌥↓: the selected blocks swap with the block before or after them. */
+export const moveBlock = (dir: -1 | 1): Command =>
+  blockEdit((tr, range) => {
+    const index = dir < 0 ? range.startIndex - 1 : range.endIndex;
+    if (index < 0 || index >= range.parent.childCount) return false;
+    const sibling = range.parent.child(index);
+    if (dir < 0) tr.delete(range.start - sibling.nodeSize, range.start).insert(range.end - sibling.nodeSize, sibling);
+    else tr.delete(range.end, range.end + sibling.nodeSize).insert(range.start, sibling);
+    return true;
+  });
+/** Block menu Duplicate: a copy of the selected blocks after them, the selection staying on the originals. */
+export const duplicateBlock: Command = blockEdit((tr, range) => {
+  tr.insert(range.end, tr.doc.slice(range.start, range.end).content);
+  return true;
+});
+/** Block menu Delete: the selected blocks go; the last block of a document becomes an empty paragraph. */
+export const deleteBlock: Command = blockEdit((tr, range) => {
+  if (!range.depth && range.startIndex === 0 && range.endIndex === range.parent.childCount)
+    tr.replaceWith(range.start, range.end, richSchema.nodes.paragraph!.create());
+  else tr.delete(range.start, range.end);
+  return true;
+});
 
 /** A typed link target: a bare domain gets https://, like Linear; anything else must be an http, https or mailto link. */
 export const linkTarget = (input: string) => {

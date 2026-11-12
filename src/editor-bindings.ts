@@ -18,6 +18,8 @@ export const editorBindings: { id: string; name: string; hotkey: Hotkey }[] = [
   { id: "expand", name: "Collapsible section", hotkey: "Mod+Shift+6" },
   { id: "move-up", name: "Move block up", hotkey: "Alt+ArrowUp" },
   { id: "move-down", name: "Move block down", hotkey: "Alt+ArrowDown" },
+  { id: "block-menu", name: "Open block menu", hotkey: "Shift+F10" },
+  { id: "block-controls", name: "Focus block controls", hotkey: "Alt+F10" },
   { id: "attach", name: "Attach image/file", hotkey: "Mod+Shift+U" },
   { id: "undo", name: "Undo", hotkey: "Mod+Z" },
   { id: "redo", name: "Redo", hotkey: "Mod+Shift+Z" },

@@ -21,7 +21,8 @@ import {
 } from "./mentions";
 import { CaretMenu, MentionMenu, searchPeople } from "./mention-menu";
 import { activeEmoji, dismissEmoji, emojiPlugin, emojiRules, insertEmoji, matchingEmoji } from "./emoji";
-import { activeSlash, dismissSlash, matchingSlashCommands, slashPlugin } from "./slash-commands";
+import { activeSlash, dismissSlash, matchingSlashCommands, slashPlugin, SLASH_COMMANDS } from "./slash-commands";
+import { ActionMenu, type ActionEntry } from "./action-menu";
 import { beginCreate, get, jiraIssueURL } from "./store";
 import { usePlacement } from "./menu-surface";
 import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
@@ -51,6 +52,8 @@ import {
 import {
   codeDown,
   codeEnter,
+  deleteBlock,
+  duplicateBlock,
   floatingPlacement,
   insertLink,
   insertTable,
@@ -149,6 +152,11 @@ export function RichEditor(props: EditorEngineProps) {
       ).values(),
     ],
   });
+  // The block controls (⌥F10) and the block menu (⇧F10), Linear's handle beside the caret's block.
+  const blockHandle = useRef<HTMLButtonElement>(null),
+    frame = useRef<HTMLDivElement>(null),
+    [blockMenu, setBlockMenu] = useState(false),
+    [handleFocused, setHandleFocused] = useState(false);
   const [, refresh] = useState(0),
     [linkOpen, setLinkOpen] = useState(false),
     [url, setURL] = useState("");
@@ -419,6 +427,8 @@ export function RichEditor(props: EditorEngineProps) {
           list(id === "bullet" ? "bulletList" : "orderedList");
         else if (id === "code-block") changeBlock("codeBlock");
         else if (id === "expand") run(toggleExpand);
+        else if (id === "block-menu") setBlockMenu(true);
+        else if (id === "block-controls") blockHandle.current?.focus();
         else if (id === "move-up" || id === "move-down") run(moveBlock(id === "move-up" ? -1 : 1));
         else if (id === "undo") run(undo);
         else if (id === "redo") run(redo);
@@ -459,6 +469,33 @@ export function RichEditor(props: EditorEngineProps) {
     setLinkError("");
   };
   const inTable = !!view.current && isInTable(view.current.state);
+  const hotkeyOf = (id: string) => editorBindings.find((b) => b.id === id)?.hotkey;
+  const blockEntries: ActionEntry[] = [
+    {
+      name: "Turn into",
+      children: SLASH_COMMANDS.filter((c) => c.command && !["table", "divider"].includes(c.id)).map((c) => ({
+        name: c.label,
+        shortcut: hotkeyOf(c.id === "text" ? "heading-0" : c.id),
+        run: () => run(c.command!),
+      })),
+    },
+    { name: "Move up", icon: "up", shortcut: hotkeyOf("move-up"), run: () => run(moveBlock(-1)) },
+    { name: "Move down", icon: "down", shortcut: hotkeyOf("move-down"), run: () => run(moveBlock(1)) },
+    { name: "Duplicate", icon: "copy", divider: true, run: () => run(duplicateBlock) },
+    { name: "Delete", icon: "trash", run: () => run(deleteBlock) },
+  ];
+  // The handle sits level with the top of the caret's top-level block.
+  const blockTop = (() => {
+    const editor = view.current,
+      box = frame.current;
+    if (!editor || !box || !(editor.hasFocus() || handleFocused || blockMenu)) return null;
+    const { $from } = editor.state.selection;
+    try {
+      return editor.coordsAtPos($from.depth ? $from.start(1) : $from.pos).top - box.getBoundingClientRect().top;
+    } catch {
+      return null;
+    }
+  })();
   // Linear's "Create issue from selection": the selected text starts a new issue related to this one.
   const selectedText =
     !!props.issueKey && view.current && !view.current.state.selection.empty
@@ -735,7 +772,43 @@ export function RichEditor(props: EditorEngineProps) {
           )}
         </div>
       )}
-      <div className="relative">
+      <div ref={frame} className="relative">
+        {blockTop !== null && (
+          <IconButton
+            ref={blockHandle}
+            label="Block actions"
+            shortcut={hotkeyOf("block-menu")}
+            size="small"
+            aria-haspopup="menu"
+            aria-expanded={blockMenu}
+            className="rich-block-handle"
+            style={{ top: blockTop }}
+            onMouseDown={(event) => event.preventDefault()}
+            onFocus={() => setHandleFocused(true)}
+            onBlur={() => setHandleFocused(false)}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") return;
+              event.preventDefault();
+              event.stopPropagation();
+              view.current?.focus();
+            }}
+            onClick={() => setBlockMenu(true)}
+          >
+            <Icon name="dots" />
+          </IconButton>
+        )}
+        {blockMenu && (
+          <ActionMenu
+            label="Block menu"
+            anchor={blockHandle.current}
+            entries={blockEntries}
+            highlight
+            close={() => {
+              setBlockMenu(false);
+              view.current?.focus();
+            }}
+          />
+        )}
         {empty && props.placeholder && (
           <p aria-hidden className="rich-placeholder pointer-events-none absolute text-fg-4">
             {props.placeholder}

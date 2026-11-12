@@ -118,3 +118,35 @@ test("BJ-69: Create issue from selection opens the composer titled with the sele
       ["TEST-2", "link", "related"],
     ]);
 });
+
+test("BJ-56 / BJ-55: block controls, the block menu and ⌥↓ act on the caret's block", async ({ open }) => {
+  await fixture.reset({ writable: true });
+  const page = await open("?issue=TEST-2&view=page");
+  await page.waitFor(`!!document.querySelector('#description h2')`);
+  const blocks = () =>
+    page.eval<string[]>(`[...document.getElementById('description').children].map(n=>n.tagName+':'+n.textContent)`);
+  const before = await blocks();
+  await page.click("#description h2");
+  await test.step("⌥F10 focuses the block controls; Esc returns to the text", async () => {
+    await page.key("F10", "alt");
+    expect(await page.active()).toBe("Block actions");
+    await page.key("Escape");
+    await page.waitFor(`document.activeElement?.id==='description'`);
+  });
+  await test.step("⇧F10 opens the block menu; Duplicate copies the block", async () => {
+    await page.key("F10", "shift");
+    await page.waitFor(`!!document.querySelector('[aria-label="Block menu"]')`);
+    await page.eval(
+      `[...document.querySelectorAll('[aria-label="Block menu"] [cmdk-item]')].find(n=>n.textContent.startsWith('Duplicate')).click()`,
+    );
+    await page.waitFor(`document.getElementById('description').children.length===${before.length + 1}`);
+    expect((await blocks()).slice(0, 2)).toEqual([before[0], before[0]]);
+  });
+  await test.step("⌥↓ moves the block below its neighbours", async () => {
+    await page.waitFor(`document.activeElement?.id==='description'`);
+    await page.key("ArrowDown", "alt");
+    await page.key("ArrowDown", "alt");
+    await page.waitFor(`document.getElementById('description').children[1].textContent===${JSON.stringify(before[1]!.replace(/^[A-Z0-9]+:/, ""))}`);
+    expect((await blocks())[2]).toBe(before[0]);
+  });
+});
