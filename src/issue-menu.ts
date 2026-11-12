@@ -13,7 +13,7 @@ import {
 import { canHaveChildren, needsParent } from "./issue-properties";
 import { createIssueDocument } from "./issue-resources";
 import { shortcutLabel, canRunShortcut, runShortcut } from "./shortcuts";
-import { copyIssue, copyKinds, copyIcons, copyShortcuts, type CopyKind } from "./issue-copy";
+import { copyIssue, copyKinds, copyIcons, copyShortcuts } from "./issue-copy";
 import { reminderEntries } from "./reminders";
 import { duePresets } from "./due-date";
 import { post } from "./commands";
@@ -35,6 +35,9 @@ export type IssueMenuDialog =
   | "pull-request"
   | "history"
   | "rename";
+/** A menu's "create sub-issue" acts on the menu's issue, never the selection: closing the menu clears its target. */
+export const createSubIssue = (issue: Issue) =>
+  requestAnimationFrame(() => runShortcut("sub-issue", issue.key));
 export function issueMenuEntries(
   issue: Issue,
   {
@@ -48,10 +51,6 @@ export function issueMenuEntries(
   },
 ): ActionEntry[] {
   const parent = issue.parent ? get().issues.get(issue.parent) : undefined;
-  const copy = async (kind: CopyKind) => {
-    await copyIssue(kind, issue);
-    close();
-  };
   const favorite = get().favorites.includes(issue.key),
     keys = (id: string) => shortcutLabel(id) || undefined;
   const open = (overlay: "due" | "reminder" | "relations") => openDialog(overlay);
@@ -143,9 +142,7 @@ export function issueMenuEntries(
                 shortcut: keys("sub-issue"),
                 run: () => {
                   close();
-                  if (presentation === "sub-issue")
-                    beginCreate({ parent: issue.key, project: issue.project });
-                  else requestAnimationFrame(() => runShortcut("sub-issue"));
+                  createSubIssue(issue);
                 },
               },
             ]
@@ -227,7 +224,8 @@ export function issueMenuEntries(
         name: `Copy ${kind}`,
         icon: copyIcons[kind],
         shortcut: keys(copyShortcuts[kind] ?? ""),
-        run: () => void copy(kind),
+        // ActionMenu already closed; closing again after the await would close whatever menu opened meanwhile.
+        run: () => void copyIssue(kind, issue),
       })),
     },
     {

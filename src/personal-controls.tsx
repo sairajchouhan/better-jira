@@ -5,7 +5,7 @@ import { Shortcut, Keycap } from "./keycap";
 import { Dialog } from "./dialog";
 import { TextInput } from "./field";
 import { Button, IconButton } from "./button";
-import { issueMenuEntries } from "./issue-menu";
+import { createSubIssue, issueMenuEntries } from "./issue-menu";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
 /* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { SubIssues, statusOf } from "./sub-issues";
@@ -74,7 +74,6 @@ import { MenuSurface as Modal, issueAnchor } from "./menu-surface";
 import { IssueResources, ResourceForm } from "./issue-resources";
 import { ReactionPicker, shortcode } from "./reactions";
 import { PropertyPill } from "./pill-select";
-import { runShortcut } from "./shortcuts";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { kept, post, useCommand } from "./commands";
 
@@ -1197,7 +1196,7 @@ export function Relations({
       : kind === "child" && !query && canHaveChildren(get(), issue)
         ? () => {
             close();
-            requestAnimationFrame(() => runShortcut("sub-issue"));
+            createSubIssue(issue);
           }
         : null;
   const row = (i: Issue, group: string) => (
