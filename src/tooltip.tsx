@@ -97,12 +97,17 @@ export function Tooltips() {
       style={{ left: tip.x, top: tip.y, transform: tip.above ? "translateY(-100%)" : undefined }}
     >
       {tip.text}
-      {/* Linear's tooltip shortcut is the small bordered b4 (`qr` size small). */}
-      {tip.keys.map((key, index) => (
-        <Keycap key={index} size="small">
-          {key}
-        </Keycap>
-      ))}
+      {/* Linear's tooltip shortcut (Aze) is b4 at size small: its caps sit in D4's container, 3px apart. The title already spells
+          the caps in display order, so they are drawn as given rather than re-derived from a chord. */}
+      {tip.keys.length > 0 && (
+        <span className="ui-shortcut">
+          {tip.keys.map((key, index) => (
+            <Keycap key={index} size="small">
+              {key}
+            </Keycap>
+          ))}
+        </span>
+      )}
     </div>
   );
 }
