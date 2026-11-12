@@ -192,11 +192,15 @@ export function Sidebar({ boards }: { boards: Board[] }) {
 /** Linear's 28px bottom bar under the sidebar and panel; ours carries the perf readout and the local-only note. */
 /** Linear's delete dialog instead of a native confirm. Jira deletes the issue's subtasks with it (deleteSubtasks=true), so it names them. */
 export function DeleteConfirm() {
-  const key = useStore((s) => s.deleting),
-    issue = useStore((s) => (s.deleting ? s.issues.get(s.deleting) : undefined)),
+  const key = useStore((s) => s.deleting);
+  // Mounted only while deleting, so a Jira poll doesn't re-render the closed dialog.
+  return key ? <DeleteDialog issueKey={key} /> : null;
+}
+function DeleteDialog({ issueKey: key }: { issueKey: string }) {
+  const issue = useStore((s) => s.issues.get(key)),
     issues = useStore((s) => s.issues),
     types = useStore((s) => s.options.types);
-  if (!key || !issue) return null;
+  if (!issue) return null;
   const levels = types?.[issue.project?.key ?? ""];
   // Subtasks go with the issue; an epic's own children (level 0 and up) stay in Jira, unparented.
   const subtasks = [...issues.values()].filter(
@@ -414,6 +418,18 @@ const SideItem = ({
 // Linear's pill button: 28px, 0.5px ring drawn as a shadow, 12px/500.
 const PILL =
   "flex h-7 shrink-0 items-center gap-1.5 rounded-full border-[0.5px] border-transparent px-2.5 text-[12px] font-medium";
+/** A team tab: the scope tabs (Active, Backlog, All issues) and saved tab views are the same pill. */
+function ViewTab({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      aria-pressed={on}
+      onClick={onClick}
+      className={`${PILL} ${on ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2"}`}
+    >
+      {children}
+    </button>
+  );
+}
 const CIRCLE =
   "flex h-7 min-w-7 shrink-0 items-center rounded-full bg-btn text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2";
 
@@ -551,16 +567,15 @@ export function BoardHeader() {
           controls into its card, so a custom draft collapses the row. */}
       <div className={`flex flex-wrap items-center gap-1 px-2 ${custom && draft ? "" : "min-h-[43.5px] py-1"}`}>
         {!custom && (["active", "backlog", "all"] as const).map((scope) => (
-          <button
+          <ViewTab
             key={scope}
-            aria-pressed={!activeView && !draft && prefs.scope === scope}
+            on={!activeView && !draft && prefs.scope === scope}
             onClick={() => { navigate({ board: board!.id, selected: null, panel: false }); setScope(board!.id, scope); }}
-            className={`${PILL} ${!activeView && !draft && prefs.scope === scope ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2"}`}
           >
             {scope === "active" ? "Active" : scope === "backlog" ? "Backlog" : "All issues"}
-          </button>
+          </ViewTab>
         ))}
-        {!custom && savedViews.filter(v => v.board === board!.id && v.kind === "tab").map(view => { const on = activeView?.id === view.id || draft?.id === view.id; return <ViewContextMenu key={view.id} view={view}><button aria-pressed={on} onClick={() => openSavedView(view)} className={`${PILL} ${on ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover"}`}>{view.name}</button></ViewContextMenu>; })}
+        {!custom && savedViews.filter(v => v.board === board!.id && v.kind === "tab").map(view => <ViewContextMenu key={view.id} view={view}><ViewTab on={activeView?.id === view.id || draft?.id === view.id} onClick={() => openSavedView(view)}>{view.name}</ViewTab></ViewContextMenu>)}
         {/* Linear swaps Add new view for the draft tab while a new tab view is being made. */}
         {draft && !draft.id && draft.kind === "tab" ? <span aria-current="page" className={`${PILL} bg-tab-on text-fg-3 shadow-(--tab-on-shadow)`}><SavedViewIcon view={draft} />{draft.name.trim() || "New view"}<Icon name="pencil" size={12} /></span>
           : !custom && !draft && <button className={`${PILL} text-fg-3 hover:bg-hover`} onClick={() => openViewEditor(createViewDraft("tab"))}><Icon name="plus" size={14} />Add new view</button>}
