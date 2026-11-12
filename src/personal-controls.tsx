@@ -343,26 +343,25 @@ const issueTypes = (issue: Issue, options: JiraOptions, issues: Issue[]) =>
   typeChoices(
     issue.type,
     options.types?.[issue.project?.key ?? ""],
-    issues.flatMap((i) => (i.type && i.project?.key === issue.project?.key ? [i.type] : [])),
+    issues.flatMap((i) => (i.board === issue.board && i.type && i.project?.key === issue.project?.key ? [i.type] : [])),
   );
 export type IssueField =
   "status" | "assignee" | "priority" | "type" | "labels" | "project" | "milestone" | "due";
-/** Routing adapter: each property owns its menu; this only binds it to an issue. */
-export function PropertyPicker({
-  issue,
-  field,
-  anchor: trigger,
-  close: done,
-}: {
-  issue: Issue;
-  field: IssueField;
-  anchor?: HTMLElement;
-  close?: () => void;
+type IssueMenuProps = { issue: Issue; anchor: HTMLElement | null; close: () => void };
+const issueFieldMenus = {
+  status: IssueStatusMenu,
+  assignee: IssueAssigneeMenu,
+  priority: IssuePriorityMenu,
+  type: IssueTypeMenu,
+  labels: IssueLabelsMenu,
+  project: IssueProjectMenu,
+  milestone: IssueMilestoneMenu,
+  due: IssueDueMenu,
+};
+/** Route before mounting the adapter so only the selected field subscribes. */
+export function PropertyPicker({ issue, field, anchor: trigger, close: done }: {
+  issue: Issue; field: IssueField; anchor?: HTMLElement; close?: () => void;
 }) {
-  const all = useStore((s) => s.issues);
-  const options = useStore((s) => s.options);
-  const writable = useStore((s) => s.writable);
-  const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
   const [anchor] = useState(
     () =>
       trigger ??
@@ -372,70 +371,100 @@ export function PropertyPicker({
         ? document.activeElement
         : issueAnchor(`prop-${field}`, issue.key)),
   );
-  const props = {
-    board,
-    anchor,
-    close: done ?? (() => ui.send({ type: "overlay.close" })),
-  };
-  const patch = (value: Partial<Issue>) => actions.patch(issue.key, value);
-  const menus = {
-    status: (
-      <StatusMenu
+  const FieldMenu = issueFieldMenus[field];
+  return <FieldMenu issue={issue} anchor={anchor} close={done ?? (() => ui.send({ type: "overlay.close" }))} />;
+}
+
+function IssueStatusMenu({ issue, anchor, close }: IssueMenuProps) {
+  const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
+  const props = { board, anchor, close };
+  return (<StatusMenu
         {...props}
         value={issue.status}
         onChange={(status) => actions.status(issue.key, status)}
-      />
-    ),
-    assignee: (
-      <AssigneeMenu
+      />);
+}
+
+function IssueAssigneeMenu({ issue, anchor, close }: IssueMenuProps) {
+  const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
+  const props = { board, anchor, close };
+  return (<AssigneeMenu
         {...props}
         value={issue.assignee ?? null}
         onChange={(assignee) => actions.assign(issue.key, assignee)}
-      />
-    ),
-    priority: (
-      <PriorityMenu
+      />);
+}
+
+function IssuePriorityMenu({ issue, anchor, close }: IssueMenuProps) {
+  const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
+  const props = { board, anchor, close };
+  const patch = (value: Partial<Issue>) => actions.patch(issue.key, value);
+  return (<PriorityMenu
         {...props}
         value={issue.priority ?? ""}
         onChange={(priority) => patch({ priority: priority || undefined })}
-      />
-    ),
-    type: (
-      <TypeMenu
+      />);
+}
+
+function IssueTypeMenu({ issue, anchor, close }: IssueMenuProps) {
+  const all = useStore((s) => s.issues);
+  const options = useStore((s) => s.options);
+  const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
+  const props = { board, anchor, close };
+  const patch = (value: Partial<Issue>) => actions.patch(issue.key, value);
+  return (<TypeMenu
         {...props}
         value={issue.type ?? ""}
         choices={issueTypes(
           issue,
           options,
-          [...all.values()].filter((i) => i.board === issue.board),
+          [...all.values()],
         )}
         onChange={(type) => {
           if (type !== issue.type) patch({ type });
         }}
-      />
-    ),
-    labels: <LabelsMenu {...props} value={issue.labels} onChange={(labels) => patch({ labels })} />,
-    project: (
-      <ProjectMenu
+      />);
+}
+
+function IssueLabelsMenu({ issue, anchor, close }: IssueMenuProps) {
+  const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
+  const props = { board, anchor, close };
+  const patch = (value: Partial<Issue>) => actions.patch(issue.key, value);
+  return (<LabelsMenu {...props} value={issue.labels} onChange={(labels) => patch({ labels })} />);
+}
+
+function IssueProjectMenu({ issue, anchor, close }: IssueMenuProps) {
+  const writable = useStore((s) => s.writable);
+  const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
+  const props = { board, anchor, close };
+  const patch = (value: Partial<Issue>) => actions.patch(issue.key, value);
+  return (<ProjectMenu
         {...props}
         value={issue.project}
         choices={writable ? (issue.project ? [issue.project] : []) : undefined}
         onChange={(project) => {
           if (project?.key !== issue.project?.key) patch({ project, milestones: [] });
         }}
-      />
-    ),
-    milestone: (
-      <MilestoneMenu
+      />);
+}
+
+function IssueMilestoneMenu({ issue, anchor, close }: IssueMenuProps) {
+  const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
+  const props = { board, anchor, close };
+  const patch = (value: Partial<Issue>) => actions.patch(issue.key, value);
+  return (<MilestoneMenu
         {...props}
         project={issue.project?.key}
         value={issue.milestones ?? []}
         onChange={(milestones) => patch({ milestones })}
-      />
-    ),
-    due: <DueMenu {...props} value={issue.due ?? null} onChange={(due) => patch({ due })} />,
-  };
-  return menus[field];
+      />);
+}
+
+function IssueDueMenu({ issue, anchor, close }: IssueMenuProps) {
+  const board = undefined;
+  const props = { board, anchor, close };
+  const patch = (value: Partial<Issue>) => actions.patch(issue.key, value);
+  return (<DueMenu {...props} value={issue.due ?? null} onChange={(due) => patch({ due })} />);
 }
 
 export function BoardDetails({ board, issues }: { board: Board; issues: Issue[] }) {
