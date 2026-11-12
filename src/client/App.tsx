@@ -28,7 +28,6 @@ import {
   StorageNotice,
   BoardHeader,
 } from "@/client/features/navigation/app-chrome";
-import { StatusPicker, AssignPicker } from "@/client/features/issue/issue-pickers";
 import { IssueSearch, CommandPalette, HelpMenu, isPalettePage } from "@/client/features/navigation/palette";
 function Hotkeys() {
   useLinearHotkeys();
@@ -127,8 +126,8 @@ function Shell({ children }: { children: ReactNode }) {
       {overlay === "add-board" && <AddBoard />}
       {overlay === "help" && <HelpMenu />}
       {overlay !== "help" && isPalettePage(overlay) && <CommandPalette page={overlay} />}
-      {overlay === "assign" && target && <AssignPicker issueKey={target} />}
-      {overlay === "status" && target && <StatusPicker issueKey={target} />}
+      {current && overlay === "assign" && <PropertyPicker issue={current} field="assignee" />}
+      {current && overlay === "status" && <PropertyPicker issue={current} field="status" />}
       {overlay === "create" && <CreateIssue />}
       {current &&
         (overlay === "priority" ||

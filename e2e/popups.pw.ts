@@ -150,12 +150,14 @@ test("toolbar popups: Filter, Display and the chip row + open at Linear's offset
 test("MenuSurface: below its anchor, flipped above near the bottom, centred under 600px, and at a point inside the edges", async ({
   open,
 }) => {
-  const page = await open();
+  const page = await open("?issue=TEST-2");
   const STATUS = dialog("Change status");
-  const card = `[data-key][data-selected]`;
+  // The open issue's Status property: S anchors there (a card or row opens the command menu instead, ISSUE-11).
+  const card = "#prop-status";
+  await page.waitFor(`!!document.querySelector('${card}')`);
 
-  await test.step("S on a card (PropertyMenu, gap 4.5): 4.5px under it, left edges flush; Tab stays in; Esc returns focus to where it was", async () => {
-    await page.keys("jj");
+  await test.step("S on the open issue (PropertyMenu, gap 4.5): 4.5px under its Status button, left edges flush; Tab stays in; Esc returns focus to where it was", async () => {
+    await page.eval("document.activeElement?.blur()");
     const before = await focused(page);
     await page.key("s");
     await page.waitFor(`document.activeElement?.placeholder==="Change status…"`);
@@ -169,7 +171,7 @@ test("MenuSurface: below its anchor, flipped above near the bottom, centred unde
     expect(await focused(page)).toBe(before);
   });
 
-  await test.step("near the bottom it flips above the card, 4.5px over it", async () => {
+  await test.step("near the bottom it flips above the button, 4.5px over it", async () => {
     const anchor = await rect(page, card);
     await page.page.setViewportSize({ width: 1440, height: Math.ceil(anchor.bottom + 40) });
     await sleep(100);

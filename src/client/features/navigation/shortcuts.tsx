@@ -73,29 +73,30 @@ const selected = (s = get()) => {
   const key = acting ?? (s.overlay && s.target) ?? (!s.document && s.selected);
   return key ? s.issues.get(key) : undefined;
 };
-/** Linear: an issue shortcut acts on the sub-issue row under the pointer or keyboard focus, as its row menu's hints promise. */
+/** Linear: an issue shortcut acts on the row under the pointer or keyboard focus, as its row menu's hints promise: a sub-issue row
+ *  (its section answers the command), else a board card or list row (IssueTarget's `data-key`, ISSUE-10). */
 const hoveredRow = () => {
-  const key = command("hovered-sub-issue");
+  const key =
+    command("hovered-sub-issue") ??
+    globalThis.document?.querySelector<HTMLElement>("[data-key][role=button]:hover")?.dataset.key;
   return key ? get().issues.get(key) : undefined;
 };
 const lastViewed = (s: State) =>
   recentIssues().map((key) => s.issues.get(currentKey(key))).find((i) => i && i.key !== s.selected);
 const viewOf = (s: State) => s.savedViews.find((v) => v.id === s.activeViewId);
-/** A menu's own issue (`runShortcut(id, key)`) wins over the row under the pointer, as in `overlay()`. */
-const target = () => {
-  const issue = selected();
-  return issue && !acting ? (hoveredRow() ?? issue) : issue;
-};
+/** A menu's own issue (`runShortcut(id, key)`) wins over the row under the pointer, which wins over the selection, as in
+ *  `overlay()`; a hovered card needs no selection (ISSUE-10). */
+const target = () => (!acting && hoveredRow()) || selected();
 const issueAction = (fn: (issue: Issue) => void) => () => {
   const issue = target();
   if (issue) fn(issue);
 };
 const overlay = (value: NonNullable<Overlay>) => () => {
-  ui.send({
-    type: "overlay.open",
-    overlay: value,
-    target: selected() ? (acting ?? hoveredRow()?.key ?? null) : null,
-  });
+  ui.send({ type: "overlay.open", overlay: value, target: null });
+};
+/** An issue's picker or menu, on the issue `target()` acts on when that isn't the selection. */
+const issueOverlay = (value: NonNullable<Overlay>) => () => {
+  ui.send({ type: "overlay.open", overlay: value, target: acting ?? hoveredRow()?.key ?? null });
 };
 /** Open the issue and keep the intent, for that issue only, until its field owner mounts. */
 const focus = (name: "focus-title" | "focus-comment" | "edit-description" | "change-subscribers") =>
@@ -504,7 +505,7 @@ export const shortcuts: Shortcut[] = [
     ...(id === "project"
       ? { when: (s: State, issue?: Issue) => !s.writable || isLocalIssue(issue?.key ?? "") }
       : {}),
-    run: overlay(value),
+    run: issueOverlay(value),
   })),
   {
     id: "assign-me",
@@ -607,7 +608,7 @@ export const shortcuts: Shortcut[] = [
     run: () => {
       post("issue-options-start", "link");
       navigate({ panel: true });
-      overlay("options")();
+      issueOverlay("options")();
     },
   },
   {

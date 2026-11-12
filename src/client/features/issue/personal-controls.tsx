@@ -65,7 +65,8 @@ import {
 } from "@/client/features/views/view-settings";
 
 export { MenuSurface as Modal } from "@/client/components/menu-surface";
-import { MenuSurface as Modal, issueAnchor } from "@/client/components/menu-surface";
+import { MenuSurface as Modal } from "@/client/components/menu-surface";
+import { CommandTarget } from "@/client/components/command-menu";
 import { IssueResources, ResourceForm } from "./issue-resources";
 import { ReactionPicker, ReactionPill } from "@/client/features/comments/reactions";
 import { PropertyPill } from "@/client/components/pill-select";
@@ -539,7 +540,19 @@ const issueFieldMenus = {
   milestone: IssueMilestoneMenu,
   due: IssueDueMenu,
 };
-/** Route before mounting the adapter so only the selected field subscribes. */
+/** The open issue's property button a picker opens beside: the focused label chip for labels, else its `prop-<field>` row.
+ *  Any other target (a shortcut over a board card, list row or sub-issue row) has none, and Linear opens its command menu. */
+function propertyButton(field: IssueField, key: string): HTMLElement | null {
+  const s = get();
+  if (!s.panel || s.document || s.selected !== key) return null;
+  const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const button =
+    (field === "labels" && focused?.closest("[data-properties]") ? focused : null) ??
+    document.getElementById(`prop-${field}`);
+  return button?.getClientRects().length ? button : null;
+}
+/** Route before mounting the adapter so only the selected field subscribes. Beside `anchor` (a property button that opened it) or
+ *  the open issue's property button; otherwise Linear's command menu on the issue (ISSUE-11). */
 export function PropertyPicker({
   issue,
   field,
@@ -551,23 +564,16 @@ export function PropertyPicker({
   anchor?: HTMLElement;
   close?: () => void;
 }) {
-  const [anchor] = useState(
-    () =>
-      trigger ??
-      (field === "labels" &&
-      document.activeElement instanceof HTMLElement &&
-      document.activeElement.closest("[data-properties]")
-        ? document.activeElement
-        : issueAnchor(`prop-${field}`, issue.key)),
-  );
+  const [anchor] = useState(() => trigger ?? propertyButton(field, issue.key));
   const FieldMenu = issueFieldMenus[field];
-  return (
+  const menu = (
     <FieldMenu
       issue={issue}
       anchor={anchor}
       close={done ?? (() => ui.send({ type: "overlay.close" }))}
     />
   );
+  return anchor ? menu : <CommandTarget issue={issue}>{menu}</CommandTarget>;
 }
 
 function IssueStatusMenu({ issue, anchor, close }: IssueMenuProps) {

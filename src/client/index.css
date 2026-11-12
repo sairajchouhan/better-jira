@@ -2231,6 +2231,53 @@ li[data-done="true"] > .todo-content {
   color: var(--menu-fg);
 }
 
+/* Linear's command menu for a picker on one issue (components/command-menu.tsx; WK and its sizes VK in startup-root.CnUSfl4j.js):
+   a 34px title row whose 26px issue chip sits 14px in, a 46px search with no hairline, and 46px rows whose highlight is inset
+   2px top and bottom (ITEM_VERTICAL_PADDING) and 6px at the sides (LIST_PADDING). */
+.command-menu {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+.command-menu-title {
+  display: flex;
+  height: 34px;
+  flex-shrink: 0;
+  align-items: flex-end;
+  padding: 0 14px;
+}
+.command-menu-chip {
+  display: flex;
+  height: 26px;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  border-radius: 6px;
+  background: var(--menu-sel);
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--menu-fg);
+}
+.command-menu-key {
+  flex-shrink: 0;
+  color: var(--menu-fg-3);
+}
+.command-menu .menu-input {
+  border-bottom: 0;
+  padding: 0 20px;
+}
+.command-menu .menu-input input {
+  height: 46px;
+  font-size: 15px;
+}
+.command-menu .menu-item {
+  height: 46px;
+  padding: 0 20px;
+}
+.command-menu .menu-item::before {
+  inset: 2px 6px;
+}
+
 /* The video toolbar keeps its own player chrome (index.css `.video-controls button`): Linear's player isn't in
    the bundle, so there is no value to move it to. Its glyphs stay 16px inside the medium IconButton. */
 .video-controls .ui-button-icon > svg {

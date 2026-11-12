@@ -8,19 +8,48 @@ test("board menus: status, create, due date, palette toggle and selection look",
   open,
 }) => {
   const page = await open();
-  await test.step("R1: S on a keyboard-selected card opens the status picker on screen, beside the card", async () => {
-    await page.keys("jj");
+  await test.step("ISSUE-10: S, A, P and L act on the hovered card, with nothing selected or another card selected", async () => {
+    const hovered = await page.eval<string>(
+      `[...document.querySelectorAll("[data-key][role=button]")].filter(n=>n.getClientRects().length)[2].dataset.key`,
+    );
+    await page.hover(`[data-key="${hovered}"]`);
+    for (const [key, label] of [
+      ["s", "Change status"],
+      ["a", "Assign issue"],
+      ["p", "Set priority"],
+      ["l", "Change labels"],
+    ] as const) {
+      await page.key(key);
+      await page.waitFor(`!!document.querySelector('${dialog(label)} .command-menu-key')`);
+      expect(await page.eval(`document.querySelector('${dialog(label)} .command-menu-key').textContent`)).toBe(hovered);
+      await page.key("Escape");
+      await page.waitFor(`!document.querySelector('${dialog(label)}')`);
+    }
+    await page.keys("j");
+    expect(await page.eval(`document.querySelector("[data-selected]")?.dataset.key`)).not.toBe(hovered);
+    await page.key("s");
+    await page.waitFor(`!!document.querySelector('${dialog("Change status")} .command-menu-key')`);
+    expect(await page.eval(`document.querySelector('${dialog("Change status")} .command-menu-key').textContent`)).toBe(hovered);
+    await page.key("Escape");
+    await page.waitFor(`!document.querySelector('${dialog("Change status")}')`);
+    await page.page.mouse.move(5, 895);
+  });
+  await test.step("ISSUE-11: S on a keyboard-selected card opens Linear's command menu: centred, 720px, the issue's chip, 46px search and rows", async () => {
+    await page.keys("j");
+    const key = await page.eval<string>(`document.querySelector("[data-selected]").dataset.key`);
     await page.key("s");
     await page.waitFor(`!!document.querySelector('${dialog("Change status")}')`);
     await sleep(100);
     expect(await page.eval(inViewport("Change status"))).toBe(true);
-    const [card, menu] = await page.eval<DOMRect[]>(
-      `[document.querySelector("[data-selected]"),document.querySelector('${dialog("Change status")}')].map(n=>n.getBoundingClientRect().toJSON())`,
+    const [menu, input, row] = await page.eval<DOMRect[]>(
+      `${JSON.stringify([dialog("Change status"), `${dialog("Change status")} input`, `${dialog("Change status")} [cmdk-item]`])}.map(s=>document.querySelector(s).getBoundingClientRect().toJSON())`,
     );
-    expect(Math.abs(menu!.left - card!.left)).toBeLessThan(40);
-    expect(
-      Math.min(Math.abs(menu!.top - card!.bottom), Math.abs(menu!.bottom - card!.top)),
-    ).toBeLessThan(20);
+    expect(menu!.width).toBe(720);
+    expect(Math.abs(menu!.left + menu!.width / 2 - 720)).toBeLessThan(1);
+    expect([input!.height, row!.height]).toEqual([46, 46]);
+    expect(await page.eval(`document.querySelector('${dialog("Change status")} .command-menu-chip').textContent`)).toMatch(
+      new RegExp(`^${key}·`),
+    );
     expect(await page.active()).toBe("Change status…");
     await page.key("Escape");
     await page.waitFor(`!document.querySelector('${dialog("Change status")}')`);

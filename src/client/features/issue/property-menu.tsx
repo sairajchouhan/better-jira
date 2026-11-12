@@ -19,9 +19,11 @@ const DateInput = lazy(() => import("./date-input").then((m) => ({ default: m.Da
 import type { ReactNode } from "react";
 import { Menu } from "@/client/components/menu";
 import { MenuSurface } from "@/client/components/menu-surface";
+import { CommandMenu, useCommandTarget } from "@/client/components/command-menu";
 
-/** Linear's property menu (RAJ-52 status, priority, assignee and labels): 208px wide, a 36px filter with the key that opens it at its right,
- *  rows 6px below. With an empty filter, a row's number key picks it, as in Linear. */
+/** Linear's property menu (RAJ-52 status, priority, assignee and labels): 208px wide beside the open issue's property button, a 36px
+ *  filter with the key that opens it at its right, rows 6px below. Inside a `CommandTarget` (a shortcut over a card or row) the same
+ *  menu is Linear's command menu on that issue instead (ISSUE-11). With an empty filter, a row's number key picks it, as in Linear. */
 export function PropertyMenu({
   label,
   placeholder,
@@ -48,46 +50,54 @@ export function PropertyMenu({
   onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
   children: ReactNode;
 }) {
-  return (
-    <MenuSurface label={label} anchor={anchor} close={close} fit gap={4.5} side={side}>
-      <Menu
-        defaultValue={current}
-        style={{ width: 206 }}
-        onKeyDown={(event) => {
-          onKeyDown?.(event);
-          if (event.defaultPrevented) return;
-          const input = event.target instanceof HTMLInputElement ? event.target : null;
-          if (
-            /^\d$/.test(event.key) &&
-            !event.metaKey &&
-            !event.ctrlKey &&
-            !event.altKey &&
-            input &&
-            !input.value
-          ) {
-            const row = event.currentTarget.querySelector<HTMLElement>(
-              `[cmdk-item][data-number="${event.key}"]`,
-            );
-            if (row) {
-              event.preventDefault();
-              row.click();
-            }
+  const target = useCommandTarget();
+  const menu = (
+    <Menu
+      defaultValue={current}
+      style={target ? undefined : { width: 206 }}
+      onKeyDown={(event) => {
+        onKeyDown?.(event);
+        if (event.defaultPrevented) return;
+        const input = event.target instanceof HTMLInputElement ? event.target : null;
+        if (
+          /^\d$/.test(event.key) &&
+          !event.metaKey &&
+          !event.ctrlKey &&
+          !event.altKey &&
+          input &&
+          !input.value
+        ) {
+          const row = event.currentTarget.querySelector<HTMLElement>(
+            `[cmdk-item][data-number="${event.key}"]`,
+          );
+          if (row) {
+            event.preventDefault();
+            row.click();
           }
-        }}
-      >
-        <Menu.Input
-          autoFocus
-          placeholder={placeholder}
-          aria-label={placeholder}
-          hotkey={hotkey}
-          value={query}
-          onValueChange={onQuery}
-        />
-        <Menu.List maxHeight="min(400px,calc(100vh - 80px))">
-          <Menu.Empty>No results</Menu.Empty>
-          {children}
-        </Menu.List>
-      </Menu>
+        }
+      }}
+    >
+      <Menu.Input
+        autoFocus
+        placeholder={placeholder}
+        aria-label={placeholder}
+        hotkey={target ? undefined : hotkey}
+        value={query}
+        onValueChange={onQuery}
+      />
+      <Menu.List maxHeight="min(400px,calc(100vh - 80px))">
+        <Menu.Empty>No results</Menu.Empty>
+        {children}
+      </Menu.List>
+    </Menu>
+  );
+  return target ? (
+    <CommandMenu label={label} issue={target} close={close}>
+      {menu}
+    </CommandMenu>
+  ) : (
+    <MenuSurface label={label} anchor={anchor} close={close} fit gap={4.5} side={side}>
+      {menu}
     </MenuSurface>
   );
 }
