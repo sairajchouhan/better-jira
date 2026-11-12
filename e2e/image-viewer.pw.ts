@@ -82,14 +82,14 @@ test("image preview: layered Escape, zoom, pan within edges, and copying link an
     await page.click('#description [aria-label="Full screen"]');
     await page.click('[aria-label="Preview"] [aria-label="Copy link"]');
     await page.waitFor(
-      `document.querySelector('.image-preview-notice')?.textContent==='Link copied'`,
+      `document.querySelector('[aria-label="Notifications"]')?.textContent.includes('Link copied')`,
     );
     expect(await page.eval(`navigator.clipboard.readText()`)).toBe(
       `${fixture.url}api/issues/TEST-2/attachments/102`,
     );
     await page.click('[aria-label="Preview"] [aria-label="Copy image"]');
     await page.waitFor(
-      `document.querySelector('.image-preview-notice')?.textContent==='Image copied'`,
+      `document.querySelector('[aria-label="Notifications"]')?.textContent.includes('Image copied')`,
     );
     expect(
       await page.eval(
@@ -103,14 +103,14 @@ test("image preview: layered Escape, zoom, pan within edges, and copying link an
     await page.waitFor(`${preview}?.naturalWidth===319`);
     await page.click('[aria-label="Preview"] [aria-label="Copy link"]');
     await page.waitFor(
-      `document.querySelector('.image-preview-notice')?.textContent==='Link copied'`,
+      `document.querySelector('[aria-label="Notifications"]')?.textContent.includes('Link copied')`,
     );
     expect(await page.eval(`navigator.clipboard.readText()`)).toBe(
       `${fixture.url}api/issues/TEST-2/attachments/102`,
     );
     await page.click('[aria-label="Preview"] [aria-label="Copy image"]');
     await page.waitFor(
-      `document.querySelector('.image-preview-notice')?.textContent==='Image copied'`,
+      `document.querySelector('[aria-label="Notifications"]')?.textContent.includes('Image copied')`,
     );
     expect(
       await page.eval(
@@ -373,7 +373,7 @@ test("image comment threads: drafts, Escape after mouse Submit, and external ima
     await page.hover(`${external} img`);
     await page.waitFor(`document.querySelector('${external} img')?.naturalWidth===320`, 15000);
     await page.waitFor(
-      `document.querySelector('${external} [aria-label="Copy image"]')?.title.includes('cannot be read')`,
+      `document.querySelector('${external} [aria-label="Copy image"]')?.getAttribute('aria-description')?.includes('cannot be read')`,
     );
     expect(
       await page.eval(`document.querySelector('${external} [aria-label="Copy image"]').disabled`),
@@ -460,7 +460,7 @@ test("an image comment keeps its image thumbnail in Activity after the image is 
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Edit image comment'`);
     await page.key("a", "meta");
     await page.type("Edited after removal");
-    await page.click(`${card} form button:not([type])`);
+    await page.click(`${card} form button[type=submit]`);
     await page.waitFor(
       `document.querySelector('${card}').textContent.includes('Edited after removal')&&document.activeElement?.getAttribute('aria-label')==='Comment options'`,
     );
