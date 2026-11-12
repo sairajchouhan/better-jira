@@ -15,11 +15,27 @@ test("keyboard help, Linear sequences, and no shortcuts while typing", async ({ 
   await test.step("Linear help uses Mod+/ and ? opens Help; reference searches supported bindings", async () => {
     await p.key("/", "meta");
     await p.waitFor(`!!document.querySelector('${dialog("Keyboard Shortcuts")}')`);
+    const panel = `document.querySelector('${dialog("Keyboard Shortcuts")}')`;
+    // 6.7: Linear's right-side panel: 360px, 12px inside the top, right and bottom edges, General first.
+    await p.waitFor(`getComputedStyle(${panel}).opacity==='1'&&${panel}.getBoundingClientRect().left+360+12===innerWidth`);
+    expect(
+      await p.eval(`(({top,bottom,width})=>[top,innerHeight-bottom,width])(${panel}.getBoundingClientRect())`),
+    ).toEqual([12, 12, 360]);
+    expect(await p.eval(`${panel}.querySelector('section h2').textContent`)).toBe("General");
+    expect(await p.eval(`[...${panel}.querySelectorAll('section:first-child dt')].slice(0,3).map(n=>n.textContent)`)).toEqual([
+      "Open command menu",
+      "Back / clear selection",
+      "Open search",
+    ]);
     await p.type("due date");
-    const text = `document.querySelector('${dialog("Keyboard Shortcuts")}').textContent`;
+    const text = `${panel}.textContent`;
     expect(await p.eval(text)).toContain("Set due date");
     expect(await p.eval(text)).not.toContain("Go to projects");
+    // Escape clears the search first, then closes the panel.
     await p.key("Escape");
+    await p.waitFor(`${panel}?.querySelector('input').value===''`);
+    await p.key("Escape");
+    await p.waitFor(`!${panel}`);
     await p.key("?", "shift");
     await p.waitFor(`!!document.querySelector('${dialog("Help")}')`);
     await p.click(`[cmdk-item][data-value="Keyboard shortcuts"]`);

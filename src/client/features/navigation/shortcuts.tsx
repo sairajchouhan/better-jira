@@ -34,10 +34,10 @@ import {
 import { copyIssue, type CopyKind } from "@/client/features/issue/issue-copy";
 import { codeBlockBindings, editorBindings } from "@/client/features/editor/editor-bindings";
 import { Dialog } from "@/client/components/dialog";
-import { Field, TextInput } from "@/client/components/field";
+import { TextInput } from "@/client/components/field";
 import { Shortcut as KeyboardShortcut, type Keys } from "@/client/components/keycap";
 import { Text } from "@/client/components/text";
-import { EmptyState } from "@/client/components/empty-state";
+import { shortcutSections } from "./shortcut-panel";
 import {
   clearFilters as clearInboxFilters,
   deleteAll,
@@ -1047,53 +1047,54 @@ export function ShortcutHelp() {
     );
   });
   return (
-    <Dialog
-      label="Keyboard Shortcuts"
-      width={720}
-      close={() => ui.send({ type: "overlay.close" })}
-    >
-      <Dialog.Header className="mb-3">
+    <Dialog label="Keyboard Shortcuts" placement="side" close={() => ui.send({ type: "overlay.close" })}>
+      <Dialog.Header className="shortcuts-header">
         <Dialog.Title>Keyboard Shortcuts</Dialog.Title>
-        <Dialog.Close label="Close dialog" />
+        <Dialog.Close label="Close dialog" shortcut="Escape" />
       </Dialog.Header>
-      <Text as="p" variant="mini" color="muted" className="mb-3">
-        Issue actions need a selected issue. Editor shortcuts apply while typing. Reordering
-        requires Manual ordering.
-      </Text>
-      <Field className="mb-4">
-        <Field.Label className="sr-only">Search shortcuts</Field.Label>
+      <div className="shortcuts-search">
         <TextInput
           autoFocus
-          placeholder="Search shortcuts…"
+          size="large"
+          aria-label="Search shortcuts"
+          placeholder="Search shortcuts"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          // Linear's Escape clears a search first; the next one closes the panel.
+          onKeyDown={(e) => {
+            if (e.key !== "Escape" || !query) return;
+            e.preventDefault();
+            e.stopPropagation();
+            setQuery("");
+          }}
           className="w-full"
         />
-      </Field>
-      <Dialog.Body className="max-h-[60vh] overflow-y-auto">
-        {[...new Set(matches.map((s) => s.group))].map((group) => (
-          <section key={group} className="mb-5">
-            <Text as="h3" variant="mini" color="muted" className="mb-2">
-              {group}
-            </Text>
-            <dl>
-              {matches
-                .filter((s) => s.group === group)
-                .map((s) => (
-                  <div key={s.id} className="flex items-center gap-3 py-1.5">
-                    <dt className="flex-1">
-                      <Text variant="mini" color="inherit">{s.name}</Text>
+      </div>
+      <div className="shortcuts-content">
+        {matches.length ? (
+          shortcutSections(matches).map(({ group, rows }) => (
+            <section key={group} className="shortcuts-section">
+              <Text as="h2" variant="smallPlus">
+                {group}
+              </Text>
+              <dl>
+                {rows.map((s) => (
+                  <div key={s.id} className="shortcuts-row">
+                    <dt>
+                      <Text variant="smallPlus" color="muted">{s.name}</Text>
                     </dt>
                     <dd>
                       <KeyboardShortcut keys={s.hotkey} />
                     </dd>
                   </div>
                 ))}
-            </dl>
-          </section>
-        ))}
-        {!matches.length && <EmptyState title="No shortcuts found" />}
-      </Dialog.Body>
+              </dl>
+            </section>
+          ))
+        ) : (
+          <Text variant="small" color="faint">No matching shortcuts found</Text>
+        )}
+      </div>
     </Dialog>
   );
 }

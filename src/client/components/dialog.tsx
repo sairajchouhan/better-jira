@@ -15,8 +15,9 @@ export const DIALOG = { WIDTH: 640, CONFIRM_WIDTH: 360 } as const;
 const DialogContext = createContext<{ close: () => void } | null>(null);
 
 type Placement = {
-  /** `top`: 12vh down (the default). `third`: Linear's DialogPresenter, a third of the free height down (see MenuSurface). */
-  placement?: "top" | "third";
+  /** `top`: 12vh down (the default). `third`: Linear's DialogPresenter, a third of the free height down. `side`: a panel along
+   *  the window's right edge (Linear's keyboard shortcuts). See MenuSurface. */
+  placement?: "top" | "third" | "side";
 };
 
 function DialogRoot({
@@ -40,10 +41,11 @@ function DialogRoot({
   );
 }
 
-function Close({ label = "Close" }: { label?: string }) {
+/** `shortcut` names the key that also closes it, in the button's tooltip (Linear's "Close" tooltip with Esc). */
+function Close({ label = "Close", shortcut }: { label?: string; shortcut?: string }) {
   const dialog = use(DialogContext);
   return (
-    <IconButton label={label} variant="muted" onClick={dialog?.close}>
+    <IconButton label={label} tooltip={shortcut ? "Close" : undefined} shortcut={shortcut} variant="muted" onClick={dialog?.close}>
       <Icon name="close" />
     </IconButton>
   );

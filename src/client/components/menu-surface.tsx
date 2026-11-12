@@ -213,6 +213,8 @@ export function Popover({
  *  moved up or left to stay 10px inside the window (Linear, RAJ-52). */
 /** Unanchored, it sits 12vh from the top; `placement="third"` is Linear's DialogPresenter instead (`uo.show`, styles `jY`): spacers
  *  growing 1 and 2 above and below put the dialog a third of the free height down, 16px inside the window at the least. */
+/** `placement="side"` is Linear's keyboard-shortcuts panel (HelpCenter): 360px wide, 12px inside the window's top, right and
+ *  bottom, sliding in from 20px right over the dimmed page. */
 /** `gap` is the space under the anchor; `side="left"` opens beside it instead, top 5.5px above its top (Linear's label menu, RAJ-52); `align="end"` lines up the right edges (its reaction picker). */
 export function MenuSurface({
   label,
@@ -244,7 +246,7 @@ export function MenuSurface({
   point?: { x: number; y: number };
   align?: "end";
   command?: boolean;
-  placement?: "top" | "third";
+  placement?: "top" | "third" | "side";
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const { keys, opener } = usePopupFocus(ref, close, MENU_FOCUS);
@@ -270,6 +272,8 @@ export function MenuSurface({
           top: Math.max(10, Math.min(innerHeight - h - 10, point.y - 1)),
           maxHeight: innerHeight - 20,
         };
+      if (placement === "side")
+        return { position: "fixed", top: 12, right: 12, bottom: 12, width: Math.min(360, innerWidth - 24) };
       if (command) {
         const cw = Math.min(width, innerWidth - 32);
         return {
@@ -342,7 +346,7 @@ export function MenuSurface({
         role="dialog"
         aria-modal="true"
         aria-label={label}
-        className={`overflow-y-auto rounded-xl border border-[var(--menu-line)] bg-[var(--menu)] text-fg-2 shadow-[var(--menu-shadow)] [--sel:var(--menu-sel)] ${fit ? "w-max min-w-[175px] scroll-py-6 max-w-[min(500px,calc(100vw-24px))]" : command ? "flex flex-col overflow-hidden" : "p-3"}`}
+        className={`overflow-y-auto rounded-xl border border-[var(--menu-line)] bg-[var(--menu)] text-fg-2 shadow-[var(--menu-shadow)] [--sel:var(--menu-sel)] ${fit ? "w-max min-w-[175px] scroll-py-6 max-w-[min(500px,calc(100vw-24px))]" : command ? "flex flex-col overflow-hidden" : placement === "side" ? "side-panel flex flex-col overflow-hidden" : "p-3"}`}
         onKeyDown={(e) => {
           if (!((e.metaKey || e.ctrlKey) && ["k", "/"].includes(e.key.toLowerCase())))
             e.stopPropagation(); // ⌘K reaches the app so it can toggle the command menu

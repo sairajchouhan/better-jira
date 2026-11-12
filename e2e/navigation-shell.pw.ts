@@ -75,6 +75,9 @@ test("navigation shell: sidebar, My issues URL, palettes and shortcut search", a
     const found = await page.eval<string[]>(names);
     expect(found).not.toContain("Assign to me");
     expect(found.length).toBeLessThan(5);
+    // Linear's Escape clears the search, then closes the panel.
+    await page.key("Escape");
+    await page.waitFor(`${dialog}.querySelector('input').value===''`);
     await page.key("Escape");
     await page.waitFor(`!${dialog}`);
   });
