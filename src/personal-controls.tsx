@@ -4,6 +4,7 @@ import { useStoredState, writeStored } from "./stored-state";
 import { adfToText } from "./adf";
 import { showNotification } from "./app-notifications";
 import { Text } from "./text";
+import { IssuePeek } from "./issue-peek";
 import { Tabs } from "./tabs";
 import { CountBadge } from "./count-badge";
 import { Shortcut, Keycap } from "./keycap";
@@ -1383,7 +1384,7 @@ export function Relations({ issue }: { issue: Issue }) {
           <Menu.Empty>No matching issues</Menu.Empty>
         </Menu.List>
         </div>
-        {peek && candidate && <IssuePeek issue={candidate} />}
+        {peek && candidate && <IssuePeek issue={candidate} className="border-l border-[var(--menu-line)]" />}
         </div>
         <div className="mark-footer">
           <span>
@@ -1421,36 +1422,6 @@ export function Relations({ issue }: { issue: Issue }) {
       />
     )}
     </>
-  );
-}
-
-/** Quick look in the relations menu: the highlighted issue at Linear's 415px peek width (VK.PEEK_WIDTH). */
-function IssuePeek({ issue }: { issue: Issue }) {
-  const boards = useStore((s) => s.boards);
-  const status = statusOf(boards, issue);
-  return (
-    <aside
-      aria-label="Quick look"
-      className="w-[415px] shrink-0 overflow-y-auto border-l border-[var(--menu-line)] p-4"
-    >
-      <div className="flex items-center gap-2">
-        <StatusIcon status={status} />
-        <Text variant="mini" color="muted">
-          {issue.key}
-        </Text>
-      </div>
-      <Text as="h3" variant="regularPlus" className="mt-2">
-        {issue.summary}
-      </Text>
-      <Text as="p" variant="small" color="muted" className="mt-1">
-        {[status.name, issue.assignee?.name ?? "Unassigned", issue.priority ?? "No priority"].join(" · ")}
-      </Text>
-      {issue.description ? (
-        <Text as="p" variant="small" className="mt-3 whitespace-pre-wrap">
-          {issue.description}
-        </Text>
-      ) : null}
-    </aside>
   );
 }
 

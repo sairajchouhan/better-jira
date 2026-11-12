@@ -7,6 +7,8 @@ import { Avatar } from "./avatar";
 import { Menu, MENU } from "./menu";
 import { MENU_POPUP, usePlacement } from "./menu-surface";
 import { StatusIcon } from "./icons";
+import { CaretPeek, groupStep } from "./caret-peek";
+import { IssuePeek } from "./issue-peek";
 import { get, statusOf, type Issue, type User } from "./store";
 import { queryClient } from "./server-data";
 
@@ -52,7 +54,8 @@ export type CaretAnchor = {
   keys: { current: ((event: KeyboardEvent) => boolean) | null };
   dismiss: () => void;
 };
-export type CaretMenuItem = { id: string; label: ReactNode; icon?: ReactNode; pick: () => void };
+/** `group` lets ⌥↑/⌥↓ jump between runs of items; `peek` is what → previews beside the menu. */
+export type CaretMenuItem = { id: string; label: ReactNode; icon?: ReactNode; pick: () => void; group?: string; peek?: ReactNode };
 
 /** Linear's caret menu (@ people and issues, / blocks, : emoji) under the caret. Focus stays in the editor, which forwards
  * its keys through `keys`. With no items it shows `empty`, or steps aside when `empty` is null. */
@@ -73,6 +76,7 @@ export function CaretMenu({
     setActiveQuery(query);
     setActive(0);
   }
+  const [peek, setPeek] = useState(false);
   const list = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
@@ -86,7 +90,12 @@ export function CaretMenu({
     }
     if (!items.length) return false;
     const move = (by: number) => setActive((i) => (i + by + items.length) % items.length);
-    if (event.key === "ArrowDown" || (event.ctrlKey && event.key === "n")) move(1);
+    const current = items[Math.min(active, items.length - 1)]!;
+    if ((event.key === "ArrowDown" || event.key === "ArrowUp") && event.altKey)
+      setActive(groupStep(items.map((item) => item.group), Math.min(active, items.length - 1), event.key === "ArrowDown" ? 1 : -1));
+    else if (event.key === "ArrowRight" && !peek && current.peek) setPeek(true);
+    else if (event.key === "ArrowLeft" && peek) setPeek(false);
+    else if (event.key === "ArrowDown" || (event.ctrlKey && event.key === "n")) move(1);
     else if (event.key === "ArrowUp" || (event.ctrlKey && event.key === "p")) move(-1);
     else if ((event.key === "Enter" || event.key === "Tab") && !event.shiftKey && !event.metaKey)
       items[Math.min(active, items.length - 1)]!.pick();
@@ -113,8 +122,10 @@ export function CaretMenu({
     !hidden && `${query} ${height}`,
   );
   if (hidden) return null;
+  const peeked = peek ? items[Math.min(active, items.length - 1)] : undefined;
   // The editor keeps focus and drives the highlight through `keys`; the menu mirrors `active` and follows the pointer.
   return (
+    <>
     <Menu
       ref={list}
       aria-label={label}
@@ -137,6 +148,12 @@ export function CaretMenu({
         ))}
       </Menu.List>
     </Menu>
+    {peeked?.peek && (
+      <CaretPeek menu={list.current} at={peeked.id}>
+        {peeked.peek}
+      </CaretPeek>
+    )}
+    </>
   );
 }
 
@@ -191,6 +208,7 @@ export function MentionMenu({
       label: person.name,
       icon: <Avatar user={person} size={16} />,
       pick: () => pick(person),
+      group: "people",
     })),
     ...issues.map((issue) => {
       const status = statusOf(issue);
@@ -203,6 +221,8 @@ export function MentionMenu({
         ),
         icon: status && <StatusIcon status={status} />,
         pick: () => pickIssue(issue),
+        group: "issues",
+        peek: <IssuePeek issue={issue} />,
       };
     }),
   ];
