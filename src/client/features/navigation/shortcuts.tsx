@@ -822,10 +822,11 @@ export const shortcuts: Shortcut[] = [
     group: "Filters",
     hotkey: "F",
     when: boardVisible,
+    // Linear opens under the chip row's "+" once the board has filters, under the toolbar button otherwise.
     run: () =>
       get().inbox
         ? ui.send({ type: "overlay.open", overlay: "inbox-filter" })
-        : ui.send({ type: "toolbar.open", toolbar: "filter" }),
+        : ui.send({ type: "toolbar.open", toolbar: filterCount(viewSettings(get().board).filters) ? "add-filter" : "filter" }),
   },
   {
     id: "view-create",
