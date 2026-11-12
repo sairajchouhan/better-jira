@@ -914,7 +914,8 @@ export function Relations({ issue, close: done }: { issue: Issue; close?: () => 
     boards = useStore((s) => s.boards);
   const [query, setQuery] = useState(""),
     [selected, setSelected] = useState("");
-  const kind = useStore((s) => s.relation);
+  const overlayKind = useStore((s) => s.relation);
+  const kind = done ? "related" : overlayKind;
   const close = done ?? (() => ui.send({ type: "overlay.close" }));
   const mark = MARK[kind] ?? MARK.related!;
   // Linear leaves out issues the new link would repeat or contradict; "Related issues" offers this issue's related ones first.

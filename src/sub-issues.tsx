@@ -1,8 +1,8 @@
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
-/* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useHotkey } from "@tanstack/react-hotkeys";
+import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
+import { useSubIssueComposer } from "./use-sub-issue-composer";
+import { useStoredState } from "./stored-state";
 import { RelationIcon, Icon, PriorityIcon, ProgressRing, StatusIcon } from "./icons";
 import { Confirm, MenuSurface } from "./menu-surface";
 import { Menu } from "./menu";
@@ -11,21 +11,15 @@ import { issueMenuEntries, type IssueMenuDialog } from "./issue-menu";
 import { InlineEditor } from "./rich-editor-loader";
 import { useCommand } from "./commands";
 import {
-  discardLateMedia,
-  documentHasMedia,
   lateMediaDiscarded,
-  normalizeDocument,
-  type AdfDocument,
 } from "./document";
 import {
   actions,
   addLocalFiles,
   get,
   issueURL,
-  ME,
   navigate,
-  restoreLocalFiles,
-  set,
+  ui,
   useStore,
   type Board,
   type Issue,
@@ -39,14 +33,9 @@ import { ResourceForm } from "./issue-resources";
 import { shortDate } from "./due-date";
 import { shortcutLabel } from "./shortcuts";
 import { canHaveChildren } from "./issue-properties";
-import { rankBetween, type Property } from "./view-model";
-import { defaultSubIssueDisplay, subIssueRows, type SubIssueDisplay } from "./sub-issue-model";
-import {
-  emptySubIssueDraft,
-  readSubIssueDraft,
-  saveSubIssueDraft,
-  type SubIssueDraft,
-} from "./sub-issue-draft";
+import { type Property } from "./view-model";
+import { childrenByParent, defaultSubIssueDisplay, subIssueRows, type SubIssueDisplay } from "./sub-issue-model";
+
 
 const orderings = [
   ["manual", "Manual"],
@@ -199,7 +188,7 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
   const parent = issue.parent ? all.get(issue.parent) : undefined;
   if (!parent) return null;
   const status = (i: Issue) => statusOf(boards, i),
-    model = subIssueRows(parent.key, [...all.values()], defaultSubIssueDisplay(), status),
+    model = subIssueRows(parent.key, all, defaultSubIssueDisplay(), status),
     siblings = model.rows.filter((row) => row.depth === 0).map((row) => row.issue);
   return (
     <div className="mt-2 mb-2.5 flex h-[26px] items-center text-[13px] leading-[normal]">
@@ -274,161 +263,45 @@ export function SubIssues({ issue }: { issue: Issue }) {
     writable = useStore((s) => s.writable);
   const noPriority = writable ? "Default priority" : "No priority";
   const storageKey = `better-jira:sub-issues:v1:${namespace}`;
-  const [display, setDisplay] = useState(() => {
-    try {
-      return parseDisplay(JSON.parse(localStorage.getItem(storageKey) ?? "null"));
-    } catch {
-      return defaultSubIssueDisplay();
-    }
-  });
+  const [display, setDisplay] = useStoredState(storageKey, parseDisplay, defaultSubIssueDisplay(), "Could not save sub-issue display settings");
   const [rowDialog, setRowDialog] = useState<{
     kind: IssueMenuDialog | "rename" | "relation";
     key: string;
   } | null>(null);
   // Linear keeps each issue's section collapsed across reloads.
   const collapseKey = `better-jira:sub-issues-collapsed:v1:${namespace}:${issue.key}`;
-  const [collapsed, setCollapsedState] = useState(() => {
-      try {
-        return localStorage.getItem(collapseKey) === "1";
-      } catch {
-        return false;
-      }
-    }),
-    setCollapsed = (value: boolean) => {
-      setCollapsedState(value);
-      try {
-        if (value) localStorage.setItem(collapseKey, "1");
-        else localStorage.removeItem(collapseKey);
-      } catch {}
-    },
-    [reveal, setReveal] = useState(false),
-    [creating, setCreating] = useState(false),
+  const [collapsed, setCollapsed] = useStoredState(collapseKey, (raw) => raw === 1 || raw === true, false);
+  const [reveal, setReveal] = useState(false),
     [settings, setSettings] = useState<HTMLElement | null>(null),
     [rowMenu, setRowMenu] = useState<{
       anchor: HTMLElement;
       key: string;
       point?: { x: number; y: number };
-    } | null>(null),
-    [confirming, setConfirming] = useState(false);
+    } | null>(null);
+
   const board = boards.find((b) => b.id === issue.board)!;
-  const initial = (): IssueDraft => ({
-    parent: issue.key,
-    project: issue.project,
-    assignee: ME,
-    priority: undefined,
-    status:
-      board.columns
-        .find((c) => !/backlog/i.test(c.name) && c.statuses.some((s) => s.category === "new"))
-        ?.statuses.find((s) => s.category === "new")?.id ?? board.columns[0]?.statuses[0]?.id,
-    labels: [],
-  });
-  const draftKey = `better-jira:sub-issue-draft:v1:${namespace}:${issue.key}`;
-  const [value, setValue] = useState(() => readSubIssueDraft(draftKey, initial())),
-    pending = useRef(value),
-    [editor, setEditor] = useState(0);
-  const { title, description, files, properties: draft } = value;
-  const update = (patch: Partial<SubIssueDraft>) => {
-    const next = { ...pending.current, ...patch };
-    pending.current = next;
-    setValue(next);
-    try {
-      saveSubIssueDraft(draftKey, next);
-    } catch {
-      set({ perf: "Could not retain this sub-issue draft across reloads" });
-    }
-  };
-  // An upload that finishes after this composer closed (navigation, a remount) updates whichever composer now owns the draft, else the stored draft;
-  // never this closure's stale copy, which would overwrite newer edits. A discarded draft drops it (discardLateMedia).
-  const scope = `${issue.key}:sub-issue`,
-    mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    const apply = (event: Event) => {
-      event.preventDefault();
-      update(
-        (event as CustomEvent<(draft: SubIssueDraft) => Partial<SubIssueDraft>>).detail(
-          pending.current,
-        ),
-      );
-    };
-    addEventListener(`late:${draftKey}`, apply);
-    return () => {
-      mounted.current = false;
-      removeEventListener(`late:${draftKey}`, apply);
-    };
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
-  }, [draftKey]);
-  const late = (change: (draft: SubIssueDraft) => Partial<SubIssueDraft>) => {
-    if (mounted.current) {
-      update(change(pending.current));
-      return;
-    }
-    if (
-      dispatchEvent(
-        new CustomEvent(`late:${draftKey}`, {
-          detail: change,
-          cancelable: true,
-        }),
-      )
-    ) {
-      try {
-        const stored = readSubIssueDraft(draftKey, initial());
-        saveSubIssueDraft(draftKey, { ...stored, ...change(stored) });
-      } catch {}
-    }
-  };
-  useEffect(() => {
-    let active = true;
-    void restoreLocalFiles(pending.current.files).then((saved) => {
-      if (active)
-        update({
-          files: pending.current.files.map(
-            (file) => saved.find((restored) => restored.id === file.id) ?? file,
-          ),
-        });
-    });
-    return () => {
-      active = false;
-    };
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
-  }, []);
-  const form = useRef<HTMLDivElement>(null),
-    titleInput = useRef<HTMLInputElement>(null);
+  const { state: { title, description, files, draft, editor, creating, confirming },
+    actions: { update, late, start, discard, cancel, submit, setConfirming },
+    meta: { form, titleInput, scope, pending } } = useSubIssueComposer(issue, board, namespace, setCollapsed);
   const status = (child: Issue) => statusOf(boards, child);
   // Direct children per row, for Linear's "0/2" progress pill.
   const progress = useMemo(() => {
     const counts = new Map<string, [number, number]>();
-    for (const i of all.values())
-      if (i.parent) {
-        const count = counts.get(i.parent) ?? [0, 0];
-        count[1]++;
-        if (status(i).category === "done") count[0]++;
-        counts.set(i.parent, count);
-      }
+    for (const [parent, children] of childrenByParent(all)) {
+      counts.set(parent, [children.filter((i) => status(i).category === "done").length, children.length]);
+    }
     return counts;
     // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
   }, [all, boards]);
   const model = useMemo(
-    () => subIssueRows(issue.key, [...all.values()], display, status, Date.now(), reveal),
+    () => subIssueRows(issue.key, all, display, status, Date.now(), reveal),
     // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
     [issue.key, all, boards, display, reveal],
   );
-  useEffect(() => {
-    setReveal(false);
-  }, [display.completed, display.nested]);
   const change = (patch: Partial<SubIssueDisplay>) => {
-    const next = { ...display, ...patch };
-    setDisplay(next);
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(next));
-    } catch {
-      set({ perf: "Could not save sub-issue display settings" });
-    }
-  };
-  const start = () => {
-    setCollapsed(false);
-    setCreating(true);
-    requestAnimationFrame(() => titleInput.current?.focus());
+    if ((patch.completed !== undefined && patch.completed !== display.completed) ||
+        (patch.nested !== undefined && patch.nested !== display.nested)) setReveal(false);
+    setDisplay({ ...display, ...patch });
   };
   const section = useRef<HTMLElement>(null);
   // ⌘⇧O does what this section's create button does, while it shows one.
@@ -444,118 +317,6 @@ export function SubIssues({ issue }: { issue: Issue }) {
       section.current?.querySelector<HTMLElement>(
         "[data-sub-issue]:hover, [data-sub-issue]:focus-within",
       )?.dataset.subIssue,
-  );
-  const close = () => {
-    setCreating(false);
-    requestAnimationFrame(() =>
-      document
-        .querySelector<HTMLElement>(
-          `[data-sub-issues="${CSS.escape(issue.key)}"] [data-create-child]`,
-        )
-        ?.focus(),
-    );
-  };
-  const discard = () => {
-    discardLateMedia(scope);
-    setConfirming(false);
-    update(emptySubIssueDraft(initial()));
-    setEditor((n) => n + 1);
-    close();
-  };
-  // Like Linear: a draft with content asks before it is thrown away; an empty one just closes.
-  const filled = () => {
-    const { title, description, files } = pending.current;
-    return (
-      !!title.trim() ||
-      files.length > 0 ||
-      JSON.stringify(description).includes('"text"') ||
-      documentHasMedia(description)
-    );
-  };
-  const cancel = () => {
-    if (filled()) setConfirming(true);
-    else discard();
-  };
-  // Escape first leaves the field for the composer itself, then cancels from there.
-  const escape = () => {
-    if (document.activeElement !== form.current) form.current?.focus();
-    else cancel();
-  };
-  // The editor hands over its document: a send deferred for an upload has media this render's closure has not seen (Opus review 4).
-  const submit = (doc?: AdfDocument) => {
-    const { title, description, files, properties: draft } = pending.current;
-    if (!title.trim() || files.some((file) => file.missing)) return;
-    const lastRank = [...all.values()]
-      .filter((i) => i.parent === issue.key)
-      .map((i) => i.rank ?? "")
-      .sort()
-      .at(-1);
-    const key = actions.create(
-      title,
-      {
-        ...draft,
-        rank: rankBetween(lastRank),
-        descriptionDoc: doc ?? description,
-        attachments: files,
-      },
-      true,
-    );
-    if (!key) return;
-    // Linear starts the next sub-issue from the defaults, not the last one's properties.
-    update({
-      title: "",
-      description: normalizeDocument(""),
-      files: [],
-      properties: initial(),
-    });
-    setEditor((n) => n + 1);
-    requestAnimationFrame(() => titleInput.current?.focus());
-  };
-  const submitFromButton = () =>
-    form.current?.querySelector<HTMLButtonElement>(".rich-editor-submit")?.click();
-  useHotkey("Mod+Enter", submitFromButton, {
-    target: titleInput,
-    capture: true,
-    ignoreInputs: false,
-  });
-  useHotkey("Mod+Shift+Enter", submitFromButton, {
-    target: form,
-    capture: true,
-    ignoreInputs: false,
-  });
-  useHotkey("Mod+Shift+O", () => titleInput.current?.focus(), {
-    target: form,
-    capture: true,
-    ignoreInputs: false,
-  });
-  useHotkey("Escape", escape, {
-    target: form,
-    capture: true,
-    ignoreInputs: false,
-  });
-  const control = (child: Issue, field: Field, content: React.ReactNode) => (
-    <PropertyControl
-      field={field}
-      board={boards.find((b) => b.id === child.board) ?? board}
-      value={child}
-      onChange={(patch) => {
-        if (patch.status) actions.status(child.key, patch.status);
-        else actions.patch(child.key, patch);
-      }}
-      title={
-        field === "status"
-          ? status(child).name
-          : field === "priority"
-            ? (child.priority ?? "No priority")
-            : field === "assignee"
-              ? (child.assignee?.name ?? "Unassigned")
-              : child.labels.join(", ")
-      }
-      label={`Change ${field} for ${child.key}`}
-      className={button}
-    >
-      {content}
-    </PropertyControl>
   );
   /** The composer's chip for a field, picking into the draft. */
   const draftControl = (field: Field, label: string, content: React.ReactNode) => (
@@ -578,20 +339,16 @@ export function SubIssues({ issue }: { issue: Issue }) {
       close: () => setRowMenu(null),
       openDialog: (kind) => {
         setRowMenu(null);
+        if (kind === "reminder") {
+          ui.send({ type: "overlay.open", overlay: "reminder", target: child.key });
+          return;
+        }
         setRowDialog({
           kind: kind === "relations" ? "relation" : kind,
           key: child.key,
         });
       },
     });
-  const childURL = (child: Issue) => {
-    const url = new URL(location.href);
-    url.hash = "";
-    url.searchParams.set("board", String(child.board));
-    url.searchParams.set("issue", child.key);
-    url.searchParams.delete("document");
-    return url.href;
-  };
   return (
     <section
       ref={section}
@@ -644,145 +401,10 @@ export function SubIssues({ issue }: { issue: Issue }) {
       )}
       {!collapsed &&
         model.rows.map(({ issue: child, depth, contextOnly }, index) => (
-          <div
-            key={child.key}
-            data-sub-issue={child.key}
-            data-depth={depth}
-            data-context-only={contextOnly || undefined}
-            className={`relative -ml-1.5 flex min-h-9 items-center gap-px rounded-lg pr-1 hover:bg-hover ${rowMenu?.key === child.key ? "bg-hover" : ""}`}
-            style={{ paddingLeft: 31 + depth * 24 }}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              setRowMenu({
-                anchor: event.currentTarget,
-                key: child.key,
-                point: { x: event.clientX + 3, y: event.clientY },
-              });
-            }}
-          >
-            {Array.from({ length: depth }, (_, level) => {
-              level++;
-              const left = level * 24 + 21.5,
-                more = continues(
-                  model.rows,
-                  index,
-                  level,
-                ); /* Linear's tree: a line under each open branch, ending in a curved elbow beside the row's own icon */
-              return level < depth ? (
-                more && (
-                  <span
-                    key={level}
-                    aria-hidden
-                    data-guide
-                    className="absolute inset-y-0 w-px bg-line-3"
-                    style={{ left }}
-                  />
-                )
-              ) : (
-                <Fragment key={level}>
-                  <span
-                    aria-hidden
-                    data-guide
-                    className="absolute top-0 w-px bg-line-3"
-                    style={{ left, height: more ? "100%" : 12 }}
-                  />
-                  <svg
-                    aria-hidden
-                    data-elbow
-                    width="10"
-                    height="9"
-                    viewBox="0 0 10 9"
-                    className="absolute fill-line-3"
-                    style={{ left, top: 10 }}
-                  >
-                    <path d="M0 0h1v1c0 2.5 2.212 3.546 2.212 3.546L9.737 8.06c.568.306.094 1.186-.474.88l-6.48-3.488S0 4 0 1V0Z" />
-                  </svg>
-                </Fragment>
-              );
-            })}
-            {display.properties.includes("status") &&
-              control(child, "status", <StatusIcon status={status(child)} />)}
-            {display.properties.includes("priority") &&
-              control(child, "priority", <PriorityIcon name={child.priority} />)}
-            {display.properties.includes("id") && (
-              <span className="px-1 text-fg-3">{child.key}</span>
-            )}
-            <a
-              className="flex min-w-0 flex-1 items-center gap-2 py-1.5 text-[13px] font-medium text-fg"
-              href={childURL(child)}
-              onClick={(event) => {
-                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-                event.preventDefault();
-                navigate({
-                  board: child.board,
-                  selected: child.key,
-                  panel: true,
-                  view: get().view,
-                });
-              }}
-            >
-              <span className="truncate">{child.summary}</span>
-              {progress.has(child.key) && (
-                <span
-                  data-row-progress
-                  className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border-[0.5px] border-line-2 px-2 text-[12px] font-[450] text-fg-3"
-                >
-                  <ProgressRing value={progress.get(child.key)![0] / progress.get(child.key)![1]} />
-                  {progress.get(child.key)!.join("/")}
-                </span>
-              )}
-            </a>
-            {/* Linear's row badges (RAJ-54 blocking 1, RAJ-55 blocked 1; Opus review 4): a red relation icon and how many issues. */}
-            {(["blocking", "blocked"] as const).map((kind) => {
-              const count = child.relations?.filter((r) => r.kind === kind).length ?? 0;
-              return (
-                count > 0 && (
-                  <span
-                    key={kind}
-                    data-row-relation={kind}
-                    title={`${kind === "blocked" ? "Blocked by" : "Blocking"} ${count} ${count === 1 ? "issue" : "issues"}`}
-                    className="flex shrink-0 items-center gap-1 text-[12px] font-[450] text-fg-3"
-                  >
-                    <RelationIcon kind={kind} />
-                    {count}
-                  </span>
-                )
-              );
-            })}
-            {display.properties.includes("labels") &&
-              control(child, "labels", child.labels.join(", ") || <Icon name="label" size={13} />)}
-            {display.properties.includes("milestone") && (
-              <span className="truncate text-fg-3">
-                {child.milestones?.map((m) => m.name).join(", ")}
-              </span>
-            )}
-            {display.properties.includes("due") && child.due && (
-              <time dateTime={child.due} className="text-fg-3">
-                {shortDate(child.due, undefined, true)}
-              </time>
-            )}
-            {display.properties.includes("links") && !!child.links?.length && (
-              <span title="Links">{child.links.length}</span>
-            )}
-            {display.properties.includes("pullRequests") && !!child.prCount && (
-              <span title="Pull requests">{child.prCount}</span>
-            )}
-            {display.properties.includes("assignee") &&
-              control(
-                child,
-                "assignee",
-                child.assignee ? (
-                  <Avatar user={child.assignee} size={18} />
-                ) : (
-                  <span
-                    title="Unassigned"
-                    className="grid size-[18px] place-items-center rounded-full bg-sel text-[10px]"
-                  >
-                    <Icon name="user" size={12} />
-                  </span>
-                ),
-              )}
-          </div>
+          <SubIssueRow key={child.key} child={child} depth={depth} contextOnly={contextOnly}
+            index={index} rows={model.rows} display={display} boards={boards} board={board}
+            progress={progress.get(child.key)} active={rowMenu?.key === child.key}
+            openMenu={(anchor, point) => setRowMenu({ anchor, key: child.key, point })} />
         ))}
       {!model.total && !creating && canHaveChildren(get(), issue) && (
         <button
@@ -1025,3 +647,179 @@ const continues = (rows: { depth: number }[], index: number, level: number) => {
   for (const row of rows.slice(index + 1)) if (row.depth <= level) return row.depth === level;
   return false;
 };
+
+function SubIssueRow({ child, depth, contextOnly, index, rows, display, boards, board, progress, active, openMenu }: {
+  child: Issue; depth: number; contextOnly: boolean; index: number; rows: { depth: number }[];
+  display: SubIssueDisplay; boards: Boards; board: Board; progress?: [number, number]; active: boolean;
+  openMenu: (anchor: HTMLElement, point: { x: number; y: number }) => void;
+}) {
+  const status = (child: Issue) => statusOf(boards, child);
+  const control = (child: Issue, field: Field, content: React.ReactNode) => (
+    <PropertyControl
+      field={field}
+      board={boards.find((b) => b.id === child.board) ?? board}
+      value={child}
+      onChange={(patch) => {
+        if (patch.status) actions.status(child.key, patch.status);
+        else actions.patch(child.key, patch);
+      }}
+      title={
+        field === "status"
+          ? status(child).name
+          : field === "priority"
+            ? (child.priority ?? "No priority")
+            : field === "assignee"
+              ? (child.assignee?.name ?? "Unassigned")
+              : child.labels.join(", ")
+      }
+      label={`Change ${field} for ${child.key}`}
+      className={button}
+    >
+      {content}
+    </PropertyControl>
+  );
+  const childURL = (child: Issue) => {
+    const url = new URL(location.href);
+    url.hash = "";
+    url.searchParams.set("board", String(child.board));
+    url.searchParams.set("issue", child.key);
+    url.searchParams.delete("document");
+    return url.href;
+  };
+
+  return (          <div
+            key={child.key}
+            data-sub-issue={child.key}
+            data-depth={depth}
+            data-context-only={contextOnly || undefined}
+            className={`relative -ml-1.5 flex min-h-9 items-center gap-px rounded-lg pr-1 hover:bg-hover ${active ? "bg-hover" : ""}`}
+            style={{ paddingLeft: 31 + depth * 24 }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              openMenu(event.currentTarget, { x: event.clientX + 3, y: event.clientY });
+            }}
+          >
+            {Array.from({ length: depth }, (_, level) => {
+              level++;
+              const left = level * 24 + 21.5,
+                more = continues(
+                  rows,
+                  index,
+                  level,
+                ); /* Linear's tree: a line under each open branch, ending in a curved elbow beside the row's own icon */
+              return level < depth ? (
+                more && (
+                  <span
+                    key={level}
+                    aria-hidden
+                    data-guide
+                    className="absolute inset-y-0 w-px bg-line-3"
+                    style={{ left }}
+                  />
+                )
+              ) : (
+                <Fragment key={level}>
+                  <span
+                    aria-hidden
+                    data-guide
+                    className="absolute top-0 w-px bg-line-3"
+                    style={{ left, height: more ? "100%" : 12 }}
+                  />
+                  <svg
+                    aria-hidden
+                    data-elbow
+                    width="10"
+                    height="9"
+                    viewBox="0 0 10 9"
+                    className="absolute fill-line-3"
+                    style={{ left, top: 10 }}
+                  >
+                    <path d="M0 0h1v1c0 2.5 2.212 3.546 2.212 3.546L9.737 8.06c.568.306.094 1.186-.474.88l-6.48-3.488S0 4 0 1V0Z" />
+                  </svg>
+                </Fragment>
+              );
+            })}
+            {display.properties.includes("status") &&
+              control(child, "status", <StatusIcon status={status(child)} />)}
+            {display.properties.includes("priority") &&
+              control(child, "priority", <PriorityIcon name={child.priority} />)}
+            {display.properties.includes("id") && (
+              <span className="px-1 text-fg-3">{child.key}</span>
+            )}
+            <a
+              className="flex min-w-0 flex-1 items-center gap-2 py-1.5 text-[13px] font-medium text-fg"
+              href={childURL(child)}
+              onClick={(event) => {
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+                navigate({
+                  board: child.board,
+                  selected: child.key,
+                  panel: true,
+                  view: get().view,
+                });
+              }}
+            >
+              <span className="truncate">{child.summary}</span>
+              {progress && (
+                <span
+                  data-row-progress
+                  className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border-[0.5px] border-line-2 px-2 text-[12px] font-[450] text-fg-3"
+                >
+                  <ProgressRing value={progress![0] / progress![1]} />
+                  {progress!.join("/")}
+                </span>
+              )}
+            </a>
+            {/* Linear's row badges (RAJ-54 blocking 1, RAJ-55 blocked 1; Opus review 4): a red relation icon and how many issues. */}
+            {(["blocking", "blocked"] as const).map((kind) => {
+              const count = child.relations?.filter((r) => r.kind === kind).length ?? 0;
+              return (
+                count > 0 && (
+                  <span
+                    key={kind}
+                    data-row-relation={kind}
+                    title={`${kind === "blocked" ? "Blocked by" : "Blocking"} ${count} ${count === 1 ? "issue" : "issues"}`}
+                    className="flex shrink-0 items-center gap-1 text-[12px] font-[450] text-fg-3"
+                  >
+                    <RelationIcon kind={kind} />
+                    {count}
+                  </span>
+                )
+              );
+            })}
+            {display.properties.includes("labels") &&
+              control(child, "labels", child.labels.join(", ") || <Icon name="label" size={13} />)}
+            {display.properties.includes("milestone") && (
+              <span className="truncate text-fg-3">
+                {child.milestones?.map((m) => m.name).join(", ")}
+              </span>
+            )}
+            {display.properties.includes("due") && child.due && (
+              <time dateTime={child.due} className="text-fg-3">
+                {shortDate(child.due, undefined, true)}
+              </time>
+            )}
+            {display.properties.includes("links") && !!child.links?.length && (
+              <span title="Links">{child.links.length}</span>
+            )}
+            {display.properties.includes("pullRequests") && !!child.prCount && (
+              <span title="Pull requests">{child.prCount}</span>
+            )}
+            {display.properties.includes("assignee") &&
+              control(
+                child,
+                "assignee",
+                child.assignee ? (
+                  <Avatar user={child.assignee} size={18} />
+                ) : (
+                  <span
+                    title="Unassigned"
+                    className="grid size-[18px] place-items-center rounded-full bg-sel text-[10px]"
+                  >
+                    <Icon name="user" size={12} />
+                  </span>
+                ),
+              )}
+          </div>);
+}

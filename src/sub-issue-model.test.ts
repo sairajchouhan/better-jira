@@ -102,3 +102,19 @@ test("a sub-issue draft keeps its labels and drops malformed ones across reloads
   storage.set("draft", JSON.stringify({ title: "Child", properties: { labels: ["ui", 3] } }));
   expect(readSubIssueDraft("draft", initial).properties.labels).toEqual(["inherited"]);
 });
+
+test("children index is shared by snapshot identity and never reordered by a view", async () => {
+  const { childrenByParent } = await import("./sub-issue-model");
+  const second = issue("SECOND", "ROOT", "todo", "b"), first = issue("FIRST", "ROOT", "todo", "a");
+  const snapshot = new Map([second, first, issue("ROOT")].map((i) => [i.key, i]));
+  const index = childrenByParent(snapshot);
+  expect(childrenByParent(snapshot)).toBe(index);
+  expect([...index.keys()]).toEqual(["ROOT"]);
+  expect(index.get("ROOT")).toEqual([second, first]);
+  expect(subIssueRows("ROOT", snapshot, defaultSubIssueDisplay(), status).rows.map((r) => r.issue.key)).toEqual(["FIRST", "SECOND"]);
+  expect(index.get("ROOT")).toEqual([second, first]);
+  const next = new Map(snapshot).set("FIRST", { ...first, parent: "SECOND" });
+  expect(childrenByParent(next)).not.toBe(index);
+  expect(childrenByParent(next).get("ROOT")).toEqual([second]);
+  expect(childrenByParent(next).get("SECOND")?.map((i) => i.key)).toEqual(["FIRST"]);
+});

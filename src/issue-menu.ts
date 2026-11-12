@@ -66,6 +66,7 @@ export function issueMenuEntries(
     beginCreate({ related: { key: issue.key, kind }, project: issue.project });
   };
   const mark = (kind: string) => {
+    close();
     ui.send({ type: "overlay.open", overlay: "relations", target: issue.key, kind });
   };
   const reopen = (view: "link" | "pull-request" | "history") => {

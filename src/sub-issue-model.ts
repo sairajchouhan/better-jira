@@ -14,21 +14,33 @@ export const defaultSubIssueDisplay = (): SubIssueDisplay => ({
 });
 export type SubIssueRow = { issue: Issue; depth: number; contextOnly: boolean };
 type Status = (issue: Issue) => { category: string; order: number };
+export type ChildrenIndex = ReadonlyMap<string, readonly Issue[]>;
+const indexes = new WeakMap<ReadonlyMap<string, Issue>, ChildrenIndex>();
+/** One index per immutable issues snapshot; shared by every parent and progress renderer. */
+export function childrenByParent(issues: ReadonlyMap<string, Issue>): ChildrenIndex {
+  const cached = indexes.get(issues);
+  if (cached) return cached;
+  const children = new Map<string, Issue[]>();
+  for (const issue of issues.values()) {
+    if (!issue.parent) continue;
+    const siblings = children.get(issue.parent) ?? [];
+    siblings.push(issue);
+    children.set(issue.parent, siblings);
+  }
+  indexes.set(issues, children);
+  return children;
+}
 export function subIssueRows(
   parent: string,
-  issues: Issue[],
+  issues: Issue[] | ReadonlyMap<string, Issue>,
   display: SubIssueDisplay,
   status: Status,
   now = Date.now(),
   revealCompleted = false,
 ) {
+  const byKey = Array.isArray(issues) ? new Map(issues.map((i) => [i.key, i])) : issues;
+  const index = childrenByParent(byKey);
   const children = new Map<string, Issue[]>();
-  for (const issue of issues)
-    if (issue.parent) {
-      const siblings = children.get(issue.parent) ?? [];
-      siblings.push(issue);
-      children.set(issue.parent, siblings);
-    }
   const compare = (a: Issue, b: Issue) => {
     let cmp = 0;
     switch (display.ordering) {
@@ -72,10 +84,15 @@ export function subIssueRows(
     }
     return cmp || a.key.localeCompare(b.key, undefined, { numeric: true });
   };
-  for (const siblings of children.values()) siblings.sort(compare);
+  // Sort only reachable branches, and never mutate the shared snapshot index.
+  const siblings = (key: string): Issue[] => {
+    let sorted = children.get(key);
+    if (!sorted) { sorted = [...(index.get(key) ?? [])].sort(compare); children.set(key, sorted); }
+    return sorted;
+  };
   const all: SubIssueRow[] = [],
     seen = new Set([parent]);
-  const pending = (children.get(parent) ?? [])
+  const pending = siblings(parent)
     .slice()
     .reverse()
     .map((issue) => ({ issue, depth: 0 }));
@@ -85,7 +102,7 @@ export function subIssueRows(
     seen.add(issue.key);
     all.push({ issue, depth, contextOnly: false });
     if (display.nested)
-      for (const child of (children.get(issue.key) ?? []).slice().reverse())
+      for (const child of siblings(issue.key).slice().reverse())
         pending.push({ issue: child, depth: depth + 1 });
   }
   const cutoff =
@@ -98,8 +115,7 @@ export function subIssueRows(
       Date.parse(issue.resolved!) >= cutoff);
   const accepted = new Set(all.filter((row) => passes(row.issue)).map((row) => row.issue.key));
   const hiddenCompleted = all.filter((row) => !passes(row.issue)).length;
-  const required = new Set(accepted),
-    byKey = new Map(issues.map((i) => [i.key, i]));
+  const required = new Set(accepted);
   // A completed ancestor remains as context for an incomplete descendant.
   if (display.nested)
     for (const key of accepted) {

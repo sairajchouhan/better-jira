@@ -399,6 +399,7 @@ function Title({ issue, className }: { issue: Issue; className: string }) {
   const ref = useRef<HTMLTextAreaElement>(null),
     start = useRef("");
   useCommand("focus-title", () => {
+    if (get().selected !== issue.key) return;
     const node = ref.current;
     if (!node) return;
     node.focus();
@@ -920,9 +921,20 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
   const subscribersRef = useRef<HTMLButtonElement>(null),
     commentRef = useRef<HTMLDivElement>(null);
   useCommand("focus-subscribers", () => focusNode(subscribersRef.current));
-  useCommand("focus-comment", () =>
-    focusNode(commentRef.current?.querySelector<HTMLElement>("#comment")),
-  );
+  const commentFocus = useRef<MutationObserver | null>(null);
+  useEffect(() => () => commentFocus.current?.disconnect(), []);
+  useCommand("focus-comment", () => {
+    if (get().selected !== issue.key || !commentRef.current) return;
+    commentFocus.current?.disconnect();
+    if (focusNode(commentRef.current.querySelector<HTMLElement>("#comment"))) return true;
+    // The lazy editor owns its DOM after it loads; observe that mount rather than polling frames.
+    const observer = new MutationObserver(() => {
+      if (focusNode(commentRef.current?.querySelector<HTMLElement>("#comment"))) observer.disconnect();
+    });
+    observer.observe(commentRef.current, { childList: true, subtree: true });
+    commentFocus.current = observer;
+    return true;
+  });
   const followedAnchor = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (!f || !location.hash) return;
