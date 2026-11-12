@@ -5,7 +5,9 @@ import { setScope, useViewSettings } from "./view-settings";
 import { openViewEditor, ViewMenu, ViewContextMenu, ViewEditorPage } from "./view-editor";
 import { ViewFavorites, SavedViewIcon } from "./views-navigation";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
+import { Toast } from "./toast";
+import { toasts } from "./toast-queue";
 import { Icon, TypeDot } from "./icons";
 import {
   actions,
@@ -225,47 +227,58 @@ function DeleteDialog({ issueKey: key }: { issueKey: string }) {
   );
 }
 
-export function Toast() {
+/** The id the `ui` machine's toast holds in the toast queue: one slot, replaced in place by each new toast. */
+const MACHINE_TOAST = "ui-machine";
+
+/**
+ * Draws the `ui` machine's toast (store writes, created issues, inbox undo, reminders) through the one toast queue. The
+ * machine still owns it, with its 5s timer, rekeying and the toast shortcuts; the queue only shows it, so it never
+ * times out on its own.
+ */
+export function MachineToast() {
   const toast = useStore((s) => s.toast);
-  if (!toast) return null;
+  useEffect(() => {
+    if (!toast) return toasts.dismiss(MACHINE_TOAST);
+    toasts.show(<MachineToastContent toast={toast} />, { id: MACHINE_TOAST, duration: Infinity });
+  }, [toast]);
+  return null;
+}
+
+function MachineToastContent({ toast }: { toast: NonNullable<ReturnType<typeof get>["toast"]> }) {
   return (
-    <div
-      aria-live="polite"
-      data-toast
-      className="fixed right-4 bottom-10 z-50 flex items-center gap-3 rounded-lg border border-line-2 bg-card px-3 py-2 text-[13px] text-fg shadow-lg"
-    >
-      <div>
-        {toast.text}
-        {toast.detail && <p className="mt-1 text-[12px] text-fg-3">{toast.detail}</p>}
-      </div>
-      {toast.undo && (
-        <button
-          className="text-accent hover:underline"
-          onClick={() => {
-            if (toast.undo === "inbox") undoInboxToast();
-            else undoEdit();
-            ui.send({ type: "toast.dismiss" });
-          }}
-        >
-          Undo
-        </button>
-      )}
-      {toast.key && (
-        <button
-          onClick={() => (
-            ui.send({ type: "toast.dismiss" }),
-            navigate({
-              selected: toast.key,
-              panel: true,
-              board: get().issues.get(currentKey(toast.key ?? ""))?.board,
-            })
+    <Toast data-toast>
+      <Toast.Title>{toast.text}</Toast.Title>
+      {toast.detail && <Toast.Description>{toast.detail}</Toast.Description>}
+      {(toast.undo || toast.key) && (
+        <Toast.Actions>
+          {toast.undo && (
+            <Toast.Action
+              onClick={() => {
+                if (toast.undo === "inbox") undoInboxToast();
+                else undoEdit();
+                ui.send({ type: "toast.dismiss" });
+              }}
+            >
+              Undo
+            </Toast.Action>
           )}
-          className="text-accent hover:underline"
-        >
-          View issue
-        </button>
+          {toast.key && (
+            <Toast.Action
+              onClick={() => (
+                ui.send({ type: "toast.dismiss" }),
+                navigate({
+                  selected: toast.key,
+                  panel: true,
+                  board: get().issues.get(currentKey(toast.key ?? ""))?.board,
+                })
+              )}
+            >
+              View issue
+            </Toast.Action>
+          )}
+        </Toast.Actions>
       )}
-    </div>
+    </Toast>
   );
 }
 

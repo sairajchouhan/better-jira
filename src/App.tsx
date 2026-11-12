@@ -13,6 +13,7 @@ import {
   Subscribers,
 } from "./personal-controls";
 import { Tooltips } from "./tooltip";
+import { ToastViewport } from "./toast";
 import { HelpMenu, ShortcutHelp, useLinearHotkeys } from "./shortcuts";
 import { InboxIssueActions, InboxList, InboxPane } from "./inbox";
 import { BoardView } from "./board-view";
@@ -20,7 +21,7 @@ import {
   QuickNavigation,
   Sidebar,
   DeleteConfirm,
-  Toast,
+  MachineToast,
   StatusBar,
   StorageNotice,
   BoardHeader,
@@ -121,7 +122,8 @@ export function App() {
       <ReminderDelivery />
       <StorageNotice />
       <StatusBar />
-      <Toast />
+      <MachineToast />
+      <ToastViewport />
       {overlay === "palette" && <CommandPalette />}
       {overlay === "search" && <IssueSearch />}
       {overlay === "shortcuts" && <ShortcutHelp />}
