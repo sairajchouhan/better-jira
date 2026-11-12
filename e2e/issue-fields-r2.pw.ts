@@ -37,14 +37,18 @@ test("R2 issue fields on a writable site: remote links, watching, palette comman
   });
   await test.step("R2-issue-fields-D13: rapid status changes reach Jira as one transition to the last status", async () => {
     await page.waitFor(ready);
-    for (const status of ["Doing", "Review", "Done", "Backlog"]) {
-      await page.eval("document.activeElement?.blur()");
-      await page.key("s");
-      await page.click(
-        `[role="dialog"][aria-label="Change status"] [cmdk-item][data-value="${status}"]`,
-      );
-      await page.waitFor(`!document.querySelector('[role="dialog"][aria-label="Change status"]')`);
-    }
+    // Rapid means within the 400 ms hold of each other: the picks run in the page, as fast as the app renders, since four
+    // Playwright round trips each can outlast the hold on a loaded machine and rightly send two transitions (BJ-166).
+    await page.eval(`(async()=>{
+      const until=async(found)=>{for(let n;!(n=found());)await new Promise(r=>requestAnimationFrame(r));return found();};
+      const menu='[role="dialog"][aria-label="Change status"]';
+      for(const status of ["Doing","Review","Done","Backlog"]){
+        document.activeElement?.blur();
+        document.body.dispatchEvent(new KeyboardEvent("keydown",{key:"s",code:"KeyS",bubbles:true,cancelable:true}));
+        (await until(()=>document.querySelector(menu+' [cmdk-item][data-value="'+status+'"]'))).click();
+        await until(()=>!document.querySelector(menu));
+      }
+    })()`);
     await page.waitFor(`${ops}.some(o=>o.op==='status')`);
     await sleep(800);
     expect(await page.eval(`${ops}.filter(o=>o.op==='status').map(o=>o.status)`)).toEqual([
