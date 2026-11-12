@@ -11,7 +11,7 @@ import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./icons";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { Button } from "./button";
-import { Dialog } from "./dialog";
+import { ConfirmDialog } from "./dialog";
 import { Toast } from "./toast";
 import { toasts } from "./toast-queue";
 import { ViewIconPicker } from "./view-icon-picker";
@@ -183,30 +183,17 @@ function exportView(view: SavedView) {
 export function ViewDeleteDialog({ view, close }: { view: SavedView; close: () => void }) {
   const [error, setError] = useState("");
   return (
-    <Dialog label={`Delete view ${view.name}`} close={close} width={480}>
-      <Dialog.Body className="view-delete">
-        <Dialog.Title>Delete the view "{view.name}"?</Dialog.Title>
-        {error && (
-          <Dialog.Description role="alert">{error}</Dialog.Description>
-        )}
-        <Dialog.Footer>
-          <Button variant="secondary" onClick={close}>
-            Cancel
-          </Button>
-          <Button
-            variant="dangerous"
-            data-autofocus
-            onClick={() => {
-              void deleteSavedView(view.id)
-                .then(close)
-                .catch((e) => setError(String(e)));
-            }}
-          >
-            {view.kind === "tab" ? "Delete view" : "Delete"}
-          </Button>
-        </Dialog.Footer>
-      </Dialog.Body>
-    </Dialog>
+    <ConfirmDialog
+      title={`Delete the view "${view.name}"?`}
+      description={error ? <span role="alert">{error}</span> : null}
+      confirmLabel={view.kind === "tab" ? "Delete view" : "Delete"}
+      close={close}
+      onConfirm={() => {
+        void deleteSavedView(view.id)
+          .then(close)
+          .catch((e) => setError(String(e)));
+      }}
+    />
   );
 }
 type Action = [label: string, icon: IconName, run: () => void];

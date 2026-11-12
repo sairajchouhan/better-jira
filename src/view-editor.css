@@ -217,12 +217,6 @@ header:has(.view-editor):has(.view-filter-row) > div:nth-child(2) > button:last-
   color: var(--fg-3);
 }
 
-/* Linear's delete confirmation sits lower and roomier than Dialog's default (follow-up: a Dialog placement variant). */
-[role="dialog"]:has(> .view-delete) {
-  top: 29vh !important;
-  padding: 24px;
-}
-
 /* The "View created" toast's check badge; the name and action line up after it. */
 .view-toast-title {
   display: flex;
