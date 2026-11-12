@@ -1,4 +1,5 @@
 import { toasts } from "./toast-queue";
+import { returnRejectedComment } from "./rejected-comment";
 import { latestNotification, rekeyNotification, showNotification, NOTIFICATION_ID } from "./app-notifications";
 import { assignableUsers, knownPeople, statusById, statuses } from "./board-catalog";
 import { viewSettings } from "./view-settings";
@@ -1282,7 +1283,7 @@ function answered({ key: sent, ops, result, created, refused, describes }: Answe
   if (result.error)
     for (const op of ops)
       if (op.op === "comment" && !created.has(op.ref))
-        rejectComment({ key: result.key ?? sent, parentId: op.parentId, body: op.body });
+        returnRejectedComment({ key: result.key ?? sent, parentId: op.parentId, body: op.body });
   adopt(result.key ?? sent, result, !!result.error, created, describes);
   for (const other of result.others ?? [])
     adopt(other.key, { issue: other, error: result.error }, false, created);
@@ -1296,33 +1297,6 @@ function answered({ key: sent, ops, result, created, refused, describes }: Answe
         ? { writeError: null }
         : {}),
   });
-}
-export const REJECTED_COMMENT = "better-jira:comment-rejected";
-export type RejectedComment = {
-  key: string;
-  parentId?: string;
-  body: AdfDocument;
-};
-/** Puts a refused comment back into the saved draft at `draftKey`, after anything typed since, and returns it. */
-export function restoreRejectedDraft(draftKey: string, body: AdfDocument): AdfDocument {
-  let draft = normalizeDocument("");
-  try {
-    draft = normalizeDocument(JSON.parse(localStorage.getItem(draftKey) ?? '""'));
-  } catch {}
-  const merged =
-    adfToText(draft).trim() || documentHasMedia(draft)
-      ? { ...draft, content: [...(draft.content ?? []), ...(body.content ?? [])] }
-      : body;
-  try {
-    localStorage.setItem(draftKey, JSON.stringify(merged));
-  } catch {}
-  return merged;
-}
-/** An open composer takes the text back (and cancels the event); otherwise it waits in the issue's comment draft. */
-function rejectComment(detail: RejectedComment) {
-  const event = new CustomEvent(REJECTED_COMMENT, { detail, cancelable: true });
-  if (dispatchEvent(event))
-    restoreRejectedDraft(`better-jira:comment-draft:${state.namespace}:${detail.key}`, detail.body);
 }
 /** Drops an issue made here that Jira refused to create, so no ghost stays or is created again after reload (R1-D24). */
 function discard(key: string, reopen = true) {

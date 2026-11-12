@@ -21,12 +21,10 @@ import {
   beginCreate,
   currentKey,
   get,
-  REJECTED_COMMENT,
-  restoreRejectedDraft,
   set,
   type Issue,
-  type RejectedComment,
 } from "./store";
+import { commentDraftKey, onRejectedComment, restoreRejectedDraft } from "./rejected-comment";
 import { readStored, writeStored } from "./stored-state";
 import { noteDraftUploads, settleDraftUploads } from "./draft-uploads";
 import { mentionDraft, visibleComments, type IssueComment } from "./comment-thread";
@@ -92,14 +90,11 @@ export function useRejectedComment(
   latest.current = restore;
   const ids = parents.join(",");
   useEffect(() => {
-    const listen = (event: Event) => {
-      const { detail } = event as CustomEvent<RejectedComment>;
-      if (currentKey(detail.key) !== currentKey(key) || !parents.includes(detail.parentId)) return;
-      event.preventDefault();
+    return onRejectedComment((detail) => {
+      if (currentKey(detail.key) !== currentKey(key) || !parents.includes(detail.parentId)) return false;
       latest.current(restoreRejectedDraft(draftKey, detail.body));
-    };
-    addEventListener(REJECTED_COMMENT, listen);
-    return () => removeEventListener(REJECTED_COMMENT, listen);
+      return true;
+    });
     // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- The joined parent IDs track membership without reattaching for each new array identity.
   }, [key, ids, draftKey]);
 }
@@ -119,7 +114,7 @@ export function commentDraft(key: string) {
 /** The issue's comment box: its stored draft and the composer generation. Sending starts an empty composer; a comment Jira
  *  refused starts one holding it, after anything typed since (R2-comments-D4). Both keep the caret in the box. */
 export function useCommentDraft(issueKey: string) {
-  const key = `better-jira:comment-draft:${get().namespace}:${issueKey}`,
+  const key = commentDraftKey(issueKey),
     draft = commentDraft(key);
   const [composer, setComposer] = useState(() => ({
     generation: 0,
