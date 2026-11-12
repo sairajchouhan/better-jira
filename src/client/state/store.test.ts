@@ -149,6 +149,24 @@ test("personal issue edits, comments, creation and deletion undo without losing 
   actions.relate(key, target, "related");
   expect(get().issues.get(key)?.relations).toEqual([{ key: target, kind: "related" }]);
   expect(get().issues.get(key)?.activity?.length).toBe(logged);
+  // BJ-15: Change to… on a Jira link to an issue outside the mirror keeps the title and status Jira sent with it, and
+  // Activity names the removed link by Jira's phrase.
+  const outside = { summary: "Made-up outside issue", status: { name: "In Progress", category: "indeterminate" } };
+  actions.patch(key, {
+    relations: [
+      ...get().issues.get(key)!.relations!,
+      { key: "OUT-1", kind: "inward:Problem/Incident", label: "is caused by", issue: outside },
+    ],
+  });
+  actions.changeRelation(key, "OUT-1", "inward:Problem/Incident", "blocked");
+  expect(get().issues.get(key)?.relations?.find((r) => r.key === "OUT-1")).toEqual({
+    key: "OUT-1",
+    kind: "blocked",
+    issue: outside,
+  });
+  expect(
+    get().issues.get(key)?.activity?.find((e) => e.field === "relation" && e.after === null)?.before,
+  ).toEqual({ key: "OUT-1", kind: "inward:Problem/Incident", label: "is caused by" });
   actions.remove(key);
   expect(get().issues.get(target)?.parent).toBeUndefined();
   expect(get().issues.get(target)?.relations).toEqual([]);

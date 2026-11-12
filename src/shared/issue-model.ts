@@ -1,5 +1,6 @@
 import type { AdfDocument } from "./document";
 import type { IssueResource } from "./issue-resource";
+import type { Relation } from "./relations";
 
 export const activityFields = [
   "status",
@@ -62,7 +63,7 @@ export type Issue = {
   commentStates?: Record<string, CommentState>;
   reminder?: { at: string; delivered?: boolean } | null;
   activity?: PropertyActivity[];
-  relations?: { key: string; kind: string }[];
+  relations?: Relation[];
   milestones?: { id: string; name: string }[];
   prCount?: number;
   statusSince?: string;

@@ -254,3 +254,45 @@ test("R1-D4, R1-D64: with Jira writes, delete asks in the app, names the row, an
       .toContainEqual({ key: "TEST-6", ops: [{ op: "delete" }] });
   });
 });
+
+test("BJ-15: linked issues outside the board show their status and title, and every Jira link kind has its section", async ({
+  open,
+}) => {
+  await fixture.reset({ writable: true, crossLinks: true });
+  const p = await open("?issue=TEST-1&view=page");
+  const row = (relation: string) => `document.querySelector('[data-relation="${relation}"] a')`;
+  await p.waitFor(`!!${row("related:OTHER-41")}`, 15000);
+
+  await test.step("sections follow Linear's, then Jira's own phrase for each other link kind", async () => {
+    const headings = await p.eval<string[]>(
+      `[...document.querySelectorAll('[data-properties] h3')].map(h=>h.textContent)`,
+    );
+    expect(headings.slice(headings.indexOf("Related"))).toEqual(["Related", "Is caused by", "Clones"]);
+  });
+
+  await test.step("an issue outside the board: Jira's status icon and title, opening in Jira", async () => {
+    expect(
+      await p.eval(
+        `(()=>{const a=${row("related:OTHER-41")};return [a.textContent,!!a.querySelector('svg circle'),new URL(a.href).pathname,a.target]})()`,
+      ),
+    ).toEqual(["Partner team task outside the board", true, "/browse/OTHER-41", "_blank"]);
+    expect(await p.eval(`${row("inward:Problem/Incident:OTHER-42")}.textContent`)).toBe(
+      "Made-up incident in another project",
+    );
+    // A mirrored issue under a Jira kind still opens here.
+    const href = await p.eval<string>(`${row("outward:Cloners:TEST-2")}.href`);
+    expect(new URL(href).origin).toBe(new URL(fixture.url).origin);
+    expect(issueOfHref(href)).toBe("TEST-2");
+    expect(await p.eval(`${row("outward:Cloners:TEST-2")}.textContent`)).toBe("Browser fixture 2");
+  });
+
+  await test.step("removing a Jira link kind sends that link's removal to Jira", async () => {
+    await p.click('[data-relation="inward:Problem/Incident:OTHER-42"] button');
+    await p.waitFor(
+      `![...document.querySelectorAll('[data-properties] h3')].some(h=>h.textContent==='Is caused by')`,
+    );
+    await expect
+      .poll(async () => (await fixture.log()).writes.flatMap((w) => w.ops))
+      .toContainEqual({ op: "link", target: "OTHER-42", kind: "inward:Problem/Incident", remove: true });
+  });
+});

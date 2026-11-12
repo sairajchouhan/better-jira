@@ -160,11 +160,31 @@ let clientFailures = 0,
   /** Speed checks: this many extra issues on each of two boards, like a real team board. */
   bulk = 0,
   /** Board 2 was added from the app. */
-  added = false;
+  added = false,
+  /** BJ-15: TEST-1's Jira links reach issues outside the board and use link types Linear has no kind for. */
+  crossLinks = false;
+/** TEST-1's links as the mirror projects them: made-up keys and text in the shape work Jira sends. */
+const crossRelations = [
+  {
+    key: "OTHER-41",
+    kind: "related",
+    issue: { summary: "Partner team task outside the board", status: { name: "In Review", category: "indeterminate" } },
+  },
+  {
+    key: "OTHER-42",
+    kind: "inward:Problem/Incident",
+    label: "is caused by",
+    issue: { summary: "Made-up incident in another project", status: { name: "Done", category: "done" } },
+  },
+  { key: "TEST-2", kind: "outward:Cloners", label: "clones" },
+];
 const requests: { method: string; path: string; status: number }[] = [];
 /** Writable mode: ops the app sent, and the types they changed (reset with the fixture). */
 const writes: { key: string; ops: any[] }[] = [],
-  types = new Map<string, string>();
+  types = new Map<string, string>(),
+  /** Links the app removed, from either end (see `pair`). */
+  unlinked = new Set<string>();
+const pair = (a: string, b: string) => [a, b].sort().join(" ");
 // Jira's createmeta types for TEST, with their hierarchy levels.
 const issueTypes = [
   { name: "Epic", hierarchyLevel: 1 },
@@ -199,6 +219,12 @@ const listed = () =>
     ...issue,
     ...(distinctCreator && issue.key === "TEST-6" ? { creator: alex } : {}),
     ...(subtask && issue.key === "TEST-6" ? { type: "Subtask", parent: "TEST-5" } : {}),
+    ...(crossLinks && issue.key === "TEST-1"
+      ? { relations: crossRelations.filter((r) => !unlinked.has(pair("TEST-1", r.key))) }
+      : {}),
+    ...(crossLinks && issue.key === "TEST-2" && !unlinked.has(pair("TEST-1", "TEST-2"))
+      ? { relations: [{ key: "TEST-1", kind: "inward:Cloners", label: "is cloned by" }] }
+      : {}),
     ...(types.has(issue.key) ? { type: types.get(issue.key) } : {}),
     comments: threadedComments ? thread.length : mediaInComment ? 1 : 0, // the mirror list counts the same Jira comments the detail returns
   }));
@@ -219,6 +245,8 @@ function applyOps(key: string, ops: any[]) {
       { status: 422 },
     );
   if (type) types.set(key, type);
+  for (const op of ops)
+    if (op.op === "link" && op.remove) unlinked.add(pair(key, op.target));
   return Response.json({
     key,
     created: {},
@@ -706,6 +734,7 @@ async function handle(req: Request) {
     mediaVariant = settings.mediaVariant ?? "";
     writable = settings.writable ?? false;
     subtask = settings.subtask ?? false;
+    crossLinks = settings.crossLinks ?? false;
     bulk = settings.bulk ?? 0;
     added = false;
     inbox = freshInbox(settings.inboxExtra ?? 0, settings.inboxExtraUnread ?? false);
@@ -715,6 +744,7 @@ async function handle(req: Request) {
     requests.length = 0;
     writes.length = 0;
     types.clear();
+    unlinked.clear();
     return Response.json({ ok: true });
   }
   if (path === "/__fixture" && req.method === "GET")

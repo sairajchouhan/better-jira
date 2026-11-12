@@ -40,7 +40,8 @@ import {
   type IssueResource,
   type LinkPreview,
 } from "@/shared/issue-resource";
-import { RELATION_ISSUE, recordRelation } from "@/client/features/issue/issue-activity";
+import { recordRelation } from "@/client/features/issue/issue-activity";
+import { inverseKind, type Relation } from "@/shared/relations";
 import { uploadNow } from "./jira-media";
 import { get, set, timed, ME, boardOf } from "./store";
 
@@ -764,30 +765,30 @@ export const actions = {
       ),
     });
   },
-  relate(key: string, target: string, kind: string, remove = false) {
+  /** `linked`: what the row shows of a target the mirror doesn't hold, kept when Change to… re-adds the relation (BJ-15). */
+  relate(key: string, target: string, kind: string, remove = false, linked?: Relation["issue"]) {
     if (key === target) return;
-    const inverse = RELATION_ISSUE[kind] ?? kind;
+    const inverse = inverseKind(kind);
     record([key, target], `${remove ? "remove" : "add"} relation`, () => {
       for (const [from, to, relation] of [
         [key, target, kind],
         [target, key, inverse],
       ] as const) {
-        const issue = get().issues.get(from);
-        if (
-          !issue ||
-          (issue.relations ?? []).some((r) => r.key === to && r.kind === relation) !== remove
-        )
-          continue;
+        const issue = get().issues.get(from),
+          held = issue?.relations?.find((r) => r.key === to && r.kind === relation);
+        if (!issue || !!held !== remove) continue;
         const relations = (issue.relations ?? []).filter(
           (r) => r.key !== to || r.kind !== relation,
         );
-        if (!remove) relations.push({ key: to, kind: relation });
+        if (!remove)
+          relations.push({ key: to, kind: relation, ...(from === key && linked ? { issue: linked } : {}) });
         patchIssue(from, {
           relations,
           activity: [
             ...recordRelation(
               issue.activity ?? [],
-              { key: to, kind: relation },
+              // A Jira link kind keeps its phrase, so Activity names a removed "is caused by" link as Jira does.
+              { key: to, kind: relation, ...(held?.label ? { label: held.label } : {}) },
               remove,
               ME,
               now(),
@@ -800,9 +801,10 @@ export const actions = {
   },
   /** Turn a relation into another kind as one undoable edit (BJ-52, Linear's relation pill › Change to…). */
   changeRelation(key: string, target: string, from: string, to: string) {
+    const linked = get().issues.get(key)?.relations?.find((r) => r.key === target)?.issue;
     record([key, target], "change relation", () => {
       actions.relate(key, target, from, true);
-      actions.relate(key, target, to);
+      actions.relate(key, target, to, false, linked);
     });
   },
 };

@@ -11,7 +11,7 @@ import { canRunShortcut, runShortcut, hotkeyOf } from "@/client/features/navigat
 import { copyIssue, copyKinds, copyIcons, copyShortcuts } from "./issue-copy";
 import { reminderSubmenu } from "@/client/features/reminders/reminders";
 import { post } from "@/client/features/navigation/commands";
-import { RELATION_ISSUE } from "./issue-activity";
+import { RELATION_ISSUE, jiraLinkType, relationName } from "@/shared/relations";
 import { DueRows, IssueLabelRows } from "./property-menu";
 import type { ActionEntry } from "@/client/components/action-menu";
 import { Icon, PriorityIcon, StatusIcon, type IconName } from "@/client/components/icons";
@@ -270,9 +270,14 @@ export function issueMenuEntries(
                   ]
                 : []),
               ...(issue.relations ?? []).map((r) => {
-                const role = RELATION_ISSUE[r.kind] ?? "related";
+                const role = RELATION_ISSUE[r.kind] ?? "related",
+                  summary = get().issues.get(r.key)?.summary ?? r.issue?.summary ?? "";
+                // A Jira link kind is named by this issue's phrase: "Is caused by VB-2 …".
+                const name = jiraLinkType(r.kind)
+                  ? relationName(r)
+                  : `${role[0]!.toUpperCase()}${role.slice(1)} issue`;
                 return {
-                  name: `${role[0]!.toUpperCase()}${role.slice(1)} issue ${r.key} ${get().issues.get(r.key)?.summary ?? ""}`.trim(),
+                  name: `${name} ${r.key} ${summary}`.trim(),
                   run: () => {
                     actions.relate(issue.key, r.key, r.kind, true);
                     close();

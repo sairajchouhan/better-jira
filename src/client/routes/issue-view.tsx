@@ -25,12 +25,13 @@ import { ReminderControl } from "@/client/features/reminders/reminders";
 import { CommentThreads, useCommentDraft, useDraftFiles } from "@/client/features/comments/comment-threads";
 import { ImageCommentCard } from "@/client/features/media/image-thread";
 import { linkTitle } from "@/shared/issue-resource";
-import { RELATION_ISSUE, activityEvents, type ActivityEvent, type ActivityRow, type Relation } from "@/client/features/issue/issue-activity";
+import { activityEvents, type ActivityEvent, type ActivityRow, type Relation } from "@/client/features/issue/issue-activity";
 import { normalizeDocument } from "@/shared/document";
 import { imageCommentIds } from "@/client/features/media/media-edits";
 import { Icon, PriorityIcon, RelationIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
 import { ME, boardOf, get, useStore, isWatching, statusOf } from "@/client/state/store";
-import { issueURL } from "@/client/features/issue/issue-urls";
+import { issueURL, jiraIssueURL } from "@/client/features/issue/issue-urls";
+import { LINEAR_RELATIONS, RELATION_ISSUE, jiraLinkType, relationSections } from "@/shared/relations";
 import { AppLink } from "@/client/features/navigation/app-link";
 import { actions, addIssueFiles } from "@/client/state/issue-actions";
 import { loadFull } from "@/client/state/server-data";
@@ -76,16 +77,20 @@ function describeActivity(event: PropertyActivity, issue: Issue, then = false): 
   const { field, before, after } = event;
   if (field === "relation") {
     const relation = (after ?? before) as Relation,
-      target = get().issues.get(relation.key);
-    const verb = after
-      ? ({
-          related: "added related issue",
-          blocked: "marked this issue as blocked by",
-          blocking: "marked this issue as blocking",
-          duplicate: "marked this issue as a duplicate of",
-          duplicated: "marked this issue as duplicated by",
-        }[relation.kind] ?? "added related issue")
-      : `removed ${RELATION_ISSUE[relation.kind] ?? "related"} issue`;
+      target = get().issues.get(relation.key),
+      // A Jira link kind Linear has no wording for is named by Jira's phrase ("removed is caused by link").
+      phrase = jiraLinkType(relation.kind) && (relation.label ?? jiraLinkType(relation.kind));
+    const verb = phrase
+      ? `${after ? "added" : "removed"} ${phrase} link`
+      : after
+        ? ({
+            related: "added related issue",
+            blocked: "marked this issue as blocked by",
+            blocking: "marked this issue as blocking",
+            duplicate: "marked this issue as a duplicate of",
+            duplicated: "marked this issue as duplicated by",
+          }[relation.kind] ?? "added related issue")
+        : `removed ${RELATION_ISSUE[relation.kind] ?? "related"} issue`;
     return (
       <>
         {verb}{" "}
@@ -94,7 +99,10 @@ function describeActivity(event: PropertyActivity, issue: Issue, then = false): 
             <b className="font-medium">{relation.key}</b> {target.summary}
           </AppLink>
         ) : (
-          <b className="font-medium">{relation.key}</b>
+          <>
+            <b className="font-medium">{relation.key}</b>
+            {relation.issue && ` ${relation.issue.summary}`}
+          </>
         )}
       </>
     );
@@ -413,25 +421,10 @@ function Title({ issue }: { issue: Issue }) {
   );
 }
 
-/** Linear's property list: unlabelled 13px/500 rows under section headings, no box and no Reporter/Created/Updated rows. */
-const RELATION_SECTIONS = [
-  ["blocked", "Blocked by"],
-  ["blocking", "Blocking"],
-  ["related", "Related"],
-  ["duplicate", "Duplicate of"],
-  ["duplicated", "Duplicated by"],
-] as const;
 /** A relation in the sidebar: its pill, a remove button on hover, and Linear's context menu (BJ-52): Change to…, Remove
- *  relation, Copy link. */
-function RelationRow({
-  issueKey,
-  relatedKey,
-  kind,
-}: {
-  issueKey: string;
-  relatedKey: string;
-  kind: (typeof RELATION_SECTIONS)[number][0];
-}) {
+ *  relation, Copy link. A Jira link kind Linear lacks changes to any of Linear's kinds. */
+function RelationRow({ issueKey, relation }: { issueKey: string; relation: Relation }) {
+  const { key: relatedKey, kind } = relation;
   const remove = () => {
     actions.relate(issueKey, relatedKey, kind, true);
     // Focus stays in the issue, as after removing a resource: the next relation, else Issue options.
@@ -448,7 +441,7 @@ function RelationRow({
       {
         name: "Change to…",
         icon: "flag",
-        children: RELATION_SECTIONS.filter(([k]) => k !== kind).map(([to, name]) => ({
+        children: LINEAR_RELATIONS.filter(([k]) => k !== kind).map(([to, name]) => ({
           name,
           run: () => actions.changeRelation(issueKey, relatedKey, kind, to),
         })),
@@ -470,7 +463,7 @@ function RelationRow({
         data-relation={`${kind}:${relatedKey}`}
         className="group/relation flex max-w-full items-center gap-2"
       >
-        <RelatedIssue issueKey={relatedKey} />
+        <RelatedIssue relation={relation} />
         <IconButton
           label="Remove relation"
           variant="borderless"
@@ -484,20 +477,32 @@ function RelationRow({
     </ContextMenu>
   );
 }
-/** A related issue's pill: its status and title, or just its key when it isn't mirrored. */
-function RelatedIssue({ issueKey }: { issueKey: string }) {
-  const target = useStore((s) => s.issues.get(issueKey)),
-    status = target && statusOf(target);
-  return target ? (
-    <AppLink to={related(target)} className="relation-pill">
-      <span>{status && <StatusIcon status={status} />}</span>
-      <span className="truncate">{target.summary}</span>
-    </AppLink>
-  ) : (
-    <span className="relation-pill">
-      <span />
-      <span className="truncate">{issueKey}</span>
-    </span>
+/** A related issue's pill, like Linear's (IssueDetailsPaneSidebar: status icon, then title). A mirrored issue opens here;
+ *  one outside the mirrored boards shows the status and title Jira sent with the link and opens in Jira, the only place
+ *  this app can show it (BJ-15). Without either, its key. */
+function RelatedIssue({ relation }: { relation: Relation }) {
+  const target = useStore((s) => s.issues.get(relation.key));
+  if (target) {
+    const status = statusOf(target);
+    return (
+      <AppLink to={related(target)} className="relation-pill">
+        <span>{status && <StatusIcon status={status} />}</span>
+        <span className="truncate">{target.summary}</span>
+      </AppLink>
+    );
+  }
+  const linked = relation.issue;
+  return (
+    <a
+      href={jiraIssueURL(relation.key)}
+      target="_blank"
+      rel="noreferrer"
+      className="relation-pill"
+      title={linked ? `${relation.key} ${linked.summary}` : relation.key}
+    >
+      <span>{linked?.status && <StatusIcon status={linked.status} />}</span>
+      <span className="truncate">{linked?.summary ?? relation.key}</span>
+    </a>
   );
 }
 type PropertyOverlay =
@@ -677,16 +682,14 @@ function Properties({ issue }: { issue: Issue }) {
         ) : null}
       </PropertySection>
       {/* Linear (RAJ-52): a section per relation kind after Project, each related issue a 28px pill (its status and title) with a round remove button on hover. */}
-      {RELATION_SECTIONS.map(([kind, heading]) => {
-        const rows = (issue.relations ?? []).filter((r) => r.kind === kind);
-        return rows.length ? (
-          <PropertySection key={kind} name={heading}>
-            {rows.map((r) => (
-              <RelationRow key={r.key} issueKey={issue.key} relatedKey={r.key} kind={kind} />
-            ))}
-          </PropertySection>
-        ) : null;
-      })}
+      {/* Linear's sections in its order, then any other Jira link kind under Jira's own phrase ("Is caused by"). */}
+      {relationSections(issue.relations ?? []).map(({ kind, heading, rows }) => (
+        <PropertySection key={kind} name={heading}>
+          {rows.map((r) => (
+            <RelationRow key={r.key} issueKey={issue.key} relation={r} />
+          ))}
+        </PropertySection>
+      ))}
     </div>
   );
 }

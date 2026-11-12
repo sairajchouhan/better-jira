@@ -152,7 +152,12 @@ const isIssue = (v: unknown, key: string): v is Issue =>
   ) &&
   optionalArray(
     v.relations,
-    (r) => object(r) && typeof r.key === "string" && typeof r.kind === "string",
+    (r) =>
+      object(r) &&
+      typeof r.key === "string" &&
+      typeof r.kind === "string" &&
+      (r.label === undefined || typeof r.label === "string") &&
+      (r.issue === undefined || (object(r.issue) && typeof r.issue.summary === "string")),
   ) &&
   optionalArray(
     v.milestones,
