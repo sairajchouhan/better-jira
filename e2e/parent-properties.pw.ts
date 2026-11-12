@@ -783,7 +783,7 @@ test("RAJ-52: relations: Mark as menus, sidebar pills, Activity rows and Issue o
       ["Recent", "Create"],
       "Add sub-issue…" +
         (await page.eval(
-          `document.querySelector('[cmdk-item][data-value="create"] kbd').textContent`,
+          `document.querySelector('[cmdk-item][data-value="create"] .ui-shortcut').textContent`,
         )),
       "↵Add as sub-issue",
       false,
