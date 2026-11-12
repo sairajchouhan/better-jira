@@ -18,16 +18,22 @@ import {
   type InboxView,
   type Local,
 } from "./inbox-model";
-import type { Issue, get as appGet, set as appSet, ui as appUi } from "./store";
-import type { statusById } from "./board-catalog";
+import type { Issue, Status } from "./store";
 export type Feed = InboxFeed & { writable: boolean };
 export type Category = "all" | "direct" | "watching";
 export type InboxPorts = {
   queryClient: QueryClient;
-  get: typeof appGet;
-  set: typeof appSet;
-  ui: Pick<typeof appUi, "send">;
-  statusOf: (key: string) => ReturnType<typeof statusById> | undefined;
+  get: () => { issues: Map<string, Issue>; clock: number };
+  set: (patch: { perf: string }) => void;
+  ui: {
+    send: (
+      event:
+        | { type: "toast.dismiss" }
+        | { type: "toast.show"; text: string; undo: "inbox" }
+        | { type: "overlay.open"; overlay: "snooze" },
+    ) => void;
+  };
+  statusOf: (key: string) => Status | undefined;
   read: <T>(name: string, fallback: T) => T;
   save: (name: string, value: object) => void;
   fetchPage: (query: URLSearchParams) => Promise<Feed>;

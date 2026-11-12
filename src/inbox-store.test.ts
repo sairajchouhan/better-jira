@@ -35,10 +35,10 @@ function setup(writable = true, send: InboxPorts["send"] = async () => null) {
   const state = { issues: new Map(), clock: Date.now() };
   const ports: InboxPorts = {
     queryClient,
-    get: (() => state) as InboxPorts["get"],
-    set: ((patch: { perf?: string }) => {
+    get: () => state,
+    set: (patch: { perf: string }) => {
       if (patch.perf) messages.push(patch.perf);
-    }) as InboxPorts["set"],
+    },
     ui: { send: () => {} },
     statusOf: () => undefined,
     read: <T>(name: string, fallback: T) => ({ ...fallback, ...saved[name] }),
@@ -187,4 +187,35 @@ test("local patches merge another tab's heads and storage invalidation reloads v
   a.saved.view = { ...DEFAULT_VIEW, ordering: "oldest" };
   a.store.storageChanged("view");
   expect(a.store.viewState().ordering).toBe("oldest");
+});
+
+test("keyboard movement follows filtered display order and keeps the newly read selection visible", () => {
+  const a = setup(false);
+  a.items[0]!.time = "2026-11-12T00:00:00Z";
+  a.items[1]!.time = "2026-11-11T00:00:00Z";
+  a.store.changeView({ ordering: "oldest", unreadOnly: true });
+  a.store.moveRow(1);
+  expect(a.store.selected()).toBe("3");
+  expect(a.store.selectedRow()?.unread).toBe(false);
+  a.store.moveRow(1);
+  expect(a.store.selected()).toBe("2");
+  a.store.moveRow(1);
+  expect(a.store.selected()).toBe("1");
+  a.store.moveRow(1);
+  expect(a.store.selected()).toBe("1");
+});
+
+test("snooze removal advances selection and undo restores prior local state and selection", () => {
+  const a = setup(false);
+  a.store.selectRow(a.items[0]);
+  const until = Date.now() + 3_600_000;
+  a.store.snoozeRow(until);
+  expect(a.store.selected()).toBe("2");
+  expect(a.store.localState()["head-1"]).toEqual({
+    read: true,
+    snoozed: until,
+  });
+  a.store.undoInboxToast();
+  expect(a.store.selected()).toBe("1");
+  expect(a.store.localState()["head-1"]).toEqual({ read: true });
 });
