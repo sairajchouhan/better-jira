@@ -10,7 +10,7 @@ const choose = (page: Page, selector: string, files: string[]) =>
 const DESCRIPTION_FILES = ".rich-editor:has(#description) input[type=file]";
 const COMMENT_FILES = ".rich-editor:has(#comment) input[type=file]";
 const SAVED = `document.querySelector('[aria-label="Local save status"]')?.textContent.includes('Saved')`;
-const submitDisabled = `[...document.querySelectorAll('button')].find(b=>b.textContent==='Submit comment').disabled`;
+const submitDisabled = `document.querySelector('button[aria-label="Submit comment"]').disabled`;
 
 test("local files: uploads render, play and survive reload without Jira media calls, and back up byte for byte", async ({
   open,
@@ -75,7 +75,7 @@ test("local files: uploads render, play and survive reload without Jira media ca
     );
     await choose(page, COMMENT_FILES, ["media-image.png"]);
     await page.waitFor(`!!document.querySelector('#comment img')`);
-    await page.click("text=Submit comment");
+    await page.click(`button[aria-label="Submit comment"]`);
     await page.waitFor(`!!document.querySelector('[data-comment^="local-"] img')`);
     await page.waitFor(SAVED);
     await page.reload();
@@ -172,7 +172,7 @@ test("local storage failures: nothing partial is saved, Retry saves the whole se
     await page.click("text=Discard");
     await page.waitFor(`!document.querySelector('#comment .media-upload')`);
     expect(await page.eval(submitDisabled)).toBe(false);
-    await page.click("text=Submit comment");
+    await page.click(`button[aria-label="Submit comment"]`);
     await page.waitFor(
       `document.querySelector('[data-comment^="local-"]')?.textContent.includes('Text waiting for its attachment')`,
     );

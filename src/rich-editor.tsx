@@ -698,18 +698,19 @@ export function RichEditor(props: EditorEngineProps) {
           )}
           {props.onSave &&
             (presentation.variant === "comment" ? (
-              // Its tooltip ("Submit comment", or why sending waits) differs from its name, which IconButton can't express yet.
-              <button
-                type="button"
-                aria-label={props.saveLabel ?? "Save description"}
+              // Linear's filled send circle has no Jx variant; `rich-editor-submit` paints it (index.css).
+              <IconButton
+                label={props.saveLabel ?? "Save description"}
+                tooltip="Submit comment"
+                shortcut="⌘↵"
+                size="small"
                 disabled={uploadBusy || empty}
-                title={uploadBusy ? "Finish or discard attachments before sending" : "Submit comment (⌘↵)"}
-                className="rich-editor-submit disabled:opacity-40 rounded bg-accent px-3 py-1 text-white"
+                disabledReason={uploadBusy ? "Finish or discard attachments before sending" : undefined}
+                className="rich-editor-submit"
                 onClick={() => save()}
               >
                 <Icon name="up" />
-                <span className="sr-only">{props.saveLabel}</span>
-              </button>
+              </IconButton>
             ) : (
               // `rich-editor-submit` is the hook the sub-issue composer's ⌘↵ clicks.
               <Button

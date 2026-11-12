@@ -24,7 +24,7 @@ test("editor presentations retain their frame, toolbar and submit contracts", ()
   expect(comment).toContain('data-variant="comment"');
   expect(comment).toContain('aria-label="Comment formatting"');
   expect(comment.indexOf("rich-editor-actions")).toBeLessThan(comment.indexOf('role="toolbar"'));
-  expect(comment).toContain('aria-label="Submit reply" disabled=""');
+  expect(comment).toMatch(/<button[^>]*aria-label="Submit reply"[^>]*disabled=""/);
   expect(comment).toContain("Submit comment (⌘↵)");
   expect(comment).not.toContain("⌘↵ save · Esc cancel");
 });
@@ -51,5 +51,5 @@ test("each public editor wrapper loads the editor and passes its own presentatio
     <CommentComposer initial="" onSave={() => {}} saveLabel="Submit reply" />,
   );
   expect(comment).toContain('data-variant="comment"');
-  expect(comment).toContain('aria-label="Submit reply" disabled=""');
+  expect(comment).toMatch(/<button[^>]*aria-label="Submit reply"[^>]*disabled=""/);
 });
