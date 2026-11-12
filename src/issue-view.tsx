@@ -67,6 +67,8 @@ import { descriptionSession, type DescriptionPorts } from "./description-session
 import { shortDate } from "./due-date";
 import { BoardBreadcrumbs } from "./app-chrome";
 import { Button, IconButton } from "./button";
+import { ActionMenu, type ActionEntry } from "./action-menu";
+import { copyIssue } from "./issue-copy";
 import { PropertyTrigger } from "./property-trigger";
 import { LabelChip } from "./label-chip";
 import { Text } from "./text";
@@ -449,6 +451,75 @@ const RELATION_SECTIONS = [
   ["duplicate", "Duplicate of"],
   ["duplicated", "Duplicated by"],
 ] as const;
+/** A relation in the sidebar: its pill, a remove button on hover, and Linear's context menu (BJ-52): Change to…, Remove
+ *  relation, Copy link. */
+function RelationRow({
+  issueKey,
+  relatedKey,
+  kind,
+}: {
+  issueKey: string;
+  relatedKey: string;
+  kind: (typeof RELATION_SECTIONS)[number][0];
+}) {
+  const [point, setPoint] = useState<{ x: number; y: number } | null>(null);
+  const remove = () => {
+    actions.relate(issueKey, relatedKey, kind, true);
+    // Focus stays in the issue, as after removing a resource: the next relation, else Issue options.
+    requestAnimationFrame(() =>
+      (
+        document.querySelector<HTMLElement>("[data-relation] a") ??
+        document.getElementById("issue-options")
+      )?.focus(),
+    );
+  };
+  const entries = (): ActionEntry[] => {
+    const related = get().issues.get(relatedKey);
+    const items: ActionEntry[] = [
+      {
+        name: "Change to…",
+        icon: "flag",
+        children: RELATION_SECTIONS.filter(([k]) => k !== kind).map(([to, name]) => ({
+          name,
+          run: () => actions.changeRelation(issueKey, relatedKey, kind, to),
+        })),
+      },
+      { name: "Remove relation", icon: "close", run: remove },
+    ];
+    if (related)
+      items.push({ name: "Copy link", icon: "link", divider: true, run: () => void copyIssue("URL", related) });
+    return items;
+  };
+  return (
+    <div
+      data-relation={`${kind}:${relatedKey}`}
+      className="group/relation flex max-w-full items-center gap-2"
+      onContextMenu={(event) => {
+        event.preventDefault();
+        setPoint({ x: event.clientX + 3, y: event.clientY });
+      }}
+    >
+      <RelatedIssue issueKey={relatedKey} />
+      <IconButton
+        label="Remove relation"
+        variant="borderless"
+        size="small"
+        className="opacity-0 group-hover/relation:opacity-100 focus-visible:opacity-100"
+        onClick={remove}
+      >
+        <Icon name="close" />
+      </IconButton>
+      {point && (
+        <ActionMenu
+          label="Relation options"
+          point={point}
+          entries={entries()}
+          close={() => setPoint(null)}
+        />
+      )}
+    </div>
+  );
+}
 /** A related issue's pill: its status and title, or just its key when it isn't mirrored. */
 function RelatedIssue({ issueKey }: { issueKey: string }) {
   const target = useStore((s) => s.issues.get(issueKey)),
@@ -655,31 +726,7 @@ function Properties({ issue }: { issue: Issue }) {
         return rows.length ? (
           <PropertySection key={kind} name={heading}>
             {rows.map((r) => (
-              <div
-                key={r.key}
-                data-relation={`${kind}:${r.key}`}
-                className="group/relation flex max-w-full items-center gap-2"
-              >
-                <RelatedIssue issueKey={r.key} />
-                <IconButton
-                  label="Remove relation"
-                  variant="borderless"
-                  size="small"
-                  className="opacity-0 group-hover/relation:opacity-100 focus-visible:opacity-100"
-                  onClick={() => {
-                    actions.relate(issue.key, r.key, kind, true);
-                    // Focus stays in the issue, as after removing a resource: the next relation, else Issue options.
-                    requestAnimationFrame(() =>
-                      (
-                        document.querySelector<HTMLElement>("[data-relation] a") ??
-                        document.getElementById("issue-options")
-                      )?.focus(),
-                    );
-                  }}
-                >
-                  <Icon name="close" />
-                </IconButton>
-              </div>
+              <RelationRow key={r.key} issueKey={issue.key} relatedKey={r.key} kind={kind} />
             ))}
           </PropertySection>
         ) : null;

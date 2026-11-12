@@ -90,6 +90,28 @@ test("sub-issue rows: shortcuts act on the row, collapse persists, the composer 
     await p.waitFor(`!document.querySelector('[data-relation="related:TEST-1"]')`);
     await p.waitFor(`document.activeElement?.id==='issue-options'`);
   });
+
+  await test.step("BJ-52: a relation pill's context menu changes the relation's kind and removes it", async () => {
+    const menu = (kind: string) =>
+      p.eval(
+        `(()=>{const n=document.querySelector('[data-relation="${kind}:TEST-1"] a'),r=n.getBoundingClientRect();n.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:r.x+20,clientY:r.y+10}))})()`,
+      );
+    await p.eval("document.activeElement?.blur()");
+    await p.keys("mr");
+    await p.type("TEST-1");
+    await p.waitFor(`!!document.querySelector('[cmdk-item][data-value="TEST-1"]')`);
+    await p.key("Enter");
+    await p.waitFor(`!!document.querySelector('[data-relation="related:TEST-1"] a')`);
+    await menu("related");
+    await p.hover('[role="dialog"][aria-label="Relation options"] [cmdk-item][data-value="Change to…"]');
+    await p.click('[role="dialog"][aria-label="Change to…"] [cmdk-item][data-value="Blocked by"]');
+    await p.waitFor(
+      `!!document.querySelector('[data-relation="blocked:TEST-1"]')&&!document.querySelector('[data-relation="related:TEST-1"]')`,
+    );
+    await menu("blocked");
+    await p.click('[role="dialog"][aria-label="Relation options"] [cmdk-item][data-value="Remove relation"]');
+    await p.waitFor(`!document.querySelector('[data-relation$=":TEST-1"]')`);
+  });
 });
 
 test("editing an issue's fields: pickers close and apply, Jira renames wait for the draft, and Tab leaves the composer", async ({

@@ -2868,6 +2868,13 @@ export const actions = {
       }
     });
   },
+  /** Turn a relation into another kind as one undoable edit (BJ-52, Linear's relation pill › Change to…). */
+  changeRelation(key: string, target: string, from: string, to: string) {
+    record([key, target], "change relation", () => {
+      actions.relate(key, target, from, true);
+      actions.relate(key, target, to);
+    });
+  },
 };
 
 /** Editor routes keep a detached draft, including toolbar changes, across history and reload. */
