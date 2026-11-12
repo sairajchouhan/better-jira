@@ -201,7 +201,8 @@ test("BJ-149: reopening Add filter creates a separate AND condition", async ({ o
 });
 
 test("BJ-61: hidden display feedback opens options and reveals completed issues", async ({ open }) => {
-  const page = await open();
+  const setup = `const read=fetch;window.fetch=async(...args)=>{const r=await read(...args);if(new URL(String(args[0]),location.href).pathname!=='/api/issues')return r;const issues=await r.json();Object.assign(issues.find(i=>i.key==='TEST-3'),{status:'done',resolved:new Date().toISOString()});return Response.json(issues)}`;
+  const page = await open("", { setup });
   try {
     await page.click('[aria-label="Display options"]');
     await page.click('[aria-label="Completed issues: All"]');
