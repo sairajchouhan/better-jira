@@ -2,12 +2,13 @@ import { expect, test, sleep, type App as Page } from "./app";
 
 // Two tabs of one browser (one context: shared IndexedDB, storage and locks) on a writable site faked in each page.
 // Ops land in `window.__ops`; a create's answer waits for `window.__release()`, so the issue stays "being created".
+// `window.__release(answer)` answers with `answer` instead of the created issue.
 const setup = `(()=>{const real=fetch;window.__ops=[];
 window.fetch=async(input,init)=>{const path=new URL(String(input),location.href).pathname;
  if(path==='/api/client'){const client=await (await real(input,init)).json();return Response.json({...client,writable:true});}
  const m=path.match(/^\\/api\\/issues\\/([^/]+)\\/ops$/);if(!m)return real(input,init);
  const {ops}=JSON.parse(init.body);window.__ops.push({key:m[1],ops});
- if(ops[0]?.op==='create'){await new Promise(r=>{window.__release=r});return Response.json({key:'TEST-99',created:{[m[1]]:'TEST-99'},others:[]});}
+ if(ops[0]?.op==='create'){const answer=await new Promise(r=>{window.__release=r});return Response.json(answer??{key:'TEST-99',created:{[m[1]]:'TEST-99'},others:[]});}
  return Response.json({key:m[1],created:{},others:[]});
 };})()`;
 const MENU = '[role="dialog"][aria-label="Issue options"]';
@@ -197,4 +198,22 @@ test("two tabs: BJ-19 a closing tab hands its unsent create to an open tab at on
   const create = await two.waitFor<any>(`${sentTo(key)}.find(o=>o.op==='create')`, 3000);
   expect(create.fields).toMatchObject({ summary: "Two tabs" });
   expect(create.client).toMatch(new RegExp(`^${key}@`));
+});
+
+test("two tabs: BJ-23 an issue its creating tab discards takes the other tab's edits of it along", async ({
+  open,
+}) => {
+  const one = await open("", { setup });
+  const key = await createHeld(one);
+  const two = await open("", { setup, tabOf: one });
+  await two.waitFor(`!!document.querySelector('[data-key="${key}"]')`);
+  // Tab two's edit waits for tab one's create.
+  await setPriority(two, key);
+  await two.waitFor(saved);
+  // Jira refuses the create: tab one discards the issue, and tab two lets go of it and of its edit.
+  await one.eval(`window.__release({key:'${key}',error:'Jira refused the issue',created:{},others:[]})`);
+  await two.waitFor(`!document.querySelector('[data-key="${key}"]')`, 8000);
+  // Its outbox lets the waiting edit go too: nothing is sent, and nothing waits on it any more.
+  expect(await two.eval(`window.__ops.length`)).toBe(0);
+  expect(await two.eval(`!!document.querySelector('[data-key="TEST-2"]')`)).toBe(true);
 });
