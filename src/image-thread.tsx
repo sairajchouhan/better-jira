@@ -1,4 +1,5 @@
 import { useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { createPortal } from "react-dom";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import type { ImageComment } from "./media-edits";
 import { ActionMenu } from "./action-menu";
@@ -25,8 +26,10 @@ export function ImageThread({
   const { text, editing } = draft;
   const setText = (text: string) => setDraft((value) => ({ ...value, text })),
     setEditing = (editing: string | undefined) => setDraft((value) => ({ ...value, editing }));
-  const [menu, setMenu] = useState<string>(),
+  const [menu, setMenu] = useState<{ anchor: HTMLElement; comment: ImageComment }>(),
     [notice, setNotice] = useState("");
+  const focusText = () =>
+    requestAnimationFrame(() => root.current?.querySelector("textarea")?.focus());
   useHotkeys(
     [
       { hotkey: "Mod+Enter", callback: () => form.current?.requestSubmit() },
@@ -50,42 +53,12 @@ export function ImageThread({
               </time>
               <button
                 aria-label="Image comment options"
-                onClick={() => setMenu(menu === comment.id ? undefined : comment.id)}
+                aria-expanded={menu?.comment.id === comment.id}
+                onClick={(event) => setMenu({ anchor: event.currentTarget, comment })}
               >
                 ···
               </button>
             </div>
-            {menu === comment.id && (
-              <div role="menu">
-                <button
-                  role="menuitem"
-                  onClick={() => {
-                    if (!editing) setDraft((value) => ({ ...value, beforeEdit: text }));
-                    setEditing(comment.id);
-                    setText(comment.text);
-                    setNotice("");
-                    setMenu(undefined);
-                    root.current?.querySelector("textarea")?.focus();
-                  }}
-                >
-                  Edit image comment
-                </button>
-                <button
-                  role="menuitem"
-                  onClick={() => {
-                    save(comments.filter((c) => c.id !== comment.id));
-                    if (editing === comment.id) {
-                      setEditing(undefined);
-                      setNotice("Comment deleted. Your draft is kept as a new comment.");
-                    }
-                    setMenu(undefined);
-                    requestAnimationFrame(() => root.current?.querySelector("textarea")?.focus());
-                  }}
-                >
-                  Delete image comment
-                </button>
-              </div>
-            )}
             <p>{comment.text}</p>
           </div>
         ))}
@@ -143,6 +116,43 @@ export function ImageThread({
           Cancel edit
         </button>
       )}
+      {/* Outside the thread's DOM, so Escape closes only the menu and not the thread (BJ-163). */}
+      {menu &&
+        createPortal(
+          <ActionMenu
+            label="Image comment options"
+            anchor={menu.anchor}
+            align="end"
+            close={() => setMenu(undefined)}
+            entries={[
+              {
+                name: "Edit image comment",
+                icon: "pencil",
+                run: () => {
+                  if (!editing) setDraft((value) => ({ ...value, beforeEdit: text }));
+                  setEditing(menu.comment.id);
+                  setText(menu.comment.text);
+                  setNotice("");
+                  // After the menu hands focus back to its trigger.
+                  focusText();
+                },
+              },
+              {
+                name: "Delete image comment",
+                icon: "trash",
+                run: () => {
+                  save(comments.filter((c) => c.id !== menu.comment.id));
+                  if (editing === menu.comment.id) {
+                    setEditing(undefined);
+                    setNotice("Comment deleted. Your draft is kept as a new comment.");
+                  }
+                  focusText();
+                },
+              },
+            ]}
+          />,
+          document.body,
+        )}
     </div>
   );
 }
