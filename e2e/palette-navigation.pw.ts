@@ -175,3 +175,24 @@ test("BJ-28: My issues has Assigned, Created, Subscribed and Activity tabs, each
   await p.waitFor(`document.readyState==="complete"&&location.pathname==="/my-issues/subscribed"`);
   await p.waitFor(`${tab("Subscribed")}?.getAttribute('aria-pressed')==='true'`);
 });
+
+const clickItem = (scope: string, text: string) =>
+  `[...document.querySelectorAll('${scope} [cmdk-item]')].find(n=>n.textContent.trim()===${JSON.stringify(text)})?.click()`;
+
+test("BJ-62: Search's Filter bar narrows results by priority and the chip removes it", async ({ open }) => {
+  const p = await open();
+  await p.key("/");
+  await p.waitFor(`!!${dialog("Search issues")}`);
+  await p.click('[role=dialog][aria-label="Search issues"] button[aria-label="Filter"]');
+  await p.waitFor(`!!${dialog("Filter")}`);
+  await p.eval(clickItem('[role=dialog][aria-label="Filter"]', "Priority"));
+  await p.waitFor(`[...document.querySelectorAll('[role=dialog][aria-label="Filter"] [cmdk-item]')].some(n=>n.textContent.trim()==='Urgent')`);
+  await p.eval(clickItem('[role=dialog][aria-label="Filter"]', "Urgent"));
+  await p.waitFor(`!${dialog("Filter")}&&!!${dialog("Search issues")}`);
+  await p.waitFor(`${dialog("Search issues")}.textContent.includes('Priority is')`);
+  const keys = `[...${dialog("Search issues")}.querySelectorAll('[cmdk-item]')].map(n=>n.textContent).join('|')`;
+  await p.waitFor(`${keys}.includes('TEST-4')`);
+  expect(await p.eval<string>(keys)).not.toContain("TEST-1");
+  await p.click('[aria-label="Remove Priority filter"]');
+  await p.waitFor(`!${dialog("Search issues")}.textContent.includes('Priority is')`);
+});

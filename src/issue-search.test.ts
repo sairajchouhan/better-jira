@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { matchDocuments, matchIssues, shorthandKey } from "./issue-search";
+import { matchDocuments, matchesSearchFilters, matchIssues, shorthandKey } from "./issue-search";
 import { plainDocument } from "./document";
 import type { Issue } from "./store";
 
@@ -70,4 +70,14 @@ test("BJ-62: @name refines search to that person's issues", () => {
   expect(keys(matchIssues(issues, "@kim"))).toEqual(["A-1"]); // any word of the name
   expect(keys(matchIssues(issues, "@sam login")).sort()).toEqual(["A-2"]);
   expect(keys(matchIssues(issues, "login @"))).toHaveLength(3); // a lone @ while the name is typed
+});
+
+test("BJ-62: Search filters keep issues with any picked value of each property, all properties applying", () => {
+  const issue = { key: "A-1", board: 2, status: "10", priority: "High", labels: ["ui", "perf"] } as Issue;
+  const status = () => "In Progress";
+  expect(matchesSearchFilters(issue, [], status)).toBe(true);
+  expect(matchesSearchFilters(issue, [{ field: "labels", values: ["perf", "docs"] }], status)).toBe(true);
+  expect(matchesSearchFilters(issue, [{ field: "status", values: ["In Progress"] }, { field: "board", values: ["2"] }], status)).toBe(true);
+  expect(matchesSearchFilters(issue, [{ field: "priority", values: ["High"] }, { field: "board", values: ["1"] }], status)).toBe(false);
+  expect(matchesSearchFilters({ ...issue, priority: undefined }, [{ field: "priority", values: ["High"] }], status)).toBe(false);
 });

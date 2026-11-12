@@ -13,7 +13,7 @@ import { Command } from "cmdk";
 import { useMemo, useState, type ReactNode } from "react";
 import { navigationChoices, type NavigationChoice } from "./quick-navigation";
 import { setScope } from "./view-settings";
-import { ActionMenu } from "./action-menu";
+import { ActionMenu, type ActionEntry } from "./action-menu";
 import { Icon, StatusIcon, TypeDot } from "./icons";
 import {
   currentKey,
@@ -34,7 +34,19 @@ import { filterCount } from "./view-model";
 import { Modal } from "./personal-controls";
 import { Avatar } from "./avatar";
 import { matchRank } from "./search-rank";
-import { matchDocuments, matchIssues, SEARCH_ORDERINGS, type DocumentMatch, type SearchOrdering } from "./issue-search";
+import {
+  matchDocuments,
+  matchesSearchFilters,
+  matchIssues,
+  SEARCH_FILTER_FIELDS,
+  SEARCH_ORDERINGS,
+  type DocumentMatch,
+  type SearchFilter,
+  type SearchOrdering,
+} from "./issue-search";
+import { FilterChip } from "./filter-chip";
+import { FilterIcon } from "./filter-icons";
+import { IconButton } from "./button";
 import { useStoredState } from "./stored-state";
 import { SelectRow } from "./display-options";
 import { recentIssues, recentSearches, recordSearch } from "./recents";
@@ -266,8 +278,25 @@ function DocumentRow({ match: { issue, resource }, q }: { match: DocumentMatch; 
 
 /** Search (/) and Open issue (O I): matching issues; before anything is typed, Linear's Recent issues (the ten last
  *  opened, not the open one) and Recent searches, or the 20 most recently updated until any issue has been opened. */
-function IssueRows({ q, setQ, ordering }: { q: string; setQ: (q: string) => void; ordering?: SearchOrdering }) {
-  const issues = useStore((s) => s.issues);
+function IssueRows({
+  q,
+  setQ,
+  ordering,
+  filters = [],
+}: {
+  q: string;
+  setQ: (q: string) => void;
+  ordering?: SearchOrdering;
+  filters?: SearchFilter[];
+}) {
+  const all = useStore((s) => s.issues);
+  const issues = useMemo(
+    () =>
+      filters.length
+        ? new Map([...all].filter(([, i]) => matchesSearchFilters(i, filters, (x) => statusOf(x)?.name)))
+        : all,
+    [all, filters],
+  );
   const [recent] = useState(() => {
     const open = get().panel ? get().selected : null;
     return recentIssues().flatMap((key) => {
@@ -276,8 +305,9 @@ function IssueRows({ q, setQ, ordering }: { q: string; setQ: (q: string) => void
     }).slice(0, 10);
   });
   const [searches] = useState(recentSearches);
-  const results = useMemo(() => (q.trim() ? matchIssues(issues, q, ordering) : []), [q, issues, ordering]);
-  if (q.trim()) return <IssueResults results={results} q={q} />;
+  const searching = !!q.trim() || filters.length > 0;
+  const results = useMemo(() => (searching ? matchIssues(issues, q, ordering) : []), [searching, q, issues, ordering]);
+  if (searching) return <IssueResults results={results} q={q} />;
   if (!recent.length && !searches.length)
     return (
       <IssueResults
@@ -306,12 +336,74 @@ function IssueRows({ q, setQ, ordering }: { q: string; setQ: (q: string) => void
   );
 }
 
+/** Search's Filter bar (BJ-62), beside @name: the board toolbar's filter chips, and a Filter menu of the properties issues
+ *  share across boards. Each pick adds or removes one value; a chip's × drops its property. */
+function SearchFilterBar({
+  filters,
+  setFilters,
+}: {
+  filters: SearchFilter[];
+  setFilters: (update: (filters: SearchFilter[]) => SearchFilter[]) => void;
+}) {
+  const issues = useStore((s) => s.issues),
+    boards = useStore((s) => s.boards);
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const choices = (field: SearchFilter["field"]): [value: string, label: string][] => {
+    if (field === "board") return boards.map((b) => [String(b.id), b.name]);
+    const names =
+      field === "status"
+        ? boards.flatMap((b) => b.columns.flatMap((c) => c.statuses.map((st) => st.name)))
+        : [...issues.values()].flatMap((i) => (field === "labels" ? i.labels : i.priority ? [i.priority] : []));
+    return [...new Set(names)].sort().map((name) => [name, name]);
+  };
+  const label = (field: SearchFilter["field"], value: string) =>
+    field === "board" ? (boards.find((b) => String(b.id) === value)?.name ?? value) : value;
+  const toggle = (field: SearchFilter["field"], value: string) =>
+    setFilters((current) => {
+      const values = current.find((f) => f.field === field)?.values ?? [],
+        next = values.includes(value) ? values.filter((v) => v !== value) : [...values, value],
+        rest = current.filter((f) => f.field !== field);
+      return next.length ? [...rest, { field, values: next }] : rest;
+    });
+  const entries: ActionEntry[] = SEARCH_FILTER_FIELDS.map(([field, name]) => ({
+    name,
+    image: <FilterIcon name={name} />,
+    children: choices(field).map(([value, text]) => ({
+      name: text,
+      selected: !!filters.find((f) => f.field === field)?.values.includes(value),
+      run: () => toggle(field, value),
+    })),
+  }));
+  return (
+    <div className="mb-1.5 flex flex-wrap items-center gap-1.5" aria-label="Search filters">
+      {filters.map(({ field, values }) => {
+        const name = SEARCH_FILTER_FIELDS.find(([f]) => f === field)![1];
+        return (
+          <FilterChip key={field}>
+            <FilterChip.Label>{name} is</FilterChip.Label>
+            <FilterChip.Value>{values.map((v) => label(field, v)).join(", ")}</FilterChip.Value>
+            <FilterChip.Remove
+              label={`Remove ${name} filter`}
+              onClick={() => setFilters((current) => current.filter((f) => f.field !== field))}
+            />
+          </FilterChip>
+        );
+      })}
+      <IconButton label="Filter" variant="muted" size="small" aria-expanded={!!anchor} onClick={(e) => setAnchor(e.currentTarget)}>
+        <Icon name="filter" />
+      </IconButton>
+      {anchor && <ActionMenu label="Filter" anchor={anchor} entries={entries} close={() => setAnchor(null)} />}
+    </div>
+  );
+}
+
 const isOrdering = (raw: unknown): SearchOrdering =>
   SEARCH_ORDERINGS.find(([value]) => value === raw)?.[0] ?? "relevance";
 
 /** Search (/): issues, in Linear's Search ordering, then documents. */
 export function IssueSearch() {
   const [q, setQ] = useState("");
+  const [filters, setFilters] = useState<SearchFilter[]>([]);
   const namespace = useStore((s) => s.namespace);
   const [ordering, setOrdering] = useStoredState(`better-jira:search-ordering:v1:${namespace}`, isOrdering, "relevance");
   return (
@@ -319,9 +411,14 @@ export function IssueSearch() {
       label="Search issues"
       q={q}
       setQ={setQ}
-      footer={<SelectRow label="Ordering" value={ordering} options={SEARCH_ORDERINGS} onChange={(v) => setOrdering(isOrdering(v))} />}
+      footer={
+        <>
+          <SearchFilterBar filters={filters} setFilters={setFilters} />
+          <SelectRow label="Ordering" value={ordering} options={SEARCH_ORDERINGS} onChange={(v) => setOrdering(isOrdering(v))} />
+        </>
+      }
     >
-      <IssueRows q={q} setQ={setQ} ordering={ordering} />
+      <IssueRows q={q} setQ={setQ} ordering={ordering} filters={filters} />
       {q.trim() && <DocumentResults q={q} />}
     </PaletteFrame>
   );

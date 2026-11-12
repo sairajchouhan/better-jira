@@ -2,6 +2,7 @@ import { matchRank } from "./search-rank";
 import { adfToText } from "./document";
 import type { IssueResource } from "./issue-resource";
 import type { Issue } from "./store";
+import { valuesFor } from "./view-model";
 
 /** The issue key a query names, hyphen optional ("sam11", "sam 11", "SAM-11" → "SAM-11"), as Linear's
  *  `identifierMatch({ matchWithoutHyphen, exact })`; letters only, so "sam11" is never SAM1-1 (a key with digits still matches typed in full). */
@@ -75,4 +76,22 @@ export function matchDocuments(issues: Map<string, Issue>, q: string): DocumentM
     .sort(([ra, a], [rb, b]) => ra - rb || (a.resource.updated < b.resource.updated ? 1 : -1))
     .slice(0, 50)
     .map(([, m]) => m);
+}
+
+/** BJ-62: Search's Filter bar, for the properties issues share across boards. Status is matched by name, since each
+ *  board has its own statuses. */
+export const SEARCH_FILTER_FIELDS = [
+  ["status", "Status"],
+  ["priority", "Priority"],
+  ["labels", "Labels"],
+  ["board", "Board"],
+] as const;
+export type SearchFilter = { field: (typeof SEARCH_FILTER_FIELDS)[number][0]; values: string[] };
+/** Each filter keeps issues with any of its values; filters on different properties all apply. */
+export function matchesSearchFilters(i: Issue, filters: SearchFilter[], statusName: (i: Issue) => string | undefined) {
+  return filters.every(({ field, values }) => {
+    const actual =
+      field === "board" ? [String(i.board)] : field === "status" ? [statusName(i) ?? ""] : valuesFor(i, field, []);
+    return actual.some((v) => values.includes(v));
+  });
 }
