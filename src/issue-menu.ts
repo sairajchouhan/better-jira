@@ -12,7 +12,7 @@ import {
 } from "./store";
 import { canHaveChildren, needsParent } from "./issue-properties";
 import { createIssueDocument } from "./issue-resources";
-import { shortcuts, canRunShortcut, runShortcut } from "./shortcuts";
+import { canRunShortcut, runShortcut, hotkeyOf } from "./shortcuts";
 import { copyIssue, copyKinds, copyIcons, copyShortcuts } from "./issue-copy";
 import { reminderEntries } from "./reminders";
 import { duePresets } from "./due-date";
@@ -50,8 +50,7 @@ export function issueMenuEntries(
   },
 ): ActionEntry[] {
   const parent = issue.parent ? get().issues.get(issue.parent) : undefined;
-  const favorite = get().favorites.includes(issue.key),
-    keys = (id: string) => shortcuts.find((entry) => entry.id === id)?.hotkey;
+  const favorite = get().favorites.includes(issue.key);
   const open = (overlay: "due" | "reminder") => openDialog(overlay);
   const related = (kind: NonNullable<IssueDraft["related"]>["kind"]) => {
     close();
@@ -68,13 +67,13 @@ export function issueMenuEntries(
   const picker = (name: string, icon: IconName, id: string): ActionEntry => ({
     name,
     icon,
-    shortcut: keys(id),
+    shortcut: hotkeyOf(id),
     run: () => openDialog(id === "assign" ? "assignee" : (id as IssueMenuDialog)),
   });
   const due: ActionEntry = {
     name: "Due date",
     icon: "calendar",
-    shortcut: keys("due"),
+    shortcut: hotkeyOf("due"),
     children: [
       {
         name: "Custom…",
@@ -97,13 +96,13 @@ export function issueMenuEntries(
     {
       name: "Issue type",
       icon: "board",
-      shortcut: keys("type"),
+      shortcut: hotkeyOf("type"),
       run: () => openDialog("type"),
     },
     {
       name: "Add link…",
       icon: "link",
-      shortcut: keys("link"),
+      shortcut: hotkeyOf("link"),
       run: () => reopen("link"),
     },
     {
@@ -121,7 +120,7 @@ export function issueMenuEntries(
           {
             name: "Rename…",
             icon: "pencil" as const,
-            shortcut: keys("rename"),
+            shortcut: hotkeyOf("rename"),
             run: () => openDialog("rename"),
           },
         ]
@@ -138,7 +137,7 @@ export function issueMenuEntries(
           ? [
               {
                 name: "Sub-issue…",
-                shortcut: keys("sub-issue"),
+                shortcut: hotkeyOf("sub-issue"),
                 run: () => {
                   close();
                   createSubIssue(issue);
@@ -158,27 +157,27 @@ export function issueMenuEntries(
         { name: "Parent of…", run: () => mark("child") },
         {
           name: "Sub-issue of…",
-          shortcut: keys("parent-set"),
+          shortcut: hotkeyOf("parent-set"),
           run: () => mark("parent"),
         },
         {
           name: "Related to…",
-          shortcut: keys("related"),
+          shortcut: hotkeyOf("related"),
           run: () => mark("related"),
         },
         {
           name: "Blocked by…",
-          shortcut: keys("blocked"),
+          shortcut: hotkeyOf("blocked"),
           run: () => mark("blocked"),
         },
         {
           name: "Blocking…",
-          shortcut: keys("blocking"),
+          shortcut: hotkeyOf("blocking"),
           run: () => mark("blocking"),
         },
         {
           name: "Duplicate of…",
-          shortcut: keys("duplicate"),
+          shortcut: hotkeyOf("duplicate"),
           run: () => mark("duplicate"),
         },
       ],
@@ -222,7 +221,7 @@ export function issueMenuEntries(
       children: copyKinds.map((kind) => ({
         name: `Copy ${kind}`,
         icon: copyIcons[kind],
-        shortcut: keys(copyShortcuts[kind] ?? ""),
+        shortcut: hotkeyOf(copyShortcuts[kind] ?? ""),
         // ActionMenu already closed; closing again after the await would close whatever menu opened meanwhile.
         run: () => void copyIssue(kind, issue),
       })),
@@ -236,7 +235,7 @@ export function issueMenuEntries(
       name: favorite ? "Remove from favorites" : "Favorite",
       icon: favorite ? "starred" : "star",
       divider: true,
-      shortcut: keys("favorite"),
+      shortcut: hotkeyOf("favorite"),
       run: () => {
         toggleFavorite(issue.key);
         close();
@@ -245,7 +244,7 @@ export function issueMenuEntries(
     {
       name: "Remind me",
       icon: "clock",
-      shortcut: keys("remind"),
+      shortcut: hotkeyOf("remind"),
       children: reminderEntries((at) => {
         actions.remind(issue.key, at);
         close();
@@ -277,7 +276,7 @@ export function issueMenuEntries(
   const remove: ActionEntry = {
     name: "Delete",
     icon: "trash",
-    shortcut: keys("delete"),
+    shortcut: hotkeyOf("delete"),
     divider: presentation === "sub-issue",
 
     run: () => actions.remove(issue.key),
@@ -295,7 +294,7 @@ export function issueMenuEntries(
     .filter(([id]) => canRunShortcut(id))
     .map(([id, name]) => ({
       name,
-      shortcut: keys(id),
+      shortcut: hotkeyOf(id),
       run: () => runShortcut(id, issue.key),
     }));
   const entries: ActionEntry[] =

@@ -26,6 +26,8 @@ import { SegmentedControl } from "./segmented-control";
 import { TextInput } from "./field";
 import { Text } from "./text";
 import { LoadingState } from "./empty-state";
+import { hotkeyOf } from "./shortcuts";
+import type { Keys } from "./keycap";
 import { shortDate } from "./due-date";
 import {
   ME,
@@ -102,7 +104,7 @@ function AddFilterButton({
   label: string;
   /** Hover text when it differs from the name: the toolbar's "Add filter" shows "Filter (F)", as Linear's does. */
   tooltip?: string;
-  shortcut?: string;
+  shortcut?: Keys;
   variant: ButtonVariant;
   size: ButtonSize;
   className?: string;
@@ -177,7 +179,7 @@ export function BoardControls({ board }: { board: Board }) {
         expanded={toolbar === "filter" || toolbar === "advanced"}
         label={count ? "Add another filter" : "Add filter"}
         tooltip={count ? undefined : "Filter"}
-        shortcut={count ? undefined : "F"}
+        shortcut={count ? undefined : hotkeyOf("filter")}
         variant="secondary"
         size="medium"
       >
@@ -186,7 +188,7 @@ export function BoardControls({ board }: { board: Board }) {
       <IconButton
         ref={displayRef}
         label="Display options"
-        shortcut="Shift+V"
+        shortcut={hotkeyOf("display")}
         variant="secondary"
         size="medium"
         aria-expanded={toolbar === "display"}
@@ -660,7 +662,7 @@ function FilterSaveActions({ board }: { board: Board }) {
                   disabled={saving || !mergeable}
                   title={mergeable ? undefined : "Cannot merge these filters into the view"}
                   description={mergeable ? undefined : "Cannot merge these filters into the view"}
-                  shortcut="Alt+S"
+                  shortcut={hotkeyOf("view-save")}
                   onSelect={() => void save()}
                 >
                   Save to this view
@@ -668,7 +670,7 @@ function FilterSaveActions({ board }: { board: Board }) {
               )}
               <Menu.Item
                 value="create"
-                shortcut="Alt+V"
+                shortcut={hotkeyOf("view-create")}
                 onSelect={() => {
                   setSaveAnchor(null);
                   createToolbarView();
