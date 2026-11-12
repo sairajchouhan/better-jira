@@ -105,8 +105,8 @@ test("issue page layout: narrow pills, copy toolbar, compact comment drafts and 
     await page.key("s", "meta", "shift");
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Change subscribers'`);
     await page.type("Audit Me");
+    // FILTER-10: Enter applies and closes a multi-select menu.
     await page.key("Enter");
-    await page.key("Escape");
     await page.waitFor(`!!document.querySelector('[aria-label="Unsubscribe from issue"]')`);
     expect(await page.active()).toBe("Change subscribers");
     await page.reload();

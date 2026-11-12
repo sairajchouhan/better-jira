@@ -121,7 +121,8 @@ function usePopupFocus(
       e.preventDefault();
       close();
     }
-    if (e.key !== "Tab" || !ref.current) return;
+    // A menu's Tab moves its highlight instead.
+    if (e.key !== "Tab" || e.defaultPrevented || !ref.current) return;
     const nodes = [...ref.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
       (n) => n.getClientRects().length,
     );

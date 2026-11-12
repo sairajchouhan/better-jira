@@ -14,9 +14,13 @@ import {
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { Command } from "cmdk";
 import {
+  createContext,
+  use,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
+  useState,
   type ComponentProps,
   type KeyboardEvent,
   type ReactNode,
@@ -24,6 +28,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
+import { MenuSurfaceContext } from "./menu-surface";
 import { Shortcut, type Keys } from "./keycap";
 
 /**
@@ -56,30 +61,207 @@ export const MENU = {
   LABEL_GAP: 8,
 } as const;
 
-const OPENS_SUBMENU = "[cmdk-item][data-selected=true][aria-haspopup]";
+// cmdk's own row query: every enabled row, in order.
+const ROWS = '[cmdk-item]:not([aria-disabled="true"])';
+// Linear's J4e moves the highlight on these, and only these let a highlighted submenu row open its preview (canOpenSubmenuOnFocus).
+const NAVIGATION = new Set(["ArrowDown", "ArrowUp", "Tab", "PageDown", "PageUp", "Home", "End"]);
 
-/** The cmdk root: keyboard selection, filtering and looping. ArrowRight opens the highlighted row's submenu (Linear's J4e). */
-function MenuRoot({ className = "", ref, ...props }: ComponentProps<typeof Command>) {
+/** What one menu level shares with its submenu rows (Linear's i3e). */
+type MenuLevel = {
+  actions: {
+    /** Adds a submenu row, so a highlight change can close it or preview it; returns the removal. */
+    register: (value: string, submenu: SubmenuHandle) => () => void;
+    /** A submenu opened: its row takes the highlight. */
+    opened: (value: string) => void;
+  };
+  meta: { root: RefObject<HTMLDivElement | null> };
+};
+type SubmenuHandle = { open: boolean; close: () => void; preview: () => void };
+const MenuLevelContext = createContext<MenuLevel | null>(null);
+
+/**
+ * The cmdk root, owning the highlight so every menu shares Linear's J4e rules:
+ * - A highlight change closes any other open submenu. A highlight moved by a navigation key previews a submenu row after 300ms.
+ * - While a submenu the pointer opened is open, rows the pointer crosses on its way there keep their hands off the highlight, so
+ *   the safe polygon keeps it open (Linear blocks them with its JCe triangle).
+ * - Tab and Shift+Tab step like ↓ and ↑; PageDown and PageUp move a page and stop at the ends.
+ * - → opens the highlighted submenu row when the caret is at the end of the search.
+ * - Space, with the search empty (or mid-search right after ↑/↓ on a checkbox row), opens a submenu row, toggles a checkbox row
+ *   and keeps the menu open, or picks any other row.
+ * - Enter on a checkbox row picks it and closes the menu; Shift+Enter toggles it and keeps the menu open.
+ */
+function MenuRoot({
+  className = "",
+  ref,
+  value,
+  defaultValue,
+  onValueChange,
+  onKeyDown,
+  onPointerMove,
+  onChange,
+  children,
+  ...props
+}: ComponentProps<typeof Command>) {
   const root = useRef<HTMLDivElement>(null);
-  useHotkey(
-    "ArrowRight",
-    () => {
-      if (!root.current?.hasAttribute("data-pristine"))
-        root.current?.querySelector<HTMLElement>(OPENS_SUBMENU)?.click();
+  const surface = use(MenuSurfaceContext);
+  const [own, setOwn] = useState(defaultValue ?? "");
+  const highlighted = value ?? own;
+  const submenus = useRef(new Map<string, SubmenuHandle>());
+  // Whether the pointer moved last; the submenu the pointer opened (it owns the highlight until it closes); whether the last key moved
+  // the highlight; whether it was ↑/↓; whether to scroll the highlight into view.
+  const pointer = useRef(false),
+    pinned = useRef<string | null>(null),
+    previews = useRef(false),
+    arrowed = useRef(false),
+    scrolls = useRef(false);
+  const highlight = (next: string) => {
+    setOwn(next);
+    onValueChange?.(next);
+    for (const [key, submenu] of submenus.current) if (key !== next) submenu.close();
+    if (previews.current) submenus.current.get(next)?.preview();
+  };
+  const level: MenuLevel = {
+    actions: {
+      register: (key, submenu) => {
+        submenus.current.set(key, submenu);
+        return () => {
+          if (submenus.current.get(key) === submenu) submenus.current.delete(key);
+        };
+      },
+      opened: (key) => {
+        pinned.current = pointer.current ? key : null;
+        if (key !== highlighted) highlight(key);
+      },
     },
-    { target: root, capture: true, ignoreInputs: false },
-  );
+    meta: { root },
+  };
+  const rows = () =>
+    [...(root.current?.querySelectorAll<HTMLElement>(ROWS) ?? [])].filter(
+      (row) => row.closest("[cmdk-root]") === root.current,
+    );
+  /** Moves the highlight `step` rows, wrapping, or with `clamp` stopping at the ends (Linear's handleMoveFocus). */
+  const move = (step: number, clamp = false) => {
+    const all = rows(),
+      // A pristine menu (Linear's focusedIndex -1) shows no highlight, so the first step lands on an end.
+      at = root.current?.hasAttribute("data-pristine")
+        ? -1
+        : all.findIndex((row) => row.getAttribute("aria-selected") === "true"),
+      n = all.length;
+    if (!n) return;
+    const to =
+      at < 0 ? (step > 0 ? 0 : n - 1) : clamp ? Math.max(0, Math.min(n - 1, at + step)) : (at + step + n) % n;
+    scrolls.current = true;
+    highlight(all[to]!.getAttribute("data-value") ?? "");
+  };
+  // cmdk scrolls its own keyboard moves before a controlled value lands, so the menu scrolls the highlight itself (the rows'
+  // aria-selected catches up a render later, so the row is found by its value).
+  useLayoutEffect(() => {
+    if (!scrolls.current) return;
+    scrolls.current = false;
+    rows()
+      .find((row) => row.getAttribute("data-value") === highlighted)
+      ?.scrollIntoView({ block: "nearest" });
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Runs when the highlight changes; `rows` reads the DOM.
+  }, [highlighted]);
   return (
-    <Command
-      loop
-      {...props}
-      ref={(node) => {
-        root.current = node;
-        if (typeof ref === "function") ref(node);
-        else if (ref) ref.current = node;
-      }}
-      className={`menu ${className}`}
-    />
+    <MenuLevelContext value={level}>
+      <Command
+        loop
+        {...props}
+        value={highlighted}
+        disablePointerSelection
+        onValueChange={(next) => {
+          scrolls.current = true;
+          highlight(next);
+        }}
+        onPointerMove={(event) => {
+          onPointerMove?.(event);
+          pointer.current = true;
+          previews.current = false;
+          const row = (event.target as Element).closest<HTMLElement>("[cmdk-item]");
+          if (!row || row.closest("[cmdk-root]") !== root.current || row.getAttribute("aria-disabled") === "true")
+            return;
+          const next = row.getAttribute("data-value") ?? "";
+          if (next === highlighted || (pinned.current && submenus.current.get(pinned.current)?.open))
+            return;
+          highlight(next);
+        }}
+        onChange={(event) => {
+          onChange?.(event);
+          if ((event.target as Element).closest("[cmdk-root]") !== root.current) return;
+          // Linear closes a preview when the search changes.
+          previews.current = false;
+          for (const submenu of submenus.current.values()) submenu.close();
+        }}
+        onKeyDown={(event) => {
+          onKeyDown?.(event);
+          const target = event.target as HTMLElement;
+          if (event.defaultPrevented || event.nativeEvent.isComposing || target.closest("[cmdk-root]") !== root.current)
+            return;
+          const search = target instanceof HTMLInputElement ? target : null,
+            pristine = root.current?.hasAttribute("data-pristine"),
+            row = pristine ? undefined : rows().find((item) => item.getAttribute("aria-selected") === "true"),
+            plain = !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey,
+            afterArrow = arrowed.current;
+          pointer.current = false;
+          previews.current =
+            NAVIGATION.has(event.key) || (event.ctrlKey && ["n", "j", "p", "k"].includes(event.key));
+          if (event.key !== " ") arrowed.current = event.key === "ArrowDown" || event.key === "ArrowUp";
+          // A checkbox row toggles from its checkbox, which keeps the menu open; any other row picks.
+          const toggle = (item: HTMLElement) =>
+            (item.querySelector<HTMLElement>("input.menu-checkbox") ?? item).click();
+          switch (event.key) {
+            case "Tab":
+              event.preventDefault();
+              move(event.shiftKey ? -1 : 1);
+              return;
+            case "PageDown":
+            case "PageUp": {
+              event.preventDefault();
+              const list = root.current?.querySelector("[cmdk-list]");
+              const page = Math.max(1, Math.floor((list?.clientHeight ?? 0) / MENU.ITEM_HEIGHT));
+              move(event.key === "PageDown" ? page : -page, true);
+              return;
+            }
+            case "ArrowRight":
+              if (
+                row?.hasAttribute("aria-haspopup") &&
+                (!search || search.selectionStart === search.value.length)
+              ) {
+                event.preventDefault();
+                row.click();
+              }
+              return;
+            case " ":
+              if (pristine && !search?.value) event.preventDefault();
+              if (!row || (search?.value && !(afterArrow && plain && row.hasAttribute("aria-checked")))) return;
+              event.preventDefault();
+              toggle(row);
+              return;
+            case "Enter":
+              if (!row?.hasAttribute("aria-checked")) return;
+              if (event.shiftKey) {
+                event.preventDefault();
+                toggle(row);
+              } else {
+                const node = root.current;
+                // After cmdk's own Enter has picked the row; a row that closes the menu itself unmounts it first.
+                setTimeout(() => {
+                  if (node?.isConnected) surface?.close();
+                });
+              }
+          }
+        }}
+        ref={(node) => {
+          root.current = node;
+          if (typeof ref === "function") ref(node);
+          else if (ref) ref.current = node;
+        }}
+        className={`menu ${className}`}
+      >
+        {children}
+      </Command>
+    </MenuLevelContext>
   );
 }
 
@@ -275,9 +457,11 @@ function edgeInset(row: Element, side: "right" | "left") {
 }
 
 /**
- * A row that opens a nested menu (Linear's Item `SubMenu`): hover intent with a safe pointer path, ArrowRight or Enter opens and
- * focuses it, ArrowLeft and Escape return to this menu. It opens beside the row on `side`, overlapping its menu by 2px, with its first
- * row level with this one. The nested menu is portalled into `container` so it stays inside the parent popup's focus scope.
+ * A row that opens a nested menu (Linear's Item `SubMenu`): hover intent with a safe pointer path, ArrowRight, Enter or Space opens and
+ * focuses it, a keyboard highlight that rests on the row for 300ms previews it without moving focus (Linear's _6e). ArrowLeft and
+ * Backspace on an empty search return to this menu; Escape closes the whole menu, as Linear's does. It opens beside the row on `side`,
+ * overlapping its menu by 2px, with its first row level with this one, and only swaps sides when it doesn't fit. The nested menu is
+ * portalled into `container` so it stays inside the parent popup's focus scope.
  */
 function MenuSubmenu({
   value,
@@ -302,14 +486,26 @@ function MenuSubmenu({
 }) {
   const id = useId(),
     nodeId = useFloatingNodeId(),
+    level = use(MenuLevelContext),
+    surface = use(MenuSurfaceContext),
     row = useRef<HTMLDivElement>(null),
-    focusOnOpen = useRef(false);
+    focusOnOpen = useRef(false),
+    // A keyboard preview keeps focus in the parent menu until → or the pointer moves in.
+    previewing = useRef(false),
+    previewTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const setOpen = (next: boolean) => {
+    // An explicit open or close supersedes a pending keyboard preview, which would otherwise reopen a menu just closed.
+    clearTimeout(previewTimer.current);
+    if (next) level?.actions.opened(value);
+    onOpenChange(next);
+  };
   const { refs, floatingStyles, context, isPositioned } = useFloating({
     nodeId,
     open,
     onOpenChange: (next) => {
       focusOnOpen.current = false;
-      onOpenChange(next);
+      previewing.current = false;
+      setOpen(next);
     },
     placement: side === "right" ? "right-start" : "left-start",
     strategy: "fixed",
@@ -332,20 +528,41 @@ function MenuSubmenu({
   });
   const hover = useHover(context, {
     mouseOnly: true,
+    // Rows crossed in under 75ms on the way to an open submenu don't open theirs (Linear blocks them with its safe triangle).
     delay: { open: 75, close: 120 },
     handleClose: safePolygon({ buffer: 2 }),
   });
   const { getReferenceProps, getFloatingProps } = useInteractions([hover]);
-  const parentInput = () =>
-    row.current?.closest("[cmdk-root]")?.querySelector<HTMLInputElement>("input");
+  const parentInput = () => level?.meta.root.current?.querySelector<HTMLInputElement>("input");
   const focusInside = () => {
+    previewing.current = false;
     const node = refs.floating.current;
     (node?.querySelector<HTMLElement>("input") ?? node?.querySelector<HTMLElement>("select,button"))?.focus();
   };
   const back = () => {
-    onOpenChange(false);
+    setOpen(false);
     parentInput()?.focus();
   };
+  useEffect(() =>
+    level?.actions.register(value, {
+      open,
+      close: () => {
+        clearTimeout(previewTimer.current);
+        if (open) onOpenChange(false);
+      },
+      preview: () => {
+        clearTimeout(previewTimer.current);
+        previewTimer.current = setTimeout(() => {
+          if (open || row.current?.getAttribute("aria-selected") !== "true") return;
+          focusOnOpen.current = false;
+          previewing.current = true;
+          setOpen(true);
+        }, 300);
+      },
+    }),
+  );
+  useEffect(() => () => clearTimeout(previewTimer.current), []);
+  // ← at the start of the search, or Backspace on an empty one (not a held key that just emptied it), steps back one level.
   useHotkey(
     "ArrowLeft",
     (event) => {
@@ -356,7 +573,16 @@ function MenuSubmenu({
     },
     { target: refs.floating, capture: true, ignoreInputs: false, preventDefault: false },
   );
-  useHotkey("Escape", back, { target: refs.floating, capture: true, ignoreInputs: false });
+  useHotkey(
+    "Backspace",
+    (event) => {
+      const input = event.target instanceof HTMLInputElement ? event.target : null;
+      if (!input || input.value || event.repeat) return;
+      event.preventDefault();
+      back();
+    },
+    { target: refs.floating, capture: true, ignoreInputs: false, preventDefault: false },
+  );
   useEffect(() => {
     if (open && isPositioned && focusOnOpen.current) {
       focusInside();
@@ -387,7 +613,7 @@ function MenuSubmenu({
         onSelect={() => {
           focusOnOpen.current = true;
           if (open) focusInside();
-          else onOpenChange(true);
+          else setOpen(true);
         }}
         className="menu-item"
       >
@@ -408,8 +634,18 @@ function MenuSubmenu({
               onPointerEnter: () => {
                 if (!refs.floating.current?.contains(document.activeElement)) focusInside();
               },
+              // cmdk moves focus to a menu's search when it first highlights a row; a preview hands it straight back.
+              onFocus: () => {
+                if (previewing.current) parentInput()?.focus();
+              },
+              // Escape closes every level (Linear's closeParent); Tab moves this menu's highlight and reaches the popup's focus trap.
               onKeyDown: (event: KeyboardEvent) => {
-                if (event.key !== "Tab") event.stopPropagation();
+                if (event.key === "Tab") return;
+                event.stopPropagation();
+                if (event.key === "Escape" && surface) {
+                  event.preventDefault();
+                  surface.close();
+                }
               },
             })}
           >

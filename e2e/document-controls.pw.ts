@@ -195,10 +195,10 @@ test("document header, menus and shortcuts act on the document, preserve the par
     );
     await page.key("ArrowRight");
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Find copy'`);
+    // CORE-5: Escape in a submenu closes every level, as Linear's does.
     await page.key("Escape");
-    await page.waitFor(
-      `!!document.querySelector('[role="dialog"][aria-label="Document options"]')&&!document.querySelector('[role="dialog"][aria-label="Copy"]')`,
-    );
+    await page.waitFor(`!document.querySelector('[role="dialog"][aria-label="Document options"]')`);
+    await page.click('[aria-label="Document options"]');
     await page.hover('[cmdk-item][data-value="Copy"]');
     await page.click('[cmdk-item][data-value="Copy title as link"]');
     const link = await page.eval<string>("navigator.clipboard.readText()");
@@ -252,7 +252,7 @@ test("document header, menus and shortcuts act on the document, preserve the par
     expect(await page.eval(`!!document.querySelector('[role="dialog"][aria-label="Copy"]')`)).toBe(
       true,
     );
-    await page.key("Escape");
+    // CORE-5: one Escape closes the submenu and the menu.
     await page.key("Escape");
     await page.click('[aria-label^="Document display options"]');
     await page.click('[aria-label^="Owned by:"]');

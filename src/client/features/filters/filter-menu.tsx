@@ -1,5 +1,4 @@
 import { FloatingTree } from "@floating-ui/react";
-import { useHotkey } from "@tanstack/react-hotkeys";
 import { Fragment, useState, type ReactNode, type RefObject } from "react";
 import { FilterIcon } from "./filter-icons";
 import { Icon, type IconName } from "@/client/components/icons";
@@ -101,7 +100,6 @@ export default function FilterMenu({
   footer,
   side,
   openedBy,
-  onClose,
   onAdvanced,
 }: {
   board: Board;
@@ -109,19 +107,8 @@ export default function FilterMenu({
   footer?: ReactNode;
   side: "left" | "right";
   openedBy: "pointer" | "keyboard";
-  onClose: () => void;
   onAdvanced: () => void;
 }) {
-  // Linear: Enter on a value row picks it and closes the menu; clicks keep it open to pick more.
-  useHotkey(
-    "Enter",
-    (event) => {
-      const root = (event.target as Element | null)?.closest("[cmdk-root]");
-      if (root?.querySelector("[cmdk-item][data-selected=true][aria-checked]"))
-        setTimeout(onClose);
-    },
-    { target: container, ignoreInputs: false, capture: true, preventDefault: false, stopPropagation: false },
-  );
   return (
     <FloatingTree>
       <FilterLevel
@@ -182,7 +169,6 @@ function FilterLevel({
       filter={menuFilter}
       className={`filter-menu ${name ? "filter-sub" : ""} max-h-[calc(100vh-140px)]`}
       {...start.props}
-      onValueChange={(value) => setOpen((current) => (current === value ? current : null))}
     >
       <Menu.Input
         autoFocus={!name}

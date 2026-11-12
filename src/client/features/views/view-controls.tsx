@@ -151,7 +151,6 @@ function AddFilterButton({
               // Submenus open away from the trigger's edge: right of the chip row's "+", left of the toolbar button.
               side={placement === "bottom-left" ? "right" : "left"}
               openedBy={byPointer ? "pointer" : "keyboard"}
-              onClose={closeToolbar}
               onAdvanced={openAdvanced}
             />
           </Suspense>

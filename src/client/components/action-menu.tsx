@@ -116,7 +116,6 @@ function Level({
         if (event.key === "ArrowDown" || event.key === "Enter") event.preventDefault();
         if (event.key === "ArrowDown" || event.key === "ArrowUp") setPristine(false);
       }}
-      onValueChange={(value) => setOpen((current) => (value === current ? current : null))}
     >
       {/* Linear keeps the filter focused but shows it only once typing starts. */}
       <Menu.Input

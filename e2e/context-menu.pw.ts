@@ -71,7 +71,7 @@ await new Promise(requestAnimationFrame);return performance.now()-t})()`,
     await expect(page.page.locator(MENU)).toHaveCount(0);
   });
 
-  await test.step("arrow keys walk rows and open submenus, Escape steps back then closes", async () => {
+  await test.step("arrow keys walk rows and open submenus, ArrowLeft steps back, Escape closes every level", async () => {
     await rightClick(page, card);
     await expect.poll(() => page.active()).toBe("Find issue options");
     // Linear opens with no row highlighted; ↓ highlights the first.
@@ -91,10 +91,9 @@ await new Promise(requestAnimationFrame);return performance.now()-t})()`,
     expect(await page.active()).toBe("Find issue options");
     await page.key("ArrowRight");
     await expect(dueDate).toBeVisible();
+    // CORE-5 / ISSUE-12: Escape in a submenu closes every level at once, as Linear's does.
     await page.key("Escape");
     await expect(dueDate).toHaveCount(0);
-    await expect(menu).toBeVisible();
-    await page.key("Escape");
     await expect(menu).toHaveCount(0);
   });
 

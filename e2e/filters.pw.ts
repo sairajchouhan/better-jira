@@ -127,8 +127,9 @@ test("Add filter by keyboard: arrows into submenus and back, Esc out", async ({ 
     await page.key("ArrowRight");
     await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Filter Labels"`);
     expect(await page.eval(`!!${root}`)).toBe(true);
+    // ISSUE-14: Tab moves the submenu's highlight and keeps focus in its search.
     await page.key("Tab");
-    expect(await page.active()).toBe("Add Filter…");
+    expect(await page.active()).toBe("Filter Labels");
     await page.key("Tab", "shift");
     expect(await page.active()).toBe("Filter Labels");
     await page.key("ArrowLeft");
