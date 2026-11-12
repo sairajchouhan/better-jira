@@ -127,3 +127,9 @@ test("BJ-65: search and O D find a document by its body text and open it", async
   await p.key("Enter");
   await p.waitFor(`!!new URLSearchParams(location.search).get('document')`);
 });
+
+test("BJ-80: G U goes to the views page", async ({ open }) => {
+  const p = await open();
+  await p.keys("gu");
+  await p.waitFor(`location.pathname==='/views'`);
+});
