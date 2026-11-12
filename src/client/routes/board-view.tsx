@@ -620,27 +620,22 @@ function IssueTarget({
   );
 }
 
-/** The display's property chips; a row fits one label and a plain priority icon, a card two labels and a priority chip. */
-function IssueProperties({
-  issue,
-  display: d,
-  labels,
-  priorityClass,
-}: {
-  issue: Issue;
-  display: Display;
-  labels: number;
-  priorityClass: string;
-}) {
+/** The issue's priority when the display shows it: a plain icon leading a row, as Linear's list draws it, or a chip on a card. */
+function IssuePriority({ issue, display: d, className }: { issue: Issue; display: Display; className: string }) {
+  if (!d.properties.includes("priority")) return null;
+  return (
+    <span title={issue.priority ?? "No priority"} className={className}>
+      <PriorityIcon name={issue.priority} />
+    </span>
+  );
+}
+
+/** The display's property chips after the title; a row fits one label, a card two. */
+function IssueProperties({ issue, display: d, labels }: { issue: Issue; display: Display; labels: number }) {
   const show = (p: Property) => d.properties.includes(p);
   const clock = useStore((s) => (d.properties.includes("statusAge") ? s.clock : 0));
   return (
     <>
-      {show("priority") && (
-        <span title={issue.priority ?? "No priority"} className={priorityClass}>
-          <PriorityIcon name={issue.priority} />
-        </span>
-      )}
       {show("type") && issue.type && (
         <span className={CHIP}>
           <TypeDot type={issue.type} />
@@ -730,7 +725,8 @@ function IssueDates({ issue, display: d, updated }: { issue: Issue; display: Dis
   );
 }
 
-/** A list row: key, status, title, then properties, assignee and dates on one line; nested rows indent 20px per level. */
+/** A list row: priority, key, status, title, then properties, assignee and dates on one line, Linear's order; nested rows indent
+ *  20px per level. */
 const IssueRow = memo(function IssueRow({
   issue,
   selected,
@@ -754,6 +750,7 @@ const IssueRow = memo(function IssueRow({
         }
         style={depth ? { paddingLeft: 20 + depth * 20 } : undefined}
       >
+        <IssuePriority issue={issue} display={d} className="shrink-0 text-fg-3" />
         {show("id") && (
           <Text variant="mini" color="muted" numeric="tabular" className="w-[85px] shrink-0">
             {depth > 0 && "↳ "}
@@ -767,7 +764,7 @@ const IssueRow = memo(function IssueRow({
         )}
         <span className="min-w-32 flex-1 truncate font-medium">{issue.summary}</span>
         <span className="flex max-w-[45%] shrink-0 items-center gap-2 overflow-hidden">
-          <IssueProperties issue={issue} display={d} labels={1} priorityClass="text-fg-3" />
+          <IssueProperties issue={issue} display={d} labels={1} />
         </span>
         {show("assignee") && <Avatar user={issue.assignee} size={18} />}
         <Text variant="micro" color="muted" className="flex shrink-0 gap-2">
@@ -822,12 +819,8 @@ const BoardCard = memo(function BoardCard({
           </span>
         )}
         <div className="mt-2.5 flex flex-wrap items-center gap-1 overflow-hidden">
-          <IssueProperties
-            issue={issue}
-            display={d}
-            labels={2}
-            priorityClass={`${CHIP} px-[4.5px]`}
-          />
+          <IssuePriority issue={issue} display={d} className={`${CHIP} px-[4.5px]`} />
+          <IssueProperties issue={issue} display={d} labels={2} />
         </div>
         {(show("updated") || show("created")) && (
           <div className="mt-1.5 flex min-h-6 flex-wrap items-center gap-x-3 pl-px text-[12px] font-[450] text-card-fg-3">

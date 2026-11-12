@@ -182,3 +182,18 @@ test("BJ-194: list and board date tooltips share the absolute timestamp formatte
     }
   }
 });
+
+test("1.8: a list row leads with the priority icon, left of the ID and status; a card keeps its priority chip", async ({ open }) => {
+  const page = await open();
+  await show(page, { 1: { display: { layout: "list", properties: ["id", "status", "priority", "labels"] } } });
+  await page.waitFor(`!!document.querySelector('[data-key="TEST-1"] [title="Normal"]')`);
+  const order = await page.eval<string[]>(
+    `(()=>{const row=document.querySelector('[data-key="TEST-1"]');const pick=row.querySelector('[title="Normal"]');const id=[...row.querySelectorAll("*")].find(n=>n.childElementCount===0&&n.textContent.trim()==="TEST-1");const title=[...row.querySelectorAll("span")].find(n=>n.classList.contains("flex-1"));return [pick,id,title].sort((a,b)=>a.getBoundingClientRect().left-b.getBoundingClientRect().left).map(n=>n===pick?"priority":n===id?"id":"title")})()`,
+  );
+  expect(order).toEqual(["priority", "id", "title"]);
+  await show(page, { 1: { display: { layout: "board", properties: ["id", "priority"] } } });
+  const chip = await page.eval<number>(
+    `(()=>{const card=document.querySelector('[data-key="TEST-1"]');const pick=card.querySelector('[title="Normal"]');return pick.getBoundingClientRect().top-card.getBoundingClientRect().top})()`,
+  );
+  expect(chip).toBeGreaterThan(20);
+});
