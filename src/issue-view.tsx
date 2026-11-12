@@ -342,7 +342,7 @@ function IssueBody({ issue }: { issue: Issue }) {
       </div>
       <div className="issue-detail-grid" data-properties-hidden={propertiesHidden || undefined}>
         <div className="issue-detail-title">
-          <Title issue={issue} />
+          <Title key={issue.key} issue={issue} />
           <SubIssueOf issue={issue} />
         </div>
         {!propertiesHidden && (
