@@ -98,3 +98,31 @@ test("BJ-178: a read-only code block renders like the editor's: numbered, labell
   expect(long).toContain('data-collapsed="true"');
   expect(long).toContain("Expand (30 lines)");
 });
+
+test("BJ-16: smart links render as Linear's mention chip: issue status, key and title; a page's title; a site's icon and name", async () => {
+  const { set } = await import("@/client/state/store");
+  const { smartLinksFixture } = await import("./smart-links.fixture");
+  set({
+    site: "https://example.atlassian.net",
+    boards: [{ id: 1, name: "Board", columns: [{ name: "Doing", statuses: [{ id: "doing", name: "Doing", category: "indeterminate" }] }] }],
+    issues: new Map([["TEST-2", { key: "TEST-2", board: 1, summary: "Second fixture", status: "doing" } as any]]),
+  } as any);
+  const html = renderToStaticMarkup(<Adf node={smartLinksFixture} />);
+  const chips = [...html.matchAll(/<a class="mention-chip smart-link" data-smart-link="(\w+)" href="([^"]+)"[^>]*>(.*?)<\/a>/g)].map(
+    ([, kind, href, inner]) => [kind, href, inner!.replace(/<[^>]+>/g, "").replace(/[⁠ ]/g, "")],
+  );
+  expect(chips).toEqual([
+    ["issue", "https://example.atlassian.net/browse/TEST-2", "TEST-2 Second fixture"],
+    ["external", "https://github.com/acme/widgets/pull/42", "Fix the widget"],
+    ["confluence", "https://example.atlassian.net/wiki/spaces/ENG/pages/123456/Release+checklist", "Release checklist"],
+    ["external", "https://docs.google.com/document/d/abc/edit", "Google Doc"],
+    ["external", "https://example.com/handbook", "example.com/handbook"],
+  ]);
+  // The issue's status icon (Doing's in-progress colour) and the sites' icons through this server, never the sites.
+  expect(html).toContain("var(--st-progress)");
+  expect(html).toContain('src="/api/favicon?origin=https%3A%2F%2Fgithub.com"');
+  expect(html).not.toMatch(/<img[^>]+src="https?:/);
+  // Block cards keep their own line: the editor's wrapper.
+  expect(html).toContain('<p class="smart-link-block"><a class="mention-chip smart-link" data-smart-link="external" href="https://docs.google.com');
+  expect(html.match(/<span class="smart-link-node">/g)).toHaveLength(3);
+});

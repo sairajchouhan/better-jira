@@ -1,4 +1,4 @@
-import { expect, test, shownIssue } from "./app";
+import { expect, test, fixture, shownIssue } from "./app";
 
 const editor = `document.querySelector('#description')`;
 const linkTo = (href: string) => `#description a[href="${href}"]`;
@@ -74,4 +74,87 @@ test("an issue link in a rendered comment opens the issue here", async ({ open }
   await page.click(link);
   await page.waitFor(`${shownIssue}==='TEST-4'`);
   expect(await page.eval(`!!window.__opened`)).toBe(false);
+});
+
+test("BJ-16: Jira smart links of every kind show as Linear's mention chips, and an edit writes each back as the same node", async ({
+  open,
+}) => {
+  await fixture.reset({ smartLinks: true, writable: true });
+  const page = await open("?issue=TEST-2&view=page");
+  const chips = (scope: string) =>
+    `[...document.querySelectorAll(${JSON.stringify(`${scope} a.smart-link`)})].map(a=>[a.dataset.smartLink,a.textContent.replace(/[\\u2060\\u00a0]/g,'').trim()])`;
+  const expected = [
+    ["issue", "TEST-3 Browser fixture 3"], // on the board: the mirror's title and status
+    ["issue", "OPS-7 Rotate the staging keys"], // this site, off the board: the server's one read
+    ["issue", "PX-3"], // another site: the key, as Linear's fallback
+    ["confluence", "Release checklist (v2)"], // the page's own title, read by the server
+    ["external", "acme/widgets#42"],
+    ["external", "Google Sheet"],
+    ["external", "Slack message"],
+    ["external", "Checkout flow"],
+    ["external", "Loom video"],
+    ["external", "docs.example.com/guides/getting-started"],
+    ["external", "acme/widgets#7"], // blockCard
+    ["external", "example.com/handbook"], // an embedCard Linear can't frame
+  ];
+  await test.step("the editor shows each kind with Linear's chip; icons come from this server only", async () => {
+    await page.waitFor(`document.getElementById('description')?.classList.contains('ProseMirror') && JSON.stringify(${chips("#description")})===${JSON.stringify(JSON.stringify(expected))}`, 8000);
+    expect(
+      await page.eval(
+        `[...document.querySelectorAll('#description a.smart-link[data-smart-link=issue]')].map(a=>!!a.querySelector('.smart-link-image svg circle'))`,
+      ),
+    ).toEqual([true, true, true]);
+    await page.waitFor(
+      `[...document.querySelectorAll('#description a.smart-link[href^="https://github.com"] img')].every(i=>i.complete&&i.naturalWidth>0)`,
+    );
+    // A site with no icon falls back to the link icon, the same size.
+    expect(await page.eval(`!!document.querySelector('#description a.smart-link[href^="https://www.loom.com"] .smart-link-image svg')`)).toBe(true);
+    expect(
+      await page.eval(`performance.getEntriesByType('resource').map(e=>e.name).filter(n=>!n.startsWith(location.origin))`),
+    ).toEqual([]);
+    // The block card keeps its own line.
+    expect(await page.eval(`document.querySelector('#description p.smart-link-block a')?.textContent.includes('acme/widgets#7')`)).toBe(true);
+  });
+  await test.step("a comment's smart link is the same chip", async () => {
+    await page.waitFor(`JSON.stringify(${chips(".rich-doc:not(#description *):not(#description)")})==='[["external","acme/widgets#42"]]'`);
+  });
+  await test.step("editing the description writes every smart link back as the node and URL Jira sent", async () => {
+    await page.click("#description h2");
+    await page.key("End");
+    await page.type(" edited");
+    await page.click("#summary");
+    const cards = async () => {
+      const writes = (await fixture.log()).writes.filter((w: { key: string }) => w.key === "TEST-2");
+      const doc = writes.flatMap((w: any) => w.ops).reverse().find((op: any) => op.op === "fields" && op.fields.description)?.fields.description;
+      if (!doc) return null;
+      const found: unknown[] = [];
+      const walk = (n: any) => {
+        if (n.type.endsWith("Card")) found.push([n.type, n.attrs]);
+        (n.content ?? []).forEach(walk);
+      };
+      walk(doc);
+      return JSON.stringify(doc).includes("Rich fixture heading edited") ? found : null;
+    };
+    await expect.poll(cards, { timeout: 8000 }).toEqual([
+      ["inlineCard", { url: "https://example.atlassian.net/browse/TEST-3" }],
+      ["inlineCard", { url: "https://example.atlassian.net/browse/OPS-7?focusedCommentId=10" }],
+      ["inlineCard", { url: "https://partner.atlassian.net/browse/PX-3" }],
+      ["inlineCard", { url: "https://example.atlassian.net/wiki/spaces/ENG/pages/123456/Release+checklist" }],
+      ["inlineCard", { url: "https://github.com/acme/widgets/pull/42" }],
+      ["inlineCard", { url: "https://docs.google.com/spreadsheets/d/abc123/edit#gid=0" }],
+      ["inlineCard", { url: "https://acme.slack.com/archives/C0123/p1700000000000100" }],
+      ["inlineCard", { url: "https://www.figma.com/design/AbC123/Checkout-flow?node-id=1-2" }],
+      ["inlineCard", { url: "https://www.loom.com/share/0123abcd" }],
+      ["inlineCard", { url: "https://docs.example.com/guides/getting-started" }],
+      ["blockCard", { url: "https://github.com/acme/widgets/issues/7" }],
+      ["embedCard", { url: "https://example.com/handbook", layout: "center" }],
+    ]);
+  });
+  await test.step("an issue on the board opens here; another opens Jira's page", async () => {
+    await page.eval(`window.open=(url)=>{window.__opened=url;return null}`);
+    await page.click('#description a.smart-link[href$="/browse/OPS-7?focusedCommentId=10"]');
+    expect(await opened(page)).toBe("https://example.atlassian.net/browse/OPS-7?focusedCommentId=10");
+    await page.click('#description a.smart-link[href$="/browse/TEST-3"]');
+    await page.waitFor(`${shownIssue}==='TEST-3'`);
+  });
 });

@@ -81,6 +81,44 @@ const rich = {
     },
   ],
 };
+/** BJ-16: Jira smart links of every kind the survey of work Jira found, with made-up targets. */
+const card = (url: string, type = "inlineCard", attrs: object = {}) => ({ type, attrs: { url, ...attrs } });
+const smartLinkNodes = [
+  {
+    type: "paragraph",
+    content: [
+      { type: "text", text: "Links: " },
+      card("https://example.atlassian.net/browse/TEST-3"),
+      { type: "text", text: " " },
+      card("https://example.atlassian.net/browse/OPS-7?focusedCommentId=10"),
+      { type: "text", text: " " },
+      card("https://partner.atlassian.net/browse/PX-3"),
+      { type: "text", text: " " },
+      card("https://example.atlassian.net/wiki/spaces/ENG/pages/123456/Release+checklist"),
+      { type: "text", text: " " },
+      card("https://github.com/acme/widgets/pull/42"),
+      { type: "text", text: " " },
+      card("https://docs.google.com/spreadsheets/d/abc123/edit#gid=0"),
+      { type: "text", text: " " },
+      card("https://acme.slack.com/archives/C0123/p1700000000000100"),
+      { type: "text", text: " " },
+      card("https://www.figma.com/design/AbC123/Checkout-flow?node-id=1-2"),
+      { type: "text", text: " " },
+      card("https://www.loom.com/share/0123abcd"),
+      { type: "text", text: " " },
+      card("https://docs.example.com/guides/getting-started"),
+    ],
+  },
+  card("https://github.com/acme/widgets/issues/7", "blockCard"),
+  card("https://example.com/handbook", "embedCard", { layout: "center" }),
+];
+const smartLinkDetails: Record<string, unknown> = {
+  "https://example.atlassian.net/browse/OPS-7?focusedCommentId=10": {
+    title: "Rotate the staging keys",
+    status: { name: "In Review", category: "indeterminate" },
+  },
+  "https://example.atlassian.net/wiki/spaces/ENG/pages/123456/Release+checklist": { title: "Release checklist (v2)" },
+};
 const board = {
   id: 1,
   name: "Browser audit",
@@ -165,7 +203,9 @@ let clientFailures = 0,
   crossLinks = false,
   /** Jira changelogs per issue key, in the server's slim shape (src/shared/jira-history.ts), and how long they take. */
   history: Record<string, unknown[]> = {},
-  historyDelay = 0;
+  historyDelay = 0,
+  /** BJ-16: TEST-2's description and a comment carry a smart link of every kind work Jira has. */
+  smartLinks = false;
 /** TEST-1's links as the mirror projects them: made-up keys and text in the shape work Jira sends. */
 const crossRelations = [
   {
@@ -229,7 +269,7 @@ const listed = () =>
       ? { relations: [{ key: "TEST-1", kind: "inward:Cloners", label: "is cloned by" }] }
       : {}),
     ...(types.has(issue.key) ? { type: types.get(issue.key) } : {}),
-    comments: threadedComments ? thread.length : mediaInComment ? 1 : 0, // the mirror list counts the same Jira comments the detail returns
+    comments: threadedComments ? thread.length : mediaInComment || (smartLinks && issue.key === "TEST-2") ? 1 : 0, // the mirror list counts the same Jira comments the detail returns
   }));
 /** Stands in for the server's applyOps: type changes follow live Jira, which refuses Subtask ↔ standard types. */
 function applyOps(key: string, ops: any[]) {
@@ -616,7 +656,7 @@ function full(key: string): any {
               ? naturalLayoutNodes
               : mediaVariant === "long"
                 ? longNodes
-                : [...rich.content, ...media],
+                : [...rich.content, ...media, ...(smartLinks && key === "TEST-2" ? smartLinkNodes : [])],
       },
       ...(includeMedia
         ? {
@@ -635,6 +675,18 @@ function full(key: string): any {
       created: "2026-11-06T10:00:00Z",
       comment: threadedComments
         ? { total: thread.length, comments: thread }
+        : smartLinks && key === "TEST-2"
+          ? {
+              total: 1,
+              comments: [
+                {
+                  id: "jira-smart-link-comment",
+                  author: { accountId: user.id, displayName: user.name },
+                  created: "2026-11-06T10:00:00Z",
+                  body: { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text: "Done in " }, card("https://github.com/acme/widgets/pull/42")] }] },
+                },
+              ],
+            }
         : {
             total: mediaInComment ? 1 : 0,
             comments: mediaInComment
@@ -742,6 +794,7 @@ async function handle(req: Request) {
     added = false;
     history = settings.history ?? {};
     historyDelay = settings.historyDelay ?? 0;
+    smartLinks = settings.smartLinks ?? false;
     inbox = freshInbox(settings.inboxExtra ?? 0, settings.inboxExtraUnread ?? false);
     inboxFail = settings.inboxFail ?? false;
     inboxDelay = settings.inboxDelay ?? 0;
@@ -833,6 +886,13 @@ async function handle(req: Request) {
           target,
         )
       : null;
+  } else if (path === "/api/smart-link") body = smartLinkDetails[url.searchParams.get("url") ?? ""] ?? null;
+  else if (path === "/api/favicon") {
+    // GitHub's icon is "fetched"; every other site has none (the link icon shows).
+    requests.push({ method: req.method, path: path + url.search, status: 200 });
+    return url.searchParams.get("origin") === "https://github.com"
+      ? new Response(fixtureFile("media-image.png"), { headers: { "Content-Type": "image/png" } })
+      : new Response(null, { status: 404 });
   } else if (path.match(/^\/api\/issues\/[^/]+\/history$/)) {
     if (historyDelay) await Bun.sleep(historyDelay);
     body = history[decodeURIComponent(path.split("/").at(-2)!)] ?? [];

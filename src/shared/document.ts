@@ -98,9 +98,6 @@ export function textToAdf(text: string): AdfDocument {
   };
 }
 
-/** What a smart link shows: an issue's key for a link to its /browse/ page, otherwise the URL. */
-export const cardText = (url: unknown) =>
-  /\/browse\/([A-Z][A-Z0-9_]*-\d+)\/?(?:[?#].*)?$/.exec(String(url ?? ""))?.[1] ?? String(url ?? "Link");
 /** Plain text of ADF: what a reader sees, without formatting or media. */
 export function adfToText(node: any): string {
   if (!node) return "";

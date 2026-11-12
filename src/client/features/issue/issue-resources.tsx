@@ -8,6 +8,7 @@ import { Button, IconButton } from "@/client/components/button";
 import { SectionDisclosure } from "@/client/components/section-disclosure";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Icon } from "@/client/components/icons";
+import { LinkIcon } from "@/client/components/link-icon";
 
 import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { normalizeDocument } from "@/shared/document";
@@ -26,22 +27,6 @@ import {
 } from "@/shared/issue-resource";
 
 const previewRequested = new Set<string>();
-/** A link's site icon, falling back to the link icon when it does not load. */
-function LinkIcon({ src }: { src?: string }) {
-  const [failed, setFailed] = useState(false);
-  return src && !failed ? (
-    <img
-      data-link-icon
-      alt=""
-      src={src}
-      onError={() => setFailed(true)}
-      className="size-4 shrink-0 rounded-full object-contain"
-    />
-  ) : (
-    <Icon name="link" />
-  );
-}
-
 const resourceAge = (date: string) => {
   const minutes = Math.max(
     0,

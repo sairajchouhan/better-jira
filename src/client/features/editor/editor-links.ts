@@ -97,6 +97,8 @@ export const linkPlugin = () => {
           const target = anchor(view, event),
             focused = pressed?.focused ?? false;
           pressed = null;
+          // A smart link's chip already opened its issue here (smart-link.tsx).
+          if (event.defaultPrevented) return true;
           if (!target || event.button !== 0 || event.shiftKey) return false;
           if (isMac() ? event.metaKey : event.ctrlKey) {
             event.preventDefault();

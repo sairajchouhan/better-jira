@@ -828,8 +828,33 @@
     background-color: var(--card-pressed);
   }
 }
-.ProseMirror-focused .mention-chip.ProseMirror-selectednode {
+.ProseMirror-focused .mention-chip.ProseMirror-selectednode,
+.ProseMirror-focused .ProseMirror-selectednode > .mention-chip {
   background-color: color-mix(in lch, var(--accent) 40%, transparent);
+}
+/* BJ-16 smart links: Linear's mention chip (startup-root ME.chip + ._mentionChip_i34q1_15). The colour, pointer and no
+   underline are !important there too, over the editor's link rules; a long title wraps chip-like (box-decoration-break:
+   clone, padding-inline .2em/.3em, padding-block clamp(…1.5px)); the image stays with its first word (ME.noWrap) and an
+   issue's key is muted (ME.affix). */
+.mention-chip.smart-link {
+  color: var(--fg) !important;
+  cursor: pointer !important;
+  text-decoration-line: none !important;
+  white-space: normal;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  padding-block: clamp(0px, 1000000 * max(0px, 16.001px - 1em), 1.5px);
+  padding-inline: 0.2em 0.3em;
+}
+.smart-link-image {
+  white-space: nowrap;
+}
+.smart-link-image > :is(svg, img) {
+  display: inline-block;
+  vertical-align: -2px;
+}
+.smart-link-affix {
+  color: var(--fg-3);
 }
 /* .editor .emoji:not(.custom-emoji){font-family:var(--font-emoji);font-style:normal} */
 .rich-doc .rich-emoji {

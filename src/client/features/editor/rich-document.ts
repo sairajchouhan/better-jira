@@ -2,12 +2,12 @@ import { mediaCaretDocument } from "./media-caret";
 import { Schema, type MarkSpec, type Node as EditorNode, type NodeSpec } from "prosemirror-model";
 import { tableNodes } from "prosemirror-tables";
 import { embedFrame, embedSource } from "./embed";
+import { smartLinkText } from "@/shared/smart-link";
 
 import {
   normalizeDocument,
   safeLink,
   jiraDate,
-  cardText,
   type AdfMark,
   type AdfNode,
   type AdfDocument,
@@ -87,23 +87,22 @@ const opaque = (inline: boolean): NodeSpec => ({
       : `[${node.attrs.raw?.type ?? "Jira content"}]`,
   ],
 });
-/** Smart links stay read-only, but open their URL like Jira's. */
+/** Smart links stay read-only. The editor draws them as Linear's mention chip (smart-link-view.tsx); this plain form,
+ *  in the same wrapper, is what copying one carries. */
 const card = (block: boolean): NodeSpec => ({
   ...(block ? { group: "block" } : { inline: true, group: "inline" }),
   atom: true,
   attrs,
   toDOM: (node) => {
-    const url = node.attrs.original?.data.attrs?.url;
+    const data = node.attrs.original?.data;
     return [
-      "a",
-      {
-        contenteditable: "false",
-        class: block ? "rich-preserved" : "rich-token",
-        href: safeLink(url) ?? "",
-        target: "_blank",
-        rel: "noreferrer",
-      },
-      cardText(url),
+      block ? "p" : "span",
+      { contenteditable: "false", class: block ? "smart-link-block" : "smart-link-node" },
+      [
+        "a",
+        { class: "mention-chip smart-link", href: safeLink(data?.attrs?.url) ?? "", target: "_blank", rel: "noreferrer" },
+        smartLinkText(data?.attrs?.url, data?.attrs?.data),
+      ],
     ];
   },
 });
@@ -246,7 +245,7 @@ export const richSchema = new Schema({
         return [
           "div",
           { class: "rich-embed", contenteditable: "false", "data-url": String(url ?? "") },
-          src ? ["iframe", embedFrame(src)] : ["a", { href: safeLink(url) ?? "", target: "_blank", rel: "noreferrer" }, cardText(url)],
+          src ? ["iframe", embedFrame(src)] : ["a", { href: safeLink(url) ?? "", target: "_blank", rel: "noreferrer" }, smartLinkText(url)],
         ];
       },
     },

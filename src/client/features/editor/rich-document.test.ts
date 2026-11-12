@@ -6,6 +6,7 @@ import {
   toEditorDocument,
   type AdfDocument,
 } from "./rich-document";
+import { smartLinksFixture } from "./smart-links.fixture";
 
 export const richFixture: AdfDocument = {
   type: "doc",
@@ -313,4 +314,16 @@ test("R1-D3: inline code keeps only a link beside it, and blocks never carry tex
   const [paragraph, table] = fromEditorDocument(doc).content!;
   expect(paragraph!.content![0]!.marks!.map((mark) => mark.type).sort()).toEqual(["code", "link"]);
   expect(table!.marks).toBeUndefined();
+});
+
+test("BJ-16: smart links round-trip as the same Jira nodes, URLs and attributes, untouched or beside an edit", () => {
+  const editor = toEditorDocument(smartLinksFixture);
+  editor.check();
+  expect(fromEditorDocument(editor)).toEqual(smartLinksFixture);
+  const state = EditorState.create({ schema: richSchema, doc: editor });
+  const next = state.apply(state.tr.insertText("Now see ", 1));
+  const result = fromEditorDocument(next.doc);
+  expect(result.content?.[0]?.content?.[0]).toEqual({ type: "text", text: "Now see See " });
+  expect(result.content?.[0]?.content?.slice(1)).toEqual(smartLinksFixture.content?.[0]?.content?.slice(1));
+  expect(result.content?.slice(1)).toEqual(smartLinksFixture.content?.slice(1));
 });

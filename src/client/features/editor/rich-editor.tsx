@@ -46,9 +46,10 @@ import {
 import { mediaNodeView, type MediaNodeView } from "./media-node-view";
 import { expandNodeView } from "./expand-node-view";
 import { codeBlockNodeView } from "./code-block-view";
+import { smartLinkNodeView } from "./smart-link-view";
 import { codeBlockKeys, codeHighlightPlugin } from "./code-block-editing";
 import type { Attachment } from "@/shared/attachment-media";
-import { EditorView } from "prosemirror-view";
+import { EditorView, type NodeViewConstructor } from "prosemirror-view";
 import "prosemirror-view/style/prosemirror.css";
 import { baseKeymap, chainCommands, toggleMark } from "prosemirror-commands";
 import { keymap } from "prosemirror-keymap";
@@ -315,6 +316,9 @@ export function RichEditor(props: EditorEngineProps) {
         expand: expandNodeView,
         codeBlock: codeBlockNodeView,
         taskItem: taskItemView,
+        inlineCard: smartLinkNodeView as NodeViewConstructor,
+        blockCard: smartLinkNodeView as NodeViewConstructor,
+        embedCard: smartLinkNodeView as NodeViewConstructor,
         ...Object.fromEntries(
         ["mediaSingle", "mediaGroup", "media", "mediaInline"].map((type) => [
           type,

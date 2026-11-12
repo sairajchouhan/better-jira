@@ -192,6 +192,10 @@ const server = serve({
     "/api/remote-image": localOnly((req) => remoteImage(new URL(req.url).searchParams.get("url") ?? "")),
     "/api/issues": localOnly(() => json(mirror.issues())),
     "/api/avatar": { GET: localOnly(mirror.avatar) },
+    "/api/favicon": { GET: localOnly(mirror.favicon) },
+    "/api/smart-link": localOnly(async (req) =>
+      Response.json(await mirror.smartLinkDetails(new URL(req.url).searchParams.get("url") ?? "")),
+    ),
     "/api/link-preview": localOnly(async (req) =>
       Response.json(await fetchPreview(new URL(req.url).searchParams.get("url") ?? "")),
     ),

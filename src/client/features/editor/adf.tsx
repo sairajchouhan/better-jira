@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 import { MediaView } from "@/client/features/media/media-loader";
 import type { Attachment } from "@/shared/attachment-media";
-import { cardText, jiraDate, safeLink } from "@/shared/document";
+import { jiraDate, safeLink } from "@/shared/document";
 import { Icon } from "@/client/components/icons";
 import { ReadonlyCodeBlock } from "./code-block";
 import { embedFrame, embedSource } from "./embed";
+import { SmartLink, smartLinkWrapper } from "./smart-link";
 export { adfToText } from "@/shared/document";
 
 /** Renders Jira's ADF (Atlassian Document Format) with the editor's DOM and classes, so `.rich-doc` styles both the
@@ -123,18 +124,17 @@ export function Adf({
       return <>{jiraDate(a.timestamp)}</>;
     case "inlineCard":
     case "blockCard":
-      return (
-        <a
-          href={safeLink(a.url) ?? undefined}
-          target="_blank"
-          rel="noreferrer"
-        >
-          {cardText(a.url)}
-        </a>
-      );
     case "embedCard": {
-      const src = embedSource(String(a.url ?? ""));
-      if (!src) return <Adf node={{ ...node, type: "blockCard" }} />;
+      const src = node.type === "embedCard" && embedSource(String(a.url ?? ""));
+      if (!src) {
+        // The editor's wrapper (smart-link-view.tsx), so the stand-in and the editor lay the chip out alike.
+        const { tag: Tag, className } = smartLinkWrapper(node.type !== "inlineCard");
+        return (
+          <Tag className={className}>
+            <SmartLink url={a.url} data={a.data} />
+          </Tag>
+        );
+      }
       const { allowfullscreen: _, referrerpolicy, sandbox, ...frame } = embedFrame(src);
       return (
         <div className="rich-embed">

@@ -22,7 +22,9 @@ import {
 import { serverConfiguration } from "./server-config";
 import { unseenChanged } from "./notifications";
 import { writeLedger } from "./write-ledger";
-import { avatarProxy } from "@/shared/avatar-proxy";
+import { avatarProxy, type AvatarCache } from "@/shared/avatar-proxy";
+import { faviconProxy } from "./favicon";
+import { smartLinkCache } from "./smart-link";
 
 const configuration = serverConfiguration();
 // `bun --hot` re-runs this module on every edit; the loops and the open tabs live on globalThis so they survive it.
@@ -64,11 +66,8 @@ export const ledger = writeLedger(db);
 db.run(
   "CREATE TABLE IF NOT EXISTS avatars (url TEXT PRIMARY KEY, type TEXT NOT NULL, body BLOB NOT NULL, at INTEGER NOT NULL)",
 );
-/** Avatar images, at most 512KB each; the newest 2,000 are kept. */
-export const avatar = avatarProxy({
-  site: configuration.site,
-  auth: serverAuth(),
-  cache: {
+/** Avatar images (and smart links' site icons), at most 512KB each; the newest 2,000 are kept. */
+const imageCache: AvatarCache = {
     get: (url) =>
       db
         .query<{ type: string; body: Uint8Array; at: number }, [string]>(
@@ -86,8 +85,12 @@ export const avatar = avatarProxy({
         "DELETE FROM avatars WHERE url NOT IN (SELECT url FROM avatars ORDER BY at DESC LIMIT 2000)",
       );
     },
-  },
-});
+};
+export const avatar = avatarProxy({ site: configuration.site, auth: serverAuth(), cache: imageCache });
+/** Smart links' site icons (BJ-16), beside the avatars. */
+export const favicon = faviconProxy({ cache: imageCache });
+/** Smart links' issue and page titles on the configured site (BJ-16). */
+export const smartLinkDetails = smartLinkCache(db, configuration.site, jira);
 
 const getMeta = (k: string) =>
   db.query<{ v: string }, [string]>("SELECT v FROM meta WHERE k = ?").get(k)?.v;

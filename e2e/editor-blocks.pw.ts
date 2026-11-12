@@ -87,7 +87,7 @@ test("BJ-42 / BJ-57 / BJ-43: the slash, emoji and @ menus insert blocks, emoji a
       json.includes("/browse/TEST-4")
     );
   });
-  expect(await page.eval(`[...document.querySelectorAll('#description a.rich-token')].map(n=>n.textContent)`)).toEqual([
+  expect(await page.eval(`[...document.querySelectorAll('#description a.smart-link[data-smart-link=issue] .smart-link-affix')].map(n=>n.textContent.trim())`)).toEqual([
     "TEST-3",
     "TEST-4",
   ]);
@@ -105,8 +105,8 @@ test("links in the description open on click: other sites in a new tab, an issue
   await page.key("End");
   await page.key("Enter");
   await page.type("see TEST-4 ");
-  await page.waitFor(`[...document.querySelectorAll('#description a.rich-token')].some(n=>n.textContent==='TEST-4')`);
-  await page.eval(`[...document.querySelectorAll('#description a.rich-token')].find(n=>n.textContent==='TEST-4').click()`);
+  await page.waitFor(`[...document.querySelectorAll('#description a.smart-link[data-smart-link=issue] .smart-link-affix')].some(n=>n.textContent.trim()==='TEST-4')`);
+  await page.eval(`[...document.querySelectorAll('#description a.smart-link[data-smart-link=issue]')].find(n=>n.textContent.includes('TEST-4')).click()`);
   await page.waitFor(`${shownIssue}==='TEST-4'`);
 });
 
