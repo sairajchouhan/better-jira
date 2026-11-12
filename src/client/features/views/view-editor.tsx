@@ -195,7 +195,7 @@ export function viewActions(view: SavedView, favorite: boolean, contextMenu: boo
   const link = () =>
     void navigator.clipboard
       .writeText(placeURL({ to: "view", id: view.id }))
-      .then(() => showNotification({ text: "Copied" }))
+      .then(() => showNotification({ text: "View link copied to clipboard" }))
       .catch((e) => showNotification({ text: String(e) }));
   return [
     [

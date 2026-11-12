@@ -26,6 +26,10 @@ test("draft reload, cancel, create toast, edit, duplicate and themed delete", as
     await p
       .getByRole("textbox", { name: "View name", exact: true })
       .fill("My new view");
+    // BJ-151: saved live-Linear measurements; check both intrinsic widths (including the transparent border).
+    const widths = await p.locator('.view-editor-heading .ui-button').evaluateAll(buttons => buttons.map(b => b.getBoundingClientRect().width));
+    expect(widths[0]).toBeCloseTo(57.83, 1);
+    expect(widths[1]).toBeCloseTo(86.12, 1);
     await p.getByRole("button", { name: "Create view", exact: true }).click();
     await expect(
       p.getByRole("status").filter({ hasText: "View created" }),
@@ -37,7 +41,7 @@ test("draft reload, cancel, create toast, edit, duplicate and themed delete", as
     );
     await p.getByRole("button", { name: "Issue view options" }).click();
     await p.getByRole("option", { name: "Copy link", exact: true }).click();
-    await expect(p.locator("[data-toast]").filter({ hasText: /^Copied$/ })).toBeVisible(); // BJ-145
+    await expect(p.locator("[data-toast]").filter({ hasText: /^View link copied to clipboard$/ })).toBeVisible(); // BJ-145
     expect(await app.eval("window.__copied")).toBe(new URL(route, p.url()).href);
     await p
       .getByRole("button", { name: "Issue view options" })
