@@ -83,12 +83,13 @@ test("two tabs: a second tab edits an issue the first is still creating", async 
   });
 });
 
-// In each step a third tab (`host`) holds the browser context, so the creating tab can close on its own.
+// In each step a third tab (`host`) holds the browser context, so the creating tab can close on its own. It is read-only:
+// a writable open tab takes a closing tab's create over too (BJ-19), and the steps watch which tab sends it.
 test("two tabs: when the creating tab closes, another tab sends the create with every tab's edits", async ({
   open,
 }) => {
   await test.step("sync review 3: when the tab creating an issue closes first, the second tab sends the create itself, with its edit", async () => {
-    const host = await open("", { setup });
+    const host = await open("");
     const one = await open("", { setup, tabOf: host });
     const key = await createHeld(one);
     const two = await open("", { setup, tabOf: host });
@@ -104,7 +105,7 @@ test("two tabs: when the creating tab closes, another tab sends the create with 
   });
 
   await test.step("sync review 2-3: exactly one of the open tabs sends the create, with every tab's edits", async () => {
-    const host = await open("", { setup });
+    const host = await open("");
     const one = await open("", { setup, tabOf: host });
     const key = await createHeld(one);
     // Each tab edits while it is the newest: a background tab's menus don't open.
@@ -135,7 +136,7 @@ test("two tabs: a taken-over create keeps its order and the closed tab's latest 
   open,
 }) => {
   await test.step("sync review 2-5: a create taken over from a closed tab goes before the jobs that name its key", async () => {
-    const host = await open("", { setup });
+    const host = await open("");
     const one = await open("", { setup, tabOf: host });
     const key = await createHeld(one);
     const two = await open("", { setup, tabOf: host });
@@ -163,7 +164,7 @@ test("two tabs: a taken-over create keeps its order and the closed tab's latest 
   });
 
   await test.step("sync review 3-5: a tab that takes over a closed tab's changes at load sends what that tab saved last", async () => {
-    const host = await open("", { setup });
+    const host = await open("");
     const one = await open("", { setup, tabOf: host });
     const key = await createHeld(one);
     // Tab one holds the outbox lock, so tab two's load reads the saved data now but claims it only once one closes.
@@ -181,4 +182,19 @@ test("two tabs: a taken-over create keeps its order and the closed tab's latest 
     const create = await two.waitFor<any>(`${sentTo(key)}.find(o=>o.op==='create')`, 8000);
     expect(create.fields.priority).toBe(priority);
   });
+});
+
+test("two tabs: BJ-19 a closing tab hands its unsent create to an open tab at once, though that tab never edited it", async ({
+  open,
+}) => {
+  const host = await open("");
+  const one = await open("", { setup, tabOf: host });
+  const key = await createHeld(one);
+  const two = await open("", { setup, tabOf: host });
+  await two.waitFor(`!!document.querySelector('[data-key="${key}"]')`);
+  // Tab two has no write waiting on the create: before, it was sent only at a tab's next load.
+  await one.close();
+  const create = await two.waitFor<any>(`${sentTo(key)}.find(o=>o.op==='create')`, 3000);
+  expect(create.fields).toMatchObject({ summary: "Two tabs" });
+  expect(create.client).toMatch(new RegExp(`^${key}@`));
 });

@@ -977,22 +977,24 @@ async function loadApplication() {
           }),
       ),
     );
-  if (state.writable)
-    void (navigator.locks && database
-      ? holdTabLock().then(() =>
-          writes.claimClosed(async (claimed, changes) => {
-            // A closed tab may have saved edits after this tab read the saved data: send and show the merged copy saved
-            // now, as a takeover later on does (sync review 3-5).
-            const saved = changes.filter((c) => claimed.has(c.key)),
-              issues = new Map(state.issues),
-              full = new Map(state.full);
-            install(saved, issues, full);
-            set({ issues, full });
-            for (const key of claimed) writes.release(key);
-            await replay(claimed, saved);
-          }),
-        )
-      : (writes.reset(true), replay()));
+  takeOverClosed =
+    state.writable && navigator.locks && database
+      ? () =>
+          holdTabLock().then(() =>
+            writes.claimClosed(async (claimed, changes) => {
+              // A closed tab may have saved edits after this tab read the saved data: send and show the merged copy saved
+              // now, as a takeover later on does (sync review 3-5).
+              const saved = changes.filter((c) => claimed.has(c.key)),
+                issues = new Map(state.issues),
+                full = new Map(state.full);
+              install(saved, issues, full);
+              set({ issues, full });
+              for (const key of claimed) writes.release(key);
+              await replay(claimed, saved);
+            }),
+          )
+      : undefined;
+  if (state.writable) void (takeOverClosed ? takeOverClosed() : (writes.reset(true), replay()));
   if (!navigationReady) {
     window.addEventListener("focus", () => {
       void refreshSavedViews().catch(viewError);
@@ -1287,6 +1289,23 @@ const tabId = crypto.randomUUID(),
   TAB_LOCK = "better-jira-tab:";
 /** Held while this tab is open, so other tabs know its saved changes are still being sent. */
 let tabLock: Promise<void> | undefined;
+/** Claims the saved changes of closed tabs and sends them (set once loaded, on a writable site with Web Locks). */
+let takeOverClosed: (() => Promise<void>) | undefined;
+// A closing tab says goodbye, so an open tab sends what it left unsent (a create still on its way) at once, not at its
+// next load. Its lock goes with the tab: waiting for it means the claim sees the tab closed (BJ-19).
+const tabChannel =
+  typeof window !== "undefined" && typeof BroadcastChannel === "function"
+    ? new BroadcastChannel("better-jira-tabs")
+    : undefined;
+tabChannel?.addEventListener("message", ({ data }) => {
+  const takeOver = takeOverClosed;
+  if (typeof data?.closed === "string" && takeOver)
+    void navigator.locks.request(TAB_LOCK + data.closed, () => {}).then(takeOver);
+});
+if (tabChannel)
+  window.addEventListener("pagehide", (event) => {
+    if (!event.persisted) tabChannel.postMessage({ closed: tabId });
+  });
 const holdTabLock = () =>
   (tabLock ??= new Promise((resolve) =>
     navigator.locks.request(TAB_LOCK + tabId, () => (resolve(), new Promise(() => {}))),

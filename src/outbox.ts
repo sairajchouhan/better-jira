@@ -438,7 +438,18 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
         if (waiting) {
           waiting.ops = mergeOps(waiting.ops, ops);
           if (hold) waiting.hold = hold;
-        } else outbox.push({ key, board, ops, ...(hold ? { hold } : {}) });
+        } else {
+          const job = { key, board, ops, ...(hold ? { hold } : {}) };
+          // A create queued late (taken over from a closed tab) goes before the queued jobs naming it, so they get its Jira key (BJ-19).
+          const naming =
+            ops[0]?.op === "create"
+              ? outbox.findIndex(
+                  (other) => !other.started && JSON.stringify(other.ops).includes(`"${key}"`),
+                )
+              : -1;
+          if (naming >= 0) outbox.splice(naming, 0, job);
+          else outbox.push(job);
+        }
       }
       return jobs.flatMap(({ key }) => (outbox.some((job) => job.key === key) ? [] : [key]));
     },

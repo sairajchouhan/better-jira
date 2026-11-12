@@ -492,3 +492,20 @@ test("BJ-20: a replayed create whose description edit met a changed Jira copy an
   // The store then keeps the edit beside Jira's text (descriptionRejected) instead of taking Jira's.
   expect(h.answers.map((a) => [a.key, a.refused, a.describes])).toEqual([[made.key, false, true]]);
 });
+
+test("BJ-19: a create queued after jobs that name it goes first, so they get its Jira key", async () => {
+  const made = issue("KAN-NEW11");
+  const h = harness({
+    reply: (key, body) => (body.ops[0]?.op === "create" ? { created: { [key]: "KAN-63" } } : {}),
+  });
+  // Another tab was creating it; this tab's edit naming it waits. The tab closes and this one takes the create over.
+  h.outbox.own(made.key, "closed-tab", true);
+  h.send(edit(issue("TO-1"), { parent: made.key }));
+  h.outbox.release(made.key);
+  h.send([made.key, {}, { issue: made }]);
+  await h.advance(0);
+  expect(h.sent.map((s) => [s.key, s.ops[0]?.op === "create" ? "create" : s.ops[0]])).toEqual([
+    [made.key, "create"],
+    ["TO-1", { op: "fields", fields: { parent: "KAN-63" } }],
+  ]);
+});
