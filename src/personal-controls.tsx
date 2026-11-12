@@ -10,7 +10,7 @@ import { Shortcut, Keycap } from "./keycap";
 import { Dialog } from "./dialog";
 import { TextInput } from "./field";
 import { Button, IconButton } from "./button";
-import { createSubIssue, issueMenuEntries } from "./issue-menu";
+import { createSubIssue, issueMenuEntries, type IssueMenuDialog } from "./issue-menu";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
 /* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { SubIssues, statusOf } from "./sub-issues";
@@ -838,6 +838,14 @@ export function GroupMenu({
   );
 }
 
+/** Where an issue menu's "…" entries go: link, pull request and history open inside Issue options, the rest their own overlay. */
+const openIssueDialog = (issue: Issue) => (kind: IssueMenuDialog) => {
+  if (kind === "link" || kind === "pull-request" || kind === "history") {
+    post("issue-options-start", kind);
+    ui.send({ type: "overlay.open", overlay: "options", target: issue.key });
+  } else if (kind !== "rename")
+    ui.send({ type: "overlay.open", overlay: kind === "assignee" ? "assign" : kind, target: issue.key });
+};
 export function IssueOptions({ issue }: { issue: Issue }) {
   const close = () => ui.send({ type: "overlay.close" });
   const point = useStore((s) => s.issueOptionsPoint),
@@ -906,21 +914,7 @@ export function IssueOptions({ issue }: { issue: Issue }) {
   const entries = issueMenuEntries(issue, {
     close,
     presentation: point ? "row" : "detail",
-    openDialog: (kind) => {
-      if (kind === "link" || kind === "pull-request" || kind === "history") {
-        post("issue-options-start", kind);
-        ui.send({
-          type: "overlay.open",
-          overlay: "options",
-          target: issue.key,
-        });
-      } else if (kind !== "rename")
-        ui.send({
-          type: "overlay.open",
-          overlay: kind === "assignee" ? "assign" : kind,
-          target: issue.key,
-        });
-    },
+    openDialog: openIssueDialog(issue),
   });
   return (
     <ActionMenu
@@ -1299,15 +1293,18 @@ export function Relations({ issue }: { issue: Issue }) {
   // Linear's command-menu footer (BJ-53): → Quick look peeks the highlighted issue beside the list, ← closes it, and
   // ⌥↵ More actions opens that issue's row menu. Both are this menu's own keys, like ↵, so they stay out of the registry.
   const candidate = all.get(selected.replace(/^related:/, ""));
+  // Linear's onOpenNestedCommandMenu: the actions open over this menu, Esc comes back to it, and running one closes both.
+  const [nested, setNested] = useState<{ issue: Issue; point?: { x: number; y: number } } | null>(null);
   const moreActions = (target: Issue) => {
     const rect = document.querySelector("[cmdk-item][data-selected=true]")?.getBoundingClientRect();
-    ui.send({
-      type: "overlay.open",
-      overlay: "options",
-      target: target.key,
-      point: rect ? { x: rect.right - 200, y: rect.top } : undefined,
-    });
+    setNested({ issue: target, point: rect ? { x: rect.right - 200, y: rect.top } : undefined });
   };
+  const closingAll = (entries: ActionEntry[]): ActionEntry[] =>
+    entries.map((entry) => ({
+      ...entry,
+      children: entry.children && closingAll(entry.children),
+      run: entry.run && (() => (close(), entry.run!())),
+    }));
   const row = (i: Issue, group: string) => (
     <Menu.Item
       key={`${group}${i.key}`}
@@ -1325,7 +1322,8 @@ export function Relations({ issue }: { issue: Issue }) {
     </Menu.Group>
   );
   return (
-    // Command-style relations retain MenuSurface: Dialog has no command placement variant.
+    <>
+    {/* Command-style relations retain MenuSurface: Dialog has no command placement variant. */}
     <Modal label="Issue relations" close={close} command width={peek ? 720 + 415 : 720}>
       <Menu
         shouldFilter={false}
@@ -1421,6 +1419,18 @@ export function Relations({ issue }: { issue: Issue }) {
         </div>
       </Menu>
     </Modal>
+    {/* A sibling, not a child: the relations menu's capture-phase keys (⌥↵, →, ←) must not see the nested menu's. */}
+    {nested && (
+      <ActionMenu
+        label="More actions"
+        point={nested.point}
+        close={() => setNested(null)}
+        entries={closingAll(
+          issueMenuEntries(nested.issue, { close, presentation: "row", openDialog: openIssueDialog(nested.issue) }),
+        )}
+      />
+    )}
+    </>
   );
 }
 

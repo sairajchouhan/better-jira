@@ -122,11 +122,16 @@ test("sub-issue rows: shortcuts act on the row, collapse persists, the composer 
     await p.waitFor(`document.querySelector('[aria-label="Quick look"]')?.textContent.includes("TEST-1")`);
     await p.key("ArrowLeft");
     await p.waitFor(`!document.querySelector('[aria-label="Quick look"]')`);
+    // A nested menu over the relations menu, like Linear's: Esc comes back to the relations search.
     await p.key("Enter", "alt");
     await p.waitFor(
-      `!!document.querySelector('[role="dialog"][aria-label="Issue options"]')&&!document.querySelector('[role="dialog"][aria-label="Issue relations"]')`,
+      `!!document.querySelector('[role="dialog"][aria-label="More actions"]')&&!!document.querySelector('[role="dialog"][aria-label="Issue relations"]')`,
     );
     expect(await p.eval(`!!document.querySelector('[data-relation$=":TEST-1"]')`)).toBe(false);
+    await p.key("Escape");
+    await p.waitFor(
+      `!document.querySelector('[role="dialog"][aria-label="More actions"]')&&document.activeElement?.closest('[role="dialog"]')?.getAttribute("aria-label")==="Issue relations"`,
+    );
     await p.key("Escape");
   });
 });
