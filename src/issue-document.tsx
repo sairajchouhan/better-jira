@@ -456,8 +456,7 @@ function DocumentHeader() {
         <Text variant="small" color="base" wrap="truncate" className="min-w-0">
           {title}
         </Text>
-        {/* FavoriteButton renders its own <button> and takes a frame class; moving it onto IconButton is its owner's change. */}
-        <FavoriteButton id={`document:${resource.id}`} noun="document" size={15} className={BUTTON} />
+        <FavoriteButton id={`document:${resource.id}`} noun="document" />
         <IconButton
           label="Document options"
           aria-haspopup="dialog"

@@ -12,8 +12,6 @@ export function FavoriteButton({
 }: {
   id: string;
   noun?: string;
-  /** @deprecated The IconButton draws the glyph at its size's icon (14px at medium, Linear's LEe); callers drop this as they migrate. */
-  size?: number;
   /** Linear's header star is a muted IconButton (fg-3, hover crumb-hover). */
   variant?: ButtonVariant;
   className?: string;

@@ -207,9 +207,6 @@ const author = (a: any): User | null =>
 
 // --- issue view: a full page, a side panel, or the inbox's pane; App picks the frame ---
 
-// Only for FavoriteButton, which draws its own button; the header's other icon buttons are IconButton.
-const ICON_BTN =
-  "grid size-7 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg";
 const SIDE =
   "issue-detail flex flex-col bg-panel max-md:absolute max-md:inset-0 max-md:z-20 max-md:w-full";
 
@@ -289,7 +286,7 @@ function IssueHeader({
   return (
     <div className="issue-detail-header flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-3 text-[12px] text-fg-3">
       {children}
-      <FavoriteButton id={issue.key} noun="issue" size={16} className={ICON_BTN} />
+      <FavoriteButton id={issue.key} noun="issue" className="shrink-0" />
       <IconButton
         id="issue-options"
         label="Issue options"
