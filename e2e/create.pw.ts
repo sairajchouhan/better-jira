@@ -101,3 +101,16 @@ test("create composer: a draft written, closed, reopened, given properties and c
     ).toBe(true);
   });
 });
+
+test("removing a create attachment from the keyboard returns focus to the attach button", async ({ open }) => {
+  const page = await open();
+  await page.key("c");
+  await page.waitFor(`document.activeElement===${title}`);
+  await page.page.locator('[aria-label="Choose attachments"]').setInputFiles("e2e/fixtures/media-file.txt");
+  const remove = page.page.getByRole("button", { name: "Remove attachment media-file.txt" });
+  await remove.focus();
+  await page.key("Enter");
+  await page.waitFor(
+    `document.activeElement?.getAttribute("aria-label")==="Attach images, files, or videos"`,
+  );
+});

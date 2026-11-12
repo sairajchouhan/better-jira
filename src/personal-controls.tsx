@@ -908,7 +908,7 @@ function AttachmentList({
           requestAnimationFrame(() =>
             scope
               .querySelector<HTMLElement>(
-                '[label="Attach images, files, or videos"]',
+                '[aria-label="Attach images, files, or videos"]',
               )
               ?.focus(),
           );
