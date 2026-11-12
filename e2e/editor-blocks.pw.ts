@@ -148,8 +148,8 @@ test("BJ-69: the created issue replaces the selected text with a reference, save
   await page.waitFor(`document.querySelector('[role="dialog"] [aria-label="Issue title"]')?.value === "Rich fixture heading"`);
   await page.key("Enter", "meta");
   await page.eval(`history.pushState({},'', '/issue/TEST-2');dispatchEvent(new PopStateEvent('popstate'))`);
-  // The heading's text is now Jira's smart link to the new issue.
-  await page.waitFor(`!document.querySelector('#description h2')?.textContent.includes("Rich fixture heading")`);
+  // The heading's text is now Jira's smart link to the new issue, drawn as its mention chip (which shows the new issue's title).
+  await page.waitFor(`!!document.querySelector('#description h2 a.smart-link[data-smart-link=issue]')`);
   await waitSaved(doc => JSON.stringify(doc).includes("/browse/TEST-90"));
   const description = JSON.stringify(await savedDescription());
   expect(description).toMatch(/"type":"inlineCard","attrs":\{"url":"[^"]*\/browse\/TEST-90"\}/);
