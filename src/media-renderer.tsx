@@ -1,4 +1,4 @@
-import { Button } from "./button";
+import { Button, ButtonLink } from "./button";
 import { EmptyState, LoadingState } from "./empty-state";
 import { Text } from "./text";
 import { useEffect, useMemo, useState } from "react";
@@ -181,15 +181,17 @@ function LoadedMedia({
             Retry attachment
           </Button>
           {file && !file.missing && (
-            <a
-              className="ml-3 text-accent"
+            <ButtonLink
+              variant="link"
+              size="small"
+              className="ml-3"
               href={downloadURL(file.url)}
               download={!external ? file.name : undefined}
               target={external ? "_blank" : undefined}
               rel="noreferrer"
             >
               {external ? "Open external image" : `Download ${file.name}`}
-            </a>
+            </ButtonLink>
           )}
         </Status>
       ) : !file ? (

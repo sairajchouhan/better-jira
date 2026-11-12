@@ -8,7 +8,7 @@ import {
 } from "react";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { Avatar } from "./avatar";
-import { Button, IconButton } from "./button";
+import { Button, ButtonLink, IconButton } from "./button";
 import { CountBadge } from "./count-badge";
 import { EmptyState, LoadingState } from "./empty-state";
 import { FutureTimeStep } from "./future-time-step";
@@ -896,18 +896,9 @@ export function InboxPane() {
             </IconButton>
           ))}
           <span className="flex-1" />
-          {/* Keep native external navigation: Button has no anchor variant in the contract. */}
-          <a
-            href={row.url}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1 hover:text-fg"
-          >
-            <Text variant="mini" color="inherit">
-              Open in Jira
-            </Text>{" "}
-            <Icon name="external" />
-          </a>
+          <ButtonLink variant="link" size="small" href={row.url} target="_blank" rel="noreferrer">
+            Open in Jira <Icon name="external" />
+          </ButtonLink>
         </div>
         <div className="mx-auto w-full max-w-[680px] p-8">
           <Text as="h1" variant="title2">
