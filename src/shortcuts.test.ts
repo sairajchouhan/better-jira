@@ -32,3 +32,16 @@ test("Linear's observed bindings replace invented single-letter shortcuts", () =
   expect([keys["inbox-read"], keys["inbox-delete"], keys["inbox-snooze"]]).toEqual(["U", "E", "H"]);
   expect(editorBindings.find((b) => b.id === "strike")?.hotkey).toBe("Mod+Shift+X");
 });
+test("whether a shortcut applies is read from the state it is given, never the DOM or the live store", async () => {
+  const { get } = await import("./store");
+  const { handle } = await import("./commands");
+  const { shortcutApplies } = await import("./shortcuts");
+  let domReads = 0;
+  const stop = handle("hovered-sub-issue", () => void domReads++);
+  const undo = shortcuts.find((s) => s.id === "inbox-undo")!;
+  expect(get().inbox).toBeFalsy();
+  expect(shortcutApplies(undo, { ...get(), inbox: true })).toBe(true);
+  for (const entry of shortcuts) shortcutApplies(entry, { ...get(), inbox: true });
+  expect(domReads).toBe(0);
+  stop();
+});

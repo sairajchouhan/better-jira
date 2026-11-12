@@ -62,6 +62,7 @@ import {
   undoInbox,
 } from "./inbox";
 
+type State = ReturnType<typeof get>;
 type Shortcut = {
   id: string;
   name: string;
@@ -71,7 +72,8 @@ type Shortcut = {
   issue?: boolean;
   document?: boolean;
   run: () => void;
-  when?: () => boolean;
+  /** Whether it would act, from the state and the issue it would act on only: the ⌘K list calls it in a store selector. */
+  when?: (s: State, issue: Issue | undefined) => boolean;
   /** The ⌘K row's name when it depends on state, e.g. "Unfavorite issue". */
   label?: () => string;
 };
@@ -86,6 +88,7 @@ const hoveredRow = () => {
   const key = command("hovered-sub-issue");
   return key ? get().issues.get(key) : undefined;
 };
+const viewOf = (s: State) => s.savedViews.find((v) => v.id === s.activeViewId);
 const target = () => (selected() ? (hoveredRow() ?? selected()) : undefined);
 const issueAction = (fn: (issue: Issue) => void) => () => {
   const issue = target();
@@ -159,7 +162,7 @@ function reorder(direction: number, edge = false) {
     b = rest[at]?.rank;
   actions.drop(issue.key, issue.board, [], descending ? rankBetween(b, a) : rankBetween(a, b));
 }
-const manual = () => viewSettings(get().board).display.ordering === "manual";
+const manual = (s = get()) => viewSettings(s.board).display.ordering === "manual";
 function scope(value: "active" | "backlog" | "all", mine = false) {
   navigate({ mine, ...(!mine && isMyIssues(get()) ? { board: get().board } : {}), panel: false, selected: null });
   setScope(get().board, value);
@@ -203,12 +206,12 @@ export const shortcuts: Shortcut[] = [
       { id: "copy-link", name: "Copy document title as link", hotkey: "Mod+C" },
       { id: "copy-markdown", name: "Copy document content as Markdown", hotkey: "Mod+Alt+C" },
     ] as const
-  ).map((entry) => ({
+  ).map((entry): Shortcut => ({
     ...entry,
     id: `document-${entry.id}`,
     document: true,
     group: "Documents",
-    when: () => !!get().document && (entry.id !== "copy-link" || !!getSelection()?.isCollapsed),
+    when: (s) => !!s.document,
     run: () => void command("document-action", entry.id),
   })),
   {
@@ -284,7 +287,7 @@ export const shortcuts: Shortcut[] = [
     name: "Toggle right sidebar",
     group: "Navigation",
     hotkey: "]",
-    when: () => !get().document,
+    when: (s) => !s.document,
     run: () =>
       get().panel
         ? set({ issuePropertiesHidden: !get().issuePropertiesHidden })
@@ -346,7 +349,7 @@ export const shortcuts: Shortcut[] = [
     group: "Inbox",
     run,
     // Enablement is computed on store changes, and the inbox selection lives outside the store: row actions check it when they run.
-    when: () => get().inbox,
+    when: (s) => s.inbox,
   })),
   {
     id: "inbox-undo",
@@ -354,7 +357,7 @@ export const shortcuts: Shortcut[] = [
     group: "Inbox",
     hotkey: "Z",
     run: undoInbox,
-    when: () => get().inbox,
+    when: (s) => s.inbox,
   },
   ...(
     [
@@ -367,7 +370,7 @@ export const shortcuts: Shortcut[] = [
     hotkey,
     group: "Inbox",
     run: () => priorityInbox() && showTab(tab),
-    when: () => get().inbox,
+    when: (s) => s.inbox,
   })),
   {
     id: "mine",
@@ -396,7 +399,7 @@ export const shortcuts: Shortcut[] = [
     name: `Go to team / board ${i + 1}`,
     group: "Navigation",
     hotkey: `Control+Shift+${i + 1}` as Hotkey,
-    when: () => !!get().boards[i],
+    when: (s) => !!s.boards[i],
     run: () => {
       const board = get().boards[i];
       if (board) navigate({ board: board.id, selected: null, panel: false });
@@ -422,7 +425,7 @@ export const shortcuts: Shortcut[] = [
     name: "Open link from last toast",
     group: "Navigation",
     hotkey: "Mod+Alt+O",
-    when: () => !!get().toast?.key,
+    when: (s) => !!s.toast?.key,
     run: () => {
       // Like the toast's View issue: a key Jira has since replaced still finds the issue.
       const issue = get().issues.get(currentKey(get().toast?.key ?? ""));
@@ -473,7 +476,7 @@ export const shortcuts: Shortcut[] = [
     issue: true,
     // Jira can't move an issue to another project: only an issue made here, not yet in Jira, picks one (R2-issue-fields-D8).
     ...(id === "project"
-      ? { when: () => !get().writable || isLocalIssue(target()?.key ?? "") }
+      ? { when: (s: State, issue?: Issue) => !s.writable || isLocalIssue(issue?.key ?? "") }
       : {}),
     run: overlay(value),
   })),
@@ -492,7 +495,7 @@ export const shortcuts: Shortcut[] = [
     group: "Issues",
     hotkey: "Mod+Shift+D",
     issue: true,
-    when: () => !!target()?.due,
+    when: (_, issue) => !!issue?.due,
     run: issueAction((i) => actions.patch(i.key, { due: null })),
   },
   {
@@ -518,7 +521,7 @@ export const shortcuts: Shortcut[] = [
       get().favorites.includes(selected()?.key ?? "") ? "Unfavorite issue" : "Mark as favorite",
     group: "Issues",
     hotkey: "Alt+F",
-    when: () => !activeView() || !boardVisible(),
+    when: (s) => !viewOf(s) || !boardVisible(s),
     issue: true,
     run: issueAction((i) => toggleFavorite(i.key)),
   },
@@ -615,7 +618,7 @@ export const shortcuts: Shortcut[] = [
     group: "Issues",
     hotkey: "Mod+Shift+ArrowUp",
     issue: true,
-    when: () => !!get().issues.get(selected()?.parent ?? ""),
+    when: (s) => !!s.issues.get(selected(s)?.parent ?? ""),
     run: issueAction((i) => {
       const parent = get().issues.get(i.parent ?? "");
       if (parent) navigate({ board: parent.board, selected: parent.key, panel: true });
@@ -627,7 +630,7 @@ export const shortcuts: Shortcut[] = [
     group: "Issues",
     hotkey: "Mod+Shift+ArrowRight",
     issue: true,
-    when: () => !!get().issues.get(selected()?.parent ?? ""),
+    when: (s) => !!s.issues.get(selected(s)?.parent ?? ""),
     // The parent's sub-issue menu lives in the open issue.
     run: () => {
       navigate({ panel: true });
@@ -640,9 +643,9 @@ export const shortcuts: Shortcut[] = [
     group: "Issues",
     hotkey: "Mod+Shift+ArrowDown",
     issue: true,
-    when: () => {
-      const key = selected()?.key;
-      return !!key && [...get().issues.values()].some((c) => c.parent === key);
+    when: (s) => {
+      const key = selected(s)?.key;
+      return !!key && [...s.issues.values()].some((c) => c.parent === key);
     },
     run: issueAction((i) => {
       const child = [...get().issues.values()].find((c) => c.parent === i.key);
@@ -665,8 +668,6 @@ export const shortcuts: Shortcut[] = [
     hotkey,
     group: "Issues",
     issue: true,
-    // ⌘C keeps its native copy whenever text is selected.
-    ...(id === "copy-link" ? { when: () => !!getSelection()?.isCollapsed } : {}),
     run: () => void copy(kind),
   })),
   {
@@ -755,7 +756,7 @@ export const shortcuts: Shortcut[] = [
     group: "List / Board",
     hotkey: "Alt+ArrowLeft",
     issue: true,
-    when: () => viewSettings(get().board).display.columns === "status",
+    when: (s) => viewSettings(s.board).display.columns === "status",
     run: () => moveColumn(-1),
   },
   {
@@ -764,7 +765,7 @@ export const shortcuts: Shortcut[] = [
     group: "List / Board",
     hotkey: "Alt+ArrowRight",
     issue: true,
-    when: () => viewSettings(get().board).display.columns === "status",
+    when: (s) => viewSettings(s.board).display.columns === "status",
     run: () => moveColumn(1),
   },
   {
@@ -773,7 +774,7 @@ export const shortcuts: Shortcut[] = [
     group: "List / Board",
     hotkey: "T",
     issue: true,
-    when: () => viewSettings(get().board).display.layout === "list",
+    when: (s) => viewSettings(s.board).display.layout === "list",
     run: () => collapse(),
   },
   {
@@ -781,7 +782,7 @@ export const shortcuts: Shortcut[] = [
     name: "Collapse/expand all groups",
     group: "List / Board",
     hotkey: "Alt+T",
-    when: () => viewSettings(get().board).display.layout === "list",
+    when: (s) => viewSettings(s.board).display.layout === "list",
     run: () => collapse(true),
   },
   {
@@ -811,7 +812,7 @@ export const shortcuts: Shortcut[] = [
     name: "Create new view…",
     group: "Views",
     hotkey: "Alt+V",
-    when: () => boardVisible() && !get().inbox,
+    when: (s) => boardVisible(s) && !s.inbox,
     run: createToolbarView,
   },
   {
@@ -819,9 +820,9 @@ export const shortcuts: Shortcut[] = [
     name: "Save to this view",
     group: "Views",
     hotkey: "Alt+S",
-    when: () => {
-      const view = activeView();
-      return boardVisible() && !!view && filterCount(get().overlayFilters) > 0 && canMergeOverlay(view.filters, get().overlayFilters);
+    when: (s) => {
+      const view = viewOf(s);
+      return boardVisible(s) && !!view && filterCount(s.overlayFilters) > 0 && canMergeOverlay(view.filters, s.overlayFilters);
     },
     run: () => {
       void saveOverlayToView().catch(() =>
@@ -837,7 +838,7 @@ export const shortcuts: Shortcut[] = [
     name: "Favorite / unfavorite view",
     group: "Views",
     hotkey: "Alt+F",
-    when: () => boardVisible() && !!activeView(),
+    when: (s) => boardVisible(s) && !!viewOf(s),
     run: () => {
       const view = activeView();
       if (view) toggleFavorite(`view:${view.id}`);
@@ -868,8 +869,8 @@ export const shortcuts: Shortcut[] = [
   },
 ];
 /** Board filters and display act only while the board is on screen, not behind a full-page issue or a document. */
-function boardVisible() {
-  return !get().document && (!get().panel || get().view !== "page");
+function boardVisible(s = get()) {
+  return !s.document && (!s.panel || s.view !== "page");
 }
 const labels = new Map<string, string>();
 const keyText = (hotkey: Hotkey | string) =>
@@ -883,37 +884,38 @@ export function shortcutLabel(id: string) {
   }
   return label;
 }
-/** Whether a shortcut would act now; keys, ⌘K and clicks all go through this. */
-/** Whether the shortcut would do something in `state`; a selector can pass the state it is given. */
-export function shortcutApplies(entry: Shortcut, state: ReturnType<typeof get> = get()) {
+/** Whether the shortcut would do something in `state` on `issue`, reading nothing else, so a store selector can call it.
+ *  `issue` defaults to the selection; keys, clicks and menus pass `target()`, which the sub-issue row under the pointer can change. */
+export function shortcutApplies(entry: Shortcut, state: State = get(), issue = selected(state)) {
   return (
     (!state.document || (!entry.issue && entry.group !== "List / Board")) &&
-    (!entry.issue || !!selected(state)) &&
-    (!entry.when || entry.when())
+    (!entry.issue || !!issue) &&
+    (!entry.when || entry.when(state, issue))
   );
 }
 export function canRunShortcut(id: string) {
   const entry = shortcuts.find((s) => s.id === id);
-  return !!entry && shortcutApplies(entry);
+  return !!entry && shortcutApplies(entry, get(), target());
 }
 export function runShortcut(id: string, key?: string) {
   const entry = shortcuts.find((s) => s.id === id);
   acting = key ?? null;
   try {
-    if (entry && shortcutApplies(entry)) entry.run();
+    if (entry && shortcutApplies(entry, get(), target())) entry.run();
   } finally {
     acting = null;
   }
 }
-/** Whether a key may run the shortcut now: an open menu or toolbar keeps the keys, except ⌘K and ⌘/ that close their own. */
-function hotkeyEnabled(entry: Shortcut) {
-  const s = get();
+/** Whether a key may run the shortcut now: an open menu or toolbar keeps the keys, except ⌘K and ⌘/ that close their own.
+ *  ⌘C keeps the browser's copy whenever page text is selected. */
+function hotkeyEnabled(entry: Shortcut, s: State, issue: Issue | undefined) {
   return (
     s.boards.length > 0 &&
     ((!s.overlay && !s.toolbar) ||
       (entry.id === "commands" && s.overlay === "palette") ||
       (entry.id === "shortcuts" && s.overlay === "shortcuts")) &&
-    shortcutApplies(entry)
+    (entry.hotkey !== "Mod+C" || !!getSelection()?.isCollapsed) &&
+    shortcutApplies(entry, s, issue)
   );
 }
 /** Registers the keyboard map once. Which shortcuts are enabled is worked out from the store at each key press,
@@ -962,7 +964,7 @@ export function useLinearHotkeys() {
             runShortcut(entry.id);
           },
           {
-            enabled: hotkeyEnabled(entry),
+            enabled: hotkeyEnabled(entry, get(), target()),
             ignoreInputs: !(
               entry.id === "shortcuts" ||
               entry.id === "commands" ||
@@ -984,7 +986,9 @@ export function useLinearHotkeys() {
         ),
       }));
     const sync = () => {
-      for (const { entry, handle } of bound) handle.setOptions({ enabled: hotkeyEnabled(entry) });
+      const s = get(),
+        issue = target();
+      for (const { entry, handle } of bound) handle.setOptions({ enabled: hotkeyEnabled(entry, s, issue) });
     };
     // Capture on window runs before every document listener, the hotkey manager's included.
     window.addEventListener("keydown", sync, true);
