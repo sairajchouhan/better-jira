@@ -68,7 +68,7 @@ test("BJ-176: the description reads like Linear's: 15px/450 text on a borderless
   expect(await styleOf(page, "#description th", ["padding"])).toEqual(["5px 8px"]);
 });
 
-test("BJ-176: menus, the block handle, the toolbar and collapsible sections take Linear's sizes", async ({ open }) => {
+test("BJ-176: menus, the table handle, the toolbar and collapsible sections take Linear's sizes", async ({ open }) => {
   await fixture.reset({ writable: true });
   const page = await open("?issue=TEST-2&view=page");
   const width = (label: string) =>
@@ -88,19 +88,24 @@ test("BJ-176: menus, the block handle, the toolbar and collapsible sections take
     expect(await width("Mention people")).toBe(350);
     await page.key("Escape");
   });
-  await test.step("the block handle is 20px", async () => {
-    await page.waitFor(`!!document.querySelector('.rich-block-handle')`);
-    const box = await page.eval<number[]>(
-      `(()=>{const r=document.querySelector('.rich-block-handle').getBoundingClientRect();return [r.width,r.height]})()`,
+  await test.step("the block handle (a table's gutter button; text blocks have none) is 20px", async () => {
+    await page.key("Enter");
+    await page.type("/table");
+    await page.key("Enter");
+    const box = await page.waitFor<number[]>(
+      `(()=>{const n=document.querySelector('.rich-block-handle');if(!n)return;const r=n.getBoundingClientRect();return [r.width,r.height]})()`,
     );
     expect(box).toEqual([20, 20]);
   });
   await test.step("the selection toolbar divides its groups with 1×16px separators", async () => {
+    // On plain text: the description's first line ends in a link, whose popover stands in for the toolbar.
     await page.click("#description > p");
     await page.key("End");
+    await page.key("Enter");
+    await page.type("plain");
     await page.key("ArrowLeft", "shift");
     const separator = await page.waitFor<number[]>(
-      `(()=>{const n=document.querySelector('[role="toolbar"] [role="separator"]');if(!n)return;const r=n.getBoundingClientRect();return [r.width,r.height]})()`,
+      `(()=>{const n=document.querySelector('[aria-label="Description formatting"] [role="separator"]');if(!n)return;const r=n.getBoundingClientRect();return [r.width,r.height]})()`,
     );
     expect(separator).toEqual([1, 16]);
   });
