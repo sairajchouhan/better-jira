@@ -210,7 +210,7 @@ test("creator falls back to the reporter; an unassigned issue keeps Jira's null;
         creator: undefined,
         assignee: null,
         resolutiondate: "2026-11-01T08:00:00.000+0000",
-        description: "Legacy string body with https://plain.test/x",
+        description: "Legacy string body with https://plain.test/x and https://site.atlassian.net/browse/CS-2",
       },
     },
     7,
@@ -218,12 +218,22 @@ test("creator falls back to the reporter; an unassigned issue keeps Jira's null;
   expect(issue.creator?.name).toBe("Grace Hopper");
   expect(issue.assignee).toBeNull();
   expect(issue.resolved).toBe("2026-11-01T08:00:00.000+0000");
-  expect(issue.description).toBe("Legacy string body with https://plain.test/x");
+  expect(issue.description).toBe("Legacy string body with https://plain.test/x and https://site.atlassian.net/browse/CS-2");
   expect(issueProjection(siteFields).slim({ ...story, fields: { ...story.fields, comment: { total: 2, comments: [
     { body: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Repro on staging" }] }] } },
     { body: "Legacy plain comment" },
   ] } } }, 7).commentText).toBe("Repro on staging\nLegacy plain comment");
+  // #18: an issue link in the text is a mention, not a resource.
   expect(issue.links).toEqual(["https://plain.test/x"]);
+  const mention = issueProjection(siteFields).slim(
+    { ...story, fields: { ...story.fields, description: { type: "doc", version: 1, content: [{ type: "paragraph", content: [
+      { type: "inlineCard", attrs: { url: "https://site.atlassian.net/browse/CS-2" } },
+      { type: "text", text: "CS-3", marks: [{ type: "link", attrs: { href: "https://site.atlassian.net/browse/CS-3" } }] },
+      { type: "inlineCard", attrs: { url: "https://github.com/o/r/pull/8" } },
+    ] }] } } },
+    7,
+  );
+  expect(mention.links).toEqual(["https://github.com/o/r/pull/8"]);
 });
 
 test("field discovery: the site's rank and story point IDs, or Jira Cloud's usual ones without a field list", () => {

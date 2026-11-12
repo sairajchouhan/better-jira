@@ -2,6 +2,7 @@ import { jiraAvatar } from "@/shared/avatar-url";
 import { issueAttachments } from "@/shared/attachment-media";
 import { pullRequestCount } from "@/shared/issue-properties";
 import { linkRelation } from "@/shared/relations";
+import { smartLink } from "@/shared/smart-link";
 
 /** Pure: raw Jira records in, the app's issue and property shapes out. No I/O. */
 
@@ -51,15 +52,17 @@ export function issueProjection(siteFields: any[] | null) {
       const text = (n: any): string =>
         typeof n === "string" ? n : [n?.text ?? "", ...(n?.content ?? []).map(text)].join(" ");
       const links = new Set<string>();
+      // A link to a Jira issue is a mention of it, not a resource: Linear lists none for one (#18).
+      const link = (url: string) => {
+        if (smartLink(url)?.kind !== "issue") links.add(url);
+      };
       const collectLinks = (n: any) => {
-        for (const m of n?.marks ?? [])
-          if (m.type === "link" && m.attrs?.href) links.add(m.attrs.href);
-        if (n?.type === "inlineCard" && n.attrs?.url) links.add(n.attrs.url);
+        for (const m of n?.marks ?? []) if (m.type === "link" && m.attrs?.href) link(m.attrs.href);
+        if (n?.type === "inlineCard" && n.attrs?.url) link(n.attrs.url);
         for (const child of n?.content ?? []) collectLinks(child);
       };
       collectLinks(f.description);
-      for (const url of text(f.description).match(/https?:\/\/[^\s<>"\]|)]+/g) ?? [])
-        links.add(url);
+      for (const url of text(f.description).match(/https?:\/\/[^\s<>"\]|)]+/g) ?? []) link(url);
       const creator = f.creator ?? f.reporter;
       return {
         key: i.key,
@@ -102,7 +105,7 @@ export function issueProjection(siteFields: any[] | null) {
 }
 export type IssueProjection = ReturnType<typeof issueProjection>;
 /** Bump when `slim`'s output changes: the mirror re-projects every stored issue on its next start. */
-export const SLIM_VERSION = "8";
+export const SLIM_VERSION = "9";
 
 /** A mirrored issue with what enrichment stored for it (null until enriched). */
 export type PropertyRow = {
