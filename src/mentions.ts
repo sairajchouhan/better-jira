@@ -5,8 +5,9 @@ import { inlineCardNode, mentionNode } from "./rich-document";
 
 export type MentionTrigger = CaretTrigger;
 
-// "@" at a word start, then a name of up to 30 characters with single spaces ("@Sairaj Ch"); two spaces or another "@" end it.
-const mention = caretTrigger("mention", /(?:^|[\s(])@((?:[^\s@￼](?:[^\S\n]?[^\s@￼])*[^\S\n]?)?)$/);
+// "@" (or a full-width "＠", as Linear) at a word start, then a name of up to 30 characters with single spaces ("@Sairaj Ch");
+// two spaces or another "@" end it.
+const mention = caretTrigger("mention", /(?:^|[\s(])[@＠]((?:[^\s@＠￼](?:[^\S\n]?[^\s@＠￼])*[^\S\n]?)?)$/);
 export const mentionTrigger = mention.find;
 export const activeMention = mention.active;
 export const dismissMention = mention.dismiss;

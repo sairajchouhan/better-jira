@@ -5,7 +5,6 @@ import { adfToText } from "./adf";
 import { discardLateMedia, documentHasMedia, lateMediaDiscarded } from "./document";
 import { Button, IconButton, SendButton } from "./button";
 import { Shortcut } from "./keycap";
-import { TextInput } from "./field";
 import { Icon } from "./icons";
 import { Text } from "./text";
 import { mediaCaretPlugin } from "./media-caret";
@@ -20,12 +19,15 @@ import {
   mentionPlugin,
 } from "./mentions";
 import { CaretMenu, MentionMenu, searchPeople } from "./mention-menu";
-import { activeEmoji, dismissEmoji, emojiPlugin, emojiRules, insertEmoji, matchingEmoji } from "./emoji";
+import { activeEmoji, dismissEmoji, emojiPlugin, emojiRules, insertEmoji } from "./emoji";
+import { EmojiMenu } from "./emoji-menu";
+import { inlineRules } from "./editor-inline-rules";
+import { linkPlugin, linkSelected } from "./editor-links";
+import { LinkPopover } from "./link-popover";
 import { activeSlash, dismissSlash, matchingSlashCommands, slashPlugin, SLASH_COMMANDS } from "./slash-commands";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { activeLinkPaste, dismissLinkPaste, linkPasteActions, pastePlugin } from "./editor-paste";
 import { get } from "./store";
-import { navigate } from "./app-navigation";
 import { jiraIssueURL } from "./issue-urls";
 import { beginCreate } from "./issue-actions";
 import { usePlacement } from "./menu-surface";
@@ -64,13 +66,10 @@ import {
   deleteBlock,
   duplicateBlock,
   floatingPlacement,
-  insertLink,
   insertTable,
   issueFromText,
   referenceSelection,
-  linkHref,
   linkRanges,
-  linkTarget,
   markdownRules,
   moveBlock,
   toggleExpand,
@@ -175,10 +174,8 @@ export function RichEditor(props: EditorEngineProps) {
     [blockMenu, setBlockMenu] = useState(false),
     [handleFocused, setHandleFocused] = useState(false);
   const [, refresh] = useState(0),
-    [linkOpen, setLinkOpen] = useState(false),
-    [url, setURL] = useState("");
-  const [linkError, setLinkError] = useState(""),
-    [uploadBusy, setUploadBusy] = useState(false),
+    [linkOpen, setLinkOpen] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false),
     [uploadNotice, setUploadNotice] = useState("");
   // Linear sends while a pasted file is still uploading; locally we send once the save finishes. A failed file still blocks until Retry.
   // A deferred send consumes this editor's late media (Opus review 4): its files went out with the post, so they never return to a draft.
@@ -234,6 +231,8 @@ export function RichEditor(props: EditorEngineProps) {
           mediaCaretPlugin(),
           uploads.plugin,
           markdownRules,
+          inlineRules,
+          linkPlugin(),
           emojiRules,
           issueReferenceRules((key) => (get().issues.has(key) ? jiraIssueURL(key) : null)),
           history(),
@@ -319,7 +318,6 @@ export function RichEditor(props: EditorEngineProps) {
         return true;
       },
       handleDOMEvents: {
-        click: (editor, event) => openLink(editor, event),
         blur: (editor) => {
           latest.current.onBlur?.(fromEditorDocument(editor.state.doc));
           refresh((n) => n + 1);
@@ -458,15 +456,16 @@ export function RichEditor(props: EditorEngineProps) {
         if (binding.id.startsWith("paste-")) return;
         if (event.target instanceof Element && event.target.closest("[data-media-interactive]"))
           return;
+        // An open caret menu takes ⌥↑/⌥↓ to jump between its groups, as Linear's suggestion menus do.
+        const editor = view.current;
+        if (binding.id.startsWith("move-") && editor && caretMenus.some(([active]) => active(editor.state))) return;
         event.preventDefault();
         event.stopPropagation();
         const id = binding.id;
         if (["strong", "em", "underline", "strike", "code"].includes(id))
           run(toggleMark(richSchema.marks[id]!));
-        else if (id === "link") {
-          setURL(view.current ? linkHref(view.current.state) : "");
-          setLinkOpen(true);
-        } else if (id.startsWith("heading-")) {
+        else if (id === "link") setLinkOpen(true);
+        else if (id.startsWith("heading-")) {
           const level = Number(id.split("-")[1]);
           changeBlock(level ? "heading" : "paragraph", level ? { level } : {});
         } else if (id === "quote") run(toggleQuote);
@@ -505,17 +504,6 @@ export function RichEditor(props: EditorEngineProps) {
     }
     const scope = host.current?.closest('[role="dialog"]') ?? document.querySelector("main");
     scope?.querySelector<HTMLInputElement>('input[type="file"]')?.click();
-  };
-  const addLink = () => {
-    const href = linkTarget(url);
-    if (!href) {
-      setLinkError("Enter an http, https, or mailto link.");
-      return;
-    }
-    run(insertLink(href));
-    setLinkOpen(false);
-    setURL("");
-    setLinkError("");
   };
   const inTable = !!view.current && isInTable(view.current.state);
   const blockEntries: ActionEntry[] = [
@@ -592,13 +580,17 @@ export function RichEditor(props: EditorEngineProps) {
   const subject =
     presentation.variant === "comment" || /comment/i.test(props.label ?? "") ? "comment" : "description";
   const selection = view.current?.state.selection;
+  // A selected link shows its link editor in place of the formatting toolbar, as Linear's does.
+  const linkShown =
+    !!view.current && (linkOpen || (view.current.hasFocus() && linkSelected(view.current.state)));
   // Above the selection; below it when the editor has too little room above, so it never covers the title or header. Either way both edges stay inside the viewport (a long selection can start above and end below it).
   const selecting =
     !!presentation.selectionToolbar &&
     !!view.current?.hasFocus() &&
     !!selection &&
     !selection.empty &&
-    !(selection instanceof NodeSelection);
+    !(selection instanceof NodeSelection) &&
+    !linkShown;
   const floating = usePlacement(
     toolbar,
     view.current?.dom,
@@ -697,10 +689,7 @@ export function RichEditor(props: EditorEngineProps) {
       <ToolbarSeparator />
       <ToolbarButton
         aria-label="Insert link"
-        onClick={() => {
-          setURL(view.current ? linkHref(view.current.state) : "");
-          setLinkOpen(!linkOpen);
-        }}
+        onClick={() => setLinkOpen(!linkOpen)}
       >
         Link
       </ToolbarButton>
@@ -786,49 +775,20 @@ export function RichEditor(props: EditorEngineProps) {
         />
       )}
       {presentation.variant !== "comment" && formatting}
-      {linkOpen && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-line-2 p-2">
-          <TextInput
-            size="small"
-            autoFocus
-            aria-label="Text link URL"
-            value={url}
-            onChange={(e) => setURL(e.target.value)}
-            className="min-w-0 flex-1"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                e.stopPropagation();
-                addLink();
-              }
-              if (e.key === "Escape") {
-                e.preventDefault();
-                e.stopPropagation();
-                setLinkOpen(false);
-                view.current?.focus();
-              }
-            }}
-          />
-          <ToolbarButton onClick={addLink}>
-            Apply link
-          </ToolbarButton>
-          {marked("link") && (
-            <ToolbarButton
-              onClick={() => {
-                run(removeLink);
-                setLinkOpen(false);
-                setURL("");
-              }}
-            >
-              Remove link
-            </ToolbarButton>
-          )}
-          {linkError && (
-            <Text role="alert" variant="mini" color="muted" className="w-full">
-              {linkError}
-            </Text>
-          )}
-        </div>
+      {linkShown && (
+        <LinkPopover
+          key={`${selection!.from} ${selection!.to}`}
+          view={view.current!}
+          focus={linkOpen}
+          edit={() => setLinkOpen(true)}
+          close={(refocus) => {
+            setLinkOpen(false);
+            const editor = view.current;
+            if (!refocus || !editor) return;
+            editor.dispatch(editor.state.tr.setSelection(Selection.near(editor.state.selection.$to)));
+            editor.focus();
+          }}
+        />
       )}
       <div ref={frame} className="relative">
         {blockTop !== null && (
@@ -897,22 +857,14 @@ export function RichEditor(props: EditorEngineProps) {
         />
       )}
       {emoji && (
-        <CaretMenu
+        <EmojiMenu
           {...caretAnchor(emoji.from, dismissEmoji)}
-          label="Insert emoji"
-          width={350}
           query={emoji.query}
-          empty={null}
-          items={matchingEmoji(emoji.query).map((item) => ({
-            id: item.name,
-            label: `:${item.name}:`,
-            icon: <span aria-hidden>{item.char}</span>,
-            pick: () => {
-              const editor = view.current!;
-              editor.dispatch(insertEmoji(editor.state, emoji, item));
-              editor.focus();
-            },
-          }))}
+          pick={(item) => {
+            const editor = view.current!;
+            editor.dispatch(insertEmoji(editor.state, emoji, item));
+            editor.focus();
+          }}
         />
       )}
       {linkPaste && (
@@ -996,28 +948,4 @@ export function RichEditor(props: EditorEngineProps) {
       )}
     </div>
   );
-}
-
-/**
- * A browser doesn't follow links inside an editable document, so a click opens them here, like Linear's document-wide
- * anchor handler (`handleDocumentClick`): a link to an issue this app has opens it here, any other in a new tab.
- * Shift-click still extends the selection, and a drag that selected text doesn't open anything. ⌘-click on an issue
- * link opens Jira's page instead.
- */
-function openLink(editor: EditorView, event: MouseEvent) {
-  const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
-  const { selection } = editor.state;
-  if (!link || event.button !== 0 || event.shiftKey || (!selection.empty && !(selection instanceof NodeSelection)))
-    return false;
-  // Links inside a node view's own controls (media Download, file cards) handle their own clicks.
-  if (link.hasAttribute("download") || link.parentElement?.closest('[contenteditable="false"]')) return false;
-  event.preventDefault();
-  const browse = `${get().site}/browse/`;
-  const issue =
-    link.href.startsWith(browse) && !(event.metaKey || event.ctrlKey)
-      ? get().issues.get(decodeURIComponent(link.href.slice(browse.length)))
-      : undefined;
-  if (issue) navigate({ board: issue.board, selected: issue.key, panel: true, view: get().view });
-  else window.open(link.href, "_blank", "noopener,noreferrer");
-  return true;
 }

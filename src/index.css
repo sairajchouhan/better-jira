@@ -753,6 +753,12 @@
 /* .editor table{table-layout:fixed;border-radius:6px;border:hairline bgBorderThin;border-collapse:separate} with
    hairline column rules (th,td{border-left}), cells padded 5px 8px (.cell-content), a header row in bgShade. */
 .rich-doc table {
+/* Linear's LinkSelection: with Mod held, a link under the pointer in the focused editor shows that a click opens it. */
+.ProseMirror-focused.link-active a[href]:hover {
+  cursor: pointer;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
   table-layout: fixed;
   width: 100%;
   border: var(--thin-pixel) solid var(--bg-border);

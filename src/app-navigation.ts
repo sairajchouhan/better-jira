@@ -130,6 +130,7 @@ export function startNavigation() {
   navigationReady = true;
   showAddress(true);
   window.addEventListener("popstate", restoreNavigation);
+  document.addEventListener("click", openIssueLink);
   // A rename (here or in another tab) moves the slug; the id suffix keeps the entry.
   let shown = get().savedViews;
   subscribe(() => {
@@ -137,6 +138,21 @@ export function startNavigation() {
     shown = get().savedViews;
     if (get().activeViewId) showAddress(true);
   });
+}
+/**
+ * A link to an issue this app has, in rendered Jira content (a description before the editor loads, a comment),
+ * opens it here, like Linear's document-wide `handleDocumentClick`. The editor handles its own links first.
+ */
+function openIssueLink(event: MouseEvent) {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+    return;
+  const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>(".rich-doc a[href]") : null,
+    browse = `${get().site}/browse/`;
+  if (!link || link.hasAttribute("download") || !link.href.startsWith(browse)) return;
+  const issue = get().issues.get(currentKey(decodeURIComponent(link.href.slice(browse.length).split(/[?#/]/)[0]!)));
+  if (!issue) return;
+  event.preventDefault();
+  navigate({ board: issue.board, selected: issue.key, panel: true, view: get().view });
 }
 /** The board's Issues › All. Leaves any view first, so its scope and details stay untouched. */
 export function openAllIssues(board: number) {

@@ -276,7 +276,7 @@ const markRule = (pattern: RegExp, mark: string) =>
       .replaceWith(start, end, richSchema.text(text, [type.create()]))
       .removeStoredMark(type);
   });
-/** Markdown shortcuts while typing (Linear supports the same), and bare URLs become links when a space follows. */
+/** Markdown block shortcuts and `*em*`, `_em_`, `code` while typing (Linear supports the same); editor-inline-rules has the rest. */
 export const markdownRules = inputRules({
   rules: [
     textblockTypeInputRule(/^(#{1,4})\s$/, richSchema.nodes.heading!, (match) => ({
@@ -314,22 +314,9 @@ export const markdownRules = inputRules({
       const tr = state.tr.delete(start, end);
       return ruleAbove(tr) ? tr : null;
     }),
-    markRule(/\*\*([^*\s][^*]*)\*\*$/, "strong"),
     markRule(/(?<![*\w])\*([^*\s][^*]*)\*$/, "em"),
     markRule(/`([^`\s][^`]*)`$/, "code"),
-    markRule(/~~([^~\s][^~]*)~~$/, "strike"),
-    markRule(/(?<![~\w])~([^~\s][^~]*)~$/, "strike"),
     markRule(/(?<![_\w])_([^_\s][^_]*)_$/, "em"),
-    new InputRule(/(?:^|\s)(https?:\/\/[^\s]+[^\s.,;:!?)])\s$/, (state, match, start, end) => {
-      const url = match[1]!,
-        from = end - url.length,
-        link = richSchema.marks.link!;
-      if (state.doc.rangeHasMark(from, end, link)) return null;
-      return state.tr
-        .addMark(from, end, link.create({ href: url }))
-        .insertText(match[0].slice(-1), end)
-        .removeStoredMark(link);
-    }),
   ],
 });
 

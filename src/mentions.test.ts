@@ -110,3 +110,8 @@ test("BJ-43: @ lists matching issues and inserts Jira's smart link to one; a typ
   ]);
   expect(typeIn("see KAN-99 ")).toEqual([{ type: "text", text: "see KAN-99 " }]);
 });
+
+test("BJ-180: a full-width ＠ opens the mention picker too, as in Linear", () => {
+  expect(mentionTrigger(typed("hi ＠sai"))).toEqual({ from: 4, to: 8, query: "sai" });
+  expect(query("a＠b")).toBeNull();
+});

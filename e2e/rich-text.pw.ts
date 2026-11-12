@@ -39,10 +39,10 @@ test("the full-page description editor: toolbar state, tables, drops, rendering 
     expect(await pressed("Text")).toBe("true");
   });
   await test.step("R1-D12: after Insert table the selection toolbar no longer covers the new table", async () => {
+    // The paragraph is all link, and a selection inside a link shows the link editor (BJ-179): select on into the next block.
     await page.click("#description p");
     await page.key("End");
-    await page.key("ArrowLeft", "shift");
-    await page.key("ArrowLeft", "shift");
+    await page.key("ArrowRight", "shift");
     await page.click('[aria-label="Insert table"]');
     await page.waitFor(`document.querySelectorAll('#description table').length===2`);
     await sleep(100); // the toolbar must not come back in this window
