@@ -48,3 +48,19 @@ test("Create related › Sub-issue… runs on the menu's issue, not the selectio
   }
   expect(parents).toEqual(["TEST-2"]);
 });
+
+test("a menu's shortcut runs on its own issue even while a sub-issue row is hovered", async () => {
+  const { runShortcut } = await import("./shortcuts");
+  const hovered = { ...issue, key: "TEST-3" };
+  set({ issues: new Map([[hovered.key, hovered], [issue.key, issue]]) });
+  const keys: string[] = [];
+  const stopHover = handle("hovered-sub-issue", () => hovered.key);
+  const stopTitle = handle("focus-title", (key) => (keys.push(key), true));
+  try {
+    runShortcut("rename", issue.key);
+  } finally {
+    stopHover();
+    stopTitle();
+  }
+  expect(keys).toEqual([issue.key]);
+});

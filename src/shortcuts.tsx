@@ -90,7 +90,11 @@ const hoveredRow = () => {
   return key ? get().issues.get(key) : undefined;
 };
 const viewOf = (s: State) => s.savedViews.find((v) => v.id === s.activeViewId);
-const target = () => (selected() ? (hoveredRow() ?? selected()) : undefined);
+/** A menu's own issue (`runShortcut(id, key)`) wins over the row under the pointer, as in `overlay()`. */
+const target = () => {
+  const issue = selected();
+  return issue && !acting ? (hoveredRow() ?? issue) : issue;
+};
 const issueAction = (fn: (issue: Issue) => void) => () => {
   const issue = target();
   if (issue) fn(issue);
