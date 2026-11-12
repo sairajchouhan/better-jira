@@ -1,3 +1,6 @@
+import { MediaIconButton } from "./media-action";
+import { notifyMedia } from "./media-toast";
+import { LoadingState } from "./empty-state";
 /* oxlint-disable react/immutability -- Session callbacks and mutable imperative models are intentionally owned outside React state. */
 /* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -106,7 +109,7 @@ export function ImageMedia({
           if (live) setDisplayURL(url);
           else URL.revokeObjectURL(url);
         })
-        .catch(() => setNotice("Could not load the cropped image"));
+        .catch(() => notifyMedia("Could not load the cropped image"));
     return () => {
       live = false;
       if (url) URL.revokeObjectURL(url);
@@ -114,8 +117,7 @@ export function ImageMedia({
     // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Crop values, rather than mirror object identity, control expensive image decoding.
   }, [file.url, JSON.stringify(edit?.crop)]);
   const [selected, setSelected] = useState(false),
-    [open, setOpen] = useState(false),
-    [notice, setNotice] = useState("");
+    [open, setOpen] = useState(false);
   const previousThread = useRef(false);
   useLayoutEffect(() => {
     if (previousThread.current && !thread) commentTrigger.current?.focus();
@@ -190,52 +192,52 @@ export function ImageMedia({
         onError={onError}
       />
       <div role="toolbar" aria-label="Image actions" className="image-actions">
-        <button
-          aria-label="Copy image"
+        <MediaIconButton
+          label="Copy image"
           disabled={!editable}
-          title={!editable ? readReason : undefined}
+          disabledReason={readReason}
           onClick={() => {
             void copyMediaImage(displayURL)
-              .then(() => setNotice("Image copied"))
-              .catch(() => setNotice("Could not copy this image. Download it instead."));
+              .then(() => notifyMedia("Image copied"))
+              .catch(() => notifyMedia("Could not copy this image. Download it instead."));
           }}
         >
           <Icon name="copy" />
-        </button>
+        </MediaIconButton>
         {issueKey && (
-          <button
-            aria-label="Crop image"
+          <MediaIconButton
+            label="Crop image"
             disabled={!editable}
-            title={!editable ? readReason : undefined}
+            disabledReason={readReason}
             onClick={() => {
               setMode("crop");
               setOpen(true);
             }}
           >
             <Icon name="crop" />
-          </button>
+          </MediaIconButton>
         )}
-        <button
+        <MediaIconButton
           ref={trigger}
-          aria-label="Full screen"
+          label="Full screen"
           onClick={() => {
             setMode("preview");
             setOpen(true);
           }}
         >
           <Icon name="expand" />
-        </button>
+        </MediaIconButton>
         {issueKey && (
-          <button
+          <MediaIconButton
             ref={commentTrigger}
-            aria-label={thread ? "Hide image comments" : "Add image comment"}
+            label={thread ? "Hide image comments" : "Add image comment"}
             onClick={() => {
               setSelected(true);
               setThread((value) => !value);
             }}
           >
             <Icon name="comment" />
-          </button>
+          </MediaIconButton>
         )}
       </div>
       {thread && issueKey && (
@@ -257,13 +259,8 @@ export function ImageMedia({
           }}
         />
       )}
-      {notice && (
-        <span role="status" className="image-notice">
-          {notice}
-        </span>
-      )}
       {open && (
-        <Suspense fallback={<div role="status">Opening preview…</div>}>
+        <Suspense fallback={<LoadingState>Opening preview…</LoadingState>}>
           <Viewer
             issueKey={issueKey}
             editable={editable}

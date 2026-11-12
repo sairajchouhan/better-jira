@@ -3,7 +3,11 @@ import { createPortal } from "react-dom";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import type { ImageComment } from "./media-edits";
 import { ActionMenu } from "./action-menu";
-import { Confirm } from "./menu-surface";
+import { ConfirmDialog } from "./dialog";
+import { Button, IconButton } from "./button";
+import { AutoResizingTextArea } from "./field";
+import { notifyMedia } from "./media-toast";
+import "./media-primitives.css";
 import { Icon } from "./icons";
 export type ImageThreadDraft = { text: string; editing?: string; beforeEdit?: string };
 export function ImageThread({
@@ -26,8 +30,7 @@ export function ImageThread({
   const { text, editing } = draft;
   const setText = (text: string) => setDraft((value) => ({ ...value, text })),
     setEditing = (editing: string | undefined) => setDraft((value) => ({ ...value, editing }));
-  const [menu, setMenu] = useState<{ anchor: HTMLElement; comment: ImageComment }>(),
-    [notice, setNotice] = useState("");
+  const [menu, setMenu] = useState<{ anchor: HTMLElement; comment: ImageComment }>();
   const focusText = () =>
     requestAnimationFrame(() => root.current?.querySelector("textarea")?.focus());
   useHotkeys(
@@ -51,19 +54,19 @@ export function ImageThread({
               <time title={new Date(comment.at).toLocaleString()} dateTime={comment.at}>
                 {new Date(comment.at).toLocaleDateString()}
               </time>
-              <button
-                aria-label="Image comment options"
+              <IconButton
+                label="Image comment options"
+                className="ml-auto"
                 aria-expanded={menu?.comment.id === comment.id}
                 onClick={(event) => setMenu({ anchor: event.currentTarget, comment })}
               >
-                ···
-              </button>
+                <Icon name="dots" />
+              </IconButton>
             </div>
             <p>{comment.text}</p>
           </div>
         ))}
       </div>
-      {notice && <p role="status">{notice}</p>}
       <form
         ref={form}
         onSubmit={(event) => {
@@ -84,29 +87,31 @@ export function ImageThread({
           );
           setText("");
           setEditing(undefined);
-          setNotice("");
           root.current?.querySelector("textarea")?.focus();
         }}
       >
         <span className="image-comment-avatar" aria-hidden="true">
           {author[0]}
         </span>
-        <textarea
+        <AutoResizingTextArea
           autoFocus
           aria-label="Image comment"
           value={text}
           onChange={(event) => setText(event.target.value)}
           placeholder="Add a comment…"
         />
-        <button
+        <IconButton
+          type="submit"
           disabled={!text.trim()}
-          aria-label={editing ? "Save image comment" : "Submit image comment"}
+          label={editing ? "Save image comment" : "Submit image comment"}
         >
-          ↑
-        </button>
+          <Icon name="up" />
+        </IconButton>
       </form>
       {editing && (
-        <button
+        <Button
+          variant="borderless"
+          size="medium"
           onClick={() => {
             setEditing(undefined);
             setText(draft.beforeEdit ?? "");
@@ -114,7 +119,7 @@ export function ImageThread({
           }}
         >
           Cancel edit
-        </button>
+        </Button>
       )}
       {/* Outside the thread's DOM, so Escape closes only the menu and not the thread (BJ-163). */}
       {menu &&
@@ -132,7 +137,6 @@ export function ImageThread({
                   if (!editing) setDraft((value) => ({ ...value, beforeEdit: text }));
                   setEditing(menu.comment.id);
                   setText(menu.comment.text);
-                  setNotice("");
                   // After the menu hands focus back to its trigger.
                   focusText();
                 },
@@ -144,7 +148,7 @@ export function ImageThread({
                   save(comments.filter((c) => c.id !== menu.comment.id));
                   if (editing === menu.comment.id) {
                     setEditing(undefined);
-                    setNotice("Comment deleted. Your draft is kept as a new comment.");
+                    notifyMedia("Comment deleted. Your draft is kept as a new comment.");
                   }
                   focusText();
                 },
@@ -217,15 +221,14 @@ export function ImageCommentCard({
           <div className="comment-head">
             {head(comment)}
             <span className="ml-auto flex">
-              <button
-                aria-label="Comment options"
-                title="Comment options"
+              <IconButton
+                label="Comment options"
                 aria-expanded={menu?.id === comment.id}
-                className="comment-hover-action"
+                className="media-comment-action"
                 onClick={(e) => setMenu({ anchor: e.currentTarget, id: comment.id })}
               >
-                <Icon name="dots" size={14} />
-              </button>
+                <Icon name="dots" />
+              </IconButton>
             </span>
           </div>
           {editing === comment.id ? (
@@ -247,18 +250,20 @@ export function ImageCommentCard({
                 }
               }}
             >
-              <textarea
+              <AutoResizingTextArea
                 autoFocus
                 aria-label="Edit image comment"
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                className="mt-1.5 w-full resize-none rounded border border-line-2 bg-transparent p-1.5 outline-none"
+                className="mt-1.5 w-full"
               />
               <div className="flex justify-end gap-2 text-[12px]">
-                <button type="button" onClick={() => done(comment.id)}>
+                <Button variant="secondary" size="medium" onClick={() => done(comment.id)}>
                   Cancel
-                </button>
-                <button disabled={!text.trim()}>Save</button>
+                </Button>
+                <Button type="submit" size="medium" disabled={!text.trim()}>
+                  Save
+                </Button>
               </div>
             </form>
           ) : (
@@ -266,9 +271,9 @@ export function ImageCommentCard({
           )}
         </div>
       ))}
-      <button className="mx-3 text-[12px] text-accent" onClick={view}>
+      <Button variant="link" size="medium" className="mx-3" onClick={view}>
         View image
-      </button>
+      </Button>
       <div className="comment-reply-composer">
         <form
           className="comment-reply-row"
@@ -278,7 +283,7 @@ export function ImageCommentCard({
           }}
         >
           {me}
-          <textarea
+          <AutoResizingTextArea
             rows={1}
             aria-label="Reply to image thread"
             placeholder="Leave a reply…"
@@ -290,16 +295,17 @@ export function ImageCommentCard({
                 send();
               }
             }}
-            className="min-w-0 flex-1 resize-none bg-transparent outline-none"
           />
-          <button
-            aria-label="Submit image reply"
-            title="Submit reply (⌘↵)"
-            className="comment-reply-send"
+          <IconButton
+            type="submit"
+            label="Submit image reply"
+            shortcut="⌘↵"
+            variant="primary"
+            size="small"
             disabled={!reply.trim()}
           >
-            <Icon name="up" size={14} />
-          </button>
+            <Icon name="up" />
+          </IconButton>
         </form>
       </div>
       {menu && (
@@ -327,10 +333,10 @@ export function ImageCommentCard({
         />
       )}
       {deleting && (
-        <Confirm
+        <ConfirmDialog
           title="Delete this comment?"
-          detail="You cannot undo this action."
-          action="Delete"
+          description="You cannot undo this action."
+          confirmLabel="Delete"
           onConfirm={() => {
             setDeleting(undefined);
             save(comments.filter((c) => c.id !== deleting));

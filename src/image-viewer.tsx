@@ -1,3 +1,6 @@
+import { Button } from "./button";
+import { MediaIconButton } from "./media-action";
+import { notifyMedia } from "./media-toast";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys";
@@ -37,7 +40,6 @@ export function ImageViewer({
     [viewport, setViewport] = useState({ width: innerWidth, height: innerHeight }),
     [zoomed, setZoomed] = useState(false),
     [pan, setPan] = useState({ x: 0, y: 0 }),
-    [notice, setNotice] = useState(""),
     // A failure belongs to the URL that failed, so a new image URL shows again without a reset.
     [failedURL, setFailedURL] = useState<string>(),
     failed = failedURL === file.url;
@@ -125,6 +127,7 @@ export function ImageViewer({
       />,
       document.body,
     );
+  // Linear media preview (PBe) owns a full-window shell with staged Escape, zoom and pan.
   return createPortal(
     <div
       ref={root}
@@ -139,14 +142,14 @@ export function ImageViewer({
       }}
     >
       <div className="image-preview-toolbar">
-        <button aria-label="Toggle image zoom" onClick={zoom}>
+        <Button variant="borderless" size="medium" aria-label="Toggle image zoom" onClick={zoom}>
           {Math.round(scale * 100)}%
-        </button>
+        </Button>
         <div className="image-preview-tools">
           {onCrop && (
-            <button aria-label="Crop image" onClick={() => setCropping(true)}>
+            <MediaIconButton label="Crop image" onClick={() => setCropping(true)}>
               <Icon name="crop" size={16} />
-            </button>
+            </MediaIconButton>
           )}
           <a
             aria-label="Download image"
@@ -163,34 +166,34 @@ export function ImageViewer({
           >
             <Icon name="download" size={16} />
           </a>
-          <button
-            aria-label="Copy image"
+          <MediaIconButton
+            label="Copy image"
             disabled={!editable}
-            title={!editable ? readReason : undefined}
+            disabledReason={readReason}
             onClick={() => {
               void copyMediaImage(file.url)
-                .then(() => setNotice("Image copied"))
-                .catch(() => setNotice("Could not copy this image. Download it instead."));
+                .then(() => notifyMedia("Image copied"))
+                .catch(() => notifyMedia("Could not copy this image. Download it instead."));
             }}
           >
             <Icon name="copy" size={16} />
-          </button>
-          <button
-            aria-label="Copy link"
+          </MediaIconButton>
+          <MediaIconButton
+            label="Copy link"
             disabled={!issueKey && original.url.startsWith("blob:")}
-            title={!issueKey ? "Create the issue before copying its attachment link" : undefined}
+            disabledReason="Create the issue before copying its attachment link"
             onClick={() => {
               void navigator.clipboard
                 .writeText(attachmentLink(original, location.href))
-                .then(() => setNotice("Link copied"))
-                .catch(() => setNotice("Could not copy the image link"));
+                .then(() => notifyMedia("Link copied"))
+                .catch(() => notifyMedia("Could not copy the image link"));
             }}
           >
             <Icon name="link" size={16} />
-          </button>
-          <button aria-label="Close" onClick={close}>
+          </MediaIconButton>
+          <MediaIconButton label="Close" onClick={close}>
             <Icon name="close" size={18} />
-          </button>
+          </MediaIconButton>
         </div>
       </div>
       <div
@@ -248,11 +251,6 @@ export function ImageViewer({
           />
         )}
       </div>
-      {notice && (
-        <div role="status" className="image-preview-notice">
-          {notice}
-        </div>
-      )}
     </div>,
     document.body,
   );

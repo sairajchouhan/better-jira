@@ -1,3 +1,7 @@
+import { Button, IconButton } from "./button";
+import { Shortcut } from "./keycap";
+import { notifyMedia } from "./media-toast";
+import "./media-primitives.css";
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 import { Debouncer } from "@tanstack/pacer";
@@ -65,7 +69,13 @@ export function VideoPlayer({
   const tip = (id: string, label: string, key?: string) => (
     <span id={`${tooltipId}-${id}`} role="tooltip" className="video-tooltip">
       {label}
-      {key && <kbd>{key}</kbd>}
+      {key && (
+        <Shortcut
+          keys={key === "< >" ? "<" : key}
+          alternate={key === "< >" ? ">" : undefined}
+          size="small"
+        />
+      )}
     </span>
   );
   const root = useRef<HTMLDivElement>(null),
@@ -84,8 +94,7 @@ export function VideoPlayer({
     [visible, setVisible] = useState(false),
     [keyboardControls, setKeyboardControls] = useState(false),
     [waiting, setWaiting] = useState(false),
-    [error, setError] = useState(""),
-    [notice, setNotice] = useState("");
+    [error, setError] = useState("");
   const [dimensions, setDimensions] = useState<{ width: number; height: number }>();
   const [hideControls] = useState(() => new Debouncer(() => setVisible(false), { wait: 2500 })),
     saved = useRef<Snapshot>({ time: 0, volume: 1, muted: false, rate: 1, paused: true }),
@@ -115,7 +124,7 @@ export function VideoPlayer({
     if (v.paused) {
       if (v.ended) v.currentTime = 0;
       void v.play().catch(() => {
-        setNotice("Playback could not start. Press Play to try again.");
+        notifyMedia("Playback could not start. Press Play to try again.");
       });
     } else v.pause();
     reveal();
@@ -171,9 +180,9 @@ export function VideoPlayer({
       if (document.pictureInPictureElement) await document.exitPictureInPicture();
       else if (video.current && document.pictureInPictureEnabled)
         await video.current.requestPictureInPicture();
-      else setNotice("Picture-in-picture is unavailable in this browser.");
+      else notifyMedia("Picture-in-picture is unavailable in this browser.");
     } catch {
-      setNotice("Picture-in-picture could not open. Try again after playback starts.");
+      notifyMedia("Picture-in-picture could not open. Try again after playback starts.");
     }
   };
   const toggleExpanded = () => {
@@ -369,6 +378,7 @@ export function VideoPlayer({
   };
   const percent = duration ? (elapsed / duration) * 100 : 0;
   const playLabel = playing ? "Pause" : ended ? "Replay" : "Play";
+  // Expanded video keeps its live player mounted; a modal portal would restart playback.
   return (
     <div
       ref={root}
@@ -420,9 +430,9 @@ export function VideoPlayer({
       }}
     >
       {expanded && (
-        <button className="video-close" aria-label="Exit full window" onClick={exit}>
+        <IconButton className="video-close" label="Exit full window" onClick={exit}>
           <Icon name="close" size={20} />
-        </button>
+        </IconButton>
       )}
       <div
         className="video-stage"
@@ -457,7 +467,6 @@ export function VideoPlayer({
           onPlay={() => {
             setPlaying(true);
             setEnded(false);
-            setNotice("");
             snapshot();
           }}
           onPause={() => {
@@ -486,18 +495,15 @@ export function VideoPlayer({
           <div className="video-pip">
             <Glyph name="pip" />
             <span>Video playing in picture-in-picture</span>
-            <button onClick={() => void picture()}>Bring it here</button>
+            <Button variant="secondary" size="medium" onClick={() => void picture()}>
+              Bring it here
+            </Button>
           </div>
         )}
         {onSelect && !expanded && (
-          <button
-            className="video-select"
-            aria-label="Select video"
-            title="Select video"
-            onClick={onSelect}
-          >
+          <IconButton className="video-select" label="Select video" onClick={onSelect}>
             ⠿
-          </button>
+          </IconButton>
         )}
         {waiting && !error && (
           <div className="video-waiting" role="status" aria-label="Loading video">
@@ -513,23 +519,16 @@ export function VideoPlayer({
               </span>
             </p>
             <div className="video-error-actions">
-              <button aria-label="Retry video" onClick={retry}>
+              <Button variant="secondary" size="medium" aria-label="Retry video" onClick={retry}>
                 Retry video
-              </button>
+              </Button>
               <a href={download(file.url)} download={file.name}>
                 Download video
               </a>
             </div>
           </div>
         )}
-        {notice && (
-          <div className="video-notice" role="status">
-            {notice}
-            <button aria-label="Dismiss video message" onClick={() => setNotice("")}>
-              ×
-            </button>
-          </div>
-        )}
+        {/* Custom video tooltips are title-less; IconButton needs a tooltip opt-out variant (Q8). */}
         {!error && (
           <div
             className="video-controls"

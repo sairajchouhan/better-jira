@@ -1,3 +1,5 @@
+import { LoadingState } from "./empty-state";
+import { Text } from "./text";
 import { lazy, Suspense, useState } from "react";
 import type { AdfNode } from "./document";
 import type { Attachment } from "./attachment-media";
@@ -27,9 +29,9 @@ function LoadingMedia({ node, embedded }: MediaProps) {
           .filter((n) => n && typeof n === "object")
           .map((child, index) =>
             child.type === "caption" ? (
-              <div key={index} className="text-center text-[12px] text-fg-3">
+              <Text as="div" key={index} variant="mini" color="muted" align="center">
                 {child.content?.map((n) => n.text ?? "").join("")}
-              </div>
+              </Text>
             ) : (
               <LoadingMedia key={index} node={child} />
             ),
@@ -45,17 +47,16 @@ function LoadingMedia({ node, embedded }: MediaProps) {
       className={inline ? "inline-flex" : "media-frame my-3"}
       style={!inline && size ? { aspectRatio: `${size.width}/${size.height}` } : undefined}
     >
-      <Wrapper
-        role="status"
-        style={!inline && !size ? { minHeight: 60 } : undefined}
-        className={
-          inline
-            ? "inline-flex text-[12px] text-fg-3"
-            : "media-message rounded-md border border-line-2 bg-card px-3 py-2 text-[13px] text-fg-3"
-        }
-      >
-        Loading attachment…
-      </Wrapper>
+      {inline ? (
+        // LoadingState is a block frame; inline atoms must retain phrasing content.
+        <Text role="status" aria-busy variant="mini" color="muted">
+          Loading attachment…
+        </Text>
+      ) : (
+        <LoadingState style={!size ? { minHeight: 60 } : undefined}>
+          Loading attachment…
+        </LoadingState>
+      )}
     </Wrapper>
   );
 }

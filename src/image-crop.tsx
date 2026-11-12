@@ -1,3 +1,5 @@
+import { Button, IconButton } from "./button";
+import "./media-primitives.css";
 import { useEffect, useRef, useState } from "react";
 import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 import { adjustCrop, type ImageCrop } from "./media-edits";
@@ -77,6 +79,7 @@ export function ImageCropEditor({
     ] as UseHotkeyDefinition[],
     { target: root, capture: true, ignoreInputs: false },
   );
+  // Crop selection and handles require the media shell and its spatial keyboard model.
   return (
     <div
       ref={root}
@@ -90,14 +93,15 @@ export function ImageCropEditor({
     >
       <div className="image-crop-actions">
         {initial && (
-          <button disabled={saving} onClick={() => setCrop(full)}>
+          <Button variant="secondary" size="medium" disabled={saving} onClick={() => setCrop(full)}>
             Reset crop
-          </button>
+          </Button>
         )}
-        <button disabled={saving} onClick={cancel}>
+        <Button variant="secondary" size="medium" disabled={saving} onClick={cancel}>
           Cancel
-        </button>
-        <button
+        </Button>
+        <Button
+          size="medium"
           disabled={saving || JSON.stringify(crop) === JSON.stringify(initial ?? full)}
           onClick={() => {
             root.current?.focus();
@@ -111,10 +115,10 @@ export function ImageCropEditor({
           }}
         >
           Save
-        </button>
-        <button aria-label="Close" disabled={saving} onClick={cancel}>
+        </Button>
+        <IconButton label="Close" disabled={saving} onClick={cancel}>
           <Icon name="close" size={16} />
-        </button>
+        </IconButton>
       </div>
       {error && (
         <p role="alert" className="image-preview-notice">

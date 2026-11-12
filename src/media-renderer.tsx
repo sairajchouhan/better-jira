@@ -1,3 +1,6 @@
+import { Button } from "./button";
+import { EmptyState, LoadingState } from "./empty-state";
+import { Text } from "./text";
 import { useEffect, useMemo, useState } from "react";
 import type { MediaProps } from "./media-loader";
 import type { Attachment } from "./attachment-media";
@@ -24,9 +27,16 @@ export function MediaRenderer({ node, issueKey, attachments, embedded, onSelect 
         {children.length ? (
           children.map((child, index) =>
             child.type === "caption" ? (
-              <div key={index} className="media-caption text-center text-[12px] text-fg-3">
+              <Text
+                as="div"
+                key={index}
+                variant="mini"
+                color="muted"
+                align="center"
+                className="media-caption"
+              >
                 <Adf node={{ type: "paragraph", content: child.content }} />
-              </div>
+              </Text>
             ) : (
               <MediaRenderer
                 key={index}
@@ -38,9 +48,7 @@ export function MediaRenderer({ node, issueKey, attachments, embedded, onSelect 
             ),
           )
         ) : (
-          <p role="alert" className="text-[12px] text-fg-3">
-            Attachment data is unavailable
-          </p>
+          <EmptyState role="alert" title="Attachment data is unavailable" />
         )}
       </div>
     );
@@ -160,6 +168,7 @@ function LoadedMedia({
         if (event.key !== "Tab" && !event.metaKey && !event.ctrlKey) event.stopPropagation();
       }}
     >
+      {/* Recovery can be inline phrasing content; EmptyState is a block-only frame. */}
       {error || failed || file?.missing ? (
         <Status
           role="alert"
@@ -169,9 +178,9 @@ function LoadedMedia({
             (file?.missing
               ? "This local file is unavailable"
               : "Could not display this attachment")}{" "}
-          <button className="ml-2 text-fg-2 hover:text-fg" onClick={retry}>
+          <Button variant="link" size="small" className="ml-2" onClick={retry}>
             Retry attachment
-          </button>
+          </Button>
           {file && !file.missing && (
             <a
               className="ml-3 text-accent"
@@ -185,13 +194,16 @@ function LoadedMedia({
           )}
         </Status>
       ) : !file ? (
-        <Status
-          style={!size && !inline ? { minHeight: 60 } : undefined}
-          role="status"
-          className="media-message rounded-md border border-line-2 bg-card px-3 py-2 text-[13px] text-fg-3"
-        >
-          Loading attachment…
-        </Status>
+        inline ? (
+          // Inline media cannot contain LoadingState's block frame.
+          <Text role="status" aria-busy variant="mini" color="muted">
+            Loading attachment…
+          </Text>
+        ) : (
+          <LoadingState style={!size ? { minHeight: 60 } : undefined}>
+            Loading attachment…
+          </LoadingState>
+        )
       ) : inline ? (
         <a
           data-attachment-id={file.id}
