@@ -133,3 +133,17 @@ test("BJ-80: G U goes to the views page", async ({ open }) => {
   await p.keys("gu");
   await p.waitFor(`location.pathname==='/views'`);
 });
+
+test("BJ-63: search remembers its chosen ordering", async ({ open }) => {
+  const p = await open();
+  await p.key("/");
+  await p.click('[aria-label="Ordering: Most relevant"]');
+  await p.click("text=Last updated");
+  await p.waitFor(`!!document.querySelector('[aria-label="Ordering: Last updated"]')`);
+  await p.type("fixture");
+  await p.waitFor(`${groupRows("Issues (6)")}.length===6`);
+  await p.key("Escape");
+  await p.waitFor(`!${input}`);
+  await p.key("/");
+  await p.waitFor(`!!document.querySelector('[aria-label="Ordering: Last updated"]')`);
+});

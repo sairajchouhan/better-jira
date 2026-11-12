@@ -24,18 +24,28 @@ export function parseQuery(q: string) {
 const haystack = (i: Issue) =>
   `${i.key} ${i.summary}\n${i.description ?? ""}\n${i.commentText ?? ""}`.toLowerCase();
 
-export function matchIssues(issues: Map<string, Issue>, q: string): Issue[] {
+/** Linear's `searchViewOrdering` (Search's display options): "Most relevant", "Last updated" or "Last created". */
+export const SEARCH_ORDERINGS = [
+  ["relevance", "Most relevant"],
+  ["updatedAt", "Last updated"],
+  ["createdAt", "Last created"],
+] as const;
+export type SearchOrdering = (typeof SEARCH_ORDERINGS)[number][0];
+
+export function matchIssues(issues: Map<string, Issue>, q: string, ordering: SearchOrdering = "relevance"): Issue[] {
   const { phrases, words } = parseQuery(q);
   const terms = [...phrases, ...words];
   const exact = shorthandKey(q) ?? q.trim().toUpperCase();
   const rank = (i: Issue) => {
+    if (ordering !== "relevance") return 0;
     const title = matchRank(i.summary, terms.join(" "));
     return i.key === exact ? -1 : title < 0 ? 6 : title;
   };
+  const date = (i: Issue) => (ordering === "createdAt" ? (i.created ?? "") : i.updated);
   return [...issues.values()]
     .filter((i) => i.key === exact || terms.every((t) => haystack(i).includes(t)))
     .map((i) => [rank(i), i] as const)
-    .sort(([ra, a], [rb, b]) => ra - rb || (a.updated < b.updated ? 1 : -1))
+    .sort(([ra, a], [rb, b]) => ra - rb || (date(a) < date(b) ? 1 : -1))
     .slice(0, 50)
     .map(([, i]) => i);
 }

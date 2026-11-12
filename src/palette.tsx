@@ -32,7 +32,9 @@ import { filterCount } from "./view-model";
 import { Modal } from "./personal-controls";
 import { Avatar } from "./avatar";
 import { matchRank } from "./search-rank";
-import { matchDocuments, matchIssues, type DocumentMatch } from "./issue-search";
+import { matchDocuments, matchIssues, SEARCH_ORDERINGS, type DocumentMatch, type SearchOrdering } from "./issue-search";
+import { useStoredState } from "./stored-state";
+import { SelectRow } from "./display-options";
 import { recentIssues, recentSearches, recordSearch } from "./recents";
 import { hotkeyOf, runShortcut, shortcutApplies, shortcuts } from "./shortcuts";
 import { Shortcut, type Keys } from "./keycap";
@@ -152,6 +154,7 @@ function PaletteFrame({
   chip,
   placeholder = "Search issues or type a command…",
   onBackspace,
+  footer,
   children,
 }: {
   label: string;
@@ -162,11 +165,14 @@ function PaletteFrame({
   placeholder?: string;
   /** Runs on Backspace in an empty input. */
   onBackspace?: () => void;
+  /** Controls under the results, outside cmdk so their own menus keep their keys. */
+  footer?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <Overlay label={label}>
-      <Command shouldFilter={false} loop className={`w-full ${MENU}`}>
+      <div className={`w-full ${MENU}`}>
+      <Command shouldFilter={false} loop>
         <div className="flex items-center gap-2 border-b border-line px-3.5">
           {chip && (
             <span className="flex h-6 shrink-0 items-center gap-1.5 rounded-md bg-sel px-2 text-[12px] text-fg-2">
@@ -187,6 +193,8 @@ function PaletteFrame({
           {children}
         </Command.List>
       </Command>
+      {footer && <div className="border-t border-line px-3.5 py-1.5">{footer}</div>}
+      </div>
     </Overlay>
   );
 }
@@ -247,7 +255,7 @@ function DocumentRow({ match: { issue, resource }, q }: { match: DocumentMatch; 
 
 /** Search (/) and Open issue (O I): matching issues; before anything is typed, Linear's Recent issues (the ten last
  *  opened, not the open one) and Recent searches, or the 20 most recently updated until any issue has been opened. */
-function IssueRows({ q, setQ }: { q: string; setQ: (q: string) => void }) {
+function IssueRows({ q, setQ, ordering }: { q: string; setQ: (q: string) => void; ordering?: SearchOrdering }) {
   const issues = useStore((s) => s.issues);
   const [recent] = useState(() => {
     const open = get().panel ? get().selected : null;
@@ -257,7 +265,7 @@ function IssueRows({ q, setQ }: { q: string; setQ: (q: string) => void }) {
     }).slice(0, 10);
   });
   const [searches] = useState(recentSearches);
-  const results = useMemo(() => (q.trim() ? matchIssues(issues, q) : []), [q, issues]);
+  const results = useMemo(() => (q.trim() ? matchIssues(issues, q, ordering) : []), [q, issues, ordering]);
   if (q.trim()) return <IssueResults results={results} q={q} />;
   if (!recent.length && !searches.length)
     return (
@@ -287,12 +295,22 @@ function IssueRows({ q, setQ }: { q: string; setQ: (q: string) => void }) {
   );
 }
 
-/** Search (/): issues, then documents. */
+const isOrdering = (raw: unknown): SearchOrdering =>
+  SEARCH_ORDERINGS.find(([value]) => value === raw)?.[0] ?? "relevance";
+
+/** Search (/): issues, in Linear's Search ordering, then documents. */
 export function IssueSearch() {
   const [q, setQ] = useState("");
+  const namespace = useStore((s) => s.namespace);
+  const [ordering, setOrdering] = useStoredState(`better-jira:search-ordering:v1:${namespace}`, isOrdering, "relevance");
   return (
-    <PaletteFrame label="Search issues" q={q} setQ={setQ}>
-      <IssueRows q={q} setQ={setQ} />
+    <PaletteFrame
+      label="Search issues"
+      q={q}
+      setQ={setQ}
+      footer={<SelectRow label="Ordering" value={ordering} options={SEARCH_ORDERINGS} onChange={(v) => setOrdering(isOrdering(v))} />}
+    >
+      <IssueRows q={q} setQ={setQ} ordering={ordering} />
       {q.trim() && <DocumentResults q={q} />}
     </PaletteFrame>
   );

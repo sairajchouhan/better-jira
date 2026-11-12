@@ -51,3 +51,14 @@ test("BJ-65: search finds documents by title and body text", () => {
   expect(ids('"beta to staging"')).toEqual(["d1"]);
   expect(ids("")).toEqual(["d1", "d2"]); // every document, most recently updated first
 });
+
+test("BJ-63: search results follow the chosen ordering", () => {
+  const issues = map(
+    issue("A-1", "login", { updated: "2026-11-01", created: "2026-10-03" }),
+    issue("A-2", "a login bug", { updated: "2026-11-03", created: "2026-10-01" }),
+    issue("A-3", "the login form", { updated: "2026-11-02", created: "2026-10-02" }),
+  );
+  expect(keys(matchIssues(issues, "login"))).toEqual(["A-1", "A-2", "A-3"]); // exact title first
+  expect(keys(matchIssues(issues, "login", "updatedAt"))).toEqual(["A-2", "A-3", "A-1"]);
+  expect(keys(matchIssues(issues, "login", "createdAt"))).toEqual(["A-1", "A-3", "A-2"]);
+});
