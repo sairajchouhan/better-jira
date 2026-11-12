@@ -62,3 +62,12 @@ test("BJ-63: search results follow the chosen ordering", () => {
   expect(keys(matchIssues(issues, "login", "updatedAt"))).toEqual(["A-2", "A-3", "A-1"]);
   expect(keys(matchIssues(issues, "login", "createdAt"))).toEqual(["A-1", "A-3", "A-2"]);
 });
+
+test("BJ-62: @name refines search to that person's issues", () => {
+  const alex = { id: "alex", name: "Alex Kim" }, sam = { id: "s1", name: "Sam" };
+  const issues = map(issue("A-1", "login bug", { assignee: alex }), issue("A-2", "login page", { assignee: sam }), issue("A-3", "login"));
+  expect(keys(matchIssues(issues, "login @alex"))).toEqual(["A-1"]);
+  expect(keys(matchIssues(issues, "@kim"))).toEqual(["A-1"]); // any word of the name
+  expect(keys(matchIssues(issues, "@sam login")).sort()).toEqual(["A-2"]);
+  expect(keys(matchIssues(issues, "login @"))).toHaveLength(3); // a lone @ while the name is typed
+});

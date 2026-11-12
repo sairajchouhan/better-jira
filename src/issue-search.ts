@@ -10,14 +10,22 @@ export function shorthandKey(q: string): string | undefined {
   return m ? `${m[1]!.toUpperCase()}-${Number(m[2])}` : undefined;
 }
 
-/** A query's "quoted phrases" (an unclosed quote runs to the end) and its other words, lower-cased. */
+/** A query's "quoted phrases" (an unclosed quote runs to the end), its @people and its other words, lower-cased. */
 export function parseQuery(q: string) {
   const lower = q.toLowerCase();
+  const rest = lower.replace(/"[^"]*"?/g, " ").split(/\s+/).filter(Boolean);
   return {
     phrases: [...lower.matchAll(/"([^"]*)"?/g)].map((m) => m[1]!.trim()).filter(Boolean),
-    words: lower.replace(/"[^"]*"?/g, " ").split(/\s+/).filter(Boolean),
+    words: rest.filter((w) => !w.startsWith("@")), // a lone "@" is a name still being typed
+    people: rest.filter((w) => /^@./.test(w)).map((w) => w.slice(1)),
   };
 }
+/** BJ-62: `@name` refines search to issues assigned to someone whose name (any word of it) or id starts with it.
+ *  ponytail: assignee only, typed; Linear's Search also has a Filter bar for any property. */
+const assignedTo = (i: Issue, person: string) =>
+  !!i.assignee &&
+  (i.assignee.id.toLowerCase().startsWith(person) ||
+    i.assignee.name.toLowerCase().split(/\s+/).some((w) => w.startsWith(person)));
 
 /** Issues whose key, title, description or comments hold every typed word and quoted phrase: the key the query names
  *  first, then title matches, then the most recently updated (top 50). */
@@ -33,7 +41,7 @@ export const SEARCH_ORDERINGS = [
 export type SearchOrdering = (typeof SEARCH_ORDERINGS)[number][0];
 
 export function matchIssues(issues: Map<string, Issue>, q: string, ordering: SearchOrdering = "relevance"): Issue[] {
-  const { phrases, words } = parseQuery(q);
+  const { phrases, words, people } = parseQuery(q);
   const terms = [...phrases, ...words];
   const exact = shorthandKey(q) ?? q.trim().toUpperCase();
   const rank = (i: Issue) => {
@@ -43,7 +51,7 @@ export function matchIssues(issues: Map<string, Issue>, q: string, ordering: Sea
   };
   const date = (i: Issue) => (ordering === "createdAt" ? (i.created ?? "") : i.updated);
   return [...issues.values()]
-    .filter((i) => i.key === exact || terms.every((t) => haystack(i).includes(t)))
+    .filter((i) => i.key === exact || (terms.every((t) => haystack(i).includes(t)) && people.every((p) => assignedTo(i, p))))
     .map((i) => [rank(i), i] as const)
     .sort(([ra, a], [rb, b]) => ra - rb || (date(a) < date(b) ? 1 : -1))
     .slice(0, 50)
