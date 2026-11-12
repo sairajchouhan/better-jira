@@ -1,9 +1,10 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Avatar } from "@/client/components/avatar";
 import { statuses } from "@/shared/board-catalog";
 import { FilterIcon } from "./filter-icons";
 import { hue, PriorityIcon, StatusIcon, TypeDot } from "@/client/components/icons";
 import { Menu } from "@/client/components/menu";
+import { menuFilter } from "@/client/lib/fuzzy-score";
 import { Select } from "@/client/components/select";
 import { Button } from "@/client/components/button";
 import { TextInput } from "@/client/components/field";
@@ -105,12 +106,26 @@ export function filterChoices(field: Field, board: Board, issues: Issue[], match
   for (const o of out) o.count = countWhere(matching, { field, op: "is", values: [o.value] });
   return out;
 }
-const countWhere = (issues: Issue[], rule: Omit<Rule, "id">) =>
+export const countWhere = (issues: Issue[], rule: Omit<Rule, "id">) =>
   issues.filter((i) => matchesRule(i, { id: "count", ...rule }, issues, ME.id)).length;
 /** Linear: "3 issues", "1 issue"; nothing for none. */
 export const issueCount = (n?: number) => (n ? `${n} issue${n === 1 ? "" : "s"}` : "");
+/** Linear's multi-value chip label noun and empty text: "2 assignees", "3 statuses", "No matching priorities". */
+export const plural = (noun: string) =>
+  /[^aeiou]y$/.test(noun) ? `${noun.slice(0, -1)}ies` : /(s|x|ch|sh)$/.test(noun) ? (noun.endsWith("s") && !/(us|ss)$/.test(noun) ? noun : `${noun}es`) : `${noun}s`;
+/** Linear's value list empty text names the field: "No matching statuses". */
+const noMatches = (name: string) => `No matching ${plural(name.toLowerCase())}`;
+/** Relations are single-select in Linear (aria-multiselectable=false): picking one replaces the filter and closes the menu. */
+const isSingle = (field: Field) => field === "relations";
+/** Linear keeps a filter submenu at its opening width while you type in it: the first layout's width becomes its minimum. */
+export const freezeWidth = (node: HTMLElement | null) => {
+  if (node && !node.style.minWidth) node.style.minWidth = `${node.getBoundingClientRect().width}px`;
+};
 
-/** The board's issues under every filter except this field's own, its rule, its choices and the edits Linear's menu makes. */
+/**
+ * The board's issues under every filter except this field's own, its rule, its choices and the edits Linear's menu makes.
+ * `editingId` edits a chip's rule: unchecking its last value keeps the empty rule, and the chip removes it when its menu closes.
+ */
 export function useFieldFilter(field: Field, board: Board, editingId?: string) {
   const [newRuleId] = useState(newId);
   const ruleId = editingId ?? newRuleId;
@@ -139,62 +154,150 @@ export function useFieldFilter(field: Field, board: Board, editingId?: string) {
   function apply(values: string[], operator = rule?.op ?? "is") {
     setRule(board.id, { id: ruleId, field, op: operator, values });
   }
-  const toggle = (v: string) => {
+  // Picking a value leaves "is empty" for "is".
+  const valueOp = () => (rule && !["empty", "notEmpty"].includes(rule.op) ? rule.op : "is");
+  /**
+   * Linear's FilterBlockHelper: a single-select field replaces its value, and so does Alt-click (`only`, its replaceSelection);
+   * otherwise the value toggles. Returns true when the pick finishes the menu (single-select).
+   */
+  const select = (v: string, only = false) => {
+    if (isSingle(field) || only) {
+      timed("filter", () => apply([v], valueOp()));
+      return isSingle(field);
+    }
     const vals = rule?.values ?? [];
     const next = vals.includes(v) ? vals.filter((x) => x !== v) : [...vals, v];
-    if (!next.length && rule)
-      updateRule(board.id, rule.id, null);
-    // Picking a value leaves "is empty" for "is".
-    else
-      timed("filter", () =>
-        apply(next, rule && !["empty", "notEmpty"].includes(rule.op) ? rule.op : "is"),
-      );
+    if (!next.length && rule && !editingId) updateRule(board.id, rule.id, null);
+    else timed("filter", () => apply(next, valueOp()));
+    return false;
   };
-  return { issues, rule, choices, apply, toggle };
+  return { issues, rule, choices, apply, select };
 }
 
-/** "Status › Todo": a searched row's dimmed path before its name (Linear's M4e breadcrumbs). */
-export function Path({ path, children }: { path: string; children: ReactNode }) {
+/** "Status › Todo", "Dates › Due date › Overdue": a searched row's dimmed path before its name (Linear's M4e breadcrumbs). */
+export function Path({ path, children }: { path: string[]; children: ReactNode }) {
   return (
     <>
-      <span className="text-[var(--menu-fg-3)]">{path}</span>
-      <svg width="5" height="9" viewBox="0 0 5 9" aria-hidden className="mx-2 inline text-[var(--menu-placeholder)]">
-        <path d="m1 1 3 3.5L1 8" fill="none" stroke="currentColor" strokeLinecap="round" />
-      </svg>
+      {path.map((crumb) => (
+        <span key={crumb}>
+          <span className="text-[var(--menu-fg-3)]">{crumb}</span>
+          <svg width="5" height="9" viewBox="0 0 5 9" aria-hidden className="mx-2 inline text-[var(--menu-placeholder)]">
+            <path d="m1 1 3 3.5L1 8" fill="none" stroke="currentColor" strokeLinecap="round" />
+          </svg>
+        </span>
+      ))}
       {children}
     </>
   );
 }
 
-/** One value row: Linear's checkbox slot, then the value's icon, its name and its issue count. */
+/**
+ * One value row: Linear's checkbox slot, then the value's icon, its name and its issue count. It searches by its label alone.
+ * `selection` is the field's: "multiple" draws the checkbox, "single" a trailing checkmark and no aria-checked. A root-search row
+ * (`path`, "Status › Todo") draws neither, as Linear's hoisted rows don't. `onSelect(only)` is true for Alt-click.
+ */
 export function ValueRow({
   choice,
   checked,
   onSelect,
-  check = true,
+  selection,
   path,
 }: {
   choice: Choice;
   checked: boolean;
-  onSelect: () => void;
-  check?: boolean;
-  path?: string;
+  onSelect: (only: boolean) => void;
+  selection: "multiple" | "single";
+  path?: string[];
 }) {
+  // cmdk selects on its own click handler, which carries no modifiers; the press before it does.
+  const alt = useRef(false);
+  const multiple = selection === "multiple";
   return (
     <Menu.Item
-      value={path ? `${path} ${choice.label} ${choice.value}` : `${choice.label} ${choice.value}`}
-      aria-checked={checked}
-      checkbox={check ? checked : undefined}
+      value={`${path?.join(" ") ?? ""} ${choice.label} ${choice.value}`.trim()}
+      keywords={[choice.label]}
+      aria-checked={multiple ? checked : undefined}
+      checkbox={multiple && !path ? checked : undefined}
+      checked={!multiple && !path ? checked : undefined}
       icon={choice.icon}
       hint={issueCount(choice.count)}
-      onSelect={onSelect}
+      onPointerDown={(event) => {
+        alt.current = event.altKey;
+      }}
+      onSelect={() => {
+        onSelect(alt.current);
+        alt.current = false;
+      }}
     >
       {path ? <Path path={path}>{choice.label}</Path> : choice.label}
     </Menu.Item>
   );
 }
 
-type Preset = { label: string; op: Rule["op"]; value: string; typed?: boolean };
+/** A field's values as rows; the one list behind the Add-filter submenu, the chip's value menu and the root search. */
+export function FieldValues({
+  field,
+  board,
+  ruleId,
+  path,
+  onDone,
+}: {
+  field: Field;
+  board: Board;
+  ruleId?: string;
+  path?: string[];
+  onDone: () => void;
+}) {
+  const { rule, choices, select } = useFieldFilter(field, board, ruleId);
+  // Linear lists the values already picked first, in the order the menu opened with, so rows don't jump while you toggle.
+  const [picked] = useState(() => new Set(rule?.values));
+  const ordered = useMemo(
+    () => choices.toSorted((a, b) => Number(picked.has(b.value)) - Number(picked.has(a.value))),
+    [choices, picked],
+  );
+  return ordered.map((c) => (
+    <ValueRow
+      key={c.value}
+      choice={c}
+      path={path}
+      selection={isSingle(field) ? "single" : "multiple"}
+      checked={rule?.values.includes(c.value) ?? false}
+      onSelect={(only) => {
+        if (select(c.value, only)) onDone();
+      }}
+    />
+  ));
+}
+
+/** One date preset with its issue count: Linear's typed suggestions always say "0 issues", the fixed presets hide a zero. */
+export function PresetRow({
+  preset: p,
+  field,
+  issues,
+  path,
+  onSelect,
+}: {
+  preset: Preset;
+  field: Field;
+  issues: Issue[];
+  path?: string[];
+  onSelect: () => void;
+}) {
+  const count =
+    p.value || p.op === "empty" ? countWhere(issues, { field, op: p.op, values: p.value ? [p.value] : [] }) : 0;
+  return (
+    <Menu.Item
+      value={[...(path ?? []), p.label].join(" ")}
+      keywords={[p.label]}
+      hint={p.typed ? `${count} issue${count === 1 ? "" : "s"}` : issueCount(count)}
+      onSelect={onSelect}
+    >
+      {path ? <Path path={path}>{p.label}</Path> : p.label}
+    </Menu.Item>
+  );
+}
+
+export type Preset = { label: string; op: Rule["op"]; value: string; typed?: boolean };
 const UNIT: Record<string, [number, string]> = {
   d: [1, "day"],
   w: [7, "week"],
@@ -291,7 +394,7 @@ export function PropertyFilter({
   inline?: boolean;
   autoFocus?: boolean;
 }) {
-  const { issues, rule, choices, apply, toggle } = useFieldFilter(field, board, ruleId);
+  const { issues, rule, apply } = useFieldFilter(field, board, ruleId);
   const [value, setValue] = useState(rule?.values[0] ?? "");
   const [op, setOp] = useState<Rule["op"]>(
     rule?.op ?? (field === "content" || field === "links" ? "contains" : "is"),
@@ -363,7 +466,8 @@ export function PropertyFilter({
       </Button>
     </form>
   );
-  const searchRow = (placeholder = "Filter…", label = `Filter ${name}`) => (
+  // A chip's value menu is titled by its field, as Linear's is.
+  const searchRow = (placeholder = inline ? name : "Filter…", label = `Filter ${name}`) => (
     <Menu.Input
       autoFocus={autoFocus}
       placeholder={placeholder}
@@ -379,30 +483,23 @@ export function PropertyFilter({
   if (dated) {
     const presets = datePresets(field, search);
     return (
-      <Menu shouldFilter={false} className="filter-menu filter-sub">
+      <Menu ref={freezeWidth} shouldFilter={false} className="filter-menu filter-sub">
         {searchRow(field === "due" ? "Try: 1 week ago, 1 week from now…" : "Filter…", name)}
         <Menu.List maxHeight="360px">
-          {!presets.length && <Menu.Empty always>No matching options</Menu.Empty>}
-          {presets.map((p) => {
-            const count =
-              p.value || p.op === "empty"
-                ? countWhere(issues, { field, op: p.op, values: p.value ? [p.value] : [] })
-                : 0;
-            return (
-              <Menu.Item
-                key={p.label}
-                value={p.label}
-                hint={p.typed ? `${count} issue${count === 1 ? "" : "s"}` : issueCount(count)}
-                onSelect={() => {
-                  if (!p.value && p.op === "is") return setCustom(true);
-                  apply(p.value ? [p.value] : [], p.op);
-                  done();
-                }}
-              >
-                {p.label}
-              </Menu.Item>
-            );
-          })}
+          {!presets.length && <Menu.Empty always>{noMatches(name)}</Menu.Empty>}
+          {presets.map((p) => (
+            <PresetRow
+              key={p.label}
+              preset={p}
+              field={field}
+              issues={issues}
+              onSelect={() => {
+                if (!p.value && p.op === "is") return setCustom(true);
+                apply(p.value ? [p.value] : [], p.op);
+                done();
+              }}
+            />
+          ))}
         </Menu.List>
       </Menu>
     );
@@ -429,34 +526,11 @@ export function PropertyFilter({
   }
   return (
     <div className={inline ? "" : "filter-menu filter-sub"}>
-      {inline && rule && (
-        <div role="group" aria-label={`${name} operator`} className="flex flex-wrap gap-1 pb-2">
-          {operatorsFor(field).map(([v, l]) => (
-            <Button
-              key={v}
-              variant="borderless"
-              size="small"
-              aria-pressed={rule.op === v}
-              onClick={() => apply(["empty", "notEmpty"].includes(v) ? [] : rule.values, v)}
-            >
-              {l}
-            </Button>
-          ))}
-        </div>
-      )}
-      <Menu>
+      <Menu ref={freezeWidth} filter={menuFilter}>
         {searchRow()}
-        <Menu.List maxHeight="360px">
-          <Menu.Empty>No matching options</Menu.Empty>
-          {choices.map((c) => (
-            <ValueRow
-              key={c.value}
-              choice={c}
-              check={field !== "relations"}
-              checked={rule?.values.includes(c.value) ?? false}
-              onSelect={() => toggle(c.value)}
-            />
-          ))}
+        <Menu.List maxHeight={inline ? "300px" : "360px"}>
+          <Menu.Empty>{noMatches(name)}</Menu.Empty>
+          <FieldValues field={field} board={board} ruleId={ruleId} onDone={done} />
         </Menu.List>
       </Menu>
     </div>

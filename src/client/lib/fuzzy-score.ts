@@ -168,3 +168,10 @@ export function fuzzyScore(text: string | string[], query = ""): number {
 }
 export const prioritize = (score: number, by = 1) => score * 1.01 ** by;
 export const deprioritize = (score: number, by = 1) => score * 0.99 ** by;
+/**
+ * cmdk's `filter` with Linear's score: pass it to every searchable menu (`<Menu filter={menuFilter}>`) so all menus rank alike.
+ * A row's `keywords`, when given, are the text it is searched by instead of its value, so a value can stay a unique id
+ * ("Status To Do 3") while the row matches on its label ("To Do") alone.
+ */
+export const menuFilter = (value: string, search: string, keywords?: string[]) =>
+  fuzzyScore(keywords?.length ? keywords : value, search);

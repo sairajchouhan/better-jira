@@ -4,7 +4,10 @@ import { Fragment, useState, type ReactNode, type RefObject } from "react";
 import { FilterIcon } from "./filter-icons";
 import { Icon, type IconName } from "@/client/components/icons";
 import { Menu } from "@/client/components/menu";
-import { Path, PropertyFilter, useFieldFilter, ValueRow } from "./property-filter";
+import { usePristine } from "@/client/components/menu-pristine";
+import { menuFilter } from "@/client/lib/fuzzy-score";
+import { ui } from "@/client/features/navigation/app-navigation";
+import { datePresets, FieldValues, freezeWidth, Path, PresetRow, PropertyFilter, useFieldFilter } from "./property-filter";
 import type { Board } from "@/client/state/store";
 import { type Field } from "@/shared/view-model";
 
@@ -17,7 +20,7 @@ type Entry = {
   icon?: IconName;
   reason?: string;
   divider?: boolean;
-  path?: string;
+  path?: string[];
 };
 type Container = RefObject<HTMLDivElement | null>;
 const UNAVAILABLE = "This field belongs to Linear and is not available on mirrored Jira issues.";
@@ -63,38 +66,49 @@ const PROJECT: Entry[] = [
   { name: "Project lead", field: "projectLead", glyph: "Assignee" },
   { name: "Milestone name", field: "milestone", glyph: "Project properties" },
 ];
-// Root search also lists nested categories and the values of these fields, as Linear's does.
-const NESTED = [
-  ...DATE_ENTRIES.filter((e) => e.field).map((e) => ({ ...e, path: "Dates" })),
-  ...PROJECT.map((e) => ({ ...e, path: "Project properties" })),
+// Root search also lists nested categories, every field's values and the date presets, as Linear's does.
+const NESTED: Entry[] = [
+  ...DATE_ENTRIES.filter((e) => e.field).map((e) => ({ ...e, path: ["Dates"] })),
+  ...PROJECT.map((e) => ({ ...e, path: ["Project properties"] })),
 ];
-const SEARCHED: [Field, string][] = [
-  ["status", "Status"],
-  ["assignee", "Assignee"],
-  ["creator", "Creator"],
-  ["priority", "Priority"],
-  ["labels", "Labels"],
-  ["project", "Project"],
-  ["watchers", "Subscribers"],
-  ["type", "Issue type"],
+const SEARCHED: [Field, string[]][] = [
+  ["status", ["Status"]],
+  ["assignee", ["Assignee"]],
+  ["creator", ["Creator"]],
+  ["priority", ["Priority"]],
+  ["labels", ["Labels"]],
+  ["relations", ["Relations"]],
+  ["project", ["Project"]],
+  ["projectLead", ["Project properties", "Project lead"]],
+  ["milestone", ["Project properties", "Milestone name"]],
+  ["watchers", ["Subscribers"]],
+  ["type", ["Issue type"]],
+  ["parent", ["Parent issue"]],
 ];
-const matches = (text: string, query: string) =>
-  query
-    .toLowerCase()
-    .split(/\s+/)
-    .every((word) => text.toLowerCase().includes(word));
+const PRESETS = DATE_ENTRIES.filter((e) => e.field);
+/** Linear hoists values into the root search from 2 characters (FilterBlockHelper `subActionsHoisting.minInputLength ?? 2`). */
+const HOIST_FROM = 2;
+const closeMenu = () => ui.send({ type: "toolbar.close" });
 
-/** The filter menu's content; the control that opens it decides what closing it and "Advanced filter" do. */
+/**
+ * The filter menu's content; the control that opens it decides what closing it and "Advanced filter" do. Submenus open on
+ * `side`, the side of the trigger with room (flip still moves them near an edge). Opened by a "pointer", no row is highlighted until
+ * a key or the pointer moves; opened by "keyboard" (F, Enter on the trigger) the first row is, as in Linear.
+ */
 export default function FilterMenu({
   board,
   container,
   footer,
+  side,
+  openedBy,
   onClose,
   onAdvanced,
 }: {
   board: Board;
   container: Container;
   footer?: ReactNode;
+  side: "left" | "right";
+  openedBy: "pointer" | "keyboard";
   onClose: () => void;
   onAdvanced: () => void;
 }) {
@@ -115,6 +129,8 @@ export default function FilterMenu({
         container={container}
         entries={CATEGORIES}
         footer={footer}
+        side={side}
+        openedBy={openedBy}
         onAdvanced={onAdvanced}
       />
     </FloatingTree>
@@ -130,13 +146,18 @@ function EntryLabel({ entry }: { entry: Entry }) {
   return entry.path ? <Path path={entry.path}>{entry.name}</Path> : entry.name;
 }
 
-/** Each level owns its search and selection; opening a branch never unmounts its parent. */
+/**
+ * Each level owns its search and selection; opening a branch never unmounts its parent. Its search ranks every row with Linear's
+ * score (menuFilter): categories by name, and at the root also nested categories, values and date presets by their own label.
+ */
 function FilterLevel({
   board,
   container,
   entries,
   name,
   footer,
+  side,
+  openedBy = "keyboard",
   onAdvanced,
 }: {
   board: Board;
@@ -144,19 +165,23 @@ function FilterLevel({
   entries: Entry[];
   name?: string;
   footer?: ReactNode;
+  side: "left" | "right";
+  openedBy?: "pointer" | "keyboard";
   onAdvanced: () => void;
 }) {
   const [open, setOpen] = useState<string | null>(null);
   const [info, setInfo] = useState("");
   const [query, setQuery] = useState("");
+  const start = usePristine(openedBy === "pointer");
   const q = query.trim();
-  const shown = q
-    ? [...entries, ...(name ? [] : NESTED)].filter((e) => matches(`${e.path ?? ""} ${e.name}`, q))
-    : entries;
+  const hoist = !name && q.length >= HOIST_FROM;
+  const shown = q && !name ? [...entries, ...NESTED] : entries;
   return (
     <Menu
-      shouldFilter={false}
+      ref={name ? freezeWidth : undefined}
+      filter={menuFilter}
       className={`filter-menu ${name ? "filter-sub" : ""} max-h-[calc(100vh-140px)]`}
+      {...start.props}
       onValueChange={(value) => setOpen((current) => (current === value ? current : null))}
     >
       <Menu.Input
@@ -168,12 +193,15 @@ function FilterLevel({
         onValueChange={(value) => {
           setQuery(value);
           setOpen(null);
+          start.wake();
         }}
       />
-      <Menu.List>
+      {/* cmdk reorders rows in place while ranking; a fresh list when the search clears restores Linear's order. */}
+      <Menu.List key={q ? "search" : "all"}>
+        <Menu.Empty>No matching options</Menu.Empty>
         {shown.map((entry) => (
-          <Fragment key={(entry.path ?? "") + entry.name}>
-            {!q && entry.divider && <Menu.Divider />}
+          <Fragment key={(entry.path?.join() ?? "") + entry.name}>
+            {entry.divider && <Menu.Divider />}
             {entry.group === "advanced" || entry.reason ? (
               <Menu.Item
                 value={entry.name}
@@ -192,7 +220,7 @@ function FilterLevel({
                 value={entry.name}
                 label={<EntryLabel entry={entry} />}
                 icon={<EntryIcon entry={entry} />}
-                side="left"
+                side={side}
                 popupLabel={`${entry.name} filter`}
                 container={container}
                 open={open === entry.name}
@@ -208,6 +236,7 @@ function FilterLevel({
                     container={container}
                     entries={entry.group === "dates" ? DATE_ENTRIES : PROJECT}
                     name={entry.name}
+                    side={side}
                     onAdvanced={onAdvanced}
                   />
                 ) : (
@@ -223,12 +252,14 @@ function FilterLevel({
             )}
           </Fragment>
         ))}
-        {!name &&
-          q &&
+        {hoist &&
           SEARCHED.map(([field, path]) => (
-            <SearchedValues key={field} field={field} path={path} board={board} query={q} />
+            <FieldValues key={field} field={field} path={path} board={board} onDone={closeMenu} />
           ))}
-        {!shown.length && !(!name && q) && <Menu.Empty always>No matching options</Menu.Empty>}
+        {hoist &&
+          PRESETS.map((entry) => (
+            <SearchedPresets key={entry.field} field={entry.field!} path={["Dates", entry.name]} board={board} />
+          ))}
       </Menu.List>
       {footer}
       {info && (
@@ -243,29 +274,22 @@ function FilterLevel({
   );
 }
 
-/** A field's values as "Status › Todo" rows in the root search; picking one toggles it like the submenu does. */
-function SearchedValues({
-  field,
-  path,
-  board,
-  query,
-}: {
-  field: Field;
-  path: string;
-  board: Board;
-  query: string;
-}) {
-  const { choices, rule, toggle } = useFieldFilter(field, board);
-  return choices
-    .filter((c) => matches(`${path} ${c.label}`, query))
-    .map((c) => (
-      <ValueRow
-        key={c.value}
-        choice={c}
+/** A date field's presets as "Dates › Due date › Overdue" rows in the root search; picking one applies it and closes, as in its submenu. */
+function SearchedPresets({ field, path, board }: { field: Field; path: string[]; board: Board }) {
+  const { issues, apply } = useFieldFilter(field, board);
+  return datePresets(field, "")
+    .filter((p) => p.value || p.op === "empty")
+    .map((p) => (
+      <PresetRow
+        key={p.label}
+        preset={p}
+        field={field}
+        issues={issues}
         path={path}
-        check={false}
-        checked={rule?.values.includes(c.value) ?? false}
-        onSelect={() => toggle(c.value)}
+        onSelect={() => {
+          apply(p.value ? [p.value] : [], p.op);
+          closeMenu();
+        }}
       />
     ));
 }

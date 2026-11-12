@@ -16,8 +16,10 @@ import {
   type RefObject,
 } from "react";
 import { MenuSurface, MENU_POPUP as POPUP, Popover } from "@/client/components/menu-surface";
-import { filterChoices, PropertyFilter, ValueRow } from "@/client/features/filters/property-filter";
+import { filterChoices, plural, PropertyFilter } from "@/client/features/filters/property-filter";
 import { Menu } from "@/client/components/menu";
+import { usePristine } from "@/client/components/menu-pristine";
+import { menuFilter } from "@/client/lib/fuzzy-score";
 import { Select } from "@/client/components/select";
 import { DisplayProperties, SelectRow, Toggle } from "@/client/components/display-options";
 import { Icon } from "@/client/components/icons";
@@ -43,6 +45,7 @@ import {
   isNumeric,
   matchesFilters,
   newId,
+  operatorLabel,
   operatorsFor,
   ORDERINGS,
   PROPERTIES,
@@ -105,6 +108,9 @@ function AddFilterButton({
   children: ReactNode;
 }) {
   const open = useStore((s) => s.toolbar === menu);
+  // A click opens the menu pristine, as Linear's pointer opens do; F and a keyboard press (detail 0) highlight the first row.
+  const [byPointer, setByPointer] = useState(false);
+  if (!open && byPointer) setByPointer(false);
   const own = useRef<HTMLButtonElement>(null);
   const trigger = triggerRef ?? own;
   const popup = useRef<HTMLDivElement>(null);
@@ -120,7 +126,10 @@ function AddFilterButton({
         aria-expanded={expanded ?? open}
         onPointerEnter={() => void loadFilterMenu()}
         onFocus={() => void loadFilterMenu()}
-        onClick={() => ui.send({ type: "toolbar.toggle", toolbar: menu })}
+        onClick={(event) => {
+          setByPointer(!open && event.detail > 0);
+          ui.send({ type: "toolbar.toggle", toolbar: menu });
+        }}
         className={className}
       >
         {children}
@@ -139,6 +148,9 @@ function AddFilterButton({
               board={board}
               container={popup}
               footer={<PropertySyncNotice />}
+              // Submenus open away from the trigger's edge: right of the chip row's "+", left of the toolbar button.
+              side={placement === "bottom-left" ? "right" : "left"}
+              openedBy={byPointer ? "pointer" : "keyboard"}
               onClose={closeToolbar}
               onAdvanced={openAdvanced}
             />
@@ -357,10 +369,6 @@ function DisplayMenu({ board }: { board: Board }) {
   );
 }
 
-/** Linear's multi-value chip label noun: "2 assignees", "3 statuses", "2 priorities". */
-const plural = (noun: string) =>
-  /[^aeiou]y$/.test(noun) ? `${noun.slice(0, -1)}ies` : /(s|x|ch|sh)$/.test(noun) ? (noun.endsWith("s") && !/(us|ss)$/.test(noun) ? noun : `${noun}es`) : `${noun}s`;
-
 /** Linear's chip: Backspace or Delete on a focused chip removes its filter. */
 const removeOnKey = (remove: () => void) => (e: React.KeyboardEvent) => {
   if (e.key === "Backspace" || e.key === "Delete") {
@@ -384,7 +392,7 @@ function RuleChip({
   rule: Rule;
   board: Board;
   open: "operator" | "value" | null;
-  onEdit: (segment: "operator" | "value", anchor: HTMLElement) => void;
+  onEdit: (segment: "operator" | "value", anchor: HTMLElement, openedBy: "pointer" | "keyboard") => void;
   remove: () => void;
 }) {
   const issues = useStore((s) => (c.values.length ? s.issues : null));
@@ -406,10 +414,10 @@ function RuleChip({
         className="view-filter-segment view-filter-operator"
         aria-label={`${c.field} operator`}
         aria-expanded={open === "operator"}
-        onClick={(e) => onEdit("operator", e.currentTarget)}
+        onClick={(e) => onEdit("operator", e.currentTarget, e.detail > 0 ? "pointer" : "keyboard")}
       >
         <span>
-          {c.op === "within" ? "in the last" : c.op === "next" ? "in the next" : operatorsFor(c.field).find(([op]) => op === c.op)?.[1]}
+          {c.op === "within" ? "in the last" : c.op === "next" ? "in the next" : operatorLabel(c.field, c.op, c.values.length)}
         </span>
       </button>
       {!["empty", "notEmpty"].includes(c.op) && (
@@ -418,7 +426,7 @@ function RuleChip({
           aria-label={`${c.field} value`}
           aria-expanded={open === "value"}
           title={picked.length > 1 ? picked.map(labelOf).join(", ") : undefined}
-          onClick={(e) => onEdit("value", e.currentTarget)}
+          onClick={(e) => onEdit("value", e.currentTarget, e.detail > 0 ? "pointer" : "keyboard")}
         >
           {picked.some((p) => p.choice?.icon) && (
             <span className="view-filter-icons">
@@ -435,26 +443,33 @@ function RuleChip({
   );
 }
 
-/** A chip's value list. Its own component so only an open value menu subscribes to the issues (for the counts). */
-function ChipValues({ rule, board, toggle }: { rule: Rule; board: Board; toggle: (value: string) => void }) {
-  const issues = useStore((s) => s.issues);
-  const choices = useMemo(() => filterChoices(rule.field, board, [...issues.values()]), [rule.field, board, issues]);
+/** A chip's operator menu: Linear's type-to-filter search hidden until typing, titled by the current operator; pristine from a click. */
+function ChipOperators({
+  rule,
+  openedBy,
+  pick,
+}: {
+  rule: Rule;
+  openedBy: "pointer" | "keyboard";
+  pick: (op: Rule["op"]) => void;
+}) {
+  const start = usePristine(openedBy === "pointer");
+  const ops = operatorsFor(rule.field, rule.values.length);
   return (
-    <Menu>
+    <Menu filter={menuFilter} defaultValue={rule.op} {...start.props}>
       <Menu.Input
+        hideWhenEmpty
         autoFocus
-        aria-label={`Filter ${FIELDS.find(([f]) => f === rule.field)?.[1]}`}
-        placeholder="Filter…"
+        aria-label={`Filter ${rule.field} operators`}
+        placeholder={operatorLabel(rule.field, rule.op, rule.values.length)}
+        onValueChange={start.wake}
       />
-      <Menu.List maxHeight="300px">
-        <Menu.Empty>No matches</Menu.Empty>
-        {choices.map((c) => (
-          <ValueRow
-            key={c.value}
-            choice={c}
-            checked={rule.values.includes(c.value)}
-            onSelect={() => toggle(c.value)}
-          />
+      <Menu.List>
+        <Menu.Empty>No matching operators</Menu.Empty>
+        {ops.map(([op, label]) => (
+          <Menu.Item key={op} value={op} keywords={[label]} checked={rule.op === op} onSelect={() => pick(op)}>
+            {label}
+          </Menu.Item>
         ))}
       </Menu.List>
     </Menu>
@@ -469,6 +484,7 @@ export function FilterChips({ board }: { board: Board }) {
     rule: Rule;
     segment: "operator" | "value";
     anchor: HTMLElement;
+    openedBy: "pointer" | "keyboard";
   } | null>(null);
   const rule = filters.children.find(
     (c): c is Rule => !("children" in c) && c.id === edit?.rule.id,
@@ -500,34 +516,18 @@ export function FilterChips({ board }: { board: Board }) {
           close={close}
         >
           {edit.segment === "operator" ? (
-            <Menu tabIndex={0} defaultValue={rule.op}>
-              <Menu.List>
-                {operatorsFor(rule.field).map(([op, label]) => (
-                  <Menu.Item
-                    key={op}
-                    value={op}
-                    checked={rule.op === op}
-                    onSelect={() => {
-                      patch(rule, {
-                        op,
-                        values: ["empty", "notEmpty"].includes(op)
-                          ? []
-                          : rule.values,
-                      });
-                      setEdit(
-                        !rule.values.length &&
-                          !["empty", "notEmpty"].includes(op)
-                          ? { ...edit, segment: "value" }
-                          : null,
-                      );
-                    }}
-                  >
-                    {label}
-                  </Menu.Item>
-                ))}
-              </Menu.List>
-            </Menu>
-          ) : form ? (
+            <ChipOperators
+              rule={rule}
+              openedBy={edit.openedBy}
+              pick={(op) => {
+                patch(rule, { op, values: ["empty", "notEmpty"].includes(op) ? [] : rule.values });
+                setEdit(
+                  !rule.values.length && !["empty", "notEmpty"].includes(op) ? { ...edit, segment: "value" } : null,
+                );
+              }}
+            />
+          ) : (
+            // The same value list as the Add-filter submenu: board-scoped counts, picked values first, the field as placeholder.
             <PropertyFilter
               ruleId={rule.id}
               inline
@@ -535,18 +535,6 @@ export function FilterChips({ board }: { board: Board }) {
               name={FIELDS.find(([f]) => f === rule.field)?.[1] ?? rule.field}
               board={board}
               onBack={close}
-            />
-          ) : (
-            <ChipValues
-              rule={rule}
-              board={board}
-              toggle={(value) =>
-                patch(rule, {
-                  values: rule.values.includes(value)
-                    ? rule.values.filter((v) => v !== value)
-                    : [...rule.values, value],
-                })
-              }
             />
           )}
         </MenuSurface>
@@ -576,7 +564,7 @@ export function FilterChips({ board }: { board: Board }) {
             rule={c}
             board={board}
             open={edit?.rule.id === c.id ? edit.segment : null}
-            onEdit={(segment, anchor) => setEdit({ rule: c, segment, anchor })}
+            onEdit={(segment, anchor, openedBy) => setEdit({ rule: c, segment, anchor, openedBy })}
             remove={remove}
           />
         );
@@ -863,7 +851,7 @@ function RuleEditor({
         value={r.op}
         onValueChange={(op) => patch({ op: op as Rule["op"], values: [] })}
       >
-        {operatorsFor(r.field).map(([v, l]) => (
+        {operatorsFor(r.field, r.values.length).map(([v, l]) => (
           <Select.Option key={v} value={v}>
             {l}
           </Select.Option>

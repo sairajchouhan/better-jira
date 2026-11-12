@@ -88,7 +88,7 @@ test("Add filter by mouse: search, hover submenus, multi-select and chips", asyn
     await page.waitFor(`${cards}===5`);
     expect(
       await page.eval(
-        `document.querySelector(".view-filter-chip")?.textContent==="Labelsis notui"`,
+        `document.querySelector(".view-filter-chip")?.textContent==="Labelsdo not includeui"`,
       ),
     ).toBe(true);
   });
@@ -234,5 +234,156 @@ test("Filter menu looks like Linear: visible checkboxes, counts and avatar photo
     await page.waitFor(
       `[...document.querySelectorAll('[data-key] img[src^="/api/avatar"]')].some(i=>i.complete&&i.naturalWidth>0)`,
     );
+  });
+});
+
+/** Opens the app with these filters already applied on the fixture board. */
+const seeded = (children: object[]) => {
+  const prefs = { 1: { filters: { id: "root", join: "and", children } } };
+  return `if(!sessionStorage.seeded){sessionStorage.seeded=1;localStorage.setItem(${JSON.stringify(PREFS_KEY)},${JSON.stringify(JSON.stringify(prefs))});}`;
+};
+const items = (scope: string) =>
+  `[...document.querySelectorAll('${scope} [cmdk-item]')].map(r=>r.textContent)`;
+const chipText = (field: string) =>
+  `document.querySelector('[aria-label="Remove ${field} filter"]').closest(".view-filter-chip").textContent`;
+
+test("Add filter root search ranks every row and opens like Linear's", async ({ open }) => {
+  const page = await open();
+  await test.step("FILTER-15: a click opens the menu pristine; F highlights the first row", async () => {
+    await page.click('[aria-label="Add filter"]');
+    await page.waitFor(`document.activeElement===${root}`);
+    expect(await page.eval(`${root}.closest("[cmdk-root]").hasAttribute("data-pristine")`)).toBe(true);
+    await page.key("Escape");
+    await page.waitFor(`!${root}`);
+    await page.key("f");
+    await page.waitFor(`document.activeElement===${root}`);
+    expect(await page.eval(`${root}.closest("[cmdk-root]").hasAttribute("data-pristine")`)).toBe(false);
+  });
+  await test.step("FILTER-5: values rank with categories by Linear's score, from 2 characters, by their label", async () => {
+    await page.type("t");
+    expect(await page.eval(`[...document.querySelectorAll("[cmdk-item]")].some(r=>r.textContent.includes("Todo")&&r.textContent.includes("Status"))`)).toBe(false);
+    await page.type("o");
+    await page.waitFor(`${items("")}[0]?.startsWith("StatusTodo")`);
+    expect(await page.eval(`document.querySelector("[cmdk-item][data-selected=true]").textContent`)).toMatch(/^StatusTodo/);
+    await page.key("a", "Meta");
+    await page.type("revi");
+    await page.waitFor(`${items("")}.length===1`);
+    expect(await page.eval(`${items("")}[0]`)).toMatch(/^StatusReview/);
+    await page.key("a", "Meta");
+    await page.type("asign");
+    await page.waitFor(`${items("")}[0]==="Assignee"`);
+    await page.key("a", "Meta");
+    await page.type("overdu");
+    await page.waitFor(`${items("")}[0]?.startsWith("DatesDue dateOverdue")`);
+  });
+  await test.step("FILTER-3: a search that matches nothing says so", async () => {
+    await page.key("a", "Meta");
+    await page.type("zzqx");
+    await page.waitFor(`document.querySelector(".menu-empty")?.textContent==="No matching options"`);
+    await page.key("Escape");
+  });
+});
+
+test("Add filter submenus: side, width, empty text, single and Alt selection", async ({ open }) => {
+  const page = await open();
+  await test.step("FILTER-16: a value submenu keeps its opening width while you type", async () => {
+    await page.click('[aria-label="Add filter"]');
+    await page.hover("text=Assignee");
+    await page.hover('[aria-label="Filter Assignee"]');
+    const before = await page.rect('[role=dialog][aria-label="Assignee filter"]');
+    await page.type("alex");
+    await page.waitFor(`${items('[aria-label="Assignee filter"]')}.length===1`);
+    const after = await page.rect('[role=dialog][aria-label="Assignee filter"]');
+    expect([after.width, after.left]).toEqual([before.width, before.left]);
+    await page.key("Escape");
+  });
+  await test.step("FILTER-20: a value submenu names its field when nothing matches", async () => {
+    await page.click('[aria-label="Add filter"]');
+    await page.hover("text=Status");
+    await page.hover('[aria-label="Filter Status"]');
+    await page.type("zzz");
+    await page.waitFor(
+      `document.querySelector('[aria-label="Status filter"] .menu-empty')?.textContent==="No matching statuses"`,
+    );
+    await page.key("Escape");
+  });
+  await test.step("FILTER-22: Alt-click replaces the selection with only that value", async () => {
+    await page.click('[aria-label="Add filter"]');
+    await page.hover("text=Priority");
+    await page.hover('[aria-label="Filter Priority"]');
+    await page.click('[aria-label="Priority filter"] [cmdk-item][data-value="High High"]');
+    await page.waitFor(`${cards}===1`);
+    await page.locate('[aria-label="Priority filter"] [cmdk-item][data-value="Low Low"]').click({ modifiers: ["Alt"] });
+    await page.waitFor(`${cards}===2`);
+    expect(
+      await page.eval(`document.querySelector('[aria-label="Priority filter"] [data-value="High High"]').getAttribute("aria-checked")`),
+    ).toBe("false");
+    await page.key("Escape");
+    await page.click('[aria-label="Remove priority filter"]');
+    await page.waitFor(`${cards}===6`);
+  });
+  await test.step("FILTER-11: a relation is single-select: picking applies it and closes, and its row shows a checkmark", async () => {
+    await page.click('[aria-label="Add filter"]');
+    await page.hover("text=Relations");
+    await page.hover('[aria-label="Filter Relations"]');
+    expect(await page.eval(`document.querySelector('[aria-label="Relations filter"] [cmdk-item][aria-checked]')`)).toBe(null);
+    await page.click('[aria-label="Relations filter"] [cmdk-item][data-value^="Blocked issues"]');
+    await page.waitFor(`!${root}&&!!document.querySelector('[aria-label="Remove relations filter"]')`);
+    await page.click('[aria-label="relations value"]');
+    await page.waitFor(
+      `!!document.querySelector('[role=dialog][aria-label="Relations value"] [cmdk-item][data-value^="Blocked issues"] .menu-checkmark')`,
+    );
+    await page.click('[role=dialog][aria-label="Relations value"] [cmdk-item][data-value^="Sub-issues"]');
+    await page.waitFor(
+      `!document.querySelector('[role=dialog][aria-label="Relations value"]')&&${chipText("relations")}.endsWith("Sub-issues")`,
+    );
+  });
+});
+
+test("Filter chips: the value menu is the submenu's list, operators read like Linear's, F opens the chip row", async ({ open }) => {
+  const page = await open("", {
+    setup: seeded([
+      { id: "p", field: "priority", op: "is", values: ["Normal"] },
+      { id: "s", field: "status", op: "is", values: ["todo"] },
+      { id: "l", field: "labels", op: "is", values: ["ui", "test"] },
+    ]),
+  });
+  await page.waitFor(`${cards}===2`);
+  await test.step("FILTER-12: several values read 'is any of'; labels read 'include any of'", async () => {
+    expect(await page.eval(chipText("labels"))).toBe("Labelsinclude any of2 labels");
+  });
+  await test.step("FILTER-2 and FILTER-18: the chip's values count the board under the other filters, picked first, titled by the field", async () => {
+    await page.click('[aria-label="status value"]');
+    await page.waitFor(`document.activeElement?.getAttribute("placeholder")==="Status"`);
+    const rows = await page.eval<string[]>(items('[role=dialog][aria-label="Status value"]'));
+    expect(rows[0]).toBe("Todo2 issues");
+    await page.type("zzz");
+    await page.waitFor(
+      `document.querySelector('[role=dialog][aria-label="Status value"] .menu-empty')?.textContent==="No matching statuses"`,
+    );
+    await page.key("Escape");
+  });
+  await test.step("FILTER-19: the operator menu opens pristine from a click and filters as you type", async () => {
+    await page.click('[aria-label="priority operator"]');
+    await page.waitFor(`document.activeElement?.getAttribute("placeholder")==="is"`);
+    expect(
+      await page.eval(`document.querySelector('[role=dialog][aria-label="Priority operator"] [cmdk-root]').hasAttribute("data-pristine")`),
+    ).toBe(true);
+    await page.type("not");
+    await page.waitFor(`${items('[role=dialog][aria-label="Priority operator"]')}.join()==="is not,is not empty"`);
+    await page.key("Escape");
+  });
+  await test.step("FILTER-9 and FILTER-8: F opens the chip row's +, whose submenus open to its right", async () => {
+    await page.eval("document.activeElement?.blur()");
+    await page.key("f");
+    await page.waitFor(`document.querySelector('.view-filter-add')?.getAttribute("aria-expanded")==="true"`);
+    expect(
+      await page.eval(`[...document.querySelectorAll('[aria-label="Add another filter"][aria-expanded=true]')].map(b=>b.classList.contains("view-filter-add"))`),
+    ).toEqual([true]);
+    await page.hover("text=Status");
+    await page.waitFor(`!!document.querySelector('[aria-label="Filter Status"]')`);
+    const parent = await page.rect('[aria-label="Add Filter…"]');
+    const child = await page.rect('[role=dialog][aria-label="Status filter"]');
+    expect(child.left).toBeGreaterThanOrEqual(parent.right - 4);
   });
 });
