@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
+  boardCells,
   buckets,
   defaultPreferences,
   rankBetween,
+  resultsFeedback,
   draftForGroup,
   listRows,
   matchesFilters,
@@ -442,5 +444,27 @@ describe("QA round 1 (G7)", () => {
   test("R1-D91: parent groups and choices show the parent's title", () => {
     expect(parentName("A-1", [issue("A-1", { summary: "Epic title" })])).toBe("A-1 Epic title");
     expect(buckets(all, "parent", board).find((b) => b.id === "A-1")?.name).toBe("A-1 A-1");
+  });
+});
+
+describe("board layout", () => {
+  test("boardCells splits each column by swimlane, and one lane of everything leaves the columns whole", () => {
+    const columns = buckets(all, "status", board);
+    const lanes = buckets(all, "assignee", board);
+    const cells = boardCells(columns, lanes);
+    const keys = cells.map((lane) => lane.map((cell) => cell.map((i) => i.key)));
+    expect(lanes.map((l) => l.name)).toEqual(["Me", "Other", "No assignee"]);
+    expect(keys).toEqual([[["A-1"], [], []], [[], ["A-2"], []], [[], [], ["A-3", "A-4"]]]);
+    expect(boardCells(columns, buckets(all, "none", board))[0]).toEqual(columns.map((c) => c.issues));
+  });
+  test("resultsFeedback counts without temporary narrowing, keeping a saved view's own filters", () => {
+    const prefs = defaultPreferences();
+    prefs.filters = { id: "f", join: "and", children: [rule("assignee", ["me"])] };
+    const none = { overlay: { id: "o", join: "and" as const, children: [] }, query: "", mine: false };
+    expect(resultsFeedback(all, board, prefs, null, none, false, "me", now)).toEqual({ baseline: 4, temporary: false });
+    const view = { board: 1, filters: { id: "v", join: "and" as const, children: [rule("status", ["done"])] }, mine: false };
+    expect(resultsFeedback(all, board, prefs, view, { ...none, query: "A" }, false, "me", now)).toEqual({ baseline: 2, temporary: true });
+    expect(resultsFeedback(all, board, prefs, null, { ...none, mine: true }, false, "me", now).temporary).toBe(true);
+    expect(resultsFeedback(all, board, prefs, { ...view, mine: true }, { ...none, mine: true }, false, "me", now)).toEqual({ baseline: 0, temporary: false });
   });
 });

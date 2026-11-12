@@ -705,6 +705,36 @@ export function boardColumns(
   );
 }
 
+/** A board's cards per swimlane and column (`[lane][column]`): each column's issues that are also in the lane.
+ *  With no swimlanes the one lane holds every visible issue, so each cell is its column. */
+export function boardCells(columns: Bucket[], lanes: Bucket[]): Issue[][][] {
+  return lanes.map((lane) => {
+    const inLane = new Set(lane.issues);
+    return columns.map((c) => c.issues.filter((i) => inLane.has(i)));
+  });
+}
+
+/** What the "hidden by filters" feedback compares against: the count without temporary filters, search or the My
+ *  issues toggle (a saved view keeps its own filters), and whether any of those temporary narrowings is on. */
+export function resultsFeedback(
+  all: Issue[],
+  board: Board,
+  prefs: Preferences,
+  view: { board: number; filters: FilterGroup; mine?: boolean } | null,
+  temporary: { overlay: FilterGroup; query: string; mine: boolean },
+  personal: boolean,
+  me: string,
+  now = Date.now(),
+): { baseline: number; temporary: boolean } {
+  const filters = view && view.board === board.id ? view.filters : defaultPreferences().filters;
+  const baseMine = personal || (view?.mine ?? false);
+  return {
+    baseline: selectIssues(all, board, { ...prefs, filters }, baseMine, "", me, now, personal).length,
+    temporary:
+      !!temporary.overlay.children.length || !!temporary.query || (temporary.mine && !baseMine),
+  };
+}
+
 /** The on-screen order, one array per column: a list is one column of its rows (nested sub-issues included), a board its cards row by row.
  *  Hidden groups, and a list's collapsed groups, drop out; a card a label grouping repeats in a column is visited once. */
 export function issueOrder(
@@ -730,8 +760,8 @@ export function issueOrder(
         ),
     ];
   else {
-    const rows = buckets(visible, d.rows, board, visible);
-    order = shown.map((c) => rows.flatMap((r) => c.issues.filter((i) => r.issues.includes(i))));
+    const cells = boardCells(shown, buckets(visible, d.rows, board, visible));
+    order = shown.map((_, c) => cells.flatMap((lane) => lane[c]!));
   }
   return order.map((c) => [...new Map(c.map((i) => [i.key, i])).values()]);
 }

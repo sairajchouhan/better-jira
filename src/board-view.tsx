@@ -45,7 +45,8 @@ import {
   rankBetween,
   listRows,
   selectIssues,
-  defaultPreferences,
+  boardCells,
+  resultsFeedback,
   statusDuration,
   type Bucket,
   type Display,
@@ -103,14 +104,21 @@ export const BoardView = memo(function BoardView({
     () => boardColumns(visible, board, prefs, universe),
     [visible, board, prefs, universe],
   );
-  const hiddenIds = prefs.hidden[d.columns] ?? [];
   const collapsed = prefs.collapsed[d.columns] ?? [];
-  const hidden = columns.filter(
-    (c) =>
-      hiddenIds.includes(c.id) || (!d.emptyGroups && !c.issues.length && !expanded.includes(c.id)),
-  );
-  const show = columns.filter((c) => !hidden.includes(c));
-  const rows = useMemo(() => buckets(visible, d.rows, board, visible), [visible, d.rows, board]);
+  // One pass per data change: shown and hidden groups, a list's rows per group, a board's cards per lane and column.
+  const layout = useMemo(() => {
+    const hiddenIds = prefs.hidden[d.columns] ?? [];
+    const hidden = columns.filter(
+      (c) =>
+        hiddenIds.includes(c.id) || (!d.emptyGroups && !c.issues.length && !expanded.includes(c.id)),
+    );
+    const show = columns.filter((c) => !hidden.includes(c));
+    if (d.layout === "list")
+      return { hidden, show, rows: [], cells: [], sections: show.map((c) => buckets(c.issues, d.rows, board, c.issues).filter((r) => r.issues.length)) };
+    const rows = buckets(visible, d.rows, board, visible);
+    return { hidden, show, rows, cells: boardCells(show, rows), sections: [] };
+  }, [columns, prefs.hidden, d.columns, d.emptyGroups, d.layout, d.rows, expanded, visible, board]);
+  const { hidden, show } = layout;
   const order = useMemo(
     () => issueOrder(columns, visible, board, prefs, universe),
     [columns, visible, board, prefs, universe],
@@ -147,20 +155,25 @@ export const BoardView = memo(function BoardView({
       ...draftForGroup(d.columns, bucket.id, board, universe, prefs.scope),
       ...(row ? draftForGroup(d.rows, row.id, board, universe, prefs.scope) : {}),
     });
-  const baseline = selectIssues(all, board, { ...prefs, filters: activeView && activeView.board === board.id ? activeView.filters : defaultPreferences().filters }, personal || (activeView?.mine ?? false), "", ME.id, Date.now(), personal).length;
+  const feedback = useMemo(
+    () => resultsFeedback(all, board, prefs, activeView, { overlay, query, mine }, personal, ME.id),
+    [all, board, prefs, activeView, overlay, query, mine, personal],
+  );
   const clearAll = () => {
     clearFilters(board.id);
     ui.send({ type: "query.set", query: "" });
     ui.send({ type: "mine.set", mine: personal || (activeView?.mine ?? false) });
     set({ findInView: false });
   };
+  // One feedback, placed by layout: the zero state above the groups, else the list's last row or the board's footer.
+  const results = <ResultsFeedback count={visible.length} {...feedback} view={activeView} clear={clearAll} layout={d.layout} />;
   return (
     <div className={`${shown ? "flex" : "hidden"} min-w-0 min-h-0 flex-1`}>
       <div className="relative flex min-w-0 min-h-0 flex-1 flex-col" data-layout={d.layout}>
-        {!visible.length && <ResultsFeedback count={0} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !personal && !activeView?.mine)} clear={clearAll} />}
+        {!visible.length && results}
         {d.layout === "list" ? (
           <div className="flex-1 overflow-auto py-1">
-            {show.map((c) => (
+            {show.map((c, ci) => (
               <section key={c.id} className="mb-2">
                 <GroupHeading
                   bucket={c}
@@ -169,9 +182,7 @@ export const BoardView = memo(function BoardView({
                   create={() => createIn(c)}
                 />
                 {!collapsed.includes(c.id) &&
-                  buckets(c.issues, d.rows, board, c.issues)
-                    .filter((r) => r.issues.length)
-                    .map((r) => (
+                  layout.sections[ci]!.map((r) => (
                       <div key={r.id}>
                         {d.rows !== "none" && (
                           <div className="border-b border-line bg-col px-8 py-2 text-[12px] text-fg-3">
@@ -190,7 +201,7 @@ export const BoardView = memo(function BoardView({
               </section>
             ))}
             {/* Linear's list footer scrolls with the rows, right after the last one. */}
-            {visible.length > 0 && <ResultsFeedback count={visible.length} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !personal && !activeView?.mine)} clear={clearAll} />}
+            {visible.length > 0 && results}
           </div>
         ) : (
           <div className="flex min-h-0 flex-1">
@@ -210,9 +221,9 @@ export const BoardView = memo(function BoardView({
                   ))}
                 </div>
               )}
-              {rows
-                .filter((r) => d.rows === "none" || r.issues.length)
-                .map((row) => (
+              {layout.rows.map(
+                (row, ri) =>
+                  (d.rows === "none" || row.issues.length > 0) && (
                   <div
                     key={row.id}
                     className={d.rows === "none" ? "flex h-full min-h-0 gap-4" : "mb-4 w-max"}
@@ -234,16 +245,12 @@ export const BoardView = memo(function BoardView({
                       </div>
                     )}
                     <div className={d.rows === "none" ? "contents" : "flex gap-4"}>
-                      {show.map((col) => (
+                      {show.map((col, ci) => (
                         <ColumnView
                           key={col.id}
                           limit={cap}
                           bucket={col}
-                          issues={
-                            d.rows === "none"
-                              ? col.issues
-                              : col.issues.filter((i) => row.issues.includes(i))
-                          }
+                          issues={layout.cells[ri]![ci]!}
                           selected={selected}
                           display={d}
                           scroll={d.rows === "none"}
@@ -260,10 +267,7 @@ export const BoardView = memo(function BoardView({
                               ],
                               d.ordering === "manual"
                                 ? dropRank(
-                                    (d.rows === "none"
-                                      ? col.issues
-                                      : col.issues.filter((i) => row.issues.includes(i))
-                                    ).filter((i) => i.key !== key),
+                                    layout.cells[ri]![ci]!.filter((i) => i.key !== key),
                                     before,
                                     d.descending,
                                   )
@@ -274,7 +278,8 @@ export const BoardView = memo(function BoardView({
                       ))}
                     </div>
                   </div>
-                ))}
+                ),
+              )}
             </div>
             {d.rows === "none" && hidden.length > 0 && (
               <HiddenColumns
@@ -286,6 +291,9 @@ export const BoardView = memo(function BoardView({
             )}
           </div>
         )}
+        {/* Not HiddenColumns in another variant: Linear's board "Hidden columns" (data-board-hidden-columns) and swimlane
+            "Hidden rows" (data-board-hidden-rows) are separate components sharing only the toggle, and its list counts hidden
+            groups in the footer instead. This list/swimlane strip is ours, so it stays its own element. */}
         {hidden.length > 0 && d.layout === "board" && d.rows === "none"
           ? null
           : hidden.length > 0 && (
@@ -312,7 +320,7 @@ export const BoardView = memo(function BoardView({
                 </div>
               </details>
             )}
-        {d.layout === "board" && visible.length > 0 && <ResultsFeedback count={visible.length} baseline={baseline} view={activeView} temporary={!!overlay.children.length || !!query || (mine && !personal && !activeView?.mine)} clear={clearAll} layout="board" />}
+        {d.layout === "board" && visible.length > 0 && results}
       </div>
       {active && shown && details && !panel && (activeView ? <ViewDetails view={activeView} issues={visible} /> : <BoardDetails board={board} issues={visible} />)}
     </div>
