@@ -225,3 +225,16 @@
     pointer-events: none;
   }
 }
+
+@layer components {
+  /* Linear DetailLabelControl.labelIconButton: 25px square, circular. */
+  .ui-button[data-shape="icon"][data-appearance="label"] {
+    width: 25px;
+    height: 25px;
+    border-radius: 100%;
+  }
+  /* Preserve the live Linear comment menu selected colour (e2e/resources.pw.ts). */
+  .ui-button[data-appearance="comment-action"][aria-expanded="true"] {
+    background: var(--card-pressed);
+  }
+}

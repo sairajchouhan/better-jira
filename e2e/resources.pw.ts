@@ -431,3 +431,31 @@ test("resource rows and open-menu triggers follow Linear (RAJ-52): 36px rows 1px
     await page.waitFor(`!document.querySelector('[role=dialog]')`);
   });
 });
+
+test("comment action hover inherits the medium IconButton appearance", async ({ open }) => {
+  await fixture.reset();
+  const page = await open();
+  await page.click('[data-key="TEST-2"]');
+  await page.waitFor(`!!document.getElementById('comment')`);
+  await page.click('#comment');
+  await page.type('Primitive hover regression');
+  await page.key('Enter', 'meta');
+  const selector = '[data-comment] [aria-label="Comment options"]';
+  await page.waitFor(`!!document.querySelector('${selector}')`);
+  await page.hover('[data-comment] .comment-body');
+  await page.hover(selector);
+  await expect.poll(() => page.eval(`(() => {
+    const button = document.querySelector('${selector}');
+    const reference = document.createElement('button');
+    reference.className = 'ui-button';
+    reference.dataset.shape = 'icon';
+    reference.dataset.size = 'medium';
+    reference.dataset.variant = 'borderless';
+    reference.style.background = 'var(--crumb-hover)';
+    button.parentElement.append(reference);
+    const actual = getComputedStyle(button), expected = getComputedStyle(reference);
+    const matches = actual.borderRadius === expected.borderRadius && actual.backgroundColor === expected.backgroundColor && actual.width === expected.width && actual.height === expected.height;
+    reference.remove();
+    return matches;
+  })()`)).toBe(true);
+});

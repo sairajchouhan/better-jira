@@ -1033,7 +1033,6 @@
   display: flex;
 }
 
-
 .image-preview {
   position: fixed;
   inset: 0;
@@ -1059,7 +1058,6 @@
   align-items: center;
   gap: 4px;
 }
-
 
 .image-preview-stage {
   position: absolute;
@@ -1128,7 +1126,6 @@
   gap: 8px;
 }
 
-
 .image-crop-stage {
   position: relative;
   max-height: calc(100vh - 100px);
@@ -1173,7 +1170,6 @@
   outline-offset: 2px;
 }
 
-
 .image-comment-meta {
   display: flex;
   align-items: center;
@@ -1195,8 +1191,6 @@
   border-radius: 50%;
   background: var(--hover);
 }
-
-
 
 .media-upload {
   display: inline-flex;
@@ -1240,8 +1234,6 @@
 .file-media:focus-within .file-media-actions {
   opacity: 1;
 }
-
-
 
 .file-media {
   min-height: 60px;
@@ -1566,12 +1558,7 @@
   color: var(--card-fg-3);
 }
 .comment-hover-action {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
   margin: -5px 0;
-  border-radius: 6px;
   opacity: 0;
 }
 .comment-head > span:last-child {
@@ -1582,12 +1569,7 @@
 .comment-message:has(> .comment-head [aria-expanded="true"]) .comment-hover-action {
   opacity: 1;
 }
-.comment-hover-action[aria-expanded="true"] {
-  background: var(--card-pressed);
-}
-.comment-hover-action:hover:not([aria-expanded="true"]) {
-  background: var(--hover);
-}
+
 .comment-reply-composer .rich-editor {
   border: 0;
   background: transparent;

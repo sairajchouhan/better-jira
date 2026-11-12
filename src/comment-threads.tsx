@@ -397,18 +397,25 @@ function Thread({
             <IconButton
               label="Add reaction"
               aria-expanded={reaction?.id === comment.id}
+              appearance="comment-action"
               className="comment-hover-action"
               onClick={(e) => setReaction({ anchor: e.currentTarget, id: comment.id })}
             >
               <Icon name="smile" />
             </IconButton>
-            <IconButton label="Reply to comment" className="comment-hover-action" onClick={() => replyTo(comment)}>
+            <IconButton
+              label="Reply to comment"
+              appearance="comment-action"
+              className="comment-hover-action"
+              onClick={() => replyTo(comment)}
+            >
               <Icon name="undo" />
             </IconButton>
             <IconButton
               label={comment.parentId ? "Reply options" : "Comment options"}
               tooltip="Comment options"
               aria-expanded={menu?.comment.id === comment.id}
+              appearance="comment-action"
               className="comment-hover-action"
               onClick={(e) => setMenu({ anchor: e.currentTarget, comment })}
             >

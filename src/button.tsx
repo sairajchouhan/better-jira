@@ -137,6 +137,7 @@ export function ButtonLink({
  */
 export function IconButton({
   label,
+  appearance,
   tooltip = label,
   shortcut,
   disabledReason,
@@ -147,10 +148,12 @@ export function IconButton({
   children,
   ...props
 }: Look &
-  Tip & { label: string; tooltip?: string | false; children: ReactNode } & Omit<
-    ComponentProps<"button">,
-    "aria-label" | "title"
-  >) {
+  Tip & {
+    appearance?: "comment-action" | "label";
+    label: string;
+    tooltip?: string | false;
+    children: ReactNode;
+  } & Omit<ComponentProps<"button">, "aria-label" | "title">) {
   const reason = props.disabled ? disabledReason : undefined;
   return (
     <DisabledReason reason={reason}>
@@ -162,6 +165,7 @@ export function IconButton({
         data-variant={variant}
         data-size={size}
         data-shape="icon"
+        data-appearance={appearance}
         className={`ui-button ${className}`}
         {...props}
       >

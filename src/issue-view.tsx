@@ -606,7 +606,7 @@ function Properties({ issue }: { issue: Issue }) {
               size="small"
               id="prop-labels"
               onClick={() => ui.send({ type: "overlay.open", overlay: "labels" })}
-              className="size-[25px] rounded-full"
+              appearance="label"
             >
               <Icon name="plus" size={14} />
             </IconButton>
