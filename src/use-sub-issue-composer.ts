@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { actions, get, ME, restoreLocalFiles, set, type Board, type Issue, type IssueDraft } from "./store";
-import { discardLateMedia, documentHasMedia, normalizeDocument, type AdfDocument } from "./document";
+import { actions, addLocalFiles, get, ME, restoreLocalFiles, set, type Board, type Issue, type IssueDraft } from "./store";
+import { discardLateMedia, documentHasMedia, lateMediaDiscarded, normalizeDocument, type AdfDocument } from "./document";
 import { rankBetween } from "./view-model";
 import { childrenByParent } from "./sub-issue-model";
 import { emptySubIssueDraft, readSubIssueDraft, saveSubIssueDraft, type SubIssueDraft } from "./sub-issue-draft";
@@ -75,6 +75,18 @@ export function useSubIssueComposer(issue: Issue, board: Board, namespace: strin
       } catch {}
     }
   };
+  // Property edits merge into the latest draft, so two quick picks never overwrite each other.
+  const setProperties = (patch: IssueDraft) =>
+    update({ properties: { ...pending.current.properties, ...patch } });
+  // Uploads saved after a discard are dropped; otherwise they join the draft as it is when they land.
+  const addFiles = async (selected: File[]) => {
+    const since = performance.now(),
+      saved = await addLocalFiles(selected);
+    if (!lateMediaDiscarded(scope, since)) late((draft) => ({ files: [...draft.files, ...saved] }));
+    return saved;
+  };
+  const onLateMedia = (merge: (current: unknown) => AdfDocument) =>
+    late((draft) => ({ description: merge(draft.description) }));
   useEffect(() => {
     let active = true;
     void restoreLocalFiles(pending.current.files).then((saved) => {
@@ -186,6 +198,7 @@ export function useSubIssueComposer(issue: Issue, board: Board, namespace: strin
   });
 
   return { state: { title, description, files, draft, editor, creating, confirming },
-    actions: { update, late, start, discard, cancel, submit, setConfirming },
-    meta: { form, titleInput, scope, pending } };
+    actions: { update, setProperties, addFiles, onLateMedia, start, discard, cancel, submit, setConfirming },
+    // The editor's late-media scope; the composer applies its rules itself.
+    meta: { form, titleInput, scope } };
 }

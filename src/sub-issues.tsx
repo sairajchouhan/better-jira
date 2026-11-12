@@ -28,10 +28,8 @@ import {
 import { issueMenuEntries } from "./issue-menu";
 import { InlineEditor } from "./rich-editor-loader";
 import { useCommand } from "./commands";
-import { lateMediaDiscarded } from "./document";
 import {
   actions,
-  addLocalFiles,
   get,
   issueURL,
   navigate,
@@ -333,8 +331,8 @@ export function SubIssues({ issue }: { issue: Issue }) {
   const board = boards.find((b) => b.id === issue.board)!;
   const {
     state: { title, description, files, draft, editor, creating, confirming },
-    actions: { update, late, start, discard, cancel, submit, setConfirming },
-    meta: { form, titleInput, scope, pending },
+    actions: { update, setProperties, addFiles, onLateMedia, start, discard, cancel, submit, setConfirming },
+    meta: { form, titleInput, scope },
   } = useSubIssueComposer(issue, board, namespace, setCollapsed);
   const status = (child: Issue) => statusOf(boards, child);
   // Direct children per row, for Linear's "0/2" progress pill.
@@ -392,9 +390,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
       board={board}
       value={draft}
       priorityEmpty={noPriority}
-      onChange={(patch) =>
-        update({ properties: { ...pending.current.properties, ...patch } })
-      }
+      onChange={setProperties}
       label={label}
       className={button}
     >
@@ -544,20 +540,12 @@ export function SubIssues({ issue }: { issue: Issue }) {
             id={`sub-issue-description-${issue.key}`}
             mentionIssue={issue.key}
             scope={scope}
-            onLateMedia={(merge) =>
-              late((draft) => ({ description: merge(draft.description) }))
-            }
+            onLateMedia={onLateMedia}
             initial={description}
             label="Sub-issue description"
             placeholder="Add description…"
             attachments={files}
-            onFiles={async (selected) => {
-              const since = performance.now(),
-                saved = await addLocalFiles(selected);
-              if (!lateMediaDiscarded(scope, since))
-                late((draft) => ({ files: [...draft.files, ...saved] }));
-              return saved;
-            }}
+            onFiles={addFiles}
             onChange={(description) => update({ description })}
             onSave={submit}
             saveLabel="Create"
