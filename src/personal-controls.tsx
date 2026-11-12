@@ -173,7 +173,7 @@ export function CreateIssue() {
   // oxlint-disable-next-line react-hooks/exhaustive-deps -- Memo invalidation follows draft identity or relation inputs; render-local helpers would invalidate every render.
   const submission = useMemo(() => crypto.randomUUID(), [draftIndex]);
   const submit = () => {
-    if (!title.trim() || filesBusy || noParentType) return;
+    if (!title.trim() || filesBusy || noParentType || (draft.subIssues?.some(t => t.trim()) && !canHaveChildren(get(), { type, project }))) return;
     const key = actions.create(
       title,
       {
@@ -195,6 +195,9 @@ export function CreateIssue() {
       more,
     );
     if (key) {
+      for (const summary of draft.subIssues ?? []) {
+        if (summary.trim()) actions.create(summary, { board: board.id, project, parent: key, type: childTypes(get(), { type, project })?.[0] ?? "Task" }, true);
+      }
       if (savedId) setSaved(saved.filter(d => d.id !== savedId));
       setSavedId(null);
       unsent.title = "";
@@ -205,6 +208,7 @@ export function CreateIssue() {
       setDescription(normalizeDocument(""));
       setDraftIndex((n) => n + 1);
       setAttachments([]);
+      setDraft(d => ({ ...d, subIssues: [], resources: [] }));
       titleRef.current?.focus();
     }
   };
@@ -403,6 +407,8 @@ export function CreateIssue() {
             {noParentType}
           </p>
         )}
+        <Button type="button" disabled={!canHaveChildren(get(), { type, project })} onClick={() => setDraft(d => ({ ...d, subIssues: [...(d.subIssues ?? []), ""] }))}>Add sub-issue</Button>
+        {draft.subIssues?.map((summary, index) => <div key={index} className="flex items-center gap-2"><TextInput aria-label={`Pending sub-issue ${index + 1}`} value={summary} onChange={e => setDraft(d => ({ ...d, subIssues: d.subIssues?.map((title, i) => i === index ? e.target.value : title) }))} placeholder="Sub-issue title" /><IconButton type="button" label={`Remove pending sub-issue ${index + 1}`} onClick={() => setDraft(d => ({ ...d, subIssues: d.subIssues?.filter((_, i) => i !== index) }))}><Icon name="close" /></IconButton></div>)}
         <Button type="button" onClick={() => setLinkInput("")}>Add link…</Button>
         {linkInput !== null && <div className="flex items-center gap-2"><TextInput aria-label="New issue link URL" value={linkInput} onChange={e => setLinkInput(e.target.value)} placeholder="https://" /><Button type="button" disabled={!resourceURL(linkInput)} onClick={() => { const url = resourceURL(linkInput); if (!url) return; setDraft(d => ({ ...d, resources: [...(d.resources ?? []), { id: crypto.randomUUID(), kind: "link", title: url, url, updated: new Date().toISOString() }] })); setLinkInput(null); }}>Add link</Button><Button type="button" onClick={() => setLinkInput(null)}>Cancel link</Button></div>}
         {draft.resources?.map(resource => <div key={resource.id} className="flex items-center gap-2"><Text variant="mini">{resource.title}</Text><IconButton type="button" label={`Remove link ${resource.title}`} onClick={() => setDraft(d => ({ ...d, resources: d.resources?.filter(r => r.id !== resource.id) }))}><Icon name="close" /></IconButton></div>)}

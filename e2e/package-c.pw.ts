@@ -98,3 +98,14 @@ test("BJ-58: add and remove a pending link in the composer", async ({ open }) =>
   await page.click('[aria-label="Remove link https://example.com/reference"]');
   expect(await page.eval(`!!document.querySelector('[aria-label="Remove link https://example.com/reference"]')`)).toBe(false);
 });
+
+test("BJ-59: compose sub-issues before creating their parent", async ({ open }) => {
+  const page = await open();
+  await page.key("c");
+  await page.type("Pending family");
+  await page.click('text=Add sub-issue');
+  await page.page.getByRole("textbox", { name: "Pending sub-issue 1" }).fill("Pending child");
+  await page.click('text=Create issue');
+  await page.waitFor(`!document.querySelector('[aria-label="Issue title"]')`);
+  expect(await page.eval(`[...document.querySelectorAll('[data-key]')].some(n => n.textContent.includes('Pending child'))`)).toBe(true);
+});

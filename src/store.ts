@@ -181,6 +181,7 @@ export type IssueDraft = Partial<
   /** Make a copy: the composer starts with this title and saves with "Save copy". */
   title?: string;
   copy?: boolean;
+  subIssues?: string[];
   /** Linear "Create related": link the new issue to this one in the same undo step. */ related?: {
     key: string;
     kind: "related" | "blocked" | "blocking" | "parent";
@@ -2702,6 +2703,7 @@ export const actions = {
     const {
       descriptionDoc,
       related,
+      subIssues: _subIssues,
       title: _title,
       copy: _copy,
       submission: _submission,
