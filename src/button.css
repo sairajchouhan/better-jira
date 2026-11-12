@@ -26,6 +26,9 @@
   .ui-button[data-menu-open="true"] {
     transition-duration: 0s;
   }
+  a.ui-button {
+    text-decoration: none;
+  }
   .ui-button:disabled {
     opacity: 0.6;
     cursor: default;
@@ -62,17 +65,17 @@
     min-width: 32px;
     padding: 0 18px;
   }
-  /* QEe: a leading icon pulls the left padding in. */
-  .ui-button:not([data-shape="icon"]):has(> .ui-button-icon:first-child) {
+  /* QEe: a leading icon pulls the left padding in (jv only; the link button fk keeps its padding). */
+  button.ui-button:not([data-shape="icon"]):has(> .ui-button-icon:first-child) {
     padding: 0 12px 0 10px;
   }
-  .ui-button[data-size="small"]:not([data-shape="icon"]):has(> .ui-button-icon:first-child) {
+  button.ui-button[data-size="small"]:not([data-shape="icon"]):has(> .ui-button-icon:first-child) {
     padding: 0 8px 0 6px;
   }
-  .ui-button[data-size="medium"]:not([data-shape="icon"]):has(> .ui-button-icon:first-child) {
+  button.ui-button[data-size="medium"]:not([data-shape="icon"]):has(> .ui-button-icon:first-child) {
     padding: 0 10px 0 8px;
   }
-  .ui-button[data-size="large"]:not([data-shape="icon"]):has(> .ui-button-icon:first-child) {
+  button.ui-button[data-size="large"]:not([data-shape="icon"]):has(> .ui-button-icon:first-child) {
     padding: 0 16px 0 14px;
   }
   /* qEe: icon-only buttons are square. */

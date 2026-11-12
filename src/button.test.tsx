@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Button, IconButton } from "./button";
+import { Button, ButtonLink, IconButton } from "./button";
 
 test("an icon button's tooltip may differ from its accessible name", () => {
   const html = renderToStaticMarkup(
@@ -43,4 +43,13 @@ test("an enabled button ignores its disabled reason", () => {
   expect(html).toStartWith("<button");
   expect(html).toContain('title="Send (⌘↵)"');
   expect(html).not.toContain("Write a comment first");
+});
+
+test("a link button is an anchor with the button's looks", () => {
+  const html = renderToStaticMarkup(
+    <ButtonLink variant="secondary" size="small" href="/backup.zip" download>
+      Download
+    </ButtonLink>,
+  );
+  expect(html).toBe('<a data-variant="secondary" data-size="small" class="ui-button " href="/backup.zip" download="">Download</a>');
 });

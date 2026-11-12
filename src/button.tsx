@@ -96,6 +96,30 @@ export function Button({
 }
 
 /**
+ * Linear's `fk`: a link with a button's looks (`Mv` variant and size), for navigation and downloads. Like `fk` it keeps
+ * the full text padding beside a leading icon (no `QEe` pull-in); the icon sits 6px from the text (`Ist.iconGap`).
+ */
+export function ButtonLink({
+  variant = "primary",
+  size = "normal",
+  icon,
+  className = "",
+  children,
+  ...props
+}: Look & { icon?: ReactNode } & ComponentProps<"a">) {
+  return (
+    <a data-variant={variant} data-size={size} className={`ui-button ${className}`} {...props}>
+      {icon && (
+        <span aria-hidden className="ui-button-icon">
+          {icon}
+        </span>
+      )}
+      {children}
+    </a>
+  );
+}
+
+/**
  * `Jx` inside Linear's Tooltip `$`: an icon-only button, borderless and medium by default. `label` names it for screen
  * readers; the hover `tooltip` defaults to it and may differ ("Filter" over "Add filter"), or be `false` when the owner
  * draws its own (the video toolbar). `shortcut` and `disabledReason` follow `Aze` (see `tooltipTitle`).
