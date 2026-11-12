@@ -1034,8 +1034,8 @@ export function PersonalIssueDetails({ issue }: { issue: Issue }) {
   const attach = useRef<HTMLButtonElement>(null);
   const { visible, embedded } = attachmentSplit(issue, full?.fields);
   return (
-    <Text className="mt-5 space-y-3" as="div" variant="mini" color="inherit">
-      {/* Linear (RAJ-52): 26px below the last paragraph, 6px left of the text and 16px above the sub-issues header, reaction pills 8px apart, then the round add-reaction and attach buttons. */}
+    <Text className="mt-2.5 space-y-3" as="div" variant="mini" color="inherit">
+      {/* Linear (RAJ-52): 26px below the last paragraph (the description surface's 16px bottom padding, then 10px), 6px left of the text and 16px above the sub-issues header, reaction pills 8px apart, then the round add-reaction and attach buttons. */}
       {/* The pills keep Linear's chip geometry; add and attach are Jx (borderless/medium IconButton), 28px round. */}
       <div data-reactions className="-ml-1.5 flex flex-wrap items-center">
         <div className="flex flex-wrap items-center gap-2 empty:hidden [&:not(:empty)]:mr-2">

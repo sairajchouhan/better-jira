@@ -23,6 +23,7 @@ import { CaretMenu, MentionMenu, searchPeople } from "./mention-menu";
 import { activeEmoji, dismissEmoji, emojiPlugin, emojiRules, insertEmoji, matchingEmoji } from "./emoji";
 import { activeSlash, dismissSlash, matchingSlashCommands, slashPlugin, SLASH_COMMANDS } from "./slash-commands";
 import { ActionMenu, type ActionEntry } from "./action-menu";
+import { activeLinkPaste, dismissLinkPaste, linkPasteActions, pastePlugin } from "./editor-paste";
 import { get } from "./store";
 import { navigate } from "./app-navigation";
 import { jiraIssueURL } from "./issue-urls";
@@ -39,6 +40,8 @@ import {
 } from "prosemirror-state";
 import { mediaNodeView, type MediaNodeView } from "./media-node-view";
 import { expandNodeView } from "./expand-node-view";
+import { codeBlockNodeView } from "./code-block-view";
+import { codeBlockKeys, codeHighlightPlugin } from "./code-block-editing";
 import type { Attachment } from "./attachment-media";
 import { EditorView } from "prosemirror-view";
 import "prosemirror-view/style/prosemirror.css";
@@ -46,6 +49,8 @@ import { baseKeymap, chainCommands, toggleMark } from "prosemirror-commands";
 import { keymap } from "prosemirror-keymap";
 import { history, redo, undo } from "prosemirror-history";
 import { splitListItem } from "prosemirror-schema-list";
+import { moveColumn, moveRow, tableResizing } from "./editor-table";
+import { TableControls } from "./table-controls";
 import {
   addColumnAfter,
   addRowAfter,
@@ -121,10 +126,13 @@ const caretMenus = [
   [activeMention, dismissMention],
   [activeSlash, dismissSlash],
   [activeEmoji, dismissEmoji],
+  [activeLinkPaste, dismissLinkPaste],
 ] as const;
 
 /** One look for every formatting and link control: Linear's borderless small Button, pressed while its mark or block is on. */
 const ToolbarButton = (props: ComponentProps<typeof Button>) => <Button variant="borderless" size="small" {...props} />;
+/** FormattingToolbar's divider between button groups: 1×16px in bgBorder. */
+const ToolbarSeparator = () => <span role="separator" aria-orientation="vertical" className="rich-toolbar-separator" />;
 
 export type EditorPresentation = "framed" | "inline" | "document" | "comment";
 export type EditorEngineProps = RichEditorProps & {
@@ -218,12 +226,19 @@ export function RichEditor(props: EditorEngineProps) {
           mentionPlugin((_view, event) => mentionKeys.current?.(event) ?? false),
           slashPlugin((_view, event) => mentionKeys.current?.(event) ?? false),
           emojiPlugin((_view, event) => mentionKeys.current?.(event) ?? false),
+          pastePlugin({
+            keys: (_view, event) => mentionKeys.current?.(event) ?? false,
+            upload: () => (latest.current.onFiles ? uploads.enqueue : null),
+            site: () => get().site,
+          }),
           mediaCaretPlugin(),
           uploads.plugin,
           markdownRules,
           emojiRules,
           issueReferenceRules((key) => (get().issues.has(key) ? jiraIssueURL(key) : null)),
           history(),
+          codeHighlightPlugin(),
+          keymap(codeBlockKeys),
           keymap({
             Enter: chainCommands(
               codeEnter,
@@ -236,11 +251,13 @@ export function RichEditor(props: EditorEngineProps) {
               latest.current.tabLeaves ? shiftTabInside(...args) : shiftTab(...args),
           }),
           keymap(baseKeymap),
+          tableResizing(),
           tableEditing(),
         ],
       }),
       nodeViews: {
         expand: expandNodeView,
+        codeBlock: codeBlockNodeView,
         ...Object.fromEntries(
         ["mediaSingle", "mediaGroup", "media", "mediaInline"].map((type) => [
           type,
@@ -278,7 +295,7 @@ export function RichEditor(props: EditorEngineProps) {
         "aria-label": props.label ?? "Issue description",
         "aria-multiline": "true",
         id: props.id ?? "",
-        class: "rich-content",
+        class: "rich-content rich-doc",
       },
       handlePaste(editor, event) {
         const files = [...(event.clipboardData?.files ?? [])];
@@ -437,6 +454,8 @@ export function RichEditor(props: EditorEngineProps) {
     editorBindings.map((binding) => ({
       hotkey: binding.hotkey,
       callback: (event: KeyboardEvent) => {
+        // The paste keys stay the browser's; the paste plugin reads which one it was.
+        if (binding.id.startsWith("paste-")) return;
         if (event.target instanceof Element && event.target.closest("[data-media-interactive]"))
           return;
         event.preventDefault();
@@ -458,6 +477,8 @@ export function RichEditor(props: EditorEngineProps) {
         else if (id === "block-menu") setBlockMenu(true);
         else if (id === "block-controls") blockHandle.current?.focus();
         else if (id === "move-up" || id === "move-down") run(moveBlock(id === "move-up" ? -1 : 1));
+        else if (id === "table-move-up" || id === "table-move-down") run(moveRow(id === "table-move-up" ? "up" : "down"));
+        else if (id === "table-move-left" || id === "table-move-right") run(moveColumn(id === "table-move-left" ? "left" : "right"));
         else if (id === "undo") run(undo);
         else if (id === "redo") run(redo);
         else if (id === "save") save();
@@ -517,6 +538,8 @@ export function RichEditor(props: EditorEngineProps) {
       box = frame.current;
     if (!editor || !box || !(editor.hasFocus() || handleFocused || blockMenu)) return null;
     const { $from } = editor.state.selection;
+    // A table has its own gutter button (TableControls); the block handle comes back with its menu.
+    if (!blockMenu && $from.depth && $from.node(1).type.spec.tableRole === "table") return null;
     try {
       return editor.coordsAtPos($from.depth ? $from.start(1) : $from.pos).top - box.getBoundingClientRect().top;
     } catch {
@@ -542,7 +565,8 @@ export function RichEditor(props: EditorEngineProps) {
   const focused = view.current?.hasFocus() ? view.current.state : null;
   const mention = focused && activeMention(focused),
     slash = focused && activeSlash(focused),
-    emoji = focused && activeEmoji(focused);
+    emoji = focused && activeEmoji(focused),
+    linkPaste = focused && activeLinkPaste(focused);
   const caretAnchor = (from: number, dismiss: (state: EditorState) => Transaction) => ({
     at: () => view.current!.coordsAtPos(from),
     editor: view.current!.dom,
@@ -597,7 +621,7 @@ export function RichEditor(props: EditorEngineProps) {
       role="toolbar"
       aria-label={`${subject === "comment" ? "Comment" : "Description"} formatting`}
       style={floating}
-      className={`z-10 items-center gap-0.5 rounded-lg border border-line-2 bg-card p-1 shadow-lg ${selecting ? "fixed flex flex-nowrap overflow-x-auto" : "absolute right-0 bottom-full mb-1 hidden max-w-full flex-nowrap overflow-x-auto group-focus-within/editor:flex"}`}
+      className={`z-10 items-center gap-0.5 rounded-lg border border-line-2 bg-card p-1 shadow-[var(--menu-shadow)] ${selecting ? "fixed flex flex-nowrap overflow-x-auto" : "absolute right-0 bottom-full mb-1 hidden max-w-full flex-nowrap overflow-x-auto group-focus-within/editor:flex"}`}
       onMouseDown={(e) => {
         if ((e.target as HTMLElement).closest("button")) e.preventDefault();
       }}
@@ -620,6 +644,7 @@ export function RichEditor(props: EditorEngineProps) {
           {text}
         </ToolbarButton>
       ))}
+      <ToolbarSeparator />
       {[0, 1, 2, 3, 4].map((n) => (
         <ToolbarButton
           key={n}
@@ -631,6 +656,7 @@ export function RichEditor(props: EditorEngineProps) {
           {n ? `H${n}` : "T"}
         </ToolbarButton>
       ))}
+      <ToolbarSeparator />
       <ToolbarButton
         aria-label="Bulleted list"
         aria-pressed={within("bulletList")}
@@ -668,6 +694,7 @@ export function RichEditor(props: EditorEngineProps) {
       >
         Collapse
       </ToolbarButton>
+      <ToolbarSeparator />
       <ToolbarButton
         aria-label="Insert link"
         onClick={() => {
@@ -718,6 +745,7 @@ export function RichEditor(props: EditorEngineProps) {
           Create issue
         </ToolbarButton>
       )}
+      <ToolbarSeparator />
       <ToolbarButton
         aria-label={`Undo ${subject} edit`}
         onClick={() => run(undo)}
@@ -845,11 +873,13 @@ export function RichEditor(props: EditorEngineProps) {
           </p>
         )}
         <div ref={host} />
+        {view.current && <TableControls view={view.current} frame={frame} />}
       </div>
       {slash && (
         <CaretMenu
           {...caretAnchor(slash.from, dismissSlash)}
           label="Insert block"
+          width={240}
           query={slash.query}
           empty={null}
           items={matchingSlashCommands(slash.query)
@@ -870,6 +900,7 @@ export function RichEditor(props: EditorEngineProps) {
         <CaretMenu
           {...caretAnchor(emoji.from, dismissEmoji)}
           label="Insert emoji"
+          width={350}
           query={emoji.query}
           empty={null}
           items={matchingEmoji(emoji.query).map((item) => ({
@@ -881,6 +912,20 @@ export function RichEditor(props: EditorEngineProps) {
               editor.dispatch(insertEmoji(editor.state, emoji, item));
               editor.focus();
             },
+          }))}
+        />
+      )}
+      {linkPaste && (
+        <CaretMenu
+          {...caretAnchor(linkPaste.to, dismissLinkPaste)}
+          // Linear's width for this menu isn't in the bundle we have; the slash menu's 240.
+          width={240}
+          label="Pasted link"
+          query={linkPaste.href}
+          empty={null}
+          items={linkPasteActions(linkPaste, view.current!).map((item) => ({
+            ...item,
+            icon: <Icon name={item.id === "keep" ? "link" : "expand"} />,
           }))}
         />
       )}

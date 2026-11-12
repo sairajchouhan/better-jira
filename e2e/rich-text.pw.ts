@@ -29,6 +29,8 @@ test("the full-page description editor: toolbar state, tables, drops, rendering 
     await page.waitFor(`!!document.querySelector('[aria-label="Code block"]')`);
     expect(await pressed("Code block")).toBe("true");
     expect(await pressed("Text")).toBe("false");
+    // Collapse the selection so the toolbar (over the list since BJ-176's 22px rhythm) closes before the click.
+    await page.key("ArrowRight");
     await page.click("#description li p");
     await page.key("End");
     await page.key("ArrowLeft", "shift");

@@ -18,12 +18,30 @@ export const editorBindings: { id: string; name: string; hotkey: Hotkey }[] = [
   { id: "expand", name: "Collapsible section", hotkey: "Mod+Shift+6" },
   { id: "move-up", name: "Move block up", hotkey: "Alt+ArrowUp" },
   { id: "move-down", name: "Move block down", hotkey: "Alt+ArrowDown" },
+  // Linear's table keys (`Shift-Alt-Meta-Arrow…`): the caret's row or column, or the selected ones, move one place.
+  { id: "table-move-up", name: "Move table row up", hotkey: "Mod+Alt+Shift+ArrowUp" },
+  { id: "table-move-down", name: "Move table row down", hotkey: "Mod+Alt+Shift+ArrowDown" },
+  { id: "table-move-left", name: "Move table column left", hotkey: "Mod+Alt+Shift+ArrowLeft" },
+  { id: "table-move-right", name: "Move table column right", hotkey: "Mod+Alt+Shift+ArrowRight" },
   { id: "block-menu", name: "Open block menu", hotkey: "Shift+F10" },
   { id: "block-controls", name: "Focus block controls", hotkey: "Alt+F10" },
   { id: "attach", name: "Attach image/file", hotkey: "Mod+Shift+U" },
+  // Chrome's keys (Linear's `pasteAndMatchStyle` / `pasteWithoutFormatting`); other browsers swap them.
+  { id: "paste-match", name: "Paste and match style", hotkey: "Mod+Shift+V" },
+  { id: "paste-plain", name: "Paste without formatting", hotkey: "Mod+Alt+Shift+V" },
   { id: "undo", name: "Undo", hotkey: "Mod+Z" },
   { id: "redo", name: "Redo", hotkey: "Mod+Shift+Z" },
   { id: "save", name: "Save or submit / send comment", hotkey: "Mod+Enter" },
 ];
 /** An editor binding's keys, for a control's tooltip or a menu row's caps. */
 export const editorKey = (id: string) => editorBindings.find((b) => b.id === id)?.hotkey;
+/** Keys inside a code block (Linear's `code_block` keys), bound by the editor's code keymap and listed in Help. */
+export const codeBlockBindings: { id: string; name: string; hotkey: Hotkey }[] = [
+  { id: "code-indent", name: "Indent code lines", hotkey: "Tab" },
+  { id: "code-outdent", name: "Outdent code lines", hotkey: "Shift+Tab" },
+  { id: "code-indent-item", name: "Indent the list item holding the code block", hotkey: "Alt+Tab" },
+  { id: "code-outdent-item", name: "Outdent the list item holding the code block", hotkey: "Alt+Shift+Tab" },
+  { id: "code-select", name: "Select the code block", hotkey: "Mod+A" },
+  { id: "code-comment", name: "Toggle line comment", hotkey: "Mod+/" },
+  { id: "code-backspace", name: "Turn an emptied code block back into text", hotkey: "Backspace" },
+];

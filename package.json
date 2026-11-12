@@ -24,6 +24,8 @@
     "bun-plugin-tailwind": "^0.1.2",
     "chrono-node": "^2.10.3",
     "cmdk": "^1.1.1",
+    "lowlight": "^3.3.0",
+    "marked": "^18.2.0",
     "prosemirror-commands": "^1.7.2",
     "prosemirror-history": "^1.5.1",
     "prosemirror-inputrules": "^1.5.1",

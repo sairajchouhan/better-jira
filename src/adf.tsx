@@ -2,9 +2,13 @@ import type { ReactNode } from "react";
 import { MediaView } from "./media-loader";
 import type { Attachment } from "./attachment-media";
 import { cardText, jiraDate, safeLink } from "./document";
+import { Icon } from "./icons";
+import { ReadonlyCodeBlock } from "./code-block";
+import { embedFrame, embedSource } from "./embed";
 export { adfToText } from "./document";
 
-/** Renders Jira's ADF (Atlassian Document Format). Unknown nodes fall through to their children. */
+/** Renders Jira's ADF (Atlassian Document Format) with the editor's DOM and classes, so `.rich-doc` styles both the
+ *  same (BJ-176). Unknown nodes fall through to their children. */
 export function Adf({
   node,
   issueKey,
@@ -22,7 +26,7 @@ export function Adf({
   const a = node.attrs ?? {};
   switch (node.type) {
     case "doc":
-      return <div className="flow-root space-y-2 leading-relaxed">{kids}</div>;
+      return <div className="rich-doc flow-root">{kids}</div>;
     case "paragraph":
       return <p>{kids}</p>;
     case "text":
@@ -37,46 +41,54 @@ export function Adf({
     case "heading": {
       const level = Math.max(1, Math.min(6, Number(a.level) || 2)),
         H = `h${level}` as "h1";
-      return <H className={HEADING[level]}>{kids}</H>;
+      return <H>{kids}</H>;
     }
     case "bulletList":
-      return <ul className="list-disc pl-5 space-y-1">{kids}</ul>;
+      return <ul>{kids}</ul>;
     case "orderedList":
       return (
-        <ol start={Number(a.order) || 1} className="list-decimal pl-5 space-y-1">
-          {kids}
-        </ol>
+        <ol start={Number(a.order) || 1}>{kids}</ol>
       );
     case "taskList":
-      return <ul className="space-y-1">{kids}</ul>;
+      return <ul data-task-list="true">{kids}</ul>;
     case "taskItem":
       return (
-        <li>
-          {a.state === "DONE" ? "☑" : "☐"} {kids}
-        </li>
+        <li data-task-state={a.state === "DONE" ? "DONE" : "TODO"}>{kids}</li>
       );
     case "listItem":
       return <li>{kids}</li>;
     case "codeBlock":
       return (
-        <pre className="overflow-x-auto rounded bg-col border border-line-2 p-2 text-xs">
-          <code>{kids}</code>
-        </pre>
+        <ReadonlyCodeBlock
+          text={(node.content ?? []).map((c: any) => c.text ?? "").join("")}
+          language={typeof a.language === "string" ? a.language : null}
+        />
       );
     case "blockquote":
-      return <blockquote className="border-l-2 border-line-3 pl-3 text-fg-3">{kids}</blockquote>;
+      return <blockquote>{kids}</blockquote>;
     case "panel":
-      return <div className="rounded border-l-4 border-accent bg-col p-2">{kids}</div>;
+      return (
+        <div className="rich-panel" data-panel-type={a.panelType ?? "info"}>
+          {kids}
+        </div>
+      );
     case "expand":
     case "nestedExpand":
       return (
-        <details className="rounded border border-line-2 px-2 py-1">
-          <summary className="cursor-pointer font-medium">{a.title || "Collapsible section"}</summary>
-          {kids}
+        <details className="rich-expand">
+          <summary className="rich-expand-header">
+            <span className="rich-expand-toggle">
+              <Icon name="chevron" size={14} />
+            </span>
+            <span className="rich-expand-title" data-empty={a.title ? undefined : true}>
+              {a.title || "Section"}
+            </span>
+          </summary>
+          <div className="rich-expand-body">{kids}</div>
         </details>
       );
     case "rule":
-      return <hr className="border-line-2" />;
+      return <hr />;
     case "mention":
       return (
         <span className="mention-chip" data-mention-id={a.id}>
@@ -84,7 +96,7 @@ export function Adf({
         </span>
       );
     case "emoji":
-      return <>{a.text ?? a.shortName}</>;
+      return <span className="rich-emoji">{a.text ?? a.shortName}</span>;
     case "status":
       return <span className="rounded bg-sel px-1 text-xs font-semibold uppercase">{a.text}</span>;
     case "date":
@@ -93,7 +105,6 @@ export function Adf({
     case "blockCard":
       return (
         <a
-          className="text-accent underline"
           href={safeLink(a.url) ?? undefined}
           target="_blank"
           rel="noreferrer"
@@ -101,12 +112,36 @@ export function Adf({
           {cardText(a.url)}
         </a>
       );
-    case "table":
+    case "embedCard": {
+      const src = embedSource(String(a.url ?? ""));
+      if (!src) return <Adf node={{ ...node, type: "blockCard" }} />;
+      const { allowfullscreen: _, referrerpolicy, sandbox, ...frame } = embedFrame(src);
       return (
-        <table className="w-full border-collapse text-xs">
-          <tbody>{kids}</tbody>
-        </table>
+        <div className="rich-embed">
+          <iframe {...frame} sandbox={sandbox} allowFullScreen referrerPolicy={referrerpolicy} />
+        </div>
       );
+    }
+    case "table": {
+      // Column widths as the editor's TableView lays them out (prosemirror-tables, 50px for a column without one), so a resized table reads the same.
+      const widths: number[] = (node.content?.[0]?.content ?? []).flatMap((cell: any) =>
+          Array.from({ length: Number(cell.attrs?.colspan) || 1 }, (_, i) => Number(cell.attrs?.colwidth?.[i]) || 0),
+        ),
+        total = widths.reduce((sum, w) => sum + (w || 50), 0),
+        fixed = widths.length > 0 && widths.every(Boolean);
+      return (
+        <div className="tableWrapper">
+          <table style={fixed ? { width: total } : { minWidth: total }}>
+            <colgroup>
+              {widths.map((w, i) => (
+                <col key={i} style={w ? { width: w } : undefined} />
+              ))}
+            </colgroup>
+            <tbody>{kids}</tbody>
+          </table>
+        </div>
+      );
+    }
     case "tableRow":
       return <tr>{kids}</tr>;
     case "tableHeader":
@@ -114,7 +149,6 @@ export function Adf({
         <th
           colSpan={Number(a.colspan) || 1}
           rowSpan={Number(a.rowspan) || 1}
-          className="border border-line-2 p-1 text-left"
         >
           {kids}
         </th>
@@ -124,7 +158,6 @@ export function Adf({
         <td
           colSpan={Number(a.colspan) || 1}
           rowSpan={Number(a.rowspan) || 1}
-          className="border border-line-2 p-1 align-top"
         >
           {kids}
         </td>
@@ -143,16 +176,6 @@ export function Adf({
   }
 }
 
-const HEADING = [
-  "",
-  "pt-2 text-[20px] leading-7 font-semibold text-fg",
-  "pt-1.5 text-[17px] leading-6 font-semibold text-fg",
-  "pt-1 text-[15px] font-semibold text-fg",
-  "text-[14px] font-semibold text-fg",
-  "text-[13px] font-semibold text-fg",
-  "text-[13px] font-medium text-fg-2",
-];
-
 /** Bare URLs in plain text become links, as Linear shows them. */
 function linkify(text: string): ReactNode {
   const parts = text.split(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g);
@@ -162,7 +185,6 @@ function linkify(text: string): ReactNode {
         i % 2 ? (
           <a
             key={i}
-            className="text-accent underline"
             href={safeLink(part) ?? undefined}
             target="_blank"
             rel="noreferrer"
@@ -186,11 +208,10 @@ function mark(inner: ReactNode, m: any): ReactNode {
     case "underline":
       return <u>{inner}</u>;
     case "code":
-      return <code className="rounded bg-sel px-1 text-[0.9em]">{inner}</code>;
+      return <code>{inner}</code>;
     case "link":
       return (
         <a
-          className="text-accent underline"
           href={safeLink(m.attrs?.href) ?? undefined}
           target="_blank"
           rel="noreferrer"

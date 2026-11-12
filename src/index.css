@@ -453,12 +453,41 @@
   color: var(--menu-placeholder);
 }
 
+/* Linear's editor, BJ-176. `.rich-doc` is Linear's `.editor` / `._sharedEditorRoot_1t2fc_1` (R): the editable
+   `.rich-content` carries it, and so does adf.tsx's read-only doc, so both look the same. Values come from
+   style-kMXsq6uH.css and FS() in startup-root.CnUSfl4j.js; the theme colours were read with getComputedStyle on a
+   linear.app issue description (2026-11-12) and map onto our tokens: labelTitle --fg, labelBase --fg-2,
+   labelMuted --fg-3, labelFaint --fg-4, bgShade --col, bgSub --app, bgBorderSolid --line-3,
+   bgBorderThin --bg-border, bgBorderSolidThin --border-solid-thin, editorHairline --thin-pixel. */
+:root {
+  --editor-link: lch(50% 80 288.43); /* --editor-label-link: purpleText */
+  --editor-code-bg: lch(20% 50 286.91 / 0.05); /* --editor-inline-code-background: [20, 50, controlPrimary hue, .05] */
+  --editor-callout-bg-mix: 5%; /* --editor-callout-bg-mix */
+  --editor-callout-border-mix: 28%; /* --editor-callout-border-mix */
+  /* --font-monospace and --font-emoji */
+  --editor-mono: "Berkeley Mono", "SFMono Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  --editor-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Segoe UI", "Twemoji Mozilla",
+    "Noto Color Emoji", "Android Emoji";
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --editor-link: lch(80% 80 288.43);
+    --editor-code-bg: rgb(255 255 255 / 0.075);
+    --editor-callout-bg-mix: 2%;
+    --editor-callout-border-mix: 20%;
+  }
+}
+
 .rich-content {
   min-height: 120px;
   padding: 12px;
   outline: none;
+}
+/* R: font-size var(--editor-font-size) (15px), line-height var(--editor-line-height) (1.6). */
+.rich-content,
+.rich-doc {
+  font-size: 15px;
   line-height: 1.6;
-  overflow-wrap: anywhere;
 }
 .rich-editor[data-expanded] .rich-content {
   min-height: 300px;
@@ -470,87 +499,338 @@
 .rich-placeholder {
   top: 12px;
   left: 12px;
+  font-size: 15px;
+  line-height: 1.6;
+  font-weight: 450;
+  letter-spacing: -0.00666667em;
 }
 .rich-editor[data-inline] .rich-placeholder {
   top: 2px;
   left: 0;
 }
-.rich-content > * + * {
-  margin-top: 0.6em;
+/* The issue description is borderless inline text on St.editorSurface (startup-root zrn.editorSurface):
+   margin 0 -14px, padding 10px 14px 16px, so its text lines up with the title. */
+.issue-description > .rich-content,
+.issue-description .rich-editor .rich-content {
+  min-height: 0;
+  margin: 0 -14px;
+  padding: 10px 14px 16px;
 }
-.rich-content h1 {
-  font-size: 1.5em;
-  font-weight: 650;
+.issue-description .rich-editor .rich-placeholder {
+  top: 10px;
+  left: 0;
 }
-.rich-content h2 {
-  font-size: 1.25em;
-  font-weight: 650;
+/* R p{line-height;overflow-wrap:break-word;font-size} + R .text-node{letter-spacing;font-weight} (margin 0 from preflight, so the :where() rhythm below wins) */
+.rich-doc p {
+  overflow-wrap: break-word;
+  font-weight: 450;
+  letter-spacing: -0.00666667em;
 }
-.rich-content h3,
-.rich-content h4,
-.rich-content h5,
-.rich-content h6 {
-  font-weight: 650;
+/* R .ProseMirror-focused:not(.readonly):not(.ProseMirror-hideselection)::selection: focusColor at .4 */
+.rich-content.ProseMirror-focused:not(.ProseMirror-hideselection)::selection,
+.rich-content.ProseMirror-focused:not(.ProseMirror-hideselection) ::selection {
+  background: color-mix(in lch, var(--accent) 40%, transparent);
 }
-.rich-content ul {
-  list-style: disc;
-  padding-left: 1.5em;
+
+/* Block rhythm (R :is(.text-node,…)+.text-node etc.): text→text 16px, text→list 6px, block→text 22px.
+   text-node = p, list-node = ul/ol, block-node = code, quote, callout, rule, media, table (prosemirror-tables wraps it in .tableWrapper), preserved content. */
+.rich-doc :where(p, ul, ol, .rich-expand) + :where(p, .rich-expand),
+.rich-doc :where(ul, ol) + :where(ul, ol),
+.rich-doc :where(h3) + :where(pre, blockquote, .rich-panel, hr, .media-frame, .rich-preserved, table, .tableWrapper) {
+  margin-top: 16px; /* var(--editor-block-spacing) */
 }
-.rich-content ol {
-  list-style: decimal;
-  padding-left: 1.5em;
+.rich-doc :where(p) + :where(ul, ol),
+.rich-doc :where(h4) + :where(pre, blockquote, .rich-panel, hr, .media-frame, .rich-preserved, table, .tableWrapper) {
+  margin-top: 6px; /* var(--editor-block-spacing-small) */
 }
-.rich-content blockquote {
-  border-left: 3px solid var(--line-3);
-  padding-left: 12px;
+.rich-doc :where(pre, blockquote, .rich-panel, hr, .media-frame, .rich-preserved, table, .tableWrapper) + :where(p, ul, ol, .rich-expand),
+.rich-doc
+  :where(p, ul, ol, pre, blockquote, .rich-panel, hr, .media-frame, .rich-preserved, table, .tableWrapper, .rich-expand, h1, h2)
+  + :where(pre, blockquote, .rich-panel, hr, .media-frame, .rich-preserved, table, .tableWrapper) {
+  margin-top: 22px; /* var(--editor-block-spacing-large) */
 }
-.rich-content pre {
-  white-space: pre-wrap;
-  background: var(--col);
-  padding: 10px;
-  border-radius: 6px;
-  font-size: 12px;
+/* R ul.list-node li :is(.text-node,.block-node)+.block-node */
+.rich-doc li :where(p, pre, blockquote, .rich-panel, .media-frame, .rich-preserved) + :where(pre, blockquote, .rich-panel, .media-frame, .rich-preserved) {
+  margin-top: 16px;
 }
-.rich-content code {
-  font-family: monospace;
-  background: var(--sel);
+
+/* .editor{--editor-h1-font-size…} + .editor .heading-node{font-weight:semibold;color:labelTitle;font-feature-settings:"calt"} */
+.rich-doc :is(h1, h2, h3, h4, h5, h6) {
+  font-weight: 600;
+  color: var(--fg);
+  font-feature-settings: "calt";
+  overflow-wrap: break-word;
 }
-.rich-content a {
-  color: var(--accent);
-  text-decoration: underline;
+.rich-doc h1 {
+  font-size: 1.375rem;
+  line-height: 1.85rem;
+  letter-spacing: -0.004375rem;
+  margin: 48px 0 16px; /* R h1: block-spacing * 3, block-spacing */
 }
-.rich-content table {
-  border-collapse: collapse;
-  table-layout: fixed;
-  width: 100%;
+.rich-doc h2 {
+  font-size: 1.1875rem;
+  line-height: 1.75rem;
+  letter-spacing: 0.003125rem;
+  margin: 32px 0 16px; /* R h2: block-spacing * 2 */
 }
-.rich-content td,
-.rich-content th {
-  position: relative;
-  min-width: 40px;
-  border: 1px solid var(--line-3);
-  padding: 6px;
-  vertical-align: top;
+.rich-doc h3 {
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  letter-spacing: 0.00625rem;
+  margin: 24px 0 6px; /* R h3: block-spacing * 1.5, block-spacing-small */
 }
-.rich-content th {
-  background: var(--col);
+.rich-doc h4 {
+  font-size: 0.9375rem;
+  line-height: 1.5rem;
+}
+.rich-doc :is(h5, h6) {
+  font-size: 0.875rem;
+  color: var(--fg-3); /* labelMuted */
+}
+.rich-doc :is(h4, h5, h6) {
+  margin: 22px 0 6px; /* R h4,R h5,R h6 */
+}
+/* R .editor>.heading-node:first-child, .cell-content>.heading-node, blockquote>.heading-node:first-child */
+.rich-doc > :is(h1, h2, h3, h4, h5, h6):first-child,
+.rich-doc :is(td, th, blockquote, .rich-panel, .rich-expand-body) > :is(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
+}
+.rich-doc .rich-panel > :is(h1, h2, h3, h4, h5, h6):last-child {
+  margin-bottom: 0;
+}
+
+/* R b,R strong{font-weight:var(--font-weight-semibold)} */
+.rich-doc :is(b, strong) {
   font-weight: 600;
 }
-.rich-content .selectedCell {
-  background: var(--sel);
+/* .editor u{text-underline-offset:2px;text-decoration-thickness:1px} */
+.rich-doc u {
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
+/* .editor ul:not([data-type=todo_list]): a 1.5rem inset and a ::before bullet .5em wide, .25em into the gutter;
+   disc → circle → disc by depth. */
+.rich-doc ul:not([data-task-list]) {
+  counter-reset: editor-ul;
+  list-style: none;
+  padding-left: 1.5rem;
+}
+.rich-doc ul:not([data-task-list]) > li {
+  counter-increment: editor-ul;
+  position: relative;
+}
+.rich-doc ul:not([data-task-list]) > li::before {
+  content: counter(editor-ul, disc);
+  position: absolute;
+  left: calc(-1.5rem + 0.25em);
+  width: 0.5em;
+  text-align: center;
+  font-feature-settings: "case";
+}
+.rich-doc ul:not([data-task-list]) ul > li::before {
+  content: counter(editor-ul, circle);
+}
+.rich-doc ul:not([data-task-list]) ul ul > li::before {
+  content: counter(editor-ul, disc);
+}
+.rich-doc ul:not([data-task-list]) ul ul ul > li::before {
+  content: counter(editor-ul, circle);
+}
+/* .editor ol>li:before{content:counter(editor-ol) ". ";text-align:end;min-width:1.5rem;tabular-nums;translate(-.55em)}:
+   decimal → lower-alpha → lower-roman. Native markers end at the content edge, so .55em of item padding puts the
+   number where Linear's does and keeps the content at 1.5rem.
+   ponytail: a fixed 1.5rem column; Linear's grid widens it for 3-digit numbers, which overflow the gutter here. */
+.rich-doc ol {
+  list-style: decimal;
+  padding-left: calc(1.5rem - 0.55em);
+}
+.rich-doc ol > li {
+  padding-left: 0.55em;
+}
+.rich-doc ol > li::marker {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.00666667em;
+}
+.rich-doc ol ol {
+  list-style-type: lower-alpha;
+}
+.rich-doc ol ol ol {
+  list-style-type: lower-roman;
+}
+/* .editor li>ol,.editor li>ul,.editor li+li{margin-top:var(--editor-block-spacing-small)} */
+.rich-doc :is(li > ol, li > ul, li + li) {
+  margin-top: 6px;
+}
+
+/* .editor blockquote{padding-left:var(--editor-block-spacing)} + :before{4px bar, radius 2px, editor-border-solid} */
+.rich-doc blockquote {
+  position: relative;
+  padding-left: 16px;
+}
+.rich-doc blockquote::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--line-3);
+}
+
+/* .editor pre{--code-block-font-size:.875em;--code-block-line-height:1.4em;--code-block-padding:12px;
+   --code-block-side-padding:16px;background:bgSub;border:hairline bgBorderThin;radius 6px;white-space:pre;tab-size:2}
+   + .editor pre code{overflow-x:auto}. */
+.rich-doc pre {
+  position: relative;
+  display: grid;
+  background: var(--app);
+  border: var(--thin-pixel) solid var(--bg-border);
+  border-radius: 6px;
+  font-family: var(--editor-mono);
+  text-align: left;
+  white-space: pre;
+  word-spacing: normal;
+  word-break: normal;
+  tab-size: 2;
+  hyphens: none;
+  direction: ltr;
+}
+/* prosemirror-view's .ProseMirror pre{white-space:pre-wrap} ties with the rule above; Linear never wraps (code scrolls). */
+.ProseMirror.rich-doc pre {
+  white-space: pre;
+}
+.rich-doc pre code {
+  padding: 12px 16px;
+  overflow-x: auto;
+  font-family: var(--editor-mono);
+  font-size: 0.875em;
+  line-height: 1.4em;
+}
+/* .editor code.inline{font-family:mono;background:inline-code-background;box-shadow:0 0 0 hairline
+   inline-code-border-color inset;border-radius:.2em;padding:0 .25em;font-size:.9375em;line-height:1.3} */
+.rich-doc :not(pre) > code {
+  font-family: var(--editor-mono);
+  box-decoration-break: clone;
+  background-color: var(--editor-code-bg);
+  box-shadow: 0 0 0 var(--thin-pixel) var(--border-solid-thin) inset;
+  border-radius: 0.2em;
+  padding: 0 0.25em;
+  font-size: 0.9375em;
+  line-height: 1.3;
+}
+
+/* .editor a{color:var(--editor-label-link);text-decoration-line:none;underline-offset 2px;thickness 1px}, underlined on
+   hover; a focused editor keeps the text cursor and no hover underline. Media controls keep their own links. */
+.rich-doc a:not(.ui-button, [data-media-interactive] *) {
+  color: var(--editor-link);
+  text-decoration-line: none;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+@media (hover: hover) {
+  .rich-doc a:not(.ui-button, [data-media-interactive] *):hover {
+    text-decoration-line: underline;
+  }
+  .rich-content.ProseMirror-focused a:not(.ui-button, [data-media-interactive] *):hover {
+    text-decoration-line: none;
+  }
+}
+.rich-content.ProseMirror-focused a:not(.ui-button, [data-media-interactive] *) {
+  cursor: text;
+}
+
+/* .editor hr{background:editor-border-solid;border:none;height:1px} + R hr{margin:var(--editor-block-spacing-large) 0} */
+.rich-doc hr {
+  width: 100%;
+  height: 1px;
+  margin: 22px 0;
+  border: none;
+  background: var(--line-3);
+}
+
+/* .editor table{table-layout:fixed;border-radius:6px;border:hairline bgBorderThin;border-collapse:separate} with
+   hairline column rules (th,td{border-left}), cells padded 5px 8px (.cell-content), a header row in bgShade. */
+.rich-doc table {
+  table-layout: fixed;
+  width: 100%;
+  border: var(--thin-pixel) solid var(--bg-border);
+  border-radius: 6px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.rich-doc :is(td, th) {
+  position: relative;
+  min-width: 40px;
+  padding: 5px 8px;
+  border-left: var(--thin-pixel) solid var(--bg-border);
+  text-align: left;
+  vertical-align: top;
+  font-weight: inherit;
+}
+.rich-doc :is(td, th):first-child {
+  border-left: none;
+}
+.rich-doc tr + tr > :is(td, th) {
+  border-top: var(--thin-pixel) solid var(--bg-border);
+}
+.rich-doc tr:has(+ tr) > th {
+  background-color: var(--col);
+}
+.rich-doc tr:first-of-type > :first-child {
+  border-top-left-radius: 6px;
+}
+.rich-doc tr:first-of-type > :last-child {
+  border-top-right-radius: 6px;
+}
+.rich-doc tr:last-of-type > :first-child {
+  border-bottom-left-radius: 6px;
+}
+.rich-doc tr:last-of-type > :last-child {
+  border-bottom-right-radius: 6px;
+}
+/* .editor.ProseMirror-focused td.selectedCell: the surface (th: bgShade) mixed with 5% #5e68d0 */
+.rich-content td.selectedCell {
+  background: color-mix(in srgb, var(--panel), #5e68d0 5%);
+}
+.rich-content th.selectedCell {
+  background: color-mix(in srgb, var(--col), #5e68d0 5%);
 }
 .rich-content .rich-token {
   border-radius: 4px;
   background: var(--sel);
   padding: 0 3px;
 }
+/* ._mentionChip_i34q1_15: the text colour, no background at rest, bgShadeHover on hover, the selection colour when
+   selected. */
 .mention-chip {
   border-radius: 4px;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--fg);
+  color: inherit;
   font-weight: 500;
   padding: 0 3px;
   white-space: nowrap;
+}
+@media (any-hover: hover) and (any-pointer: fine) {
+  .mention-chip:hover {
+    background-color: var(--card-pressed);
+  }
+}
+.ProseMirror-focused .mention-chip.ProseMirror-selectednode {
+  background-color: color-mix(in lch, var(--accent) 40%, transparent);
+}
+/* .editor .emoji:not(.custom-emoji){font-family:var(--font-emoji);font-style:normal} */
+.rich-doc .rich-emoji {
+  font-family: var(--editor-emoji);
+  font-style: normal;
+}
+/* --editor-image-max-height: 600px; R img{object-fit:contain} */
+.rich-doc .media-frame,
+.rich-doc .media-visual {
+  max-height: 600px;
+}
+.rich-doc .media-visual {
+  object-fit: contain;
 }
 .rich-content .rich-preserved {
   color: var(--fg-3);
@@ -583,42 +863,138 @@
 :hover > .media-resize-handle {
   opacity: 1;
 }
-/* Linear's block handle, in the gutter left of the caret's block; only the keyboard or a hover brings it forward. */
+/* Linear's block handle, in the gutter left of the caret's block; only the keyboard or a hover brings it forward.
+   --editor-block-menu-size 20px at --editor-block-menu-offset 28px; it fades in over --editor-toolbar-fade-duration
+   (40ms) after --editor-toolbar-reveal-delay (.1s). */
 .rich-block-handle {
   position: absolute;
   left: -28px;
   z-index: 1;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0;
   opacity: 0;
+  transition: opacity 40ms ease-out;
+}
+.rich-editor:hover .rich-block-handle {
+  transition-delay: 0.1s;
 }
 .rich-editor:hover .rich-block-handle,
 .rich-block-handle:focus-visible,
 .rich-block-handle[aria-expanded="true"] {
   opacity: 1;
 }
-.rich-content .rich-expand {
-  border: 1px solid var(--line-2);
-  border-radius: 6px;
-  padding: 2px 8px 2px 2px;
+@media (prefers-reduced-motion: reduce) {
+  .rich-block-handle {
+    transition-duration: 0s;
+  }
 }
-.rich-content .rich-expand-header {
+/* FormattingToolbar's separator: 1×16px in bgBorder with 2px inline margin. */
+.rich-toolbar-separator {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: var(--bg-border);
+}
+
+/* Collapsible section (Jira's expand) as Linear's .collapsible-section: no box, its content one list inset in, the
+   title line pulled back into the gutter where a 20px toggle sits at -5px; the chevron turns 90° over .15s. */
+.rich-doc .rich-expand {
+  position: relative;
+  padding-left: 1.5rem; /* var(--editor-list-inset) */
+}
+.rich-doc .rich-expand-header {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: 2px;
+  min-height: 1lh;
+  margin-left: -1.5rem;
+  padding-left: 1.5rem;
+  border-radius: 6px;
+  list-style: none;
 }
-.rich-content .rich-expand-title {
+.rich-doc .rich-expand-header::-webkit-details-marker {
+  display: none;
+}
+.rich-doc .rich-expand-toggle {
+  position: absolute;
+  top: calc((1lh - 20px) / 2);
+  left: -5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 2px;
+  color: var(--fg-3); /* labelMuted */
+  cursor: pointer;
+}
+.rich-doc .rich-expand-toggle svg {
+  transition: transform 0.15s;
+}
+.rich-doc .rich-expand:is([data-open="true"], [open]) > .rich-expand-header .rich-expand-toggle svg {
+  transform: rotate(90deg);
+}
+.rich-doc .rich-expand-title {
   flex: 1;
   min-width: 0;
   background: transparent;
-  font-weight: 500;
+  font-weight: 450;
+  letter-spacing: -0.00666667em;
   outline: none;
 }
-.rich-content .rich-expand-body {
-  padding-left: 26px;
+.rich-doc .rich-expand-title::placeholder,
+.rich-doc .rich-expand-title[data-empty] {
+  color: var(--fg-4); /* labelFaint: "Add section title…", "Section" when read-only */
 }
-.rich-content .rich-panel {
-  border-left: 4px solid var(--accent);
-  background: var(--col);
-  padding: 10px;
+.rich-doc .rich-expand-body {
+  padding-left: 0;
+}
+.rich-doc .rich-expand:is([data-open="true"], [open]) > .rich-expand-body {
+  margin-top: 16px;
+}
+
+/* .editor div.callout-node{--callout-accent:var(--callout-color,#26b5ce);hairline border at the border mix, background at
+   the bg mix, radius 8px, padding 10px 16px 10px 38px, margin 22px 0} with its icon in a 28px column at 10px/8px.
+   Jira's panelType picks the accent. */
+.rich-doc .rich-panel {
+  --callout-accent: var(--callout-color, #26b5ce);
+  position: relative;
+  margin: 22px 0;
+  padding: 10px 16px 10px 38px;
+  border: var(--thin-pixel) solid
+    color-mix(in srgb, var(--callout-accent) var(--editor-callout-border-mix), transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--callout-accent) var(--editor-callout-bg-mix), transparent);
+}
+.rich-doc .rich-panel::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  left: 8px;
+  width: 28px;
+  height: calc(15px * 1.6);
+  background: var(--callout-accent);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13Zm0 5.25a.75.75 0 0 0-.75.75v3.5a.75.75 0 0 0 1.5 0V7.5A.75.75 0 0 0 8 6.75Zm0-2.5a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8Z'/%3E%3C/svg%3E")
+    center / 16px no-repeat;
+}
+.rich-doc .rich-panel[data-panel-type="note"] {
+  --callout-color: #5e6ad2;
+}
+.rich-doc .rich-panel[data-panel-type="success"],
+.rich-doc .rich-panel[data-panel-type="tip"] {
+  --callout-color: #4cb782;
+}
+.rich-doc .rich-panel[data-panel-type="warning"] {
+  --callout-color: #f2994a;
+}
+.rich-doc .rich-panel[data-panel-type="error"] {
+  --callout-color: #eb5757;
+}
+.rich-doc .rich-panel[data-panel-type="info"] {
+  --callout-color: #4ea7fc;
 }
 .rich-content [data-task-list] {
   list-style: none;
@@ -1797,4 +2173,324 @@
 .video-controls .ui-button:focus-visible .video-tooltip {
   opacity: 1;
   visibility: visible;
+}
+/* Jira's embedCard as Linear's embed frame: 100% wide, 400px tall (startup-entry `embed` node). Editor and read-only view. */
+.rich-embed {
+  margin: 6px 0;
+}
+.rich-embed iframe {
+  display: block;
+  width: 100%;
+  height: 400px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--col);
+}
+
+/* Code blocks (package D): Linear's `.editor pre.code-block` grid, gutter, syntax colours, collapse and hover toolbar
+   (style-kMXsq6uH.css), shared by the editor's node view and the read-only ReadonlyCodeBlock. The block's own chrome
+   (border, radius, background) stays with `.rich-content pre`. */
+:root {
+  /* Linear's `MS` hljs palette (startup-root `--editor-hljs-*`), light. */
+  --hljs-red: #bf1420;
+  --hljs-orange: #a74002;
+  --hljs-green: #00755c;
+  --hljs-yellow: #8a5d00;
+  --hljs-pink: #9532a4;
+  --hljs-blue: #00264d;
+  --hljs-blue-light: #025f8c;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --hljs-red: #ec3b40;
+    --hljs-orange: #eb6e3d;
+    --hljs-green: #25f8ca;
+    --hljs-yellow: #fce27d;
+    --hljs-pink: #e394dc;
+    --hljs-blue: #2482d8;
+    --hljs-blue-light: #00c5f0;
+  }
+}
+/* `.editor pre`: the padding lives on the gutter and the code, so the gutter can sit in its own column. */
+pre.code-block {
+  --code-block-font-size: 0.875em;
+  --code-block-line-height: 1.4em;
+  --code-block-padding: 12px;
+  --code-block-side-padding: 16px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  position: relative;
+  isolation: isolate;
+  padding: 0;
+  font-size: var(--code-block-font-size);
+  white-space: pre;
+  word-break: normal;
+  tab-size: 2;
+  text-align: left;
+  direction: ltr;
+}
+pre.code-block > code,
+pre.code-block > .cb-gutter {
+  font-family: monospace;
+  font-size: inherit;
+  line-height: var(--code-block-line-height);
+  padding-top: var(--code-block-padding);
+  padding-bottom: var(--code-block-padding);
+  background: none;
+}
+pre.code-block > code {
+  grid-column: 2;
+  align-self: start;
+  padding-right: var(--code-block-side-padding);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+pre.code-block > .cb-gutter {
+  grid-column: 1;
+  box-sizing: content-box;
+  min-width: 2ch;
+  padding-left: var(--code-block-side-padding);
+  padding-right: 20px;
+  text-align: right;
+  color: var(--fg-4);
+  user-select: none;
+}
+pre.code-block[data-line-numbers="false"] > .cb-gutter {
+  display: none;
+}
+pre.code-block[data-line-numbers="false"] > code {
+  grid-column: 1 / -1;
+  padding-left: var(--code-block-side-padding);
+}
+pre.code-block[data-line-wrap="true"] {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+pre.code-block[data-line-wrap="true"] > code {
+  overflow-x: hidden;
+}
+/* Collapsible past 30 lines: room for the bar under the code, and 15 lines under a fade while collapsed. */
+pre.code-block[data-collapsible="true"]:not([data-collapsed="true"]) > code,
+pre.code-block[data-collapsible="true"]:not([data-collapsed="true"]) > .cb-gutter {
+  padding-bottom: 39px;
+}
+pre.code-block[data-collapsed="true"] {
+  overflow: hidden;
+}
+pre.code-block[data-collapsed="true"] > code,
+pre.code-block[data-collapsed="true"] > .cb-gutter {
+  max-height: calc(15 * var(--code-block-line-height) + var(--code-block-padding) * 2);
+  overflow: clip;
+  cursor: pointer;
+}
+pre.code-block[data-collapsed="true"] > code::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 70%, var(--col) 100%);
+}
+pre.code-block > .cb-controls {
+  display: contents;
+  white-space: normal;
+  font-family: var(--font-sans, inherit);
+}
+/* The hover toolbar (`.cb-copy`): top right, revealed after Linear's 0.1s toolbar delay. */
+pre.code-block .cb-copy {
+  position: absolute;
+  z-index: 10;
+  top: min(10px, 50% - 16px);
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 8%);
+  transition: opacity 40ms ease-out;
+}
+@media (hover: hover) {
+  pre.code-block .cb-copy {
+    opacity: 0;
+    pointer-events: none;
+  }
+  pre.code-block:hover .cb-copy,
+  pre.code-block .cb-copy[data-popover-open],
+  pre.code-block .cb-copy:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  pre.code-block:hover:not(:focus-within) .cb-copy {
+    transition-delay: 0.1s;
+  }
+}
+pre.code-block .cb-language {
+  gap: 3px;
+  padding-left: 8px;
+  color: var(--fg-3);
+  user-select: none;
+}
+pre.code-block .cb-language[data-readonly] {
+  cursor: default;
+}
+/* The Expand/Collapse bar (`expandCollapseControlsContainer`): centred 9px above the bottom. */
+pre.code-block .cb-ex-col {
+  position: absolute;
+  z-index: 10;
+  bottom: 9px;
+  left: 50%;
+  transform: translate(-50%);
+  display: flex;
+}
+pre.code-block .cb-ex-col button {
+  color: var(--fg-3);
+  transition: opacity 40ms ease-out;
+}
+@media (hover: hover) {
+  pre.code-block[data-collapsed="true"] .cb-ex-col button {
+    opacity: 0;
+    pointer-events: none;
+  }
+  pre.code-block:hover .cb-ex-col button,
+  pre.code-block .cb-ex-col button:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+/* Display options (`I0e`): a column of labelled switches, 4px 16px. */
+.cb-display-options {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 16px;
+  font-size: 12px;
+}
+.cb-display-options label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 32px;
+  color: var(--fg-3);
+}
+/* Syntax colours: Linear's `.editor .syntax-*` rules. */
+.code-block .syntax-comment,
+.code-block .syntax-markup-quote {
+  color: var(--fg-4);
+}
+.code-block .syntax-string,
+.code-block .syntax-markup-list {
+  color: var(--hljs-blue-light);
+}
+.code-block .syntax-constant-language,
+.code-block .syntax-markup-deleted {
+  color: var(--hljs-red);
+}
+.code-block .syntax-entity-name-function,
+.code-block .syntax-meta-embedded,
+.code-block .syntax-markup-heading,
+.code-block .syntax-markup-inserted {
+  color: var(--hljs-green);
+}
+.code-block .syntax-keyword,
+.code-block .syntax-keyword-operator,
+.code-block .syntax-support-function {
+  color: var(--hljs-pink);
+}
+.code-block .syntax-entity-other-attribute-name,
+.code-block .syntax-constant-other-symbol,
+.code-block .syntax-variable-other-property,
+.code-block .syntax-variable,
+.code-block .syntax-variable-parameter {
+  color: var(--hljs-yellow);
+}
+.code-block .syntax-entity-name-tag,
+.code-block .syntax-entity-name-type,
+.code-block .syntax-entity-other-attribute-name-id,
+.code-block .syntax-entity-other-attribute-name-class,
+.code-block .syntax-string-regexp,
+.code-block .syntax-markup-underline-link {
+  color: var(--hljs-orange);
+}
+.code-block .syntax-constant-numeric {
+  color: var(--hljs-blue);
+}
+@media print {
+  pre.code-block > .cb-gutter,
+  pre.code-block > .cb-controls {
+    display: none;
+  }
+  pre.code-block > code {
+    grid-column: 1 / -1;
+    padding-left: var(--code-block-side-padding);
+  }
+  pre.code-block[data-collapsed="true"] > code {
+    max-height: none;
+  }
+}
+/* Linear's table controls (BJ-181): column resize handle, row/column handles, gutter menu button, edge add bars. */
+.rich-content .tableWrapper {
+  overflow-x: auto;
+}
+.rich-content .column-resize-handle {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  right: -1.5px;
+  z-index: 10;
+  width: 2px;
+  background: var(--fg-4);
+  pointer-events: none;
+}
+.rich-content.resize-cursor {
+  cursor: col-resize;
+}
+.rich-table-handle {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rich-table-handle[data-table-cell-control="row"] {
+  width: 8px;
+}
+.rich-table-handle[data-table-cell-control="column"] {
+  height: 8px;
+}
+/* Linear's 3×20 pill, faint until hovered or its menu is open. */
+.rich-table-handle::after {
+  content: "";
+  width: 3px;
+  height: 20px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--fg-4) 50%, transparent);
+}
+.rich-table-handle[data-table-cell-control="column"]::after {
+  width: 20px;
+  height: 3px;
+}
+.rich-table-handle:hover::after,
+.rich-table-handle[aria-expanded="true"]::after {
+  background: var(--accent);
+}
+.rich-table-add {
+  position: absolute;
+  z-index: 1;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--fg-4) 20%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  min-height: 18px;
+  color: var(--fg-3);
+  opacity: 0;
+}
+.rich-editor:hover .rich-table-add {
+  opacity: 1;
+}
+.rich-table-add:hover {
+  background: color-mix(in srgb, var(--fg-4) 60%, transparent);
 }

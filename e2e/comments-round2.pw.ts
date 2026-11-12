@@ -54,6 +54,8 @@ test("R2 comments: undo/redo, refusals, image comments and the first @", async (
     );
     // type() itself waits 60 ms after the key.
     expect(shown).toBeLessThan(200);
+    // The 350px menu (BJ-176) covers the composer; close it before the next step clicks there.
+    await page.key("Escape");
   });
   await test.step("R2-comments-D1: after undo and redo of a new comment, other people's comments still arrive", async () => {
     await send(page, "Mine");
