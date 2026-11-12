@@ -1,3 +1,5 @@
+import { useStoredState } from "./stored-state";
+import { adfToText } from "./adf";
 import { showNotification } from "./app-notifications";
 import { Text } from "./text";
 import { Tabs } from "./tabs";
@@ -80,6 +82,8 @@ import { kept, post, useCommand } from "./commands";
 
 /** Linear keeps an unsent title and description when the composer closes; the next C brings them back. */
 const unsent = { title: "", description: normalizeDocument("") };
+type SavedComposerDraft = { id: string; title: string; fields: IssueDraft };
+const parseComposerDrafts = (raw: unknown): SavedComposerDraft[] => Array.isArray(raw) ? raw.filter(d => d && typeof d.id === "string" && typeof d.title === "string" && d.fields && typeof d.fields === "object") : [];
 export function CreateIssue() {
   const boards = useStore(s => s.boards);
   const currentBoard = useStore(s => s.board);
@@ -109,6 +113,10 @@ export function CreateIssue() {
     initial.attachments ?? [],
   );
   const [filesBusy, setFilesBusy] = useState(false);
+  const account = useStore(s => s.site);
+  const [saved, setSaved] = useStoredState<SavedComposerDraft[]>(`better-jira:composer-drafts:v1:${account}`, parseComposerDrafts, [], "Could not save drafts locally");
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [draftsOpen, setDraftsOpen] = useState(false);
 
   const titleRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -148,7 +156,16 @@ export function CreateIssue() {
     draft.type && types.includes(draft.type)
       ? draft.type
       : (types[0] ?? "Task");
-  const close = () => ui.send({ type: "overlay.close" });
+  const closeNow = () => ui.send({ type: "overlay.close" });
+  const hasContent = !!title.trim() || !!adfToText(description).trim() || !!attachments?.length;
+  const close = closeNow;
+  const saveDraft = () => {
+    const id = savedId ?? crypto.randomUUID();
+    setSaved([...saved.filter(d => d.id !== id), { id, title, fields: { ...draft, board: board.id, type, title, descriptionDoc: description, attachments, labels: labels.split(",").map(l => l.trim()).filter(Boolean) } }]);
+    unsent.title = "";
+    unsent.description = normalizeDocument("");
+    closeNow();
+  };
   // One id per draft, read from this render: a second submit before React re-renders (a double click) makes no second issue.
   // oxlint-disable-next-line react-hooks/exhaustive-deps -- Memo invalidation follows draft identity or relation inputs; render-local helpers would invalidate every render.
   const submission = useMemo(() => crypto.randomUUID(), [draftIndex]);
@@ -175,6 +192,8 @@ export function CreateIssue() {
       more,
     );
     if (key) {
+      if (savedId) setSaved(saved.filter(d => d.id !== savedId));
+      setSavedId(null);
       unsent.title = "";
       unsent.description = normalizeDocument("");
     }
@@ -191,6 +210,13 @@ export function CreateIssue() {
     capture: true,
     ignoreInputs: false,
   });
+  if (draftsOpen) return <Dialog label="Saved drafts" close={() => setDraftsOpen(false)}>
+    <Dialog.Header><Dialog.Title>Saved drafts</Dialog.Title><Dialog.Close /></Dialog.Header>
+    {saved.length ? saved.map(item => <div key={item.id} className="flex items-center gap-2">
+      <Button onClick={() => { setDraft(item.fields); setTitle(item.title); setDescription(normalizeDocument(item.fields.descriptionDoc)); setAttachments(item.fields.attachments ?? []); setLabels(item.fields.labels?.join(", ") ?? ""); setSavedId(item.id); setDraftIndex(n => n + 1); setDraftsOpen(false); }}>Finish {item.title || "Untitled issue"}</Button>
+      <IconButton label={`Delete draft ${item.title || "Untitled issue"}`} onClick={() => setSaved(saved.filter(d => d.id !== item.id))}><Icon name="trash" /></IconButton>
+    </div>) : <Text variant="mini">No saved drafts</Text>}
+  </Dialog>;
   return (
     <Dialog
       label="Create issue"
@@ -218,6 +244,7 @@ export function CreateIssue() {
           >
             <Icon name="expand" />
           </IconButton>
+          <Button type="button" onClick={() => setDraftsOpen(true)}>Saved drafts ({saved.length})</Button>
           <Dialog.Close />
         </Dialog.Header>
         <TextInput
@@ -385,6 +412,7 @@ export function CreateIssue() {
             />
             Create more
           </Text>
+          <Button type="button" onClick={saveDraft} disabled={!hasContent || filesBusy}>Save draft</Button>
           <Button
             type="button"
             onClick={close}

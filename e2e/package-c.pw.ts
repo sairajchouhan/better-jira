@@ -54,3 +54,21 @@ test("BJ-60: choose another board inside the composer", async ({ open }) => {
   await page.click('[cmdk-item][data-value="Other board"]');
   expect(await page.eval(`!!document.querySelector('[aria-label="Status: Open"]')`)).toBe(true);
 });
+
+test("BJ-29: save, list, finish and delete composer drafts", async ({ open }) => {
+  const page = await open();
+  await page.key("c");
+  await page.type("Saved parent");
+  await page.click('text=Save draft');
+  await page.waitFor(`!document.querySelector('[aria-label="Issue title"]')`);
+  await page.key("c");
+  await page.click('text=Saved drafts (1)');
+  await page.click('text=Finish Saved parent');
+  expect(await page.eval(`document.querySelector('[aria-label="Issue title"]').value`)).toBe("Saved parent");
+  await page.click('text=Save draft');
+  await page.waitFor(`!document.querySelector('[aria-label="Issue title"]')`);
+  await page.key("c");
+  await page.click('text=Saved drafts (1)');
+  await page.click('[aria-label="Delete draft Saved parent"]');
+  expect(await page.eval(`document.querySelector('[role=dialog][aria-label="Saved drafts"]').textContent`)).toContain("No saved drafts");
+});
