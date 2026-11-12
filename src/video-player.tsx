@@ -1,5 +1,5 @@
 import { Button, IconButton } from "./button";
-import { Shortcut } from "./keycap";
+import { Keycap, Shortcut } from "./keycap";
 import { notifyMedia } from "./media-toast";
 import "./media-primitives.css";
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
@@ -69,13 +69,12 @@ export function VideoPlayer({
   const tip = (id: string, label: string, key?: string) => (
     <span id={`${tooltipId}-${id}`} role="tooltip" className="video-tooltip">
       {label}
-      {key && (
-        <Shortcut
-          keys={key === "< >" ? "<" : key}
-          alternate={key === "< >" ? ">" : undefined}
-          size="small"
-        />
-      )}
+      {key &&
+        (key === "< >" ? (
+          <Shortcut keys="<" alternate=">" size="small" />
+        ) : (
+          <Keycap size="small">{key}</Keycap>
+        ))}
     </span>
   );
   const root = useRef<HTMLDivElement>(null),
