@@ -1,7 +1,8 @@
 import { isValidElement } from "react";
 import { Toast } from "./toast";
 import { toasts } from "./toast-queue";
-import { currentKey, get } from "./store";
+import { get } from "./store";
+import { currentKey } from "./jira-sync";
 import { navigate } from "./app-navigation";
 
 /** Existing confirmations replace one another; inbox undo keeps its own slot. */

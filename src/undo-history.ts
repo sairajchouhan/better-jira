@@ -16,7 +16,8 @@ import {
   restoreSnapshots,
   snapshot,
 } from "./local-edits";
-import { currentKey, get, hasPendingWrite, send, set, touch } from "./store";
+import { get, set } from "./store";
+import { currentKey, hasPendingWrite, send, touch } from "./jira-sync";
 import { queueSave } from "./local-database";
 import { toasts } from "./toast-queue";
 

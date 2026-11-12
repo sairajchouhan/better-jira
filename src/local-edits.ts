@@ -15,7 +15,8 @@ import { JIRA_ISSUE_FIELDS, namesKey, renameIds } from "./jira-ops";
 import type { LocalChange, Snapshot } from "./local-data";
 import type { WriteResult } from "./outbox";
 import { navigate } from "./app-navigation";
-import { creatingIssue, get, hasPendingWrite, holdsCommentDelete, holdsCommentDeletes, ME, set, touch, writeTab, type Full, type Issue } from "./store";
+import { get, ME, set, type Full, type Issue } from "./store";
+import { creatingIssue, hasPendingWrite, holdsCommentDelete, holdsCommentDeletes, touch, writeTab } from "./jira-sync";
 import { queueSave } from "./local-database";
 
 const now = () => new Date().toISOString();

@@ -3,7 +3,8 @@ import "./index.css";
 import { ViewsDirectory } from "./views-navigation";
 import { useEffect, useState } from "react";
 import { ReminderPicker, ReminderDelivery } from "./reminders";
-import { load, useStore, firstKey } from "./store";
+import { load, useStore } from "./store";
+import { firstKey } from "./jira-sync";
 import {
   AddBoard,
   CreateIssue,

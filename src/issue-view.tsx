@@ -32,7 +32,8 @@ import {
 import { normalizeDocument } from "./document";
 import { imageCommentIds } from "./media-edits";
 import { Icon, PriorityIcon, RelationIcon, StatusIcon, TypeDot, hue } from "./icons";
-import { ME, actions, addIssueFiles, boardOf, get, loadFull, useStore, issueURL, isWatching, appURL, type Issue, type User, currentKey, statusOf } from "./store";
+import { ME, actions, addIssueFiles, boardOf, get, loadFull, useStore, issueURL, isWatching, appURL, type Issue, type User, statusOf } from "./store";
+import { currentKey } from "./jira-sync";
 import { flushLocalChanges } from "./local-database";
 import { isLocalIssue } from "./local-edits";
 import { navigate, ui } from "./app-navigation";

@@ -5,7 +5,8 @@
 import { createActor } from "xstate";
 import { uiMachine, inspector, type UiContext } from "./machines";
 import { MACHINE_FIELDS, screenUrl, transition, type Destination, type NavigationEvent, type Screen } from "./navigation";
-import { commit, currentKey, get, set, subscribe, type State } from "./store";
+import { commit, get, set, subscribe, type State } from "./store";
+import { currentKey } from "./jira-sync";
 import { createViewDraft, editViewDraft, updateSavedView, viewError } from "./saved-views";
 import { emptyOverlay, type SavedView, type ViewDraft } from "./saved-view-model";
 import type { FilterGroup } from "./view-model";

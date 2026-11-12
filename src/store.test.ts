@@ -753,7 +753,8 @@ test("R2-palette-shortcuts-D3: a timed action that posts its own message, such a
 });
 
 test("sync review 4: learning a new issue's Jira key keeps the edits made on both its keys", async () => {
-  const { actions, get, set, learnKeys } = await import("./store");
+  const { actions, get, set } = await import("./store");
+  const { learnKeys } = await import("./jira-sync");
   const key = actions.create("Mine")!;
   // The poll brought the issue under its Jira key before this tab learnt the move, and the user edited that copy.
   set({
@@ -958,7 +959,8 @@ test("outbox: a write Jira refuses rolls the issue back to Jira's copy and says 
 });
 
 test("outbox: an issue created here takes Jira's key, and writes queued under its app key follow it there", async () => {
-  const { actions, get, set, currentKey, firstKey } = await import("./store");
+  const { actions, get, set } = await import("./store");
+  const { currentKey, firstKey } = await import("./jira-sync");
   const { navigate } = await import("./app-navigation");
   let release!: () => void;
   const gate = new Promise<void>((resolve) => (release = resolve));

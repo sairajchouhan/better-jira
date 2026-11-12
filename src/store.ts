@@ -1,25 +1,33 @@
-import { returnRejectedComment } from "./rejected-comment";
+import {
+  cancelWrites,
+  keyMoves,
+  learnKeys,
+  restartSync,
+  resumeSync,
+  touch,
+  unsentWrites,
+} from "./jira-sync";
 import {
   addLocalFiles,
-  claimChanges,
   flushLocalChanges,
   localDataBlocked,
-  localDataOpen,
   localFiles,
   nextSeq,
   openLocalData,
   queueSave,
   storage,
-  storedChanges,
   unsavedLocalChanges,
 } from "./local-database";
-import { forgetLastEdit, loadHistory, record, rewriteHistoricIssue, rewriteHistory, savedHistory } from "./undo-history";
 import {
-  adoptJira,
+  forgetLastEdit,
+  loadHistory,
+  record,
+  rewriteHistoricIssue,
+  savedHistory,
+} from "./undo-history";
+import {
   clearLocalEdits,
   editCount,
-  forgetIssue,
-  installChanges,
   isLocalIssue,
   markChanged,
   markCreated,
@@ -28,15 +36,11 @@ import {
   needsFull,
   patchFields,
   patchIssue,
-  releaseAttachments,
-  releaseJiraFields,
-  renameIssue,
   resetLocalEdits,
   savedChanges,
-  snapshot,
   withJiraLinks,
 } from "./local-edits";
-import { rekeyNotification, showNotification } from "./app-notifications";
+import { showNotification } from "./app-notifications";
 import { assignableUsers, knownPeople, statusById, statuses } from "./board-catalog";
 import { viewSettings } from "./view-settings";
 import { navigate, startNavigation, ui } from "./app-navigation";
@@ -56,7 +60,6 @@ import {
   type Preferences,
 } from "./view-model";
 import { documentHasMedia, normalizeDocument, textToAdf, type AdfDocument } from "./document";
-import { type LocalChange } from "./local-data";
 import { createActor, fromPromise, waitFor } from "xstate";
 import { appMachine, inspector, type UiContext } from "./machines";
 import type { Screen } from "./navigation";
@@ -65,7 +68,7 @@ import { QueryClient, QueryObserver } from "@tanstack/query-core";
 import { reminderTime } from "./reminder-display";
 import { typeChoices, childTypes, canHaveChildren } from "./issue-properties";
 import { replyParent, visibleCommentTotal, type CommentState } from "./comment-thread";
-import { jiraCommentId, type ImageCrop, type MediaEdit } from "./media-edits";
+import { type ImageCrop, type MediaEdit } from "./media-edits";
 
 import {
   resourceMediaIds,
@@ -74,19 +77,7 @@ import {
   type LinkPreview,
 } from "./issue-resource";
 import { RELATION_ISSUE, recordRelation, type PropertyActivity } from "./issue-activity";
-import { createOutbox, type Answer } from "./outbox";
-import {
-  prepareOps,
-  aliasAttachments,
-  settleUploads,
-  uploadNow,
-} from "./jira-media";
-import {
-  renameCommentIds,
-  namesKey,
-  renameIds,
-  type Side,
-} from "./jira-ops";
+import { uploadNow } from "./jira-media";
 import type { PersonTab } from "./people";
 import {
   persistPreferences,
@@ -591,7 +582,7 @@ async function loadApplication() {
   if (!boards.length)
     throw new Error("The Jira mirror is still syncing your boards. Retry in a moment.");
   const { local, start: startSaving } = await openLocalData(namespace, {
-    snapshot: () => ({ changes: savedChanges(), ...savedHistory(), keys: writes.keys() }),
+    snapshot: () => ({ changes: savedChanges(), ...savedHistory(), keys: keyMoves() }),
     moved: learnKeys,
   });
   const defaults = savedDefaults();
@@ -607,17 +598,9 @@ async function loadApplication() {
   const issues = new Map(remote.map((i) => [i.key, i])),
     full = new Map<string, Full>();
   resetLocalEdits();
-  writes.reset();
-  const inJira = new Map(remote.map((i) => [i.key, i]));
-  /** Puts saved changes over Jira's copies, into `issues` and `full`; each stays with the tab that saved it. */
-  const install = (changes: LocalChange[], issues: Map<string, Issue>, full: Map<string, Full>) => {
-    for (const change of installChanges(changes, issues, full, inJira, client.writable === true))
-      writes.own(change.key, change.tab ?? "", change.created);
-  };
-  install(local.changes, issues, full);
+  restartSync(local, remote, issues, full, client.writable === true);
   // Undo covers this tab's own edits only, as Linear's per-client history does; a reload keeps them (R2-inbox-D3).
   const history = loadHistory(local);
-  writes.restoreKeys(local.keys);
   set({
     boards,
     site: client.site,
@@ -633,88 +616,7 @@ async function loadApplication() {
   });
   navigate({ board, view: preferences[board]?.display.openIn ?? "side" });
   startSaving();
-  // Saved local overrides are the durable outbox: whatever Jira hasn't taken yet is sent again.
-  // An override for an issue Jira no longer has is not re-created; only issues made here are. Deletes are never replayed.
-  // Only changes of tabs that have closed are replayed, by one tab: an open tab is still sending its own (R1-D6, R1-D7).
-  const replay = async (keys?: Set<string>, changes = local.changes) =>
-    send(
-      await Promise.all(
-        changes
-          .filter(
-            (change) =>
-              (!keys || keys.has(change.key)) &&
-              change.issue &&
-              (change.created || remote.some((i) => i.key === change.key)),
-          )
-          .map(async (change): Promise<[string, Side, Side]> => {
-            const after = snapshot(change.key),
-              known = remote.find((i) => i.key === change.key),
-              f = after.full;
-            const full = f && {
-              ...f,
-              fields: {
-                ...f.fields,
-                description: change.fullFields.includes("description")
-                  ? f.descriptionBase
-                  : f.fields.description,
-                comment: {
-                  ...f.fields.comment,
-                  comments: (f.fields.comment?.comments ?? []).filter(
-                    (c: any) => !String(c.id).startsWith("local-"),
-                  ),
-                },
-              },
-            };
-            // The mirror has no remote links: only links Jira lacks are sent again, and none are removed (R1-D1).
-            const links =
-              !change.created &&
-              change.issueFields.includes("resources") &&
-              after.issue?.resources?.some((r) => r.kind !== "document")
-                ? await jiraLinks(change.key)
-                : undefined;
-            // Only fields still owned locally differ from Jira; the rest already match, so they send nothing.
-            const remoteFields = Object.fromEntries(
-              change.issueFields.map((field) => [
-                field,
-                field === "attachments"
-                  ? aliasAttachments(change.key, known?.attachments ?? [])
-                  : field === "mediaEdits"
-                    ? jiraImageComments(after.issue?.mediaEdits)
-                    : field === "resources"
-                      ? after.issue?.resources?.filter(
-                          (r) => r.kind === "document" || !r.url || !links || links.has(r.url),
-                        )
-                      : (known as any)?.[field],
-              ]),
-            );
-            return [
-              change.key,
-              change.created
-                ? {}
-                : { issue: after.issue ? { ...after.issue, ...remoteFields } : known, full },
-              after,
-            ];
-          }),
-      ),
-    );
-  takeOverClosed =
-    state.writable && navigator.locks && localDataOpen()
-      ? () =>
-          holdTabLock().then(() =>
-            writes.claimClosed(async (claimed, changes) => {
-              // A closed tab may have saved edits after this tab read the saved data: send and show the merged copy saved
-              // now, as a takeover later on does (sync review 3-5).
-              const saved = changes.filter((c) => claimed.has(c.key)),
-                issues = new Map(state.issues),
-                full = new Map(state.full);
-              install(saved, issues, full);
-              set({ issues, full });
-              for (const key of claimed) writes.release(key);
-              await replay(claimed, saved);
-            }),
-          )
-      : undefined;
-  if (state.writable) void (takeOverClosed ? takeOverClosed() : (writes.reset(true), replay()));
+  resumeSync(local.changes);
   if (!listening) {
     listening = true;
     window.addEventListener("focus", () => {
@@ -723,7 +625,7 @@ async function loadApplication() {
     startNavigation();
     window.addEventListener("beforeunload", (event) => {
       // Jobs waiting on another tab's create are saved, and replayed by whichever tab sends that create.
-      if (unsavedLocalChanges() || writes.unsent()) {
+      if (unsavedLocalChanges() || unsentWrites()) {
         event.preventDefault();
         event.returnValue = "";
       }
@@ -831,240 +733,6 @@ export function timed(label: string, fn: () => void) {
 }
 
 const now = () => new Date().toISOString();
-export const touch = (...keys: string[]) => writes.touch(...keys);
-const tabId = crypto.randomUUID(),
-  TAB_LOCK = "better-jira-tab:";
-/** Held while this tab is open, so other tabs know its saved changes are still being sent. */
-let tabLock: Promise<void> | undefined;
-/** Claims the saved changes of closed tabs and sends them (set once loaded, on a writable site with Web Locks). */
-let takeOverClosed: (() => Promise<void>) | undefined;
-// A closing tab says goodbye, so an open tab sends what it left unsent (a create still on its way) at once, not at its
-// next load. Its lock goes with the tab: waiting for it means the claim sees the tab closed (BJ-19).
-const tabChannel =
-  typeof window !== "undefined" && typeof BroadcastChannel === "function"
-    ? new BroadcastChannel("better-jira-tabs")
-    : undefined;
-tabChannel?.addEventListener("message", ({ data }) => {
-  const takeOver = takeOverClosed;
-  if (typeof data?.closed === "string" && takeOver)
-    void navigator.locks.request(TAB_LOCK + data.closed, () => {}).then(takeOver);
-});
-if (tabChannel)
-  window.addEventListener("pagehide", (event) => {
-    if (!event.persisted) tabChannel.postMessage({ closed: tabId });
-  });
-const holdTabLock = () =>
-  (tabLock ??= new Promise((resolve) =>
-    navigator.locks.request(TAB_LOCK + tabId, () => (resolve(), new Promise(() => {}))),
-  ));
-/** The URLs of an issue's Jira remote links, or undefined if they can't be read. */
-async function jiraLinks(key: string) {
-  try {
-    const response = await fetch(`/api/issues/${encodeURIComponent(key)}`);
-    if (!response.ok) return;
-    const full: Full = await response.json();
-    return new Set((full.remotelinks ?? []).map((l) => l.url));
-  } catch {}
-}
-
-// --- Jira writes: each edit's before/after becomes ops, which the outbox sends one job at a time (see outbox.ts) ---
-const writes = createOutbox(
-  {
-    post: (key, body) =>
-      fetch(`/api/issues/${encodeURIComponent(key)}/ops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
-    prepare: prepareOps,
-    clock: {
-      now: () => Date.now(),
-      setTimeout: (fn, ms) => setTimeout(fn, ms),
-      clearTimeout: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
-    },
-    tabs: {
-      id: tabId,
-      stored: storedChanges,
-      save: () => (queueSave(), flushLocalChanges()),
-      ...(typeof navigator !== "undefined" && navigator.locks
-        ? {
-            exclusive: (fn: (live: Set<string>) => Promise<void>) =>
-              navigator.locks.request("better-jira-outbox", async () => {
-                const held = (await navigator.locks.query()).held ?? [];
-                await fn(
-                  new Set(
-                    held.flatMap((l) =>
-                      l.name?.startsWith(TAB_LOCK) ? [l.name.slice(TAB_LOCK.length)] : [],
-                    ),
-                  ),
-                );
-              }),
-          }
-        : {}),
-      claim: (live, only) => claimChanges(tabId, live, only),
-    },
-  },
-  {
-    pending: (count) => set({ pendingWrites: count }),
-    status: (perf) => set({ perf }),
-    retrying: (key, text, shown) =>
-      set({
-        perf: text,
-        ...(shown ? { writeError: { key, text, retrying: true } } : {}),
-      }),
-    uploadsOnly: releaseAttachments,
-    answered,
-    moved: (from, to) => {
-      if (state.issues.has(from)) rekey(from, to);
-    },
-    discarded: (key) => {
-      if (state.issues.has(key)) discard(key, false);
-    },
-    takeOver: (change) => {
-      set({
-        issues: new Map(state.issues).set(change.key, change.issue!),
-        ...(change.full ? { full: new Map(state.full).set(change.key, change.full) } : {}),
-      });
-      send([[change.key, {}, { issue: change.issue!, full: change.full }]]);
-    },
-  },
-);
-/** The key Jira gave an issue created here; views and closures holding the app key reach the issue through it. */
-export const currentKey = (key: string) => writes.currentKey(key);
-/** The first key an issue had in this session, so a view stays mounted when Jira assigns the real key. */
-export const firstKey = (key: string) => writes.firstKey(key);
-/** Image comments Jira already has; a replay re-sends only the rest. */
-const jiraImageComments = (edits: Issue["mediaEdits"]) =>
-  edits &&
-  Object.fromEntries(
-    Object.entries(edits).map(([id, edit]) => [
-      id,
-      { ...edit, comments: edit.comments?.filter((c) => jiraCommentId(c.id)) },
-    ]),
-  );
-export function send(changes: [string, Side, Side][]) {
-  if (!state.writable) return;
-  // A change that queued no write (nothing to send, or a redo that only cancelled a held comment delete) gets no answer
-  // for adopt() to settle, so its Jira fields would stay pinned over every refresh: Jira's copy owns them again (R2-comments-D1).
-  for (const key of writes.queue(changes, state.issues))
-    if (releaseJiraFields(key)) {
-      touch(key);
-      queueSave();
-    }
-  writes.flush();
-}
-/** Applies Jira's answer to a write: new keys and comment ids, Jira's copy (or a rollback), and what to tell the user. */
-function answered({ key: sent, ops, result, created, refused, describes }: Answer) {
-  if (created.has(sent)) rekey(sent, created.get(sent)!);
-  // A deleted issue (full null) takes its upload slots with it.
-  if (result.full !== undefined && result.key) settleUploads(result.key, result.full);
-  // New comment ids too, so undo and redo address the comment Jira now has.
-  const comments = new Map([...created].filter(([from]) => from !== sent));
-  if (comments.size) {
-    rewriteHistory((edits) => renameCommentIds(edits, comments));
-    // An image thread keeps its place on the image under the Jira comment id.
-    const key = result.key ?? sent,
-      issue = state.issues.get(key);
-    if (issue?.mediaEdits) {
-      set({
-        issues: new Map(state.issues).set(key, {
-          ...issue,
-          mediaEdits: renameCommentIds(issue.mediaEdits, comments),
-        }),
-      });
-      touch(key);
-      queueSave();
-    }
-  }
-  // A rejected link or parent naming an issue created here leaves that issue in Jira on its own: say which.
-  const orphans =
-    ops[0]?.op === "create"
-      ? []
-      : [...new Set(Object.values(writes.keys()))].filter((created) =>
-          JSON.stringify(ops).includes(`"${created}"`),
-        );
-  if (result.error)
-    showNotification({
-      text: `Jira did not save the change to ${result.key ?? sent}`,
-      detail: `${result.error}${orphans.length ? ` ${orphans.join(", ")} was created in Jira, but not linked.` : ""}`,
-    });
-  // A comment Jira refused goes back into its composer, so the text is never lost (R2-comments-D4).
-  if (result.error)
-    for (const op of ops)
-      if (op.op === "comment" && !created.has(op.ref))
-        returnRejectedComment({ key: result.key ?? sent, parentId: op.parentId, body: op.body });
-  adoptJira(result.key ?? sent, result, !!result.error, created, describes);
-  for (const other of result.others ?? [])
-    adoptJira(other.key, { issue: other, error: result.error }, false, created);
-  if (refused) discard(sent);
-  const key = result.key ?? sent;
-  set({
-    pendingWrites: writes.pending(),
-    ...(result.error
-      ? { writeError: { key, text: result.error } }
-      : state.writeError?.key === key
-        ? { writeError: null }
-        : {}),
-  });
-}
-/** Drops an issue made here that Jira refused to create, so no ghost stays or is created again after reload (R1-D24). */
-function discard(key: string, reopen = true) {
-  const issue = state.issues.get(key),
-    description = state.full.get(key)?.fields.description;
-  const issues = new Map(state.issues),
-    full = new Map(state.full);
-  issues.delete(key);
-  full.delete(key);
-  forgetIssue(key);
-  touch(key);
-  set({ issues, full });
-  if (state.selected === key) navigate({ selected: null, panel: false });
-  queueSave();
-  // The composer comes back with what was typed, so a create Jira refuses loses nothing (R2-comments-D3).
-  if (reopen && issue && !state.overlay)
-    beginCreate({
-      title: issue.summary,
-      descriptionDoc: description,
-      attachments: issue.attachments,
-      status: issue.status,
-      type: issue.type,
-      priority: issue.priority,
-      assignee: issue.assignee,
-      labels: issue.labels,
-      parent: issue.parent,
-      project: issue.project,
-      due: issue.due,
-      milestones: issue.milestones,
-    });
-}
-export const dismissWriteError = () => set({ writeError: null });
-/** A new issue's app key becomes Jira's key everywhere: issues, references, undo history and queued writes. */
-function rekey(from: string, to: string) {
-  const ids = new Map([[from, to]]),
-    mentions = (v: unknown) => namesKey(v, from);
-  const { issues, full } = renameIssue(from, to);
-  touch(from, to);
-  const label = new RegExp(`${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\d)`, "g");
-  rewriteHistory((edits) =>
-    edits.map((edit) =>
-      mentions(edit) ? { ...renameIds(edit, ids), label: edit.label.replace(label, to) } : edit,
-    ),
-  );
-  writes.rename(from, to);
-  set({ issues, full });
-  // Saved at once: other tabs wait for this move to send their edits of the issue (sync check 7).
-  queueSave();
-  rekeyNotification(from, to);
-  if (state.selected === from) navigate({ selected: to });
-}
-/** Takes up key moves another tab saved for issues it created (app key → Jira key). Returns whether any was new. */
-export const learnKeys = (keys?: Record<string, string>) => writes.learnKeys(keys);
-export const pendingJiraWrites = () => writes.pending();
-export const hasPendingWrite = (key: string) => writes.has(key);
-export const holdsCommentDelete = (id: string) => writes.holdsDelete(id);
-export const holdsCommentDeletes = () => writes.holdsDeletes();
-export const creatingIssue = () => writes.creating();
-export const writeTab = (key: string) => writes.tab(key);
 export async function retryLocalStorage() {
   if (localDataBlocked()) {
     app.send({ type: "reload" });
@@ -1371,7 +1039,7 @@ export const actions = {
         return;
       }
       // Jira already has this version: queued edits are dropped and nothing is written (R2-D3).
-      writes.cancel(key);
+      cancelWrites(key);
       record(
         key,
         `restore Jira version of ${key}`,
