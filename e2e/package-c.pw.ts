@@ -45,3 +45,12 @@ test("BJ-48: remove a pending relation before creating", async ({ open }) => {
   await page.click('[aria-label="Remove pending relation"]');
   expect(await page.eval(`!!document.querySelector('[data-pending-relation]')`)).toBe(false);
 });
+
+test("BJ-60: choose another board inside the composer", async ({ open }) => {
+  const setup = `const read=fetch;window.fetch=async(...args)=>{const r=await read(...args);if(new URL(String(args[0]),location.href).pathname!=="/api/boards")return r;const boards=await r.json();boards.push({id:2,name:"Other board",columns:[{name:"Open",statuses:[{id:"other-open",name:"Open",category:"new"}]}]});return Response.json(boards)}`;
+  const page = await open("", { setup });
+  await page.key("c");
+  await page.page.getByRole("button", { name: /^Board:/ }).click();
+  await page.click('[cmdk-item][data-value="Other board"]');
+  expect(await page.eval(`!!document.querySelector('[aria-label="Status: Open"]')`)).toBe(true);
+});

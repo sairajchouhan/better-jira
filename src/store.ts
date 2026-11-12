@@ -161,6 +161,7 @@ export type Overlay =
 export type IssueDraft = Partial<
   Pick<
     Issue,
+    | "board"
     | "status"
     | "assignee"
     | "priority"
@@ -2689,7 +2690,7 @@ export const actions = {
     // The submit itself is guarded, not just its button: one submission makes one issue (comments smoke F1).
     const made = draft.submission && submissions.get(draft.submission);
     if (made) return made;
-    const board = state.boards.find((b) => b.id === state.board);
+    const board = state.boards.find((b) => b.id === (draft.board ?? state.board));
     const status = statusById(board, draft.status) ?? statuses(board)[0];
     if (!board || !status || !summary.trim()) return;
     const prefix =

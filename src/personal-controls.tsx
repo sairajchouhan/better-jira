@@ -81,10 +81,12 @@ import { kept, post, useCommand } from "./commands";
 /** Linear keeps an unsent title and description when the composer closes; the next C brings them back. */
 const unsent = { title: "", description: normalizeDocument("") };
 export function CreateIssue() {
-  const board = useStore((s) => s.boards.find((b) => b.id === s.board))!;
+  const boards = useStore(s => s.boards);
+  const currentBoard = useStore(s => s.board);
   const all = useStore((s) => s.issues);
   const initial = useStore((s) => s.draft);
   const [draft, setDraft] = useState<IssueDraft>(initial);
+  const board = boards.find(b => b.id === (draft.board ?? currentBoard))!;
   const [title, setTitle] = useState(initial.title ?? unsent.title);
   const [description, setDescription] = useState(() =>
     normalizeDocument(initial.descriptionDoc ?? unsent.description),
@@ -204,7 +206,7 @@ export function CreateIssue() {
       >
         <Dialog.Header className="mb-3">
           <Text variant="mini" color="muted" wrap="truncate" className="flex-1">
-            {board.name} ›{" "}
+            <PropertyPill label="Board" current={board.name} menu={ComposerBoardMenu} menuProps={{ boards, value: board.id, onChange: (board: number) => setDraft({ board }) }} /> ›{" "}
             {initial.parent ? `Sub-issue of ${initial.parent}` : "New issue"}
           </Text>
           <IconButton
@@ -1328,4 +1330,8 @@ export function AddBoard() {
       </form>
     </Dialog>
   );
+}
+
+function ComposerBoardMenu({ boards, value, onChange, anchor, close }: { boards: Board[]; value: number; onChange: (board: number) => void; anchor: HTMLElement | null; close: () => void }) {
+ return <Modal label="Choose board" anchor={anchor} close={close} fit><Menu><Menu.Input autoFocus aria-label="Choose board" /><Menu.List>{boards.map(board => <Menu.Item key={board.id} value={board.name} checked={board.id === value} onSelect={() => { onChange(board.id); close(); }}>{board.name}</Menu.Item>)}</Menu.List></Menu></Modal>;
 }
