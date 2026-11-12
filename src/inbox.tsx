@@ -699,7 +699,10 @@ export function InboxList() {
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Reobserve the load sentinel after a page appends rows.
   }, [hasNextPage, isFetchingNextPage, pages, fetchNextPage]);
   const filtered = hasFilters(v) || v.unreadOnly;
-  const overlay = useStore((s) => s.overlay);
+  // Boolean selectors: another overlay opening elsewhere must not re-render the list.
+  const actionsOpen = useStore((s) => s.overlay === "inbox-actions"),
+    filterOpen = useStore((s) => s.overlay === "inbox-filter"),
+    displayOpen = useStore((s) => s.overlay === "inbox-display");
   return (
     <section
       aria-label="Inbox"
@@ -712,7 +715,7 @@ export function InboxList() {
         <IconButton
           id="inbox-actions"
           label="Notification actions"
-          aria-expanded={overlay === "inbox-actions"}
+          aria-expanded={actionsOpen}
           onClick={() =>
             ui.send({ type: "overlay.open", overlay: "inbox-actions" })
           }
@@ -747,7 +750,7 @@ export function InboxList() {
           label="Add filter"
           tooltip="Filter"
           shortcut={shortcutLabel("filter")}
-          aria-expanded={overlay === "inbox-filter"}
+          aria-expanded={filterOpen}
           aria-pressed={hasFilters(v)}
           onClick={() =>
             ui.send({ type: "overlay.open", overlay: "inbox-filter" })
@@ -758,7 +761,7 @@ export function InboxList() {
         <IconButton
           id="inbox-display"
           label="Display options"
-          aria-expanded={overlay === "inbox-display"}
+          aria-expanded={displayOpen}
           onClick={() =>
             ui.send({ type: "overlay.open", overlay: "inbox-display" })
           }
