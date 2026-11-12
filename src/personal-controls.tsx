@@ -12,7 +12,7 @@ import { createSubIssue, issueMenuEntries } from "./issue-menu";
 import { SubIssues, statusOf } from "./sub-issues";
 import { attachmentSplit } from "./issue-attachments";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Adf } from "./adf";
 import { FramedEditor } from "./rich-editor-loader";
 import { MediaView } from "./media-loader";
@@ -73,7 +73,7 @@ import {
 export { MenuSurface as Modal } from "./menu-surface";
 import { MenuSurface as Modal, issueAnchor } from "./menu-surface";
 import { IssueResources, ResourceForm } from "./issue-resources";
-import { ReactionPicker, shortcode } from "./reactions";
+import { ReactionPicker, ReactionPill } from "./reactions";
 import { PropertyPill } from "./pill-select";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { kept, post, useCommand } from "./commands";
@@ -827,7 +827,8 @@ export function Attachments({
   onChange: (files: NonNullable<Issue["attachments"]>) => void;
   onBusy?: (busy: boolean) => void;
 }) {
-  const file = useRef<HTMLInputElement>(null);
+  const file = useRef<HTMLInputElement>(null),
+    attach = useRef<HTMLButtonElement>(null);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   return (
@@ -862,6 +863,7 @@ export function Attachments({
         }}
       />
       <Button
+        ref={attach}
         type="button"
         disabled={busy}
         aria-label="Attach images, files, or videos"
@@ -876,20 +878,22 @@ export function Attachments({
           {error}
         </p>
       )}
-      <AttachmentList attachments={attachments} onChange={onChange} />
+      <AttachmentList attachments={attachments} onChange={onChange} attachButton={attach} />
     </Text>
   );
 }
 
-/** Attached files, each with a remove button that returns focus to the nearest attach button. */
+/** Attached files, each with a remove button that returns focus to the owner's attach button. */
 function AttachmentList({
   attachments,
   onChange,
   issueKey,
+  attachButton,
 }: {
   attachments: NonNullable<Issue["attachments"]>;
   onChange: (files: NonNullable<Issue["attachments"]>) => void;
   issueKey?: string;
+  attachButton: RefObject<HTMLButtonElement | null>;
 }) {
   return attachments.map((a) => (
     <div key={a.id} className="relative mt-2">
@@ -901,17 +905,10 @@ function AttachmentList({
       <IconButton
         type="button"
         label={`Remove attachment ${a.name}`}
-        onClick={(e) => {
-          const scope = e.currentTarget.closest('[role="dialog"]') ?? document;
+        onClick={() => {
           onChange(attachments.filter((f) => f.id !== a.id));
           // Focus returns to the attach button, as after removing a resource, not to <body>.
-          requestAnimationFrame(() =>
-            scope
-              .querySelector<HTMLElement>(
-                '[aria-label="Attach images, files, or videos"]',
-              )
-              ?.focus(),
-          );
+          requestAnimationFrame(() => attachButton.current?.focus());
         }}
         variant="borderless"
         size="medium"
@@ -934,40 +931,28 @@ export function PersonalIssueDetails({ issue }: { issue: Issue }) {
         : [...(issue.reactions ?? []), emoji],
     });
   const full = useStore((s) => s.full.get(issue.key));
+  const attach = useRef<HTMLButtonElement>(null);
   const { visible, embedded } = attachmentSplit(issue, full?.fields);
   return (
     <Text className="mt-5 space-y-3" as="div" variant="mini" color="inherit">
       {/* Linear (RAJ-52): 26px below the last paragraph, 6px left of the text and 16px above the sub-issues header, reaction pills 8px apart, then the round add-reaction and attach buttons. */}
-      {/* Reaction pills and circular actions retain their bundle geometry; the contract has no matching variants. */}
+      {/* The pills keep Linear's chip geometry; add and attach are Jx (borderless/medium IconButton), 28px round. */}
       <div data-reactions className="-ml-1.5 flex flex-wrap items-center">
         <div className="flex flex-wrap items-center gap-2 empty:hidden [&:not(:empty)]:mr-2">
           {issue.reactions?.map((emoji) => (
-            <button
-              key={emoji}
-              aria-label={`Remove ${emoji} reaction`}
-              aria-pressed="true"
-              title={`You reacted with :${shortcode(emoji)}:`}
-              onClick={() => toggleReaction(emoji)}
-              className="reaction-pill"
-            >
-              <span>{emoji}</span>
-              <span>1</span>
-            </button>
+            <ReactionPill key={emoji} emoji={emoji} onRemove={() => toggleReaction(emoji)} />
           ))}
         </div>
-        <button
-          aria-label="Add reaction"
-          title="Add reaction"
+        <IconButton
+          label="Add reaction"
+          aria-expanded={!!reactionAnchor}
           onClick={(e) => setReactionAnchor(e.currentTarget)}
-          className="round-action"
         >
           <Icon name="smile" size={14} />
-        </button>
-        <button
-          type="button"
-          aria-label="Attach images, files, or videos"
-          title="Attach images, files, or videos"
-          className="round-action"
+        </IconButton>
+        <IconButton
+          ref={attach}
+          label="Attach images, files, or videos"
           onClick={() =>
             document
               .getElementById("description")
@@ -977,7 +962,7 @@ export function PersonalIssueDetails({ issue }: { issue: Issue }) {
           }
         >
           <Icon name="paperclip" size={14} />
-        </button>
+        </IconButton>
       </div>
       {reactionAnchor && (
         <ReactionPicker
@@ -990,6 +975,7 @@ export function PersonalIssueDetails({ issue }: { issue: Issue }) {
       <Text className="mt-3" as="div" variant="mini" color="inherit">
         <AttachmentList
           issueKey={issue.key}
+          attachButton={attach}
           attachments={visible}
           onChange={(attachments) =>
             actions.patch(issue.key, {

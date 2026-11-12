@@ -11,7 +11,7 @@ import { IconButton } from "./button";
 import { ConfirmDialog } from "./dialog";
 import { Text } from "./text";
 import { ActionMenu, type ActionEntry } from "./action-menu";
-import { ReactionPicker, shortcode } from "./reactions";
+import { ReactionPicker, ReactionPill } from "./reactions";
 import { FramedEditor, CommentComposer } from "./rich-editor-loader";
 import {
   ME,
@@ -457,21 +457,10 @@ function Thread({
             <Adf node={comment.body} issueKey={issue.key} attachments={issue.attachments} />
           )}
         </div>
-        {/* Reaction pills are Linear's own emoji-count chip; no primitive draws them. */}
         {!!reactions.length && (
           <div className="mt-2 flex gap-2">
             {reactions.map((emoji) => (
-              <button
-                key={emoji}
-                aria-label={`Remove ${emoji} reaction`}
-                aria-pressed="true"
-                title={`You reacted with :${shortcode(emoji)}:`}
-                onClick={() => toggleReaction(comment.id, emoji)}
-                className="reaction-pill"
-              >
-                <span>{emoji}</span>
-                <span>1</span>
-              </button>
+              <ReactionPill key={emoji} emoji={emoji} onRemove={() => toggleReaction(comment.id, emoji)} />
             ))}
           </div>
         )}

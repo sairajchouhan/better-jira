@@ -131,6 +131,23 @@ function tint(emoji: string) {
   }
   return tints.get(emoji)!;
 }
+/** Your reaction: Linear's emoji-count chip (no primitive draws it; geometry in index.css `.reaction-pill`). Clicking removes it. */
+export function ReactionPill({ emoji, onRemove }: { emoji: string; onRemove: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={`Remove ${emoji} reaction`}
+      aria-pressed="true"
+      title={`You reacted with :${shortcode(emoji)}:`}
+      onClick={onRemove}
+      className="reaction-pill"
+    >
+      <span>{emoji}</span>
+      <span>1</span>
+    </button>
+  );
+}
+
 /** Linear's reaction picker (RAJ-52): 274px, right-aligned 3.6px under its button, a padded search field that keeps focus while the arrows move through 9 columns of 28px cells. */
 export function ReactionPicker({
   anchor,
