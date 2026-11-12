@@ -1,3 +1,4 @@
+import { IssueHoverCard } from "./issue-hover-card";
 /**
  * One property row's words and icon, in Linear's wording (its issue-history chunk `IssueCommentsAndHistory`, read 2026-11-12):
  * the entry builders `ws` (status), `Es` (priority), `Os` (assignee), `ks` (title), `As`/`js` (labels), `tc` (estimate),
@@ -61,7 +62,7 @@ const RELATION_REMOVED: Record<string, string> = {
 
 function RelationTarget({ relation }: { relation: Relation }) {
   const target = get().issues.get(relation.key);
-  return target ? (
+  return <IssueHoverCard relation={relation} issue={target}>{target ? (
     <AppLink to={related(target)} className="hover:text-fg">
       <b className="font-medium">{relation.key}</b> {target.summary}
     </AppLink>
@@ -70,7 +71,7 @@ function RelationTarget({ relation }: { relation: Relation }) {
       <b className="font-medium">{relation.key}</b>
       {relation.issue && ` ${relation.issue.summary}`}
     </>
-  );
+  )}</IssueHoverCard>;
 }
 
 /** Jira's remote link text, 'This work item links to "Wiki Page (Confluence)"', as its title. */

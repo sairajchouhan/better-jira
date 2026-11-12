@@ -296,3 +296,23 @@ test("BJ-15: linked issues outside the board show their status and title, and ev
       .toContainEqual({ op: "link", target: "OTHER-42", kind: "inward:Problem/Incident", remove: true });
   });
 });
+
+test("BJ-195: related issue hover cards and external Copy link", async ({ open }) => {
+  await fixture.reset({ crossLinks: true });
+  const p = await open("?issue=TEST-1&view=page");
+  const related = '[data-relation="related:OTHER-41"] a';
+  await p.waitFor(`!!document.querySelector('${related}')`);
+  await p.hover(related);
+  await p.waitFor(`!!document.querySelector('[data-issue-hover="OTHER-41"]')`);
+  expect(await p.eval(`document.querySelector('[data-issue-hover="OTHER-41"]').textContent`)).toContain("In Review");
+  const card = await p.page.locator('[data-issue-hover="OTHER-41"]').boundingBox();
+  const pill = await p.page.locator(related).boundingBox();
+  expect(card!.x + card!.width).toBeLessThanOrEqual(pill!.x);
+  await p.page.mouse.move(1, 1);
+  await p.waitFor(`!document.querySelector('[data-issue-hover="OTHER-41"]')`);
+  await p.context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await p.page.locator(related).click({ button: "right" });
+  await p.click('[cmdk-item][data-value="Copy link"]');
+  await p.waitFor(`document.body.textContent.includes('Copied URL')`);
+  expect(await p.eval(`navigator.clipboard.readText()`)).toBe("https://example.atlassian.net/browse/OTHER-41");
+});

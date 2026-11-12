@@ -180,6 +180,7 @@ export function issueCopy(
 /** Copies one projection of the issue and says so in the status bar. "everything as Markdown" loads the comments
  *  first. `url` is the issue's link unless the caller has a better one (an inbox notification's). */
 export async function copyIssue(kind: CopyKind, issue: Issue, url = issueURL(issue)) {
+  if (kind === "URL") return copyIssueLink(url);
   try {
     if (kind === "everything as Markdown" && !get().full.has(issue.key) && !isLocalIssue(issue.key)) {
       await loadFull(issue.key);
@@ -190,6 +191,16 @@ export async function copyIssue(kind: CopyKind, issue: Issue, url = issueURL(iss
       issueCopy(kind, issue, get().full.get(issue.key), url, status, ME.name),
     );
     set({ perf: `Copied ${kind}` });
+  } catch {
+    set({ perf: "Could not access the clipboard" });
+  }
+}
+
+/** The same URL clipboard feedback for mirrored and cross-project relation rows. */
+export async function copyIssueLink(url: string) {
+  try {
+    await navigator.clipboard.writeText(url);
+    set({ perf: "Copied URL" });
   } catch {
     set({ perf: "Could not access the clipboard" });
   }

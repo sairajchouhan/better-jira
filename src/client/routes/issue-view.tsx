@@ -1,3 +1,4 @@
+import { IssueHoverCard } from "@/client/features/issue/issue-hover-card";
 import { ActivityPropertyRow } from "@/client/features/issue/activity-entry";
 import { fullTime } from "@/client/features/issue/issue-dates";
 import { type Issue, type User } from "@/shared/issue-model";
@@ -60,7 +61,7 @@ import { shortDate } from "@/client/lib/due-date";
 import { BoardBreadcrumbs } from "@/client/features/navigation/app-chrome";
 import { Button, IconButton } from "@/client/components/button";
 import { ContextMenu, type ActionEntry } from "@/client/components/action-menu";
-import { copyIssue } from "@/client/features/issue/issue-copy";
+import { copyIssue, copyIssueLink } from "@/client/features/issue/issue-copy";
 import { PropertyTrigger } from "@/client/components/property-trigger";
 import { LabelChip } from "@/client/components/label-chip";
 import { Text } from "@/client/components/text";
@@ -341,12 +342,11 @@ function RelationRow({ issueKey, relation }: { issueKey: string; relation: Relat
       },
       { name: "Remove relation", icon: "close", run: remove },
     ];
-    if (related)
-      items.push({
+    items.push({
         name: "Copy link",
         icon: "link",
         divider: true,
-        run: () => void copyIssue("URL", related),
+        run: () => void (related ? copyIssue("URL", related) : copyIssueLink(jiraIssueURL(relatedKey))),
       });
     return items;
   };
@@ -378,24 +378,23 @@ function RelatedIssue({ relation }: { relation: Relation }) {
   if (target) {
     const status = statusOf(target);
     return (
-      <AppLink to={related(target)} className="relation-pill">
+      <IssueHoverCard relation={relation} issue={target}><AppLink to={related(target)} className="relation-pill">
         <span>{status && <StatusIcon status={status} />}</span>
         <span className="truncate">{target.summary}</span>
-      </AppLink>
+      </AppLink></IssueHoverCard>
     );
   }
   const linked = relation.issue;
   return (
-    <a
+    <IssueHoverCard relation={relation}><a
       href={jiraIssueURL(relation.key)}
       target="_blank"
       rel="noreferrer"
       className="relation-pill"
-      title={linked ? `${relation.key} ${linked.summary}` : relation.key}
     >
       <span>{linked?.status && <StatusIcon status={linked.status} />}</span>
       <span className="truncate">{linked?.summary ?? relation.key}</span>
-    </a>
+    </a></IssueHoverCard>
   );
 }
 type PropertyOverlay =
