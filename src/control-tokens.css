@@ -10,17 +10,21 @@
   --thin-pixel: 0.5px; /* wi.thinPixel */
   --control-secondary-hover: lch(95.883% 0.157 282); /* controlSecondaryHover */
   --control-primary-hover: lch(47% 50.26 286.91); /* controlPrimaryHover */
-  --control-primary-label: #fff; /* controlPrimaryLabel */
+  --control-primary-label: lch(100% 5 286.91); /* controlPrimaryLabel = h(accent, {}, {c: 5}): getTextColor keeps the accent hue */
   --border-alpha-thin: lch(0 0 0 / 0.09); /* bgBorderAlphaThin */
   --border-solid-alpha-thin: lch(0 0 0 / 0.511); /* bgBorderSolidAlphaThin */
   --red-base: lch(58% 73 29); /* redBase */
   --red-base-hover: lch(53% 73 29); /* redBaseHover */
-  --red-text: lch(50% 80 29); /* redText */
+  --red-text: lch(50% 80 29); /* redText = h(redBase, {}, {l: 50, c: 80}): getTextColor keeps redBase's hue 29 */
   --red-tint: color-mix(in lch, var(--red-base) 20%, var(--panel)); /* redTint over bgBase */
+  --border-solid-thin: lch(84.44% 0 282); /* bgBorderSolidThin (retina): the input border */
+  --border-solid-highlight: lch(76.44% 0 282); /* highlightVariant(bgBorderSolid): ghost button border, input hover border */
+  --elevated-border-thin: lch(91.9% 0 282); /* elevatedTheme().bgBorderThin: the segmented indicator's ring */
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
+    --control-primary-label: lch(100% 5 288.421);
     --control-secondary-hover: lch(14.778% 1.075 272);
     --control-primary-hover: lch(52.418% 61.103 288.421);
     --border-alpha-thin: lch(100 0 0 / 0.137);
@@ -28,5 +32,8 @@
     --red-base-hover: lch(62.5% 73 29);
     --red-text: lch(80% 80 29);
     --red-tint: color-mix(in lch, var(--red-base) 3%, var(--panel));
+    --border-solid-thin: lch(27.12% 1.48 272);
+    --border-solid-highlight: lch(24.32% 6.48 272);
+    --elevated-border-thin: lch(22.193% 1.93 272);
   }
 }

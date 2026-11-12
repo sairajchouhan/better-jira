@@ -31,10 +31,11 @@
   .ui-segment:not([data-active]):is(:hover, :active):not(:disabled) {
     color: var(--fg-2);
   }
-  /* The selected segment wears $Tr.indicator: the opposite tertiary fill plus a thin ring and low shadow. */
+  /* The selected segment wears $Tr.indicator: the opposite tertiary fill plus J4.List's ring, `0 0 0 thinPixel
+     elevated.bgBorderThin, elevated.shadowLow` (the elevated shadowLow equals the base one at these contrasts). */
   .ui-segment[data-active] {
     background: var(--tab);
-    box-shadow: 0 0 0 var(--thin-pixel) var(--frame), var(--frame-shadow);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--elevated-border-thin), var(--frame-shadow);
     color: var(--fg-2);
   }
   .ui-segment:disabled {

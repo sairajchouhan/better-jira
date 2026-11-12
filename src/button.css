@@ -117,8 +117,9 @@
     color: var(--fg);
   }
 
+  /* Nv.ghostBorder(highlightVariant(bgBorderSolid)) on UEe.ghost's 1px dashed border. */
   .ui-button[data-variant="ghost"] {
-    border: 1px dashed var(--line-3);
+    border: 1px dashed var(--border-solid-highlight);
     background: transparent;
     color: var(--fg-2);
   }
@@ -206,6 +207,6 @@
     box-shadow: 0 0 0 var(--thin-pixel) var(--border-alpha-thin), var(--frame-shadow);
   }
   .ui-button-group[data-variant="ghost"] {
-    border: 1px dashed var(--line-3);
+    border: 1px dashed var(--border-solid-highlight);
   }
 }
