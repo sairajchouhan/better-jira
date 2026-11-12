@@ -47,7 +47,7 @@ export const codeDisplay = {
   },
   subscribe: (listener: () => void) => (displayListeners.add(listener), () => void displayListeners.delete(listener)),
 };
-const useCodeDisplay = () => useSyncExternalStore(codeDisplay.subscribe, codeDisplay.get);
+const useCodeDisplay = () => useSyncExternalStore(codeDisplay.subscribe, codeDisplay.get, codeDisplay.get);
 
 /** The data attributes Linear's CSS keys a code block's look on. */
 export function codeBlockAttributes(lines: number, collapsed: boolean, view: CodeDisplay) {
@@ -154,7 +154,7 @@ export function CodeBlockControls({
   const keep = (event: { preventDefault: () => void }) => event.preventDefault();
   return (
     <>
-      <div className="cb-copy" role="toolbar" aria-label="Code block actions" data-popover-open={menu ? "true" : undefined} onMouseDown={keep}>
+      <div className="cb-copy" role="group" aria-label="Code block actions" data-popover-open={menu ? "true" : undefined} onMouseDown={keep}>
         {collapsible && !collapsed && (
           <IconButton label="Collapse" size="small" onClick={() => setCollapsed(true)}>
             <Icon name="up" />
@@ -187,7 +187,7 @@ export function CodeBlockControls({
           <Icon name="copy" />
         </IconButton>
         {remove && (
-          <IconButton label="Delete" size="small" onClick={remove}>
+          <IconButton label="Delete code block" size="small" onClick={remove}>
             <Icon name="trash" />
           </IconButton>
         )}
@@ -251,7 +251,7 @@ function tokenized(text: string, tokens: CodeToken[]): ReactNode[] {
 
 /** A Jira codeBlock in the read-only view, looking as it does in the editor. */
 export function ReadonlyCodeBlock({ text, language }: { text: string; language: string | null }) {
-  useSyncExternalStore(onHighlighter, highlighterVersion);
+  useSyncExternalStore(onHighlighter, highlighterVersion, highlighterVersion);
   const view = useCodeDisplay(),
     lines = lineStarts(text).length,
     [collapsed, setCollapsed] = useState(() => lines >= COLLAPSE_LINES),

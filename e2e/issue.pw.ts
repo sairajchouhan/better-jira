@@ -20,7 +20,7 @@ test("issue page editing: description autosave, code block Tab, toolbar rows, co
     await page.key("End");
     await page.key("Tab");
     expect(await page.eval(`document.activeElement?.id`)).toBe("description");
-    expect(await page.eval(`document.querySelector("#description pre").textContent`)).toBe(
+    expect(await page.eval(`document.querySelector("#description pre code").textContent`)).toBe(
       "const answer = 42;  ",
     );
   });

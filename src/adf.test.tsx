@@ -55,3 +55,18 @@ test("Jira mentions render as mention chips", () => {
   );
   expect(html).toContain('<span class="mention-chip" data-mention-id="acc-1">@Priya</span>');
 });
+
+test("BJ-178: a read-only code block renders like the editor's: numbered, labelled, collapsed past 30 lines", () => {
+  const block = (text: string, language?: string) =>
+    renderToStaticMarkup(
+      <Adf node={doc({ type: "codeBlock", ...(language ? { attrs: { language } } : {}), content: [{ type: "text", text }] })} />,
+    );
+  const short = block("a\nb", "go");
+  expect(short).toContain('<pre class="code-block">');
+  expect(short).toContain('<div class="cb-gutter" aria-hidden="true"><div>1</div><div>2</div></div>');
+  expect(short).toContain("Golang");
+  expect(short).not.toContain('aria-label="Delete code block"');
+  const long = block(Array.from({ length: 30 }, (_, i) => `line ${i}`).join("\n"));
+  expect(long).toContain('data-collapsed="true"');
+  expect(long).toContain("Expand (30 lines)");
+});
