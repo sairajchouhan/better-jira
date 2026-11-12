@@ -59,7 +59,7 @@ function MediaFile({ node, issueKey, attachments, onSelect }: MediaProps) {
       requestAnimationFrame(() =>
         document.getElementById(anchor)?.scrollIntoView({ block: "center" }),
       );
-  }, [id, issueKey, externalURL]);
+  }, [id, externalURL]);
   const local = useMemo(
     () =>
       externalURL
