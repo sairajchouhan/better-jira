@@ -4,6 +4,7 @@ import { useHotkeys, useHotkey } from "@tanstack/react-hotkeys";
 import { adfToText } from "./adf";
 import { discardLateMedia, documentHasMedia, lateMediaDiscarded } from "./document";
 import { Button, IconButton, SendButton } from "./button";
+import { chordKeys } from "./keycap";
 import { TextInput } from "./field";
 import { Icon } from "./icons";
 import { Text } from "./text";
@@ -685,7 +686,7 @@ export function RichEditor(props: EditorEngineProps) {
         <div className="rich-editor-actions flex items-center justify-end gap-2 border-t border-line-2 p-2 text-[12px]">
           {presentation.variant === "comment" && formatting}
           {presentation.variant !== "comment" && (
-            <span className="rich-editor-hint mr-auto text-fg-3">{props.hint ?? "⌘↵ save · Esc cancel"}</span>
+            <span className="rich-editor-hint mr-auto text-fg-3">{props.hint ?? `${chordKeys("Mod+Enter").join("")} save · Esc cancel`}</span>
           )}
           {/* Linear's edit actions: a medium link Cancel beside a medium Save (Comment.*.js). */}
           {props.onCancel && (
