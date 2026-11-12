@@ -2,6 +2,7 @@ import { FloatingTree } from "@floating-ui/react";
 import { useRef, useState, type RefObject } from "react";
 import { Icon, type IconName } from "./icons";
 import { Menu } from "./menu";
+import { Keycap } from "./keycap";
 import { MenuSurface, MENU_POPUP } from "./menu-surface";
 
 /** `divider` starts a new group, drawn as a separator above the entry while the menu is unfiltered. */
@@ -124,7 +125,7 @@ function Level({
               value={entry.name}
               label={<Label name={entry.name} />}
               icon={entry.icon && <Icon name={entry.icon} size={16} />}
-              hint={entry.shortcut}
+              hint={entry.shortcut && <ActionHint hint={entry.shortcut} />}
               open={open === entry.name}
               onOpenChange={(next) =>
                 setOpen((cur) => (next ? entry.name : cur === entry.name ? null : cur))
@@ -145,7 +146,7 @@ function Level({
               value={entry.name}
               icon={entry.icon && <Icon name={entry.icon} size={16} />}
               checked={entry.selected}
-              hint={entry.shortcut}
+              hint={entry.shortcut && <ActionHint hint={entry.shortcut} />}
               onSelect={() => {
                 close();
                 entry.run?.();
@@ -173,4 +174,13 @@ function Label({ name }: { name: string }) {
       {last}
     </>
   );
+}
+
+/** The legacy shortcut slot also carries dates and counts; only keyboard hints get caps. */
+function ActionHint({ hint }: { hint: string }) {
+  const chords = hint.split(/ (?:then|or) /);
+  const keyboard = chords.every((chord) =>
+    /^(?:(?:Ctrl|Control|Alt|Shift|Meta|⌘|⌥|⇧|⌃)[+ ]*)*(?:[A-Z0-9]|[^\w\s]|Esc|Enter|Tab|Space|Backspace|Delete)$/.test(chord),
+  );
+  return keyboard ? <Keycap size="small" type="borderless">{hint}</Keycap> : hint;
 }

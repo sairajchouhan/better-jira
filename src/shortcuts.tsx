@@ -42,7 +42,11 @@ import {
 import { copyIssue, type CopyKind } from "./issue-copy";
 import { editorBindings } from "./editor-bindings";
 import { ActionMenu } from "./action-menu";
-import { MenuSurface } from "./menu-surface";
+import { Dialog } from "./dialog";
+import { Field, TextInput } from "./field";
+import { Shortcut as KeyboardShortcut } from "./keycap";
+import { Text } from "./text";
+import { EmptyState } from "./empty-state";
 import {
   clearFilters as clearInboxFilters,
   deleteAll,
@@ -1022,54 +1026,54 @@ export function ShortcutHelp() {
     );
   });
   return (
-    <MenuSurface
+    <Dialog
       label="Keyboard Shortcuts"
       width={720}
       close={() => ui.send({ type: "overlay.close" })}
     >
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-semibold text-fg">Keyboard Shortcuts</h2>
-        <button aria-label="Close dialog" onClick={() => ui.send({ type: "overlay.close" })}>
-          ×
-        </button>
-      </div>
-      <p className="mb-3 text-[12px] text-fg-3">
+      <Dialog.Header className="mb-3">
+        <Dialog.Title>Keyboard Shortcuts</Dialog.Title>
+        <Dialog.Close label="Close dialog" />
+      </Dialog.Header>
+      <Text as="p" variant="mini" color="muted" className="mb-3">
         Issue actions need a selected issue. Editor shortcuts apply while typing. Reordering
         requires Manual ordering.
-      </p>
-      <input
-        aria-label="Search shortcuts"
-        autoFocus
-        placeholder="Search shortcuts…"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        className="mb-4 w-full rounded border border-line-2 bg-card px-3 py-2 outline-none focus:border-accent"
-      />
-      <div className="max-h-[60vh] overflow-y-auto">
+      </Text>
+      <Field className="mb-4">
+        <Field.Label className="sr-only">Search shortcuts</Field.Label>
+        <TextInput
+          autoFocus
+          placeholder="Search shortcuts…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="w-full"
+        />
+      </Field>
+      <Dialog.Body className="max-h-[60vh] overflow-y-auto">
         {[...new Set(matches.map((s) => s.group))].map((group) => (
           <section key={group} className="mb-5">
-            <h3 className="mb-2 text-[12px] text-fg-3">{group}</h3>
+            <Text as="h3" variant="mini" color="muted" className="mb-2">
+              {group}
+            </Text>
             <dl>
               {matches
                 .filter((s) => s.group === group)
                 .map((s) => (
-                  <div key={s.id} className="flex items-center gap-3 py-1.5 text-[12px]">
-                    <dt className="flex-1">{s.name}</dt>
+                  <div key={s.id} className="flex items-center gap-3 py-1.5">
+                    <dt className="flex-1">
+                      <Text variant="mini" color="inherit">{s.name}</Text>
+                    </dt>
                     <dd>
-                      <kbd className="rounded border border-line-2 px-1.5 py-0.5">
-                        {formatForDisplay(s.id === "help" ? "?" : s.hotkey, {
-                          sequenceSeparator: " then ",
-                        })}
-                      </kbd>
+                      <KeyboardShortcut keys={s.id === "help" ? "?" : s.hotkey} />
                     </dd>
                   </div>
                 ))}
             </dl>
           </section>
         ))}
-        {!matches.length && <p className="p-3 text-fg-3">No shortcuts found</p>}
-      </div>
-    </MenuSurface>
+        {!matches.length && <EmptyState title="No shortcuts found" />}
+      </Dialog.Body>
+    </Dialog>
   );
 }
 /** Linear's Help menu is an action menu under the sidebar's Help button. */
