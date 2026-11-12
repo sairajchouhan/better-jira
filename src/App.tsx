@@ -17,6 +17,7 @@ import { ToastViewport } from "./toast";
 import { EmptyState, LoadingState } from "./empty-state";
 import { Button } from "./button";
 import { ShortcutHelp, useLinearHotkeys } from "./shortcuts";
+import { useRecordVisits } from "./recents";
 import { InboxIssueActions, InboxList, InboxPane } from "./inbox";
 import { BoardView } from "./board-view";
 import {
@@ -32,6 +33,7 @@ import { StatusPicker, AssignPicker } from "./issue-pickers";
 import { IssueSearch, CommandPalette, HelpMenu, isPalettePage } from "./palette";
 function Hotkeys() {
   useLinearHotkeys();
+  useRecordVisits();
   return null;
 }
 export function App() {

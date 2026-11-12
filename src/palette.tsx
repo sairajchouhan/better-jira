@@ -14,8 +14,9 @@ import { useMemo, useState, type ReactNode } from "react";
 import { navigationChoices, type NavigationChoice } from "./quick-navigation";
 import { setScope } from "./view-settings";
 import { ActionMenu } from "./action-menu";
-import { StatusIcon, TypeDot } from "./icons";
+import { Icon, StatusIcon, TypeDot } from "./icons";
 import {
+  currentKey,
   get,
   navigate,
   openSavedView,
@@ -32,6 +33,7 @@ import { Modal } from "./personal-controls";
 import { Avatar } from "./avatar";
 import { matchRank } from "./search-rank";
 import { matchIssues } from "./issue-search";
+import { recentIssues, recentSearches, recordSearch } from "./recents";
 import { hotkeyOf, runShortcut, shortcutApplies, shortcuts } from "./shortcuts";
 import { Shortcut, type Keys } from "./keycap";
 const MENU =
@@ -80,6 +82,7 @@ const PAGES = {
   favorites: { parent: "Favorite", label: "Open favorite" },
   boards: { parent: "Team", label: "Open team" },
   views: { parent: "View", label: "Open view" },
+  issues: { parent: "Issue", label: "Open issue" },
   /** Linear's `?` Help action (`mAt`, search input hidden) when the sidebar's Help button isn't there to anchor its menu. */
   help: { parent: "Help", label: "Help" },
 } as const;
@@ -100,6 +103,7 @@ function usePageRows(page: PalettePage): Cmd[] {
   const savedViews = useStore((s) => s.savedViews);
   const favorites = useStore((s) => s.favorites);
   const issues = useStore((s) => s.issues);
+  if (page === "issues") return [];
   if (page === "help")
     return [{ name: "Keyboard shortcuts", keys: hotkeyOf("shortcuts"), run: () => ui.send({ type: "overlay.open", overlay: "shortcuts" }) }];
   return navigationChoices(page, { boards, savedViews, favorites, issues }).map((choice) => ({
@@ -108,8 +112,9 @@ function usePageRows(page: PalettePage): Cmd[] {
     run: () => openChoice(choice),
   }));
 }
-function PageRows({ page, q }: { page: PalettePage; q: string }) {
+function PageRows({ page, q, setQ }: { page: PalettePage; q: string; setQ: (q: string) => void }) {
   const rows = ranked(usePageRows(page), q);
+  if (page === "issues") return <IssueRows q={q} setQ={setQ} />;
   return rows.map(([, c]) => <CommandRow key={c.id ?? c.name} cmd={c} />);
 }
 
@@ -181,55 +186,80 @@ function PaletteFrame({
   );
 }
 
-/** The "Issues (n)" group; picking one opens it on its board. */
-function IssueResults({ results }: { results: Issue[] }) {
+const openIssue = (i: Issue) =>
+  timed(`open ${i.key}`, () => (close(), navigate({ board: i.board, selected: i.key, panel: true }), ui.send({ type: "query.set", query: "" })));
+
+/** An issue row: status, key, title and assignee; picking it opens the issue on its board. */
+function IssueRow({ issue: i, onOpen }: { issue: Issue; onOpen?: () => void }) {
+  const s = statusOf(i);
+  return (
+    <Command.Item value={i.key} onSelect={() => (onOpen?.(), openIssue(i))}>
+      {s ? <StatusIcon status={s} /> : <TypeDot type={i.type} />}
+      <span className="w-[88px] shrink-0 text-[12px] tracking-[-0.24px] text-fg-3">{i.key}</span>
+      <span className="flex-1 truncate">{i.summary}</span>
+      <Avatar user={i.assignee} size={18} />
+    </Command.Item>
+  );
+}
+
+/** The "Issues (n)" group for a typed query; opening one remembers the query as a recent search. */
+function IssueResults({ results, q }: { results: Issue[]; q: string }) {
   if (!results.length) return null;
   return (
     <Command.Group heading={`Issues (${results.length === 50 ? "top 50" : results.length})`}>
-      {results.map((i) => (
-        <Command.Item
-          key={i.key}
-          value={i.key}
-          onSelect={() =>
-            timed(
-              `open ${i.key}`,
-              () => (
-                ui.send({ type: "overlay.close" }),
-                navigate({ board: i.board, selected: i.key, panel: true }),
-                ui.send({ type: "query.set", query: "" })
-              ),
-            )
-          }
-        >
-          {(() => {
-            const s = statusOf(i);
-            return s ? <StatusIcon status={s} /> : <TypeDot type={i.type} />;
-          })()}
-          <span className="w-[88px] shrink-0 text-[12px] tracking-[-0.24px] text-fg-3">
-            {i.key}
-          </span>
-          <span className="flex-1 truncate">{i.summary}</span>
-          <Avatar user={i.assignee} size={18} />
-        </Command.Item>
-      ))}
+      {results.map((i) => <IssueRow key={i.key} issue={i} onOpen={() => recordSearch(q)} />)}
     </Command.Group>
   );
 }
 
-/** Search (/): issues only, the 20 most recently updated before anything is typed. */
-export function IssueSearch() {
+/** Search (/) and Open issue (O I): matching issues; before anything is typed, Linear's Recent issues (the ten last
+ *  opened, not the open one) and Recent searches, or the 20 most recently updated until any issue has been opened. */
+function IssueRows({ q, setQ }: { q: string; setQ: (q: string) => void }) {
   const issues = useStore((s) => s.issues);
-  const [q, setQ] = useState("");
-  const results = useMemo(
-    () =>
-      q.trim()
-        ? matchIssues(issues, q)
-        : [...issues.values()].sort((a, b) => b.updated.localeCompare(a.updated)).slice(0, 20),
-    [q, issues],
+  const [recent] = useState(() => {
+    const open = get().panel ? get().selected : null;
+    return recentIssues().flatMap((key) => {
+      const issue = issues.get(currentKey(key));
+      return issue && issue.key !== open ? [issue] : [];
+    }).slice(0, 10);
+  });
+  const [searches] = useState(recentSearches);
+  const results = useMemo(() => (q.trim() ? matchIssues(issues, q) : []), [q, issues]);
+  if (q.trim()) return <IssueResults results={results} q={q} />;
+  if (!recent.length && !searches.length)
+    return (
+      <IssueResults
+        results={[...issues.values()].sort((a, b) => b.updated.localeCompare(a.updated)).slice(0, 20)}
+        q=""
+      />
+    );
+  return (
+    <>
+      {recent.length > 0 && (
+        <Command.Group heading="Recent">
+          {recent.map((i) => <IssueRow key={i.key} issue={i} />)}
+        </Command.Group>
+      )}
+      {searches.length > 0 && (
+        <Command.Group heading="Recent searches">
+          {searches.map((search) => (
+            <Command.Item key={search} value={`search:${search}`} onSelect={() => setQ(search)}>
+              <span className="grid w-4 shrink-0 place-items-center text-fg-3"><Icon name="search" /></span>
+              <span className="flex-1 truncate">{search}</span>
+            </Command.Item>
+          ))}
+        </Command.Group>
+      )}
+    </>
   );
+}
+
+/** Search (/): issues only. */
+export function IssueSearch() {
+  const [q, setQ] = useState("");
   return (
     <PaletteFrame label="Search issues" q={q} setQ={setQ}>
-      <IssueResults results={results} />
+      <IssueRows q={q} setQ={setQ} />
     </PaletteFrame>
   );
 }
@@ -249,7 +279,7 @@ export function CommandPalette({ page: initialPage }: { page?: PalettePage }) {
         placeholder="Search…"
         onBackspace={() => setPage(null)}
       >
-        <PageRows page={page} q={q} />
+        <PageRows page={page} q={q} setQ={setQ} />
       </PaletteFrame>
     );
   return <RootPalette />;
@@ -341,7 +371,7 @@ function RootPalette() {
           {g.rows.map(([, c]) => <CommandRow key={c.name} cmd={c} />)}
         </Command.Group>
       ))}
-      <IssueResults results={results} />
+      <IssueResults results={results} q={q} />
     </PaletteFrame>
   );
 }

@@ -159,6 +159,7 @@ export type Overlay =
   | "favorites"
   | "views"
   | "boards"
+  | "issues"
   | "add-board"
   | "customize-sidebar"
   | "subscribers"

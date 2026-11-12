@@ -45,3 +45,30 @@ test("BJ-165: O F / O T / O V open the ⌘K palette frame on their page; Help fa
     expect(await p.eval(`${input}.getAttribute('aria-label')`)).toBeTruthy();
   });
 });
+
+const heading = (name: string) =>
+  `[...document.querySelectorAll('[cmdk-group]')].find(g=>g.querySelector('[cmdk-group-heading]')?.textContent===${JSON.stringify(name)})`;
+const groupRows = (name: string) => `[...(${heading(name)}?.querySelectorAll('[cmdk-item]')??[])].map(n=>n.textContent)`;
+
+test("BJ-35: search and O I list recently opened issues and recent searches", async ({ open }) => {
+  const p = await open();
+  for (const key of ["TEST-2", "TEST-3"]) {
+    await p.click(`[data-key="${key}"]`);
+    await p.waitFor(`new URLSearchParams(location.search).get('issue')==='${key}'`);
+  }
+  await p.key("Escape");
+  await p.waitFor(`!new URLSearchParams(location.search).get('issue')`);
+  await p.key("/");
+  await p.waitFor(`${groupRows("Recent")}.length===2`);
+  expect((await p.eval<string[]>(groupRows("Recent"))).map((t) => t.slice(0, 6))).toEqual(["TEST-3", "TEST-2"]);
+  await p.type("fixture 4");
+  await p.waitFor(`document.querySelector('[cmdk-item][data-selected=true]')?.textContent.includes('TEST-4')`);
+  await p.key("Enter");
+  await p.waitFor(`new URLSearchParams(location.search).get('issue')==='TEST-4'`);
+  await p.key("Escape");
+  await p.keys("oi");
+  await p.waitFor(`!!document.querySelector('[role=dialog][aria-label="Open issue"]')&&${groupRows("Recent searches")}.length===1`);
+  expect((await p.eval<string[]>(groupRows("Recent")))[0]).toContain("TEST-4");
+  await p.click(`[cmdk-item][data-value="search:fixture 4"]`);
+  expect(await p.eval(`document.querySelector('[cmdk-input]').value`)).toBe("fixture 4");
+});
