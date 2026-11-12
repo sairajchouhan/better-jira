@@ -174,8 +174,10 @@ function show(place: Place, location: ParsedLocation) {
   go({ type: "restore", place, draft: drafts.read(location.pathname) });
   // The address names the screen differently (an issue beside another board's list): show its own address, once.
   const { target, location: shown } = current();
-  if (!location.state.settled && !sameAddress(shown, location))
-    throw redirect({ ...(target as object), replace: true, state: { ...(target as { state?: object }).state, settled: true } } as never);
+  if (location.state.settled || sameAddress(shown, location)) return;
+  // A comment or attachment anchor (a deep link, the page's own `#…` link) stays while the address names the same issue.
+  const hash = issueOf(shown) === issueOf(location) ? location.hash : undefined;
+  throw redirect({ ...(target as object), hash, replace: true, state: { ...(target as { state?: object }).state, settled: true } } as never);
 }
 /** Set once load has restored the address; before that nothing is written to history. */
 let navigationReady = false;
@@ -184,6 +186,7 @@ export function startNavigation() {
   if (navigationReady) return;
   navigationReady = true;
   window.addEventListener("click", openIssueLink);
+  window.addEventListener("click", followHash);
   // The issue screens load with their route; fetch them once the board is idle so the first issue opens at once.
   const warm = () => void import("@/client/routes/issue-view");
   if (typeof requestIdleCallback === "function") requestIdleCallback(warm);
@@ -210,6 +213,20 @@ function openIssueLink(event: MouseEvent) {
   if (!issue) return;
   event.preventDefault();
   navigate({ board: issue.board, selected: issue.key, panel: true, view: get().view });
+}
+/**
+ * A link to a spot on this page (a comment's timestamp) moves the hash through the router, so the entry keeps the
+ * list the page opened over; the browser's own fragment navigation would write an entry without it.
+ */
+function followHash(event: MouseEvent) {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+    return;
+  const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href*='#']") : null;
+  if (!link || link.target || link.origin !== location.origin || link.pathname !== location.pathname) return;
+  if (link.search !== location.search || !link.hash || link.hash === location.hash) return;
+  event.preventDefault();
+  router.history.push(link.pathname + link.search + link.hash, router.state.location.state);
+  window.dispatchEvent(new HashChangeEvent("hashchange"));
 }
 /** The board's Issues › All. Leaves any view first, so its scope and details stay untouched. */
 export function openAllIssues(board: number) {

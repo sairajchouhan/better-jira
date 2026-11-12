@@ -41,12 +41,16 @@ const Devtools =
     ? () => null
     : lazy(() => import("@tanstack/react-router-devtools").then((m) => ({ default: m.TanStackRouterDevtools })));
 
-/** Waits for the boards, then hands the address to the router. */
+/** Waits for the boards, then for the router to show the address, so the first paint is the address's screen. */
 export function App() {
   const ready = useStore((s) => s.boards.length > 0);
   const loadError = useStore((s) => s.loadError);
+  const [opened, setOpened] = useState(false);
   useEffect(() => void load(), []);
-  if (!ready)
+  useEffect(() => {
+    if (ready) void router.load().then(() => setOpened(true));
+  }, [ready]);
+  if (!ready || !opened)
     return loadError ? (
       <EmptyState
         role="alert"
