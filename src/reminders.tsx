@@ -233,7 +233,6 @@ export function ReminderControl({ issue }: { issue: Issue }) {
     <>
       <IconButton
         label={label}
-
         onClick={(e) => setAnchor(e.currentTarget)}
         variant="borderless"
         size="medium"

@@ -900,7 +900,6 @@ function AttachmentList({
       <IconButton
         type="button"
         label={`Remove attachment ${a.name}`}
-
         onClick={(e) => {
           const scope = e.currentTarget.closest('[role="dialog"]') ?? document;
           onChange(attachments.filter((f) => f.id !== a.id));

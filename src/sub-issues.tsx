@@ -247,7 +247,6 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
         data-parent-progress
         title={`Open sub-issues of ${parent.key} (${shortcutLabel("sub-issues-of-parent")})`}
         aria-label={`Open sub-issues of ${parent.key}`}
-
         onClick={(event) => setMenu(event.currentTarget)}
         variant="row"
         state="value"
@@ -465,7 +464,6 @@ export function SubIssues({ issue }: { issue: Issue }) {
           )}
           <IconButton
             label="Sub-issue display options"
-
             onClick={(e) => setSettings(e.currentTarget)}
             variant="borderless"
             size="medium"
@@ -475,7 +473,6 @@ export function SubIssues({ issue }: { issue: Issue }) {
           <IconButton
             data-create-child
             label="Create new sub-issue"
-
             onClick={start}
             variant="borderless"
             size="medium"
@@ -507,7 +504,6 @@ export function SubIssues({ issue }: { issue: Issue }) {
         <Button
           data-create-child
           aria-label="Add sub-issues"
-
           onClick={start}
           variant="borderless"
           size="small"
@@ -704,7 +700,6 @@ export function SubIssues({ issue }: { issue: Issue }) {
               <Button
                 key={id}
                 aria-pressed={display.properties.includes(id)}
-
                 onClick={() =>
                   change({
                     properties: display.properties.includes(id)
