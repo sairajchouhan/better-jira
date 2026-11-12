@@ -10,7 +10,7 @@ import {
   type Issue,
   type IssueDraft,
 } from "./store";
-import { typeChoices, canHaveChildren, needsParent } from "./issue-properties";
+import { canHaveChildren, needsParent } from "./issue-properties";
 import { createIssueDocument } from "./issue-resources";
 import { shortcutLabel, canRunShortcut, runShortcut } from "./shortcuts";
 import { copyIssue, copyKinds, copyIcons, copyShortcuts, type CopyKind } from "./issue-copy";
@@ -48,12 +48,6 @@ export function issueMenuEntries(
   },
 ): ActionEntry[] {
   const parent = issue.parent ? get().issues.get(issue.parent) : undefined;
-  const issueTypes = (issue: Issue, options: ReturnType<typeof get>["options"], issues: Issue[]) =>
-    typeChoices(
-      issue.type,
-      options.types?.[issue.project?.key ?? ""],
-      issues.flatMap((i) => (i.type && i.project?.key === issue.project?.key ? [i.type] : [])),
-    );
   const copy = async (kind: CopyKind) => {
     await copyIssue(kind, issue);
     close();
@@ -106,13 +100,7 @@ export function issueMenuEntries(
       name: "Issue type",
       icon: "board",
       shortcut: keys("type"),
-      children: issueTypes(issue, get().options, [...get().issues.values()]).map((type) => ({
-        name: type,
-        run: () => {
-          if (type !== issue.type) actions.patch(issue.key, { type });
-          close();
-        },
-      })),
+      run: () => openDialog("type"),
     },
     {
       name: "Add link…",
