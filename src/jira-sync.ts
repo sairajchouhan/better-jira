@@ -24,7 +24,8 @@ import { rekeyNotification, showNotification } from "./app-notifications";
 import { returnRejectedComment } from "./rejected-comment";
 import { navigate } from "./app-navigation";
 import { claimChanges, flushLocalChanges, localDataOpen, queueSave, storedChanges } from "./local-database";
-import { beginCreate, get, set, type Full, type Issue } from "./store";
+import { get, set, type Full, type Issue } from "./store";
+import { beginCreate } from "./issue-actions";
 
 /** Marks issues changed by this tab, so other tabs take its copy. */
 export const touch = (...keys: string[]) => writes.touch(...keys);

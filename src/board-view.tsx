@@ -21,7 +21,8 @@ import {
 } from "react";
 import { commentCount } from "./media-edits";
 import { Icon, Label, PriorityIcon, StatusIcon, TypeDot } from "./icons";
-import { ME, actions, get, set, timed, useStore, beginCreate, type Board, type Issue, statusOf } from "./store";
+import { ME, get, set, timed, useStore, type Board, type Issue, statusOf } from "./store";
+import { actions, beginCreate } from "./issue-actions";
 import { loadFull } from "./server-data";
 import { navigate, ui } from "./app-navigation";
 import {

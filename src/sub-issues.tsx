@@ -31,7 +31,9 @@ import {
 import { issueMenuEntries } from "./issue-menu";
 import { InlineEditor } from "./rich-editor-loader";
 import { useCommand } from "./commands";
-import { actions, get, issueURL, useStore, type Issue } from "./store";
+import { get, useStore, type Issue } from "./store";
+import { issueURL } from "./issue-urls";
+import { actions } from "./issue-actions";
 import { navigate, ui } from "./app-navigation";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { Avatar } from "./avatar";

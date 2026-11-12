@@ -7,7 +7,8 @@ import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "re
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import type { Attachment } from "./attachment-media";
 import { Icon } from "./icons";
-import { actions, ME, saveCrop, useStore } from "./store";
+import { ME, useStore } from "./store";
+import { actions, saveCrop } from "./issue-actions";
 import { ImageThread, type ImageThreadDraft } from "./image-thread";
 import type { ImageCrop } from "./media-edits";
 const Viewer = lazy(() =>

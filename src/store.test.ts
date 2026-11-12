@@ -76,7 +76,8 @@ const address = () => {
 };
 
 test("personal issue edits, comments, creation and deletion undo without losing issue details", async () => {
-  const { actions, get, set, ME } = await import("./store");
+  const { get, set, ME } = await import("./store");
+  const { actions } = await import("./issue-actions");
   const { undoEdit, redoEdit } = await import("./undo-history");
   const { navigate } = await import("./app-navigation");
   Object.assign(ME, { id: "me", name: "Me" });
@@ -265,7 +266,8 @@ test("browser history restores issue selection without pushing another navigatio
 });
 
 test("I7: local comments can be rich, edited and deleted, each step undoable; other authors remain read-only", async () => {
-  const { actions, get, set, ME } = await import("./store");
+  const { get, set, ME } = await import("./store");
+  const { actions } = await import("./issue-actions");
   const { undoEdit } = await import("./undo-history");
   const { navigate } = await import("./app-navigation");
   const board: Board = {
@@ -336,7 +338,8 @@ test("I7: local comments can be rich, edited and deleted, each step undoable; ot
 });
 
 test("R4: autosaved description edits within a minute make one history entry", async () => {
-  const { actions, get } = await import("./store");
+  const { get } = await import("./store");
+  const { actions } = await import("./issue-actions");
   const key = actions.create("Described")!;
   for (const text of ["one", "two", "three"]) actions.description(key, text);
   expect(get().issues.get(key)!.description).toBe("three");
@@ -344,7 +347,8 @@ test("R4: autosaved description edits within a minute make one history entry", a
 });
 
 test("restoring a description keeps the version it replaces, without duplicating the newest entry", async () => {
-  const { actions, get } = await import("./store");
+  const { get } = await import("./store");
+  const { actions } = await import("./issue-actions");
   const key = actions.create("Restored")!,
     texts = () =>
       get()
@@ -370,7 +374,8 @@ test("restoring a description keeps the version it replaces, without duplicating
 });
 
 test("undoing a reschedule cannot deliver an older reminder again", async () => {
-  const { actions, get } = await import("./store");
+  const { get } = await import("./store");
+  const { actions } = await import("./issue-actions");
   const { undoEdit } = await import("./undo-history");
   const key = actions.create("Reminder history")!,
     now = Date.now;
@@ -389,7 +394,8 @@ test("undoing a reschedule cannot deliver an older reminder again", async () => 
 });
 
 test("document version checkpoints and personal settings undo independently", async () => {
-  const { actions, get, ME } = await import("./store");
+  const { get, ME } = await import("./store");
+  const { actions } = await import("./issue-actions");
   const { undoEdit, redoEdit } = await import("./undo-history");
   const key = actions.create("Document versions")!,
     body = (text: string) => ({
@@ -439,7 +445,8 @@ test("document version checkpoints and personal settings undo independently", as
 });
 
 test("restoring a document version keeps the replaced version even inside the one-minute window, without duplicates", async () => {
-  const { actions, get, ME } = await import("./store");
+  const { get, ME } = await import("./store");
+  const { actions } = await import("./issue-actions");
   const key = actions.create("Document restore")!,
     body = (text: string) => ({
       type: "doc" as const,
@@ -487,7 +494,8 @@ test("restoring a document version keeps the replaced version even inside the on
 });
 
 test("a restore never adds a version identical to the newest saved one", async () => {
-  const { actions, get, ME } = await import("./store");
+  const { get, ME } = await import("./store");
+  const { actions } = await import("./issue-actions");
   const key = actions.create("Document restore dedupe")!,
     body = (text: string) => ({
       type: "doc" as const,
@@ -518,7 +526,8 @@ test("a restore never adds a version identical to the newest saved one", async (
 });
 
 test("image crops and comment counts undo and redo without changing the description", async () => {
-  const { actions, get } = await import("./store");
+  const { get } = await import("./store");
+  const { actions } = await import("./issue-actions");
   const { undoEdit, redoEdit } = await import("./undo-history");
   const { commentCount } = await import("./media-edits");
   const key = actions.create("Image edits", { description: "Original description" })!;
@@ -544,7 +553,8 @@ test("image crops and comment counts undo and redo without changing the descript
 });
 
 test("B5: creating stays on the board with a toast, Create more toasts too, and undoing the create closes it", async () => {
-  const { actions, get } = await import("./store");
+  const { get } = await import("./store");
+  const { actions } = await import("./issue-actions");
   const { undoEdit } = await import("./undo-history");
   const { navigate } = await import("./app-navigation");
   navigate({ panel: false, selected: null });
@@ -563,7 +573,8 @@ test("B5: creating stays on the board with a toast, Create more toasts too, and 
   expect(latestNotification()).toBeUndefined();
 });
 test("deleting a sub-issue keeps its open parent; with Jira writes it asks in the app first", async () => {
-  const { actions, get, set } = await import("./store");
+  const { get, set } = await import("./store");
+  const { actions } = await import("./issue-actions");
   const { navigate } = await import("./app-navigation");
   const parent = actions.create("Parent")!,
     child = actions.create("Child", { parent })!;
@@ -596,7 +607,8 @@ test("deleting a sub-issue keeps its open parent; with Jira writes it asks in th
   expect(get().panel).toBe(true);
 });
 test("deleting a document keeps attachments that another document still shows", async () => {
-  const { actions, get, set, ME } = await import("./store");
+  const { get, set, ME } = await import("./store");
+  const { actions } = await import("./issue-actions");
   const key = actions.create("Shared media")!,
     media = (id: string) => ({
       type: "doc" as const,
@@ -674,7 +686,8 @@ test("Jira's remote links become link resources: a writable site takes Jira's se
 });
 
 test("R1-D71: adding a URL the issue already has reports it instead of adding it again", async () => {
-  const { actions, get, set } = await import("./store");
+  const { get, set } = await import("./store");
+  const { actions } = await import("./issue-actions");
   const issue = {
     key: "D71-1",
     board: 1,
@@ -698,7 +711,8 @@ test("R1-D71: adding a URL the issue already has reports it instead of adding it
 });
 
 test("R1-D101: deleting an issue sends no link removals for the issues it was linked to", async () => {
-  const { actions, get, set } = await import("./store");
+  const { get, set } = await import("./store");
+  const { actions } = await import("./issue-actions");
   const sent: { key: string; ops: any[] }[] = [],
     realFetch = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -755,7 +769,8 @@ test("R2-palette-shortcuts-D3: a timed action that posts its own message, such a
 });
 
 test("sync review 4: learning a new issue's Jira key keeps the edits made on both its keys", async () => {
-  const { actions, get, set } = await import("./store");
+  const { get, set } = await import("./store");
+  const { actions } = await import("./issue-actions");
   const { learnKeys } = await import("./jira-sync");
   const key = actions.create("Mine")!;
   // The poll brought the issue under its Jira key before this tab learnt the move, and the user edited that copy.
@@ -774,7 +789,8 @@ test("sync review 4: learning a new issue's Jira key keeps the edits made on bot
 });
 
 test("sync review 7: an undo made while Restore reads Jira's version is not discarded by the Restore", async () => {
-  const { actions, get, set } = await import("./store");
+  const { get, set } = await import("./store");
+  const { actions } = await import("./issue-actions");
   const { undoEdit } = await import("./undo-history");
   const issue = { ...[...get().issues.values()][0]!, key: "TEST-91", priority: "Low" };
   set({ issues: new Map(get().issues).set("TEST-91", issue) });
@@ -803,7 +819,8 @@ test("sync review 7: an undo made while Restore reads Jira's version is not disc
 });
 
 test("sync review 2: a tab never mints a new-issue number another tab of the browser has", async () => {
-  const { actions, get } = await import("./store");
+  const { get } = await import("./store");
+  const { actions } = await import("./issue-actions");
   const { LocalDatabase } = await import("./local-data");
   expect(get().namespace).toBeTruthy();
   // Another tab of this browser takes numbers from the same saved data while this one creates issues.
@@ -865,7 +882,8 @@ const writableIssue = (key: string, extra: object = {}) => ({
 });
 
 test("outbox: an issue's edits queued behind its write in flight merge into one write, sent after it; other issues go in order", async () => {
-  const { actions, get, set } = await import("./store");
+  const { get, set } = await import("./store");
+  const { actions } = await import("./issue-actions");
   let release!: () => void;
   const gate = new Promise<void>((resolve) => (release = resolve));
   const jira = await fakeJiraWrites(async (key, body) => {
@@ -901,7 +919,8 @@ test("outbox: an issue's edits queued behind its write in flight merge into one 
 });
 
 test("outbox: rapid status changes reach Jira as one transition", async () => {
-  const { actions, get, set } = await import("./store");
+  const { get, set } = await import("./store");
+  const { actions } = await import("./issue-actions");
   const jira = await fakeJiraWrites();
   try {
     set({
@@ -938,7 +957,8 @@ test("outbox: rapid status changes reach Jira as one transition", async () => {
 });
 
 test("outbox: a write Jira refuses rolls the issue back to Jira's copy and says why", async () => {
-  const { actions, get, set } = await import("./store");
+  const { get, set } = await import("./store");
+  const { actions } = await import("./issue-actions");
   const jira = await fakeJiraWrites((key) => ({
     error: "Priority is locked.",
     issue: writableIssue(key),
@@ -961,7 +981,8 @@ test("outbox: a write Jira refuses rolls the issue back to Jira's copy and says 
 });
 
 test("outbox: an issue created here takes Jira's key, and writes queued under its app key follow it there", async () => {
-  const { actions, get, set } = await import("./store");
+  const { get, set } = await import("./store");
+  const { actions } = await import("./issue-actions");
   const { currentKey, firstKey } = await import("./jira-sync");
   const { navigate } = await import("./app-navigation");
   let release!: () => void;

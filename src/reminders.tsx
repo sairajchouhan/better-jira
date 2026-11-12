@@ -16,7 +16,8 @@ import { ActionMenu, type ActionEntry } from "./action-menu";
 import { Icon } from "./icons";
 import { Menu } from "./menu";
 import { MenuSurface } from "./menu-surface";
-import { actions, set, useStore, type Issue } from "./store";
+import { set, useStore, type Issue } from "./store";
+import { actions } from "./issue-actions";
 import { ui } from "./app-navigation";
 import { kept, useCommand } from "./commands";
 

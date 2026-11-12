@@ -10,7 +10,8 @@ import { Icon } from "./icons";
 
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { normalizeDocument } from "./document";
-import { actions, get, ME, set, useStore, type Issue } from "./store";
+import { get, ME, set, useStore, type Issue } from "./store";
+import { actions } from "./issue-actions";
 import { flushLocalChanges } from "./local-database";
 import { navigate, ui } from "./app-navigation";
 import {

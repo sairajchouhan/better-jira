@@ -8,7 +8,9 @@ import { useMemo, useRef, useState, type MouseEvent, type ReactNode } from "reac
 import { isMyIssues } from "./navigation";
 import { PERSON_TABS, peopleOf } from "./people";
 import { Icon, TypeDot } from "./icons";
-import { actions, set, timed, useStore, beginCreate, issueURL, type Board, type Issue } from "./store";
+import { set, timed, useStore, type Board, type Issue } from "./store";
+import { issueURL } from "./issue-urls";
+import { actions, beginCreate } from "./issue-actions";
 import { retryLocalStorage } from "./app-load";
 import { removeBoard } from "./server-data";
 import { dismissWriteError } from "./jira-sync";

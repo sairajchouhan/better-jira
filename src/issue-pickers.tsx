@@ -1,5 +1,6 @@
 import { StatusMenu, AssigneeMenu } from "./property-menu";
-import { actions, boardOf, useStore } from "./store";
+import { boardOf, useStore } from "./store";
+import { actions } from "./issue-actions";
 import { ui } from "./app-navigation";
 import { issueAnchor } from "./menu-surface";
 export function StatusPicker({ issueKey }: { issueKey: string }) {

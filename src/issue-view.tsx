@@ -32,7 +32,9 @@ import {
 import { normalizeDocument } from "./document";
 import { imageCommentIds } from "./media-edits";
 import { Icon, PriorityIcon, RelationIcon, StatusIcon, TypeDot, hue } from "./icons";
-import { ME, actions, addIssueFiles, boardOf, get, useStore, issueURL, isWatching, appURL, type Issue, type User, statusOf } from "./store";
+import { ME, boardOf, get, useStore, isWatching, type Issue, type User, statusOf } from "./store";
+import { issueURL, appURL } from "./issue-urls";
+import { actions, addIssueFiles } from "./issue-actions";
 import { loadFull } from "./server-data";
 import { currentKey } from "./jira-sync";
 import { flushLocalChanges } from "./local-database";
