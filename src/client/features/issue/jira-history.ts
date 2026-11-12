@@ -1,13 +1,14 @@
 /**
  * Jira's changelog as Activity events (BJ-13). Each changelog item maps to a Linear activity field where Linear has one
  * (status, assignee, priority, labels, due date, parent, type, relations, title, estimate, cycle, project, milestone),
- * and to an honest Jira-only change where it has none (resolution, component, team, custom fields). The changes are then
- * grouped exactly as this app groups its own edits (`groupChanges`), and an edit made here is shown once: Jira's echo of
- * it replaces the local event.
+ * and to an honest Jira-only change where it has none (resolution, component, team, custom fields). Each changelog entry
+ * is one Linear history record (`historyEvents`), so every change stays reachable in Activity, and an edit made here is
+ * shown once: Jira's echo of it replaces the local event.
  */
 import type { HistoryEntry, HistoryItem } from "@/shared/jira-history";
 import {
-  groupChanges,
+  changed,
+  historyEvents,
   sameValue,
   type ActivityField,
   type Change,
@@ -146,20 +147,8 @@ export function historyChanges(history: readonly HistoryEntry[]): Change[] {
     return entry.items.flatMap((item, index) => {
       const mapped = mapItem(item, entry.items);
       if (!mapped || (mapped.before === null && mapped.after === null)) return [];
-      if (!mapped.delta && sameValue(mapped.before, mapped.after)) return [];
-      return [
-        {
-          id: `jira-${entry.id}-${index}`,
-          ...mapped,
-          // A generic field groups by its own name, so two custom fields in one group stay apart.
-          slot:
-            mapped.field === "field"
-              ? `field:${((mapped.after ?? mapped.before) as FieldValue).name}`
-              : mapped.field,
-          actor,
-          at: entry.at,
-        },
-      ];
+      if (!mapped.delta && !changed(mapped)) return [];
+      return [{ id: `jira-${entry.id}-${index}`, ...mapped, actor, at: entry.at }];
     });
   });
 }
@@ -178,15 +167,15 @@ const echoed = (event: PropertyActivity, jira: readonly Change[]) =>
         : sameValue(change.after, event.after)),
   );
 
-/** The issue's Activity events: Jira's whole history, grouped as Linear groups an actor's edits, plus the local edits
- *  Jira doesn't have yet (pending, refused, or made on a read-only site). */
+/** The issue's Activity events: Jira's whole history, one record per changelog entry, plus the local edits Jira doesn't
+ *  have yet (pending, refused, or made on a read-only site). */
 export function mergeHistory(
   local: readonly PropertyActivity[],
   history: readonly HistoryEntry[],
 ): PropertyActivity[] {
   const jira = historyChanges(history);
   if (!jira.length) return [...local];
-  return [...groupChanges(jira), ...local.filter((event) => !echoed(event, jira))];
+  return [...historyEvents(jira), ...local.filter((event) => !echoed(event, jira))];
 }
 
 /** Jira's default time tracking uses 5 working days/week and 8 working hours/day.

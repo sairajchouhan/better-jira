@@ -870,9 +870,15 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
   };
   // Jira's whole history arrives after the details (BJ-13); until then the Activity shows this app's own edits.
   const history = useIssueHistory(issue.key, f?.updated);
+  const comments: any[] | undefined = f?.comment?.comments;
   const events = useMemo(
-    () => activityEvents({ ...issue, activity: mergeHistory(issue.activity ?? [], history) }),
-    [issue, history],
+    () =>
+      activityEvents(
+        { ...issue, activity: mergeHistory(issue.activity ?? [], history) },
+        // Linear groups only adjacent history entries, so a comment thread between two changes keeps them apart.
+        (comments ?? []).flatMap((comment) => (comment.parentId ? [] : [comment.created])),
+      ),
+    [issue, history, comments],
   );
   // Linear's Activity starts with "created"; it opens the first run, so a long history folds after it.
   // BJ-14: the issue's creator (not its reporter) and the mirrored created time.

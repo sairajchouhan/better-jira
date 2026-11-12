@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { HistoryEntry, HistoryItem } from "@/shared/jira-history";
-import { activityRows, GROUP_MS, type PropertyActivity } from "./issue-activity";
+import { activityRows, type PropertyActivity } from "./issue-activity";
 import { historyChanges, linkRelation, mapItem, mergeHistory } from "./jira-history";
 
 // Made-up fixtures with the shapes Jira's changelog uses (sampled read-only from real tickets, BJ-40).
@@ -133,60 +133,81 @@ test("BJ-40: Jira link phrases become Linear relation kinds", () => {
   expect(linkRelation(null, "ABC-9")).toEqual({ key: "ABC-9", kind: "related" });
 });
 
-test("BJ-13: Jira changes group like this app's edits: one actor, under an hour since the last, at the group's first time", () => {
+/** Every row's changes, the head's and the ones it expands to. */
+const reachable = (events: PropertyActivity[], breaks: string[] = []) =>
+  activityRows(events, breaks).flatMap((row) => [...row.events, ...row.chain]);
+
+test("F2: every Jira change stays reachable at its own time; nothing merges or cancels across changelog entries", () => {
+  const labels = (from: string, to: string) => item("labels", { fromText: from, toText: to }, "labels");
+  // DRFT-953's shape: one person's agent toggles a label on and off for hours between status moves and description edits.
   const history = [
-    entry([item("labels", { fromText: "", toText: "alpha" }, "labels")]),
-    entry([item("labels", { fromText: "alpha", toText: "alpha beta" }, "labels")], 4_000),
-    entry([status("To Do", "Selected")], 8_000),
-    entry([item("assignee", { to: "ada", toText: "Ada Example" }, "assignee")], 50 * 60_000),
-    // Another actor starts a new group; Ada's next change then starts another.
-    entry([item("labels", { fromText: "alpha beta", toText: "alpha beta gamma" }, "labels")], 51 * 60_000, bot),
-    entry([status("Selected", "In Progress")], 52 * 60_000),
+    entry([labels("", "agentic")]),
+    entry([status("Selected", "To Do")], 4 * 60_000),
+    entry([status("To Do", "Selected")], 11 * 60_000),
+    entry([labels("agentic", "agent-working agentic")], 24 * 60_000),
+    entry([status("Selected", "In Progress")], 25 * 60_000),
+    entry([labels("agent-working agentic", "agentic")], 44 * 60_000),
+    entry([item("description", { fromText: "", toText: "" }, "description")], 50 * 60_000),
+    entry([labels("agentic", "agent-working agentic")], 55 * 60_000),
+    entry([labels("agent-working agentic", "agent-blocked agentic")], 70 * 60_000),
+    // Noise Linear never shows, and a resolution that is its transition's.
+    entry([item("Rank", { toText: "Ranked higher" }), status("In Progress", "Done"), item("resolution", { to: "1", toText: "Done" }, "resolution")], 80 * 60_000),
+    entry([item("Attachment", { to: "1", toText: "a.png" }, "attachment")], 81 * 60_000),
+    entry([item("Attachment", { from: "1", fromText: "a.png" }, "attachment")], 82 * 60_000),
+    entry([item("Link", { to: "ABC-2", toText: "This work item blocks ABC-2" })], 83 * 60_000),
+    entry([item("Link", { from: "ABC-2", fromText: "This work item blocks ABC-2" })], 84 * 60_000),
   ];
   const events = mergeHistory([], history);
-  expect(events.map((e) => [e.field, e.actor.id, e.at])).toEqual([
-    ["labels", "ada", at()],
-    ["status", "ada", at()],
-    ["assignee", "ada", at()],
-    ["labels", "bot", at(51 * 60_000)],
-    ["status", "ada", at(52 * 60_000)],
-  ]);
-  expect(events[0]).toMatchObject({ before: [], after: ["alpha", "beta"] });
-  // The group's status is its own row; its labels and assignee share one.
-  expect(activityRows(events).map((r) => [r.field, r.actor.id])).toEqual([
-    ["status", "ada"],
-    ["multi", "ada"],
-    ["labels", "bot"],
-    ["status", "ada"],
-  ]);
+  const hidden = new Set(["Rank", "resolution"]);
+  const expected = history.flatMap((e) =>
+    e.items.flatMap((i, index) => (hidden.has(i.field) ? [] : [{ id: `jira-${e.id}-${index}`, at: e.at }])),
+  );
+  expect(reachable(events).map((e) => ({ id: e.id, at: e.at })).sort((a, b) => a.id.localeCompare(b.id))).toEqual(
+    expected.sort((a, b) => a.id.localeCompare(b.id)),
+  );
 });
 
-test("BJ-13: a value changed back inside its group drops out; a group ends an hour after its last change", () => {
-  const events = mergeHistory(
-    [],
-    [
-      entry([item("priority", { fromText: "Low", toText: "High" }, "priority")]),
-      entry([item("priority", { fromText: "High", toText: "Low" }, "priority")], 30 * 60_000),
-      entry([item("Attachment", { to: "1", toText: "a.png" }, "attachment")], 31 * 60_000),
-      entry([item("Attachment", { from: "1", fromText: "a.png" }, "attachment")], 32 * 60_000),
-      entry([item("priority", { fromText: "Low", toText: "High" }, "priority")], 32 * 60_000 + GROUP_MS),
-    ],
-  );
-  expect(activityRows(events).map((r) => [r.field, r.events.map((e) => e.after), r.at])).toEqual([
-    ["priority", ["High"], at(32 * 60_000 + GROUP_MS)],
+test("F2: adjacent changes Linear groups (Xc) form one row at the latest change's time, one actor's for status and labels", () => {
+  const history = [
+    entry([status("To Do", "Selected")]),
+    entry([status("Selected", "In Progress")], 10 * 60_000),
+    entry([status("In Progress", "Review")], 3 * 60 * 60_000),
+    // Another actor's move starts its own row.
+    entry([status("Review", "QA")], 3 * 60 * 60_000 + 1_000, bot),
+    entry([item("labels", { fromText: "a", toText: "a b" }, "labels")], 4 * 60 * 60_000),
+    entry([item("labels", { fromText: "a b", toText: "a" }, "labels")], 4 * 60 * 60_000 + 5_000),
+    // Adding one label while removing another is Linear's aggregated entry (`ss`), which never groups.
+    entry([item("labels", { fromText: "a", toText: "c" }, "labels")], 4 * 60 * 60_000 + 9_000),
+  ];
+  const rows = activityRows(mergeHistory([], history));
+  expect(rows.map((r) => [r.field, r.actor.id, r.events.length + r.chain.length, r.at])).toEqual([
+    ["status", "ada", 3, at(3 * 60 * 60_000)],
+    ["status", "bot", 1, at(3 * 60 * 60_000 + 1_000)],
+    ["labels", "ada", 2, at(4 * 60 * 60_000 + 5_000)],
+    ["labels", "ada", 1, at(4 * 60 * 60_000 + 9_000)],
   ]);
+  // Each grouped change keeps its own time for the expanded list.
+  expect(rows[0]!.chain.map((e) => e.at)).toEqual([at(10 * 60_000), at(3 * 60 * 60_000)]);
 });
 
-test("BJ-13: relations stay one row each, and one removed within the hour drops its add", () => {
-  const events = mergeHistory(
-    [],
-    [
-      entry([item("Link", { to: "ABC-2", toText: "This work item blocks ABC-2" })]),
-      entry([item("Link", { to: "ABC-3", toText: "This work item relates to ABC-3" })], 1_000),
-      entry([item("Link", { from: "ABC-2", fromText: "This work item blocks ABC-2" })], 2_000),
-    ],
+test("F2: a comment or attached link between two changes keeps them apart, as Linear groups only within a run", () => {
+  const events = mergeHistory([], [entry([status("To Do", "Selected")]), entry([status("Selected", "Done")], 60_000)]);
+  expect(activityRows(events, [at(30_000)]).map((r) => r.chain.length)).toEqual([0, 0]);
+  expect(activityRows(events, [at(90_000)]).map((r) => r.chain.length)).toEqual([1]);
+});
+
+test("F2: DRFT-784's burst of attachments keeps each file at its own upload time", () => {
+  const files = Array.from({ length: 8 }, (_, i) =>
+    entry([item("Attachment", { to: String(i), toText: `clip-${i}.png` }, "attachment")], 6_000 + i * 120),
   );
-  expect(fields(events)).toEqual([["relation", null, { key: "ABC-3", kind: "related" }]]);
+  const rows = activityRows(mergeHistory([], [entry([item("labels", { fromText: "", toText: "bug" }, "labels")]), ...files]));
+  expect(rows.map((r) => r.at)).toEqual([at(), ...files.map((f) => f.at)]);
+});
+
+test("F2: a description edit is listed though the server drops its text", () => {
+  const events = mergeHistory([], [entry([item("description", { fromText: "", toText: "" }, "description")])]);
+  expect(fields(events)).toEqual([["description", "", ""]]);
+  expect(activityRows(events)).toHaveLength(1);
 });
 
 test("BJ-13: an edit made here appears once: Jira's echo replaces it, an unsent one stays", () => {
