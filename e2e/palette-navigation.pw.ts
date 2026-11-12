@@ -72,3 +72,21 @@ test("BJ-35: search and O I list recently opened issues and recent searches", as
   await p.click(`[cmdk-item][data-value="search:fixture 4"]`);
   expect(await p.eval(`document.querySelector('[cmdk-input]').value`)).toBe("fixture 4");
 });
+
+test("BJ-46: ⌘K opens the last viewed issue", async ({ open }) => {
+  const p = await open();
+  await p.key("k", "meta");
+  await p.type("last viewed");
+  expect(await p.eval<string[]>(rows)).not.toContain("Open last viewed issue");
+  await p.key("Escape");
+  for (const key of ["TEST-2", "TEST-3"]) {
+    await p.click(`[data-key="${key}"]`);
+    await p.waitFor(`new URLSearchParams(location.search).get('issue')==='${key}'`);
+  }
+  await p.key("Escape");
+  await p.key("k", "meta");
+  await p.type("last viewed");
+  await p.waitFor(`document.querySelector('[cmdk-item][data-selected=true]')?.textContent==='Open last viewed issue'`);
+  await p.key("Enter");
+  await p.waitFor(`new URLSearchParams(location.search).get('issue')==='TEST-2'`);
+});

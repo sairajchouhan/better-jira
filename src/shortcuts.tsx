@@ -1,5 +1,6 @@
 import { latestNotification, showNotification } from "./app-notifications";
 import { toasts } from "./toast-queue";
+import { recentIssues } from "./recents";
 import { isMyIssues } from "./navigation";
 import { useEffect, useState } from "react";
 import { VIEW_SHORTCUT_IDS, viewShortcutId } from "./view-shortcut";
@@ -90,6 +91,8 @@ const hoveredRow = () => {
   const key = command("hovered-sub-issue");
   return key ? get().issues.get(key) : undefined;
 };
+const lastViewed = (s: State) =>
+  recentIssues().map((key) => s.issues.get(currentKey(key))).find((i) => i && i.key !== s.selected);
 const viewOf = (s: State) => s.savedViews.find((v) => v.id === s.activeViewId);
 /** A menu's own issue (`runShortcut(id, key)`) wins over the row under the pointer, as in `overlay()`. */
 const target = () => {
@@ -431,6 +434,17 @@ export const shortcuts: Shortcut[] = [
     hotkey: "Shift+V",
     run: () => ui.send({ type: "toolbar.open", toolbar: "display" }),
     when: boardVisible,
+  },
+  {
+    // ⌘K only, like Linear's: the last issue opened before the selected one.
+    id: "last-viewed",
+    name: "Open last viewed issue",
+    group: "Navigation",
+    when: (s) => !!lastViewed(s),
+    run: () => {
+      const issue = lastViewed(get());
+      if (issue) navigate({ board: issue.board, selected: issue.key, panel: true });
+    },
   },
   {
     id: "toast-open",
