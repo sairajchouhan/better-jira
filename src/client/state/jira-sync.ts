@@ -26,7 +26,8 @@ import { returnRejectedComment } from "@/client/features/comments/rejected-comme
 import { navigate } from "@/client/features/navigation/app-navigation";
 import { claimChanges, flushLocalChanges, localDataOpen, queueSave, storedChanges } from "./local-database";
 import { get, set } from "./store";
-import { beginCreate } from "./issue-actions";
+import { refusedSelectionCreate, forgetSelectionCreate } from "./selection-create";
+import { actions, beginCreate } from "./issue-actions";
 
 /** Marks issues changed by this tab, so other tabs take its copy. */
 export const touch = (...keys: string[]) => writes.touch(...keys);
@@ -153,7 +154,10 @@ export function send(changes: [string, Side, Side][]) {
 }
 /** Applies Jira's answer to a write: new keys and comment ids, Jira's copy (or a rollback), and what to tell the user. */
 function answered({ key: sent, ops, result, created, refused, describes }: Answer) {
-  if (created.has(sent)) rekey(sent, created.get(sent)!);
+  if (created.has(sent)) {
+    forgetSelectionCreate(sent);
+    rekey(sent, created.get(sent)!);
+  }
   // A deleted issue (full null) takes its upload slots with it.
   if (result.full !== undefined && result.key) settleUploads(result.key, result.full);
   // New comment ids too, so undo and redo address the comment Jira now has.
@@ -194,7 +198,12 @@ function answered({ key: sent, ops, result, created, refused, describes }: Answe
   adoptJira(result.key ?? sent, result, !!result.error, created, describes);
   for (const other of result.others ?? [])
     adoptJira(other.key, { issue: other, error: result.error }, false, created);
-  if (refused) discard(sent);
+  if (refused) {
+    const selection = refusedSelectionCreate(sent);
+    const doc = selection && get().full.get(selection.source)?.fields.description;
+    if (selection && doc) actions.description(selection.source, selection.restore(doc));
+    discard(sent);
+  }
   const key = result.key ?? sent;
   set({
     pendingWrites: writes.pending(),

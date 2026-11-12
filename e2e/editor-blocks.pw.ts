@@ -147,6 +147,7 @@ test("BJ-69: the created issue replaces the selected text with a reference, save
   await page.click('[aria-label="Create issue from selection"]');
   await page.waitFor(`document.querySelector('[role="dialog"] [aria-label="Issue title"]')?.value === "Rich fixture heading"`);
   await page.key("Enter", "meta");
+  await page.eval(`history.pushState({},'', '/issue/TEST-2');dispatchEvent(new PopStateEvent('popstate'))`);
   // The heading's text is now Jira's smart link to the new issue.
   await page.waitFor(`!document.querySelector('#description h2')?.textContent.includes("Rich fixture heading")`);
   await waitSaved(doc => JSON.stringify(doc).includes("/browse/TEST-90"));
@@ -170,4 +171,23 @@ test("BJ-56 / BJ-55: no block handle (Linear has none for text); ⌥↓ moves th
   await page.key("ArrowDown", "alt");
   await page.waitFor(`document.getElementById('description').children[0].textContent===${JSON.stringify(before[1]!.replace(/^[A-Z0-9]+:/, ""))}`);
   expect((await blocks())[1]).toBe(before[0]);
+});
+
+
+test("BJ-170: a refused selection create restores its source text and removes the temporary card", async ({ open }) => {
+  await fixture.reset({ writable: true });
+  const page = await open("?issue=TEST-2&view=page");
+  await page.waitFor(`!!document.querySelector('#description h2')`);
+  await page.click("#description h2");
+  await page.key("End");
+  await page.key("Home", "shift");
+  await page.click('[aria-label="Create issue from selection"]');
+  await page.waitFor(`document.querySelector('[role="dialog"] [aria-label="Issue title"]')?.value === "Rich fixture heading"`);
+  await page.key("Enter", "meta");
+  await page.waitFor(`document.querySelector('[data-toast]')?.textContent.includes("Jira refused")`);
+  await page.key("Escape");
+  await page.eval(`history.pushState({},'', '/issue/TEST-2');dispatchEvent(new PopStateEvent('popstate'))`);
+  await page.waitFor(`document.querySelector('#description h2')?.textContent === "Rich fixture heading"`);
+  await waitSaved(doc => JSON.stringify(doc).includes("Rich fixture heading") && !JSON.stringify(doc).includes("TEST-NEW"));
+  expect(await page.eval(`!!document.querySelector('[data-key^="TEST-NEW"]')`)).toBe(false);
 });

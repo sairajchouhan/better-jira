@@ -32,6 +32,7 @@ import { ActionMenu } from "@/client/components/action-menu";
 import { activeLinkPaste, dismissLinkPaste, linkPasteActions, pastePlugin } from "./editor-paste";
 import { get } from "@/client/state/store";
 import { jiraIssueURL } from "@/client/features/issue/issue-urls";
+import { rememberSelectionCreate } from "@/client/state/selection-create";
 import { beginCreate } from "@/client/state/issue-actions";
 import { usePlacement } from "@/client/components/menu-surface";
 import { useCommand } from "@/client/features/navigation/commands";
@@ -456,7 +457,13 @@ export function RichEditor(props: EditorEngineProps) {
     if (!editor || pending?.id !== id) return;
     fromSelection.current = null;
     const tr = referenceSelection(editor.state, pending, jiraIssueURL(key));
-    if (tr) editor.dispatch(tr);
+    if (tr) {
+      const fragment = editor.state.doc.slice(pending.from, pending.to).content;
+      const content = fromEditorDocument(richSchema.nodes.doc!.create(null, fragment)).content ?? [];
+      rememberSelectionCreate(key, props.issueKey!, jiraIssueURL(key), content);
+      editor.dispatch(tr);
+      latest.current.onBlur?.(fromEditorDocument(editor.state.doc));
+    }
     return true;
   });
   const run = (command: Command) => {
