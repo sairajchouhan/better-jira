@@ -9,15 +9,10 @@ export const statusById = (board: Board | undefined, id: unknown) =>
   statuses(board).find((s) => s.id === id);
 
 /** The assignee choices every picker offers, Assign and Create alike: you first, then Jira's assignable users and anyone assigned an issue in the mirror, by name. */
-export function assignableUsers(
-  me: User,
-  jiraUsers: User[],
-  issues: Iterable<Issue>,
-): User[] {
+export function assignableUsers(me: User, jiraUsers: User[], issues: Iterable<Issue>): User[] {
   const m = new Map<string, User>([[me.id, me]]);
   for (const u of jiraUsers) if (!m.has(u.id)) m.set(u.id, u);
-  for (const i of issues)
-    if (i.assignee && !m.has(i.assignee.id)) m.set(i.assignee.id, i.assignee);
+  for (const i of issues) if (i.assignee && !m.has(i.assignee.id)) m.set(i.assignee.id, i.assignee);
   return [...m.values()].sort((a, b) =>
     a.id === me.id ? -1 : b.id === me.id ? 1 : a.name.localeCompare(b.name),
   );
@@ -45,9 +40,7 @@ export function priorityChoices(
 export function projectChoices(issues: Iterable<Issue>) {
   return [
     ...new Map(
-      Array.from(issues).flatMap((i) =>
-        i.project ? [[i.project.key, i.project] as const] : [],
-      ),
+      Array.from(issues).flatMap((i) => (i.project ? [[i.project.key, i.project] as const] : [])),
     ).values(),
   ];
 }
@@ -77,11 +70,7 @@ export function knownPeople(
     me,
     ...jiraUsers,
     ...extra,
-    ...Array.from(issues).flatMap((i) => [
-      i.assignee,
-      i.creator,
-      ...(i.watchers ?? []),
-    ]),
+    ...Array.from(issues).flatMap((i) => [i.assignee, i.creator, ...(i.watchers ?? [])]),
   ])
     if (user && !people.has(user.id)) people.set(user.id, user);
   return [...people.values()].sort((a, b) =>

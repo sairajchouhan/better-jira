@@ -93,11 +93,11 @@ test("Jira writes: a rejected write rolls back, created issues open by their Jir
     await p.click('[aria-label="Issue type: Epic"]');
     expect(
       await p.waitFor<string[]>(
-        `(()=>{const items=[...document.querySelectorAll('[role="dialog"][aria-label="Issue type"] [cmdk-item]')].map(n=>n.textContent);return items.length&&items})()`,
+        `(()=>{const items=[...document.querySelectorAll('[role="dialog"][aria-label="Change issue type"] [cmdk-item]')].map(n=>n.textContent);return items.length&&items})()`,
       ),
     ).toEqual(["Epic"]);
-    await p.click('[role="dialog"][aria-label="Issue type"] [cmdk-item]');
-    await p.waitFor(`!document.querySelector('[role="dialog"][aria-label="Issue type"]')`);
+    await p.click('[role="dialog"][aria-label="Change issue type"] [cmdk-item]');
+    await p.waitFor(`!document.querySelector('[role="dialog"][aria-label="Change issue type"]')`);
     await p.eval(
       `document.querySelector('[aria-label="Create issue"] [aria-label="Issue title"]').focus()`,
     );

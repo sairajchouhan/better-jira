@@ -49,12 +49,13 @@ test("Jira's hierarchy rules: a Subtask's options, a Task's parents, project and
   });
   await test.step("R1-D34, R1-D36, R1-D74: the composer offers Subtask only under a parent, and never No project", async () => {
     const pill = async (label: string) => {
+      const dialog = label === "Issue type" ? "Change issue type" : "Change project";
       await p.click(`[role="dialog"][aria-label="Create issue"] button[title="${label}"]`);
       await p.waitFor(
-        `!!document.querySelector('[role="dialog"][aria-label="${label}"] [cmdk-item]')`,
+        `!!document.querySelector('[role="dialog"][aria-label="${dialog}"] [cmdk-item]')`,
       );
       const found = await p.eval<string[]>(
-        `[...document.querySelectorAll('[role="dialog"][aria-label="${label}"] [cmdk-item]')].map(n=>n.textContent)`,
+        `[...document.querySelectorAll('[role="dialog"][aria-label="${dialog}"] [cmdk-item]')].map(n=>n.querySelector(".menu-name")?.textContent)`,
       );
       await p.key("Escape");
       return found;

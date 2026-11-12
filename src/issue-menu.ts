@@ -12,13 +12,7 @@ import {
 import { typeChoices, canHaveChildren, needsParent } from "./issue-properties";
 import { createIssueDocument } from "./issue-resources";
 import { shortcutLabel, canRunShortcut, runShortcut } from "./shortcuts";
-import {
-  copyIssue,
-  copyKinds,
-  copyIcons,
-  copyShortcuts,
-  type CopyKind,
-} from "./issue-copy";
+import { copyIssue, copyKinds, copyIcons, copyShortcuts, type CopyKind } from "./issue-copy";
 import { reminderPresets, reminderTime } from "./reminder-display";
 import { duePresets } from "./due-date";
 import { post } from "./commands";
@@ -53,17 +47,11 @@ export function issueMenuEntries(
   },
 ): ActionEntry[] {
   const parent = issue.parent ? get().issues.get(issue.parent) : undefined;
-  const issueTypes = (
-    issue: Issue,
-    options: ReturnType<typeof get>["options"],
-    issues: Issue[],
-  ) =>
+  const issueTypes = (issue: Issue, options: ReturnType<typeof get>["options"], issues: Issue[]) =>
     typeChoices(
       issue.type,
       options.types?.[issue.project?.key ?? ""],
-      issues.flatMap((i) =>
-        i.type && i.project?.key === issue.project?.key ? [i.type] : [],
-      ),
+      issues.flatMap((i) => (i.type && i.project?.key === issue.project?.key ? [i.type] : [])),
     );
   const copy = async (kind: CopyKind) => {
     await copyIssue(kind, issue);
@@ -71,8 +59,7 @@ export function issueMenuEntries(
   };
   const favorite = get().favorites.includes(issue.key),
     keys = (id: string) => shortcutLabel(id) || undefined;
-  const open = (overlay: "due" | "reminder" | "relations") =>
-    openDialog(overlay);
+  const open = (overlay: "due" | "reminder" | "relations") => openDialog(overlay);
   const related = (kind: NonNullable<IssueDraft["related"]>["kind"]) => {
     close();
     beginCreate({ related: { key: issue.key, kind }, project: issue.project });
@@ -89,8 +76,7 @@ export function issueMenuEntries(
     name,
     icon,
     shortcut: keys(id),
-    run: () =>
-      openDialog(id === "assign" ? "assignee" : (id as IssueMenuDialog)),
+    run: () => openDialog(id === "assign" ? "assignee" : (id as IssueMenuDialog)),
   });
   const due: ActionEntry = {
     name: "Due date",
@@ -119,9 +105,7 @@ export function issueMenuEntries(
       name: "Issue type",
       icon: "board",
       shortcut: keys("type"),
-      children: issueTypes(issue, get().options, [
-        ...get().issues.values(),
-      ]).map((type) => ({
+      children: issueTypes(issue, get().options, [...get().issues.values()]).map((type) => ({
         name: type,
         run: () => {
           if (type !== issue.type) actions.patch(issue.key, { type });

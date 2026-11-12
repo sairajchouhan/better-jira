@@ -695,27 +695,20 @@ test("RAJ-52: relations: Mark as menus, sidebar pills, Activity rows and Issue o
     };
     const look = `(()=>{const d=${D};return [d.querySelector('input').placeholder,[...d.querySelectorAll('[cmdk-group-heading]')].map(h=>h.textContent),d.querySelector('[cmdk-item][data-value="create"]')?.textContent??null,d.querySelector('.mark-footer').textContent,!!d.querySelector('select')]})()`;
     await markAs("Related to…");
-    // RAJ-52 at 1272×846: 720px wide, 110px down with no backdrop; a 40px input 6px in; 30px headings and 46px rows, the key 36px in and the title 8px after it; a 35px footer.
+    // Relations now renders the shared Menu input, heading and row geometry.
     expect(
       await page.eval(
-        `(()=>{const R=n=>{const b=n.getBoundingClientRect();return [b.x,b.y,b.width,b.height].map(v=>Math.round(v*10)/10)};const d=${D},i=d.querySelector('input'),h=d.querySelector('[cmdk-group-heading]'),row=d.querySelector('[cmdk-item]'),key=row.children[1],title=row.children[2],f=d.querySelector('.mark-footer');return [R(d).slice(0,3),getComputedStyle(d.parentElement).backgroundColor,getComputedStyle(d).borderRadius,R(i).slice(0,2).concat(R(i)[3]),getComputedStyle(i).fontSize,getComputedStyle(i).color,getComputedStyle(i,'::placeholder').color,R(h).slice(1),getComputedStyle(h).fontSize,getComputedStyle(h).fontWeight,R(row)[3],R(key)[0]-R(row)[0],Math.round(R(title)[0]-R(key)[0]-R(key)[2]),getComputedStyle(key).color,getComputedStyle(title).color,R(f)[3],getComputedStyle(f).borderTopColor]})()`,
+        `(()=>{const d=${D},r=d.getBoundingClientRect(),row=d.querySelector('[cmdk-item]'),f=d.querySelector('.mark-footer');return [[r.x,r.y,r.width],getComputedStyle(d.parentElement).backgroundColor,getComputedStyle(d).borderRadius,d.querySelector('input').getBoundingClientRect().height,d.querySelector('[cmdk-group-heading]').getBoundingClientRect().height,row.getBoundingClientRect().height,!!row.querySelector('.menu-icon'),row.classList.contains('menu-item'),f.getBoundingClientRect().height,getComputedStyle(f).borderTopColor]})()`,
       ),
     ).toEqual([
       [276, 110, 720],
       "rgba(0, 0, 0, 0)",
       "12px",
-      [283, 117, 40],
-      "13px",
-      "lch(91.178 1.425 272)",
-      "lch(41.778 1.425 272)",
-      [163, 706, 30],
-      "12px",
-      "500",
-      46,
       36,
-      8,
-      "lch(64.714 1.425 272)",
-      "lch(91.178 1.425 272)",
+      30,
+      32,
+      true,
+      true,
       35,
       "lch(21.36 1.93 272)",
     ]);
@@ -726,13 +719,13 @@ test("RAJ-52: relations: Mark as menus, sidebar pills, Activity rows and Issue o
       "↵Mark as related",
       false,
     ]);
-    // The highlight is Linear's 42px lch(20.82) inset; on the Create row the footer reads "Select".
+    // The highlight uses the shared 32px row; on the Create row the footer reads "Select".
     await page.key("ArrowDown");
     expect(
       await page.eval(
         `(()=>{const s=${D}.querySelector('[cmdk-item][data-selected=true]'),b=getComputedStyle(s,'::before');return [b.backgroundColor,b.height,b.borderRadius]})()`,
       ),
-    ).toEqual(["lch(20.82 1.3 272)", "42px", "8px"]);
+    ).toEqual(["lch(20.82 1.3 272)", "32px", "8px"]);
     await page.key("ArrowUp");
     await page.key("ArrowUp");
     await page.waitFor(`${D}.querySelector('.mark-footer').textContent==='↵Select'`);

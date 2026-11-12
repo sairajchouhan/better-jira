@@ -8,22 +8,13 @@ import {
   milestoneChoices,
   statuses,
 } from "./board-catalog";
-import {
-  useStore,
-  useAssignableUsers,
-  type Board,
-  type Issue,
-  type User,
-} from "./store";
+import { useStore, useAssignableUsers, type Board, type Issue, type User } from "./store";
 import { shortcutLabel } from "./shortcuts";
 import { kept, useCommand } from "./commands";
 import { duePresets, shortDate } from "./due-date";
 import { MenuSurface as Modal } from "./menu-surface";
-const DateInput = lazy(() =>
-  import("./date-input").then((m) => ({ default: m.DateInput })),
-);
-const BUTTON =
-  "rounded-md px-3 py-1.5 text-fg-2 hover:bg-hover disabled:opacity-40";
+const DateInput = lazy(() => import("./date-input").then((m) => ({ default: m.DateInput })));
+const BUTTON = "rounded-md px-3 py-1.5 text-fg-2 hover:bg-hover disabled:opacity-40";
 import type { ReactNode } from "react";
 import { Menu } from "./menu";
 import { MenuSurface } from "./menu-surface";
@@ -56,22 +47,14 @@ export function PropertyMenu({
   children: ReactNode;
 }) {
   return (
-    <MenuSurface
-      label={label}
-      anchor={anchor}
-      close={close}
-      fit
-      gap={4.5}
-      side={side}
-    >
+    <MenuSurface label={label} anchor={anchor} close={close} fit gap={4.5} side={side}>
       <Menu
         defaultValue={current}
         style={{ width: 206 }}
         onKeyDown={(event) => {
           onKeyDown?.(event);
           if (event.defaultPrevented) return;
-          const input =
-            event.target instanceof HTMLInputElement ? event.target : null;
+          const input = event.target instanceof HTMLInputElement ? event.target : null;
           if (
             /^\d$/.test(event.key) &&
             !event.metaKey &&
@@ -159,13 +142,7 @@ function useCatalog(board: Board | undefined) {
     writable,
   };
 }
-export function StatusMenu({
-  anchor,
-  board,
-  value,
-  onChange,
-  close,
-}: FieldMenuProps<string>) {
+export function StatusMenu({ anchor, board, value, onChange, close }: FieldMenuProps<string>) {
   return (
     <PropertyMenu
       label="Change status"
@@ -196,12 +173,7 @@ export function StatusMenu({
     </PropertyMenu>
   );
 }
-export function AssigneeMenu({
-  anchor,
-  value,
-  onChange,
-  close,
-}: FieldMenuProps<User | null>) {
+export function AssigneeMenu({ anchor, value, onChange, close }: FieldMenuProps<User | null>) {
   const users = useAssignableUsers();
   const key = (u: User) => `${u.name} ${u.id}`;
   return (
@@ -294,6 +266,7 @@ export function TypeMenu({
     <PropertyMenu
       label="Change issue type"
       placeholder="Change issue type to…"
+      hotkey={shortcutLabel("type")}
       anchor={anchor}
       close={close}
       current={value}
@@ -410,13 +383,7 @@ export function MilestoneMenu({
     </PropertyMenu>
   );
 }
-export function LabelsMenu({
-  anchor,
-  board,
-  value,
-  onChange,
-  close,
-}: FieldMenuProps<string[]>) {
+export function LabelsMenu({ anchor, board, value, onChange, close }: FieldMenuProps<string[]>) {
   const { issues, options } = useCatalog(board);
   const [query, setQuery] = useState("");
   const [order] = useState(() => ({
@@ -424,9 +391,7 @@ export function LabelsMenu({
     rest: knownLabels(issues, options.labels).filter((l) => !value.includes(l)),
   }));
   const toggle = (name: string) =>
-    onChange(
-      value.includes(name) ? value.filter((l) => l !== name) : [...value, name],
-    );
+    onChange(value.includes(name) ? value.filter((l) => l !== name) : [...value, name]);
   const row = (name: string) => {
     const on = value.includes(name);
     return (
@@ -437,12 +402,7 @@ export function LabelsMenu({
         checkbox={on}
         checkboxLabel={`${on ? "Remove" : "Add"} label ${name}`}
         onCheckboxClick={() => toggle(name)}
-        icon={
-          <span
-            className="size-[9px] rounded-full"
-            style={{ background: hue(name) }}
-          />
-        }
+        icon={<span className="size-[9px] rounded-full" style={{ background: hue(name) }} />}
         onSelect={() => {
           toggle(name);
           close();
@@ -481,9 +441,7 @@ export function LabelsMenu({
       {order.checked.map(row)}
       {order.checked.length > 0 && order.rest.length > 0 && <Menu.Divider />}
       {order.checked.length > 0 && order.rest.length > 0 ? (
-        <Menu.Group heading="Workspace labels">
-          {order.rest.map(row)}
-        </Menu.Group>
+        <Menu.Group heading="Workspace labels">{order.rest.map(row)}</Menu.Group>
       ) : (
         order.rest.map(row)
       )}
@@ -503,20 +461,12 @@ export function LabelsMenu({
     </PropertyMenu>
   );
 }
-export function DueMenu({
-  anchor,
-  value,
-  onChange,
-  close,
-}: FieldMenuProps<string | null>) {
+export function DueMenu({ anchor, value, onChange, close }: FieldMenuProps<string | null>) {
   const [query, setQuery] = useState("");
   const [date, setDate] = useState(value ?? "");
   const [dateValid, setDateValid] = useState(true);
-  const [custom, setCustom] = useState(
-    () => kept("issue-options-start") === "due",
-  );
-  const [parseDue, setParseDue] =
-    useState<typeof import("./due-parse").parseDueDate>();
+  const [custom, setCustom] = useState(() => kept("issue-options-start") === "due");
+  const [parseDue, setParseDue] = useState<typeof import("./due-parse").parseDueDate>();
   useEffect(() => {
     let active = true;
     void import("./due-parse").then(
@@ -559,11 +509,7 @@ export function DueMenu({
             Due
           </PickerRow>
         )}
-        <PickerRow
-          value="Custom…"
-          icon={<Icon name="calendar" />}
-          onSelect={() => setCustom(true)}
-        >
+        <PickerRow value="Custom…" icon={<Icon name="calendar" />} onSelect={() => setCustom(true)}>
           Custom…
         </PickerRow>
         {duePresets().map((preset) => (
@@ -602,12 +548,7 @@ export function DueMenu({
       >
         <div className="mb-3">
           <Suspense fallback={<p>Loading dates…</p>}>
-            <DateInput
-              autoFocus
-              value={date}
-              onChange={setDate}
-              onValidity={setDateValid}
-            />
+            <DateInput autoFocus value={date} onChange={setDate} onValidity={setDateValid} />
           </Suspense>
         </div>
         <div className="flex justify-end gap-2">

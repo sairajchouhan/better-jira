@@ -11,94 +11,45 @@ const show = async (page: Page, ...names: string[]) => {
       await page.click(`text=${name}`);
 };
 
-test("the sub-issue tree: progress, guide lines and display preferences", async ({
-  open,
-}) => {
+test("the sub-issue tree: progress, guide lines and display preferences", async ({ open }) => {
   const page = await open("?issue=TEST-2&view=page", { setup: tree });
   await test.step("RAJ-52, RAJ-53 › RAJ-54, RAJ-55: Linear sub-issue progress rings and tree guide lines", async () => {
-    await page.waitFor(
-      `document.querySelector('[data-sub-issues]')?.textContent.includes('1/3')`,
-    );
-    expect(
-      await page.eval(`document.querySelectorAll('[data-sub-issue]').length`),
-    ).toBe(3);
+    await page.waitFor(`document.querySelector('[data-sub-issues]')?.textContent.includes('1/3')`);
+    expect(await page.eval(`document.querySelectorAll('[data-sub-issue]').length`)).toBe(3);
     // Linear (RAJ-52): a progress ring before "1/3", a "0/2" ring pill on a row with children, a guide beside nested rows, and round header buttons.
     expect(
       await page.eval(
         `(()=>{const header=document.querySelector('[data-sub-progress]'),pill=document.querySelector('[data-sub-issue="TEST-3"] [data-row-progress]'),button=document.querySelector('[aria-label="Sub-issue display options"]').getBoundingClientRect();return [header.textContent,header.querySelector('svg').dataset.progress,pill?.textContent,pill?.querySelector('svg').dataset.progress,[...document.querySelectorAll('[data-sub-issue]')].map(n=>!!n.querySelector('[data-guide]')),[button.width,button.height,parseFloat(getComputedStyle(document.querySelector('[aria-label="Sub-issue display options"]')).borderRadius)>=14]]})()`,
       ),
-    ).toEqual([
-      "1/3",
-      "0.33",
-      "0/2",
-      "0.00",
-      [false, true, true],
-      [28, 28, true],
-    ]);
+    ).toEqual(["1/3", "0.33", "0/2", "0.00", [false, true, true], [28, 28, true]]);
     // Linear (RAJ-53 › RAJ-54, RAJ-55): a 1px lch(16.32) line at the parent icon's centre runs through a middle child and stops 12px into the last, each ending in the same 10×9 curved elbow; children indent 24px.
     expect(
       await page.eval(
         `['TEST-4','TEST-5'].map(k=>{const r=document.querySelector('[data-sub-issue="'+k+'"]'),b=r.getBoundingClientRect(),g=r.querySelector('[data-guide]'),e=r.querySelector('[data-elbow]'),parent=document.querySelector('[data-sub-issue="TEST-3"] button svg').getBoundingClientRect(),own=r.querySelector('button svg').getBoundingClientRect(),q=g.getBoundingClientRect(),p=e.getBoundingClientRect();return [q.left-parent.left,q.width,q.top-b.top,q.height,getComputedStyle(g).backgroundColor,p.left-q.left,p.top-b.top,p.width,p.height,getComputedStyle(e).fill,own.left-parent.left]})`,
       ),
     ).toEqual([
-      [
-        6.5,
-        1,
-        0,
-        36,
-        "lch(16.32 1.48 272)",
-        0,
-        10,
-        10,
-        9,
-        "lch(16.32 1.48 272)",
-        24,
-      ],
-      [
-        6.5,
-        1,
-        0,
-        12,
-        "lch(16.32 1.48 272)",
-        0,
-        10,
-        10,
-        9,
-        "lch(16.32 1.48 272)",
-        24,
-      ],
+      [6.5, 1, 0, 36, "lch(16.32 1.48 272)", 0, 10, 10, 9, "lch(16.32 1.48 272)", 24],
+      [6.5, 1, 0, 12, "lch(16.32 1.48 272)", 0, 10, 10, 9, "lch(16.32 1.48 272)", 24],
     ]);
   });
   await test.step("retained ancestors and display preferences work across reloads", async () => {
     await page.click('[aria-label="Sub-issue display options"]');
     await page.eval(`document.querySelector('input[type=checkbox]').click()`);
-    await page.waitFor(
-      `document.querySelector('[data-sub-issues]').textContent.includes('1/1')`,
-    );
-    expect(
-      await page.eval(`document.querySelectorAll('[data-sub-issue]').length`),
-    ).toBe(1);
+    await page.waitFor(`document.querySelector('[data-sub-issues]').textContent.includes('1/1')`);
+    expect(await page.eval(`document.querySelectorAll('[data-sub-issue]').length`)).toBe(1);
     await page.eval(
       `const select=document.querySelector('[aria-label="Completed sub-issues"]');select.value='none';select.dispatchEvent(new Event('change',{bubbles:true}))`,
     );
-    await page.waitFor(
-      `document.querySelectorAll('[data-sub-issue]').length===0`,
-    );
+    await page.waitFor(`document.querySelectorAll('[data-sub-issue]').length===0`);
     await page.key("Escape");
     await page.click("text=Show 1 completed");
-    expect(
-      await page.eval(`document.querySelectorAll('[data-sub-issue]').length`),
-    ).toBe(1);
+    expect(await page.eval(`document.querySelectorAll('[data-sub-issue]').length`)).toBe(1);
     await page.click('[aria-label="Sub-issue display options"]');
     await page.eval(`document.querySelector('input[type=checkbox]').click()`);
     await page.click("text=ID");
     await page.key("Escape");
-    await page.waitFor(
-      `document.querySelector('[data-sub-issues]').textContent.includes('1/3')`,
-    );
-    expect(
-      await page.eval(`document.querySelectorAll('[data-sub-issue]').length`),
-    ).toBe(3);
+    await page.waitFor(`document.querySelector('[data-sub-issues]').textContent.includes('1/3')`);
+    expect(await page.eval(`document.querySelectorAll('[data-sub-issue]').length`)).toBe(3);
     expect(
       await page.eval(
         `document.querySelector('[data-sub-issue="TEST-3"]').hasAttribute('data-context-only')`,
@@ -108,9 +59,7 @@ test("the sub-issue tree: progress, guide lines and display preferences", async 
     await page.waitFor(
       `document.querySelector('[data-sub-issue="TEST-3"]')?.textContent.includes('TEST-3')`,
     );
-    expect(
-      await page.eval(`document.querySelectorAll('[data-sub-issue]').length`),
-    ).toBe(3);
+    expect(await page.eval(`document.querySelectorAll('[data-sub-issue]').length`)).toBe(3);
   });
   await test.step("a grandchild keeps its ancestor branch line running to the next sibling, like Linear's tree", async () => {
     const page = await open("?issue=TEST-2&view=page", {
@@ -194,20 +143,12 @@ test("the sub-issue tree: progress, guide lines and display preferences", async 
     await page.waitFor(`!!document.querySelector('[data-sub-issue]')`);
     await page.click('[aria-label="Sub-issue display options"]');
     expect(
-      await page.eval(
-        `document.querySelector('[aria-label="Sub-issue ordering"]').value`,
-      ),
+      await page.eval(`document.querySelector('[aria-label="Sub-issue ordering"]').value`),
     ).toBe("manual");
     expect(
-      await page.eval(
-        `document.querySelector('[aria-label="Completed sub-issues"]').value`,
-      ),
+      await page.eval(`document.querySelector('[aria-label="Completed sub-issues"]').value`),
     ).toBe("all");
-    expect(
-      await page.eval(
-        `document.querySelector('input[type="checkbox"]').checked`,
-      ),
-    ).toBe(true);
+    expect(await page.eval(`document.querySelector('input[type="checkbox"]').checked`)).toBe(true);
     await page.click("text=ID");
     expect(
       await page.eval(
@@ -236,21 +177,13 @@ test("the sub-issue tree: progress, guide lines and display preferences", async 
     await page.waitFor(`!!document.querySelector('[data-sub-issue="TEST-4"]')`);
     await page.click('[aria-label="Change status for TEST-4"]');
     expect(
-      await page.eval(
-        `[...document.querySelectorAll('[cmdk-item]')].map(e=>e.textContent)`,
-      ),
+      await page.eval(`[...document.querySelectorAll('[cmdk-item]')].map(e=>e.textContent)`),
     ).toEqual(["Open1", "Shipped2"]);
     await page.key("Escape");
     await page.click('[data-sub-issue="TEST-4"] a');
-    await page.waitFor(
-      `document.getElementById('summary')?.value==='Browser fixture 4'`,
-    );
-    expect(
-      await page.eval(`new URLSearchParams(location.search).get('view')`),
-    ).toBe("page");
-    expect(
-      await page.eval(`new URLSearchParams(location.search).get('board')`),
-    ).toBe("2");
+    await page.waitFor(`document.getElementById('summary')?.value==='Browser fixture 4'`);
+    expect(await page.eval(`new URLSearchParams(location.search).get('view')`)).toBe("page");
+    expect(await page.eval(`new URLSearchParams(location.search).get('board')`)).toBe("2");
   });
 });
 
@@ -261,27 +194,23 @@ test("sub-issue row properties change locally, undo, sort and persist with no Ji
   await test.step("row assignee and label removals apply to the selected child and persist", async () => {
     await page.waitFor(`!!document.querySelector('[data-sub-issue="TEST-4"]')`);
     await page.click('[aria-label="Change assignee for TEST-4"]');
-    await page.page.getByRole("option", { name: "Alex", exact: true }).click(); // the detail's own assignee button also reads "Alex"
+    await page.page
+      .locator('[aria-label="Assign issue"] .menu-name')
+      .filter({ hasText: /^Alex$/ })
+      .click(); // the detail's own assignee button also reads "Alex"
     expect(
-      await page.eval(
-        `document.querySelector('[aria-label="Change assignee for TEST-4"]').title`,
-      ),
+      await page.eval(`document.querySelector('[aria-label="Change assignee for TEST-4"]').title`),
     ).toBe("Alex");
     expect(
-      await page.eval(
-        `document.querySelector('[aria-label="Change assignee for TEST-3"]').title`,
-      ),
+      await page.eval(`document.querySelector('[aria-label="Change assignee for TEST-3"]').title`),
     ).toBe("Unassigned");
     await page.click('[aria-label="Sub-issue display options"]');
     await page.click("text=Labels");
     await page.key("Escape");
     await page.click('[aria-label="Change labels for TEST-4"]');
     await page.click('[cmdk-item][data-value="test"]');
-    await page.key("Escape");
     expect(
-      await page.eval(
-        `document.querySelector('[aria-label="Change labels for TEST-4"]').title`,
-      ),
+      await page.eval(`document.querySelector('[aria-label="Change labels for TEST-4"]').title`),
     ).toBe("");
     await page.waitFor(
       `document.querySelector('[aria-label="Local save status"]').textContent.includes('Saved')`,
@@ -291,36 +220,27 @@ test("sub-issue row properties change locally, undo, sort and persist with no Ji
       `document.querySelector('[aria-label="Change assignee for TEST-4"]')?.title==='Alex'`,
     );
     expect(
-      await page.eval(
-        `document.querySelector('[aria-label="Change labels for TEST-4"]').title`,
-      ),
+      await page.eval(`document.querySelector('[aria-label="Change labels for TEST-4"]').title`),
     ).toBe("");
   });
   await test.step("row status, priority and labels change locally, undo, sort and persist with no Jira writes", async () => {
     await page.waitFor(`!!document.querySelector('[data-sub-issue="TEST-3"]')`);
     await page.click('[aria-label="Change status for TEST-3"]');
     await page.click('[role=dialog] [cmdk-item][data-value="Todo"]');
-    await page.waitFor(
-      `document.querySelector('[data-sub-issues]').textContent.includes('0/3')`,
-    );
+    await page.waitFor(`document.querySelector('[data-sub-issues]').textContent.includes('0/3')`);
     await page.click('[aria-label="Undo"]');
-    await page.waitFor(
-      `document.querySelector('[data-sub-issues]').textContent.includes('1/3')`,
-    );
+    await page.waitFor(`document.querySelector('[data-sub-issues]').textContent.includes('1/3')`);
     await page.click('[aria-label="Sub-issue display options"]');
     await show(page, "Priority", "Labels");
     await page.key("Escape");
     await page.click('[aria-label="Change priority for TEST-4"]');
-    await page.click("text=Urgent");
+    await page.click('[cmdk-item][data-value="Urgent"]');
     expect(
-      await page.eval(
-        `document.querySelector('[aria-label="Change priority for TEST-4"]').title`,
-      ),
+      await page.eval(`document.querySelector('[aria-label="Change priority for TEST-4"]').title`),
     ).toBe("Urgent");
     await page.click('[aria-label="Change labels for TEST-4"]');
     await page.type("ui");
     await page.click("text=ui");
-    await page.key("Escape");
     expect(
       await page.eval(
         `document.querySelector('[aria-label="Change labels for TEST-4"]').textContent`,
@@ -349,11 +269,7 @@ test("sub-issue row properties change locally, undo, sort and persist with no Ji
       ),
     ).toContain("ui");
     const { requests } = await (await fetch(`${fixture.url}__fixture`)).json();
-    expect(
-      requests.some(
-        (r: any) => r.method !== "GET" && r.path.startsWith("/api/"),
-      ),
-    ).toBe(false);
+    expect(requests.some((r: any) => r.method !== "GET" && r.path.startsWith("/api/"))).toBe(false);
   });
 });
 
@@ -406,25 +322,17 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
       ),
     ).toEqual([true, true, true]);
     await page.click('[cmdk-item][data-value="Status"]');
-    await page.click(
-      '[role="dialog"][aria-label="Change status"] [cmdk-item][data-value="Done"]',
-    );
+    await page.click('[role="dialog"][aria-label="Change status"] [cmdk-item][data-value="Done"]');
     await page.waitFor(
       `document.querySelector('[aria-label="Change status for TEST-4"]')?.title==='Done'`,
     );
     expect(
-      await page.eval(
-        `document.querySelector('[aria-label="Change status for TEST-5"]')?.title`,
-      ),
+      await page.eval(`document.querySelector('[aria-label="Change status for TEST-5"]')?.title`),
     ).toBe("Todo");
     await menu("TEST-4");
     await page.type("parent");
-    await page.waitFor(
-      `${names}.some(n=>n.startsWith('Remove › Parent issue TEST-3 '))`,
-    );
-    await page.click(
-      '[cmdk-item][data-value^="Remove › Parent issue TEST-3 "]',
-    );
+    await page.waitFor(`${names}.some(n=>n.startsWith('Remove › Parent issue TEST-3 '))`);
+    await page.click('[cmdk-item][data-value^="Remove › Parent issue TEST-3 "]');
     await page.waitFor(`!document.querySelector('[data-sub-issue="TEST-4"]')`);
     await page.eval("document.activeElement?.blur()");
     await page.key("z", "meta");
@@ -474,9 +382,7 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
     await page.type("hour from");
     await page.waitFor(`${names}.includes('Remind me › An hour from now')`);
     await page.click('[cmdk-item][data-value="Remind me › An hour from now"]');
-    await page.waitFor(
-      `!document.querySelector('[aria-label="Sub-issue actions"]')`,
-    );
+    await page.waitFor(`!document.querySelector('[aria-label="Sub-issue actions"]')`);
     expect(
       await page.eval(
         `[!!document.getElementById('prop-due')?.textContent.includes('${tomorrow}'),!!document.querySelector('[aria-label^="Reminder scheduled"]')]`,
@@ -490,34 +396,22 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
   await test.step("Opus review 4: sub-issue rows show Linear's blocking and blocked badges with counts", async () => {
     await page.goto("?issue=TEST-2&view=page");
     await page.waitFor(`!!document.querySelector('[data-sub-issue="TEST-4"]')`);
-    expect(
-      await page.eval(
-        `document.querySelectorAll('[data-row-relation]').length`,
-      ),
-    ).toBe(0);
+    expect(await page.eval(`document.querySelectorAll('[data-row-relation]').length`)).toBe(0);
     await page.eval(
       `document.querySelector('[data-sub-issue="TEST-4"]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))`,
     );
     await page.type("blocking");
-    await page.waitFor(
-      `!!document.querySelector('[cmdk-item][data-value="Mark as › Blocking…"]')`,
-    );
+    await page.waitFor(`!!document.querySelector('[cmdk-item][data-value="Mark as › Blocking…"]')`);
     await page.click('[cmdk-item][data-value="Mark as › Blocking…"]');
     await page.waitFor(
       `document.activeElement?.tagName==='INPUT'&&!!document.activeElement.closest('[aria-label="Issue relations"]')`,
     );
     await page.type("TEST-5");
-    await page.waitFor(
-      `!!document.querySelector('[cmdk-item][data-value="TEST-5"]')`,
-    );
+    await page.waitFor(`!!document.querySelector('[cmdk-item][data-value="TEST-5"]')`);
     await page.key("Enter");
-    await page.waitFor(
-      `!document.querySelector('[role="dialog"][aria-label="Issue relations"]')`,
-    );
+    await page.waitFor(`!document.querySelector('[role="dialog"][aria-label="Issue relations"]')`);
     const badges = `[...document.querySelectorAll('[data-row-relation]')].map(n=>[n.closest('[data-sub-issue]').dataset.subIssue,n.dataset.rowRelation,n.textContent,n.querySelector('[data-relation-icon]')?.dataset.relationIcon,n.title])`;
-    await page.waitFor(
-      `document.querySelectorAll('[data-row-relation]').length===2`,
-    );
+    await page.waitFor(`document.querySelectorAll('[data-row-relation]').length===2`);
     expect(await page.eval(badges)).toEqual([
       ["TEST-4", "blocking", "1", "blocking", "Blocking 1 issue"],
       ["TEST-5", "blocked", "1", "blocked", "Blocked by 1 issue"],
@@ -532,9 +426,7 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
         `document.activeElement?.getAttribute('aria-label')==='Find sub-issue actions'`,
       );
       await page.type(filter);
-      await page.waitFor(
-        `!!document.querySelector('[cmdk-item][data-value="${item}"]')`,
-      );
+      await page.waitFor(`!!document.querySelector('[cmdk-item][data-value="${item}"]')`);
       await page.click(`[cmdk-item][data-value="${item}"]`);
     };
     await page.waitFor(`!!document.querySelector('[data-sub-issue="TEST-4"]')`);
@@ -553,9 +445,7 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
     ).toEqual([true, "Copy ›Copy title as link⌘ C"]);
     await page.key("Escape");
     await menu("TEST-4", "rename", "More properties › Rename…");
-    await page.waitFor(
-      `document.activeElement?.getAttribute('aria-label')==='Issue title'`,
-    );
+    await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Issue title'`);
     await page.key("a", "meta");
     await page.type("Renamed child");
     await page.key("Enter");
@@ -568,23 +458,15 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
       ),
     ).not.toContain("Renamed child");
     await menu("TEST-4", "add link", "More properties › Add link…");
-    await page.waitFor(
-      `document.activeElement?.getAttribute('aria-label')==='Link URL'`,
-    );
+    await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Link URL'`);
     await page.type("https://example.com/child");
     await page.click("text=Add link");
     await menu("TEST-4", "related to", "Mark as › Related to…");
-    await page.waitFor(
-      `document.activeElement?.getAttribute('aria-label')==='Find related issue'`,
-    );
+    await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Find related issue'`);
     await page.type("TEST-3");
-    await page.waitFor(
-      `!!document.querySelector('[cmdk-item][data-value="TEST-3"]')`,
-    );
+    await page.waitFor(`!!document.querySelector('[cmdk-item][data-value="TEST-3"]')`);
     await page.key("Enter");
-    await page.waitFor(
-      `!document.querySelector('[role="dialog"][aria-label="Issue relations"]')`,
-    );
+    await page.waitFor(`!document.querySelector('[role="dialog"][aria-label="Issue relations"]')`);
     expect(
       await page.eval(
         `[!!document.querySelector('a[href="https://example.com/child"]'),!!document.querySelector('[data-relation="related:TEST-3"]')]`,
@@ -594,9 +476,9 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
     await page.waitFor(
       `!!document.querySelector('[role="dialog"][aria-label="New issue"], [aria-label="Issue title"]')`,
     );
-    expect(
-      await page.eval(`document.querySelector('[role="dialog"]').textContent`),
-    ).toContain("TEST-4");
+    expect(await page.eval(`document.querySelector('[role="dialog"]').textContent`)).toContain(
+      "TEST-4",
+    );
     await page.key("Escape");
     await page.goto("?issue=TEST-4&view=page");
     await page.waitFor(
@@ -612,60 +494,38 @@ test("the inline sub-issue composer: shortcuts, Escape, drafts and descriptions"
   await test.step("Escape on an empty sub-issue composer closes it without confirmation and returns focus to Create", async () => {
     await page.waitFor(`!!document.querySelector('[data-create-child]')`);
     await page.click("[data-create-child]");
-    await page.waitFor(
-      `document.activeElement?.getAttribute('aria-label')==='Sub-issue title'`,
-    );
+    await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Sub-issue title'`);
     await page.key("Escape");
-    await page.waitFor(
-      `document.activeElement?.getAttribute('aria-label')==='Create sub-issue'`,
-    );
+    await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Create sub-issue'`);
     await page.key("Escape");
     await page.waitFor(
       `!document.querySelector('[aria-label="Create sub-issue"]')&&document.activeElement?.hasAttribute('data-create-child')`,
     );
-    expect(await page.eval(`!!document.querySelector('[role="dialog"]')`)).toBe(
-      false,
-    );
+    expect(await page.eval(`!!document.querySelector('[role="dialog"]')`)).toBe(false);
     await page.click("[data-create-child]");
-    await page.click(
-      `[aria-label="Create sub-issue"] .rich-editor-actions button`,
-    );
-    await page.waitFor(
-      `!document.querySelector('[aria-label="Create sub-issue"]')`,
-    );
-    expect(await page.eval(`!!document.querySelector('[role="dialog"]')`)).toBe(
-      false,
-    );
+    await page.click(`[aria-label="Create sub-issue"] .rich-editor-actions button`);
+    await page.waitFor(`!document.querySelector('[aria-label="Create sub-issue"]')`);
+    expect(await page.eval(`!!document.querySelector('[role="dialog"]')`)).toBe(false);
   });
   await test.step("the existing Linear shortcut opens inline creation and both submit shortcuts retain a blank composer", async () => {
     await page.waitFor(`!!document.getElementById('summary')`);
     await page.eval("document.activeElement?.blur()");
     await page.key("o", "meta", "shift");
-    await page.waitFor(
-      `document.activeElement?.getAttribute('aria-label')==='Sub-issue title'`,
-    );
+    await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Sub-issue title'`);
     await page.type("First inline child");
     await page.key("Enter", "meta");
     await page.waitFor(
       `document.querySelector('[data-sub-issues]').textContent.includes('First inline child')`,
     );
-    await page.waitFor(
-      `document.activeElement?.getAttribute('aria-label')==='Sub-issue title'`,
-    );
+    await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Sub-issue title'`);
     expect(await page.eval(`document.activeElement.value`)).toBe("");
     await page.type("Second inline child");
     await page.key("Enter", "meta", "shift");
-    await page.waitFor(
-      `document.querySelectorAll('[data-sub-issue]').length===2`,
+    await page.waitFor(`document.querySelectorAll('[data-sub-issue]').length===2`);
+    expect(await page.eval(`document.querySelector('[aria-label="Sub-issue title"]').value`)).toBe(
+      "",
     );
-    expect(
-      await page.eval(
-        `document.querySelector('[aria-label="Sub-issue title"]').value`,
-      ),
-    ).toBe("");
-    await page.click(
-      `[aria-label="Create sub-issue"] .rich-editor-actions button`,
-    );
+    await page.click(`[aria-label="Create sub-issue"] .rich-editor-actions button`);
     await page.click('[aria-label="Sub-issue display options"]');
     await page.click("text=Priority");
     await page.key("Escape");
@@ -686,9 +546,7 @@ test("the inline sub-issue composer: shortcuts, Escape, drafts and descriptions"
     await page.waitFor(
       `document.querySelector('[data-sub-issues]').textContent.includes('Description then title')`,
     );
-    await page.click(
-      `[aria-label="Create sub-issue"] .rich-editor-actions button`,
-    );
+    await page.click(`[aria-label="Create sub-issue"] .rich-editor-actions button`);
     await page.click("text=Description then title");
     await page.waitFor(
       `document.getElementById('description')?.textContent.includes('Keep this rich child description')`,
@@ -700,7 +558,7 @@ test("the inline sub-issue composer: shortcuts, Escape, drafts and descriptions"
     await page.click("[data-create-child]");
     await page.type("Unfinished child");
     await page.click('[aria-label^="Sub-issue priority."]');
-    await page.click("text=High");
+    await page.click('[cmdk-item][data-value="High"]');
     await page.click('[aria-label="Sub-issue description"]');
     await page.type("Keep this unfinished body");
     await page.eval(
@@ -715,27 +573,21 @@ test("the inline sub-issue composer: shortcuts, Escape, drafts and descriptions"
     await page.waitFor(composerFocused);
     expect(await page.eval(`!!${confirmOpen}`)).toBe(false);
     await page.key("Escape");
-    await page.waitFor(
-      `document.activeElement?.textContent==='Discard'&&!!${confirmOpen}`,
-    );
+    await page.waitFor(`document.activeElement?.textContent==='Discard'&&!!${confirmOpen}`);
     expect(await page.eval(`${confirmOpen}.textContent`)).toContain(
       "Confirm that you want to discard this draft.",
     );
     await page.key("Escape");
     await page.waitFor(`!${confirmOpen}&&${composerFocused}`);
-    expect(
-      await page.eval(
-        `document.querySelector('[aria-label="Sub-issue title"]').value`,
-      ),
-    ).toBe("Unfinished child");
+    expect(await page.eval(`document.querySelector('[aria-label="Sub-issue title"]').value`)).toBe(
+      "Unfinished child",
+    );
     await page.goto("?issue=TEST-3&view=page");
     await page.goto("?issue=TEST-2&view=page");
     await page.click("[data-create-child]");
-    expect(
-      await page.eval(
-        `document.querySelector('[aria-label="Sub-issue title"]').value`,
-      ),
-    ).toBe("Unfinished child");
+    expect(await page.eval(`document.querySelector('[aria-label="Sub-issue title"]').value`)).toBe(
+      "Unfinished child",
+    );
     await page.waitFor(
       `document.querySelector('[aria-label="Sub-issue description"]')?.textContent.includes('draft-child.txt')`,
     );
@@ -758,45 +610,29 @@ test("the inline sub-issue composer: shortcuts, Escape, drafts and descriptions"
     await page.key("Escape");
     await page.waitFor(composerFocused);
     await page.key("o", "meta", "shift");
-    await page.waitFor(
-      `document.activeElement?.getAttribute('aria-label')==='Sub-issue title'`,
-    );
+    await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Sub-issue title'`);
     await page.click('[aria-label="Sub-issue description"]');
     await page.key("o", "meta", "shift");
-    await page.waitFor(
-      `document.activeElement?.getAttribute('aria-label')==='Sub-issue title'`,
-    );
-    await page.click(
-      `[aria-label="Create sub-issue"] .rich-editor-actions button`,
-    );
+    await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Sub-issue title'`);
+    await page.click(`[aria-label="Create sub-issue"] .rich-editor-actions button`);
     await page.waitFor(`!!${confirmOpen}`);
-    await page.click(
-      '[role="dialog"][aria-label="Discard this draft?"] button',
-    );
+    await page.click('[role="dialog"][aria-label="Discard this draft?"] button');
     await page.waitFor(`!${confirmOpen}`);
-    expect(
-      await page.eval(
-        `document.querySelector('[aria-label="Sub-issue title"]').value`,
-      ),
-    ).toBe("Unfinished child");
-    await page.click(
-      `[aria-label="Create sub-issue"] .rich-editor-actions button`,
+    expect(await page.eval(`document.querySelector('[aria-label="Sub-issue title"]').value`)).toBe(
+      "Unfinished child",
     );
+    await page.click(`[aria-label="Create sub-issue"] .rich-editor-actions button`);
     await page.waitFor(`!!${confirmOpen}`);
     await page.click("text=Discard");
     await page.waitFor(
       `!document.querySelector('[aria-label="Create sub-issue"]')&&document.activeElement?.hasAttribute('data-create-child')`,
     );
     await page.click("[data-create-child]");
+    expect(await page.eval(`document.querySelector('[aria-label="Sub-issue title"]').value`)).toBe(
+      "",
+    );
     expect(
-      await page.eval(
-        `document.querySelector('[aria-label="Sub-issue title"]').value`,
-      ),
-    ).toBe("");
-    expect(
-      await page.eval(
-        `document.querySelector('[aria-label="Sub-issue description"]').textContent`,
-      ),
+      await page.eval(`document.querySelector('[aria-label="Sub-issue description"]').textContent`),
     ).toBe("");
     expect(
       await page.eval(
@@ -811,9 +647,7 @@ test("the inline sub-issue composer: shortcuts, Escape, drafts and descriptions"
   });
   await test.step("description submit appends after siblings, clears rich content and files, and refocuses the title", async () => {
     const page = await open("?issue=TEST-2&view=page", { setup: tree });
-    await page.waitFor(
-      `document.querySelectorAll('[data-sub-issue]').length===3`,
-    );
+    await page.waitFor(`document.querySelectorAll('[data-sub-issue]').length===3`);
     await page.click("[data-create-child]");
     await page.type("Child with a file");
     await page.click('[aria-label="Sub-issue description"]');
@@ -825,39 +659,27 @@ test("the inline sub-issue composer: shortcuts, Escape, drafts and descriptions"
       `document.querySelector('[aria-label="Sub-issue description"]').textContent.includes('child-note.txt')&&!document.querySelector('.media-upload')`,
     );
     await page.key("Enter", "meta");
-    await page.waitFor(
-      `document.querySelectorAll('[data-sub-issue]').length===4`,
-    );
-    await page.waitFor(
-      `document.activeElement?.getAttribute('aria-label')==='Sub-issue title'`,
-    );
+    await page.waitFor(`document.querySelectorAll('[data-sub-issue]').length===4`);
+    await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Sub-issue title'`);
     expect(
-      await page.eval(
-        `document.querySelector('[aria-label="Sub-issue description"]').textContent`,
-      ),
+      await page.eval(`document.querySelector('[aria-label="Sub-issue description"]').textContent`),
     ).toBe("");
     expect(
-      await page.eval(
-        `[...document.querySelectorAll('[data-sub-issue]')].at(-1)?.textContent`,
-      ),
+      await page.eval(`[...document.querySelectorAll('[data-sub-issue]')].at(-1)?.textContent`),
     ).toContain("Child with a file");
-    await page.click(
-      `[aria-label="Create sub-issue"] .rich-editor-actions button`,
-    );
+    await page.click(`[aria-label="Create sub-issue"] .rich-editor-actions button`);
     await page.click("text=Child with a file");
     await page.waitFor(
       `document.getElementById('description')?.textContent.includes('child-note.txt')`,
     );
-    expect(
-      await page.eval(`document.getElementById('description').textContent`),
-    ).toContain("Description for the first child");
+    expect(await page.eval(`document.getElementById('description').textContent`)).toContain(
+      "Description for the first child",
+    );
     await page.waitFor(
       `document.querySelector('[aria-label="Local save status"]').textContent.includes('Saved')`,
     );
     await page.reload();
-    await page.waitFor(
-      `!!document.querySelector('#description .file-media a')`,
-    );
+    await page.waitFor(`!!document.querySelector('#description .file-media a')`);
     expect(
       await page.eval(
         `fetch(document.querySelector('#description .file-media a').href).then(r=>r.text())`,
@@ -887,9 +709,7 @@ test("a sub-issue draft's late upload or file save never loses newer edits or re
     const openComposer = async () => {
       await page.eval("document.activeElement?.blur()");
       await page.key("o", "meta", "shift");
-      await page.waitFor(
-        `document.activeElement?.getAttribute('aria-label')==='Sub-issue title'`,
-      );
+      await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Sub-issue title'`);
     };
     await page.waitFor(`!!document.getElementById('summary')`);
     await openComposer();
@@ -904,53 +724,39 @@ test("a sub-issue draft's late upload or file save never loses newer edits or re
     await page.type(" NEWER");
     await page.eval("window.releaseBitmap()");
     await page.waitFor(`${media}>0`, 8000);
-    expect(
-      await page.eval(
-        `document.querySelector('[aria-label="Sub-issue title"]').value`,
-      ),
-    ).toBe("Late child NEWER");
+    expect(await page.eval(`document.querySelector('[aria-label="Sub-issue title"]').value`)).toBe(
+      "Late child NEWER",
+    );
     await page.reload();
     await page.waitFor(`!!document.getElementById('summary')`);
     await openComposer();
     await page.waitFor(`${media}>0`, 8000);
-    expect(
-      await page.eval(
-        `document.querySelector('[aria-label="Sub-issue title"]').value`,
-      ),
-    ).toBe("Late child NEWER");
+    expect(await page.eval(`document.querySelector('[aria-label="Sub-issue title"]').value`)).toBe(
+      "Late child NEWER",
+    );
     // Discarding while a paste is still uploading: the file does not come back into the next draft.
     await page.click('[aria-label="Sub-issue description"]');
     await paste("discarded.png");
     await page.waitFor(`typeof window.releaseBitmap==='function'`);
-    await page.click(
-      `[aria-label="Create sub-issue"] .rich-editor-actions button`,
-    );
+    await page.click(`[aria-label="Create sub-issue"] .rich-editor-actions button`);
     await page.waitFor(
       `!!document.querySelector('[role="dialog"][aria-label="Discard this draft?"] [data-autofocus]')`,
     );
-    await page.click(
-      '[role="dialog"][aria-label="Discard this draft?"] [data-autofocus]',
-    );
-    await page.waitFor(
-      `!document.querySelector('[aria-label="Sub-issue title"]')`,
-    );
+    await page.click('[role="dialog"][aria-label="Discard this draft?"] [data-autofocus]');
+    await page.waitFor(`!document.querySelector('[aria-label="Sub-issue title"]')`);
     await page.eval("window.releaseBitmap()");
     await sleep(600);
     await openComposer();
     await sleep(300);
     expect(
-      await page.eval(
-        `[document.querySelector('[aria-label="Sub-issue title"]').value,${media}]`,
-      ),
+      await page.eval(`[document.querySelector('[aria-label="Sub-issue title"]').value,${media}]`),
     ).toEqual(["", 0]);
     await page.reload();
     await page.waitFor(`!!document.getElementById('summary')`);
     await openComposer();
     await sleep(300);
     expect(
-      await page.eval(
-        `[document.querySelector('[aria-label="Sub-issue title"]').value,${media}]`,
-      ),
+      await page.eval(`[document.querySelector('[aria-label="Sub-issue title"]').value,${media}]`),
     ).toEqual(["", 0]);
   });
   await test.step("a sub-issue file save that finishes after leaving adds the file to the current draft without dropping newer edits; after a discard it adds nothing", async () => {
@@ -972,9 +778,7 @@ test("a sub-issue draft's late upload or file save never loses newer edits or re
     const openComposer = async () => {
       await page.eval("document.activeElement?.blur()");
       await page.key("o", "meta", "shift");
-      await page.waitFor(
-        `document.activeElement?.getAttribute('aria-label')==='Sub-issue title'`,
-      );
+      await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Sub-issue title'`);
     };
     await page.waitFor(`!!document.getElementById('summary')`);
     await openComposer();
@@ -988,28 +792,41 @@ test("a sub-issue draft's late upload or file save never loses newer edits or re
     await page.key("End");
     await page.type(" NEWER");
     await page.eval("window.releaseFiles()");
-    await page.waitFor(
-      `JSON.stringify(${stored})==='["Saved late NEWER",1]'`,
-      8000,
-    );
+    await page.waitFor(`JSON.stringify(${stored})==='["Saved late NEWER",1]'`, 8000);
     // Discarded while the save is held: nothing is added to the next draft.
     await page.click('[aria-label="Sub-issue description"]');
     await paste("dropped-file.png");
     await page.waitFor(`typeof window.releaseFiles==='function'`);
-    await page.click(
-      `[aria-label="Create sub-issue"] .rich-editor-actions button`,
-    );
+    await page.click(`[aria-label="Create sub-issue"] .rich-editor-actions button`);
     await page.waitFor(
       `!!document.querySelector('[role="dialog"][aria-label="Discard this draft?"] [data-autofocus]')`,
     );
-    await page.click(
-      '[role="dialog"][aria-label="Discard this draft?"] [data-autofocus]',
-    );
-    await page.waitFor(
-      `!document.querySelector('[aria-label="Sub-issue title"]')`,
-    );
+    await page.click('[role="dialog"][aria-label="Discard this draft?"] [data-autofocus]');
+    await page.waitFor(`!document.querySelector('[aria-label="Sub-issue title"]')`);
     await page.eval("window.releaseFiles()");
     await sleep(600);
     expect(await page.eval(stored)).toBeNull(); // an empty draft is not stored
   });
+});
+
+test("sub-issue field menus include Jira users and labels absent from every issue", async ({
+  open,
+}) => {
+  await fixture.reset({ writable: true });
+  const directory = `;const directoryFetch=fetch;window.fetch=async(...args)=>{const response=await directoryFetch(...args);if(new URL(String(args[0]),location.href).pathname!=="/api/options")return response;const options=await response.json();options.users.push({id:"directory-only",name:"Directory only"});options.labels.push("jira-only");return Response.json(options)}`;
+  const page = await open("?issue=TEST-2&view=page", { setup: tree + directory });
+  await page.click('[aria-label="Change assignee for TEST-4"]');
+  await expect(
+    page.page
+      .locator('[aria-label="Assign issue"] .menu-name')
+      .filter({ hasText: /^Directory only$/ }),
+  ).toHaveCount(1);
+  await page.key("Escape");
+  await page.click('[aria-label="Sub-issue display options"]');
+  await show(page, "Labels");
+  await page.key("Escape");
+  await page.click('[aria-label="Change labels for TEST-4"]');
+  await expect(
+    page.page.locator('[aria-label="Change labels"] [cmdk-item][data-value="jira-only"]'),
+  ).toHaveCount(1);
 });

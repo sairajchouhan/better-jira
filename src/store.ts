@@ -1,6 +1,5 @@
-import { knownPeople } from "./board-catalog";
 import { savedViewClient } from "./saved-view-client";
-import { assignableUsers, statusById, statuses } from "./board-catalog";
+import { assignableUsers, knownPeople, statusById, statuses } from "./board-catalog";
 import { effectiveSettings, setScope, viewSettings } from "./view-settings";
 import { useMemo, useSyncExternalStore } from "react";
 import { adfToText } from "./adf";

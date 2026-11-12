@@ -34,19 +34,10 @@ export function PillSelect({
         <span className="truncate">{current}</span>
       </button>
       {anchor && (
-        <MenuSurface
-          label={label}
-          anchor={anchor}
-          fit
-          close={() => setAnchor(null)}
-        >
+        <MenuSurface label={label} anchor={anchor} fit close={() => setAnchor(null)}>
           {/* Opens on the current choice, like Linear, not the first option. */}
           <Menu defaultValue={`${current} ${value}`}>
-            <Menu.Input
-              autoFocus
-              aria-label={`${label}…`}
-              placeholder={`${label}…`}
-            />
+            <Menu.Input autoFocus aria-label={`${label}…`} placeholder={`${label}…`} />
             <Menu.List maxHeight="300px">
               <Menu.Empty>No matches</Menu.Empty>
               {options.map(([v, l]) => (
@@ -98,13 +89,7 @@ export function PropertyPill<P>({
       >
         <span className="truncate">{current}</span>
       </button>
-      {anchor && (
-        <FieldMenu
-          {...menuProps}
-          anchor={anchor}
-          close={() => setAnchor(null)}
-        />
-      )}
+      {anchor && <FieldMenu {...menuProps} anchor={anchor} close={() => setAnchor(null)} />}
     </>
   );
 }

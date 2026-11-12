@@ -1,30 +1,12 @@
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
 /* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
-import {
-  Fragment,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import {
-  RelationIcon,
-  Icon,
-  PriorityIcon,
-  ProgressRing,
-  StatusIcon,
-} from "./icons";
+import { RelationIcon, Icon, PriorityIcon, ProgressRing, StatusIcon } from "./icons";
 import { Confirm, MenuSurface } from "./menu-surface";
 import { Menu } from "./menu";
-import {
-  StatusMenu,
-  PriorityMenu,
-  AssigneeMenu,
-  LabelsMenu,
-} from "./property-menu";
+import { StatusMenu, PriorityMenu, AssigneeMenu, LabelsMenu } from "./property-menu";
 import { issueMenuEntries, type IssueMenuDialog } from "./issue-menu";
 import { InlineEditor } from "./rich-editor-loader";
 import { useCommand } from "./commands";
@@ -58,11 +40,7 @@ import { shortDate } from "./due-date";
 import { shortcutLabel } from "./shortcuts";
 import { canHaveChildren } from "./issue-properties";
 import { rankBetween, type Property } from "./view-model";
-import {
-  defaultSubIssueDisplay,
-  subIssueRows,
-  type SubIssueDisplay,
-} from "./sub-issue-model";
+import { defaultSubIssueDisplay, subIssueRows, type SubIssueDisplay } from "./sub-issue-model";
 import {
   emptySubIssueDraft,
   readSubIssueDraft,
@@ -106,6 +84,7 @@ function PropertyControl({
   className,
   board,
   value,
+  priorityEmpty,
   onChange,
   children,
 }: {
@@ -115,6 +94,7 @@ function PropertyControl({
   className: string;
   board: Board;
   value: IssueDraft;
+  priorityEmpty?: string;
   onChange: (patch: IssueDraft) => void;
   children: ReactNode;
 }) {
@@ -132,7 +112,7 @@ function PropertyControl({
       <PriorityMenu
         {...props}
         value={value.priority ?? ""}
-        empty={"key" in value ? "No priority" : "Default priority"}
+        empty={priorityEmpty}
         onChange={(priority) => onChange({ priority: priority || undefined })}
       />
     ),
@@ -174,18 +154,14 @@ function parseDisplay(value: unknown): SubIssueDisplay {
   const source = value as Partial<SubIssueDisplay>;
   return {
     ...base,
-    ...(orderings.some(([id]) => id === source.ordering)
-      ? { ordering: source.ordering }
-      : {}),
+    ...(orderings.some(([id]) => id === source.ordering) ? { ordering: source.ordering } : {}),
     ...(["all", "day", "week", "month", "none"].includes(source.completed ?? "")
       ? { completed: source.completed }
       : {}),
     ...(typeof source.nested === "boolean" ? { nested: source.nested } : {}),
     ...(Array.isArray(source.properties)
       ? {
-          properties: source.properties.filter((p) =>
-            properties.some(([id]) => id === p),
-          ),
+          properties: source.properties.filter((p) => properties.some(([id]) => id === p)),
         }
       : {}),
   } as SubIssueDisplay;
@@ -198,9 +174,7 @@ export const statusOf = (boards: Boards, child: Issue) => {
   return {
     name: result?.name ?? child.status,
     category: result?.category ?? "new",
-    order: columns.findIndex((c) =>
-      c.statuses.some((s) => s.id === child.status),
-    ),
+    order: columns.findIndex((c) => c.statuses.some((s) => s.id === child.status)),
   };
 };
 const openIssue = (target: Issue) =>
@@ -225,15 +199,8 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
   const parent = issue.parent ? all.get(issue.parent) : undefined;
   if (!parent) return null;
   const status = (i: Issue) => statusOf(boards, i),
-    model = subIssueRows(
-      parent.key,
-      [...all.values()],
-      defaultSubIssueDisplay(),
-      status,
-    ),
-    siblings = model.rows
-      .filter((row) => row.depth === 0)
-      .map((row) => row.issue);
+    model = subIssueRows(parent.key, [...all.values()], defaultSubIssueDisplay(), status),
+    siblings = model.rows.filter((row) => row.depth === 0).map((row) => row.issue);
   return (
     <div className="mt-2 mb-2.5 flex h-[26px] items-center text-[13px] leading-[normal]">
       <span className="mr-0.5 font-[450] text-fg-3">Sub-issue of</span>
@@ -242,8 +209,7 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
         className="flex h-[26px] min-w-0 items-center gap-1 rounded-lg border border-transparent px-1 hover:bg-hover"
         href={issueURL(parent)}
         onClick={(event) => {
-          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
-            return;
+          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
           event.preventDefault();
           openIssue(parent);
         }}
@@ -273,11 +239,7 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
           fit
         >
           <Menu style={{ width: 347 }}>
-            <Menu.Input
-              hideWhenEmpty
-              autoFocus
-              aria-label={`Open sub-issues of ${parent.key}…`}
-            />
+            <Menu.Input hideWhenEmpty autoFocus aria-label={`Open sub-issues of ${parent.key}…`} />
             <Menu.List>
               <Menu.Group heading="Navigation">
                 {siblings.map((child) => (
@@ -292,9 +254,7 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
                       if (child.key !== issue.key) openIssue(child);
                     }}
                   >
-                    <span className="mr-2 text-[var(--menu-fg-3)]">
-                      {child.key}
-                    </span>
+                    <span className="mr-2 text-[var(--menu-fg-3)]">{child.key}</span>
                     {child.summary}
                   </Menu.Item>
                 ))}
@@ -316,9 +276,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
   const storageKey = `better-jira:sub-issues:v1:${namespace}`;
   const [display, setDisplay] = useState(() => {
     try {
-      return parseDisplay(
-        JSON.parse(localStorage.getItem(storageKey) ?? "null"),
-      );
+      return parseDisplay(JSON.parse(localStorage.getItem(storageKey) ?? "null"));
     } catch {
       return defaultSubIssueDisplay();
     }
@@ -360,19 +318,12 @@ export function SubIssues({ issue }: { issue: Issue }) {
     priority: undefined,
     status:
       board.columns
-        .find(
-          (c) =>
-            !/backlog/i.test(c.name) &&
-            c.statuses.some((s) => s.category === "new"),
-        )
-        ?.statuses.find((s) => s.category === "new")?.id ??
-      board.columns[0]?.statuses[0]?.id,
+        .find((c) => !/backlog/i.test(c.name) && c.statuses.some((s) => s.category === "new"))
+        ?.statuses.find((s) => s.category === "new")?.id ?? board.columns[0]?.statuses[0]?.id,
     labels: [],
   });
   const draftKey = `better-jira:sub-issue-draft:v1:${namespace}:${issue.key}`;
-  const [value, setValue] = useState(() =>
-      readSubIssueDraft(draftKey, initial()),
-    ),
+  const [value, setValue] = useState(() => readSubIssueDraft(draftKey, initial())),
     pending = useRef(value),
     [editor, setEditor] = useState(0);
   const { title, description, files, properties: draft } = value;
@@ -395,9 +346,9 @@ export function SubIssues({ issue }: { issue: Issue }) {
     const apply = (event: Event) => {
       event.preventDefault();
       update(
-        (
-          event as CustomEvent<(draft: SubIssueDraft) => Partial<SubIssueDraft>>
-        ).detail(pending.current),
+        (event as CustomEvent<(draft: SubIssueDraft) => Partial<SubIssueDraft>>).detail(
+          pending.current,
+        ),
       );
     };
     addEventListener(`late:${draftKey}`, apply);
@@ -458,15 +409,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
     // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
   }, [all, boards]);
   const model = useMemo(
-    () =>
-      subIssueRows(
-        issue.key,
-        [...all.values()],
-        display,
-        status,
-        Date.now(),
-        reveal,
-      ),
+    () => subIssueRows(issue.key, [...all.values()], display, status, Date.now(), reveal),
     // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
     [issue.key, all, boards, display, reveal],
   );
@@ -490,9 +433,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
   const section = useRef<HTMLElement>(null);
   // ⌘⇧O does what this section's create button does, while it shows one.
   useCommand("create-sub-issue", (key) => {
-    const button = section.current?.querySelector<HTMLElement>(
-      "[data-create-child]",
-    );
+    const button = section.current?.querySelector<HTMLElement>("[data-create-child]");
     if (key !== issue.key || !button) return;
     button.click();
     return true;
@@ -571,9 +512,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
     requestAnimationFrame(() => titleInput.current?.focus());
   };
   const submitFromButton = () =>
-    form.current
-      ?.querySelector<HTMLButtonElement>(".rich-editor-submit")
-      ?.click();
+    form.current?.querySelector<HTMLButtonElement>(".rich-editor-submit")?.click();
   useHotkey("Mod+Enter", submitFromButton, {
     target: titleInput,
     capture: true,
@@ -619,19 +558,14 @@ export function SubIssues({ issue }: { issue: Issue }) {
     </PropertyControl>
   );
   /** The composer's chip for a field, picking into the draft. */
-  const draftControl = (
-    field: Field,
-    label: string,
-    content: React.ReactNode,
-  ) => (
+  const draftControl = (field: Field, label: string, content: React.ReactNode) => (
     <PropertyControl
       key={field}
       field={field}
       board={board}
       value={draft}
-      onChange={(patch) =>
-        update({ properties: { ...pending.current.properties, ...patch } })
-      }
+      priorityEmpty={noPriority}
+      onChange={(patch) => update({ properties: { ...pending.current.properties, ...patch } })}
       label={label}
       className={button}
     >
@@ -668,18 +602,12 @@ export function SubIssues({ issue }: { issue: Issue }) {
       {!!model.total && (
         <div className="-ml-1.5 mb-2 flex items-center gap-1.5 pr-2">
           <button
-            aria-label={
-              collapsed
-                ? "Expand sub-issues section"
-                : "Collapse sub-issues section"
-            }
+            aria-label={collapsed ? "Expand sub-issues section" : "Collapse sub-issues section"}
             aria-expanded={!collapsed}
             className="flex h-6 items-center gap-0.5 rounded-full pr-[13px] pl-1.5 text-[12px] font-medium text-fg-3 hover:bg-hover"
             onClick={() => setCollapsed(!collapsed)}
           >
-            <span
-              className={`grid size-4 place-items-center ${collapsed ? "" : "rotate-90"}`}
-            >
+            <span className={`grid size-4 place-items-center ${collapsed ? "" : "rotate-90"}`}>
               <Icon name="chevron" size={14} />
             </span>
             <span>Sub-issues</span>
@@ -775,11 +703,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
             {display.properties.includes("status") &&
               control(child, "status", <StatusIcon status={status(child)} />)}
             {display.properties.includes("priority") &&
-              control(
-                child,
-                "priority",
-                <PriorityIcon name={child.priority} />,
-              )}
+              control(child, "priority", <PriorityIcon name={child.priority} />)}
             {display.properties.includes("id") && (
               <span className="px-1 text-fg-3">{child.key}</span>
             )}
@@ -787,13 +711,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
               className="flex min-w-0 flex-1 items-center gap-2 py-1.5 text-[13px] font-medium text-fg"
               href={childURL(child)}
               onClick={(event) => {
-                if (
-                  event.metaKey ||
-                  event.ctrlKey ||
-                  event.shiftKey ||
-                  event.altKey
-                )
-                  return;
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
                 event.preventDefault();
                 navigate({
                   board: child.board,
@@ -809,19 +727,14 @@ export function SubIssues({ issue }: { issue: Issue }) {
                   data-row-progress
                   className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border-[0.5px] border-line-2 px-2 text-[12px] font-[450] text-fg-3"
                 >
-                  <ProgressRing
-                    value={
-                      progress.get(child.key)![0] / progress.get(child.key)![1]
-                    }
-                  />
+                  <ProgressRing value={progress.get(child.key)![0] / progress.get(child.key)![1]} />
                   {progress.get(child.key)!.join("/")}
                 </span>
               )}
             </a>
             {/* Linear's row badges (RAJ-54 blocking 1, RAJ-55 blocked 1; Opus review 4): a red relation icon and how many issues. */}
             {(["blocking", "blocked"] as const).map((kind) => {
-              const count =
-                child.relations?.filter((r) => r.kind === kind).length ?? 0;
+              const count = child.relations?.filter((r) => r.kind === kind).length ?? 0;
               return (
                 count > 0 && (
                   <span
@@ -837,11 +750,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
               );
             })}
             {display.properties.includes("labels") &&
-              control(
-                child,
-                "labels",
-                child.labels.join(", ") || <Icon name="label" size={13} />,
-              )}
+              control(child, "labels", child.labels.join(", ") || <Icon name="label" size={13} />)}
             {display.properties.includes("milestone") && (
               <span className="truncate text-fg-3">
                 {child.milestones?.map((m) => m.name).join(", ")}
@@ -920,9 +829,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
             id={`sub-issue-description-${issue.key}`}
             mentionIssue={issue.key}
             scope={scope}
-            onLateMedia={(merge) =>
-              late((draft) => ({ description: merge(draft.description) }))
-            }
+            onLateMedia={(merge) => late((draft) => ({ description: merge(draft.description) }))}
             initial={description}
             label="Sub-issue description"
             placeholder="Add description…"
@@ -953,10 +860,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
                   {field === "priority" ? (
                     <PriorityIcon name={draft.priority} />
                   ) : (
-                    <Icon
-                      name={field === "labels" ? "label" : "user"}
-                      size={14}
-                    />
+                    <Icon name={field === "labels" ? "label" : "user"} size={14} />
                   )}
                   {/* Linear names the value on each chip: "Priority", the assignee, "Labels". */}
                   {field === "priority"
@@ -1118,7 +1022,6 @@ function RenameIssue({ issue, close }: { issue: Issue; close: () => void }) {
   );
 }
 const continues = (rows: { depth: number }[], index: number, level: number) => {
-  for (const row of rows.slice(index + 1))
-    if (row.depth <= level) return row.depth === level;
+  for (const row of rows.slice(index + 1)) if (row.depth <= level) return row.depth === level;
   return false;
 };
