@@ -560,6 +560,9 @@ function ColumnView({
         {issues.slice(0, limit).map((i) => (
           <BoardCard key={i.key} issue={i} selected={i.key === selected} display={display} />
         ))}
+        <Button type="button" variant="borderless" size="medium" onClick={create} aria-label={`Add issue to ${bucket.name}`}>
+          <Icon name="plus" size={14} /> Add issue
+        </Button>
       </div>
     </section>
   );
