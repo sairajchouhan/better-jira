@@ -3,8 +3,8 @@
 import { useHotkeys, useHotkey } from "@tanstack/react-hotkeys";
 import { adfToText } from "./adf";
 import { discardLateMedia, documentHasMedia, lateMediaDiscarded } from "@/shared/document";
-import { Button, IconButton, SendButton } from "@/client/components/button";
-import { Shortcut } from "@/client/components/keycap";
+import { Button } from "@/client/components/button";
+import { EditorActions, EditorArea, EditorFrame, presentations } from "./editor-frame";
 import { Icon } from "@/client/components/icons";
 import { Text } from "@/client/components/text";
 import { mediaCaretPlugin } from "./media-caret";
@@ -190,15 +190,6 @@ export type EditorEngineProps = RichEditorProps & {
   /** Input the loader's stand-in took before this chunk arrived: text continues where the content ends, then ⌘↵ saves. */
   early?: { text: string; submit: boolean };
 };
-// Presentation policy stays private to the engine. Callers compose a named editor variant.
-const BUSY = "Finish or discard attachments before sending";
-const presentations = {
-  framed: { inline: false, selectionToolbar: false, variant: undefined },
-  inline: { inline: true, selectionToolbar: false, variant: undefined },
-  document: { inline: true, selectionToolbar: true, variant: undefined },
-  comment: { inline: false, selectionToolbar: false, variant: "comment" },
-} as const;
-
 export function RichEditor(props: EditorEngineProps) {
   const presentation = presentations[props.presentation];
   const host = useRef<HTMLDivElement>(null),
@@ -772,11 +763,9 @@ export function RichEditor(props: EditorEngineProps) {
   const preloadPeople = () =>
     void searchPeople("", props.mentionIssue ?? props.issueKey).catch(() => {});
   return (
-    <div
-      className={`rich-editor group/editor relative ${presentation.inline ? "" : "mb-3 rounded-lg border border-line-2 bg-card"}`}
-      data-variant={presentation.variant}
-      data-inline={presentation.inline || undefined}
-      data-expanded={props.expanded || undefined}
+    <EditorFrame
+      presentation={props.presentation}
+      expanded={props.expanded}
       // The first @ lists people at once: Jira is asked when the editor is approached, not on the @ (R2-comments-D6).
       onPointerEnter={props.onSave ? preloadPeople : undefined}
       onFocusCapture={preloadPeople}
@@ -810,15 +799,10 @@ export function RichEditor(props: EditorEngineProps) {
           }}
         />
       )}
-      <div ref={frame} className="relative">
-        {empty && props.placeholder && (
-          <p aria-hidden className="rich-placeholder pointer-events-none absolute text-fg-4">
-            {props.placeholder}
-          </p>
-        )}
+      <EditorArea ref={frame} placeholder={empty && props.placeholder}>
         <div ref={host} />
         {view.current && <TableControls view={view.current} frame={frame} />}
-      </div>
+      </EditorArea>
       {slash && (
         <CaretMenu
           {...caretAnchor(slash.from, dismissSlash)}
@@ -889,49 +873,15 @@ export function RichEditor(props: EditorEngineProps) {
           {uploadNotice}
         </Text>
       )}
-      {(props.onSave || props.onCancel) && (
-        <div className="rich-editor-actions flex items-center justify-end gap-2 border-t border-line-2 p-2 text-[12px]">
-          {presentation.variant === "comment" && formatting}
-          {presentation.variant !== "comment" && (
-            <span className="rich-editor-hint mr-auto text-fg-3"><Shortcut keys="Mod+Enter" size="small" /> {props.hint?.save ?? "save"} ·{" "}
-              <Shortcut keys="Escape" size="small" /> {props.hint?.cancel ?? "cancel"}</span>
-          )}
-          {/* Linear's edit actions: a medium link Cancel beside a medium Save (Comment.*.js). */}
-          {props.onCancel && (
-            <Button variant="link" size="medium" aria-label={props.cancelLabel} onClick={props.onCancel}>
-              {props.cancelLabel ?? "Cancel"}
-            </Button>
-          )}
-          {props.onFiles && (
-            <IconButton label="Attach images, files, or videos" size="small" onClick={() => fileInput.current?.click()}>
-              <Icon name="paperclip" />
-            </IconButton>
-          )}
-          {props.onSave &&
-            (presentation.variant === "comment" ? (
-              <SendButton
-                label={props.saveLabel ?? "Save description"}
-                tooltip="Submit comment"
-                disabled={uploadBusy || empty}
-                disabledReason={uploadBusy ? BUSY : undefined}
-                onClick={() => save()}
-              />
-            ) : (
-              // `rich-editor-submit` is the hook the sub-issue composer's ⌘↵ clicks. Passing `disabledReason` (even
-              // undefined) keeps the reason's wrapper, so the button is not remounted when uploads start or finish.
-              <Button
-                size="medium"
-                className="rich-editor-submit"
-                aria-label={props.saveLabel ?? "Save description"}
-                disabled={uploadBusy || (props.required && empty)}
-                disabledReason={uploadBusy ? BUSY : undefined}
-                onClick={() => save()}
-              >
-                {props.saveLabel ?? "Save description"}
-              </Button>
-            ))}
-        </div>
-      )}
-    </div>
+      <EditorActions
+        props={props}
+        presentation={props.presentation}
+        formatting={formatting}
+        attach={() => fileInput.current?.click()}
+        save={() => save()}
+        busy={uploadBusy}
+        empty={empty}
+      />
+    </EditorFrame>
   );
 }

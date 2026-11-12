@@ -32,13 +32,12 @@ test("editor presentations retain their frame, toolbar and submit contracts", ()
 });
 
 test("each public editor wrapper loads the editor and passes its own presentation", async () => {
-  const { FramedEditor, InlineEditor, DocumentBodyEditor, CommentComposer } = await import(
+  const { FramedEditor, InlineEditor, DocumentBodyEditor, CommentComposer, loadEditor } = await import(
     "./rich-editor-loader"
   );
   // Keep the document visible while the editor chunk arrives.
   expect(renderToStaticMarkup(<FramedEditor initial="Existing description" />)).toContain("Existing description");
-  await import("./rich-editor");
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await loadEditor();
 
   const framed = renderToStaticMarkup(<FramedEditor initial="" onSave={() => {}} />);
   expect(framed).toContain("mb-3 rounded-lg border border-line-2 bg-card");

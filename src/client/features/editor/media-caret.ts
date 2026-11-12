@@ -2,26 +2,24 @@ import { Fragment, type Node as EditorNode } from "prosemirror-model";
 import { Plugin } from "prosemirror-state";
 import { Debouncer } from "@tanstack/pacer";
 import type { EditorView } from "prosemirror-view";
+import { withCaretParagraphs } from "./editor-shape";
 const media = (node: EditorNode | undefined | null) =>
   !!node?.isBlock && ["mediaSingle", "mediaGroup", "media"].includes(node.type.name);
 /** Editor-only empty paragraphs give Chromium real caret positions beside block media, and one ends a document whose last
- * block is not text (a table, divider or code block), like Linear's trailing node. Empty, they are never saved. */
+ * block is not text (a table, divider or code block), like Linear's trailing node. Empty, they are never saved. Placed by
+ * the rule the loader's stand-in shares (editor-shape.ts), so the editor takes over at the stand-in's height (BJ-198). */
 export function mediaCaretDocument(node: EditorNode): EditorNode {
   if (node.isLeaf) return node;
   const children: EditorNode[] = [];
   node.forEach((child) => children.push(mediaCaretDocument(child)));
-  const out: EditorNode[] = [];
-  for (let i = 0; i < children.length; i++) {
-    const child = children[i]!;
-    if (media(child) && !out.at(-1)?.isTextblock)
-      out.push(node.type.schema.nodes.paragraph!.create({ mediaBoundary: true }));
-    out.push(child);
-    if (media(child) && !children[i + 1]?.isTextblock && !media(children[i + 1]))
-      out.push(node.type.schema.nodes.paragraph!.create({ mediaBoundary: true }));
-  }
-  if (node.type.name === "doc" && out.length && !out.at(-1)!.isTextblock)
-    out.push(node.type.schema.nodes.paragraph!.create({ mediaBoundary: true }));
-  const content = Fragment.fromArray(out);
+  const content = Fragment.fromArray(
+    withCaretParagraphs(children, {
+      doc: node.type.name === "doc",
+      type: (child) => child.type.name,
+      textblock: (child) => child.isTextblock,
+      caret: () => node.type.schema.nodes.paragraph!.create({ mediaBoundary: true }),
+    }),
+  );
   return node.type.validContent(content) ? node.copy(content) : node;
 }
 export function mediaCaretPlugin() {

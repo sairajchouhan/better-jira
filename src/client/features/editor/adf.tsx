@@ -6,6 +6,7 @@ import { Icon } from "@/client/components/icons";
 import { ReadonlyCodeBlock } from "./code-block";
 import { embedFrame, embedSource } from "./embed";
 import { SmartLink, smartLinkWrapper } from "./smart-link";
+import { preservedLabel } from "./editor-shape";
 export { adfToText } from "@/shared/document";
 
 /** Renders Jira's ADF (Atlassian Document Format) with the editor's DOM and classes, so `.rich-doc` styles both the
@@ -32,7 +33,12 @@ export function Adf({
     case "doc":
       return <div className="rich-doc flow-root">{kids}</div>;
     case "paragraph":
-      return <p>{kids}</p>;
+      return (
+        <p data-media-caret={a.mediaBoundary ? "true" : undefined}>
+          {kids}
+          {trailingBreak(node)}
+        </p>
+      );
     case "text":
       return (node.marks ?? []).reduce(
         mark,
@@ -45,7 +51,12 @@ export function Adf({
     case "heading": {
       const level = Math.max(1, Math.min(6, Number(a.level) || 2)),
         H = `h${level}` as "h1";
-      return <H>{kids}</H>;
+      return (
+        <H>
+          {kids}
+          {trailingBreak(node)}
+        </H>
+      );
     }
     case "bulletList":
       return <ul>{kids}</ul>;
@@ -187,6 +198,11 @@ export function Adf({
     case "media":
     case "mediaInline":
       return <MediaView node={node} issueKey={issueKey} attachments={attachments} />;
+    // What the editor keeps but can't edit (editor-shape.ts gives the stand-in these), as the editor draws it.
+    case "opaqueBlock":
+      return <div contentEditable={false} className="rich-preserved">{preservedLabel(a.raw)}</div>;
+    case "opaqueInline":
+      return <span contentEditable={false} className="rich-preserved">{preservedLabel(a.raw)}</span>;
     default:
       return kids?.length ? (
         <>{kids}</>
@@ -195,6 +211,10 @@ export function Adf({
       );
   }
 }
+
+/** The break ProseMirror ends an empty line or a trailing hard break with, so the line keeps its height as in the editor. */
+const trailingBreak = (node: any) =>
+  !node.content?.length || node.content.at(-1)?.type === "hardBreak" ? <br className="ProseMirror-trailingBreak" /> : null;
 
 /** Bare URLs in plain text become links, as Linear shows them. */
 function linkify(text: string): ReactNode {

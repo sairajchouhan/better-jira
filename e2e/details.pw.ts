@@ -155,6 +155,70 @@ test("BJ-193: an issue opened while its details load mounts each editor once", a
   expect(await page.eval(`document.querySelectorAll(".issue-description .rich-content").length`)).toBe(1);
 });
 
+// Each frame, the issue's layout and which editors are real, so a test can compare the stand-ins' frame with the editors'.
+const WATCH_LAYOUT = `
+  window.__layout = [];
+  const frame = () => {
+    const description = document.querySelector(".issue-description");
+    const activity = [...document.querySelectorAll("h3")].find((h) => h.textContent === "Activity");
+    const field = document.querySelector('[aria-label="Leave a comment…"]');
+    const composer = field?.closest(".rich-editor") ?? field;
+    if (description && activity && composer)
+      window.__layout.push({
+        at: performance.now(),
+        description: !!document.querySelector("#description.ProseMirror"),
+        comment: !!document.querySelector("#comment.ProseMirror"),
+        busy: document.querySelectorAll('.rich-content[aria-busy="true"]').length,
+        descriptionHeight: description.getBoundingClientRect().height,
+        activityTop: activity.getBoundingClientRect().top,
+        composerHeight: composer.getBoundingClientRect().height,
+      });
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+`;
+
+for (const smartLinks of [false, true])
+  test(`BJ-198: the editors take over from their stand-ins in one frame and move nothing${smartLinks ? " (smart links)" : ""}`, async ({
+    open,
+  }) => {
+    await fixture.reset({ smartLinks });
+    const page = await open("", { height: 1400, setup: WATCH_LAYOUT });
+    // A cold editor chunk: held until both stand-ins show (BJ-110).
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    await page.page.route("**/*.js", async (route) => {
+      const response = await route.fetch();
+      if ((await response.text()).includes("Invalid content for node")) await gate;
+      await route.fulfill({ response });
+    });
+    await page.click('[data-key="TEST-2"]');
+    try {
+      // Released as soon as both show, inside React's 300ms Suspense reveal throttle.
+      await page.waitFor(`document.querySelectorAll('.rich-content[aria-busy="true"]').length === 2`);
+      await page.eval(`window.__released = performance.now()`);
+    } finally {
+      release();
+    }
+    await page.waitFor(`!!document.querySelector("#description.ProseMirror") && !!document.querySelector("#comment.ProseMirror")`);
+    await sleep(300);
+    type Frame = { at: number; description: boolean; comment: boolean; busy: number; descriptionHeight: number; activityTop: number; composerHeight: number };
+    const frames = await page.eval<Frame[]>(`window.__layout`);
+    const before = frames.findLast((f) => f.busy === 2)!,
+      after = frames.at(-1)!;
+    expect(before).toBeDefined();
+    // Both editors replace their stand-ins in the same frame: no stand-in waits behind React's Suspense reveal throttle.
+    expect(frames.filter((f) => f.busy === 1)).toEqual([]);
+    expect(after).toMatchObject({ description: true, comment: true, busy: 0 });
+    // And as soon as the chunk arrives (~50ms to fetch and run it): React's throttle held them until 300ms after the
+    // stand-ins showed, ~200ms after this release.
+    expect(frames.find((f) => f.busy === 0)!.at - (await page.eval<number>(`window.__released`))).toBeLessThan(160);
+    const layout = ({ descriptionHeight, activityTop, composerHeight }: Frame) => ({ descriptionHeight, activityTop, composerHeight });
+    expect(layout(after)).toEqual(layout(before));
+    // Nothing moved in any frame between.
+    expect(new Set(frames.slice(frames.indexOf(before)).map((f) => JSON.stringify(layout(f)))).size).toBe(1);
+  });
+
 test("BJ-193: the editor takes over from its stand-in in one frame, keeping a scroll made while the issue opens", async ({
   open,
 }) => {
@@ -172,8 +236,7 @@ test("BJ-193: the editor takes over from its stand-in in one frame, keeping a sc
   let top: number;
   try {
     await page.waitFor(`!!document.querySelector('.issue-description [aria-busy="true"].rich-content')`);
-    // Near the end, as a reader landing on the issue might scroll; not at it, since the composer's stand-in is a little
-    // taller than its editor.
+    // Near the end, as a reader landing on the issue might scroll.
     top = await page.eval<number>(`(() => {
       const body = document.querySelector(".issue-detail-body");
       body.scrollTop = body.scrollHeight - body.clientHeight - 40;

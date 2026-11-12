@@ -1,4 +1,5 @@
 import { mediaCaretDocument } from "./media-caret";
+import { preservedLabel } from "./editor-shape";
 import { Schema, type MarkSpec, type Node as EditorNode, type NodeSpec } from "prosemirror-model";
 import { tableNodes } from "prosemirror-tables";
 import { embedFrame, embedSource } from "./embed";
@@ -82,9 +83,7 @@ const opaque = (inline: boolean): NodeSpec => ({
   toDOM: (node) => [
     inline ? "span" : "div",
     { contenteditable: "false", class: "rich-preserved" },
-    /expand/i.test(node.attrs.raw?.type)
-      ? `▸ ${node.attrs.raw.attrs?.title || "Expand"}`
-      : `[${node.attrs.raw?.type ?? "Jira content"}]`,
+    preservedLabel(node.attrs.raw),
   ],
 });
 /** Smart links stay read-only. The editor draws them as Linear's mention chip (smart-link-view.tsx); this plain form,
