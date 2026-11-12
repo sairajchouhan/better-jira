@@ -248,6 +248,14 @@ export function CreateIssue() {
           tabLeaves
         />
         <div className="flex flex-wrap gap-2">
+          {draft.related && (
+            <div className="flex items-center gap-1" data-pending-relation>
+              <Text variant="mini">{draft.related.kind}: {draft.related.key} · {all.get(draft.related.key)?.summary}</Text>
+              <IconButton type="button" label="Remove pending relation" onClick={() => setDraft(({ related: _related, ...rest }) => rest)}>
+                <Icon name="close" />
+              </IconButton>
+            </div>
+          )}
           <PropertyPill
             label="Issue type"
             current={type}

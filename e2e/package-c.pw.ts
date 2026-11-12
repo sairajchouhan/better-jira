@@ -35,3 +35,13 @@ test("BJ-31: composer creates and removes new labels", async ({ open }) => {
   await page.key("Enter");
   expect(await page.eval(`!!document.querySelector('[aria-label="Labels: No labels"]')`)).toBe(true);
 });
+
+test("BJ-48: remove a pending relation before creating", async ({ open }) => {
+  const page = await open("?issue=TEST-2&view=page");
+  await page.click('#issue-options');
+  await page.hover('[cmdk-item][data-value="Create related"]');
+  await page.click('[cmdk-item][data-value="Blocked issue…"]');
+  await page.waitFor(`document.querySelector('[data-pending-relation]')?.textContent.includes('TEST-2')`);
+  await page.click('[aria-label="Remove pending relation"]');
+  expect(await page.eval(`!!document.querySelector('[data-pending-relation]')`)).toBe(false);
+});
