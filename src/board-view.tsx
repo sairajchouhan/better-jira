@@ -73,6 +73,9 @@ export const BoardView = memo(function BoardView({
   const boards = useStore(s => s.boards);
   board = useMemo(() => personal ? myIssuesBoard(boards, board) : board, [personal, boards, board]);
   const activeView = useActiveView();
+  const draft = useStore(s => s.editorDraft);
+  const editedView = useStore(s => s.savedViews.find(v => v.id === draft?.id));
+  const detailView = draft && editedView ? { ...editedView, ...draft, id: editedView.id } : activeView;
   const overlay = useOverlayFilters();
   const mine = useEffectiveMine();
   const query = useStore((s) => s.query);
@@ -319,7 +322,7 @@ export const BoardView = memo(function BoardView({
             )}
         {d.layout === "board" && visible.length > 0 && results}
       </div>
-      {active && shown && details && !panel && (activeView ? <ViewDetails view={activeView} issues={visible} /> : <BoardDetails board={board} issues={visible} />)}
+      {active && shown && details && !panel && (detailView ? <ViewDetails view={detailView} issues={visible} /> : <BoardDetails board={board} issues={visible} />)}
     </div>
   );
 });

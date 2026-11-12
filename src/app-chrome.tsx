@@ -399,7 +399,10 @@ function CrumbSep({ className = "" }: { className?: string }) {
 export function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue }) {
   const mine = useStore((s) => s.mine);
   const activeView = useActiveView();
-  const custom = !issue && activeView?.kind === "custom" ? activeView : null;
+  const draft = useStore((s) => s.editorDraft);
+  const saved = useSavedViews().find(v => v.id === draft?.id);
+  const current = draft && saved ? { ...saved, ...draft, id: saved.id } : activeView;
+  const custom = !issue && current?.kind === "custom" ? current : null;
   const openAllIssues = () => openBoardIssues(board.id);
   return (
     <nav

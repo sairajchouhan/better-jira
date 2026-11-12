@@ -388,7 +388,7 @@ function rememberViewDetails(id: string, open: boolean) {
   }
 }
 const customViewId = () =>
-  state.savedViews.find((v) => v.id === state.activeViewId && v.kind === "custom")?.id;
+  state.savedViews.find((v) => v.id === (state.editorDraft?.id ?? state.activeViewId) && v.kind === "custom")?.id;
 function commit(patch: Partial<State>) {
   if (patch.perf !== undefined) perfPosts++;
   const was = customViewId(),

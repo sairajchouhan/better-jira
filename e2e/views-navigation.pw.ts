@@ -156,3 +156,21 @@ test("a view route paints as the view on reload and keeps how it opens issues", 
     expect(await page.eval(`fetch('/api/views').then(r => r.json()).then(v => v.find(x => x.name === 'Page tab').display.openIn)`)).toBe("page");
   } finally { await page.close(); }
 });
+
+// BJ-148: editing an existing view preserves its identity and right sidebar.
+test("editing keeps the view breadcrumb and details open", async ({ open }) => {
+  const page = await open();
+  try {
+    await page.key("v", "alt");
+    await page.waitFor(`!!document.querySelector('[aria-label="View name"]')`);
+    await page.page.fill('[aria-label="View name"]', 'Editable view');
+    await page.click('text=Create view');
+    await page.waitFor(`location.pathname.startsWith('/view/') && !location.pathname.endsWith('/edit')`);
+    await page.click('button[aria-label="Board details"]');
+    await page.click('[aria-label="Issue view options"]');
+    await page.click('text=Edit…');
+    await page.waitFor(`location.pathname.endsWith('/edit')`);
+    expect(await page.eval(`document.querySelector('[aria-label="Breadcrumb"]').textContent.includes('Editable view')`)).toBe(true);
+    expect(await page.eval(`!!document.querySelector('[aria-label="View details"]')`)).toBe(true);
+  } finally { await page.close(); }
+});
