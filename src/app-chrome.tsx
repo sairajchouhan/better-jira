@@ -132,7 +132,7 @@ export function Sidebar({ boards }: { boards: Board[] }) {
           <Icon name="search" /> Search <Shortcut className="ml-auto" keys={hotkeyOf("search")} size="small" />
         </SideItem>
         <SideItem onClick={() => beginCreate()}>
-          <Icon name="plus" /> New issue <Shortcut className="ml-auto" keys={hotkeyOf("create")} size="small" />
+          <Icon name="plus" /> New issue <Shortcut className="ml-auto" keys={hotkeyOf("new")} size="small" />
         </SideItem>
         {/* Like Linear, My issues is a sidebar view rather than a tab beside Active/Backlog/All. */}
         <SideItem
