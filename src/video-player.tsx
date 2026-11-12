@@ -622,7 +622,7 @@ export function VideoPlayer({
               </select>
               {tip("rate", "Change playback rate", "< >")}
             </div>
-            {/* Icon-only, so not ButtonLink yet: it lacks Linear's `fk` onlyIcon shape (Ist.onlyIcon, padding-inline 2px). */}
+            {/* Not ButtonLink: it carries the player's own tooltip, like the toolbar's IconButtons with tooltip={false}. */}
             <a
               aria-label="Download"
               aria-describedby={`${tooltipId}-download`}

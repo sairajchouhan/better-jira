@@ -1,5 +1,5 @@
 import { Text } from "./text";
-import { IconButton } from "./button";
+import { ButtonLink, IconButton } from "./button";
 import "./media-primitives.css";
 import { notifyMedia } from "./media-toast";
 import { Icon } from "./icons";
@@ -35,14 +35,14 @@ export function FileMedia({ file, issueKey }: { file: Attachment; issueKey?: str
         >
           <Icon name="link" />
         </IconButton>
-        {/* Icon-only, so not ButtonLink yet: it lacks Linear's `fk` onlyIcon shape (Ist.onlyIcon, padding-inline 2px). */}
-        <a
-          aria-label={`Download ${file.name}`}
+        <ButtonLink
+          variant="borderless"
+          size="medium"
+          label={`Download ${file.name}`}
+          icon={<Icon name="download" />}
           href={file.url.startsWith("/api/") ? `${file.url}?download=1` : file.url}
           download={file.name}
-        >
-          <Icon name="download" />
-        </a>
+        />
       </div>
     </div>
   );

@@ -53,3 +53,12 @@ test("a link button is an anchor with the button's looks", () => {
   );
   expect(html).toBe('<a data-variant="secondary" data-size="small" class="ui-button " href="/backup.zip" download="">Download</a>');
 });
+
+test("an icon-only ButtonLink is IconButton's square, named and titled by its label", () => {
+  const html = renderToStaticMarkup(
+    <ButtonLink variant="borderless" size="medium" label="Download image" icon={<svg />} href="/a.png" download />,
+  );
+  expect(html).toContain('data-shape="icon"');
+  expect(html).toContain('aria-label="Download image"');
+  expect(html).toContain('title="Download image"');
+});

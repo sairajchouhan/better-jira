@@ -1,4 +1,4 @@
-import { Button, IconButton } from "./button";
+import { Button, ButtonLink, IconButton } from "./button";
 import { notifyMedia } from "./media-toast";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -150,9 +150,11 @@ export function ImageViewer({
               <Icon name="crop" size={16} />
             </IconButton>
           )}
-          {/* Icon-only, so not ButtonLink yet: it lacks Linear's `fk` onlyIcon shape (Ist.onlyIcon, padding-inline 2px). */}
-          <a
-            aria-label="Download image"
+          <ButtonLink
+            variant="borderless"
+            size="medium"
+            label="Download image"
+            icon={<Icon name="download" size={16} />}
             href={file.url.startsWith("/api/") ? `${file.url}?download=1` : file.url}
             download={
               file.url !== original.url
@@ -163,9 +165,7 @@ export function ImageViewer({
             }
             target={external && file.url === original.url ? "_blank" : undefined}
             rel="noreferrer"
-          >
-            <Icon name="download" size={16} />
-          </a>
+          />
           <IconButton
             label="Copy image"
             disabled={!editable}

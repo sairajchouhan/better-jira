@@ -103,12 +103,23 @@ export function ButtonLink({
   variant = "primary",
   size = "normal",
   icon,
+  label,
   className = "",
   children,
   ...props
-}: Look & { icon?: ReactNode } & ComponentProps<"a">) {
+}: Look & { icon?: ReactNode; label?: string } & Omit<ComponentProps<"a">, "aria-label" | "title">) {
+  // `fk onlyIcon`: no text, so the link is IconButton's square and `label` names it and titles it.
+  const onlyIcon = !children;
   return (
-    <a data-variant={variant} data-size={size} className={`ui-button ${className}`} {...props}>
+    <a
+      data-variant={variant}
+      data-size={size}
+      data-shape={onlyIcon ? "icon" : undefined}
+      aria-label={label}
+      title={onlyIcon ? label : undefined}
+      className={`ui-button ${className}`}
+      {...props}
+    >
       {icon && (
         <span aria-hidden className="ui-button-icon">
           {icon}
