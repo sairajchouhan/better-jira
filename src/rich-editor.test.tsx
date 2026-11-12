@@ -35,8 +35,8 @@ test("each public editor wrapper loads the editor and passes its own presentatio
   const { FramedEditor, InlineEditor, DocumentBodyEditor, CommentComposer } = await import(
     "./rich-editor-loader"
   );
-  // Before the editor's code arrives, a wrapper shows the loading state.
-  expect(renderToStaticMarkup(<FramedEditor initial="" />)).toContain("Loading editor…");
+  // Keep the document visible while the editor chunk arrives.
+  expect(renderToStaticMarkup(<FramedEditor initial="Existing description" />)).toContain("Existing description");
   await import("./rich-editor");
   await new Promise((resolve) => setTimeout(resolve, 0));
 

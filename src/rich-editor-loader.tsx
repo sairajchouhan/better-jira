@@ -1,19 +1,16 @@
 import { lazy, Suspense, useState } from "react";
-import { LoadingState } from "./empty-state";
+import { Adf } from "./adf";
 import type { EditorEngineProps, RichEditorProps } from "./rich-editor";
 
 let loaded: typeof import("./rich-editor").RichEditor | undefined;
 const load = () =>
   import("./rich-editor").then((module) => ({ default: (loaded = module.RichEditor) }));
 const Editor = lazy(load);
-// Fetched once the page is idle, so the first composer opens without "Loading editor…".
-if (typeof window !== "undefined")
-  (window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 200)))(() => void load());
 function LoadedEditor(props: EditorEngineProps) {
   // Chosen once per editor, so a later load never swaps the component (and remounts it) mid-edit.
   const [Component] = useState(() => loaded ?? Editor);
   return (
-    <Suspense fallback={<LoadingState>Loading editor…</LoadingState>}>
+    <Suspense fallback={<div className="rich-content" aria-busy="true"><Adf node={props.initial || props.placeholder} issueKey={props.issueKey} attachments={props.attachments} /></div>}>
       <Component {...props} />
     </Suspense>
   );
