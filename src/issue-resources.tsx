@@ -1,8 +1,9 @@
+import { Dialog, ConfirmDialog } from "./dialog";
 import { Field, TextInput } from "./field";
 import { Button, IconButton } from "./button";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Icon } from "./icons";
-import { Confirm, MenuSurface } from "./menu-surface";
+
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { normalizeDocument } from "./document";
 import {
@@ -101,7 +102,7 @@ export function ResourceForm({
       ? "Add link"
       : "Add pull request";
   return (
-    <MenuSurface label={label} close={close} width={480}>
+    <Dialog label={label} close={close} width={480}>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -132,9 +133,9 @@ export function ResourceForm({
           close();
         }}
       >
-        <h2 className="mb-4 font-medium">
+        <Dialog.Title className="mb-4">
           {resource ? label : `${label} to ${issue.key}`}
-        </h2>
+        </Dialog.Title>
         <Field>
           <Field.Label className="mb-1 block text-[12px] text-fg-3">
             URL
@@ -181,7 +182,7 @@ export function ResourceForm({
           </Button>
         </div>
       </form>
-    </MenuSurface>
+    </Dialog>
   );
 }
 export function IssueResources({ issue }: { issue: Issue }) {
@@ -436,18 +437,18 @@ export function IssueResources({ issue }: { issue: Issue }) {
       )}
       {removing &&
         (removing.kind === "document" ? (
-          <Confirm
+          <ConfirmDialog
             title={`Delete "${removing.title || "New document"}"?`}
-            detail="The document is removed from this issue. You can undo this."
-            action="Delete"
+            description="The document is removed from this issue. You can undo this."
+            confirmLabel="Delete"
             onConfirm={() => remove(removing)}
             close={() => setRemoving(null)}
           />
         ) : (
-          <Confirm
+          <ConfirmDialog
             title="Remove this link from the issue?"
-            detail="You cannot undo this action."
-            action="Remove"
+            description="You cannot undo this action."
+            confirmLabel="Remove"
             onConfirm={() => remove(removing)}
             close={() => setRemoving(null)}
           />

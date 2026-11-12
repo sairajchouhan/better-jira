@@ -1,3 +1,4 @@
+import { Dialog } from "./dialog";
 import { TextInput } from "./field";
 import { Button, IconButton } from "./button";
 import { issueMenuEntries } from "./issue-menu";
@@ -185,7 +186,7 @@ export function CreateIssue() {
     ignoreInputs: false,
   });
   return (
-    <Modal
+    <Dialog
       label="Create issue"
       close={close}
       width={expanded ? Math.max(640, window.innerWidth - 48) : 640}
@@ -197,7 +198,7 @@ export function CreateIssue() {
           submit();
         }}
       >
-        <div className="mb-3 flex items-center gap-2 text-[12px] text-fg-3">
+        <Dialog.Header className="mb-3">
           <span className="flex-1 truncate">
             {board.name} ›{" "}
             {initial.parent ? `Sub-issue of ${initial.parent}` : "New issue"}
@@ -212,16 +213,8 @@ export function CreateIssue() {
           >
             <Icon name="expand" />
           </IconButton>
-          <IconButton
-            type="button"
-            label="Close"
-            onClick={close}
-            variant="borderless"
-            size="medium"
-          >
-            <Icon name="close" />
-          </IconButton>
-        </div>
+          <Dialog.Close />
+        </Dialog.Header>
         <TextInput
           ref={titleRef}
           autoFocus
@@ -391,7 +384,7 @@ export function CreateIssue() {
           </Button>
         </div>
       </form>
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -741,8 +734,8 @@ export function IssueOptions({ issue }: { issue: Issue }) {
   const resourceKind = view === "pull-request" ? "pull-request" : "link";
   if (historyOpen)
     return (
-      <Modal label="Description history" close={close}>
-        <h3 className="mb-3 font-medium">Description history</h3>
+      <Dialog label="Description history" close={close}>
+        <Dialog.Title className="mb-3">Description history</Dialog.Title>
         <p className="mb-3 text-[12px] text-fg-3">
           Your locally saved description revisions.
         </p>
@@ -788,7 +781,7 @@ export function IssueOptions({ issue }: { issue: Issue }) {
         >
           Close
         </Button>
-      </Modal>
+      </Dialog>
     );
   if (linkOpen)
     return <ResourceForm issue={issue} kind={resourceKind} close={close} />;
@@ -1285,7 +1278,7 @@ export function AddBoard() {
     [error, setError] = useState("");
   const close = () => ui.send({ type: "overlay.close" });
   return (
-    <Modal label="Add board" close={close} width={440}>
+    <Dialog label="Add board" close={close} width={440}>
       <form
         onSubmit={async (e) => {
           e.preventDefault();
@@ -1343,6 +1336,6 @@ export function AddBoard() {
           </Button>
         </div>
       </form>
-    </Modal>
+    </Dialog>
   );
 }

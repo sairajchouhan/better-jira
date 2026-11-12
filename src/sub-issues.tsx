@@ -1,3 +1,4 @@
+import { Dialog, ConfirmDialog } from "./dialog";
 import { TextInput } from "./field";
 import { Button, IconButton } from "./button";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
@@ -12,7 +13,7 @@ import {
   ProgressRing,
   StatusIcon,
 } from "./icons";
-import { Confirm, MenuSurface } from "./menu-surface";
+import { MenuSurface } from "./menu-surface";
 import { Menu } from "./menu";
 import {
   StatusMenu,
@@ -623,10 +624,10 @@ export function SubIssues({ issue }: { issue: Issue }) {
         />
       )}
       {confirming && (
-        <Confirm
+        <ConfirmDialog
           title="Discard this draft?"
-          detail="Confirm that you want to discard this draft."
-          action="Discard"
+          description="Confirm that you want to discard this draft."
+          confirmLabel="Discard"
           onConfirm={discard}
           close={() => setConfirming(false)}
         />
@@ -721,7 +722,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
 function RenameIssue({ issue, close }: { issue: Issue; close: () => void }) {
   const [title, setTitle] = useState(issue.summary);
   return (
-    <MenuSurface label="Rename issue" close={close} width={420}>
+    <Dialog label="Rename issue" close={close} width={420}>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -739,7 +740,7 @@ function RenameIssue({ issue, close }: { issue: Issue; close: () => void }) {
           className="w-full"
         />
       </form>
-    </MenuSurface>
+    </Dialog>
   );
 }
 const continues = (rows: { depth: number }[], index: number, level: number) => {
