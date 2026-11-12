@@ -7,7 +7,8 @@ test("document reminder presets are available while the lazy date parser is bloc
   await page.click("text=Add document…");
   await page.waitFor("document.activeElement?.getAttribute('aria-label')==='Document title'");
   await page.type("Cold reminder");
-  await page.click("#resource-document");
+  await page.waitFor("!!document.getElementById('resource-document')");
+  await page.eval("document.activeElement?.blur()");
   // The custom step must also remain independent of a parser that never loads.
   await page.page.route("**/*reminder-date*.js", (route) => route.abort());
   await page.key("h", "shift");

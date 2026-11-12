@@ -27,6 +27,7 @@ export function FutureTimeStep({
     });
   return (
     <form
+      noValidate
       className="w-[320px]"
       onSubmit={(event) => {
         event.preventDefault();
