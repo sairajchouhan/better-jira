@@ -34,3 +34,42 @@
     opacity: 0.6;
   }
 }
+
+@layer components {
+  /* Linear's Tabs `sq`: cq.list (isolate, bgBase, radius 5, gap 2, -2px block margin) and cq.trigger over Mv tab/medium
+     (28px, 12px/500; margin 2, padding 4/12, gap 6, max-width 200, grow 1). Retina ring (V_n.retina): bgBorderAlphaThin
+     plus shadowLow, bgBorderSolidAlphaThin when hovered or selected. */
+  .ui-tabs-list[data-variant="section"] {
+    isolation: isolate;
+    width: fit-content;
+    gap: 2px;
+    margin-block: -2px;
+    border-radius: 5px;
+    background: var(--panel);
+  }
+  .ui-tabs-list[data-variant="section"][data-width="full"] {
+    width: 100%;
+  }
+  .ui-tabs-list[data-variant="section"] .ui-tab {
+    flex: 1 0 auto;
+    justify-content: center;
+    max-width: 200px;
+    margin: 2px;
+    padding: 4px 12px;
+    background: var(--tab);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--border-alpha-thin), var(--frame-shadow);
+  }
+  .ui-tabs-list[data-variant="section"][data-width="full"] .ui-tab {
+    flex: auto;
+    max-width: none;
+  }
+  .ui-tabs-list[data-variant="section"] .ui-tab:not([aria-selected="true"]):hover {
+    background: var(--crumb-hover);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--border-solid-alpha-thin), var(--frame-shadow);
+  }
+  .ui-tabs-list[data-variant="section"] .ui-tab[aria-selected="true"] {
+    background: var(--tab-on);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--border-solid-alpha-thin);
+    color: var(--fg);
+  }
+}
