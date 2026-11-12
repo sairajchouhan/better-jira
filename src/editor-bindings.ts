@@ -15,6 +15,7 @@ export const editorBindings: { id: string; name: string; hotkey: Hotkey }[] = [
   { id: "bullet", name: "Bulleted list", hotkey: "Mod+Shift+8" },
   { id: "ordered", name: "Numbered list", hotkey: "Mod+Shift+9" },
   { id: "code-block", name: "Code block", hotkey: "Mod+Shift+\\" },
+  { id: "expand", name: "Collapsible section", hotkey: "Mod+Shift+6" },
   { id: "move-up", name: "Move block up", hotkey: "Alt+ArrowUp" },
   { id: "move-down", name: "Move block down", hotkey: "Alt+ArrowDown" },
   { id: "attach", name: "Attach image/file", hotkey: "Mod+Shift+U" },

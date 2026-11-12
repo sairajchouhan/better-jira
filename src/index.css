@@ -559,6 +559,26 @@
   padding: 8px;
   border-radius: 6px;
 }
+.rich-content .rich-expand {
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  padding: 2px 8px 2px 2px;
+}
+.rich-content .rich-expand-header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.rich-content .rich-expand-title {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  font-weight: 500;
+  outline: none;
+}
+.rich-content .rich-expand-body {
+  padding-left: 26px;
+}
 .rich-content .rich-panel {
   border-left: 4px solid var(--accent);
   background: var(--col);

@@ -10,6 +10,7 @@ import {
   insertTable,
   linkTarget,
   markdownRules,
+  toggleExpand,
   moveBlock,
   pasteLink,
   removeLink,
@@ -19,7 +20,7 @@ import {
   toggleList,
   toggleQuote,
 } from "./editor-commands";
-import { fromEditorDocument, richSchema as s, type AdfNode } from "./rich-document";
+import { fromEditorDocument, richSchema as s, toEditorDocument, type AdfNode } from "./rich-document";
 
 const n = s.nodes;
 const p = (text = "") => n.paragraph!.create(null, text ? s.text(text) : null);
@@ -151,7 +152,22 @@ const CELL = [
   ...MEDIA,
 ];
 const JIRA: Record<string, string[]> = {
+  expand: [
+    "paragraph",
+    "panel",
+    "blockquote",
+    "orderedList",
+    "bulletList",
+    "rule",
+    "heading",
+    "codeBlock",
+    "taskList",
+    "table",
+    "blockCard",
+    ...MEDIA,
+  ],
   doc: [
+    "expand",
     "paragraph",
     "heading",
     "bulletList",
@@ -506,4 +522,45 @@ test("BJ-55: ⌥↑ / ⌥↓ move the selected block, or its list item when it i
   // A table row moves, never a cell.
   const t = apply(state([table(["1", "2"], ["3", "4"])], "3"), moveBlock(-1));
   expect(t.doc.firstChild!.firstChild!.textContent).toBe("34");
+});
+
+test("BJ-68: a collapsible section wraps top-level blocks, round-trips as Jira's expand, and unwraps", () => {
+  const typed = typeInto(empty(), ">>> body");
+  expect(typed.doc.firstChild!.type.name).toBe("expand");
+  expect(fromEditorDocument(typed.doc).content![0]).toEqual({
+    type: "expand",
+    attrs: { title: "" },
+    content: [{ type: "paragraph", content: [{ type: "text", text: "body" }] }],
+  });
+  expect(typeInto(empty(), "- >>> ").doc.textContent).toBe(">>> ");
+
+  const jira = {
+    type: "doc",
+    version: 1,
+    content: [
+      { type: "expand", attrs: { title: "Details" }, content: [{ type: "paragraph", content: [{ type: "text", text: "a" }] }] },
+    ],
+  };
+  const loaded = toEditorDocument(jira);
+  expect(loaded.firstChild!.type.name).toBe("expand");
+  expect(loaded.firstChild!.attrs.title).toBe("Details");
+  expect(fromEditorDocument(loaded)).toEqual(jira as any);
+
+  const wrapped = (() => {
+    const s0 = state([p("one"), p("two")], "one");
+    let next = s0;
+    toggleExpand(s0, (tr) => (next = s0.apply(tr)));
+    return next;
+  })();
+  expect(wrapped.doc.firstChild!.type.name).toBe("expand");
+  expect(wrapped.doc.childCount).toBe(2);
+  let unwrapped = wrapped;
+  toggleExpand(wrapped, (tr) => (unwrapped = wrapped.apply(tr)));
+  expect(unwrapped.doc.firstChild!.type.name).toBe("paragraph");
+  // In a list the whole list goes in the section (Jira allows no expand inside a list).
+  const list = state([bullets("x")], "x");
+  let listed = list;
+  toggleExpand(list, (tr) => (listed = list.apply(tr)));
+  expect(listed.doc.firstChild!.firstChild!.type.name).toBe("bulletList");
+  expect(jiraErrors(fromEditorDocument(wrapped.doc))).toEqual([]);
 });

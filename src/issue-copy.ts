@@ -78,6 +78,9 @@ export function adfToMarkdown(node: AdfNode | string | null | undefined): string
         .join("\n");
     case "rule":
       return "---";
+    case "expand":
+    case "nestedExpand":
+      return `<details><summary>${escape(String(attrs.title ?? ""))}</summary>\n\n${children.map(adfToMarkdown).join("\n\n")}\n\n</details>`;
     case "mention":
     case "status":
     case "emoji":

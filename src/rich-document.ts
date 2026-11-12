@@ -51,6 +51,9 @@ const PANEL =
   "(paragraph|heading|bulletList|orderedList|taskList|codeBlock|rule|blockCard|mediaSingle|mediaGroup|opaqueBlock)+";
 const CELL =
   "(paragraph|heading|bulletList|orderedList|taskList|codeBlock|blockquote|panel|rule|blockCard|mediaSingle|mediaGroup|opaqueBlock)+";
+/** Jira's expand: top level only (in a table cell Jira wants a nestedExpand, kept opaque). */
+const EXPAND =
+  "(paragraph|panel|blockquote|orderedList|bulletList|rule|heading|codeBlock|mediaGroup|mediaSingle|taskList|table|blockCard|opaqueBlock)+";
 const table = tableNodes({ tableGroup: "block", cellContent: CELL, cellAttributes: {} });
 function tableNode(name: keyof typeof table, role: string): NodeSpec {
   const spec = table[name]!;
@@ -105,7 +108,7 @@ const card = (block: boolean): NodeSpec => ({
 
 export const richSchema = new Schema({
   nodes: {
-    doc: { content: "block+", marks: "_", attrs },
+    doc: { content: "(block|expand)+", marks: "_", attrs },
     paragraph: {
       ...block("p", "inline*"),
       group: "block",
@@ -174,6 +177,14 @@ export const richSchema = new Schema({
       isolating: true,
       parseDOM: [],
       toDOM: () => ["div", { class: "rich-panel" }, 0],
+    },
+    expand: {
+      content: EXPAND,
+      marks: "_",
+      attrs: { ...attrs, title: { default: "" } },
+      defining: true,
+      isolating: true,
+      toDOM: (node) => ["div", { class: "rich-expand", "data-title": node.attrs.title }, 0],
     },
     rule: { group: "block", attrs, toDOM: () => ["hr"], parseDOM: [{ tag: "hr" }] },
     mention: {
@@ -269,11 +280,12 @@ const fields: Record<string, Record<string, unknown>> = {
   orderedList: { order: 1 },
   codeBlock: { language: null },
   taskItem: { state: "TODO" },
+  expand: { title: "" },
   tableCell: { colspan: 1, rowspan: 1, colwidth: null },
   tableHeader: { colspan: 1, rowspan: 1, colwidth: null },
 };
 /** Attributes Jira rejects a node or mark without, so they are sent even when they equal the default. */
-const REQUIRED = new Set(["heading.level", "taskItem.state", "subsup.type"]);
+const REQUIRED = new Set(["heading.level", "taskItem.state", "subsup.type", "expand.title"]);
 /** Jira's marks allowed together with inline code. */
 const WITH_CODE = new Set(["code", "link", "opaqueMark", "textMetadata"]);
 const markFields: Record<string, Record<string, unknown>> = {

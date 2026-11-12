@@ -17,6 +17,7 @@ import { usePlacement } from "./menu-surface";
 import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { EditorState, NodeSelection, Selection, type Command } from "prosemirror-state";
 import { mediaNodeView, type MediaNodeView } from "./media-node-view";
+import { expandNodeView } from "./expand-node-view";
 import type { Attachment } from "./attachment-media";
 import { EditorView } from "prosemirror-view";
 import "prosemirror-view/style/prosemirror.css";
@@ -42,6 +43,7 @@ import {
   linkTarget,
   markdownRules,
   moveBlock,
+  toggleExpand,
   pasteLink,
   removeLink,
   setBlock,
@@ -191,7 +193,9 @@ export function RichEditor(props: EditorEngineProps) {
           tableEditing(),
         ],
       }),
-      nodeViews: Object.fromEntries(
+      nodeViews: {
+        expand: expandNodeView,
+        ...Object.fromEntries(
         ["mediaSingle", "mediaGroup", "media", "mediaInline"].map((type) => [
           type,
           (node, editor, getPos) => {
@@ -215,7 +219,8 @@ export function RichEditor(props: EditorEngineProps) {
             return media;
           },
         ]),
-      ),
+        ),
+      },
       attributes: {
         ...(props.scope ? { "data-scope": props.scope } : {}),
         role: "textbox",
@@ -383,6 +388,7 @@ export function RichEditor(props: EditorEngineProps) {
         else if (id === "bullet" || id === "ordered")
           list(id === "bullet" ? "bulletList" : "orderedList");
         else if (id === "code-block") changeBlock("codeBlock");
+        else if (id === "expand") run(toggleExpand);
         else if (id === "move-up" || id === "move-down") run(moveBlock(id === "move-up" ? -1 : 1));
         else if (id === "undo") run(undo);
         else if (id === "redo") run(redo);
@@ -532,6 +538,15 @@ export function RichEditor(props: EditorEngineProps) {
         onClick={() => changeBlock("codeBlock")}
       >
         Code
+      </ToolbarButton>
+      <ToolbarButton
+        aria-label="Collapsible section"
+        tooltip="Collapsible section"
+        shortcut={editorBindings.find((b) => b.id === "expand")!.hotkey}
+        aria-pressed={within("expand")}
+        onClick={() => run(toggleExpand)}
+      >
+        Collapse
       </ToolbarButton>
       <ToolbarButton
         aria-label="Insert link"

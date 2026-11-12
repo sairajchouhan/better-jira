@@ -214,6 +214,23 @@ export const insertTable: Command = (state, dispatch) => {
   return true;
 };
 
+/** ⇧⌘6 / toolbar Collapse: wraps the selected top-level blocks in a collapsible section (Jira's expand), or, inside one,
+ * lifts its blocks back out. Nothing happens where Jira allows no expand (inside a list, quote or table). */
+export const toggleExpand: Command = (state, dispatch) => {
+  const { $from, $to } = state.selection,
+    expand = richSchema.nodes.expand!;
+  for (let d = $from.depth; d > 0; d--)
+    if ($from.node(d).type === expand) {
+      dispatch?.(state.tr.replaceWith($from.before(d), $from.after(d), $from.node(d).content).scrollIntoView());
+      return true;
+    }
+  const range = $from.blockRange($to, (node) => node.type.name === "doc"),
+    wrapping = range && findWrapping(range, expand);
+  if (!range || !wrapping) return false;
+  dispatch?.(state.tr.wrap(range, wrapping).scrollIntoView());
+  return true;
+};
+
 const markRule = (pattern: RegExp, mark: string) =>
   new InputRule(pattern, (state, match, start, end) => {
     const type = richSchema.marks[mark]!,
@@ -236,6 +253,7 @@ export const markdownRules = inputRules({
       (match, node) => node.childCount + node.attrs.order === Number(match[1]),
     ),
     wrappingInputRule(/^\s*>\s$/, richSchema.nodes.blockquote!),
+    wrappingInputRule(/^>>>\s$/, richSchema.nodes.expand!),
     textblockTypeInputRule(/^```$/, richSchema.nodes.codeBlock!),
     // `|--` in a paragraph starts a table. A Markdown header row just above (`| a | b |`) becomes its header; otherwise it is 2×2, like the toolbar's.
     new InputRule(/^\|--$/, (state, _match, start) => {

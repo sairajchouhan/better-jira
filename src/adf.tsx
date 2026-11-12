@@ -67,6 +67,14 @@ export function Adf({
       return <blockquote className="border-l-2 border-line-3 pl-3 text-fg-3">{kids}</blockquote>;
     case "panel":
       return <div className="rounded border-l-4 border-accent bg-col p-2">{kids}</div>;
+    case "expand":
+    case "nestedExpand":
+      return (
+        <details className="rounded border border-line-2 px-2 py-1">
+          <summary className="cursor-pointer font-medium">{a.title || "Collapsible section"}</summary>
+          {kids}
+        </details>
+      );
     case "rule":
       return <hr className="border-line-2" />;
     case "mention":
