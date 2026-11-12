@@ -77,3 +77,14 @@ test("row 21: the slash Date inserts today as Jira's date (midnight UTC, in mill
     { type: "date", attrs: { timestamp: String(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())) } },
   ]);
 });
+
+test("row 51: the slash Table takes the empty line it was typed on, and goes after a line with text", () => {
+  const run = (doc: ReturnType<typeof n.doc.create>, pos: number) => {
+    let state = EditorState.create({ doc, selection: TextSelection.create(doc, pos) });
+    matchingSlashCommands("table", state).find((c) => c.id === "table")!.command!(state, (tr) => (state = state.apply(tr)));
+    return state.doc.content.content.map((node) => node.type.name);
+  };
+  const p = (text?: string) => n.paragraph!.create(null, text ? richSchema.text(text) : null);
+  expect(run(n.doc!.create(null, [p("a"), p()]), 4)).toEqual(["paragraph", "table"]);
+  expect(run(n.doc!.create(null, [p("a")]), 2)).toEqual(["paragraph", "table"]);
+});

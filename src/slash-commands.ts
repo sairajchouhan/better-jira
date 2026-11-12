@@ -29,6 +29,20 @@ const inHeading = (state: EditorState) => state.selection.$from.parent.type.name
 // ponytail: stubs for package F's table commands (insert/delete row and column, delete table); swap in F's exports when it merges.
 const table = { insertRow: addRowAfter, deleteRow, insertColumn: addColumnAfter, deleteColumn, deleteTable };
 
+/** The slash Table takes the empty line it was typed on, as Linear's does; on a line with text it goes after it. */
+const tableHere: Command = (state, dispatch) => {
+  const { $from, empty } = state.selection,
+    line = $from.parent,
+    index = $from.index(-1);
+  const takesLine =
+    empty &&
+    line.type.name === "paragraph" &&
+    !line.content.size &&
+    $from.node(-1).canReplaceWith(index, index + 1, state.schema.nodes.table!);
+  if (!takesLine) return insertTable(state, dispatch);
+  return insertTable(state, dispatch && ((tr) => dispatch(tr.delete($from.before(), $from.after()))));
+};
+
 /** Linear's slash items, in its order, less the ones Jira cannot store (screenshot, gif, documents, diagram, LaTeX, insight). */
 export const SLASH_COMMANDS: SlashCommand[] = [
   { id: "insert-row", label: "Insert row", keywords: "", icon: "insert-row", command: table.insertRow, when: isInTable },
@@ -69,7 +83,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     command: toggleCallout(),
     when: (s) => !within(s, "panel"),
   },
-  { id: "table", label: "Table", keywords: "", icon: "table", command: insertTable, when: (s) => !isInTable(s) },
+  { id: "table", label: "Table", keywords: "", icon: "table", command: tableHere, when: (s) => !isInTable(s) },
   {
     id: "divider",
     label: "Divider",

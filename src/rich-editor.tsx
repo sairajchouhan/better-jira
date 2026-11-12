@@ -128,15 +128,19 @@ function ToolbarDropdown({
   current,
   show,
   disabled,
+  open,
+  onOpenChange,
 }: {
   label: string;
   options: DropdownOption[];
   current?: string;
   show: "icon" | "name";
   disabled?: boolean;
+  /** Owned by the editor: its menu takes focus, and the selection toolbar stays up while one is open. */
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false),
-    button = useRef<HTMLButtonElement>(null),
+  const button = useRef<HTMLButtonElement>(null),
     shown = options.find((o) => o.id === current) ?? options[0]!;
   return (
     <>
@@ -147,7 +151,7 @@ function ToolbarDropdown({
         aria-haspopup="menu"
         aria-expanded={open}
         disabled={disabled}
-        onClick={() => setOpen(!open)}
+        onClick={() => onOpenChange(!open)}
       >
         {show === "icon" && shown.icon ? <EditorIcon name={shown.icon} /> : shown.name}
         <span aria-hidden className="grid rotate-90 place-items-center">
@@ -159,7 +163,7 @@ function ToolbarDropdown({
           label={label}
           anchor={button.current}
           highlight
-          close={() => setOpen(false)}
+          close={() => onOpenChange(false)}
           entries={options.map((option) => ({
             name: option.name,
             selected: option.id === current,
@@ -210,6 +214,7 @@ export function RichEditor(props: EditorEngineProps) {
   });
   const [, refresh] = useState(0),
     [linkOpen, setLinkOpen] = useState(false),
+    [toolbarMenu, setToolbarMenu] = useState<"Text style" | "List" | null>(null),
     [url, setURL] = useState("");
   const [linkError, setLinkError] = useState(""),
     [uploadBusy, setUploadBusy] = useState(false),
@@ -602,7 +607,7 @@ export function RichEditor(props: EditorEngineProps) {
   // Above the selection; below it when the editor has too little room above, so it never covers the title or header. Either way both edges stay inside the viewport (a long selection can start above and end below it).
   const selecting =
     !!presentation.selectionToolbar &&
-    !!view.current?.hasFocus() &&
+    (!!view.current?.hasFocus() || !!toolbarMenu) &&
     !!selection &&
     !selection.empty &&
     !(selection instanceof NodeSelection);
@@ -622,6 +627,15 @@ export function RichEditor(props: EditorEngineProps) {
     },
     selecting && `${selection!.from} ${selection!.to}`,
   );
+  // One toolbar menu open at a time; closing it hands focus back to the text, as Linear's does.
+  const toolbarMenuProps = (label: "Text style" | "List") => ({
+    label,
+    open: toolbarMenu === label,
+    onOpenChange: (open: boolean) => {
+      setToolbarMenu(open ? label : null);
+      if (!open) view.current?.focus();
+    },
+  });
   const formatting = (!presentation.selectionToolbar || selecting) && (
     <div
       ref={toolbar}
@@ -635,7 +649,7 @@ export function RichEditor(props: EditorEngineProps) {
     >
       {/* Linear's order (LB): text style, marks, link, quote, collapse, inline code, code block, lists, then selection actions. */}
       <ToolbarDropdown
-        label="Text style"
+        {...toolbarMenuProps("Text style")}
         show="name"
         current={level >= 0 ? `heading-${level}` : undefined}
         disabled={within("listItem") || within("taskList")}
@@ -715,7 +729,7 @@ export function RichEditor(props: EditorEngineProps) {
         <EditorIcon name="code-block" />
       </ToolbarButton>
       <ToolbarDropdown
-        label="List"
+        {...toolbarMenuProps("List")}
         show="icon"
         current={within("taskList") ? "checklist" : within("orderedList") ? "ordered" : within("bulletList") ? "bullet" : undefined}
         disabled={block === "heading"}
