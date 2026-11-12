@@ -116,7 +116,37 @@ test("BJ-69: Create issue from selection opens the composer titled with the sele
     .toEqual([
       ["TEST-NEW1", "create", "Rich fixture heading"],
       ["TEST-2", "link", "related"],
+      ["TEST-2", "fields", undefined], // BJ-69: the selected text became a reference to the new issue
     ]);
+});
+
+// The fixture refuses creates; this site lands them as TEST-90 and passes every other write through.
+const landing = `(()=>{const real=fetch;window.__ops=[];
+window.fetch=async(input,init)=>{const m=new URL(String(input),location.href).pathname.match(/^\\/api\\/issues\\/([^/]+)\\/ops$/);
+ if(!m)return real(input,init);
+ const {ops}=JSON.parse(init.body);window.__ops.push({key:m[1],ops});
+ if(ops[0]?.op!=='create')return real(input,init);
+ const f=ops[0].fields;return Response.json({key:'TEST-90',created:{[m[1]]:'TEST-90'},others:[],issue:{key:'TEST-90',board:1,summary:f.summary,status:f.status,type:'Task',assignee:null,labels:[],comments:0,updated:'2026-11-08T10:00:00Z',resolved:null,project:{key:'TEST',name:'Audit'}}});
+};})()`;
+
+test("BJ-69: the created issue replaces the selected text with a reference, saved under its Jira key", async ({ open }) => {
+  await fixture.reset({ writable: true });
+  const page = await open("?issue=TEST-2&view=page", { setup: landing });
+  await page.waitFor(`!!document.querySelector('#description h2')`);
+  await page.click("#description h2");
+  await page.key("End");
+  await page.key("Home", "shift");
+  await page.click('[aria-label="Create issue from selection"]');
+  await page.waitFor(`document.querySelector('[role="dialog"] [aria-label="Issue title"]')?.value === "Rich fixture heading"`);
+  await page.key("Enter", "meta");
+  // The heading's text is now Jira's smart link to the new issue.
+  await page.waitFor(`!document.querySelector('#description h2')?.textContent.includes("Rich fixture heading")`);
+  const description = await page.waitFor<string>(
+    `JSON.stringify(window.__ops.filter(w=>w.key==='TEST-2').flatMap(w=>w.ops).find(op=>op.fields?.description)?.fields.description ?? "")`,
+    8000,
+  );
+  expect(description).toMatch(/"type":"inlineCard","attrs":\{"url":"[^"]*\/browse\/TEST-90"\}/);
+  expect(description).not.toContain("Rich fixture heading");
 });
 
 test("BJ-56 / BJ-55: block controls, the block menu and ⌥↓ act on the caret's block", async ({ open }) => {

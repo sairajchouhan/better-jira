@@ -81,7 +81,7 @@ import { IssueResources, ResourceForm } from "./issue-resources";
 import { ReactionPicker, ReactionPill } from "./reactions";
 import { PropertyPill } from "./pill-select";
 import { ActionMenu, type ActionEntry } from "./action-menu";
-import { kept, post, useCommand } from "./commands";
+import { kept, post, run as runCommand, useCommand } from "./commands";
 
 /** Linear keeps an unsent title and description when the composer closes; the next C brings them back. */
 const unsent = { title: "", description: normalizeDocument("") };
@@ -242,10 +242,11 @@ export function CreateIssue() {
   const submission = useMemo(() => crypto.randomUUID(), [draftIndex]);
   const submit = () => {
     if (!title.trim() || filesBusy || noParentType || (draft.subIssues?.some(t => t.trim()) && !canHaveChildren(get(), { type, project }))) return;
+    const { fromSelection, ...fields } = draft;
     const key = actions.create(
       title,
       {
-        ...draft,
+        ...fields,
         submission,
         type,
         ...(draft.priority === "" ? { priority: undefined } : {}),
@@ -263,6 +264,7 @@ export function CreateIssue() {
       more,
     );
     if (key) {
+      if (fromSelection) runCommand("issue-from-selection", { id: fromSelection, key });
       if (savedId) setSaved(saved.filter(d => d.id !== savedId));
       setSavedId(null);
       unsent.title = "";

@@ -62,6 +62,7 @@ import {
 import {
   JIRA_ISSUE_FIELDS,
   renameCommentIds,
+  namesKey,
   renameIds,
   type Side,
 } from "./jira-ops";
@@ -201,6 +202,8 @@ export type IssueDraft = Partial<
   };
   /** Names one submit of a composer: a second call with it (a double click before React re-renders) creates nothing. */
   submission?: string;
+  /** "Create issue from selection" (BJ-69): the editor waiting to swap its selected text for a reference to the new issue. */
+  fromSelection?: string;
 };
 export type View = "side" | "page";
 export type JiraOptions = {
@@ -1563,7 +1566,7 @@ export const dismissWriteError = () => set({ writeError: null });
 /** A new issue's app key becomes Jira's key everywhere: issues, references, undo history and queued writes. */
 function rekey(from: string, to: string) {
   const ids = new Map([[from, to]]),
-    mentions = (v: unknown) => JSON.stringify(v).includes(`"${from}"`);
+    mentions = (v: unknown) => namesKey(v, from);
   const issues = new Map<string, Issue>(),
     full = new Map<string, Full>();
   // The issue under its app key carries the local edits: it wins over a copy the poll already brought under the Jira key,

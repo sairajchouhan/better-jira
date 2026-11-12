@@ -24,6 +24,8 @@ export type Commands = {
   "document-action": { arg: DocumentAction; result: true };
   /** The view Issue options, or the due or reminder menu, opens in. Kept until a menu that shows it mounts. */
   "issue-options-start": { arg: IssueOptionsStart; result: true };
+  /** The composer created `key` from description text (BJ-69): the editor it came from swaps that text for a reference. */
+  "issue-from-selection": { arg: { id: string; key: string }; result: true };
 };
 export type DocumentAction =
   | "rename"

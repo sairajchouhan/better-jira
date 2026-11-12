@@ -375,10 +375,20 @@ export function renameCommentIds<T>(value: T, ids: Map<string, string>): T {
   return walk(value);
 }
 
-/** Swaps app issue keys (PREFIX-NEWn, unique by shape) for Jira's once Jira has assigned them. */
+const BROWSE = /\/browse\/([^/?#]+)$/;
+/** Swaps app issue keys (PREFIX-NEWn, unique by shape) for Jira's once Jira has assigned them, also at the end of an issue's
+ *  /browse/ URL: a description's reference to an issue made from its text (BJ-69). */
 export function renameIds<T>(value: T, ids: Map<string, string>): T {
   if (!ids.size) return value;
-  return JSON.parse(JSON.stringify(value), (_, v) =>
-    typeof v === "string" && ids.has(v) ? ids.get(v) : v,
-  );
+  return JSON.parse(JSON.stringify(value), (_, v) => {
+    if (typeof v !== "string") return v;
+    if (ids.has(v)) return ids.get(v);
+    const key = BROWSE.exec(v)?.[1];
+    return key && ids.has(key) ? v.replace(BROWSE, `/browse/${ids.get(key)}`) : v;
+  });
 }
+/** Whether `value` names the app key `key`, as a value of its own or as an issue's /browse/ URL; renameIds swaps both. */
+export const namesKey = (value: unknown, key: string) => {
+  const json = JSON.stringify(value);
+  return json.includes(`"${key}"`) || json.includes(`/browse/${key}"`);
+};

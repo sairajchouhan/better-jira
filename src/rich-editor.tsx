@@ -25,6 +25,7 @@ import { activeSlash, dismissSlash, matchingSlashCommands, slashPlugin, SLASH_CO
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { beginCreate, get, jiraIssueURL } from "./store";
 import { usePlacement } from "./menu-surface";
+import { useCommand } from "./commands";
 import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import {
   EditorState,
@@ -58,6 +59,7 @@ import {
   insertLink,
   insertTable,
   issueFromText,
+  referenceSelection,
   linkHref,
   linkRanges,
   linkTarget,
@@ -368,6 +370,17 @@ export function RichEditor(props: EditorEngineProps) {
   useEffect(() => {
     for (const media of mediaViews.current) media.updateContext();
   }, [props.issueKey, props.attachments]);
+  // The text "Create issue from selection" started from; the composer's create swaps it for a reference to the new issue.
+  const fromSelection = useRef<{ id: string; from: number; to: number; text: string } | null>(null);
+  useCommand("issue-from-selection", ({ id, key }) => {
+    const pending = fromSelection.current,
+      editor = view.current;
+    if (!editor || pending?.id !== id) return;
+    fromSelection.current = null;
+    const tr = referenceSelection(editor.state, pending, jiraIssueURL(key));
+    if (tr) editor.dispatch(tr);
+    return true;
+  });
   const run = (command: Command) => {
     const editor = view.current;
     if (editor) {
@@ -507,9 +520,12 @@ export function RichEditor(props: EditorEngineProps) {
       : "";
   const createFromSelection = () => {
     const key = latest.current.issueKey!,
-      issue = get().issues.get(key);
+      issue = get().issues.get(key),
+      { from, to } = view.current!.state.selection;
+    fromSelection.current = { id: crypto.randomUUID(), from, to, text: selectedText };
     beginCreate({
       ...issueFromText(selectedText),
+      fromSelection: fromSelection.current.id,
       ...(issue ? { related: { key, kind: "related" as const }, project: issue.project } : {}),
     });
   };

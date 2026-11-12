@@ -13,6 +13,7 @@ import {
   duplicateBlock,
   deleteBlock,
   issueFromText,
+  referenceSelection,
   toggleExpand,
   moveBlock,
   pasteLink,
@@ -575,6 +576,20 @@ test("BJ-69: selected text starts an issue: first line the title, the rest its d
     description: "Steps:\n\n1. open",
   });
   expect(issueFromText("x".repeat(300)).title.length).toBe(255);
+});
+
+test("BJ-69: the created issue replaces the text it was made from with a reference, unless that text changed", () => {
+  const doc = n.doc!.create(null, [p("fix the login now")]);
+  const before = EditorState.create({ doc });
+  const tr = referenceSelection(before, { from: 5, to: 14, text: "the login" }, "https://x.test/browse/KAN-12")!;
+  const after = before.apply(tr).doc.firstChild!;
+  expect(after.childCount).toBe(3);
+  expect(after.child(1).type.name).toBe("inlineCard");
+  expect(fromEditorDocument(before.apply(tr).doc).content?.[0]?.content?.[1]).toEqual({
+    type: "inlineCard",
+    attrs: { url: "https://x.test/browse/KAN-12" },
+  });
+  expect(referenceSelection(before, { from: 5, to: 14, text: "the logon" }, "https://x.test/browse/KAN-12")).toBeNull();
 });
 
 test("BJ-56: the block menu's Duplicate and Delete act on the selected block, or its list item", () => {

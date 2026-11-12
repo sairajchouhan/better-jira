@@ -10,7 +10,7 @@ import { liftListItem, sinkListItem, wrapInList } from "prosemirror-schema-list"
 import { EditorState, TextSelection, type Command, type Transaction } from "prosemirror-state";
 import { findWrapping, liftTarget } from "prosemirror-transform";
 import { addRowAfter, goToNextCell, isInTable } from "prosemirror-tables";
-import { richSchema, safeLink } from "./rich-document";
+import { inlineCardNode, richSchema, safeLink } from "./rich-document";
 
 const inCode = (state: Parameters<Command>[0]) => !!state.selection.$from.parent.type.spec.code;
 
@@ -464,6 +464,18 @@ export function issueFromText(text: string): { title: string; description?: stri
   const [first = "", ...rest] = text.trim().split(/\n+/),
     description = rest.join("\n\n").trim();
   return { title: first.trim().slice(0, 255), ...(description ? { description } : {}) };
+}
+
+/** Once that issue exists, the text it was made from becomes a reference to it (Jira's smart link to its /browse/ URL),
+ * unless the text there has changed since. */
+export function referenceSelection(
+  state: EditorState,
+  selection: { from: number; to: number; text: string },
+  url: string,
+): Transaction | null {
+  const { from, to, text } = selection;
+  if (to > state.doc.content.size || state.doc.textBetween(from, to, "\n") !== text) return null;
+  return state.tr.replaceWith(from, to, inlineCardNode(url));
 }
 
 type Box = { top: number; bottom: number; left: number };

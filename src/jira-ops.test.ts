@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mergeOps, opsFor, renameCommentIds, renameIds, threadParent } from "./jira-ops";
+import { mergeOps, namesKey, opsFor, renameCommentIds, renameIds, threadParent } from "./jira-ops";
 import type { Issue } from "./store";
 
 const base: Issue = {
@@ -366,4 +366,17 @@ test("R1-D11: a pull request is a Jira remote link like any other link", () => {
   expect(opsFor({ issue: base }, { issue: { ...base, resources: [pr] } }, new Map())).toEqual([
     { op: "weblink", url: pr.url, title: "PR" },
   ]);
+});
+
+test("BJ-69: an app key at the end of an issue's /browse/ URL is renamed too, and counts as naming it", () => {
+  const doc = { type: "inlineCard", attrs: { url: "https://x.test/browse/A-NEW1" } };
+  expect(namesKey(doc, "A-NEW1")).toBe(true);
+  expect(namesKey(doc, "A-NEW")).toBe(false);
+  expect(renameIds(doc, new Map([["A-NEW1", "A-11"]]))).toEqual({
+    type: "inlineCard",
+    attrs: { url: "https://x.test/browse/A-11" },
+  });
+  expect(renameIds({ url: "https://x.test/browse/A-NEW12" }, new Map([["A-NEW1", "A-11"]]))).toEqual({
+    url: "https://x.test/browse/A-NEW12",
+  });
 });

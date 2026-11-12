@@ -1,4 +1,4 @@
-import { DESCRIPTION_CONFLICT, mergeOps, opsFor, renameCommentIds, renameIds, type Op, type Side } from "./jira-ops";
+import { DESCRIPTION_CONFLICT, mergeOps, opsFor, renameCommentIds, namesKey, renameIds, type Op, type Side } from "./jira-ops";
 import { withoutLocalMedia } from "./jira-media";
 import type { LocalChange } from "./local-data";
 import type { Full, Issue } from "./store";
@@ -147,7 +147,7 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
   const waitsForCreate = (job: Job) =>
     othersCreating.size > 0 &&
     [...othersCreating.keys()].some(
-      (key) => currentKey(job.key) === key || JSON.stringify(job.ops).includes(`"${key}"`),
+      (key) => currentKey(job.key) === key || namesKey(job.ops, key),
     );
 
   function learnKeys(keys: Record<string, string> = {}) {
