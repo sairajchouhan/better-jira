@@ -8,16 +8,27 @@ export function shorthandKey(q: string): string | undefined {
   return m ? `${m[1]!.toUpperCase()}-${Number(m[2])}` : undefined;
 }
 
-/** Issues matching every typed word: the key the query names first, then title matches, then the most recently updated (top 50). */
+/** A query's "quoted phrases" (an unclosed quote runs to the end) and its other words, lower-cased. */
+export function parseQuery(q: string) {
+  const lower = q.toLowerCase();
+  return {
+    phrases: [...lower.matchAll(/"([^"]*)"?/g)].map((m) => m[1]!.trim()).filter(Boolean),
+    words: lower.replace(/"[^"]*"?/g, " ").split(/\s+/).filter(Boolean),
+  };
+}
+
+/** Issues matching every typed word and quoted phrase: the key the query names first, then title matches, then the most
+ *  recently updated (top 50). */
 export function matchIssues(issues: Map<string, Issue>, q: string): Issue[] {
-  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const { phrases, words } = parseQuery(q);
+  const terms = [...phrases, ...words];
   const exact = shorthandKey(q) ?? q.trim().toUpperCase();
   const rank = (i: Issue) => {
-    const title = matchRank(i.summary, q);
+    const title = matchRank(i.summary, terms.join(" "));
     return i.key === exact ? -1 : title < 0 ? 6 : title;
   };
   return [...issues.values()]
-    .filter((i) => i.key === exact || words.every((w) => `${i.key} ${i.summary}`.toLowerCase().includes(w)))
+    .filter((i) => i.key === exact || terms.every((t) => `${i.key} ${i.summary}`.toLowerCase().includes(t)))
     .map((i) => [rank(i), i] as const)
     .sort(([ra, a], [rb, b]) => ra - rb || (a.updated < b.updated ? 1 : -1))
     .slice(0, 50)

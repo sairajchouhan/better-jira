@@ -18,3 +18,11 @@ test("BJ-36: a shorthand key opens that issue, hyphen optional", () => {
   expect(keys(matchIssues(issues, "sam11"))).toEqual(["SAM-11"]);
   expect(keys(matchIssues(issues, "sam 11"))[0]).toBe("SAM-11");
 });
+
+test("BJ-37: a quoted phrase matches only those words in that order", () => {
+  const issues = map(issue("A-1", "login page broken"), issue("A-2", "broken login page"), issue("A-3", "page login"));
+  expect(keys(matchIssues(issues, '"login page"')).sort()).toEqual(["A-1", "A-2"]);
+  expect(keys(matchIssues(issues, '"broken page'))).toEqual([]); // an unclosed quote runs to the end
+  expect(keys(matchIssues(issues, 'broken "login page"')).sort()).toEqual(["A-1", "A-2"]);
+  expect(keys(matchIssues(issues, "page login")).sort()).toEqual(["A-1", "A-2", "A-3"]);
+});
