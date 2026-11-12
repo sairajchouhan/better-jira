@@ -7,9 +7,10 @@ import { TextInput } from "./field";
 import { Button, IconButton } from "./button";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
-import { Fragment, useMemo, useRef, useState, type ComponentProps, type ComponentType, type ReactNode } from "react";
+import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSubIssueComposer } from "./use-sub-issue-composer";
 import { useStoredState } from "./stored-state";
+import { FieldMenuButton } from "./pill-select";
 import {
   RelationIcon,
   Icon,
@@ -76,32 +77,8 @@ const properties: [Property, string][] = [
   ["assignee", "Assignee"],
   ["pullRequests", "Pull requests"],
 ];
+// Compact composer/row property geometry has no variant in the primitive contract.
 const button = "rounded px-2 py-1 text-fg-3 hover:bg-hover";
-/** A compact property button that owns only its anchor; the field menu it opens owns choices and writes. */
-function PropertyButton<P extends { anchor?: HTMLElement | null; close?: () => void }>({
-  menu: FieldMenu,
-  menuProps,
-  ...props
-}: {
-  menu: ComponentType<P>;
-  menuProps: Omit<P, "anchor" | "close">;
-} & Omit<ComponentProps<"button">, "onClick">) {
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  return (
-    <>
-      {/* Compact composer/row property geometry has no variant in the primitive contract. */}
-      <button
-        type="button"
-        aria-haspopup="dialog"
-        aria-expanded={!!anchor}
-        className={button}
-        {...props}
-        onClick={(event) => setAnchor(event.currentTarget)}
-      />
-      {anchor && <FieldMenu {...({ ...menuProps, anchor, close: () => setAnchor(null) } as P)} />}
-    </>
-  );
-}
 function parseDisplay(value: unknown): SubIssueDisplay {
   const base = defaultSubIssueDisplay();
   if (!value || typeof value !== "object") return base;
@@ -442,7 +419,8 @@ export function SubIssues({ issue }: { issue: Issue }) {
           className="sub-issue-composer outline-none mt-3 rounded-lg border border-line-2 bg-card p-3"
         >
           <div className="flex items-center gap-2">
-            <PropertyButton
+            <FieldMenuButton
+              className={button}
               aria-label={`Sub-issue status. ${statusById(board, draft.status)?.name ?? "Todo"} is selected`}
               menu={StatusMenu}
               menuProps={{
@@ -459,7 +437,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
                   }
                 }
               />
-            </PropertyButton>
+            </FieldMenuButton>
             <TextInput
               ref={titleInput}
               autoFocus
@@ -489,7 +467,8 @@ export function SubIssues({ issue }: { issue: Issue }) {
           />
           <div className="flex gap-1">
             {/* Linear names the value on each chip: "Priority", the assignee, "Labels". */}
-            <PropertyButton
+            <FieldMenuButton
+              className={button}
               aria-label={`Sub-issue priority. ${draft.priority ?? noPriority} is selected`}
               menu={PriorityMenu}
               menuProps={{
@@ -504,8 +483,9 @@ export function SubIssues({ issue }: { issue: Issue }) {
                 <PriorityIcon name={draft.priority} />
                 {draft.priority ?? "Priority"}
               </span>
-            </PropertyButton>
-            <PropertyButton
+            </FieldMenuButton>
+            <FieldMenuButton
+              className={button}
               aria-label={`Sub-issue assignee. ${draft.assignee?.name ?? "Unassigned"}`}
               menu={AssigneeMenu}
               menuProps={{
@@ -518,8 +498,9 @@ export function SubIssues({ issue }: { issue: Issue }) {
                 <Icon name="user" size={14} />
                 {draft.assignee?.name ?? "Assignee"}
               </span>
-            </PropertyButton>
-            <PropertyButton
+            </FieldMenuButton>
+            <FieldMenuButton
+              className={button}
               aria-label={`Sub-issue labels. ${draft.labels?.join(", ") || "No labels"}`}
               menu={LabelsMenu}
               menuProps={{
@@ -532,7 +513,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
                 <Icon name="label" size={14} />
                 {draft.labels?.length ? draft.labels.join(", ") : "Labels"}
               </span>
-            </PropertyButton>
+            </FieldMenuButton>
           </div>
         </div>
       )}
@@ -711,14 +692,15 @@ function SubIssueRow({
   const status = (child: Issue) => statusOf(boards, child);
   // Rows pick through PropertyPicker, the one field→write path every issue picker shares.
   const control = (field: IssueField, title: string, content: ReactNode) => (
-    <PropertyButton
+    <FieldMenuButton
+      className={button}
       title={title}
       aria-label={`Change ${field} for ${child.key}`}
       menu={PropertyPicker}
       menuProps={{ issue: child, field }}
     >
       {content}
-    </PropertyButton>
+    </FieldMenuButton>
   );
   const childURL = (child: Issue) => {
     const url = new URL(location.href);
