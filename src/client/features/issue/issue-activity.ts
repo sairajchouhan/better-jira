@@ -74,6 +74,11 @@ export const sameValue = (a: unknown, b: unknown) =>
 /** Events that changed something; a field edited back to its value before the group is not shown. */
 export const visibleActivity = (events: readonly PropertyActivity[]) => events.filter(changed);
 
+/** Who keeps the issue's history. `local`: this browser, grouping an actor's edits the way Linear's server does. `jira`:
+ *  a writable site, where every write becomes its own changelog entry; the event stands in for that entry, at its own time,
+ *  until Jira's history echoes it, so it never folds into (or cancels against) an earlier edit Jira already recorded. */
+export type HistoryKeeper = "local" | "jira";
+
 export function recordActivity(
   events: readonly PropertyActivity[],
   before: Record<string, unknown>,
@@ -81,10 +86,26 @@ export function recordActivity(
   actor: { id: string; name: string },
   now: string,
   id: () => string,
+  keeper: HistoryKeeper = "local",
 ): readonly PropertyActivity[] {
   const changes = activityFields.filter(
     (field) => field in patch && !sameValue(before[field], patch[field]),
   );
+  if (keeper === "jira")
+    return changes.length
+      ? [
+          ...events,
+          ...changes.map((field) => ({
+            id: id(),
+            field,
+            before: structuredClone(before[field] ?? null),
+            after: structuredClone(patch[field] ?? null),
+            actor: { ...actor },
+            at: now,
+            updated: now,
+          })),
+        ]
+      : events;
   const properties = events.filter((event) => event.field !== "relation"),
     last = properties.at(-1),
     group = last

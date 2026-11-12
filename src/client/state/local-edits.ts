@@ -42,7 +42,7 @@ export function patchIssue(key: string, patch: Partial<Issue>) {
     i = state.issues.get(key);
   if (i) {
     const prior = i.activity ?? [],
-      activity = recordActivity(prior, i, patch, ME, now(), () => crypto.randomUUID());
+      activity = recordActivity(prior, i, patch, ME, now(), () => crypto.randomUUID(), state.writable ? "jira" : "local");
     if (activity !== prior) patch = { ...patch, activity: [...activity] };
     localFields.set(
       key,

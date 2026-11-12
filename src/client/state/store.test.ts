@@ -610,6 +610,32 @@ test("deleting a sub-issue keeps its open parent; with Jira writes it asks in th
   expect(get().selected).toBe(parent);
   expect(get().panel).toBe(true);
 });
+test("3.4: on a Jira-writable site each property edit shows at once as its own row, even when it undoes an earlier one", async () => {
+  const { get, set } = await import("./store");
+  const { actions } = await import("./issue-actions");
+  const { visibleActivity } = await import("@/client/features/issue/issue-activity");
+  const key = actions.create("Priority round trip", { priority: "Medium" })!;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => Response.json({ created: {}, others: [], issue: null })) as unknown as typeof fetch;
+  set({ writable: true });
+  try {
+    actions.patch(key, { priority: "High" });
+    actions.patch(key, { priority: "Medium" });
+    for (let i = 0; i < 50 && get().pendingWrites; i++) await Bun.sleep(10);
+  } finally {
+    set({ writable: false });
+    globalThis.fetch = realFetch;
+  }
+  // Jira logs both writes; folding the second into the first would hide both until Jira's history is read again.
+  expect(
+    visibleActivity(get().issues.get(key)?.activity ?? [])
+      .filter((event) => event.field === "priority")
+      .map((event) => [event.before, event.after]),
+  ).toEqual([
+    ["Medium", "High"],
+    ["High", "Medium"],
+  ]);
+});
 test("deleting a document keeps attachments that another document still shows", async () => {
   const { get, set, ME } = await import("./store");
   const { actions } = await import("./issue-actions");

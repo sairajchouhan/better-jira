@@ -232,3 +232,16 @@ test("BJ-202: attached links group and comments keep groups apart", () => {
   if (grouped[0]!.kind === "property") expect([...grouped[0]!.row.events, ...grouped[0]!.row.chain].map((event) => event.at)).toEqual([at(), at(1)]);
   expect(activityEvents({ resources }, [at(1)])).toHaveLength(2);
 });
+
+test("3.4: a Jira-kept history records every edit as its own event at its own time, so a round trip stays visible", () => {
+  const jira = (events: readonly PropertyActivity[], before: Record<string, unknown>, patch: Record<string, unknown>, ms: number) =>
+    recordActivity(events, before, patch, me, at(ms), id, "jira");
+  const raised = jira([], { priority: "Medium", status: "todo" }, { priority: "High", status: "progress" }, 0);
+  const lowered = jira(raised, { priority: "High" }, { priority: "Medium" }, 360_000);
+  expect(visibleActivity(lowered).map((e) => [e.field, e.before, e.after, e.at])).toEqual([
+    ["status", "todo", "progress", at()],
+    ["priority", "Medium", "High", at()],
+    ["priority", "High", "Medium", at(360_000)],
+  ]);
+  expect(jira(lowered, { priority: "Medium" }, { priority: "Medium" }, 400_000)).toBe(lowered);
+});
