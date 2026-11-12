@@ -3,14 +3,17 @@
 import { useHotkeys, useHotkey, formatForDisplay } from "@tanstack/react-hotkeys";
 import { adfToText } from "./adf";
 import { discardLateMedia, documentHasMedia, lateMediaDiscarded } from "./document";
+import { Button, IconButton } from "./button";
+import { TextInput } from "./field";
 import { Icon } from "./icons";
+import { Text } from "./text";
 import { mediaCaretPlugin } from "./media-caret";
 import { mediaUploads, mergeLateMedia, type LateMedia } from "./editor-media-upload";
 import { editorBindings } from "./editor-bindings";
 import { activeMention, dismissMention, insertMention, mentionPlugin } from "./mentions";
 import { MentionMenu, searchPeople } from "./mention-menu";
 import { usePlacement } from "./menu-surface";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { EditorState, NodeSelection, Selection, type Command } from "prosemirror-state";
 import { mediaNodeView, type MediaNodeView } from "./media-node-view";
 import type { Attachment } from "./attachment-media";
@@ -81,8 +84,9 @@ export type RichEditorProps = {
   ) => void;
   /** Tab outside a list, table or code block moves focus on (Linear's create composer) instead of staying in the editor. */ tabLeaves?: boolean;
 };
-const BUTTON =
-  "shrink-0 whitespace-nowrap rounded px-2 py-1 text-[12px] text-fg-2 hover:bg-hover disabled:opacity-30 aria-pressed:bg-sel";
+
+/** One look for every formatting and link control: Linear's borderless small Button, pressed while its mark or block is on. */
+const ToolbarButton = (props: ComponentProps<typeof Button>) => <Button variant="borderless" size="small" {...props} />;
 
 export type EditorPresentation = "framed" | "inline" | "document" | "comment";
 export type EditorEngineProps = RichEditorProps & { presentation: EditorPresentation };
@@ -469,140 +473,112 @@ export function RichEditor(props: EditorEngineProps) {
         ["strike", "Strikethrough", "S"],
         ["code", "Inline code", "<>"],
       ].map(([name, label, text]) => (
-        <button
+        <ToolbarButton
           key={name}
-          type="button"
           aria-label={label}
           title={`${label} (${formatForDisplay(editorBindings.find((b) => b.id === name)!.hotkey)})`}
           aria-pressed={marked(name!)}
-          className={BUTTON}
           onClick={() => run(toggleMark(richSchema.marks[name!]!))}
         >
           {text}
-        </button>
+        </ToolbarButton>
       ))}
       {[0, 1, 2, 3, 4].map((n) => (
-        <button
+        <ToolbarButton
           key={n}
-          type="button"
           aria-label={n ? `Heading ${n}` : "Text"}
           title={n ? `Heading ${n}` : "Text"}
           aria-pressed={level === n}
-          className={`${BUTTON} shrink-0`}
           onClick={() => changeBlock(n ? "heading" : "paragraph", n ? { level: n } : {})}
         >
           {n ? `H${n}` : "T"}
-        </button>
+        </ToolbarButton>
       ))}
-      <button
-        type="button"
+      <ToolbarButton
         aria-label="Bulleted list"
         aria-pressed={within("bulletList")}
-        className={BUTTON}
         onClick={() => list("bulletList")}
       >
         • List
-      </button>
-      <button
-        type="button"
+      </ToolbarButton>
+      <ToolbarButton
         aria-label="Numbered list"
         aria-pressed={within("orderedList")}
-        className={BUTTON}
         onClick={() => list("orderedList")}
       >
         1. List
-      </button>
-      <button
-        type="button"
+      </ToolbarButton>
+      <ToolbarButton
         aria-label="Block quote"
         aria-pressed={within("blockquote")}
-        className={BUTTON}
         onClick={() => run(toggleQuote)}
       >
         Quote
-      </button>
-      <button
-        type="button"
+      </ToolbarButton>
+      <ToolbarButton
         aria-label="Code block"
         aria-pressed={block === "codeBlock"}
-        className={BUTTON}
         onClick={() => changeBlock("codeBlock")}
       >
         Code
-      </button>
-      <button
-        type="button"
+      </ToolbarButton>
+      <ToolbarButton
         aria-label="Insert link"
-        className={BUTTON}
         onClick={() => {
           setURL(view.current ? linkHref(view.current.state) : "");
           setLinkOpen(!linkOpen);
         }}
       >
         Link
-      </button>
+      </ToolbarButton>
       {marked("link") && (
-        <button
-          type="button"
+        <ToolbarButton
           aria-label="Remove text link"
-          className={BUTTON}
           onClick={() => run(removeLink)}
         >
           Unlink
-        </button>
+        </ToolbarButton>
       )}
-      <button
-        type="button"
+      <ToolbarButton
         aria-label="Insert table"
-        className={BUTTON}
         onClick={() => run(insertTable)}
       >
         Table
-      </button>
+      </ToolbarButton>
       {inTable && (
         <>
-          <button
-            type="button"
+          <ToolbarButton
             aria-label="Add table row"
-            className={BUTTON}
             onClick={() => run(addRowAfter)}
           >
             + Row
-          </button>
-          <button
-            type="button"
+          </ToolbarButton>
+          <ToolbarButton
             aria-label="Add table column"
-            className={BUTTON}
             onClick={() => run(addColumnAfter)}
           >
             + Column
-          </button>
-          <button
-            type="button"
+          </ToolbarButton>
+          <ToolbarButton
             aria-label="Remove table"
-            className={BUTTON}
             onClick={() => run(deleteTable)}
           >
             Remove table
-          </button>
+          </ToolbarButton>
         </>
       )}
-      <button
-        type="button"
+      <ToolbarButton
         aria-label={`Undo ${subject} edit`}
-        className={BUTTON}
         onClick={() => run(undo)}
       >
         Undo
-      </button>
-      <button
-        type="button"
+      </ToolbarButton>
+      <ToolbarButton
         aria-label={`Redo ${subject} edit`}
-        className={BUTTON}
         onClick={() => run(redo)}
       >
         Redo
-      </button>
+      </ToolbarButton>
     </div>
   );
   const preloadPeople = () =>
@@ -633,12 +609,13 @@ export function RichEditor(props: EditorEngineProps) {
       {presentation.variant !== "comment" && formatting}
       {linkOpen && (
         <div className="flex flex-wrap items-center gap-2 border-b border-line-2 p-2">
-          <input
+          <TextInput
+            size="small"
             autoFocus
             aria-label="Text link URL"
             value={url}
             onChange={(e) => setURL(e.target.value)}
-            className="min-w-0 flex-1 rounded border border-line-2 px-2 py-1 outline-none"
+            className="min-w-0 flex-1"
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
@@ -653,13 +630,11 @@ export function RichEditor(props: EditorEngineProps) {
               }
             }}
           />
-          <button type="button" className={BUTTON} onClick={addLink}>
+          <ToolbarButton onClick={addLink}>
             Apply link
-          </button>
+          </ToolbarButton>
           {marked("link") && (
-            <button
-              type="button"
-              className={BUTTON}
+            <ToolbarButton
               onClick={() => {
                 run(removeLink);
                 setLinkOpen(false);
@@ -667,12 +642,12 @@ export function RichEditor(props: EditorEngineProps) {
               }}
             >
               Remove link
-            </button>
+            </ToolbarButton>
           )}
           {linkError && (
-            <span role="alert" className="w-full text-[12px] text-fg-3">
+            <Text role="alert" variant="mini" color="muted" className="w-full">
               {linkError}
-            </span>
+            </Text>
           )}
         </div>
       )}
@@ -700,9 +675,9 @@ export function RichEditor(props: EditorEngineProps) {
         />
       )}
       {uploadNotice && (
-        <p role="status" className="text-[12px] text-fg-3">
+        <Text as="p" role="status" variant="mini" color="muted">
           {uploadNotice}
-        </p>
+        </Text>
       )}
       {(props.onSave || props.onCancel) && (
         <div className="rich-editor-actions flex items-center justify-end gap-2 border-t border-line-2 p-2 text-[12px]">
@@ -710,52 +685,42 @@ export function RichEditor(props: EditorEngineProps) {
           {presentation.variant !== "comment" && (
             <span className="mr-auto text-fg-3">{props.hint ?? "⌘↵ save · Esc cancel"}</span>
           )}
+          {/* Linear's edit actions: a medium link Cancel beside a medium Save (Comment.*.js). */}
           {props.onCancel && (
-            <button
-              type="button"
-              className={BUTTON}
-              aria-label={props.cancelLabel}
-              onClick={props.onCancel}
-            >
+            <Button variant="link" size="medium" aria-label={props.cancelLabel} onClick={props.onCancel}>
               {props.cancelLabel ?? "Cancel"}
-            </button>
+            </Button>
           )}
           {props.onFiles && (
-            <button
-              type="button"
-              aria-label="Attach images, files, or videos"
-              title="Attach images, files, or videos"
-              className={BUTTON}
-              onClick={() => fileInput.current?.click()}
-            >
+            <IconButton label="Attach images, files, or videos" size="small" onClick={() => fileInput.current?.click()}>
               <Icon name="paperclip" />
-            </button>
+            </IconButton>
           )}
-          {props.onSave && (
-            <button
-              type="button"
-              aria-label={props.saveLabel ?? "Save description"}
-              disabled={uploadBusy || ((presentation.variant === "comment" || props.required) && empty)}
-              title={
-                uploadBusy
-                  ? "Finish or discard attachments before sending"
-                  : presentation.variant === "comment"
-                    ? "Submit comment (⌘↵)"
-                    : undefined
-              }
-              className="rich-editor-submit disabled:opacity-40 rounded bg-accent px-3 py-1 text-white"
-              onClick={() => save()}
-            >
-              {presentation.variant === "comment" ? (
-                <>
-                  <Icon name="up" />
-                  <span className="sr-only">{props.saveLabel}</span>
-                </>
-              ) : (
-                (props.saveLabel ?? "Save description")
-              )}
-            </button>
-          )}
+          {props.onSave &&
+            (presentation.variant === "comment" ? (
+              // Its tooltip ("Submit comment", or why sending waits) differs from its name, which IconButton can't express yet.
+              <button
+                type="button"
+                aria-label={props.saveLabel ?? "Save description"}
+                disabled={uploadBusy || empty}
+                title={uploadBusy ? "Finish or discard attachments before sending" : "Submit comment (⌘↵)"}
+                className="rich-editor-submit disabled:opacity-40 rounded bg-accent px-3 py-1 text-white"
+                onClick={() => save()}
+              >
+                <Icon name="up" />
+                <span className="sr-only">{props.saveLabel}</span>
+              </button>
+            ) : (
+              <Button
+                size="medium"
+                aria-label={props.saveLabel ?? "Save description"}
+                disabled={uploadBusy || (props.required && empty)}
+                title={uploadBusy ? "Finish or discard attachments before sending" : undefined}
+                onClick={() => save()}
+              >
+                {props.saveLabel ?? "Save description"}
+              </Button>
+            ))}
         </div>
       )}
     </div>
