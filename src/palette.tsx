@@ -27,7 +27,9 @@ import { filterCount } from "./view-model";
 import { Modal } from "./personal-controls";
 import { Avatar } from "./avatar";
 import { matchRank } from "./search-rank";
-import { runShortcut, shortcutApplies, shortcutLabel, shortcuts } from "./shortcuts";
+import { runShortcut, shortcutApplies, shortcuts } from "./shortcuts";
+import { Shortcut } from "./keycap";
+import { hotkeyOf } from "./app-chrome";
 const MENU =
   "overflow-hidden rounded-xl border border-[var(--menu-line)] bg-[var(--menu)] text-fg-2 shadow-[var(--menu-shadow)] " +
   "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[12px] [&_[cmdk-group-heading]]:text-fg-3 " +
@@ -48,8 +50,8 @@ function Overlay({
   );
 }
 
-type Cmd = { name: string; hint?: string; icon?: ReactNode; disabled?: boolean; run: () => void };
-/** A palette command that runs a shortcut, so the hint shown is the key that does the same thing. */
+/** `keys`: the hotkey that does the same thing, drawn after the name. */
+type Cmd = { name: string; keys?: string | readonly string[]; icon?: ReactNode; disabled?: boolean; run: () => void };
 
 /** Issues matching every typed word: an exact key first, then title matches, then the most recently updated (top 50). */
 const matchIssues = (issues: Map<string, Issue>, q: string) => {
@@ -193,7 +195,7 @@ export function CommandPalette() {
   const viewCommands: Cmd[] = activeView ? [
     { name: "Edit view…", run: viewAction(() => openViewEditor(editViewDraft(activeView.id))) },
     { name: "Save to…", run: () => { setSavingTo(true); setQ(""); } },
-    { name: favorites.includes(`view:${activeView.id}`) ? "Unfavorite view" : "Favorite view", hint: shortcutLabel("view-favorite"), run: viewAction(() => toggleFavorite(`view:${activeView.id}`)) },
+    { name: favorites.includes(`view:${activeView.id}`) ? "Unfavorite view" : "Favorite view", keys: hotkeyOf("view-favorite"), run: viewAction(() => toggleFavorite(`view:${activeView.id}`)) },
     { name: "Make a copy as new view…", run: viewAction(() => openViewEditor(duplicateViewDraft(activeView.id))) },
     { name: "Delete view", run: () => setDeletingView(true) },
   ] : [];
@@ -201,7 +203,7 @@ export function CommandPalette() {
 
   const command = (entry: (typeof shortcuts)[number]): Cmd => ({
     name: entry.label?.() ?? entry.name,
-    hint: shortcutLabel(entry.id),
+    keys: hotkeyOf(entry.id),
     run: () => {
       ui.send({ type: "overlay.close" });
       runShortcut(entry.id);
@@ -240,8 +242,8 @@ export function CommandPalette() {
   // Save to… mirrors the filter row's Save menu, so it is offered even before any temporary filter exists.
   const mergeable = !!activeView && !!filterCount(overlay) && canMergeOverlay(activeView.filters, overlay);
   const groups = savingTo && activeView ? [{ heading: "Save to", rows: ranked([
-    { name: filterCount(overlay) && !mergeable ? "Cannot merge these filters into the view" : "Save to this view", hint: shortcutLabel("view-save"), disabled: !mergeable, run: viewAction(() => { void saveOverlayToView().catch(e => set({ perf: String(e) })); }) },
-    { name: "Create new view…", hint: shortcutLabel("view-create"), run: viewAction(createToolbarView) },
+    { name: filterCount(overlay) && !mergeable ? "Cannot merge these filters into the view" : "Save to this view", keys: hotkeyOf("view-save"), disabled: !mergeable, run: viewAction(() => { void saveOverlayToView().catch(e => set({ perf: String(e) })); }) },
+    { name: "Create new view…", keys: hotkeyOf("view-create"), run: viewAction(createToolbarView) },
   ]) }] : [
     { heading: scoped?.key ?? "", rows: ranked(issueCmds) },
     { heading: `View · ${activeView?.name ?? ""}`, rows: ranked(viewCommands) },
@@ -254,7 +256,7 @@ export function CommandPalette() {
     <Command.Item key={c.name} value={`cmd:${c.name}`} disabled={c.disabled} className="data-[disabled=true]:opacity-50" onSelect={c.run}>
       <span className="grid w-4 shrink-0 place-items-center text-fg-3">{c.icon}</span>
       <span className="flex-1 truncate">{c.name}</span>
-      {c.hint && <kbd>{c.hint}</kbd>}
+      {c.keys?.length ? <Shortcut keys={c.keys} /> : null}
     </Command.Item>
   );
 
