@@ -1,31 +1,12 @@
-import {
-  cancelWrites,
-  keyMoves,
-  learnKeys,
-  restartSync,
-  resumeSync,
-  touch,
-  unsentWrites,
-} from "./jira-sync";
-import { fetchJson, loadFull, queryClient, startPoll } from "./server-data";
+import { cancelWrites, touch } from "./jira-sync";
+import { fetchJson } from "./server-data";
 import {
   addLocalFiles,
-  flushLocalChanges,
-  localDataBlocked,
   localFiles,
   nextSeq,
-  openLocalData,
   queueSave,
-  storage,
-  unsavedLocalChanges,
 } from "./local-database";
-import {
-  forgetLastEdit,
-  loadHistory,
-  record,
-  rewriteHistoricIssue,
-  savedHistory,
-} from "./undo-history";
+import { forgetLastEdit, record, rewriteHistoricIssue } from "./undo-history";
 import {
   clearLocalEdits,
   editCount,
@@ -34,32 +15,22 @@ import {
   markCreated,
   patchFields,
   patchIssue,
-  resetLocalEdits,
-  savedChanges,
   withJiraLinks,
 } from "./local-edits";
 import { showNotification } from "./app-notifications";
 import { assignableUsers, knownPeople, statusById, statuses } from "./board-catalog";
 import { viewSettings } from "./view-settings";
-import { navigate, startNavigation, ui } from "./app-navigation";
-import { liveFavorites } from "./favorites";
-import {
-  loadSavedViews,
-  refreshSavedViews,
-  viewError,
-} from "./saved-views";
+import { navigate, ui } from "./app-navigation";
 import { useMemo, useSyncExternalStore } from "react";
 import { adfToText } from "./adf";
 import {
   defaultPreferences,
-  parsePreferences,
   type Display,
   type Grouping,
   type Preferences,
 } from "./view-model";
 import { documentHasMedia, normalizeDocument, textToAdf, type AdfDocument } from "./document";
-import { createActor, fromPromise, waitFor } from "xstate";
-import { appMachine, inspector, type UiContext } from "./machines";
+import { type UiContext } from "./machines";
 import type { Screen } from "./navigation";
 
 import { reminderTime } from "./reminder-display";
@@ -80,12 +51,10 @@ import {
   persistPreferences,
   rememberViewDetails,
   savedBoard,
-  savedDefaults,
   savedFavorites,
   savedOpenIn,
   savedSidebarHidden,
   savedViewPreferences,
-  scopePreferences,
   viewDetailsOpen,
 } from "./browser-preferences";
 export type User = { id: string; name: string; avatar?: string };
@@ -445,131 +414,6 @@ export function usePeople(extra?: readonly User[]): User[] {
   return useMemo(() => knownPeople(ME, jiraUsers, issues.values(), extra), [issues, jiraUsers, extra]);
 }
 
-const app = createActor(appMachine.provide({ actors: { load: fromPromise(loadApplication) } }), {
-  inspect: inspector("app"),
-}).start();
-app.subscribe(({ context }) => {
-  if (context.error !== state.loadError) commit({ loadError: context.error });
-});
-if (typeof window !== "undefined")
-  Object.assign(window, { machines: { ui, app, storage }, queryClient, loadFull });
-
-const settled = (s: ReturnType<typeof app.getSnapshot>) =>
-  s.matches("ready") || s.matches("failed");
-export async function load() {
-  app.send({ type: "load" });
-  await waitFor(app, settled);
-}
-/** Window listeners are added by the first load only; a storage retry loads again. */
-let listening = false;
-async function loadApplication() {
-  const client = await fetchJson<{
-    site: string;
-    user: User;
-    writable?: boolean;
-  }>("/api/client");
-  if (!client.site || !client.user?.id || !client.user.name)
-    throw new Error("Jira account setup is incomplete");
-  Object.assign(ME, client.user);
-  const namespace = `${client.site}/${client.user.id}`;
-  scopePreferences(namespace);
-  // Views load with the issues, so a view route paints as the view, never the plain board first.
-  const [boards, remote, savedViews] = await Promise.all([
-    fetchJson<Board[]>("/api/boards"),
-    fetchJson<Issue[]>("/api/issues"),
-    loadSavedViews(),
-  ]);
-  if (!boards.length)
-    throw new Error("The Jira mirror is still syncing your boards. Retry in a moment.");
-  const { local, start: startSaving } = await openLocalData(namespace, {
-    snapshot: () => ({ changes: savedChanges(), ...savedHistory(), keys: keyMoves() }),
-    moved: learnKeys,
-  });
-  const defaults = savedDefaults();
-  const preferences = savedViewPreferences();
-  for (const b of boards)
-    if (!preferences[b.id]) {
-      const display = parsePreferences({ display: defaults[b.id] }).display;
-      if (!defaults[b.id]) display.openIn = savedOpenIn();
-      preferences[b.id] = { ...defaultPreferences(), display };
-    }
-  const last = savedBoard();
-  const board = boards.some((b) => b.id === last) ? last : boards[0]!.id;
-  const issues = new Map(remote.map((i) => [i.key, i])),
-    full = new Map<string, Full>();
-  resetLocalEdits();
-  restartSync(local, remote, issues, full, client.writable === true);
-  // Undo covers this tab's own edits only, as Linear's per-client history does; a reload keeps them (R2-inbox-D3).
-  const history = loadHistory(local);
-  set({
-    boards,
-    site: client.site,
-    namespace,
-    writable: client.writable === true,
-    issues,
-    full,
-    defaults,
-    preferences,
-    savedViews,
-    favorites: liveFavorites(savedViews),
-    ...history,
-  });
-  navigate({ board, view: preferences[board]?.display.openIn ?? "side" });
-  startSaving();
-  resumeSync(local.changes);
-  if (!listening) {
-    listening = true;
-    window.addEventListener("focus", () => {
-      void refreshSavedViews().catch(viewError);
-    });
-    startNavigation();
-    window.addEventListener("beforeunload", (event) => {
-      // Jobs waiting on another tab's create are saved, and replayed by whichever tab sends that create.
-      if (unsavedLocalChanges() || unsentWrites()) {
-        event.preventDefault();
-        event.returnValue = "";
-      }
-    });
-  }
-  startPoll();
-  if (state.writable)
-    void import("./draft-uploads").then(({ keepDraftUploadsClean }) =>
-      keepDraftUploadsClean(namespace, () => JSON.stringify(savedChanges()), {
-        full: async (key) => {
-          const response = await fetch(`/api/issues/${encodeURIComponent(key)}`);
-          if (response.status === 404) return null;
-          if (!response.ok) throw new Error("Could not read the issue");
-          return response.json();
-        },
-        uploaded: async (client) => {
-          const response = await fetch(`/api/uploads/${encodeURIComponent(client)}`);
-          if (response.status === 404) return undefined;
-          if (!response.ok) throw new Error("Could not read the upload");
-          return response.json();
-        },
-        remove: async (key, id) => {
-          const response = await fetch(`/api/issues/${encodeURIComponent(key)}/ops`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              ops: [{ op: "attachment.delete", id }],
-              board: state.issues.get(key)?.board,
-            }),
-          });
-          const result = await response.json().catch(() => ({ error: "No answer" }));
-          if (!response.ok || result.error) throw new Error(result.error);
-        },
-      }),
-    );
-  if (state.writable)
-    fetchJson<JiraOptions>("/api/options", 5 * 60_000).then(
-      (options) => set({ options }),
-      () => {},
-    );
-  clockTimer ??= setInterval(() => set({ clock: Date.now() }), 60000);
-}
-
-let clockTimer: ReturnType<typeof setInterval> | undefined;
 /** Time from the action to the next painted frame, shown in the header. */
 export function timed(label: string, fn: () => void) {
   const t0 = performance.now(),
@@ -583,15 +427,6 @@ export function timed(label: string, fn: () => void) {
 }
 
 const now = () => new Date().toISOString();
-export async function retryLocalStorage() {
-  if (localDataBlocked()) {
-    app.send({ type: "reload" });
-    await waitFor(app, settled);
-  } else {
-    queueSave();
-    await flushLocalChanges();
-  }
-}
 /** On a writable site a crop uploads as a new Jira attachment, which takes the original's place in the description. Read-only sites keep it as a local view edit. */
 export async function saveCrop(key: string, id: string, crop: ImageCrop, file: File) {
   const edit = () => ({ ...state.issues.get(key)?.mediaEdits?.[id], crop });

@@ -223,7 +223,8 @@ test("failed issue details expose an error and can be retried", async () => {
 });
 
 test("browser history restores issue selection without pushing another navigation", async () => {
-  const { get, load } = await import("./store");
+  const { get } = await import("./store");
+  const { load } = await import("./app-load");
   const { navigate } = await import("./app-navigation");
   const issues = [...get().issues.values()],
     boards = get().boards;
