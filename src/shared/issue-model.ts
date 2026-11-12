@@ -11,7 +11,27 @@ export const activityFields = [
   "parent",
   "type",
 ] as const;
-export type ActivityField = (typeof activityFields)[number] | "relation";
+/** Fields only Jira's history carries (BJ-13): Linear ones this app doesn't edit, and Jira-only ones ("field" is any other). */
+export const historyFields = [
+  "title",
+  "description",
+  "estimate",
+  "cycle",
+  "project",
+  "milestone",
+  "team",
+  "component",
+  "resolution",
+  "flag",
+  "attachment",
+  "weblink",
+  "comment",
+  "field",
+] as const;
+export type ActivityField =
+  | (typeof activityFields)[number]
+  | "relation"
+  | (typeof historyFields)[number];
 
 export type CommentState = {
   resolved?: boolean;
@@ -25,13 +45,15 @@ export type ImageCrop = { x: number; y: number; width: number; height: number };
 export type ImageComment = { id: string; text: string; author: string; at: string };
 /** `src` keeps a non-local image's source so its comments still show it after the image leaves the document, as in Linear. */
 export type MediaEdit = { crop?: ImageCrop; comments?: ImageComment[]; src?: string };
+/** Who made a change: a person, or an app (Jira Automation) whose name and avatar Jira gives. */
+export type Actor = { id: string; name: string; avatar?: string; app?: boolean };
 /** `at` is the group's time; `updated` is when the group was last edited. */
 export type PropertyActivity = {
   id: string;
   field: ActivityField;
   before: unknown;
   after: unknown;
-  actor: { id: string; name: string };
+  actor: Actor;
   at: string;
   updated?: string;
 };

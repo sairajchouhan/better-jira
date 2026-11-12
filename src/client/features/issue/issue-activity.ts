@@ -1,11 +1,43 @@
 import { activityFields } from "@/shared/issue-model";
-import type { ActivityField, PropertyActivity } from "@/shared/issue-model";
+import type { ActivityField, Actor, PropertyActivity } from "@/shared/issue-model";
+export type { ActivityField, Actor, PropertyActivity };
 import { type ImageComment, type MediaEdit } from "@/shared/issue-model";
 
 import type { IssueResource } from "@/shared/issue-resource";
 /** Local property history, kept the way Linear keeps an actor's edits (observed on RAJ-52, 2026-11-07/08):
  * an edit joins the actor's latest group while that group was last edited under GROUP_MS ago, and the group keeps its first time;
  * a field already in the group is updated, and hidden (but kept) when it returns to its value before the group. */
+/** Linear's order of a history record's entries (`Qo` in its issue-history chunk): team, status, cycle, the small changes,
+ *  milestone, labels, title, parent, relations, attachments, due date; Jira-only kinds follow. */
+const FIELD_ORDER: readonly ActivityField[] = [
+  "team",
+  "status",
+  "cycle",
+  "assignee",
+  "priority",
+  "estimate",
+  "project",
+  "labels",
+  "milestone",
+  "title",
+  "parent",
+  "relation",
+  "attachment",
+  "weblink",
+  "due",
+  "type",
+  "component",
+  "resolution",
+  "flag",
+  "description",
+  "comment",
+  "field",
+];
+/** The kinds Linear lists together on one row (`ss`): "set priority to Urgent and removed label test", two to a row. */
+const SMALL_FIELDS: ReadonlySet<ActivityField> = new Set(["assignee", "project", "priority", "estimate", "labels"]);
+const order = (field: ActivityField) => FIELD_ORDER.indexOf(field);
+/** The kinds whose next lone change joins the row before it (Linear's grouped entries `Xc`: state, priority, labels, cycle). */
+const CHAINED_FIELDS: ReadonlySet<ActivityField> = new Set(["status", "priority", "labels", "cycle"]);
 import type { Relation } from "@/shared/relations";
 export type { Relation };
 /** The other issue's role, as Linear's Issue options › Remove names it (RAJ-52): a blocked-by relation lists the "Blocking issue". */
@@ -110,11 +142,86 @@ export function recordRelation(
   ];
 }
 
-/** One Activity row. Linear (RAJ-52) gives a status change its own row; the group's other changes share one row ("removed priority and added label").
+/** A change as it happened, before grouping: its own time, and the group key (`slot`) of the value it changes. */
+export type Change = {
+  id: string;
+  field: ActivityField;
+  slot?: string;
+  before: unknown;
+  after: unknown;
+  delta?: boolean;
+  actor: Actor;
+  at: string;
+};
+/** Changes grouped by the rule `recordActivity` applies to this app's edits (RAJ-52): a change joins the latest group
+ *  while it is its actor's and was last changed under GROUP_MS ago; the group keeps its first time; a value changed twice
+ *  keeps its first `before` (and drops out once back to it). A relation is its own row at its own time, and removing one
+ *  added under GROUP_MS ago drops both (`recordRelation`); any other one-at-a-time change (a file, a version) undone in
+ *  its group drops both. */
+export function groupChanges(changes: readonly Change[]): PropertyActivity[] {
+  const events: PropertyActivity[] = [];
+  let group: { actor: string; at: string; last: number; events: PropertyActivity[] } | undefined;
+  for (const change of [...changes].sort((a, b) => Date.parse(a.at) - Date.parse(b.at))) {
+    const time = Date.parse(change.at),
+      { slot = change.field, delta, ...rest } = change;
+    const event = (at: string): PropertyActivity & { slot: string } => ({
+      id: rest.id,
+      field: rest.field,
+      before: rest.before,
+      after: rest.after,
+      actor: rest.actor,
+      at,
+      slot,
+    });
+    if (change.field === "relation") {
+      const added =
+        change.after === null
+          ? events.findLastIndex(
+              (e) =>
+                e.field === "relation" &&
+                e.before === null &&
+                sameValue(e.after, change.before) &&
+                e.actor.id === change.actor.id &&
+                time - Date.parse(e.at) < GROUP_MS,
+            )
+          : -1;
+      if (added >= 0) events.splice(added, 1);
+      else events.push(event(change.at));
+      continue;
+    }
+    if (!(group && group.actor === change.actor.id && time - group.last < GROUP_MS))
+      group = { actor: change.actor.id, at: change.at, last: time, events: [] };
+    group.last = time;
+    const same = (e: PropertyActivity) => (e as { slot?: string }).slot === slot;
+    if (delta) {
+      const undo = group.events.findIndex(
+        (e) => same(e) && (change.after === null ? sameValue(e.after, change.before) : sameValue(e.before, change.after)),
+      );
+      if (undo >= 0) {
+        const [gone] = group.events.splice(undo, 1);
+        events.splice(events.indexOf(gone!), 1);
+        continue;
+      }
+    } else {
+      const open = group.events.find(same);
+      if (open) {
+        open.after = change.after;
+        continue;
+      }
+    }
+    const created = event(group.at);
+    group.events.push(created);
+    events.push(created);
+  }
+  return events.map(({ slot: _, ...e }: PropertyActivity & { slot?: string }) => e);
+}
+
+/** One Activity row. Linear (RAJ-52, `Qo`/`ss`) gives each change its own row, except the small kinds (assignee, project,
+ *  priority, estimate, labels), which share a row two at a time ("removed priority and added label").
  *  A row of one change that follows the same actor's row of the same field, with nothing else in either group, joins it: "set priority to Low, then removed priority", at the later time. */
 export type ActivityRow = {
   id: string;
-  actor: { id: string; name: string };
+  actor: Actor;
   at: string;
   field: ActivityField | "multi";
   events: PropertyActivity[];
@@ -125,8 +232,7 @@ export function activityRows(events: readonly PropertyActivity[]): ActivityRow[]
   for (const event of [...visibleActivity(events)].sort(
     (a, b) =>
       Date.parse(a.at) - Date.parse(b.at) ||
-      (activityFields as readonly string[]).indexOf(a.field) -
-        (activityFields as readonly string[]).indexOf(b.field),
+      order(a.field) - order(b.field),
   )) {
     const key = `${event.actor.id} ${event.at}${event.field === "relation" ? ` ${event.id}` : ""}`;
     groups.set(key, [...(groups.get(key) ?? []), event]);
@@ -134,9 +240,13 @@ export function activityRows(events: readonly PropertyActivity[]): ActivityRow[]
   const rows: ActivityRow[] = [];
   let previous: ActivityRow | undefined;
   for (const group of groups.values()) {
-    const status = group.filter((event) => event.field === "status"),
-      rest = group.filter((event) => event.field !== "status");
-    const own = [...status.map((event) => [event]), ...(rest.length ? [rest] : [])].map((list) => ({
+    const small = group.filter((event) => SMALL_FIELDS.has(event.field)),
+      chunks = [small.slice(0, 2), small.slice(2, 4), small.slice(4)].filter((chunk) => chunk.length);
+    const lists = [
+      ...group.filter((event) => !SMALL_FIELDS.has(event.field)).map((event) => [event]),
+      ...chunks,
+    ].sort((a, b) => order(a[0]!.field) - order(b[0]!.field));
+    const own = lists.map((list) => ({
       id: list[0]!.id,
       actor: list[0]!.actor,
       at: list[0]!.at,
@@ -147,7 +257,7 @@ export function activityRows(events: readonly PropertyActivity[]): ActivityRow[]
     const single = own.length === 1 && own[0]!.events.length === 1 ? own[0]! : undefined;
     if (
       single &&
-      single.field !== "relation" &&
+      CHAINED_FIELDS.has(single.field as ActivityField) &&
       previous &&
       previous === rows.at(-1) &&
       previous.actor.id === single.actor.id &&

@@ -7,7 +7,6 @@ import { LoadingState } from "@/client/components/empty-state";
 import { showNotification } from "@/client/state/app-notifications";
 /* oxlint-disable react/no-unstable-nested-components -- Comment heads and avatars are render callbacks supplied to the activity threads. */
 import { FavoriteButton } from "@/client/features/navigation/favorite-button";
-import { statusById } from "@/shared/board-catalog";
 import { jiraAvatar } from "@/shared/avatar-url";
 import {
   lazy,
@@ -25,7 +24,10 @@ import { ReminderControl } from "@/client/features/reminders/reminders";
 import { CommentThreads, useCommentDraft, useDraftFiles } from "@/client/features/comments/comment-threads";
 import { ImageCommentCard } from "@/client/features/media/image-thread";
 import { linkTitle } from "@/shared/issue-resource";
-import { activityEvents, type ActivityEvent, type ActivityRow, type Relation } from "@/client/features/issue/issue-activity";
+import { activityEvents, type ActivityEvent, type Relation } from "@/client/features/issue/issue-activity";
+import { ActivityIcon, describeActivity } from "@/client/features/issue/activity-entry";
+import { mergeHistory } from "@/client/features/issue/jira-history";
+import { useIssueHistory } from "@/client/features/issue/use-issue-history";
 import { normalizeDocument } from "@/shared/document";
 import { imageCommentIds } from "@/client/features/media/media-edits";
 import { Icon, PriorityIcon, RelationIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
@@ -65,113 +67,6 @@ const ImageViewer = lazy(() =>
 
 const related = (target: Issue) => ({ board: target.board, selected: target.key, panel: true, view: get().view });
 
-/** Linear's wording (RAJ-52). `then` is the shorter form after ", then": "set to Medium", "moved to Done". Labels carry their 4px dot. */
-function describeActivity(event: PropertyActivity, issue: Issue, then = false): ReactNode {
-  const name = (value: unknown) =>
-    value && typeof value === "object" && "name" in value
-      ? String((value as { name: unknown }).name)
-      : String(value);
-  const status = (id: unknown) => statusById(boardOf(issue.key), id)?.name ?? String(id);
-  const date = (value: unknown) =>
-    new Date(`${value}T00:00`).toLocaleDateString("en", { month: "short", day: "numeric" });
-  const { field, before, after } = event;
-  if (field === "relation") {
-    const relation = (after ?? before) as Relation,
-      target = get().issues.get(relation.key),
-      // A Jira link kind Linear has no wording for is named by Jira's phrase ("removed is caused by link").
-      phrase = jiraLinkType(relation.kind) && (relation.label ?? jiraLinkType(relation.kind));
-    const verb = phrase
-      ? `${after ? "added" : "removed"} ${phrase} link`
-      : after
-        ? ({
-            related: "added related issue",
-            blocked: "marked this issue as blocked by",
-            blocking: "marked this issue as blocking",
-            duplicate: "marked this issue as a duplicate of",
-            duplicated: "marked this issue as duplicated by",
-          }[relation.kind] ?? "added related issue")
-        : `removed ${RELATION_ISSUE[relation.kind] ?? "related"} issue`;
-    return (
-      <>
-        {verb}{" "}
-        {target ? (
-          <AppLink to={related(target)} className="hover:text-fg">
-            <b className="font-medium">{relation.key}</b> {target.summary}
-          </AppLink>
-        ) : (
-          <>
-            <b className="font-medium">{relation.key}</b>
-            {relation.issue && ` ${relation.issue.summary}`}
-          </>
-        )}
-      </>
-    );
-  }
-  if (field === "status")
-    return then ? `moved to ${status(after)}` : `moved from ${status(before)} to ${status(after)}`;
-  if (field === "labels") {
-    const was = new Set((before as string[]) ?? []),
-      now = new Set((after as string[]) ?? []),
-      added = [...now].filter((l) => !was.has(l)),
-      removed = [...was].filter((l) => !now.has(l));
-    const list = (names: string[]) =>
-      names.map((l, i) => (
-        <span key={l}>
-          {i ? ", " : ""}
-          <span
-            className="mr-1 inline-block size-1 rounded-full align-middle"
-            style={{ background: hue(l) }}
-          />
-          {l}
-        </span>
-      ));
-    return (
-      <>
-        {added.length > 0 && (
-          <>
-            added label{added.length > 1 ? "s" : ""} {list(added)}
-          </>
-        )}
-        {added.length > 0 && removed.length > 0 && " and "}
-        {removed.length > 0 && (
-          <>
-            removed label{removed.length > 1 ? "s" : ""} {list(removed)}
-          </>
-        )}
-      </>
-    );
-  }
-  const label = {
-    priority: "priority",
-    assignee: "assignee",
-    due: "due date",
-    parent: "parent issue",
-    type: "issue type",
-  }[field];
-  if (after === null || after === "") return `removed ${label}`;
-  if (field === "assignee")
-    return then ? `assigned to ${name(after)}` : `assigned the issue to ${name(after)}`;
-  return then
-    ? `set to ${field === "due" ? date(after) : name(after)}`
-    : `set ${label} to ${field === "due" ? date(after) : name(after)}`;
-}
-/** The row's icon in Linear (RAJ-52): the new status or priority, the label glyph, the assignee; a row of several changes shows the actor. */
-function ActivityIcon({ row, issue }: { row: ActivityRow; issue: Issue }) {
-  const last = row.chain.at(-1) ?? row.events[0]!;
-  if (row.field === "relation")
-    return <RelationIcon kind={((last.after ?? last.before) as Relation).kind} />;
-  if (row.field === "status") {
-    const status = statusById(boardOf(issue.key), last.after);
-    if (status) return <StatusIcon status={status} />;
-  }
-  if (row.field === "priority")
-    return <PriorityIcon name={(last.after as string | null) ?? undefined} />;
-  if (row.field === "labels") return <Icon name="label" />;
-  if (row.field === "type") return <TypeDot type={last.after as string} />;
-  if (row.field === "due") return <Icon name="calendar" />;
-  if (row.field === "assignee") return <Avatar user={last.after as User | null} size={14} />;
-  return <Avatar user={row.actor} size={14} />;
-}
 // Linear's exact-time label: "Sat Nov 7, 2026, 07:49:03" (24-hour, with seconds).
 const fullTime = (iso: string) => {
   const d = new Date(iso);
@@ -992,6 +887,12 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
         external: !file,
       });
   };
+  // Jira's whole history arrives after the details (BJ-13); until then the Activity shows this app's own edits.
+  const history = useIssueHistory(issue.key, f?.updated);
+  const events = useMemo(
+    () => activityEvents({ ...issue, activity: mergeHistory(issue.activity ?? [], history) }),
+    [issue, history],
+  );
   if (!f) return null;
   const imageComments = imageCommentIds(issue.mediaEdits);
   const creator = issue.creator ?? author(f.creator ?? f.reporter);
@@ -1055,7 +956,7 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
           avatar={(c) => <Avatar user={author(c.author)} size={18} />}
           me={<Avatar user={ME} size={18} />}
           timestamp={timestamp}
-          events={activityEvents(issue).map((event) => ({
+          events={events.map((event) => ({
             at: event.at,
             node: (
               <ActivityEventItem key={event.id} event={event} issue={issue} viewImage={viewImage} />

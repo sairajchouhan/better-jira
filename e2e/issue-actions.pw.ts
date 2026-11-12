@@ -1,4 +1,4 @@
-import { expect, test, shownIssue } from "./app";
+import { expect, fixture, test, shownIssue } from "./app";
 
 const OPTIONS = '[role="dialog"][aria-label="Issue options"]';
 const optionValues = `[...document.querySelectorAll('${OPTIONS} [cmdk-item]')].map(n=>n.getAttribute('data-value'))`;
@@ -157,15 +157,16 @@ test("issue activity, related-issue search and description history", async ({ op
     await pick("p", other);
     await page.waitFor(`${rows}.length===1`);
     expect((await page.eval<string[]>(rows))[0]).toMatch(
-      new RegExp(`Audit user set priority to ${other} · just now$`),
+      // Linear's `Es`: a priority that had a value is raised or lowered from it.
+      new RegExp(`Audit user raised priority from ${original} to ${other} · just now$`),
     );
     await pick("p", "High");
-    await page.waitFor(`${rows}.join().includes('set priority to High')`);
+    await page.waitFor(`${rows}.join().includes('raised priority from Low to High')`);
     expect(await page.eval(`${rows}.length`)).toBe(1);
     await pick("s", "Doing");
     await page.waitFor(`${rows}.length===2`);
     expect((await page.eval<string[]>(rows))[0]).toContain("moved from Todo to Doing");
-    expect((await page.eval<string[]>(rows))[1]).toContain("set priority to High");
+    expect((await page.eval<string[]>(rows))[1]).toContain("raised priority from Low to High");
     await pick("p", original);
     await page.waitFor(`${rows}.length===1`);
     await page.eval("document.activeElement?.blur()");
@@ -242,4 +243,71 @@ test("issue activity, related-issue search and description history", async ({ op
       await page.eval(`document.querySelector('[aria-label="Description history"]').textContent`),
     ).toContain("Newest description at risk");
   });
+});
+
+test("BJ-13: Jira's whole history joins Activity after the details paint, in Linear's wording", async ({ open }) => {
+  // Made-up history in the server's slim shape (src/shared/jira-history.ts): a person and an automation app.
+  const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+  const ada = { id: "ada", name: "Ada Example" },
+    bot = { id: "bot", name: "Automation for Jira", app: true };
+  const item = (field: string, sides: object, fieldId?: string) => ({
+    field,
+    ...(fieldId ? { fieldId } : {}),
+    from: null,
+    fromText: null,
+    to: null,
+    toText: null,
+    ...sides,
+  });
+  await fixture.reset({
+    historyDelay: 1500,
+    history: {
+      "TEST-2": [
+        {
+          id: "1",
+          at: daysAgo(5),
+          actor: ada,
+          items: [
+            item("status", { from: "todo", fromText: "Todo", to: "doing", toText: "Doing" }, "status"),
+            item("resolution", { to: "1", toText: "Done" }, "resolution"),
+          ],
+        },
+        {
+          id: "2",
+          at: daysAgo(4),
+          actor: bot,
+          items: [item("Sprint", { to: "3", toText: "Sprint 10" }, "customfield_1"), item("Rank", { toText: "Ranked higher" })],
+        },
+        {
+          id: "3",
+          at: daysAgo(3),
+          actor: ada,
+          items: [
+            item("Link", { to: "TEST-1", toText: "This work item blocks TEST-1" }),
+            item("Fix Version", { to: "7", toText: "Release 1" }, "fixVersions"),
+          ],
+        },
+        { id: "4", at: daysAgo(2), actor: ada, items: [item("Release notes", { toText: "Shipped" }, "customfield_9")] },
+      ],
+    },
+  });
+  const page = await open("?issue=TEST-2&view=page");
+  // The words after the icon (an actor avatar falls back to an initial).
+  const rows = `[...document.querySelectorAll('[data-activity]')].map(n=>n.children[1].textContent.replace(/\\s+/g,' ').replace(/ ·$/,'').trim())`;
+  // The details paint while the history is still on its way.
+  await page.waitFor(`!!document.getElementById('comment')&&!!document.getElementById('issue-created')`);
+  expect(await page.eval(rows)).toEqual([]);
+  await page.waitFor(`${rows}.length===5`, 5000);
+  expect(await page.eval(rows)).toEqual([
+    // A resolution set by its transition is that status change; Jira's rank is noise Linear never shows.
+    "Ada Example moved from Todo to Doing",
+    "Automation for Jira added issue to Sprint 10",
+    "Ada Example added to milestone Release 1",
+    "Ada Example marked this issue as blocking TEST-1 Rich browser fixture",
+    "Ada Example set Release notes to Shipped",
+  ]);
+  // Each row keeps Linear's time link with the exact time on hover.
+  expect(
+    await page.eval(`[...document.querySelectorAll('[data-activity] a[href*="#activity-"]')].every(a=>/\\d{2}:\\d{2}:\\d{2}$/.test(a.getAttribute('aria-label')))`),
+  ).toBe(true);
 });

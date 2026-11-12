@@ -506,7 +506,7 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
       await page.eval(
         `${row}.textContent.slice(${row}.firstElementChild.textContent.length).replace(/\\s+/g,' ').trim()`,
       ),
-    ).toMatch(/^Audit user set priority to Urgent and removed label test · just now$/);
+    ).toMatch(/^Audit user raised priority from High to Urgent and removed label test · just now$/);
     expect(
       await page.eval(
         `(()=>{const d=${row}.querySelector('[style*="background"]');return [d.getBoundingClientRect().width,d.getBoundingClientRect().height,${row}.firstElementChild.querySelector('svg')?'icon':'avatar']})()`,
