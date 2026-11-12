@@ -19,6 +19,11 @@ import { filterChoices, PropertyFilter, ValueRow } from "./property-filter";
 import { Menu } from "./menu";
 import { PillSelect } from "./pill-select";
 import { Icon } from "./icons";
+import { Button, IconButton, type ButtonSize, type ButtonVariant } from "./button";
+import { SegmentedControl } from "./segmented-control";
+import { TextInput } from "./field";
+import { Text } from "./text";
+import { LoadingState } from "./empty-state";
 import { shortDate } from "./due-date";
 import {
   ME,
@@ -64,8 +69,6 @@ const FilterMenu = lazy(
 );
 
 export { MENU_POPUP as POPUP } from "./menu-surface";
-const CIRCLE =
-  "relative grid size-7 shrink-0 place-items-center rounded-full bg-btn text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg";
 
 type Placement = "bottom-left" | "bottom-right";
 const closeToolbar = () => ui.send({ type: "toolbar.close" });
@@ -82,7 +85,9 @@ function AddFilterButton({
   triggerRef,
   expanded,
   label,
-  title,
+  shortcut,
+  variant,
+  size,
   className,
   children,
 }: {
@@ -92,8 +97,10 @@ function AddFilterButton({
   triggerRef?: RefObject<HTMLButtonElement | null>;
   expanded?: boolean;
   label: string;
-  title?: string;
-  className: string;
+  shortcut?: string;
+  variant: ButtonVariant;
+  size: ButtonSize;
+  className?: string;
   children: ReactNode;
 }) {
   const open = useStore((s) => s.toolbar === menu);
@@ -102,10 +109,12 @@ function AddFilterButton({
   const popup = useRef<HTMLDivElement>(null);
   return (
     <>
-      <button
+      <IconButton
         ref={trigger}
-        aria-label={label}
-        title={title}
+        label={label}
+        shortcut={shortcut}
+        variant={variant}
+        size={size}
         aria-expanded={expanded ?? open}
         onPointerEnter={() => void loadFilterMenu()}
         onFocus={() => void loadFilterMenu()}
@@ -113,13 +122,13 @@ function AddFilterButton({
         className={className}
       >
         {children}
-      </button>
+      </IconButton>
       {open && (
         <Popover trigger={trigger} placement={placement} popup={popup} close={closeToolbar}>
           <Suspense
             fallback={
-              <div role="status" className={`${POPUP} w-[248px] p-3`}>
-                Opening filters…
+              <div className={`${POPUP} w-[248px] p-3`}>
+                <LoadingState>Opening filters…</LoadingState>
               </div>
             }
           >
@@ -161,24 +170,26 @@ export function BoardControls({ board }: { board: Board }) {
         triggerRef={filterRef}
         expanded={toolbar === "filter" || toolbar === "advanced"}
         label={count ? "Add another filter" : "Add filter"}
-        title={count ? "Add another filter" : "Filter (F)"}
-        className={CIRCLE}
+        shortcut={count ? undefined : "F"}
+        variant="secondary"
+        size="medium"
       >
         <Icon name="filter" />
       </AddFilterButton>
-      <button
+      <IconButton
         ref={displayRef}
-        aria-label="Display options"
-        title="Display options (Shift+V)"
+        label="Display options"
+        shortcut="Shift+V"
+        variant="secondary"
+        size="medium"
         aria-expanded={toolbar === "display"}
         onClick={() => ui.send({ type: "toolbar.toggle", toolbar: "display" })}
-        className={CIRCLE}
       >
         <Icon name="display" />
         {!sameDisplay(preferences.display, view?.display ?? savedDefault ?? defaultDisplay()) && (
           <span className="absolute top-0 right-0 size-1.5 rounded-full bg-accent" />
         )}
-      </button>
+      </IconButton>
       {(toolbar === "display" || toolbar === "advanced") && (
         <Popover
           key={toolbar}
@@ -209,10 +220,11 @@ export function Select({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex min-h-8 items-center justify-between gap-2 text-[12px] text-fg-3">
-      <span>{label}</span>
+    <div className="flex min-h-8 items-center justify-between gap-2">
+      <Text variant="mini" color="muted">{label}</Text>
       <span className="flex w-[170px] items-center gap-2">
         {children}
+        {/* PillSelect (P0's file) owns its trigger's look; this keeps the display menu's compact size until it renders a Button. */}
         <PillSelect
           label={label}
           value={value}
@@ -224,7 +236,7 @@ export function Select({
     </div>
   );
 }
-/** A display-options row: label on the left, a switch on the right. */
+/** A display-options row: label on the left, a switch on the right. No Switch primitive exists yet, so the input keeps `view-toggle`. */
 export function Toggle({
   label,
   value,
@@ -235,8 +247,8 @@ export function Toggle({
   onChange: () => void;
 }) {
   return (
-    <label className="flex min-h-8 cursor-default items-center justify-between gap-4 text-[12px] text-fg-3">
-      <span>{label}</span>
+    <label className="flex min-h-8 cursor-default items-center justify-between gap-4">
+      <Text variant="mini" color="muted">{label}</Text>
       <input
         type="checkbox"
         role="switch"
@@ -260,37 +272,38 @@ function DisplayMenu({ board }: { board: Board }) {
       aria-label="Display options"
       className={`${POPUP} w-[304px] max-h-[calc(100vh-140px)] overflow-y-auto p-3`}
     >
-      <div role="tablist" aria-label="Layout" className="mb-4 grid grid-cols-2 gap-1">
+      <SegmentedControl
+        aria-label="Layout"
+        size="medium"
+        width="full"
+        value={d.layout}
+        onValueChange={(layout) => patch({ layout: layout as Display["layout"] })}
+        className="mb-4"
+      >
         {(["list", "board"] as const).map((layout) => (
-          <button
-            role="tab"
-            aria-selected={d.layout === layout}
-            key={layout}
-            onClick={() => patch({ layout })}
-            className={`flex h-7 items-center justify-center gap-2 rounded-full bg-tab text-[12px] shadow-(--tab-shadow) ${d.layout === layout ? "bg-tab-on text-fg" : "text-fg-3"}`}
-          >
+          // ponytail: gap is layout inside the segment until SegmentedControl spaces an icon from its label (Q8).
+          <SegmentedControl.Segment key={layout} value={layout} className="gap-1.5">
             <Icon name={layout} />
             {layout === "list" ? "List" : "Board"}
-          </button>
+          </SegmentedControl.Segment>
         ))}
-      </div>
+      </SegmentedControl>
       <Select
         label={d.layout === "board" ? "Columns" : "Grouping"}
         value={d.columns}
         options={GROUPINGS.filter(([v]) => d.layout === "list" || v !== "none")}
         onChange={(v) => patch({ columns: v as Display["columns"] })}
       >
-        <button
-          aria-label="Group ordering"
-          title="Reverse group order"
+        <IconButton
+          label="Reverse group order"
+          size="small"
           onClick={(e) => {
             e.preventDefault();
             patch({ groupDescending: !d.groupDescending });
           }}
-          className="text-fg-2"
         >
           <Icon name={d.groupDescending ? "down" : "up"} />
-        </button>
+        </IconButton>
       </Select>
       <Select
         label={d.layout === "board" ? "Rows" : "Sub-grouping"}
@@ -304,17 +317,16 @@ function DisplayMenu({ board }: { board: Board }) {
         options={ORDERINGS}
         onChange={(v) => patch({ ordering: v as Display["ordering"] })}
       >
-        <button
-          aria-label="Direction"
-          title="Reverse issue order"
+        <IconButton
+          label="Reverse issue order"
+          size="small"
           onClick={(e) => {
             e.preventDefault();
             patch({ descending: !d.descending });
           }}
-          className="text-fg-2"
         >
           <Icon name={d.descending ? "down" : "up"} />
-        </button>
+        </IconButton>
       </Select>
       <Toggle
         label="Order completed by recency"
@@ -328,9 +340,9 @@ function DisplayMenu({ board }: { board: Board }) {
         onChange={() => patch({ subIssues: !d.subIssues })}
       />
       <div className="my-3 border-t border-line-2" />
-      <div className="mb-1 text-[12px] font-medium">
+      <Text as="div" variant="miniPlus" className="mb-1">
         {d.layout === "board" ? "Board" : "List"} options
-      </div>
+      </Text>
       {d.layout === "list" && (
         <Select
           label="Nested sub-issues"
@@ -348,11 +360,15 @@ function DisplayMenu({ board }: { board: Board }) {
         value={d.emptyGroups}
         onChange={() => patch({ emptyGroups: !d.emptyGroups })}
       />
-      <div className="mt-3 mb-2 text-[12px] text-fg-3">Display properties</div>
+      <Text as="div" variant="mini" color="muted" className="mt-3 mb-2">
+        Display properties
+      </Text>
       <div className="flex flex-wrap gap-1">
         {PROPERTIES.filter(([p]) => d.layout === "list" || p !== "creator").map(([p, label]) => (
-          <button
+          <Button
             key={p}
+            variant="borderless"
+            size="small"
             aria-pressed={d.properties.includes(p)}
             onClick={() =>
               patch({
@@ -361,10 +377,9 @@ function DisplayMenu({ board }: { board: Board }) {
                   : [...d.properties, p],
               })
             }
-            className={`rounded-full px-2 py-1 text-[11px] ${d.properties.includes(p) ? "bg-tab-on text-fg-2" : "bg-tab text-fg-3"}`}
           >
             {label}
-          </button>
+          </Button>
         ))}
       </div>
       <PropertySyncNotice />
@@ -378,15 +393,18 @@ function DisplayMenu({ board }: { board: Board }) {
         ]}
         onChange={(v) => patch({ openIn: v as Display["openIn"] })}
       />
-      {!inView && <div className="mt-3 flex justify-end gap-3 border-t border-line-2 pt-2 text-[11px]">
-        <button
+      {!inView && <div className="mt-3 flex justify-end gap-1 border-t border-line-2 pt-2">
+        <Button
+          variant="borderless"
+          size="small"
           title="Reset to the saved default for this board"
           onClick={() => resetDisplay(board.id)}
         >
           Reset
-        </button>
-        <button
-          className="text-accent disabled:opacity-50"
+        </Button>
+        <Button
+          variant="secondary"
+          size="small"
           disabled={saving}
           title="Save your display default in this browser"
           onClick={async () => {
@@ -396,7 +414,7 @@ function DisplayMenu({ board }: { board: Board }) {
           }}
         >
           {saving ? "Saving…" : "Save my default"}
-        </button>
+        </Button>
       </div>}
     </div>
   );
@@ -414,7 +432,11 @@ const removeOnKey = (remove: () => void) => (e: React.KeyboardEvent) => {
   }
 };
 
-/** One rule's chip: field, operator and values. Only a chip with values subscribes to the issues, for their labels. */
+/**
+ * One rule's chip: field, operator and values. Only a chip with values subscribes to the issues, for their labels.
+ * Linear's view filter is the segmented FilterBlock (FilterBlockHelper), not the single-pill FilterChip (`man`), so it
+ * keeps its own markup in view-toolbar.css.
+ */
 function RuleChip({
   rule: c,
   board,
@@ -593,12 +615,9 @@ export function FilterChips({ board }: { board: Board }) {
       )}
       <div className="view-filter-chips">
       {filters.join === "or" && chips.length > 1 && (
-        <button
-          className="text-fg-3"
-          onClick={() => ui.send({ type: "toolbar.open", toolbar: "advanced" })}
-        >
+        <Button variant="muted" size="small" onClick={() => ui.send({ type: "toolbar.open", toolbar: "advanced" })}>
           Any of
-        </button>
+        </Button>
       )}
       {chips.map((c) => {
         const remove = () => updateRule(board.id, c.id, null);
@@ -629,6 +648,8 @@ export function FilterChips({ board }: { board: Board }) {
         menu="add-filter"
         placement="bottom-left"
         label="Add another filter"
+        variant="borderless"
+        size="small"
         className="view-filter-add"
       >
         <Icon name="plus" />
@@ -660,20 +681,18 @@ function FilterSaveActions({ board }: { board: Board }) {
   return (
     <>
       <div className="view-filter-actions">
-        <button
-          className="view-filter-action"
-          onClick={() => clearFilters(board.id)}
-        >
+        <Button variant="borderless" size="small" onClick={() => clearFilters(board.id)}>
           Clear
-        </button>
-        <button
-          className="view-filter-action view-filter-save"
+        </Button>
+        <Button
+          variant="secondary"
+          size="small"
           aria-haspopup="dialog"
           aria-expanded={!!saveAnchor}
           onClick={(e) => setSaveAnchor(e.currentTarget)}
         >
           Save
-        </button>
+        </Button>
       </div>
       {saveAnchor && (
         <MenuSurface
@@ -757,27 +776,21 @@ function AdvancedMenu({ board }: { board: Board }) {
       className={`${POPUP} w-[640px] max-w-[calc(100vw-24px)] max-h-[calc(100vh-140px)] overflow-y-auto p-3`}
     >
       <div className="mb-3 flex items-center justify-between">
-        <span className="font-medium">Advanced filter</span>
-        <button
-          aria-label="Close advanced filter"
-          onClick={() => ui.send({ type: "toolbar.close" })}
-        >
+        <Text variant="smallPlus">Advanced filter</Text>
+        <IconButton label="Close advanced filter" variant="muted" size="small" onClick={() => ui.send({ type: "toolbar.close" })}>
           <Icon name="close" />
-        </button>
+        </IconButton>
       </div>
       <FilterGroupEditor group={filters} board={board} issues={all} patch={patch} depth={0} />
       <PropertySyncNotice />
-      <div className="mt-3 flex justify-between border-t border-line-2 pt-3 text-[12px] text-fg-3">
-        <span>
+      <div className="mt-3 flex items-center justify-between border-t border-line-2 pt-3">
+        <Text variant="mini" color="muted">
           {all.filter((i) => matchesFilters(i, filters, universe, ME.id)).length} matching issues in
           this view
-        </span>
-        <button
-          onClick={() => ui.send({ type: "toolbar.close" })}
-          className="rounded-md bg-accent px-3 py-1 text-white"
-        >
+        </Text>
+        <Button size="small" onClick={() => ui.send({ type: "toolbar.close" })}>
           Done
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -810,13 +823,9 @@ function FilterGroupEditor({
         </select>
         of the following
         {depth > 0 && (
-          <button
-            aria-label="Remove filter group"
-            className="ml-auto"
-            onClick={() => patch(group.id, null)}
-          >
+          <IconButton label="Remove filter group" variant="muted" size="small" className="ml-auto" onClick={() => patch(group.id, null)}>
             <Icon name="close" />
-          </button>
+          </IconButton>
         )}
       </div>
       {group.children.map((c) =>
@@ -839,8 +848,11 @@ function FilterGroupEditor({
           />
         ),
       )}
-      <div className="flex gap-3 text-[12px] text-fg-3">
-        <button
+      <div className="flex gap-1">
+        <Button
+          variant="muted"
+          size="small"
+          icon={<Icon name="plus" />}
           aria-label={depth === 0 ? "Add filter condition" : "Add group condition"}
           onClick={() =>
             patch(group.id, {
@@ -848,10 +860,13 @@ function FilterGroupEditor({
             })
           }
         >
-          + Add filter
-        </button>
+          Add filter
+        </Button>
         {depth < 5 && (
-          <button
+          <Button
+            variant="muted"
+            size="small"
+            icon={<Icon name="plus" />}
             aria-label={depth === 0 ? "Add filter group" : "Add nested filter group"}
             onClick={() =>
               patch(group.id, {
@@ -859,13 +874,14 @@ function FilterGroupEditor({
               })
             }
           >
-            + Add filter group
-          </button>
+            Add filter group
+          </Button>
         )}
       </div>
     </div>
   );
 }
+/** The advanced editor's native <select>s keep index.css's `view-select`: there is no Select primitive yet. */
 function RuleEditor({
   rule: r,
   board,
@@ -915,8 +931,9 @@ function RuleEditor({
       </select>
       {!["empty", "notEmpty"].includes(r.op) &&
         (free ? (
-          <input
-            className="view-select min-w-24 flex-1"
+          <TextInput
+            size="medium"
+            className="min-w-24 flex-1"
             aria-label="Filter value"
             type={
               isNumeric(r.field)
@@ -936,14 +953,17 @@ function RuleEditor({
         ) : (
           <div className="min-w-32 flex-1 space-y-1">
             {r.values.map((v) => (
-              <button
+              <Button
                 key={v}
-                className="mr-1 rounded bg-tab-on px-2 py-1 text-[11px]"
+                variant="secondary"
+                size="small"
+                className="mr-1"
                 title="Remove value"
                 onClick={() => patch({ values: r.values.filter((x) => x !== v) })}
               >
-                {choices.find((c) => c.value === v)?.label ?? v} ×
-              </button>
+                {choices.find((c) => c.value === v)?.label ?? v}
+                <Icon name="x" size={12} />
+              </Button>
             ))}
             <select
               aria-label="Add filter value"
@@ -970,13 +990,9 @@ function RuleEditor({
           Use 0 or more
         </span>
       )}
-      <button
-        aria-label="Remove condition"
-        className="grid size-7 place-items-center text-fg-3"
-        onClick={() => patch(null)}
-      >
-        <Icon name="close" size={12} />
-      </button>
+      <IconButton label="Remove condition" variant="muted" onClick={() => patch(null)}>
+        <Icon name="close" />
+      </IconButton>
     </div>
   );
 }
@@ -985,10 +1001,10 @@ function PropertySyncNotice() {
   const progress = useStore((s) => s.propertySync);
   if (!progress.pending && !progress.errors) return null;
   return (
-    <div role="status" className="border-t border-line-2 px-2 py-2 text-[11px] leading-4 text-fg-3">
+    <Text as="div" role="status" variant="micro" color="muted" className="border-t border-line-2 px-2 py-2">
       {progress.pending
         ? `Loading Jira properties… ${progress.completed} / ${progress.total}. Results update as data arrives.`
         : `Some Jira properties could not be read on ${progress.errors} issues. Restricted watcher lists are excluded from subscriber filters.`}
-    </div>
+    </Text>
   );
 }

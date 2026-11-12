@@ -4,6 +4,9 @@ import { statuses } from "./board-catalog";
 import { FilterIcon } from "./filter-icons";
 import { hue, PriorityIcon, StatusIcon, TypeDot } from "./icons";
 import { Menu } from "./menu";
+import { Button } from "./button";
+import { TextInput } from "./field";
+import { Text } from "./text";
 import { setRule, updateRule, useViewSettings } from "./view-settings";
 import {
   ME,
@@ -312,6 +315,7 @@ export function PropertyFilter({
       }}
       className="space-y-2 p-3"
     >
+      {/* No Select primitive yet: the native select keeps index.css's `view-select`. */}
       <select
         aria-label={`${name} operator`}
         value={op}
@@ -325,7 +329,8 @@ export function PropertyFilter({
         ))}
       </select>
       {!["empty", "notEmpty"].includes(op) && (
-        <input
+        <TextInput
+          size="medium"
           autoFocus={autoFocus || !inline}
           aria-label={name}
           required
@@ -342,16 +347,18 @@ export function PropertyFilter({
           }
           min={numeric || op === "within" || op === "next" ? 0 : undefined}
           step={numeric ? "any" : undefined}
-          className="view-select w-full"
+          className="w-full"
           placeholder={field === "statusAge" ? "Days in current status…" : "Text to match…"}
         />
       )}
       {field === "statusAge" && (
-        <div className="text-[11px] text-fg-3">Duration in days, including fractions.</div>
+        <Text as="div" variant="micro" color="muted">
+          Duration in days, including fractions.
+        </Text>
       )}
-      <button type="submit" className="h-7 w-full rounded-md bg-accent text-[12px] text-white">
+      <Button type="submit" size="medium" className="w-full">
         Apply filter
-      </button>
+      </Button>
     </form>
   );
   const searchRow = (placeholder = "Filter…", label = `Filter ${name}`) => (
@@ -423,14 +430,15 @@ export function PropertyFilter({
       {inline && rule && (
         <div role="group" aria-label={`${name} operator`} className="flex flex-wrap gap-1 pb-2">
           {operatorsFor(field).map(([v, l]) => (
-            <button
+            <Button
               key={v}
+              variant="borderless"
+              size="small"
               aria-pressed={rule.op === v}
               onClick={() => apply(["empty", "notEmpty"].includes(v) ? [] : rule.values, v)}
-              className={`rounded-full px-2 py-0.5 text-[11px] ${rule.op === v ? "bg-tab-on text-fg" : "bg-tab text-fg-3 hover:text-fg-2"}`}
             >
               {l}
-            </button>
+            </Button>
           ))}
         </div>
       )}
