@@ -139,8 +139,10 @@ export function ResourceForm({
           {resource ? label : `${label} to ${issue.key}`}
         </Dialog.Title>
         <Field>
-          <Field.Label className="mb-1 block text-[12px] text-fg-3">
-            URL
+          <Field.Label className="mb-1 block">
+            <Text variant="mini" color="muted">
+              URL
+            </Text>
           </Field.Label>
           <TextInput
             autoFocus={!resource}
@@ -153,8 +155,10 @@ export function ResourceForm({
           />
         </Field>
         <Field className="mt-3">
-          <Field.Label className="mb-1 block text-[12px] text-fg-3">
-            Title (optional)
+          <Field.Label className="mb-1 block">
+            <Text variant="mini" color="muted">
+              Title (optional)
+            </Text>
           </Field.Label>
           <TextInput
             data-autofocus={resource ? true : undefined}
@@ -351,6 +355,7 @@ export function IssueResources({ issue }: { issue: Issue }) {
             ) : (
               <Icon name={resource.kind === "document" ? "file" : "branch"} />
             )}
+            {/* Text has no anchor/time element variant; preserve native link and timestamp semantics. */}
             {resource.kind === "document" ? (
               <a
                 data-resource-id={resource.id}

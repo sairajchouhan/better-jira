@@ -349,6 +349,7 @@ export function CreateIssue() {
             }}
           />
         </div>
+        {/* Text has no semantic danger color; keep the validation alert styling. */}
         {noParentType && (
           <p role="alert" className="mt-3 text-[12px] text-danger">
             {noParentType}
@@ -360,14 +361,19 @@ export function CreateIssue() {
           onBusy={setFilesBusy}
         />
         <div className="mt-4 flex items-center gap-2 border-t border-line pt-3">
-          <label className="mr-auto flex items-center gap-2 text-[12px]">
+          <Text
+            as="label"
+            variant="mini"
+            color="inherit"
+            className="mr-auto flex items-center gap-2"
+          >
             <input
               type="checkbox"
               checked={more}
               onChange={(e) => setMore(e.target.checked)}
             />
             Create more
-          </label>
+          </Text>
           <Button
             type="button"
             onClick={close}
@@ -1293,7 +1299,7 @@ export function AddBoard() {
           }
         }}
       >
-        <label className="text-[12px]">
+        <Text as="label" variant="mini" color="inherit">
           Jira board link or ID
           <TextInput
             autoFocus
@@ -1303,7 +1309,8 @@ export function AddBoard() {
             onChange={(e) => setValue(e.target.value)}
             className="w-full mt-2"
           />
-        </label>
+        </Text>
+        {/* Text has no semantic error color; keep the validation alert styling. */}
         {error ? (
           <p role="alert" className="mt-2 text-[12px] text-red-500">
             {error}

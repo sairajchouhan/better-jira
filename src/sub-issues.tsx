@@ -224,6 +224,7 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
       color="inherit"
     >
       <span className="mr-0.5 font-[450] text-fg-3">Sub-issue of</span>
+      {/* Text has no anchor variant; preserve link semantics and keyboard navigation. */}
       <a
         data-parent-link
         className="flex h-[26px] min-w-0 items-center gap-1 rounded-lg border border-transparent px-1 hover:bg-hover"
@@ -884,6 +885,7 @@ function SubIssueRow({
       {display.properties.includes("id") && (
         <span className="px-1 text-fg-3">{child.key}</span>
       )}
+      {/* Text has no anchor variant; preserve the native issue link. */}
       <a
         className="flex min-w-0 flex-1 items-center gap-2 py-1.5 text-[13px] font-medium text-fg"
         href={childURL(child)}

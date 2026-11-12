@@ -1,3 +1,4 @@
+import { Text } from "./text";
 import { TextInput } from "./field";
 import { Button, IconButton } from "./button";
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
@@ -79,7 +80,12 @@ export function ReminderMenu({
             if (parsed) choose(parsed);
           }}
         >
-          <label className="block p-2 text-[13px]">
+          <Text
+            as="label"
+            variant="small"
+            color="inherit"
+            className="block p-2"
+          >
             Custom reminder
             <TextInput
               autoFocus
@@ -100,7 +106,7 @@ export function ReminderMenu({
                 )
               }
             />
-          </label>
+          </Text>
           <div className="flex justify-end gap-2 p-2">
             <Button
               type="button"
