@@ -26,3 +26,19 @@ test("a Field labels and describes its control", () => {
   expect(html).toContain(`<input data-size="normal" class="ui-input " id="${id}" aria-describedby="${id}-description"`);
   expect(html).toContain(`<p id="${id}-description">`);
 });
+
+test("a Field without a rendered description never emits a dangling description id", () => {
+  for (const description of [null, false, undefined]) {
+    const html = renderToStaticMarkup(<Field><Field.Label>Name</Field.Label><TextInput />{description}</Field>);
+    expect(html).not.toContain("aria-describedby");
+  }
+});
+
+test("autosizing mirrors caller typography and size onto the measurement copy", () => {
+  for (const size of ["small", "medium", "normal", "large", "xlarge"] as const) {
+    const html = renderToStaticMarkup(<AutoResizingTextArea size={size} className="custom-type" style={{ fontSize: 17, lineHeight: "25px", padding: 9 }} />);
+    expect(html.match(/data-size=/g)).toHaveLength(2);
+    expect(html.match(/custom-type/g)).toHaveLength(2);
+    expect(html.match(/style="font-size:17px;line-height:25px;padding:9px"/g)).toHaveLength(2);
+  }
+});

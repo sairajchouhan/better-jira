@@ -1,3 +1,4 @@
+import { AutoResizingTextArea } from "./field";
 import { LoadingState } from "./empty-state";
 import { showNotification } from "./app-notifications";
 /* oxlint-disable react/no-unstable-nested-components -- Comment heads and avatars are render callbacks supplied to the activity threads. */
@@ -341,10 +342,7 @@ function IssueBody({ issue }: { issue: Issue }) {
       </div>
       <div className="issue-detail-grid" data-properties-hidden={propertiesHidden || undefined}>
         <div className="issue-detail-title">
-          <Title
-            issue={issue}
-            className="text-[24px] !leading-[32px] tracking-[-0.16px] [font-variation-settings:'opsz'_32]"
-          />
+          <Title issue={issue} />
           <SubIssueOf issue={issue} />
         </div>
         {!propertiesHidden && (
@@ -394,11 +392,11 @@ function Stepper({ issueKey }: { issueKey: string }) {
   );
 }
 
-/** A Jira-side rename shows at once unless the title is being edited (Linear keeps a focused draft); leaving it saves only typed text.
- *  Not AutoResizingTextArea: the title is a borderless heading that sizes itself with `field-sizing`, not a form field. */
-function Title({ issue, className }: { issue: Issue; className: string }) {
+/** A Jira-side rename shows at once unless the title is being edited; leaving it saves only typed text. */
+function Title({ issue }: { issue: Issue }) {
   const ref = useRef<HTMLTextAreaElement>(null),
     start = useRef("");
+  const [draft, setDraft] = useState<string | null>(null);
   useCommand("focus-title", (key) => {
     if (key !== issue.key) return;
     const node = ref.current;
@@ -408,23 +406,23 @@ function Title({ issue, className }: { issue: Issue; className: string }) {
     node.setSelectionRange(node.value.length, node.value.length);
     return true;
   });
-  useEffect(() => {
-    if (ref.current && document.activeElement !== ref.current) ref.current.value = issue.summary;
-  }, [issue.summary]);
   return (
-    <textarea
+    <AutoResizingTextArea
+      appearance="heading"
       ref={ref}
       id="summary"
       aria-label="Issue title"
       key={issue.key}
-      defaultValue={issue.summary}
+      value={draft ?? issue.summary}
+      onChange={e => setDraft(e.target.value)}
       rows={1}
-      onFocus={(e) => (start.current = e.target.value)}
+      onFocus={(e) => { start.current = e.target.value; setDraft(e.target.value); }}
       onBlur={(e) => {
         // Only an edit saves: an unchanged field never writes back a title Jira has since replaced.
         if (e.target.value !== start.current) actions.summary(issue.key, e.target.value);
         // An empty title isn't saved: show the current one again.
         e.target.value = get().issues.get(issue.key)?.summary ?? issue.summary;
+        setDraft(null);
       }}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
@@ -436,7 +434,7 @@ function Title({ issue, className }: { issue: Issue; className: string }) {
           e.currentTarget.blur();
         }
       }}
-      className={`block w-full resize-none rounded-md bg-transparent font-semibold leading-snug text-fg outline-none [field-sizing:content] focus:bg-hover ${className}`}
+      className="rounded-md focus:bg-hover"
     />
   );
 }

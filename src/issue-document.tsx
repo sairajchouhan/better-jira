@@ -13,7 +13,6 @@ import { AutoResizingTextArea } from "./field";
 import { chordKeys } from "./keycap";
 import { Tabs } from "./tabs";
 import { Text } from "./text";
-import "./issue-document.css";
 import { DocumentBodyEditor } from "./rich-editor-loader";
 import { Adf } from "./adf";
 import { statusById } from "./board-catalog";
@@ -244,10 +243,10 @@ function DocumentContent() {
 
 function DocumentTitle() {
   const { state: { draft }, actions: { update, endSession } } = useDocument();
-  // The title is a one-line-minimum autosizing field in the document's own type (issue-document.css), not an input box.
   return (
     <div className="document-title mb-6">
       <AutoResizingTextArea
+        appearance="heading"
         rows={1}
         autoFocus={!draft.title}
         aria-label="Document title"

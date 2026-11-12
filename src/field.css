@@ -75,6 +75,26 @@
     scroll-padding-block: 0.5lh;
     white-space: pre-wrap;
     overflow-wrap: break-word;
+    line-height: 1.5;
+  }
+  .ui-autosize > .ui-input:is([data-size="small"], [data-size="medium"]) {
+    line-height: 1.4;
+  }
+  /* Title appearance: Linear's 24px/32px heading, shared by issue and document titles. */
+  .ui-autosize[data-appearance="heading"] > .ui-input {
+    min-height: 1lh;
+    max-height: none;
+    overflow: hidden;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 32px;
+    letter-spacing: -0.16px;
+    font-variation-settings: "opsz" 32;
+    outline: none;
   }
   .ui-autosize-sizer {
     visibility: hidden;

@@ -1,4 +1,4 @@
-import { createContext, use, useId, useMemo, useRef, type ComponentProps } from "react";
+import { Children, isValidElement, createContext, use, useId, useMemo, useRef, type ComponentProps, type ReactNode } from "react";
 import "./control-tokens.css";
 import "./field.css";
 
@@ -18,12 +18,22 @@ export const FIELD = {
 
 type Size = keyof typeof FIELD.HEIGHT;
 
-const FieldContext = createContext<{ id: string; descriptionId: string } | null>(null);
+const FieldContext = createContext<{ id: string; descriptionId?: string } | null>(null);
+
+function FieldDescription(props: Omit<ComponentProps<"p">, "id">) {
+  return <p id={use(FieldContext)?.descriptionId} {...props} />;
+}
+
+function hasDescription(children: ReactNode): boolean {
+  return Children.toArray(children).some(child => isValidElement<{ children?: ReactNode }>(child) &&
+    (child.type === FieldDescription || hasDescription(child.props.children)));
+}
 
 /** Ties a label and description to the one control inside it. Layout is the caller's. */
 function FieldRoot({ children, ...props }: ComponentProps<"div">) {
   const id = useId(),
-    value = useMemo(() => ({ id, descriptionId: `${id}-description` }), [id]);
+    described = hasDescription(children),
+    value = useMemo(() => ({ id, descriptionId: described ? `${id}-description` : undefined }), [id, described]);
   return (
     <FieldContext value={value}>
       <div {...props}>{children}</div>
@@ -39,16 +49,11 @@ function useField(id: string | undefined) {
 
 export const Field = Object.assign(FieldRoot, {
   Label: (props: Omit<ComponentProps<"label">, "htmlFor">) => <label htmlFor={use(FieldContext)?.id} {...props} />,
-  Description: (props: Omit<ComponentProps<"p">, "id">) => <p id={use(FieldContext)?.descriptionId} {...props} />,
+  Description: FieldDescription,
 });
 
 export function TextInput({ size = "normal", id, className = "", ...props }: { size?: Size } & Omit<ComponentProps<"input">, "size">) {
   return <input data-size={size} className={`ui-input ${className}`} {...useField(id)} {...props} />;
-}
-
-/** A fixed 64px textarea. */
-export function TextArea({ size = "normal", id, className = "", ...props }: { size?: Size } & ComponentProps<"textarea">) {
-  return <textarea data-size={size} className={`ui-input ${className}`} {...useField(id)} {...props} />;
 }
 
 /** The hidden copy's text: a trailing zero-width space keeps a final empty line counted in its height. */
@@ -57,6 +62,7 @@ export const sizerText = (value: string) => `${value}​`;
 /** Grows with its text from 3 to 30 lines, then scrolls. Controlled or uncontrolled, like a textarea. */
 export function AutoResizingTextArea({
   size = "normal",
+  appearance = "input",
   id,
   className = "",
   style,
@@ -64,13 +70,14 @@ export function AutoResizingTextArea({
   defaultValue,
   onInput,
   ...props
-}: { size?: Size } & ComponentProps<"textarea">) {
+}: { size?: Size; appearance?: "input" | "heading" } & ComponentProps<"textarea">) {
   const sizer = useRef<HTMLDivElement>(null);
   return (
-    <div className="ui-autosize" style={style}>
+    <div className="ui-autosize" data-appearance={appearance}>
       <textarea
         data-size={size}
         className={`ui-input ${className}`}
+        style={style}
         value={value}
         defaultValue={defaultValue}
         onInput={(event) => {
@@ -81,7 +88,7 @@ export function AutoResizingTextArea({
         {...useField(id)}
         {...props}
       />
-      <div ref={sizer} aria-hidden data-size={size} className="ui-input ui-autosize-sizer">
+      <div ref={sizer} aria-hidden data-size={size} className={`ui-input ui-autosize-sizer ${className}`} style={style}>
         {sizerText(String(value ?? defaultValue ?? ""))}
       </div>
     </div>

@@ -531,3 +531,25 @@ test("media action hover uses the shared button colour", async ({ open }) => {
   await expect.poll(() => matchesPrimitive(download)).toBe(true);
   await page.key('Escape');
 });
+
+test("autosize fallback measures image comments with the textarea's typography", async ({ open }) => {
+  await media();
+  const page = await open();
+  await issueImage(page);
+  await page.hover("#description img");
+  await page.click('#description [aria-label="Add image comment"]');
+  await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Image comment'`);
+  // Exercise the fallback even on Chromium versions with native field sizing.
+  await page.eval(`(() => {
+    const style = document.createElement('style');
+    style.textContent = '.ui-autosize > textarea { field-sizing: fixed !important } .ui-autosize-sizer { display: block !important }';
+    document.head.append(style);
+  })()`);
+  await page.type("first line\nsecond line\nthird line\nfourth line\nfifth line");
+  expect(await page.eval(`(() => {
+    const input = document.querySelector('[aria-label="Image comment"]'), copy = input.nextElementSibling;
+    const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'padding', 'whiteSpace', 'overflowWrap', 'minHeight', 'maxHeight'];
+    return properties.every(key => getComputedStyle(input)[key] === getComputedStyle(copy)[key]);
+  })()`)).toBe(true);
+  expect(await page.eval(`(() => { const input = document.querySelector('[aria-label="Image comment"]'); return input.scrollHeight <= input.clientHeight + 1; })()`)).toBe(true);
+});
