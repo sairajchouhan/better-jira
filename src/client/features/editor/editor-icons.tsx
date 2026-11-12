@@ -138,8 +138,9 @@ const GLYPHS = {
 export type EditorGlyph = keyof typeof GLYPHS;
 export const EditorIcon = ({ name, size = 16 }: { name: EditorGlyph; size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" className="shrink-0">
-    {GLYPHS[name].map(([d, evenodd]) => (
-      <path key={d} d={d} {...(evenodd ? { fillRule: "evenodd", clipRule: "evenodd" } : {})} />
+    {/* The heading glyphs repeat a path, so the index keys them (CORE-27); the list is static. */}
+    {GLYPHS[name].map(([d, evenodd], i) => (
+      <path key={i} d={d} {...(evenodd ? { fillRule: "evenodd", clipRule: "evenodd" } : {})} />
     ))}
   </svg>
 );
