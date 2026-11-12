@@ -109,7 +109,7 @@ const overlay = (value: NonNullable<Overlay>) => () => {
   });
 };
 /** Open the issue and keep the intent, for that issue only, until its field owner mounts. */
-const focus = (name: "focus-title" | "focus-comment" | "edit-description") =>
+const focus = (name: "focus-title" | "focus-comment" | "edit-description" | "change-subscribers") =>
   issueAction((issue) => {
     navigate({ selected: issue.key, panel: true });
     post(name, issue.key);
@@ -546,10 +546,7 @@ export const shortcuts: Shortcut[] = [
     group: "Issues",
     hotkey: "Mod+Shift+S",
     issue: true,
-    run: issueAction(() => {
-      navigate({ panel: true });
-      post("change-subscribers", get().selected!);
-    }),
+    run: focus("change-subscribers"),
   },
   {
     id: "subscribe",

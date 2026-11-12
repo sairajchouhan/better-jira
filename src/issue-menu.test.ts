@@ -64,3 +64,21 @@ test("a menu's shortcut runs on its own issue even while a sub-issue row is hove
   }
   expect(keys).toEqual([issue.key]);
 });
+
+test("Change subscribers on a hovered sub-issue row opens that issue's subscribers, not the open parent's", async () => {
+  const { runShortcut } = await import("./shortcuts");
+  const parent = { ...issue, key: "TEST-1" }, child = { ...issue, key: "TEST-3" };
+  set({ issues: new Map([[parent.key, parent], [child.key, child]]) });
+  ui.send({ type: "overlay.close" });
+  navigate({ selected: parent.key, panel: true, document: null, inbox: false, viewsPage: false, mine: false });
+  const keys: string[] = [];
+  const stopHover = handle("hovered-sub-issue", () => child.key);
+  const stopSubs = handle("change-subscribers", (key) => (keys.push(key), true));
+  try {
+    runShortcut("subscribers");
+  } finally {
+    stopHover();
+    stopSubs();
+  }
+  expect([keys, get().selected]).toEqual([[child.key], child.key]);
+});
