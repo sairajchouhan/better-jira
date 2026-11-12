@@ -1,7 +1,6 @@
 import { Button, ButtonLink, IconButton } from "./button";
 import { Keycap, Shortcut } from "./keycap";
 import { notifyMedia } from "./media-toast";
-import "./media-primitives.css";
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 import { Debouncer } from "@tanstack/pacer";

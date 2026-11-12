@@ -1,6 +1,5 @@
 import { Text } from "./text";
 import { ButtonLink, IconButton } from "./button";
-import "./media-primitives.css";
 import { notifyMedia } from "./media-toast";
 import { Icon } from "./icons";
 import type { Attachment } from "./attachment-media";

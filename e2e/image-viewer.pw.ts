@@ -506,3 +506,28 @@ test("an image comment keeps its image thumbnail in Activity after the image is 
     ).toEqual(["Reply after removal"]);
   });
 });
+
+test("media action hover uses the shared button colour", async ({ open }) => {
+  await media();
+  const page = await open();
+  await issueImage(page);
+  const matchesPrimitive = (selector: string) => page.eval<boolean>(`(() => {
+    const button = document.querySelector(${JSON.stringify(selector)});
+    const reference = document.createElement('span');
+    reference.style.background = 'var(--crumb-hover)';
+    button.append(reference);
+    const expected = getComputedStyle(reference).backgroundColor;
+    reference.remove();
+    return getComputedStyle(button).backgroundColor === expected;
+  })()`);
+  const fullScreen = '#description [aria-label="Full screen"]';
+  await page.hover('#description img');
+  await page.hover(fullScreen);
+  await expect.poll(() => matchesPrimitive(fullScreen)).toBe(true);
+  await page.click(fullScreen);
+  await page.waitFor(`!!${preview}`);
+  const download = '[aria-label="Preview"] [aria-label^="Download"]';
+  await page.hover(download);
+  await expect.poll(() => matchesPrimitive(download)).toBe(true);
+  await page.key('Escape');
+});

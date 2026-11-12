@@ -1,5 +1,4 @@
 import { Button, IconButton } from "./button";
-import "./media-primitives.css";
 import { useEffect, useRef, useState } from "react";
 import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 import { adjustCrop, type ImageCrop } from "./media-edits";

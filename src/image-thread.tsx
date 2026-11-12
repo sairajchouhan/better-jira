@@ -7,7 +7,6 @@ import { ConfirmDialog } from "./dialog";
 import { Button, IconButton } from "./button";
 import { AutoResizingTextArea } from "./field";
 import { notifyMedia } from "./media-toast";
-import "./media-primitives.css";
 import { Icon } from "./icons";
 export type ImageThreadDraft = { text: string; editing?: string; beforeEdit?: string };
 export function ImageThread({
