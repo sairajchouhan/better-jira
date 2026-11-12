@@ -197,7 +197,7 @@ export function TableControls({ view, frame }: { view: EditorView; frame: RefObj
       if (!target.cell.contains(view.domAtPos(view.state.selection.head).node))
         view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(view.posAtDOM(target.cell, 0)))));
       view.focus();
-      setOpen({ kind: "cell", target, point: { x: event.clientX + 3, y: event.clientY } });
+      setOpen({ kind: "cell", target, point: { x: event.clientX, y: event.clientY } });
     };
     box.addEventListener("mousemove", move);
     box.addEventListener("mouseleave", leave);

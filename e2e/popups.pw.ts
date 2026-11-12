@@ -214,7 +214,7 @@ test("MenuSurface: below its anchor, flipped above near the bottom, centred unde
     await page.waitFor(`!document.querySelector('${MENU}')`);
   });
 
-  await test.step("a right-click mid-board opens 3px right of the pointer", async () => {
+  await test.step("CORE-18: a right-click mid-board opens 4px right of and 1px above the pointer", async () => {
     await page.eval(
       `(()=>{const n=document.querySelector('[data-key="TEST-2"]');n.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:300,clientY:200}))})()`,
     );
@@ -222,8 +222,8 @@ test("MenuSurface: below its anchor, flipped above near the bottom, centred unde
     await page.waitFor(`!!document.querySelector('${MENU}')`);
     await sleep(50);
     const menu = await rect(page, MENU);
-    near(menu.left, 303);
-    near(menu.top, 200);
+    near(menu.left, 304);
+    near(menu.top, 199);
     await page.key("Escape");
   });
   await page.close();

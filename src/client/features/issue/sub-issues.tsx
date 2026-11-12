@@ -629,7 +629,7 @@ function SubIssueRow({
       onContextMenu={(event) => {
         event.preventDefault();
         openMenu(event.currentTarget, {
-          x: event.clientX + 3,
+          x: event.clientX,
           y: event.clientY,
         });
       }}

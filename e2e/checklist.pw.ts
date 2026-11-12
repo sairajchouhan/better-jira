@@ -310,8 +310,9 @@ test("RAJ-52: action menus sit where Linear puts them: Issue options left-aligne
     expect([m[0] - x, m[1] - y]).toEqual([2, 4]);
     [x, y, m] = await right('[aria-label="Options for Spec"]', -200, 12);
     expect([m[0] - x, m[1] - y]).toEqual([4, -1]);
+    // CORE-18: every row menu opens at Linear's one point offset.
     [x, y, m] = await right("[data-sub-issue]", 200, 18);
-    expect([m[0] - x, m[1] - y]).toEqual([3, 0]);
+    expect([m[0] - x, m[1] - y]).toEqual([4, -1]);
   });
   await test.step("RAJ-52: too tall to fit under the cursor, a menu stays 10px off the window bottom ([439,255,180,637])", async () => {
     await page.cmd("Emulation.setDeviceMetricsOverride", {
@@ -321,6 +322,6 @@ test("RAJ-52: action menus sit where Linear puts them: Issue options left-aligne
       mobile: false,
     });
     const [x, y, m] = await right("[data-sub-issue]", 200, 18);
-    expect([m[0] - x, m[3], m[1] < y]).toEqual([3, 590, true]);
+    expect([m[0] - x, m[3], m[1] < y]).toEqual([4, 590, true]);
   });
 });

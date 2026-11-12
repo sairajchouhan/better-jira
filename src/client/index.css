@@ -252,6 +252,10 @@
 .menu-input input::placeholder {
   color: var(--menu-fg-3);
 }
+/* A row keeps its hover background while its context menu is open, as Linear's do (ContextMenu's data-menu-open, CORE-26). */
+[data-menu-open] > :first-child:not(.bg-sel) {
+  background-color: var(--hover);
+}
 /* N6e: 6px above and below the rows. */
 .menu-list {
   overflow-y: auto;

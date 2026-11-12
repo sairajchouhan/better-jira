@@ -607,7 +607,7 @@ function IssueTarget({
           type: "overlay.open",
           overlay: "options",
           target: issue.key,
-          point: { x: e.clientX + 3, y: e.clientY },
+          point: { x: e.clientX, y: e.clientY },
         });
       }}
       className={className(selected || columnSelected || menu)}

@@ -367,7 +367,8 @@ function Thread({
           setMenu({
             anchor: button,
             comment,
-            point: { x: event.clientX + 2, y: event.clientY + 4 },
+            // Linear's comment menu sits +2,+4 from the pointer; MenuSurface adds its +4,−1.
+            point: { x: event.clientX - 2, y: event.clientY + 5 },
           });
         }}
       >

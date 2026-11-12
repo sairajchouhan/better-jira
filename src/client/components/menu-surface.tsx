@@ -209,7 +209,8 @@ export function Popover({
 /** A modal menu or dialog over a backdrop that closes it, with measured placement and a centered small-screen fallback. */
 /** `fit` sizes the surface to its content, like Linear's action menus. */
 /** `command` places Linear's command menu (RAJ-52 "Mark as"): centred, 110px from the top, no backdrop or padding. */
-/** `point` opens a right-click menu there (already offset by the caller), moved up or left to stay 10px inside the window (Linear, RAJ-52). */
+/** `point` is a right-click's raw clientX/clientY: the menu opens 4px right of and 1px above it (Linear's list-row context menu, CORE-18),
+ *  moved up or left to stay 10px inside the window (Linear, RAJ-52). */
 /** Unanchored, it sits 12vh from the top; `placement="third"` is Linear's DialogPresenter instead (`uo.show`, styles `jY`): spacers
  *  growing 1 and 2 above and below put the dialog a third of the free height down, 16px inside the window at the least. */
 /** `gap` is the space under the anchor; `side="left"` opens beside it instead, top 5.5px above its top (Linear's label menu, RAJ-52); `align="end"` lines up the right edges (its reaction picker). */
@@ -265,8 +266,8 @@ export function MenuSurface({
         return {
           position: "fixed",
           width: fit ? undefined : w,
-          left: Math.max(10, Math.min(innerWidth - w - 10, point.x)),
-          top: Math.max(10, Math.min(innerHeight - h - 10, point.y)),
+          left: Math.max(10, Math.min(innerWidth - w - 10, point.x + 4)),
+          top: Math.max(10, Math.min(innerHeight - h - 10, point.y - 1)),
           maxHeight: innerHeight - 20,
         };
       if (command) {

@@ -177,7 +177,8 @@ function Level({
     </Menu>
   );
 }
-/** A right-click on `children` opens an ActionMenu at the pointer, as Linear's row menus do; `entries` is read as it opens. */
+/** A right-click on `children` opens an ActionMenu at the pointer, as Linear's row menus do; `entries` is read as it opens. While it is
+ *  open the row keeps its hover background (`data-menu-open`, index.css), as Linear's does. */
 export function ContextMenu({
   label,
   entries,
@@ -191,10 +192,11 @@ export function ContextMenu({
   return (
     <div
       className="contents"
+      data-menu-open={point ? "" : undefined}
       onContextMenu={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        setPoint({ x: event.clientX + 3, y: event.clientY });
+        setPoint({ x: event.clientX, y: event.clientY });
       }}
     >
       {children}

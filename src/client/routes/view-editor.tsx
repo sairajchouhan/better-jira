@@ -289,6 +289,7 @@ export function ViewContextMenu({
   return (
     <div
       className="contents"
+      data-menu-open={target ? "" : undefined}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();

@@ -323,7 +323,7 @@ export function IssueResources({ issue }: { issue: Issue }) {
                     '[aria-label^="Options for "]',
                   ) ?? event.currentTarget,
                 resource,
-                point: { x: event.clientX + 4, y: event.clientY - 1 },
+                point: { x: event.clientX, y: event.clientY },
               });
             }}
             data-open={options?.resource.id === resource.id || undefined}
