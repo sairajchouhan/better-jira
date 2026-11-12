@@ -171,7 +171,7 @@ function ItemContent({
             <Icon name="check" size={16} />
           </span>
         )}
-        {(shortcut || hint || submenu) && (
+        {(shortcut || hint != null || submenu) && (
           <span className="menu-hint">
             {/* Out of the row's name, as v6e names the row by its label alone (aria-labelledby). */}
             {shortcut && <Shortcut aria-hidden keys={shortcut} size="small" />}
