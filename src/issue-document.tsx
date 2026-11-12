@@ -230,9 +230,9 @@ function DocumentContent() {
         <div className="mx-auto max-w-[854px] px-6 py-16 text-[15px]">
           <DocumentIcon resource={resource} issue={issue} />
           {resource.showAuthors && (
-            <p className="mb-2 text-[12px] text-fg-3" data-document-author>
+            <Text as="p" variant="mini" color="muted" className="mb-2" data-document-author>
               {resource.editedBy?.name ?? resource.owner?.name ?? ME.name}
-            </p>
+            </Text>
           )}
           <DocumentTitle />
           <DocumentBody />
@@ -453,7 +453,9 @@ function DocumentHeader() {
         </button>
         <span aria-hidden>›</span>
         <Icon name="file" size={14} />
-        <span className="min-w-0 truncate text-fg-2">{title}</span>
+        <Text variant="small" color="base" wrap="truncate" className="min-w-0">
+          {title}
+        </Text>
         {/* FavoriteButton renders its own <button> and takes a frame class; moving it onto IconButton is its owner's change. */}
         <FavoriteButton id={`document:${resource.id}`} noun="document" size={15} className={BUTTON} />
         <IconButton
