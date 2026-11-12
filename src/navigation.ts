@@ -14,6 +14,7 @@ import {
   type ViewDraft,
 } from "./saved-view-model";
 import type { View } from "./store";
+import { isPersonTab, type PersonTab } from "./people";
 
 export type Screen = {
   board: number;
@@ -25,6 +26,9 @@ export type Screen = {
   document: string | null;
   inbox: boolean;
   mine: boolean;
+  /** On the personal page: whose issues (null is me, Linear's My issues; else Open user's profile) and which tab. */
+  person: string | null;
+  personTab: PersonTab;
   viewsPage: boolean;
   activeViewId: string | null;
   /** Filters added on top of the open saved view, until it is left or saved into. */
@@ -45,6 +49,9 @@ export type Destination = {
   viewsPage?: boolean;
   /** The standalone My issues destination, not a board filter. */
   mine?: boolean;
+  /** Another user's issues (with `mine`), or null for mine; a new person opens on Assigned. */
+  person?: string | null;
+  personTab?: PersonTab;
 };
 export type NavigationEvent =
   /** Go somewhere: a new board leaves the open view or editor, and fills in how that board opens issues. */
@@ -97,6 +104,8 @@ function move(s: Screen, to: Destination): Screen {
     ...s,
     ...(changed ? { board: to.board } : {}),
     mine: to.mine ?? (to.board !== undefined || to.inbox || to.viewsPage ? false : s.mine),
+    person: to.person !== undefined ? to.person : to.mine ? null : s.person,
+    personTab: to.personTab ?? (to.mine || to.person !== undefined ? "assigned" : s.personTab),
     ...(to.view ? { view: to.view } : {}),
     inbox: to.inbox ?? (to.board !== undefined || to.mine ? false : s.inbox),
     selected,
@@ -261,8 +270,9 @@ function restore(screen: Screen, href: string, saved: ViewDraft | null, data: Na
     activeViewId: active?.id ?? null,
     overlayFilters: active ? decodeOverlay(params.get("filter")) : emptyOverlay(),
   };
+  const route = personRoute(pathname);
   const personal = !editorDraft && !active && pathname !== "/views" && !params.has("inbox") &&
-    (pathname === "/my-issues" || params.has("mine"));
+    (!!route || params.has("mine"));
   const view = params.get("view");
   enter(
     s,
@@ -272,7 +282,7 @@ function restore(screen: Screen, href: string, saved: ViewDraft | null, data: Na
       panel: !!issue,
       document: issue ? params.get("document") : null,
       inbox: params.has("inbox"),
-      ...(personal ? { mine: true, view: data.preferences[0]?.display.openIn ?? "side" } : {}),
+      ...(personal ? { mine: true, view: data.preferences[0]?.display.openIn ?? "side", ...route } : {}),
       ...(active ? { view: active.display.openIn } : {}),
       ...(view === "page" || view === "side" ? { view } : {}),
     },
@@ -280,7 +290,7 @@ function restore(screen: Screen, href: string, saved: ViewDraft | null, data: Na
     true,
     out,
   );
-  const mine = editorDraft?.mine ?? active?.mine ?? (pathname === "/my-issues" || params.has("mine"));
+  const mine = editorDraft?.mine ?? active?.mine ?? (!!route || params.has("mine"));
   if (!params.has("inbox")) out.screen = { ...out.screen, mine, inbox: false };
   out.history = "none"; // A restore must never push, including settle reverting a link view.
   if (wanted && !issue) out.missing = wanted;
@@ -305,7 +315,7 @@ export function screenUrl(s: Screen, href: string, savedViews: SavedView[]): str
       : s.viewsPage
         ? "/views"
         : s.mine && !s.inbox
-          ? "/my-issues"
+          ? `${s.person ? `/user/${encodeURIComponent(s.person)}` : "/my-issues"}${s.personTab === "assigned" ? "" : `/${s.personTab}`}`
           : "/";
   if (s.activeViewId && s.overlayFilters.children.length) url.searchParams.set("filter", encodeOverlay(s.overlayFilters));
   else url.searchParams.delete("filter");
@@ -327,6 +337,13 @@ export function screenUrl(s: Screen, href: string, savedViews: SavedView[]): str
   if (s.mine && !s.inbox && !personal) url.searchParams.set("mine", "1");
   else url.searchParams.delete("mine");
   return url.href;
+}
+
+/** `/my-issues[/tab]` or `/user/<id>[/tab]`: whose issues and which tab. */
+function personRoute(pathname: string): { person: string | null; personTab: PersonTab } | undefined {
+  const m = /^\/(?:my-issues|user\/([^/]+))(?:\/([a-z]+))?$/.exec(pathname);
+  if (!m) return undefined;
+  return { person: m[1] ? decodeURIComponent(m[1]) : null, personTab: isPersonTab(m[2]) ? m[2] : "assigned" };
 }
 
 /** Saved views may also filter by assignee; only this screen is the sidebar destination. */

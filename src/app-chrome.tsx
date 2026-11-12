@@ -4,7 +4,9 @@ import { setScope, useViewSettings } from "./view-settings";
 import { openViewEditor, ViewMenu, ViewContextMenu, ViewEditorPage } from "./view-editor";
 import { ViewFavorites, SavedViewIcon } from "./views-navigation";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { useRef, type ReactNode } from "react";
+import { useMemo, useRef, type ReactNode } from "react";
+import { isMyIssues } from "./navigation";
+import { PERSON_TABS, peopleOf } from "./people";
 import { Icon, TypeDot } from "./icons";
 import {
   actions,
@@ -70,6 +72,7 @@ export function Sidebar({ boards }: { boards: Board[] }) {
   const views = useSavedViews();
   const viewsPage = useStore((s) => s.viewsPage);
   const mine = useStore((s) => s.mine);
+  const person = useStore((s) => s.person);
   const hidden = useStore((s) => s.sidebarHidden);
   const open = useStore((s) => s.sidebarOpen);
   const inbox = useStore((s) => s.inbox);
@@ -128,7 +131,7 @@ export function Sidebar({ boards }: { boards: Board[] }) {
         {/* Like Linear, My issues is a sidebar view rather than a tab beside Active/Backlog/All. */}
         {prefs.myIssues === "Always" && (
           <SideItem
-            active={mine && !inbox && !activeView && !viewsPage}
+            active={mine && !person && !inbox && !activeView && !viewsPage}
             onClick={() => timed("open my issues", () => navigate({ mine: true, selected: null, panel: false }))}
           >
             <Icon name="user" /> My issues <Shortcut className="ml-auto" keys={hotkeyOf("mine")} size="small" />
@@ -457,6 +460,13 @@ function CrumbSep({ className = "" }: { className?: string }) {
 }
 export function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue }) {
   const mine = useStore((s) => s.mine);
+  const person = useStore((s) => s.person);
+  const issues = useStore((s) => s.issues);
+  // Open user's page names its person, as Linear's profile does; mine is My issues.
+  const personal = useMemo(
+    () => (person ? (peopleOf(issues.values()).find((u) => u.id === person)?.name ?? person) : "My issues"),
+    [person, issues],
+  );
   const activeView = useActiveView();
   const draft = useStore((s) => s.editorDraft);
   const saved = useSavedViews().find(v => v.id === draft?.id);
@@ -492,12 +502,12 @@ export function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue
         </>
       ) : (
         <button
-          aria-label={!activeView && mine ? "My issues" : "Issues"}
+          aria-label={!activeView && mine ? personal : "Issues"}
           aria-current={issue ? undefined : "page"}
           onClick={openAllIssues}
           className={`${CRUMB} shrink-0 ${issue ? "max-sm:hidden" : ""}`}
         >
-          {!activeView && mine ? "My issues" : "Issues"}
+          {!activeView && mine ? personal : "Issues"}
         </button>
       )}
       {issue && (
@@ -539,6 +549,8 @@ export function BoardHeader() {
     { target: findRef, ignoreInputs: false },
   );
   const favoriteId = activeView?.kind === "custom" ? `view:${activeView.id}` : `board:${board!.id}`;
+  const personal = useStore(isMyIssues);
+  const personTab = useStore((s) => s.personTab);
   return (
     <header className="shrink-0">
       <div className="flex h-11 items-center justify-between border-b-[0.5px] border-frame px-2">
@@ -564,7 +576,13 @@ export function BoardHeader() {
       {/* Linear: custom views (and their editor) show only the breadcrumb, no team tabs. The editor floats this row's
           controls into its card, so a custom draft collapses the row. */}
       <div className={`flex flex-wrap items-center gap-1 px-2 ${custom && draft ? "" : "min-h-[43.5px] py-1"}`}>
-        {!custom && (["active", "backlog", "all"] as const).map((scope) => (
+        {/* Linear's My issues (and a user's issues) has Assigned / Created / Subscribed / Activity instead of team scopes. */}
+        {personal && PERSON_TABS.map(([tab, name]) => (
+          <ViewTab key={tab} on={personTab === tab} onClick={() => navigate({ personTab: tab, selected: null, panel: false })}>
+            {name}
+          </ViewTab>
+        ))}
+        {!custom && !personal && (["active", "backlog", "all"] as const).map((scope) => (
           <ViewTab
             key={scope}
             on={!activeView && !draft && prefs.scope === scope}
@@ -573,10 +591,10 @@ export function BoardHeader() {
             {scope === "active" ? "Active" : scope === "backlog" ? "Backlog" : "All issues"}
           </ViewTab>
         ))}
-        {!custom && savedViews.filter(v => v.board === board!.id && v.kind === "tab").map(view => <ViewContextMenu key={view.id} view={view}><ViewTab on={activeView?.id === view.id || draft?.id === view.id} onClick={() => openSavedView(view)}>{view.name}</ViewTab></ViewContextMenu>)}
+        {!custom && !personal && savedViews.filter(v => v.board === board!.id && v.kind === "tab").map(view => <ViewContextMenu key={view.id} view={view}><ViewTab on={activeView?.id === view.id || draft?.id === view.id} onClick={() => openSavedView(view)}>{view.name}</ViewTab></ViewContextMenu>)}
         {/* Linear swaps Add new view for the draft tab while a new tab view is being made. */}
         {draft && !draft.id && draft.kind === "tab" ? <span aria-current="page" className={`${PILL} bg-tab-on text-fg-3 shadow-(--tab-on-shadow)`}><SavedViewIcon view={draft} />{draft.name.trim() || "New view"}<Icon name="pencil" size={12} /></span>
-          : !custom && !draft && (
+          : !custom && !draft && !personal && (
             <Button variant="muted" size="medium" icon={<Icon name="plus" />} onClick={() => openViewEditor(createViewDraft("tab"))}>
               Add new view
             </Button>

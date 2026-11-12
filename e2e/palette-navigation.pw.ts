@@ -147,3 +147,17 @@ test("BJ-63: search remembers its chosen ordering", async ({ open }) => {
   await p.key("/");
   await p.waitFor(`!!document.querySelector('[aria-label="Ordering: Last updated"]')`);
 });
+
+const tab = (name: string) => `[...document.querySelectorAll('button[aria-pressed]')].find(b=>b.textContent===${JSON.stringify(name)})`;
+
+test("BJ-28: My issues has Assigned, Created, Subscribed and Activity tabs, each with its own address", async ({ open }) => {
+  const p = await open();
+  await p.keys("gm");
+  await p.waitFor(`location.pathname==='/my-issues'&&${tab("Assigned")}?.getAttribute('aria-pressed')==='true'`);
+  expect(await p.eval(`!!${tab("Active")}`)).toBe(false);
+  await p.eval(`${tab("Activity")}.click()`);
+  await p.waitFor(`location.pathname==='/my-issues/activity'`);
+  await p.eval(`location.assign("/my-issues/subscribed")`);
+  await p.waitFor(`document.readyState==="complete"&&location.pathname==="/my-issues/subscribed"`);
+  await p.waitFor(`${tab("Subscribed")}?.getAttribute('aria-pressed')==='true'`);
+});

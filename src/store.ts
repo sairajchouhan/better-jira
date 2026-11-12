@@ -65,6 +65,7 @@ import {
   renameIds,
   type Side,
 } from "./jira-ops";
+import type { PersonTab } from "./people";
 export type User = { id: string; name: string; avatar?: string };
 export type Issue = {
   key: string;
@@ -232,6 +233,8 @@ type State = {
   /** Open issues in a side panel or as a full page. */
   view: View;
   mine: boolean;
+  person: string | null;
+  personTab: PersonTab;
   inbox: boolean;
   viewsPage: boolean;
   query: string;
@@ -324,6 +327,8 @@ let state: State = {
   document: null,
   view: savedValue("view") === "page" ? "page" : "side",
   mine: false,
+  person: null,
+  personTab: "assigned",
   inbox: false,
   viewsPage: false,
   query: "",
@@ -508,6 +513,8 @@ const screen = (): Screen => ({
   document: state.document,
   inbox: state.inbox,
   mine: state.mine,
+  person: state.person,
+  personTab: state.personTab,
   viewsPage: state.viewsPage,
   activeViewId: state.activeViewId,
   overlayFilters: state.overlayFilters,

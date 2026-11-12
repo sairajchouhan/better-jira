@@ -34,6 +34,8 @@ const start: Screen = {
   document: null,
   inbox: false,
   mine: false,
+  person: null,
+  personTab: "assigned",
   viewsPage: false,
   activeViewId: null,
   overlayFilters: emptyOverlay(),
@@ -177,4 +179,18 @@ test("legacy mine links restore My issues independently of their board", () => {
     expect(restored.screen.mine).toBe(true);
     expect(restored.history).toBe("none");
   }
+});
+
+test("BJ-28 / BJ-77: My issues tabs and a user's issues have their own addresses, and My issues starts on Assigned", () => {
+  const go = (to: object, s = start) => transition(s, { type: "go", to }, data()).screen;
+  const created = go({ mine: true, personTab: "created" });
+  expect(url(created)).toBe("/my-issues/created");
+  const alex = go({ mine: true, person: "alex", selected: null, panel: false }, created);
+  expect(alex).toMatchObject({ person: "alex", personTab: "assigned" });
+  expect(url(alex)).toBe("/user/alex");
+  expect(url(go({ personTab: "activity" }, alex))).toBe("/user/alex/activity");
+  expect(go({ mine: true }, alex)).toMatchObject({ person: null, personTab: "assigned" });
+  const restore = (href: string) => transition(start, { type: "restore", href, draft: null }, data()).screen;
+  expect(restore("http://x/user/alex/subscribed")).toMatchObject({ mine: true, person: "alex", personTab: "subscribed" });
+  expect(restore("http://x/my-issues/nope")).toMatchObject({ mine: true, person: null, personTab: "assigned" });
 });

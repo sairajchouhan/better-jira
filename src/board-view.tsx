@@ -1,4 +1,5 @@
 import { isMyIssues } from "./navigation";
+import { personIssues } from "./people";
 import { useEffectiveMine, useActiveView, useOverlayFilters } from "./saved-views";
 import {
   clearFilters,
@@ -79,6 +80,13 @@ export const BoardView = memo(function BoardView({
   const detailView = draft && editedView ? { ...editedView, ...draft, id: editedView.id } : activeView;
   const overlay = useOverlayFilters();
   const mine = useEffectiveMine();
+  const person = useStore((s) => s.person);
+  const personTab = useStore((s) => s.personTab);
+  // The personal page lists the open person's tab: my Assigned issues by default (BJ-28), or another user's (BJ-77).
+  const who = useMemo(
+    () => (personal ? personIssues(person ?? ME.id, personTab, ME.id) : false),
+    [personal, person, personTab],
+  );
   const query = useStore((s) => s.query);
   const details = useStore((s) => s.details);
   const panel = useStore((s) => s.panel);
@@ -101,8 +109,8 @@ export const BoardView = memo(function BoardView({
   };
   const all = useMemo(() => [...issues.values()], [issues]);
   const visible = useMemo(
-    () => selectIssues(all, board, prefs, mine, query, ME.id, Date.now(), personal),
-    [all, board, prefs, mine, query, personal],
+    () => selectIssues(all, board, prefs, who || mine, query, ME.id, Date.now(), personal),
+    [all, board, prefs, who, mine, query, personal],
   );
   const universe = useMemo(() => personal ? all : all.filter((i) => i.board === board.id), [all, board.id, personal]);
   const columns = useMemo(
@@ -156,8 +164,8 @@ export const BoardView = memo(function BoardView({
       ...(row ? draftForGroup(d.rows, row.id, board, universe, prefs.scope) : {}),
     });
   const feedback = useMemo(
-    () => resultsFeedback(all, board, prefs, activeView, { overlay, query, mine }, personal, ME.id),
-    [all, board, prefs, activeView, overlay, query, mine, personal],
+    () => resultsFeedback(all, board, prefs, activeView, { overlay, query, mine }, who, ME.id),
+    [all, board, prefs, activeView, overlay, query, mine, who],
   );
   const clearAll = () => {
     clearFilters(board.id);

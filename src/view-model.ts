@@ -1,4 +1,5 @@
 import type { Board, Issue, IssueDraft } from "./store";
+import { personIssues, type PersonTab } from "./people";
 import { statusById } from "./board-catalog";
 
 export type Grouping =
@@ -561,11 +562,12 @@ export function rankBetween(a = "", b?: string): string {
   }
 }
 
+/** `mine` keeps my assigned issues; on the personal page, the open person's tab instead (people.ts). */
 export function selectIssues(
   all: Issue[],
   board: Board,
   prefs: Preferences,
-  mine: boolean,
+  mine: boolean | ((i: Issue) => boolean),
   query: string,
   me: string,
   now = Date.now(),
@@ -584,7 +586,7 @@ export function selectIssues(
         (prefs.scope === "backlog"
           ? isBacklog(i, board)
           : !isBacklog(i, board) && statusById(board, i.status)?.category !== "done")) &&
-      (!mine || i.assignee?.id === me) &&
+      (typeof mine === "function" ? mine(i) : !mine || i.assignee?.id === me) &&
       (!q || `${i.key} ${i.summary}`.toLowerCase().includes(q)) &&
       matchesFilters(i, prefs.filters, all, me, now),
   );
@@ -728,14 +730,15 @@ export function resultsFeedback(
   prefs: Preferences,
   view: { board: number; filters: FilterGroup; mine?: boolean } | null,
   temporary: { overlay: FilterGroup; query: string; mine: boolean },
-  personal: boolean,
+  /** The personal page's person filter, or false off it. */
+  personal: false | ((i: Issue) => boolean),
   me: string,
   now = Date.now(),
 ): { baseline: number; temporary: boolean } {
   const filters = view && view.board === board.id ? view.filters : defaultPreferences().filters;
   const baseMine = personal || (view?.mine ?? false);
   return {
-    baseline: selectIssues(all, board, { ...prefs, filters }, baseMine, "", me, now, personal).length,
+    baseline: selectIssues(all, board, { ...prefs, filters }, baseMine, "", me, now, !!personal).length,
     temporary:
       !!temporary.overlay.children.length || !!temporary.query || (temporary.mine && !baseMine),
   };
@@ -789,6 +792,8 @@ export type OrderState = {
   savedViews: { id: string; mine: boolean }[];
   activeViewId: string | null;
   mine: boolean;
+  person?: string | null;
+  personTab?: PersonTab;
   query: string;
   inbox?: boolean;
   editorDraft?: unknown;
@@ -805,10 +810,11 @@ export function visibleOrder(state: OrderState, me: string): Issue[][] {
   const board = personal ? myIssuesBoard(state.boards, current) : current;
   const prefs = state.effectiveViewPreferences ?? state.preferences[personal ? 0 : board.id] ?? noPreferences,
     mine = state.mine || !!state.savedViews.find((v) => v.id === state.activeViewId)?.mine,
-    inputs = [state.issues, board, prefs, mine, state.query, me];
+    who = personal ? personIssues(state.person ?? me, state.personTab ?? "assigned", me) : mine,
+    inputs = [state.issues, board, prefs, mine, state.query, me, state.person, state.personTab];
   if (lastOrder?.inputs.every((x, i) => x === inputs[i])) return lastOrder.order;
   const all = [...state.issues.values()],
-    visible = selectIssues(all, board, prefs, mine, state.query, me, Date.now(), personal),
+    visible = selectIssues(all, board, prefs, who, state.query, me, Date.now(), personal),
     universe = personal ? all : all.filter((i) => i.board === board.id),
     hidden = prefs.hidden[prefs.display.columns] ?? [],
     shown = boardColumns(visible, board, prefs, universe).filter((c) => !hidden.includes(c.id)),
