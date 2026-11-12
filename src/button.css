@@ -131,8 +131,9 @@
     background: transparent;
     color: var(--fg-2);
   }
+  /* WEe.borderless reads a runtime theme var (--sx-ljw4h1) the bundle leaves empty; live Linear measured --sel (RAJ-52, e2e/resources.pw.ts). */
   .ui-button[data-variant="borderless"]:is(:active, [aria-expanded="true"], [aria-pressed="true"], [data-menu-open="true"]) {
-    background: var(--tab-on);
+    background: var(--sel);
     color: var(--fg);
   }
 
