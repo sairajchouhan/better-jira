@@ -305,6 +305,10 @@ async function catchUp(key: string, fields: Record<string, unknown>, sent: any) 
   );
   if (Object.keys(update).length)
     await jira(at(key), { method: "PUT", body: JSON.stringify({ fields: update }) });
+  // A description Jira changed (or rewrote past recognising) isn't overwritten, nor is the edit dropped: the editor keeps
+  // it beside Jira's and asks which to keep (BJ-20).
+  if (edited.includes("description") && !("description" in update))
+    throw new UserError(DESCRIPTION_CONFLICT);
 }
 async function run(ctx: Context, op: Op) {
   const key = ctx.key;

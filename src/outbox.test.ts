@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createOutbox, type Answer, type OutboxPorts } from "./outbox";
-import type { Side } from "./jira-ops";
+import { DESCRIPTION_CONFLICT, type Side } from "./jira-ops";
 import type { LocalChange } from "./local-data";
 import type { Issue } from "./store";
 
@@ -480,4 +480,15 @@ test("tab hand-off: an issue its tab discarded takes this tab's edits of it alon
   await h.advance(0);
   expect(h.log).toContain("discarded KAN-NEW9");
   expect([h.sent, h.outbox.pending()]).toEqual([[], 0]);
+});
+
+test("BJ-20: a replayed create whose description edit met a changed Jira copy answers as a refused description", async () => {
+  const made = issue("KAN-NEW10");
+  const h = harness({
+    reply: (key) => ({ created: { [key]: "KAN-62" }, error: `Jira didn't take the edits made to KAN-62 since it was created: ${DESCRIPTION_CONFLICT}` }),
+  });
+  h.send([made.key, {}, { issue: made }]);
+  await h.advance(0);
+  // The store then keeps the edit beside Jira's text (descriptionRejected) instead of taking Jira's.
+  expect(h.answers.map((a) => [a.key, a.refused, a.describes])).toEqual([[made.key, false, true]]);
 });

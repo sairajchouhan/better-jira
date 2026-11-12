@@ -1,4 +1,4 @@
-import { mergeOps, opsFor, renameCommentIds, renameIds, type Op, type Side } from "./jira-ops";
+import { DESCRIPTION_CONFLICT, mergeOps, opsFor, renameCommentIds, renameIds, type Op, type Side } from "./jira-ops";
 import { withoutLocalMedia } from "./jira-media";
 import type { LocalChange } from "./local-data";
 import type { Full, Issue } from "./store";
@@ -361,9 +361,10 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
           else
             for (const queued of outbox)
               queued.ops = renameCommentIds(queued.ops, new Map([[from, to]]));
-        const describes = job.ops.some(
-          (op) => op.op === "fields" && op.fields.description !== undefined,
-        );
+        // A replayed create whose description edit met a changed Jira copy counts too, so the edit is kept (BJ-20).
+        const describes =
+          job.ops.some((op) => op.op === "fields" && op.fields.description !== undefined) ||
+          !!result!.error?.includes(DESCRIPTION_CONFLICT);
         // A refused description stands in for the description edits still queued: they started from the refused text, so Jira would refuse them too.
         if (result!.error && describes)
           for (const queued of outbox)

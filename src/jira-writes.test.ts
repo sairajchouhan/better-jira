@@ -29,7 +29,7 @@ mock.module("./mirror", () => ({
   ledger,
 }));
 const { applyOps } = await import("./jira-writes");
-import type { Op } from "./jira-ops";
+import { DESCRIPTION_CONFLICT, type Op } from "./jira-ops";
 
 test("R1-D1: a web link Jira already has, added in Jira's UI under another globalId, is not posted again", async () => {
   links = [{ id: 7, globalId: "jira-ui-1", object: { url: "https://a.test/", title: "A" } }];
@@ -393,8 +393,9 @@ test("sync review 2-4: a replayed create sends only the fields edited here and u
     { op: "watcher", id: "acc-3", add: true },
   ];
   calls.length = 0;
-  expect((await applyOps("K-NEW30", ops())).error).toBe(undefined);
-  // Jira's changed description and priority stay; the summary edit and the clear (Jira still has acc-1) go.
+  // Jira's changed description and priority stay; the summary edit and the clear (Jira still has acc-1) go. The
+  // description edit comes back as a conflict, to be kept beside Jira's (BJ-20).
+  expect((await applyOps("K-NEW30", ops())).error).toContain(DESCRIPTION_CONFLICT);
   expect(puts).toEqual([{ fields: { summary: "Mine", assignee: null } }]);
   refuse = true;
   calls.length = 0;
@@ -588,4 +589,33 @@ test("sync review 3-4: a replay compares descriptions by structure: Jira's image
   expect(await replay("K-NEW33@t", "K-33", stored, bold)).toEqual([
     { fields: { description: bold } },
   ]);
+});
+
+test("BJ-20: a replayed create whose description Jira rewrote past recognising keeps the edit and reports the conflict", async () => {
+  ledger.intend("K-NEW34@t", {
+    summary: "S",
+    description: doc("Old"),
+    project: { key: "K" },
+    issuetype: { name: "Task" },
+  });
+  ledger.remember("K-NEW34@t", "K-34");
+  // Jira stores "Old" split into two text nodes: the same words, a shape the replay can't match to what it sent.
+  const rewritten = {
+    ...doc(""),
+    content: [{ type: "paragraph", content: [{ type: "text", text: "Ol" }, { type: "text", text: "d" }] }],
+  };
+  const puts: unknown[] = [];
+  answer = (path, init) => {
+    if (init?.method === "PUT" && path === "/rest/api/3/issue/K-34")
+      return void puts.push(JSON.parse(String(init.body)));
+    if (path.startsWith("/rest/api/3/issue/K-34?fields=")) return { fields: { summary: "S", description: rewritten } };
+    return jiraAnswers(path, init);
+  };
+  const result = await applyOps("K-NEW34", [
+    { op: "create", fields: { summary: "Mine", description: doc("Mine"), project: "K" }, client: "K-NEW34@t" },
+  ]);
+  // The other edits go; the description isn't written over Jira's, and the answer says so instead of dropping it.
+  expect(puts).toEqual([{ fields: { summary: "Mine" } }]);
+  expect(result.created).toEqual({ "K-NEW34": "K-34" });
+  expect(result.error).toContain(DESCRIPTION_CONFLICT);
 });
