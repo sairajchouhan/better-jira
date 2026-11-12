@@ -35,7 +35,7 @@ test("Create related › Sub-issue… runs on the menu's issue, not the selectio
   const selected = { ...issue, key: "TEST-1" };
   set({ issues: new Map([[selected.key, selected], [issue.key, issue]]) });
   ui.send({ type: "overlay.close" });
-  navigate({ selected: selected.key, document: null, inbox: false, viewsPage: false, mine: false });
+  navigate({ selected: selected.key, document: null, inbox: false, mine: false });
   expect(get().selected).toBe(selected.key);
   const parents: string[] = [];
   const stop = handle("create-sub-issue", (key) => (parents.push(key), true));
@@ -71,7 +71,7 @@ test("Change subscribers on a hovered sub-issue row opens that issue's subscribe
   const parent = { ...issue, key: "TEST-1" }, child = { ...issue, key: "TEST-3" };
   set({ issues: new Map([[parent.key, parent], [child.key, child]]) });
   ui.send({ type: "overlay.close" });
-  navigate({ selected: parent.key, panel: true, document: null, inbox: false, viewsPage: false, mine: false });
+  navigate({ selected: parent.key, panel: true, document: null, inbox: false, mine: false });
   const keys: string[] = [];
   const stopHover = handle("hovered-sub-issue", () => child.key);
   const stopSubs = handle("change-subscribers", (key) => (keys.push(key), true));

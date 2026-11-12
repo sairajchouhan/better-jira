@@ -69,7 +69,8 @@ test("router: old addresses land on the paths that replaced them", async ({ open
     ["/?board=1", "/team/1/all"],
     ["/?board=1&mine=1", "/my-issues"],
     ["/?board=1&inbox=1", "/inbox"],
-    ["/views?board=1", "/team/1/views"],
+    ["/views?board=1", "/team/1/all"],
+    ["/team/1/views", "/team/1/all"],
   ];
   for (const [from, to] of cases) {
     await app.page.goto(new URL(from, fixture.url).href);

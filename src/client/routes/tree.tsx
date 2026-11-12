@@ -119,16 +119,6 @@ const boardRoute = createRoute({
     if (!preload) context.show({ to: "board", board, scope: params.scope, ...listSearch(search) }, location);
   },
 });
-const viewsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/team/$board/views",
-  beforeLoad: ({ params, context, location, preload }) => {
-    const board = Number(params.board);
-    if (!context.hasBoard(board)) throw notFound();
-    if (!preload) context.show({ to: "views", board }, location);
-  },
-  component: lazyRouteComponent(() => import("./views"), "ViewsDirectory"),
-});
 /** A view's address segment, `<slug>-<id>`; an old one redirects to it (BJ-155). */
 const segmentOf = (view: Pick<SavedView, "id" | "name">) => decodeURIComponent(viewPath(view).slice("/view/".length));
 function savedView(segment: string, context: RouteContext, location: ParsedLocation, suffix = "") {
@@ -241,7 +231,6 @@ const documentRoute = createRoute({
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   boardRoute,
-  viewsRoute,
   viewRoute,
   newViewRoute,
   editViewRoute,
@@ -288,8 +277,6 @@ export function locationOf(place: Place, context: Pick<RouteContext, "view">) {
   switch (place.to) {
     case "board":
       return { to: "/team/$board/$scope", params: { board: String(place.board), scope: place.scope }, search: issue } as const;
-    case "views":
-      return { to: "/team/$board/views", params: { board: String(place.board) } } as const;
     case "view":
       return {
         to: "/view/$view",
@@ -318,7 +305,7 @@ export function locationOf(place: Place, context: Pick<RouteContext, "view">) {
 }
 
 /**
- * The place an old address named (`/?board=1&issue=KEY-1&view=page`, `/user/<id>`, `/views?board=1`, `?mine=1`,
+ * The place an old address named (`/?board=1&issue=KEY-1&view=page`, `/user/<id>`, `/views?board=1`, `/team/1/views`, `?mine=1`,
  * `?inbox=1`), or undefined for a current address. Read the way `restore` read them before the router.
  */
 export function legacyPlace(
@@ -326,13 +313,15 @@ export function legacyPlace(
   q: Record<string, string>,
   context: Pick<RouteContext, "issue" | "currentKey" | "view" | "scope" | "lastBoard" | "hasBoard">,
 ): Place | undefined {
-  const old = pathname === "/" || pathname === "/views" || /^\/user\/[^/]+(\/[a-z]+)?$/.test(pathname) ||
+  // The views page is gone (`/views`, `/team/<board>/views`): its address opens the board.
+  const views = /^\/(?:team\/(\d+)\/)?views$/.exec(pathname);
+  const old = pathname === "/" || !!views || /^\/user\/[^/]+(\/[a-z]+)?$/.test(pathname) ||
     ["board", "view", "mine", "inbox", "document"].some((key) => key in q);
   if (!old) return undefined;
   const key = q.issue ? context.currentKey(q.issue) : undefined,
     issue = key ? context.issue(key) : undefined,
     page = q.view === "page" || !!q.document,
-    named = Number(q.board),
+    named = Number(q.board ?? views?.[1]),
     board = issue?.board ?? (context.hasBoard(named) ? named : context.lastBoard());
   const editor = /^\/view\/(?:new|([^/]+)\/edit)$/.exec(pathname),
     view = /^\/view\/([^/]+)$/.exec(pathname)?.[1],
@@ -341,7 +330,6 @@ export function legacyPlace(
   let list: ListPlace;
   if (editor) list = { to: "editor", ...(editor[1] ? { id: id(editor[1]) } : {}) };
   else if (view) list = { to: "view", id: id(view), ...(q.filter ? { filter: q.filter } : {}) };
-  else if (pathname === "/views") return { to: "views", board: context.hasBoard(named) ? named : context.lastBoard() };
   else if ("inbox" in q) list = { to: "inbox" };
   else if (person || "mine" in q)
     list = { to: "person", person: person?.[1] ? decodeURIComponent(person[1]) : null, tab: isPersonTab(person?.[2]) ? person[2] : "assigned" };

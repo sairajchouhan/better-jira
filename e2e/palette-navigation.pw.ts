@@ -128,12 +128,6 @@ test("BJ-65: search and O D find a document by its body text and open it", async
   await p.waitFor(`!!${shownDocument}`);
 });
 
-test("BJ-80: G U goes to the views page", async ({ open }) => {
-  const p = await open();
-  await p.keys("gu");
-  await p.waitFor(`location.pathname==='/team/1/views'`);
-});
-
 test("BJ-63: search remembers its chosen ordering", async ({ open }) => {
   const p = await open();
   await p.key("/");

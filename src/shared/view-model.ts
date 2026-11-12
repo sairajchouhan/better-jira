@@ -797,14 +797,13 @@ export type OrderState = {
   query: string;
   inbox?: boolean;
   editorDraft?: unknown;
-  viewsPage?: boolean;
 };
 const noPreferences = defaultPreferences();
 let lastOrder: { inputs: unknown[]; order: Issue[][] } | undefined;
 /** The active board's issues in on-screen order, as the board shows them: J/K, ←/→ and the issue page's stepper all follow it.
  *  Memoised on its inputs, so a store selector can return it. */
 export function visibleOrder(state: OrderState, me: string): Issue[][] {
-  const personal = state.mine && !state.activeViewId && !state.editorDraft && !state.inbox && !state.viewsPage;
+  const personal = state.mine && !state.activeViewId && !state.editorDraft && !state.inbox;
   const current = state.boards.find((b) => b.id === state.board);
   if (!current) return [];
   const board = personal ? myIssuesBoard(state.boards, current) : current;

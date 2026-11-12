@@ -50,9 +50,7 @@ for (const scheme of ["dark", "light"] as const) {
     await page.key("Escape");
     await page.key("Escape");
 
-    await page.click("text=Views");
-    await page.waitFor(`document.querySelector('[role=table]')?.textContent.includes('Mine')`);
-    await page.page.getByRole("row").filter({ hasText: "Mine" }).click({ button: "right" });
+    await page.page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Mine", exact: true }).click({ button: "right" });
     menus.view = await measure(page);
     await page.key("Escape");
 

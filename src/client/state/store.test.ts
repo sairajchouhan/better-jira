@@ -1225,7 +1225,6 @@ const navigationFixture = async () => {
       document: s.document,
       inbox: s.inbox,
       mine: s.mine,
-      viewsPage: s.viewsPage,
       activeViewId: s.activeViewId,
       overlayFilters: s.overlayFilters.children.length,
       draft: s.editorDraft ? `${s.editorDraft.name || "new"}:${s.editorDraft.display.openIn}` : null,
@@ -1290,7 +1289,6 @@ test("navigation: back and forward restore each screen without adding entries", 
         "panel": false,
         "selected": null,
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1306,7 +1304,6 @@ test("navigation: back and forward restore each screen without adding entries", 
         "panel": true,
         "selected": "NAV-1",
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1322,7 +1319,6 @@ test("navigation: back and forward restore each screen without adding entries", 
         "panel": false,
         "selected": null,
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": "nav-view",
@@ -1338,7 +1334,6 @@ test("navigation: back and forward restore each screen without adding entries", 
         "panel": false,
         "selected": null,
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1354,7 +1349,6 @@ test("navigation: back and forward restore each screen without adding entries", 
         "panel": false,
         "selected": null,
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": "nav-view",
@@ -1370,7 +1364,6 @@ test("navigation: back and forward restore each screen without adding entries", 
         "panel": false,
         "selected": null,
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1386,7 +1379,6 @@ test("navigation: back and forward restore each screen without adding entries", 
         "panel": false,
         "selected": null,
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1402,7 +1394,6 @@ test("navigation: back and forward restore each screen without adding entries", 
         "panel": true,
         "selected": "NAV-1",
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1418,7 +1409,6 @@ test("navigation: back and forward restore each screen without adding entries", 
         "panel": false,
         "selected": null,
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": "nav-view",
@@ -1434,7 +1424,6 @@ test("navigation: back and forward restore each screen without adding entries", 
         "panel": false,
         "selected": null,
         "view": "side",
-        "viewsPage": false,
       },
     ]
   `);
@@ -1476,7 +1465,6 @@ test("navigation: issues open beside the board or as a page, and the board remem
         "panel": true,
         "selected": "NAV-1",
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1492,7 +1480,6 @@ test("navigation: issues open beside the board or as a page, and the board remem
         "panel": true,
         "selected": "NAV-1",
         "view": "page",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1508,7 +1495,6 @@ test("navigation: issues open beside the board or as a page, and the board remem
         "panel": false,
         "selected": "NAV-1",
         "view": "page",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1524,7 +1510,6 @@ test("navigation: issues open beside the board or as a page, and the board remem
         "panel": true,
         "selected": "NAV-2",
         "view": "page",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1540,7 +1525,6 @@ test("navigation: issues open beside the board or as a page, and the board remem
         "panel": true,
         "selected": "NAV-1",
         "view": "page",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1556,7 +1540,6 @@ test("navigation: issues open beside the board or as a page, and the board remem
         "panel": true,
         "selected": "NAV-1",
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1572,7 +1555,6 @@ test("navigation: issues open beside the board or as a page, and the board remem
         "panel": true,
         "selected": "NAV-1",
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1588,7 +1570,6 @@ test("navigation: issues open beside the board or as a page, and the board remem
         "panel": true,
         "selected": "NAV-1",
         "view": "page",
-        "viewsPage": false,
       },
     ]
   `);
@@ -1628,7 +1609,6 @@ test("navigation: a link's view opens that issue once and never becomes the boar
         "panel": true,
         "selected": "NAV-1",
         "view": "page",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1644,7 +1624,6 @@ test("navigation: a link's view opens that issue once and never becomes the boar
         "panel": true,
         "selected": "NAV-2",
         "view": "page",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1660,7 +1639,6 @@ test("navigation: a link's view opens that issue once and never becomes the boar
         "panel": false,
         "selected": "NAV-2",
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1676,7 +1654,6 @@ test("navigation: a link's view opens that issue once and never becomes the boar
         "panel": true,
         "selected": "NAV-1",
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1692,7 +1669,6 @@ test("navigation: a link's view opens that issue once and never becomes the boar
         "panel": true,
         "selected": "NAV-3",
         "view": "page",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1708,7 +1684,6 @@ test("navigation: a link's view opens that issue once and never becomes the boar
         "panel": true,
         "selected": "NAV-3",
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1724,7 +1699,6 @@ test("navigation: a link's view opens that issue once and never becomes the boar
         "panel": false,
         "selected": "NAV-3",
         "view": "side",
-        "viewsPage": false,
       },
     ]
   `);
@@ -1774,7 +1748,6 @@ test("navigation: changing how issues open inside a saved view saves it to that 
           "panel": false,
           "selected": null,
           "view": "page",
-          "viewsPage": false,
         },
         {
           "activeViewId": "open-in",
@@ -1790,7 +1763,6 @@ test("navigation: changing how issues open inside a saved view saves it to that 
           "panel": true,
           "selected": "NAV-1",
           "view": "side",
-          "viewsPage": false,
         },
         {
           "activeViewId": "open-in",
@@ -1806,7 +1778,6 @@ test("navigation: changing how issues open inside a saved view saves it to that 
           "panel": false,
           "selected": "NAV-1",
           "view": "page",
-          "viewsPage": false,
         },
         {
           "activeViewId": "open-in",
@@ -1822,7 +1793,6 @@ test("navigation: changing how issues open inside a saved view saves it to that 
           "panel": true,
           "selected": "NAV-1",
           "view": "page",
-          "viewsPage": false,
         },
         {
           "activeViewId": "open-in",
@@ -1838,7 +1808,6 @@ test("navigation: changing how issues open inside a saved view saves it to that 
           "panel": true,
           "selected": "NAV-1",
           "view": "side",
-          "viewsPage": false,
         },
         {
           "activeViewId": "open-in",
@@ -1854,7 +1823,6 @@ test("navigation: changing how issues open inside a saved view saves it to that 
           "panel": true,
           "selected": "NAV-1",
           "view": "side",
-          "viewsPage": false,
         },
         {
           "activeViewId": "open-in",
@@ -1870,7 +1838,6 @@ test("navigation: changing how issues open inside a saved view saves it to that 
           "panel": true,
           "selected": "NAV-1",
           "view": "page",
-          "viewsPage": false,
         },
       ]
     `);
@@ -1922,7 +1889,6 @@ test("navigation: switching or leaving a view resets its filter overlay; closing
         "panel": false,
         "selected": null,
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": "second",
@@ -1938,7 +1904,6 @@ test("navigation: switching or leaving a view resets its filter overlay; closing
         "panel": false,
         "selected": null,
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": "first",
@@ -1954,7 +1919,6 @@ test("navigation: switching or leaving a view resets its filter overlay; closing
         "panel": false,
         "selected": null,
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1970,7 +1934,6 @@ test("navigation: switching or leaving a view resets its filter overlay; closing
         "panel": false,
         "selected": null,
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -1986,7 +1949,6 @@ test("navigation: switching or leaving a view resets its filter overlay; closing
         "panel": false,
         "selected": null,
         "view": "side",
-        "viewsPage": false,
       },
     ]
   `);
@@ -2031,7 +1993,7 @@ test("navigation: the view editor keeps its draft in the address across reload, 
   steps.push(trace());
   expect(session.has(`view-editor:${get().namespace}:/view/edited-edited/edit`)).toBe(false);
   beginViewEditor(createViewDraft());
-  navigate({ viewsPage: true, board: 1 });
+  navigate({ board: 1 });
   steps.push(trace());
   expect(steps).toMatchInlineSnapshot(`
     [
@@ -2049,7 +2011,6 @@ test("navigation: the view editor keeps its draft in the address across reload, 
         "panel": false,
         "selected": null,
         "view": "page",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -2065,7 +2026,6 @@ test("navigation: the view editor keeps its draft in the address across reload, 
         "panel": false,
         "selected": null,
         "view": "page",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -2081,7 +2041,6 @@ test("navigation: the view editor keeps its draft in the address across reload, 
         "panel": true,
         "selected": "NAV-1",
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -2097,7 +2056,6 @@ test("navigation: the view editor keeps its draft in the address across reload, 
         "panel": false,
         "selected": "NAV-1",
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -2113,7 +2071,6 @@ test("navigation: the view editor keeps its draft in the address across reload, 
         "panel": false,
         "selected": null,
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -2129,7 +2086,6 @@ test("navigation: the view editor keeps its draft in the address across reload, 
         "panel": false,
         "selected": null,
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
@@ -2145,7 +2101,6 @@ test("navigation: the view editor keeps its draft in the address across reload, 
         "panel": false,
         "selected": null,
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": "edited",
@@ -2161,11 +2116,10 @@ test("navigation: the view editor keeps its draft in the address across reload, 
         "panel": false,
         "selected": null,
         "view": "side",
-        "viewsPage": false,
       },
       {
         "activeViewId": null,
-        "address": "/team/1/views",
+        "address": "/team/1/all",
         "board": 1,
         "boardOpenIn": "page/side",
         "document": null,
@@ -2177,7 +2131,6 @@ test("navigation: the view editor keeps its draft in the address across reload, 
         "panel": false,
         "selected": null,
         "view": "page",
-        "viewsPage": true,
       },
     ]
   `);

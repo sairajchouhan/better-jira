@@ -21,7 +21,6 @@ export type Screen = {
   /** On the personal page: whose issues (null is me, Linear's My issues; else Open user's profile) and which tab. */
   person: string | null;
   personTab: PersonTab;
-  viewsPage: boolean;
   activeViewId: string | null;
   /** Filters added on top of the open saved view, until it is left or saved into. */
   overlayFilters: FilterGroup;
@@ -38,7 +37,6 @@ export type Destination = {
   panel?: boolean;
   document?: string | null;
   inbox?: boolean;
-  viewsPage?: boolean;
   /** The standalone My issues destination, not a board filter. */
   mine?: boolean;
   /** Another user's issues (with `mine`), or null for mine; a new person opens on Assigned. */
@@ -63,7 +61,6 @@ export type NavigationEvent =
 /** A list screen: what a board, view, My issues or the inbox shows, with the issue open beside it. */
 export type ListPlace =
   | { to: "board"; board: number; scope: Scope; issue?: string }
-  | { to: "views"; board: number }
   | { to: "view"; id: string; filter?: string; issue?: string }
   | { to: "editor"; id?: string; issue?: string }
   | { to: "person"; person: string | null; tab: PersonTab; issue?: string }
@@ -101,7 +98,7 @@ function move(s: Screen, to: Destination): Screen {
   return {
     ...s,
     ...(changed ? { board: to.board } : {}),
-    mine: to.mine ?? (to.board !== undefined || to.inbox || to.viewsPage ? false : s.mine),
+    mine: to.mine ?? (to.board !== undefined || to.inbox ? false : s.mine),
     person: to.person !== undefined ? to.person : to.mine ? null : s.person,
     personTab: to.personTab ?? (to.mine || to.person !== undefined ? "assigned" : s.personTab),
     ...(to.view ? { view: to.view } : {}),
@@ -176,11 +173,6 @@ function enter(screen: Screen, to: Destination, data: NavigationData, quiet: boo
   if (!quiet && s.editorDraft && (to.board !== undefined || to.inbox || to.mine)) {
     s = { ...s, editorDraft: null };
   }
-  if (!quiet)
-    s = {
-      ...s,
-      viewsPage: to.viewsPage ?? (to.board !== undefined || to.inbox === true || to.mine === true ? false : s.viewsPage),
-    };
   if (to.selected) to = { ...to, selected: data.currentKey(to.selected) };
   const view =
     to.view ??
@@ -220,7 +212,7 @@ export function transition(screen: Screen, event: NavigationEvent, data: Navigat
     // One history entry, with the view's identity installed first so its own `openIn` is never written back.
     case "open-view": {
       const v = event.view;
-      const s = { ...screen, editorDraft: null, activeViewId: v.id, viewsPage: false, overlayFilters: emptyOverlay() };
+      const s = { ...screen, editorDraft: null, activeViewId: v.id, overlayFilters: emptyOverlay() };
       // The view's own board and openIn, as given: no renamed-key or board-default lookups.
       settle(s, move(s, { board: v.board, selected: null, panel: false, inbox: false, view: v.display.openIn }), data, true, out);
       out.screen = { ...out.screen, mine: v.mine, inbox: false };
@@ -229,7 +221,7 @@ export function transition(screen: Screen, event: NavigationEvent, data: Navigat
     }
     case "edit-view": {
       const draft = structuredClone(event.draft);
-      const s = { ...screen, editorDraft: draft, viewsPage: false, activeViewId: null, overlayFilters: emptyOverlay() };
+      const s = { ...screen, editorDraft: draft, activeViewId: null, overlayFilters: emptyOverlay() };
       enter(s, { board: draft.board, selected: null, panel: false, inbox: false }, data, true, out);
       out.screen = { ...out.screen, mine: draft.mine, inbox: false };
       return out;
@@ -257,11 +249,10 @@ function restore(screen: Screen, place: Place, saved: ViewDraft | null, data: Na
   const editorDraft = list?.to === "editor" ? (saved ?? data.draftFor(list.id)) : null;
   const active = list?.to === "view" ? data.savedViews.find((v) => v.id === list.id) : undefined;
   const board =
-    editorDraft?.board ?? active?.board ?? issue?.board ?? (list?.to === "board" || list?.to === "views" ? list.board : undefined);
+    editorDraft?.board ?? active?.board ?? issue?.board ?? (list?.to === "board" ? list.board : undefined);
   const s: Screen = {
     ...screen,
     editorDraft,
-    viewsPage: list?.to === "views",
     activeViewId: active?.id ?? null,
     overlayFilters: active && list?.to === "view" ? decodeOverlay(list.filter ?? null) : emptyOverlay(),
   };
@@ -314,12 +305,11 @@ function listOf(s: Screen, scopeOf: (board: number) => Scope, open: string | und
       ...(s.overlayFilters.children.length ? { filter: encodeOverlay(s.overlayFilters) } : {}),
       ...issue,
     };
-  if (s.viewsPage) return { to: "views", board: s.board };
   if (s.inbox) return { to: "inbox", ...issue };
   if (s.mine) return { to: "person", person: s.person, tab: s.personTab, ...issue };
   return { to: "board", board: s.board, scope: scopeOf(s.board), ...issue };
 }
 
 /** Saved views may also filter by assignee; only this screen is the sidebar destination. */
-export const isMyIssues = (s: Pick<Screen, "mine" | "inbox" | "activeViewId" | "editorDraft" | "viewsPage">) =>
-  s.mine && !s.inbox && !s.activeViewId && !s.editorDraft && !s.viewsPage;
+export const isMyIssues = (s: Pick<Screen, "mine" | "inbox" | "activeViewId" | "editorDraft">) =>
+  s.mine && !s.inbox && !s.activeViewId && !s.editorDraft;

@@ -331,14 +331,6 @@ export const shortcuts: Shortcut[] = [
     run: () => scope("all"),
   },
   {
-    /** Linear's `$1` "Go to views" (G U) opens the views page. */
-    id: "go-views",
-    name: "Go to views",
-    group: "Navigation",
-    hotkey: ["G", "U"],
-    run: () => navigate({ viewsPage: true, selected: null, panel: false, inbox: false }),
-  },
-  {
     id: "inbox",
     name: "Go to inbox",
     group: "Navigation",

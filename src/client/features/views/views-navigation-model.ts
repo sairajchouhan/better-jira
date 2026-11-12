@@ -1,8 +1,4 @@
-import type { SavedView } from "@/shared/saved-view-model";
 import type { Issue } from "@/client/state/store";
-export function directoryViews(views: SavedView[], board: number, descending = false, sort: "name" | "owner" = "name") {
-  return views.filter(v => v.board === board && v.kind === "custom").sort((a, b) => (sort === "name" && descending ? -1 : 1) * a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
-}
 /** `baseline` counts the saved definition alone; `total` counts the board with no filters. Empty states keep Linear's hidden count. */
 export function resultFeedback(count: number, baseline: number, saved: boolean, temporary: boolean) {
   if (!count) {

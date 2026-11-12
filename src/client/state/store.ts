@@ -192,7 +192,6 @@ export type State = {
   person: string | null;
   personTab: PersonTab;
   inbox: boolean;
-  viewsPage: boolean;
   query: string;
   overlay: Overlay;
   perf: string;
@@ -265,7 +264,6 @@ let state: State = {
   person: null,
   personTab: "assigned",
   inbox: false,
-  viewsPage: false,
   query: "",
   overlay: null,
   perf: "",

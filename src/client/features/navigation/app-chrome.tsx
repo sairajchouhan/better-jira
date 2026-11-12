@@ -54,11 +54,34 @@ const parseSidebarPrefs = (raw: unknown): SidebarPrefs => {
 
 // --- chrome ---
 
+/** A sidebar section's heading (Boards, Views): its caret collapses the section and a hover "+" adds to it. */
+function SectionHeading({ label, expanded, onToggle, addLabel, onAdd }: {
+  label: string;
+  expanded: boolean;
+  onToggle: () => void;
+  addLabel: string;
+  onAdd: () => void;
+}) {
+  return (
+    <div className="group mt-5 mb-1 flex items-center">
+      <SectionDisclosure label={label} expanded={expanded} onToggle={onToggle} />
+      <IconButton
+        label={addLabel}
+        variant="muted"
+        size="small"
+        onClick={onAdd}
+        className="-my-0.5 ml-auto opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+      >
+        <Icon name="plus" />
+      </IconButton>
+    </div>
+  );
+}
+
 export function Sidebar({ boards }: { boards: Board[] }) {
   const boardId = useStore((s) => s.board);
   const activeView = useActiveView();
   const views = useSavedViews();
-  const viewsPage = useStore((s) => s.viewsPage);
   const mine = useStore((s) => s.mine);
   const person = useStore((s) => s.person);
   const hidden = useStore((s) => s.sidebarHidden);
@@ -119,7 +142,7 @@ export function Sidebar({ boards }: { boards: Board[] }) {
         {/* Like Linear, My issues is a sidebar view rather than a tab beside Active/Backlog/All. */}
         {prefs.myIssues === "Always" && (
           <SideItem
-            active={mine && !person && !inbox && !activeView && !viewsPage}
+            active={mine && !person && !inbox && !activeView}
             onClick={openMyIssues}
           >
             <Icon name="user" /> My issues <Shortcut className="ml-auto" keys={hotkeyOf("mine")} size="small" />
@@ -127,23 +150,18 @@ export function Sidebar({ boards }: { boards: Board[] }) {
         )}
         <SidebarMore prefs={prefs} />
 
-        <div className="group mt-5 mb-1 flex items-center">
-          <SectionDisclosure label="Boards" expanded={expanded("boards")} onToggle={() => toggle("boards")} />
-          <IconButton
-            label="Add board"
-            variant="muted"
-            size="small"
-            onClick={() => ui.send({ type: "overlay.open", overlay: "add-board" })}
-            className="-my-0.5 ml-auto opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-          >
-            <Icon name="plus" />
-          </IconButton>
-        </div>
+        <SectionHeading
+          label="Boards"
+          expanded={expanded("boards")}
+          onToggle={() => toggle("boards")}
+          addLabel="Add board"
+          onAdd={() => ui.send({ type: "overlay.open", overlay: "add-board" })}
+        />
         {expanded("boards") && boards.map((b) => {
           const item = (
             <SideItem
               key={b.id}
-              active={!mine && !inbox && !activeView && !viewsPage && b.id === boardId}
+              active={!mine && !inbox && !activeView && b.id === boardId}
               onClick={() =>
                 timed("switch board", () => navigate({ board: b.id, selected: null, panel: false }))
               }
@@ -163,28 +181,14 @@ export function Sidebar({ boards }: { boards: Board[] }) {
             item
           );
         })}
-        {/* Views is a section like Boards: every saved view inline; its caret collapses it and the heading opens the Views directory. */}
-        <div className="mt-5 mb-1 flex items-center">
-          <IconButton
-            label={`${expanded("views") ? "Collapse" : "Expand"} views section`}
-            aria-expanded={expanded("views")}
-            variant="muted"
-            size="small"
-            onClick={() => toggle("views")}
-          >
-            <span className={`grid place-items-center ${expanded("views") ? "rotate-90" : ""}`}>
-              <Icon name="chevron" size={14} />
-            </span>
-          </IconButton>
-          {/* Navigation section heading uses aria-current styling; Button has no navigation variant. */}
-          <button
-            onClick={() => navigate({ board: boardId, viewsPage: true, selected: null, panel: false, inbox: false })}
-            aria-current={viewsPage || undefined}
-            className={`flex h-6 items-center rounded-md px-1 text-left text-[12px] hover:text-fg-2 ${viewsPage ? "text-fg-2" : "text-fg-3"}`}
-          >
-            Views
-          </button>
-        </div>
+        {/* Views is a section like Boards: every saved view inline, edited from its row's menu. */}
+        <SectionHeading
+          label="Views"
+          expanded={expanded("views")}
+          onToggle={() => toggle("views")}
+          addLabel="New view"
+          onAdd={() => openViewEditor(createViewDraft("custom"))}
+        />
         {expanded("views") && views.map((v) => (
           <ViewContextMenu key={v.id} view={v}>
             <SideItem active={activeView?.id === v.id} onClick={() => timed("open view", () => openSavedView(v))}>
@@ -516,10 +520,6 @@ export function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue
       <CrumbSep className={issue ? "max-sm:hidden" : ""} /></> : null}
       {custom ? (
         <>
-          <button onClick={() => navigate({ board: board.id, viewsPage: true, selected: null, panel: false, inbox: false })} className={`${CRUMB} shrink-0`}>
-            Views
-          </button>
-          <CrumbSep />
           {/* Linear: the current view is plain text (right-click for its menu), not a link. */}
           <ViewContextMenu view={custom}>
             <span aria-current="page" className="flex h-6 min-w-0 items-center">

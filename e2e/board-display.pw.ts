@@ -49,20 +49,18 @@ test("the default board: My issues, board details, saved views and a fast layout
     await page.click("text=Alex1");
     await page.waitFor(`${cards}===6`);
   });
-  await test.step("saved custom views are discoverable in the Views directory", async () => {
+  await test.step("saved custom views are listed in the sidebar's Views section", async () => {
     const view = { id: "v1", board: 1, name: "Mine", mine: false, preferences: {} };
     const key = PREFS_KEY.replace("views:v1", "saved-views:v1");
     await page.eval(`localStorage.removeItem(${JSON.stringify(key + ":imported")});localStorage.setItem(${JSON.stringify(key)},${JSON.stringify(JSON.stringify([view]))})`);
     await page.reload();
-    await page.click("text=Views");
-    await page.waitFor(`document.querySelector('[role=table]')?.textContent.includes('Mine')`);
-    await page.page.getByRole("row").filter({ hasText: "Mine" }).click({ button: "right" });
+    const row = page.page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Mine", exact: true });
+    await row.click({ button: "right" });
     await page.click("text=Delete");
     expect(await page.eval(`document.querySelector('[role=dialog]')?.textContent.includes('Delete the view "Mine"?')`)).toBe(true);
     await page.click("text=Cancel");
-    expect(await page.page.getByRole("row").filter({ hasText: "Mine" }).count()).toBe(1);
-    await page.waitFor(`document.querySelector('[role=table]')?.textContent.includes('Mine')`);
-    await page.click("text=Mine");
+    expect(await row.count()).toBe(1);
+    await row.click();
     await page.waitFor(`location.pathname === '/view/mine-v1'`);
     await page.click('[aria-label="Breadcrumb"] button[aria-label="Browser audit"]');
   });

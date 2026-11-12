@@ -81,7 +81,6 @@ const screen = (s = get()): Screen => ({
   mine: s.mine,
   person: s.person,
   personTab: s.personTab,
-  viewsPage: s.viewsPage,
   activeViewId: s.activeViewId,
   overlayFilters: s.overlayFilters,
   editorDraft: s.editorDraft,

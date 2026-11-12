@@ -43,7 +43,8 @@ test("D7: old addresses redirect to the paths that replaced them, replacing the 
     ["/?board=1&inbox=1&issue=A-1", "/inbox?issue=A-1"],
     ["/?board=1&mine=1", "/my-issues"],
     ["/user/alex/activity", "/profiles/alex/activity"],
-    ["/views?board=1", "/team/1/views"],
+    ["/views?board=1", "/team/1/all"],
+    ["/team/1/views", "/team/1/all"],
     ["/view/v1?board=1", "/view/triage-v1"],
     ["/view/v1/edit?board=1", "/view/triage-v1/edit"],
   ];

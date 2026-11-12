@@ -1,17 +1,15 @@
 import { expect, test } from "./app";
 import { defaultPreferences } from "../src/shared/view-model";
 
-test("custom identity, directory, favorite, details, palette and tab identity", async ({ open }) => {
+test("custom identity, sidebar, favorite, details, palette and tab identity", async ({ open }) => {
   const page = await open();
   try {
     const p = defaultPreferences();
     const definitions = ["custom", "tab"].map(kind => ({board:1,kind,name:kind === "custom" ? "Directory custom" : "Named tab",description:"Personal triage",icon:"filter",color:"gray",filters:p.filters,display:p.display,scope:p.scope,mine:false}));
     await page.eval(`Promise.all(${JSON.stringify(definitions)}.map(body => fetch('/api/views', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})))`);
     await page.reload();
-    await page.click('text=Views');
-    await page.waitFor(`location.pathname === '/team/1/views'`);
-    expect(await page.eval(`document.querySelector('[role=table]').textContent.includes('Named tab')`)).toBe(false);
-    await page.click('text=Directory customPersonal triage');
+    // Saved views open from the sidebar's Views section; there is no views page.
+    await page.page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Directory custom", exact: true }).click();
     await page.waitFor(`location.pathname.startsWith('/view/')`);
     expect(await page.eval(`document.querySelector('[aria-label=Breadcrumb]').textContent.includes('Directory custom')`)).toBe(true);
     await page.click('[aria-label="Add to favorites"]');
@@ -35,12 +33,9 @@ test("custom identity, directory, favorite, details, palette and tab identity", 
   } finally { await page.close(); }
 });
 
-test("empty directory and saved versus temporary empty results", async ({ open }) => {
+test("saved versus temporary empty results", async ({ open }) => {
   const page = await open();
   try {
-    await page.click('text=Views');
-    await page.waitFor(`document.body.textContent.includes('Create custom views using filters')`);
-    expect(await page.eval(`!![...document.querySelectorAll('button')].find(b=>b.textContent==='Create new view')`)).toBe(true);
     const p = defaultPreferences();
     const draft = {board:1,kind:"custom",name:"Empty base",description:"",icon:"filter",color:"gray",display:p.display,scope:p.scope,mine:false,filters:{id:"root",join:"and",children:[{id:"missing",field:"labels",op:"is",values:["missing-label"]}]}};
     const saved = await page.eval(`fetch('/api/views',{method:'POST',headers:{'Content-Type':'application/json'},body:${JSON.stringify(JSON.stringify(draft))}}).then(r=>r.json())`);

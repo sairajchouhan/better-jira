@@ -15,7 +15,6 @@ import { Tabs } from "@/client/components/tabs";
 import { Text } from "@/client/components/text";
 import { CountBadge } from "@/client/components/count-badge";
 import { resultFeedback, viewSummaries } from "./views-navigation-model";
-import "./views-navigation.css";
 
 export function SavedViewIcon({ view }: { view: Pick<SavedView, "icon" | "color"> }) {
   return <span aria-hidden="true" className="inline-flex shrink-0" style={{ color: view.color === "gray" ? "var(--view-gray)" : view.color }}>

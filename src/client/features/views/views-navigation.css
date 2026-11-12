@@ -1,5 +1,0 @@
-.views-directory-grid { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 16px; }
-.views-directory { color: lch(19.588 1.25 282); }
-@media (prefers-color-scheme: dark) {
-  .views-directory { color: lch(90.451 1.2 272); }
-}

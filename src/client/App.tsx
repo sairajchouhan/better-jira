@@ -81,7 +81,7 @@ function Shell({ children }: { children: ReactNode }) {
   const target = useStore((s) => s.target ?? s.selected);
   const current = useStore((s) => (target ? s.issues.get(target) : undefined));
   // The boards show unless an issue page, the inbox or the views list covers them.
-  const covered = useStore((s) => (s.panel && !!s.selected && (s.view === "page" || !!s.document)) || s.inbox || s.viewsPage);
+  const covered = useStore((s) => (s.panel && !!s.selected && (s.view === "page" || !!s.document)) || s.inbox);
   // Boards opened this session stay mounted (hidden) so switching back is instant; adjusted during render.
   const [visited, setVisited] = useState(() => new Set([boardId]));
   if (!visited.has(boardId)) setVisited(new Set(visited).add(boardId));
