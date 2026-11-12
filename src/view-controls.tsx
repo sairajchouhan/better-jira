@@ -19,7 +19,7 @@ import { MenuSurface, MENU_POPUP as POPUP, Popover } from "./menu-surface";
 import { filterChoices, PropertyFilter, ValueRow } from "./property-filter";
 import { Menu } from "./menu";
 import { Select } from "./select";
-import { Switch } from "./switch";
+import { DisplayProperties, SelectRow, Toggle } from "./display-options";
 import { Icon } from "./icons";
 import { Button, IconButton, type ButtonSize, type ButtonVariant } from "./button";
 import { SegmentedControl } from "./segmented-control";
@@ -212,53 +212,6 @@ export function BoardControls({ board }: { board: Board }) {
   );
 }
 
-/** A display-options row: label on the left, Linear's compact Select on the right (Linear's Display menu). */
-export function SelectRow({
-  label,
-  value,
-  options,
-  onChange,
-  children,
-}: {
-  label: string;
-  value: string;
-  options: readonly (readonly [string, string])[];
-  onChange: (value: string) => void;
-  children?: ReactNode;
-}) {
-  return (
-    <div className="flex min-h-8 items-center justify-between gap-2">
-      <Text variant="mini" color="muted">{label}</Text>
-      <span className="flex w-[170px] items-center gap-2">
-        {children}
-        <Select label={label} size="compact" value={value} onValueChange={onChange} className="min-w-0 flex-1">
-          {options.map(([v, l]) => (
-            <Select.Option key={v} value={v}>
-              {l}
-            </Select.Option>
-          ))}
-        </Select>
-      </span>
-    </div>
-  );
-}
-/** A display-options row: label on the left, a small Switch on the right. */
-export function Toggle({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: boolean;
-  onChange: () => void;
-}) {
-  return (
-    <label className="flex min-h-8 cursor-default items-center justify-between gap-4">
-      <Text variant="mini" color="muted">{label}</Text>
-      <Switch size="small" aria-label={label} checked={value} onChange={onChange} />
-    </label>
-  );
-}
 function DisplayMenu({ board }: { board: Board }) {
   const { display: d } = useViewSettings(board.id);
   // Saved views and the view editor own their display, so the board-default footer stays out (Linear).
@@ -359,28 +312,11 @@ function DisplayMenu({ board }: { board: Board }) {
         value={d.emptyGroups}
         onChange={() => patch({ emptyGroups: !d.emptyGroups })}
       />
-      <Text as="div" variant="mini" color="muted" className="mt-3 mb-2">
-        Display properties
-      </Text>
-      <div className="flex flex-wrap gap-1">
-        {PROPERTIES.filter(([p]) => d.layout === "list" || p !== "creator").map(([p, label]) => (
-          <Button
-            key={p}
-            variant="borderless"
-            size="small"
-            aria-pressed={d.properties.includes(p)}
-            onClick={() =>
-              patch({
-                properties: d.properties.includes(p)
-                  ? d.properties.filter((v) => v !== p)
-                  : [...d.properties, p],
-              })
-            }
-          >
-            {label}
-          </Button>
-        ))}
-      </div>
+      <DisplayProperties
+        properties={PROPERTIES.filter(([p]) => d.layout === "list" || p !== "creator")}
+        shown={d.properties}
+        onChange={(properties) => patch({ properties })}
+      />
       <PropertySyncNotice />
       <div className="my-3 border-t border-line-2" />
       <SelectRow

@@ -26,6 +26,7 @@ export type ButtonVariant =
   | "ghost"
   | "borderless"
   | "muted"
+  | "tab"
   | "link"
   | "dangerous"
   | "dangerous-borderless";

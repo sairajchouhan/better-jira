@@ -12,7 +12,7 @@ import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSubIssueComposer } from "./use-sub-issue-composer";
 import { useStoredState } from "./stored-state";
 import { FieldMenuButton } from "./pill-select";
-import { SelectRow, Toggle } from "./view-controls";
+import { DisplayProperties, SelectRow, Toggle } from "./display-options";
 import {
   RelationIcon,
   Icon,
@@ -571,28 +571,11 @@ export function SubIssues({ issue }: { issue: Issue }) {
             value={display.nested}
             onChange={() => change({ nested: !display.nested })}
           />
-          <Text as="div" variant="mini" color="muted" className="mt-3 mb-2">
-            Display properties
-          </Text>
-          <div className="flex flex-wrap gap-1">
-            {properties.map(([id, label]) => (
-              <Button
-                key={id}
-                aria-pressed={display.properties.includes(id)}
-                onClick={() =>
-                  change({
-                    properties: display.properties.includes(id)
-                      ? display.properties.filter((p) => p !== id)
-                      : [...display.properties, id],
-                  })
-                }
-                variant="secondary"
-                size="small"
-              >
-                {label}
-              </Button>
-            ))}
-          </div>
+          <DisplayProperties
+            properties={properties}
+            shown={display.properties}
+            onChange={(properties) => change({ properties })}
+          />
         </MenuSurface>
       )}
     </section>

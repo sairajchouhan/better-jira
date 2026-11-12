@@ -159,6 +159,24 @@
     color: var(--fg);
   }
 
+  /* UEe.tab: controlTertiary on the secondary ring, labelMuted turning labelBase on hover. WEe.tab (active):
+     controlTertiarySelected and labelTitle, the ring without shadowLow. */
+  .ui-button[data-variant="tab"] {
+    background: var(--tab);
+    color: var(--fg-3);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--border-alpha-thin), var(--frame-shadow);
+  }
+  .ui-button[data-variant="tab"]:hover {
+    background: var(--crumb-hover);
+    color: var(--fg-2);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--border-solid-alpha-thin), var(--frame-shadow);
+  }
+  .ui-button[data-variant="tab"]:is(:active, [aria-expanded="true"], [aria-pressed="true"], [data-menu-open="true"]) {
+    background: var(--tab-on);
+    color: var(--fg);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--border-alpha-thin);
+  }
+
   .ui-button[data-variant="dangerous"] {
     background: var(--red-base);
     color: var(--control-primary-label);

@@ -48,7 +48,7 @@ import {
 
 import { createInboxStore, type Category } from "./inbox-store";
 import { readStored, writeStored } from "./stored-state";
-import { SelectRow, Toggle } from "./view-controls";
+import { SelectRow, Toggle } from "./display-options";
 const storageKey = (name: string) =>
   `better-jira:inbox-${name}:v1:${get().namespace}`;
 const statusOf = (key: string) => {
