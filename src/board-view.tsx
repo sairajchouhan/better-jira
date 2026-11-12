@@ -1,4 +1,3 @@
-/* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
 import { isMyIssues } from "./navigation";
 import { useEffectiveMine, useActiveView, useOverlayFilters } from "./saved-views";
 import {
@@ -707,6 +706,7 @@ function IssueProperties({
         >
           <Icon name="calendar" />
           <span className="ml-1.5">
+            {/* oxlint-disable-next-line react/purity -- the elapsed time is read at render; `clock` re-renders it each minute. */}
             {statusDuration(issue.statusSince, Math.max(clock, Date.now()))} in status
           </span>
         </span>
