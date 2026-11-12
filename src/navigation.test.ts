@@ -134,9 +134,10 @@ test("the view editor takes display changes into its draft, keeps the board's pr
   expect(toggled.preferences).toBeUndefined();
   const cancelled = transition(editing.screen, { type: "discard-editor" }, data());
   expect(cancelled).toMatchObject({ forgetDraft: true, screen: { editorDraft: null, activeViewId: "v1" } });
-  // Leaving through another board first adds the editor's board, as it always has.
+  // BJ-158: leaving pushes only the destination so Back returns to the editor.
   const left = transition(editing.screen, { type: "go", to: { board: 2 } }, data());
-  expect(left.via && url(left.via)).toBe("/?board=1");
+  expect(left.via).toBeUndefined();
+  expect(transition(editing.screen, { type: "go", to: { inbox: true } }, data()).via).toBeUndefined();
   expect(url(left.screen)).toBe("/?board=2");
   // A reload of the editor's address uses the draft kept for it, else starts a fresh one.
   const kept = run([{ type: "restore", href: "http://x/view/new?board=1", draft: { ...draft, name: "Kept" } }]);

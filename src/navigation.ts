@@ -168,7 +168,6 @@ function enter(screen: Screen, to: Destination, data: NavigationData, quiet: boo
   }
   if (!quiet && s.editorDraft && (to.board !== undefined || to.inbox || to.mine)) {
     s = { ...s, editorDraft: null };
-    out.via = { ...s, mine: false };
   }
   if (!quiet)
     s = {
