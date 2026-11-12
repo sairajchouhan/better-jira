@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   GROUP_MS,
+  activityEvents,
   activityRows,
   recordActivity,
   recordRelation,
@@ -199,4 +200,24 @@ test("a write Jira rejected takes its Activity entries with it; earlier saved ch
     ).map((e) => e.field),
   ).toEqual(["status"]);
   expect(rollbackActivity(events, { status: "done" }, { status: "done" }, me.id)).toBe(events);
+});
+
+test("activityEvents lists image threads at their first comment, property rows, and only attached links with a time", () => {
+  const events = activityEvents({
+    mediaEdits: {
+      img: { comments: [{ id: "c1", text: "hi", author: "Me", at: at(5) }] },
+      cropped: { crop: { x: 0, y: 0, width: 1, height: 1 } } as never,
+    },
+    activity: change([], { priority: null }, { priority: "Low" }),
+    resources: [
+      { id: "l1", kind: "link", url: "https://x", created: at(9) } as never,
+      { id: "l2", kind: "link", url: "https://y" } as never,
+      { id: "d1", kind: "document", created: at(1) } as never,
+    ],
+  });
+  expect(events.map((e) => [e.kind, e.id, e.at])).toEqual([
+    ["image-thread", "img", at(5)],
+    ["property", expect.any(String), at()],
+    ["link", "l1", at(9)],
+  ]);
 });

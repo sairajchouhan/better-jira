@@ -25,6 +25,7 @@ import {
   type Issue,
   type RejectedComment,
 } from "./store";
+import { readStored, writeStored } from "./stored-state";
 import { noteDraftUploads, settleDraftUploads } from "./draft-uploads";
 import { mentionDraft, visibleComments, type IssueComment } from "./comment-thread";
 
@@ -99,6 +100,43 @@ export function useRejectedComment(
     return () => removeEventListener(REJECTED_COMMENT, listen);
     // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- The joined parent IDs track membership without reattaching for each new array identity.
   }, [key, ids, draftKey]);
+}
+
+/** A comment composer's draft, kept per browser under `key` so a reload or a refused send never loses it. Writes don't re-render. */
+export function commentDraft(key: string) {
+  const read = () => readStored(key, normalizeDocument, normalizeDocument(""));
+  return {
+    read,
+    save: (body: AdfDocument) => void writeStored(key, body),
+    /** Applies a change to the stored draft, such as an upload that finished after the composer closed. */
+    update: (change: (body: AdfDocument) => AdfDocument) => void writeStored(key, change(read())),
+    clear: () => void writeStored(key, undefined),
+  };
+}
+
+/** The issue's comment box: its stored draft and the composer generation. Sending starts an empty composer; a comment Jira
+ *  refused starts one holding it, after anything typed since (R2-comments-D4). Both keep the caret in the box. */
+export function useCommentDraft(issueKey: string) {
+  const key = `better-jira:comment-draft:${get().namespace}:${issueKey}`,
+    draft = commentDraft(key);
+  const [composer, setComposer] = useState(() => ({
+    generation: 0,
+    initial: draft.read() as AdfDocument | "",
+  }));
+  useRejectedComment(issueKey, [undefined], key, (body) =>
+    setComposer((c) => ({ generation: c.generation + 1, initial: body })),
+  );
+  return {
+    key: composer.generation,
+    initial: composer.initial,
+    autoFocus: composer.generation > 0,
+    save: draft.save,
+    update: draft.update,
+    sent: () => {
+      draft.clear();
+      setComposer((c) => ({ generation: c.generation + 1, initial: "" }));
+    },
+  };
 }
 
 type Props = {
@@ -197,14 +235,8 @@ function Thread({
       point?: { x: number; y: number };
     } | null>(null),
     [reaction, setReaction] = useState<{ anchor: HTMLElement; id: string } | null>(null);
-  const draftKey = `better-jira:reply-draft:${get().namespace}:${issue.key}:${root.id}`;
-  const draft = () => {
-    try {
-      return normalizeDocument(JSON.parse(localStorage.getItem(draftKey) ?? '""'));
-    } catch {
-      return normalizeDocument("");
-    }
-  };
+  const draftKey = `better-jira:reply-draft:${get().namespace}:${issue.key}:${root.id}`,
+    reply = commentDraft(draftKey);
   const restoreFocus = (id = root.id) =>
     requestAnimationFrame(() => {
       const thread = document.querySelector<HTMLElement>(`[data-thread="${CSS.escape(root.id)}"]`);
@@ -247,9 +279,7 @@ function Thread({
   // Replies are one level deep, as in Jira and Linear: replying to a reply joins this thread and mentions its author.
   const replyTo = (comment: IssueComment) => {
     if (comment.parentId && comment.author?.accountId !== ME.id)
-      try {
-        localStorage.setItem(draftKey, JSON.stringify(mentionDraft(draft(), comment.author)));
-      } catch {}
+      reply.update((draft) => mentionDraft(draft, comment.author));
     setComposer((n) => n + 1);
     setReplying(true);
   };
@@ -482,31 +512,23 @@ function Thread({
                   key={composer}
                   id={`reply-${root.id}`}
                   scope={`${issue.key}:reply:${root.id}`}
-                  onLateMedia={(merge) => {
-                    try {
-                      localStorage.setItem(draftKey, JSON.stringify(merge(draft())));
-                    } catch {}
-                  }}
+                  onLateMedia={reply.update}
                   label="Reply to thread"
                   placeholder="Reply…"
                   autoFocus
-                  initial={draft()}
+                  initial={reply.read()}
                   issueKey={issue.key}
                   attachments={issue.attachments}
                   onFiles={replyFiles.onFiles}
                   saveLabel="Submit reply"
                   onChange={(body) => {
                     replyFiles.changed(body);
-                    try {
-                      localStorage.setItem(draftKey, JSON.stringify(body));
-                    } catch {}
+                    reply.save(body);
                   }}
                   onSave={(body) => {
                     if (actions.comment(issue.key, body, root.id)) {
                       replyFiles.sent(body);
-                      try {
-                        localStorage.removeItem(draftKey);
-                      } catch {}
+                      reply.clear();
                       // A fresh, empty reply editor keeps the focus, as in Linear.
                       setComposer((n) => n + 1);
                     }

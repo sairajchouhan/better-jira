@@ -14,7 +14,7 @@ import {
 } from "./personal-controls";
 import { Tooltips } from "./tooltip";
 import { HelpMenu, ShortcutHelp, useLinearHotkeys } from "./shortcuts";
-import { InboxList, InboxPane } from "./inbox";
+import { InboxIssueActions, InboxList, InboxPane } from "./inbox";
 import { BoardView } from "./board-view";
 import {
   QuickNavigation,
@@ -25,7 +25,8 @@ import {
   StorageNotice,
   BoardHeader,
 } from "./app-chrome";
-import { IssueView } from "./issue-view";
+import { InboxIssuePane, IssuePage, IssueSidePanel } from "./issue-view";
+import { IssueDocument } from "./issue-resources";
 import { StatusPicker, AssignPicker } from "./issue-pickers";
 import { IssueSearch, CommandPalette } from "./palette";
 function Hotkeys() {
@@ -98,7 +99,19 @@ export function App() {
             {viewsPage && <ViewsDirectory />}
             {inbox && !page && <InboxList />}
             {open ? (
-              <IssueView key={firstKey(open.key)} issue={open} page={page} fill={inbox} />
+              document ? (
+                <IssueDocument key={firstKey(open.key)} issue={open} id={document} />
+              ) : page ? (
+                <IssuePage
+                  key={firstKey(open.key)}
+                  issue={open}
+                  actions={inbox && <InboxIssueActions />}
+                />
+              ) : inbox ? (
+                <InboxIssuePane key={firstKey(open.key)} issue={open} />
+              ) : (
+                <IssueSidePanel key={firstKey(open.key)} issue={open} />
+              )
             ) : (
               inbox && <InboxPane />
             )}

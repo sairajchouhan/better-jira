@@ -1,3 +1,5 @@
+import type { ImageComment, MediaEdit } from "./media-edits";
+import type { IssueResource } from "./issue-resource";
 /** Local property history, kept the way Linear keeps an actor's edits (observed on RAJ-52, 2026-11-07/08):
  * an edit joins the actor's latest group while that group was last edited under GROUP_MS ago, and the group keeps its first time;
  * a field already in the group is updated, and hidden (but kept) when it returns to its value before the group. */
@@ -223,4 +225,50 @@ export function rollbackActivity(
   return next.length === events.length && next.every((event, i) => event === events[i])
     ? events
     : next;
+}
+
+/** An Activity entry other than a comment thread, at its time, for the threads to interleave with. */
+export type ActivityEvent =
+  | { kind: "image-thread"; id: string; at: string; edit: MediaEdit & { comments: ImageComment[] } }
+  | { kind: "property"; id: string; at: string; row: ActivityRow }
+  | { kind: "link"; id: string; at: string; resource: IssueResource & { created: string } };
+/** The issue's image comment threads (one per image, at its first comment), property rows, and attached links. Linear lists a
+ *  link while it is attached and drops the row once it is removed (RAJ-52, 2026-11-07). */
+export function activityEvents(issue: {
+  mediaEdits?: Record<string, MediaEdit>;
+  activity?: readonly PropertyActivity[];
+  resources?: readonly IssueResource[];
+}): ActivityEvent[] {
+  return [
+    ...Object.entries(issue.mediaEdits ?? {}).flatMap(([id, edit]) =>
+      edit.comments?.length
+        ? [
+            {
+              kind: "image-thread" as const,
+              id,
+              at: edit.comments[0]!.at,
+              edit: { ...edit, comments: edit.comments },
+            },
+          ]
+        : [],
+    ),
+    ...activityRows(issue.activity ?? []).map((row) => ({
+      kind: "property" as const,
+      id: row.id,
+      at: row.at,
+      row,
+    })),
+    ...(issue.resources ?? []).flatMap((resource) =>
+      resource.kind === "link" && resource.created
+        ? [
+            {
+              kind: "link" as const,
+              id: resource.id,
+              at: resource.created,
+              resource: { ...resource, created: resource.created },
+            },
+          ]
+        : [],
+    ),
+  ];
 }
