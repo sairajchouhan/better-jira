@@ -24,6 +24,7 @@ import { activeEmoji, dismissEmoji, emojiPlugin, emojiRules, insertEmoji, matchi
 import { activeSlash, dismissSlash, matchingSlashCommands, slashPlugin, SLASH_COMMANDS } from "./slash-commands";
 import { ActionMenu, type ActionEntry } from "./action-menu";
 import { get } from "./store";
+import { navigate } from "./app-navigation";
 import { jiraIssueURL } from "./issue-urls";
 import { beginCreate } from "./issue-actions";
 import { usePlacement } from "./menu-surface";
@@ -301,6 +302,7 @@ export function RichEditor(props: EditorEngineProps) {
         return true;
       },
       handleDOMEvents: {
+        click: (editor, event) => openLink(editor, event),
         blur: (editor) => {
           latest.current.onBlur?.(fromEditorDocument(editor.state.doc));
           refresh((n) => n + 1);
@@ -949,4 +951,26 @@ export function RichEditor(props: EditorEngineProps) {
       )}
     </div>
   );
+}
+
+/**
+ * A browser doesn't follow links inside an editable document, so a click opens them here, like Linear's document-wide
+ * anchor handler (`handleDocumentClick`): a link to an issue this app has opens it here, any other in a new tab.
+ * Shift-click still extends the selection, and a drag that selected text doesn't open anything. ⌘-click on an issue
+ * link opens Jira's page instead.
+ */
+function openLink(editor: EditorView, event: MouseEvent) {
+  const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
+  const { selection } = editor.state;
+  if (!link || event.button !== 0 || event.shiftKey || (!selection.empty && !(selection instanceof NodeSelection)))
+    return false;
+  event.preventDefault();
+  const browse = `${get().site}/browse/`;
+  const issue =
+    link.href.startsWith(browse) && !(event.metaKey || event.ctrlKey)
+      ? get().issues.get(decodeURIComponent(link.href.slice(browse.length)))
+      : undefined;
+  if (issue) navigate({ board: issue.board, selected: issue.key, panel: true, view: get().view });
+  else window.open(link.href, "_blank", "noopener,noreferrer");
+  return true;
 }

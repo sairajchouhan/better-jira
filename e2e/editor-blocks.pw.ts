@@ -93,6 +93,23 @@ test("BJ-42 / BJ-57 / BJ-43: the slash, emoji and @ menus insert blocks, emoji a
   ]);
 });
 
+test("links in the description open on click: other sites in a new tab, an issue reference in the app", async ({
+  open,
+}) => {
+  const page = await open("?issue=TEST-2&view=page");
+  await page.waitFor(`!!document.querySelector('#description .ProseMirror a[href="https://example.test/reference"], #description a[href="https://example.test/reference"]')`);
+  await page.eval(`window.open=(url)=>{window.__opened=url;return null}`);
+  await page.click('#description a[href="https://example.test/reference"]');
+  expect(await page.eval(`window.__opened`)).toBe("https://example.test/reference");
+  await page.click("#description h2");
+  await page.key("End");
+  await page.key("Enter");
+  await page.type("see TEST-4 ");
+  await page.waitFor(`[...document.querySelectorAll('#description a.rich-token')].some(n=>n.textContent==='TEST-4')`);
+  await page.eval(`[...document.querySelectorAll('#description a.rich-token')].find(n=>n.textContent==='TEST-4').click()`);
+  await page.waitFor(`new URLSearchParams(location.search).get('issue')==='TEST-4'`);
+});
+
 test("BJ-69: Create issue from selection opens the composer titled with the selected text, related to this issue", async ({
   open,
 }) => {
