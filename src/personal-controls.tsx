@@ -1,3 +1,4 @@
+import { Text } from "./text";
 import { Tabs } from "./tabs";
 import { CountBadge } from "./count-badge";
 import { Shortcut, Keycap } from "./keycap";
@@ -729,14 +730,14 @@ export function IssueOptions({ issue }: { issue: Issue }) {
     return (
       <Dialog label="Description history" close={close}>
         <Dialog.Title className="mb-3">Description history</Dialog.Title>
-        <p className="mb-3 text-[12px] text-fg-3">
+        <Text className="mb-3" as="p" variant="mini" color="muted">
           Your locally saved description revisions.
-        </p>
+        </Text>
         {[...(issue.descriptionHistory ?? [])].reverse().map((entry, index) => (
           <div key={index} className="mb-3 rounded-md border border-line-2 p-3">
-            <div className="mb-2 text-[11px] text-fg-3">
+            <Text className="mb-2" as="div" variant="micro" color="muted">
               {new Date(entry.at).toLocaleString()}
-            </div>
+            </Text>
             <div>
               {entry.document ? (
                 <Adf node={entry.document} />
@@ -822,7 +823,7 @@ export function Attachments({
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   return (
-    <div className="mt-3 text-[12px]">
+    <Text className="mt-3" as="div" variant="mini" color="inherit">
       <input
         ref={file}
         type="file"
@@ -868,7 +869,7 @@ export function Attachments({
         </p>
       )}
       <AttachmentList attachments={attachments} onChange={onChange} />
-    </div>
+    </Text>
   );
 }
 
@@ -928,7 +929,7 @@ export function PersonalIssueDetails({ issue }: { issue: Issue }) {
   const full = useStore((s) => s.full.get(issue.key));
   const { visible, embedded } = attachmentSplit(issue, full?.fields);
   return (
-    <div className="mt-5 space-y-3 text-[12px]">
+    <Text className="mt-5 space-y-3" as="div" variant="mini" color="inherit">
       {/* Linear (RAJ-52): 26px below the last paragraph, 6px left of the text and 16px above the sub-issues header, reaction pills 8px apart, then the round add-reaction and attach buttons. */}
       {/* Reaction pills and circular actions retain their bundle geometry; the contract has no matching variants. */}
       <div data-reactions className="-ml-1.5 flex flex-wrap items-center">
@@ -979,7 +980,7 @@ export function PersonalIssueDetails({ issue }: { issue: Issue }) {
         />
       )}
       {/* The paperclip above attaches through the description editor; this is only the list. */}
-      <div className="mt-3 text-[12px]">
+      <Text className="mt-3" as="div" variant="mini" color="inherit">
         <AttachmentList
           issueKey={issue.key}
           attachments={visible}
@@ -989,11 +990,11 @@ export function PersonalIssueDetails({ issue }: { issue: Issue }) {
             })
           }
         />
-      </div>
+      </Text>
 
       <SubIssues key={issue.key} issue={issue} />
       <IssueResources issue={issue} />
-    </div>
+    </Text>
   );
 }
 
@@ -1307,10 +1308,10 @@ export function AddBoard() {
             {error}
           </p>
         ) : (
-          <p className="mt-2 text-[12px] text-fg-3">
+          <Text className="mt-2" as="p" variant="mini" color="muted">
             Open the board in Jira and copy its address. Better-jira only reads
             it.
-          </p>
+          </Text>
         )}
         <div className="mt-4 flex justify-end gap-2">
           <Button

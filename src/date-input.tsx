@@ -1,3 +1,4 @@
+import { Text } from "./text";
 import { TextInput } from "./field";
 import { Button } from "./button";
 import { useState } from "react";
@@ -24,7 +25,7 @@ export function DateInput({
     if (date || !next.trim()) onChange(date ?? "");
   };
   return (
-    <div className="space-y-2 text-[12px]">
+    <Text className="space-y-2" as="div" variant="mini" color="inherit">
       <TextInput
         autoFocus={autoFocus}
         aria-label="Due date"
@@ -71,6 +72,6 @@ export function DateInput({
           className="min-w-0"
         />
       </label>
-    </div>
+    </Text>
   );
 }

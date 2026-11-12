@@ -1,3 +1,4 @@
+import { Text } from "./text";
 import { Dialog, ConfirmDialog } from "./dialog";
 import { Field, TextInput } from "./field";
 import { Button, IconButton } from "./button";
@@ -164,9 +165,15 @@ export function ResourceForm({
           />
         </Field>
         {error && (
-          <p role="alert" className="mt-2 text-[12px]">
+          <Text
+            role="alert"
+            className="mt-2"
+            as="p"
+            variant="mini"
+            color="inherit"
+          >
             {error}
-          </p>
+          </Text>
         )}
         <div className="mt-3 flex justify-end gap-2">
           <Button

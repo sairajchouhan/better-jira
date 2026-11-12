@@ -1,3 +1,4 @@
+import { Text } from "./text";
 import { PropertyTrigger } from "./property-trigger";
 import { LabelChip } from "./label-chip";
 import { CountBadge } from "./count-badge";
@@ -216,7 +217,12 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
       .filter((row) => row.depth === 0)
       .map((row) => row.issue);
   return (
-    <div className="mt-2 mb-2.5 flex h-[26px] items-center text-[13px] leading-[normal]">
+    <Text
+      className="mt-2 mb-2.5 flex h-[26px] items-center leading-[normal]"
+      as="div"
+      variant="small"
+      color="inherit"
+    >
       <span className="mr-0.5 font-[450] text-fg-3">Sub-issue of</span>
       <a
         data-parent-link
@@ -288,7 +294,7 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
           </Menu>
         </MenuSurface>
       )}
-    </div>
+    </Text>
   );
 }
 
@@ -443,13 +449,16 @@ export function SubIssues({ issue }: { issue: Issue }) {
             </span>
             <span>Sub-issues</span>
           </Button>
-          <span
+          <Text
             data-sub-progress
-            className="ml-0.5 flex items-center gap-1.5 text-[12px] text-fg-3"
+            className="ml-0.5 flex items-center gap-1.5"
+            as="span"
+            variant="mini"
+            color="muted"
           >
             <ProgressRing value={model.completed / model.total} />
             {model.completed}/{model.total}
-          </span>
+          </Text>
           <span className="flex-1" />
           {model.hiddenCompleted > 0 && (
             <Button
@@ -905,15 +914,18 @@ function SubIssueRow({
           child.relations?.filter((r) => r.kind === kind).length ?? 0;
         return (
           count > 0 && (
-            <span
+            <Text
               key={kind}
               data-row-relation={kind}
               title={`${kind === "blocked" ? "Blocked by" : "Blocking"} ${count} ${count === 1 ? "issue" : "issues"}`}
-              className="flex shrink-0 items-center gap-1 text-[12px] font-[450] text-fg-3"
+              className="flex shrink-0 items-center gap-1"
+              as="span"
+              variant="mini"
+              color="muted"
             >
               <RelationIcon kind={kind} />
               {count}
-            </span>
+            </Text>
           )
         );
       })}
