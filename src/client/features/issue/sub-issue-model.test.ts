@@ -1,5 +1,6 @@
+import { type Issue } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
-import type { Issue } from "@/client/state/store";
+
 import { defaultSubIssueDisplay, subIssueRows } from "./sub-issue-model";
 const issue = (key: string, parent?: string, status = "todo", rank = ""): Issue => ({
   key,

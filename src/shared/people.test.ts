@@ -1,6 +1,7 @@
+import { type Issue } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
 import { peopleOf, personIssues } from "./people";
-import type { Issue } from "@/client/state/store";
+
 
 const alex = { id: "alex", name: "Alex" }, me = { id: "me", name: "Me" };
 const issue = (key: string, extra: Partial<Issue> = {}): Issue => ({

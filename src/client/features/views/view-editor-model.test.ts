@@ -1,6 +1,7 @@
+import { type Board, type Issue } from "@/shared/issue-model";
 import { test, expect } from "bun:test";
 import { viewPlaceholder, issuesCSV } from "./view-editor-model";
-import type { Board, Issue } from "@/client/state/store";
+
 const board: Board = {
   id: 1,
   name: "SAM1 board",

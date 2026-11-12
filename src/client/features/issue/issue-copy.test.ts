@@ -1,6 +1,7 @@
+import { type Issue } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
 import { adfToMarkdown, issueCopy } from "./issue-copy";
-import type { Issue } from "@/client/state/store";
+
 test("clipboard projections retain rich formatting, tables and exact IDs/URLs", () => {
   const issue: Issue = {
     key: "TEST-1",

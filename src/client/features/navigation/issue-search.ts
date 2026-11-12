@@ -1,7 +1,8 @@
+import { type Issue } from "@/shared/issue-model";
 import { matchRank } from "@/shared/search-rank";
 import { adfToText } from "@/shared/document";
 import type { IssueResource } from "@/shared/issue-resource";
-import type { Issue } from "@/client/state/store";
+
 import { valuesFor } from "@/shared/view-model";
 
 /** The issue key a query names, hyphen optional ("sam11", "sam 11", "SAM-11" → "SAM-11"), as Linear's

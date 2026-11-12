@@ -1,8 +1,9 @@
+import { type Issue } from "@/shared/issue-model";
 import { AppLink, SavedViewLink } from "@/client/features/navigation/app-link";
 import { useState } from "react";
 import { Icon, type IconName } from "@/client/components/icons";
 import { Avatar } from "@/client/components/avatar";
-import { ME, useStore, type Issue } from "@/client/state/store";
+import { ME, useStore } from "@/client/state/store";
 import { moveFavorite, toggleFavorite } from "@/client/features/navigation/favorites";
 import { ContextMenu } from "@/client/components/action-menu";
 import { SectionDisclosure } from "@/client/components/section-disclosure";

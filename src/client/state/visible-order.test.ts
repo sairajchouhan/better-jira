@@ -1,6 +1,7 @@
+import { type Board, type Issue } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
 import { IDBFactory } from "fake-indexeddb";
-import type { Board, Issue } from "./store";
+
 import type { FilterGroup } from "@/shared/view-model";
 
 const storage = new Map<string, string>();

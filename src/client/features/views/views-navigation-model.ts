@@ -1,4 +1,5 @@
-import type { Issue } from "@/client/state/store";
+import { type Issue } from "@/shared/issue-model";
+
 /** `baseline` counts the saved definition alone; `total` counts the board with no filters. Empty states keep Linear's hidden count. */
 export function resultFeedback(count: number, baseline: number, saved: boolean, temporary: boolean) {
   if (!count) {

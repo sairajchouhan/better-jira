@@ -1,3 +1,4 @@
+import { type Issue } from "@/shared/issue-model";
 /**
  * This account's saved local data in IndexedDB: the edits Jira hasn't taken, the undo history, the files they hold and
  * the numbers local keys and comment ids are made from. Saving runs through the storage machine, which reports its
@@ -7,7 +8,7 @@
 import { createActor, fromPromise, waitFor } from "xstate";
 import { inspector, storageMachine } from "./machines";
 import { emptyLocalState, LocalDatabase, type LocalState } from "./local-data";
-import { commit, get, set, type Issue } from "./store";
+import { commit, get, set } from "./store";
 
 type Opened =
   | { type: "opened"; message?: string; recovered?: boolean }

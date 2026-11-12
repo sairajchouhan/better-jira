@@ -1,3 +1,4 @@
+import { type Issue } from "@/shared/issue-model";
 import { showNotification } from "@/client/state/app-notifications";
 import { LoadingState } from "@/client/components/empty-state";
 import { Text } from "@/client/components/text";
@@ -10,7 +11,7 @@ import { Icon } from "@/client/components/icons";
 
 import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { normalizeDocument } from "@/shared/document";
-import { get, ME, set, useStore, type Issue } from "@/client/state/store";
+import { get, ME, set, useStore } from "@/client/state/store";
 import { actions } from "@/client/state/issue-actions";
 import { flushLocalChanges } from "@/client/state/local-database";
 import { navigate, ui, placeURL } from "@/client/features/navigation/app-navigation";

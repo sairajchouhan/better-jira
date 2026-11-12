@@ -1,7 +1,8 @@
+import { type Full, type Issue } from "@/shared/issue-model";
 import { DESCRIPTION_CONFLICT, mergeOps, opsFor, renameCommentIds, namesKey, renameIds, type Op, type Side } from "@/shared/jira-ops";
 import { withoutLocalMedia } from "./jira-media";
 import type { LocalChange } from "./local-data";
-import type { Full, Issue } from "./store";
+
 
 /**
  * The Jira write outbox: the user's edits that Jira doesn't have yet.

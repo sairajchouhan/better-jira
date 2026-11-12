@@ -1,3 +1,4 @@
+import { type Board, type Issue } from "@/shared/issue-model";
 import { VirtualItems } from "@/client/components/virtual-items";
 import { isMyIssues } from "@/client/features/navigation/navigation";
 import { personIssues } from "@/shared/people";
@@ -21,7 +22,7 @@ import {
 } from "react";
 import { commentCount } from "@/client/features/media/media-edits";
 import { Icon, Label, PriorityIcon, StatusIcon, TypeDot } from "@/client/components/icons";
-import { ME, get, set, timed, useStore, type Board, type Issue, statusOf } from "@/client/state/store";
+import { ME, get, set, timed, useStore, statusOf } from "@/client/state/store";
 import { actions, beginCreate } from "@/client/state/issue-actions";
 import { loadFull } from "@/client/state/server-data";
 import { navigate, preloadOnHover, ui } from "@/client/features/navigation/app-navigation";

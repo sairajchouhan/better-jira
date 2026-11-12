@@ -1,3 +1,4 @@
+import { type Issue, type Full } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
 import { IDBFactory } from "fake-indexeddb";
 import {
@@ -7,7 +8,7 @@ import {
   parseLocalState,
   type LocalState,
 } from "./local-data";
-import type { Issue, Full } from "./store";
+
 
 const issue: Issue = {
   key: "TEST-NEW1",

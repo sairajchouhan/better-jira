@@ -1,4 +1,5 @@
-import type { Board, Issue } from "@/client/state/store";
+import { type Board, type Issue } from "@/shared/issue-model";
+
 import type { FilterGroup } from "@/shared/view-model";
 import { statusById, statuses } from "@/shared/board-catalog";
 export function viewPlaceholder(filters: FilterGroup, board?: Board): string {

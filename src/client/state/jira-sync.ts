@@ -1,3 +1,4 @@
+import { type Full, type Issue } from "@/shared/issue-model";
 /**
  * Sending local edits to Jira. Each edit's before/after (`send`) becomes ops that the outbox (outbox.ts) sends one job
  * at a time per issue; Jira's answer gives created issues and comments their Jira ids everywhere (`currentKey`,
@@ -24,7 +25,7 @@ import { rekeyNotification, showNotification } from "./app-notifications";
 import { returnRejectedComment } from "@/client/features/comments/rejected-comment";
 import { navigate } from "@/client/features/navigation/app-navigation";
 import { claimChanges, flushLocalChanges, localDataOpen, queueSave, storedChanges } from "./local-database";
-import { get, set, type Full, type Issue } from "./store";
+import { get, set } from "./store";
 import { beginCreate } from "./issue-actions";
 
 /** Marks issues changed by this tab, so other tabs take its copy. */

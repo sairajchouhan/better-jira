@@ -1,4 +1,5 @@
-import type { Issue } from "@/client/state/store";
+import { type Issue } from "@/shared/issue-model";
+
 import { priorityRank, type Ordering, type Property } from "@/shared/view-model";
 export type SubIssueDisplay = {
   ordering: Exclude<Ordering, "statusAge">;

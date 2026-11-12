@@ -1,6 +1,7 @@
+import { type Issue } from "@/shared/issue-model";
 import type { HTMLAttributes } from "react";
 import { StatusIcon } from "@/client/components/icons";
-import { useStore, type Issue } from "@/client/state/store";
+import { useStore } from "@/client/state/store";
 import { statusOf } from "./sub-issues";
 import { Text } from "@/client/components/text";
 

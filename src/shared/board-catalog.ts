@@ -1,6 +1,7 @@
+import { type Board, type Issue, type User, type JiraOptions } from "@/shared/issue-model";
 /** What a board offers to pick from: its statuses, the people an issue can be assigned to, and known labels. */
 import { priorityRank } from "./view-model";
-import type { Board, Issue, User, JiraOptions } from "@/client/state/store";
+
 
 /** The board's statuses in column order. */
 export const statuses = (board: Board | undefined) =>

@@ -1,8 +1,9 @@
+import { type Issue } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
 import { createOutbox, type Answer, type OutboxPorts } from "./outbox";
 import { DESCRIPTION_CONFLICT, type Side } from "@/shared/jira-ops";
 import type { LocalChange } from "./local-data";
-import type { Issue } from "./store";
+
 
 const issue = (key: string, extra: Partial<Issue> = {}): Issue => ({
   key,

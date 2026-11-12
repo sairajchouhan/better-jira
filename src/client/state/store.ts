@@ -1,15 +1,11 @@
+import type { User, Issue, Board, Full, IssueDraft, JiraOptions } from "@/shared/issue-model";
 import { assignableUsers, knownPeople, statusById } from "@/shared/board-catalog";
 import { useMemo, useSyncExternalStore } from "react";
 import { defaultPreferences, type Display, type Preferences } from "@/shared/view-model";
-import { type AdfDocument } from "@/shared/document";
 import { type UiContext } from "./machines";
 import type { Screen } from "@/client/features/navigation/navigation";
 
-import { type CommentState } from "@/client/features/comments/comment-thread";
-import { type MediaEdit } from "@/client/features/media/media-edits";
 
-import { type IssueResource } from "@/shared/issue-resource";
-import { type PropertyActivity } from "@/client/features/issue/issue-activity";
 import type { PersonTab } from "@/shared/people";
 import {
   persistPreferences,
@@ -21,80 +17,6 @@ import {
   savedViewPreferences,
   viewDetailsOpen,
 } from "./browser-preferences";
-export type User = { id: string; name: string; avatar?: string };
-export type Issue = {
-  key: string;
-  board: number;
-  summary: string;
-  status: string;
-  type?: string;
-  priority?: string;
-  assignee: User | null;
-  labels: string[];
-  parent?: string;
-  rank?: string;
-  comments: number;
-  updated: string;
-  resolved: string | null;
-  created?: string;
-  creator?: User | null;
-  due?: string | null;
-  project?: { key: string; name: string } | null;
-  description?: string;
-  /** Every comment's text, for search (BJ-27). */
-  commentText?: string;
-  links?: string[];
-  resources?: IssueResource[];
-  commentStates?: Record<string, CommentState>;
-  reminder?: { at: string; delivered?: boolean } | null;
-  activity?: PropertyActivity[];
-  relations?: { key: string; kind: string }[];
-  milestones?: { id: string; name: string }[];
-  prCount?: number;
-  statusSince?: string;
-  started?: string;
-  watchers?: User[];
-  watchersComplete?: boolean;
-  /** Whether this Jira user watches the issue, from the mirror list; `watchers` wins once loaded (R2-issue-fields-D9). */
-  watching?: boolean;
-  estimate?: number;
-  projectLead?: User | null;
-  attachments?: {
-    id: string;
-    name: string;
-    url: string;
-    type: string;
-    size: number;
-    missing?: boolean;
-    mediaId?: string;
-  }[];
-  reactions?: string[];
-  mediaEdits?: Record<string, MediaEdit>;
-  descriptionHistory?: { text: string; document?: AdfDocument; at: string }[];
-};
-export type Status = { id: string; name: string; category: string };
-export type Column = { name: string; statuses: Status[] };
-export type Board = {
-  id: number;
-  name: string;
-  columns: Column[];
-  /** Added in the app, so the sidebar can remove it (BJ-24). */
-  removable?: boolean;
-};
-/** Raw Jira issue: { key, fields: { description, comment, reporter, created, ... } } */
-export type Full = {
-  key: string;
-  fields: any;
-  /** Jira remote links, read with the full record. */ remotelinks?: {
-    url: string;
-    title: string;
-  }[];
-  /** Jira's description the unsent local one started from, kept so a replay after reload can still refuse to overwrite a newer Jira text (R2-D2). */
-  descriptionBase?: AdfDocument;
-  /** A description Jira refused (someone else's newer text, or invalid content), with Jira's reason; kept until the person picks a version or edits again. */
-  descriptionRejected?: AdfDocument;
-  descriptionError?: string;
-};
 export type Overlay =
   | null
   | "palette"
@@ -126,47 +48,7 @@ export type Overlay =
   | "inbox-filter"
   | "inbox-display"
   | "snooze";
-export type IssueDraft = Partial<
-  Pick<
-    Issue,
-    | "board"
-    | "status"
-    | "assignee"
-    | "priority"
-    | "labels"
-    | "project"
-    | "milestones"
-    | "due"
-    | "parent"
-    | "type"
-    | "rank"
-    | "attachments"
-    | "resources"
-  >
-> & {
-  description?: string;
-  descriptionDoc?: AdfDocument;
-  /** Make a copy: the composer starts with this title and saves with "Save copy". */
-  title?: string;
-  copy?: boolean;
-  subIssues?: string[];
-  /** Linear "Create related": link the new issue to this one in the same undo step. */ related?: {
-    key: string;
-    kind: "related" | "blocked" | "blocking" | "parent";
-  };
-  /** Names one submit of a composer: a second call with it (a double click before React re-renders) creates nothing. */
-  submission?: string;
-  /** "Create issue from selection" (BJ-69): the editor waiting to swap its selected text for a reference to the new issue. */
-  fromSelection?: string;
-};
 export type View = "side" | "page";
-export type JiraOptions = {
-  priorities: { id: string; name: string }[];
-  users: User[];
-  labels: string[];
-  versions: Record<string, { id: string; name: string }[]>;
-  types?: Record<string, { name: string; hierarchyLevel: number }[]>;
-};
 export type { SavedView } from "@/shared/saved-view-model";
 import {
   type SavedView,

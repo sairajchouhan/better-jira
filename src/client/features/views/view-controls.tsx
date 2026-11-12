@@ -1,3 +1,4 @@
+import { type Issue, type Board } from "@/shared/issue-model";
 import { showNotification } from "@/client/state/app-notifications";
 import "./view-toolbar.css";
 import { useActiveView, useOverlayFilters, saveOverlayToView } from "./saved-views";
@@ -31,7 +32,7 @@ import { LoadingState } from "@/client/components/empty-state";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import type { Keys } from "@/client/components/keycap";
 import { shortDate } from "@/client/lib/due-date";
-import { ME, timed, useStore, type Issue, type Board } from "@/client/state/store";
+import { ME, timed, useStore } from "@/client/state/store";
 import { ui } from "@/client/features/navigation/app-navigation";
 import { saveDefault } from "./view-settings";
 import {

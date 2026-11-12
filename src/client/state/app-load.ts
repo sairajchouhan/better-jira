@@ -1,3 +1,4 @@
+import { type User, type Issue, type Full, type Board, type JiraOptions } from "@/shared/issue-model";
 /**
  * Loading the app: the account, boards, issues and saved views from the server, this account's saved local data over
  * them, then the poll, Jira sync and the window listeners. The app machine runs a load and keeps its error on
@@ -38,17 +39,7 @@ import {
   savedViewPreferences,
   scopePreferences,
 } from "./browser-preferences";
-import {
-  commit,
-  get,
-  set,
-  ME,
-  type User,
-  type Issue,
-  type Full,
-  type Board,
-  type JiraOptions,
-} from "./store";
+import { commit, get, set, ME } from "./store";
 
 const app = createActor(appMachine.provide({ actors: { load: fromPromise(loadApplication) } }), {
   inspect: inspector("app"),

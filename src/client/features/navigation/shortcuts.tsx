@@ -1,3 +1,4 @@
+import { type Issue } from "@/shared/issue-model";
 import { latestNotification, showNotification } from "@/client/state/app-notifications";
 import { toasts } from "@/client/components/toast-queue";
 import { recentIssues } from "./recents";
@@ -11,7 +12,7 @@ import { filterCount, visibleOrder } from "@/shared/view-model";
 import { forgetIssueIntents, post, run as command } from "./commands";
 import { canHaveChildren } from "@/shared/issue-properties";
 import { formatForDisplay, getHotkeyManager, type Hotkey } from "@tanstack/react-hotkeys";
-import { boardOf, get, isWatching, ME, set, useStore, type Issue, type Overlay } from "@/client/state/store";
+import { boardOf, get, isWatching, ME, set, useStore, type Overlay } from "@/client/state/store";
 import { actions, beginCreate } from "@/client/state/issue-actions";
 import { currentKey } from "@/client/state/jira-sync";
 import { redoEdit, undoEdit } from "@/client/state/undo-history";

@@ -1,7 +1,8 @@
+import { type Issue } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
 import { matchDocuments, matchesSearchFilters, matchIssues, shorthandKey } from "./issue-search";
 import { plainDocument } from "@/shared/document";
-import type { Issue } from "@/client/state/store";
+
 
 const issue = (key: string, summary: string, extra: Partial<Issue> = {}): Issue => ({
   key, board: 1, summary, status: "1", assignee: null, labels: [], comments: 0,

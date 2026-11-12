@@ -1,3 +1,4 @@
+import { type ImageCrop } from "@/shared/issue-model";
 import { Button, ButtonLink, IconButton } from "@/client/components/button";
 import { notifyMedia } from "./media-toast";
 import { useEffect, useRef, useState } from "react";
@@ -7,7 +8,7 @@ import type { Attachment } from "@/shared/attachment-media";
 import { copyMediaImage } from "./image-media";
 import { Icon } from "@/client/components/icons";
 import { ImageCropEditor } from "./image-crop";
-import type { ImageCrop } from "./media-edits";
+
 import { attachmentLink, downloadURL } from "./media-layout";
 export function ImageViewer({
   file,

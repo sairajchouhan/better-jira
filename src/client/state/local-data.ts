@@ -1,10 +1,11 @@
+import { activityFields, type Full, type Issue } from "@/shared/issue-model";
 import { validCommentStates } from "@/client/features/comments/comment-thread";
 import { resourceURL, validDocumentProperties, validLinkPreview } from "@/shared/issue-resource";
-import { activityFields } from "@/client/features/issue/issue-activity";
+
 import { localFileBlob } from "@/shared/media-types";
 import { validMediaEdits } from "@/client/features/media/media-edits";
 import { renameIds } from "@/shared/jira-ops";
-import type { Full, Issue } from "./store";
+
 
 export type Snapshot = {
   issue?: Issue;

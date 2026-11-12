@@ -1,3 +1,4 @@
+import { type PropertyActivity, type Issue, type User } from "@/shared/issue-model";
 import { useLocation } from "@tanstack/react-router";
 import { pageURL } from "@/client/features/navigation/app-navigation";
 import { AutoResizingTextArea } from "@/client/components/field";
@@ -23,18 +24,11 @@ import { ReminderControl } from "@/client/features/reminders/reminders";
 import { CommentThreads, useCommentDraft, useDraftFiles } from "@/client/features/comments/comment-threads";
 import { ImageCommentCard } from "@/client/features/media/image-thread";
 import { linkTitle } from "@/shared/issue-resource";
-import {
-  RELATION_ISSUE,
-  activityEvents,
-  type ActivityEvent,
-  type ActivityRow,
-  type PropertyActivity,
-  type Relation,
-} from "@/client/features/issue/issue-activity";
+import { RELATION_ISSUE, activityEvents, type ActivityEvent, type ActivityRow, type Relation } from "@/client/features/issue/issue-activity";
 import { normalizeDocument } from "@/shared/document";
 import { imageCommentIds } from "@/client/features/media/media-edits";
 import { Icon, PriorityIcon, RelationIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
-import { ME, boardOf, get, useStore, isWatching, type Issue, type User, statusOf } from "@/client/state/store";
+import { ME, boardOf, get, useStore, isWatching, statusOf } from "@/client/state/store";
 import { issueURL } from "@/client/features/issue/issue-urls";
 import { AppLink } from "@/client/features/navigation/app-link";
 import { actions, addIssueFiles } from "@/client/state/issue-actions";

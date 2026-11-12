@@ -1,4 +1,5 @@
-import type { Issue, User } from "@/client/state/store";
+import { type Issue, type User } from "@/shared/issue-model";
+
 
 /** Linear's My issues tabs (`assigned`, `created`, `subscribed`, `activity`); a user's profile shows the same lists. */
 export const PERSON_TABS = [

@@ -1,3 +1,4 @@
+import { type CommentState, type ImageCrop, type MediaEdit, type User, type Issue, type Full, type IssueDraft } from "@/shared/issue-model";
 /**
  * The edits a person makes to issues. Each action records one undo step (undo-history.ts) whose before/after is sent
  * to Jira (jira-sync.ts) on a writable site, and is kept locally until Jira has it (local-edits.ts). Files are kept
@@ -31,8 +32,8 @@ import { type Grouping } from "@/shared/view-model";
 import { documentHasMedia, normalizeDocument, textToAdf, type AdfDocument } from "@/shared/document";
 import { reminderTime } from "@/client/features/reminders/reminder-display";
 import { typeChoices, childTypes, canHaveChildren } from "@/shared/issue-properties";
-import { replyParent, visibleCommentTotal, type CommentState } from "@/client/features/comments/comment-thread";
-import { type ImageCrop, type MediaEdit } from "@/client/features/media/media-edits";
+import { replyParent, visibleCommentTotal } from "@/client/features/comments/comment-thread";
+
 import {
   resourceMediaIds,
   type DocumentProperties,
@@ -41,17 +42,7 @@ import {
 } from "@/shared/issue-resource";
 import { RELATION_ISSUE, recordRelation } from "@/client/features/issue/issue-activity";
 import { uploadNow } from "./jira-media";
-import {
-  get,
-  set,
-  timed,
-  ME,
-  boardOf,
-  type User,
-  type Issue,
-  type Full,
-  type IssueDraft,
-} from "./store";
+import { get, set, timed, ME, boardOf } from "./store";
 
 /** Opens the create composer; false when local storage refused it. */
 export function beginCreate(draft: IssueDraft = {}): boolean {

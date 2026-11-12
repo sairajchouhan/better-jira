@@ -1,6 +1,7 @@
+import { type User } from "@/shared/issue-model";
 import { useState } from "react";
 import { avatarSrc } from "@/shared/avatar-proxy";
-import type { User } from "@/client/state/store";
+
 
 /** The person's Jira photo through the same-origin proxy; their initial while it loads or if it fails; a dashed ring for nobody. */
 export function Avatar({ user, size = 20 }: { user: User | null; size?: number }) {

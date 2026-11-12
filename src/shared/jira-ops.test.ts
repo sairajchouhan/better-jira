@@ -1,6 +1,7 @@
+import { type Issue } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
 import { mergeOps, namesKey, opsFor, renameCommentIds, renameIds, threadParent } from "./jira-ops";
-import type { Issue } from "@/client/state/store";
+
 
 const base: Issue = {
   key: "A-1",

@@ -1,6 +1,7 @@
+import { type Board, type Issue, type IssueDraft } from "@/shared/issue-model";
 import { useEffect, useRef, useState } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { get, ME, set, type Board, type Issue, type IssueDraft } from "@/client/state/store";
+import { get, ME, set } from "@/client/state/store";
 import { actions } from "@/client/state/issue-actions";
 import { addLocalFiles, restoreLocalFiles } from "@/client/state/local-database";
 import { discardLateMedia, documentHasMedia, lateMediaDiscarded, normalizeDocument, type AdfDocument } from "@/shared/document";

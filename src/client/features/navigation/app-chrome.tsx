@@ -1,3 +1,4 @@
+import { type Board, type Issue } from "@/shared/issue-model";
 import { AppLink, SavedViewLink } from "./app-link";
 import type { Destination } from "./navigation";
 import { defaultPreferences } from "@/shared/view-model";
@@ -11,7 +12,7 @@ import { useMemo, useRef, useState, type MouseEvent, type ReactNode } from "reac
 import { isMyIssues } from "./navigation";
 import { PERSON_TABS, peopleOf } from "@/shared/people";
 import { Icon, TypeDot } from "@/client/components/icons";
-import { get, set, timed, useStore, type Board, type Issue } from "@/client/state/store";
+import { get, set, timed, useStore } from "@/client/state/store";
 import { issueURL } from "@/client/features/issue/issue-urls";
 import { actions, beginCreate } from "@/client/state/issue-actions";
 import { retryLocalStorage } from "@/client/state/app-load";

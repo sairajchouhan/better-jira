@@ -1,7 +1,8 @@
+import { type Issue } from "@/shared/issue-model";
 import { test, expect } from "bun:test";
 import { opsFor, mergeOps } from "@/shared/jira-ops";
 import { rewriteDocuments } from "./jira-media";
-import type { Issue } from "./store";
+
 const issue = {
   key: "KAN-1",
   board: 1,

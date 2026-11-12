@@ -1,3 +1,4 @@
+import { type Board, type Issue } from "@/shared/issue-model";
 /**
  * Reading the server's mirror of Jira. Reads go through TanStack Query, which dedupes loads in flight; the property poll
  * merges Jira's changes into the issues (keeping local edits on top, see local-edits.ts) and runs at once when the
@@ -8,7 +9,7 @@ import { defaultPreferences, parsePreferences } from "@/shared/view-model";
 import { mergeFull, mergeProperties, needsFull } from "./local-edits";
 import { navigate } from "@/client/features/navigation/app-navigation";
 import { showNotification } from "./app-notifications";
-import { get, set, subscribe, type Board, type Issue } from "./store";
+import { get, set, subscribe } from "./store";
 
 /** Server data goes through TanStack Query: it dedupes loads in flight, schedules the poll and refetches on focus. Invalidate a key to refetch it. */
 export const queryClient = new QueryClient({

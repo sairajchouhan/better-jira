@@ -1,14 +1,6 @@
+import { type PropertyActivity } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
-import {
-  GROUP_MS,
-  activityEvents,
-  activityRows,
-  recordActivity,
-  recordRelation,
-  rollbackActivity,
-  visibleActivity,
-  type PropertyActivity,
-} from "./issue-activity";
+import { GROUP_MS, activityEvents, activityRows, recordActivity, recordRelation, rollbackActivity, visibleActivity } from "./issue-activity";
 const me = { id: "me", name: "Me" },
   start = Date.parse("2026-11-08T09:00:00Z");
 let n = 0;

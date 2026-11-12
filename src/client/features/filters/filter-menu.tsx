@@ -1,3 +1,4 @@
+import { type Board } from "@/shared/issue-model";
 import { FloatingTree } from "@floating-ui/react";
 import { Fragment, useState, type ReactNode, type RefObject } from "react";
 import { FilterIcon } from "./filter-icons";
@@ -7,7 +8,7 @@ import { usePristine } from "@/client/components/menu-pristine";
 import { menuFilter } from "@/client/lib/fuzzy-score";
 import { ui } from "@/client/features/navigation/app-navigation";
 import { datePresets, FieldValues, freezeWidth, Path, PresetRow, PropertyFilter, useFieldFilter } from "./property-filter";
-import type { Board } from "@/client/state/store";
+
 import { type Field } from "@/shared/view-model";
 
 /** `divider` draws Linear's separator above the entry; `glyph` is a Linear icon, `icon` ours for Jira-only fields. */

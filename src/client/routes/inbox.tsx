@@ -1,3 +1,4 @@
+import { type Issue } from "@/shared/issue-model";
 /** Linear's Inbox over Jira's in-app notifications. Read state goes to Jira; delete and snooze stay in this browser, because Jira's notification API has neither. */
 import { useEffect, useRef, useState } from "react";
 import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
@@ -16,7 +17,7 @@ import { Menu } from "@/client/components/menu";
 import { MenuSurface } from "@/client/components/menu-surface";
 import { hotkeyOf, runShortcut } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
-import { get, isWatching, useStore, type Issue } from "@/client/state/store";
+import { get, isWatching, useStore } from "@/client/state/store";
 import { preloadOnHover, ui } from "@/client/features/navigation/app-navigation";
 import { useSearch } from "@tanstack/react-router";
 import { toggleFavorite } from "@/client/features/navigation/favorites";

@@ -1,5 +1,6 @@
+import { type Issue } from "@/shared/issue-model";
 import { createContext, use, type ReactNode } from "react";
-import type { Issue } from "@/client/state/store";
+
 import { MenuSurface } from "./menu-surface";
 
 const Target = createContext<Issue | null>(null);

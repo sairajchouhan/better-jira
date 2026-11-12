@@ -1,5 +1,6 @@
+import { type Issue, type User } from "@/shared/issue-model";
 import type { AdfDocument } from "./document";
-import type { Issue, User } from "@/client/state/store";
+
 export type DocumentRevision = { title: string; body: AdfDocument; at: string; author: User };
 export type DocumentProperties = {
   reminder?: { at: string; delivered?: boolean } | null;
@@ -38,7 +39,7 @@ export const validLinkPreview = (value: unknown) =>
     ((value as LinkPreview).icon === undefined ||
       (typeof (value as LinkPreview).icon === "string" &&
         resourceURL((value as LinkPreview).icon!) !== null)));
-export function findIssueDocument(issues: Iterable<import("@/client/state/store").Issue>, id: string) {
+export function findIssueDocument(issues: Iterable<import("./issue-model").Issue>, id: string) {
   for (const issue of issues) {
     const resource = issue.resources?.find((r) => r.kind === "document" && r.id === id);
     if (resource) return { issue, resource };

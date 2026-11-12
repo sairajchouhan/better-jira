@@ -1,7 +1,8 @@
+import { type Issue } from "@/shared/issue-model";
 import { placeURL } from "@/client/features/navigation/app-navigation";
 /** Where an issue opens: in Jira, or in this app for an issue Jira doesn't have yet. */
 import { isLocalIssue } from "@/client/state/local-edits";
-import { get, type Issue } from "@/client/state/store";
+import { get } from "@/client/state/store";
 
 export function jiraIssueURL(key: string) {
   return `${get().site}/browse/${encodeURIComponent(key)}`;

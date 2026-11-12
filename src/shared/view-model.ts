@@ -1,4 +1,5 @@
-import type { Board, Issue, IssueDraft } from "@/client/state/store";
+import { type Board, type Issue, type IssueDraft } from "@/shared/issue-model";
+
 import { personIssues, type PersonTab } from "./people";
 import { statusById } from "./board-catalog";
 

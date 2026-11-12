@@ -1,6 +1,7 @@
+import { type Issue, type IssueDraft } from "@/shared/issue-model";
 import { documentHasMedia, normalizeDocument, type AdfDocument } from "@/shared/document";
 import { adfToText } from "@/client/features/editor/adf";
-import type { Issue, IssueDraft } from "@/client/state/store";
+
 
 export type SubIssueDraft = {
   title: string;

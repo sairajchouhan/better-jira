@@ -1,7 +1,4 @@
-export type ImageCrop = { x: number; y: number; width: number; height: number };
-export type ImageComment = { id: string; text: string; author: string; at: string };
-/** `src` keeps a non-local image's source so its comments still show it after the image leaves the document, as in Linear. */
-export type MediaEdit = { crop?: ImageCrop; comments?: ImageComment[]; src?: string };
+import type { ImageCrop, ImageComment, MediaEdit } from "@/shared/issue-model";
 /** Image comments with a Jira id are real Jira comments, so `comments` already counts them. */
 export const jiraCommentId = (id: string) => /^\d+$/.test(id);
 export function commentCount(issue: {

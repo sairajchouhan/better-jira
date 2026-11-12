@@ -1,3 +1,4 @@
+import { type Issue, type User } from "@/shared/issue-model";
 /* oxlint-disable react/immutability -- Session callbacks and mutable imperative models are intentionally owned outside React state. */
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 /* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
@@ -10,7 +11,7 @@ import { StatusIcon } from "@/client/components/icons";
 import { CaretPeek, groupStep } from "./caret-peek";
 import { IssuePeek } from "@/client/features/issue/issue-peek";
 import type { Keys } from "@/client/components/keycap";
-import { get, statusOf, type Issue, type User } from "@/client/state/store";
+import { get, statusOf } from "@/client/state/store";
 import { queryClient } from "@/client/state/server-data";
 
 const peopleKey = (query: string, issue?: string) => [

@@ -1,3 +1,4 @@
+import { type Board, type Issue } from "@/shared/issue-model";
 import { describe, expect, test } from "bun:test";
 import {
   boardCells,
@@ -21,7 +22,7 @@ import {
   type FilterGroup,
   type Rule,
 } from "./view-model";
-import type { Board, Issue } from "@/client/state/store";
+
 
 const board: Board = {
   id: 1,

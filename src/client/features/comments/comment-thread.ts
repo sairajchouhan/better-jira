@@ -1,12 +1,5 @@
+import type { CommentState } from "@/shared/issue-model";
 import type { AdfDocument, AdfNode } from "@/shared/document";
-export type CommentState = {
-  resolved?: boolean;
-  subscribed?: boolean;
-  reactions?: string[];
-  body?: AdfDocument;
-  updated?: string;
-  deleted?: boolean;
-};
 export type IssueComment = {
   id: string;
   parentId?: string;

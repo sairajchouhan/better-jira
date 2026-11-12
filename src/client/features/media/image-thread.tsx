@@ -1,7 +1,8 @@
+import { type ImageComment } from "@/shared/issue-model";
 import { useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { createPortal } from "react-dom";
 import { useHotkey, useHotkeys } from "@tanstack/react-hotkeys";
-import type { ImageComment } from "./media-edits";
+
 import { ActionMenu } from "@/client/components/action-menu";
 import { ConfirmDialog } from "@/client/components/dialog";
 import { Button, IconButton, SendButton } from "@/client/components/button";

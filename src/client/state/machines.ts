@@ -1,3 +1,4 @@
+import { type IssueDraft } from "@/shared/issue-model";
 /**
  * Every state machine in better-jira lives in this file, so you can read which event leads where.
  * Each one can be pasted into https://stately.ai/viz to see it as a diagram.
@@ -17,7 +18,7 @@
  */
 import { assign, enqueueActions, fromPromise, setup, type InspectionEvent } from "xstate";
 import type { AdfDocument } from "@/shared/document";
-import type { IssueDraft, Overlay, View } from "./store";
+import type { Overlay, View } from "./store";
 
 export type Toolbar = "display" | "filter" | "add-filter" | "advanced";
 /** The screen state; store.ts copies it onto `get()` so components keep reading it with `useStore`. */

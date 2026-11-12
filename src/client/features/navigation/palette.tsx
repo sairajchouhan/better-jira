@@ -1,3 +1,4 @@
+import { type Issue } from "@/shared/issue-model";
 import {
   useActiveView,
   useOverlayFilters,
@@ -14,7 +15,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { navigationChoices, type NavigationChoice } from "./quick-navigation";
 import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { Icon, StatusIcon, TypeDot } from "@/client/components/icons";
-import { get, set, timed, useStore, type Issue, statusOf, ME } from "@/client/state/store";
+import { get, set, timed, useStore, statusOf, ME } from "@/client/state/store";
 import { currentKey } from "@/client/state/jira-sync";
 import { navigate, openSavedView, preloadOnHover, ui } from "./app-navigation";
 import { toggleFavorite } from "./favorites";

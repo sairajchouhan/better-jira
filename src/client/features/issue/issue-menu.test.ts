@@ -1,6 +1,7 @@
+import { type Issue } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
 import type { ActionEntry } from "@/client/components/action-menu";
-import { get, set, type Issue } from "@/client/state/store";
+import { get, set } from "@/client/state/store";
 import { navigate, ui } from "@/client/features/navigation/app-navigation";
 import { handle } from "@/client/features/navigation/commands";
 

@@ -1,3 +1,4 @@
+import { type Issue, type Status } from "@/shared/issue-model";
 import { showNotification, INBOX_NOTIFICATION_ID } from "./app-notifications";
 import { toasts } from "@/client/components/toast-queue";
 /** Inbox state, ordered writes and undo. Each instance owns its caches and queues; IO enters through ports. */
@@ -21,7 +22,7 @@ import {
   type InboxView,
   type Local,
 } from "@/shared/inbox-model";
-import type { Issue, Status } from "./store";
+
 export type Feed = InboxFeed & { writable: boolean };
 export type Category = "all" | "direct" | "watching";
 export type InboxPorts = {

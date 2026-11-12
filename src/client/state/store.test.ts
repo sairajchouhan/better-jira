@@ -1,7 +1,8 @@
+import { type Board } from "@/shared/issue-model";
 import { latestNotification, NOTIFICATION_ID } from "./app-notifications";
 import { toasts } from "@/client/components/toast-queue";
 import { expect, test } from "bun:test";
-import type { Board } from "./store";
+
 import { IDBFactory } from "fake-indexeddb";
 
 const storage = new Map<string, string>();

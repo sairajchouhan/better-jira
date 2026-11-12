@@ -1,3 +1,4 @@
+import { type Issue, type Board, type User } from "@/shared/issue-model";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Avatar } from "@/client/components/avatar";
 import { statuses } from "@/shared/board-catalog";
@@ -10,7 +11,7 @@ import { Button } from "@/client/components/button";
 import { TextInput } from "@/client/components/field";
 import { Text } from "@/client/components/text";
 import { setRule, updateRule, useViewSettings } from "@/client/features/views/view-settings";
-import { ME, timed, useStore, type Issue, type Board, type User } from "@/client/state/store";
+import { ME, timed, useStore } from "@/client/state/store";
 import { ui } from "@/client/features/navigation/app-navigation";
 import {
   isDate,

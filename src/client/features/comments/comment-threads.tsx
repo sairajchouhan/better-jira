@@ -1,3 +1,4 @@
+import { type Issue } from "@/shared/issue-model";
 import { pageURL } from "@/client/features/navigation/app-navigation";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
@@ -14,7 +15,7 @@ import { Text } from "@/client/components/text";
 import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { ReactionPicker, ReactionPill } from "./reactions";
 import { FramedEditor, CommentComposer } from "@/client/features/editor/rich-editor-loader";
-import { ME, get, set, type Issue } from "@/client/state/store";
+import { ME, get, set } from "@/client/state/store";
 import { actions, addIssueFiles, beginCreate } from "@/client/state/issue-actions";
 import { currentKey } from "@/client/state/jira-sync";
 import { addLocalFiles } from "@/client/state/local-database";

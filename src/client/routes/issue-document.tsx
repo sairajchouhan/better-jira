@@ -1,3 +1,4 @@
+import { type Issue, type User } from "@/shared/issue-model";
 import { AppLink } from "@/client/features/navigation/app-link";
 /* oxlint-disable react/immutability -- Session callbacks and mutable imperative models are intentionally owned outside React state. */
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
@@ -18,7 +19,7 @@ import { Adf } from "@/client/features/editor/adf";
 import { statusById } from "@/shared/board-catalog";
 import { adfToMarkdown } from "@/client/features/issue/issue-copy";
 import { normalizeDocument, type AdfDocument } from "@/shared/document";
-import { get, ME, set, useStore, usePeople, type Issue, type User } from "@/client/state/store";
+import { get, ME, set, useStore, usePeople } from "@/client/state/store";
 import { firstKey } from "@/client/state/jira-sync";
 import { actions, addIssueFiles } from "@/client/state/issue-actions";
 import { flushLocalChanges } from "@/client/state/local-database";

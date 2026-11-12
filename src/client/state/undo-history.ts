@@ -1,3 +1,4 @@
+import { type Issue } from "@/shared/issue-model";
 /**
  * Undo history: this tab's local edits as undoable steps, kept across a reload (R2-inbox-D3) but never shared with
  * another tab, as Linear's per-client history is. `record` makes one step of whatever `fn` changes; undo and redo send
@@ -6,7 +7,7 @@
  */
 import { NOTIFICATION_ID, latestNotification } from "./app-notifications";
 import { navigate, ui } from "@/client/features/navigation/app-navigation";
-import type { Issue } from "./store";
+
 import type { LocalEdit, LocalState, Snapshot } from "./local-data";
 import {
   countEdit,

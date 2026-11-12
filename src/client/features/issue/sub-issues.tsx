@@ -1,3 +1,4 @@
+import { type Issue } from "@/shared/issue-model";
 import { Text } from "@/client/components/text";
 import { SubIssueProgressButton } from "@/client/components/sub-issue-progress-button";
 import "./issue-header.css";
@@ -32,7 +33,7 @@ import {
 import { issueMenuEntries } from "./issue-menu";
 import { InlineEditor } from "@/client/features/editor/rich-editor-loader";
 import { useCommand } from "@/client/features/navigation/commands";
-import { get, useStore, type Issue } from "@/client/state/store";
+import { get, useStore } from "@/client/state/store";
 import { actions } from "@/client/state/issue-actions";
 import { navigate, ui } from "@/client/features/navigation/app-navigation";
 import { AppLink } from "@/client/features/navigation/app-link";

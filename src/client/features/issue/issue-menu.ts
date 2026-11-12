@@ -1,5 +1,6 @@
+import { type Issue, type IssueDraft } from "@/shared/issue-model";
 import { createElement } from "react";
-import { get, boardOf, ME, type Issue, type IssueDraft } from "@/client/state/store";
+import { get, boardOf, ME } from "@/client/state/store";
 import { actions, beginCreate } from "@/client/state/issue-actions";
 import { isLocalIssue, hasLocalJiraChanges } from "@/client/state/local-edits";
 import { ui } from "@/client/features/navigation/app-navigation";

@@ -1,5 +1,6 @@
+import { type Issue } from "@/shared/issue-model";
 import { resourceMediaIds } from "@/shared/issue-resource";
-import type { Issue } from "@/client/state/store";
+
 
 type Attachments = NonNullable<Issue["attachments"]>;
 type Fields = { description?: unknown; comment?: { comments?: { body?: unknown }[] } };

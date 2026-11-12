@@ -1,6 +1,7 @@
+import { type Full, type Issue, type CommentState } from "@/shared/issue-model";
 import { adfToText, textToAdf, type AdfDocument } from "./document";
-import type { Full, Issue } from "@/client/state/store";
-import type { CommentState, IssueComment } from "@/client/features/comments/comment-thread";
+
+import type { IssueComment } from "@/client/features/comments/comment-thread";
 
 /** `labels` sets the whole list (create); `labelEdits` adds and removes single labels so others' labels survive. */
 type Fields = {

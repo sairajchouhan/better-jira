@@ -1,3 +1,4 @@
+import { type Board, type Issue, type User } from "@/shared/issue-model";
 import { lazy, Suspense, use, useEffect, useState } from "react";
 import { Avatar } from "@/client/components/avatar";
 import { Icon, PriorityIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
@@ -8,7 +9,7 @@ import {
   milestoneChoices,
   statuses,
 } from "@/shared/board-catalog";
-import { useStore, useAssignableUsers, type Board, type Issue, type User } from "@/client/state/store";
+import { useStore, useAssignableUsers } from "@/client/state/store";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { Button } from "@/client/components/button";
 import { LoadingState } from "@/client/components/empty-state";

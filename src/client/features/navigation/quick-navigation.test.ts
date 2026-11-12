@@ -1,7 +1,8 @@
+import { type Board, type Issue } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
 import { navigationChoices } from "./quick-navigation";
 import { defaultPreferences } from "@/shared/view-model";
-import type { Board, Issue } from "@/client/state/store";
+
 import type { SavedView } from "@/shared/saved-view-model";
 
 const board: Board = { id: 1, name: "Team", columns: [] };

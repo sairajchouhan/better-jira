@@ -1,6 +1,7 @@
+import { type Board, type Issue, type User, type JiraOptions } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
 import { assignableUsers, knownLabels, statusById, statuses } from "./board-catalog";
-import type { Board, Issue, User } from "@/client/state/store";
+
 
 const board: Board = {
   id: 1,
@@ -35,7 +36,7 @@ test("known labels: the issues' labels first, then Jira's, each once", () => {
 });
 
 import { knownPeople, priorityChoices, projectChoices, milestoneChoices } from "./board-catalog";
-import type { JiraOptions } from "@/client/state/store";
+
 const options: JiraOptions = {
   users: [],
   labels: [],

@@ -1,3 +1,4 @@
+import { type Board, type Issue, type IssueDraft, type JiraOptions, type User } from "@/shared/issue-model";
 import { EmptyState } from "@/client/components/empty-state";
 import { resourceURL } from "@/shared/issue-resource";
 import { useStoredState, writeStored } from "@/client/state/stored-state";
@@ -44,7 +45,7 @@ import {
   MilestoneMenu,
   DueMenu,
 } from "./property-menu";
-import { usePeople, get, set, useStore, type Board, type Issue, type IssueDraft, type JiraOptions, type User } from "@/client/state/store";
+import { usePeople, get, set, useStore } from "@/client/state/store";
 import { actions, beginCreate } from "@/client/state/issue-actions";
 import { addBoard } from "@/client/state/server-data";
 import { addLocalFiles } from "@/client/state/local-database";

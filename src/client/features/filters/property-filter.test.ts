@@ -1,6 +1,7 @@
+import { type Board, type Issue } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
 import { filterChoices } from "./property-filter";
-import type { Board, Issue } from "@/client/state/store";
+
 
 const board: Board = { id: 1, name: "Board", columns: [] };
 const issue = (key: string, priority: string): Issue => ({

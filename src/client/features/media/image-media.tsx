@@ -1,3 +1,4 @@
+import { type ImageCrop } from "@/shared/issue-model";
 import { IconButton } from "@/client/components/button";
 import { notifyMedia } from "./media-toast";
 import { LoadingState } from "@/client/components/empty-state";
@@ -10,7 +11,7 @@ import { Icon } from "@/client/components/icons";
 import { ME, useStore } from "@/client/state/store";
 import { actions, saveCrop } from "@/client/state/issue-actions";
 import { ImageThread, type ImageThreadDraft } from "./image-thread";
-import type { ImageCrop } from "./media-edits";
+
 const Viewer = lazy(() =>
   import("./image-viewer").then((module) => ({ default: module.ImageViewer })),
 );

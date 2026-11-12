@@ -1,3 +1,4 @@
+import { type Issue } from "@/shared/issue-model";
 import { NOTIFICATION_ID } from "@/client/state/app-notifications";
 import { toasts } from "@/client/components/toast-queue";
 import { useSyncExternalStore } from "react";
@@ -17,7 +18,7 @@ import { Icon } from "@/client/components/icons";
 import { Menu } from "@/client/components/menu";
 import { MenuSurface } from "@/client/components/menu-surface";
 import { CommandMenu, CommandTarget, useCommandTarget } from "@/client/components/command-menu";
-import { set, useStore, type Issue } from "@/client/state/store";
+import { set, useStore } from "@/client/state/store";
 import { actions } from "@/client/state/issue-actions";
 import { ui } from "@/client/features/navigation/app-navigation";
 import { kept, useCommand } from "@/client/features/navigation/commands";

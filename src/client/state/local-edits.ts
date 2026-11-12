@@ -1,3 +1,4 @@
+import { type CommentState, type Full, type Issue } from "@/shared/issue-model";
 /**
  * Issue state and optimistic edits: what the store shows is Jira's copy with this browser's edits on top.
  *
@@ -7,7 +8,7 @@
  * data. Callers never see the ledger: they ask questions (`isLocalIssue`, `hasLocalJiraChanges`) or say what happened.
  */
 import { adfToText } from "@/client/features/editor/adf";
-import { visibleCommentTotal, type CommentState } from "@/client/features/comments/comment-thread";
+import { visibleCommentTotal } from "@/client/features/comments/comment-thread";
 import { normalizeDocument } from "@/shared/document";
 import { rollbackActivity, recordActivity } from "@/client/features/issue/issue-activity";
 import { aliasAttachments, uploadedAttachments } from "./jira-media";
@@ -15,7 +16,7 @@ import { JIRA_ISSUE_FIELDS, namesKey, renameIds } from "@/shared/jira-ops";
 import type { LocalChange, Snapshot } from "./local-data";
 import type { WriteResult } from "./outbox";
 import { navigate } from "@/client/features/navigation/app-navigation";
-import { get, ME, set, type Full, type Issue } from "./store";
+import { get, ME, set } from "./store";
 import { creatingIssue, hasPendingWrite, holdsCommentDelete, holdsCommentDeletes, touch, writeTab } from "./jira-sync";
 import { queueSave } from "./local-database";
 

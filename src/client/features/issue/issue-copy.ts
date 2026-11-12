@@ -1,4 +1,5 @@
-import { ME, get, set, statusOf, type Full, type Issue } from "@/client/state/store";
+import { type Full, type Issue } from "@/shared/issue-model";
+import { ME, get, set, statusOf } from "@/client/state/store";
 import { issueURL } from "./issue-urls";
 import { loadFull } from "@/client/state/server-data";
 import { isLocalIssue } from "@/client/state/local-edits";

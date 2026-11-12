@@ -1,18 +1,11 @@
-import type { ImageComment, MediaEdit } from "@/client/features/media/media-edits";
+import { activityFields } from "@/shared/issue-model";
+import type { ActivityField, PropertyActivity } from "@/shared/issue-model";
+import { type ImageComment, type MediaEdit } from "@/shared/issue-model";
+
 import type { IssueResource } from "@/shared/issue-resource";
 /** Local property history, kept the way Linear keeps an actor's edits (observed on RAJ-52, 2026-11-07/08):
  * an edit joins the actor's latest group while that group was last edited under GROUP_MS ago, and the group keeps its first time;
  * a field already in the group is updated, and hidden (but kept) when it returns to its value before the group. */
-export const activityFields = [
-  "status",
-  "priority",
-  "assignee",
-  "labels",
-  "due",
-  "parent",
-  "type",
-] as const;
-export type ActivityField = (typeof activityFields)[number] | "relation";
 export type Relation = { key: string; kind: string };
 /** The other issue's role, as Linear's Issue options › Remove names it (RAJ-52): a blocked-by relation lists the "Blocking issue". */
 export const RELATION_ISSUE: Record<string, string> = {
@@ -21,16 +14,6 @@ export const RELATION_ISSUE: Record<string, string> = {
   related: "related",
   duplicate: "duplicated",
   duplicated: "duplicate",
-};
-/** `at` is the group's time; `updated` is when the group was last edited. */
-export type PropertyActivity = {
-  id: string;
-  field: ActivityField;
-  before: unknown;
-  after: unknown;
-  actor: { id: string; name: string };
-  at: string;
-  updated?: string;
 };
 // RAJ-52: edits 30.5 min, 5 min and about 60 min after the group's last edit joined it; one 62.7 min after started a new group.
 // ponytail: the cut-off is in [60, 62.7] min; 60 is the round number inside it.

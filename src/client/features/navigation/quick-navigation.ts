@@ -1,6 +1,7 @@
+import { type Board, type Issue } from "@/shared/issue-model";
 import { findIssueDocument } from "@/shared/issue-resource";
 import type { SavedView } from "@/shared/saved-view-model";
-import type { Board, Issue } from "@/client/state/store";
+
 import type { Scope } from "@/shared/view-model";
 
 export type NavigationChoice = {
