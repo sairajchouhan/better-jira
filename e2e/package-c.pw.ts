@@ -72,3 +72,18 @@ test("BJ-29: save, list, finish and delete composer drafts", async ({ open }) =>
   await page.click('[aria-label="Delete draft Saved parent"]');
   expect(await page.eval(`document.querySelector('[role=dialog][aria-label="Saved drafts"]').textContent`)).toContain("No saved drafts");
 });
+
+test("BJ-30: closing a filled composer offers save, cancel and discard", async ({ open }) => {
+  const page = await open();
+  await page.key("c");
+  await page.type("Discard me");
+  await page.key("Escape");
+  await page.waitFor(`!!document.querySelector('[role=dialog][aria-label="Save to drafts?"]')`);
+  await page.click('text=Cancel');
+  expect(await page.eval(`document.querySelector('[aria-label="Issue title"]').value`)).toBe("Discard me");
+  await page.key("Escape");
+  await page.click('text=Discard');
+  await page.waitFor(`!document.querySelector('[role=dialog][aria-label="Save to drafts?"]')`);
+  await page.key("c");
+  expect(await page.waitFor<string>(`document.querySelector('[aria-label="Issue title"]')?.value === ""`)).toBe(true);
+});

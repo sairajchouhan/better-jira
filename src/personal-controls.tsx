@@ -117,6 +117,7 @@ export function CreateIssue() {
   const [saved, setSaved] = useStoredState<SavedComposerDraft[]>(`better-jira:composer-drafts:v1:${account}`, parseComposerDrafts, [], "Could not save drafts locally");
   const [savedId, setSavedId] = useState<string | null>(null);
   const [draftsOpen, setDraftsOpen] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
 
   const titleRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -158,7 +159,7 @@ export function CreateIssue() {
       : (types[0] ?? "Task");
   const closeNow = () => ui.send({ type: "overlay.close" });
   const hasContent = !!title.trim() || !!adfToText(description).trim() || !!attachments?.length;
-  const close = closeNow;
+  const close = () => hasContent && !initial.copy ? setConfirmClose(true) : closeNow();
   const saveDraft = () => {
     const id = savedId ?? crypto.randomUUID();
     setSaved([...saved.filter(d => d.id !== id), { id, title, fields: { ...draft, board: board.id, type, title, descriptionDoc: description, attachments, labels: labels.split(",").map(l => l.trim()).filter(Boolean) } }]);
@@ -216,6 +217,13 @@ export function CreateIssue() {
       <Button onClick={() => { setDraft(item.fields); setTitle(item.title); setDescription(normalizeDocument(item.fields.descriptionDoc)); setAttachments(item.fields.attachments ?? []); setLabels(item.fields.labels?.join(", ") ?? ""); setSavedId(item.id); setDraftIndex(n => n + 1); setDraftsOpen(false); }}>Finish {item.title || "Untitled issue"}</Button>
       <IconButton label={`Delete draft ${item.title || "Untitled issue"}`} onClick={() => setSaved(saved.filter(d => d.id !== item.id))}><Icon name="trash" /></IconButton>
     </div>) : <Text variant="mini">No saved drafts</Text>}
+  </Dialog>;
+  if (confirmClose) return <Dialog label="Save to drafts?" close={() => setConfirmClose(false)} width={360}>
+    <Dialog.Title>Save to drafts?</Dialog.Title><Dialog.Description>You can finish this issue later from your drafts.</Dialog.Description>
+    <Dialog.Footer>
+      <Button variant="dangerous" onClick={() => { if (savedId) setSaved(saved.filter(d => d.id !== savedId)); unsent.title = ""; unsent.description = normalizeDocument(""); closeNow(); }}>Discard</Button>
+      <Button onClick={() => setConfirmClose(false)}>Cancel</Button><Button variant="primary" onClick={saveDraft} disabled={filesBusy}>Save</Button>
+    </Dialog.Footer>
   </Dialog>;
   return (
     <Dialog
