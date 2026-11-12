@@ -67,7 +67,10 @@ const matchIssues = (issues: Map<string, Issue>, q: string) => {
     .map(([, i]) => i);
 };
 
-/** The palette dialog both search and ⌘K use: the input (with the scoped issue's chip), then the result groups. */
+/** The palette dialog both search and ⌘K use: the input (with the scoped issue's chip), then the result groups.
+ *  Not menu.tsx on purpose: Linear's ⌘K CommandMenu renders through its own large-menu compound
+ *  (`WK = {List, Item, Title, GroupHeader, Divider, TextDivider, Input, Peek}` in startup-root.CnUSfl4j.js), while IB
+ *  (menu.tsx) serves only its small and contextual command menus. */
 function PaletteFrame({
   label,
   q,
