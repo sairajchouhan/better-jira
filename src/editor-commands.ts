@@ -91,6 +91,17 @@ export const insertLink =
     return true;
   };
 
+/** A URL pasted over selected text links that text instead of replacing it, like Linear. Only a lone http, https or mailto address counts. */
+export const pasteLink =
+  (text: string): Command =>
+  (state, dispatch, view) => {
+    const url = text.trim(),
+      href = /^(?:https?:\/\/|mailto:)\S+$/i.test(url) ? safeLink(url) : null;
+    if (!href || !(state.selection instanceof TextSelection) || state.selection.empty || inCode(state))
+      return false;
+    return insertLink(href)(state, dispatch, view);
+  };
+
 /** A typed link target: a bare domain gets https://, like Linear; anything else must be an http, https or mailto link. */
 export const linkTarget = (input: string) => {
   const text = input.trim();

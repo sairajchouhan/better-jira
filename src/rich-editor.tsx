@@ -41,6 +41,7 @@ import {
   linkRanges,
   linkTarget,
   markdownRules,
+  pasteLink,
   removeLink,
   setBlock,
   shiftTab,
@@ -222,8 +223,12 @@ export function RichEditor(props: EditorEngineProps) {
         id: props.id ?? "",
         class: "rich-content",
       },
-      handlePaste(_editor, event) {
+      handlePaste(editor, event) {
         const files = [...(event.clipboardData?.files ?? [])];
+        if (!files.length && pasteLink(event.clipboardData?.getData("text/plain") ?? "")(editor.state, editor.dispatch)) {
+          event.preventDefault();
+          return true;
+        }
         if (!files.length || !latest.current.onFiles) return false;
         event.preventDefault();
         uploads.enqueue(files);

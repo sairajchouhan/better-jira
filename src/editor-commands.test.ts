@@ -10,6 +10,7 @@ import {
   insertTable,
   linkTarget,
   markdownRules,
+  pasteLink,
   removeLink,
   setBlock,
   shiftTab,
@@ -459,4 +460,25 @@ test("BJ-66: `|--` starts a table, taking a Markdown header row typed just above
   expect(t.child(1).childCount).toBe(3);
   expect(t.child(1).firstChild!.textContent).toBe("a");
   expect(jiraErrors(fromEditorDocument(after.doc))).toEqual([]);
+});
+
+test("BJ-44: a URL pasted over selected text links the text; anything else pastes as usual", () => {
+  const doc = n.doc!.create(null, [p("see the docs here"), code("x")]);
+  const select = (from: number, to: number) =>
+    EditorState.create({ doc, selection: TextSelection.create(doc, from, to) });
+  const run = (state: EditorState, text: string) => {
+    let next: EditorState | null = null;
+    const handled = pasteLink(text)(state, (tr) => (next = state.apply(tr)));
+    return { handled, next: next as EditorState | null };
+  };
+  const linked = run(select(9, 13), " https://example.test/docs ");
+  expect(linked.handled).toBe(true);
+  const docs = linked.next!.doc.firstChild!.child(1);
+  expect(docs.text).toBe("docs");
+  expect(docs.marks[0]?.attrs.href).toBe("https://example.test/docs");
+  expect(run(select(9, 9), "https://example.test").handled).toBe(false);
+  expect(run(select(9, 13), "not a url").handled).toBe(false);
+  expect(run(select(9, 13), "https://a.test and more").handled).toBe(false);
+  expect(run(select(9, 13), "javascript:alert(1)").handled).toBe(false);
+  expect(run(select(20, 21), "https://example.test").handled).toBe(false);
 });
