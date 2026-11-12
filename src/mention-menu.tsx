@@ -7,6 +7,7 @@ import { Avatar } from "./avatar";
 import { Menu, MENU } from "./menu";
 import { MENU_POPUP, usePlacement } from "./menu-surface";
 import { StatusIcon } from "./icons";
+import type { Keys } from "./keycap";
 import { get, statusOf, type Issue, type User } from "./store";
 import { queryClient } from "./server-data";
 
@@ -52,7 +53,7 @@ export type CaretAnchor = {
   keys: { current: ((event: KeyboardEvent) => boolean) | null };
   dismiss: () => void;
 };
-export type CaretMenuItem = { id: string; label: ReactNode; icon?: ReactNode; pick: () => void };
+export type CaretMenuItem = { id: string; label: ReactNode; icon?: ReactNode; shortcut?: Keys; pick: () => void };
 
 /** Linear's caret menu (@ people and issues, / blocks, : emoji) under the caret. Focus stays in the editor, which forwards
  * its keys through `keys`. With no items it shows `empty`, or steps aside when `empty` is null. */
@@ -65,7 +66,8 @@ export function CaretMenu({
   editor,
   keys,
   dismiss,
-}: CaretAnchor & { label: string; query: string; items: CaretMenuItem[]; empty: string | null }) {
+  width = 260,
+}: CaretAnchor & { label: string; query: string; items: CaretMenuItem[]; empty: string | null; width?: number }) {
   const [active, setActive] = useState(0);
   // A new query resets keyboard selection.
   const [activeQuery, setActiveQuery] = useState(query);
@@ -105,7 +107,7 @@ export function CaretMenu({
       const caret = at(),
         below = innerHeight - caret.bottom - 8 >= height;
       return {
-        left: Math.max(8, Math.min(caret.left, innerWidth - 268)),
+        left: Math.max(8, Math.min(caret.left, innerWidth - width - 8)),
         top: below ? caret.bottom + 4 : Math.max(8, caret.top - 4 - height),
         maxHeight: height,
       };
@@ -124,14 +126,14 @@ export function CaretMenu({
         const i = items.findIndex((item) => item.id === id);
         if (i >= 0) setActive(i);
       }}
-      className={`${MENU_POPUP} fixed z-50 w-[260px]`}
-      style={style}
+      className={`${MENU_POPUP} fixed z-50`}
+      style={{ ...style, width }}
       onMouseDown={(event) => event.preventDefault()}
     >
       <Menu.List>
         {!items.length && <Menu.Empty always>{empty}</Menu.Empty>}
         {items.map((item) => (
-          <Menu.Item key={item.id} value={item.id} icon={item.icon} onSelect={item.pick}>
+          <Menu.Item key={item.id} value={item.id} icon={item.icon} shortcut={item.shortcut} onSelect={item.pick}>
             {item.label}
           </Menu.Item>
         ))}

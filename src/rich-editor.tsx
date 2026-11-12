@@ -21,8 +21,11 @@ import {
 } from "./mentions";
 import { CaretMenu, MentionMenu, searchPeople } from "./mention-menu";
 import { activeEmoji, dismissEmoji, emojiPlugin, emojiRules, insertEmoji, matchingEmoji } from "./emoji";
-import { activeSlash, dismissSlash, matchingSlashCommands, slashPlugin, SLASH_COMMANDS } from "./slash-commands";
-import { ActionMenu, type ActionEntry } from "./action-menu";
+import { activeSlash, dismissSlash, matchingSlashCommands, slashPlugin } from "./slash-commands";
+import { setList, taskBackspace, taskEnter, taskItemView, toggleTask } from "./editor-checklist";
+import { blockRules, dividerKey, headingBackspace, insertDivider, lineBreak, slashTipPlugin } from "./editor-blocks";
+import { EditorIcon, type EditorGlyph } from "./editor-icons";
+import { ActionMenu } from "./action-menu";
 import { get } from "./store";
 import { navigate } from "./app-navigation";
 import { jiraIssueURL } from "./issue-urls";
@@ -46,21 +49,12 @@ import { baseKeymap, chainCommands, toggleMark } from "prosemirror-commands";
 import { keymap } from "prosemirror-keymap";
 import { history, redo, undo } from "prosemirror-history";
 import { splitListItem } from "prosemirror-schema-list";
-import {
-  addColumnAfter,
-  addRowAfter,
-  deleteTable,
-  isInTable,
-  tableEditing,
-} from "prosemirror-tables";
+import { tableEditing } from "prosemirror-tables";
 import {
   codeDown,
   codeEnter,
-  deleteBlock,
-  duplicateBlock,
   floatingPlacement,
   insertLink,
-  insertTable,
   issueFromText,
   referenceSelection,
   linkHref,
@@ -76,7 +70,6 @@ import {
   shiftTabInside,
   tabInside,
   tab,
-  toggleList,
   toggleQuote,
 } from "./editor-commands";
 import {
@@ -126,6 +119,60 @@ const caretMenus = [
 /** One look for every formatting and link control: Linear's borderless small Button, pressed while its mark or block is on. */
 const ToolbarButton = (props: ComponentProps<typeof Button>) => <Button variant="borderless" size="small" {...props} />;
 
+type DropdownOption = { id: string; name: string; icon?: EditorGlyph; run: () => void };
+/** Linear's toolbar dropdown (AAe), for text styles and lists alike: the current option (its icon or its name) over a chevron,
+ * opening a menu of the options with their keys, the current one checked. */
+function ToolbarDropdown({
+  label,
+  options,
+  current,
+  show,
+  disabled,
+}: {
+  label: string;
+  options: DropdownOption[];
+  current?: string;
+  show: "icon" | "name";
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false),
+    button = useRef<HTMLButtonElement>(null),
+    shown = options.find((o) => o.id === current) ?? options[0]!;
+  return (
+    <>
+      <ToolbarButton
+        ref={button}
+        aria-label={label}
+        tooltip={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen(!open)}
+      >
+        {show === "icon" && shown.icon ? <EditorIcon name={shown.icon} /> : shown.name}
+        <span aria-hidden className="grid rotate-90 place-items-center">
+          <Icon name="chevron" size={12} />
+        </span>
+      </ToolbarButton>
+      {open && (
+        <ActionMenu
+          label={label}
+          anchor={button.current}
+          highlight
+          close={() => setOpen(false)}
+          entries={options.map((option) => ({
+            name: option.name,
+            selected: option.id === current,
+            shortcut: editorKey(option.id),
+            image: option.icon && <EditorIcon name={option.icon} />,
+            run: option.run,
+          }))}
+        />
+      )}
+    </>
+  );
+}
+
 export type EditorPresentation = "framed" | "inline" | "document" | "comment";
 export type EditorEngineProps = RichEditorProps & {
   presentation: EditorPresentation;
@@ -161,11 +208,6 @@ export function RichEditor(props: EditorEngineProps) {
       ).values(),
     ],
   });
-  // The block controls (⌥F10) and the block menu (⇧F10), Linear's handle beside the caret's block.
-  const blockHandle = useRef<HTMLButtonElement>(null),
-    frame = useRef<HTMLDivElement>(null),
-    [blockMenu, setBlockMenu] = useState(false),
-    [handleFocused, setHandleFocused] = useState(false);
   const [, refresh] = useState(0),
     [linkOpen, setLinkOpen] = useState(false),
     [url, setURL] = useState("");
@@ -221,16 +263,24 @@ export function RichEditor(props: EditorEngineProps) {
           mediaCaretPlugin(),
           uploads.plugin,
           markdownRules,
+          blockRules,
+          ...(latest.current.presentation === "document" ? [slashTipPlugin] : []),
           emojiRules,
           issueReferenceRules((key) => (get().issues.has(key) ? jiraIssueURL(key) : null)),
           history(),
           keymap({
             Enter: chainCommands(
               codeEnter,
+              dividerKey(true),
+              taskEnter,
               splitListItem(richSchema.nodes.listItem!),
               baseKeymap.Enter!,
             ),
-            ArrowDown: codeDown,
+            "Shift-Enter": lineBreak,
+            // With no Save here (the description), ⌘↵ reaches the editor: it ticks a checklist item.
+            "Mod-Enter": toggleTask,
+            Backspace: chainCommands(taskBackspace, headingBackspace),
+            ArrowDown: chainCommands(codeDown, dividerKey(false)),
             Tab: (...args) => (latest.current.tabLeaves ? tabInside(...args) : tab(...args)),
             "Shift-Tab": (...args) =>
               latest.current.tabLeaves ? shiftTabInside(...args) : shiftTab(...args),
@@ -241,6 +291,7 @@ export function RichEditor(props: EditorEngineProps) {
       }),
       nodeViews: {
         expand: expandNodeView,
+        taskItem: taskItemView,
         ...Object.fromEntries(
         ["mediaSingle", "mediaGroup", "media", "mediaInline"].map((type) => [
           type,
@@ -410,7 +461,7 @@ export function RichEditor(props: EditorEngineProps) {
   };
   const changeBlock = (type: string, attributes: Record<string, unknown> = {}) =>
     run(setBlock(type, attributes));
-  const list = (name: "bulletList" | "orderedList") => run(toggleList(name));
+  const list = (name: "bulletList" | "orderedList" | "taskList") => run(setList(name));
   useHotkey(
     "Escape",
     (event) => {
@@ -451,16 +502,21 @@ export function RichEditor(props: EditorEngineProps) {
           const level = Number(id.split("-")[1]);
           changeBlock(level ? "heading" : "paragraph", level ? { level } : {});
         } else if (id === "quote") run(toggleQuote);
-        else if (id === "bullet" || id === "ordered")
-          list(id === "bullet" ? "bulletList" : "orderedList");
+        else if (id === "bullet" || id === "ordered" || id === "checklist")
+          list(id === "bullet" ? "bulletList" : id === "ordered" ? "orderedList" : "taskList");
         else if (id === "code-block") changeBlock("codeBlock");
         else if (id === "expand") run(toggleExpand);
-        else if (id === "block-menu") setBlockMenu(true);
-        else if (id === "block-controls") blockHandle.current?.focus();
-        else if (id === "move-up" || id === "move-down") run(moveBlock(id === "move-up" ? -1 : 1));
+        else if (id === "divider") run(insertDivider);
+        else if (id === "issue-from-selection") {
+          if (subject === "description" && selectedText.trim()) createFromSelection();
+        } else if (id === "move-up" || id === "move-down") run(moveBlock(id === "move-up" ? -1 : 1));
         else if (id === "undo") run(undo);
         else if (id === "redo") run(redo);
-        else if (id === "save") save();
+        else if (id === "save") {
+          // ⌘↵ in a checklist item ticks it; anywhere else it saves.
+          const editor = view.current;
+          if (!editor || !toggleTask(editor.state, editor.dispatch)) save();
+        }
         else if (id === "attach") attach();
       },
       options: {
@@ -477,8 +533,10 @@ export function RichEditor(props: EditorEngineProps) {
       stopPropagation: false,
     },
   );
-  const attach = () => {
+  // Linear's Insert media… picks images, video and audio; Attach files… any file.
+  const attach = (accept = "") => {
     if (fileInput.current) {
+      fileInput.current.accept = accept;
       fileInput.current.click();
       return;
     }
@@ -496,33 +554,6 @@ export function RichEditor(props: EditorEngineProps) {
     setURL("");
     setLinkError("");
   };
-  const inTable = !!view.current && isInTable(view.current.state);
-  const blockEntries: ActionEntry[] = [
-    {
-      name: "Turn into",
-      children: SLASH_COMMANDS.filter((c) => c.command && !["table", "divider"].includes(c.id)).map((c) => ({
-        name: c.label,
-        shortcut: editorKey(c.id === "text" ? "heading-0" : c.id),
-        run: () => run(c.command!),
-      })),
-    },
-    { name: "Move up", icon: "up", shortcut: editorKey("move-up"), run: () => run(moveBlock(-1)) },
-    { name: "Move down", icon: "down", shortcut: editorKey("move-down"), run: () => run(moveBlock(1)) },
-    { name: "Duplicate", icon: "copy", divider: true, run: () => run(duplicateBlock) },
-    { name: "Delete", icon: "trash", run: () => run(deleteBlock) },
-  ];
-  // The handle sits level with the top of the caret's top-level block.
-  const blockTop = (() => {
-    const editor = view.current,
-      box = frame.current;
-    if (!editor || !box || !(editor.hasFocus() || handleFocused || blockMenu)) return null;
-    const { $from } = editor.state.selection;
-    try {
-      return editor.coordsAtPos($from.depth ? $from.start(1) : $from.pos).top - box.getBoundingClientRect().top;
-    } catch {
-      return null;
-    }
-  })();
   // Linear's "Create issue from selection": the selected text starts a new issue related to this one.
   const selectedText =
     !!props.issueKey && view.current && !view.current.state.selection.empty
@@ -602,134 +633,108 @@ export function RichEditor(props: EditorEngineProps) {
         if ((e.target as HTMLElement).closest("button")) e.preventDefault();
       }}
     >
-      {[
-        ["strong", "Bold", "B"],
-        ["em", "Italic", "I"],
-        ["underline", "Underline", "U"],
-        ["strike", "Strikethrough", "S"],
-        ["code", "Inline code", "<>"],
-      ].map(([name, label, text]) => (
+      {/* Linear's order (LB): text style, marks, link, quote, collapse, inline code, code block, lists, then selection actions. */}
+      <ToolbarDropdown
+        label="Text style"
+        show="name"
+        current={level >= 0 ? `heading-${level}` : undefined}
+        disabled={within("listItem") || within("taskList")}
+        options={[0, 1, 2, 3, 4].map((n) => ({
+          id: `heading-${n}`,
+          name: n ? `Heading ${n}` : "Regular text",
+          run: () => changeBlock(n ? "heading" : "paragraph", n ? { level: n } : {}),
+        }))}
+      />
+      {(
+        [
+          ["strong", "Bold", "bold"],
+          ["em", "Italic", "italic"],
+          ["strike", "Strikethrough", "strike"],
+          ["underline", "Underline", "underline"],
+        ] as const
+      ).map(([name, label, icon]) => (
         <ToolbarButton
           key={name}
           aria-label={label}
           tooltip={label}
-          shortcut={editorKey(name!)}
-          aria-pressed={marked(name!)}
-          onClick={() => run(toggleMark(richSchema.marks[name!]!))}
+          shortcut={editorKey(name)}
+          aria-pressed={marked(name)}
+          onClick={() => run(toggleMark(richSchema.marks[name]!))}
         >
-          {text}
+          <EditorIcon name={icon} />
         </ToolbarButton>
       ))}
-      {[0, 1, 2, 3, 4].map((n) => (
-        <ToolbarButton
-          key={n}
-          aria-label={n ? `Heading ${n}` : "Text"}
-          title={n ? `Heading ${n}` : "Text"}
-          aria-pressed={level === n}
-          onClick={() => changeBlock(n ? "heading" : "paragraph", n ? { level: n } : {})}
-        >
-          {n ? `H${n}` : "T"}
-        </ToolbarButton>
-      ))}
-      <ToolbarButton
-        aria-label="Bulleted list"
-        aria-pressed={within("bulletList")}
-        onClick={() => list("bulletList")}
-      >
-        • List
-      </ToolbarButton>
-      <ToolbarButton
-        aria-label="Numbered list"
-        aria-pressed={within("orderedList")}
-        onClick={() => list("orderedList")}
-      >
-        1. List
-      </ToolbarButton>
-      <ToolbarButton
-        aria-label="Block quote"
-        aria-pressed={within("blockquote")}
-        onClick={() => run(toggleQuote)}
-      >
-        Quote
-      </ToolbarButton>
-      <ToolbarButton
-        aria-label="Code block"
-        aria-pressed={block === "codeBlock"}
-        onClick={() => changeBlock("codeBlock")}
-      >
-        Code
-      </ToolbarButton>
-      <ToolbarButton
-        aria-label="Collapsible section"
-        tooltip="Collapsible section"
-        shortcut={editorKey("expand")}
-        aria-pressed={within("expand")}
-        onClick={() => run(toggleExpand)}
-      >
-        Collapse
-      </ToolbarButton>
       <ToolbarButton
         aria-label="Insert link"
+        tooltip="Link"
+        shortcut={editorKey("link")}
+        aria-pressed={marked("link")}
         onClick={() => {
           setURL(view.current ? linkHref(view.current.state) : "");
           setLinkOpen(!linkOpen);
         }}
       >
-        Link
+        <EditorIcon name="link" />
       </ToolbarButton>
-      {marked("link") && (
-        <ToolbarButton
-          aria-label="Remove text link"
-          onClick={() => run(removeLink)}
-        >
-          Unlink
-        </ToolbarButton>
-      )}
       <ToolbarButton
-        aria-label="Insert table"
-        onClick={() => run(insertTable)}
+        aria-label="Block quote"
+        tooltip="Quote"
+        shortcut={editorKey("quote")}
+        aria-pressed={within("blockquote")}
+        disabled={block === "heading"}
+        onClick={() => run(toggleQuote)}
       >
-        Table
+        <EditorIcon name="quote" />
       </ToolbarButton>
-      {inTable && (
-        <>
-          <ToolbarButton
-            aria-label="Add table row"
-            onClick={() => run(addRowAfter)}
-          >
-            + Row
-          </ToolbarButton>
-          <ToolbarButton
-            aria-label="Add table column"
-            onClick={() => run(addColumnAfter)}
-          >
-            + Column
-          </ToolbarButton>
-          <ToolbarButton
-            aria-label="Remove table"
-            onClick={() => run(deleteTable)}
-          >
-            Remove table
-          </ToolbarButton>
-        </>
-      )}
+      <ToolbarButton
+        aria-label="Collapsible section"
+        tooltip="Collapse"
+        shortcut={editorKey("expand")}
+        aria-pressed={within("expand")}
+        onClick={() => run(toggleExpand)}
+      >
+        <EditorIcon name="collapse" />
+      </ToolbarButton>
+      <ToolbarButton
+        aria-label="Inline code"
+        tooltip="Inline code"
+        shortcut={editorKey("code")}
+        aria-pressed={marked("code")}
+        onClick={() => run(toggleMark(richSchema.marks.code!))}
+      >
+        <EditorIcon name="inline-code" />
+      </ToolbarButton>
+      <ToolbarButton
+        aria-label="Code block"
+        tooltip="Code block"
+        shortcut={editorKey("code-block")}
+        aria-pressed={block === "codeBlock"}
+        disabled={block === "heading"}
+        onClick={() => changeBlock("codeBlock")}
+      >
+        <EditorIcon name="code-block" />
+      </ToolbarButton>
+      <ToolbarDropdown
+        label="List"
+        show="icon"
+        current={within("taskList") ? "checklist" : within("orderedList") ? "ordered" : within("bulletList") ? "bullet" : undefined}
+        disabled={block === "heading"}
+        options={[
+          { id: "bullet", name: "List", icon: "list", run: () => list("bulletList") },
+          { id: "ordered", name: "Numbered list", icon: "numbered-list", run: () => list("orderedList") },
+          { id: "checklist", name: "Checklist", icon: "checklist", run: () => list("taskList") },
+        ]}
+      />
       {subject === "description" && selectedText.trim() && (
-        <ToolbarButton aria-label="Create issue from selection" tooltip="Create issue from selection" onClick={createFromSelection}>
+        <ToolbarButton
+          aria-label="Create issue from selection"
+          tooltip="Create issue from selection"
+          shortcut={editorKey("issue-from-selection")}
+          onClick={createFromSelection}
+        >
           Create issue
         </ToolbarButton>
       )}
-      <ToolbarButton
-        aria-label={`Undo ${subject} edit`}
-        onClick={() => run(undo)}
-      >
-        Undo
-      </ToolbarButton>
-      <ToolbarButton
-        aria-label={`Redo ${subject} edit`}
-        onClick={() => run(redo)}
-      >
-        Redo
-      </ToolbarButton>
     </div>
   );
   const preloadPeople = () =>
@@ -802,43 +807,7 @@ export function RichEditor(props: EditorEngineProps) {
           )}
         </div>
       )}
-      <div ref={frame} className="relative">
-        {blockTop !== null && (
-          <IconButton
-            ref={blockHandle}
-            label="Block actions"
-            shortcut={editorKey("block-menu")}
-            size="small"
-            aria-haspopup="menu"
-            aria-expanded={blockMenu}
-            className="rich-block-handle"
-            style={{ top: blockTop }}
-            onMouseDown={(event) => event.preventDefault()}
-            onFocus={() => setHandleFocused(true)}
-            onBlur={() => setHandleFocused(false)}
-            onKeyDown={(event) => {
-              if (event.key !== "Escape") return;
-              event.preventDefault();
-              event.stopPropagation();
-              view.current?.focus();
-            }}
-            onClick={() => setBlockMenu(true)}
-          >
-            <Icon name="dots" />
-          </IconButton>
-        )}
-        {blockMenu && (
-          <ActionMenu
-            label="Block menu"
-            anchor={blockHandle.current}
-            entries={blockEntries}
-            highlight
-            close={() => {
-              setBlockMenu(false);
-              view.current?.focus();
-            }}
-          />
-        )}
+      <div className="relative">
         {empty && props.placeholder && (
           <p aria-hidden className="rich-placeholder pointer-events-none absolute text-fg-4">
             {props.placeholder}
@@ -852,16 +821,19 @@ export function RichEditor(props: EditorEngineProps) {
           label="Insert block"
           query={slash.query}
           empty={null}
-          items={matchingSlashCommands(slash.query)
+          width={240}
+          items={matchingSlashCommands(slash.query, view.current!.state)
             .filter((item) => item.command || props.onFiles)
             .map((item) => ({
               id: item.id,
               label: item.label,
+              icon: <EditorIcon name={item.icon} />,
+              shortcut: editorKey(item.id),
               pick: () => {
                 const editor = view.current!;
                 editor.dispatch(editor.state.tr.delete(slash.from, slash.to));
                 if (item.command) run(item.command);
-                else attach();
+                else attach(item.id === "media" ? "image/*,video/*,audio/*" : "");
               },
             }))}
         />

@@ -137,18 +137,6 @@ export const moveBlock = (dir: -1 | 1): Command =>
     else tr.delete(range.end, range.end + sibling.nodeSize).insert(range.start, sibling);
     return true;
   });
-/** Block menu Duplicate: a copy of the selected blocks after them, the selection staying on the originals. */
-export const duplicateBlock: Command = blockEdit((tr, range) => {
-  tr.insert(range.end, tr.doc.slice(range.start, range.end).content);
-  return true;
-});
-/** Block menu Delete: the selected blocks go; the last block of a document becomes an empty paragraph. */
-export const deleteBlock: Command = blockEdit((tr, range) => {
-  if (!range.depth && range.startIndex === 0 && range.endIndex === range.parent.childCount)
-    tr.replaceWith(range.start, range.end, richSchema.nodes.paragraph!.create());
-  else tr.delete(range.start, range.end);
-  return true;
-});
 
 /** A typed link target: a bare domain gets https://, like Linear; anything else must be an http, https or mailto link. */
 export const linkTarget = (input: string) => {
@@ -251,23 +239,6 @@ export const toggleExpand: Command = (state, dispatch) => {
   return true;
 };
 
-/** A divider above the caret's paragraph, where Jira allows one (not in a list item). */
-function ruleAbove(tr: Transaction) {
-  const { $from } = tr.selection,
-    rule = richSchema.nodes.rule!,
-    index = $from.index(-1);
-  if ($from.parent.type !== richSchema.nodes.paragraph || !$from.node(-1).canReplaceWith(index, index, rule))
-    return false;
-  tr.insert($from.before(), rule.create());
-  return true;
-}
-export const insertRule: Command = (state, dispatch) => {
-  const tr = state.tr;
-  if (!ruleAbove(tr)) return false;
-  dispatch?.(tr.scrollIntoView());
-  return true;
-};
-
 const markRule = (pattern: RegExp, mark: string) =>
   new InputRule(pattern, (state, match, start, end) => {
     const type = richSchema.marks[mark]!,
@@ -308,11 +279,6 @@ export const markdownRules = inputRules({
       // The first cell below the header (or the first cell).
       const first = header ? from + 1 + table.firstChild!.nodeSize : from;
       return tr.setSelection(TextSelection.near(tr.doc.resolve(first + 1)));
-    }),
-    // `***` or `---` then Space at a paragraph's start: a divider above, the caret stays in the paragraph (Linear's horizontal rule).
-    new InputRule(/^(?:\*\*\*|---)\s$/, (state, _match, start, end) => {
-      const tr = state.tr.delete(start, end);
-      return ruleAbove(tr) ? tr : null;
     }),
     markRule(/\*\*([^*\s][^*]*)\*\*$/, "strong"),
     markRule(/(?<![*\w])\*([^*\s][^*]*)\*$/, "em"),
