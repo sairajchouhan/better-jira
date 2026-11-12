@@ -273,6 +273,7 @@ test("image cropping: keyboard and pointer geometry, unreadable sources, local p
     await media();
     const page = await open();
     page.onEvent("Fetch.requestPaused", (params) => {
+      // The editor's stand-in may start this request and the editor cancel it on mount (BJ-110).
       void page.cmd("Fetch.fulfillRequest", {
         requestId: params.requestId,
         responseCode: 200,
@@ -287,7 +288,7 @@ test("image cropping: keyboard and pointer geometry, unreadable sources, local p
             size: 1000,
           }),
         ).toString("base64"),
-      });
+      }).catch(() => {});
     });
     await page.cmd("Fetch.enable", {
       patterns: [{ urlPattern: "*/api/issues/TEST-2/media/22222222*", requestStage: "Request" }],
