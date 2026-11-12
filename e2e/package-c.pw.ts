@@ -87,3 +87,14 @@ test("BJ-30: closing a filled composer offers save, cancel and discard", async (
   await page.key("c");
   expect(await page.waitFor<string>(`document.querySelector('[aria-label="Issue title"]')?.value === ""`)).toBe(true);
 });
+
+test("BJ-58: add and remove a pending link in the composer", async ({ open }) => {
+  const page = await open();
+  await page.key("c");
+  await page.click('text=Add link…');
+  await page.page.getByRole("textbox", { name: "New issue link URL" }).fill("https://example.com/reference");
+  await page.click('text=Add link');
+  await page.waitFor(`!!document.querySelector('[aria-label="Remove link https://example.com/reference"]')`);
+  await page.click('[aria-label="Remove link https://example.com/reference"]');
+  expect(await page.eval(`!!document.querySelector('[aria-label="Remove link https://example.com/reference"]')`)).toBe(false);
+});

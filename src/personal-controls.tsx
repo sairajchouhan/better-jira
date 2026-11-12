@@ -1,3 +1,4 @@
+import { resourceURL } from "./issue-resource";
 import { useStoredState } from "./stored-state";
 import { adfToText } from "./adf";
 import { showNotification } from "./app-notifications";
@@ -117,6 +118,7 @@ export function CreateIssue() {
   const [saved, setSaved] = useStoredState<SavedComposerDraft[]>(`better-jira:composer-drafts:v1:${account}`, parseComposerDrafts, [], "Could not save drafts locally");
   const [savedId, setSavedId] = useState<string | null>(null);
   const [draftsOpen, setDraftsOpen] = useState(false);
+  const [linkInput, setLinkInput] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
 
   const titleRef = useRef<HTMLInputElement>(null);
@@ -401,6 +403,9 @@ export function CreateIssue() {
             {noParentType}
           </p>
         )}
+        <Button type="button" onClick={() => setLinkInput("")}>Add link…</Button>
+        {linkInput !== null && <div className="flex items-center gap-2"><TextInput aria-label="New issue link URL" value={linkInput} onChange={e => setLinkInput(e.target.value)} placeholder="https://" /><Button type="button" disabled={!resourceURL(linkInput)} onClick={() => { const url = resourceURL(linkInput); if (!url) return; setDraft(d => ({ ...d, resources: [...(d.resources ?? []), { id: crypto.randomUUID(), kind: "link", title: url, url, updated: new Date().toISOString() }] })); setLinkInput(null); }}>Add link</Button><Button type="button" onClick={() => setLinkInput(null)}>Cancel link</Button></div>}
+        {draft.resources?.map(resource => <div key={resource.id} className="flex items-center gap-2"><Text variant="mini">{resource.title}</Text><IconButton type="button" label={`Remove link ${resource.title}`} onClick={() => setDraft(d => ({ ...d, resources: d.resources?.filter(r => r.id !== resource.id) }))}><Icon name="close" /></IconButton></div>)}
         <Attachments
           attachments={attachments}
           onChange={setAttachments}

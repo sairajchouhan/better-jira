@@ -173,6 +173,7 @@ export type IssueDraft = Partial<
     | "type"
     | "rank"
     | "attachments"
+    | "resources"
   >
 > & {
   description?: string;
