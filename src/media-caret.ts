@@ -4,7 +4,8 @@ import { Debouncer } from "@tanstack/pacer";
 import type { EditorView } from "prosemirror-view";
 const media = (node: EditorNode | undefined | null) =>
   !!node?.isBlock && ["mediaSingle", "mediaGroup", "media"].includes(node.type.name);
-/** Editor-only empty paragraphs give Chromium real caret positions beside block media. */
+/** Editor-only empty paragraphs give Chromium real caret positions beside block media, and one ends a document whose last
+ * block is not text (a table, divider or code block), like Linear's trailing node. Empty, they are never saved. */
 export function mediaCaretDocument(node: EditorNode): EditorNode {
   if (node.isLeaf) return node;
   const children: EditorNode[] = [];
@@ -18,6 +19,8 @@ export function mediaCaretDocument(node: EditorNode): EditorNode {
     if (media(child) && !children[i + 1]?.isTextblock && !media(children[i + 1]))
       out.push(node.type.schema.nodes.paragraph!.create({ mediaBoundary: true }));
   }
+  if (node.type.name === "doc" && out.length && !out.at(-1)!.isTextblock)
+    out.push(node.type.schema.nodes.paragraph!.create({ mediaBoundary: true }));
   const content = Fragment.fromArray(out);
   return node.type.validContent(content) ? node.copy(content) : node;
 }
@@ -81,6 +84,7 @@ export function mediaCaretPlugin() {
       };
       inspect(state.doc, -1);
       state.doc.descendants(inspect);
+      if (state.doc.lastChild && !state.doc.lastChild.isTextblock) gaps.add(state.doc.content.size);
       for (const pos of [...gaps].sort((a, b) => b - a))
         tr.insert(pos, state.schema.nodes.paragraph!.create({ mediaBoundary: true }));
       return tr.docChanged ? (gaps.size ? tr.setMeta("addToHistory", false) : tr) : null;

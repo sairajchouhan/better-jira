@@ -41,6 +41,7 @@
   --panel: lch(97.94% 0.5 282); /* --color-bg-primary */
   --col: lch(92.44% 0.5 282); /* --color-bg-secondary */
   --card: lch(100% 0 282); /* elevated theme bgBase (menus, popovers) */
+  --editor-todo-checked-opacity: 0.75;
   --hover: lch(90.94% 0.5 282);
   --row-hover: var(--hover);
   --card-pressed: var(--card-hover); /* --color-bg-tertiary (bgShadeHover) */
@@ -111,6 +112,7 @@
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
+    --editor-todo-checked-opacity: 0.65;
     --fg: lch(100% 0 272);
     --fg-2: lch(90.451% 1.2 272);
     --fg-3: lch(61.803% 1.2 272);
@@ -583,18 +585,6 @@
 :hover > .media-resize-handle {
   opacity: 1;
 }
-/* Linear's block handle, in the gutter left of the caret's block; only the keyboard or a hover brings it forward. */
-.rich-block-handle {
-  position: absolute;
-  left: -28px;
-  z-index: 1;
-  opacity: 0;
-}
-.rich-editor:hover .rich-block-handle,
-.rich-block-handle:focus-visible,
-.rich-block-handle[aria-expanded="true"] {
-  opacity: 1;
-}
 .rich-content .rich-expand {
   border: 1px solid var(--line-2);
   border-radius: 6px;
@@ -615,20 +605,107 @@
 .rich-content .rich-expand-body {
   padding-left: 26px;
 }
-.rich-content .rich-panel {
-  border-left: 4px solid var(--accent);
-  background: var(--col);
+/* Callouts (Jira's panels) in Linear's preset colours: note teal, tip green, important primary, warning orange, caution red. */
+.rich-panel {
+  --callout-color: #26b5ce;
+  border-left: 4px solid var(--callout-color);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--callout-color) 10%, transparent);
   padding: 10px;
 }
-.rich-content [data-task-list] {
+.rich-panel[data-panel-type="success"] {
+  --callout-color: #4cb782;
+}
+.rich-panel[data-panel-type="note"] {
+  --callout-color: var(--accent);
+}
+.rich-panel[data-panel-type="warning"] {
+  --callout-color: #f2994a;
+}
+.rich-panel[data-panel-type="error"] {
+  --callout-color: #eb5757;
+}
+/* Linear's checklist (editor and read-only view alike): the checkbox and drag handle sit in the list's inset. */
+ul[data-task-list] {
   list-style: none;
-  padding-left: 4px;
+  padding-left: 1.5rem;
 }
-.rich-content [data-task-state="TODO"]::before {
-  content: "☐ ";
+ul[data-task-list] > li {
+  position: relative;
 }
-.rich-content [data-task-state="DONE"]::before {
-  content: "☑ ";
+.todo-checkbox-container {
+  position: absolute;
+  left: -1.5rem;
+  display: flex;
+  align-items: center;
+  height: 1lh;
+}
+.todo-drag-handle {
+  position: absolute;
+  left: -12px;
+  display: flex;
+  align-items: center;
+  width: 14px;
+  height: 100%;
+  padding: 0 6px 0 2px;
+  color: var(--fg-4);
+  cursor: move;
+  opacity: 0;
+  user-select: none;
+}
+.todo-drag-handle:hover {
+  color: var(--fg-3);
+}
+ul[data-task-list] > li:hover > .todo-checkbox-container > .todo-drag-handle {
+  opacity: 1;
+}
+.todo-checkbox {
+  position: relative;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 1px solid var(--fg-4);
+  border-radius: 3px;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color 80ms ease-out,
+    border-color 80ms ease-out;
+}
+.todo-checkbox::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+}
+.todo-checkbox[aria-disabled="true"] {
+  cursor: default;
+}
+.todo-checkbox[aria-checked="true"] {
+  opacity: 0.9;
+  border-color: var(--fg);
+  background: var(--fg)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='9' viewBox='0 0 10 8'%3E%3Cpath fill='white' d='M3.46975 5.70757L1.88358 4.1225C1.65832 3.8974 1.29423 3.8974 1.06897 4.1225C0.843675 4.34765 0.843675 4.7116 1.06897 4.93674L3.0648 6.93117C3.29006 7.15628 3.65414 7.15628 3.8794 6.93117L8.93103 1.88306C9.15633 1.65792 9.15633 1.29397 8.93103 1.06883C8.70578 0.843736 8.34172 0.843724 8.11646 1.06879L3.46975 5.70757Z'/%3E%3C/svg%3E")
+    1px 2px no-repeat;
+}
+@media (prefers-color-scheme: dark) {
+  .todo-checkbox[aria-checked="true"] {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='9' viewBox='0 0 10 8'%3E%3Cpath fill='black' d='M3.46975 5.70757L1.88358 4.1225C1.65832 3.8974 1.29423 3.8974 1.06897 4.1225C0.843675 4.34765 0.843675 4.7116 1.06897 4.93674L3.0648 6.93117C3.29006 7.15628 3.65414 7.15628 3.8794 6.93117L8.93103 1.88306C9.15633 1.65792 9.15633 1.29397 8.93103 1.06883C8.70578 0.843736 8.34172 0.843724 8.11646 1.06879L3.46975 5.70757Z'/%3E%3C/svg%3E");
+  }
+}
+.todo-content {
+  min-width: 0;
+}
+li[data-done="true"] > .todo-content {
+  opacity: var(--editor-todo-checked-opacity);
+}
+/* Linear's tip on the caret's empty line (EC `Uc`). */
+.ProseMirror-focused .rich-slash-tip::before {
+  content: "Type / for commands…";
+  float: left;
+  height: 0;
+  color: var(--fg-4);
+  pointer-events: none;
 }
 
 /* Reserve the ADF frame before metadata, then use the loaded media's intrinsic ratio. */

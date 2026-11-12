@@ -149,9 +149,13 @@ export const richSchema = new Schema({
       toDOM: () => ["li", 0],
       parseDOM: [{ tag: "li" }],
     },
+    // Ours (data-task-*) and Linear's (data-type=todo_*) checklists paste as Jira tasks; listed before ul/li so they win.
     taskList: {
       ...block("ul", "taskItem+"),
-      parseDOM: [],
+      parseDOM: [
+        { tag: "ul[data-task-list]", priority: 60 },
+        { tag: 'ul[data-type="todo_list"]', priority: 60 },
+      ],
       toDOM: () => ["ul", { "data-task-list": "true" }, 0],
     },
     taskItem: {
@@ -159,7 +163,10 @@ export const richSchema = new Schema({
       group: undefined,
       attrs: { ...attrs, state: { default: "TODO" } },
       defining: true,
-      parseDOM: [],
+      parseDOM: [
+        { tag: "li[data-task-state]", priority: 60, getAttrs: (dom) => ({ state: dom.getAttribute("data-task-state") === "DONE" ? "DONE" : "TODO" }) },
+        { tag: 'li[data-type="todo_item"]', priority: 60, getAttrs: (dom) => ({ state: dom.getAttribute("data-done") === "true" ? "DONE" : "TODO" }) },
+      ],
       toDOM: (node) => ["li", { "data-task-state": node.attrs.state }, 0],
     },
     codeBlock: {
@@ -173,11 +180,19 @@ export const richSchema = new Schema({
       parseDOM: [{ tag: "pre", preserveWhitespace: "full" }],
     },
     blockquote: { ...block("blockquote", QUOTE), defining: true },
+    // Jira's panel is Linear's callout; a pasted Linear callout comes in as an info panel.
     panel: {
       ...block("div", PANEL),
+      attrs: { ...attrs, panelType: { default: "info" } },
       isolating: true,
-      parseDOM: [],
-      toDOM: () => ["div", { class: "rich-panel" }, 0],
+      parseDOM: [
+        { tag: "div[data-panel-type]", getAttrs: (dom) => {
+          const type = dom.getAttribute("data-panel-type") ?? "";
+          return { panelType: ["info", "note", "success", "warning", "error"].includes(type) ? type : "info" };
+        } },
+        { tag: "div[data-callout]" },
+      ],
+      toDOM: (node) => ["div", { class: "rich-panel", "data-panel-type": node.attrs.panelType }, 0],
     },
     expand: {
       content: EXPAND,
@@ -281,12 +296,13 @@ const fields: Record<string, Record<string, unknown>> = {
   orderedList: { order: 1 },
   codeBlock: { language: null },
   taskItem: { state: "TODO" },
+  panel: { panelType: "info" },
   expand: { title: "" },
   tableCell: { colspan: 1, rowspan: 1, colwidth: null },
   tableHeader: { colspan: 1, rowspan: 1, colwidth: null },
 };
 /** Attributes Jira rejects a node or mark without, so they are sent even when they equal the default. */
-const REQUIRED = new Set(["heading.level", "taskItem.state", "subsup.type", "expand.title"]);
+const REQUIRED = new Set(["heading.level", "taskItem.state", "subsup.type", "expand.title", "panel.panelType"]);
 /** Jira's marks allowed together with inline code. */
 const WITH_CODE = new Set(["code", "link", "opaqueMark", "textMetadata"]);
 const markFields: Record<string, Record<string, unknown>> = {
@@ -388,10 +404,10 @@ function fromEditorNode(node: EditorNode): AdfNode {
     if (original?.data.type !== node.type.name)
       for (const key of Object.keys(fields[String(original?.data.type)] ?? {}))
         delete baseAttrs[key];
-    const attrs = exportedAttrs(node.type.name, baseAttrs, node.attrs, fields[node.type.name]);
-    // Jira requires a task's localId; a task made here (Enter at the end of one) has none yet.
-    if (["taskList", "taskItem"].includes(node.type.name) && attrs && !attrs.localId)
-      attrs.localId = crypto.randomUUID();
+    let attrs = exportedAttrs(node.type.name, baseAttrs, node.attrs, fields[node.type.name]);
+    // Jira requires a task's localId; a task made here (Enter at the end of one, a new checklist) has none yet.
+    if (["taskList", "taskItem"].includes(node.type.name) && !attrs?.localId)
+      attrs = { ...attrs, localId: crypto.randomUUID() };
     if (attrs) data.attrs = attrs;
     else delete data.attrs;
     if (node.childCount || original?.hadContent) {
@@ -456,6 +472,14 @@ export const emojiNode = (emoji: { name: string; char: string }) =>
           text: emoji.char,
         },
       },
+      hadContent: false,
+    },
+  });
+/** Jira's date node: midnight UTC of the day, in milliseconds, as a string. */
+export const dateNode = (day: Date) =>
+  richSchema.nodes.date!.create({
+    original: {
+      data: { type: "date", attrs: { timestamp: String(Date.UTC(day.getFullYear(), day.getMonth(), day.getDate())) } },
       hadContent: false,
     },
   });

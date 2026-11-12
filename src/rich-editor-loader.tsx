@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from "react";
-import { Adf } from "./adf";
+import { Adf, withTaskToggled } from "./adf";
 import type { EditorEngineProps, RichEditorProps } from "./rich-editor";
 
 let loaded: typeof import("./rich-editor").RichEditor | undefined;
@@ -47,7 +47,20 @@ function EditorStandIn({ props, early, setEarly }: { props: EditorEngineProps; e
       }}
     >
       {props.initial ? (
-        <Adf node={props.initial} issueKey={props.issueKey} attachments={props.attachments} />
+        <Adf
+          node={props.initial}
+          issueKey={props.issueKey}
+          attachments={props.attachments}
+          // A checklist item ticks before the editor arrives, saved the way an edit is.
+          onTask={
+            props.onChange &&
+            ((task) => {
+              const next = withTaskToggled(props.initial, task);
+              props.onChange?.(next);
+              props.onBlur?.(next);
+            })
+          }
+        />
       ) : (
         !early.text && <p className="text-fg-4">{props.placeholder}</p>
       )}
