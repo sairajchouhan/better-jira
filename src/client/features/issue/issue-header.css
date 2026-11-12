@@ -1,0 +1,38 @@
+@layer components {
+  /* If/Lf: title's 6px bottom padding + 8px margin, followed by -6px.
+     Our heading primitive has no padding/margin, so the equivalent text-to-line gap is 8px. */
+  .issue-parent-line {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 2px;
+    margin: 8px 0 24px;
+  }
+  .issue-parent-link {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    min-width: 0;
+    flex-shrink: 1;
+    gap: 4px;
+    height: 26px;
+    margin-right: 2px;
+    padding: 5px 4px;
+    border: var(--thin-pixel) solid transparent;
+    border-radius: 8px;
+    transition: background-color .15s, border-color .15s;
+  }
+  .issue-parent-link:is(:hover, :active) {
+    border-color: var(--bg-border);
+    background: var(--col);
+  }
+}
+
+@layer components {
+  /* Oh → dQ → XHn.text; restrict this to issue titles, leaving other heading appearances alone. */
+  .issue-detail-title .ui-autosize[data-appearance="heading"] > .ui-input {
+    letter-spacing: -0.00625rem;
+    font-feature-settings: "calt";
+    text-wrap: pretty;
+  }
+}

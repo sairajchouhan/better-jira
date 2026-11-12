@@ -1,5 +1,6 @@
 import { Text } from "@/client/components/text";
-import { PropertyTrigger } from "@/client/components/property-trigger";
+import { SubIssueProgressButton } from "@/client/components/sub-issue-progress-button";
+import "./issue-header.css";
 import { CountBadge } from "@/client/components/count-badge";
 import { Dialog, ConfirmDialog } from "@/client/components/dialog";
 import { TextInput } from "@/client/components/field";
@@ -144,38 +145,35 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
     model = subIssueRows(parent.key, all, defaultSubIssueDisplay(), status);
   return (
     <Text
-      className="mt-2 mb-2.5 flex h-[26px] items-center leading-[normal]"
+      className="issue-parent-line"
       as="div"
       variant="small"
       color="inherit"
     >
-      <span className="mr-0.5 font-[450] text-fg-3">Sub-issue of</span>
+      <span className="shrink-0 font-[450] text-fg-3">Sub-issue of</span>
       {/* Text has no anchor variant; preserve link semantics and keyboard navigation. */}
       <AppLink
         data-parent-link
-        className="flex h-[26px] min-w-0 items-center gap-1 rounded-lg border border-transparent px-1 hover:bg-hover"
+        className="issue-parent-link"
         to={{ board: parent.board, selected: parent.key, panel: true }}
       >
-        <span className="grid size-3.5 place-items-center">
+        <span className="grid size-3.5 shrink-0 place-items-center">
           <StatusIcon status={status(parent)} />
         </span>
-        <span className="font-[450] text-fg-3">{parent.key}</span>
+        <span className="shrink-0 font-[450] text-fg-3">{parent.key}</span>
         <span className="truncate font-medium text-fg">{parent.summary}</span>
       </AppLink>
-      <PropertyTrigger
+      <SubIssueProgressButton
         ref={progress}
         data-parent-progress
         title={shortcutTitle(`Open sub-issues of ${parent.key}`, hotkeyOf("sub-issues-of-parent"))}
         aria-label={`Open sub-issues of ${parent.key}`}
         onClick={(event) => setMenu(event.currentTarget)}
-        variant="row"
-        state="value"
+        variant="header"
+        completed={model.completed}
+        total={model.total}
         aria-expanded={!!menu}
-        className="ml-1 shrink-0"
-      >
-        <ProgressRing value={model.total ? model.completed / model.total : 0} />
-        {model.completed}/{model.total}
-      </PropertyTrigger>
+        />
       {menu && (
         <ChildrenMenu parent={parent} current={issue.key} anchor={menu} close={() => setMenu(null)} />
       )}
@@ -695,7 +693,7 @@ function SubIssueRow({
       >
         <span className="truncate">{child.summary}</span>
       </AppLink>
-      {progress && <PropertyTrigger data-row-progress variant="row" state="value" aria-label={`Open sub-issues of ${child.key}`} aria-expanded={!!childrenMenu} onClick={e => setChildrenMenu(e.currentTarget)}><ProgressRing value={progress[0] / progress[1]} />{progress.join("/")}</PropertyTrigger>}
+      {progress && <SubIssueProgressButton data-row-progress variant="row" completed={progress[0]} total={progress[1]} aria-label={`Open sub-issues of ${child.key}`} aria-expanded={!!childrenMenu} onClick={e => setChildrenMenu(e.currentTarget)} />}
       {childrenMenu && <ChildrenMenu parent={child} anchor={childrenMenu} close={() => setChildrenMenu(null)} />}
 
       {/* Linear's row badges (RAJ-54 blocking 1, RAJ-55 blocked 1; Opus review 4): a red relation icon and how many issues. */}

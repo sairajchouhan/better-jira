@@ -239,29 +239,26 @@ const FILLED = {
   select: "M4.07132 3.8283C4.04394 3.81721 4.01406 3.81379 3.98488 3.8184C3.95566 3.82301 3.92826 3.83551 3.90561 3.85453C3.88297 3.87356 3.86594 3.8984 3.85636 3.92639C3.84678 3.95437 3.84501 3.98443 3.85124 4.01335L5.80802 13.1405C5.81898 13.1915 5.83884 13.2155 5.85542 13.2298C5.87605 13.2476 5.9078 13.2631 5.94754 13.268C5.98728 13.2729 6.0217 13.2654 6.04578 13.2532C6.06507 13.2434 6.08993 13.2252 6.11273 13.1784L7.83779 9.64746C8.05513 9.20258 8.45077 8.87059 8.92663 8.73378L12.7035 7.64791C12.7535 7.63353 12.776 7.61215 12.789 7.59475C12.8052 7.57307 12.8186 7.54044 12.8207 7.50049C12.8228 7.46054 12.813 7.42669 12.7992 7.40342C12.788 7.38476 12.7681 7.36116 12.7199 7.34158L4.07132 3.8283C4.07129 3.82829 4.07135 3.82832 4.07132 3.8283ZM3.75083 2.33677C4.04945 2.2896 4.35527 2.32474 4.63541 2.43841L13.2843 5.95183C13.2843 5.95184 13.2843 5.95183 13.2843 5.95183C14.747 6.54596 14.6351 8.65343 13.1179 9.08953L9.34109 10.1754C9.27311 10.1949 9.21659 10.2424 9.18554 10.3059L7.46077 13.8363C7.46072 13.8364 7.46082 13.8362 7.46077 13.8363C6.76755 15.2562 4.67275 14.9979 4.34147 13.4555L2.38492 4.3294C2.38489 4.32925 2.38495 4.32956 2.38492 4.3294C2.32134 4.03401 2.33935 3.72642 2.43722 3.44054C2.53514 3.15452 2.70919 2.90061 2.94065 2.70612C3.17211 2.51164 3.45221 2.38394 3.75083 2.33677Z",  // Linear KS (uKe)
 };
 export type IconName = keyof typeof PATHS | keyof typeof FILLED;
-/** Linear's sub-issue progress (RAJ-52): a grey track with the completed share drawn in the accent colour. */
-export const ProgressRing = ({ value }: { value: number }) => (
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 16 16"
-    aria-hidden="true"
-    data-progress={value.toFixed(2)}
-  >
-    <circle cx="8" cy="8" r="7" fill="none" strokeWidth="2" className="stroke-line-2" />
-    <circle
-      cx="8"
-      cy="8"
-      r="7"
-      fill="none"
-      strokeWidth="2"
-      transform="rotate(-90 8 8)"
-      strokeDasharray="44"
-      strokeDashoffset={44 * (1 - value)}
-      className="stroke-accent"
-    />
-  </svg>
-);
+/** Linear Nk / Pk: two rounded arcs separated by a 3px gap, including at zero progress. */
+export function ProgressRing({ value }: { value: number }) {
+  const circumference = 2 * Math.PI * 7;
+  const gap = 3;
+  const progress = .085 + Math.max(0, Math.min(1, value)) * (.915 + gap / circumference);
+  const rotation = 360 * circumference / (circumference + gap);
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" data-progress={value.toFixed(2)} className="shrink-0">
+      <circle cx="8" cy="8" r="7" fill="none" strokeWidth="2" strokeLinecap="round"
+        transform={`rotate(${-76 + Math.min(progress, 1) * rotation} 8 8)`}
+        stroke="var(--progress-track)" strokeDasharray={circumference}
+        strokeDashoffset={gap + (circumference - gap) * Math.min(progress, 1)}
+        style={{ transition: "transform .6s, stroke-dashoffset .6s" }} />
+      <circle cx="8" cy="8" r="7" fill="none" strokeWidth="2" strokeLinecap="round"
+        transform="rotate(-76 8 8)" stroke="var(--st-done)" strokeDasharray={circumference}
+        strokeDashoffset={gap + circumference - (circumference - gap) * progress}
+        style={{ transition: "transform .6s, stroke-dashoffset .6s" }} />
+    </svg>
+  );
+}
 export const Icon = ({ name, size = 14 }: { name: IconName; size?: number }) =>
   name in FILLED ? (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" className="shrink-0">

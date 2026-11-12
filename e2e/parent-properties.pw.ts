@@ -14,12 +14,12 @@ test('a sub-issue\'s parent: the "Sub-issue of" line, its sub-issue list, and re
     await page.waitFor(
       `!!document.querySelector('[data-parent-link]')&&!!document.querySelector('#description p')`,
     );
-    // RAJ-53 at 1272×846: title 112.5, the line 8px under it (26px tall, link from x 373, status icon at 378), the paragraph at 212.5.
+    // RAJ-53 at 1272×846: title 112.5, the line 8px under it (26px tall, link from x 373, status icon at 378), the paragraph now 226.5: bundle If/Lf.container has 24px bottom margin (was 10px).
     expect(
       await page.eval(
         `[document.getElementById('summary').getBoundingClientRect().y,document.querySelector('#description p').getBoundingClientRect().y]`,
       ),
-    ).toEqual([112.5, 212.5]);
+    ).toEqual([112.5, 226.5]);
     const [link, icon] = await page.eval<number[][]>(
       `[${box("[data-parent-link]")},${box("[data-parent-link] svg")}]`,
     );
@@ -232,7 +232,7 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
       "9999px",
       "lch(90.451 1.2 272)",
       [14, 14],
-      [314.2, 262.5, 28, 28],
+      [314.2, 276.5, 28, 28],
     ]);
     await page.click('[aria-label="Add reaction"]');
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Search emoji'`);
@@ -331,19 +331,20 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
     );
     await page.clickAt(5, 600);
     const r = `const r=n=>{const b=n.getBoundingClientRect();return [Math.round(b.x*10)/10,Math.round(b.y*10)/10,Math.round(b.width*10)/10,Math.round(b.height*10)/10]};`;
+    // Bundle If/Lf.container adds 14px below the parent line; Nk also proves the section ring is 16px.
     // RAJ-53 at 1272×846: a 24px header pill 6px left of the content, caret and label 7/24px in, progress 8px after it, circles 6px apart 8px from the right.
     expect(
       await page.eval(
         `(()=>{${r}const h=document.querySelector('[data-sub-issues]').firstElementChild,b=h.querySelector('button');return [r(b),r(b.querySelector('svg'))[0],r(b.querySelector('span:nth-child(2)'))[0],r(h.querySelector('[data-sub-progress] svg')).slice(0,3),[...h.querySelectorAll('button')].slice(-2).map(c=>r(c.querySelector('svg')).slice(0,2))]})()`,
       ),
     ).toEqual([
-      [286.2, 306.5, 101.6, 24],
+      [286.2, 320.5, 101.6, 24],
       293.2,
       310.2,
-      [395.8, 311.5, 14],
+      [395.8, 324.5, 16],
       [
-        [801.9, 311.5],
-        [835.9, 311.5],
+        [801.9, 325.5],
+        [835.9, 325.5],
       ],
     ]);
     // Rows: 36px, 6px outset, status icon 39px in, title 23px after it, an 18px avatar 12px from the right.
@@ -352,8 +353,8 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
         `[...document.querySelectorAll('[data-sub-issue]')].map(row=>{${r}return [r(row),r(row.querySelector('button svg'))[0],r(row.querySelector('a span'))[0],r(row.lastElementChild.querySelector('span')).slice(0,1).concat(r(row.lastElementChild.querySelector('span'))[2])]})`,
       ),
     ).toEqual([
-      [[286.2, 340.5, 578.7, 36], 325.2, 348.2, [834.9, 18]],
-      [[286.2, 376.5, 578.7, 36], 325.2, 348.2, [834.9, 18]],
+      [[286.2, 354.5, 578.7, 36], 325.2, 348.2, [834.9, 18]],
+      [[286.2, 390.5, 578.7, 36], 325.2, 348.2, [834.9, 18]],
     ]);
     // Activity: the rule 16px under the list, the heading 22.5px under it, event rows 24.8px tall with a 14px avatar 11px in and the name 36px in, the 84px composer 14px below.
     expect(
@@ -361,17 +362,17 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
         `(()=>{${r}const s=document.querySelector('.issue-activity'),c=document.getElementById('issue-created'),ed=document.getElementById('comment').closest('.rich-editor');return [r(s)[1],r(s.querySelector('h3'))[1],r(c),r(c.firstElementChild),r(c.querySelector('.font-medium'))[0],r(ed),r(ed.querySelector('.rich-placeholder')).slice(0,2),getComputedStyle(ed.querySelector('.rich-placeholder')).fontSize,[...ed.querySelectorAll('.rich-editor-actions > button, .rich-editor-actions > .ui-tooltip-trigger > button')].map(b=>r(b))]})()`,
       ),
     ).toEqual([
-      428.5,
-      452,
-      [292.2, 493.5, 572.7, 24.8],
-      [303.2, 498.9, 14, 14],
+      442.5,
+      466,
+      [292.2, 507.5, 572.7, 24.8],
+      [303.2, 512.9, 14, 14],
       328.2,
-      [284.2, 532.3, 588.7, 84],
-      [301.2, 545.3],
+      [284.2, 546.3, 588.7, 84],
+      [301.2, 559.3],
       "15px",
       [
-        [793.9, 577.3, 24, 24],
-        [829.9, 577.3, 24, 24],
+        [793.9, 591.3, 24, 24],
+        [829.9, 591.3, 24, 24],
       ],
     ]);
     // A property change adds an event row 28.8px under the previous one.
@@ -384,7 +385,7 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
       await page.eval(
         `[...document.querySelectorAll('.activity-event')].map(n=>Math.round(n.getBoundingClientRect().y*10)/10)`,
       ),
-    ).toEqual([493.5, 522.3]);
+    ).toEqual([507.5, 536.3]);
   });
   await test.step("RAJ-52: property menus, label chips and the label menu follow Linear, and their edits read as Linear's Activity rows", async () => {
     await page.waitFor(
@@ -802,4 +803,37 @@ test("RAJ-52: relations: Mark as menus, sidebar pills, Activity rows and Issue o
     await page.goto("?issue=TEST-2&view=page");
     await page.waitFor(`!!document.querySelector('[data-relation="blocked:${created}"]')`);
   });
+});
+
+// Bundle: Nk/Pk, QB/eV/c1t/l1t/f1t, and If/Lf.subIssuesWidgetBadges.
+test("bundle header geometry and colours are shared by page and side panel", async ({ open }) => {
+  const page = await open("?issue=TEST-3&view=page", { width: 1272, height: 846, setup: tree });
+  for (const mode of ["page", "side"]) {
+    await page.waitFor(`document.querySelector('.issue-detail')?.dataset.mode===${JSON.stringify(mode)}&&!!document.querySelector('[data-parent-progress]')`);
+    await page.hover('#summary');
+    await page.waitFor(`getComputedStyle(document.querySelector('[data-parent-progress]')).borderTopColor==='lch(16.32 1.48 272)'`);
+    expect(await page.eval(`(() => {
+      const pill=document.querySelector('[data-parent-progress]'), style=getComputedStyle(pill), ring=pill.querySelector('svg'), arcs=[...ring.querySelectorAll('circle')];
+      return [pill.getBoundingClientRect().height,style.paddingLeft,style.paddingRight,style.borderRadius,style.fontSize,style.fontWeight,
+        getComputedStyle(pill.querySelector('.sub-issue-progress-count')).marginLeft,
+        ring.getBoundingClientRect().width,ring.getBoundingClientRect().height,
+        arcs.map(a=>[a.getAttribute('r'),a.getAttribute('stroke-width'),a.getAttribute('stroke-linecap'),getComputedStyle(a).stroke]),
+        style.backgroundColor,style.color,style.borderTopColor, getComputedStyle(document.querySelector('[data-parent-link]').parentElement).marginBottom];
+    })()`)).toEqual([26,"8px","8px","48px","12px","450","6px",16,16,
+      [["7","2","round","lch(13.08 1.48 272)"],["7","2","round","lch(48 59.31 288.43)"]],
+      "lch(5.52 0.4 272)","lch(61.803 1.2 272)","lch(16.32 1.48 272)","24px"]);
+    expect(await page.eval(`(() => {const arcs=document.querySelector('[data-parent-progress] svg').children;return [arcs[0].getAttribute('stroke-dasharray'),arcs[1].getAttribute('transform'),Number(arcs[1].getAttribute('stroke-dashoffset'))]})()`)).toEqual([String(2*Math.PI*7),"rotate(-76 8 8)",3+2*Math.PI*7-(2*Math.PI*7-3)*(.085+.25*(.915+3/(2*Math.PI*7)))]);
+    expect(await page.eval(`(() => {const s=getComputedStyle(document.getElementById('summary'));return [s.fontSize,s.fontWeight,s.lineHeight,s.letterSpacing,s.fontFeatureSettings,s.textWrap]})()`)).toEqual(["24px","600","32px","-0.1px",'"calt"',"pretty"]);
+    await page.hover('[data-parent-progress]');
+    await page.waitFor(`getComputedStyle(document.querySelector('[data-parent-progress]')).backgroundColor==='lch(7.32 0.85 272)'`);
+    await page.click('[data-parent-progress]');
+    await page.waitFor(`!!document.querySelector('[role=dialog]')`);
+    expect(await page.eval(`(() => {const s=getComputedStyle(document.querySelector('[data-parent-progress]'));return [s.backgroundColor,s.borderTopColor]})()`)).toEqual(["lch(7.32 0.85 272)","lch(27.12 1.48 272)"]);
+    await page.key("Escape");
+    if(mode==="page") await page.click('[title="Open in side panel"]');
+  }
+  await page.hover('#summary');
+  await page.cmd("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }] });
+  await page.waitFor(`getComputedStyle(document.querySelector('[data-parent-progress]')).backgroundColor==='lch(97.94 0.5 282)'&&getComputedStyle(document.querySelector('[data-parent-progress]')).borderTopColor==='lch(84.44 0 282)'`);
+  expect(await page.eval(`(() => {const p=document.querySelector('[data-parent-progress]'),s=getComputedStyle(p);return [s.backgroundColor,s.color,s.borderTopColor,...[...p.querySelectorAll('circle')].map(a=>getComputedStyle(a).stroke)]})()`)).toEqual(["lch(97.94 0.5 282)","lch(39.176 1.25 282)","lch(84.44 0 282)","lch(88.49 0 282)","lch(48 59.31 288.43)"]);
 });

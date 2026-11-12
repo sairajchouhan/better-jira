@@ -37,3 +37,9 @@
     --elevated-border-thin: lch(22.193% 1.93 272);
   }
 }
+
+/* Nk uses the base theme's bgBorder, rather than the border-thin alias used by editors. */
+:root { --progress-track: lch(88.49% 0 282); }
+@media (prefers-color-scheme: dark) {
+  :root { --progress-track: lch(13.08% 1.48 272); }
+}

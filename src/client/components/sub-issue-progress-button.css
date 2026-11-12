@@ -1,0 +1,35 @@
+@layer components {
+  /* startup-root: QB/eV + c1t.rounded + l1t.rounded + f1t.rounded.
+     Parent header overrides height through If/Lf.subIssuesWidgetBadges. */
+  .sub-issue-progress-button {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    min-width: auto;
+    height: 24px;
+    padding: 0 8px;
+    border: var(--thin-pixel) solid var(--line-3);
+    border-radius: 48px;
+    background: var(--panel);
+    color: var(--fg-3);
+    font-size: 12px;
+    font-weight: 450;
+    line-height: normal;
+    overflow: hidden;
+    transition: border-color .15s, background-color .15s;
+  }
+  .sub-issue-progress-button[data-variant="header"] { height: 26px; }
+  .sub-issue-progress-button:is(:hover, :active, [aria-expanded="true"]) {
+    border-color: var(--border-solid-thin);
+    background: var(--col);
+  }
+  .sub-issue-progress-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+  }
+  .sub-issue-progress-count { margin: 0 1px 0 6px; white-space: nowrap; }
+}
