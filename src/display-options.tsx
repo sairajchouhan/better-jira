@@ -81,7 +81,7 @@ export function DisplayProperties<Id extends string>({
             size="small"
             aria-pressed={shown.includes(id)}
             onClick={() => onChange(shown.includes(id) ? shown.filter((p) => p !== id) : [...shown, id])}
-            className="mr-1 mb-1 aria-pressed:bg-sel"
+            className="mr-1 mb-1"
           >
             {label}
           </Button>

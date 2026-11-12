@@ -176,6 +176,11 @@
     color: var(--fg);
     box-shadow: 0 0 0 var(--thin-pixel) var(--border-alpha-thin);
   }
+  /* A pressed tab is Linear's SmallToggleButton (Nxr): D4.smallToggleButtonActive paints controlSecondarySelected at
+     rest, hover and :active. The main area's controlSecondarySelected is --crumb-hover (94.854, see --sel). */
+  .ui-button[data-variant="tab"][aria-pressed="true"] {
+    background: var(--crumb-hover);
+  }
 
   .ui-button[data-variant="dangerous"] {
     background: var(--red-base);
