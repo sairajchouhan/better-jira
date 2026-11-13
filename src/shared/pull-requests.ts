@@ -7,8 +7,22 @@ export type PullRequest = {
   status: "open" | "merged" | "declined" | "draft";
   repo?: string;
   author?: string;
+  /** The source branch Jira lists (`source.branch`) and the one it merges into (`destination.branch`). */
   branch?: string;
+  target?: string;
+  /** The review tool's name, as Linear's `externalReviewToolLabel` ("GitHub"): "Open in GitHub", "Copy GitHub URL". */
+  tool?: string;
   updated?: string;
+};
+
+/** Jira's development providers (the summary's `byInstanceType` keys, e.g. "GitHub", "githube", "bitbucket") by the name their
+ *  review tool goes by. */
+const TOOLS: Record<string, string> = { github: "GitHub", githube: "GitHub", gitlab: "GitLab", bitbucket: "Bitbucket", stash: "Bitbucket" };
+/** The review tool's name for a provider detail: Jira's instance type, or its own instance name for one we don't know. */
+export const pullRequestTool = (type: unknown, instance?: { name?: unknown; typeName?: unknown }) => {
+  const known = TOOLS[String(type ?? "").toLowerCase()];
+  const named = instance?.typeName ?? instance?.name;
+  return known ?? (typeof named === "string" && named ? named : typeof type === "string" && type ? type : undefined);
 };
 
 const STATUS: Record<string, PullRequest["status"]> = { OPEN: "open", MERGED: "merged", DECLINED: "declined", DRAFT: "draft" };
@@ -32,14 +46,16 @@ export function pullRequestProviders(summary: any): string[] {
   return Object.entries(types).flatMap(([type, value]: [string, any]) => (value?.count ? [type] : []));
 }
 
-/** Every provider's detail answer as one list, most recently updated first (Linear's `qg(r, "desc")`); one row per URL. */
-export function pullRequestList(details: any[]): PullRequest[] {
+/** Every provider's detail answer as one list, most recently updated first (Linear's `qg(r, "desc")`); one row per URL. `providers`
+ *  names the provider each answer came from, in the same order. */
+export function pullRequestList(details: any[], providers: string[] = []): PullRequest[] {
   const byUrl = new Map<string, PullRequest>();
-  for (const answer of details)
+  for (const [index, answer] of details.entries())
     for (const detail of answer?.detail ?? [])
       for (const pr of detail?.pullRequests ?? []) {
         if (typeof pr?.url !== "string" || byUrl.has(pr.url)) continue;
         const id = String(pr.id ?? "");
+        const tool = pullRequestTool(providers[index], detail?._instance);
         byUrl.set(pr.url, {
           url: pr.url,
           title: typeof pr.name === "string" && pr.name ? pr.name : pr.url,
@@ -48,6 +64,8 @@ export function pullRequestList(details: any[]): PullRequest[] {
           ...(pr.repositoryName ? { repo: pr.repositoryName } : {}),
           ...(pr.author?.name ? { author: pr.author.name } : {}),
           ...(pr.source?.branch ? { branch: pr.source.branch } : {}),
+          ...(pr.destination?.branch ? { target: pr.destination.branch } : {}),
+          ...(tool ? { tool } : {}),
           ...(pr.lastUpdate ? { updated: pr.lastUpdate } : {}),
         });
       }

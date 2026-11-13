@@ -13,5 +13,5 @@ export async function readPullRequests(jira: Read, key: string): Promise<PullReq
       jira(`/rest/dev-status/latest/issue/detail?${at}&applicationType=${encodeURIComponent(type)}&dataType=pullrequest`),
     ),
   );
-  return pullRequestList(details);
+  return pullRequestList(details, providers);
 }

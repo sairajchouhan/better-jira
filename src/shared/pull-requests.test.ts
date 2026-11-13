@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { leadingStatus, pullRequestBadgeText, pullRequestList, pullRequestProviders, pullRequestStatus } from "./pull-requests";
+import { leadingStatus, pullRequestBadgeText, pullRequestList, pullRequestProviders, pullRequestStatus, pullRequestTool } from "./pull-requests";
 
 test("the providers are those Jira's development summary counts pull requests for", () => {
   expect(
@@ -49,4 +49,15 @@ test("Linear's PR badge: one PR shows its number, several \"N PRs\" with the ico
   expect(leadingStatus([{ status: "declined" }, { status: "merged" }, { status: "draft" }])).toBe("draft");
   expect(leadingStatus([{ status: "declined" }, { status: "merged" }])).toBe("merged");
   expect(leadingStatus([])).toBeUndefined();
+});
+
+test("each pull request keeps its target branch and its review tool's name, for Linear's Open in and Copy actions", () => {
+  const pr = { id: "#5", name: "Five", url: "https://github.com/acme/app/pull/5", status: "OPEN", source: { branch: "ana/five" }, destination: { branch: "main" } };
+  const [github] = pullRequestList([{ detail: [{ pullRequests: [pr] }] }], ["GitHub"]);
+  expect([github!.branch, github!.target, github!.tool]).toEqual(["ana/five", "main", "GitHub"]);
+  // A provider Jira names by its instance only, and one it names nowhere: no tool, so Linear's fallbacks ("Open in source").
+  const [named] = pullRequestList([{ detail: [{ _instance: { name: "Forge" }, pullRequests: [pr] }] }], ["forge-x"]);
+  expect(named!.tool).toBe("Forge");
+  expect(pullRequestList([{ detail: [{ pullRequests: [pr] }] }])[0]!.tool).toBeUndefined();
+  expect(["githube", "stash", "gitlab"].map((type) => pullRequestTool(type))).toEqual(["GitHub", "Bitbucket", "GitLab"]);
 });
