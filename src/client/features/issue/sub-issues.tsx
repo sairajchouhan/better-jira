@@ -2,8 +2,7 @@ import { type Issue } from "@/shared/issue-model";
 import { Text } from "@/client/components/text";
 import { SubIssueProgressButton } from "@/client/components/sub-issue-progress-button";
 import "./issue-header.css";
-import { CountBadge } from "@/client/components/count-badge";
-import { PullRequestBadge } from "./card-badges";
+import { LinkBadges, PullRequestBadge } from "./card-badges";
 import { Dialog, ConfirmDialog } from "@/client/components/dialog";
 import { TextInput } from "@/client/components/field";
 import { Button, IconButton } from "@/client/components/button";
@@ -741,13 +740,9 @@ function SubIssueRow({
           {shortDate(child.due, undefined, true)}
         </time>
       )}
-      {display.properties.includes("links") && !!child.links?.length && (
-        <span title="Links">
-          <CountBadge>{child.links.length}</CountBadge>
-        </span>
-      )}
-      {/* Linear's sub-issue rows are its list rows: the same pull request badge (`mhn`, layout list). */}
+      {/* Linear's sub-issue rows are its list rows: the same pull request (`mhn`, layout list) and link (`mt`) badges, in its order. */}
       {display.properties.includes("pullRequests") && !!child.prCount && <PullRequestBadge issue={child} layout="list" />}
+      {display.properties.includes("links") && <LinkBadges issue={child} />}
       {display.properties.includes("assignee") &&
         control(
           "assignee",

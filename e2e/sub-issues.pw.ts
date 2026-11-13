@@ -843,3 +843,37 @@ test("a sub-issue row's pull requests are Linear's PR badge, as on list rows", a
     await page.eval(`[${badge}.textContent,${badge}.classList.contains('ui-badge'),${badge}.querySelector('[data-pr-status]').dataset.prStatus]`),
   ).toEqual(["3 PRs", true, "draft"]);
 });
+
+// Linear's sub-issue rows are its list rows, so they draw its link badges (`mt`): one per link under three, one count badge from three.
+const withLinks = (key: string, links: string[]) =>
+  `const linkRead=fetch;window.fetch=async(...args)=>{const response=await linkRead(...args);if(new URL(String(args[0]),location.href).pathname!=='/api/issues')return response;const issues=await response.json();issues.find(i=>i.key===${JSON.stringify(key)}).links=${JSON.stringify(links)};return Response.json(issues)}`;
+
+test("a sub-issue row with one link shows Linear's link badge that opens it", async ({ open }) => {
+  const page = await open("?issue=TEST-3&view=page", { setup: `${tree};${withLinks("TEST-4", ["https://github.com/example/app/pull/7"])}` });
+  await page.waitFor(`!!document.querySelector('[data-sub-issue="TEST-4"]')`);
+  await page.click('[aria-label="Sub-issue display options"]');
+  await show(page, "Links");
+  await page.key("Escape");
+  const link = `document.querySelector('[data-sub-issue="TEST-4"] [aria-label="Open link example/app#7 on TEST-4"]')`;
+  await page.waitFor(`!!${link}`);
+  expect(await page.eval(`[${link}.textContent,${link}.getAttribute("href"),${link}.target,${link}.classList.contains('ui-badge')]`)).toEqual([
+    "#7",
+    "https://github.com/example/app/pull/7",
+    "_blank",
+    true,
+  ]);
+});
+
+test("a sub-issue row with three links shows one count badge that opens Open link…", async ({ open }) => {
+  const links = ["https://example.test/spec", "https://example.test/notes", "https://docs.google.com/document/d/1"];
+  const page = await open("?issue=TEST-2&view=page", { setup: `${tree};${withLinks("TEST-3", links)}` });
+  await page.waitFor(`!!document.querySelector('[data-sub-issue="TEST-3"]')`);
+  await page.click('[aria-label="Sub-issue display options"]');
+  await show(page, "Links");
+  await page.key("Escape");
+  const badge = `document.querySelector('[data-sub-issue="TEST-3"] [aria-label="Links on TEST-3"]')`;
+  await page.waitFor(`!!${badge}`);
+  expect(await page.eval(`[${badge}.textContent,${badge}.classList.contains('ui-badge')]`)).toEqual(["3", true]);
+  await page.click('[data-sub-issue="TEST-3"] [aria-label="Links on TEST-3"]');
+  await page.waitFor(`document.querySelector('[role="dialog"][aria-label="Open link…"]')?.querySelectorAll("[cmdk-item]").length===3`);
+});
