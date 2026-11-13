@@ -159,7 +159,7 @@ function LoadedMedia({
       data-media-id={externalURL ? externalMediaId(externalURL) : id}
       className={
         inline
-          ? "media-inline inline-flex max-w-full align-middle text-[12px]"
+          ? "media-inline"
           : "media-frame relative my-3 min-w-0"
       }
       style={reserved}
@@ -206,14 +206,8 @@ function LoadedMedia({
           </LoadingState>
         )
       ) : inline ? (
-        <a
-          data-attachment-id={file.id}
-          href={downloadURL(file.url)}
-          download={!external ? file.name : undefined}
-          className="inline-flex max-w-full items-center rounded border border-line-2 bg-card px-1.5 text-fg-2 hover:bg-(--card-hover)"
-        >
-          <span className="truncate">{file.name}</span>
-        </a>
+        // Linear has no inline file: a Jira inline attachment is the same file block, on its own line in the paragraph.
+        <FileMedia file={file} issueKey={issueKey} onSelect={onSelect} />
       ) : file.type.startsWith("video/") ? (
         <VideoPlayer key={file.url} file={file} onSize={setIntrinsic} onSelect={onSelect} />
       ) : external || /^image\/(png|jpeg|gif|webp|avif|bmp)$/.test(file.type) ? (
@@ -238,7 +232,7 @@ function LoadedMedia({
           onError={() => setFailed(true)}
         />
       ) : (
-        <FileMedia file={file} issueKey={issueKey} />
+        <FileMedia file={file} issueKey={issueKey} onSelect={onSelect} />
       )}
     </Wrapper>
   );

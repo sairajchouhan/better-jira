@@ -65,3 +65,16 @@ test("BJ-54: dragging an image's width handle gives Jira's percentage width", as
   expect(resizedMedia(media, 60)).toEqual({ type: "mediaSingle", attrs: { layout: "center", width: 60 }, content: [] });
   expect(resizedMedia({ type: "mediaSingle", content: [] }, 40).attrs).toEqual({ layout: "center", width: 40 });
 });
+
+test("BJ-228: a file's size reads as Linear's pL: B, KB, MB, GB 1024 apart, at most two fraction digits", async () => {
+  const { formatFileSize } = await import("./media-layout");
+  expect(formatFileSize(35, "en-US")).toBe("35 B");
+  expect(formatFileSize(0, "en-US")).toBe("0 B");
+  expect(formatFileSize(1023, "en-US")).toBe("1,023 B");
+  expect(formatFileSize(1024, "en-US")).toBe("1 KB");
+  expect(formatFileSize(1536, "en-US")).toBe("1.5 KB");
+  expect(formatFileSize(1263, "en-US")).toBe("1.23 KB");
+  expect(formatFileSize(5 * 1048576, "en-US")).toBe("5 MB");
+  expect(formatFileSize(2.5 * 1073741824, "en-US")).toBe("2.5 GB");
+  expect(formatFileSize(Number.NaN, "en-US")).toBe("Unknown size");
+});

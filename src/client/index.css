@@ -1825,35 +1825,82 @@ li[data-done="true"] > .todo-content {
   background: var(--hover);
 }
 
+/*
+ * Linear's file block (startup-root.CnUSfl4j.js `Bx`, `uBe`, `_fileContentWrapper`), painted in the elevated theme its
+ * `data-elevation="dialog"` scope gives it: `Bx.contentWrapper` (padding 6, gap 6, bgBase, shadowLow, the editor's 6px
+ * block radius, no selection) with `Tu.bgBorderFaint` (thinPixel solid bgBorderFaintThin), full width. The row (`uBe`):
+ * relative, gap 6, padding 2 4. The icon (`Bx.fileIcon`) labelFaint, centred, 7px before and 9px after; the name column
+ * (`Bx.content`) pulled up 4px, the size (`Bx.timestamp`) 2px under the name. 51px tall with a regular name.
+ */
 .file-media {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 6px;
+  border: var(--thin-pixel) solid var(--border-faint-thin);
+  border-radius: 6px;
+  background: var(--panel);
+  box-shadow: var(--shadow-low);
+  user-select: none;
+}
+.file-media-row {
   position: relative;
   display: flex;
+  flex: 1 1 0%;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--line-2);
-  border-radius: 6px;
-  background: var(--card);
-  color: var(--fg-2);
-  font-size: 13px;
+  gap: 6px;
+  min-width: 0;
+  padding: 2px 4px;
 }
-.file-media-actions {
+.file-media-main {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  opacity: 0;
+  flex: 1 1 auto;
+  min-width: 0;
 }
-.file-media:hover .file-media-actions,
-.file-media:focus-within .file-media-actions {
-  opacity: 1;
+.file-media-icon {
+  display: flex;
+  flex-shrink: 0;
+  align-self: center;
+  margin: 0 9px 0 7px;
+  color: var(--fg-4);
 }
-
-.file-media {
-  min-height: 60px;
-  line-height: 20px;
+.file-media-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  margin-top: -4px;
 }
-.file-media > div > div:last-child {
-  line-height: 16px;
+.file-media-name {
+  display: block;
+  width: 100%;
+}
+.file-media-size {
+  display: block;
+  margin-top: 2px;
+}
+/* `_fileNodeContainer.selected-node ._fileContentWrapper` in a focused editor: a 2px focusColor outline, 1px out. */
+.ProseMirror-focused .ProseMirror-selectednode .file-media {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* A Jira inline attachment: the file block on its own line inside the paragraph (Linear has no inline file). */
+.media-inline {
+  display: flex;
+  width: 100%;
+  font-size: 12px;
+}
+/* Linear has no filmstrip for files: in a Jira media group each file block takes a full row, images keep their tiles. */
+.media-filmstrip:has(> .media-frame > .file-media) {
+  flex-wrap: wrap;
+}
+.media-filmstrip > .media-frame:has(> .file-media) {
+  flex: 1 0 100%;
+  width: 100%;
 }
 
 .rich-content p[data-media-caret] {

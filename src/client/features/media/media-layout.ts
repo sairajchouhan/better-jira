@@ -81,3 +81,15 @@ export function attachmentLink(file: { id: string; url: string }, base: string):
   if (file.url.startsWith("blob:")) url.hash = `attachment-${file.id}`;
   return url.href;
 }
+
+/**
+ * Linear's file size (startup-entry.Dt5YDWdY.js `pL`): the largest of B, KB, MB, GB (1024 apart) the size reaches, at
+ * most two fraction digits in the reader's locale; a size that is not a number is "Unknown size" (`uBe`).
+ */
+export function formatFileSize(bytes: number, locale?: string): string {
+  if (typeof bytes !== "number" || !Number.isFinite(bytes)) return "Unknown size";
+  const size = Math.abs(bytes);
+  const [unit, scale] =
+    size >= 1073741824 ? ["GB", 1073741824] : size >= 1048576 ? ["MB", 1048576] : size >= 1024 ? ["KB", 1024] : ["B", 1];
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(bytes / scale)} ${unit}`;
+}

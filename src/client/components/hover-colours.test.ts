@@ -140,3 +140,21 @@ test("BJ-224: no control hovers with bgShadeHover, and no blanket open-menu rule
   expect(index).not.toContain("--color-hover");
   expect(index).not.toMatch(/\[data-menu-open\] > :first-child/);
 });
+
+test("BJ-228: the file block and its node toolbar paint the elevated theme's tokens (Linear `cBe` wraps it in `w_`)", async () => {
+  const dark = tokens(controls, '[data-elevation="dialog"]', "dark"),
+    light = tokens(controls, "[data-elevation]", "light");
+  // bgShadeHover of the elevated theme: c(bgBase, 3, 1) in dark; light paints bgBorderSolidAlpha (`Fx.itemLight`).
+  const t = linear("dark").t.elevated().bgBase;
+  same(dark["--node-toolbar-item-hover"], clamp([t[0] + 3 * 0.9, t[1] + 0.9]), 272);
+  same(root("dark")["--node-toolbar-item-hover"], [8.22, 1.3], 272);
+  expect(light["--node-toolbar-item-hover"]).toBe("lch(0 0 0 / 0.147)");
+  expect(root("light")["--node-toolbar-item-hover"]).toBe("lch(0 0 0 / 0.15)");
+  const toolbar = await read("./node-toolbar.css");
+  // The pill fills controlTertiarySelected (--tab-on) under the pointer; an item its own hover token.
+  expect(toolbar).toMatch(/\.ui-node-toolbar:hover \{\s*background: var\(--tab-on\);/);
+  expect(toolbar).toMatch(/\[data-appearance="node-toolbar"\]:is\(:hover, :active\) \{\s*background: var\(--node-toolbar-item-hover\);\s*color: var\(--fg-2\);/);
+  // The block itself: bgBase, a thinPixel bgBorderFaintThin border and shadowLow of its theme, the 6px block radius.
+  expect(index).toMatch(/\.file-media \{[^}]*border: var\(--thin-pixel\) solid var\(--border-faint-thin\);[^}]*border-radius: 6px;[^}]*background: var\(--panel\);[^}]*box-shadow: var\(--shadow-low\);/);
+  expect(await source("../features/media/file-media.tsx")).toContain('data-elevation="dialog"');
+});

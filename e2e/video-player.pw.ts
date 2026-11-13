@@ -98,7 +98,7 @@ test("inline video player: Linear keys, volume, tooltips, revealed controls, dow
   });
   await test.step("keyboard focus arriving from outside or returning from full window stays visible while idle", async () => {
     await page.hover("#description video");
-    await page.eval(`document.querySelector('#description [data-attachment-id="103"]').focus()`);
+    await page.eval(`document.querySelector('#description [data-attachment-id="103"] [aria-label="Copy link"]').focus()`);
     await page.key("Tab", "shift");
     expect(await page.active()).toBe("Full window (keyboard shortcut f)");
     // Longer than the 2.5 s idle hide: the controls must still show.

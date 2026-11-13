@@ -68,6 +68,53 @@ test("Jira media: nothing fetched for the board, exact attachments and byte rang
     await page.waitFor(`${image}?.naturalWidth===320`);
     expect(await page.eval(`document.querySelectorAll('#description img').length`)).toBe(1);
   });
+  await test.step("BJ-228: a file is Linear's file block: File actions on hover copy its URL and download it, a click selects it and Backspace deletes it", async () => {
+    const at = '#description [data-attachment-id="103"]';
+    const block = `document.querySelector('${at}')`;
+    const toolbar = `${block}.querySelector('[role="toolbar"][aria-label="File actions"]')`;
+    await page.waitFor(`!!${block}?.querySelector('.file-media-size')`);
+    const look = await page.eval<any>(
+      `(()=>{const b=${block},s=getComputedStyle(b),r=b.getBoundingClientRect();return {height:r.height,width:r.width,column:b.closest('#description > *').getBoundingClientRect().width,radius:s.borderTopLeftRadius,border:s.borderTopWidth+' '+s.borderTopStyle,name:b.querySelector('.file-media-name').textContent,size:b.querySelector('.file-media-size').textContent,elevation:b.dataset.elevation}})()`,
+    );
+    // Live Linear (RAJ-46): full editor width, 51px tall, radius 6, 0.5px solid border, the name over its size.
+    expect(look.width).toBeCloseTo(look.column, 0);
+    expect(look.height).toBeGreaterThanOrEqual(50);
+    expect(look.height).toBeLessThanOrEqual(52);
+    expect(look.radius).toBe("6px");
+    expect(look.border).toBe("0.5px solid");
+    expect(look.name).toBe("media-file.txt");
+    expect(look.size).toMatch(/^[\d,.]+ (B|KB)$/);
+    expect(look.elevation).toBe("dialog");
+    expect(await page.eval(`getComputedStyle(${toolbar}).opacity`)).toBe("0");
+    await page.hover(`${at} .file-media-name`);
+    await page.waitFor(`getComputedStyle(${toolbar}).opacity==='1'`);
+    expect(
+      await page.eval(`[...${toolbar}.querySelectorAll('.ui-button')].map(b=>b.getAttribute('aria-label'))`),
+    ).toEqual(["Copy link", "Download"]);
+    expect(await page.eval(`${toolbar}.querySelector('a[aria-label="Download"]').getAttribute('href')`)).toBe(
+      "/api/issues/TEST-1/attachments/103?download=1",
+    );
+    expect(await page.eval(`${toolbar}.querySelector('a[aria-label="Download"]').getAttribute('download')`)).toBe(
+      "media-file.txt",
+    );
+    await page.context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.click(`${at} [aria-label="Copy link"]`);
+    await page.waitFor(
+      `document.querySelector('[aria-label="Notifications"]')?.textContent.includes('File URL copied to clipboard')`,
+    );
+    expect(await page.eval(`navigator.clipboard.readText()`)).toBe(
+      `${fixture.url}api/issues/TEST-1/attachments/103`,
+    );
+    await page.click(`${at} .file-media-name`);
+    await page.waitFor(
+      `!!document.querySelector('#description .ProseMirror-selectednode [data-attachment-id="103"]')&&document.activeElement===document.getElementById('description')`,
+    );
+    expect(await page.eval(`getComputedStyle(${block}).outlineStyle`)).toBe("solid");
+    await page.key("Backspace");
+    await page.waitFor(`!${block}`);
+    await page.key("z", "meta");
+    await page.waitFor(`!!${block}`);
+  });
   await test.step("comment media on a middle issue isolates navigation and commands, while Space actually plays", async () => {
     await mediaIssue(page, "TEST-2");
     const commentVideo = `document.querySelector('[data-comment="jira-media-comment"] video')`;
@@ -131,7 +178,7 @@ test("media failures: unresolved media, failed bytes and unmapped media show the
   });
 });
 
-test("media layout: reserved space, native sizes, ADF widths and wraps, inline chips and external images", async ({
+test("media layout: reserved space, native sizes, ADF widths and wraps, inline file blocks and external images", async ({
   open,
 }) => {
   await test.step("ADF dimensions reserve media space before metadata and bytes arrive", async () => {
@@ -163,7 +210,7 @@ test("media layout: reserved space, native sizes, ADF widths and wraps, inline c
     expect(sizes.wrap).toBe(320);
     expect(sizes.text).toBeGreaterThan(sizes.right);
   });
-  await test.step("ADF width, wrap, filmstrip, inline chips and external images without CORS render correctly", async () => {
+  await test.step("ADF width, wrap, filmstrip, inline file blocks and external images without CORS render correctly", async () => {
     await media({ mediaVariant: "layouts", mediaInComment: true });
     const page = await open();
     const failures: string[] = [],
