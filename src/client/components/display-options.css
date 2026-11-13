@@ -106,6 +106,18 @@
   .ui-vo-footer-link {
     color: var(--link);
   }
+  /* A page opened in place (Group ordering): its header row of Back and title, 8px padding over a bgBorder line. */
+  .ui-vo-page-header {
+    display: flex;
+    height: 32px;
+    box-sizing: content-box;
+    align-items: center;
+    gap: 6px;
+    /* Linear's page drops the container's 8px top padding (`$noPaddingTop`). */
+    margin-top: -8px;
+    padding: 8px;
+    border-bottom: var(--thin-pixel) solid var(--bg-border);
+  }
   /* The layout tabs reach 8px into the section's padding and keep 16px above the rows. */
   .ui-vo-layout {
     margin: 0 -8px 16px;

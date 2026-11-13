@@ -1,5 +1,6 @@
 import { useRef, type ComponentProps, type ReactNode, type RefObject } from "react";
 import { Button, IconButton } from "./button";
+import { Icon } from "./icons";
 import { Popover, POPOVER_SURFACE } from "./menu-surface";
 import { Select } from "./select";
 import { Switch } from "./switch";
@@ -132,6 +133,23 @@ function Footer({ children }: { children: ReactNode }) {
   return <div className="ui-vo-footer">{children}</div>;
 }
 
+/**
+ * The header of a page the panel opens in place (Linear's Group ordering): a Back button and the page's miniPlus labelMuted
+ * title in a 32px row, over a thinPixel bgBorder line. Escape still closes the whole popover, as in Linear.
+ */
+function PageHeader({ onBack, children }: { onBack: () => void; children: ReactNode }) {
+  return (
+    <div className="ui-vo-page-header">
+      <IconButton label="Back" tooltip={false} variant="borderless" size="small" autoFocus onClick={onBack}>
+        <Icon name="arrow-left" />
+      </IconButton>
+      <Text variant="miniPlus" color="muted">
+        {children}
+      </Text>
+    </div>
+  );
+}
+
 /** The layout switch atop Linear's view options: `sq` fullWidth tabs, 8px into the section's padding, 16px above the rows. */
 function LayoutTabs<Value extends string>({
   value,
@@ -171,6 +189,7 @@ export const ViewOptions = {
   SelectWithToggleWrapper,
   Footer,
   LayoutTabs,
+  PageHeader,
 };
 
 /** A Row of a label and a SelectButton, with an optional toggle in front of the select (Linear's ordering rows). */

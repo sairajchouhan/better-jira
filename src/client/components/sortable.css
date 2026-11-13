@@ -1,0 +1,41 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+/* Linear's Group ordering rows (dnd-kit SortableContext), measured on linear.app 2026-11-13. */
+@layer components {
+  .ui-sortable-item {
+    position: relative;
+    outline: none;
+  }
+  /* While a drag is under way the passed rows slide aside (dnd-kit's 250ms ease); the dragged one follows the pointer. */
+  .ui-sortable[data-dragging] .ui-sortable-item {
+    transition: transform 250ms ease;
+  }
+  .ui-sortable .ui-sortable-item[data-dragged] {
+    z-index: 1;
+    border-radius: 5px;
+    background: var(--panel);
+  }
+  .ui-sortable .ui-sortable-item[data-dragged="pointer"] {
+    transition: none;
+  }
+  /* The handle: 20 x row height, 4px in from the row's left edge, its 6 x 10 grip centred in 8px padding. */
+  .ui-sortable-handle {
+    position: absolute;
+    top: 0;
+    left: 4px;
+    z-index: 1;
+    display: flex;
+    width: 20px;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    color: var(--fg-3);
+    cursor: move;
+    touch-action: none;
+  }
+  .ui-sortable-grip {
+    flex-shrink: 0;
+  }
+}
