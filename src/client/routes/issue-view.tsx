@@ -56,6 +56,7 @@ import { hotkeyOf, runShortcut } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
 import { post, useCommand, focusNode } from "@/client/features/navigation/commands";
 import { InboxIssueActions } from "./inbox";
+import { SplitPanel } from "@/client/features/issue/split-panel";
 import { descriptionSession, type DescriptionPorts } from "@/client/features/issue/description-session";
 import { shortDate } from "@/client/lib/due-date";
 import { BoardBreadcrumbs } from "@/client/features/navigation/app-chrome";
@@ -84,6 +85,7 @@ export function IssueScreen() {
   return open ? <IssuePage key={firstKey(open.key)} issue={open} actions={inbox && <InboxIssueActions />} /> : null;
 }
 
+const closePanel = () => navigate({ panel: false });
 const SIDE =
   "issue-detail flex flex-col bg-panel max-md:absolute max-md:inset-0 max-md:z-20 max-md:w-full";
 
@@ -104,18 +106,15 @@ export const IssuePage = memo(function IssuePage({
     </div>
   );
 });
-/** The issue beside the board, 520px wide. */
+/** The issue beside the board in Linear's resizable split panel. */
 export const IssueSidePanel = memo(function IssueSidePanel({ issue }: { issue: Issue }) {
   return (
-    <aside
-      className={`${SIDE} w-[520px] max-w-full shrink-0 border-l border-line`}
-      data-mode="side"
-    >
+    <SplitPanel className={SIDE} data-mode="side" onClose={closePanel}>
       <IssueHeader issue={issue} switchTo="page">
         <IssueKey issue={issue} />
       </IssueHeader>
       <IssueBody issue={issue} />
-    </aside>
+    </SplitPanel>
   );
 });
 /** The issue filling the inbox's right pane, with the notification's snooze and delete. */
@@ -184,7 +183,7 @@ function IssueHeader({
       >
         <Icon name={switchTo === "side" ? "side" : "expand"} />
       </IconButton>
-      <IconButton label="Close" shortcut="Escape" variant="muted" onClick={() => navigate({ panel: false })}>
+      <IconButton label="Close" shortcut="Escape" variant="muted" onClick={closePanel}>
         <Icon name="close" />
       </IconButton>
     </div>
