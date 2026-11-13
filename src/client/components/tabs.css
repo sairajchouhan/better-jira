@@ -3,7 +3,12 @@
 
 @layer components {
   /* Linear's header view tabs (.raj/linear.md "Tabs", computed styles): 28px pills, 0 10px, 12px/500, a 0.5px ring. */
+  /* The rings, one definition: a thinPixel ring over shadowLow, the selected tab's ring alone. Declared on the list, so
+     inside a popup each reads the surface's elevated colours (control-tokens.css [data-elevation]). Header tabs ring
+     both states with bgBorderAlphaThin. */
   .ui-tabs-list {
+    --tab-ring: var(--border-alpha-thin);
+    --tab-on-ring: var(--border-alpha-thin);
     display: flex;
     align-items: center;
     gap: 4px;
@@ -18,7 +23,7 @@
     border: var(--thin-pixel) solid transparent;
     border-radius: 9999px;
     background: var(--tab);
-    box-shadow: var(--tab-shadow);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--tab-ring), var(--frame-shadow);
     color: var(--fg-3);
     font-size: 12px;
     font-weight: 500;
@@ -30,7 +35,7 @@
   }
   .ui-tab[aria-selected="true"] {
     background: var(--tab-on);
-    box-shadow: var(--tab-on-shadow);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--tab-on-ring);
     color: var(--fg);
   }
   .ui-tab:disabled {
@@ -54,9 +59,10 @@
 /* `sq` fullWidth (cq, I_n): the track is bgBase; each trigger is a jv tab in Mv medium (28px, 12/500, 0 8px beside its
    icon, 6px gap) with 2px margins, sharing the row equally (137 each in the 300px panel, live). Off: controlTertiary + labelMuted, a bgBorderAlphaThin ring over
    shadowLow; hover controlTertiaryHover + labelBase; on controlTertiarySelected + labelTitle, ringed with
-   bgBorderSolidAlphaThin. Inside a popover every token is the elevated one (control-tokens.css .ui-elevated). */
+   bgBorderSolidAlphaThin. Inside a popover every token is the elevated one (control-tokens.css [data-elevation]). */
 @layer components {
   .ui-tabs-list[data-variant="options"] {
+    --tab-on-ring: var(--border-solid-alpha-thin);
     isolation: isolate;
     width: 100%;
     gap: 2px;
@@ -70,14 +76,9 @@
     justify-content: center;
     margin: 2px;
     padding: 0 8px;
-    box-shadow: 0 0 0 var(--thin-pixel) var(--border-alpha-thin), var(--frame-shadow);
   }
   .ui-tabs-list[data-variant="options"] .ui-tab:hover {
     background: var(--control-tertiary-hover);
-  }
-  .ui-tabs-list[data-variant="options"] .ui-tab[aria-selected="true"] {
-    background: var(--tab-on);
-    box-shadow: 0 0 0 var(--thin-pixel) var(--border-solid-alpha-thin);
   }
   .ui-tabs-list[data-variant="options"] .ui-tab:focus-visible {
     outline-offset: -1px;
