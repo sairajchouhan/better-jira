@@ -1050,7 +1050,7 @@ test("opening saved views and changing their overlay never writes board preferen
   const { setRule, viewSettings, effectiveSettings } = await import("@/client/features/views/view-settings");
   const { defaultPreferences } = await import("@/shared/view-model");
   const p = defaultPreferences();
-  const view = {id:"identity-test",board:1,kind:"custom" as const,name:"Identity",description:"",icon:"filter",color:"gray",filters:{...p.filters,children:[{id:"saved",field:"status" as const,op:"is" as const,values:["todo"]}]},display:{...p.display,openIn:"page" as const},scope:p.scope,mine:false,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  const view = {id:"identity-test",board:1,kind:"custom" as const,name:"Identity",description:"",icon:"filter",color:"gray",filters:{...p.filters,children:[{id:"saved",field:"status" as const,op:"is" as const,values:["todo"]}]},display:{...p.display,openIn:"page" as const},scope:p.scope,hidden:{},collapsed:{},mine:false,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
   set({preferences:{1:p}, savedViews:[view]});
   const before = JSON.stringify(get().preferences);
   openSavedView(view);
@@ -1075,7 +1075,7 @@ const viewFixture = async (patch: Record<string, unknown> = {}) => {
   const { defaultPreferences } = await import("@/shared/view-model");
   const p = defaultPreferences();
   const at = new Date().toISOString();
-  return {id:"v-source",board:1,kind:"custom" as const,name:"Source",description:"",icon:"filter",color:"gray",filters:{...p.filters,children:[{id:"saved",field:"status" as const,op:"is" as const,values:["todo"]}]},display:p.display,scope:p.scope,mine:false,createdAt:at,updatedAt:at,...patch};
+  return {id:"v-source",board:1,kind:"custom" as const,name:"Source",description:"",icon:"filter",color:"gray",filters:{...p.filters,children:[{id:"saved",field:"status" as const,op:"is" as const,values:["todo"]}]},display:p.display,scope:p.scope,hidden:{},collapsed:{},mine:false,createdAt:at,updatedAt:at,...patch};
 };
 const withFetch = async (respond: (url: string, init?: RequestInit) => unknown, run: () => Promise<void>) => {
   const original = globalThis.fetch;
@@ -2288,5 +2288,50 @@ test("#3: a refused description and Keep mine send the description again, never 
   } finally {
     set({ writable: false });
     globalThis.fetch = realFetch;
+  }
+});
+
+test("hiding or collapsing a group inside a saved view saves it to that view, never to the board", async () => {
+  const { get, set } = await import("./store");
+  const { openSavedView, navigate } = await import("@/client/features/navigation/app-navigation");
+  const { hideGroup, showGroup, toggleCollapsed, effectiveSettings } = await import("@/client/features/views/view-settings");
+  const { defaultPreferences } = await import("@/shared/view-model");
+  const p = defaultPreferences();
+  const at = new Date().toISOString();
+  const view = {id:"hidden-test",board:1,kind:"tab" as const,name:"Hidden",description:"",icon:"filter",color:"gray",filters:p.filters,display:p.display,scope:p.scope,hidden:{},collapsed:{},mine:false,createdAt:at,updatedAt:at};
+  set({preferences:{1:p}, savedViews:[view]});
+  const before = JSON.stringify(get().preferences);
+  const puts: unknown[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const patch = JSON.parse(String(init?.body));
+    puts.push(patch);
+    return Response.json({ ...get().savedViews.find((v) => v.id === view.id), ...patch });
+  }) as typeof fetch;
+  const saved = async () => {
+    for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+  };
+  try {
+    openSavedView(view);
+    hideGroup(1, "Todo");
+    expect(effectiveSettings(1).hidden).toEqual({ status: ["Todo"] });
+    await saved();
+    toggleCollapsed(1, ["Done"]);
+    await saved();
+    expect(puts).toEqual([{ hidden: { status: ["Todo"] } }, { collapsed: { status: ["Done"] } }]);
+    expect(get().savedViews[0]).toMatchObject({ hidden: { status: ["Todo"] }, collapsed: { status: ["Done"] } });
+    expect(JSON.stringify(get().preferences)).toBe(before);
+    // The board's own settings keep nothing hidden; the view keeps its hidden column when opened again.
+    navigate({ board: 1 });
+    expect(effectiveSettings(1).hidden).toEqual({});
+    openSavedView(get().savedViews[0]!);
+    expect(effectiveSettings(1).hidden).toEqual({ status: ["Todo"] });
+    showGroup(1, "Todo");
+    await saved();
+    expect(effectiveSettings(1).hidden).toEqual({ status: [] });
+  } finally {
+    globalThis.fetch = realFetch;
+    navigate({ board: 1 });
+    set({ savedViews: [] });
   }
 });

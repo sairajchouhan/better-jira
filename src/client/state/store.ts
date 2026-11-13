@@ -223,6 +223,8 @@ export function commit(patch: Partial<State>) {
           ...defaultPreferences(),
           scope: v.scope,
           display: v.display,
+          hidden: v.hidden,
+          collapsed: v.collapsed,
           filters: state.overlayFilters,
         }
       : null;

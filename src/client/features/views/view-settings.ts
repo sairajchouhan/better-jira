@@ -3,7 +3,8 @@ import { isMyIssues } from "@/client/features/navigation/navigation";
  *
  * Callers say what they want ("remove this rule", "clear filters", "hide this group"); this module decides where
  * it goes. On a plain board it goes to the board's preferences. While a saved view is open, filters go to the view's
- * temporary overlay (its saved base filters are never edited here), and display and scope are saved to the view.
+ * temporary overlay (its saved base filters are never edited here), and display, scope, hidden and collapsed groups are
+ * saved to the view, as Linear keeps them in the view's preferences.
  * While the view editor is open, everything goes to the editor's draft. Any other board's settings are its own
  * preferences.
  */
@@ -43,13 +44,10 @@ function write(board: number, patch: Partial<Preferences>) {
     return;
   }
   if (s.activeViewId && board === s.board) {
-    if (patch.filters) setOverlay(patch.filters);
-    const { display, scope } = patch;
-    if (display || scope)
-      void updateSavedView(s.activeViewId, {
-        ...(display ? { display } : {}),
-        ...(scope ? { scope } : {}),
-      }).catch((e: unknown) =>
+    const { filters: overlay, ...saved } = patch;
+    if (overlay) setOverlay(overlay);
+    if (Object.keys(saved).length)
+      void updateSavedView(s.activeViewId, saved).catch((e: unknown) =>
         set({ perf: e instanceof Error ? e.message : "Could not save view" }),
       );
     return;

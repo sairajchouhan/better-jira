@@ -171,6 +171,9 @@ describe("view selection", () => {
     expect(invalid.display.layout).toBe("board");
     expect(invalid.display.subIssues).toBe(false);
     expect(invalid.filters.children).toEqual([]);
+    // Hidden and collapsed groups keep only known groupings and string ids; a malformed map reads as none.
+    const groups = parsePreferences({ hidden: { status: ["Done", 4], nope: ["x"] }, collapsed: ["status"] });
+    expect([groups.hidden, groups.collapsed]).toEqual([{ status: ["Done"] }, {}]);
   });
   test("unfinished OR branches do not override completed filters", () => {
     const group: FilterGroup = {

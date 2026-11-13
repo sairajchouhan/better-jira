@@ -98,12 +98,14 @@ export type Display = {
   openIn: "side" | "page";
 };
 export type Scope = "all" | "active" | "backlog";
+/** Group ids per column grouping: the hidden or collapsed groups of each grouping (Linear's `hiddenColumns`). */
+export type GroupIds = Record<string, string[]>;
 export type Preferences = {
   display: Display;
   filters: FilterGroup;
   scope: Scope;
-  hidden: Record<string, string[]>;
-  collapsed: Record<string, string[]>;
+  hidden: GroupIds;
+  collapsed: GroupIds;
 };
 export const GROUPINGS: [Grouping, string][] = [
   ["none", "No grouping"],
@@ -267,21 +269,24 @@ export const defaultPreferences = (): Preferences => ({
   collapsed: {},
 });
 
+/** Stored hidden or collapsed groups: unknown groupings and non-string ids drop; anything else reads as none. */
+export const parseGroupIds = (saved: unknown): GroupIds =>
+  saved && typeof saved === "object" && !Array.isArray(saved)
+    ? Object.fromEntries(
+        Object.entries(saved)
+          .filter((e): e is [string, unknown[]] => GROUPINGS.some(([id]) => id === e[0]) && Array.isArray(e[1]))
+          .map(([g, v]) => [g, v.filter((id): id is string => typeof id === "string")]),
+      )
+    : {};
+
 /** Treat saved settings as versioned input. Invalid or stale values fall back independently. */
 export function parsePreferences(value: unknown): Preferences {
   const base = defaultPreferences();
   if (!value || typeof value !== "object") return base;
   if (["all", "active", "backlog"].includes((value as Preferences).scope))
     base.scope = (value as Preferences).scope;
-  for (const key of ["hidden", "collapsed"] as const) {
-    const saved = (value as Preferences)[key];
-    if (saved && typeof saved === "object")
-      base[key] = Object.fromEntries(
-        Object.entries(saved)
-          .filter(([g, v]) => GROUPINGS.some(([id]) => id === g) && Array.isArray(v))
-          .map(([g, v]) => [g, v.filter((id) => typeof id === "string")]),
-      );
-  }
+  base.hidden = parseGroupIds((value as Preferences).hidden);
+  base.collapsed = parseGroupIds((value as Preferences).collapsed);
   const d = (value as Preferences).display;
   if (d && typeof d === "object") {
     for (const key of [

@@ -85,6 +85,8 @@ test("the visible order follows a saved view, its temporary filters and the view
     filters: filter("labels", "bug"),
     display: p.display,
     scope: p.scope,
+    hidden: {},
+    collapsed: {},
     mine: false,
     createdAt: at,
     updatedAt: at,

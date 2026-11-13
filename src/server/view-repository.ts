@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { validateDraft, type SavedView } from "@/shared/saved-view-model";
-import { parsePreferences } from "@/shared/view-model";
+import { parseGroupIds, parsePreferences } from "@/shared/view-model";
 
 export function viewRepository(db: Database) {
   db.run(
@@ -16,7 +16,13 @@ export function viewRepository(db: Database) {
       .map((r) => {
         const view = JSON.parse(r.data) as SavedView;
         // A view stored before a display option existed lacks that key; read it with the option's default so later writes validate.
-        return { ...view, display: parsePreferences({ display: view.display }).display };
+        // One stored before views kept hidden and collapsed groups has none.
+        return {
+          ...view,
+          display: parsePreferences({ display: view.display }).display,
+          hidden: parseGroupIds(view.hidden),
+          collapsed: parseGroupIds(view.collapsed),
+        };
       });
   const find = (ns: string, id: string) => list(ns).find((v) => v.id === id);
   const insert = (ns: string, v: SavedView) =>

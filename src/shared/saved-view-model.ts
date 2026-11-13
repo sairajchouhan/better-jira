@@ -2,8 +2,10 @@ import {
   defaultPreferences,
   FIELDS,
   operatorsFor,
+  parseGroupIds,
   parsePreferences,
   type FilterGroup,
+  type GroupIds,
   type Rule,
   type Display,
   type Scope,
@@ -20,6 +22,9 @@ export type SavedView = {
   filters: FilterGroup;
   display: Display;
   scope: Scope;
+  /** Hidden and collapsed groups per grouping, kept with the view as Linear keeps `hiddenColumns` in its view preferences. */
+  hidden: GroupIds;
+  collapsed: GroupIds;
   mine: boolean;
   createdAt: string;
   updatedAt: string;
@@ -90,6 +95,9 @@ export function validateDraft(v: unknown): ViewDraft {
     filters: structuredClone(v.filters),
     display: parsed,
     scope: v.scope,
+    // A view saved before views kept their hidden groups has none.
+    hidden: parseGroupIds(v.hidden),
+    collapsed: parseGroupIds(v.collapsed),
     mine: v.mine,
   };
 }

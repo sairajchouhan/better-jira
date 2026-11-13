@@ -22,6 +22,8 @@ const view = (patch: Partial<SavedView> = {}): SavedView => {
     filters: p.filters,
     display: { ...p.display, openIn: "page" },
     scope: p.scope,
+    hidden: {},
+    collapsed: {},
     mine: true,
     createdAt: "",
     updatedAt: "",

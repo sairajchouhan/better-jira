@@ -61,6 +61,8 @@ export function createViewDraft(
     // Linear: a new custom view starts as a list with its details open; a tab keeps the board's layout.
     display: kind === "custom" ? { ...p.display, layout: "list" } : p.display,
     scope: p.scope,
+    hidden: p.hidden,
+    collapsed: p.collapsed,
     mine: get().mine,
   });
 }
