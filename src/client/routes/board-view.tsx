@@ -20,7 +20,10 @@ import {
   useState,
   type CSSProperties,
   type ReactNode,
+  type SyntheticEvent,
 } from "react";
+import { FieldMenuButton } from "@/client/components/pill-select";
+import { PropertyPicker } from "@/client/features/issue/personal-controls";
 import { commentCount } from "@/client/features/media/media-edits";
 import { Icon, Label, PriorityIcon, StatusIcon, TypeDot } from "@/client/components/icons";
 import { ME, get, set, timed, useStore, statusOf } from "@/client/state/store";
@@ -598,6 +601,9 @@ function IssueTarget({
   // A right-clicked card is highlighted only while its menu is open, as Linear does; it never becomes the selection.
   const menu = useStore((s) => !!s.overlay && s.target === issue.key);
   const columnSelected = useStore((s) => s.columnSelection.has(issue.key));
+  // A control inside the card (a label chip) and the menu it opens in a portal handle their own clicks and keys.
+  const own = (e: SyntheticEvent) =>
+    e.currentTarget.contains(e.target as Node) && !(e.target as Element).closest("button");
   return (
     <div
       ref={ref}
@@ -612,7 +618,7 @@ function IssueTarget({
       onPointerEnter={() => preloadOnHover({ selected: issue.key, panel: true })}
       onPointerLeave={() => preloadOnHover(null)}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
+        if (own(e) && (e.key === "Enter" || e.key === " ")) {
           e.preventDefault();
           e.stopPropagation();
           navigate({
@@ -622,7 +628,8 @@ function IssueTarget({
           });
         }
       }}
-      onClick={() =>
+      onClick={(e) =>
+        own(e) &&
         timed(`open ${issue.key}`, () => {
           set({ columnSelection: new Set() });
           navigate({ selected: issue.key, panel: true });
@@ -630,6 +637,7 @@ function IssueTarget({
       }
       // Linear's row menu: Issue options at the pointer, on this issue, without selecting it.
       onContextMenu={(e) => {
+        if (!e.currentTarget.contains(e.target as Node)) return;
         e.preventDefault();
         ui.send({
           type: "overlay.open",
@@ -643,6 +651,20 @@ function IssueTarget({
     >
       {children}
     </div>
+  );
+}
+
+/** A card or row label chip opens the issue's label picker beside it, as Linear's does. */
+function LabelsButton({ issue, children }: { issue: Issue; children: ReactNode }) {
+  return (
+    <FieldMenuButton
+      aria-label={`Labels on ${issue.key}`}
+      className="flex shrink-0 rounded-full"
+      menu={PropertyPicker}
+      menuProps={{ issue, field: "labels" as const }}
+    >
+      {children}
+    </FieldMenuButton>
   );
 }
 
@@ -674,11 +696,17 @@ function IssueProperties({ issue, display: d, labels }: { issue: Issue; display:
           <span className="ml-1.5 truncate">{issue.project.name}</span>
         </span>
       )}
-      {show("labels") && issue.labels.slice(0, labels).map((l) => <Label key={l} name={l} />)}
+      {show("labels") && issue.labels.slice(0, labels).map((l) => (
+        <LabelsButton key={l} issue={issue}>
+          <Label name={l} />
+        </LabelsButton>
+      ))}
       {show("labels") && issue.labels.length > labels && (
-        <span title={issue.labels.join(", ")} className={CHIP}>
-          +{issue.labels.length - labels}
-        </span>
+        <LabelsButton issue={issue}>
+          <span title={issue.labels.join(", ")} className={CHIP}>
+            +{issue.labels.length - labels}
+          </span>
+        </LabelsButton>
       )}
       {show("comments") && commentCount(issue) > 0 && (
         <span className={CHIP} aria-label={`${commentCount(issue)} comments`}>

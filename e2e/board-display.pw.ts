@@ -197,3 +197,29 @@ test("1.8: a list row leads with the priority icon, left of the ID and status; a
   );
   expect(chip).toBeGreaterThan(20);
 });
+
+// Linear: clicking a card's label chip opens the issue's label menu ("Change or add labels…", Workspace labels) beside the
+// chip; the card does not open. Picking a label in that menu changes the issue, still without opening it.
+test("a card's label chip opens the label picker beside it, not the issue", async ({ open }) => {
+  const page = await open();
+  const chip = '[data-key] [aria-label^="Labels on "]';
+  await page.waitFor(`!!document.querySelector('${chip}')`);
+  const key = await page.eval<string>(`document.querySelector('${chip}').closest("[data-key]").dataset.key`);
+  const labels = () => page.eval<string[]>(`[...document.querySelectorAll('[data-key="${key}"] [aria-label^="Labels on "]')].map(b=>b.textContent)`);
+  const before = await labels();
+  const url = await page.eval<string>("location.href");
+  await page.click(chip);
+  const menu = `[role="dialog"][aria-label="Change labels"]`;
+  await page.waitFor(`!!document.querySelector('${menu}')`);
+  expect(await page.eval(`document.activeElement.placeholder`)).toBe("Change or add labels…");
+  expect(await page.eval("location.href")).toBe(url);
+  // Pick a label that isn't on the issue: Enter in the menu must not open the card either.
+  await page.key("ArrowDown");
+  await page.key("Enter");
+  const list = `[...document.querySelectorAll('[data-key="${key}"] [aria-label^="Labels on "]')].map(b=>b.textContent).join()`;
+  await page.waitFor(`${list}!==${JSON.stringify(before.join())}`);
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector('${menu}')`);
+  expect(await page.eval("location.href")).toBe(url);
+  expect(await labels()).not.toEqual(before);
+});
