@@ -1,4 +1,4 @@
-import { type Board, type Issue } from "@/shared/issue-model";
+import { type Board, type Full, type Issue } from "@/shared/issue-model";
 /**
  * Reading the server's mirror of Jira. Reads go through TanStack Query, which dedupes loads in flight; the property poll
  * merges Jira's changes into the issues (keeping local edits on top, see local-edits.ts) and runs at once when the
@@ -152,9 +152,19 @@ export async function loadFull(key: string, force = false) {
     error("Could not load issue details");
   }
 }
-/** Loads an issue's Jira record and keeps local field edits on top. */
+const fullPath = (key: string) => `/api/issues/${encodeURIComponent(key)}`;
+/** Loads an issue's Jira record and keeps local field edits on top. The first read after a cold load takes the preloaded
+ *  record when it is this issue's, and drops it otherwise, so a later read never gets an old answer. */
 async function fetchFull(key: string) {
-  const res = await fetch(`/api/issues/${encodeURIComponent(key)}`);
-  if (!res.ok) throw new Error("Could not load issue details");
-  mergeFull(key, await res.json());
+  const early = preloaded?.key === key ? preloaded.record : undefined;
+  preloaded = undefined;
+  mergeFull(key, await (early ?? json<Full>(fullPath(key))));
+}
+/** Linear's PageDataPreloader (`preloadTargetForPath`, `registerPreload`): an issue page opened cold starts that issue's
+ *  record alongside the app's own load, instead of after it, so the issue's first read usually finds it arrived. */
+let preloaded: { key: string; record: Promise<Full> } | undefined;
+export function preloadFull(key: string) {
+  const record = json<Full>(fullPath(key));
+  record.catch(() => {}); // the issue's own read reports it
+  preloaded = { key, record };
 }

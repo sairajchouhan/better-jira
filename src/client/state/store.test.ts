@@ -269,6 +269,59 @@ test("browser history restores issue selection without pushing another navigatio
   }
 });
 
+test("an issue page opened cold reads the issue's record alongside the app's load, as Linear's PageDataPreloader", async () => {
+  const { get } = await import("./store");
+  const { load } = await import("./app-load");
+  const { loadFull } = await import("./server-data");
+  const { markStale } = await import("./local-edits");
+  const issues = [...get().issues.values()],
+    boards = get().boards;
+  const key = issues.find((issue) => !issue.key.includes("-NEW"))!.key;
+  const description = { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text: "Preloaded" }] }] };
+  const requests: string[] = [];
+  let reads = 0;
+  const originalFetch = globalThis.fetch,
+    path = location.pathname;
+  fresh(`/issue/${key}`);
+  location.pathname = `/issue/${key}`;
+  try {
+    globalThis.fetch = Object.assign(async (input: string | URL | Request) => {
+      const url = String(input);
+      requests.push(url);
+      if (url === `/api/issues/${key}`) {
+        reads++;
+        return Response.json({ key, fields: { description, comment: { comments: [], total: 0 } } });
+      }
+      // The mirror's list is slow, so the record arrives while the app still loads.
+      if (url === "/api/issues") await Bun.sleep(20);
+      return Response.json(
+        url === "/api/client"
+          ? { site: "https://example.atlassian.net", user: { id: "me", name: "Me" } }
+          : url === "/api/boards"
+            ? boards
+            : url.startsWith("/api/views") ? [] : url === "/api/issues"
+              ? issues
+              : { entries: {}, progress: { total: 0, pending: 0, completed: 0, errors: 0 } },
+      );
+    }, originalFetch);
+    await load();
+    // Asked first, before the account or the mirror.
+    expect(requests[0]).toBe(`/api/issues/${key}`);
+    // The issue screen's own read takes it instead of asking again.
+    await settle();
+    await loadFull(key);
+    expect(get().full.get(key)?.fields.description).toEqual(description);
+    expect(reads).toBe(1);
+    // A later read asks Jira again: the preloaded answer is used once.
+    markStale(key);
+    await loadFull(key);
+    expect(reads).toBe(2);
+  } finally {
+    globalThis.fetch = originalFetch;
+    location.pathname = path;
+  }
+});
+
 test("I7: local comments can be rich, edited and deleted, each step undoable; other authors remain read-only", async () => {
   const { get, set, ME } = await import("./store");
   const { actions } = await import("./issue-actions");

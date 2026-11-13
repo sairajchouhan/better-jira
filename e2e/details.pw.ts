@@ -323,3 +323,32 @@ test("reloading an issue page: the description holds Linear's 190px skeleton whi
   expect(waiting.length).toBeGreaterThan(0);
   expect(new Set(waiting.map((f) => f.subIssues)).size).toBe(1);
 });
+
+test("reloading an issue page reads its record alongside the app's load, so the first paint has the description and the Sub-issues heading never moves", async ({
+  open,
+}) => {
+  await fixture.reset();
+  const page = await open("?issue=TEST-2&view=page", { setup: WITH_SUB_ISSUE + WATCH_RELOAD });
+  await page.waitFor(`!!document.querySelector("#description.ProseMirror")`);
+  // The mirror's list waits (up to 2s) for the issue's record: Linear's PageDataPreloader asks for it with the app's own load.
+  let answer!: () => void,
+    beforeList: boolean | undefined;
+  const answered = new Promise<boolean>((resolve) => (answer = () => resolve(true)));
+  await page.page.route(/\/api\/issues\/TEST-2$/, async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response });
+    answer();
+  });
+  await page.page.route(/\/api\/issues$/, async (route) => {
+    beforeList = await Promise.race([answered, sleep(2000).then(() => false)]);
+    await route.continue();
+  });
+  await page.page.reload();
+  await page.waitFor(`!!document.querySelector("#description.ProseMirror")`, 15000);
+  await sleep(300);
+  expect(beforeList).toBe(true);
+  const frames = await page.eval<ReloadFrame[]>(`window.__frames`);
+  expect(frames.length).toBeGreaterThan(0);
+  expect(frames.filter((f) => f.skeleton)).toEqual([]);
+  expect(new Set(frames.map((f) => f.subIssues)).size).toBe(1);
+});

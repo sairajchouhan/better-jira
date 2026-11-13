@@ -11,7 +11,7 @@ import {
   resumeSync,
   unsentWrites,
 } from "./jira-sync";
-import { fetchJson, loadFull, queryClient, startPoll } from "./server-data";
+import { fetchJson, loadFull, preloadFull, queryClient, startPoll } from "./server-data";
 import {
   flushLocalChanges,
   localDataBlocked,
@@ -56,9 +56,14 @@ export async function load() {
   app.send({ type: "load" });
   await waitFor(app, settled);
 }
+/** The issue an issue page's address names (`/issue/KEY/…`), as Linear's `preloadTargetForPath` reads it. Jira keys
+ *  need no decoding. */
+const issueOfPath = (path: string) => path.match(/^\/issue\/([^/]+)/)?.[1];
 /** Window listeners are added by the first load only; a storage retry loads again. */
 let listening = false;
 async function loadApplication() {
+  const opened = issueOfPath(location.pathname);
+  if (opened) preloadFull(opened);
   const client = await fetchJson<{
     site: string;
     user: User;
