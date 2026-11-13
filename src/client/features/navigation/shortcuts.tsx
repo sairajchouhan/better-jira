@@ -1052,10 +1052,13 @@ export function ShortcutHelp() {
   });
   return (
     <Dialog label="Keyboard Shortcuts" placement="side" close={() => ui.send({ type: "overlay.close" })}>
-      <Dialog.Header className="shortcuts-header">
-        <Dialog.Title>Keyboard Shortcuts</Dialog.Title>
-        <Dialog.Close label="Close dialog" shortcut="Escape" />
-      </Dialog.Header>
+      {/* HelpCenter's own header (`On`), not the Modal header: regularPlus labelTitle, a spacer, the small Close inline. */}
+      <header className="shortcuts-header">
+        <Text as="h1" variant="regularPlus">
+          Keyboard Shortcuts
+        </Text>
+        <Dialog.Close label="Close dialog" shortcut="Escape" size="small" />
+      </header>
       <div className="shortcuts-search">
         <TextInput
           autoFocus

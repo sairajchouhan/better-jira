@@ -53,6 +53,7 @@
 :root {
   --control-secondary-selected: lch(94.854% 0.157 282); /* controlSecondarySelected */
   --control-tertiary-hover: lch(94.854% 0.5 282); /* controlTertiaryHover */
+  --border-faint: lch(95.24% 0 282); /* bgBorderFaint */
   --border-faint-thin: lch(89.84% 0 282); /* bgBorderFaintThin */
   --border-thin: lch(89.84% 0 282); /* bgBorderThin */
   --border-solid-hover: lch(73.64% 0 282); /* bgBorderSolidHover */
@@ -63,6 +64,7 @@
   :root {
     --control-secondary-selected: lch(18.634% 1.075 272);
     --control-tertiary-hover: lch(14.006% 0.593 272);
+    --border-faint: lch(9.84% 1.48 272);
     --border-faint-thin: lch(13.08% 1.48 272);
     --border-thin: lch(18.48% 1.48 272);
     --border-solid-hover: lch(20.64% 1.48 272);
@@ -94,6 +96,7 @@
   --tab-on: lch(95.543% 0 282); /* controlTertiarySelected */
   --border-alpha-thin: lch(0 0 0 / 0.088);
   --border-solid-alpha-thin: lch(0 0 0 / 0.147);
+  --border-faint: lch(97.3% 0 282);
   --border-faint-thin: lch(91.9% 0 282);
   --border-thin: lch(91.9% 0 282);
   --bg-border: lch(90.55% 0 282);
@@ -124,6 +127,7 @@
     --tab-on: lch(23.906% 1.429 272);
     --border-alpha-thin: lch(100 0 0 / 0.148);
     --border-solid-alpha-thin: lch(100 0 0 / 0.247);
+    --border-faint: lch(17.04% 1.93 272);
     --border-faint-thin: lch(20.28% 1.93 272);
     --border-thin: lch(25.68% 1.93 272);
     --bg-border: lch(21.36% 1.93 272);
@@ -147,6 +151,7 @@
     --tab-on: lch(27.618% 1.879 272);
     --border-alpha-thin: lch(100 0 0 / 0.155);
     --border-solid-alpha-thin: lch(100 0 0 / 0.258);
+    --border-faint: lch(20.752% 2.38 272);
     --border-faint-thin: lch(23.992% 2.38 272);
     --border-thin: lch(29.392% 2.38 272);
     --bg-border: lch(25.072% 2.38 272);
@@ -180,6 +185,7 @@
     --tab-on: lch(20.418% 1.429 272);
     --border-alpha-thin: lch(100 0 0 / 0.143);
     --border-solid-alpha-thin: lch(100 0 0 / 0.238);
+    --border-faint: lch(13.553% 1.93 272);
     --border-faint-thin: lch(16.793% 1.93 272);
     --border-thin: lch(22.193% 1.93 272);
     --bg-border: lch(17.873% 1.93 272);

@@ -2413,7 +2413,10 @@ li[data-done="true"] > .todo-content {
   }
 }
 .shortcuts-header {
-  flex-shrink: 0;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
   padding: 20px 20px 14px;
 }

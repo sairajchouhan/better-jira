@@ -21,6 +21,21 @@ test("keyboard help, Linear sequences, and no shortcuts while typing", async ({ 
     expect(
       await p.eval(`(({top,bottom,width})=>[top,innerHeight-bottom,width])(${panel}.getBoundingClientRect())`),
     ).toEqual([12, 12, 360]);
+    // BJ-207: HelpCenter's surface (`vn.animatingContainer` in the elevated theme), not the dialog box: a 1px solid
+    // bgBorderFaint border, shadowMedium and radius 12, over its `g_` backdrop (bgModalOverlay at .95). Values: Linear's
+    // generateTheme on the presets (.raj/linear.md).
+    for (const [scheme, linear] of [
+      ["light", { border: "1px solid lch(97.3 0 282)", bg: "lch(100 0 282)", shadow: "lch(0 0 0 / 0.02) 0px 6px 18px 0px, lch(0 0 0 / 0.04) 0px 3px 9px 0px, lch(0 0 0 / 0.04) 0px 1px 1px 0px", alpha: 0.2375 }],
+      ["dark", { border: "1px solid lch(13.553 1.93 272)", bg: "lch(9.232 0.85 272)", shadow: "lch(0 0 0 / 0.125) 0px 3px 8px 0px, lch(0 0 0 / 0.125) 0px 2px 5px 0px, lch(0 0 0 / 0.125) 0px 1px 1px 0px", alpha: 0.38 }],
+    ] as const) {
+      await p.page.emulateMedia({ colorScheme: scheme });
+      const look = await p.eval<{ border: string; bg: string; shadow: string; radius: string; overlay: string }>(
+        `(()=>{const d=${panel},c=getComputedStyle(d);return {border:c.borderTopWidth+' '+c.borderTopStyle+' '+c.borderTopColor,bg:c.backgroundColor,shadow:c.boxShadow.split(/,(?![^(]*\\))/).map(x=>x.trim()).filter(x=>!x.startsWith("rgba(0, 0, 0, 0)")).join(", "),radius:c.borderTopLeftRadius,overlay:getComputedStyle(d.parentElement).backgroundColor}})()`,
+      );
+      expect({ ...look, overlay: undefined }).toEqual({ border: linear.border, bg: linear.bg, shadow: linear.shadow, radius: "12px", overlay: undefined });
+      expect(Number(/\/ ([\d.]+)\)$/.exec(look.overlay)?.[1])).toBeCloseTo(linear.alpha, 3);
+    }
+    await p.page.emulateMedia({ colorScheme: "light" });
     expect(await p.eval(`${panel}.querySelector('section h2').textContent`)).toBe("General");
     expect(await p.eval(`[...${panel}.querySelectorAll('section:first-child dt')].slice(0,3).map(n=>n.textContent)`)).toEqual([
       "Open command menu",

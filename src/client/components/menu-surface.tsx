@@ -68,6 +68,14 @@ export const POPOVER_SURFACE = `${ELEVATED_BOX} shadow-[var(--menu-shadow)]`;
 const DIALOG_SURFACE = `${ELEVATED_BOX} flex flex-col shadow-[var(--shadow-high)]`;
 
 /**
+ * Linear's keyboard-shortcuts panel (HelpCenter.RUjT1v_p.js `vn.animatingContainer`), inside the same elevated theme (`se`
+ * is `w_`): radius 12, bgBase, a 1px solid bgBorderFaint border and shadowMedium, not the dialog's thinPixel bgBorderThin
+ * and shadowHigh. A column that clips; the content scrolls.
+ */
+const SIDE_PANEL_SURFACE =
+  "view-popup side-panel flex flex-col overflow-clip rounded-xl border border-solid border-[var(--border-faint)] bg-[var(--panel)] text-fg-2 shadow-[var(--menu-shadow)] [--sel:var(--menu-sel)]";
+
+/**
  * The one placement engine every popup uses. `place` turns the anchor's box (null without one) and the popup node into the popup's
  * fixed style; floating-ui's autoUpdate runs it again on resize, on scrolls of the anchor's or popup's scroll parents, and when the
  * popup resizes. It deliberately ignores the anchor's own resizes and layout shifts, so a menu stays put while the issue it edits
@@ -388,9 +396,11 @@ export function MenuSurface({
     },
     [anchorId, anchored, width, label, gap, rounding, side, align, command, placement, point?.x, point?.y].join(),
   );
+  const panel = placement === "side";
   return (
     <div
-      className={`fixed inset-0 z-50 ${anchored || command ? "" : "bg-[var(--modal-overlay)]"}`}
+      // Linear's side panel dims with its `g_` backdrop: bgModalOverlay at opacity .95.
+      className={`fixed inset-0 z-50 ${anchored || command ? "" : panel ? "bg-[color-mix(in_srgb,var(--modal-overlay)_95%,transparent)]" : "bg-[var(--modal-overlay)]"}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) outside(e, close);
       }}
@@ -403,7 +413,11 @@ export function MenuSurface({
         aria-label={label}
         {...elevation.props}
         data-surface={variant}
-        className={`${variant === "dialog" ? DIALOG_SURFACE : MENU_POPUP} overflow-y-auto ${fit ? "w-max min-w-[175px] scroll-py-6 max-w-[min(500px,calc(100vw-24px))]" : command ? "flex flex-col overflow-hidden" : placement === "side" ? "side-panel flex flex-col overflow-hidden" : variant === "dialog" ? "" : "p-3"}`}
+        className={
+          panel
+            ? SIDE_PANEL_SURFACE
+            : `${variant === "dialog" ? DIALOG_SURFACE : MENU_POPUP} overflow-y-auto ${fit ? "w-max min-w-[175px] scroll-py-6 max-w-[min(500px,calc(100vw-24px))]" : command ? "flex flex-col overflow-hidden" : variant === "dialog" ? "" : "p-3"}`
+        }
         onKeyDown={(e) => {
           if (!((e.metaKey || e.ctrlKey) && ["k", "/"].includes(e.key.toLowerCase())))
             e.stopPropagation(); // ⌘K reaches the app so it can toggle the command menu
