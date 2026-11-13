@@ -101,3 +101,12 @@ test("BJ-187: copied route and timestamp URLs use the router base path, target a
       .toBe(`https://example.test/jira${path}#comment-12`);
   }
 });
+
+test("R3-board-D4: once the issue screens are preloaded, the side panel renders in the same pass instead of suspending", async () => {
+  const { preloadIssueScreens, SidePanel } = await import("./tree");
+  const { IssueSidePanel } = await import("./issue-view");
+  await preloadIssueScreens();
+  // Called as a function, it hands back the loaded panel at once; a component still loading would suspend (throw) here.
+  const element = (SidePanel as unknown as (props: object) => { type: unknown })({ issue: issues["A-1"] });
+  expect(element.type).toBe(IssueSidePanel);
+});

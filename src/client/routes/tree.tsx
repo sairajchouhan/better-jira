@@ -17,7 +17,7 @@ import {
   type ParsedLocation,
   type RouterHistory,
 } from "@tanstack/react-router";
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
 import type { ListPlace, Place } from "@/client/features/navigation/navigation";
 import { isPersonTab, type PersonTab } from "@/shared/people";
 import { viewPath, type SavedView } from "@/shared/saved-view-model";
@@ -89,7 +89,12 @@ function openBeside(issue: string | undefined, context: RouteContext, location: 
     throw redirect({ to: location.pathname, search: { ...(location.search as object), issue: key }, replace: true } as never);
   if (!context.issue(key)) throw notFound({ data: { issue } });
 }
-const SidePanel = lazy(() => import("./issue-view").then((m) => ({ default: m.IssueSidePanel })));
+// lazyRouteComponent, not React.lazy: once loaded it renders in the same pass. React.lazy suspends on its first render even
+// when the module is already here, so the first issue opened after a load waited a task for its panel (R3-board-D4).
+export const SidePanel = lazyRouteComponent(() => import("./issue-view"), "IssueSidePanel");
+const IssueScreen = lazyRouteComponent(() => import("./issue-view"), "IssueScreen");
+/** Loads the issue screens ahead (idle after the board, or a hover), so the first issue opened renders at once. */
+export const preloadIssueScreens = () => Promise.all([SidePanel.preload?.(), IssueScreen.preload?.()]);
 /** A list route's own content: the open issue beside the boards the shell shows. */
 function ListScreen() {
   const open = useStore((s) => (s.panel && s.selected && s.view === "side" && !s.document ? s.issues.get(s.selected) : undefined));
@@ -224,7 +229,7 @@ const issueRoute = createRoute({
     if (!preload) context.show({ to: "issue", key: params.key, ...(location.state.over ? { over: location.state.over } : {}) }, location);
   },
   loader: ({ context, params, preload }) => issueLoader(context, params.key, preload),
-  component: lazyRouteComponent(() => import("./issue-view"), "IssueScreen"),
+  component: IssueScreen,
 });
 const documentRoute = createRoute({
   getParentRoute: () => rootRoute,

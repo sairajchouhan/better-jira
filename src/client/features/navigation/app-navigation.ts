@@ -16,7 +16,7 @@ import { emptyOverlay, viewForRoute, type SavedView, type ViewDraft } from "@/sh
 import { defaultPreferences, type FilterGroup } from "@/shared/view-model";
 import { savedBoard, savedOpenIn, savedSidebarHidden } from "@/client/state/browser-preferences";
 import { loadFull } from "@/client/state/server-data";
-import { createAppRouter, locationOf, routeURL } from "@/client/routes/tree";
+import { createAppRouter, locationOf, preloadIssueScreens, routeURL } from "@/client/routes/tree";
 
 type UiKey = keyof UiContext;
 
@@ -43,7 +43,7 @@ const findView = (segment: string) => viewForRoute(get().savedViews, segment);
 /** The router. Tests (no DOM) run it on a memory history. */
 export const router = createAppRouter(typeof document === "undefined" ? createMemoryHistory() : createBrowserHistory(), {
   show,
-  preload: (key) => Promise.all([loadFull(key), import("@/client/routes/issue-view")]),
+  preload: (key) => Promise.all([loadFull(key), preloadIssueScreens()]),
   issue: (key) => get().issues.get(currentKey(key)),
   // Wrapped: jira-sync can still be loading when this module runs (app-notifications imports both).
   currentKey: (key) => currentKey(key),
@@ -200,7 +200,7 @@ export function startNavigation() {
   window.addEventListener("click", openIssueLink);
   window.addEventListener("click", followHash);
   // The issue screens load with their route; fetch them once the board is idle so the first issue opens at once.
-  const warm = () => void import("@/client/routes/issue-view");
+  const warm = () => void preloadIssueScreens();
   if (typeof requestIdleCallback === "function") requestIdleCallback(warm);
   else setTimeout(warm, 1);
   // A rename (here or in another tab) moves the view's slug; the id suffix keeps the entry.

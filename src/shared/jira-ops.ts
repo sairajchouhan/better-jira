@@ -376,6 +376,8 @@ export function renameCommentIds<T>(value: T, ids: Map<string, string>): T {
   return walk(value);
 }
 
+/** An issue key this app made (PREFIX-NEWn) that Jira hasn't keyed yet. */
+export const isAppKey = (key: string) => /-NEW\d+$/.test(key);
 const BROWSE = /\/browse\/([^/?#]+)$/;
 /** Swaps app issue keys (PREFIX-NEWn, unique by shape) for Jira's once Jira has assigned them, also at the end of an issue's
  *  /browse/ URL: a description's reference to an issue made from its text (BJ-69). */
