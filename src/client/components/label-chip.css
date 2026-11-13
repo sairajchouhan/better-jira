@@ -60,17 +60,4 @@
     font-size: 12px;
     font-weight: 450;
   }
-  /* Compact: the chip on list rows and board cards (.raj/linear.md "Board"), 24px with a 0.5px chipLine border. */
-  .ui-label-chip[data-size="compact"] {
-    height: 24px;
-    border: var(--thin-pixel) solid var(--chip-line);
-    border-radius: 9999px;
-    background: var(--card);
-  }
-  .ui-label-chip[data-size="compact"] .ui-label-chip-text {
-    margin: 0 1px 0 6px;
-    color: var(--card-fg-3);
-    font-size: 12px;
-    font-weight: 450;
-  }
 }

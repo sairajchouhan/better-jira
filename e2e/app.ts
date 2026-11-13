@@ -205,8 +205,10 @@ async function wrap(page: PwPage, base: string, path: string, setup: string, tab
       await page.mouse.click(x, y);
       await settle();
     },
+    /** A bare card or row (`[data-key="…"]`) is clicked on its own surface by its key, as a person opening the issue does: its
+     *  centre may be a property badge, which opens that property's menu instead (Linear's `FI`). */
     async click(selector: string) {
-      await locate(selector).click();
+      await locate(selector).click(/^\[data-key=("?)[^"\]]+\1\]$/.test(selector) ? { position: { x: 10, y: 10 } } : undefined);
       await settle();
     },
     async hover(selector: string) {

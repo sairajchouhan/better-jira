@@ -1,4 +1,3 @@
-import { LabelChip } from "./label-chip";
 /** Linear's workflow-state icon, copied from its DOM (linear.app board, 2026-11-06).
  *  Ring r=6; progress pie r=2 stroke 4, dash 12.19 shifted by (1 - progress); done fills r=3 and cuts a check. */
 type Look = { color: string; progress?: number; dashed?: true; done?: "check" | "x" };
@@ -153,12 +152,9 @@ const LABEL_COLORS = [
 ];
 export const hue = (s: string) =>
   LABEL_COLORS[[...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 0) % LABEL_COLORS.length]!;
-/** A label on a list row or board card: Linear's compact label chip. */
-export const Label = ({ name }: { name: string }) => (
-  <LabelChip size="compact" title={name} className="max-w-[224px] shrink-0">
-    <LabelChip.Dot color={hue(name)} />
-    <LabelChip.Text>{name}</LabelChip.Text>
-  </LabelChip>
+/** A label's colour as Linear's 9px dot, in a badge's 14px icon box. */
+export const LabelDot = ({ name }: { name: string }) => (
+  <span aria-hidden className="size-[9px] shrink-0 rounded-full" style={{ background: hue(name) }} />
 );
 
 const PATHS = {

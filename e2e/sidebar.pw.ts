@@ -117,7 +117,7 @@ test("a favorite opened from the sidebar lights only its own row, never its boar
   await test.step("a board favorite stays lit over an issue opened from it; the board row takes over when clicked", async () => {
     await p.page.locator('[data-favorite="board:1"]').click();
     expect(await p.waitFor(`${marked}==='board:1'&&${marked}`)).toBe("board:1");
-    await p.page.locator('[data-key="TEST-2"]').first().click();
+    await p.page.locator('[data-key="TEST-2"]').first().click({ position: { x: 10, y: 10 } }); // the card itself, not a badge
     await p.waitFor(`/TEST-2/.test(location.href)`);
     expect(await p.eval(marked)).toBe("board:1");
     await p.page.locator(`${nav} a:not([data-favorite])`, { hasText: "Browser audit" }).click();

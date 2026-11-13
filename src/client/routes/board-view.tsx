@@ -24,10 +24,10 @@ import {
   type ReactNode,
   type SyntheticEvent,
 } from "react";
-import { FieldMenuButton } from "@/client/components/pill-select";
-import { PropertyPicker } from "@/client/features/issue/personal-controls";
+import { Badge, IconMenuButton } from "@/client/components/badge";
+import { PropertyPicker, type IssueField } from "@/client/features/issue/personal-controls";
 import { commentCount } from "@/client/features/media/media-edits";
-import { Icon, Label, PriorityIcon, StatusIcon, TypeDot } from "@/client/components/icons";
+import { Icon, LabelDot, PriorityIcon, StatusIcon, TypeDot } from "@/client/components/icons";
 import { ME, get, set, timed, useStore, statusOf } from "@/client/state/store";
 import { actions, beginCreate } from "@/client/state/issue-actions";
 import { loadFull } from "@/client/state/server-data";
@@ -562,7 +562,7 @@ function ColumnView({
       )}
       <div
         data-scroll-restoration-id={scroll}
-        className={`flex-1 px-[9px] pt-[9px] ${scroll ? "overflow-y-auto" : ""}`}
+        className={`flex-1 px-2 pt-[9px] ${scroll ? "overflow-y-auto" : ""}`}
       >
         <VirtualItems items={issues} itemKey={issueKey} selected={selected} estimate={124}>
           {(issue) => <BoardCard issue={issue} selected={issue.key === selected} display={display} />}
@@ -575,12 +575,9 @@ function ColumnView({
   );
 }
 
-// Linear's card chip: 24px pill, 0.5px border, 12px/450 muted text after a 14px icon. Not PropertyTrigger: these chips
-// only show a value inside the card's own button, and PropertyTrigger is a button that opens a picker.
-const CHIP =
-  "flex h-6 max-w-[224px] shrink-0 items-center rounded-full border-[0.5px] border-chip-line bg-card px-2 text-[12px] font-[450] text-card-fg-3";
 
-/** What a row and a card share: the clickable, draggable target with selection scrolling, the menu highlight and the issue's keys. */
+/** What a row and a card share: the clickable, draggable target with selection scrolling, the menu highlight and the issue's keys.
+ *  Its state is in `data-selected` (the j/k or column selection) and `data-menu` (its right-click menu is open), for the caller's look. */
 function IssueTarget({
   issue,
   selected,
@@ -590,7 +587,7 @@ function IssueTarget({
 }: {
   issue: Issue;
   selected: boolean;
-  className: (lit: boolean) => string;
+  className: string;
   style?: CSSProperties;
   children: ReactNode;
 }) {
@@ -599,9 +596,10 @@ function IssueTarget({
   // A right-clicked card is highlighted only while its menu is open, as Linear does; it never becomes the selection.
   const menu = useStore((s) => !!s.overlay && s.target === issue.key);
   const columnSelected = useStore((s) => s.columnSelection.has(issue.key));
-  // A control inside the card (a label chip) and the menu it opens in a portal handle their own clicks and keys.
+  // A property control inside (a badge, a status icon, the avatar, a link) and the menu it opens, which renders inside the card,
+  // handle their own clicks and keys: Linear's `FI` stops them reaching the card, so the issue does not open.
   const own = (e: SyntheticEvent) =>
-    e.currentTarget.contains(e.target as Node) && !(e.target as Element).closest("button");
+    e.currentTarget.contains(e.target as Node) && !(e.target as Element).closest('button, a, [role="dialog"]');
   return (
     <div
       ref={ref}
@@ -644,7 +642,7 @@ function IssueTarget({
           point: { x: e.clientX, y: e.clientY },
         });
       }}
-      className={className(selected || columnSelected || menu)}
+      className={className}
       style={style}
     >
       {children}
@@ -652,133 +650,219 @@ function IssueTarget({
   );
 }
 
-/** A card or row label chip opens the issue's label picker beside it, as Linear's does. */
-function LabelsButton({ issue, children }: { issue: Issue; children: ReactNode }) {
+type FieldControl = { issue: Issue; field: IssueField; label: string; title?: string; className?: string; children: ReactNode };
+
+/** One of the issue's properties as a badge that opens that property's menu (the issue detail's PropertyPicker) anchored to it:
+ *  Linear's `ZB`. Named "<Field> on <key>"; `title` is its tooltip. */
+function FieldBadge({ issue, field, label, title, className, children }: FieldControl) {
   return (
-    <FieldMenuButton
-      aria-label={`Labels on ${issue.key}`}
-      className="flex shrink-0 rounded-full"
+    <Badge.Menu
+      aria-label={`${label} on ${issue.key}`}
+      title={title}
+      className={className}
       menu={PropertyPicker}
-      menuProps={{ issue, field: "labels" as const }}
+      menuProps={{ issue, field }}
     >
       {children}
-    </FieldMenuButton>
+    </Badge.Menu>
   );
 }
 
-/** The issue's priority when the display shows it: a plain icon leading a row, as Linear's list draws it, or a chip on a card. */
-function IssuePriority({ issue, display: d, className }: { issue: Issue; display: Display; className: string }) {
-  if (!d.properties.includes("priority")) return null;
+/** A bare property icon (status, priority leading a row, the assignee's avatar) that opens its menu: Linear's brightening trigger. */
+function FieldIcon({ issue, field, label, title, className, children }: FieldControl) {
   return (
-    <span title={issue.priority ?? "No priority"} className={className}>
-      <PriorityIcon name={issue.priority} />
-    </span>
+    <IconMenuButton
+      aria-label={`${label} on ${issue.key}`}
+      title={title}
+      className={className}
+      menu={PropertyPicker}
+      menuProps={{ issue, field }}
+    >
+      {children}
+    </IconMenuButton>
   );
 }
 
-/** The display's property chips after the title; a row fits one label, a card two. */
+/** The issue's labels, Linear's `LabelsBadges`: up to `max` inline; past that `max - 1` and one "+N labels" badge for the rest,
+ *  with the first hidden label's dot. Each opens the label menu, which Linear places left of the badge (`horizontal-left`). */
+function IssueLabels({ issue, max }: { issue: Issue; max: number }) {
+  const inline = issue.labels.length > max ? issue.labels.slice(0, max - 1) : issue.labels;
+  const hidden = issue.labels.slice(inline.length);
+  return (
+    <>
+      {inline.map((l) => (
+        <FieldBadge key={l} issue={issue} field="labels" label="Labels" title={l}>
+          <Badge.Icon>
+            <LabelDot name={l} />
+          </Badge.Icon>
+          <Badge.Text>{l}</Badge.Text>
+        </FieldBadge>
+      ))}
+      {hidden.length > 0 && (
+        <FieldBadge issue={issue} field="labels" label="Labels" title={hidden.join(", ")}>
+          <Badge.Icon>
+            <LabelDot name={hidden[0]!} />
+          </Badge.Icon>
+          <Badge.Text>
+            {inline.length ? "+" : ""}
+            {hidden.length} {hidden.length === 1 ? "label" : "labels"}
+          </Badge.Text>
+        </FieldBadge>
+      )}
+    </>
+  );
+}
+
+/** Linear's link badges (`mt`, "Open link…"): under three links, one badge each that opens it; from three, one count badge. */
+function IssueLinks({ links }: { links: string[] }) {
+  if (links.length >= 3)
+    return (
+      <Badge title={links.join("\n")}>
+        <Badge.Icon>
+          <Icon name="external" />
+        </Badge.Icon>
+        <Badge.Text>{links.length}</Badge.Text>
+      </Badge>
+    );
+  return links.map((url) => (
+    <Badge.Link key={url} href={url} title={url}>
+      <Badge.Icon>
+        <Icon name="external" />
+      </Badge.Icon>
+      <Badge.Text>{linkName(url)}</Badge.Text>
+    </Badge.Link>
+  ));
+}
+
+const linkName = (url: string) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+};
+
+/** The display's property badges after the title, in Linear's card order (`wd`); a row fits one label, a card five. */
 function IssueProperties({ issue, display: d, labels }: { issue: Issue; display: Display; labels: number }) {
   const show = (p: Property) => d.properties.includes(p);
   const clock = useStore((s) => (d.properties.includes("statusAge") ? s.clock : 0));
   return (
     <>
+      {show("statusAge") && issue.statusSince && (
+        <FieldBadge issue={issue} field="status" label="Time in status" title={`In current status since ${fullTime(issue.statusSince)}`}>
+          <Badge.Icon>
+            <Icon name="clock" />
+          </Badge.Icon>
+          {/* oxlint-disable-next-line react/purity -- the elapsed time is read at render; `clock` re-renders it each minute. */}
+          <Badge.Text>{statusDuration(issue.statusSince, Math.max(clock, Date.now()))}</Badge.Text>
+        </FieldBadge>
+      )}
+      {show("due") && issue.due && (
+        <FieldBadge issue={issue} field="due" label="Due date" title={`Due ${fullTime(`${issue.due}T00:00:00`)}`}>
+          <Badge.Icon>
+            <Icon name="calendar" />
+          </Badge.Icon>
+          <Badge.Text>{shortDate(issue.due, undefined, true)}</Badge.Text>
+        </FieldBadge>
+      )}
       {show("type") && issue.type && (
-        <span className={CHIP}>
-          <TypeDot type={issue.type} />
-          <span className="ml-1.5">{issue.type}</span>
-        </span>
+        <FieldBadge issue={issue} field="type" label="Type" title={issue.type}>
+          <Badge.Icon>
+            <TypeDot type={issue.type} />
+          </Badge.Icon>
+          <Badge.Text>{issue.type}</Badge.Text>
+        </FieldBadge>
       )}
       {show("project") && issue.project && (
-        <span title={issue.project.name} className={CHIP}>
-          <Icon name="layers" />
-          <span className="ml-1.5 truncate">{issue.project.name}</span>
-        </span>
+        <FieldBadge issue={issue} field="project" label="Project" title={issue.project.name}>
+          <Badge.Icon>
+            <Icon name="layers" />
+          </Badge.Icon>
+          <Badge.Text>{issue.project.name}</Badge.Text>
+        </FieldBadge>
       )}
-      {show("labels") && issue.labels.slice(0, labels).map((l) => (
-        <LabelsButton key={l} issue={issue}>
-          <Label name={l} />
-        </LabelsButton>
-      ))}
-      {show("labels") && issue.labels.length > labels && (
-        <LabelsButton issue={issue}>
-          <span title={issue.labels.join(", ")} className={CHIP}>
-            +{issue.labels.length - labels}
-          </span>
-        </LabelsButton>
+      {show("milestone") &&
+        issue.milestones?.map((v) => (
+          <FieldBadge key={v.id} issue={issue} field="milestone" label="Milestone" title={`Jira fix version: ${v.name}`}>
+            <Badge.Icon>
+              <Icon name="layers" />
+            </Badge.Icon>
+            <Badge.Text>{v.name}</Badge.Text>
+          </FieldBadge>
+        ))}
+      {show("labels") && <IssueLabels issue={issue} max={labels} />}
+      {show("pullRequests") && !!issue.prCount && (
+        <Badge title="Pull requests reported by Jira's development summary">
+          <Badge.Icon>
+            <Icon name="branch" />
+          </Badge.Icon>
+          <Badge.Text>
+            {issue.prCount} PR{issue.prCount === 1 ? "" : "s"}
+          </Badge.Text>
+        </Badge>
       )}
+      {show("links") && !!issue.links?.length && <IssueLinks links={issue.links} />}
       {show("comments") && commentCount(issue) > 0 && (
-        <span className={CHIP} aria-label={`${commentCount(issue)} comments`}>
-          <Icon name="comment" />
-          <span className="ml-1.5">{commentCount(issue)}</span>
-        </span>
-      )}
-      {show("links") && !!issue.links?.length && (
-        <span title={issue.links.join("\n")} className={CHIP}>
-          <Icon name="external" />
-          <span className="ml-1.5">{issue.links.length}</span>
-        </span>
+        <Badge aria-label={`${commentCount(issue)} comments`}>
+          <Badge.Icon>
+            <Icon name="comment" />
+          </Badge.Icon>
+          <Badge.Text>{commentCount(issue)}</Badge.Text>
+        </Badge>
       )}
       {show("creator") && issue.creator && (
         <span title={`Created by ${issue.creator.name}`}>
           <Avatar user={issue.creator} size={18} />
         </span>
       )}
-      {show("due") && issue.due && (
-        <span className={CHIP}>
-          <Icon name="calendar" />
-          <span title={fullTime(`${issue.due}T00:00:00`)} className="ml-1.5">{shortDate(issue.due, undefined, true)}</span>
-        </span>
-      )}
-      {show("milestone") &&
-        issue.milestones?.map((v) => (
-          <span key={v.id} title={`Jira fix version: ${v.name}`} className={CHIP}>
-            <Icon name="layers" />
-            <span className="ml-1.5 truncate">{v.name}</span>
-          </span>
-        ))}
-      {show("statusAge") && issue.statusSince && (
-        <span
-          className={CHIP}
-          title={`In current status since ${fullTime(issue.statusSince)}`}
-        >
-          <Icon name="calendar" />
-          <span className="ml-1.5">
-            {/* oxlint-disable-next-line react/purity -- the elapsed time is read at render; `clock` re-renders it each minute. */}
-            {statusDuration(issue.statusSince, Math.max(clock, Date.now()))} in status
-          </span>
-        </span>
-      )}
-      {show("pullRequests") && !!issue.prCount && (
-        <span className={CHIP} title="Pull requests reported by Jira's development summary">
-          <Icon name="external" />
-          <span className="ml-1.5">
-            {issue.prCount} PR{issue.prCount === 1 ? "" : "s"}
-          </span>
-        </span>
-      )}
     </>
   );
 }
 
-/** Created and updated dates; `updated` is the label before the updated date ("Updated " on cards, none on rows). */
+/** Created and updated dates, Linear's `Sd`/`Cd`: plain badges with the full time as their tooltip. `updated` is the label before the
+ *  updated date ("Updated " on cards, none on rows). */
 function IssueDates({ issue, display: d, updated }: { issue: Issue; display: Display; updated: string }) {
   return (
     <>
       {d.properties.includes("created") && issue.created && (
-        <span title={`Created ${fullTime(issue.created)}`}>Created {shortDate(issue.created)}</span>
+        <Badge variant="plain" title={`Created ${fullTime(issue.created)}`}>
+          <Badge.Text>Created {shortDate(issue.created)}</Badge.Text>
+        </Badge>
       )}
       {d.properties.includes("updated") && (
-        <span title={`Updated ${fullTime(issue.updated)}`}>
-          {updated}
-          {shortDate(issue.updated)}
-        </span>
+        <Badge variant="plain" title={`Updated ${fullTime(issue.updated)}`}>
+          <Badge.Text>
+            {updated}
+            {shortDate(issue.updated)}
+          </Badge.Text>
+        </Badge>
       )}
     </>
   );
 }
 
+/** The status icon before the title, opening the status menu. */
+function IssueStatus({ issue, className }: { issue: Issue; className?: string }) {
+  const status = statusOf(issue);
+  if (!status) return null;
+  return (
+    <FieldIcon issue={issue} field="status" label="Status" title={status.name} className={className}>
+      <StatusIcon status={status} />
+    </FieldIcon>
+  );
+}
+
+/** The assignee's avatar, opening the assignee menu. */
+function IssueAssignee({ issue, className }: { issue: Issue; className?: string }) {
+  return (
+    <FieldIcon issue={issue} field="assignee" label="Assignee" className={className}>
+      <Avatar user={issue.assignee} size={18} />
+    </FieldIcon>
+  );
+}
+
 /** A list row: priority, key, status, title, then properties, assignee and dates on one line, Linear's order; nested rows indent
- *  20px per level. */
+ *  20px per level. Its keyboard ring is drawn inside the row (outline-offset −1px), so the next row cannot cover its bottom edge. */
 const IssueRow = memo(function IssueRow({
   issue,
   selected,
@@ -791,43 +875,45 @@ const IssueRow = memo(function IssueRow({
   depth: number;
 }) {
   const show = (p: Property) => d.properties.includes(p);
-  const status = statusOf(issue);
   return (
     <div>
       <IssueTarget
         issue={issue}
         selected={selected}
-        className={(lit) =>
-          `flex min-h-11 cursor-default items-center gap-3 border-b border-line px-5 outline-none focus-visible:ring-1 focus-visible:ring-accent ${lit ? "bg-hover shadow-[inset_2px_0_0_var(--accent)]" : "hover:bg-hover"}`
-        }
+        className="flex min-h-11 cursor-default items-center gap-3 border-b border-line px-5 -outline-offset-1 hover:bg-hover data-menu:bg-hover data-menu:shadow-[inset_2px_0_0_var(--accent)] data-selected:bg-hover data-selected:shadow-[inset_2px_0_0_var(--accent)]"
         style={depth ? { paddingLeft: 20 + depth * 20 } : undefined}
       >
-        <IssuePriority issue={issue} display={d} className="shrink-0 text-fg-3" />
+        {show("priority") && (
+          <FieldIcon issue={issue} field="priority" label="Priority" title={issue.priority ?? "No priority"} className="text-fg-3">
+            <PriorityIcon name={issue.priority} />
+          </FieldIcon>
+        )}
         {show("id") && (
           <Text variant="mini" color="muted" numeric="tabular" className="w-[85px] shrink-0">
             {depth > 0 && "↳ "}
             {issue.key}
           </Text>
         )}
-        {show("status") && status && (
-          <span title={status.name}>
-            <StatusIcon status={status} />
-          </span>
-        )}
+        {show("status") && <IssueStatus issue={issue} />}
         <span className="min-w-32 flex-1 truncate font-medium">{issue.summary}</span>
-        <span className="flex max-w-[45%] shrink-0 items-center gap-2 overflow-hidden">
+        <span className="flex max-w-[45%] shrink-0 items-center gap-1 overflow-hidden">
           <IssueProperties issue={issue} display={d} labels={1} />
         </span>
-        {show("assignee") && <Avatar user={issue.assignee} size={18} />}
-        <Text variant="micro" color="muted" className="flex shrink-0 gap-2">
+        {show("assignee") && <IssueAssignee issue={issue} />}
+        <span className="flex shrink-0 items-center gap-1">
           <IssueDates issue={issue} display={d} updated="" />
-        </Text>
+        </span>
       </IssueTarget>
     </div>
   );
 });
 
-/** A board card: key and two-line title with the assignee in the corner, then property chips and dates. */
+/**
+ * A board card, Linear's board item (`Cu.link`) around its issue card (`wd`, IssueList.CUOYX8Am.js): key and two-line title with the
+ * assignee in the corner, then property badges and dates. Hovered or with a property menu open it takes bgBaseHover; selected or
+ * keyboard-focused it keeps bgBase and draws a 1px accent outline 1px inside its edge, so no ancestor's overflow can clip it. The
+ * wrapper's 0 1px 8px padding is Linear's.
+ */
 const BoardCard = memo(function BoardCard({
   issue,
   selected,
@@ -838,15 +924,12 @@ const BoardCard = memo(function BoardCard({
   display: Display;
 }) {
   const show = (p: Property) => d.properties.includes(p);
-  const status = statusOf(issue);
   return (
-    <div className="pb-2 [overflow-clip-margin:4px]">
+    <div className="px-px pb-2">
       <IssueTarget
         issue={issue}
         selected={selected}
-        className={(lit) =>
-          `relative flex min-h-[42px] cursor-default flex-col rounded-lg p-2 shadow-(--card-shadow) outline-none focus-visible:ring-1 focus-visible:ring-accent ${lit ? "bg-card-hover ring-1 ring-accent" : "bg-card hover:bg-card-hover"}`
-        }
+        className="relative flex min-h-[42px] cursor-default flex-col rounded-lg bg-card p-2 shadow-(--card-shadow) -outline-offset-1 hover:bg-card-hover has-[[aria-expanded=true]]:bg-card-hover data-menu:bg-card-hover data-selected:bg-card data-selected:outline-1 data-selected:outline-accent data-selected:outline-solid"
       >
         <div className="flex flex-col gap-1.5 pr-[34px] pl-1">
           {show("id") && (
@@ -855,27 +938,26 @@ const BoardCard = memo(function BoardCard({
             </span>
           )}
           <div className="flex items-start gap-1.5">
-            {show("status") && status && (
-              <span className="mt-px" title={status.name}>
-                <StatusIcon status={status} />
-              </span>
-            )}
+            {show("status") && <IssueStatus issue={issue} className="mt-px" />}
             <span className="line-clamp-2 text-[13px] leading-4 font-medium [overflow-wrap:anywhere]">
               {issue.summary}
             </span>
           </div>
         </div>
-        {show("assignee") && (
-          <span className="absolute top-2 right-2">
-            <Avatar user={issue.assignee} size={18} />
-          </span>
-        )}
-        <div className="mt-2.5 flex flex-wrap items-center gap-1 overflow-hidden">
-          <IssuePriority issue={issue} display={d} className={`${CHIP} px-[4.5px]`} />
-          <IssueProperties issue={issue} display={d} labels={2} />
+        {show("assignee") && <IssueAssignee issue={issue} className="absolute top-2 right-2" />}
+        {/* data-badges: Linear's badge row; the label menu opens left of a label badge here (`horizontal-left`). */}
+        <div data-badges className="mt-2.5 flex flex-wrap items-center gap-1 empty:hidden">
+          {show("priority") && (
+            <FieldBadge issue={issue} field="priority" label="Priority" title={issue.priority ?? "No priority"}>
+              <Badge.Icon>
+                <PriorityIcon name={issue.priority} />
+              </Badge.Icon>
+            </FieldBadge>
+          )}
+          <IssueProperties issue={issue} display={d} labels={5} />
         </div>
         {(show("updated") || show("created")) && (
-          <div className="mt-1.5 flex min-h-6 flex-wrap items-center gap-x-3 pl-px text-[12px] font-[450] text-card-fg-3">
+          <div className="mt-1.5 flex flex-wrap items-center gap-1 empty:hidden">
             <IssueDates issue={issue} display={d} updated="Updated " />
           </div>
         )}

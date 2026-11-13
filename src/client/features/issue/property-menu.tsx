@@ -461,7 +461,8 @@ export function LabelsMenu({ anchor, board, value, onChange, close }: FieldMenuP
       placeholder={value.length ? "Change or add labels…" : "Add labels…"}
       hotkey="L"
       anchor={anchor}
-      side={anchor?.closest("[data-properties]") ? "left" : undefined}
+      // Linear's label badges open `horizontal-left`, in the issue's properties and on a card's badge row alike.
+      side={anchor?.closest("[data-properties], [data-badges]") ? "left" : undefined}
       close={close}
       query={query}
       onQuery={setQuery}

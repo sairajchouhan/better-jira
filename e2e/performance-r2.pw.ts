@@ -90,7 +90,7 @@ for (const layout of ["list", "board"] as const) {
       expect(await root.locator("[data-key]").count()).toBeLessThan(600);
       const key = await windowed.last().getAttribute("data-key");
       // A click selects a visible row; j/k must mount the adjacent row across the window edge.
-      await root.locator(`[data-key="${key}"]`).click();
+      await root.locator(`[data-key="${key}"]`).click({ position: { x: 10, y: 10 } }); // the card itself, not a badge
       await app.key("Escape");
       await app.key("k");
       await expect(root.locator('[data-selected="true"]').first()).toBeInViewport();

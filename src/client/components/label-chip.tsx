@@ -4,22 +4,20 @@ import "./label-chip.css";
 
 /**
  * Linear's label pill (`ISn`/`iJ`, LabelsBadges.DpwfhH1r.js): 25px, radius 30, 1px bgBorder, a 9px dot then the name
- * 6px after it in smallPlus. `size="compact"` is the 24px list/board chip from .raj/linear.md.
+ * 6px after it in smallPlus. Cards and list rows draw labels as a Badge.
  */
 export const LABEL_CHIP = {
   normal: { HEIGHT: 25, BORDER_RADIUS: 30, PADDING: 8, TEXT_GAP: 6, FONT_SIZE: 13, FONT_WEIGHT: 500 },
-  compact: { HEIGHT: 24, PADDING: 8, TEXT_GAP: 6, FONT_SIZE: 12, FONT_WEIGHT: 450 },
   ICON: 14,
   DOT: 9,
 } as const;
 
-type Look = { variant?: "bordered" | "borderless"; size?: "normal" | "compact" };
+type Look = { variant?: "bordered" | "borderless" };
 
 /** A label as a pill. Render `as="button"` when clicking it opens the labels picker. */
 function LabelChipRoot({
   as = "span",
   variant = "bordered",
-  size = "normal",
   className = "",
   ...props
 }: Look & { as?: "span" | "button" } & ComponentProps<"button">) {
@@ -28,7 +26,6 @@ function LabelChipRoot({
     <Tag
       type={as === "button" ? (props.type ?? "button") : undefined}
       data-variant={variant}
-      data-size={size}
       className={`ui-label-chip ${className}`}
       {...props}
     />
