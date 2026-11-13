@@ -1,6 +1,6 @@
 import { type Board, type Issue } from "@/shared/issue-model";
-import { AppLink, SavedViewLink } from "./app-link";
-import type { Destination } from "./navigation";
+import { AppLink } from "./app-link";
+import { SidebarLink, SidebarViewLink } from "./sidebar-link";
 import { defaultPreferences } from "@/shared/view-model";
 import { FavoriteButton } from "./favorite-button";
 import { useActiveView, useSavedViews, createViewDraft } from "@/client/features/views/saved-views";
@@ -84,11 +84,7 @@ function SectionHeading({ label, expanded, onToggle, addLabel, onAdd }: {
 }
 
 export function Sidebar({ boards }: { boards: Board[] }) {
-  const boardId = useStore((s) => s.board);
-  const activeView = useActiveView();
   const views = useSavedViews();
-  const mine = useStore((s) => s.mine);
-  const person = useStore((s) => s.person);
   const hidden = useStore((s) => s.sidebarHidden);
   const open = useStore((s) => s.sidebarOpen);
   const inbox = useStore((s) => s.inbox);
@@ -129,14 +125,14 @@ export function Sidebar({ boards }: { boards: Board[] }) {
           better-jira
         </div>
         {(prefs.inbox === "Always" || inbox || (prefs.inbox === "WithNotifications" && badge > 0)) && (
-          <SideLink active={inbox} to={{ inbox: true, selected: null, panel: false }}>
+          <SidebarLink row={{ place: { to: "inbox" } }} to={{ inbox: true, selected: null, panel: false }}>
             <Icon name="inbox" /> Inbox
             {badge > 0 && (
               <Text data-inbox-badge variant="mini" color="base" className="ml-auto">
                 {badge}
               </Text>
             )}
-          </SideLink>
+          </SidebarLink>
         )}
         <SideItem onClick={() => runShortcut("search")}>
           <Icon name="search" /> Search <Shortcut className="ml-auto" keys={hotkeyOf("search")} size="small" />
@@ -146,12 +142,9 @@ export function Sidebar({ boards }: { boards: Board[] }) {
         </SideItem>
         {/* Like Linear, My issues is a sidebar view rather than a tab beside Active/Backlog/All. */}
         {prefs.myIssues === "Always" && (
-          <SideLink
-            active={mine && !person && !inbox && !activeView}
-            to={{ mine: true, selected: null, panel: false }}
-          >
+          <SidebarLink row={{ place: { to: "my-issues" } }} to={{ mine: true, selected: null, panel: false }}>
             <Icon name="user" /> My issues <Shortcut className="ml-auto" keys={hotkeyOf("mine")} size="small" />
-          </SideLink>
+          </SidebarLink>
         )}
         <SidebarMore prefs={prefs} />
 
@@ -164,16 +157,12 @@ export function Sidebar({ boards }: { boards: Board[] }) {
         />
         {expanded("boards") && boards.map((b) => {
           const item = (
-            <SideLink
-              key={b.id}
-              active={!mine && !inbox && !activeView && b.id === boardId}
-              to={{ board: b.id, selected: null, panel: false }}
-            >
+            <SidebarLink key={b.id} row={{ place: { to: "board", board: b.id } }} to={{ board: b.id, selected: null, panel: false }}>
               <span className="grid size-4 shrink-0 place-items-center rounded-[4px] bg-sel text-[9px] font-semibold text-fg-2">
                 {b.name[0]}
               </span>
               <span className="truncate">{b.name}</span>
-            </SideLink>
+            </SidebarLink>
           );
           return (
             <ContextMenu key={b.id} label="Board options" entries={() => boardEntries(b)}>
@@ -191,10 +180,10 @@ export function Sidebar({ boards }: { boards: Board[] }) {
         />
         {expanded("views") && views.map((v) => (
           <ViewContextMenu key={v.id} view={v}>
-            <SavedViewLink view={v} aria-current={activeView?.id === v.id || undefined} className={sideItemClass(activeView?.id === v.id)}>
+            <SidebarViewLink row={{ place: { to: "view", id: v.id } }} view={v}>
               <SavedViewIcon view={v} />
               <span className="truncate">{v.name}</span>
-            </SavedViewLink>
+            </SidebarViewLink>
           </ViewContextMenu>
         ))}
         <ViewFavorites expanded={expanded("favorites")} onToggle={() => toggle("favorites")} />
@@ -461,24 +450,9 @@ export function StorageNotice() {
   );
 }
 
-const sideItemClass = (active?: boolean) => `flex h-7 items-center gap-2 rounded-lg pr-[9px] pl-2 text-left ${active ? "bg-sel text-fg" : "text-fg-2 hover:bg-hover"}`;
-function SideLink({ active, to, children }: { active?: boolean; to: Destination; children: ReactNode }) {
-  return <AppLink to={to} aria-current={active || undefined} className={sideItemClass(active)}>{children}</AppLink>;
-}
-const SideItem = ({
-  active,
-  onClick,
-  children,
-}: {
-  active?: boolean;
-  onClick: (e: MouseEvent<HTMLButtonElement>) => void;
-  children: ReactNode;
-}) => (
-  <button
-    onClick={onClick}
-    aria-current={active || undefined}
-    className={sideItemClass(active)}
-  >
+/** A sidebar row that runs an action (Search, New issue, More) rather than opening a place, so it is never active. */
+const SideItem = ({ onClick, children }: { onClick: (e: MouseEvent<HTMLButtonElement>) => void; children: ReactNode }) => (
+  <button onClick={onClick} className="flex h-7 items-center gap-2 rounded-lg pr-[9px] pl-2 text-left text-fg-2 hover:bg-hover">
     {children}
   </button>
 );

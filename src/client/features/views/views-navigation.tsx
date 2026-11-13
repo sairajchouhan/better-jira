@@ -1,5 +1,6 @@
 import { type Issue } from "@/shared/issue-model";
-import { AppLink, SavedViewLink } from "@/client/features/navigation/app-link";
+import { SidebarLink, SidebarViewLink } from "@/client/features/navigation/sidebar-link";
+import { favoritePlace } from "@/client/features/navigation/sidebar-active";
 import { useState } from "react";
 import { Icon, type IconName } from "@/client/components/icons";
 import { Avatar } from "@/client/components/avatar";
@@ -8,7 +9,7 @@ import { moveFavorite, toggleFavorite } from "@/client/features/navigation/favor
 import { ContextMenu } from "@/client/components/action-menu";
 import { SectionDisclosure } from "@/client/components/section-disclosure";
 import { findIssueDocument } from "@/shared/issue-resource";
-import { useActiveView, useSavedViews, type SavedView } from "./saved-views";
+import { useSavedViews, type SavedView } from "./saved-views";
 import { FavoriteButton } from "@/client/features/navigation/favorite-button";
 import { ViewMenu, ViewContextMenu } from "@/client/features/views/view-editor";
 import { Button, IconButton } from "@/client/components/button";
@@ -23,29 +24,30 @@ export function SavedViewIcon({ view }: { view: Pick<SavedView, "icon" | "color"
   </span>;
 }
 export function ViewFavorites({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
-  const favorites = useStore(s => s.favorites), views = useSavedViews(), active = useActiveView();
+  const favorites = useStore(s => s.favorites), views = useSavedViews();
   const boards = useStore(s => s.boards), issues = useStore(s => s.issues);
   const rows = favorites.flatMap(id => {
     const view = views.find(v => `view:${v.id}` === id);
     const document = id.startsWith("document:") ? findIssueDocument(issues.values(), id.slice(9)) : undefined;
     const issue = issues.get(id), board = id.startsWith("board:") ? boards.find(b => b.id === Number(id.split(":")[1])) : undefined;
     if (!view && !document && !issue && !board) return [];
-    // Sidebar navigation rows use selected-page geometry, outside the Button variants.
-    // Drag a favorite onto another to reorder (BJ-75).
     const content = <>{view ? <SavedViewIcon view={view} /> : document ? <Icon name="file" /> : <span className="text-fg-3">☆</span>}<span className="truncate">{view?.name ?? (document ? document.resource.title || "New document" : issue ? `${issue.key} ${issue.summary}` : board?.name)}</span></>;
+    // Each row is the sidebar's one link, marked by the shared rule: active only when the screen came from this favorite.
+    const row = { place: favoritePlace(id), favorite: id };
+    // Drag a favorite onto another to reorder (BJ-75).
     const props = {
       draggable: true,
       "data-favorite": id,
       onDragStart: (e: React.DragEvent<HTMLAnchorElement>) => e.dataTransfer.setData("text/plain", id),
       onDragOver: (e: React.DragEvent<HTMLAnchorElement>) => e.preventDefault(),
       onDrop: (e: React.DragEvent<HTMLAnchorElement>) => { e.preventDefault(); moveFavorite(e.dataTransfer.getData("text/plain"), id); },
-      className: `flex h-7 w-full items-center gap-2 rounded-lg px-2 text-left ${view && active?.id === view.id ? "bg-sel text-fg" : "text-fg-2 hover:bg-hover"}`,
+      className: "w-full",
     };
-    const button = view
-      ? <SavedViewLink view={view} aria-current={active?.id === view.id ? "page" : undefined} {...props}>{content}</SavedViewLink>
-      : <AppLink to={document ? { board: document.issue.board, selected: document.issue.key, panel: true, document: document.resource.id } : issue ? { board: issue.board, selected: issue.key, panel: true } : { board: board!.id, panel: false, selected: null }} {...props}>{content}</AppLink>;
+    const link = view
+      ? <SidebarViewLink row={row} view={view} {...props}>{content}</SidebarViewLink>
+      : <SidebarLink row={row} to={document ? { board: document.issue.board, selected: document.issue.key, panel: true, document: document.resource.id } : issue ? { board: issue.board, selected: issue.key, panel: true } : { board: board!.id, panel: false, selected: null }} {...props}>{content}</SidebarLink>;
     // A view's own menu has Unfavorite; the other rows get Remove from favorites (BJ-75).
-    return [view ? <ViewContextMenu key={id} view={view}>{button}</ViewContextMenu> : <ContextMenu key={id} label="Favorite options" entries={() => [{ name: "Remove from favorites", icon: "starred", run: () => toggleFavorite(id) }]}>{button}</ContextMenu>];
+    return [view ? <ViewContextMenu key={id} view={view}>{link}</ViewContextMenu> : <ContextMenu key={id} label="Favorite options" entries={() => [{ name: "Remove from favorites", icon: "starred", run: () => toggleFavorite(id) }]}>{link}</ContextMenu>];
   });
   return rows.length ? <div className="mt-5"><div className="mb-1"><SectionDisclosure label="Favorites" expanded={expanded} onToggle={onToggle} /></div>{expanded && rows}</div> : null;
 }

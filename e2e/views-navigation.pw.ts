@@ -13,9 +13,13 @@ test("custom identity, sidebar, favorite, details, palette and tab identity", as
     await page.waitFor(`location.pathname.startsWith('/view/')`);
     expect(await page.eval(`document.querySelector('[aria-label=Breadcrumb]').textContent.includes('Directory custom')`)).toBe(true);
     await page.click('[aria-label="Add to favorites"]');
-    await page.waitFor(`!!document.querySelector('nav[aria-label="Main navigation"] [aria-current="page"]')`);
-    // Only the active view is marked: its Views-section row and its Favorites row, never another view or the board.
-    expect(await page.eval(`[...document.querySelectorAll('nav[aria-label="Main navigation"] [aria-current]')].map(e => e.textContent).join('|')`)).toBe('Directory custom|Directory custom');
+    await page.waitFor(`!!document.querySelector('nav[aria-label="Main navigation"] [data-favorite^="view:"]')`);
+    // Only the row it was opened from is marked: its Views-section row, not its new Favorites row (Linear's ECe: a view
+    // favorite has no activeWithoutFavoriteOrigin), never another view or the board.
+    const marked = `[...document.querySelectorAll('nav[aria-label="Main navigation"] [aria-current]')].map(e => (e.dataset.favorite ? 'favorite ' : '') + e.textContent).join('|')`;
+    expect(await page.eval(marked)).toBe('Directory custom');
+    await page.click('nav[aria-label="Main navigation"] [data-favorite^="view:"]');
+    expect(await page.waitFor(`${marked}==='favorite Directory custom'&&${marked}`)).toBe('favorite Directory custom');
     await page.click('button[aria-label="Board details"]');
     await page.waitFor(`document.querySelector('[aria-label="View details"]').textContent.includes('Personal triage')`);
     await page.key('k','meta');

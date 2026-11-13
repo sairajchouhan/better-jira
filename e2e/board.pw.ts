@@ -44,7 +44,7 @@ test("board layout: hidden columns, column titles, drag placement and My issues"
     const item = `[...document.querySelectorAll("nav a")].find(b=>b.textContent.includes("My issues"))`;
     await page.eval(`${item}.click()`);
     await page.waitFor(`document.querySelectorAll("[data-key]").length===0`);
-    expect(await page.eval(`${item}.getAttribute("aria-current")`)).toBe("true");
+    expect(await page.eval(`${item}.getAttribute("aria-current")`)).toBe("page");
     await page.eval(`${item}.click()`);
     expect(await page.eval(`location.pathname`)).toBe("/my-issues");
     expect(await page.eval(`document.querySelectorAll("[data-key]").length`)).toBe(0);

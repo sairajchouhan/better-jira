@@ -1,7 +1,7 @@
 import { expect, fixture, test } from "./app";
 
 const nav = 'nav[aria-label="Main navigation"]';
-const active = `${nav} [aria-current="true"]`;
+const active = `${nav} [aria-current="page"]`;
 
 test("My issues is one active destination, including repeat clicks and opening the same board", async ({ open }) => {
   const app = await open("?board=1");
