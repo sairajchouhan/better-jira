@@ -89,3 +89,14 @@ test("BJ-222: the create dialog's chips are Linear's secondary small button in t
   expect(create).toMatch(/<Button\s+data-pending-relation\s+variant="secondary"\s+size="small"/);
   expect(create).toMatch(/label="More actions"\s+variant="secondary"\s+size="small"/);
 });
+
+test("BJ-223: a relation pill hovers (and holds while its menu is open) with controlTertiaryHover in both themes", () => {
+  for (const scheme of ["light", "dark"] as const) {
+    const { hue, t } = linear(scheme);
+    same(root(scheme)["--control-tertiary-hover"], t.controlTertiaryHover, hue);
+  }
+  expect(root("light")["--control-tertiary-hover"]).toBe("lch(94.854% 0.5 282)");
+  expect(root("dark")["--control-tertiary-hover"]).toBe("lch(14.006% 0.593 272)");
+  expect(index).toMatch(/\.relation-pill:hover,\s*\[data-menu-open\] > \[data-relation\] \.relation-pill \{\s*background: var\(--control-tertiary-hover\);/);
+  expect(index).not.toContain("--add-hover");
+});
