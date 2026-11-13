@@ -63,7 +63,7 @@ const COMPLETED = [
   ["none", "None"],
 ] as const;
 // Compact composer/row property geometry has no variant in the primitive contract.
-const button = "rounded px-2 py-1 text-fg-3 hover:bg-hover";
+const button = "rounded px-2 py-1 text-fg-3 hover:bg-(--control-tertiary-hover)";
 function parseDisplay(value: unknown): SubIssueDisplay {
   const base = defaultSubIssueDisplay();
   if (!value || typeof value !== "object") return base;
@@ -609,7 +609,7 @@ function SubIssueRow({
       data-sub-issue={child.key}
       data-depth={depth}
       data-context-only={contextOnly || undefined}
-      className={`group relative -ml-1.5 flex min-h-9 items-center gap-px rounded-lg pr-1 hover:bg-hover ${active ? "bg-hover" : ""}`}
+      className={`group relative -ml-1.5 flex min-h-9 items-center gap-px rounded-lg pr-1 hover:bg-(--row-hover) ${active ? "bg-(--row-hover)" : ""}`}
       style={{ paddingLeft: 31 + depth * 24 }}
       onContextMenu={(event) => {
         event.preventDefault();

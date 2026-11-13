@@ -100,3 +100,43 @@ test("BJ-223: a relation pill hovers (and holds while its menu is open) with con
   expect(index).toMatch(/\.relation-pill:hover,\s*\[data-menu-open\] > \[data-relation\] \.relation-pill \{\s*background: var\(--control-tertiary-hover\);/);
   expect(index).not.toContain("--add-hover");
 });
+
+test("BJ-224: sidebar rows hover with the sidebar theme's sidebarLinkBg, list-type rows with bgBaseHover", async () => {
+  for (const scheme of ["light", "dark"] as const) {
+    const { hue, t } = linear(scheme);
+    same(root(scheme)["--sidebar-hover"], t.sub().sidebarLinkBg, hue);
+    same(root(scheme)["--row-hover"], t.bgBaseHover, hue);
+  }
+  expect(root("dark")["--sidebar-hover"]).toBe("lch(8.445% 1.3 272)");
+  expect(root("light")["--sidebar-hover"]).toBe("lch(91.64% 0.5 282)");
+  expect(root("light")["--row-hover"]).toBe("lch(94.44% 0.5 282)");
+
+  // One row class for links and buttons (Search, New issue), lit under the pointer and while its context menu is open.
+  const link = await source("../features/navigation/sidebar-link.tsx");
+  expect(link).toContain(`"text-fg-2 hover:bg-(--sidebar-hover) in-data-menu-open:bg-(--sidebar-hover)"`);
+  expect(await source("../features/navigation/app-chrome.tsx")).toContain(`<button onClick={onClick} className={sidebarRowClass(false)}>`);
+  // List, inbox and sub-issue rows are Linear's list item (listItemHover / listItemMenuOpen / itemActive).
+  expect(await source("../routes/board-view.tsx")).toContain("hover:bg-(--row-hover) data-menu:bg-(--row-hover)");
+  expect(await source("../routes/inbox.tsx")).toContain(`"hover:bg-(--row-hover)"`);
+  expect(await source("../features/issue/sub-issues.tsx")).toContain(`hover:bg-(--row-hover) \${active ? "bg-(--row-hover)" : ""}`);
+});
+
+test("BJ-224: Submit comment is a secondary button, so its fill is the composer's elevated controlSecondary", () => {
+  same(root("light")["--send"], linear("light").t.elevated().controlSecondary, 282);
+  same(root("dark")["--send"], linear("dark").t.elevated().controlSecondary, 272);
+});
+
+test("BJ-224: no control hovers with bgShadeHover, and no blanket open-menu rule paints rows", async () => {
+  const glob = new Bun.Glob("**/*.{tsx,css}");
+  const dir = new URL("..", import.meta.url).pathname;
+  const users: string[] = [];
+  for await (const file of glob.scan(dir)) {
+    const text = await Bun.file(`${dir}/${file}`).text();
+    if (/\bbg-hover\b|hover:bg-hover|var\(--hover\)/.test(text)) users.push(file);
+  }
+  // Only the two fills that are no hover: the image-comment avatar and the upload pill's button (index.css).
+  expect(users).toEqual(["index.css"]);
+  expect(index.match(/var\(--hover\)/g)).toHaveLength(2);
+  expect(index).not.toContain("--color-hover");
+  expect(index).not.toMatch(/\[data-menu-open\] > :first-child/);
+});

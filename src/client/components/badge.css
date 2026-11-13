@@ -32,14 +32,17 @@
       max-width: 224px;
     }
   }
-  /* containerHoverBackground + containerBordered: bgShade and bgBorderSolidThin while hovered, pressed or its menu is open; the text
+  /* containerHoverBackground + containerBordered: bgShade and bgBorderSolidThin while hovered, pressed or its menu is open (a
+     ContextMenu's `[data-menu-open]`, through a HoverCard's wrapper too: QB's `[data-menu-open=true]>*`); the text
      takes --badge-highlight-color (labelTitle). In instantly, out over .15s. */
-  .ui-badge:is(button, a):is(:hover, :active, [aria-expanded="true"]) {
+  .ui-badge:is(button, a):is(:hover, :active, [aria-expanded="true"]),
+  :is([data-menu-open] > *, [data-menu-open] > * > *).ui-badge:is(button, a) {
     border-color: var(--chip-line-hover);
     background-color: var(--chip-hover);
     transition-duration: 0s;
   }
-  .ui-badge:is(button, a):is(:hover, :active, [aria-expanded="true"]) > .ui-badge-text {
+  .ui-badge:is(button, a):is(:hover, :active, [aria-expanded="true"]) > .ui-badge-text,
+  :is([data-menu-open] > *, [data-menu-open] > * > *).ui-badge:is(button, a) > .ui-badge-text {
     color: var(--chip-fg-hover);
   }
   /* The Created / Updated dates: borderless, no hover, disabled, transparent with no padding. */

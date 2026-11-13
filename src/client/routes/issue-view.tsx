@@ -309,7 +309,7 @@ function Title({ issue }: { issue: Issue }) {
           e.currentTarget.blur();
         }
       }}
-      className="rounded-md focus:bg-hover"
+      className="rounded-md"
     />
   );
 }

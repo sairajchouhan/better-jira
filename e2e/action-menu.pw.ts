@@ -214,7 +214,7 @@ test("CORE-18 / CORE-26: a context menu opens 4px right of and 1px above the poi
     expect([Math.round(box.left - at.x), Math.round(box.top - at.y)]).toEqual([4, -1]);
     await page.key("Escape");
   });
-  await test.step("CORE-26: a sidebar board row keeps its hover background while its menu is open", async () => {
+  await test.step("CORE-26: a sidebar board row keeps its hover background (sidebarLinkBg) while its menu is open", async () => {
     await page.click("nav a:has([data-inbox-badge])");
     await page.waitFor(`location.pathname === "/inbox"`);
     const row = `[...document.querySelectorAll('nav[aria-label="Main navigation"] a')].find(b=>b.textContent.includes('Browser audit'))`;
@@ -224,7 +224,7 @@ test("CORE-18 / CORE-26: a context menu opens 4px right of and 1px above the poi
     await page.page.mouse.move(r.x + 400, r.y + 300);
     await sleep(100);
     const hover = await page.eval<string>(
-      `(()=>{const d=document.createElement("div");d.style.background="var(--hover)";document.body.append(d);const c=getComputedStyle(d).backgroundColor;d.remove();return c})()`,
+      `(()=>{const d=document.createElement("div");d.style.background="var(--sidebar-hover)";document.body.append(d);const c=getComputedStyle(d).backgroundColor;d.remove();return c})()`,
     );
     expect(await page.eval<string>(`getComputedStyle(${row}).backgroundColor`)).toBe(hover);
   });

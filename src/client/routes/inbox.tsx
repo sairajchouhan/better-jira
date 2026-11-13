@@ -118,7 +118,7 @@ function Row({
         e.preventDefault();
         onMenu(item, { x: e.clientX, y: e.clientY });
       }}
-      className={`mx-2 flex h-[55px] gap-3 rounded-lg px-2 ${selected ? "bg-sel" : "hover:bg-hover"}`}
+      className={`mx-2 flex h-[55px] gap-3 rounded-lg px-2 ${selected ? "bg-sel" : "hover:bg-(--row-hover)"}`}
     >
       <Actor item={item} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-2.5">

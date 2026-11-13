@@ -1,6 +1,6 @@
 import { type Board, type Issue } from "@/shared/issue-model";
 import { AppLink } from "./app-link";
-import { SidebarLink, SidebarViewLink } from "./sidebar-link";
+import { SidebarLink, SidebarViewLink, sidebarRowClass } from "./sidebar-link";
 import { defaultPreferences } from "@/shared/view-model";
 import { FavoriteButton } from "./favorite-button";
 import { useActiveView, useSavedViews, createViewDraft } from "@/client/features/views/saved-views";
@@ -451,7 +451,7 @@ export function StorageNotice() {
 
 /** A sidebar row that runs an action (Search, New issue, More) rather than opening a place, so it is never active. */
 const SideItem = ({ onClick, children }: { onClick: (e: MouseEvent<HTMLButtonElement>) => void; children: ReactNode }) => (
-  <button onClick={onClick} className="flex h-7 items-center gap-2 rounded-lg pr-[9px] pl-2 text-left text-fg-2 hover:bg-hover">
+  <button onClick={onClick} className={sidebarRowClass(false)}>
     {children}
   </button>
 );

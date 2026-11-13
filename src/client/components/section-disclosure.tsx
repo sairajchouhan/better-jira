@@ -19,7 +19,7 @@ export function SectionDisclosure({
       type="button"
       aria-label={`${expanded ? "Collapse" : "Expand"} ${label.toLowerCase()} section`}
       aria-expanded={expanded}
-      className="flex h-6 items-center gap-0.5 rounded-full pr-[13px] pl-1.5 text-[12px] font-medium text-fg-3 hover:bg-hover"
+      className="flex h-6 items-center gap-0.5 rounded-full pr-[13px] pl-1.5 text-[12px] font-medium text-fg-3 hover:bg-(--control-tertiary-hover)"
       onClick={onToggle}
     >
       <span className={`grid size-4 place-items-center ${expanded ? "rotate-90" : ""}`}>

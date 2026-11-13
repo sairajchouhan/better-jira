@@ -33,7 +33,7 @@ import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { emojiOptions } from "@/client/features/comments/reactions";
 import { ReminderMenu, reminderSubmenu } from "@/client/features/reminders/reminders";
 /** The header breadcrumb, the favorite star and the icon-picker cells: no primitive yet (see the note at each). */
-const BUTTON = "rounded px-2 py-1.5 text-[13px] text-fg-2 hover:bg-hover";
+const BUTTON = "rounded px-2 py-1.5 text-[13px] text-fg-2 hover:bg-(--control-tertiary-hover)";
 type Draft = { title: string; body: AdfDocument };
 /** The `/issue/KEY-1/document/<id>` route: the open issue's document. */
 export function DocumentScreen() {
@@ -718,7 +718,7 @@ function DocumentIcon({ resource, issue }: { resource: IssueResource; issue: Iss
       {/* An 18px glyph in a 24px box: IconButton's small size draws icons at 14px. */}
       <button
         aria-label="Document icon"
-        className="mx-1 mt-1.5 mb-3 grid size-6 place-items-center rounded hover:bg-hover"
+        className="mx-1 mt-1.5 mb-3 grid size-6 place-items-center rounded hover:bg-(--control-tertiary-hover)"
         style={{ color }}
         onClick={(e) => setAnchor(e.currentTarget)}
       >

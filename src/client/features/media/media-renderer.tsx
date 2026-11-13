@@ -210,7 +210,7 @@ function LoadedMedia({
           data-attachment-id={file.id}
           href={downloadURL(file.url)}
           download={!external ? file.name : undefined}
-          className="inline-flex max-w-full items-center rounded border border-line-2 bg-card px-1.5 text-fg-2 hover:bg-hover"
+          className="inline-flex max-w-full items-center rounded border border-line-2 bg-card px-1.5 text-fg-2 hover:bg-(--card-hover)"
         >
           <span className="truncate">{file.name}</span>
         </a>

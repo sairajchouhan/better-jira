@@ -361,7 +361,7 @@ function HiddenColumns({
         <button
           aria-expanded={open}
           onClick={toggle}
-          className="ml-px flex h-6 items-center gap-1 rounded-full border-[0.5px] border-transparent pr-2 pl-1 text-[12px] font-medium text-fg-2 hover:bg-hover"
+          className="ml-px flex h-6 items-center gap-1 rounded-full border-[0.5px] border-transparent pr-2 pl-1 text-[12px] font-medium text-fg-2 hover:bg-(--control-tertiary-hover)"
         >
           <svg
             width="18"
@@ -843,7 +843,7 @@ const IssueRow = memo(function IssueRow({
       <IssueTarget
         issue={issue}
         selected={selected}
-        className="flex min-h-11 cursor-default items-center gap-3 border-b border-line px-5 -outline-offset-1 hover:bg-hover data-menu:bg-hover data-menu:shadow-[inset_2px_0_0_var(--accent)] data-selected:bg-hover data-selected:shadow-[inset_2px_0_0_var(--accent)]"
+        className="flex min-h-11 cursor-default items-center gap-3 border-b border-line px-5 -outline-offset-1 hover:bg-(--row-hover) data-menu:bg-(--row-hover) data-menu:shadow-[inset_2px_0_0_var(--accent)] data-selected:bg-(--row-hover) data-selected:shadow-[inset_2px_0_0_var(--accent)]"
         style={depth ? { paddingLeft: 20 + depth * 20 } : undefined}
       >
         {show("priority") && (

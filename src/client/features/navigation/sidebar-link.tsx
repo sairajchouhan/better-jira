@@ -13,10 +13,14 @@ import { isSidebarActive, type SidebarRow } from "./sidebar-active";
 /** Whether this row is the active one; a boolean selector, so a row re-renders only when its own state flips. */
 const useSidebarActive = (row: SidebarRow) => useStore((s) => isSidebarActive(row, s));
 
-// Selected-page geometry, outside the Button variants. The keyboard ring is the global :focus-visible one, so a
-// mouse click leaves no ring (Linear's linkBase only styles :focus-visible).
-const itemClass = (active: boolean, className = "") =>
-  `flex h-7 items-center gap-2 rounded-lg pr-[9px] pl-2 text-left ${active ? "bg-sel text-fg" : "text-fg-2 hover:bg-hover"} ${className}`;
+/**
+ * Every sidebar row's box: Linear's SidebarLink (`_$.linkBase` + `_$.containerBg`) and sidebar button (`qsr.button`, Search
+ * and New issue) light up with the sidebar theme's sidebarLinkBg (`--sidebar-hover`) under the pointer and while their
+ * context menu is open (`[data-menu-open]`). The keyboard ring is the global :focus-visible one, so a mouse click leaves
+ * no ring (Linear's linkBase only styles :focus-visible).
+ */
+export const sidebarRowClass = (active: boolean, className = "") =>
+  `flex h-7 items-center gap-2 rounded-lg pr-[9px] pl-2 text-left ${active ? "bg-sel text-fg" : "text-fg-2 hover:bg-(--sidebar-hover) in-data-menu-open:bg-(--sidebar-hover)"} ${className}`;
 
 type RowProps = { row: SidebarRow } & Omit<ComponentProps<"a">, "aria-current">;
 
@@ -27,7 +31,7 @@ export function SidebarLink({ row, to, className, ...props }: RowProps & { to: D
     <AppLink
       to={{ ...to, favorite: row.favorite ?? null }}
       aria-current={active ? "page" : undefined}
-      className={itemClass(active, className)}
+      className={sidebarRowClass(active, className)}
       {...props}
     />
   );
@@ -41,7 +45,7 @@ export function SidebarViewLink({ row, view, className, ...props }: RowProps & {
       view={view}
       favorite={row.favorite}
       aria-current={active ? "page" : undefined}
-      className={itemClass(active, className)}
+      className={sidebarRowClass(active, className)}
       {...props}
     />
   );

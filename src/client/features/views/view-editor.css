@@ -50,7 +50,7 @@
   background: var(--view-icon-fill);
 }
 .view-icon-button:hover {
-  background: var(--hover);
+  background: var(--control-tertiary-hover);
 }
 @media (prefers-color-scheme: dark) {
   .view-editor {
