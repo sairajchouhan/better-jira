@@ -1,6 +1,9 @@
 import { type Board, type Issue } from "@/shared/issue-model";
 import { describe, expect, test } from "bun:test";
 import {
+  ORDERINGS,
+  PROPERTIES,
+  pickLabels,
   boardCells,
   displayHiddenCount,
   buckets,
@@ -603,4 +606,14 @@ describe("group ordering (BJ-205)", () => {
     prefs.hidden = { status: ["Todo"] };
     expect(displayHiddenCount(all, board, prefs, false, "", "me", now)).toBe(base + 1);
   });
+});
+
+test("board Display options use Linear's link wording; pickLabels reads the shared table (BJ-215)", () => {
+  expect(ORDERINGS.find(([id]) => id === "links")?.[1]).toBe("Link count");
+  expect(PROPERTIES.find(([id]) => id === "links")?.[1]).toBe("Links");
+  expect(pickLabels(ORDERINGS, ["links", "due"])).toEqual([
+    ["links", "Link count"],
+    ["due", "Due date"],
+  ]);
+  expect(() => pickLabels(PROPERTIES, ["nope" as never])).toThrow();
 });

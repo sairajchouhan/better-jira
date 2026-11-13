@@ -179,6 +179,17 @@ FIELDS.push(
 ORDERINGS.push(["estimate", "Estimate"]);
 FIELDS.push(["estimate", "Estimate"]);
 FIELDS.push(["projectLead", "Project lead"]);
+/** One label per id across every menu: pick rows from a shared table (ORDERINGS, PROPERTIES) instead of retyping labels. */
+export function pickLabels<T extends string, K extends T>(
+  table: readonly (readonly [T, string])[],
+  ids: readonly K[],
+): [K, string][] {
+  return ids.map((id) => {
+    const row = table.find(([key]) => key === id);
+    if (!row) throw new Error(`No label for ${id}`);
+    return [id, row[1]];
+  });
+}
 export const OPERATORS: [Operator, string][] = [
   ["is", "is"],
   ["isNot", "is not"],

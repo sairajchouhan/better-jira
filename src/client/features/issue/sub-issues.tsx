@@ -46,26 +46,15 @@ import { shortDate } from "@/client/lib/due-date";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
 import { canHaveChildren } from "@/shared/issue-properties";
-import { type Property } from "@/shared/view-model";
 import {
   childrenByParent,
   defaultSubIssueDisplay,
+  SUB_ISSUE_ORDERINGS as orderings,
+  SUB_ISSUE_PROPERTIES as properties,
   subIssueRows,
   type SubIssueDisplay,
 } from "./sub-issue-model";
 
-const orderings = [
-  ["manual", "Manual"],
-  ["title", "Title"],
-  ["status", "Status"],
-  ["priority", "Priority"],
-  ["assignee", "Assignee"],
-  ["estimate", "Estimate"],
-  ["updated", "Updated"],
-  ["created", "Created"],
-  ["due", "Due date"],
-  ["links", "Link count"],
-] as const;
 const COMPLETED = [
   ["all", "All"],
   ["day", "Past day"],
@@ -73,17 +62,6 @@ const COMPLETED = [
   ["month", "Past month"],
   ["none", "None"],
 ] as const;
-const properties: [Property, string][] = [
-  ["priority", "Priority"],
-  ["id", "ID"],
-  ["status", "Status"],
-  ["labels", "Labels"],
-  ["milestone", "Milestone"],
-  ["due", "Due date"],
-  ["links", "Links"],
-  ["assignee", "Assignee"],
-  ["pullRequests", "Pull requests"],
-];
 // Compact composer/row property geometry has no variant in the primitive contract.
 const button = "rounded px-2 py-1 text-fg-3 hover:bg-hover";
 function parseDisplay(value: unknown): SubIssueDisplay {

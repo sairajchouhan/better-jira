@@ -1,7 +1,13 @@
 import { type Issue } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
 
-import { defaultSubIssueDisplay, subIssueRows } from "./sub-issue-model";
+import { ORDERINGS, PROPERTIES } from "@/shared/view-model";
+import {
+  defaultSubIssueDisplay,
+  SUB_ISSUE_ORDERINGS,
+  SUB_ISSUE_PROPERTIES,
+  subIssueRows,
+} from "./sub-issue-model";
 const issue = (key: string, parent?: string, status = "todo", rank = ""): Issue => ({
   key,
   parent,
@@ -125,4 +131,13 @@ test("BJ-50: local manual order takes precedence over Jira rank without flatteni
   const rows = subIssueRows("P", issues, defaultSubIssueDisplay(), status, Date.now(), false, ["B", "A"]);
   expect(rows.rows.map(row => [row.issue.key, row.depth])).toEqual([["B", 0], ["A", 0], ["C", 1]]);
   expect(issues[1]!.rank).toBe("a");
+});
+
+test("sub-issue menus use Linear's labels from the board's shared tables (BJ-215)", () => {
+  const label = (rows: [string, string][], id: string) => rows.find(([key]) => key === id)?.[1];
+  // Linear: ordering spec linkCount → "Link count"; sub-issue display property fieldLinkCount → "Links".
+  expect(label(SUB_ISSUE_ORDERINGS, "links")).toBe("Link count");
+  expect(label(SUB_ISSUE_PROPERTIES, "links")).toBe("Links");
+  for (const [id, text] of SUB_ISSUE_ORDERINGS) expect(label(ORDERINGS, id)).toBe(text);
+  for (const [id, text] of SUB_ISSUE_PROPERTIES) expect(label(PROPERTIES, id)).toBe(text);
 });

@@ -1,12 +1,44 @@
 import { type Issue } from "@/shared/issue-model";
 
-import { priorityRank, type Ordering, type Property } from "@/shared/view-model";
+import {
+  ORDERINGS,
+  PROPERTIES,
+  pickLabels,
+  priorityRank,
+  type Ordering,
+  type Property,
+} from "@/shared/view-model";
 export type SubIssueDisplay = {
   ordering: Exclude<Ordering, "statusAge">;
   completed: "all" | "day" | "week" | "month" | "none";
   nested: boolean;
   properties: Property[];
 };
+// Linear's sub-issue pane: ordering labels from its shared ordering spec ("Link count"),
+// display properties from IssueDetailsPaneSidebar ("Links"); same tables as the board.
+export const SUB_ISSUE_ORDERINGS = pickLabels(ORDERINGS, [
+  "manual",
+  "title",
+  "status",
+  "priority",
+  "assignee",
+  "estimate",
+  "updated",
+  "created",
+  "due",
+  "links",
+] as const satisfies readonly SubIssueDisplay["ordering"][]);
+export const SUB_ISSUE_PROPERTIES = pickLabels(PROPERTIES, [
+  "priority",
+  "id",
+  "status",
+  "labels",
+  "milestone",
+  "due",
+  "links",
+  "assignee",
+  "pullRequests",
+] as const);
 export const defaultSubIssueDisplay = (): SubIssueDisplay => ({
   ordering: "manual",
   completed: "all",
