@@ -829,3 +829,17 @@ test("sub-issue field menus include Jira users and labels absent from every issu
     page.page.locator('[aria-label="Change labels"] [cmdk-item][data-value="jira-only"]'),
   ).toHaveCount(1);
 });
+
+test("a sub-issue row's pull requests are Linear's PR badge, as on list rows", async ({ open }) => {
+  const prs = `const prRead=fetch;window.fetch=async(...args)=>{const response=await prRead(...args);if(new URL(String(args[0]),location.href).pathname!=='/api/issues')return response;const issues=await response.json();Object.assign(issues.find(i=>i.key==='TEST-3'),{prCount:3,prStatus:'draft'});return Response.json(issues)}`;
+  const page = await open("?issue=TEST-2&view=page", { setup: `${tree};${prs}` });
+  await page.waitFor(`!!document.querySelector('[data-sub-issue="TEST-3"]')`);
+  await page.click('[aria-label="Sub-issue display options"]');
+  await show(page, "Pull requests");
+  await page.key("Escape");
+  const badge = `document.querySelector('[data-sub-issue="TEST-3"] [aria-label="Pull requests on TEST-3"]')`;
+  await page.waitFor(`!!${badge}`);
+  expect(
+    await page.eval(`[${badge}.textContent,${badge}.classList.contains('ui-badge'),${badge}.querySelector('[data-pr-status]').dataset.prStatus]`),
+  ).toEqual(["3 PRs", true, "draft"]);
+});

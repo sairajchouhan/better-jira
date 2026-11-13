@@ -3,6 +3,7 @@ import { Text } from "@/client/components/text";
 import { SubIssueProgressButton } from "@/client/components/sub-issue-progress-button";
 import "./issue-header.css";
 import { CountBadge } from "@/client/components/count-badge";
+import { PullRequestBadge } from "./card-badges";
 import { Dialog, ConfirmDialog } from "@/client/components/dialog";
 import { TextInput } from "@/client/components/field";
 import { Button, IconButton } from "@/client/components/button";
@@ -745,11 +746,8 @@ function SubIssueRow({
           <CountBadge>{child.links.length}</CountBadge>
         </span>
       )}
-      {display.properties.includes("pullRequests") && !!child.prCount && (
-        <span title="Pull requests">
-          <CountBadge>{child.prCount}</CountBadge>
-        </span>
-      )}
+      {/* Linear's sub-issue rows are its list rows: the same pull request badge (`mhn`, layout list). */}
+      {display.properties.includes("pullRequests") && !!child.prCount && <PullRequestBadge issue={child} layout="list" />}
       {display.properties.includes("assignee") &&
         control(
           "assignee",
