@@ -4,7 +4,7 @@ import { QueryObserver } from "@tanstack/query-core";
 import { Avatar } from "@/client/components/avatar";
 import { Badge } from "@/client/components/badge";
 import { HoverCard, MoreList } from "@/client/components/hover-card";
-import { Icon } from "@/client/components/icons";
+import { Icon, PullRequestStatusIcon } from "@/client/components/icons";
 import { LinkIcon } from "@/client/components/link-icon";
 import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { navigate } from "@/client/features/navigation/app-navigation";
@@ -13,7 +13,7 @@ import { commentCount } from "@/client/features/media/media-edits";
 import { fullTime } from "./issue-dates";
 import { queryClient } from "@/client/state/server-data";
 import type { Issue, User } from "@/shared/issue-model";
-import { pullRequestStatus, type PullRequest } from "@/shared/pull-requests";
+import { leadingStatus, pullRequestBadgeText, pullRequestStatus, type PullRequest } from "@/shared/pull-requests";
 import { externalTitle, faviconSrc, linkBadgeText } from "@/shared/smart-link";
 
 const openExternal = (url: string) => void window.open(url, "_blank", "noopener,noreferrer");
@@ -100,31 +100,23 @@ const pullRequestQuery = (key: string, enabled = true) => ({
     return response.json();
   },
   enabled,
-  staleTime: 60_000,
+  staleTime: 5 * 60_000,
   retry: false,
 });
-/** The issue's pull requests from Jira's development panel: one read per issue a minute, shared by its badge, card and menu. */
+/** The issue's pull requests from Jira's development panel: one read per issue every five minutes, shared by its badge, card and
+ *  menu. */
 export const fetchPullRequests = (key: string) => queryClient.fetchQuery(pullRequestQuery(key));
-function usePullRequests(key: string) {
+/** `read`: whether mounting reads them (a single PR's badge needs its number); otherwise this only shows what a hover or click read. */
+function usePullRequests(key: string, read = true) {
   const [observer] = useState(
-    () => new QueryObserver<PullRequest[], Error, PullRequest[], PullRequest[], PullRequestKey>(queryClient, pullRequestQuery(key)),
+    () => new QueryObserver<PullRequest[], Error, PullRequest[], PullRequest[], PullRequestKey>(queryClient, pullRequestQuery(key, read)),
   );
-  useEffect(() => observer.setOptions(pullRequestQuery(key)), [observer, key]);
+  useEffect(() => observer.setOptions(pullRequestQuery(key, read)), [observer, key, read]);
   const result = () => observer.getCurrentResult();
   return useSyncExternalStore((changed) => observer.subscribe(changed), result, result);
 }
 
-const PR_COLOR: Record<PullRequest["status"], string> = {
-  open: "var(--st-review)",
-  merged: "var(--st-done)",
-  declined: "var(--st-canceled)",
-  draft: "var(--st-backlog)",
-};
-const PullRequestIcon = ({ pr }: { pr: PullRequest }) => (
-  <span className="flex" style={{ color: PR_COLOR[pr.status] }} data-pr-status={pr.status}>
-    <Icon name="branch" />
-  </span>
-);
+const PullRequestIcon = ({ pr }: { pr: PullRequest }) => <PullRequestStatusIcon status={pr.status} />;
 
 /** Linear's PR row (`Whn`): status icon, title (opens it), and a muted line of repository, number, status and author. */
 function PullRequestRow({ pr }: { pr: PullRequest }) {
@@ -160,11 +152,14 @@ const pullRequestEntries = (prs: PullRequest[]): ActionEntry[] =>
 /** Linear's "Go to linked pull request…" (`xpn`, immediatelyExecuteSingularSubAction): one pull request opens; several list. */
 const goToPullRequestsLabel = (count: number) => `Go to linked pull ${count === 1 ? "request" : "requests"}…`;
 
-/** Linear's pull request badge (`mhn`): the count, "N PRs"; a click runs "Go to linked pull request…", which opens the one pull
- *  request or lists them below the badge, left edges flush (`bottom-left`); ⇧→ on the card does the same. Hover shows the card. */
-export function PullRequestBadge({ issue }: { issue: Issue }) {
+/** Linear's pull request badge (`mhn`): one PR shows its status icon and number ("#7"); several show the icon of the first status in
+ *  Linear's order and "N PRs". The count and Jira's summary state come with the issue (its Development field), so several PRs cost
+ *  no read; one PR's number needs Jira's development detail, read when the badge mounts. A click runs "Go to linked pull request…",
+ *  which opens the one pull request or lists them below the badge (board `bottom-left`, list `bottom-right`); ⇧→ on the card does
+ *  the same. Hover shows the card. */
+export function PullRequestBadge({ issue, layout }: { issue: Issue; layout: "board" | "list" }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const { data } = usePullRequests(issue.key);
+  const { data } = usePullRequests(issue.key, issue.prCount === 1);
   const go = async (target: HTMLElement) => {
     const prs = await fetchPullRequests(issue.key).catch(() => []);
     if (prs.length === 1) openExternal(prs[0]!.url);
@@ -177,7 +172,8 @@ export function PullRequestBadge({ issue }: { issue: Issue }) {
     void go(button.current);
     return true;
   });
-  const count = issue.prCount ?? 0;
+  const count = data?.length || (issue.prCount ?? 0);
+  const text = pullRequestBadgeText(count, data?.[0]?.number);
   return (
     <>
       <HoverCard label="Pull requests" content={<PullRequestsCard issue={issue} />}>
@@ -190,16 +186,15 @@ export function PullRequestBadge({ issue }: { issue: Issue }) {
           onClick={(e) => (anchor ? setAnchor(null) : void go(e.currentTarget))}
         >
           <Badge.Icon>
-            <Icon name="branch" />
+            <PullRequestStatusIcon status={(data?.length ? leadingStatus(data) : undefined) ?? issue.prStatus} />
           </Badge.Icon>
-          <Badge.Text>
-            {count} PR{count === 1 ? "" : "s"}
-          </Badge.Text>
+          {text && <Badge.Text>{text}</Badge.Text>}
         </Badge.Button>
       </HoverCard>
       {anchor && (
         <ActionMenu
           anchor={anchor}
+          align={layout === "list" ? "end" : undefined}
           label={goToPullRequestsLabel(count)}
           entries={data?.length ? pullRequestEntries(data) : [{ name: data ? "Jira lists no pull requests" : "Loading pull requests…" }]}
           close={() => setAnchor(null)}

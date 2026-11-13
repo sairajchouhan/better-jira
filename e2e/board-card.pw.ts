@@ -170,13 +170,15 @@ test("a list row's keyboard ring sits inside the row, so the next row cannot cov
   ).toEqual(["solid", "1px", "-1px", "none"]);
 });
 
-/** TEST-1: two pull requests and three links; TEST-2: one pull request, one GitHub link, a comment and a creator. window.open is
+/** TEST-1: two pull requests (Jira's Development field summarises them as merged; the detail has one open, one merged) and three
+ *  links; TEST-2: one open pull request, one GitHub link, a comment and a creator. window.open and the pull request reads are
  *  recorded, so opening a pull request or link stays in the test. The fixture's smart links give TEST-2 its one Jira comment. */
 const BADGE_PROPS = ["id", "status", "assignee", "pullRequests", "links", "comments", "creator"];
 const badgeSetup = `(()=>{localStorage.setItem(${JSON.stringify(PREFS_KEY)},${JSON.stringify(
   JSON.stringify({ 1: { display: { layout: "board", properties: BADGE_PROPS } } }),
-)});window.__opened=[];window.open=(u)=>{window.__opened.push(String(u));return null};const real=fetch;window.fetch=async(input,init)=>{const path=new URL(String(input),location.href).pathname;
- if(path==='/api/issues'){const issues=await (await real(input,init)).json();return Response.json(issues.map(i=>i.key==='TEST-1'?{...i,prCount:2,links:['https://example.test/spec','https://example.test/notes','https://docs.google.com/document/d/1']}:i.key==='TEST-2'?{...i,prCount:1,links:['https://github.com/example/app/pull/7'],creator:{id:'alex',name:'Alex'},created:'2026-11-01T10:00:00Z'}:i));}
+)});window.__opened=[];window.__prReads=[];window.open=(u)=>{window.__opened.push(String(u));return null};const real=fetch;window.fetch=async(input,init)=>{const path=new URL(String(input),location.href).pathname;
+ if(path.endsWith('/pull-requests'))window.__prReads.push(path.split('/').at(-2));
+ if(path==='/api/issues'){const issues=await (await real(input,init)).json();return Response.json(issues.map(i=>i.key==='TEST-1'?{...i,prCount:2,prStatus:'merged',links:['https://example.test/spec','https://example.test/notes','https://docs.google.com/document/d/1']}:i.key==='TEST-2'?{...i,prCount:1,prStatus:'open',links:['https://github.com/example/app/pull/7'],creator:{id:'alex',name:'Alex'},created:'2026-11-01T10:00:00Z'}:i));}
  return real(input,init);};})()`;
 const opened = (page: App) => page.eval<string[]>("window.__opened");
 
@@ -221,10 +223,23 @@ test("the link, pull request, comment and creator badges behave like Linear's", 
     const hover = await hoverCard(link, "Link");
     expect(await page.eval(`${hover}.textContent`)).toContain("https://github.com/example/app/pull/7");
   });
+  await test.step("Linear's PR badge text and status: one PR is its number and status icon; several are \"N PRs\"", async () => {
+    const icon = (key: string) => `${badge(key, `Pull requests on ${key}`)}.querySelector('[data-pr-status]')`;
+    const look = (key: string) =>
+      page.eval(`[${badge(key, `Pull requests on ${key}`)}.textContent,${icon(key)}.dataset.prStatus,getComputedStyle(${icon(key)}).fill]`);
+    // One PR: its number from Jira's development detail, Linear's open icon in greenBase (the suite's dark theme: l 60; light is 68).
+    await page.waitFor(`${badge("TEST-2", "Pull requests on TEST-2")}.textContent==="#7"`);
+    expect(await look("TEST-2")).toEqual(["#7", "open", "lch(60 64.37 141.95)"]);
+    // Several: "2 PRs" and the status Jira's Development field gives with the issue (merged, purpleBase) — no per-card read.
+    expect(await look("TEST-1")).toEqual(["2 PRs", "merged", "lch(48 59.31 288.43)"]);
+    expect(await page.eval<string[]>("window.__prReads")).not.toContain("TEST-1");
+  });
   await test.step("pull requests: hover lists Jira's pull requests; click → Go to linked pull requests… opens the pick", async () => {
     const prs = badge("TEST-1", "Pull requests on TEST-1");
     expect(await page.eval(`${prs}.textContent`)).toBe("2 PRs");
     const hover = await hoverCard(prs, "Pull requests");
+    // Read on hover: the badge icon becomes the first status in Linear's order among them (open before merged).
+    await page.waitFor(`${prs}.querySelector('[data-pr-status]').dataset.prStatus==="open"`);
     await page.waitFor(`${hover}.textContent.includes("Fix the fixture sync")&&${hover}.textContent.includes("Add the fixture board")`);
     await page.click(`[data-key="TEST-1"] [aria-label="Pull requests on TEST-1"]`);
     const menu = `document.querySelector('[role="dialog"][aria-label="Go to linked pull requests…"]')`;

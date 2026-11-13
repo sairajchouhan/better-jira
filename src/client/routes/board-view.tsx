@@ -762,7 +762,7 @@ function IssueProperties({ issue, display: d, labels }: { issue: Issue; display:
           </FieldBadge>
         ))}
       {show("labels") && <IssueLabels issue={issue} max={labels} />}
-      {show("pullRequests") && !!issue.prCount && <PullRequestBadge issue={issue} />}
+      {show("pullRequests") && !!issue.prCount && <PullRequestBadge issue={issue} layout={d.layout} />}
       {show("links") && <LinkBadges issue={issue} />}
       {show("comments") && <CommentBadge issue={issue} />}
       {show("creator") && <CreatorBadge issue={issue} />}
