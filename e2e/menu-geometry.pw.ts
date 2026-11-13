@@ -73,18 +73,22 @@ for (const scheme of ["dark", "light"] as const) {
   });
 }
 
-// Records what the sidebar's Help menu paints on every frame from the click until it settles. A ResizeObserver made after the
-// popup's own (floating-ui's) runs after it in the same frame, before paint, so its first callback sees the first painted box.
+// Records what the sidebar's Help menu paints on every frame from before the click until AFTER_PAINT frames after the popup
+// first paints. Counting from the popup's first frame, not from the click, keeps the sample the same size however long the
+// click takes to land under load. A ResizeObserver made after the popup's own (floating-ui's) runs after it in the same frame,
+// before paint, so its first callback sees the first painted box.
+const AFTER_PAINT = 24;
 const recordOpen = `(()=>{
+  const AFTER_PAINT=${AFTER_PAINT};
   const box=(n)=>{if(!n)return null;const r=n.getBoundingClientRect();return [r.x,r.y,r.width,r.height].map(v=>Math.round(v*100)/100).join()};
-  const out=window.__open={painted:null,frames:[]};
+  const out=window.__open={painted:null,done:false,frames:[]};
   const popup=()=>document.querySelector('[role=dialog][aria-label="Help"]');
   const still=()=>({help:box(document.getElementById('help-menu')),nav:box(document.getElementById('help-menu')?.parentElement),main:box(document.querySelector('main')),page:document.documentElement.clientWidth+'x'+document.documentElement.scrollHeight});
   new MutationObserver(()=>{
     const node=popup();
     if(node&&!out.painted){out.painted='pending';new ResizeObserver((_,ro)=>{out.painted=box(node);ro.disconnect()}).observe(node)}
   }).observe(document.body,{childList:true,subtree:true});
-  let n=0;const frame=()=>{out.frames.push({popup:box(popup()),...still()});if(++n<30)requestAnimationFrame(frame)};
+  let after=0;const frame=()=>{const f={popup:box(popup()),...still()};out.frames.push(f);if(f.popup||after)after++;if(after<AFTER_PAINT)requestAnimationFrame(frame);else out.done=true};
   requestAnimationFrame(frame);
 })()`;
 
@@ -96,13 +100,16 @@ test("the sidebar Help menu opens in place: nothing grows, shrinks or moves, col
       await p.waitFor(`!!document.getElementById('help-menu')`);
       await p.eval(recordOpen);
       await p.click("#help-menu");
-      await p.waitFor(`window.__open.frames.length===30`);
+      await p.waitFor(`window.__open.done`);
       const { painted, frames } = await p.eval<{
         painted: string;
         frames: { popup: string | null; help: string; nav: string; main: string; page: string }[];
       }>("window.__open");
-      const shown = frames.filter((f) => f.popup);
-      expect(shown.length).toBeGreaterThan(20);
+      // From its first painted frame on, the popup is on screen in every one of the AFTER_PAINT sampled frames.
+      const first = frames.findIndex((f) => f.popup);
+      const shown = frames.slice(first);
+      expect(first).toBeGreaterThan(0);
+      expect(shown.length).toBe(AFTER_PAINT);
       // The first painted box is the final one (a transient "No matching actions" row once made it 42px too tall), on every frame after it too: 4px above the Help row, left at the window's 12px inset.
       const help = frames[0]!.help.split(",").map(Number);
       const [x, y, , h] = painted.split(",").map(Number);
@@ -110,8 +117,8 @@ test("the sidebar Help menu opens in place: nothing grows, shrinks or moves, col
       expect(y! + h!).toBe(help[1]! - 4);
       expect(new Set(shown.map((f) => f.popup))).toEqual(new Set([painted]));
       // The trigger, the sidebar, the main column and the page never move.
-      const { popup: _, ...first } = frames[0]!;
-      for (const { popup: __, ...rest } of frames) expect(rest).toEqual(first);
+      const { popup: _, ...start } = frames[0]!;
+      for (const { popup: __, ...rest } of frames) expect(rest).toEqual(start);
       await p.key("Escape");
       await p.waitFor(`!document.querySelector('[role=dialog][aria-label="Help"]')`);
     });
