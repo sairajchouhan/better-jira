@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
 import { createLink } from "@tanstack/react-router";
-import { linkTo, navigate, openSavedView } from "./app-navigation";
+import { linkTo, navigate, openSavedView, withFavorite } from "./app-navigation";
 import { locationOf } from "@/client/routes/tree";
 import type { SavedView } from "@/shared/saved-view-model";
 import type { Destination } from "./navigation";
@@ -13,8 +13,10 @@ export function AppLink({ to, onClick, ...props }: { to: Destination } & Compone
   return <NavigationLink routeLocation={linkTo(to)} go={() => navigate(to)} onClick={onClick} {...props} />;
 }
 
-export function SavedViewLink({ view, ...props }: { view: SavedView } & ComponentProps<"a">) {
-  return <NavigationLink routeLocation={locationOf({ to: "view", id: view.id }, { view: () => view })} go={() => openSavedView(view)} {...props} />;
+/** A link opening a saved view; `favorite` when it is the view's Favorites row. */
+export function SavedViewLink({ view, favorite, ...props }: { view: SavedView; favorite?: string } & ComponentProps<"a">) {
+  const route = withFavorite(locationOf({ to: "view", id: view.id }, { view: () => view }), favorite);
+  return <NavigationLink routeLocation={route} go={() => openSavedView(view, favorite)} {...props} />;
 }
 
 // The app's selected screen owns aria-current (a list can stay selected under an issue).

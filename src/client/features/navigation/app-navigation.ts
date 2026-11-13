@@ -56,7 +56,16 @@ export const router = createAppRouter(typeof document === "undefined" ? createMe
 export function linkTo(to: Destination) {
   const t = transition(screen(), { type: "go", to }, data()),
     preferences = t.preferences ?? get().preferences;
-  return locationOf(placeOf(t.screen, (board) => (preferences[board] ?? defaultPreferences()).scope), { view: findView });
+  return withFavorite(
+    locationOf(placeOf(t.screen, (board) => (preferences[board] ?? defaultPreferences()).scope), { view: findView }),
+    t.screen.favorite,
+  );
+}
+/** A route location carrying the favorite its screen was opened from in history state, as Linear's `favoriteId`. */
+export function withFavorite<T extends object>(target: T, favorite: string | null | undefined): T {
+  if (!favorite) return target;
+  const state = (target as { state?: object }).state;
+  return { ...target, state: { ...state, favorite } };
 }
 /** Loads a destination's route ahead of time (its issue's details and screen), as hovering its link would. */
 export function preload(to: Destination) {
@@ -85,6 +94,7 @@ const screen = (s = get()): Screen => ({
   overlayFilters: s.overlayFilters,
   editorDraft: s.editorDraft,
   linkView: s.linkView,
+  favorite: s.favorite,
 });
 const data = () => ({
   savedViews: get().savedViews,
@@ -140,16 +150,19 @@ const drafts = {
 /** The screen's place and the address the router shows for it. */
 function current() {
   const place = placeOf(screen(), scopeOf),
-    named = locationOf(place, { view: findView }),
+    named = withFavorite(locationOf(place, { view: findView }), screen().favorite),
     // The inbox keeps a selected row whose issue isn't mirrored in its address; the screen doesn't model it.
     note = place.to === "inbox" && !place.issue ? (router.latestLocation.search as { notification?: string }).notification : undefined;
   const target = note ? { ...named, search: { ...named.search, notification: note } } : named;
   const location = router.buildLocation(target as never);
   return { place, target, location };
 }
-/** Same address and, on an issue page, the same list under it. */
+/** Same address, opened from the same favorite and, on an issue page, the same list under it. */
 const sameAddress = (a: ParsedLocation, b: ParsedLocation) =>
-  a.pathname === b.pathname && a.searchStr === b.searchStr && JSON.stringify(a.state.over) === JSON.stringify(b.state.over);
+  a.pathname === b.pathname &&
+  a.searchStr === b.searchStr &&
+  a.state.favorite === b.state.favorite &&
+  JSON.stringify(a.state.over) === JSON.stringify(b.state.over);
 /** Shows the screen's place in the address: a new history entry, or `replace` this one. */
 function showAddress(replace = false) {
   const { target, location } = current(),
@@ -170,7 +183,7 @@ const issueOf = (l: ParsedLocation) =>
 function show(place: Place, location: ParsedLocation) {
   if (location.href !== router.latestLocation.href) return;
   if (navigationReady && sameAddress(current().location, location)) return;
-  go({ type: "restore", place, draft: drafts.read(location.pathname) });
+  go({ type: "restore", place, draft: drafts.read(location.pathname), favorite: location.state.favorite });
   // The address names the screen differently (an issue beside another board's list): show its own address, once.
   const { target, location: shown } = current();
   if (location.state.settled || sameAddress(shown, location)) return;
@@ -238,10 +251,10 @@ export function setOverlay(filters: FilterGroup) {
   go({ type: "filters", filters });
 }
 export const clearOverlay = () => setOverlay(emptyOverlay());
-export function openSavedView(view: SavedView | string) {
+export function openSavedView(view: SavedView | string, favorite?: string) {
   const v = typeof view === "string" ? get().savedViews.find((v) => v.id === view) : view;
   if (!v) return;
-  go({ type: "open-view", view: v });
+  go({ type: "open-view", view: v, favorite });
   ui.send({ type: "toolbar.close" });
 }
 

@@ -44,6 +44,7 @@ const start: Screen = {
   overlayFilters: emptyOverlay(),
   editorDraft: null,
   linkView: false,
+  favorite: null,
 };
 const data = (patch: Partial<NavigationData> = {}): NavigationData => ({
   savedViews: [view()],
@@ -228,4 +229,24 @@ test("D7: every old address names the place it showed", () => {
     ["/view/triage-v1", undefined],
   ];
   for (const [href, place] of cases) expect([href, legacy(href)]).toEqual([href, place as Place]);
+});
+
+test("a favorite's origin follows the screen as Linear's favoriteId does: kept over its issues, dropped on leaving", () => {
+  const fromIssue = run([{ type: "go", to: { board: 1, selected: "A-1", panel: true, favorite: "A-1" } }]);
+  expect(fromIssue.screen).toMatchObject({ selected: "A-1", panel: true, favorite: "A-1" });
+  // A sidebar row that is no favorite leaves the favorite's origin, even for the same board.
+  expect(transition(fromIssue.screen, { type: "go", to: { board: 1, selected: null, panel: false, favorite: null } }, data()).screen.favorite).toBeNull();
+  // Escape closing the issue drops it, so the board it shows lights again.
+  expect(transition(fromIssue.screen, { type: "moved", screen: { panel: false } }, data()).screen.favorite).toBeNull();
+  const fromBoard = run([{ type: "go", to: { board: 2, selected: null, panel: false, favorite: "board:2" } }]);
+  const issueOver = transition(fromBoard.screen, { type: "go", to: { selected: "B-1", panel: true } }, data());
+  expect(issueOver.screen.favorite).toBe("board:2");
+  expect(transition(issueOver.screen, { type: "go", to: { scope: "active" } }, data()).screen.favorite).toBe("board:2");
+  expect(transition(issueOver.screen, { type: "go", to: { board: 1 } }, data()).screen.favorite).toBeNull();
+  expect(transition(issueOver.screen, { type: "go", to: { board: 2, selected: null, panel: false, favorite: null } }, data()).screen.favorite).toBeNull();
+  // A saved view opened from its favorite keeps it; from the Views section, or by Back to an entry without it, none.
+  expect(run([{ type: "open-view", view: view(), favorite: "view:v1" }]).screen.favorite).toBe("view:v1");
+  expect(run([{ type: "open-view", view: view(), favorite: "view:v1" }, { type: "open-view", view: view() }]).screen.favorite).toBeNull();
+  expect(run([{ type: "go", to: { favorite: "board:1" } }, restore(board1)]).screen.favorite).toBeNull();
+  expect(run([{ type: "restore", place: board1, draft: null, favorite: "board:1" }]).screen.favorite).toBe("board:1");
 });

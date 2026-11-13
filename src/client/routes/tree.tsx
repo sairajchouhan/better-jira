@@ -32,6 +32,8 @@ declare module "@tanstack/history" {
     over?: ListPlace;
     /** This entry was already moved once to the address its screen shows. */
     settled?: boolean;
+    /** The sidebar favorite this entry was opened from (Linear's `favoriteId`), so Back and reload keep its row active. */
+    favorite?: string;
   }
 }
 

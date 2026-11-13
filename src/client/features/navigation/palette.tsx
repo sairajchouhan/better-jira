@@ -161,10 +161,11 @@ export const keywordPage = (q: string) =>
   (Object.keys(PAGES) as PalettePage[]).find((page) => PAGES[page].keyword && q === `${PAGES[page].keyword} `);
 const close = () => ui.send({ type: "overlay.close" });
 
-function openChoice({ destination: to }: NavigationChoice) {
+function openChoice({ destination: to, favorite }: NavigationChoice) {
   close();
-  if ("view" in to) return openSavedView(to.view);
-  navigate(to);
+  // Linear's Open favorite links carry `favoriteId` like the sidebar row, so the favorite's row lights, not its board.
+  if ("view" in to) return openSavedView(to.view, favorite);
+  navigate({ ...to, favorite: favorite ?? null });
 }
 /** A page's rows, unfiltered. */
 function usePageRows(page: PalettePage): Cmd[] {

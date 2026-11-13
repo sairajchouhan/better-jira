@@ -7,6 +7,7 @@ import { defaultPreferences, type Display, type FilterGroup, type Preferences, t
 import { decodeOverlay, emptyOverlay, encodeOverlay, type SavedView, type ViewDraft } from "@/shared/saved-view-model";
 import type { View } from "@/client/state/store";
 import type { PersonTab } from "@/shared/people";
+import { keptFavorite } from "./sidebar-active";
 
 export type Screen = {
   board: number;
@@ -27,6 +28,8 @@ export type Screen = {
   editorDraft: ViewDraft | null;
   /** A link's or reload's `view` shows the open issue that way once: it reverts when the issue closes and never becomes a preference (R2-D4). */
   linkView: boolean;
+  /** The sidebar favorite this screen was opened from (Linear's `location.state.favoriteId`); see sidebar-active.ts. */
+  favorite: string | null;
 };
 /** The fields the ui machine also holds, for Escape and the toolbar. */
 export const MACHINE_FIELDS = ["board", "view", "selected", "panel", "document", "inbox", "mine"] as const;
@@ -44,20 +47,23 @@ export type Destination = {
   personTab?: PersonTab;
   /** The board's Issues tab (all, active or backlog), part of its address. */
   scope?: Scope;
+  /** Opened from this sidebar favorite, or (null) from a sidebar row that is none; omitted, the screen keeps the
+   *  favorite while it still shows it. */
+  favorite?: string | null;
 };
 export type NavigationEvent =
   /** Go somewhere: a new board leaves the open view or editor, and fills in how that board opens issues. */
   | { type: "go"; to: Destination }
   /** The ui machine moved on its own (Escape, My issues, editing a description). */
   | { type: "moved"; screen: Partial<Screen> }
-  | { type: "open-view"; view: SavedView }
+  | { type: "open-view"; view: SavedView; favorite?: string }
   | { type: "edit-view"; draft: ViewDraft }
   /** Cancel in the editor: back to the view it edits or duplicates, else its board. */
   | { type: "discard-editor" }
   | { type: "draft"; draft: ViewDraft }
   | { type: "filters"; filters: FilterGroup }
   /** Show what an address names: a reload, a link, Back or Forward. `draft` is the editor draft saved for that address. */
-  | { type: "restore"; place: Place; draft: ViewDraft | null };
+  | { type: "restore"; place: Place; draft: ViewDraft | null; favorite?: string };
 /** A list screen: what a board, view, My issues or the inbox shows, with the issue open beside it. */
 export type ListPlace =
   | { to: "board"; board: number; scope: Scope; issue?: string }
@@ -196,6 +202,25 @@ const go = (screen: Screen, to: Destination, data: NavigationData) => {
 };
 
 export function transition(screen: Screen, event: NavigationEvent, data: NavigationData): Transition {
+  const out = step(screen, event, data);
+  return { ...out, screen: { ...out.screen, favorite: favoriteAfter(screen, event, out.screen) } };
+}
+/** The favorite the next screen comes from: the one a step names, else the one it still keeps (sidebar-active.ts). */
+function favoriteAfter(prev: Screen, event: NavigationEvent, next: Screen): string | null {
+  switch (event.type) {
+    case "go":
+      return event.to.favorite !== undefined ? event.to.favorite : keptFavorite(prev, next);
+    case "open-view":
+    case "restore":
+      return event.favorite ?? null;
+    case "edit-view":
+    case "discard-editor":
+      return null;
+    default:
+      return keptFavorite(prev, next);
+  }
+}
+function step(screen: Screen, event: NavigationEvent, data: NavigationData): Transition {
   const out: Transition = { screen, history: "push" };
   switch (event.type) {
     case "go":
@@ -232,7 +257,7 @@ export function transition(screen: Screen, event: NavigationEvent, data: Navigat
       const s = { ...screen, editorDraft: null };
       // Edit and duplicate return to the view they came from, while it still exists.
       const back = data.savedViews.find((v) => v.id === (draft.id ?? draft.sourceId));
-      const result = back ? transition(s, { type: "open-view", view: back }, data) : go(s, { board: draft.board }, data);
+      const result = back ? step(s, { type: "open-view", view: back }, data) : go(s, { board: draft.board }, data);
       return { ...result, forgetDraft: true };
     }
     case "restore":

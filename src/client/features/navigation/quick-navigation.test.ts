@@ -31,14 +31,14 @@ test("mixed favorites preserve order, labels, document fallback and legacy board
     "missing", "document:doc", "T-1", "view:bugs", "board:1:active", "board:1:backlog", "board:1:old", "board:1", "board:99",
   ] });
   expect(choices).toEqual([
-    { id: "document:doc", name: "New document", destination: { board: 1, selected: "T-1", panel: true, document: "doc" } },
-    { id: "T-1", name: "T-1 An issue", destination: { board: 1, selected: "T-1", panel: true } },
-    { id: "view:bugs", name: "Bugs", destination: { view } },
+    { id: "document:doc", favorite: "document:doc", name: "New document", destination: { board: 1, selected: "T-1", panel: true, document: "doc" } },
+    { id: "T-1", favorite: "T-1", name: "T-1 An issue", destination: { board: 1, selected: "T-1", panel: true } },
+    { id: "view:bugs", favorite: "view:bugs", name: "Bugs", destination: { view } },
     ...(["active", "backlog", "old"] as const).map((scope) => ({
-      id: `board:1:${scope}`, name: `Team · ${scope}`,
+      id: `board:1:${scope}`, favorite: `board:1:${scope}`, name: `Team · ${scope}`,
       destination: { board: 1, selected: null, panel: false, scope: scope === "old" ? "all" as const : scope },
     })),
-    { id: "board:1", name: "Team", destination: { board: 1, selected: null, panel: false } },
+    { id: "board:1", favorite: "board:1", name: "Team", destination: { board: 1, selected: null, panel: false } },
   ]);
 });
 
@@ -46,6 +46,6 @@ test("document lookup keeps first-match precedence and uses a nonempty title ver
   const other = { ...issue, key: "T-2", resources: [{ id: "doc", kind: "document" as const, title: "Named", updated: "" }] };
   const issues = new Map([[other.key, other], [issue.key, issue]]);
   expect(navigationChoices("favorites", { ...state, issues, favorites: ["document:doc"] })[0]).toEqual({
-    id: "document:doc", name: "Named", destination: { board: 1, selected: "T-2", panel: true, document: "doc" },
+    id: "document:doc", favorite: "document:doc", name: "Named", destination: { board: 1, selected: "T-2", panel: true, document: "doc" },
   });
 });

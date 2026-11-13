@@ -109,6 +109,8 @@ export type State = {
   activeViewId: string | null;
   /** A link's `view` shows the open issue that way once; see navigation.ts. */
   linkView: boolean;
+  /** The sidebar favorite the screen was opened from; see navigation.ts. */
+  favorite: string | null;
   overlayFilters: import("@/shared/view-model").FilterGroup;
   viewPreferences: Preferences | null;
   effectiveViewPreferences: Preferences | null;
@@ -171,6 +173,7 @@ let state: State = {
   editorDraft: null,
   activeViewId: null,
   linkView: false,
+  favorite: null,
   overlayFilters: emptyOverlay(),
   viewPreferences: null,
   effectiveViewPreferences: null,
