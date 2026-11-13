@@ -2,7 +2,7 @@ import { expect, test, shownIssue } from "./app";
 
 test("BJ-39: bottom of column creates with that column's status", async ({ open }) => {
   const page = await open();
-  await page.click('[aria-label="Add issue to Doing"]');
+  await page.click('[data-board-column="Doing"] [aria-label="Add new issue"]');
   await page.waitFor(`!!document.querySelector('[aria-label="Issue title"]')`);
   expect(await page.eval(`!!document.querySelector('[aria-label="Status: Doing"]')`)).toBe(true);
 });

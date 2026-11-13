@@ -463,14 +463,11 @@ const PILL =
  *  Not Tabs: these are Linear's header tab links (HeaderTabLinks), navigation pressed by aria-pressed, every one in the
  *  tab order and none selected while a view is open; Tabs is a roving tablist with exactly one selected tab. */
 function ViewTab({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
+  // Linear's header tab is `jv` variant tab, size medium, `active` on the current one (UEe.tab / WEe.tab): the shared Button.
   return (
-    <button
-      aria-pressed={on}
-      onClick={onClick}
-      className={`${PILL} ${on ? "bg-tab-on text-fg shadow-(--tab-on-shadow)" : "bg-tab text-fg-3 shadow-(--tab-shadow) hover:bg-hover hover:text-fg-2"}`}
-    >
+    <Button variant="tab" size="medium" aria-pressed={on} data-active={on || undefined} onClick={onClick}>
       {children}
-    </button>
+    </Button>
   );
 }
 

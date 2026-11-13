@@ -358,3 +358,52 @@ test("one pull request's badge opens Linear's pull request menu at the pointer; 
     });
   }
 });
+
+test("board colours: the Add new issue pill, the column backdrop and the header view tabs (Linear's dark theme)", async ({ open }) => {
+  const page = await open("", { setup });
+  const add = `document.querySelector('[data-board-column="Doing"] [aria-label="Add new issue"]')`;
+  await page.waitFor(`!!${add}`);
+  const style = (sel: string, ...props: string[]) =>
+    page.eval<string[]>(`(()=>{const s=getComputedStyle(${sel});return ${JSON.stringify(props)}.map(p=>s[p])})()`);
+
+  await test.step("the pill: full column width, 28px, only a 16px plus, hidden until the pointer is over the column", async () => {
+    const r = await page.eval<{ w: number; h: number; text: string; svg: number; card: number }>(
+      `(()=>{const b=${add},r=b.getBoundingClientRect(),c=document.querySelector('[data-board-column="Doing"] [data-key]')?.getBoundingClientRect();return {w:r.width,h:r.height,text:b.textContent,svg:b.querySelector("svg").getBoundingClientRect().width,card:c?c.width:322}})()`,
+    );
+    expect([r.h, r.text, r.svg]).toEqual([28, "", 16]);
+    expect(r.w).toBe(r.card - 2); // 320 beside a 322px card: both inside the 324px item column, 2px margins
+    expect(await style(add, "backgroundColor", "borderTopColor", "borderTopWidth", "borderRadius", "transitionProperty")).toEqual([
+      "lch(9.232 0.85 272 / 0.5)",
+      "lch(16.793 1.93 272)",
+      "0.5px",
+      "9999px",
+      "border, background-color, color, opacity",
+    ]);
+    await page.hover("header");
+    await page.waitFor(`getComputedStyle(${add}.parentElement).opacity==="0"`);
+    await page.hover('[data-board-column="Doing"] [data-key]');
+    await page.waitFor(`getComputedStyle(${add}.parentElement).opacity==="1"`);
+  });
+  await test.step("hovered: bgBaseHover and labelBase", async () => {
+    await page.hover('[data-board-column="Doing"] [aria-label="Add new issue"]');
+    await page.waitFor(`getComputedStyle(${add}).backgroundColor==="lch(13.058 1.3 272)"`);
+    expect((await style(add, "color"))[0]).toBe("lch(90.826 1.425 272)");
+  });
+  await test.step("the column: a bgSub/.4 header strip over a bgSub .4 → .1 gradient that starts at the header's top", async () => {
+    const col = `document.querySelector('[data-board-column="Doing"]')`;
+    expect((await style(`${col}.querySelector('h2')`, "backgroundColor"))[0]).toBe("lch(2.595 0.4 272 / 0.4)");
+    const [image, position] = await style(`${col}.querySelector('.board-column-body')`, "backgroundImage", "backgroundPosition");
+    expect(image).toBe("linear-gradient(lch(2.595 0.4 272 / 0.4), lch(2.595 0.4 272 / 0.1))");
+    expect(position).toBe("0px -46px");
+    expect((await style(col, "backgroundColor"))[0]).toBe("rgba(0, 0, 0, 0)");
+  });
+  await test.step("header view tabs: controlTertiary, controlTertiaryHover under the pointer, controlTertiarySelected when current", async () => {
+    const tab = (name: string) => `[...document.querySelectorAll('button[aria-pressed]')].find(b=>b.textContent===${JSON.stringify(name)})`;
+    expect((await style(tab("Active"), "backgroundColor", "color"))).toEqual(["lch(16.706 0.979 272)", "lch(100 0 272)"]);
+    expect((await style(tab("Backlog"), "backgroundColor", "height", "borderRadius"))).toEqual(["lch(10.149 0.593 272)", "28px", "9999px"]);
+    await page.hover('button[aria-pressed="false"]:text-is("Backlog")');
+    await page.waitFor(`getComputedStyle(${tab("Backlog")}).backgroundColor==="lch(14.006 0.593 272)"`);
+    await page.hover('button[aria-pressed="true"]:text-is("Active")');
+    await page.waitFor(`getComputedStyle(${tab("Active")}).backgroundColor==="lch(16.706 0.979 272)"`);
+  });
+});

@@ -184,6 +184,13 @@
   .ui-button[data-variant="tab"][aria-pressed="true"] {
     background: var(--control-secondary-selected);
   }
+  /* Mv `active` on a tab (WEe.tab, the header's current view tab): controlTertiarySelected and labelTitle at rest and
+     under the pointer, ringed with bgBorderAlphaThin alone. */
+  .ui-button[data-variant="tab"][data-active="true"] {
+    background: var(--tab-on);
+    color: var(--fg);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--border-alpha-thin);
+  }
 
   .ui-button[data-variant="dangerous"] {
     background: var(--red-base);

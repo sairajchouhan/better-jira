@@ -1,0 +1,59 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+/*
+ * A board column's backdrop and its "Add new issue" pill, from Linear's IssueList.CUOYX8Am.js (.raj/linear.md
+ * "Board colours"). Linear draws no background on the column itself (`Ku.boardClusterWrapper` is `inherit`):
+ * - the header strip (`Yu.headerColumnBackground`) is bgSub at .4, 46px, 5px top corners;
+ * - the body (`lu.columnBackgroundWrapper`, an `::after`) is `linear-gradient(bgSub/.4, bgSub/.1)` that starts 46px up,
+ *   at the header's top, so the gradient runs over the whole column and the header covers its first 46px.
+ * A column without its own header (swimlane cells) has the gradient from its own top.
+ */
+@layer components {
+  .board-column {
+    --board-column-header: 0px;
+  }
+  .board-column:has(> .board-column-heading) {
+    --board-column-header: 46px;
+  }
+  .board-column > .board-column-heading {
+    border-radius: 5px 5px 0 0;
+    background: var(--col-top);
+  }
+  .board-column:not(:has(> .board-column-heading)) > .board-column-body {
+    border-radius: 5px 5px 0 0;
+  }
+  .board-column-body {
+    background: linear-gradient(var(--col-top), var(--col-bottom)) 0 calc(-1 * var(--board-column-header)) / 100%
+      calc(100% + var(--board-column-header)) no-repeat;
+  }
+
+  /* `rl`: the slot after the last card, at least 36px. `cl.visibleOnHover`: 0 2px 4px margins, hidden until the pointer
+     is over the column (`Ic` with hover support) or focus is inside, fading in over .1s. */
+  .board-add-slot {
+    min-height: 36px;
+    margin: 0 2px 4px;
+    opacity: 0;
+    transition: opacity 0.1s ease-in-out;
+  }
+  .board-column-body:hover .board-add-slot,
+  .board-add-slot:focus-within {
+    opacity: 1;
+  }
+  /* `sl` on Linear's button base (`xt` = Nv.base, our .ui-button) with `nl` and `cl.addButton`: the full width, 28px,
+     a 16px plus and no text; a thinPixel bgBorderFaintThin border, bgBase at .5, bgBaseHover under the pointer, the icon
+     labelMuted turning labelBase. All in the elevated theme the column's items paint in. */
+  .ui-button.board-add {
+    width: 100%;
+    height: 28px;
+    padding: 6px 8px;
+    border-color: var(--card-line);
+    background-color: var(--card-half);
+    color: var(--card-fg-3);
+    font-size: 0.75rem;
+  }
+  .ui-button.board-add:is(:hover, :active):not(:disabled) {
+    background-color: var(--card-hover);
+    color: var(--card-fg-2);
+  }
+}

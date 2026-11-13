@@ -55,6 +55,7 @@ import { shortDate } from "@/client/lib/due-date";
 import { Button, IconButton } from "@/client/components/button";
 import { CountBadge } from "@/client/components/count-badge";
 import { Text } from "@/client/components/text";
+import "./board-column.css";
 // Memoised: an overlay opening (⌘K) re-renders App, and must not re-render every board.
 export const BoardView = memo(function BoardView({
   board,
@@ -483,7 +484,7 @@ function ColumnHeading({
   create: () => void;
 }) {
   return (
-    <h2 className="flex h-[46px] shrink-0 items-center gap-2 pr-2 pl-3.5 text-[13px]">
+    <h2 className="board-column-heading flex h-[46px] shrink-0 items-center gap-2 pr-2 pl-3.5 text-[13px]">
       <GroupIcon bucket={bucket} by={display.columns} />
       {/* .raj/linear.md "Columns": the name 13px/500 fg-2, the count 13px/450 fg-3. */}
       <Text variant="smallPlus" color="base" wrap="truncate" className="ml-0.5">
@@ -549,7 +550,8 @@ function ColumnView({
           })?.dataset.key,
         );
       }}
-      className={`flex w-[340px] shrink-0 flex-col rounded-t-[5px] bg-[linear-gradient(var(--col-top),var(--col-top)_46px,var(--col-bottom))] ${over ? "ring-1 ring-accent" : ""}`}
+      data-board-column={bucket.name}
+      className={`board-column flex w-[340px] shrink-0 flex-col rounded-t-[5px] ${over ? "ring-1 ring-accent" : ""}`}
     >
       {header && (
         <ColumnHeading
@@ -562,19 +564,29 @@ function ColumnView({
       )}
       <div
         data-scroll-restoration-id={scroll}
-        className={`flex-1 px-2 pt-[9px] ${scroll ? "overflow-y-auto" : ""}`}
+        className={`board-column-body flex-1 px-2 pt-[9px] ${scroll ? "overflow-y-auto" : ""}`}
       >
         <VirtualItems items={issues} itemKey={issueKey} selected={selected} estimate={124}>
           {(issue) => <BoardCard issue={issue} selected={issue.key === selected} display={display} />}
         </VirtualItems>
-        <Button type="button" variant="borderless" size="medium" onClick={create} aria-label={`Add issue to ${bucket.name}`}>
-          <Icon name="plus" size={14} /> Add issue
-        </Button>
+        <AddIssueSlot onClick={create} />
       </div>
     </section>
   );
 }
 
+
+/** Linear's column foot (IssueList `rl` around `sl`): a full-width 28px pill holding only a plus, shown while the pointer
+ *  is over the column; every column's is "Add new issue" (board-column.css). */
+function AddIssueSlot({ onClick }: { onClick: () => void }) {
+  return (
+    <div className="board-add-slot">
+      <button type="button" aria-label="Add new issue" className="ui-button board-add" onClick={onClick}>
+        <Icon name="plus" size={16} />
+      </button>
+    </div>
+  );
+}
 
 /** What a row and a card share: the clickable, draggable target with selection scrolling, the menu highlight and the issue's keys.
  *  Its state is in `data-selected` (the j/k or column selection) and `data-menu` (its right-click menu is open), for the caller's look. */

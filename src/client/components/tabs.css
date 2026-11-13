@@ -29,8 +29,9 @@
     font-weight: 500;
     white-space: nowrap;
   }
+  /* UEe.tab hover: controlTertiaryHover and labelBase. */
   .ui-tab:hover {
-    background: var(--hover);
+    background: var(--control-tertiary-hover);
     color: var(--fg-2);
   }
   .ui-tab[aria-selected="true"] {
@@ -76,9 +77,6 @@
     justify-content: center;
     margin: 2px;
     padding: 0 8px;
-  }
-  .ui-tabs-list[data-variant="options"] .ui-tab:hover {
-    background: var(--control-tertiary-hover);
   }
   .ui-tabs-list[data-variant="options"] .ui-tab:focus-visible {
     outline-offset: -1px;
