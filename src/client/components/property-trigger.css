@@ -62,32 +62,4 @@
     flex-shrink: 0;
     align-items: center;
   }
-
-  /* The list/board property chip (.raj/linear.md "Board", computed styles): 24px pill, 0.5px chipLine, 14px icon, text 6px after it. */
-  .ui-property-trigger[data-variant="row"] {
-    column-gap: 0;
-    height: 24px;
-    padding: 0 8px;
-    border: var(--thin-pixel) solid var(--chip-line);
-    background: var(--card);
-    color: var(--card-fg-3);
-    font-size: 12px;
-    font-weight: 450;
-  }
-  .ui-property-trigger[data-variant="row"]::before {
-    content: none;
-  }
-  .ui-property-trigger[data-variant="row"] .ui-property-trigger-icon {
-    width: 14px;
-    height: 14px;
-  }
-  .ui-property-trigger[data-variant="row"] .ui-property-trigger-label {
-    margin: 0 1px 0 6px;
-  }
-  .ui-property-trigger[data-variant="row"]:not(:has(.ui-property-trigger-label)) {
-    padding: 0 4.5px;
-  }
-  .ui-property-trigger[data-variant="row"]:is(:hover, [aria-expanded="true"]) {
-    background: var(--card-hover);
-  }
 }

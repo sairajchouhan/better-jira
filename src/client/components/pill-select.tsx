@@ -1,5 +1,6 @@
 import { useState, type ComponentProps, type ComponentType, type MouseEvent, type ReactNode } from "react";
-import { PropertyTrigger } from "./property-trigger";
+import { Button } from "./button";
+import { Text } from "./text";
 
 type FieldMenuProps<M> = {
   menu: ComponentType<M>;
@@ -40,8 +41,10 @@ export function FieldMenuButton<M extends { anchor?: HTMLElement | null; close?:
 }
 
 /**
- * A composer chip (Linear's create modal property row): the row PropertyTrigger, 24px with its 14px icon, showing the
- * value, or with none set the field's name, muted. Named "<label>: <current>" either way.
+ * A composer chip: Linear's fast-create property button (`AV` → `Lj` → `jv` secondary small, startup-root.CnUSfl4j.js),
+ * 24px, its 14px icon, then the value in mini text, labelBase; with none set the field's name, labelMuted. Named
+ * "<label>: <current>" either way. It paints the surrounding theme's controlSecondary, so the create dialog's chip row
+ * (`data-elevation="dialog-raised"`) gives it Linear's colours.
  */
 export function PropertyPill<M extends { anchor?: HTMLElement | null; close?: () => void }>({
   label,
@@ -61,16 +64,11 @@ export function PropertyPill<M extends { anchor?: HTMLElement | null; close?: ()
   const { trigger, menu: open } = useFieldMenu({ menu, menuProps });
   return (
     <>
-      <PropertyTrigger
-        variant="row"
-        state={value === undefined ? "empty" : "value"}
-        aria-label={`${label}: ${current}`}
-        title={label}
-        {...trigger}
-      >
-        {icon && <PropertyTrigger.Icon>{icon}</PropertyTrigger.Icon>}
-        <PropertyTrigger.Label>{value ?? label}</PropertyTrigger.Label>
-      </PropertyTrigger>
+      <Button variant="secondary" size="small" icon={icon} aria-label={`${label}: ${current}`} title={label} {...trigger}>
+        <Text variant="mini" color={value === undefined ? "muted" : "base"} wrap="truncate">
+          {value ?? label}
+        </Text>
+      </Button>
       {open}
     </>
   );

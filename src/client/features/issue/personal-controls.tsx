@@ -26,7 +26,6 @@ import { normalizeDocument, documentHasMedia } from "@/shared/document";
 import { Icon, PriorityIcon, RelationIcon, StatusIcon, TypeDot } from "@/client/components/icons";
 import { Switch } from "@/client/components/switch";
 import "./create-issue.css";
-import { PropertyTrigger } from "@/client/components/property-trigger";
 import {
   canHaveChildren,
   canParent,
@@ -95,16 +94,17 @@ function PendingRelation({ related, remove }: { related: NonNullable<IssueDraft[
   const [chip, title, heading] = PENDING_RELATION[related.kind];
   return (
     <>
-      <PropertyTrigger
+      <Button
         data-pending-relation
-        variant="row"
-        state="value"
+        variant="secondary"
+        size="small"
+        icon={<RelationIcon kind={related.kind} />}
         title={title}
         aria-expanded={!!anchor}
         onClick={(e) => setAnchor(e.currentTarget)}
       >
-        <RelationIcon kind={related.kind} />1 {chip}
-      </PropertyTrigger>
+        1 {chip}
+      </Button>
       {anchor && (
         <Modal label={title} anchor={anchor} close={() => setAnchor(null)} fit>
           <Menu style={{ width: 347 }}>
@@ -396,8 +396,9 @@ export function CreateIssue() {
           tabLeaves
         />
         </div>
-        {/* One row of chips, as Linear's: it scrolls sideways rather than wrapping. */}
-        <div className="create-issue-properties" data-create-properties>
+        {/* One row of chips, as Linear's: it scrolls sideways rather than wrapping. Its theme is the dialog's elevated once
+            more, as Linear's chips paint (BJ-222, control-tokens.css). */}
+        <div className="create-issue-properties" data-create-properties data-elevation="dialog-raised">
           {draft.related && (
             <PendingRelation related={draft.related} remove={() => setDraft(({ related: _related, ...rest }) => rest)} />
           )}

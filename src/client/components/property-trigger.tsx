@@ -4,12 +4,11 @@ import "./property-trigger.css";
 
 /**
  * Linear's DetailButton (`v`/`y`/`C` in DetailButton.B6DQogHG.js): the property pill in an issue's sidebar, 28px, icon
- * 6px in, label 6px after it, muted while the property is empty. `variant="row"` is the 24px chip on list rows and
- * board cards (.raj/linear.md "Board"). property-trigger.css spells these out.
+ * 6px in, label 6px after it, muted while the property is empty. property-trigger.css spells these out. (A composer's chips
+ * are Linear's secondary small button instead: pill-select.tsx's PropertyPill.)
  */
 export const PROPERTY_TRIGGER = {
   detail: { HEIGHT: 28, PADDING_LEFT: 6, PADDING_RIGHT: 10, GAP: 6, ICON: 16, FONT_SIZE: 13, FONT_WEIGHT: 500 },
-  row: { HEIGHT: 24, PADDING: 8, ICON_ONLY_PADDING: 4.5, GAP: 6, ICON: 14, FONT_SIZE: 12, FONT_WEIGHT: 450 },
   HIT_AREA: { TOP: 4, RIGHT: 4, BOTTOM: 4, LEFT: 8 },
 } as const;
 
@@ -18,16 +17,14 @@ export const PROPERTY_TRIGGER = {
  * the pill. `state="empty"` mutes it ("Set priority"); an open menu shows through `aria-expanded`.
  */
 function PropertyTriggerRoot({
-  variant = "detail",
   state,
   type = "button",
   className = "",
   ...props
-}: { variant?: "detail" | "row"; state: "empty" | "value" } & ComponentProps<"button">) {
+}: { state: "empty" | "value" } & ComponentProps<"button">) {
   return (
     <button
       type={type}
-      data-variant={variant}
       data-state={state}
       className={`ui-property-trigger ${className}`}
       {...props}
