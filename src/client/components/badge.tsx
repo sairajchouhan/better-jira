@@ -29,9 +29,15 @@ function BadgeLink({ className = "", ...props }: ComponentProps<"a">) {
   return <a target="_blank" rel="noreferrer" className={`ui-badge ${className}`} {...props} />;
 }
 
+/** A badge that runs its own action on click (opens the issue at its comments, a pull request or a menu of them). */
+function BadgeButton({ className = "", ...props }: ComponentProps<"button">) {
+  return <button type="button" className={`ui-badge ${className}`} {...props} />;
+}
+
 export const Badge = Object.assign(BadgeRoot, {
   Menu: BadgeMenu,
   Link: BadgeLink,
+  Button: BadgeButton,
   Icon: ({ className = "", ...props }: ComponentProps<"span">) => (
     <span aria-hidden className={`ui-badge-icon ${className}`} {...props} />
   ),

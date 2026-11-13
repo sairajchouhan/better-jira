@@ -4,7 +4,8 @@ import { avatarSrc } from "@/shared/avatar-proxy";
 
 
 /** The person's Jira photo through the same-origin proxy; their initial while it loads or if it fails; a dashed ring for nobody. */
-export function Avatar({ user, size = 20 }: { user: User | null; size?: number }) {
+/** `title` is the native tooltip, the person's name by default; null when a hover card names them instead. */
+export function Avatar({ user, size = 20, title }: { user: User | null; size?: number; title?: null }) {
   // A new photo URL starts loading again: the state belongs to the URL it was reached for.
   const [loading, setLoading] = useState<{
     avatar?: string;
@@ -31,7 +32,7 @@ export function Avatar({ user, size = 20 }: { user: User | null; size?: number }
     </span>
   );
   return (
-    <span className="relative inline-block shrink-0" style={box} title={user.name}>
+    <span className="relative inline-block shrink-0" style={box} title={title === null ? undefined : user.name}>
       {state !== "loaded" && initial}
       {user.avatar && state !== "broken" && (
         <img
