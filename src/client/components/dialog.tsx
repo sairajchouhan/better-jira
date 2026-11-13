@@ -6,8 +6,8 @@ import "./control-tokens.css";
 import "./dialog.css";
 
 /**
- * A centred modal on the shared menu surface: MenuSurface without an anchor already is one (backdrop, focus trap,
- * Escape, focus restored on close), so Dialog only adds the slots. Initial focus goes to `data-autofocus`, as Linear's
+ * A centred modal: MenuSurface's `dialog` variant already is one (Linear's elevated-theme box over bgModalOverlay, focus
+ * trap, Escape, focus restored on close), so Dialog only adds the slots. Initial focus goes to `data-autofocus`, as Linear's
  * confirmation focuses its confirm button (`bIt.focusTrapOptions.initialFocus`).
  */
 export const DIALOG = { WIDTH: 640, CONFIRM_WIDTH: 360 } as const;
@@ -35,7 +35,7 @@ function DialogRoot({
 }) {
   const context = useMemo(() => ({ close }), [close]);
   return (
-    <MenuSurface label={label} close={close} width={width} placement={placement}>
+    <MenuSurface label={label} close={close} width={width} placement={placement} variant="dialog">
       <DialogContext value={context}>{children}</DialogContext>
     </MenuSurface>
   );

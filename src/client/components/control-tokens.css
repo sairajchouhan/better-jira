@@ -13,6 +13,7 @@
   --control-primary-label: lch(100% 5 286.91); /* controlPrimaryLabel = h(accent, {}, {c: 5}): getTextColor keeps the accent hue */
   --border-alpha-thin: lch(0 0 0 / 0.09); /* bgBorderAlphaThin */
   --border-solid-alpha-thin: lch(0 0 0 / 0.15); /* bgBorderSolidAlphaThin = re(bgBorderSolidThin): (97.94 - 84.44) / 97.94 * 1.09 */
+  --modal-overlay: lch(0 0 0 / 0.25); /* bgModalOverlay: .25 light, .4 dark (times the contrast factor, 1 here) */
   --red-base: lch(58% 73 29); /* redBase */
   --red-base-hover: lch(53% 73 29); /* redBaseHover */
   --red-text: lch(50% 80 29); /* redText = h(redBase, {}, {l: 50, c: 80}): getTextColor keeps redBase's hue 29 */
@@ -29,6 +30,7 @@
     --control-primary-hover: lch(52.418% 61.103 288.421);
     --border-alpha-thin: lch(100 0 0 / 0.137);
     --border-solid-alpha-thin: lch(100 0 0 / 0.229); /* (27.12 - 5.52) / (100 - 5.52) */
+    --modal-overlay: lch(0 0 0 / 0.4);
     --red-base-hover: lch(62.5% 73 29);
     --red-text: lch(80% 80 29);
     --red-tint: color-mix(in lch, var(--red-base) 3%, var(--panel));
@@ -153,5 +155,39 @@
     --bg-focus: lch(24.532% 1.75 272);
     --link: lch(61.992% 70 288.421);
     --menu-check: lch(59.633% 2.38 272);
+  }
+}
+
+/*
+ * Linear's dialogs. DialogPresenter (startup-root.CnUSfl4j.js `YMn`) wraps each dialog's content in `w_` with no props,
+ * which is `theme.elevatedTheme()`: the base theme one step up (bgBase l+4.125·contrast/30, so dark 9.232), not the
+ * menu theme (l+8, 12.72). The box (`jY.content`, `Tu.bgBorder`) is that theme's bgBase with a thinPixel bgBorderThin
+ * border, shadowHigh and radius 12; the overlay is the base theme's bgModalOverlay. menu-surface.tsx stamps it
+ * `data-elevation="dialog"`. Light's elevated theme equals its menu theme (both clamp to bgBase 100), so only dark
+ * repoints anything. Values: Linear's own generateTheme run on the presets (.raj/linear.md, "Dialogs").
+ */
+@media (prefers-color-scheme: dark) {
+  [data-elevation="dialog"] {
+    --panel: lch(9.232% 0.85 272);
+    --fg-2: lch(90.826% 1.425 272);
+    --fg-3: lch(63.304% 1.425 272);
+    --fg-4: lch(39.452% 1.425 272);
+    --btn: lch(13.861% 1.139 272);
+    --control-secondary-hover: lch(18.49% 1.525 272);
+    --control-secondary-selected: lch(22.347% 1.525 272);
+    --tab: lch(13.861% 1.043 272);
+    --control-tertiary-hover: lch(17.718% 1.043 272);
+    --tab-on: lch(20.418% 1.429 272);
+    --border-alpha-thin: lch(100 0 0 / 0.143);
+    --border-solid-alpha-thin: lch(100 0 0 / 0.238);
+    --border-faint-thin: lch(16.793% 1.93 272);
+    --border-thin: lch(22.193% 1.93 272);
+    --bg-border: lch(17.873% 1.93 272);
+    --border-solid-thin: lch(30.833% 1.93 272);
+    --border-solid-hover: lch(24.352% 1.93 272);
+    --bg-focus: lch(17.332% 1.3 272);
+    --link: lch(58.717% 70 288.421);
+    --menu-line: var(--bg-border);
+    --menu-check: lch(52.433% 1.93 272);
   }
 }

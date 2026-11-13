@@ -495,3 +495,54 @@ test("popup elevation: a Select lists one level up, a menu or submenu over anoth
     expect(await p.eval(paintOf(SUBMENU))).toEqual(["1", DARK.surface.bg, "lch(91.178 1.425 272)"]);
   });
 });
+
+// Linear's DialogPresenter box (startup-root.CnUSfl4j.js `YMn`: `w_` → elevatedTheme(), `jY.content`, `Tu.bgBorder`) over
+// the base theme's bgModalOverlay, and bgBorderSolidAlphaThin per theme level. Values: Linear's own generateTheme on the
+// presets (.raj/linear.md, "Dialogs"), which reproduces every live-measured level (5.52, 9.232, 12.72, 16.432). The
+// border is thinPixel, which a 1x screen draws at 1px, so only its style and colour are read.
+const LINEAR_DIALOG = {
+  light: {
+    box: { bg: "lch(100 0 282)", border: ["solid", "lch(91.9 0 282)"], shadow: "lch(0 0 0 / 0.08) 0px 9px 48px 0px, lch(0 0 0 / 0.1) 0px 6px 24px 0px, lch(0 0 0 / 0.04) 0px 1px 1px 0px", radius: "12px" },
+    overlay: "lch(0 0 0 / 0.25)",
+    solidAlphaThin: { root: "lch(0 0 0 / 0.15)", dialog: "lch(0 0 0 / 0.147)", menu: "lch(0 0 0 / 0.147)" },
+    menu: "lch(100 0 282)",
+  },
+  dark: {
+    box: { bg: "lch(9.232 0.85 272)", border: ["solid", "lch(22.193 1.93 272)"], shadow: "lch(0 0 0 / 0.1) 0px 4px 40px 0px, lch(0 0 0 / 0.125) 0px 3px 20px 0px, lch(0 0 0 / 0.125) 0px 3px 12px 0px, lch(0 0 0 / 0.125) 0px 2px 8px 0px, lch(0 0 0 / 0.125) 0px 1px 1px 0px", radius: "12px" },
+    overlay: "lch(0 0 0 / 0.4)",
+    solidAlphaThin: { root: "lch(100 0 0 / 0.229)", dialog: "lch(100 0 0 / 0.238)", menu: "lch(100 0 0 / 0.247)" },
+    menu: "lch(12.72 0.85 272)",
+  },
+};
+
+test("dialogs paint Linear's elevated theme over bgModalOverlay; a menu inside keeps the menu theme", async ({ open }) => {
+  const page = await open();
+  const CREATE = '[role=dialog][aria-label="Create issue"]';
+  const MORE = '[role=dialog][aria-label="More actions"]';
+  /** bgBorderSolidAlphaThin as a probe inside `selector` resolves it (the page root when null). */
+  const solidAlphaThin = (selector: string | null) =>
+    `(()=>{const host=${selector ? `document.querySelector(${JSON.stringify(selector)})` : "document.body"},p=document.createElement('i');p.style.cssText='position:absolute;border:1px solid var(--border-solid-alpha-thin)';host.append(p);const c=getComputedStyle(p).borderTopColor;p.remove();return c})()`;
+  for (const scheme of ["light", "dark"] as const) {
+    await test.step(`${scheme}: the root, the Create issue dialog, and its More actions menu`, async () => {
+      const linear = LINEAR_DIALOG[scheme];
+      await page.page.emulateMedia({ colorScheme: scheme });
+      expect(await page.eval(solidAlphaThin(null))).toBe(linear.solidAlphaThin.root);
+      await page.key("c");
+      await page.waitFor(`!!document.querySelector('${CREATE}')`);
+      expect(
+        await page.eval(
+          `(()=>{const d=document.querySelector('${CREATE}'),c=getComputedStyle(d);return {elevation:d.dataset.elevation,box:{bg:c.backgroundColor,border:[c.borderTopStyle,c.borderTopColor],shadow:c.boxShadow.split(/,(?![^(]*\\))/).map(x=>x.trim()).filter(x=>!x.startsWith("rgba(0, 0, 0, 0)")).join(", "),radius:c.borderTopLeftRadius},overlay:getComputedStyle(d.parentElement).backgroundColor}})()`,
+        ),
+      ).toEqual({ elevation: "dialog", box: linear.box, overlay: linear.overlay });
+      expect(await page.eval(solidAlphaThin(CREATE))).toBe(linear.solidAlphaThin.dialog);
+      await page.click(`${CREATE} [aria-label="More actions"]`);
+      await page.waitFor(`!!document.querySelector('${MORE} [cmdk-item]')`);
+      expect(await page.eval(`getComputedStyle(document.querySelector('${MORE}')).backgroundColor`)).toBe(linear.menu);
+      expect(await page.eval(solidAlphaThin(MORE))).toBe(linear.solidAlphaThin.menu);
+      await page.key("Escape");
+      await page.waitFor(`!document.querySelector('${MORE}')`);
+      await page.key("Escape");
+      await page.waitFor(`!document.querySelector('${CREATE}')`);
+    });
+  }
+});

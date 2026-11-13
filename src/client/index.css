@@ -81,7 +81,8 @@
   --menu-check: lch(54.1% 0 282); /* the multi-select checkbox border */
   /* Linear's filter menu shell (measured 2026-11-11, .raj/qa/filter-parity.md); its rows are the shared menu's */
   --filter-line: lch(91.9% 0 282);
-  --filter-sub-shadow:
+  /* shadowHigh (generateTheme): dialogs and the filter submenu */
+  --shadow-high:
     lch(0 0 0 / 0.08) 0 9px 48px, lch(0 0 0 / 0.1) 0 6px 24px, lch(0 0 0 / 0.04) 0 1px 1px;
   --reaction: color-mix(in lch, var(--accent) 12%, var(--panel));
   --reaction-line: color-mix(in lch, var(--accent) 30%, var(--panel));
@@ -162,7 +163,7 @@
     --key-line: lch(17.04% 1.93 272);
     --filter-line: lch(25.68% 1.93 272);
     --menu-check: lch(55.92% 1.93 272);
-    --filter-sub-shadow:
+    --shadow-high:
       lch(0 0 0 / 0.1) 0 4px 40px, lch(0 0 0 / 0.125) 0 3px 20px, lch(0 0 0 / 0.125) 0 3px 12px,
       lch(0 0 0 / 0.125) 0 2px 8px, lch(0 0 0 / 0.125) 0 1px 1px;
     --col-top: lch(2.595% 0.4 272 / 0.4);
@@ -224,7 +225,7 @@
   box-shadow: var(--menu-shadow);
 }
 .filter-menu.filter-sub {
-  box-shadow: var(--filter-sub-shadow);
+  box-shadow: var(--shadow-high);
 }
 
 /* Menu (src/client/components/menu.tsx): Linear's IB, startup-root.CnUSfl4j.js (Vw, fT, aT, pT, O6e, Qw) and style-kMXsq6uH.css. The values are MENU's.

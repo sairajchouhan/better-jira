@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 
 /**
  * control-tokens.css against Linear's generateTheme (startup-root.CnUSfl4j.js): each theme level's
- * bgBorderSolidAlphaThin is `re(bgBorderSolidThin)` of that level's own bgBase.
+ * bgBorderSolidAlphaThin is `re(bgBorderSolidThin)` of that level's own bgBase, and a dialog is the elevated theme.
  */
 const css = (await Bun.file(new URL("./control-tokens.css", import.meta.url)).text()).replace(/\/\*[\s\S]*?\*\//g, "");
 
@@ -49,7 +49,7 @@ test("root --border-solid-alpha-thin is Linear's base bgBorderSolidAlphaThin: .1
 });
 
 test("every elevation level's --border-solid-alpha-thin is re() of its own bgBase and bgBorderSolidThin", () => {
-  const levels = ["[data-elevation]", '[data-elevation="2"]'];
+  const levels = ["[data-elevation]", '[data-elevation="2"]', '[data-elevation="dialog"]'];
   for (const scheme of ["light", "dark"] as const) {
     let inherited = tokens("[data-elevation]", scheme);
     for (const level of levels) {
@@ -62,3 +62,13 @@ test("every elevation level's --border-solid-alpha-thin is re() of its own bgBas
   }
 });
 
+test("a dialog paints Linear's elevated theme (dark bgBase 9.232), not the menu theme (12.72)", () => {
+  const dialog = { ...tokens("[data-elevation]", "dark"), ...tokens('[data-elevation="dialog"]', "dark") };
+  expect(dialog["--panel"]).toBe("lch(9.232% 0.85 272)");
+  expect(dialog["--border-thin"]).toBe("lch(22.193% 1.93 272)");
+  expect(alpha(dialog["--border-solid-alpha-thin"]!)).toBe(0.238);
+  // Light's elevated theme equals its menu theme, so a light dialog repoints nothing.
+  expect(tokens('[data-elevation="dialog"]', "light")).toEqual({});
+  expect(alpha(tokens(":root", "light")["--modal-overlay"]!)).toBe(0.25);
+  expect(alpha(tokens(":root", "dark")["--modal-overlay"]!)).toBe(0.4);
+});

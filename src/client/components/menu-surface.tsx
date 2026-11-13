@@ -33,11 +33,15 @@ const Elevation = createContext(0);
  * startup-root.CnUSfl4j.js) climbs: `elevation: menuTheme() === theme ? 2 : 1`, so `raised` is one above what is
  * around it. Live dark: a submenu of a menu in Create issue paints 12.72 (level 1), the Grouping list in Display
  * options 16.432 (level 2).
+ *
+ * `dialog` is a DialogPresenter box: it paints Linear's elevated theme (`data-elevation="dialog"`, control-tokens.css),
+ * not the menu theme, while what opens inside it keeps the levels above; Linear shows menus from its root presenter, so
+ * a menu in a dialog is the page's menu theme (live: Create issue's More actions paints 12.72).
  */
-export function useElevation(variant: "surface" | "raised" = "surface") {
+export function useElevation(variant: "surface" | "raised" | "dialog" = "surface") {
   const outer = use(Elevation);
   const level = variant === "raised" ? outer + 1 : Math.max(outer, 1);
-  return { level, props: { "data-elevation": level } };
+  return { level, props: { "data-elevation": variant === "dialog" ? "dialog" : level } };
 }
 
 /** Hands a surface's level to the surfaces opened from inside it. */
@@ -49,13 +53,18 @@ export function ElevationScope({ level, children }: { level: number; children: R
 export const MENU_POPUP =
   "view-popup rounded-xl border border-[var(--menu-line)] bg-[var(--menu)] text-fg-2 shadow-[var(--menu-shadow)] [--sel:var(--menu-sel)]";
 
+/** An elevated box: radius 12, a thinPixel bgBorderThin border and bgBase, read inside its own theme scope. */
+const ELEVATED_BOX =
+  "view-popup rounded-xl border-[length:var(--thin-pixel)] border-solid border-[var(--border-thin)] bg-[var(--panel)] text-fg-2 [--sel:var(--menu-sel)]";
+
 /**
- * Linear's popover `Y` (ViewOptions.2m5-Tfth.js `Z.popover`): radius 12, a thinPixel bgBorderThin border, bgBase and
- * shadowMedium, all read inside the elevated scope its Popover opens. The toolbar popovers (Display options, Advanced
- * filter) use it.
+ * Linear's popover `Y` (ViewOptions.2m5-Tfth.js `Z.popover`): the elevated box with shadowMedium. The toolbar popovers
+ * (Display options, Advanced filter) use it.
  */
-export const POPOVER_SURFACE =
-  "view-popup rounded-xl border-[length:var(--thin-pixel)] border-solid border-[var(--border-thin)] bg-[var(--panel)] text-fg-2 shadow-[var(--menu-shadow)] [--sel:var(--menu-sel)]";
+export const POPOVER_SURFACE = `${ELEVATED_BOX} shadow-[var(--menu-shadow)]`;
+
+/** Linear's DialogPresenter box (`jY.content` with `Tu.bgBorder`): the elevated box with shadowHigh. */
+const DIALOG_SURFACE = `${ELEVATED_BOX} shadow-[var(--shadow-high)]`;
 
 /**
  * The one placement engine every popup uses. `place` turns the anchor's box (null without one) and the popup node into the popup's
@@ -288,11 +297,12 @@ export function MenuSurface({
   align?: "end";
   command?: boolean;
   placement?: "top" | "third" | "side";
-  /** `select`: a Select's list (`gy` popup), ringed with bgBorderSolidThin instead of the menu border; select.css. */
-  variant?: "menu" | "select";
+  /** `select`: a Select's list (`gy` popup), ringed with bgBorderSolidThin instead of the menu border; select.css.
+   *  `dialog`: Linear's DialogPresenter box, in the elevated theme over bgModalOverlay (Dialog renders it). */
+  variant?: "menu" | "select" | "dialog";
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const elevation = useElevation(variant === "select" ? "raised" : "surface");
+  const elevation = useElevation(variant === "select" ? "raised" : variant === "dialog" ? "dialog" : "surface");
   const { keys, opener } = usePopupFocus(ref, close, MENU_FOCUS);
   // The previously focused element is only a useful anchor when it is a real control, not <body> after keyboard navigation.
   const [fallback] = useState(
@@ -379,7 +389,7 @@ export function MenuSurface({
   );
   return (
     <div
-      className={`fixed inset-0 z-50 ${anchored || command ? "" : "bg-black/40"}`}
+      className={`fixed inset-0 z-50 ${anchored || command ? "" : "bg-[var(--modal-overlay)]"}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) outside(e, close);
       }}
@@ -392,7 +402,7 @@ export function MenuSurface({
         aria-label={label}
         {...elevation.props}
         data-surface={variant}
-        className={`${MENU_POPUP} overflow-y-auto ${fit ? "w-max min-w-[175px] scroll-py-6 max-w-[min(500px,calc(100vw-24px))]" : command ? "flex flex-col overflow-hidden" : placement === "side" ? "side-panel flex flex-col overflow-hidden" : "p-3"}`}
+        className={`${variant === "dialog" ? DIALOG_SURFACE : MENU_POPUP} overflow-y-auto ${fit ? "w-max min-w-[175px] scroll-py-6 max-w-[min(500px,calc(100vw-24px))]" : command ? "flex flex-col overflow-hidden" : placement === "side" ? "side-panel flex flex-col overflow-hidden" : "p-3"}`}
         onKeyDown={(e) => {
           if (!((e.metaKey || e.ctrlKey) && ["k", "/"].includes(e.key.toLowerCase())))
             e.stopPropagation(); // ⌘K reaches the app so it can toggle the command menu

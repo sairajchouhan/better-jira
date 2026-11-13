@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { ElevationScope, useElevation } from "./menu-surface";
 
 /** A popup surface the way MenuSurface, Popover and the hand-built popups use the mechanism. */
-function Surface({ name, variant, children }: { name: string; variant?: "surface" | "raised"; children?: ReactNode }) {
+function Surface({ name, variant, children }: { name: string; variant?: "surface" | "raised" | "dialog"; children?: ReactNode }) {
   const elevation = useElevation(variant);
   return (
     <div data-name={name} {...elevation.props}>
@@ -14,7 +14,7 @@ function Surface({ name, variant, children }: { name: string; variant?: "surface
 }
 const levels = (tree: ReactNode) =>
   Object.fromEntries(
-    [...renderToStaticMarkup(tree).matchAll(/data-name="([^"]+)" data-elevation="(\d)"/g)].map(([, n, l]) => [n, Number(l)]),
+    [...renderToStaticMarkup(tree).matchAll(/data-name="([^"]+)" data-elevation="(\w+)"/g)].map(([, n, l]) => [n, Number(l) || l]),
   );
 
 test("Linear's menuTheme is idempotent: a menu, or a submenu, over another surface stays at level 1", () => {
@@ -45,4 +45,17 @@ test("a Select's list climbs one level over the surface it opens from, and only 
       </>,
     ),
   ).toEqual({ "page-select": 1, dialog: 1, "dialog-select": 2, popover: 1, "popover-select": 2, "inside-list": 2 });
+});
+
+test("a dialog paints Linear's elevated theme, and what opens inside it keeps the menu theme's levels", () => {
+  expect(
+    levels(
+      <Surface name="dialog" variant="dialog">
+        <Surface name="menu">
+          <Surface name="submenu" />
+        </Surface>
+        <Surface name="select" variant="raised" />
+      </Surface>,
+    ),
+  ).toEqual({ dialog: "dialog", menu: 1, submenu: 1, select: 2 });
 });
