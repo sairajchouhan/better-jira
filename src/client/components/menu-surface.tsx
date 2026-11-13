@@ -12,7 +12,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 
 /** What a popup offers the menus inside it: closing it (every level at once), as a menu's Enter or a submenu's Escape does. */
 export const MenuSurfaceContext = createContext<{ close: () => void } | null>(null);
@@ -89,9 +89,14 @@ export function usePlacement<T extends HTMLElement>(
   key: string | false,
 ) {
   const [style, setStyle] = useState<CSSProperties>();
-  const update = useEffectEvent(() => {
+  const update = useEffectEvent((sync: boolean) => {
     const node = ref.current;
-    if (node) setStyle(place(anchor?.getBoundingClientRect() ?? null, node));
+    if (!node) return;
+    const next = place(anchor?.getBoundingClientRect() ?? null, node);
+    // autoUpdate's later calls come from a ResizeObserver or a scroll, which run before the browser paints; a plain setState would
+    // commit after that paint, so one frame shows the popup where its old size put it (the Help menu jumping as it opened).
+    if (sync) flushSync(() => setStyle(next));
+    else setStyle(next);
   });
   useLayoutEffect(() => {
     const node = ref.current;
@@ -101,7 +106,11 @@ export function usePlacement<T extends HTMLElement>(
       getBoundingClientRect: () => anchor?.getBoundingClientRect() ?? new DOMRect(),
       contextElement: anchor ?? undefined,
     };
-    return autoUpdate(reference, node, () => update(), { layoutShift: false });
+    // The first call runs inside this layout effect, where React already commits before paint (and flushSync may not run).
+    let mounted = false;
+    const cleanup = autoUpdate(reference, node, () => update(mounted), { layoutShift: false });
+    mounted = true;
+    return cleanup;
   }, [ref, anchor, key]);
   return key === false ? undefined : style;
 }
