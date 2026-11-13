@@ -130,7 +130,7 @@
     color: var(--fg-2);
   }
   .ui-button:is([data-variant="ghost"], [data-variant="borderless"]):hover {
-    background: var(--crumb-hover);
+    background: var(--control-tertiary-hover);
     color: var(--fg);
   }
 
@@ -149,7 +149,7 @@
     color: var(--fg-3);
   }
   .ui-button[data-variant="muted"]:is(:hover, :active, [aria-expanded="true"], [aria-pressed="true"], [data-menu-open="true"]) {
-    background: var(--crumb-hover);
+    background: var(--control-tertiary-hover);
     color: var(--fg-2);
   }
 
@@ -170,7 +170,7 @@
     box-shadow: 0 0 0 var(--thin-pixel) var(--border-alpha-thin), var(--frame-shadow);
   }
   .ui-button[data-variant="tab"]:hover {
-    background: var(--crumb-hover);
+    background: var(--control-tertiary-hover);
     color: var(--fg-2);
     box-shadow: 0 0 0 var(--thin-pixel) var(--border-solid-alpha-thin), var(--frame-shadow);
   }
@@ -180,9 +180,9 @@
     box-shadow: 0 0 0 var(--thin-pixel) var(--border-alpha-thin);
   }
   /* A pressed tab is Linear's SmallToggleButton (Nxr): D4.smallToggleButtonActive paints controlSecondarySelected at
-     rest, hover and :active. The main area's controlSecondarySelected is --crumb-hover (94.854, see --sel). */
+     rest, hover and :active. */
   .ui-button[data-variant="tab"][aria-pressed="true"] {
-    background: var(--crumb-hover);
+    background: var(--control-secondary-selected);
   }
 
   .ui-button[data-variant="dangerous"] {

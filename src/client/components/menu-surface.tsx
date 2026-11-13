@@ -1,6 +1,7 @@
 import { autoUpdate } from "@floating-ui/react";
 import {
   createContext,
+  use,
   useEffectEvent,
   useLayoutEffect,
   useRef,
@@ -16,8 +17,31 @@ import { createPortal } from "react-dom";
 /** What a popup offers the menus inside it: closing it (every level at once), as a menu's Enter or a submenu's Escape does. */
 export const MenuSurfaceContext = createContext<{ close: () => void } | null>(null);
 
+/**
+ * How many popup surfaces deep we are. Linear wraps each popover, menu and dialog in a theme-provider of
+ * `elevatedTheme(theme)`, so one opened from inside another (a Select's list in the Display popover) elevates twice.
+ * Context, not CSS nesting, because nested surfaces are often portalled out of their parent's DOM. control-tokens.css
+ * `.ui-elevated` holds the values.
+ */
+const Elevation = createContext(0);
+
+/** The elevated theme scope for a popup surface: `className` gets `ui-elevated`, the level comes from the surfaces around it. */
+function useElevation() {
+  const level = use(Elevation) + 1;
+  return { level, props: { "data-elevation": level } };
+}
+
+/** The shell every hand-built popup shares (Linear's elevated menu surface); its content paints elevated tokens. */
 export const MENU_POPUP =
-  "view-popup rounded-xl border border-[var(--menu-line)] bg-[var(--menu)] text-fg-2 shadow-[var(--menu-shadow)] [--sel:var(--menu-sel)]";
+  "ui-elevated view-popup rounded-xl border border-[var(--menu-line)] bg-[var(--menu)] text-fg-2 shadow-[var(--menu-shadow)] [--sel:var(--menu-sel)]";
+
+/**
+ * Linear's popover `Y` (ViewOptions.2m5-Tfth.js `Z.popover`): radius 12, a thinPixel bgBorderThin border, bgBase and
+ * shadowMedium, all read inside the elevated scope its Popover opens. The toolbar popovers (Display options, Advanced
+ * filter) use it.
+ */
+export const POPOVER_SURFACE =
+  "view-popup rounded-xl border-[length:var(--thin-pixel)] border-solid border-[var(--border-thin)] bg-[var(--panel)] text-fg-2 shadow-[var(--menu-shadow)] [--sel:var(--menu-sel)]";
 
 /**
  * The one placement engine every popup uses. `place` turns the anchor's box (null without one) and the popup node into the popup's
@@ -185,6 +209,7 @@ export function Popover({
           : { top: r.bottom + 6, right: innerWidth - r.right },
     placement,
   );
+  const elevation = useElevation();
   return createPortal(
     <MenuSurfaceContext value={{ close }}>
       <div className="fixed inset-0" style={{ zIndex: 40 }} onMouseDown={(e) => outside(e, close)} />
@@ -192,14 +217,15 @@ export function Popover({
         ref={popup}
         data-popover
         tabIndex={-1}
-        className="fixed z-40 max-w-[calc(100vw-24px)] outline-none"
+        {...elevation.props}
+        className="ui-elevated fixed z-40 max-w-[calc(100vw-24px)] outline-none"
         style={style}
         onKeyDown={(e) => {
           e.stopPropagation();
           keys(e);
         }}
       >
-        {children}
+        <Elevation value={elevation.level}>{children}</Elevation>
       </div>
     </MenuSurfaceContext>,
     document.body,
@@ -231,6 +257,7 @@ export function MenuSurface({
   command = false,
   point,
   placement = "top",
+  variant = "menu",
 }: {
   label: string;
   children: ReactNode;
@@ -247,8 +274,11 @@ export function MenuSurface({
   align?: "end";
   command?: boolean;
   placement?: "top" | "third" | "side";
+  /** `select`: a Select's list (`gy` popup), ringed with bgBorderSolidThin instead of the menu border; select.css. */
+  variant?: "menu" | "select";
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const elevation = useElevation();
   const { keys, opener } = usePopupFocus(ref, close, MENU_FOCUS);
   // The previously focused element is only a useful anchor when it is a real control, not <body> after keyboard navigation.
   const [fallback] = useState(
@@ -346,14 +376,18 @@ export function MenuSurface({
         role="dialog"
         aria-modal="true"
         aria-label={label}
-        className={`overflow-y-auto rounded-xl border border-[var(--menu-line)] bg-[var(--menu)] text-fg-2 shadow-[var(--menu-shadow)] [--sel:var(--menu-sel)] ${fit ? "w-max min-w-[175px] scroll-py-6 max-w-[min(500px,calc(100vw-24px))]" : command ? "flex flex-col overflow-hidden" : placement === "side" ? "side-panel flex flex-col overflow-hidden" : "p-3"}`}
+        {...elevation.props}
+        data-surface={variant}
+        className={`${MENU_POPUP} overflow-y-auto ${fit ? "w-max min-w-[175px] scroll-py-6 max-w-[min(500px,calc(100vw-24px))]" : command ? "flex flex-col overflow-hidden" : placement === "side" ? "side-panel flex flex-col overflow-hidden" : "p-3"}`}
         onKeyDown={(e) => {
           if (!((e.metaKey || e.ctrlKey) && ["k", "/"].includes(e.key.toLowerCase())))
             e.stopPropagation(); // ⌘K reaches the app so it can toggle the command menu
           keys(e);
         }}
       >
-        <MenuSurfaceContext value={{ close }}>{children}</MenuSurfaceContext>
+        <MenuSurfaceContext value={{ close }}>
+          <Elevation value={elevation.level}>{children}</Elevation>
+        </MenuSurfaceContext>
       </div>
     </div>
   );
