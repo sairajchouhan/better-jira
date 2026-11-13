@@ -1,5 +1,5 @@
 import { useRef, type ReactNode } from "react";
-import { MENU_POPUP, usePlacement } from "@/client/components/menu-surface";
+import { MENU_POPUP, useElevation, usePlacement } from "@/client/components/menu-surface";
 
 /** Linear's suggestion-menu ⌥↑/⌥↓: to the start of this group (or the one before, from its start), or of the next one
  * (or the last item, from the last group). `groups` holds each item's group. */
@@ -13,6 +13,7 @@ export function groupStep(groups: readonly (string | undefined)[], at: number, b
 /** The → preview of a caret menu's highlighted item, beside the menu (left of it when the right has no room). */
 export function CaretPeek({ menu, at, children }: { menu: HTMLElement | null; at: string; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
+  const elevation = useElevation();
   const style = usePlacement(
     ref,
     menu,
@@ -27,6 +28,7 @@ export function CaretPeek({ menu, at, children }: { menu: HTMLElement | null; at
   return (
     <div
       ref={ref}
+      {...elevation.props}
       className={`${MENU_POPUP} fixed z-50 flex max-h-[400px] overflow-hidden`}
       style={style}
       onMouseDown={(event) => event.preventDefault()}

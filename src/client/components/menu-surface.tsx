@@ -18,22 +18,36 @@ import { createPortal } from "react-dom";
 export const MenuSurfaceContext = createContext<{ close: () => void } | null>(null);
 
 /**
- * How many popup surfaces deep we are. Linear wraps each popover, menu and dialog in a theme-provider of
- * `elevatedTheme(theme)`, so one opened from inside another (a Select's list in the Display popover) elevates twice.
- * Context, not CSS nesting, because nested surfaces are often portalled out of their parent's DOM. control-tokens.css
- * `.ui-elevated` holds the values.
+ * The elevation level of the surface around us (0 on the page). control-tokens.css paints `[data-elevation]` with
+ * Linear's menu theme and `[data-elevation="2"]` with that theme elevated again. Context, not CSS nesting, because
+ * nested surfaces are often portalled out of their parent's DOM.
  */
 const Elevation = createContext(0);
 
-/** The elevated theme scope for a popup surface: `className` gets `ui-elevated`, the level comes from the surfaces around it. */
-function useElevation() {
-  const level = use(Elevation) + 1;
+/**
+ * The one elevation mechanism every popup surface goes through: spread `props` on the surface element and, when it
+ * renders surfaces of its own, wrap them in `<ElevationScope level={level}>`.
+ *
+ * Linear paints menus and popovers with `theme.menuTheme()`, which returns itself on a menu theme, so a surface opened
+ * from inside another (a submenu, a menu in a dialog) stays at its level: `surface`. Only a Select's list (`eAe`,
+ * startup-root.CnUSfl4j.js) climbs: `elevation: menuTheme() === theme ? 2 : 1`, so `raised` is one above what is
+ * around it. Live dark: a submenu of a menu in Create issue paints 12.72 (level 1), the Grouping list in Display
+ * options 16.432 (level 2).
+ */
+export function useElevation(variant: "surface" | "raised" = "surface") {
+  const outer = use(Elevation);
+  const level = variant === "raised" ? outer + 1 : Math.max(outer, 1);
   return { level, props: { "data-elevation": level } };
 }
 
-/** The shell every hand-built popup shares (Linear's elevated menu surface); its content paints elevated tokens. */
+/** Hands a surface's level to the surfaces opened from inside it. */
+export function ElevationScope({ level, children }: { level: number; children: ReactNode }) {
+  return <Elevation value={level}>{children}</Elevation>;
+}
+
+/** The shell every hand-built popup shares (Linear's menu surface). Spread `useElevation().props` beside it. */
 export const MENU_POPUP =
-  "ui-elevated view-popup rounded-xl border border-[var(--menu-line)] bg-[var(--menu)] text-fg-2 shadow-[var(--menu-shadow)] [--sel:var(--menu-sel)]";
+  "view-popup rounded-xl border border-[var(--menu-line)] bg-[var(--menu)] text-fg-2 shadow-[var(--menu-shadow)] [--sel:var(--menu-sel)]";
 
 /**
  * Linear's popover `Y` (ViewOptions.2m5-Tfth.js `Z.popover`): radius 12, a thinPixel bgBorderThin border, bgBase and
@@ -218,14 +232,14 @@ export function Popover({
         data-popover
         tabIndex={-1}
         {...elevation.props}
-        className="ui-elevated fixed z-40 max-w-[calc(100vw-24px)] outline-none"
+        className="fixed z-40 max-w-[calc(100vw-24px)] outline-none"
         style={style}
         onKeyDown={(e) => {
           e.stopPropagation();
           keys(e);
         }}
       >
-        <Elevation value={elevation.level}>{children}</Elevation>
+        <ElevationScope level={elevation.level}>{children}</ElevationScope>
       </div>
     </MenuSurfaceContext>,
     document.body,
@@ -278,7 +292,7 @@ export function MenuSurface({
   variant?: "menu" | "select";
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const elevation = useElevation();
+  const elevation = useElevation(variant === "select" ? "raised" : "surface");
   const { keys, opener } = usePopupFocus(ref, close, MENU_FOCUS);
   // The previously focused element is only a useful anchor when it is a real control, not <body> after keyboard navigation.
   const [fallback] = useState(
@@ -386,7 +400,7 @@ export function MenuSurface({
         }}
       >
         <MenuSurfaceContext value={{ close }}>
-          <Elevation value={elevation.level}>{children}</Elevation>
+          <ElevationScope level={elevation.level}>{children}</ElevationScope>
         </MenuSurfaceContext>
       </div>
     </div>

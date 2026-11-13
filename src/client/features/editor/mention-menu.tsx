@@ -6,7 +6,7 @@ import { Debouncer } from "@tanstack/pacer";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Avatar } from "@/client/components/avatar";
 import { Menu, MENU } from "@/client/components/menu";
-import { MENU_POPUP, usePlacement } from "@/client/components/menu-surface";
+import { MENU_POPUP, useElevation, usePlacement } from "@/client/components/menu-surface";
 import { StatusIcon } from "@/client/components/icons";
 import { CaretPeek, groupStep } from "./caret-peek";
 import { IssuePeek } from "@/client/features/issue/issue-peek";
@@ -125,6 +125,7 @@ export function CaretMenu({
   }
   const [peek, setPeek] = useState(false);
   const list = useRef<HTMLDivElement>(null);
+  const elevation = useElevation();
   useLayoutEffect(() => {
     list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Scroll the newly active result into view.
@@ -197,6 +198,7 @@ export function CaretMenu({
         const i = items.findIndex((item) => item.id === id);
         if (i >= 0) setActive(i);
       }}
+      {...elevation.props}
       className={`${MENU_POPUP} fixed z-50`}
       style={{ ...style, width }}
       onMouseDown={(event) => event.preventDefault()}

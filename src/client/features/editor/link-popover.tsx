@@ -5,7 +5,7 @@ import { floatingPlacement, insertLink, linkHref, linkTarget, removeLink } from 
 import { appIssue, followLink } from "./editor-links";
 import { TextInput } from "@/client/components/field";
 import { Icon } from "@/client/components/icons";
-import { MENU_POPUP, usePlacement } from "@/client/components/menu-surface";
+import { MENU_POPUP, useElevation, usePlacement } from "@/client/components/menu-surface";
 import { Text } from "@/client/components/text";
 
 /**
@@ -31,6 +31,7 @@ export function LinkPopover({
   const popup = useRef<HTMLDivElement>(null),
     input = useRef<HTMLInputElement>(null),
     done = useRef(false);
+  const elevation = useElevation();
   useEffect(() => {
     if (focus) input.current?.focus();
   }, [focus]);
@@ -72,6 +73,7 @@ export function LinkPopover({
       ref={popup}
       role="group"
       aria-label="Link"
+      {...elevation.props}
       className={`${MENU_POPUP} fixed z-50 flex w-[320px] flex-wrap items-center gap-1 p-1`}
       style={style}
       // The buttons act on the selection without taking focus from the field or the editor.

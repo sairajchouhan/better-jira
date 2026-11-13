@@ -7,7 +7,7 @@ import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode
 import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { Button, IconButton } from "@/client/components/button";
 import { Icon } from "@/client/components/icons";
-import { Popover, MENU_POPUP } from "@/client/components/menu-surface";
+import { Popover, MENU_POPUP, useElevation } from "@/client/components/menu-surface";
 import { Switch } from "@/client/components/switch";
 import { Toast } from "@/client/components/toast";
 import { toasts } from "@/client/components/toast-queue";
@@ -145,6 +145,7 @@ export function CodeBlockControls({
   remove?: () => void;
 }) {
   const view = useCodeDisplay();
+  const elevation = useElevation();
   const lines = lineStarts(text).length,
     collapsible = collapsed || lines >= COLLAPSE_LINES;
   const languageButton = useRef<HTMLButtonElement>(null),
@@ -213,7 +214,7 @@ export function CodeBlockControls({
       )}
       {menu === "display" && (
         <Popover trigger={displayButton} placement="bottom-right" popup={popup} close={() => setMenu(null)}>
-          <div role="group" aria-label="Display options" className={`${MENU_POPUP} cb-display-options`}>
+          <div role="group" aria-label="Display options" {...elevation.props} className={`${MENU_POPUP} cb-display-options`}>
             {(
               [
                 ["lineWrap", "Wrap lines"],

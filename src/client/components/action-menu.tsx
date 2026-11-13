@@ -5,7 +5,7 @@ import { Icon, type IconName } from "./icons";
 import type { Keys } from "./keycap";
 import { Menu } from "./menu";
 import { usePristine } from "./menu-pristine";
-import { MenuSurface, MenuSurfaceContext, MENU_POPUP } from "./menu-surface";
+import { MenuSurface, MenuSurfaceContext, MENU_POPUP, useElevation } from "./menu-surface";
 import { NoMatchesFooter, splitByMatches } from "./no-matches";
 
 /** One action row (Linear's action). `divider` starts a new group, drawn as a separator above the entry while the menu is unfiltered. */
@@ -148,6 +148,7 @@ function Level({
   placeholder?: string;
   highlight?: "first";
 }) {
+  const elevation = useElevation();
   const [reveal, setReveal] = useState(false);
   const [query, setQuery] = useState(""),
     [open, setOpen] = useState<string | null>(null);
@@ -171,6 +172,7 @@ function Level({
       filter={menuFilter}
       // Opened by a key, a submenu starts on its current value (Linear's focusedIndex); a multi-select one on its first row.
       defaultValue={nested ? own.find((e) => e.selected)?.name : undefined}
+      {...(nested ? elevation.props : {})}
       className={nested ? `${MENU_POPUP} w-max min-w-[175px] max-w-[min(500px,calc(100vw-24px))]` : ""}
       {...start.props}
     >
