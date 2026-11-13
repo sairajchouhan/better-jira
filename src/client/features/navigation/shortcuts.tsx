@@ -35,6 +35,7 @@ import {
 import { copyIssue, type CopyKind } from "@/client/features/issue/issue-copy";
 import { codeBlockBindings, editorBindings } from "@/client/features/editor/editor-bindings";
 import { Dialog } from "@/client/components/dialog";
+import { actionMenuOpen } from "@/client/components/open-action-menus";
 import { TextInput } from "@/client/components/field";
 import { Shortcut as KeyboardShortcut, type Keys } from "@/client/components/keycap";
 import { Text } from "@/client/components/text";
@@ -937,11 +938,13 @@ export function runShortcut(id: string, key?: string) {
   }
 }
 /** Whether a key may run the shortcut now: an open menu or toolbar keeps the keys, except ⌘K and ⌘/ that close their own.
+ *  An open action menu keeps them wherever focus is, as Linear's isActionMenuOpen does (BJ-216: ⇧⌘. beside the PR menu's
+ *  "Copy branch name" must not copy the issue's branch); ⌘K and ⌘/ still pass it, as before.
  *  ⌘C keeps the browser's copy whenever page text is selected. */
-function hotkeyEnabled(entry: Shortcut, s: State, issue: Issue | undefined) {
+export function hotkeyEnabled(entry: Shortcut, s: State, issue: Issue | undefined, menuOpen = actionMenuOpen()) {
   return (
     s.boards.length > 0 &&
-    ((!s.overlay && !s.toolbar) ||
+    ((!s.overlay && !s.toolbar && (!menuOpen || entry.id === "commands" || entry.id === "shortcuts")) ||
       (entry.id === "commands" && s.overlay === "palette") ||
       (entry.id === "shortcuts" && s.overlay === "shortcuts")) &&
     (entry.hotkey !== "Mod+C" || !!getSelection()?.isCollapsed) &&
@@ -962,7 +965,8 @@ export function useLinearHotkeys() {
         event.defaultPrevented ||
         !get().boards.length ||
         get().overlay ||
-        get().toolbar
+        get().toolbar ||
+        actionMenuOpen()
       )
         return;
       if (

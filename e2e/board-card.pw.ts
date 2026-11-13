@@ -329,6 +329,26 @@ test("one pull request's badge opens Linear's pull request menu at the pointer; 
         await page.waitFor(`[...document.querySelectorAll('[data-toast]')].some(t=>t.textContent.includes(${JSON.stringify(toast)})&&t.textContent.includes(${JSON.stringify(text)}))`);
       }
     });
+    await test.step(`${layout}: BJ-216 ⇧⌘. copies nothing while the menu is open, even with focus outside it; closed, it is the issue's command`, async () => {
+      const copies = () => page.eval<number>("window.__copied.length");
+      await rightClick();
+      await menu.locator('[cmdk-item][data-value="Copy"]').hover();
+      await expect(page.page.locator('[cmdk-item][data-value="Copy branch name"]')).toBeVisible();
+      const before = await copies();
+      // Linear's open action menu runs no global shortcut (isActionMenuOpen), whether focus is in the menu…
+      await page.page.keyboard.press("Meta+Shift+Period");
+      // …or has left it (a click on the menu's padding drops focus to the page).
+      await page.eval("document.activeElement?.blur()");
+      await page.page.keyboard.press("Meta+Shift+Period");
+      expect(await copies()).toBe(before);
+      await expect(menu).toBeVisible();
+      await page.key("Escape");
+      await expect(menu).toHaveCount(0);
+      // Closed, the key is the hovered card's Copy git branch name (`SX`), the issue's branch and not the PR's.
+      await page.hover('[data-key="TEST-2"] [aria-label="Status on TEST-2"]');
+      await page.page.keyboard.press("Meta+Shift+Period");
+      await expect.poll(() => page.eval<string>("window.__copied.at(-1)")).toMatch(/test-2-/);
+    });
     await test.step(`${layout}: several pull requests leave the right-click to the card's issue menu`, async () => {
       const r = await page.rect(`[data-key="TEST-1"] [aria-label="Pull requests on TEST-1"]`);
       await page.page.mouse.click(r.x + 3, r.y + r.height / 2, { button: "right" });

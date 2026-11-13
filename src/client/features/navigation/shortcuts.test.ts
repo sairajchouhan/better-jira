@@ -58,3 +58,16 @@ test("V leaves no full-screen intent behind when the composer refuses to open", 
   expect([get().overlay, expanded]).toEqual([null, false]);
   stop();
 });
+test("BJ-216: an open action menu keeps every global key, as Linear's isActionMenuOpen does; ⌘K and ⌘/ still pass", async () => {
+  const { get } = await import("@/client/state/store");
+  const { hotkeyEnabled } = await import("./shortcuts");
+  const s = { ...get(), boards: [{}], overlay: null, toolbar: null, document: null } as never;
+  const issue = { key: "TEST-2" } as never;
+  const entry = (id: string) => shortcuts.find((e) => e.id === id)!;
+  // The PR menu's "Copy branch name ⇧⌘." hint must not run the issue's Copy git branch name behind the menu.
+  expect(hotkeyEnabled(entry("copy-branch"), s, issue, false)).toBe(true);
+  expect(hotkeyEnabled(entry("copy-branch"), s, issue, true)).toBe(false);
+  expect(hotkeyEnabled(entry("copy-id"), s, issue, true)).toBe(false);
+  expect(hotkeyEnabled(entry("commands"), s, issue, true)).toBe(true);
+  expect(hotkeyEnabled(entry("shortcuts"), s, issue, true)).toBe(true);
+});

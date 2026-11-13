@@ -171,6 +171,9 @@ async function copyText(text: string, title: string, icon?: "copy") {
  *  auto-merge, Unlink), which Jira can't. */
 export function pullRequestActions(pr: PullRequest): ActionEntry[] {
   const image = <LinkImage link={linkOf(pr.url)} />;
+  // ⇧⌘. is `bK`'s own shortcut: Linear binds it to the same keys as the issue's "Copy git branch name" (`SX`, which yields when a
+  // pull request is the target). Nothing here makes a pull request a key target, and an open action menu runs no global key
+  // (open-action-menus.ts), so the hint is display-only, as Linear's is inside this menu.
   const branches: ActionEntry[] = [
     ...(pr.branch
       ? [{ name: "Copy branch name", icon: "branch", shortcut: hotkeyOf("copy-branch"), run: () => void copyText(pr.branch!, "Branch name copied to clipboard", "copy") } as const]

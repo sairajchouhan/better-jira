@@ -7,6 +7,7 @@ import { Menu } from "./menu";
 import { usePristine } from "./menu-pristine";
 import { MenuSurface, MenuSurfaceContext, MENU_POPUP, useElevation } from "./menu-surface";
 import { NoMatchesFooter, splitByMatches } from "./no-matches";
+import { useOpenActionMenu } from "./open-action-menus";
 
 /** One action row (Linear's action). `divider` starts a new group, drawn as a separator above the entry while the menu is unfiltered. */
 export type ActionEntry = {
@@ -80,7 +81,8 @@ export function searchActions(entries: ActionEntry[], query: string): ActionEntr
 }
 
 /** Linear opens an action menu 4px under its trigger, left-aligned (Issue options) or, with `align="end"`, right-aligned (row, resource
- *  and comment ⋯); a right-click opens it at `point`. Opened by a key it highlights its first row; by the pointer, none. */
+ *  and comment ⋯); a right-click opens it at `point`. Opened by a key it highlights its first row; by the pointer, none. While it is
+ *  open no global shortcut runs, even with focus outside it (Linear's isActionMenuOpen): its rows' hints are not live keys. */
 export function ActionMenu({
   anchor,
   entries,
@@ -105,6 +107,7 @@ export function ActionMenu({
   placeholder?: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
+  useOpenActionMenu();
   return (
     <MenuSurface
       label={label}
