@@ -203,3 +203,22 @@ test("view routes: /view/<slug>-<id>, old ids and stale slugs resolve", () => {
   expect(viewForRoute(views, `unicode-bugs-${id}`)?.id).toBe(id);
   expect(viewForRoute(views, "nope")).toBeUndefined();
 });
+test("a view stored before a display option existed can still be renamed", async () => {
+  const db = new Database(":memory:");
+  const r = viewRepository(db);
+  const { completedIssues: _dropped, ...oldDisplay } = p.display as typeof p.display & { completedIssues?: unknown };
+  const at = new Date().toISOString();
+  db.query("INSERT INTO saved_views VALUES (?,?,?)").run(
+    "a",
+    "old",
+    JSON.stringify({ ...draft, display: oldDisplay, id: "old", createdAt: at, updatedAt: at }),
+  );
+  const res = await r.handle(
+    new Request("http://localhost/api/views/old", { method: "PUT", body: JSON.stringify({ name: "Renamed" }) }),
+    "a",
+    "old",
+  );
+  expect(res.status).toBe(200);
+  expect(r.list("a")[0]).toMatchObject({ name: "Renamed", display: p.display });
+  db.close();
+});

@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { validateDraft, type SavedView } from "@/shared/saved-view-model";
+import { parsePreferences } from "@/shared/view-model";
 
 export function viewRepository(db: Database) {
   db.run(
@@ -12,7 +13,11 @@ export function viewRepository(db: Database) {
         "SELECT data FROM saved_views WHERE namespace=? ORDER BY rowid",
       )
       .all(ns)
-      .map((r) => JSON.parse(r.data));
+      .map((r) => {
+        const view = JSON.parse(r.data) as SavedView;
+        // A view stored before a display option existed lacks that key; read it with the option's default so later writes validate.
+        return { ...view, display: parsePreferences({ display: view.display }).display };
+      });
   const find = (ns: string, id: string) => list(ns).find((v) => v.id === id);
   const insert = (ns: string, v: SavedView) =>
     db.query("INSERT INTO saved_views VALUES (?,?,?)").run(ns, v.id, JSON.stringify(v));
