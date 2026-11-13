@@ -10,12 +10,13 @@ import "./select.css";
  * as Linear's action menus are, where Linear's base-ui list jumps to a typed prefix instead.
  */
 export const SELECT = {
+  /** `lAe` triggers; `ROW_HEIGHT`/`ROW_FONT_SIZE` are its list's rows (`fAe`, by the same size), select.css. */
   SIZES: {
-    large: { HEIGHT: 44, PADDING_LEFT: 10, PADDING_RIGHT: 28, FONT_SIZE: 13 },
-    default: { HEIGHT: 30, PADDING_LEFT: 10, PADDING_RIGHT: 28, FONT_SIZE: 13 },
-    medium: { HEIGHT: 26, PADDING_LEFT: 10, PADDING_RIGHT: 28, FONT_SIZE: 12 },
-    small: { HEIGHT: 24, PADDING_LEFT: 10, PADDING_RIGHT: 24, FONT_SIZE: 12 },
-    compact: { HEIGHT: 22, PADDING_LEFT: 8, PADDING_RIGHT: 18, FONT_SIZE: 12 },
+    large: { HEIGHT: 44, PADDING_LEFT: 10, PADDING_RIGHT: 28, FONT_SIZE: 13, ROW_HEIGHT: 44, ROW_FONT_SIZE: 13 },
+    default: { HEIGHT: 30, PADDING_LEFT: 10, PADDING_RIGHT: 28, FONT_SIZE: 13, ROW_HEIGHT: 32, ROW_FONT_SIZE: 13 },
+    medium: { HEIGHT: 26, PADDING_LEFT: 10, PADDING_RIGHT: 28, FONT_SIZE: 12, ROW_HEIGHT: 30, ROW_FONT_SIZE: 12 },
+    small: { HEIGHT: 24, PADDING_LEFT: 10, PADDING_RIGHT: 24, FONT_SIZE: 12, ROW_HEIGHT: 24, ROW_FONT_SIZE: 12 },
+    compact: { HEIGHT: 22, PADDING_LEFT: 8, PADDING_RIGHT: 18, FONT_SIZE: 12, ROW_HEIGHT: 24, ROW_FONT_SIZE: 12 },
   },
   RADIUS: 8,
   CARET_RIGHT: 10,
@@ -123,7 +124,7 @@ function SelectRoot({
         >
           <SelectContext value={context}>
             {/* Opens on the chosen option, like Linear. */}
-            <Menu defaultValue={chosen ? `${chosen.children} ${value}` : undefined} className="ui-select-list">
+            <Menu defaultValue={chosen ? `${chosen.children} ${value}` : undefined} data-size={size} className="ui-select-list">
               <Menu.Input autoFocus hideWhenEmpty aria-label={`${label}…`} />
               <Menu.List maxHeight={`${SELECT.LIST_MAX_HEIGHT}px`}>
                 <Menu.Empty>No matches</Menu.Empty>

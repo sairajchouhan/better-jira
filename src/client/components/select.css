@@ -102,14 +102,27 @@
   border-color: transparent;
   box-shadow: 0 0 0 var(--thin-pixel) var(--border-solid-thin), var(--menu-shadow);
 }
-/* gy items: 24px rows, 12px/400 labelBase, 0 35 0 12 padding; the highlight is controlSecondaryHover inset 0 4px
-   (radius 8); the chosen row's 16px check sits 8px from the right in labelMuted. */
+/* gy items ($ke, dAe + fAe by the trigger's size): 400 labelBase, 0 35 0 12 padding; the highlight is
+   controlSecondaryHover inset 0 4px (radius 8); the chosen row's 16px check sits 8px from the right in labelMuted.
+   Rows are 32px at 13px by default, 44 large, 30 medium, 24 small and compact at 12px (live: a medium select's rows in
+   Linear's recurrence form are 30px; Display options' compact ones 24px). */
 .ui-select-list {
   --menu-sel: var(--control-secondary-hover);
+  --row: 32px;
+  font-size: 13px;
+}
+.ui-select-list[data-size="large"] {
+  --row: 44px;
+}
+.ui-select-list:is([data-size="medium"], [data-size="small"], [data-size="compact"]) {
+  --row: 24px;
   font-size: 12px;
 }
+.ui-select-list[data-size="medium"] {
+  --row: 30px;
+}
 .ui-select-list .menu-item {
-  height: 24px;
+  height: var(--row);
   padding: 0 35px 0 12px;
 }
 .ui-select-list .menu-item::before {
