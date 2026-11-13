@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Command } from "cmdk";
 import { Icon, type IconName } from "@/client/components/icons";
 import { MenuSurface } from "@/client/components/menu-surface";
+import { NO_AUTOFILL } from "@/client/components/field";
 
 /** Linear's view colours (2026-11-11 capture). Grey is stored as "gray"; Linear fills it #bec2c8 in every theme. */
 export const VIEW_COLORS = [
@@ -140,6 +141,7 @@ export function ViewIconPicker({
         </div>
         <Command loop key={tab}>
           <Command.Input
+            {...NO_AUTOFILL}
             autoFocus
             className="view-icon-search"
             placeholder="Search icons…"

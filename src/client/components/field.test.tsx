@@ -23,7 +23,7 @@ test("a Field labels and describes its control", () => {
   );
   const id = /<label for="([^"]+)"/.exec(html)?.[1];
   expect(id).toBeTruthy();
-  expect(html).toContain(`<input data-size="normal" class="ui-input " id="${id}" aria-describedby="${id}-description"`);
+  expect(html).toContain(`<input data-size="normal" class="ui-input " data-1p-ignore="true" data-form-type="other" data-lpignore="true" id="${id}" aria-describedby="${id}-description"`);
   expect(html).toContain(`<p id="${id}-description">`);
 });
 

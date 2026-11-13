@@ -30,6 +30,7 @@ import {
 import { defaultPreferences, selectIssues } from "@/shared/view-model";
 import { viewPlaceholder, issuesCSV } from "@/client/features/views/view-editor-model";
 import "./view-editor.css";
+import { NO_AUTOFILL } from "@/client/components/field";
 
 export function openViewEditor(draft: ViewDraft): void {
   beginViewEditor(draft);
@@ -108,6 +109,7 @@ function Editor({ draft }: { draft: ViewDraft }) {
         </button>
         {/* Linear edits the name and description as borderless inline text, not its framed input (`ry`), so TextInput doesn't fit. */}
         <input
+          {...NO_AUTOFILL}
           autoFocus
           aria-label="View name"
           className="view-name"
@@ -124,6 +126,7 @@ function Editor({ draft }: { draft: ViewDraft }) {
         </Button>
       </div>
       <input
+        {...NO_AUTOFILL}
         aria-label="View description"
         className="view-description"
         placeholder="Description (optional)"

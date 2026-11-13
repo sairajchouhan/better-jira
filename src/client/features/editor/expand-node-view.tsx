@@ -4,6 +4,7 @@ import { TextSelection } from "prosemirror-state";
 import type { EditorView, NodeView } from "prosemirror-view";
 import { IconButton } from "@/client/components/button";
 import { Icon } from "@/client/components/icons";
+import { NO_AUTOFILL } from "@/client/components/field";
 
 /** A collapsible section (Jira's expand): a disclosure and a title above its editable blocks. Jira stores no open state,
  * so a section shows collapsed when loaded and open when just made (empty). */
@@ -51,6 +52,7 @@ export function expandNodeView(
         </IconButton>
         {/* A bare title line, like a heading in the document, not a boxed form field. */}
         <input
+          {...NO_AUTOFILL}
           key={revision}
           className="rich-expand-title"
           aria-label="Collapsible section title"

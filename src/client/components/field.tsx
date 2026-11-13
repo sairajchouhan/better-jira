@@ -17,6 +17,12 @@ export const FIELD = {
 
 type Size = keyof typeof FIELD.HEIGHT;
 
+/**
+ * Linear's O4e, spread on every text field that is not a login form: password managers skip it. Without it 1Password's injected
+ * script scans the page on each focus (50-150ms on a board), so a menu that focuses its search opens late.
+ */
+export const NO_AUTOFILL = { "data-1p-ignore": true, "data-form-type": "other", "data-lpignore": "true" } as const;
+
 const FieldContext = createContext<{ id: string; descriptionId?: string } | null>(null);
 
 function FieldDescription(props: Omit<ComponentProps<"p">, "id">) {
@@ -52,7 +58,7 @@ export const Field = Object.assign(FieldRoot, {
 });
 
 export function TextInput({ size = "normal", id, className = "", ...props }: { size?: Size } & Omit<ComponentProps<"input">, "size">) {
-  return <input data-size={size} className={`ui-input ${className}`} {...useField(id)} {...props} />;
+  return <input data-size={size} className={`ui-input ${className}`} {...NO_AUTOFILL} {...useField(id)} {...props} />;
 }
 
 /** The hidden copy's text: a trailing zero-width space keeps a final empty line counted in its height. */
@@ -74,6 +80,7 @@ export function AutoResizingTextArea({
   return (
     <div className="ui-autosize" data-appearance={appearance}>
       <textarea
+        {...NO_AUTOFILL}
         data-size={size}
         className={`ui-input ${className}`}
         style={style}

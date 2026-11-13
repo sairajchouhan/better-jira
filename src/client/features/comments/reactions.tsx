@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { MenuSurface } from "@/client/components/menu-surface";
 import { Text } from "@/client/components/text";
 import { get } from "@/client/state/store";
+import { NO_AUTOFILL } from "@/client/components/field";
 
 // Linear's picker (RAJ-52): "Frequently used" first, then categories. ponytail: a curated set, not the full Unicode catalogue; add a dataset if search misses matter.
 const groups: Record<string, string> = {
@@ -211,6 +212,7 @@ export function ReactionPicker({
         {/* A menu's search row, not a form field: the cells move under it while it keeps focus. */}
         <div className="border-b border-[var(--key-line)] px-[5px] py-1">
           <input
+            {...NO_AUTOFILL}
             autoFocus
             aria-label="Search emoji"
             placeholder="Search emoji…"

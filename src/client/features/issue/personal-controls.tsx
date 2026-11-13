@@ -10,7 +10,7 @@ import { Tabs } from "@/client/components/tabs";
 import { CountBadge } from "@/client/components/count-badge";
 import { Shortcut, Keycap } from "@/client/components/keycap";
 import { Dialog } from "@/client/components/dialog";
-import { TextInput } from "@/client/components/field";
+import { TextInput, NO_AUTOFILL } from "@/client/components/field";
 import { Button, IconButton } from "@/client/components/button";
 import { createSubIssue, issueMenuEntries, type IssueMenuDialog } from "./issue-menu";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
@@ -353,6 +353,7 @@ export function CreateIssue() {
         </Dialog.Header>
         {/* Linear's fast-create title (dQ, size regular): borderless, 18px semibold. */}
         <input
+          {...NO_AUTOFILL}
           ref={titleRef}
           autoFocus
           aria-label="Issue title"

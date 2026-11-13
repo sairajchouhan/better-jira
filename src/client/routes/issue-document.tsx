@@ -11,7 +11,7 @@ import { MenuSurface } from "@/client/components/menu-surface";
 import { Button, IconButton } from "@/client/components/button";
 import { ConfirmDialog, Dialog } from "@/client/components/dialog";
 import { EmptyState } from "@/client/components/empty-state";
-import { AutoResizingTextArea } from "@/client/components/field";
+import { AutoResizingTextArea, NO_AUTOFILL } from "@/client/components/field";
 import { Tabs } from "@/client/components/tabs";
 import { Text } from "@/client/components/text";
 import { DocumentBodyEditor } from "@/client/features/editor/rich-editor-loader";
@@ -749,6 +749,7 @@ function DocumentIcon({ resource, issue }: { resource: IssueResource; issue: Iss
           </Tabs>
           {/* A menu's search row (borderless, underlined), not a form field; Menu.Input needs a cmdk Menu around it. */}
           <input
+            {...NO_AUTOFILL}
             autoFocus
             aria-label="Search document icons"
             placeholder="Search icons…"

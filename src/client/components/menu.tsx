@@ -31,6 +31,7 @@ import { createPortal } from "react-dom";
 import { Icon } from "./icons";
 import { MenuSurfaceContext } from "./menu-surface";
 import { Shortcut, type Keys } from "./keycap";
+import { NO_AUTOFILL } from "@/client/components/field";
 
 /**
  * Linear's one menu primitive, `IB = Object.assign(B3e, {List, Item, GroupHeader, Divider, TextDivider, Input})` in
@@ -300,7 +301,7 @@ function MenuInput({
   return (
     <div className={hidden ? "sr-only" : "menu-input"}>
       {chip && <span className="menu-input-chip">{chip}</span>}
-      <Command.Input {...props} className={hidden ? "sr-only" : undefined} />
+      <Command.Input {...NO_AUTOFILL} {...props} className={hidden ? "sr-only" : undefined} />
       {hotkey && <Shortcut aria-hidden keys={hotkey} size="small" />}
     </div>
   );
