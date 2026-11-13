@@ -457,13 +457,16 @@ function MenuTextDivider({ children }: { children: ReactNode }) {
   return <div className="menu-text-divider">{children}</div>;
 }
 
-/** Linear's 42px empty state. `always` shows it outside cmdk's own filtering (menus with shouldFilter={false}). */
+/** Linear's 42px empty state. `always` shows it outside cmdk's own filtering (menus with shouldFilter={false}).
+ *  Linear derives it from its rows during render (B3e), so a menu never opens showing it. cmdk's Empty reads its count, which is 0
+ *  on the first commit, before the rows register: a popup measured then is 42px too tall and jumps when it re-measures (the
+ *  sidebar Help menu). So it waits one commit for cmdk to count the rows. */
 function MenuEmpty({ children, always = false }: { children: ReactNode; always?: boolean }) {
-  return always ? (
-    <div className="menu-empty">{children}</div>
-  ) : (
-    <Command.Empty className="menu-empty">{children}</Command.Empty>
-  );
+  const [counted, setCounted] = useState(always);
+  // oxlint-disable-next-line react/set-state-in-effect -- waits for cmdk's store, external to React, to register the rows
+  useLayoutEffect(() => setCounted(true), []);
+  if (always) return <div className="menu-empty">{children}</div>;
+  return counted ? <Command.Empty className="menu-empty">{children}</Command.Empty> : null;
 }
 
 type Container = RefObject<HTMLElement | null>;
