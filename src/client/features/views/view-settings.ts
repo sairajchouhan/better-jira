@@ -15,6 +15,7 @@ import { saveDefaults } from "@/client/state/browser-preferences";
 import {
   defaultDisplay,
   defaultPreferences,
+  resetDisplayPreferences,
   storedGroupOrder,
   updateFilter,
   type Display,
@@ -91,9 +92,10 @@ export function setDisplay(board: number, patch: Partial<Display>) {
   if (display.rows === display.columns) display.rows = "none";
   write(board, { display });
 }
-/** Back to the display saved as this browser's default for the board, else the app's. */
+/** Linear's Reset: back to the display saved as this browser's default for the board, else the app's, dropping the hidden
+ *  groups and group order with it (resetDisplayPreferences). */
 export const resetDisplay = (board: number) =>
-  setDisplay(board, get().defaults[board] ?? defaultDisplay());
+  write(board, resetDisplayPreferences(get().defaults[board] ?? defaultDisplay()));
 
 /** Hidden and collapsed groups, and the group order, belong to the current column grouping. */
 const grouped = (board: number, key: "hidden" | "collapsed" | "order", change: (ids: string[]) => string[]) => {

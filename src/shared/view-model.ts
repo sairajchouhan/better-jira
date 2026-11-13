@@ -247,6 +247,23 @@ export function operatorLabel(field: Field, op: Operator, count: number) {
 export const sameDisplay = (a: Display, b: Display) =>
   JSON.stringify({ ...a, properties: [...a.properties].sort() }) ===
   JSON.stringify({ ...b, properties: [...b.properties].sort() });
+/**
+ * Linear's `hasUserChanges` (`userPreferencesHaveNoEffect`): whether anything Reset clears is set, so the toolbar's dot and
+ * the Reset footer show. That is the display against `baseline`, plus the current grouping's hidden groups
+ * (`hiddenColumns`/`hiddenGroupsList`) and group order (`columnOrderBoard`/`columnOrderList`), which Linear keeps among the
+ * same view preferences. Collapsed groups are not view preferences (Linear keeps them per user, `collapsedGroups`).
+ */
+export const hasDisplayChanges = (prefs: Pick<Preferences, "display" | "hidden" | "order">, baseline: Display) =>
+  !sameDisplay(prefs.display, baseline) ||
+  !!prefs.hidden[prefs.display.columns]?.length ||
+  !!prefs.order[prefs.display.columns]?.length;
+/** Linear's `disregardSettings` → `clearPreferencesOrDelete`: `preferences = {}`, every user preference at once. The display
+ *  returns to `baseline` and the hidden groups and group order of every grouping go; collapsed groups stay. */
+export const resetDisplayPreferences = (baseline: Display): Pick<Preferences, "display" | "hidden" | "order"> => ({
+  display: structuredClone(baseline),
+  hidden: {},
+  order: {},
+});
 export const newId = () => crypto.randomUUID();
 export const defaultDisplay = (): Display => ({
   layout: "board",

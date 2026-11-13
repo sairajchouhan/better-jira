@@ -21,6 +21,8 @@ import {
   parentName,
   parsePreferences,
   sameDisplay,
+  hasDisplayChanges,
+  resetDisplayPreferences,
   selectIssues,
   statusDuration,
   updateFilter,
@@ -470,6 +472,26 @@ describe("QA round 1 (G7)", () => {
     const a = defaultPreferences().display;
     expect(sameDisplay(a, { ...a, properties: [...a.properties].reverse() })).toBe(true);
     expect(sameDisplay(a, { ...a, properties: a.properties.slice(1) })).toBe(false);
+  });
+  test("BJ-208: Reset is Linear's disregardSettings: display, hidden groups and group order go; collapsed groups stay", () => {
+    const baseline = defaultPreferences().display;
+    const prefs = {
+      ...defaultPreferences(),
+      display: { ...baseline, layout: "list" as const },
+      hidden: { status: ["done"], assignee: ["me"] },
+      order: { status: ["done", "todo"] },
+      collapsed: { status: ["todo"] },
+    };
+    expect(hasDisplayChanges(prefs, baseline)).toBe(true);
+    const reset = { ...prefs, ...resetDisplayPreferences(baseline) };
+    expect(reset.display).toEqual(baseline);
+    expect(reset.display).not.toBe(baseline);
+    expect([reset.hidden, reset.order, reset.collapsed]).toEqual([{}, {}, { status: ["todo"] }]);
+    expect(hasDisplayChanges(reset, baseline)).toBe(false);
+    // Hidden groups or a group order alone are user changes (the toolbar's dot and the Reset footer); collapsed are not.
+    expect(hasDisplayChanges({ ...reset, hidden: { status: ["done"] } }, baseline)).toBe(true);
+    expect(hasDisplayChanges({ ...reset, order: { status: ["done"] } }, baseline)).toBe(true);
+    expect(hasDisplayChanges({ ...reset, hidden: { assignee: ["me"] } }, baseline)).toBe(false);
   });
   test("R1-D91: parent groups and choices show the parent's title", () => {
     expect(parentName("A-1", [issue("A-1", { summary: "Epic title" })])).toBe("A-1 Epic title");

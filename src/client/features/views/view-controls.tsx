@@ -39,6 +39,7 @@ import {
   canOrderGroups,
   defaultDisplay,
   defaultPreferences,
+  hasDisplayChanges,
   sameDisplay,
   filterCount,
   FIELDS,
@@ -217,12 +218,15 @@ export function BoardControls({ board }: { board: Board }) {
   );
 }
 
-/** Whether the board's display differs from what Reset returns to (the view's, else the saved default): the toolbar's dot and the footer. */
+/** The toolbar's dot and the Reset footer. On a board, whether there is anything Reset clears (against the saved default);
+ *  a saved view keeps its hidden groups and order as its own, so there only a display unlike the view's counts. */
 function useDisplayChanged(boardId: Board["id"]) {
   const view = useActiveView();
-  const { display } = useViewSettings(boardId);
+  const settings = useViewSettings(boardId);
   const savedDefault = useStore((s) => s.defaults[boardId]);
-  return !sameDisplay(display, view?.display ?? savedDefault ?? defaultDisplay());
+  return view
+    ? !sameDisplay(settings.display, view.display)
+    : hasDisplayChanges(settings, savedDefault ?? defaultDisplay());
 }
 
 const LAYOUTS = [
