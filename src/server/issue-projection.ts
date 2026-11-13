@@ -1,6 +1,6 @@
 import { jiraAvatar } from "@/shared/avatar-url";
 import { issueAttachments } from "@/shared/attachment-media";
-import { pullRequestCount } from "@/shared/issue-properties";
+import { pullRequestSummary } from "@/shared/issue-properties";
 import { linkRelation } from "@/shared/relations";
 import { smartLink } from "@/shared/smart-link";
 
@@ -64,6 +64,7 @@ export function issueProjection(siteFields: any[] | null) {
       collectLinks(f.description);
       for (const url of text(f.description).match(/https?:\/\/[^\s<>"\]|)]+/g) ?? []) link(url);
       const creator = f.creator ?? f.reporter;
+      const prs = pullRequestSummary(f.customfield_10000);
       return {
         key: i.key,
         board,
@@ -95,7 +96,8 @@ export function issueProjection(siteFields: any[] | null) {
         /** Every comment's text, for search only (BJ-27); absent without comments. */
         commentText: (f.comment?.comments ?? []).map((c: any) => text(c.body)).join("\n").trim() || undefined,
         milestones: f.fixVersions?.map((v: any) => ({ id: v.id, name: v.name })),
-        prCount: pullRequestCount(f.customfield_10000),
+        prCount: prs?.count,
+        prStatus: prs?.status,
         estimate: estimates.map((id) => f[id]).find((v) => typeof v === "number"),
         links: [...links],
         relations: (f.issuelinks ?? []).flatMap((link: any) => linkRelation(link) ?? []),
@@ -105,7 +107,7 @@ export function issueProjection(siteFields: any[] | null) {
 }
 export type IssueProjection = ReturnType<typeof issueProjection>;
 /** Bump when `slim`'s output changes: the mirror re-projects every stored issue on its next start. */
-export const SLIM_VERSION = "9";
+export const SLIM_VERSION = "10";
 
 /** A mirrored issue with what enrichment stored for it (null until enriched). */
 export type PropertyRow = {

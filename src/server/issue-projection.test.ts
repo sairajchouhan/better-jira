@@ -140,6 +140,7 @@ test("projects a full Jira record into the board's slim issue", () => {
     commentText: undefined,
     milestones: [{ id: "20001", name: "v2.4" }],
     prCount: 2,
+    prStatus: "open",
     // "Story Points" (shorter name) is preferred but empty, so the estimate falls back to "Story point estimate".
     estimate: 5,
     links: ["https://docs.test/spec", "https://github.com/o/r/pull/7", "https://ci.test/run/9"],
@@ -190,6 +191,7 @@ test("a sparse record: missing optional fields project to the app's empty values
     commentText: undefined,
     milestones: undefined,
     prCount: undefined,
+    prStatus: undefined,
     estimate: undefined,
     links: [],
     relations: [],

@@ -12,6 +12,18 @@ export type PullRequest = {
 };
 
 const STATUS: Record<string, PullRequest["status"]> = { OPEN: "open", MERGED: "merged", DECLINED: "declined", DRAFT: "draft" };
+/** Jira's pull request state (OPEN, MERGED, DECLINED, DRAFT) as ours; anything else is unknown. */
+export const jiraPullRequestStatus = (state: unknown): PullRequest["status"] | undefined => STATUS[String(state).toUpperCase()];
+
+/** Linear's order for the one status icon a set of PRs shows (`Hpn`: open, in review, approved, draft, merged, closed; Jira has no
+ *  review states). */
+const LEADING: PullRequest["status"][] = ["open", "draft", "merged", "declined"];
+/** The status Linear's PR badge icon shows for several PRs (`Upn`): the first in `LEADING` any of them has. */
+export const leadingStatus = (prs: Pick<PullRequest, "status">[]) =>
+  LEADING.find((status) => prs.some((pr) => pr.status === status));
+
+/** Linear's PR badge text (`mhn`): the one PR's number (`prNumber`, "#12"), or "N PRs" for several. */
+export const pullRequestBadgeText = (count: number, number?: string) => (count === 1 ? (number ?? "") : `${count} PRs`);
 
 /** The providers Jira's summary counts pull requests for (`summary.pullrequest.byInstanceType`), e.g. "GitHub". */
 export function pullRequestProviders(summary: any): string[] {
@@ -32,7 +44,7 @@ export function pullRequestList(details: any[]): PullRequest[] {
           url: pr.url,
           title: typeof pr.name === "string" && pr.name ? pr.name : pr.url,
           number: id ? (id.startsWith("#") ? id : `#${id}`) : "",
-          status: STATUS[String(pr.status).toUpperCase()] ?? "open",
+          status: jiraPullRequestStatus(pr.status) ?? "open",
           ...(pr.repositoryName ? { repo: pr.repositoryName } : {}),
           ...(pr.author?.name ? { author: pr.author.name } : {}),
           ...(pr.source?.branch ? { branch: pr.source.branch } : {}),

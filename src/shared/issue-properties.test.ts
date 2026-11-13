@@ -5,7 +5,7 @@ import {
   childTypes,
   matchRank,
   needsParent,
-  pullRequestCount,
+  pullRequestSummary,
   statusDates,
   typeChoices,
 } from "./issue-properties";
@@ -41,23 +41,28 @@ test("keeps a stale status snapshot unknown rather than attaching a different st
   );
 });
 test("distinguishes empty Jira development summaries from unsupported or missing summaries", () => {
-  expect(pullRequestCount("{}")).toBe(0);
+  expect(pullRequestSummary("{}")).toEqual({ count: 0 });
+  expect(pullRequestSummary({ cachedValue: { summary: { pullrequest: { overall: { count: 3 } } } } })).toEqual({ count: 3 });
+  expect(pullRequestSummary(undefined)).toBeUndefined();
+  expect(pullRequestSummary("unrecognized")).toBeUndefined();
+  expect(pullRequestSummary({ somethingElse: 2 })).toBeUndefined();
   expect(
-    pullRequestCount({ cachedValue: { summary: { pullrequest: { overall: { count: 3 } } } } }),
-  ).toBe(3);
-  expect(pullRequestCount(undefined)).toBeUndefined();
-  expect(pullRequestCount("unrecognized")).toBeUndefined();
-  expect(pullRequestCount({ somethingElse: 2 })).toBeUndefined();
+    pullRequestSummary('{build={count=1}, json={"cachedValue":{"summary":{"build":{"overall":{"count":1}}}},"isStale":true}}'),
+  ).toEqual({ count: 0 });
   expect(
-    pullRequestCount(
-      '{build={count=1}, json={"cachedValue":{"summary":{"build":{"overall":{"count":1}}}},"isStale":true}}',
-    ),
-  ).toBe(0);
-  expect(
-    pullRequestCount(
-      '{pullrequest={count=2}, json={"cachedValue":{"summary":{"pullrequest":{"overall":{"count":2}}}}}}',
-    ),
-  ).toBe(2);
+    pullRequestSummary('{pullrequest={count=2}, json={"cachedValue":{"summary":{"pullrequest":{"overall":{"count":2}}}}}}'),
+  ).toEqual({ count: 2 });
+});
+
+test("reads the PR count and Jira's summary state from the Development field a search returns, per Jira state", () => {
+  // The shape live Jira returns (made-up dates): a Java-map wrapper around the dev summary JSON.
+  const field = (count: number, state: string) =>
+    `{pullrequest={dataType=pullrequest, state=${state}, stateCount=${count}}, json={"cachedValue":{"errors":[],"summary":{"pullrequest":{"overall":{"count":${count},"lastUpdated":"2026-01-02T10:00:00.000+0530","stateCount":${count},"state":"${state}","open":${state === "OPEN"},"dataType":"pullrequest"},"byInstanceType":{"oAuth-com.github.integration.production":{"count":${count},"name":"GitHub"}}}}},"isStale":true}}`;
+  expect(pullRequestSummary(field(1, "MERGED"))).toEqual({ count: 1, status: "merged" });
+  expect(pullRequestSummary(field(2, "DRAFT"))).toEqual({ count: 2, status: "draft" });
+  expect(pullRequestSummary(field(1, "OPEN"))).toEqual({ count: 1, status: "open" });
+  expect(pullRequestSummary(field(3, "DECLINED"))).toEqual({ count: 3, status: "declined" });
+  expect(pullRequestSummary(field(1, "SOMETHING_NEW"))).toEqual({ count: 1 });
 });
 
 test("type choices stay at the issue's Jira hierarchy level", () => {

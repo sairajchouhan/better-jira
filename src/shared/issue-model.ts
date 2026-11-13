@@ -1,6 +1,7 @@
 import type { AdfDocument } from "./document";
 import type { IssueResource } from "./issue-resource";
 import type { Relation } from "./relations";
+import type { PullRequest } from "./pull-requests";
 
 export const activityFields = [
   "status",
@@ -91,6 +92,8 @@ export type Issue = {
   relations?: Relation[];
   milestones?: { id: string; name: string }[];
   prCount?: number;
+  /** The state Jira's Development field summarises the PRs by (one PR's own state). */
+  prStatus?: PullRequest["status"];
   statusSince?: string;
   started?: string;
   watchers?: User[];

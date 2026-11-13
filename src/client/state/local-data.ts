@@ -78,6 +78,7 @@ const issueFields = new Set([
   "relations",
   "milestones",
   "prCount",
+  "prStatus",
   "statusSince",
   "started",
   "watchers",

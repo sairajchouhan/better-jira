@@ -1,3 +1,4 @@
+import { jiraPullRequestStatus, type PullRequest } from "./pull-requests";
 import { matchRank as textRank } from "./search-rank";
 export type History = {
   created: string | number;
@@ -40,8 +41,10 @@ export function statusDates(
   };
 }
 
-/** Unknown formats stay unknown. An empty development summary means Jira reports no linked PRs. */
-export function pullRequestCount(value: unknown): number | undefined {
+/** The pull requests Jira's Development field (its dev summary, returned with every search result) reports: how many, and the
+ *  state Jira summarises them by (`overall.state`: one PR's own state; for several, the state Jira ranks first). Unknown formats
+ *  stay unknown. An empty development summary means Jira reports no linked PRs. */
+export function pullRequestSummary(value: unknown): { count: number; status?: PullRequest["status"] } | undefined {
   let data: any = value;
   if (typeof data === "string") {
     try {
@@ -79,11 +82,14 @@ export function pullRequestCount(value: unknown): number | undefined {
     }
   }
   if (!data || typeof data !== "object" || Array.isArray(data)) return undefined;
-  if (!Object.keys(data).length) return 0;
+  if (!Object.keys(data).length) return { count: 0 };
   const summary = data.cachedValue?.summary ?? data.summary;
-  if (summary && typeof summary === "object" && !summary.pullrequest) return 0;
-  const count = summary?.pullrequest?.overall?.count;
-  return typeof count === "number" && Number.isInteger(count) && count >= 0 ? count : undefined;
+  if (summary && typeof summary === "object" && !summary.pullrequest) return { count: 0 };
+  const overall = summary?.pullrequest?.overall;
+  const count = overall?.count;
+  if (!(typeof count === "number" && Number.isInteger(count) && count >= 0)) return undefined;
+  const status = jiraPullRequestStatus(overall.state);
+  return status && count ? { count, status } : { count };
 }
 
 /** Types an existing issue can switch to with Jira's edit: its project's types at its hierarchy level (live Jira rejects Subtask ↔ Task).

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { pullRequestList, pullRequestProviders, pullRequestStatus } from "./pull-requests";
+import { leadingStatus, pullRequestBadgeText, pullRequestList, pullRequestProviders, pullRequestStatus } from "./pull-requests";
 
 test("the providers are those Jira's development summary counts pull requests for", () => {
   expect(
@@ -39,4 +39,14 @@ test("pull requests from every provider's detail: one per URL, newest first, wit
     updated: "2026-03-01T00:00:00Z",
   });
   expect(list.map(pullRequestStatus)).toEqual(["Open", "Closed", "Merged"]);
+});
+
+test("Linear's PR badge: one PR shows its number, several \"N PRs\" with the icon of the first status in Linear's order", () => {
+  expect(pullRequestBadgeText(1, "#7")).toBe("#7");
+  expect(pullRequestBadgeText(1)).toBe("");
+  expect(pullRequestBadgeText(3, "#7")).toBe("3 PRs");
+  expect(leadingStatus([{ status: "merged" }, { status: "open" }])).toBe("open");
+  expect(leadingStatus([{ status: "declined" }, { status: "merged" }, { status: "draft" }])).toBe("draft");
+  expect(leadingStatus([{ status: "declined" }, { status: "merged" }])).toBe("merged");
+  expect(leadingStatus([])).toBeUndefined();
 });
