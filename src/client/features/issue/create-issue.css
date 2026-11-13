@@ -20,15 +20,50 @@
   .create-issue-title::placeholder {
     color: var(--fg-4);
   }
-  /* The property chips: one row, 6px apart, scrolling sideways (no scrollbar) instead of wrapping. */
+  /* The dialog box has no padding (Linear's DialogPresenter); the composer pads its own rows, as Linear's fast create does
+     (FastIssueCreateEditor.Dv-odwz6.js). The header (`Rr`, a `b8` row with `sx-c7ga6q`): 12px all round, top-aligned. */
+  .create-issue-header {
+    display: flex;
+    align-items: flex-start;
+    padding: 12px;
+  }
+  /* `Hr.rightHandContainer`: 12px clear of the breadcrumb, controls 6px apart. */
+  .create-issue-header-actions {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    padding-left: 12px;
+  }
+  /* `$.body` (0 6px) around `$.issueEditor` (0 12px): the title and description start 18px in. */
+  .create-issue-body {
+    padding: 0 18px;
+  }
+  /* Pending relations, sub-issues, links and files: `$.attachmentsWrapper`'s 12px sides. */
+  .create-issue-extras {
+    padding: 0 12px;
+  }
+  .create-issue-extras:empty {
+    display: none;
+  }
+  /* The footer (`Si`, `sx-aobbuh sx-1qughib sx-exx8yu sx-nuq7ks sx-sag5q8 sx-f18ygs`): 0 12px 12px, its two sides split
+     and at least 18px apart. */
+  .create-issue-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 0 12px 12px;
+  }
+  /* The property chips (`$.issuePropertiesEdit`, 6px 12px 12px): one row, 6px apart, scrolling sideways (no scrollbar)
+     instead of wrapping; the padding leaves the chips' focus ring room inside the scroll box. */
   .create-issue-properties {
     display: flex;
     flex-wrap: nowrap;
     align-items: center;
     gap: 6px;
     overflow-x: auto;
-    /* Room for the chips' focus ring, which the scroll box would clip. */
-    padding-block: 2px;
+    padding: 6px 12px 12px;
     scrollbar-width: none;
   }
   .create-issue-properties.create-issue-properties > * {

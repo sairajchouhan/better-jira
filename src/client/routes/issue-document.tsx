@@ -838,13 +838,13 @@ function DocumentHistory({
     version = versions[selected] ?? current;
   return (
     <Dialog label={`History for ${resource.title || "New document"}`} close={close} width={1100}>
-      <Dialog.Header className="mb-4">
+      <Dialog.Header>
         <Dialog.Title className="min-w-0 flex-1 truncate">
           History for {resource.title || "New document"}
         </Dialog.Title>
         <Dialog.Close label="Close document history" />
       </Dialog.Header>
-      <div className="document-history-grid grid min-h-64 grid-cols-[minmax(0,1fr)_240px] gap-4">
+      <Dialog.Body className="document-history-grid grid min-h-64 grid-cols-[minmax(0,1fr)_240px] gap-4">
         <div className="min-w-0">
           <h3 className="mb-4 text-[24px] font-semibold">{version.title || "New document"}</h3>
           <div aria-label="Document version content" className="rich-content">
@@ -899,7 +899,7 @@ function DocumentHistory({
             </button>
           ))}
         </div>
-      </div>
+      </Dialog.Body>
     </Dialog>
   );
 }

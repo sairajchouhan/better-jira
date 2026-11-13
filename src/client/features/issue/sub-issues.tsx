@@ -565,14 +565,16 @@ function RenameIssue({ issue, close }: { issue: Issue; close: () => void }) {
           close();
         }}
       >
-        <TextInput
-          autoFocus
-          aria-label="Issue title"
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          onFocus={(event) => event.currentTarget.select()}
-          className="w-full"
-        />
+        <Dialog.Body>
+          <TextInput
+            autoFocus
+            aria-label="Issue title"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            onFocus={(event) => event.currentTarget.select()}
+            className="w-full"
+          />
+        </Dialog.Body>
       </form>
     </Dialog>
   );

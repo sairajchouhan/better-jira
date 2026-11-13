@@ -23,7 +23,7 @@ export type TextVariant = keyof typeof TEXT;
 
 /**
  * Typography from Linear's table. `color` maps labelTitle/Base/Muted/Faint onto --fg…--fg-4; `wrap="truncate"` is
- * Linear's `truncate`, `numeric="tabular"` its `tabularNums`.
+ * Linear's `truncate` (`pretty` its `wrap: "pretty"`), `numeric="tabular"` its `tabularNums`.
  */
 export function Text({
   as = "span",
@@ -39,7 +39,7 @@ export function Text({
   variant?: TextVariant;
   color?: "title" | "base" | "muted" | "faint" | "inherit";
   align?: "left" | "center" | "right";
-  wrap?: "wrap" | "nowrap" | "truncate";
+  wrap?: "wrap" | "nowrap" | "truncate" | "pretty";
   numeric?: "proportional" | "tabular";
 } & ComponentProps<"span">) {
   // One element type for typing; the rendered tag is `as`.

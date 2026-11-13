@@ -63,8 +63,9 @@ const ELEVATED_BOX =
  */
 export const POPOVER_SURFACE = `${ELEVATED_BOX} shadow-[var(--menu-shadow)]`;
 
-/** Linear's DialogPresenter box (`jY.content` with `Tu.bgBorder`): the elevated box with shadowHigh. */
-const DIALOG_SURFACE = `${ELEVATED_BOX} shadow-[var(--shadow-high)]`;
+/** Linear's DialogPresenter box (`jY.content` with `Tu.bgBorder`): the elevated box with shadowHigh, a column with no padding
+ *  of its own (each dialog's slots pad themselves; dialog.css). */
+const DIALOG_SURFACE = `${ELEVATED_BOX} flex flex-col shadow-[var(--shadow-high)]`;
 
 /**
  * The one placement engine every popup uses. `place` turns the anchor's box (null without one) and the popup node into the popup's
@@ -402,7 +403,7 @@ export function MenuSurface({
         aria-label={label}
         {...elevation.props}
         data-surface={variant}
-        className={`${variant === "dialog" ? DIALOG_SURFACE : MENU_POPUP} overflow-y-auto ${fit ? "w-max min-w-[175px] scroll-py-6 max-w-[min(500px,calc(100vw-24px))]" : command ? "flex flex-col overflow-hidden" : placement === "side" ? "side-panel flex flex-col overflow-hidden" : "p-3"}`}
+        className={`${variant === "dialog" ? DIALOG_SURFACE : MENU_POPUP} overflow-y-auto ${fit ? "w-max min-w-[175px] scroll-py-6 max-w-[min(500px,calc(100vw-24px))]" : command ? "flex flex-col overflow-hidden" : placement === "side" ? "side-panel flex flex-col overflow-hidden" : variant === "dialog" ? "" : "p-3"}`}
         onKeyDown={(e) => {
           if (!((e.metaKey || e.ctrlKey) && ["k", "/"].includes(e.key.toLowerCase())))
             e.stopPropagation(); // ⌘K reaches the app so it can toggle the command menu

@@ -238,11 +238,12 @@ function CustomizeSidebar({
   const options = Object.entries(VISIBILITY);
   return (
     <Dialog label="Customize sidebar" close={close} width={440}>
-      <Dialog.Header>
+      {/* Linear's `rX`: the Modal header and content at 24px, sections 24px apart. */}
+      <Dialog.Header className="p-6">
         <Dialog.Title>Customize sidebar</Dialog.Title>
         <Dialog.Close />
       </Dialog.Header>
-      <Dialog.Body>
+      <Dialog.Body className="flex flex-col gap-6 px-6 pt-0 pb-6">
         <Text as="h3" variant="smallPlus" className="mb-2">
           Personal
         </Text>

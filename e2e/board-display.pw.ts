@@ -541,6 +541,55 @@ test("dialogs paint Linear's elevated theme over bgModalOverlay; a menu inside k
   }
 });
 
+test("BJ-206: the dialog box has no padding; each dialog pads its own slots as Linear's does", async ({ open }) => {
+  const page = await open();
+  const CREATE = '[role=dialog][aria-label="Create issue"]';
+  const CONFIRM = '[role=dialog][aria-label="Save to drafts?"]';
+  const DRAFTS = '[role=dialog][aria-label="Saved drafts"]';
+  /** A node's padding and its left edge inside the dialog's padding box. */
+  const pad = (dialog: string, selector: string) =>
+    `(()=>{const d=document.querySelector('${dialog}'),n=d.querySelector(${JSON.stringify(selector)});return [getComputedStyle(n).padding,Math.round(n.getBoundingClientRect().left-d.getBoundingClientRect().left-d.clientLeft)]})()`;
+  await page.key("c");
+  await page.waitFor(`!!document.querySelector('${CREATE}')`);
+  await test.step("Create issue: Linear's fast create (header 12, title 18 in, chips 6/12/12, footer 0/12/12)", async () => {
+    expect(await page.eval(`getComputedStyle(document.querySelector('${CREATE}')).padding`)).toBe("0px");
+    expect(await page.eval(pad(CREATE, ".create-issue-header"))).toEqual(["12px", 0]);
+    expect(await page.eval(pad(CREATE, ".create-issue-header-actions"))).toEqual(["0px 0px 0px 12px", expect.any(Number)]);
+    expect((await page.eval<[string, number]>(pad(CREATE, '[aria-label="Issue title"]')))[1]).toBe(18);
+    expect(await page.eval(pad(CREATE, "[data-create-properties]"))).toEqual(["6px 12px 12px", 0]);
+    expect(await page.eval(pad(CREATE, ".create-issue-footer"))).toEqual(["0px 12px 12px", 0]);
+  });
+  await test.step("Save to drafts?: Linear's confirmation (title 24/24/0, body 4/24, buttons 16/24/4 split by Discard)", async () => {
+    await page.type("Padding draft");
+    await page.key("Escape");
+    await page.waitFor(`!!document.querySelector('${CONFIRM}')`);
+    expect(await page.eval(`getComputedStyle(document.querySelector('${CONFIRM}')).padding`)).toBe("0px");
+    expect(await page.eval(pad(CONFIRM, ".ui-confirm"))).toEqual(["0px 0px 20px", 0]);
+    expect(await page.eval(pad(CONFIRM, ".ui-confirm-title"))).toEqual(["24px 24px 0px", 0]);
+    expect(await page.eval(pad(CONFIRM, ".ui-confirm-body"))).toEqual(["4px 24px", 0]);
+    expect(await page.eval(pad(CONFIRM, ".ui-confirm-footer"))).toEqual(["16px 24px 4px", 0]);
+    expect(
+      await page.eval(
+        `(()=>{const d=document.querySelector('${CONFIRM}');return [getComputedStyle(d.querySelector('.ui-confirm-body .ui-text')).fontSize,[...d.querySelectorAll('.ui-confirm-footer button')].map(b=>b.textContent+':'+b.dataset.variant),getComputedStyle(d.querySelector('.ui-confirm-footer')).justifyContent]})()`,
+      ),
+    ).toEqual(["15px", ["Discard:secondary", "Cancel:secondary", "Save:primary"], "space-between"]);
+    await page.page.getByRole("dialog", { name: "Save to drafts?" }).getByRole("button", { name: "Save", exact: true }).click();
+    await page.waitFor(`!document.querySelector('${CREATE}')`);
+  });
+  await test.step("Saved drafts: Linear's Modal header (16, 48 right, Close 16 in) and content (12 16)", async () => {
+    await page.key("c");
+    await page.click("text=Saved drafts (1)");
+    await page.waitFor(`!!document.querySelector('${DRAFTS}')`);
+    expect(await page.eval(pad(DRAFTS, ".ui-dialog-header"))).toEqual(["16px 48px 16px 16px", 0]);
+    expect(await page.eval(pad(DRAFTS, ".ui-dialog-body"))).toEqual(["12px 16px", 0]);
+    expect(
+      await page.eval(
+        `(()=>{const d=document.querySelector('${DRAFTS}'),h=d.querySelector('.ui-dialog-header').getBoundingClientRect(),c=d.querySelector('.ui-dialog-close').getBoundingClientRect();return [Math.round(h.right-c.right),Math.round((c.top+c.bottom)/2-(h.top+h.bottom)/2)]})()`,
+      ),
+    ).toEqual([16, 0]);
+  });
+});
+
 /** BJ-205: Linear's Group ordering page (linear.app, 2026-11-13). */
 const PAGE = `${DISPLAY} .ui-group-ordering`;
 const rows = (variant: "sortable" | "hidden") =>

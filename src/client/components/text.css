@@ -33,5 +33,6 @@
   .ui-text[data-align="right"] { text-align: right; }
   .ui-text[data-wrap="nowrap"] { white-space: nowrap; }
   .ui-text[data-wrap="truncate"] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ui-text[data-wrap="pretty"] { text-wrap: pretty; }
   .ui-text[data-numeric="tabular"] { font-variant-numeric: tabular-nums; }
 }

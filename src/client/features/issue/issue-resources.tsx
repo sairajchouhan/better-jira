@@ -141,9 +141,10 @@ export function ResourceForm({
           close();
         }}
       >
-        <Dialog.Title className="mb-4">
-          {resource ? label : `${label} to ${issue.key}`}
-        </Dialog.Title>
+        <Dialog.Header>
+          <Dialog.Title>{resource ? label : `${label} to ${issue.key}`}</Dialog.Title>
+        </Dialog.Header>
+        <Dialog.Body>
         <Field>
           <Field.Label className="mb-1 block">
             <Text variant="mini" color="muted">
@@ -186,6 +187,7 @@ export function ResourceForm({
             {error}
           </Text>
         )}
+        </Dialog.Body>
         <Dialog.Footer>
           <Button
             type="button"

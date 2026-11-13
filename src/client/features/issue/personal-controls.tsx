@@ -9,7 +9,7 @@ import { IssuePeek } from "./issue-peek";
 import { Tabs } from "@/client/components/tabs";
 import { CountBadge } from "@/client/components/count-badge";
 import { Shortcut, Keycap } from "@/client/components/keycap";
-import { Dialog } from "@/client/components/dialog";
+import { ConfirmDialog, Dialog } from "@/client/components/dialog";
 import { TextInput, NO_AUTOFILL } from "@/client/components/field";
 import { Button, IconButton } from "@/client/components/button";
 import { createSubIssue, issueMenuEntries, type IssueMenuDialog } from "./issue-menu";
@@ -279,18 +279,24 @@ export function CreateIssue() {
   });
   if (draftsOpen) return <Dialog label="Saved drafts" close={() => setDraftsOpen(false)}>
     <Dialog.Header><Dialog.Title>Saved drafts</Dialog.Title><Dialog.Close /></Dialog.Header>
-    {saved.length ? saved.map(item => <div key={item.id} className="flex items-center gap-2">
-      <Button variant="secondary" onClick={() => { setDraft(item.fields); setTitle(item.title); setDescription(normalizeDocument(item.fields.descriptionDoc)); setAttachments(item.fields.attachments ?? []); setLabels(item.fields.labels?.join(", ") ?? ""); setSavedId(item.id); setDraftIndex(n => n + 1); setDraftsOpen(false); }}>Finish {item.title || "Untitled issue"}</Button>
-      <IconButton label={`Delete draft ${item.title || "Untitled issue"}`} onClick={() => setSaved(saved.filter(d => d.id !== item.id))}><Icon name="trash" /></IconButton>
-    </div>) : <EmptyState title="No saved drafts" />}
+    <Dialog.Body>
+      {saved.length ? saved.map(item => <div key={item.id} className="flex items-center gap-2">
+        <Button variant="secondary" onClick={() => { setDraft(item.fields); setTitle(item.title); setDescription(normalizeDocument(item.fields.descriptionDoc)); setAttachments(item.fields.attachments ?? []); setLabels(item.fields.labels?.join(", ") ?? ""); setSavedId(item.id); setDraftIndex(n => n + 1); setDraftsOpen(false); }}>Finish {item.title || "Untitled issue"}</Button>
+        <IconButton label={`Delete draft ${item.title || "Untitled issue"}`} onClick={() => setSaved(saved.filter(d => d.id !== item.id))}><Icon name="trash" /></IconButton>
+      </div>) : <EmptyState title="No saved drafts" />}
+    </Dialog.Body>
   </Dialog>;
-  if (confirmClose) return <Dialog label="Save to drafts?" close={() => setConfirmClose(false)} width={360}>
-    <Dialog.Title>Save to drafts?</Dialog.Title><Dialog.Description>You can finish this issue later from your drafts.</Dialog.Description>
-    <Dialog.Footer>
-      <Button variant="dangerous" onClick={() => { if (savedId) setSaved(saved.filter(d => d.id !== savedId)); unsent.title = ""; unsent.description = normalizeDocument(""); closeNow(); }}>Discard</Button>
-      <Button variant="secondary" onClick={() => setConfirmClose(false)}>Cancel</Button><Button variant="primary" onClick={saveDraft} disabled={filesBusy}>Save</Button>
-    </Dialog.Footer>
-  </Dialog>;
+  // Linear's has-changes alert (`getHasChangesBehaviorOnCancel`): "Save to drafts?", Save, and Discard as the reject button.
+  if (confirmClose) return <ConfirmDialog
+    title="Save to drafts?"
+    description="You can finish this issue later from your drafts."
+    confirmLabel="Save"
+    tone="primary"
+    confirmDisabled={filesBusy}
+    reject={{ label: "Discard", onReject: () => { if (savedId) setSaved(saved.filter(d => d.id !== savedId)); unsent.title = ""; unsent.description = normalizeDocument(""); closeNow(); } }}
+    onConfirm={saveDraft}
+    close={() => setConfirmClose(false)}
+  />;
   const statusId = draft.status ?? board.columns[0]?.statuses[0]?.id ?? "";
   const status = statuses(board).find((s) => s.id === statusId);
   const labelList = labels
@@ -320,7 +326,8 @@ export function CreateIssue() {
           submit();
         }}
       >
-        <Dialog.Header className="mb-2">
+        {/* Linear's fast-create header (`Rr`, a `b8` row): 12px all round, the controls 12px clear of the breadcrumb. */}
+        <div className="create-issue-header">
           <Text variant="mini" color="muted" wrap="truncate" className="flex flex-1 items-center gap-1.5">
             <PropertyPill
               label="Board"
@@ -335,6 +342,8 @@ export function CreateIssue() {
               {initial.parent ? `Sub-issue of ${initial.parent}` : "New issue"}
             </Text>
           </Text>
+          {/* `Hr.rightHandContainer`: 12px clear of the breadcrumb, 6px between controls. */}
+          <div className="create-issue-header-actions">
           {saved.length > 0 && (
             <Button type="button" variant="borderless" size="small" onClick={() => setDraftsOpen(true)}>
               Saved drafts ({saved.length})
@@ -350,7 +359,10 @@ export function CreateIssue() {
             <Icon name="expand" />
           </IconButton>
           <Dialog.Close />
-        </Dialog.Header>
+          </div>
+        </div>
+        {/* Linear's body (`$.body`, 0 6px) around the issue editor (`$.issueEditor`, 0 12px): title and description 18px in. */}
+        <div className="create-issue-body">
         {/* Linear's fast-create title (dQ, size regular): borderless, 18px semibold. */}
         <input
           {...NO_AUTOFILL}
@@ -383,6 +395,7 @@ export function CreateIssue() {
           expanded={expanded}
           tabLeaves
         />
+        </div>
         {/* One row of chips, as Linear's: it scrolls sideways rather than wrapping. */}
         <div className="create-issue-properties" data-create-properties>
           {draft.related && (
@@ -492,6 +505,7 @@ export function CreateIssue() {
           />
           <ComposerMore entries={extraActions} />
         </div>
+        <div className="create-issue-extras">
         {/* Text has no semantic danger color; keep the validation alert styling. */}
         {noParentType && (
           <p role="alert" className="mt-3 text-[12px] text-danger">
@@ -502,11 +516,14 @@ export function CreateIssue() {
         {linkInput !== null && <div className="mt-2 flex items-center gap-2"><TextInput autoFocus aria-label="New issue link URL" value={linkInput} onChange={e => setLinkInput(e.target.value)} placeholder="https://" /><Button type="button" variant="secondary" size="medium" disabled={!resourceURL(linkInput)} onClick={() => { const url = resourceURL(linkInput); if (!url) return; setDraft(d => ({ ...d, resources: [...(d.resources ?? []), { id: crypto.randomUUID(), kind: "link", title: url, url, updated: new Date().toISOString() }] })); setLinkInput(null); }}>Add link</Button><Button type="button" variant="borderless" size="medium" onClick={() => setLinkInput(null)}>Cancel link</Button></div>}
         {draft.resources?.map(resource => <div key={resource.id} className="mt-2 flex items-center gap-2"><Text variant="mini">{resource.title}</Text><IconButton type="button" label={`Remove link ${resource.title}`} onClick={() => setDraft(d => ({ ...d, resources: d.resources?.filter(r => r.id !== resource.id) }))}><Icon name="close" /></IconButton></div>)}
         <Attachments.List />
-        {/* Linear's footer: the paperclip (secondary, medium) at the left, then Create more (small switch) and Create issue. */}
-        <div className="mt-3 flex items-center gap-3">
-          <span className="mr-auto">
+        </div>
+        {/* Linear's footer (`Si`): 0 12px 12px, the paperclip (secondary, medium) at the left 18px clear of Create more
+            (small switch) and Create issue at the right. */}
+        <div className="create-issue-footer">
+          <span>
             <Attachments.Button />
           </span>
+          <div className="flex items-center gap-3">
           <Text as="label" variant="mini" color="inherit" className="flex items-center gap-1.5" title="Create more issues">
             <Switch size="small" checked={more} onChange={(e) => setMore(e.target.checked)} />
             Create more
@@ -519,6 +536,7 @@ export function CreateIssue() {
           >
             {initial.copy ? "Save copy" : "Create issue"}
           </Button>
+          </div>
         </div>
       </form>
       </Attachments>
@@ -895,7 +913,10 @@ export function IssueOptions({ issue }: { issue: Issue }) {
   if (historyOpen)
     return (
       <Dialog label="Description history" close={close}>
-        <Dialog.Title className="mb-3">Description history</Dialog.Title>
+        <Dialog.Header>
+          <Dialog.Title>Description history</Dialog.Title>
+        </Dialog.Header>
+        <Dialog.Body>
         <Text className="mb-3" as="p" variant="mini" color="muted">
           Your locally saved description revisions.
         </Text>
@@ -933,14 +954,12 @@ export function IssueOptions({ issue }: { issue: Issue }) {
         {!issue.descriptionHistory?.length && (
           <p>No local description changes yet.</p>
         )}
-        <Button
-          onClick={close}
-          variant="borderless"
-          size="medium"
-          className="mt-3"
-        >
-          Close
-        </Button>
+        </Dialog.Body>
+        <Dialog.Footer>
+          <Button onClick={close} variant="borderless" size="medium">
+            Close
+          </Button>
+        </Dialog.Footer>
       </Dialog>
     );
   if (linkOpen)
@@ -1524,6 +1543,7 @@ export function AddBoard() {
           }
         }}
       >
+        <Dialog.Body>
         <Text as="label" variant="mini" color="inherit">
           Jira board link or ID
           <TextInput
@@ -1546,6 +1566,7 @@ export function AddBoard() {
             it.
           </Text>
         )}
+        </Dialog.Body>
         <Dialog.Footer>
           <Button
             type="button"
