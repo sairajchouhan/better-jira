@@ -39,6 +39,7 @@ import { TextInput } from "@/client/components/field";
 import { Shortcut as KeyboardShortcut, type Keys } from "@/client/components/keycap";
 import { Text } from "@/client/components/text";
 import { shortcutSections } from "./shortcut-panel";
+import { goToPullRequests } from "@/client/features/issue/card-badges";
 import {
   clearFilters as clearInboxFilters,
   deleteAll,
@@ -703,6 +704,18 @@ export const shortcuts: Shortcut[] = [
     hotkey: "Control+M",
     issue: true,
     run: focus("focus-comment"),
+  },
+  {
+    // Linear's `xpn`: ⇧→ (and ⇧←) on an issue with pull requests; one opens, several list from the card's badge.
+    id: "go-pull-requests",
+    name: "Go to linked pull request…",
+    group: "Issues",
+    hotkey: "Shift+ArrowRight",
+    issue: true,
+    when: (_s, issue) => !!issue?.prCount,
+    run: issueAction((issue) => {
+      if (issue.prCount) void goToPullRequests(issue);
+    }),
   },
   {
     id: "peek",

@@ -17,6 +17,8 @@ export type Commands = {
   "focus-find": { arg: void; result: true };
   /** Open the issue's "Sub-issue of" pill menu of its parent's sub-issues. */
   "open-parent-sub-issues": { arg: string; result: true };
+  /** Open the card's or row's pull request badge menu for this issue (Linear's ⇧→ "Go to linked pull request…"). */
+  "open-pull-requests": { arg: string; result: true };
   /** Start an inline sub-issue under this issue; untaken, the shortcut opens the create dialog. */
   "create-sub-issue": { arg: string; result: true };
   /** The sub-issue row under the pointer or keyboard focus; issue shortcuts act on it. */

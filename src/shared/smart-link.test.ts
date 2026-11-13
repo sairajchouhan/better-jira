@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { smartLink, smartLinkText, tinyCode, tinyPageId } from "./smart-link";
+import { linkBadgeText, smartLink, smartLinkText, tinyCode, tinyPageId } from "./smart-link";
 
 // Made-up URLs in the shapes the BJ-16 survey of work Jira found in smart-link nodes.
 const title = (url: string, data?: unknown) => {
@@ -69,4 +69,18 @@ test("BJ-16: no smart link for a URL that is not a web address", () => {
   expect(smartLink(undefined)).toBeNull();
   expect(smartLinkText("https://acme.atlassian.net/browse/OPS-12")).toBe("OPS-12");
   expect(smartLinkText("nope")).toBe("nope");
+});
+
+test("link badge text follows Linear's `vt`: GitHub #n or tag, GitLab !n, Bitbucket pull requests, else a 16-character name", () => {
+  expect(linkBadgeText("https://github.com/acme/app/pull/12")).toBe("#12");
+  expect(linkBadgeText("https://github.com/acme/app/issues/3")).toBe("#3");
+  expect(linkBadgeText("https://github.com/acme/app/releases/tag/v1.2")).toBe("v1.2");
+  expect(linkBadgeText("https://github.com/acme/app")).toBe("GitHub");
+  expect(linkBadgeText("https://gitlab.com/acme/app/-/merge_requests/5")).toBe("!5");
+  expect(linkBadgeText("https://gitlab.com/acme/app/-/tags/v2")).toBe("v2");
+  expect(linkBadgeText("https://gitlab.com/acme/app")).toBe("GitLab");
+  expect(linkBadgeText("https://bitbucket.org/acme/app/pull-requests/8/overview")).toBe("#8");
+  expect(linkBadgeText("https://docs.google.com/document/d/1")).toBe("Google Doc");
+  expect(linkBadgeText("https://example.test/a/long/path")).toBe("example.test/...");
+  expect(linkBadgeText("https://example.test/a/long/path")).toHaveLength(16);
 });

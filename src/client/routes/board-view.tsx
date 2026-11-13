@@ -26,7 +26,7 @@ import {
 } from "react";
 import { Badge, IconMenuButton } from "@/client/components/badge";
 import { PropertyPicker, type IssueField } from "@/client/features/issue/personal-controls";
-import { commentCount } from "@/client/features/media/media-edits";
+import { CommentBadge, CreatorBadge, LinkBadges, PullRequestBadge } from "@/client/features/issue/card-badges";
 import { Icon, LabelDot, PriorityIcon, StatusIcon, TypeDot } from "@/client/components/icons";
 import { ME, get, set, timed, useStore, statusOf } from "@/client/state/store";
 import { actions, beginCreate } from "@/client/state/issue-actions";
@@ -713,35 +713,6 @@ function IssueLabels({ issue, max }: { issue: Issue; max: number }) {
   );
 }
 
-/** Linear's link badges (`mt`, "Open link…"): under three links, one badge each that opens it; from three, one count badge. */
-function IssueLinks({ links }: { links: string[] }) {
-  if (links.length >= 3)
-    return (
-      <Badge title={links.join("\n")}>
-        <Badge.Icon>
-          <Icon name="external" />
-        </Badge.Icon>
-        <Badge.Text>{links.length}</Badge.Text>
-      </Badge>
-    );
-  return links.map((url) => (
-    <Badge.Link key={url} href={url} title={url}>
-      <Badge.Icon>
-        <Icon name="external" />
-      </Badge.Icon>
-      <Badge.Text>{linkName(url)}</Badge.Text>
-    </Badge.Link>
-  ));
-}
-
-const linkName = (url: string) => {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-};
-
 /** The display's property badges after the title, in Linear's card order (`wd`); a row fits one label, a card five. */
 function IssueProperties({ issue, display: d, labels }: { issue: Issue; display: Display; labels: number }) {
   const show = (p: Property) => d.properties.includes(p);
@@ -791,30 +762,10 @@ function IssueProperties({ issue, display: d, labels }: { issue: Issue; display:
           </FieldBadge>
         ))}
       {show("labels") && <IssueLabels issue={issue} max={labels} />}
-      {show("pullRequests") && !!issue.prCount && (
-        <Badge title="Pull requests reported by Jira's development summary">
-          <Badge.Icon>
-            <Icon name="branch" />
-          </Badge.Icon>
-          <Badge.Text>
-            {issue.prCount} PR{issue.prCount === 1 ? "" : "s"}
-          </Badge.Text>
-        </Badge>
-      )}
-      {show("links") && !!issue.links?.length && <IssueLinks links={issue.links} />}
-      {show("comments") && commentCount(issue) > 0 && (
-        <Badge aria-label={`${commentCount(issue)} comments`}>
-          <Badge.Icon>
-            <Icon name="comment" />
-          </Badge.Icon>
-          <Badge.Text>{commentCount(issue)}</Badge.Text>
-        </Badge>
-      )}
-      {show("creator") && issue.creator && (
-        <span title={`Created by ${issue.creator.name}`}>
-          <Avatar user={issue.creator} size={18} />
-        </span>
-      )}
+      {show("pullRequests") && !!issue.prCount && <PullRequestBadge issue={issue} />}
+      {show("links") && <LinkBadges issue={issue} />}
+      {show("comments") && <CommentBadge issue={issue} />}
+      {show("creator") && <CreatorBadge issue={issue} />}
     </>
   );
 }

@@ -169,3 +169,93 @@ test("a list row's keyboard ring sits inside the row, so the next row cannot cov
     await page.eval(`(()=>{const s=getComputedStyle(${card("TEST-2")});return [s.outlineStyle,s.outlineWidth,s.outlineOffset,s.boxShadow]})()`),
   ).toEqual(["solid", "1px", "-1px", "none"]);
 });
+
+/** TEST-1: two pull requests and three links; TEST-2: one pull request, one GitHub link, a comment and a creator. window.open is
+ *  recorded, so opening a pull request or link stays in the test. The fixture's smart links give TEST-2 its one Jira comment. */
+const BADGE_PROPS = ["id", "status", "assignee", "pullRequests", "links", "comments", "creator"];
+const badgeSetup = `(()=>{localStorage.setItem(${JSON.stringify(PREFS_KEY)},${JSON.stringify(
+  JSON.stringify({ 1: { display: { layout: "board", properties: BADGE_PROPS } } }),
+)});window.__opened=[];window.open=(u)=>{window.__opened.push(String(u));return null};const real=fetch;window.fetch=async(input,init)=>{const path=new URL(String(input),location.href).pathname;
+ if(path==='/api/issues'){const issues=await (await real(input,init)).json();return Response.json(issues.map(i=>i.key==='TEST-1'?{...i,prCount:2,links:['https://example.test/spec','https://example.test/notes','https://docs.google.com/document/d/1']}:i.key==='TEST-2'?{...i,prCount:1,links:['https://github.com/example/app/pull/7'],creator:{id:'alex',name:'Alex'},created:'2026-11-01T10:00:00Z'}:i));}
+ return real(input,init);};})()`;
+const opened = (page: App) => page.eval<string[]>("window.__opened");
+
+test("the link, pull request, comment and creator badges behave like Linear's", async ({ open }) => {
+  await fixture.reset({ smartLinks: true });
+  const page = await open("", { setup: badgeSetup });
+  const badge = (key: string, label: string) => `${card(key)}.querySelector('[aria-label="${label}"]')`;
+  await page.waitFor(`!!${badge("TEST-1", "Links on TEST-1")}`);
+  /** Hovers a badge and returns its hover card's box, checking Linear's interactive tooltip opens top-start above it. */
+  const hoverCard = async (sel: string, label: string) => {
+    const chip = await page.eval<DOMRect>(rect(sel));
+    await page.page.mouse.move(1, 1);
+    await page.page.mouse.move((chip.left + chip.right) / 2, (chip.top + chip.bottom) / 2);
+    const hover = `document.querySelector('[data-hover-card="${label}"]')`;
+    await page.waitFor(`!!${hover}`);
+    const box = await page.eval<DOMRect>(rect(hover));
+    expect(box.bottom).toBeLessThanOrEqual(chip.top);
+    expect(Math.abs(box.left - chip.left)).toBeLessThanOrEqual(1);
+    return hover;
+  };
+
+  await test.step("3+ links: one count badge; hover lists them; click → Open link… lists them and opens the pick", async () => {
+    expect(await page.eval(`${badge("TEST-1", "Links on TEST-1")}.textContent`)).toBe("3");
+    const hover = await hoverCard(badge("TEST-1", "Links on TEST-1"), "Links");
+    expect(await page.eval(`${hover}.querySelectorAll("a").length`)).toBe(3);
+    await page.click(`[data-key="TEST-1"] [aria-label="Links on TEST-1"]`);
+    await page.waitFor(`!document.querySelector('[data-hover-card="Links"]')`);
+    const menu = `document.querySelector('[role="dialog"][aria-label="Open link…"]')`;
+    await page.waitFor(`${menu}?.querySelectorAll("[cmdk-item]").length===3`);
+    expect(await page.eval(shownIssue)).toBe(null);
+    await page.click(`[role="dialog"][aria-label="Open link…"] [cmdk-item]:nth-child(3)`);
+    await expect.poll(() => opened(page)).toEqual(["https://docs.google.com/document/d/1"]);
+    expect(await page.eval(shownIssue)).toBe(null);
+  });
+  await test.step("under 3 links: a badge per link with Linear's short name that links to it; hover shows its card", async () => {
+    const link = badge("TEST-2", "Open link example/app#7 on TEST-2");
+    expect(await page.eval(`[${link}.textContent,${link}.getAttribute("href"),${link}.target]`)).toEqual([
+      "#7",
+      "https://github.com/example/app/pull/7",
+      "_blank",
+    ]);
+    const hover = await hoverCard(link, "Link");
+    expect(await page.eval(`${hover}.textContent`)).toContain("https://github.com/example/app/pull/7");
+  });
+  await test.step("pull requests: hover lists Jira's pull requests; click → Go to linked pull requests… opens the pick", async () => {
+    const prs = badge("TEST-1", "Pull requests on TEST-1");
+    expect(await page.eval(`${prs}.textContent`)).toBe("2 PRs");
+    const hover = await hoverCard(prs, "Pull requests");
+    await page.waitFor(`${hover}.textContent.includes("Fix the fixture sync")&&${hover}.textContent.includes("Add the fixture board")`);
+    await page.click(`[data-key="TEST-1"] [aria-label="Pull requests on TEST-1"]`);
+    const menu = `document.querySelector('[role="dialog"][aria-label="Go to linked pull requests…"]')`;
+    await page.waitFor(`${menu}?.querySelectorAll("[cmdk-item]").length===2`);
+    const box = await page.eval<DOMRect>(rect(menu));
+    const chip = await page.eval<DOMRect>(rect(prs));
+    expect(Math.abs(box.left - chip.left)).toBeLessThanOrEqual(1);
+    expect(box.top).toBeGreaterThan(chip.bottom);
+    await page.click(`[role="dialog"][aria-label="Go to linked pull requests…"] [cmdk-item]:nth-child(1)`);
+    await expect.poll(() => opened(page)).toContain("https://github.com/example/app/pull/12");
+    expect(await page.eval(shownIssue)).toBe(null);
+  });
+  await test.step("one pull request: the click opens it straight away; so does ⇧→ on the hovered card", async () => {
+    await page.eval("window.__opened=[]");
+    await page.click(`[data-key="TEST-2"] [aria-label="Pull requests on TEST-2"]`);
+    await expect.poll(() => opened(page)).toEqual(["https://github.com/example/app/pull/7"]);
+    expect(await page.eval(`!!document.querySelector('[role="dialog"][aria-label^="Go to linked"]')`)).toBe(false);
+    await page.eval("window.__opened=[]");
+    await page.hover('[data-key="TEST-2"] [aria-label="Status on TEST-2"]');
+    await page.key("ArrowRight", "Shift");
+    await expect.poll(() => opened(page)).toEqual(["https://github.com/example/app/pull/7"]);
+    expect(await page.eval(shownIssue)).toBe(null);
+  });
+  await test.step("creator: Linear's user card above the avatar, with the name", async () => {
+    const hover = await hoverCard(`${card("TEST-2")}.querySelector('[data-creator="TEST-2"]')`, "Creator");
+    expect(await page.eval(`${hover}.textContent`)).toContain("Alex");
+    expect(await page.eval(`${hover}.textContent`)).toContain("Created the issue");
+  });
+  await test.step("comments: the click is Linear's Comment on issue — the issue opens with its comment box focused", async () => {
+    await page.click(`[data-key="TEST-2"] [aria-label="1 comments"]`);
+    await page.waitFor(`${shownIssue}==="TEST-2"`);
+    await page.waitFor(`!!document.activeElement?.closest("#comment")`);
+  });
+});

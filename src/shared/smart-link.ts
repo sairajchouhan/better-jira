@@ -155,3 +155,40 @@ export type SmartLinkDetails = { title: string; status?: { name: string; categor
 
 /** A site's icon in the browser: always through this server, never the site itself (BJ-16: no third-party fetch from the page). */
 export const faviconSrc = (origin: string) => `/api/favicon?origin=${encodeURIComponent(origin)}`;
+
+/** Linear's link badge text (`_t`/`vt`, issueWidgetFieldPreferences): a GitHub pull request or issue `#1`, a release its tag,
+ *  else "GitHub"; a GitLab merge request `!1`, a tag, else "GitLab"; any other `/pullrequest/1` or `/pull-requests/1` URL (Bitbucket) `#1`; else the link's name cut to
+ *  16 characters (lodash `truncate`, "..." included). */
+export function linkBadgeText(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return cut(value);
+  }
+  const host = url.hostname.replace(/^www\./, ""),
+    path = url.pathname.split("/").filter(Boolean);
+  if (host === "github.com") {
+    if (/^(pull|issues)$/.test(path[2] ?? "") && /^\d+$/.test(path[3] ?? "")) return `#${path[3]}`;
+    if (path[2] === "releases" && path[3] === "tag" && path[4]) return decode(path[4]);
+    return "GitHub";
+  }
+  if (host === "gitlab.com") {
+    const at = path.indexOf("-");
+    if (path[at + 1] === "merge_requests" && /^\d+$/.test(path[at + 2] ?? "")) return `!${path[at + 2]}`;
+    const tag = path[at + 1] === "tags" ? path[at + 2] : undefined;
+    if (tag) return decode(tag);
+    return "GitLab";
+  }
+  const pull = /\/pull(?:request|-requests)\/(\d+)(?:[/?#]|$)/i.exec(url.pathname);
+  if (pull) return `#${Number(pull[1])}`;
+  return cut(externalTitle(url));
+}
+const decode = (part: string) => {
+  try {
+    return decodeURIComponent(part);
+  } catch {
+    return part;
+  }
+};
+const cut = (text: string) => (text.length > 16 ? `${text.slice(0, 13)}...` : text);
