@@ -20,6 +20,8 @@ export type ActionEntry = {
   rows?: (query: string) => ReactNode;
   /** The submenu's search placeholder (Linear's subActionPlaceholder); "Filter…" by default. */
   placeholder?: string;
+  /** "hidden": the submenu keeps its search out of sight until typing starts, as a root menu does (Linear's searchInput hidden). */
+  search?: "hidden";
   /** How many typed characters list this entry's children in its menu's search (Linear's subActionsHoisting.minInputLength):
    *  2 by default, Infinity never. */
   hoistFrom?: number;
@@ -138,6 +140,7 @@ function Level({
   container,
   nested = false,
   placeholder,
+  search,
   highlight,
 }: {
   entries: ActionEntry[];
@@ -146,6 +149,7 @@ function Level({
   container: Container;
   nested?: boolean;
   placeholder?: string;
+  search?: "hidden";
   highlight?: "first";
 }) {
   const elevation = useElevation();
@@ -177,7 +181,7 @@ function Level({
       {...start.props}
     >
       <Menu.Input
-        hideWhenEmpty={!nested && !placeholder}
+        hideWhenEmpty={(!nested && !placeholder) || search === "hidden"}
         autoFocus={!nested}
         aria-label={`Find ${label.toLowerCase()}`}
         placeholder={reveal && hidden.length ? label : (placeholder ?? "Filter…")}
@@ -249,6 +253,7 @@ function Row({
           rows={entry.rows}
           label={entry.name}
           placeholder={entry.placeholder}
+          search={entry.search}
           container={container}
         />
       </Menu.Submenu>

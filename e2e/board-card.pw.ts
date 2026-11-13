@@ -274,3 +274,67 @@ test("the link, pull request, comment and creator badges behave like Linear's", 
     await page.waitFor(`!!document.activeElement?.closest("#comment")`);
   });
 });
+
+test("one pull request's badge opens Linear's pull request menu at the pointer; each row acts on that pull request", async ({ open }) => {
+  const copied = `;window.__copied=[];Object.defineProperty(navigator,'clipboard',{value:{writeText:async t=>{window.__copied.push(t)}}})`;
+  for (const layout of ["board", "list"] as const) {
+    const setup = badgeSetup.replace('"board"', `"${layout}"`) + copied;
+    const page = await open("", { setup });
+    const prs = `[data-key="TEST-2"] [aria-label="Pull requests on TEST-2"]`;
+    await page.waitFor(`document.querySelector('${prs}')?.textContent==="#7"`);
+    const menu = page.page.locator('[role="dialog"][aria-label="Pull request options"]');
+    const rightClick = async () => {
+      const r = await page.rect(prs);
+      const at = { x: r.x + 3, y: r.y + r.height / 2 };
+      await page.page.mouse.click(at.x, at.y, { button: "right" });
+      await expect(menu).toBeVisible();
+      return at;
+    };
+    await test.step(`${layout}: right-click opens it at the pointer with Linear's rows, not the card's issue menu`, async () => {
+      const at = await rightClick();
+      const box = (await menu.boundingBox())!;
+      // The shared ContextMenu's placement at the pointer (e2e/context-menu.pw.ts): within the 4px menu gap.
+      expect(Math.abs(box.x - at.x)).toBeLessThan(10);
+      expect(Math.abs(box.y - at.y)).toBeLessThan(10);
+      expect(await menu.locator("[cmdk-item]").allTextContents()).toEqual(["Open in GitHub", "Copy"]);
+      expect(await page.eval(`!!document.querySelector('[role="dialog"][aria-label="Issue options"]')`)).toBe(false);
+      expect(await page.eval(shownIssue)).toBe(null);
+    });
+    await test.step(`${layout}: Open in GitHub opens the pull request`, async () => {
+      await menu.locator('[cmdk-item][data-value="Open in GitHub"]').click();
+      await expect.poll(() => opened(page)).toEqual(["https://github.com/example/app/pull/7"]);
+      await expect(menu).toHaveCount(0);
+    });
+    await test.step(`${layout}: Copy lists the GitHub URL and both branch names; each copies with Linear's toast`, async () => {
+      for (const [row, text, toast] of [
+        ["Copy GitHub URL", "https://github.com/example/app/pull/7", "URL copied to clipboard"],
+        ["Copy branch name", "alex/tidy-labels", "Branch name copied to clipboard"],
+        ["Copy target branch name", "main", "Branch name copied to clipboard"],
+      ] as const) {
+        await rightClick();
+        await menu.locator('[cmdk-item][data-value="Copy"]').hover();
+        const rows = page.page.locator('[cmdk-item][data-value^="Copy "]');
+        await expect(rows).toHaveCount(3);
+        expect(await rows.evaluateAll((items) => items.map((i) => i.getAttribute("data-value")))).toEqual([
+          "Copy GitHub URL",
+          "Copy branch name",
+          "Copy target branch name",
+        ]);
+        // Linear's Copy submenu hides its search until typing (`chn` searchInput hidden).
+        await expect(page.page.locator('input[aria-label="Find copy"]')).toHaveClass(/sr-only/);
+        // Linear's Copy branch name carries its ⇧⌘. shortcut (`bK`).
+        expect(await rows.nth(1).textContent()).toContain(".");
+        await page.page.locator(`[cmdk-item][data-value="${row}"]`).click();
+        await expect.poll(() => page.eval<string[]>("window.__copied.at(-1)")).toBe(text);
+        await page.waitFor(`[...document.querySelectorAll('[data-toast]')].some(t=>t.textContent.includes(${JSON.stringify(toast)})&&t.textContent.includes(${JSON.stringify(text)}))`);
+      }
+    });
+    await test.step(`${layout}: several pull requests leave the right-click to the card's issue menu`, async () => {
+      const r = await page.rect(`[data-key="TEST-1"] [aria-label="Pull requests on TEST-1"]`);
+      await page.page.mouse.click(r.x + 3, r.y + r.height / 2, { button: "right" });
+      await expect(page.page.locator('[role="dialog"][aria-label="Issue options"]')).toBeVisible();
+      await expect(menu).toHaveCount(0);
+      await page.key("Escape");
+    });
+  }
+});

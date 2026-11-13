@@ -877,3 +877,22 @@ test("a sub-issue row with three links shows one count badge that opens Open lin
   await page.click('[data-sub-issue="TEST-3"] [aria-label="Links on TEST-3"]');
   await page.waitFor(`document.querySelector('[role="dialog"][aria-label="Open link…"]')?.querySelectorAll("[cmdk-item]").length===3`);
 });
+
+test("a sub-issue row's single pull request badge opens Linear's pull request menu on right-click", async ({ open }) => {
+  const pr = { url: "https://github.com/example/app/pull/31", title: "Sub fix", number: "#31", status: "open", branch: "sam/sub-fix", tool: "GitHub" };
+  const prs = `const prRead=fetch;window.__opened=[];window.open=(u)=>{window.__opened.push(String(u));return null};window.fetch=async(...args)=>{const path=new URL(String(args[0]),location.href).pathname;if(path==='/api/issues/TEST-3/pull-requests')return Response.json([${JSON.stringify(pr)}]);const response=await prRead(...args);if(path!=='/api/issues')return response;const issues=await response.json();Object.assign(issues.find(i=>i.key==='TEST-3'),{prCount:1,prStatus:'open'});return Response.json(issues)}`;
+  const page = await open("?issue=TEST-2&view=page", { setup: `${tree};${prs}` });
+  await page.waitFor(`!!document.querySelector('[data-sub-issue="TEST-3"]')`);
+  await page.click('[aria-label="Sub-issue display options"]');
+  await show(page, "Pull requests");
+  await page.key("Escape");
+  const badge = '[data-sub-issue="TEST-3"] [aria-label="Pull requests on TEST-3"]';
+  await page.waitFor(`document.querySelector('${badge}')?.textContent==="#31"`);
+  const r = await page.rect(badge);
+  await page.page.mouse.click(r.x + 3, r.y + r.height / 2, { button: "right" });
+  const menu = page.page.locator('[role="dialog"][aria-label="Pull request options"]');
+  await expect(menu).toBeVisible();
+  expect(await menu.locator("[cmdk-item]").allTextContents()).toEqual(["Open in GitHub", "Copy"]);
+  await menu.locator('[cmdk-item][data-value="Open in GitHub"]').click();
+  await expect.poll(() => page.eval<string[]>("window.__opened")).toEqual([pr.url]);
+});

@@ -6,7 +6,10 @@ import { Badge } from "@/client/components/badge";
 import { HoverCard, MoreList } from "@/client/components/hover-card";
 import { Icon, PullRequestStatusIcon } from "@/client/components/icons";
 import { LinkIcon } from "@/client/components/link-icon";
-import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
+import { ActionMenu, ContextMenu, type ActionEntry } from "@/client/components/action-menu";
+import { hotkeyOf } from "@/client/features/navigation/shortcuts";
+import { showNotification } from "@/client/state/app-notifications";
+import { set } from "@/client/state/store";
 import { navigate } from "@/client/features/navigation/app-navigation";
 import { post, run, useCommand } from "@/client/features/navigation/commands";
 import { commentCount } from "@/client/features/media/media-edits";
@@ -152,11 +155,49 @@ const pullRequestEntries = (prs: PullRequest[]): ActionEntry[] =>
 /** Linear's "Go to linked pull request…" (`xpn`, immediatelyExecuteSingularSubAction): one pull request opens; several list. */
 const goToPullRequestsLabel = (count: number) => `Go to linked pull ${count === 1 ? "request" : "requests"}…`;
 
+/** Copies `text` with Linear's info toast: `title` over the copied text. */
+async function copyText(text: string, title: string, icon?: "copy") {
+  try {
+    await navigator.clipboard.writeText(text);
+    showNotification({ text: title, detail: text, icon });
+  } catch {
+    set({ perf: "Could not access the clipboard" });
+  }
+}
+
+/** Linear's pull request menu (`lhn` with hideDisplayPreference) as far as Jira's read-only development data goes: "Open in GitHub"
+ *  (`rhn`), then the Copy submenu (`chn`: the review tool's URL, then the source and target branch names, `bK` and `lmn`). Linear's
+ *  other rows act on its own review entity or write to the provider (Open in Linear, Edit, Change link type, draft, merge, close,
+ *  auto-merge, Unlink), which Jira can't. */
+export function pullRequestActions(pr: PullRequest): ActionEntry[] {
+  const image = <LinkImage link={linkOf(pr.url)} />;
+  const branches: ActionEntry[] = [
+    ...(pr.branch
+      ? [{ name: "Copy branch name", icon: "branch", shortcut: hotkeyOf("copy-branch"), run: () => void copyText(pr.branch!, "Branch name copied to clipboard", "copy") } as const]
+      : []),
+    ...(pr.target ? [{ name: "Copy target branch name", icon: "branch", run: () => void copyText(pr.target!, "Branch name copied to clipboard", "copy") } as const] : []),
+  ];
+  return [
+    { name: `Open in ${pr.tool ?? "source"}`, image, run: () => openExternal(pr.url) },
+    {
+      name: "Copy",
+      icon: "copy",
+      divider: true,
+      search: "hidden",
+      children: [
+        { name: pr.tool ? `Copy ${pr.tool} URL` : "Copy URL", image, run: () => void copyText(pr.url, "URL copied to clipboard") },
+        ...branches.map((entry, index) => (index === 0 ? { ...entry, divider: true } : entry)),
+      ],
+    },
+  ];
+}
+
 /** Linear's pull request badge (`mhn`): one PR shows its status icon and number ("#7"); several show the icon of the first status in
  *  Linear's order and "N PRs". The count and Jira's summary state come with the issue (its Development field), so several PRs cost
  *  no read; one PR's number needs Jira's development detail, read when the badge mounts. A click runs "Go to linked pull request…",
  *  which opens the one pull request or lists them below the badge (board `bottom-left`, list `bottom-right`); ⇧→ on the card does
- *  the same. Hover shows the card. */
+ *  the same. Hover shows the card. One pull request's badge opens Linear's pull request menu on right-click, at the pointer, in place
+ *  of the card's issue menu (`wO` with `lhn`); several leave the right-click to the card. */
 export function PullRequestBadge({ issue, layout }: { issue: Issue; layout: "board" | "list" }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const { data } = usePullRequests(issue.key, issue.prCount === 1);
@@ -174,23 +215,35 @@ export function PullRequestBadge({ issue, layout }: { issue: Issue; layout: "boa
   });
   const count = data?.length || (issue.prCount ?? 0);
   const text = pullRequestBadgeText(count, data?.[0]?.number);
+  const badge = (
+    <HoverCard label="Pull requests" content={<PullRequestsCard issue={issue} />}>
+      <Badge.Button
+        ref={button}
+        aria-label={`Pull requests on ${issue.key}`}
+        aria-haspopup="dialog"
+        aria-expanded={!!anchor}
+        onPointerEnter={() => void queryClient.prefetchQuery(pullRequestQuery(issue.key))}
+        onClick={(e) => (anchor ? setAnchor(null) : void go(e.currentTarget))}
+      >
+        <Badge.Icon>
+          <PullRequestStatusIcon status={(data?.length ? leadingStatus(data) : undefined) ?? issue.prStatus} />
+        </Badge.Icon>
+        {text && <Badge.Text>{text}</Badge.Text>}
+      </Badge.Button>
+    </HoverCard>
+  );
   return (
     <>
-      <HoverCard label="Pull requests" content={<PullRequestsCard issue={issue} />}>
-        <Badge.Button
-          ref={button}
-          aria-label={`Pull requests on ${issue.key}`}
-          aria-haspopup="dialog"
-          aria-expanded={!!anchor}
-          onPointerEnter={() => void queryClient.prefetchQuery(pullRequestQuery(issue.key))}
-          onClick={(e) => (anchor ? setAnchor(null) : void go(e.currentTarget))}
+      {count === 1 ? (
+        <ContextMenu
+          label="Pull request options"
+          entries={() => (data?.[0] ? pullRequestActions(data[0]) : [{ name: data ? "Jira lists no pull requests" : "Loading pull requests…" }])}
         >
-          <Badge.Icon>
-            <PullRequestStatusIcon status={(data?.length ? leadingStatus(data) : undefined) ?? issue.prStatus} />
-          </Badge.Icon>
-          {text && <Badge.Text>{text}</Badge.Text>}
-        </Badge.Button>
-      </HoverCard>
+          {badge}
+        </ContextMenu>
+      ) : (
+        badge
+      )}
       {anchor && (
         <ActionMenu
           anchor={anchor}

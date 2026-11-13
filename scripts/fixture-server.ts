@@ -240,7 +240,7 @@ const fixturePullRequests: Record<string, unknown[]> = {
     { url: "https://github.com/example/app/pull/9", title: "Add the fixture board", number: "#9", status: "merged", repo: "example/app", author: "Sam", updated: "2026-11-01T10:00:00Z" },
   ],
   "TEST-2": [
-    { url: "https://github.com/example/app/pull/7", title: "Tidy fixture labels", number: "#7", status: "open", repo: "example/app", author: "Alex", updated: "2026-11-02T10:00:00Z" },
+    { url: "https://github.com/example/app/pull/7", title: "Tidy fixture labels", number: "#7", status: "open", repo: "example/app", author: "Alex", branch: "alex/tidy-labels", target: "main", tool: "GitHub", updated: "2026-11-02T10:00:00Z" },
   ],
 };
 const pair = (a: string, b: string) => [a, b].sort().join(" ");
