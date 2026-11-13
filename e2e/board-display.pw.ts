@@ -364,3 +364,134 @@ for (const scheme of ["dark", "light"] as const) {
     });
   });
 }
+
+// Review fixes on the ViewOptions popover (dark, where Linear's levels differ). Values: live linear.app theme objects
+// and computed styles, 2026-11-13 (.raj/qa/display-menu.md "Review fixes").
+const DARK = LINEAR_DISPLAY.dark;
+const RING = "lch(100 0 0 / 0.148) 0px 0px 0px 0.5px"; // menu theme bgBorderAlphaThin
+const SOLID_RING = "lch(100 0 0 / 0.247) 0px 0px 0px 0.5px"; // menu theme bgBorderSolidAlphaThin
+const SHADOW_LOW = "lch(0 0 0 / 0.3) 0px 0.5px 1px 1px";
+/** A popup's shell, compared with the board's Display options popover. */
+const shell = (selector: string) =>
+  `(()=>{const p=document.querySelector(${JSON.stringify(selector)}),s=getComputedStyle(p);return {width:p.clientWidth,bg:s.backgroundColor,border:s.borderTopColor,borderStyle:s.borderTopStyle,radius:s.borderRadius,shadow:s.boxShadow.split(/,(?![^(]*\\))/).map(x=>x.trim()).filter(x=>!x.startsWith("rgba(0, 0, 0, 0)")).join(", "),paddingTop:s.paddingTop}})()`;
+const SHELL = { width: 300, bg: DARK.surface.bg, border: DARK.surface.border, borderStyle: "solid", radius: "12px", shadow: DARK.surface.shadow, paddingTop: "8px" };
+
+test("Display options in list layout: Linear's list rows, its tab, chip and select rings, and Group ordering's state", async ({ open }) => {
+  const page = await open();
+  await page.page.emulateMedia({ colorScheme: "dark" });
+  await show(page, { 1: { display: { layout: "list" } } });
+  await page.click('[aria-label="Display options"]');
+  await page.waitFor(`!!document.querySelector('${DISPLAY} .ui-vo-select')`);
+  await test.step("list rows: Grouping, Sub-grouping, Nested sub-issues and Show empty groups are 32px rows of labelMuted labels", async () => {
+    expect(
+      await page.eval(
+        `[...document.querySelectorAll('${DISPLAY} .ui-vo-row')].map(r=>{const l=r.querySelector('.ui-vo-label'),c=r.querySelector('.ui-vo-select,[role=switch]');return [l.textContent,r.getBoundingClientRect().height,getComputedStyle(l).color,c.matches('.ui-vo-select')?[c.getBoundingClientRect().width,c.getBoundingClientRect().height]:'switch']}).filter(([name])=>["Grouping","Sub-grouping","Nested sub-issues","Show empty groups"].includes(name))`,
+      ),
+    ).toEqual([
+      ["Grouping", 32, DARK.label, [160, 24]],
+      ["Sub-grouping", 32, DARK.label, [160, 24]],
+      ["Nested sub-issues", 32, DARK.label, [160, 24]],
+      ["Show empty groups", 32, DARK.label, "switch"],
+    ]);
+    expect(await page.eval(`document.querySelector('${DISPLAY} .ui-vo-section-label').textContent`)).toBe("List options");
+  });
+  await test.step("rings: options tabs, chips and select triggers ring with the popover's elevated alphas", async () => {
+    expect(
+      await page.eval(
+        `(()=>{const q=s=>getComputedStyle(document.querySelector('${DISPLAY} '+s)).boxShadow;return {tabOff:q('[role=tab][aria-selected=false]'),tabOn:q('[role=tab][aria-selected=true]'),chipOff:q('.ui-vo-chip[aria-pressed=false]'),chipOn:q('.ui-vo-chip[aria-pressed=true]'),select:getComputedStyle(document.querySelector('${DISPLAY} .ui-vo-select'),'::after').boxShadow}})()`,
+      ),
+    ).toEqual({
+      tabOff: `${RING}, ${SHADOW_LOW}`,
+      tabOn: SOLID_RING,
+      chipOff: `${RING}, ${SHADOW_LOW}`,
+      chipOn: RING,
+      select: `${RING}, ${SHADOW_LOW}`,
+    });
+  });
+  await test.step("Group ordering: Linear's label and fixed glyph; reversed groups show as pressed", async () => {
+    const button = `${DISPLAY} [aria-label="Group ordering"]`;
+    expect(await page.eval(`document.querySelector('${button}').getAttribute('aria-pressed')`)).toBe("false");
+    await page.click(button);
+    await page.waitFor(`document.querySelector('${button}').getAttribute('aria-pressed')==="true"`);
+    // jv's pressed fill: the popover's bgFocus.
+    expect(await page.eval(`getComputedStyle(document.querySelector('${button}')).backgroundColor`)).toBe("lch(20.82 1.3 272)");
+    await page.click(button);
+    await page.waitFor(`document.querySelector('${button}').getAttribute('aria-pressed')==="false"`);
+  });
+});
+
+test("every ViewOptions panel opens in the same popover: inbox and sub-issue display options match the board's", async ({ open }) => {
+  const page = await open("?inbox=1");
+  await page.page.emulateMedia({ colorScheme: "dark" });
+  await page.click('#inbox-display');
+  await page.waitFor(`!!document.querySelector('${DISPLAY} .ui-vo-row')`);
+  expect(await page.eval(shell(DISPLAY))).toEqual(SHELL);
+  // Linear's list pane with a right slot opens it under the button's start edge.
+  const [trigger, popup] = [await page.rect("#inbox-display"), await page.rect(DISPLAY)];
+  expect(Math.round(popup.x - trigger.x)).toBe(0);
+  expect(popup.y).toBe(Math.round(trigger.y + trigger.height + 4));
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector('${DISPLAY}')`);
+
+  // TEST-3 becomes TEST-2's sub-issue, so its Sub-issues section renders.
+  const child = `const read=fetch;window.fetch=async(...args)=>{const response=await read(...args);if(new URL(String(args[0]),location.href).pathname!=='/api/issues')return response;const issues=await response.json();issues.find(i=>i.key==='TEST-3').parent='TEST-2';return Response.json(issues)}`;
+  const issue = await open("?issue=TEST-2&view=page", { setup: child });
+  await issue.page.emulateMedia({ colorScheme: "dark" });
+  const SUB = '[role=dialog][aria-label="Sub-issue display options"]';
+  await issue.click('[aria-label="Sub-issue display options"]');
+  await issue.waitFor(`!!document.querySelector('${SUB} .ui-vo-row')`);
+  expect(await issue.eval(shell(SUB))).toEqual(SHELL);
+  expect(await issue.eval(`document.querySelector('[aria-label="Sub-issue display options"]').getAttribute('aria-expanded')`)).toBe("true");
+});
+
+test("popup elevation: a Select lists one level up, a menu or submenu over another surface stays at the menu theme", async ({ open }) => {
+  const page = await open();
+  await page.page.emulateMedia({ colorScheme: "dark" });
+  await test.step("Advanced filter's medium Select lists at level 2 with gy's 30px medium rows", async () => {
+    await page.eval(`machines.ui.send({type:"toolbar.open",toolbar:"advanced"})`);
+    await page.waitFor(`!!document.querySelector('[aria-label="Advanced filter"] .ui-select[data-size=medium]')`);
+    await page.click('[aria-label="Advanced filter"] .ui-select[data-size=medium]');
+    await page.waitFor(`!!document.querySelector('[data-surface=select] [cmdk-item]')`);
+    expect(
+      await page.eval(
+        `(()=>{const s=document.querySelector('[data-surface=select]'),row=s.querySelector('[cmdk-item]:not([data-selected=true])');return [s.dataset.elevation,getComputedStyle(s).backgroundColor,getComputedStyle(row).color,row.getBoundingClientRect().height,getComputedStyle(row).fontSize]})()`,
+      ),
+    ).toEqual(["2", DARK.list.bg, "lch(91.554 1.65 272)", 30, "12px"]);
+    await page.key("Escape");
+    await page.key("Escape");
+  });
+  await test.step("Create issue's More actions, a menu inside a dialog, paints the level-1 menu theme as Linear's does", async () => {
+    await page.key("c");
+    await page.click('[role=dialog][aria-label="Create issue"] [aria-label="More actions"]');
+    const MORE = '[role=dialog][aria-label="More actions"]';
+    await page.waitFor(`!!document.querySelector('${MORE} [cmdk-item]')`);
+    expect(
+      await page.eval(
+        `(()=>{const s=document.querySelector('${MORE}');return [s.dataset.elevation,getComputedStyle(s).backgroundColor,getComputedStyle(s.querySelector('[cmdk-item]:not([data-selected=true])')).color]})()`,
+      ),
+    ).toEqual(["1", DARK.surface.bg, "lch(91.178 1.425 272)"]);
+    await page.key("Escape");
+  });
+  await test.step("a menu opened from a menu, and its submenu, paint the level-1 menu theme (Linear: 12.72, labelBase 91.178)", async () => {
+    const p = await open("?issue=TEST-2&view=page");
+    await p.page.emulateMedia({ colorScheme: "dark" });
+    await p.hover("#summary");
+    await p.eval("document.activeElement?.blur()");
+    await p.keys("mr");
+    await p.type("TEST-1");
+    await p.waitFor(`document.querySelector('[cmdk-item][data-selected=true]')?.dataset.value==="TEST-1"`);
+    await p.key("Enter", "alt");
+    const MORE = '[role="dialog"][aria-label="More actions"]';
+    await p.waitFor(`!!document.querySelector('${MORE}')`);
+    const paintOf = (selector: string) =>
+      `(()=>{const s=document.querySelector(${JSON.stringify(selector)});return [s.closest('[data-elevation]').dataset.elevation,getComputedStyle(s).backgroundColor,getComputedStyle(s.querySelector('[cmdk-item]:not([data-selected=true])')).color]})()`;
+    expect(await p.eval(paintOf(MORE))).toEqual(["1", DARK.surface.bg, "lch(91.178 1.425 272)"]);
+    const row = await p.eval<string>(`document.querySelector('${MORE} [cmdk-item][aria-haspopup]')?.dataset.value ?? ""`);
+    expect(row).not.toBe("");
+    await p.hover(`${MORE} [cmdk-item][data-value=${JSON.stringify(row)}]`);
+    const id = await p.waitFor<string>(`document.querySelector('${MORE} [cmdk-item][aria-expanded=true]')?.getAttribute('aria-controls')`);
+    const SUBMENU = `[id="${id}"] [cmdk-root]`;
+    await p.waitFor(`!!document.querySelector(${JSON.stringify(SUBMENU)})?.querySelector('[cmdk-item]')`);
+    expect(await p.eval(paintOf(SUBMENU))).toEqual(["1", DARK.surface.bg, "lch(91.178 1.425 272)"]);
+  });
+});
