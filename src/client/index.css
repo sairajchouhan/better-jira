@@ -70,6 +70,13 @@
   --menu-shadow:
     lch(0 0 0 / 0.02) 0 6px 18px, lch(0 0 0 / 0.04) 0 3px 9px, lch(0 0 0 / 0.04) 0 1px 1px;
   --chip-line: lch(86.5% 0 282);
+  /* Linear's board badge (QB) hovered or with its menu open, read live on linear.app 2026-11-13 (.raj/linear.md "Board card"):
+     elevated bgShade, bgBorderSolidThin and labelTitle; light keeps the resting border. */
+  --chip-hover: lch(94.5% 0 282);
+  --chip-line-hover: var(--chip-line);
+  --chip-fg-hover: lch(10% 0 282);
+  /* brighteningIconLight/Dark: a status icon or avatar trigger's filter while hovered, pressed or open. */
+  --icon-brighten: brightness(0.7);
   --add-hover: var(--hover);
   /* Linear breadcrumb / header icon-button hover, and the "Grey" view colour (linear.app light theme, 2026-11-11) */
   --crumb-hover: lch(94.854% 0.5 282);
@@ -148,6 +155,10 @@
     --menu-shadow:
       lch(0 0 0 / 0.125) 0 3px 8px, lch(0 0 0 / 0.125) 0 2px 5px, lch(0 0 0 / 0.125) 0 1px 1px;
     --chip-line: lch(20.032% 1.93 272);
+    --chip-hover: lch(11.033% 1.3 272);
+    --chip-line-hover: lch(30.833% 1.93 272);
+    --chip-fg-hover: lch(100% 0 272);
+    --icon-brighten: brightness(1.32);
     --add-hover: lch(14.006% 0.593 272);
     --crumb-hover: lch(14.006% 0.593 272);
     --view-gray: #bec2c8;

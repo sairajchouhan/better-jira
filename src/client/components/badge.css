@@ -1,0 +1,94 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+@layer components {
+  /* Linear's badge `QB` (startup-root.CnUSfl4j.js, styles `eV`, `c1t`, `l1t`/`u1t`, `s1t`, `f1t`; .raj/linear.md "Board card"):
+     the one pill for every property on a board card or list row. 24px, radius 48, thinPixel bgBorderSolid border on bgBase,
+     8px sides with text and 4.5px around a lone icon, 112px wide at most (224px from a 1400px window). */
+  .ui-badge {
+    position: relative;
+    z-index: 0;
+    display: flex;
+    flex-shrink: 0;
+    flex-direction: row;
+    align-items: center;
+    min-width: auto;
+    max-width: 112px;
+    height: 24px;
+    padding: 0 4.5px;
+    overflow: hidden;
+    border: var(--thin-pixel) solid var(--chip-line);
+    border-radius: 48px;
+    background-color: var(--card);
+    color: var(--card-fg-3);
+    transition-property: border-color, color, background-color;
+    transition-duration: 0.15s;
+  }
+  .ui-badge:has(> .ui-badge-text) {
+    padding: 0 8px;
+  }
+  @media (min-width: 1400px) {
+    .ui-badge {
+      max-width: 224px;
+    }
+  }
+  /* containerHoverBackground + containerBordered: bgShade and bgBorderSolidThin while hovered, pressed or its menu is open; the text
+     takes --badge-highlight-color (labelTitle). In instantly, out over .15s. */
+  .ui-badge:is(button, a):is(:hover, :active, [aria-expanded="true"]) {
+    border-color: var(--chip-line-hover);
+    background-color: var(--chip-hover);
+    transition-duration: 0s;
+  }
+  .ui-badge:is(button, a):is(:hover, :active, [aria-expanded="true"]) > .ui-badge-text {
+    color: var(--chip-fg-hover);
+  }
+  /* The Created / Updated dates: borderless, no hover, disabled, transparent with no padding. */
+  .ui-badge[data-variant="plain"] {
+    padding: 0;
+    border-color: transparent;
+    background-color: transparent;
+  }
+  /* eV.iconContainer: 14px, its child at most 14px. */
+  .ui-badge-icon {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+  }
+  .ui-badge-icon > * {
+    max-width: 14px !important;
+    max-height: 14px !important;
+  }
+  /* f1t.rounded on Text "mini": 12px/450, margins 0 1px 0 6px, or 0 3px 0 1px with no icon; truncated. */
+  .ui-badge-text {
+    min-width: 0;
+    margin: 0 1px 0 6px;
+    overflow: hidden;
+    color: var(--card-fg-3);
+    font-size: 12px;
+    font-weight: 450;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: inherit;
+  }
+  .ui-badge-text:only-child {
+    margin: 0 3px 0 1px;
+  }
+
+  /* brighteningActionTrigger (`vQ`): a status icon or avatar that opens its menu. No box; the icon brightens (dark 1.32, light .7)
+     while hovered, pressed or open. */
+  .ui-icon-trigger {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+  }
+  .ui-icon-trigger > * {
+    transition: filter 0.15s;
+  }
+  .ui-icon-trigger:is(:hover, :active, [aria-expanded="true"]) > * {
+    filter: var(--icon-brighten);
+    transition: filter 0s;
+  }
+}
