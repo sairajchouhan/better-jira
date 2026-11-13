@@ -210,6 +210,13 @@ const server = serve({
         );
       }
     }),
+    "/api/issues/:key/pull-requests": localOnly(async (req: BunRequest<"/api/issues/:key/pull-requests">) => {
+      try {
+        return Response.json(await mirror.pullRequests(req.params.key));
+      } catch {
+        return Response.json({ error: "Could not read the pull requests from Jira." }, { status: 503 });
+      }
+    }),
     "/api/issues/:key/history": localOnly(async (req: BunRequest<"/api/issues/:key/history">) => {
       try {
         const history = await mirror.history(req.params.key);

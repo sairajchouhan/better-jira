@@ -233,6 +233,16 @@ const writes: { key: string; ops: any[] }[] = [],
   descriptions = new Map<string, any>(),
   /** Links the app removed, from either end (see `pair`). */
   unlinked = new Set<string>();
+/** Jira's development panel pull requests as the server projects them (src/shared/pull-requests.ts), made up. */
+const fixturePullRequests: Record<string, unknown[]> = {
+  "TEST-1": [
+    { url: "https://github.com/example/app/pull/12", title: "Fix the fixture sync", number: "#12", status: "open", repo: "example/app", author: "Alex", updated: "2026-11-10T10:00:00Z" },
+    { url: "https://github.com/example/app/pull/9", title: "Add the fixture board", number: "#9", status: "merged", repo: "example/app", author: "Sam", updated: "2026-11-01T10:00:00Z" },
+  ],
+  "TEST-2": [
+    { url: "https://github.com/example/app/pull/7", title: "Tidy fixture labels", number: "#7", status: "open", repo: "example/app", author: "Alex", updated: "2026-11-02T10:00:00Z" },
+  ],
+};
 const pair = (a: string, b: string) => [a, b].sort().join(" ");
 // Jira's createmeta types for TEST, with their hierarchy levels.
 const issueTypes = [
@@ -931,6 +941,8 @@ async function handle(req: Request) {
     return url.searchParams.get("origin") === "https://github.com"
       ? new Response(fixtureFile("media-image.png"), { headers: { "Content-Type": "image/png" } })
       : new Response(null, { status: 404 });
+  } else if (path.match(/^\/api\/issues\/[^/]+\/pull-requests$/)) {
+    body = fixturePullRequests[decodeURIComponent(path.split("/").at(-2)!)] ?? [];
   } else if (path.match(/^\/api\/issues\/[^/]+\/history$/)) {
     if (historyDelay) await Bun.sleep(historyDelay);
     body = history[decodeURIComponent(path.split("/").at(-2)!)] ?? [];

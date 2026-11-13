@@ -4,6 +4,7 @@ import { jira, JiraError } from "./jira";
 import { boardFromInput, withoutAddedBoard } from "./config";
 import { detailCache } from "./detail-cache";
 import { historyCache, readHistory } from "./issue-history";
+import { readPullRequests } from "./pull-requests";
 import { recentlyTouched, storeRemoteLinks } from "./remote-links";
 import { attachmentGateway, jiraAttachmentReader } from "@/shared/attachment-media";
 import { saveAddedBoard, serverAuth } from "./server-config";
@@ -430,6 +431,8 @@ export const history = historyCache(
       )
       .get(key)?.updated,
 );
+/** The issue's pull requests from Jira's development panel, read when a card's pull request badge asks. */
+export const pullRequests = (key: string) => readPullRequests(jira, key);
 /** Re-read one issue from Jira after a write, so reads and the next client poll see Jira's truth. Null when it no longer exists. */
 export async function refresh(
   key: string,
