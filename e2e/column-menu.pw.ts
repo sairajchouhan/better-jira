@@ -69,12 +69,10 @@ for (const scheme of ["dark", "light"] as const) {
 test("completed column has Linear's recency action, including in swimlane headers", async ({
   open,
 }) => {
-  const setup = `localStorage.setItem(${JSON.stringify(PREFS_KEY)},JSON.stringify({1:{display:{rows:'assignee'},hidden:[]}}))`;
+  const setup = `localStorage.setItem(${JSON.stringify(PREFS_KEY)},JSON.stringify({1:{display:{rows:'assignee',emptyGroups:true},hidden:[]}}))`;
   const page = await open("", { setup });
   await page.click("text=All issues");
-  // Reveal the fixture's empty completed column if the default view hides it.
-  if (await page.eval(`!!document.querySelector('[aria-label="Show Done"]')`))
-    await page.click('[aria-label="Show Done"]');
+  // The fixture's completed column is empty; Show empty columns keeps it on the board.
   await page.click('[aria-label="Options for Done"]');
   expect(
     await page.eval(

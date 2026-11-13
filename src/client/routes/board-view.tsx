@@ -83,7 +83,6 @@ export const BoardView = memo(function BoardView({
   const panel = useStore((s) => s.panel);
   const prefs = useEffectiveSettings(board.id);
   const d = prefs.display;
-  const [expanded, setExpanded] = useState<string[]>([]);
   const [hiddenOpen, setHiddenOpen] = useState(true);
   const all = useMemo(() => [...issues.values()], [issues]);
   const visible = useMemo(
@@ -101,21 +100,14 @@ export const BoardView = memo(function BoardView({
     const hiddenIds = prefs.hidden[d.columns] ?? [];
     const hidden = columns.filter(
       (c) =>
-        hiddenIds.includes(c.id) || (!d.emptyGroups && !c.issues.length && !expanded.includes(c.id)),
+        hiddenIds.includes(c.id) || (!d.emptyGroups && !c.issues.length),
     );
     const show = columns.filter((c) => !hidden.includes(c));
-    return { hidden, show, ...groupLayout(show, visible, board, d) };
-  }, [columns, prefs.hidden, d, expanded, visible, board]);
-  const { hidden, show } = layout;
+    return { hidden, hiddenIds, show, ...groupLayout(show, visible, board, d) };
+  }, [columns, prefs.hidden, d, visible, board]);
+  const { hidden, hiddenIds, show } = layout;
   // The prefetch order follows the cards and rows just laid out, so which groups show is decided once.
   const order = useMemo(() => layoutOrder(layout.show, layout, prefs, universe), [layout, prefs, universe]);
-  // Revealed empty groups close again when grouping or the empty-groups option changes.
-  const expandedFor = `${d.columns}:${d.emptyGroups}`;
-  const [expandedKey, setExpandedKey] = useState(expandedFor);
-  if (expandedKey !== expandedFor) {
-    setExpandedKey(expandedFor);
-    setExpanded([]);
-  }
   useEffect(() => {
     if (!active || !selected) return;
     if (!get().fullErrors.get(selected)) loadFull(selected);
@@ -131,10 +123,8 @@ export const BoardView = memo(function BoardView({
 
   const hide = (id: string) =>
     hideGroup(board.id, id);
-  const reveal = (id: string) => {
-    showGroup(board.id, id);
-    setExpanded([...expanded, id]);
-  };
+  // Linear offers Show only for a column the user hid; an empty column comes back only through Show empty columns.
+  const reveal = (id: string) => showGroup(board.id, id);
   const collapse = (id: string) => toggleCollapsed(board.id, [id]);
   const createIn = (bucket: Bucket, row?: Bucket) =>
     beginCreate({
@@ -273,6 +263,7 @@ export const BoardView = memo(function BoardView({
             {d.rows === "none" && hidden.length > 0 && (
               <HiddenColumns
                 columns={hidden}
+                hiddenIds={hiddenIds}
                 open={hiddenOpen}
                 toggle={() => setHiddenOpen(!hiddenOpen)}
                 reveal={reveal}
@@ -294,18 +285,27 @@ export const BoardView = memo(function BoardView({
                   Hidden {d.layout === "board" ? "columns" : "groups"}
                 </summary>
                 <div className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-y-auto">
-                  {hidden.map((c) => (
-                    <Button
-                      key={c.id}
-                      variant="secondary"
-                      aria-label={`Show ${c.name}`}
-                      icon={c.status && <StatusIcon status={c.status} />}
-                      onClick={() => reveal(c.id)}
-                    >
-                      {c.name}
-                      <CountBadge>{c.issues.length}</CountBadge>
-                    </Button>
-                  ))}
+                  {hidden.map((c) =>
+                    hiddenIds.includes(c.id) ? (
+                      <Button
+                        key={c.id}
+                        variant="secondary"
+                        aria-label={`Show ${c.name}`}
+                        data-hidden-group={c.name}
+                        icon={c.status && <StatusIcon status={c.status} />}
+                        onClick={() => reveal(c.id)}
+                      >
+                        {c.name}
+                        <CountBadge>{c.issues.length}</CountBadge>
+                      </Button>
+                    ) : (
+                      <span key={c.id} data-hidden-group={c.name} className="flex h-7 items-center gap-1.5 px-2 text-fg-2">
+                        {c.status && <StatusIcon status={c.status} />}
+                        {c.name}
+                        <CountBadge>{c.issues.length}</CountBadge>
+                      </span>
+                    ),
+                  )}
                 </div>
               </details>
             )}
@@ -332,11 +332,13 @@ function dropRank(list: Issue[], before: string | undefined, descending: boolean
 /** Linear's "Hidden columns" list: pinned right, 338px, 50px header on the panel colour, 37px rows 10px apart. */
 function HiddenColumns({
   columns,
+  hiddenIds,
   open,
   toggle,
   reveal,
 }: {
   columns: Bucket[];
+  hiddenIds: string[];
   open: boolean;
   toggle: () => void;
   reveal: (id: string) => void;
@@ -368,20 +370,44 @@ function HiddenColumns({
       {open && (
         <div className="flex flex-col gap-2.5 pb-12">
           {columns.map((c) => (
-            <button
+            <HiddenGroup
               key={c.id}
-              aria-label={`Show ${c.name}`}
-              onClick={() => reveal(c.id)}
-              className="flex h-[37px] shrink-0 items-center gap-3.5 rounded-lg border-[0.5px] border-hidden-line bg-card px-3 text-left text-[13px] font-medium text-fg shadow-(--hidden-shadow) hover:bg-card-hover"
+              bucket={c}
+              reveal={hiddenIds.includes(c.id) ? () => reveal(c.id) : undefined}
+              className="flex h-[37px] shrink-0 items-center gap-3.5 rounded-lg border-[0.5px] border-hidden-line bg-card px-3 text-left text-[13px] font-medium text-fg shadow-(--hidden-shadow)"
             >
               {c.status ? <StatusIcon status={c.status} /> : <Icon name="layers" />}
               <span className="flex-1 truncate">{c.name}</span>
               <span className="font-[450] text-card-fg-3">{c.issues.length}</span>
-            </button>
+            </HiddenGroup>
           ))}
         </div>
       )}
     </aside>
+  );
+}
+
+/** A row in the hidden list. Only a group the user hid can be shown again (Linear's handleShowGroup); an empty
+ * group stays listed, without Show, until Show empty columns is turned on. */
+function HiddenGroup({
+  bucket,
+  reveal,
+  className,
+  children,
+}: {
+  bucket: Bucket;
+  reveal: (() => void) | undefined;
+  className: string;
+  children: ReactNode;
+}) {
+  return reveal ? (
+    <button aria-label={`Show ${bucket.name}`} data-hidden-group={bucket.name} onClick={reveal} className={`${className} hover:bg-card-hover`}>
+      {children}
+    </button>
+  ) : (
+    <div data-hidden-group={bucket.name} className={className}>
+      {children}
+    </div>
   );
 }
 

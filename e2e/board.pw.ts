@@ -1,6 +1,6 @@
 import { expect, test, PREFS_KEY } from "./app";
 
-const hiddenNames = `[...document.querySelectorAll('aside[aria-label="Hidden columns"] [aria-label^="Show "]')].map(b=>b.getAttribute("aria-label").slice(5))`;
+const hiddenNames = `[...document.querySelectorAll('aside[aria-label="Hidden columns"] [data-hidden-group]')].map(b=>b.dataset.hiddenGroup)`;
 
 test("board layout: hidden columns, column titles, drag placement and My issues", async ({
   open,

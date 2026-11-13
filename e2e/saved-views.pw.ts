@@ -57,7 +57,7 @@ test("a saved view keeps its hidden columns, and Show empty columns keeps an emp
     const saved = await page.eval<{ id: string }>(`fetch('/api/views', {method:'POST',headers:{'Content-Type':'application/json'},body:${JSON.stringify(JSON.stringify(draft))}}).then(r=>r.json())`);
     await page.goto(`/view/${saved.id}?board=1`);
     const aside = 'aside[aria-label="Hidden columns"]';
-    const hiddenNames = `[...document.querySelectorAll('${aside} [aria-label^="Show "]')].map(b=>b.getAttribute("aria-label").slice(5))`;
+    const hiddenNames = `[...document.querySelectorAll('${aside} [data-hidden-group]')].map(b=>b.dataset.hiddenGroup)`;
     const column = (name: string) => `!!document.querySelector('[aria-label="Options for ${name}"]')`;
     const viewHidden = () =>
       page.eval<string[]>(`fetch('/api/views').then(r=>r.json()).then(vs=>vs.find(v=>v.id===${JSON.stringify(saved.id)}).hidden.status ?? [])`);
@@ -66,6 +66,12 @@ test("a saved view keeps its hidden columns, and Show empty columns keeps an emp
     const [empty] = await page.eval<string[]>(hiddenNames);
     expect(empty).toBeTruthy();
     expect(await page.eval(column(empty!))).toBe(false);
+
+    await test.step("An empty column has no Show: only Show empty columns brings it back, as in Linear", async () => {
+      expect(await page.eval(`!!document.querySelector('${aside} [aria-label="Show ${empty}"]')`)).toBe(false);
+      await page.click(`${aside} [data-hidden-group="${empty}"]`);
+      expect(await page.eval(column(empty!))).toBe(false);
+    });
 
     await test.step("Hide column on a column with issues keeps it hidden in this view across a reload", async () => {
       await page.click('[aria-label="Options for Todo"]');
