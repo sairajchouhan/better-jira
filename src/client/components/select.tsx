@@ -59,6 +59,7 @@ function SelectRoot({
   size = "default",
   placeholder,
   disabled,
+  align = "start",
   className = "",
   children,
 }: {
@@ -68,6 +69,8 @@ function SelectRoot({
   size?: SelectSize;
   placeholder?: string;
   disabled?: boolean;
+  /** Which trigger edge the list lines up with, 5px below it (base-ui `align`; ViewOptions' `Rxr` passes `end`). */
+  align?: "start" | "end";
   className?: string;
   /** `Select.Option`s, optionally inside Menu.Group / Menu.Divider. */
   children: ReactNode;
@@ -110,10 +113,17 @@ function SelectRoot({
         </svg>
       </button>
       {anchor && (
-        <MenuSurface label={label} anchor={anchor} fit close={() => setAnchor(null)}>
+        <MenuSurface
+          label={label}
+          anchor={anchor}
+          fit
+          variant="select"
+          align={align === "end" ? "end" : undefined}
+          close={() => setAnchor(null)}
+        >
           <SelectContext value={context}>
             {/* Opens on the chosen option, like Linear. */}
-            <Menu defaultValue={chosen ? `${chosen.children} ${value}` : undefined}>
+            <Menu defaultValue={chosen ? `${chosen.children} ${value}` : undefined} className="ui-select-list">
               <Menu.Input autoFocus hideWhenEmpty aria-label={`${label}…`} />
               <Menu.List maxHeight={`${SELECT.LIST_MAX_HEIGHT}px`}>
                 <Menu.Empty>No matches</Menu.Empty>
