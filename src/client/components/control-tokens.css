@@ -12,7 +12,7 @@
   --control-primary-hover: lch(47% 50.26 286.91); /* controlPrimaryHover */
   --control-primary-label: lch(100% 5 286.91); /* controlPrimaryLabel = h(accent, {}, {c: 5}): getTextColor keeps the accent hue */
   --border-alpha-thin: lch(0 0 0 / 0.09); /* bgBorderAlphaThin */
-  --border-solid-alpha-thin: lch(0 0 0 / 0.511); /* bgBorderSolidAlphaThin */
+  --border-solid-alpha-thin: lch(0 0 0 / 0.15); /* bgBorderSolidAlphaThin = re(bgBorderSolidThin): (97.94 - 84.44) / 97.94 * 1.09 */
   --red-base: lch(58% 73 29); /* redBase */
   --red-base-hover: lch(53% 73 29); /* redBaseHover */
   --red-text: lch(50% 80 29); /* redText = h(redBase, {}, {l: 50, c: 80}): getTextColor keeps redBase's hue 29 */
@@ -28,7 +28,7 @@
     --control-secondary-hover: lch(14.778% 1.075 272);
     --control-primary-hover: lch(52.418% 61.103 288.421);
     --border-alpha-thin: lch(100 0 0 / 0.137);
-    --border-solid-alpha-thin: lch(100 0 0 / 0.594);
+    --border-solid-alpha-thin: lch(100 0 0 / 0.229); /* (27.12 - 5.52) / (100 - 5.52) */
     --red-base-hover: lch(62.5% 73 29);
     --red-text: lch(80% 80 29);
     --red-tint: color-mix(in lch, var(--red-base) 3%, var(--panel));
