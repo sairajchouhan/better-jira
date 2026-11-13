@@ -12,6 +12,8 @@ import {
   useEffectiveSettings,
 } from "@/client/features/views/view-settings";
 import { ViewDetails, ResultsFeedback } from "@/client/features/views/views-navigation";
+import { useRegisterViewGroups } from "@/client/features/views/view-groups";
+import { GroupIcon } from "@/client/features/views/group-icon";
 import {
   memo,
   useEffect,
@@ -35,6 +37,7 @@ import {
   boardColumns,
   draftForGroup,
   groupLayout,
+  groupVisibility,
   layoutOrder,
   rankBetween,
   listRows,
@@ -99,16 +102,14 @@ export const BoardView = memo(function BoardView({
   );
   const collapsed = prefs.collapsed[d.columns] ?? [];
   // One pass per data change: shown and hidden groups, a list's rows per group, a board's cards per lane and column.
-  const layout = useMemo(() => {
-    const hiddenIds = prefs.hidden[d.columns] ?? [];
-    const hidden = columns.filter(
-      (c) =>
-        hiddenIds.includes(c.id) || (!d.emptyGroups && !c.issues.length),
-    );
-    const show = columns.filter((c) => !hidden.includes(c));
-    return { hidden, hiddenIds, show, ...groupLayout(show, visible, board, d) };
-  }, [columns, prefs.hidden, d, visible, board]);
+  const groups = useMemo(() => groupVisibility(columns, prefs), [columns, prefs]);
+  const layout = useMemo(
+    () => ({ ...groups, ...groupLayout(groups.show, visible, board, d) }),
+    [groups, visible, board, d],
+  );
   const { hidden, hiddenIds, show } = layout;
+  // The Group ordering panel lists the groups this view shows (Linear's ViewOptionsGroupsContext).
+  useRegisterViewGroups(board.id, useMemo(() => (active ? { columns, hidden, hiddenIds } : null), [active, columns, hidden, hiddenIds]));
   // The prefetch order follows the cards and rows just laid out, so which groups show is decided once.
   const order = useMemo(() => layoutOrder(layout.show, layout, prefs, universe), [layout, prefs, universe]);
   useEffect(() => {
@@ -266,6 +267,7 @@ export const BoardView = memo(function BoardView({
             {d.rows === "none" && hidden.length > 0 && (
               <HiddenColumns
                 columns={hidden}
+                by={d.columns}
                 hiddenIds={hiddenIds}
                 open={hiddenOpen}
                 toggle={() => setHiddenOpen(!hiddenOpen)}
@@ -295,7 +297,7 @@ export const BoardView = memo(function BoardView({
                         variant="secondary"
                         aria-label={`Show ${c.name}`}
                         data-hidden-group={c.name}
-                        icon={c.status && <StatusIcon status={c.status} />}
+                        icon={<GroupIcon bucket={c} by={d.columns} />}
                         onClick={() => reveal(c.id)}
                       >
                         {c.name}
@@ -303,7 +305,7 @@ export const BoardView = memo(function BoardView({
                       </Button>
                     ) : (
                       <span key={c.id} data-hidden-group={c.name} className="flex h-7 items-center gap-1.5 px-2 text-fg-2">
-                        {c.status && <StatusIcon status={c.status} />}
+                        <GroupIcon bucket={c} by={d.columns} />
                         {c.name}
                         <CountBadge>{c.issues.length}</CountBadge>
                       </span>
@@ -335,12 +337,14 @@ function dropRank(list: Issue[], before: string | undefined, descending: boolean
 /** Linear's "Hidden columns" list: pinned right, 338px, 50px header on the panel colour, 37px rows 10px apart. */
 function HiddenColumns({
   columns,
+  by,
   hiddenIds,
   open,
   toggle,
   reveal,
 }: {
   columns: Bucket[];
+  by: Display["columns"];
   hiddenIds: string[];
   open: boolean;
   toggle: () => void;
@@ -379,7 +383,7 @@ function HiddenColumns({
               reveal={hiddenIds.includes(c.id) ? () => reveal(c.id) : undefined}
               className="flex h-[37px] shrink-0 items-center gap-3.5 rounded-lg border-[0.5px] border-hidden-line bg-card px-3 text-left text-[13px] font-medium text-fg shadow-(--hidden-shadow)"
             >
-              {c.status ? <StatusIcon status={c.status} /> : <Icon name="layers" />}
+              <GroupIcon bucket={c} by={by} />
               <span className="flex-1 truncate">{c.name}</span>
               <span className="font-[450] text-card-fg-3">{c.issues.length}</span>
             </HiddenGroup>
@@ -480,13 +484,7 @@ function ColumnHeading({
 }) {
   return (
     <h2 className="flex h-[46px] shrink-0 items-center gap-2 pr-2 pl-3.5 text-[13px]">
-      {bucket.status ? (
-        <StatusIcon status={bucket.status} />
-      ) : display.columns === "priority" ? (
-        <PriorityIcon name={bucket.name} />
-      ) : (
-        <Icon name="layers" />
-      )}
+      <GroupIcon bucket={bucket} by={display.columns} />
       {/* .raj/linear.md "Columns": the name 13px/500 fg-2, the count 13px/450 fg-3. */}
       <Text variant="smallPlus" color="base" wrap="truncate" className="ml-0.5">
         {bucket.name}

@@ -87,6 +87,7 @@ test("the visible order follows a saved view, its temporary filters and the view
     scope: p.scope,
     hidden: {},
     collapsed: {},
+    order: {},
     mine: false,
     createdAt: at,
     updatedAt: at,

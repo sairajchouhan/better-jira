@@ -23,6 +23,7 @@ import { usePristine } from "@/client/components/menu-pristine";
 import { menuFilter } from "@/client/lib/fuzzy-score";
 import { Select } from "@/client/components/select";
 import { DisplayProperties, SelectRow, Toggle, ViewOptions } from "@/client/components/display-options";
+import { GroupOrdering } from "./group-ordering";
 import { Icon } from "@/client/components/icons";
 import { Button, IconButton, type ButtonSize, type ButtonVariant } from "@/client/components/button";
 import { TextInput } from "@/client/components/field";
@@ -35,6 +36,7 @@ import { ME, timed, useStore } from "@/client/state/store";
 import { ui } from "@/client/features/navigation/app-navigation";
 import { saveDefault } from "./view-settings";
 import {
+  canOrderGroups,
   defaultDisplay,
   defaultPreferences,
   sameDisplay,
@@ -250,8 +252,26 @@ const OPEN_IN = [
 /**
  * Linear's ViewOptions panel (`qxr`), inside ViewOptions.Popover: layout tabs and grouping/ordering, then sub-issues,
  * then the layout's options, each a Content section, with the footer only while the display differs from its default.
+ * Group ordering opens its page in place of these sections; Back returns to them, with focus on its button again.
  */
 function DisplayMenu({ board }: { board: Board }) {
+  const [page, setPage] = useState<"options" | "group-ordering" | "back">("options");
+  const { display: d } = useViewSettings(board.id);
+  if (page === "group-ordering")
+    return <GroupOrdering board={board.id} by={d.columns} onBack={() => setPage("back")} />;
+  return <DisplayOptions board={board} openGroupOrdering={() => setPage("group-ordering")} returned={page === "back"} />;
+}
+
+function DisplayOptions({
+  board,
+  openGroupOrdering,
+  returned,
+}: {
+  board: Board;
+  openGroupOrdering: () => void;
+  /** Back from Group ordering: its button takes focus again. */
+  returned: boolean;
+}) {
   const { display: d } = useViewSettings(board.id);
   // Saved views and the view editor own their display, so the board-default footer stays out (Linear).
   const inView = useStore((s) => !!s.activeViewId || !!s.editorDraft);
@@ -269,15 +289,12 @@ function DisplayMenu({ board }: { board: Board }) {
           options={GROUPINGS.filter(([v]) => !isBoard || v !== "none")}
           onChange={(v) => patch({ columns: v as Display["columns"] })}
         >
-          {/* Linear's "Group ordering" opens a sub-panel to drag and hide groups; Jira's groups only reverse here, so it
-              is a toggle, its state shown by Linear's jv pressed fill (aria-pressed) under Linear's fixed glyph. */}
-          <ViewOptions.SmallIconButton
-            label="Group ordering"
-            aria-pressed={d.groupDescending}
-            onClick={() => patch({ groupDescending: !d.groupDescending })}
-          >
-            <Icon name="group-order" />
-          </ViewOptions.SmallIconButton>
+          {/* Linear's `Aat`: only a grouping whose groups can be custom-ordered offers Group ordering. */}
+          {canOrderGroups(d.columns) && (
+            <ViewOptions.SmallIconButton label="Group ordering" autoFocus={returned} onClick={openGroupOrdering}>
+              <Icon name="group-order" />
+            </ViewOptions.SmallIconButton>
+          )}
         </SelectRow>
         <SelectRow
           label={isBoard ? "Rows" : "Sub-grouping"}

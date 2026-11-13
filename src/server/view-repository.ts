@@ -16,12 +16,13 @@ export function viewRepository(db: Database) {
       .map((r) => {
         const view = JSON.parse(r.data) as SavedView;
         // A view stored before a display option existed lacks that key; read it with the option's default so later writes validate.
-        // One stored before views kept hidden and collapsed groups has none.
+        // One stored before views kept hidden and collapsed groups, or their group order, has none.
         return {
           ...view,
           display: parsePreferences({ display: view.display }).display,
           hidden: parseGroupIds(view.hidden),
           collapsed: parseGroupIds(view.collapsed),
+          order: parseGroupIds(view.order),
         };
       });
   const find = (ns: string, id: string) => list(ns).find((v) => v.id === id);

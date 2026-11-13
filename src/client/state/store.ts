@@ -228,6 +228,7 @@ export function commit(patch: Partial<State>) {
           display: v.display,
           hidden: v.hidden,
           collapsed: v.collapsed,
+          order: v.order,
           filters: state.overlayFilters,
         }
       : null;

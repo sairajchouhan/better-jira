@@ -3,7 +3,7 @@ import { isMyIssues } from "@/client/features/navigation/navigation";
  *
  * Callers say what they want ("remove this rule", "clear filters", "hide this group"); this module decides where
  * it goes. On a plain board it goes to the board's preferences. While a saved view is open, filters go to the view's
- * temporary overlay (its saved base filters are never edited here), and display, scope, hidden and collapsed groups are
+ * temporary overlay (its saved base filters are never edited here), and display, scope, hidden and collapsed groups and the group order are
  * saved to the view, as Linear keeps them in the view's preferences.
  * While the view editor is open, everything goes to the editor's draft. Any other board's settings are its own
  * preferences.
@@ -15,6 +15,7 @@ import { saveDefaults } from "@/client/state/browser-preferences";
 import {
   defaultDisplay,
   defaultPreferences,
+  storedGroupOrder,
   updateFilter,
   type Display,
   type FilterGroup,
@@ -94,8 +95,8 @@ export function setDisplay(board: number, patch: Partial<Display>) {
 export const resetDisplay = (board: number) =>
   setDisplay(board, get().defaults[board] ?? defaultDisplay());
 
-/** Hidden and collapsed groups belong to the current column grouping. */
-const grouped = (board: number, key: "hidden" | "collapsed", change: (ids: string[]) => string[]) => {
+/** Hidden and collapsed groups, and the group order, belong to the current column grouping. */
+const grouped = (board: number, key: "hidden" | "collapsed" | "order", change: (ids: string[]) => string[]) => {
   const p = viewSettings(board),
     by = p.display.columns;
   write(board, { [key]: { ...p[key], [by]: change(p[key][by] ?? []) } });
@@ -103,6 +104,9 @@ const grouped = (board: number, key: "hidden" | "collapsed", change: (ids: strin
 export const hideGroup = (board: number, id: string) => grouped(board, "hidden", (ids) => [...ids, id]);
 export const showGroup = (board: number, id: string) =>
   grouped(board, "hidden", (ids) => ids.filter((x) => x !== id));
+/** The Group ordering panel's drop: `order` is every current group in its new order (Linear's `setGroupOrder`). */
+export const setGroupOrder = (board: number, order: string[]) =>
+  grouped(board, "order", (stored) => storedGroupOrder(order, stored));
 /** Collapses these groups, or expands them when all are already collapsed. */
 export const toggleCollapsed = (board: number, groups: string[]) =>
   grouped(board, "collapsed", (ids) =>

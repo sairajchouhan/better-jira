@@ -22,6 +22,7 @@ import { toggleFavorite } from "./favorites";
 import {
   buckets,
   columnInScope,
+  orderGroups,
   rankBetween,
 } from "@/shared/view-model";
 import {
@@ -136,8 +137,11 @@ function moveColumn(direction: number) {
   if (!issue) return;
   const board = boardOf(issue.key)!,
     prefs = viewSettings(issue.board);
-  const choices = board.columns.filter((c) => columnInScope(c, prefs.scope));
-  if (prefs.display.groupDescending) choices.reverse();
+  // Status columns step in the board's shown order, the Group ordering panel's when the view has one.
+  const choices = orderGroups(
+    board.columns.filter((c) => columnInScope(c, prefs.scope)).map((c) => ({ ...c, id: c.name })),
+    prefs.order.status ?? [],
+  );
   const at = choices.findIndex((c) => c.statuses.some((s) => s.id === issue.status));
   const target = choices[at + direction]?.statuses[0];
   if (at >= 0 && target) actions.status(issue.key, target.id);

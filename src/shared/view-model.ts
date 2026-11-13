@@ -88,7 +88,6 @@ export type Display = {
   rows: Grouping;
   ordering: Ordering;
   descending: boolean;
-  groupDescending: boolean;
   completedRecency: boolean;
   completedIssues: "all" | "day" | "week" | "month" | "none";
   subIssues: boolean;
@@ -98,7 +97,8 @@ export type Display = {
   openIn: "side" | "page";
 };
 export type Scope = "all" | "active" | "backlog";
-/** Group ids per column grouping: the hidden or collapsed groups of each grouping (Linear's `hiddenColumns`). */
+/** Group ids per column grouping: the hidden or collapsed groups of each grouping (Linear's `hiddenColumns`), or its
+ *  group order (Linear's `columnOrderBoard`). */
 export type GroupIds = Record<string, string[]>;
 export type Preferences = {
   display: Display;
@@ -106,6 +106,8 @@ export type Preferences = {
   scope: Scope;
   hidden: GroupIds;
   collapsed: GroupIds;
+  /** The Group ordering panel's order per grouping: a local display preference, never written to Jira. */
+  order: GroupIds;
 };
 export const GROUPINGS: [Grouping, string][] = [
   ["none", "No grouping"],
@@ -252,7 +254,6 @@ export const defaultDisplay = (): Display => ({
   rows: "none",
   ordering: "manual",
   descending: false,
-  groupDescending: false,
   completedRecency: false,
   completedIssues: "all",
   subIssues: true,
@@ -267,6 +268,7 @@ export const defaultPreferences = (): Preferences => ({
   scope: "all",
   hidden: {},
   collapsed: {},
+  order: {},
 });
 
 /** Stored hidden or collapsed groups: unknown groupings and non-string ids drop; anything else reads as none. */
@@ -287,6 +289,7 @@ export function parsePreferences(value: unknown): Preferences {
     base.scope = (value as Preferences).scope;
   base.hidden = parseGroupIds((value as Preferences).hidden);
   base.collapsed = parseGroupIds((value as Preferences).collapsed);
+  base.order = parseGroupIds((value as Preferences).order);
   const d = (value as Preferences).display;
   if (d && typeof d === "object") {
     for (const key of [
@@ -294,7 +297,6 @@ export function parsePreferences(value: unknown): Preferences {
       "subIssues",
       "emptyGroups",
       "descending",
-      "groupDescending",
     ] as const)
       if (typeof d[key] === "boolean") base.display[key] = d[key];
     for (const key of ["columns", "rows"] as const)
@@ -546,12 +548,13 @@ export const parentName = (key: string, issues: Issue[]) => {
   return summary ? `${key} ${summary}` : key;
 };
 
+/** `order` is the Group ordering panel's stored order for this grouping (see orderGroups). */
 export function buckets(
   items: Issue[],
   by: Grouping,
   board: Board,
   universe = items,
-  reverse = false,
+  order: readonly string[] = [],
 ): Bucket[] {
   const map = new Map<string, Bucket>();
   if (by === "status")
@@ -576,7 +579,49 @@ export function buckets(
     result.sort((a, b) =>
       a.id === "$none" ? 1 : b.id === "$none" ? -1 : a.name.localeCompare(b.name),
     );
-  return reverse ? result.reverse() : result;
+  return orderGroups(result, order);
+}
+
+/** Linear's `Tat`: groups with a fixed natural order (priority, like its dates and cycles) cannot be custom-ordered, so
+ *  Linear shows no Group ordering for them. No grouping has no groups to order. */
+export const canOrderGroups = (by: Grouping) => by !== "none" && by !== "priority";
+
+/**
+ * Linear's `Nat`: the groups the stored order names take the slots those groups hold in the default order, in the stored
+ * order; every other group (one created since) keeps its default slot. Stored ids with no group are skipped.
+ */
+export function orderGroups<T extends { id: string }>(groups: T[], stored: readonly string[]): T[] {
+  const named = new Map(groups.map((g) => [g.id, g]));
+  const picked = [...new Set(stored)].flatMap((id) => named.get(id) ?? []);
+  if (!picked.length) return groups;
+  const moved = new Set(picked);
+  let next = 0;
+  return groups.map((g) => (moved.has(g) ? picked[next++]! : g));
+}
+
+/** The order after dragging `id` onto `target`'s slot in `ids` (every group, in shown order): it lands before the target
+ *  when moving up and after it when moving down, as a sortable list's drop does. */
+export function moveGroup(ids: readonly string[], id: string, target: string): string[] {
+  const from = ids.indexOf(id),
+    to = ids.indexOf(target);
+  if (from < 0 || to < 0 || from === to) return [...ids];
+  const out = ids.filter((x) => x !== id);
+  out.splice(to, 0, id);
+  return out;
+}
+
+/** What to store for a new order: every current group in it, then the stored ids of groups not on the board now (another
+ *  tab's columns, a label nobody uses yet), so they keep their place once they are back (Linear's `Hat`). */
+export const storedGroupOrder = (order: readonly string[], stored: readonly string[]): string[] => [
+  ...order,
+  ...stored.filter((id) => !order.includes(id)),
+];
+
+/** A board's groups split for display: hidden are those the user hid, and empty ones unless Show empty groups is on. */
+export function groupVisibility(columns: Bucket[], prefs: Preferences) {
+  const hiddenIds = prefs.hidden[prefs.display.columns] ?? [];
+  const isHidden = (c: Bucket) => hiddenIds.includes(c.id) || (!prefs.display.emptyGroups && !c.issues.length);
+  return { hiddenIds, show: columns.filter((c) => !isHidden(c)), hidden: columns.filter(isHidden) };
 }
 
 /** A rank that sorts (by code unit) after `a` and before `b`; no `b` means "at the end". */
@@ -735,7 +780,7 @@ export function boardColumns(
   universe: Issue[],
 ): Bucket[] {
   const d = prefs.display;
-  return buckets(visible, d.columns, board, universe, d.groupDescending).filter(
+  return buckets(visible, d.columns, board, universe, canOrderGroups(d.columns) ? prefs.order[d.columns] : []).filter(
     (c) =>
       d.columns !== "status" ||
       columnInScope(

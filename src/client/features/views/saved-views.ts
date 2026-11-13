@@ -63,6 +63,7 @@ export function createViewDraft(
     scope: p.scope,
     hidden: p.hidden,
     collapsed: p.collapsed,
+    order: p.order,
     mine: get().mine,
   });
 }

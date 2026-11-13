@@ -4,6 +4,11 @@ import {
   boardCells,
   displayHiddenCount,
   buckets,
+  canOrderGroups,
+  groupVisibility,
+  moveGroup,
+  orderGroups,
+  storedGroupOrder,
   defaultPreferences,
   rankBetween,
   resultsFeedback,
@@ -144,7 +149,7 @@ describe("view selection", () => {
     expect(groups.find((g) => g.id === "bug")?.issues.map((i) => i.key)).toEqual(["A-1"]);
     expect(groups.find((g) => g.id === "ui")?.issues.map((i) => i.key)).toEqual(["A-1"]);
     expect(buckets([], "status", board).map((g) => g.name)).toEqual(["Todo", "Doing", "Done"]);
-    expect(buckets([], "status", board, [], true)[0]?.name).toBe("Done");
+    expect(buckets([], "status", board, [], ["Done", "Todo"]).map((g) => g.name)).toEqual(["Done", "Doing", "Todo"]);
   });
   test("orders priority, reverses direction, and keeps undated issues last", () => {
     const p = defaultPreferences();
@@ -521,4 +526,59 @@ test("BJ-61: display hidden counts respect filters and reveal duplicate label gr
   expect(displayHiddenCount(all, board, prefs, false, "", "me", now)).toBe(0);
   prefs.hidden.status = ["Todo"];
   expect(displayHiddenCount(all, board, prefs, false, "", "me", now)).toBe(2);
+});
+
+describe("group ordering (BJ-205)", () => {
+  const g = (...ids: string[]) => ids.map((id) => ({ id }));
+  const ids = (groups: { id: string }[]) => groups.map((x) => x.id);
+  test("orderGroups puts stored groups in their own slots in stored order, as Linear's Nat does", () => {
+    expect(ids(orderGroups(g("a", "b", "c", "d"), ["c", "a"]))).toEqual(["c", "b", "a", "d"]);
+    expect(ids(orderGroups(g("a", "b", "c"), []))).toEqual(["a", "b", "c"]);
+  });
+  test("orderGroups keeps a new group in its default slot and skips stale or repeated ids", () => {
+    expect(ids(orderGroups(g("a", "new", "b", "c"), ["c", "gone", "b", "a", "c"]))).toEqual(["c", "new", "b", "a"]);
+    expect(ids(orderGroups(g("a", "b"), ["gone"]))).toEqual(["a", "b"]);
+  });
+  test("moveGroup moves a group onto its target's slot, up or down", () => {
+    expect(moveGroup(["a", "b", "c", "d"], "a", "c")).toEqual(["b", "c", "a", "d"]);
+    expect(moveGroup(["a", "b", "c", "d"], "d", "b")).toEqual(["a", "d", "b", "c"]);
+    expect(moveGroup(["a", "b"], "a", "a")).toEqual(["a", "b"]);
+  });
+  test("storedGroupOrder keeps stored ids of groups not on screen after the new order", () => {
+    expect(storedGroupOrder(["b", "a"], ["a", "x", "b"])).toEqual(["b", "a", "x"]);
+  });
+  test("only groupings with a custom order offer Group ordering", () => {
+    expect(canOrderGroups("status")).toBe(true);
+    expect(canOrderGroups("assignee")).toBe(true);
+    expect(canOrderGroups("priority")).toBe(false);
+    expect(canOrderGroups("none")).toBe(false);
+  });
+  test("groupVisibility hides user-hidden groups, and empty ones while Show empty groups is off", () => {
+    const prefs = defaultPreferences();
+    prefs.display.columns = "status";
+    prefs.hidden = { status: ["Doing"] };
+    const columns = buckets([all[0]!, all[1]!], "status", board, all);
+    prefs.display.emptyGroups = false;
+    let v = groupVisibility(columns, prefs);
+    expect(v.show.map((c) => c.name)).toEqual(["Todo"]);
+    expect(v.hidden.map((c) => c.name)).toEqual(["Doing", "Done"]);
+    expect(v.hiddenIds).toEqual(["Doing"]);
+    prefs.display.emptyGroups = true;
+    v = groupVisibility(columns, prefs);
+    expect(v.show.map((c) => c.name)).toEqual(["Todo", "Done"]);
+  });
+  test("a stored order round-trips through saved preferences and malformed orders are dropped", () => {
+    const prefs = defaultPreferences();
+    prefs.order = { status: ["Done", "Todo"] };
+    expect(parsePreferences(JSON.parse(JSON.stringify(prefs))).order).toEqual({ status: ["Done", "Todo"] });
+    expect(parsePreferences({ ...prefs, order: "oops" }).order).toEqual({});
+    expect(parsePreferences({ ...prefs, order: { status: [1, "Done"] } }).order.status ?? []).not.toContain(1);
+  });
+  test("the hidden-by-display count includes issues in a group the user hid", () => {
+    const prefs = defaultPreferences();
+    prefs.display.columns = "status";
+    const base = displayHiddenCount(all, board, prefs, false, "", "me", now);
+    prefs.hidden = { status: ["Todo"] };
+    expect(displayHiddenCount(all, board, prefs, false, "", "me", now)).toBe(base + 1);
+  });
 });

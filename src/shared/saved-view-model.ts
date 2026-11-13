@@ -25,6 +25,8 @@ export type SavedView = {
   /** Hidden and collapsed groups per grouping, kept with the view as Linear keeps `hiddenColumns` in its view preferences. */
   hidden: GroupIds;
   collapsed: GroupIds;
+  /** The Group ordering panel's order per grouping, kept with the view as Linear keeps `columnOrderBoard`. */
+  order: GroupIds;
   mine: boolean;
   createdAt: string;
   updatedAt: string;
@@ -98,6 +100,7 @@ export function validateDraft(v: unknown): ViewDraft {
     // A view saved before views kept their hidden groups has none.
     hidden: parseGroupIds(v.hidden),
     collapsed: parseGroupIds(v.collapsed),
+    order: parseGroupIds(v.order),
     mine: v.mine,
   };
 }

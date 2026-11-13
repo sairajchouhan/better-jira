@@ -24,6 +24,7 @@ const view = (patch: Partial<SavedView> = {}): SavedView => {
     scope: p.scope,
     hidden: {},
     collapsed: {},
+    order: {},
     mine: true,
     createdAt: "",
     updatedAt: "",

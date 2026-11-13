@@ -376,7 +376,7 @@ const shell = (selector: string) =>
   `(()=>{const p=document.querySelector(${JSON.stringify(selector)}),s=getComputedStyle(p);return {width:p.clientWidth,bg:s.backgroundColor,border:s.borderTopColor,borderStyle:s.borderTopStyle,radius:s.borderRadius,shadow:s.boxShadow.split(/,(?![^(]*\\))/).map(x=>x.trim()).filter(x=>!x.startsWith("rgba(0, 0, 0, 0)")).join(", "),paddingTop:s.paddingTop}})()`;
 const SHELL = { width: 300, bg: DARK.surface.bg, border: DARK.surface.border, borderStyle: "solid", radius: "12px", shadow: DARK.surface.shadow, paddingTop: "8px" };
 
-test("Display options in list layout: Linear's list rows, its tab, chip and select rings, and Group ordering's state", async ({ open }) => {
+test("Display options in list layout: Linear's list rows, its tab, chip and select rings, and Group ordering's button", async ({ open }) => {
   const page = await open();
   await page.page.emulateMedia({ colorScheme: "dark" });
   await show(page, { 1: { display: { layout: "list" } } });
@@ -408,15 +408,9 @@ test("Display options in list layout: Linear's list rows, its tab, chip and sele
       select: `${RING}, ${SHADOW_LOW}`,
     });
   });
-  await test.step("Group ordering: Linear's label and fixed glyph; reversed groups show as pressed", async () => {
+  await test.step("Group ordering: Linear's label and fixed glyph, a button that opens its page rather than a toggle", async () => {
     const button = `${DISPLAY} [aria-label="Group ordering"]`;
-    expect(await page.eval(`document.querySelector('${button}').getAttribute('aria-pressed')`)).toBe("false");
-    await page.click(button);
-    await page.waitFor(`document.querySelector('${button}').getAttribute('aria-pressed')==="true"`);
-    // jv's pressed fill: the popover's bgFocus.
-    expect(await page.eval(`getComputedStyle(document.querySelector('${button}')).backgroundColor`)).toBe("lch(20.82 1.3 272)");
-    await page.click(button);
-    await page.waitFor(`document.querySelector('${button}').getAttribute('aria-pressed')==="false"`);
+    expect(await page.eval(`document.querySelector('${button}').hasAttribute('aria-pressed')`)).toBe(false);
   });
 });
 
@@ -545,4 +539,110 @@ test("dialogs paint Linear's elevated theme over bgModalOverlay; a menu inside k
       await page.waitFor(`!document.querySelector('${CREATE}')`);
     });
   }
+});
+
+/** BJ-205: Linear's Group ordering page (linear.app, 2026-11-13). */
+const PAGE = `${DISPLAY} .ui-group-ordering`;
+const rows = (variant: "sortable" | "hidden") =>
+  `[...document.querySelectorAll('${PAGE} .ui-group-row[data-variant=${variant}]')].map(r=>r.dataset.group)`;
+const boardColumns = `[...document.querySelectorAll("section h2 [data-wrap=truncate]")].map(s=>s.textContent)`;
+const listGroups = `[...document.querySelectorAll('main button[aria-expanded][aria-label^="Collapse "],main button[aria-expanded][aria-label^="Expand "]')].map(b=>b.getAttribute('aria-label').replace(/^(Collapse|Expand) /,''))`;
+const hiddenFeedback = `[...document.querySelectorAll('span,p')].find(e=>/^\\d+ issues? hidden by display options$/.test(e.textContent))?.textContent.split(' ')[0]??null`;
+
+const center = (page: Page, selector: string) =>
+  page.eval<{ x: number; y: number }>(
+    `(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`,
+  );
+
+async function openGroupOrdering(page: Page) {
+  await page.click('[aria-label="Display options"]');
+  await page.click(`${DISPLAY} [aria-label="Group ordering"]`);
+  await page.waitFor(`!!document.querySelector('${PAGE}')`);
+}
+
+test("BJ-205: Group ordering drags and hides groups per view, as Linear's page does", async ({ open }) => {
+  const page = await open();
+  await page.page.emulateMedia({ colorScheme: "dark" });
+  await page.waitFor(`${boardColumns}.join()==="Todo,Doing"`);
+  await openGroupOrdering(page);
+  await test.step("the page: a Back header, the shown groups with handles, then the empty ones with Show group disabled", async () => {
+    expect(await page.eval(`document.activeElement.getAttribute('aria-label')`)).toBe("Back");
+    expect(
+      await page.eval(
+        `(()=>{const h=document.querySelector('${DISPLAY} .ui-vo-page-header'),s=getComputedStyle(h);return [h.textContent,h.getBoundingClientRect().height,s.paddingTop,s.borderBottomStyle]})()`,
+      ),
+    ).toEqual(["Group ordering", 49, "8px", "solid"]); // 32px row, 8px padding, the thin-pixel border (1px at DPR 1)
+    expect(await page.eval(rows("sortable"))).toEqual(["Todo", "Doing"]);
+    expect(await page.eval(rows("hidden"))).toEqual(["Backlog", "Review", "Done"]);
+    expect(
+      await page.eval(
+        `[...document.querySelectorAll('${PAGE} .ui-group-row')].slice(0,1).concat([...document.querySelectorAll('${PAGE} .ui-group-row[data-variant=hidden]')].slice(0,1)).map(r=>{const s=getComputedStyle(r),b=r.querySelector('button').getBoundingClientRect();return [r.getBoundingClientRect().height,s.paddingLeft,s.borderTopLeftRadius,b.width,b.height,r.querySelector('button').getAttribute('aria-label'),r.querySelector('button').disabled]})`,
+      ),
+    ).toEqual([
+      [32, "28px", "5px", 24, 24, "Hide group", false],
+      [32, "8px", "5px", 24, 24, "Show group", true],
+    ]);
+    const handle = await page.eval<object>(
+      `(()=>{const h=document.querySelector('${PAGE} [aria-roledescription=sortable]'),r=h.getBoundingClientRect(),row=h.closest('[data-sortable-item]').getBoundingClientRect();return {role:h.getAttribute('role'),left:r.left-row.left,width:r.width,height:r.height,cursor:getComputedStyle(h).cursor}})()`,
+    );
+    expect(handle).toEqual({ role: "button", left: 4, width: 20, height: 32, cursor: "move" });
+    // The disabled button's reason hangs on its tooltip trigger, as Linear's does.
+    expect(await page.eval(`document.querySelector('${PAGE} .ui-group-row[data-group=Backlog] .ui-tooltip-trigger').title`)).toBe(
+      "Empty groups are hidden",
+    );
+  });
+  await test.step("dragging a group by its handle reorders the board's columns on drop", async () => {
+    const { x, y } = await center(page, `${PAGE} [data-sortable-item=Doing] [aria-roledescription=sortable]`);
+    await page.pointerDrag(x, y, x, y - 32);
+    await page.waitFor(`${boardColumns}.join()==="Doing,Todo"`);
+    expect(await page.eval(rows("sortable"))).toEqual(["Doing", "Todo"]);
+  });
+  await test.step("the keyboard moves a group too: Space picks it up, an arrow moves it, Space drops it", async () => {
+    await page.page.focus(`${PAGE} [data-sortable-item=Doing] [aria-roledescription=sortable]`);
+    await page.key("Space");
+    await page.key("ArrowDown");
+    await page.key("Space");
+    await page.waitFor(`${boardColumns}.join()==="Todo,Doing"`);
+    // Escape puts a picked-up group back without closing the popover.
+    await page.key("Space");
+    await page.key("ArrowUp");
+    await page.key("Escape");
+    expect(await page.eval(`!!document.querySelector('${PAGE}')`)).toBe(true);
+    expect(await page.eval(boardColumns)).toEqual(["Todo", "Doing"]);
+    const { x, y } = await center(page, `${PAGE} [data-sortable-item=Todo] [aria-roledescription=sortable]`);
+    await page.pointerDrag(x, y, x, y + 32);
+    await page.waitFor(`${boardColumns}.join()==="Doing,Todo"`);
+  });
+  await test.step("Hide group hides its column and counts its issues as hidden by display options; Show group brings it back", async () => {
+    expect(await page.eval(hiddenFeedback)).toBe(null);
+    await page.click(`${PAGE} .ui-group-row[data-group=Todo] [aria-label="Hide group"]`);
+    await page.waitFor(`${boardColumns}.join()==="Doing"`);
+    expect(await page.eval(rows("sortable"))).toEqual(["Doing"]);
+    expect(await page.eval(rows("hidden"))).toEqual(["Backlog", "Todo", "Review", "Done"]);
+    expect(await page.eval(`document.querySelector('${PAGE} .ui-group-row[data-group=Todo] button').disabled`)).toBe(false);
+    expect(await page.waitFor(hiddenFeedback)).toBe("5");
+  });
+  await test.step("Back returns to the options with focus on Group ordering; Escape closes the popover from the page", async () => {
+    await page.click(`${DISPLAY} [aria-label="Back"]`);
+    await page.waitFor(`document.activeElement?.getAttribute('aria-label')==="Group ordering"`);
+    await page.click(`${DISPLAY} [aria-label="Group ordering"]`);
+    await page.waitFor(`!!document.querySelector('${PAGE}')`);
+    await page.key("Escape");
+    await page.waitFor(`!document.querySelector('${DISPLAY}')`);
+    await page.click('[aria-label="Display options"]');
+    expect(await page.eval(`!!document.querySelector('${PAGE}')`)).toBe(false);
+    await page.key("Escape");
+  });
+  await test.step("the order and hidden group survive a reload, and the list layout groups in the same order", async () => {
+    await page.reload();
+    await page.waitFor(`${boardColumns}.join()==="Doing"`);
+    expect(await page.waitFor(hiddenFeedback)).toBe("5");
+    await openGroupOrdering(page);
+    await page.click(`${PAGE} .ui-group-row[data-group=Todo] [aria-label="Show group"]`);
+    await page.waitFor(`${boardColumns}.join()==="Doing,Todo"`);
+    expect(await page.eval(hiddenFeedback)).toBe(null);
+    await page.click(`${DISPLAY} [aria-label="Back"]`);
+    await page.page.locator(DISPLAY).getByRole("tab", { name: "List" }).click();
+    await page.waitFor(`${listGroups}.join()==="Doing,Todo"`);
+  });
 });

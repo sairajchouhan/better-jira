@@ -222,30 +222,34 @@ test("a view stored before a display option existed can still be renamed", async
   expect(r.list("a")[0]).toMatchObject({ name: "Renamed", display: p.display });
   db.close();
 });
-test("a view keeps its hidden and collapsed columns; one stored before views kept them has none", async () => {
+test("a view keeps its hidden, collapsed and ordered groups; one stored before views kept them has none", async () => {
   const db = new Database(":memory:");
   const r = viewRepository(db);
   // `draft` has no hidden or collapsed groups, as views saved before them.
-  expect(validateDraft(draft)).toMatchObject({ hidden: {}, collapsed: {} });
+  expect(validateDraft(draft)).toMatchObject({ hidden: {}, collapsed: {}, order: {} });
   expect(
-    validateDraft({ ...draft, hidden: { status: ["Done", 3], bogus: ["x"] }, collapsed: "bad" }),
-  ).toMatchObject({ hidden: { status: ["Done"] }, collapsed: {} });
+    validateDraft({ ...draft, hidden: { status: ["Done", 3], bogus: ["x"] }, collapsed: "bad", order: { status: ["Done", "Todo", 1] } }),
+  ).toMatchObject({ hidden: { status: ["Done"] }, collapsed: {}, order: { status: ["Done", "Todo"] } });
   const at = new Date().toISOString();
   db.query("INSERT INTO saved_views VALUES (?,?,?)").run(
     "a",
     "old",
     JSON.stringify({ ...draft, id: "old", createdAt: at, updatedAt: at }),
   );
-  expect(r.list("a")[0]).toMatchObject({ hidden: {}, collapsed: {} });
+  expect(r.list("a")[0]).toMatchObject({ hidden: {}, collapsed: {}, order: {} });
   const res = await r.handle(
     new Request("http://localhost/api/views/old", {
       method: "PUT",
-      body: JSON.stringify({ hidden: { status: ["Todo"] }, collapsed: { priority: ["High"] } }),
+      body: JSON.stringify({ hidden: { status: ["Todo"] }, collapsed: { priority: ["High"] }, order: { status: ["Done", "Todo"] } }),
     }),
     "a",
     "old",
   );
   expect(res.status).toBe(200);
-  expect(r.list("a")[0]).toMatchObject({ hidden: { status: ["Todo"] }, collapsed: { priority: ["High"] } });
+  expect(r.list("a")[0]).toMatchObject({
+    hidden: { status: ["Todo"] },
+    collapsed: { priority: ["High"] },
+    order: { status: ["Done", "Todo"] },
+  });
   db.close();
 });
