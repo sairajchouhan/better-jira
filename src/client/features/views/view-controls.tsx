@@ -69,8 +69,6 @@ const FilterMenu = lazy(
       : loadFilterMenu()) as Promise<FilterMenuModule>,
 );
 
-export { MENU_POPUP as POPUP } from "@/client/components/menu-surface";
-
 type Placement = "bottom-left" | "bottom-right";
 const closeToolbar = () => ui.send({ type: "toolbar.close" });
 const openAdvanced = () => ui.send({ type: "toolbar.open", toolbar: "advanced" });
@@ -138,7 +136,7 @@ function AddFilterButton({
         <Popover trigger={trigger} placement={placement} popup={popup} close={closeToolbar}>
           <Suspense
             fallback={
-              <div className={`${POPOVER_SURFACE} w-[248px] p-3`}>
+              <div className="filter-menu w-[248px] p-3">
                 <LoadingState>Opening filters…</LoadingState>
               </div>
             }
@@ -203,15 +201,14 @@ export function BoardControls({ board }: { board: Board }) {
           <span className="absolute top-0 right-0 size-1.5 rounded-full bg-accent" />
         )}
       </IconButton>
-      {(toolbar === "display" || toolbar === "advanced") && (
-        <Popover
-          key={toolbar}
-          trigger={toolbar === "display" ? displayRef : filterRef}
-          placement="bottom-right"
-          popup={popup}
-          close={closeToolbar}
-        >
-          {toolbar === "display" ? <DisplayMenu board={board} /> : <AdvancedMenu board={board} />}
+      {toolbar === "display" && (
+        <ViewOptions.Popover label="Display options" trigger={displayRef} close={closeToolbar}>
+          <DisplayMenu board={board} />
+        </ViewOptions.Popover>
+      )}
+      {toolbar === "advanced" && (
+        <Popover trigger={filterRef} placement="bottom-right" popup={popup} close={closeToolbar}>
+          <AdvancedMenu board={board} />
         </Popover>
       )}
     </>
@@ -251,8 +248,8 @@ const OPEN_IN = [
 ] as const;
 
 /**
- * Linear's ViewOptions panel (`qxr`) in its popover: layout tabs and grouping/ordering, then sub-issues, then the
- * layout's options, each a Content section, with the footer only while the display differs from its default.
+ * Linear's ViewOptions panel (`qxr`), inside ViewOptions.Popover: layout tabs and grouping/ordering, then sub-issues,
+ * then the layout's options, each a Content section, with the footer only while the display differs from its default.
  */
 function DisplayMenu({ board }: { board: Board }) {
   const { display: d } = useViewSettings(board.id);
@@ -263,11 +260,7 @@ function DisplayMenu({ board }: { board: Board }) {
   const patch = (p: Partial<Display>) => timed("display", () => setDisplay(board.id, p));
   const isBoard = d.layout === "board";
   return (
-    <ViewOptions.Container
-      role="dialog"
-      aria-label="Display options"
-      className={`${POPOVER_SURFACE} max-h-[calc(100vh-140px)] overflow-y-auto`}
-    >
+    <>
       <ViewOptions.Content>
         <ViewOptions.LayoutTabs value={d.layout} layouts={LAYOUTS} onValueChange={(layout) => patch({ layout })} />
         <SelectRow
@@ -276,9 +269,11 @@ function DisplayMenu({ board }: { board: Board }) {
           options={GROUPINGS.filter(([v]) => !isBoard || v !== "none")}
           onChange={(v) => patch({ columns: v as Display["columns"] })}
         >
+          {/* Linear's "Group ordering" opens a sub-panel to drag and hide groups; Jira's groups only reverse here, so it
+              is a toggle, its state shown by Linear's jv pressed fill (aria-pressed) under Linear's fixed glyph. */}
           <ViewOptions.SmallIconButton
-            label="Reverse group order"
-            tooltip="Group ordering"
+            label="Group ordering"
+            aria-pressed={d.groupDescending}
             onClick={() => patch({ groupDescending: !d.groupDescending })}
           >
             <Icon name="group-order" />
@@ -370,7 +365,7 @@ function DisplayMenu({ board }: { board: Board }) {
           </Button>
         </ViewOptions.Footer>
       )}
-    </ViewOptions.Container>
+    </>
   );
 }
 

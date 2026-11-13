@@ -325,59 +325,56 @@ function SnoozeMenu({ close }: { close: () => void }) {
   );
 }
 
-/** Linear keeps display controls in their own panel, separate from notification action menus. */
+/**
+ * Linear keeps display controls in their own panel, separate from notification action menus: the shared ViewOptions
+ * popover, under the button's start edge as Linear places it in a list pane with a right slot.
+ */
 function InboxDisplayOptions({ close }: { close: () => void }) {
   const v = useView();
+  const [trigger] = useState(() => ({ current: document.getElementById("inbox-display") }));
   return (
-    <MenuSurface
-      label="Display options"
-      anchorId="inbox-display"
-      fit
-      close={close}
-    >
-      <ViewOptions.Container>
-        <ViewOptions.Content>
-          <Toggle
-            label="Enable priority inbox"
-            value={v.priorityInbox}
-            onChange={() => changeView({ priorityInbox: !v.priorityInbox })}
-          />
-          <SelectRow
-            label="Group unreads by"
-            value={v.grouping}
-            options={[
-              ["none", "No grouping"],
-              ["focus", "Focus"],
-            ]}
-            onChange={(value) =>
-              changeView({ grouping: value as InboxView["grouping"] })
-            }
-          />
-          <SelectRow
-            label="Ordering"
-            value={v.ordering}
-            options={[
-              ["newest", "Newest"],
-              ["oldest", "Oldest"],
-              ["priority", "Priority"],
-            ]}
-            onChange={(value) =>
-              changeView({ ordering: value as InboxView["ordering"] })
-            }
-          />
-          <Toggle
-            label="Show snoozed"
-            value={v.showSnoozed}
-            onChange={() => changeView({ showSnoozed: !v.showSnoozed })}
-          />
-          <Toggle
-            label="Show unread first"
-            value={v.unreadFirst}
-            onChange={() => changeView({ unreadFirst: !v.unreadFirst })}
-          />
-        </ViewOptions.Content>
-      </ViewOptions.Container>
-    </MenuSurface>
+    <ViewOptions.Popover label="Display options" trigger={trigger} placement="bottom-left" close={close}>
+      <ViewOptions.Content>
+        <Toggle
+          label="Enable priority inbox"
+          value={v.priorityInbox}
+          onChange={() => changeView({ priorityInbox: !v.priorityInbox })}
+        />
+        <SelectRow
+          label="Group unreads by"
+          value={v.grouping}
+          options={[
+            ["none", "No grouping"],
+            ["focus", "Focus"],
+          ]}
+          onChange={(value) =>
+            changeView({ grouping: value as InboxView["grouping"] })
+          }
+        />
+        <SelectRow
+          label="Ordering"
+          value={v.ordering}
+          options={[
+            ["newest", "Newest"],
+            ["oldest", "Oldest"],
+            ["priority", "Priority"],
+          ]}
+          onChange={(value) =>
+            changeView({ ordering: value as InboxView["ordering"] })
+          }
+        />
+        <Toggle
+          label="Show snoozed"
+          value={v.showSnoozed}
+          onChange={() => changeView({ showSnoozed: !v.showSnoozed })}
+        />
+        <Toggle
+          label="Show unread first"
+          value={v.unreadFirst}
+          onChange={() => changeView({ unreadFirst: !v.unreadFirst })}
+        />
+      </ViewOptions.Content>
+    </ViewOptions.Popover>
   );
 }
 

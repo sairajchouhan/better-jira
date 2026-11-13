@@ -1,5 +1,6 @@
-import type { ComponentProps, ReactNode } from "react";
+import { useRef, type ComponentProps, type ReactNode, type RefObject } from "react";
 import { Button, IconButton } from "./button";
+import { Popover, POPOVER_SURFACE } from "./menu-surface";
 import { Select } from "./select";
 import { Switch } from "./switch";
 import { Tabs } from "./tabs";
@@ -12,9 +13,38 @@ import "./display-options.css";
  * label, select, chip or footer looks the same wherever it renders. display-options.css spells the values out.
  */
 
-/** `Exr` Container: 300 wide, 8px above the first section, whose top border it drops. Spread the popup's props on it. */
-function Container({ className = "", ...props }: ComponentProps<"div">) {
-  return <div className={`ui-vo ${className}`} {...props} />;
+/**
+ * Linear's `q` (ViewOptions.2m5-Tfth.js): the one popover every view-options panel opens in, so the board, inbox and
+ * sub-issue panels share a surface. Its `component: Y` is the surface (POPOVER_SURFACE: radius 12, a thinPixel
+ * bgBorderThin border, bgBase, shadowMedium) around `Exr` Container: 300 wide, 8px above the first section, whose top
+ * border it drops. `placement` is Linear's: under the trigger's end edge, or its start edge in a list pane with a right
+ * slot (the inbox list).
+ */
+function ViewOptionsPopover({
+  label,
+  trigger,
+  placement = "bottom-right",
+  close,
+  children,
+}: {
+  label: string;
+  trigger: RefObject<HTMLElement | null>;
+  placement?: "bottom-left" | "bottom-right";
+  close: () => void;
+  children: ReactNode;
+}) {
+  const popup = useRef<HTMLDivElement>(null);
+  return (
+    <Popover trigger={trigger} placement={placement} popup={popup} close={close}>
+      <div
+        role="dialog"
+        aria-label={label}
+        className={`ui-vo ${POPOVER_SURFACE} max-h-[calc(100vh-140px)] overflow-y-auto`}
+      >
+        {children}
+      </div>
+    </Popover>
+  );
 }
 
 /** `Dxr` Content: one section, 8px 16px, divided from the one above by a thinPixel bgBorderFaintThin line. */
@@ -129,7 +159,7 @@ function LayoutTabs<Value extends string>({
 }
 
 export const ViewOptions = {
-  Container,
+  Popover: ViewOptionsPopover,
   Content,
   Row,
   Label,

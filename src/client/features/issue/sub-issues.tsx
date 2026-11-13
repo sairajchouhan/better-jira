@@ -206,8 +206,9 @@ export function SubIssues({ issue }: { issue: Issue }) {
     (raw) => raw === 1 || raw === true,
     false,
   );
+  const settingsTrigger = useRef<HTMLButtonElement>(null);
   const [reveal, setReveal] = useState(false),
-    [settings, setSettings] = useState<HTMLElement | null>(null),
+    [settings, setSettings] = useState(false),
     [rowMenu, setRowMenu] = useState<{
       anchor: HTMLElement;
       key: string;
@@ -314,8 +315,10 @@ export function SubIssues({ issue }: { issue: Issue }) {
             </Button>
           )}
           <IconButton
+            ref={settingsTrigger}
             label="Sub-issue display options"
-            onClick={(e) => setSettings(e.currentTarget)}
+            aria-expanded={settings}
+            onClick={() => setSettings(!settings)}
             variant="borderless"
             size="medium"
           >
@@ -514,39 +517,36 @@ export function SubIssues({ issue }: { issue: Issue }) {
         />
       )}
       {settings && (
-        <MenuSurface
+        <ViewOptions.Popover
           label="Sub-issue display options"
-          anchor={settings}
-          close={() => setSettings(null)}
-          fit
+          trigger={settingsTrigger}
+          close={() => setSettings(false)}
         >
-          <ViewOptions.Container>
-            <ViewOptions.Content>
-              <SelectRow
-                label="Ordering"
-                value={display.ordering}
-                options={orderings}
-                onChange={(ordering) => change({ ordering: ordering as SubIssueDisplay["ordering"] })}
-              />
-              <SelectRow
-                label="Completed issues"
-                value={display.completed}
-                options={COMPLETED}
-                onChange={(completed) => change({ completed: completed as SubIssueDisplay["completed"] })}
-              />
-              <Toggle
-                label="Nested sub-issues"
-                value={display.nested}
-                onChange={() => change({ nested: !display.nested })}
-              />
-              <DisplayProperties
-                properties={properties}
-                shown={display.properties}
-                onChange={(properties) => change({ properties })}
-              />
-            </ViewOptions.Content>
-          </ViewOptions.Container>
-        </MenuSurface>
+          <ViewOptions.Content>
+            <SelectRow
+              label="Ordering"
+              value={display.ordering}
+              options={orderings}
+              onChange={(ordering) => change({ ordering: ordering as SubIssueDisplay["ordering"] })}
+            />
+            <SelectRow
+              label="Completed issues"
+              value={display.completed}
+              options={COMPLETED}
+              onChange={(completed) => change({ completed: completed as SubIssueDisplay["completed"] })}
+            />
+            <Toggle
+              label="Nested sub-issues"
+              value={display.nested}
+              onChange={() => change({ nested: !display.nested })}
+            />
+            <DisplayProperties
+              properties={properties}
+              shown={display.properties}
+              onChange={(properties) => change({ properties })}
+            />
+          </ViewOptions.Content>
+        </ViewOptions.Popover>
       )}
     </section>
   );
