@@ -119,9 +119,7 @@ export function Sidebar({ boards }: { boards: Board[] }) {
         className={`flex w-[244px] shrink-0 flex-col gap-px overflow-y-auto p-2 font-medium ${open ? "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:bg-panel max-md:shadow-lg" : "max-md:hidden"}`}
       >
         <div className="mb-1 flex h-11 items-center gap-2 px-2 text-fg">
-          <span className="grid size-[18px] place-items-center rounded-[5px] bg-accent text-[10px] font-semibold text-white">
-            bj
-          </span>
+          <NotchMark />
           better-jira
         </div>
         {(prefs.inbox === "Always" || inbox || (prefs.inbox === "WithNotifications" && badge > 0)) && (
@@ -663,3 +661,13 @@ export function BoardHeader() {
 }
 
 // --- board ---
+
+/** The app's logo: the Notch kit's small mark (svg/notch-small-on-*.svg, pixel-snapped for under 48px) in the theme's ink and accent. */
+function NotchMark() {
+  return (
+    <svg aria-hidden viewBox="0 0 16 16" className="size-[18px] shrink-0">
+      <path d="M8 1A7 7 0 1 0 15 8H8Z" fill="var(--logo-ink)" />
+      <rect x="10" y="1" width="5" height="5" rx="1.25" fill="var(--logo-accent)" />
+    </svg>
+  );
+}

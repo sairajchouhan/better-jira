@@ -33,6 +33,9 @@
 
 :root {
   color-scheme: light;
+  /* Notch logo kit (src/client/assets/notch/README.md): ink and accent on a light UI */
+  --logo-ink: #141417;
+  --logo-accent: #5b60e0;
   --fg: lch(9.794% 0 282); /* --color-text-primary */
   --fg-2: lch(19.588% 1.25 282); /* --color-text-secondary */
   --fg-3: lch(39.176% 1.25 282); /* --color-text-tertiary */
@@ -112,6 +115,8 @@
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
+    --logo-ink: #ededf0;
+    --logo-accent: #8b8ff8;
     --editor-todo-checked-opacity: 0.65;
     --fg: lch(100% 0 272);
     --fg-2: lch(90.451% 1.2 272);
