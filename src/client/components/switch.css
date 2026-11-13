@@ -4,15 +4,16 @@
 @layer components {
   /* _w.toggleBase + A0e.normal: a 30x20 pill (radius 72), the knob an ::after pinned by left/right so hovering widens
      it toward the free side (k0e.hover: the far inset 13 → 11). Track: mix(bgBase, labelBase, .4) at rest, .5 hovered,
-     controlPrimary / controlPrimaryHover when checked; knob controlPrimaryLabel. */
+     controlPrimary / controlPrimaryHover when checked; knob controlPrimaryLabel. `Em.mixCss` mixes in linear sRGB
+     (xyz), which is what live Linear paints (dark 48.247 / 56.807, light 82.484); an lch mix lands lighter. */
   .ui-switch {
     --knob: 14px;
     --knob-radius: 7px;
     --near: 3px;
     --far: 13px;
     --far-hover: 11px;
-    --track: color-mix(in lch, var(--fg-2) 40%, var(--panel));
-    --track-hover: color-mix(in lch, var(--fg-2) 50%, var(--panel));
+    --track: color-mix(in srgb-linear, var(--fg-2) 40%, var(--panel));
+    --track-hover: color-mix(in srgb-linear, var(--fg-2) 50%, var(--panel));
     --left: var(--near);
     --right: var(--far);
     /* The knob's leading edge moves first, the trailing one 50ms later: it stretches, then settles. */
@@ -92,8 +93,8 @@
   @layer components {
     /* gw: the track mixes .2 / .3 of labelBase in dark. */
     .ui-switch {
-      --track: color-mix(in lch, var(--fg-2) 20%, var(--panel));
-      --track-hover: color-mix(in lch, var(--fg-2) 30%, var(--panel));
+      --track: color-mix(in srgb-linear, var(--fg-2) 20%, var(--panel));
+      --track-hover: color-mix(in srgb-linear, var(--fg-2) 30%, var(--panel));
     }
   }
 }
