@@ -6,7 +6,7 @@ import { useLocation } from "@tanstack/react-router";
 import { pageURL } from "@/client/features/navigation/app-navigation";
 import { activityTime as ago } from "@/client/features/issue/issue-dates";
 import { AutoResizingTextArea } from "@/client/components/field";
-import { LoadingState } from "@/client/components/empty-state";
+import { DocumentLoadingState } from "@/client/components/empty-state";
 import { showNotification } from "@/client/state/app-notifications";
 /* oxlint-disable react/no-unstable-nested-components -- Comment heads and avatars are render callbacks supplied to the activity threads. */
 import { FavoriteButton } from "@/client/features/navigation/favorite-button";
@@ -711,7 +711,7 @@ function Description({ issue }: { issue: Issue }) {
               Retry
             </Button>
           </Text>
-        ) : <LoadingState />
+        ) : <DocumentLoadingState />
       ) : (
         <DocumentBodyEditor
           key={revision}

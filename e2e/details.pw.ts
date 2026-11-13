@@ -254,3 +254,72 @@ test("BJ-193: the editor takes over from its stand-in in one frame, keeping a sc
   // Never clamped by an empty frame; scroll anchoring may move it down as the editor's blocks render taller.
   expect(await page.eval(`Math.min(...window.__editors.tops)`)).toBeGreaterThanOrEqual(top);
 });
+
+// TEST-3 becomes TEST-2's sub-issue, so the issue page has a Sub-issues heading below its description.
+const WITH_SUB_ISSUE = `const read=fetch;window.fetch=async(...args)=>{const response=await read(...args);if(new URL(String(args[0]),location.href).pathname!=='/api/issues')return response;const issues=await response.json();issues.find(i=>i.key==='TEST-3').parent='TEST-2';return Response.json(issues)};`;
+// Each frame once the issue shows: whether the description is the loading skeleton, and where the Sub-issues heading is.
+const WATCH_RELOAD = `
+  window.__frames = [];
+  const frame = () => {
+    const heading = document.querySelector("[data-sub-issues] button");
+    if (document.getElementById("summary") && heading)
+      window.__frames.push({
+        skeleton: !!document.querySelector(".issue-description [role=status]"),
+        subIssues: heading.getBoundingClientRect().top,
+      });
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+`;
+type ReloadFrame = { skeleton: boolean; subIssues: number };
+
+test("reloading an issue page: the description holds Linear's 190px skeleton while its record loads, and nothing below it moves meanwhile", async ({
+  open,
+}) => {
+  await fixture.reset();
+  const page = await open("?issue=TEST-2&view=page", { setup: WITH_SUB_ISSUE + WATCH_RELOAD });
+  await page.waitFor(`!!document.querySelector("#description.ProseMirror")`);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  await page.page.route(/\/api\/issues\/TEST-2$/, async (route) => {
+    await gate;
+    await route.continue();
+  });
+  try {
+    await page.page.reload();
+    await page.waitFor(`!!document.querySelector(".issue-description [role=status]")`, 15000);
+    // Past Linear's 250ms delay and the fade.
+    await sleep(700);
+    // Linear's document fallback (`Jjn`): 24px above and below, at least 190px, three 18px bars 9px apart, 50–100% wide.
+    expect(
+      await page.eval(`(() => {
+        const slot = document.querySelector(".issue-description [role=status]"), box = slot.getBoundingClientRect(), style = getComputedStyle(slot);
+        const bars = [...slot.querySelectorAll("[aria-hidden] > div")];
+        const heading = document.querySelector("[data-sub-issues] button").getBoundingClientRect();
+        return {
+          height: box.height,
+          padding: [style.paddingTop, style.paddingBottom],
+          shown: getComputedStyle(slot.querySelector("[aria-hidden]")).opacity,
+          bars: bars.map((bar) => { const r = bar.getBoundingClientRect(), s = getComputedStyle(bar); return [r.height, s.marginBottom, s.borderRadius, r.width >= box.width / 2 - 2 && r.width <= box.width]; }),
+          below: heading.top >= box.bottom,
+        };
+      })()`),
+    ).toEqual({
+      height: 190,
+      padding: ["24px", "24px"],
+      shown: "1",
+      bars: [
+        [18, "9px", "12px", true],
+        [18, "9px", "12px", true],
+        [18, "9px", "12px", true],
+      ],
+      below: true,
+    });
+  } finally {
+    release();
+  }
+  await page.waitFor(`!!document.querySelector("#description.ProseMirror")`);
+  const waiting = (await page.eval<ReloadFrame[]>(`window.__frames`)).filter((f) => f.skeleton);
+  expect(waiting.length).toBeGreaterThan(0);
+  expect(new Set(waiting.map((f) => f.subIssues)).size).toBe(1);
+});

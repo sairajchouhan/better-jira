@@ -49,3 +49,22 @@ export function LoadingState({ children = "Loading…", ...props }: ComponentPro
     </Frame>
   );
 }
+
+/** Linear's skeleton lines (`Gjn`, startup-root): three bars, each 50–100% wide (drawn once per page load, as Linear's
+ *  `Wjn`), fading in after 250ms so a quick load never flashes them. */
+const SKELETON_WIDTHS = Array.from({ length: 3 }, () => `${Math.round(50 + Math.random() * 50)}%`);
+
+/** Waiting on a document's text: Linear's document fallback (`Jjn`, exported as `XO`; the issue description editor's
+ *  `fallback`), which holds 190px for the text so what sits below it starts where a short text will leave it. */
+export function DocumentLoadingState({ className = "", ...props }: ComponentProps<"div">) {
+  return (
+    <div role="status" aria-busy className={`ui-document-loading ${className}`} {...props}>
+      <span className="sr-only">Loading…</span>
+      <div className="ui-skeleton-lines" aria-hidden>
+        {SKELETON_WIDTHS.map((width, i) => (
+          <div key={i} className="ui-skeleton-line" style={{ width }} />
+        ))}
+      </div>
+    </div>
+  );
+}

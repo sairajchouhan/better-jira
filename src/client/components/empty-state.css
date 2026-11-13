@@ -46,4 +46,58 @@
       flex-direction: row;
     }
   }
+  /* Linear's document fallback `Jjn` (Yjn.loadingContainer): a flex column, 24px above and below, at least 190px. */
+  .ui-document-loading {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 190px;
+    padding-block: 24px;
+    padding-inline: 0;
+  }
+  /* `Gjn`: fades in after 250ms (react-spring from opacity 0, default spring, about 300ms). */
+  .ui-skeleton-lines {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    animation: ui-skeleton-in 300ms ease-out 250ms both;
+  }
+  /* `Kjn` (qjn.mask): 18px bar, 9px apart, 2px left of the text edge, 12px radius, labelFaint at 20%, pulsing every 2.6s. */
+  .ui-skeleton-line {
+    display: flex;
+    flex: none;
+    height: 18px;
+    margin-bottom: 9px;
+    margin-left: -2px;
+    border-radius: 12px;
+    background-color: color-mix(in lch, var(--fg-4) 20%, transparent);
+    animation: ui-skeleton-pulse 2.6s infinite;
+  }
+  /* The pulse only; the delayed fade still keeps a quick load from flashing the bars. */
+  @media (prefers-reduced-motion: reduce) {
+    .ui-skeleton-line {
+      animation: none;
+    }
+  }
+}
+
+@keyframes ui-skeleton-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* Linear's `sx-tut5q7-B`. */
+@keyframes ui-skeleton-pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  to {
+    opacity: 1;
+  }
 }
