@@ -44,11 +44,8 @@ for (const scheme of ["dark", "light"] as const) {
     menus.filter = await measure(page);
     await page.key("Escape");
 
-    await page.click('[aria-label="Display options"]');
-    await page.click('[aria-label^="Columns:"]');
-    menus.display = await measure(page);
-    await page.key("Escape");
-    await page.key("Escape");
+    // Display options' selects list through Linear's Select (`gy`, base-ui), not this menu: 24px rows at 12px, measured
+    // live 2026-11-13. e2e/board-display.pw.ts checks them.
 
     await page.page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Mine", exact: true }).click({ button: "right" });
     menus.view = await measure(page);

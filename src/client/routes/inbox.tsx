@@ -25,7 +25,7 @@ import { toggleFavorite } from "@/client/features/navigation/favorites";
 import { changeView, toggleFilter, clearFilters, selectRow, toggleRead, markAllRead, deleteRow, deleteAll, openSnooze, snoozeRow, showTab, inbox, statusOf, ROW_PARAM, useFeed, useSelected, useView, useLocal, useUnreadCount, orderOf, facets, itemsOf, clearUnseen } from "@/client/features/inbox/inbox";
 import { InboxIssuePane } from "./issue-view";
 import { firstKey } from "@/client/state/jira-sync";
-import { SelectRow, Toggle } from "@/client/components/display-options";
+import { SelectRow, Toggle, ViewOptions } from "@/client/components/display-options";
 
 const copyRow = (item: InboxItem, kind: CopyKind) =>
   copyIssue(kind, { key: item.key, summary: item.title } as Issue, item.url);
@@ -332,47 +332,51 @@ function InboxDisplayOptions({ close }: { close: () => void }) {
     <MenuSurface
       label="Display options"
       anchorId="inbox-display"
-      width={300}
+      fit
       close={close}
     >
-      <Toggle
-        label="Enable priority inbox"
-        value={v.priorityInbox}
-        onChange={() => changeView({ priorityInbox: !v.priorityInbox })}
-      />
-      <SelectRow
-        label="Group unreads by"
-        value={v.grouping}
-        options={[
-          ["none", "No grouping"],
-          ["focus", "Focus"],
-        ]}
-        onChange={(value) =>
-          changeView({ grouping: value as InboxView["grouping"] })
-        }
-      />
-      <SelectRow
-        label="Ordering"
-        value={v.ordering}
-        options={[
-          ["newest", "Newest"],
-          ["oldest", "Oldest"],
-          ["priority", "Priority"],
-        ]}
-        onChange={(value) =>
-          changeView({ ordering: value as InboxView["ordering"] })
-        }
-      />
-      <Toggle
-        label="Show snoozed"
-        value={v.showSnoozed}
-        onChange={() => changeView({ showSnoozed: !v.showSnoozed })}
-      />
-      <Toggle
-        label="Show unread first"
-        value={v.unreadFirst}
-        onChange={() => changeView({ unreadFirst: !v.unreadFirst })}
-      />
+      <ViewOptions.Container>
+        <ViewOptions.Content>
+          <Toggle
+            label="Enable priority inbox"
+            value={v.priorityInbox}
+            onChange={() => changeView({ priorityInbox: !v.priorityInbox })}
+          />
+          <SelectRow
+            label="Group unreads by"
+            value={v.grouping}
+            options={[
+              ["none", "No grouping"],
+              ["focus", "Focus"],
+            ]}
+            onChange={(value) =>
+              changeView({ grouping: value as InboxView["grouping"] })
+            }
+          />
+          <SelectRow
+            label="Ordering"
+            value={v.ordering}
+            options={[
+              ["newest", "Newest"],
+              ["oldest", "Oldest"],
+              ["priority", "Priority"],
+            ]}
+            onChange={(value) =>
+              changeView({ ordering: value as InboxView["ordering"] })
+            }
+          />
+          <Toggle
+            label="Show snoozed"
+            value={v.showSnoozed}
+            onChange={() => changeView({ showSnoozed: !v.showSnoozed })}
+          />
+          <Toggle
+            label="Show unread first"
+            value={v.unreadFirst}
+            onChange={() => changeView({ unreadFirst: !v.unreadFirst })}
+          />
+        </ViewOptions.Content>
+      </ViewOptions.Container>
     </MenuSurface>
   );
 }

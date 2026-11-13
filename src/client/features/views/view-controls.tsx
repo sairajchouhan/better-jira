@@ -16,16 +16,15 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { MenuSurface, MENU_POPUP as POPUP, Popover } from "@/client/components/menu-surface";
+import { MenuSurface, POPOVER_SURFACE, Popover } from "@/client/components/menu-surface";
 import { filterChoices, plural, PropertyFilter, useFilterCatalog } from "@/client/features/filters/property-filter";
 import { Menu } from "@/client/components/menu";
 import { usePristine } from "@/client/components/menu-pristine";
 import { menuFilter } from "@/client/lib/fuzzy-score";
 import { Select } from "@/client/components/select";
-import { DisplayProperties, SelectRow, Toggle } from "@/client/components/display-options";
+import { DisplayProperties, SelectRow, Toggle, ViewOptions } from "@/client/components/display-options";
 import { Icon } from "@/client/components/icons";
 import { Button, IconButton, type ButtonSize, type ButtonVariant } from "@/client/components/button";
-import { SegmentedControl } from "@/client/components/segmented-control";
 import { TextInput } from "@/client/components/field";
 import { Text } from "@/client/components/text";
 import { LoadingState } from "@/client/components/empty-state";
@@ -139,7 +138,7 @@ function AddFilterButton({
         <Popover trigger={trigger} placement={placement} popup={popup} close={closeToolbar}>
           <Suspense
             fallback={
-              <div className={`${POPUP} w-[248px] p-3`}>
+              <div className={`${POPOVER_SURFACE} w-[248px] p-3`}>
                 <LoadingState>Opening filters…</LoadingState>
               </div>
             }
@@ -162,10 +161,9 @@ function AddFilterButton({
 }
 
 export function BoardControls({ board }: { board: Board }) {
-  const view = useActiveView();
   const toolbar = useStore((s) => s.toolbar);
   const preferences = useViewSettings(board.id);
-  const savedDefault = useStore((s) => s.defaults[board.id]);
+  const displayChanged = useDisplayChanged(board.id);
   const filterRef = useRef<HTMLButtonElement>(null);
   const displayRef = useRef<HTMLButtonElement>(null);
   const popup = useRef<HTMLDivElement>(null);
@@ -201,7 +199,7 @@ export function BoardControls({ board }: { board: Board }) {
         onClick={() => ui.send({ type: "toolbar.toggle", toolbar: "display" })}
       >
         <Icon name="display" />
-        {!sameDisplay(preferences.display, view?.display ?? savedDefault ?? defaultDisplay()) && (
+        {displayChanged && (
           <span className="absolute top-0 right-0 size-1.5 rounded-full bg-accent" />
         )}
       </IconButton>
@@ -220,152 +218,159 @@ export function BoardControls({ board }: { board: Board }) {
   );
 }
 
+/** Whether the board's display differs from what Reset returns to (the view's, else the saved default): the toolbar's dot and the footer. */
+function useDisplayChanged(boardId: Board["id"]) {
+  const view = useActiveView();
+  const { display } = useViewSettings(boardId);
+  const savedDefault = useStore((s) => s.defaults[boardId]);
+  return !sameDisplay(display, view?.display ?? savedDefault ?? defaultDisplay());
+}
+
+const LAYOUTS = [
+  { value: "list", label: "List", icon: <Icon name="list" size={14} /> },
+  { value: "board", label: "Board", icon: <Icon name="board" size={14} /> },
+] as const;
+
+const COMPLETED_ISSUES = [
+  ["all", "All"],
+  ["day", "Past day"],
+  ["week", "Past week"],
+  ["month", "Past month"],
+  ["none", "None"],
+] as const;
+
+const NESTED = [
+  ["matching", "Show matching"],
+  ["all", "Show all"],
+  ["none", "Don't nest"],
+] as const;
+
+const OPEN_IN = [
+  ["side", "Side panel"],
+  ["page", "Full page"],
+] as const;
+
+/**
+ * Linear's ViewOptions panel (`qxr`) in its popover: layout tabs and grouping/ordering, then sub-issues, then the
+ * layout's options, each a Content section, with the footer only while the display differs from its default.
+ */
 function DisplayMenu({ board }: { board: Board }) {
   const { display: d } = useViewSettings(board.id);
   // Saved views and the view editor own their display, so the board-default footer stays out (Linear).
   const inView = useStore((s) => !!s.activeViewId || !!s.editorDraft);
+  const changed = useDisplayChanged(board.id);
   const [saving, setSaving] = useState(false);
   const patch = (p: Partial<Display>) => timed("display", () => setDisplay(board.id, p));
+  const isBoard = d.layout === "board";
   return (
-    <div
+    <ViewOptions.Container
       role="dialog"
       aria-label="Display options"
-      className={`${POPUP} w-[304px] max-h-[calc(100vh-140px)] overflow-y-auto p-3`}
+      className={`${POPOVER_SURFACE} max-h-[calc(100vh-140px)] overflow-y-auto`}
     >
-      <SegmentedControl
-        aria-label="Layout"
-        size="medium"
-        width="full"
-        value={d.layout}
-        onValueChange={(layout) => patch({ layout: layout as Display["layout"] })}
-        className="mb-4"
-      >
-        {(["list", "board"] as const).map((layout) => (
-          // `J4` sets no icon/label gap and no bundle trigger pairs them, so the gap stays layout at the call site.
-          <SegmentedControl.Segment key={layout} value={layout} className="gap-1.5">
-            <Icon name={layout} />
-            {layout === "list" ? "List" : "Board"}
-          </SegmentedControl.Segment>
-        ))}
-      </SegmentedControl>
-      <SelectRow
-        label={d.layout === "board" ? "Columns" : "Grouping"}
-        value={d.columns}
-        options={GROUPINGS.filter(([v]) => d.layout === "list" || v !== "none")}
-        onChange={(v) => patch({ columns: v as Display["columns"] })}
-      >
-        <IconButton
-          label="Reverse group order"
-          size="small"
-          onClick={(e) => {
-            e.preventDefault();
-            patch({ groupDescending: !d.groupDescending });
-          }}
-        >
-          <Icon name={d.groupDescending ? "down" : "up"} />
-        </IconButton>
-      </SelectRow>
-      <SelectRow
-        label={d.layout === "board" ? "Rows" : "Sub-grouping"}
-        value={d.rows}
-        options={GROUPINGS.filter(([v]) => v === "none" || v !== d.columns)}
-        onChange={(v) => patch({ rows: v as Display["rows"] })}
-      />
-      <SelectRow
-        label="Ordering"
-        value={d.ordering}
-        options={ORDERINGS}
-        onChange={(v) => patch({ ordering: v as Display["ordering"] })}
-      >
-        <IconButton
-          label="Reverse issue order"
-          size="small"
-          onClick={(e) => {
-            e.preventDefault();
-            patch({ descending: !d.descending });
-          }}
-        >
-          <Icon name={d.descending ? "down" : "up"} />
-        </IconButton>
-      </SelectRow>
-      <SelectRow
-        label="Completed issues"
-        value={d.completedIssues}
-        options={[["all", "All"], ["day", "Past day"], ["week", "Past week"], ["month", "Past month"], ["none", "None"]]}
-        onChange={v => patch({ completedIssues: v as Display["completedIssues"] })}
-      />
-      <Toggle
-        label="Order completed by recency"
-        value={d.completedRecency}
-        onChange={() => patch({ completedRecency: !d.completedRecency })}
-      />
-      <div className="my-3 border-t border-line-2" />
-      <Toggle
-        label="Show sub-issues"
-        value={d.subIssues}
-        onChange={() => patch({ subIssues: !d.subIssues })}
-      />
-      <div className="my-3 border-t border-line-2" />
-      <Text as="div" variant="miniPlus" className="mb-1">
-        {d.layout === "board" ? "Board" : "List"} options
-      </Text>
-      {d.layout === "list" && (
+      <ViewOptions.Content>
+        <ViewOptions.LayoutTabs value={d.layout} layouts={LAYOUTS} onValueChange={(layout) => patch({ layout })} />
         <SelectRow
-          label="Nested sub-issues"
-          value={d.nested}
-          options={[
-            ["matching", "Show matching"],
-            ["all", "Show all"],
-            ["none", "Don't nest"],
-          ]}
-          onChange={(v) => patch({ nested: v as Display["nested"] })}
+          label={isBoard ? "Columns" : "Grouping"}
+          value={d.columns}
+          options={GROUPINGS.filter(([v]) => !isBoard || v !== "none")}
+          onChange={(v) => patch({ columns: v as Display["columns"] })}
+        >
+          <ViewOptions.SmallIconButton
+            label="Reverse group order"
+            tooltip="Group ordering"
+            onClick={() => patch({ groupDescending: !d.groupDescending })}
+          >
+            <Icon name="group-order" />
+          </ViewOptions.SmallIconButton>
+        </SelectRow>
+        <SelectRow
+          label={isBoard ? "Rows" : "Sub-grouping"}
+          value={d.rows}
+          options={GROUPINGS.filter(([v]) => v === "none" || v !== d.columns)}
+          onChange={(v) => patch({ rows: v as Display["rows"] })}
         />
-      )}
-      <Toggle
-        label={d.layout === "board" ? "Show empty columns" : "Show empty groups"}
-        value={d.emptyGroups}
-        onChange={() => patch({ emptyGroups: !d.emptyGroups })}
-      />
-      <DisplayProperties
-        properties={PROPERTIES.filter(([p]) => d.layout === "list" || p !== "creator")}
-        shown={d.properties}
-        onChange={(properties) => patch({ properties })}
-      />
+        <SelectRow
+          label="Ordering"
+          value={d.ordering}
+          options={ORDERINGS}
+          onChange={(v) => patch({ ordering: v as Display["ordering"] })}
+        >
+          <ViewOptions.SmallIconButton
+            label="Reverse issue order"
+            tooltip="Direction"
+            onClick={() => patch({ descending: !d.descending })}
+          >
+            {/* Linear's Direction glyphs: an arrow up beside shrinking bars when ascending (our table menu's sort-desc). */}
+            <Icon name={d.descending ? "sort-asc" : "sort-desc"} />
+          </ViewOptions.SmallIconButton>
+        </SelectRow>
+        <Toggle
+          label="Order completed by recency"
+          value={d.completedRecency}
+          onChange={() => patch({ completedRecency: !d.completedRecency })}
+        />
+      </ViewOptions.Content>
+      <ViewOptions.Content>
+        <SelectRow
+          label="Completed issues"
+          value={d.completedIssues}
+          options={COMPLETED_ISSUES}
+          onChange={(v) => patch({ completedIssues: v as Display["completedIssues"] })}
+        />
+        <Toggle label="Show sub-issues" value={d.subIssues} onChange={() => patch({ subIssues: !d.subIssues })} />
+      </ViewOptions.Content>
+      <ViewOptions.Content>
+        <ViewOptions.SectionLabel>{isBoard ? "Board" : "List"} options</ViewOptions.SectionLabel>
+        {!isBoard && (
+          <SelectRow
+            label="Nested sub-issues"
+            value={d.nested}
+            options={NESTED}
+            onChange={(v) => patch({ nested: v as Display["nested"] })}
+          />
+        )}
+        <Toggle
+          label={isBoard ? "Show empty columns" : "Show empty groups"}
+          value={d.emptyGroups}
+          onChange={() => patch({ emptyGroups: !d.emptyGroups })}
+        />
+        <DisplayProperties
+          properties={PROPERTIES.filter(([p]) => !isBoard || p !== "creator")}
+          shown={d.properties}
+          onChange={(properties) => patch({ properties })}
+        />
+      </ViewOptions.Content>
       <PropertySyncNotice />
-      <div className="my-3 border-t border-line-2" />
-      <SelectRow
-        label="Open issues in"
-        value={d.openIn}
-        options={[
-          ["side", "Side panel"],
-          ["page", "Full page"],
-        ]}
-        onChange={(v) => patch({ openIn: v as Display["openIn"] })}
-      />
-      {!inView && <div className="mt-3 flex justify-end gap-1 border-t border-line-2 pt-2">
-        <Button
-          variant="borderless"
-          size="small"
-          title="Reset to the saved default for this board"
-          onClick={() => resetDisplay(board.id)}
-        >
-          Reset
-        </Button>
-        <Button
-          variant="secondary"
-          size="small"
-          disabled={saving}
-          title="Save your display default in this browser"
-          onClick={async () => {
-            setSaving(true);
-            await saveDefault(board.id);
-            setSaving(false);
-          }}
-        >
-          {saving ? "Saving…" : "Save my default"}
-        </Button>
-      </div>}
-    </div>
+      <ViewOptions.Content>
+        <SelectRow
+          label="Open issues in"
+          value={d.openIn}
+          options={OPEN_IN}
+          onChange={(v) => patch({ openIn: v as Display["openIn"] })}
+        />
+      </ViewOptions.Content>
+      {!inView && changed && (
+        <ViewOptions.Footer>
+          <Button variant="borderless" size="small" title="Reset to your default" onClick={() => resetDisplay(board.id)}>
+            Reset
+          </Button>
+          <Button
+            variant="borderless"
+            size="small"
+            disabled={saving}
+            title="Save your view as your default in this browser"
+            onClick={async () => {
+              setSaving(true);
+              await saveDefault(board.id);
+              setSaving(false);
+            }}
+          >
+            <span className="ui-vo-footer-link">{saving ? "Saving…" : "Save my default"}</span>
+          </Button>
+        </ViewOptions.Footer>
+      )}
+    </ViewOptions.Container>
   );
 }
 
@@ -704,7 +709,7 @@ function AdvancedMenu({ board }: { board: Board }) {
     <div
       role="dialog"
       aria-label="Advanced filter"
-      className={`${POPUP} w-[640px] max-w-[calc(100vw-24px)] max-h-[calc(100vh-140px)] overflow-y-auto p-3`}
+      className={`${POPOVER_SURFACE} w-[640px] max-w-[calc(100vw-24px)] max-h-[calc(100vh-140px)] overflow-y-auto p-3`}
     >
       <div className="mb-3 flex items-center justify-between">
         <Text variant="smallPlus">Advanced filter</Text>
@@ -932,7 +937,7 @@ function PropertySyncNotice() {
   const progress = useStore((s) => s.propertySync);
   if (!progress.pending && !progress.errors) return null;
   return (
-    <Text as="div" role="status" variant="micro" color="muted" className="border-t border-line-2 px-2 py-2">
+    <Text as="div" role="status" variant="micro" color="muted" className="border-t-[length:var(--thin-pixel)] border-[var(--border-faint-thin)] px-2 py-2">
       {progress.pending
         ? `Loading Jira properties… ${progress.completed} / ${progress.total}. Results update as data arrives.`
         : `Some Jira properties could not be read on ${progress.errors} issues. Restricted watcher lists are excluded from subscriber filters.`}

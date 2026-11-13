@@ -1,0 +1,125 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+/* Linear's ViewOptions styles (`D4`, CSS module `_1koer_`, startup-root.CnUSfl4j.js), read in the elevated scope of
+   the popover around them. Measured on linear.app 2026-11-13: .raj/qa/display-menu.md. */
+@layer components {
+  /* Exr: 300 wide inside the popover's border, 8px above the first section. */
+  .ui-vo {
+    box-sizing: content-box;
+    width: 300px;
+    max-width: 100%;
+    padding-top: 8px;
+  }
+  /* Dxr: 8px 16px, a thinPixel bgBorderFaintThin line above; `_container > :first-child ._content` has none. */
+  .ui-vo-content {
+    padding: 8px 16px;
+    border-top: var(--thin-pixel) solid var(--border-faint-thin);
+  }
+  .ui-vo > .ui-vo-content:first-child {
+    border-top: none;
+  }
+  /* kxr */
+  .ui-vo-row {
+    display: flex;
+    min-height: 32px;
+    align-items: center;
+    justify-content: space-between;
+  }
+  /* jxr: align-self stretch, flex-centred; $fullWidth spans the row with 8px above and 4px below. */
+  .ui-vo-label {
+    display: flex;
+    align-self: stretch;
+    align-items: center;
+    margin: 0;
+    white-space: nowrap;
+  }
+  .ui-vo-label[data-label="full"] {
+    width: 100%;
+    margin: 8px 0 4px;
+  }
+  /* Mxr */
+  .ui-vo-section-label {
+    margin: 8px 0 2px;
+  }
+  .ui-vo-block {
+    display: flex;
+    min-height: 32px;
+    flex-direction: column;
+  }
+  /* Gxr: chips 8px under the label, 1px apart, each with a 4px right / bottom margin. */
+  .ui-vo-field-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1px;
+    margin-top: 8px;
+  }
+  .ui-vo-field-options > * {
+    margin: 0 4px 4px 0;
+  }
+  /* Nxr's focus ring sits inside the pill, as jv tab's does. */
+  .ui-vo-chip:focus-visible {
+    outline-offset: -1px;
+  }
+  /* Kxr: the toggle sits in front of the select, no gap; the select stays 160 at most. */
+  .ui-vo-select-toggle {
+    display: flex;
+    flex: auto;
+    flex-direction: row-reverse;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0;
+  }
+  /* Fxr */
+  .ui-vo-icon-button {
+    margin: 0 4px;
+  }
+  /* Rxr: a 160 x 24 compact select (Uxr measures the widest at open: 160 live). Hover, press and open paint
+     controlSecondaryHover with labelTitle; open adds a bgBorderSolidHover border. */
+  .ui-select.ui-vo-select {
+    flex-shrink: 0;
+    width: 160px;
+    max-width: 160px;
+    height: 24px;
+    margin-block: 0;
+  }
+  .ui-select.ui-vo-select:is(:hover, :active, [aria-expanded="true"]):not(:disabled) {
+    background-color: var(--control-secondary-hover);
+    color: var(--fg);
+  }
+  .ui-select.ui-vo-select[aria-expanded="true"] {
+    border-color: var(--border-solid-hover);
+  }
+  /* wxr: 36px, 8px padding, 4px apart, right-aligned under a bgBorder line, revealed by GS's fast collapse. */
+  .ui-vo-footer {
+    display: flex;
+    height: 36px;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    padding: 8px;
+    overflow: hidden;
+    border-top: var(--thin-pixel) solid var(--bg-border);
+    animation: ui-vo-footer-in 0.15s ease-out;
+  }
+  /* The link-coloured action ("Set default for everyone"): q miniPlus labelLink inside a borderless button. */
+  .ui-vo-footer-link {
+    color: var(--link);
+  }
+  /* The layout tabs reach 8px into the section's padding and keep 16px above the rows. */
+  .ui-vo-layout {
+    margin: 0 -8px 16px;
+  }
+}
+
+@keyframes ui-vo-footer-in {
+  from {
+    height: 0;
+    padding-block: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-vo-footer {
+    animation: none;
+  }
+}

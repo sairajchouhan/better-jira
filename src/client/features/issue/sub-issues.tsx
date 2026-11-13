@@ -13,7 +13,7 @@ import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSubIssueComposer } from "./use-sub-issue-composer";
 import { useStoredState } from "@/client/state/stored-state";
 import { FieldMenuButton } from "@/client/components/pill-select";
-import { DisplayProperties, SelectRow, Toggle } from "@/client/components/display-options";
+import { DisplayProperties, SelectRow, Toggle, ViewOptions } from "@/client/components/display-options";
 import {
   RelationIcon,
   Icon,
@@ -518,30 +518,34 @@ export function SubIssues({ issue }: { issue: Issue }) {
           label="Sub-issue display options"
           anchor={settings}
           close={() => setSettings(null)}
-          width={300}
+          fit
         >
-          <SelectRow
-            label="Ordering"
-            value={display.ordering}
-            options={orderings}
-            onChange={(ordering) => change({ ordering: ordering as SubIssueDisplay["ordering"] })}
-          />
-          <SelectRow
-            label="Completed issues"
-            value={display.completed}
-            options={COMPLETED}
-            onChange={(completed) => change({ completed: completed as SubIssueDisplay["completed"] })}
-          />
-          <Toggle
-            label="Nested sub-issues"
-            value={display.nested}
-            onChange={() => change({ nested: !display.nested })}
-          />
-          <DisplayProperties
-            properties={properties}
-            shown={display.properties}
-            onChange={(properties) => change({ properties })}
-          />
+          <ViewOptions.Container>
+            <ViewOptions.Content>
+              <SelectRow
+                label="Ordering"
+                value={display.ordering}
+                options={orderings}
+                onChange={(ordering) => change({ ordering: ordering as SubIssueDisplay["ordering"] })}
+              />
+              <SelectRow
+                label="Completed issues"
+                value={display.completed}
+                options={COMPLETED}
+                onChange={(completed) => change({ completed: completed as SubIssueDisplay["completed"] })}
+              />
+              <Toggle
+                label="Nested sub-issues"
+                value={display.nested}
+                onChange={() => change({ nested: !display.nested })}
+              />
+              <DisplayProperties
+                properties={properties}
+                shown={display.properties}
+                onChange={(properties) => change({ properties })}
+              />
+            </ViewOptions.Content>
+          </ViewOptions.Container>
         </MenuSurface>
       )}
     </section>

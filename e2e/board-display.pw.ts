@@ -223,3 +223,144 @@ test("a card's label chip opens the label picker beside it, not the issue", asyn
   expect(await page.eval("location.href")).toBe(url);
   expect(await labels()).not.toEqual(before);
 });
+
+// Linear's ViewOptions panel in its popover (startup-root.CnUSfl4j.js `qxr`, `sq`, `gw`, `gy`; ViewOptions.2m5-Tfth.js `Y`),
+// every value read from live linear.app with getComputedStyle, 2026-11-13 (.raj/qa/display-menu.md). The popover is
+// Linear's elevated theme, so each control inside paints elevated tokens; a Select's list elevates once more in dark.
+const DISPLAY = '[role=dialog][aria-label="Display options"]';
+const LINEAR_DISPLAY = {
+  dark: {
+    surface: { bg: "lch(12.72 0.85 272)", border: "lch(25.68 1.93 272)", shadow: "lch(0 0 0 / 0.125) 0px 3px 8px 0px, lch(0 0 0 / 0.125) 0px 2px 5px 0px, lch(0 0 0 / 0.125) 0px 1px 1px 0px" },
+    divider: "lch(20.28 1.93 272)",
+    tab: { off: ["lch(17.349 1.043 272)", "lch(64.714 1.425 272)"], hover: ["lch(21.206 1.043 272)", "lch(91.178 1.425 272)"], on: ["lch(23.906 1.429 272)", "lch(100 0 272)"] },
+    label: "lch(64.714 1.425 272)",
+    heading: "lch(91.178 1.425 272)",
+    select: { rest: ["lch(17.349 1.139 272)", "lch(91.178 1.425 272)"], hover: ["lch(21.977 1.525 272)", "lch(100 0 272)"] },
+    // gw: mix(bgBase, labelBase, .2 / .3) in linear sRGB = lch(48.247) / lch(56.807) live.
+    switch: { off: "color(srgb-linear 0.168276 0.169979 0.174897)", hover: "color(srgb-linear 0.244973 0.247373 0.254295)", on: "lch(47.918 59.303 288.421)" },
+    chip: { on: ["lch(25.834 1.525 272)", "lch(100 0 272)"], off: ["lch(17.349 1.043 272)", "lch(64.714 1.425 272)"], hover: ["lch(21.206 1.043 272)", "lch(91.178 1.425 272)"] },
+    footer: { border: "lch(21.36 1.93 272)", link: "lch(60.303 70 288.421)" },
+    list: { bg: "lch(16.432 1.3 272)", ring: "lch(38.032 2.38 272) 0px 0px 0px 0.5px", highlight: "lch(25.689 1.975 272)", check: "lch(66.215 1.65 272)" },
+  },
+  light: {
+    surface: { bg: "lch(100 0 282)", border: "lch(91.9 0 282)", shadow: "lch(0 0 0 / 0.02) 0px 6px 18px 0px, lch(0 0 0 / 0.04) 0px 3px 9px 0px, lch(0 0 0 / 0.04) 0px 1px 1px 0px" },
+    divider: "lch(91.9 0 282)",
+    tab: { off: ["lch(100 0 282)", "lch(40 1 282)"], hover: ["lch(96.914 0 282)", "lch(20 1 282)"], on: ["lch(95.543 0 282)", "lch(10 0 282)"] },
+    label: "lch(40 1 282)",
+    heading: "lch(20 1 282)",
+    select: { rest: ["lch(100 0 282)", "lch(20 1 282)"], hover: ["lch(95.886 0 282)", "lch(10 0 282)"] },
+    // .4 / .5 in light = lch(82.484) / lch(76.978) live.
+    switch: { off: "color(srgb-linear 0.611684 0.61201 0.612628)", hover: "color(srgb-linear 0.51468 0.514978 0.515784)", on: "lch(53 52.26 286.91)" },
+    chip: { on: ["lch(94.857 0 282)", "lch(10 0 282)"], off: ["lch(100 0 282)", "lch(40 1 282)"], hover: ["lch(96.914 0 282)", "lch(20 1 282)"] },
+    footer: { border: "lch(90.55 0 282)", link: "lch(45 70 286.91)" },
+    list: { bg: "lch(100 0 282)", ring: "lch(86.5 0 282) 0px 0px 0px 0.5px", highlight: "lch(95.886 0 282)", check: "lch(40 1 282)" },
+  },
+} as const;
+const paint = (selector: string, pseudo = "") =>
+  `(()=>{const n=document.querySelector(${JSON.stringify(selector)}),s=getComputedStyle(n${pseudo && `,${JSON.stringify(pseudo)}`});return [s.backgroundColor,s.color]})()`;
+
+for (const scheme of ["dark", "light"] as const) {
+  test(`Display options is Linear's ViewOptions popover, state for state (${scheme})`, async ({ open }) => {
+    const page = await open();
+    await page.page.emulateMedia({ colorScheme: scheme });
+    const L = LINEAR_DISPLAY[scheme];
+    const hover = async (selector: string) => {
+      await page.page.hover(selector);
+      await page.page.waitForTimeout(300); // past the 0.15s colour transitions
+    };
+    await page.click('[aria-label="Display options"]');
+    await page.waitFor(`!!document.querySelector('${DISPLAY} .ui-vo-select')`);
+    await test.step("the popover: Y's elevated bgBase, bgBorderThin border, radius 12, shadowMedium, 300 inside", async () => {
+      const s = await page.eval<Record<string, unknown>>(
+        `(()=>{const p=document.querySelector('${DISPLAY}'),s=getComputedStyle(p);return {width:p.clientWidth,bg:s.backgroundColor,border:s.borderTopColor,radius:s.borderRadius,shadow:s.boxShadow.split(/,(?![^(]*\\))/).map(x=>x.trim()).filter(x=>!x.startsWith("rgba(0, 0, 0, 0)")).join(", "),paddingTop:s.paddingTop}})()`,
+      );
+      expect(s).toEqual({ width: 300, bg: L.surface.bg, border: L.surface.border, radius: "12px", shadow: L.surface.shadow, paddingTop: "8px" });
+    });
+    await test.step("sections: 8px 16px, divided by bgBorderFaintThin, the first undivided", async () => {
+      expect(
+        await page.eval(
+          `[...document.querySelectorAll('${DISPLAY} .ui-vo-content')].map(n=>{const s=getComputedStyle(n);return [s.padding,s.borderTopStyle,s.borderTopColor]}).slice(0,2)`,
+        ),
+      ).toEqual([
+        ["8px 16px", "none", expect.any(String)],
+        ["8px 16px", "solid", L.divider],
+      ]);
+    });
+    await test.step("layout tabs: sq fullWidth, 137 x 28 each on a bgBase track, tertiary off / hover / selected", async () => {
+      expect(
+        await page.eval(
+          `(()=>{const l=document.querySelector('${DISPLAY} [role=tablist]');return [getComputedStyle(l).backgroundColor,getComputedStyle(l).borderRadius,...[...l.children].map(t=>[t.getBoundingClientRect().width,t.getBoundingClientRect().height])]})()`,
+        ),
+      ).toEqual([L.surface.bg, "5px", [137, 28], [137, 28]]);
+      expect(await page.eval(paint(`${DISPLAY} [role=tab][aria-selected=false]`))).toEqual(L.tab.off);
+      expect(await page.eval(paint(`${DISPLAY} [role=tab][aria-selected=true]`))).toEqual(L.tab.on);
+      await hover(`${DISPLAY} [role=tab][aria-selected=false]`);
+      expect(await page.eval(paint(`${DISPLAY} [role=tab][aria-selected=false]`))).toEqual(L.tab.hover);
+    });
+    await test.step("rows: 32px, miniPlus labelMuted labels on one line, a labelBase section heading", async () => {
+      expect(
+        await page.eval(
+          `(()=>{const r=document.querySelector('${DISPLAY} .ui-vo-row'),l=r.querySelector('.ui-vo-label'),s=getComputedStyle(l),h=getComputedStyle(document.querySelector('${DISPLAY} .ui-vo-section-label'));return [getComputedStyle(r).minHeight,s.fontSize,s.fontWeight,s.color,s.whiteSpace,h.color,h.fontWeight,h.marginTop,h.marginBottom]})()`,
+        ),
+      ).toEqual(["32px", "12px", "500", L.label, "nowrap", L.heading, "500", "8px", "2px"]);
+    });
+    await test.step("selects: Rxr's 160 x 24 controlSecondary field, controlSecondaryHover + labelTitle on hover", async () => {
+      expect(
+        await page.eval(
+          `[...document.querySelectorAll('${DISPLAY} .ui-vo-select')].map(n=>[n.getBoundingClientRect().width,n.getBoundingClientRect().height])`,
+        ),
+      ).toEqual(Array.from({ length: 5 }, () => [160, 24]));
+      expect(await page.eval(paint(`${DISPLAY} .ui-vo-select`))).toEqual(L.select.rest);
+      await hover(`${DISPLAY} .ui-vo-select`);
+      expect(await page.eval(paint(`${DISPLAY} .ui-vo-select`))).toEqual(L.select.hover);
+    });
+    await test.step("switches: gw's track mixed in linear sRGB over the elevated bgBase", async () => {
+      const track = (state: string) =>
+        page.eval(`getComputedStyle(document.querySelector('${DISPLAY} [role=switch]${state}')).backgroundColor`);
+      expect(await track(":checked")).toBe(L.switch.on);
+      expect(await track(":not(:checked)")).toBe(L.switch.off);
+      await hover(`${DISPLAY} [role=switch]:not(:checked)`);
+      expect(await track(":not(:checked)")).toBe(L.switch.hover);
+    });
+    await test.step("property chips: Nxr tab/small, controlSecondarySelected when on, tertiary hover when off; a click keeps the popover", async () => {
+      const on = `${DISPLAY} .ui-vo-chip[aria-pressed=true]`,
+        off = `${DISPLAY} .ui-vo-chip[aria-pressed=false]`;
+      expect(await page.eval(paint(on))).toEqual(L.chip.on);
+      expect(await page.eval(paint(off))).toEqual(L.chip.off);
+      await hover(on);
+      expect(await page.eval(paint(on))).toEqual(L.chip.on);
+      await hover(off);
+      expect(await page.eval(paint(off))).toEqual(L.chip.hover);
+      const name = await page.eval<string>(`document.querySelector('${off}').textContent`);
+      await page.click(off);
+      await page.waitFor(
+        `[...document.querySelectorAll('${DISPLAY} .ui-vo-chip')].find(n=>n.textContent===${JSON.stringify(name)})?.getAttribute('aria-pressed')==='true'`,
+      );
+    });
+    await test.step("the footer shows only while the display differs from its default: bgBorder line, Reset, a labelLink save", async () => {
+      // The chip pressed above leaves a changed display.
+      await page.waitFor(`!!document.querySelector('${DISPLAY} .ui-vo-footer')`);
+      await page.page.waitForTimeout(300); // GS's collapse opens it
+      expect(
+        await page.eval(
+          `(()=>{const f=document.querySelector('${DISPLAY} .ui-vo-footer'),s=getComputedStyle(f);return [f.getBoundingClientRect().height,s.borderTopColor,Math.round(f.getBoundingClientRect().right-f.lastElementChild.getBoundingClientRect().right),[...f.querySelectorAll('button')].map(b=>[b.dataset.variant,b.textContent]),getComputedStyle(f.querySelector('.ui-vo-footer-link')).color]})()`,
+        ),
+      ).toEqual([36, L.footer.border, 8, [["borderless", "Reset"], ["borderless", "Save my default"]], L.footer.link]);
+      await page.eval(`[...document.querySelectorAll('${DISPLAY} .ui-vo-footer button')].find(b=>b.textContent==="Reset").click()`);
+      await page.waitFor(`!document.querySelector('${DISPLAY} .ui-vo-footer')`);
+    });
+    await test.step("a select's list: gy, one elevation up, 24px rows, end-aligned 5px below; Escape closes only the list", async () => {
+      await page.click(`${DISPLAY} .ui-vo-select`);
+      await page.waitFor(`!!document.querySelector('[data-surface=select] [cmdk-item][data-selected=true]')`);
+      expect(
+        await page.eval(
+          `(()=>{const s=document.querySelector('[data-surface=select]'),row=s.querySelector('[cmdk-item][data-selected=true]'),t=document.querySelector('${DISPLAY} .ui-vo-select').getBoundingClientRect(),b=s.getBoundingClientRect();return {bg:getComputedStyle(s).backgroundColor,ring:getComputedStyle(s).boxShadow.split(/,(?![^(]*\\))/)[0],height:row.getBoundingClientRect().height,font:getComputedStyle(row).fontSize,padding:getComputedStyle(row).padding,highlight:getComputedStyle(row,'::before').backgroundColor,inset:getComputedStyle(row,'::before').left,check:getComputedStyle(s.querySelector('.menu-checkmark')).color,right:Math.round(t.right-b.right),top:Math.round(b.top-t.bottom)}})()`,
+        ),
+      ).toEqual({ bg: L.list.bg, ring: L.list.ring, height: 24, font: "12px", padding: "0px 35px 0px 12px", highlight: L.list.highlight, inset: "4px", check: L.list.check, right: 0, top: 5 });
+      await page.key("Escape");
+      await page.waitFor(`!document.querySelector('[data-surface=select]')`);
+      expect(await page.eval(`!!document.querySelector('${DISPLAY}')`)).toBe(true);
+      expect(await page.eval(`document.activeElement?.classList.contains('ui-vo-select')`)).toBe(true);
+    });
+  });
+}
