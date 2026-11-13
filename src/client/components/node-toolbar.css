@@ -1,0 +1,95 @@
+@layer properties, theme, base, components, utilities;
+
+@layer components {
+  /*
+   * Linear's node toolbar `Px` with `Fx.container` + `Fx.actionToolbarOpaque` (startup-root.CnUSfl4j.js): a pill
+   * (radius 9999, padding 2, no gap, none with a single item) with no fill, border, shadow or blur at rest, filled
+   * controlTertiarySelected under the pointer. In a row (`Fx.rowToolbar`) it sits in the flow, at the row's end.
+   */
+  .ui-node-toolbar {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 0;
+    padding: 2px;
+    border-radius: 9999px;
+    background: transparent;
+  }
+  .ui-node-toolbar:has(> :only-child) {
+    padding: 0;
+  }
+  .ui-node-toolbar:hover {
+    background: var(--tab-on);
+  }
+
+  /* `kx.reveal` + `kx.fade`: opacity 0 → 1 over the host, after --editor-toolbar-reveal-delay (.1s) when only hovered,
+     at once and without a fade while focus is inside; the fade is --editor-toolbar-fade-duration (40ms, 0 for reduced motion). */
+  .ui-node-toolbar[data-reveal="hover"] {
+    opacity: 0;
+    pointer-events: none;
+    transition-property: opacity;
+    transition-duration: 40ms;
+    transition-timing-function: ease-out;
+    transition-delay: 0s;
+  }
+  [data-node-toolbar-host]:hover .ui-node-toolbar[data-reveal="hover"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  [data-node-toolbar-host]:hover:not(:focus-within) .ui-node-toolbar[data-reveal="hover"] {
+    transition-delay: 0.1s;
+  }
+  [data-node-toolbar-host]:focus-within .ui-node-toolbar[data-reveal="hover"] {
+    opacity: 1;
+    pointer-events: auto;
+    transition-property: none;
+  }
+  /* toolbarAlwaysVisible: lm.isPureTouchDevice. */
+  @media (hover: none) {
+    .ui-node-toolbar[data-reveal="hover"] {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ui-node-toolbar[data-reveal="hover"] {
+      transition-duration: 0s;
+    }
+  }
+
+  /* `Nx` (`Fx.item`, `_nodeToolbarItem` 14px svg): a 26px circle, padding 6, transparent; labelMuted icon turning
+     labelBase under the pointer. Hover fill: bgShadeHover in dark, bgBorderSolidAlpha in light (`Fx.itemLight`). */
+  .ui-button.ui-button[data-appearance="node-toolbar"] {
+    width: 26px;
+    min-width: 26px;
+    height: 26px;
+    padding: 6px;
+    border: none;
+    border-radius: 9999px;
+    background: transparent;
+    color: var(--fg-3);
+    transition-property: background-color, color;
+  }
+  .ui-button.ui-button[data-appearance="node-toolbar"]:is(:hover, :active) {
+    background: var(--node-toolbar-item-hover);
+    color: var(--fg-2);
+  }
+  .ui-button.ui-button[data-appearance="node-toolbar"] .ui-button-icon > svg {
+    width: 14px;
+    height: 14px;
+    transition: fill 0.15s;
+  }
+  /* `_nodeToolbarItem:not(:only-child):before`: a hit area 4px past the pill's ends and 2px between items. */
+  .ui-node-toolbar > .ui-button:not(:only-child)::before {
+    content: "";
+    position: absolute;
+    inset: -4px -2px;
+  }
+  .ui-node-toolbar > .ui-button:last-child:not(:only-child)::before {
+    right: -4px;
+  }
+  .ui-node-toolbar > .ui-button:first-child:not(:only-child)::before {
+    left: -4px;
+  }
+}

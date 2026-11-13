@@ -38,7 +38,8 @@ type IconButtonProps = Omit<Look, "variant"> &
   Tip & {
     /** `send` is SendButton's look only. */
     variant?: ButtonVariant | "send";
-    appearance?: "comment-action" | "label";
+    /** `node-toolbar`: an item of Linear's editor node toolbar (NodeToolbar.Button). */
+    appearance?: "comment-action" | "label" | "node-toolbar";
     label: string;
     tooltip?: string | false;
     children: ReactNode;
@@ -136,10 +137,16 @@ export function ButtonLink({
   size = "normal",
   icon,
   label,
+  appearance,
   className = "",
   children,
   ...props
-}: Look & { icon?: ReactNode; label?: string } & Omit<ComponentProps<"a">, "aria-label" | "title">) {
+}: Look & {
+  icon?: ReactNode;
+  label?: string;
+  /** `node-toolbar`: an item of Linear's editor node toolbar (NodeToolbar.Link). */
+  appearance?: "node-toolbar";
+} & Omit<ComponentProps<"a">, "aria-label" | "title">) {
   // `fk onlyIcon`: no text, so the link is IconButton's square and `label` names it and titles it.
   const onlyIcon = !children;
   return (
@@ -147,6 +154,7 @@ export function ButtonLink({
       data-variant={variant}
       data-size={size}
       data-shape={onlyIcon ? "icon" : undefined}
+      data-appearance={appearance}
       aria-label={label}
       title={onlyIcon ? label : undefined}
       className={`ui-button ${className}`}
