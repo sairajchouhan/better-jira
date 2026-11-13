@@ -50,3 +50,36 @@
     padding-inline: 12px;
   }
 }
+
+/* `sq` fullWidth (cq, I_n): the track is bgBase; each trigger is a jv tab in Mv medium (28px, 12/500, 0 8px beside its
+   icon, 6px gap) with 2px margins, sharing the row equally (137 each in the 300px panel, live). Off: controlTertiary + labelMuted, a bgBorderAlphaThin ring over
+   shadowLow; hover controlTertiaryHover + labelBase; on controlTertiarySelected + labelTitle, ringed with
+   bgBorderSolidAlphaThin. Inside a popover every token is the elevated one (control-tokens.css .ui-elevated). */
+@layer components {
+  .ui-tabs-list[data-variant="options"] {
+    isolation: isolate;
+    width: 100%;
+    gap: 2px;
+    margin: -2px 0;
+    padding: 0;
+    border-radius: 5px;
+    background: var(--panel);
+  }
+  .ui-tabs-list[data-variant="options"] .ui-tab {
+    flex: 1 1 0;
+    justify-content: center;
+    margin: 2px;
+    padding: 0 8px;
+    box-shadow: 0 0 0 var(--thin-pixel) var(--border-alpha-thin), var(--frame-shadow);
+  }
+  .ui-tabs-list[data-variant="options"] .ui-tab:hover {
+    background: var(--control-tertiary-hover);
+  }
+  .ui-tabs-list[data-variant="options"] .ui-tab[aria-selected="true"] {
+    background: var(--tab-on);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--border-solid-alpha-thin);
+  }
+  .ui-tabs-list[data-variant="options"] .ui-tab:focus-visible {
+    outline-offset: -1px;
+  }
+}
