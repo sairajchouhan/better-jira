@@ -83,7 +83,7 @@ const board1 = { to: "board", board: 1, scope: "all" } as const;
 test("an issue opens the way its board does; choosing page or side is remembered by the board", () => {
   const opened = run([{ type: "go", to: { selected: "OLD-1", panel: true } }]);
   expect(opened.screen).toMatchObject({ selected: "A-1", panel: true, view: "side" });
-  expect(url(opened.screen)).toBe("/team/1/all?issue=A-1");
+  expect(url(opened.screen)).toBe("/board/1/all?issue=A-1");
   const page = transition(opened.screen, { type: "go", to: { view: "page" } }, data());
   expect(page.preferences?.[1]!.display.openIn).toBe("page");
   expect(page.history).toBe("push");
@@ -145,7 +145,7 @@ test("leaving or switching a view drops its filter overlay; going to a board pic
   expect(other.screen.overlayFilters.children).toHaveLength(0);
   const left = transition(filtered.screen, { type: "go", to: { board: 1 } }, data());
   expect(left.screen).toMatchObject({ activeViewId: null, view: "side", overlayFilters: { children: [] } });
-  expect(url(left.screen)).toBe("/team/1/all");
+  expect(url(left.screen)).toBe("/board/1/all");
 });
 
 test("the view editor takes display changes into its draft, keeps the board's preference, and returns on cancel", () => {
@@ -161,7 +161,7 @@ test("the view editor takes display changes into its draft, keeps the board's pr
   // BJ-158: leaving pushes only the destination so Back returns to the editor.
   const left = transition(editing.screen, { type: "go", to: { board: 2 } }, data());
   expect(left.history).toBe("push");
-  expect(url(left.screen)).toBe("/team/2/all");
+  expect(url(left.screen)).toBe("/board/2/all");
   // A reload of the editor's address uses the draft kept for it, else starts a fresh one.
   const kept = run([restore({ to: "editor" }, { ...draft, name: "Kept" })]);
   expect(kept.screen.editorDraft?.name).toBe("Kept");
@@ -177,7 +177,7 @@ test("My issues is one destination; opening either board leaves it and restore n
   for (const board of [1, 2]) {
     const opened = transition(mine.screen, { type: "go", to: { board } }, data());
     expect(opened.screen.mine).toBe(false);
-    expect(url(opened.screen)).toBe(`/team/${board}/all`);
+    expect(url(opened.screen)).toBe(`/board/${board}/all`);
     const back = transition(opened.screen, restore({ to: "person", person: null, tab: "assigned" }), data());
     expect(url(back.screen)).toBe("/my-issues");
     expect(back.history).toBe("none");
@@ -225,7 +225,7 @@ test("D7: every old address names the place it showed", () => {
     ["/view/old-name-v1?board=1&issue=A-1&view=page", { to: "issue", key: "A-1", over: { to: "view", id: "v1" } }],
     ["/view/triage-v1/edit?board=1", { to: "editor", id: "v1" }],
     ["/view/new?board=1&mine=1", { to: "editor" }],
-    ["/team/1/all?issue=A-1", undefined],
+    ["/board/1/all?issue=A-1", undefined],
     ["/view/triage-v1", undefined],
   ];
   for (const [href, place] of cases) expect([href, legacy(href)]).toEqual([href, place as Place]);

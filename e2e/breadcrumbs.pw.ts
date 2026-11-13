@@ -16,7 +16,7 @@ for (const parent of ["Browser audit", "Issues"]) {
       );
       await page.click(`[aria-label="Breadcrumb"] [aria-label="${parent}"]`);
       await page.waitFor(`!document.getElementById('summary')`);
-      expect(await page.eval(`location.pathname`)).toBe("/team/1/all");
+      expect(await page.eval(`location.pathname`)).toBe("/board/1/all");
       expect(await page.eval(`!!${shownIssue}`)).toBe(false);
       expect(
         await page.eval(

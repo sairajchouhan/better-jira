@@ -34,17 +34,18 @@ async function open(href: string, state?: Record<string, unknown>) {
 
 test("D7: old addresses redirect to the paths that replaced them, replacing the entry", async () => {
   const cases: [string, string][] = [
-    ["/", "/team/2/active"],
-    ["/?board=1", "/team/1/all"],
-    ["/?board=1&issue=A-1&view=side", "/team/1/all?issue=A-1"],
-    ["/?board=1&issue=OLD-1", "/team/1/all?issue=A-1"],
+    ["/", "/board/2/active"],
+    ["/?board=1", "/board/1/all"],
+    ["/?board=1&issue=A-1&view=side", "/board/1/all?issue=A-1"],
+    ["/?board=1&issue=OLD-1", "/board/1/all?issue=A-1"],
     ["/?board=1&issue=A-1&view=page", "/issue/A-1"],
     ["/?board=1&issue=A-1&document=d1", "/issue/A-1/document/d1"],
     ["/?board=1&inbox=1&issue=A-1", "/inbox?issue=A-1"],
     ["/?board=1&mine=1", "/my-issues"],
     ["/user/alex/activity", "/profiles/alex/activity"],
-    ["/views?board=1", "/team/1/all"],
-    ["/team/1/views", "/team/1/all"],
+    ["/views?board=1", "/board/1/all"],
+    ["/team/1/views", "/board/1/all"],
+    ["/team/1/active?issue=A-1", "/board/1/active?issue=A-1"],
     ["/view/v1?board=1", "/view/triage-v1"],
     ["/view/v1/edit?board=1", "/view/triage-v1/edit"],
   ];
@@ -66,18 +67,18 @@ test("an issue page keeps the list it opened over in history state; a renamed ke
 });
 
 test("each path shows its place; unknown issues, boards, tabs and views are not found", async () => {
-  expect((await open("/team/1/backlog?issue=B-1")).shown).toEqual({ to: "board", board: 1, scope: "backlog", issue: "B-1" });
+  expect((await open("/board/1/backlog?issue=B-1")).shown).toEqual({ to: "board", board: 1, scope: "backlog", issue: "B-1" });
   expect((await open("/my-issues/created")).shown).toEqual({ to: "person", person: null, tab: "created" });
   expect((await open("/profiles/alex")).shown).toEqual({ to: "person", person: "alex", tab: "assigned" });
   expect((await open("/inbox?notification=n1")).shown).toEqual({ to: "inbox" });
-  for (const href of ["/issue/GONE-1", "/team/1/all?issue=GONE-1", "/team/9/all", "/team/1/someday", "/my-issues/assigned", "/my-issues/nope", "/view/nothing"]) {
+  for (const href of ["/issue/GONE-1", "/board/1/all?issue=GONE-1", "/board/9/all", "/board/1/someday", "/my-issues/assigned", "/my-issues/nope", "/view/nothing"]) {
     const { notFound, shown } = await open(href);
     expect([href, notFound, shown]).toEqual([href, true, undefined]);
   }
 });
 
 test("hovering a link preloads its issue without showing it", async () => {
-  const { router, preloaded, shown } = await open("/team/1/all");
+  const { router, preloaded, shown } = await open("/board/1/all");
   await router.preloadRoute({ to: "/issue/$key/{-$slug}", params: { key: "B-1" } });
   expect(preloaded).toContain("B-1");
   expect(shown).toEqual({ to: "board", board: 1, scope: "all" });
@@ -85,11 +86,11 @@ test("hovering a link preloads its issue without showing it", async () => {
 
 
 test("BJ-187: copied route and timestamp URLs use the router base path, target and search", async () => {
-  const { router } = await open("/team/1/all");
+  const { router } = await open("/board/1/all");
   router.update({ ...router.options, basepath: "/jira" });
   const context = { view: (id: string) => id === triage.id ? triage : undefined };
   const cases: [Place, string][] = [
-    [{ to: "board", board: 2, scope: "active", issue: "B-1" }, "/team/2/active?issue=B-1"],
+    [{ to: "board", board: 2, scope: "active", issue: "B-1" }, "/board/2/active?issue=B-1"],
     [{ to: "inbox", issue: "A-1" }, "/inbox?issue=A-1"],
     [{ to: "person", person: "alex", tab: "created" }, "/profiles/alex/created"],
     [{ to: "view", id: triage.id }, "/view/triage-v1"],

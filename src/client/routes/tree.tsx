@@ -112,13 +112,21 @@ const listRoute = {
 
 const boardRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/team/$board/$scope",
+  path: "/board/$board/$scope",
   ...listRoute,
   beforeLoad: ({ params, search, context, location, preload }) => {
     const board = Number(params.board);
     if (!context.hasBoard(board) || !isScope(params.scope)) throw notFound();
     openBeside(search.issue, context, location);
     if (!preload) context.show({ to: "board", board, scope: params.scope, ...listSearch(search) }, location);
+  },
+});
+/** The board address before boards were named in it (`/team/<board>/<scope>`, copied from Linear's team URL): same place, new path. */
+const teamRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/team/$board/$scope",
+  beforeLoad: ({ location }) => {
+    throw redirect({ href: location.href.replace(/^\/team\//, "/board/"), state: location.state, replace: true });
   },
 });
 /** A view's address segment, `<slug>-<id>`; an old one redirects to it (BJ-155). */
@@ -233,6 +241,7 @@ const documentRoute = createRoute({
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   boardRoute,
+  teamRoute,
   viewRoute,
   newViewRoute,
   editViewRoute,
@@ -278,7 +287,7 @@ export function locationOf(place: Place, context: Pick<RouteContext, "view">) {
   };
   switch (place.to) {
     case "board":
-      return { to: "/team/$board/$scope", params: { board: String(place.board), scope: place.scope }, search: issue } as const;
+      return { to: "/board/$board/$scope", params: { board: String(place.board), scope: place.scope }, search: issue } as const;
     case "view":
       return {
         to: "/view/$view",

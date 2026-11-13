@@ -29,7 +29,7 @@ test("navigation shell: sidebar, My issues URL, palettes and shortcut search", a
       `document.querySelector('nav[aria-label="Breadcrumb"] [aria-label="My issues"]')?.textContent==='My issues'`,
     );
     await page.keys("ge");
-    await page.waitFor(`location.pathname.startsWith('/team/')`);
+    await page.waitFor(`location.pathname.startsWith('/board/')`);
   });
   await test.step("R1-D54: the scoped palette lists only issue commands that apply", async () => {
     await fetch(`${fixture.url}__fixture`, {

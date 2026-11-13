@@ -304,7 +304,7 @@ function restore(screen: Screen, place: Place, saved: ViewDraft | null, data: Na
   const mine = editorDraft?.mine ?? active?.mine ?? !!person;
   if (!inbox) out.screen = { ...out.screen, mine, inbox: false };
   out.history = "none"; // A restore must never push, including settle reverting a link view.
-  // The board's Issues tab is part of its address (Linear's /team/KEY/all|active|backlog).
+  // The board's Issues tab is part of its address (/board/<id>/all|active|backlog, as Linear's /team/KEY/…).
   if (list?.to === "board" && list.board === out.screen.board) {
     const prefs = out.preferences ?? data.preferences,
       current = prefs[list.board] ?? defaultPreferences();

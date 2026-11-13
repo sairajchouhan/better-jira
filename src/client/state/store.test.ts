@@ -1156,7 +1156,7 @@ test("BJ-142: deleting the active view lands on the board's All issues", async (
   expect(get().activeViewId).toBeNull();
   expect(get().savedViews).toHaveLength(0);
   expect(viewSettings(1).scope).toBe("all");
-  expect(router.history.location.pathname).toBe("/team/1/all");
+  expect(router.history.location.pathname).toBe("/board/1/all");
 });
 
 test("BJ-133: Cancel on a duplicate draft returns to the source view", async () => {
@@ -1322,7 +1322,7 @@ test("navigation: back and forward restore each screen without adding entries", 
     [
       {
         "activeViewId": null,
-        "address": "/team/1/all",
+        "address": "/board/1/all",
         "board": 1,
         "boardOpenIn": "side/side",
         "document": null,
@@ -1337,7 +1337,7 @@ test("navigation: back and forward restore each screen without adding entries", 
       },
       {
         "activeViewId": null,
-        "address": "/team/1/all?issue=NAV-1",
+        "address": "/board/1/all?issue=NAV-1",
         "board": 1,
         "boardOpenIn": "side/side",
         "document": null,
@@ -1352,7 +1352,7 @@ test("navigation: back and forward restore each screen without adding entries", 
       },
       {
         "activeViewId": null,
-        "address": "/team/2/all",
+        "address": "/board/2/all",
         "board": 2,
         "boardOpenIn": "side/side",
         "document": null,
@@ -1412,7 +1412,7 @@ test("navigation: back and forward restore each screen without adding entries", 
       },
       {
         "activeViewId": null,
-        "address": "/team/2/all",
+        "address": "/board/2/all",
         "board": 2,
         "boardOpenIn": "side/side",
         "document": null,
@@ -1427,7 +1427,7 @@ test("navigation: back and forward restore each screen without adding entries", 
       },
       {
         "activeViewId": null,
-        "address": "/team/1/all?issue=NAV-1",
+        "address": "/board/1/all?issue=NAV-1",
         "board": 1,
         "boardOpenIn": "side/side",
         "document": null,
@@ -1442,7 +1442,7 @@ test("navigation: back and forward restore each screen without adding entries", 
       },
       {
         "activeViewId": null,
-        "address": "/team/2/all",
+        "address": "/board/2/all",
         "board": 2,
         "boardOpenIn": "side/side",
         "document": null,
@@ -1498,7 +1498,7 @@ test("navigation: issues open beside the board or as a page, and the board remem
     [
       {
         "activeViewId": null,
-        "address": "/team/1/all?issue=NAV-1",
+        "address": "/board/1/all?issue=NAV-1",
         "board": 1,
         "boardOpenIn": "side/side",
         "document": null,
@@ -1528,7 +1528,7 @@ test("navigation: issues open beside the board or as a page, and the board remem
       },
       {
         "activeViewId": null,
-        "address": "/team/1/all",
+        "address": "/board/1/all",
         "board": 1,
         "boardOpenIn": "page/side",
         "document": null,
@@ -1573,7 +1573,7 @@ test("navigation: issues open beside the board or as a page, and the board remem
       },
       {
         "activeViewId": null,
-        "address": "/team/2/all?issue=NAV-1",
+        "address": "/board/2/all?issue=NAV-1",
         "board": 2,
         "boardOpenIn": "page/side",
         "document": null,
@@ -1588,7 +1588,7 @@ test("navigation: issues open beside the board or as a page, and the board remem
       },
       {
         "activeViewId": null,
-        "address": "/team/2/all?issue=NAV-1",
+        "address": "/board/2/all?issue=NAV-1",
         "board": 2,
         "boardOpenIn": "page/side",
         "document": null,
@@ -1672,7 +1672,7 @@ test("navigation: a link's view opens that issue once and never becomes the boar
       },
       {
         "activeViewId": null,
-        "address": "/team/1/all",
+        "address": "/board/1/all",
         "board": 1,
         "boardOpenIn": "side/side",
         "document": null,
@@ -1687,7 +1687,7 @@ test("navigation: a link's view opens that issue once and never becomes the boar
       },
       {
         "activeViewId": null,
-        "address": "/team/1/all?issue=NAV-1",
+        "address": "/board/1/all?issue=NAV-1",
         "board": 1,
         "boardOpenIn": "side/side",
         "document": null,
@@ -1717,7 +1717,7 @@ test("navigation: a link's view opens that issue once and never becomes the boar
       },
       {
         "activeViewId": null,
-        "address": "/team/2/all?issue=NAV-3",
+        "address": "/board/2/all?issue=NAV-3",
         "board": 2,
         "boardOpenIn": "side/side",
         "document": null,
@@ -1732,7 +1732,7 @@ test("navigation: a link's view opens that issue once and never becomes the boar
       },
       {
         "activeViewId": null,
-        "address": "/team/2/all",
+        "address": "/board/2/all",
         "board": 2,
         "boardOpenIn": "side/side",
         "document": null,
@@ -1967,7 +1967,7 @@ test("navigation: switching or leaving a view resets its filter overlay; closing
       },
       {
         "activeViewId": null,
-        "address": "/team/1/all",
+        "address": "/board/1/all",
         "board": 1,
         "boardOpenIn": "side/side",
         "document": null,
@@ -2104,7 +2104,7 @@ test("navigation: the view editor keeps its draft in the address across reload, 
       },
       {
         "activeViewId": null,
-        "address": "/team/2/all",
+        "address": "/board/2/all",
         "board": 2,
         "boardOpenIn": "page/side",
         "document": null,
@@ -2164,7 +2164,7 @@ test("navigation: the view editor keeps its draft in the address across reload, 
       },
       {
         "activeViewId": null,
-        "address": "/team/1/all",
+        "address": "/board/1/all",
         "board": 1,
         "boardOpenIn": "page/side",
         "document": null,
@@ -2189,18 +2189,18 @@ test("navigation: My issues pushes once and Back/Forward restore exact destinati
   navigate({ mine: true, selected: null, panel: false });
   expect(entries()).toBe(2);
   navigate({ board: 2, selected: null, panel: false });
-  expect(address()).toBe("/team/2/all");
+  expect(address()).toBe("/board/2/all");
   await travel(-1);
   expect(address()).toBe("/my-issues");
   expect(get().mine).toBe(true);
   expect(entries()).toBe(3);
   await travel(-1);
-  expect(address()).toBe("/team/1/all");
+  expect(address()).toBe("/board/1/all");
   expect(get().mine).toBe(false);
   await travel(1);
   expect(address()).toBe("/my-issues");
   await travel(1);
-  expect(address()).toBe("/team/2/all");
+  expect(address()).toBe("/board/2/all");
   expect(get().mine).toBe(false);
   navigate({ mine: true });
   navigate({ board: 2 });

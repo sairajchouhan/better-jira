@@ -7,7 +7,7 @@ const where = `location.pathname+location.search`;
 
 test("router: Back restores the issue body and the board's scroll; a new issue and j/k start at the top", async ({ open }) => {
   await fixture.reset({ bulk: 60 });
-  const app = await open("/team/1/all", { height: 520 });
+  const app = await open("/board/1/all", { height: 520 });
   const columnTop = await app.eval<number>(`(${column}.scrollTop=600,${column}.scrollTop)`);
   expect(columnTop).toBeGreaterThan(300);
   await sleep(150); // the scroll event is what the router snapshots
@@ -26,7 +26,7 @@ test("router: Back restores the issue body and the board's scroll; a new issue a
   await app.page.goBack();
   await app.waitFor(`location.pathname==='/issue/${key}'&&${body}?.scrollTop===${bodyTop}`);
   await app.page.goBack();
-  await app.waitFor(`${where}==='/team/1/all'&&${column}?.scrollTop===${columnTop}`);
+  await app.waitFor(`${where}==='/board/1/all'&&${column}?.scrollTop===${columnTop}`);
   await app.page.goForward();
   await app.waitFor(`location.pathname==='/issue/${key}'&&${body}?.scrollTop===${bodyTop}`);
   // The next issue is a new page: it opens at its top, not where the last one was scrolled.
@@ -38,7 +38,7 @@ test("router: Back restores the issue body and the board's scroll; a new issue a
 
 test("router: resting on a card loads its issue before the click", async ({ open }) => {
   await fixture.reset({ bulk: 60 });
-  const app = await open("/team/1/all");
+  const app = await open("/board/1/all");
   const loaded = async (key: string) =>
     (await fixture.log()).requests.some((r) => r.method === "GET" && r.path === `/api/issues/${key}`);
   // BULK-7 is a To do card, away from any selection the board prefetches around.
@@ -47,30 +47,31 @@ test("router: resting on a card loads its issue before the click", async ({ open
   await app.waitFor(`new Promise(r=>setTimeout(()=>r(true),300))`);
   await expect.poll(() => loaded("BULK-7")).toBe(true);
   await app.click('[data-key="BULK-7"]');
-  await app.waitFor(`${where}==='/team/1/all?issue=BULK-7'`);
+  await app.waitFor(`${where}==='/board/1/all?issue=BULK-7'`);
 });
 
 test("router: unknown issues and addresses show not found", async ({ open }) => {
   const app = await open("/issue/NOPE-1");
   await app.waitFor(`document.body.textContent.includes('Issue NOPE-1 not found')`);
-  await app.goto("/team/1/all?issue=NOPE-2");
+  await app.goto("/board/1/all?issue=NOPE-2");
   await app.waitFor(`document.body.textContent.includes('Issue NOPE-2 not found')`);
   await app.goto("/somewhere/else");
   await app.waitFor(`document.body.textContent.includes('Page not found')`);
   await app.click('a[href="/"]');
-  await app.waitFor(`${where}==='/team/1/all'&&!document.body.textContent.includes('Page not found')`);
+  await app.waitFor(`${where}==='/board/1/all'&&!document.body.textContent.includes('Page not found')`);
 });
 
 test("router: old addresses land on the paths that replaced them", async ({ open }) => {
-  const app = await open("/team/1/all");
+  const app = await open("/board/1/all");
   const cases: [string, string][] = [
     ["/?board=1&issue=TEST-2&view=page", "/issue/TEST-2"],
-    ["/?issue=TEST-2&view=side", "/team/1/all?issue=TEST-2"],
-    ["/?board=1", "/team/1/all"],
+    ["/?issue=TEST-2&view=side", "/board/1/all?issue=TEST-2"],
+    ["/?board=1", "/board/1/all"],
     ["/?board=1&mine=1", "/my-issues"],
     ["/?board=1&inbox=1", "/inbox"],
-    ["/views?board=1", "/team/1/all"],
-    ["/team/1/views", "/team/1/all"],
+    ["/views?board=1", "/board/1/all"],
+    ["/team/1/views", "/board/1/all"],
+    ["/team/1/active?issue=TEST-2", "/board/1/active?issue=TEST-2"],
   ];
   for (const [from, to] of cases) {
     await app.page.goto(new URL(from, fixture.url).href);
@@ -84,7 +85,7 @@ test("BJ-185: sidebar and breadcrumb destinations are real keyboard-accessible l
   const mine = nav.getByRole("link", { name: /^My issues/ });
   await expect(mine).toHaveAttribute("href", "/my-issues");
   const board = nav.getByRole("link", { name: /Browser audit/ });
-  await expect(board).toHaveAttribute("href", /\/team\/1\//);
+  await expect(board).toHaveAttribute("href", /\/board\/1\//);
   const popup = app.context.waitForEvent("page");
   await mine.click({ button: "middle" });
   const tab = await popup;
@@ -94,16 +95,16 @@ test("BJ-185: sidebar and breadcrumb destinations are real keyboard-accessible l
   await app.page.keyboard.press("Enter");
   await expect(app.page).toHaveURL(/\/my-issues$/);
   const crumb = app.page.getByRole("navigation", { name: "Breadcrumb", exact: true }).getByRole("link", { name: "My issues", exact: true });
-  await expect(crumb).toHaveAttribute("href", "/team/1/all");
+  await expect(crumb).toHaveAttribute("href", "/board/1/all");
   await crumb.focus();
   await app.page.keyboard.press("Space");
-  await expect(app.page).toHaveURL(/\/team\/1\/all$/);
+  await expect(app.page).toHaveURL(/\/board\/1\/all$/);
 });
 
 test("BJ-187: Copy page URL uses the router screen when the browser address differs", async ({ open }) => {
-  const app = await open("/team/1/all");
+  const app = await open("/board/1/all");
   await app.eval(`window.copied=[];navigator.clipboard.writeText=async text=>{window.copied.push(text)};history.replaceState(history.state,'','/stale-address')`);
   await app.key("c", "meta", "shift");
   await app.waitFor(`window.copied.length===1`);
-  expect(await app.eval(`window.copied[0]`)).toBe(`${fixture.url}team/1/all`);
+  expect(await app.eval(`window.copied[0]`)).toBe(`${fixture.url}board/1/all`);
 });
