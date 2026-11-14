@@ -50,7 +50,8 @@ test("sub-issue rows: shortcuts act on the row, collapse persists, the composer 
     await p.waitFor(`/"TEST-3" copied to clipboard|Could not access the clipboard/.test(document.body.textContent)`);
   });
 
-  await test.step("R1-D68: Linear's sub-issue composer has named chips and Cancel, and the next draft starts from the defaults", async () => {
+  await test.step("R1-D68: Linear's sub-issue composer has named chips and Cancel; ⌘↵ carries the last one's properties, a reopen or Shift-click starts from the defaults", async () => {
+    const chips = `[document.querySelector('[aria-label^="Sub-issue priority"]').textContent,document.querySelector('[aria-label="Create sub-issue"] .rich-editor-actions button').textContent]`;
     await p.click('[aria-label="Create new sub-issue"]');
     await p.click('[aria-label^="Sub-issue priority"]');
     await p.click(
@@ -65,13 +66,26 @@ test("sub-issue rows: shortcuts act on the row, collapse persists, the composer 
     await p.waitFor(
       `document.querySelector('[data-sub-issues]').textContent.includes('Reset after create')`,
     );
-    expect(
-      await p.eval(
-        `[document.querySelector('[aria-label^="Sub-issue priority"]').textContent,document.querySelector('[aria-label="Create sub-issue"] .rich-editor-actions button').textContent]`,
-      ),
-    // The defaults start at the parent's priority (TEST-2 is Low), as Linear's Issue.create with a parent does
-    // (`priority = priority || parent.priority`, R3-create-D10), not at the High picked for the last one.
-    ).toEqual(["Low", "Cancel"]);
+    // R3 G13: ⌘↵ starts the next draft from the sub-issue it created (Linear's `xm`: no Shift → `Cm(team,user,parent,previous)`,
+    // and `createSubIssue` copies the previous issue's priority).
+    expect(await p.eval(chips)).toEqual(["High", "Cancel"]);
+    // Closing the empty draft and reopening starts from the defaults: the parent's priority (TEST-2 is Low), as Linear's
+    // Issue.create with a parent (`priority = priority || parent.priority`, R3-create-D10).
+    await p.click('[aria-label="Create sub-issue"] .rich-editor-actions button');
+    await p.click('[aria-label="Create new sub-issue"]');
+    expect(await p.eval(chips)).toEqual(["Low", "Cancel"]);
+    // A Shift-click on Create starts from the defaults too (`xm` reads the save event's `shiftKey`).
+    await p.click('[aria-label^="Sub-issue priority"]');
+    await p.click('[role="dialog"][aria-label="Set priority"] [cmdk-item][data-value="High"]');
+    await p.click('[aria-label="Sub-issue title"]');
+    await p.type("Shift-click create");
+    await p.eval(
+      `document.querySelector('[aria-label="Create sub-issue"] .rich-editor-submit').dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,shiftKey:true}))`,
+    );
+    await p.waitFor(
+      `document.querySelector('[data-sub-issues]').textContent.includes('Shift-click create')`,
+    );
+    expect(await p.eval(chips)).toEqual(["Low", "Cancel"]);
     await p.click('[aria-label="Create sub-issue"] .rich-editor-actions button');
   });
 
