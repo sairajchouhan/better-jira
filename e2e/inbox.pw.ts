@@ -142,6 +142,10 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
     await p.waitFor(
       `document.querySelector('[data-inbox-chip="type"]')?.textContent.includes("is any of")`,
     );
+    // Linear's imageForValues: the value segment draws each type's icon (BJ-297).
+    await p.waitFor(
+      `document.querySelectorAll('[data-inbox-chip="type"] .ui-filter-value .ui-filter-icons svg').length === 2`,
+    );
     await p.click(`[aria-label="Add filter"]`);
     await p.click(`[cmdk-item][data-value="Issue priority"]`);
     await p.click(item("Issue priority", "Urgent"));

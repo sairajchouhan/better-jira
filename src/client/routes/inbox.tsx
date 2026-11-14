@@ -7,14 +7,14 @@ import { Button, ButtonLink, IconButton } from "@/client/components/button";
 import { CountBadge } from "@/client/components/count-badge";
 import { EmptyState, LoadingState } from "@/client/components/empty-state";
 import { FutureTimeStep } from "@/client/features/reminders/future-time-step";
-import { FilterBar, FilterBlock, openedBy, type OpenedBy } from "@/client/components/filter-block";
+import { FilterBar, FilterBlock, openedBy, valueIcons, type OpenedBy } from "@/client/components/filter-block";
 import { FilterOperatorMenu } from "@/client/features/filters/filter-operator-menu";
 import { plural } from "@/client/features/filters/property-filter";
 import { equalOperators } from "@/shared/view-model";
 import { FindField } from "@/client/components/find-field";
 import { Tabs } from "@/client/components/tabs";
 import { Text } from "@/client/components/text";
-import { Icon, StatusIcon, TypeDot, type IconName } from "@/client/components/icons";
+import { Icon, PriorityIcon, StatusIcon, TypeDot, type IconName } from "@/client/components/icons";
 import { FILTER_FIELDS, filterOperator, withOperator, withoutFilter, describe, groupSummary, rowLabel, feedCategory, hasFilters, missingIssueNote, shortAgo, type FilterField, type InboxItem, type InboxView, snoozeMarks, type SnoozeMarks } from "@/shared/inbox-model";
 import { CommentCard, InboxGroupUpdates } from "@/client/features/inbox/inbox-group";
 import { TIME_PLACEHOLDER, TimeOptionRows } from "@/client/features/time-options/time-option-rows";
@@ -316,6 +316,38 @@ const FIELD_ICON: Record<FilterField, IconName> = {
   priority: "priority",
   statusType: "status",
 };
+// A notification type's icon, the one its rows' actor badge shows (KIND_ICON); Linear's own subscription glyph is a bell here.
+const TYPE_ICON: Record<string, IconName> = {
+  Assignments: "user",
+  Mentions: "at",
+  "Comments and replies": "comment",
+  Reactions: "smile",
+  "Status changes": "status",
+  Subscriptions: "bell",
+};
+// A Linear status type drawn with the Jira status look that stands for it (statusType in inbox-model). Triage has no icon here.
+const STATUS_TYPE_LOOK: Record<string, { name: string; category: string }> = {
+  Backlog: { name: "Backlog", category: "new" },
+  Unstarted: { name: "", category: "new" },
+  Started: { name: "", category: "indeterminate" },
+  Completed: { name: "", category: "done" },
+  Canceled: { name: "Canceled", category: "done" },
+  Duplicate: { name: "Canceled", category: "done" },
+};
+/** One filter value's icon in its block (Linear's imageForValues): the person's avatar (Jira's own rows a bell, as their rows),
+ *  the type's, the priority's and the status type's; spaces have none. */
+function filterValueIcon(field: FilterField, value: string, base: InboxItem[]) {
+  if (field === "from") {
+    if (value === "Jira") return <Icon name="bell" size={14} />;
+    const actor = base.find((r) => r.actor?.name === value)?.actor;
+    const user = actor ? { id: actor.name, ...actor } : (get().options.users.find((u) => u.name === value) ?? { id: value, name: value });
+    return <Avatar user={user} size={14} />;
+  }
+  if (field === "type") return TYPE_ICON[value] && <Icon name={TYPE_ICON[value]} size={14} />;
+  if (field === "priority") return <PriorityIcon name={value} />;
+  if (field === "statusType") return STATUS_TYPE_LOOK[value] && <StatusIcon status={STATUS_TYPE_LOOK[value]} />;
+  return undefined;
+}
 const ORDER: Partial<Record<FilterField, string[]>> = {
   priority: ["No priority", "Urgent", "High", "Medium", "Low"],
   statusType: [
@@ -613,6 +645,10 @@ function InboxFilterBar({ v, base }: { v: InboxView; base: InboxItem[] }) {
                 label={`${fieldName} value`}
                 expanded={open === "value"}
                 title={values.length > 1 ? values.join(", ") : undefined}
+                icons={valueIcons(
+                  values.map((value) => filterValueIcon(field, value, base)),
+                  field === "priority" ? "single" : "each",
+                )}
                 onOpen={editing("value")}
               >
                 {values.length > 1 ? `${values.length} ${plural(fieldName.toLowerCase())}` : values[0]}

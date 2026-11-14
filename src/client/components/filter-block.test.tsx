@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Glob } from "bun";
 import { renderToStaticMarkup } from "react-dom/server";
-import { FilterBar, FilterBlock } from "./filter-block";
+import { FilterBar, FilterBlock, valueIcons } from "./filter-block";
 
 const noop = () => {};
 const bar = (actions: boolean) =>
@@ -73,4 +73,24 @@ test("every place filters apply renders the shared FilterBlock", async () => {
     expect([path, text.includes('from "@/client/components/filter-block"')]).toEqual([path, true]);
     expect([path, /<FilterBlock\.Remove /.test(text)]).toEqual([path, true]);
   }
+});
+
+test("every value segment shows its values' icons (Linear's imageForValues), priority and project only for a single value", async () => {
+  expect(valueIcons(["a", "b"])).toEqual(["a", "b"]);
+  expect(valueIcons(["a"], "single")).toEqual(["a"]);
+  expect(valueIcons(["a", "b"], "single")).toEqual([]);
+  for (const path of ["routes/inbox.tsx", "features/views/view-controls.tsx", "features/navigation/palette.tsx"]) {
+    const text = await Bun.file(root + path).text();
+    // A field's value segment (named "… value"); a view's filter group block names no values.
+    const values = (text.match(/<FilterBlock\.Value\b[\s\S]*?<\/FilterBlock\.Value>/g) ?? []).filter((tag) => tag.includes("value`}"));
+    expect([path, values.length > 0 && values.every((tag) => tag.includes("icons={valueIcons("))]).toEqual([path, true]);
+  }
+});
+
+test("the bar's colours are the theme's tokens, so it follows the app theme and elevated surfaces, not its own colour scheme", async () => {
+  const css = await Bun.file(root + "components/filter-block.css").text();
+  expect(css).not.toContain("prefers-color-scheme");
+  expect(css).not.toMatch(/--(filter-card|chip)[\w-]*:\s*lch\(/);
+  for (const token of ["--row-hover", "--border-faint-thin", "--border-alpha-thin", "--btn", "--control-secondary-hover", "--border-solid-thin"])
+    expect(css).toContain(`var(${token})`);
 });

@@ -1,5 +1,6 @@
 import { createContext, use, type ComponentProps, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { Icon } from "./icons";
+import "./control-tokens.css";
 import "./filter-block.css";
 
 /**
@@ -79,6 +80,14 @@ function Segment({ label, expanded, onOpen, title, className, children }: Segmen
       {children}
     </button>
   );
+}
+
+/**
+ * Which values a block's value segment shows icons for (Linear's imageForValues): people and statuses show one per value (the
+ * segment keeps three), while priority, project and milestone show theirs only when it is the only value.
+ */
+export function valueIcons(icons: ReactNode[], show: "each" | "single" = "each"): ReactNode[] {
+  return show === "single" && icons.length !== 1 ? [] : icons;
 }
 
 export const FilterBar = Object.assign(FilterBarRoot, {

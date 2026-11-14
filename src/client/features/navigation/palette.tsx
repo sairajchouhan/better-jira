@@ -14,7 +14,7 @@ import { createToolbarView } from "@/client/features/views/view-toolbar-actions"
 import { useMemo, useState, type ReactNode } from "react";
 import { navigationChoices, type NavigationChoice } from "./quick-navigation";
 import { ActionLabel, ActionMenu, type ActionEntry } from "@/client/components/action-menu";
-import { Icon, StatusIcon, TypeDot, type IconName } from "@/client/components/icons";
+import { Icon, LabelDot, PriorityIcon, StatusIcon, TypeDot, type IconName } from "@/client/components/icons";
 import { get, set, timed, useStore, statusOf, ME } from "@/client/state/store";
 import { currentKey } from "@/client/state/jira-sync";
 import { navigate, openSavedView, preloadOnHover, ui } from "./app-navigation";
@@ -48,7 +48,7 @@ import {
   type SearchFilter,
   type SearchOrdering,
 } from "./issue-search";
-import { FilterBar, FilterBlock, type OpenedBy } from "@/client/components/filter-block";
+import { FilterBar, FilterBlock, valueIcons, type OpenedBy } from "@/client/components/filter-block";
 import { FilterOperatorMenu } from "@/client/features/filters/filter-operator-menu";
 import { plural } from "@/client/features/filters/property-filter";
 import { FilterIcon } from "@/client/features/filters/filter-icons";
@@ -577,6 +577,14 @@ function SearchFilterBar({
   };
   const label = (field: SearchFilter["field"], value: string) =>
     field === "board" ? (boards.find((b) => String(b.id) === value)?.name ?? value) : value;
+  // A value's icon in its block (Linear's imageForValues), as the board's filter choices draw them; spaces have none.
+  const icon = (field: SearchFilter["field"], value: string) => {
+    if (field === "labels") return <LabelDot name={value} />;
+    if (field === "priority") return <PriorityIcon name={value} />;
+    if (field !== "status") return undefined;
+    const status = boards.flatMap((b) => b.columns.flatMap((c) => c.statuses)).find((st) => st.name === value);
+    return status && <StatusIcon status={status} />;
+  };
   const toggle = (field: SearchFilter["field"], value: string) => setFilters((current) => toggleSearchValue(current, field, value));
   const entries: ActionEntry[] = SEARCH_FILTER_FIELDS.map(([field, name]) => ({
     name,
@@ -620,6 +628,10 @@ function SearchFilterBar({
                     label={`${name} value`}
                     expanded={open === "value"}
                     title={values.length > 1 ? labels.join(", ") : undefined}
+                    icons={valueIcons(
+                      values.map((v) => icon(field, v)),
+                      field === "priority" ? "single" : "each",
+                    )}
                     onOpen={(anchor, by) => setEdit({ field, segment: "value", anchor, openedBy: by })}
                   >
                     {values.length > 1 ? `${values.length} ${plural(name.toLowerCase())}` : labels[0]}

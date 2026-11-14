@@ -18,7 +18,7 @@ import {
 import { MenuSurface, POPOVER_SURFACE, Popover } from "@/client/components/menu-surface";
 import { dateValueLabel, filterChoices, plural, PropertyFilter, useFilterCatalog } from "@/client/features/filters/property-filter";
 import { Menu } from "@/client/components/menu";
-import { FilterBar, FilterBlock, type OpenedBy } from "@/client/components/filter-block";
+import { FilterBar, FilterBlock, type OpenedBy, valueIcons } from "@/client/components/filter-block";
 import { FilterOperatorMenu } from "@/client/features/filters/filter-operator-menu";
 import { Select } from "@/client/components/select";
 import { DisplayProperties, SelectRow, Toggle, ViewOptions } from "@/client/components/display-options";
@@ -395,6 +395,9 @@ function DisplayOptions({
 /**
  * One rule's FilterBlock: field, operator and values. Only a block with values subscribes to the issues, for their labels.
  */
+// Linear's imageForValues draws these fields' icon only for a single value.
+const SINGLE_ICON: Field[] = ["priority", "projectPriority", "project", "milestone"];
+
 function RuleChip({
   rule: c,
   board,
@@ -437,7 +440,10 @@ function RuleChip({
           label={`${c.field} value`}
           expanded={open === "value"}
           title={picked.length > 1 ? picked.map(labelOf).join(", ") : undefined}
-          icons={picked.map((p) => p.choice?.icon)}
+          icons={valueIcons(
+            picked.map((p) => p.choice?.icon),
+            SINGLE_ICON.includes(c.field) ? "single" : "each",
+          )}
           onOpen={(anchor, by) => onEdit("value", anchor, by)}
         >
           {picked.length > 1 ? `${picked.length} ${plural(name.toLowerCase())}` : picked[0] ? labelOf(picked[0]) : ""}
