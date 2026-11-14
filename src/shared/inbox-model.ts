@@ -240,13 +240,15 @@ export function issueTypeOf(message: string): string {
 }
 
 /** Old and new status of a status change. Jira's sentence is "… from A to B", and either name may hold " to ", so the
- *  status Jira sent (the new one) splits it. */
+ *  status Jira sent (the new one) splits it. Jira's sentence and its status field may differ in case ("Ready to deploy" vs
+ *  "Ready to Deploy"), so they match in any case, and the sentence keeps its own words. */
 export function statusChange(note: Pick<InboxNote, "message" | "status">) {
   const m = note.message.match(/ from (.+)$/);
   if (!m) return null;
-  const tail = m[1]!;
-  if (note.status && tail.endsWith(` to ${note.status}`))
-    return { from: tail.slice(0, -` to ${note.status}`.length), to: note.status };
+  const tail = m[1]!,
+    end = ` to ${note.status}`;
+  if (note.status && tail.toLowerCase().endsWith(end.toLowerCase()))
+    return { from: tail.slice(0, -end.length), to: tail.slice(-note.status.length) };
   const at = tail.lastIndexOf(" to ");
   return at > 0 ? { from: tail.slice(0, at), to: tail.slice(at + 4) } : null;
 }

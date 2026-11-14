@@ -174,7 +174,14 @@ test("prod parity #5/#6: a status change keeps both statuses, even a name holdin
   expect(statusChange({ message: "Ana changed a bug from Doing to Ready to deploy", status: "Ready to deploy" })).toEqual({
     from: "Doing",
     to: "Ready to deploy",
+  });  // R3 G15: Jira's status field may differ from its sentence in case; the sentence's words stay.
+  expect(statusChange({ message: "Ana changed a story from QA to Ready to deploy", status: "Ready to Deploy" })).toEqual({
+    from: "QA",
+    to: "Ready to deploy",
   });
+  expect(status("Ana changed a story from QA to Ready to deploy", "READY TO DEPLOY")).toBe(
+    "Status updated by Ana: QA → Ready to deploy",
+  );
 });
 
 test("prod parity #7/#8/#16: Jira's issue type survives in the words and the row", () => {
