@@ -105,6 +105,7 @@ export function Sidebar({ boards }: { boards: Board[] }) {
   const [prefs, setPrefs] = useStoredState(SIDEBAR_KEY, parseSidebarPrefs, SIDEBAR_PREFS);
   const customizing = useStore((s) => s.overlay === "customize-sidebar");
   const dialog = customizing && <CustomizeSidebar prefs={prefs} setPrefs={setPrefs} />;
+  const [backgroundMenu, setBackgroundMenu] = useState<{ x: number; y: number } | null>(null);
   if (hidden && !open && !peek) return dialog || null;
   const close = () => set({ sidebarOpen: false });
   const expanded = (section: string) => !prefs.collapsed.includes(section);
@@ -132,6 +133,14 @@ export function Sidebar({ boards }: { boards: Board[] }) {
         // A hidden sidebar peeked from the header's Menu button floats over the page below the header, so the toggle stays
         // reachable (Linear's floating panel `top`: r1 + mainPageMargin - 10 = 44 - hairline + 8 - 10).
         onClick={(e) => open && (e.target as Element).closest("button, a") && close()}
+        // Linear wraps the sidebar's content in a contextual menu of the More rows and Customize sidebar (`Ffr`: `yPn()`); a row's
+        // own menu stops the event first, and the Help trigger sits outside that content. A row's `in-data-menu-open` hover
+        // reads any ancestor, so this menu marks no ancestor.
+        onContextMenu={(e) => {
+          if ((e.target as Element).closest("#help-menu")) return;
+          e.preventDefault();
+          setBackgroundMenu({ x: e.clientX, y: e.clientY });
+        }}
         data-sidebar-peek={peek || undefined}
         className={`flex w-[244px] shrink-0 flex-col gap-px overflow-y-auto p-2 font-medium ${peek ? SIDEBAR_PEEK : open ? "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:bg-panel max-md:shadow-lg" : "max-md:hidden"}`}
       >
@@ -219,6 +228,14 @@ export function Sidebar({ boards }: { boards: Board[] }) {
           Help <Shortcut keys={hotkeyOf("help")} size="small" />
         </Button>
       </nav>
+      {backgroundMenu && (
+        <ActionMenu
+          label="Sidebar options"
+          point={backgroundMenu}
+          entries={sidebarMoreEntries(prefs)}
+          close={() => setBackgroundMenu(null)}
+        />
+      )}
       {dialog}
     </>
   );
@@ -226,16 +243,20 @@ export function Sidebar({ boards }: { boards: Board[] }) {
 
 const openMyIssues = () => timed("open my issues", () => navigate({ mine: true, selected: null, panel: false }));
 
+/** The More menu's rows, which a right-click on the sidebar's own background lists too (Linear's `yPn()` on its content). */
+const sidebarMoreEntries = (prefs: SidebarPrefs) =>
+  moreEntries(
+    prefs,
+    { inbox: () => runShortcut("inbox"), myIssues: openMyIssues },
+    { inbox: hotkeyOf("inbox"), myIssues: hotkeyOf("mine") },
+  );
+
 /** Linear's sidebar "More" (`Jp.more_workspace`): shown while an item is set to "Don't show", it lists those items so they
  *  stay one click away, then ┄ Customize sidebar (`yPn`, chrome-53). */
 function SidebarMore({ prefs }: { prefs: SidebarPrefs }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   if (prefs.inbox !== "MoreMenu" && prefs.myIssues !== "MoreMenu") return null;
-  const entries = moreEntries(
-    prefs,
-    { inbox: () => runShortcut("inbox"), myIssues: openMyIssues },
-    { inbox: hotkeyOf("inbox"), myIssues: hotkeyOf("mine") },
-  );
+  const entries = sidebarMoreEntries(prefs);
   return (
     <>
       {/* Below 768px a pick closes the sidebar; this one opens a menu inside it, so it keeps the sidebar open. */}
