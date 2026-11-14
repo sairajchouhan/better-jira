@@ -9,6 +9,7 @@ import {
   createRootRouteWithContext,
   createRoute,
   createRouter,
+  isNotFound,
   lazyRouteComponent,
   notFound,
   redirect,
@@ -370,6 +371,11 @@ export function legacyPlace(
   if (page) return { to: "issue", key, ...(q.document ? { document: q.document } : {}), over: list };
   return { ...list, issue: key };
 }
+
+/** Whether the router shows Not found: an address that names nothing (the root's `_notFound`), or a board, view or issue
+ *  it names that isn't there (a route that threw `notFound`). */
+export const routeNotFound = (matches: readonly { status: string; error: unknown; _notFound?: boolean }[]) =>
+  matches.some((m) => m.status === "notFound" || m["_notFound"] === true || isNotFound(m.error));
 
 /** Linear's `fk` button look on a router link. */
 const RouteButton = createLink(ButtonLink);

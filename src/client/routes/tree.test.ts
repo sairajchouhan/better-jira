@@ -3,7 +3,7 @@ import { createMemoryHistory, isNotFound } from "@tanstack/react-router";
 import { viewForRoute, type SavedView } from "@/shared/saved-view-model";
 import { defaultPreferences } from "@/shared/view-model";
 import type { Place } from "@/client/features/navigation/navigation";
-import { createAppRouter, locationOf, routeURL, type RouteContext } from "./tree";
+import { createAppRouter, locationOf, routeNotFound, routeURL, type RouteContext } from "./tree";
 
 const p = defaultPreferences();
 const triage = { id: "v1", name: "Triage", board: 1, filters: p.filters, display: p.display, scope: p.scope } as SavedView;
@@ -29,6 +29,8 @@ async function open(href: string, state?: Record<string, unknown>) {
   await router.load();
   while (router.state.status !== "idle" || router.state.location.href !== history.location.href) await Bun.sleep(1);
   const notFound = router.state.matches.some((m) => m.status === "notFound" || isNotFound(m.error));
+  // What the sidebar reads to light no row on a Not found screen (R3-chrome-D7).
+  expect(routeNotFound(router.state.matches)).toBe(notFound || href.startsWith("/nope"));
   return { at: history.location.pathname + history.location.search, shown: shown.at(-1), notFound, preloaded, router };
 }
 
@@ -78,6 +80,14 @@ test("each path shows its place; unknown issues, boards, tabs and views are not 
     const { notFound, shown } = await open(href);
     expect([href, notFound, shown]).toEqual([href, true, undefined]);
   }
+});
+
+test("R3-chrome-D7: an address that names nothing is Not found for the sidebar, which then lights no row", async () => {
+  const { router, shown } = await open("/nope/xyz");
+  expect(shown).toBeUndefined();
+  expect(routeNotFound(router.state.matches)).toBe(true);
+  expect(routeNotFound((await open("/issue/GONE-1")).router.state.matches)).toBe(true);
+  expect(routeNotFound((await open("/board/1/all")).router.state.matches)).toBe(false);
 });
 
 test("hovering a link preloads its issue without showing it", async () => {

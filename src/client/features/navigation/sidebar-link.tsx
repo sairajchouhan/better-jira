@@ -4,14 +4,20 @@
  * saved view.
  */
 import type { ComponentProps } from "react";
+import { useRouterState } from "@tanstack/react-router";
+import { routeNotFound } from "@/client/routes/tree";
 import type { SavedView } from "@/shared/saved-view-model";
 import { useStore } from "@/client/state/store";
 import { AppLink, SavedViewLink } from "./app-link";
 import type { Destination } from "./navigation";
 import { isSidebarActive, type SidebarRow } from "./sidebar-active";
 
-/** Whether this row is the active one; a boolean selector, so a row re-renders only when its own state flips. */
-const useSidebarActive = (row: SidebarRow) => useStore((s) => isSidebarActive(row, s));
+/** Whether this row is the active one; boolean selectors, so a row re-renders only when its own state flips. A Not found
+ *  screen lights no row, though the store still holds the board it fell back to (R3-chrome-D7). */
+const useSidebarActive = (row: SidebarRow) => {
+  const notFound = useRouterState({ select: (s) => routeNotFound(s.matches) });
+  return useStore((s) => isSidebarActive(row, s)) && !notFound;
+};
 
 /**
  * Every sidebar row's box: Linear's SidebarLink (`_$.linkBase` + `_$.containerBg`) and sidebar button (`qsr.button`, Search
