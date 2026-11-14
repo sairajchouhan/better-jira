@@ -6,6 +6,7 @@
       "name": "bun-react-template",
       "dependencies": {
         "@floating-ui/react": "^0.27.20",
+        "@internationalized/date": "3.12.4",
         "@tanstack/pacer": "0.23.1",
         "@tanstack/query-core": "5.107.1",
         "@tanstack/react-hotkeys": "^0.22.0",

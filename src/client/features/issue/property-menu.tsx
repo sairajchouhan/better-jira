@@ -15,12 +15,11 @@ import {
 import { useStore, ME } from "@/client/state/store";
 import { menuFilter, personKeywords, rowKeywords } from "@/client/lib/fuzzy-score";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
-import { Button } from "@/client/components/button";
 import { LoadingState } from "@/client/components/empty-state";
 import { kept, useCommand } from "@/client/features/navigation/commands";
-import { duePresets, shortDate } from "@/client/lib/due-date";
-import { MenuSurface as Modal } from "@/client/components/menu-surface";
-const DateInput = lazy(() => import("./date-input").then((m) => ({ default: m.DateInput })));
+import { DUE_DIALOG, duePresets, shortDate } from "@/client/lib/due-date";
+import { Dialog } from "@/client/components/dialog";
+const DueDateDialog = lazy(() => import("./date-input").then((m) => ({ default: m.DueDateDialog })));
 let dueParser: typeof import("@/client/lib/due-parse").parseDueDate | undefined;
 /** The due menu's parser (chrono, its one heavy import), kept once loaded so a later menu has it on its first render. */
 export const loadDueParser = () => import("@/client/lib/due-parse").then((m) => (dueParser = m.parseDueDate));
@@ -648,8 +647,6 @@ export function DueRows({
 }
 export function DueMenu({ anchor, value, onChange, close }: FieldMenuProps<string | null>) {
   const [query, setQuery] = useState("");
-  const [date, setDate] = useState(value ?? "");
-  const [dateValid, setDateValid] = useState(true);
   const [custom, setCustom] = useState(() => kept("issue-options-start") === "due");
   useCommand("issue-options-start", (start) => {
     if (start !== "due") return;
@@ -679,37 +676,16 @@ export function DueMenu({ anchor, value, onChange, close }: FieldMenuProps<strin
         />
       </PropertyMenu>
     );
+  // Linear's "Custom…" (`cfn`): the due-date dialog, in place of the menu.
   return (
-    <Modal label="Due date" close={close} anchor={anchor} width={360}>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!dateValid) return;
-          onChange(date || null);
-          close();
-        }}
-      >
-        <div className="mb-3">
-          <Suspense fallback={<LoadingState>Loading dates…</LoadingState>}>
-            <DateInput autoFocus value={date} onChange={setDate} onValidity={setDateValid} />
-          </Suspense>
-        </div>
-        <div className="flex justify-end gap-2">
-          {/* Borderless, as before: the bundle has no footer for this picker's custom-date form. */}
-          <Button
-            variant="borderless"
-            onClick={() => {
-              onChange(null);
-              close();
-            }}
-          >
-            Remove due date
-          </Button>
-          <Button variant="borderless" type="submit" disabled={!dateValid}>
-            Save
-          </Button>
-        </div>
-      </form>
-    </Modal>
+    <Suspense
+      fallback={
+        <Dialog label="Due date" close={close} placement="third" width={DUE_DIALOG.WIDTH}>
+          <LoadingState>Loading dates…</LoadingState>
+        </Dialog>
+      }
+    >
+      <DueDateDialog value={value} onSave={onChange} close={close} />
+    </Suspense>
   );
 }

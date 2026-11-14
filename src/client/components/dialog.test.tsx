@@ -2,14 +2,7 @@ import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ConfirmDialog, Dialog, DIALOG } from "./dialog";
 
-const render = (node: React.ReactNode) => {
-  Object.assign(globalThis, { document: { activeElement: null } });
-  try {
-    return renderToStaticMarkup(node);
-  } finally {
-    delete (globalThis as { document?: unknown }).document;
-  }
-};
+const render = renderToStaticMarkup;
 
 test("a dialog is Linear's DialogPresenter box: named, in the elevated theme, as wide as asked but never wider than the window", () => {
   const html = render(

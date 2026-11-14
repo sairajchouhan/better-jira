@@ -1,3 +1,6 @@
+/** Linear's issue due-date dialog (`r3t`): `cfn` opens it through DialogPresenter at `uo.widths.medium`. */
+export const DUE_DIALOG = { WIDTH: 562 } as const;
+
 export function dateOnly(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }

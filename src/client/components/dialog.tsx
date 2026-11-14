@@ -90,13 +90,13 @@ function DialogRoot({
     className: `${placement === "side" ? SIDE_PANEL_SURFACE : `${DIALOG_SURFACE} overflow-y-auto`} ui-modal-box`,
     style: placement === "side" ? undefined : { width: `min(${width}px, 100%)` },
   };
-  // No overlay layer on the server: the box renders in place, so its content can be rendered statically.
+  // No overlay layer and no focus on the server: the box renders in place, so its content can be rendered statically.
   if (useServerRender())
     return (
       <div role="dialog" {...boxProps}>
-        <DialogContent box={box} close={close} level={elevation.level}>
+        <DialogScope close={close} level={elevation.level}>
           {children}
-        </DialogContent>
+        </DialogScope>
       </div>
     );
   return (
@@ -142,7 +142,6 @@ function DialogContent({
 }) {
   useReturnFocus(box);
   useInitialFocus(box, MENU_FOCUS);
-  const context = useMemo(() => ({ close }), [close]);
   return (
     <div
       className="contents"
@@ -155,12 +154,22 @@ function DialogContent({
         }
       }}
     >
-      <MenuSurfaceContext value={context}>
-        <DialogContext value={context}>
-          <ElevationScope level={level}>{children}</ElevationScope>
-        </DialogContext>
-      </MenuSurfaceContext>
+      <DialogScope close={close} level={level}>
+        {children}
+      </DialogScope>
     </div>
+  );
+}
+
+/** What the dialog's content reads: its close (as a menu surface's, for menus inside) and its elevation. */
+function DialogScope({ close, level, children }: { close: () => void; level: number; children: ReactNode }) {
+  const context = useMemo(() => ({ close }), [close]);
+  return (
+    <MenuSurfaceContext value={context}>
+      <DialogContext value={context}>
+        <ElevationScope level={level}>{children}</ElevationScope>
+      </DialogContext>
+    </MenuSurfaceContext>
   );
 }
 

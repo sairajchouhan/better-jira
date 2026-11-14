@@ -1,0 +1,226 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+/* Linear's `_datePicker_rzslo_1` (style-kMXsq6uH.css) on react-day-picker's classes, here on React Aria's Calendar:
+   rdp-months → .ui-calendar-months, rdp-month_caption → .ui-calendar-caption, rdp-month_grid → .ui-calendar-grid,
+   rdp-weekday → th, rdp-day → td, rdp-day_button → .ui-calendar-day, modifiers → React Aria's data attributes plus our
+   data-weekend and data-highlighted. Tokens: bgBorder --bg-border, bgBorderFaint (weekends) --border-faint,
+   controlPrimary --accent, labelBase --fg-2, labelMuted --fg-3, labelFaint --fg-4, labelTitle --fg. */
+@layer components {
+  .ui-calendar {
+    /* --dp-highlighted-color: bgBorder, bgBorderSolid in the dark theme. */
+    --calendar-highlighted: var(--bg-border);
+    --calendar-weekend: var(--border-faint);
+    --calendar-radius: 8px;
+    --calendar-join: -8px;
+    color: var(--fg-2);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .ui-calendar:dir(rtl) {
+    --calendar-join: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    .ui-calendar {
+      --calendar-highlighted: var(--line-3);
+    }
+  }
+  .ui-calendar-months {
+    position: relative;
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+  }
+  .ui-calendar-caption {
+    display: flex;
+    height: 36px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px;
+  }
+  .ui-calendar-caption-label {
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .ui-calendar-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  /* UF.navigationButton: labelFaint, labelTitle on hover and press. */
+  .ui-calendar-nav .ui-button {
+    color: var(--fg-4);
+  }
+  .ui-calendar-nav .ui-button:is(:hover, :active, [data-hovered], [data-pressed]) {
+    color: var(--fg);
+  }
+  /* One arrow and one chevron, mirrored for the other way. */
+  .ui-calendar-nav [data-mirror] svg {
+    scale: -1 1;
+  }
+  .ui-calendar-grid {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 8px;
+  }
+  .ui-calendar-grid thead {
+    position: relative;
+  }
+  .ui-calendar-grid thead::after {
+    content: "";
+    position: absolute;
+    right: 5px;
+    bottom: 0;
+    left: 0;
+    height: var(--thin-pixel);
+    background: var(--bg-border);
+  }
+  .ui-calendar-grid th {
+    padding: 0;
+    color: var(--fg-3);
+    font-size: 13px;
+    font-weight: inherit;
+    text-transform: none;
+  }
+  .ui-calendar-grid td {
+    padding: 0;
+    border-radius: 50%;
+    text-align: center;
+  }
+  /* showOutsideDays is off with two months: the cell keeps its place, unseen. */
+  .ui-calendar-grid td:has(> [data-outside-month]) {
+    visibility: hidden;
+  }
+  .ui-calendar-day {
+    position: relative;
+    display: grid;
+    width: 26px;
+    height: 26px;
+    box-sizing: border-box;
+    margin: 0 auto;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: inherit;
+    font-size: 13px;
+    line-height: 20px;
+    cursor: default;
+    outline: none;
+  }
+  .ui-calendar-day::before {
+    content: "";
+    position: absolute;
+    inset: -5px;
+  }
+  .ui-calendar-day[data-focus-visible] {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .ui-calendar-day[data-today] {
+    border: 1px solid var(--fg-4);
+    background: var(--calendar-highlighted);
+    color: var(--fg);
+    font-weight: 500;
+  }
+  .ui-calendar-day[data-disabled]:not([data-outside-month]) {
+    color: var(--fg-4);
+    cursor: not-allowed;
+  }
+  .ui-calendar-day:not([data-disabled], [data-selected])[data-pressed] {
+    background-color: var(--accent);
+    color: var(--control-primary-label);
+  }
+  @media (any-hover: hover) and (any-pointer: fine) {
+    .ui-calendar-day:not([data-disabled], [data-selected])[data-hovered] {
+      background-color: var(--accent);
+      color: var(--control-primary-label);
+    }
+    .ui-calendar-day[data-selected][data-hovered] {
+      background-color: var(--control-primary-hover);
+    }
+  }
+  .ui-calendar-day[data-selected]:not([data-outside-month]) {
+    border: 0;
+    background-color: var(--accent);
+    color: var(--control-primary-label);
+  }
+  .ui-calendar-day[data-selected][data-pressed] {
+    background-color: var(--control-primary-hover);
+  }
+
+  /* Weekends: a bgBorderFaint band down each weekend column, from its weekday name (rounded top) to the last week
+     (rounded bottom), joined across the 8px spacing by shadows; neighbouring weekend columns join sideways too. */
+  .ui-calendar-grid td:has(> [data-weekend]) {
+    border-radius: 0;
+    background-color: var(--calendar-weekend);
+    box-shadow: 0 8px 0 var(--calendar-weekend);
+    color: var(--fg-3);
+  }
+  .ui-calendar-grid:has(tbody td:has(> [data-weekend]):nth-child(1)) th:nth-child(1),
+  .ui-calendar-grid:has(tbody td:has(> [data-weekend]):nth-child(2)) th:nth-child(2),
+  .ui-calendar-grid:has(tbody td:has(> [data-weekend]):nth-child(3)) th:nth-child(3),
+  .ui-calendar-grid:has(tbody td:has(> [data-weekend]):nth-child(4)) th:nth-child(4),
+  .ui-calendar-grid:has(tbody td:has(> [data-weekend]):nth-child(5)) th:nth-child(5),
+  .ui-calendar-grid:has(tbody td:has(> [data-weekend]):nth-child(6)) th:nth-child(6),
+  .ui-calendar-grid:has(tbody td:has(> [data-weekend]):nth-child(7)) th:nth-child(7) {
+    padding-top: 8px;
+    border-start-start-radius: var(--calendar-radius);
+    border-start-end-radius: var(--calendar-radius);
+    background-color: var(--calendar-weekend);
+    box-shadow: 0 16px 0 var(--calendar-weekend);
+  }
+  .ui-calendar-grid tbody tr:last-child td:has(> [data-weekend]) {
+    padding-bottom: 4px;
+    border-end-start-radius: var(--calendar-radius);
+    border-end-end-radius: var(--calendar-radius);
+    box-shadow: none;
+  }
+  .ui-calendar-grid td:has(> [data-weekend]) + td:has(> [data-weekend]) {
+    box-shadow:
+      var(--calendar-join) 0 0 var(--calendar-weekend),
+      var(--calendar-join) 8px 0 var(--calendar-weekend),
+      0 8px 0 var(--calendar-weekend);
+  }
+  .ui-calendar-grid:has(tbody td:has(> [data-weekend]):nth-child(1)):has(tbody td:has(> [data-weekend]):nth-child(2)) th:nth-child(1),
+  .ui-calendar-grid:has(tbody td:has(> [data-weekend]):nth-child(2)):has(tbody td:has(> [data-weekend]):nth-child(3)) th:nth-child(2),
+  .ui-calendar-grid:has(tbody td:has(> [data-weekend]):nth-child(3)):has(tbody td:has(> [data-weekend]):nth-child(4)) th:nth-child(3),
+  .ui-calendar-grid:has(tbody td:has(> [data-weekend]):nth-child(4)):has(tbody td:has(> [data-weekend]):nth-child(5)) th:nth-child(4),
+  .ui-calendar-grid:has(tbody td:has(> [data-weekend]):nth-child(5)):has(tbody td:has(> [data-weekend]):nth-child(6)) th:nth-child(5),
+  .ui-calendar-grid:has(tbody td:has(> [data-weekend]):nth-child(6)):has(tbody td:has(> [data-weekend]):nth-child(7)) th:nth-child(6) {
+    border-start-end-radius: 0;
+  }
+  .ui-calendar-grid:has(tbody td:has(> [data-weekend]):nth-child(1)):has(tbody td:has(> [data-weekend]):nth-child(2)) th:nth-child(2),
+  .ui-calendar-grid:has(tbody td:has(> [data-weekend]):nth-child(2)):has(tbody td:has(> [data-weekend]):nth-child(3)) th:nth-child(3),
+  .ui-calendar-grid:has(tbody td:has(> [data-weekend]):nth-child(3)):has(tbody td:has(> [data-weekend]):nth-child(4)) th:nth-child(4),
+  .ui-calendar-grid:has(tbody td:has(> [data-weekend]):nth-child(4)):has(tbody td:has(> [data-weekend]):nth-child(5)) th:nth-child(5),
+  .ui-calendar-grid:has(tbody td:has(> [data-weekend]):nth-child(5)):has(tbody td:has(> [data-weekend]):nth-child(6)) th:nth-child(6),
+  .ui-calendar-grid:has(tbody td:has(> [data-weekend]):nth-child(6)):has(tbody td:has(> [data-weekend]):nth-child(7)) th:nth-child(7) {
+    border-start-start-radius: 0;
+    box-shadow:
+      var(--calendar-join) 0 0 var(--calendar-weekend),
+      var(--calendar-join) 16px 0 var(--calendar-weekend),
+      0 16px 0 var(--calendar-weekend);
+  }
+  .ui-calendar-grid tbody tr:last-child td:has(> [data-weekend]):has(+ td:has(> [data-weekend])) {
+    border-end-end-radius: 0;
+  }
+  .ui-calendar-grid tbody tr:last-child td:has(> [data-weekend]) + td:has(> [data-weekend]) {
+    border-end-start-radius: 0;
+    box-shadow: var(--calendar-join) 0 0 var(--calendar-weekend);
+  }
+
+  /* The typed preview (`highlighted`): a circle a quarter larger than the day, behind it. */
+  .ui-calendar-grid td:has(> [data-highlighted]) {
+    position: relative;
+  }
+  .ui-calendar-grid td:has(> [data-highlighted])::before {
+    content: "";
+    position: absolute;
+    height: 100%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background-color: var(--calendar-highlighted);
+    transform: scale(1.25);
+  }
+}

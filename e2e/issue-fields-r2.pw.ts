@@ -138,3 +138,59 @@ test("R2 issue fields on a read-only site: reminder pill, hyphenated labels, Shi
     ).toEqual(await page.eval(`Array(3).fill(document.activeElement.value.length)`));
   });
 });
+
+test("Due date › Custom… is Linear's due-date dialog: typed dates preview on a two-month calendar, a day saves, Remove clears", async ({
+  open,
+}) => {
+  const page = await open("?issue=TEST-1&view=page");
+  const SET = '[role="dialog"][aria-label="Set due date"]';
+  const EDIT = '[role="dialog"][aria-label="Edit due date"]';
+  const custom = async () => {
+    await page.eval("document.activeElement?.blur()");
+    await page.key("d", "shift");
+    await page.click('[role="dialog"][aria-label="Due date"] [cmdk-item][data-value="Custom…"]');
+  };
+  await page.waitFor(ready);
+  await test.step("the dialog: 562px, the field focused, two months, Jump to today hidden on today's month", async () => {
+    await custom();
+    await page.waitFor(`!!document.querySelector('${SET} .ui-calendar')`);
+    await page.waitFor(`document.activeElement?.matches('${SET} input')`);
+    expect(await page.eval(`document.querySelector('${SET}').getBoundingClientRect().width`)).toBe(562);
+    expect(await page.eval(`document.querySelectorAll('${SET} .ui-calendar-grid').length`)).toBe(2);
+    expect(await page.eval(`!!document.querySelector('${SET} [aria-label="Jump to today"]')`)).toBe(false);
+    expect(await page.eval(`!!document.querySelector('${SET} [data-today]')`)).toBe(true);
+  });
+  await test.step("typing a date turns the calendar to its month and circles it; Enter saves it", async () => {
+    await page.type("2030-03-20");
+    await page.waitFor(`document.querySelector('${SET} .ui-calendar-caption-label')?.textContent==="March 2030"`);
+    expect(await page.eval(`document.querySelector('${SET} [data-highlighted]')?.textContent`)).toBe("20");
+    // Off today's months now: Jump to today shows, pointing back.
+    expect(await page.eval(`!!document.querySelector('${SET} [aria-label="Jump to today"]')`)).toBe(true);
+    await page.key("Enter");
+    await page.waitFor(`!document.querySelector('${SET}')`);
+    expect(await page.waitFor<string>(`document.getElementById('prop-due')?.textContent`)).toBe("Mar 20, 2030");
+  });
+  await test.step("Edit due date opens on the chosen day; Next month moves one month; a day press saves at once", async () => {
+    await custom();
+    await page.waitFor(`!!document.querySelector('${EDIT} [data-selected]')`);
+    expect(await page.eval(`document.querySelector('${EDIT} [data-selected]').textContent`)).toBe("20");
+    await page.click(`${EDIT} [aria-label="Next month"]`);
+    await page.waitFor(`document.querySelector('${EDIT} .ui-calendar-caption-label')?.textContent==="April 2030"`);
+    // Focus stays in the field (the calendar's mousedown is prevented, as Linear's).
+    expect(await page.eval(`document.activeElement?.matches('${EDIT} input')`)).toBe(true);
+    await page.click(`${EDIT} [aria-label="Wednesday, April 10, 2030"]`);
+    await page.waitFor(`!document.querySelector('${EDIT}')`);
+    expect(await page.waitFor<string>(`document.getElementById('prop-due')?.textContent`)).toBe("Apr 10, 2030");
+  });
+  await test.step("Escape in the field moves to Close; Remove due date clears it", async () => {
+    await custom();
+    await page.waitFor(`document.activeElement?.matches('${EDIT} input')`);
+    await page.key("Escape");
+    expect(await page.eval(`document.activeElement?.getAttribute('aria-label')`)).toBe("Close");
+    expect(await page.eval(`!!document.querySelector('${EDIT}')`)).toBe(true);
+    await page.eval(`[...document.querySelectorAll('${EDIT} button')].find(b=>b.textContent==='Remove due date').click()`);
+    await page.waitFor(`!document.querySelector('${EDIT}')`);
+    expect(await page.eval(`document.getElementById('prop-due')?.textContent ?? ""`)).not.toContain("2030");
+  });
+  await page.close();
+});
