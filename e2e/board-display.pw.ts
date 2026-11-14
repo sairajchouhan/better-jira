@@ -695,3 +695,55 @@ test("BJ-205: Group ordering drags and hides groups per view, as Linear's page d
     await page.waitFor(`${listGroups}.join()==="Doing,Todo"`);
   });
 });
+
+/** Linear's list geometry (startup-root `CM`: listHeaderHeight 36, listIssueRowHeight 44; IssueList list `heightPerLevel`) and its
+ *  sticky group header (`stickyHeaderLevels: +!!grouping`: the group level only, never the sub-group). */
+test("B3/B4: list group headers are 36px and stick while their rows scroll; rows are 44px; sub-group headers scroll away", async ({ open }) => {
+  await fixture.reset({ bulk: 90 });
+  const page = await open("/board/1/all", { height: 640, setup: seed({ 1: { display: { layout: "list" } } }) });
+  const scroller = `document.querySelector('[data-layout=list] > [data-scroll-restoration-id]')`;
+  const header = (name: string) => `document.querySelector('[data-list-group="${name}"]')`;
+  /** The header's top against the list's top edge: 0 (or the list's 4px top padding) while it is stuck. */
+  const offset = (name: string) => `Math.round(${header(name)}.getBoundingClientRect().top-${scroller}.getBoundingClientRect().top)`;
+  await page.waitFor(`!!${header("Todo")}&&!!document.querySelector('[data-layout=list] [data-key^="BULK-"]')`);
+  await test.step("B4: every group header is 36px and every row 44px", async () => {
+    expect(await page.eval<number[]>(`[...new Set([...document.querySelectorAll('[data-list-group]')].map(h=>Math.round(h.getBoundingClientRect().height)))]`)).toEqual([36]);
+    expect(await page.eval<number[]>(`[...new Set([...document.querySelectorAll('[data-layout=list] [data-key]')].map(r=>Math.round(r.getBoundingClientRect().height)))]`)).toEqual([44]);
+  });
+  await test.step("B3: scrolled into the first group, its header stays at the top of the list, over its rows", async () => {
+    const first = await page.eval<string>(`document.querySelector('[data-list-group]').dataset.listGroup`);
+    expect(await page.eval(`getComputedStyle(${header(first)}).position`)).toBe("sticky");
+    await page.eval(`${scroller}.scrollTop=300`);
+    await page.waitFor(`${scroller}.scrollTop===300`);
+    const stuck = await page.eval<number>(offset(first));
+    expect(stuck).toBeGreaterThanOrEqual(0);
+    expect(stuck).toBeLessThanOrEqual(4);
+    // The header paints over the row scrolled beneath it.
+    const hit = await page.eval<string>(
+      `(()=>{const r=${header(first)}.getBoundingClientRect();return document.elementFromPoint(r.left+r.width/2,r.top+r.height/2).closest('[data-list-group]')?.dataset.listGroup})()`,
+    );
+    expect(hit).toBe(first);
+  });
+  await test.step("B3: past the first group, the next group's header takes the top and the first one scrolls away with its section", async () => {
+    const [first, second] = await page.eval<string[]>(`[...document.querySelectorAll('[data-list-group]')].map(h=>h.dataset.listGroup)`);
+    await page.eval(`${scroller}.scrollTop=${header(second!)}.closest('section').offsetTop+200`);
+    await page.waitFor(`${offset(second!)}<=4`);
+    expect(await page.eval<number>(offset(first!))).toBeLessThan(0);
+  });
+  await test.step("B4/B3: with sub-grouping the sub-group header is 36px too and does not stick", async () => {
+    await show(page, { 1: { display: { layout: "list", rows: "priority" } } });
+    await page.waitFor(`!!document.querySelector('[data-list-subgroup]')`);
+    expect(await page.eval<number[]>(`[...new Set([...document.querySelectorAll('[data-list-subgroup]')].map(h=>Math.round(h.getBoundingClientRect().height)))]`)).toEqual([36]);
+    expect(await page.eval(`getComputedStyle(document.querySelector('[data-list-subgroup]')).position`)).toBe("static");
+  });
+  await test.step("B4: My issues lists with the same 36px headers and 44px rows", async () => {
+    await page.goto("/my-issues");
+    await page.waitFor(`!!document.querySelector('[data-layout]')&&!!document.querySelector('[data-key]')`);
+    if ((await page.eval(`[...document.querySelectorAll('[data-layout]')].find(n=>n.offsetParent)?.dataset.layout`)) !== "list")
+      await page.key("b", "meta");
+    await page.waitFor(`[...document.querySelectorAll('[data-layout=list]')].some(n=>n.offsetParent&&n.querySelector('[data-list-group]'))`);
+    const list = `[...document.querySelectorAll('[data-layout=list]')].find(n=>n.offsetParent)`;
+    expect(await page.eval<number[]>(`[...new Set([...${list}.querySelectorAll('[data-list-group]')].map(h=>Math.round(h.getBoundingClientRect().height)))]`)).toEqual([36]);
+    expect(await page.eval<number[]>(`[...new Set([...${list}.querySelectorAll('[data-key]')].map(r=>Math.round(r.getBoundingClientRect().height)))]`)).toEqual([44]);
+  });
+});

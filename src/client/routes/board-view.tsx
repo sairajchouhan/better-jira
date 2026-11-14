@@ -174,8 +174,10 @@ export const BoardView = memo(function BoardView({
                 {!collapsed.includes(c.id) &&
                   layout.sections[ci]!.map((r) => (
                       <div key={r.id}>
+                        {/* Linear's sub-group divider is listHeaderHeight tall too (IssueList `heightPerLevel` [36, 36, 44]) and,
+                            with `stickyHeaderLevels: 1`, scrolls with its rows: only the group header sticks. */}
                         {d.rows !== "none" && (
-                          <div className="border-b border-line bg-col px-8 py-2 text-[12px] text-fg-3">
+                          <div data-list-subgroup={r.name} className="flex h-9 items-center border-b border-line bg-col px-8 text-[12px] text-fg-3">
                             {r.name} <span className="ml-2">{r.issues.length}</span>
                           </div>
                         )}
@@ -424,7 +426,9 @@ function HiddenGroup({
   );
 }
 
-/** A list group's header; right-click opens Linear's list group menu (useListContextualActions `h`). Linear's list header has no ⋯. */
+/** A list group's header; right-click opens Linear's list group menu (useListContextualActions `h`). Linear's list header has no ⋯.
+ *  It is `listHeaderHeight` (36px, startup-root `CM`) tall and sticks to the top of the list while its rows scroll under it
+ *  (IssueList list `stickyHeaderLevels: +!!grouping`); the section bounds it, so the next group's header takes its place. */
 function GroupHeading({
   bucket,
   display,
@@ -455,7 +459,7 @@ function GroupHeading({
     });
   return (
     <ContextMenu label={`Group ${bucket.name}`} entries={entries}>
-      <div className="flex h-10 items-center gap-2 border-y border-line bg-col px-5 text-[12px] font-medium text-fg-2">
+      <div data-list-group={bucket.name} className="sticky top-0 z-[2] flex h-9 items-center gap-2 border-y border-line bg-col px-5 text-[12px] font-medium text-fg-2">
         <button
           aria-label={`${collapsed ? "Expand" : "Collapse"} ${bucket.name}`}
           aria-expanded={!collapsed}
@@ -848,7 +852,8 @@ function IssueAssignee({ issue, className }: { issue: Issue; className?: string 
   );
 }
 
-/** A list row: priority, key, status, title, then properties, assignee and dates on one line, Linear's order; nested rows indent
+/** A list row, `listIssueRowHeight` (44px, startup-root `CM`) tall: priority, key, status, title, then properties, assignee and
+ *  dates on one line, Linear's order; nested rows indent
  *  20px per level. Its keyboard ring is drawn inside the row (outline-offset −1px), so the next row cannot cover its bottom edge. */
 const IssueRow = memo(function IssueRow({
   issue,
@@ -867,7 +872,7 @@ const IssueRow = memo(function IssueRow({
       <IssueTarget
         issue={issue}
         selected={selected}
-        className="flex min-h-11 cursor-default items-center gap-3 border-b border-line px-5 -outline-offset-1 hover:bg-(--row-hover) data-menu:bg-(--row-hover) data-menu:shadow-[inset_2px_0_0_var(--accent)] data-selected:bg-(--row-hover) data-selected:shadow-[inset_2px_0_0_var(--accent)]"
+        className="flex h-11 cursor-default items-center gap-3 border-b border-line px-5 -outline-offset-1 hover:bg-(--row-hover) data-menu:bg-(--row-hover) data-menu:shadow-[inset_2px_0_0_var(--accent)] data-selected:bg-(--row-hover) data-selected:shadow-[inset_2px_0_0_var(--accent)]"
         style={depth ? { paddingLeft: 20 + depth * 20 } : undefined}
       >
         {show("priority") && (
