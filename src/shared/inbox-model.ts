@@ -18,10 +18,9 @@ export type InboxNote = {
   kind: InboxKind;
   /** Jira's own sentence, e.g. "Ana changed a task from To Do to Done". */
   message: string;
-  /** Comment text, for comments, mentions and reactions. */
+  /** Comment text, for comments, mentions and reactions. Its ADF stays on the server: every card shows this text, as
+   *  Linear's (`bodyTextContent`), so the feed and its group pages don't carry the comment twice. */
   preview: string;
-  /** The comment itself (ADF), so its links and formatting survive in the pane. */
-  doc?: unknown;
   time: string;
   /** Status name at notification time, as Jira sent it. */
   status: string;
@@ -63,19 +62,13 @@ export const GROUP_PAGE = 5;
 /** What an expanded group shows before "Show more": the head and five more, as Jira's bell (prod parity #15). */
 export const GROUP_SHOWN = 1 + GROUP_PAGE;
 
-/** One page of Jira's `notificationGroup`, `first` long: a short page, or one without a cursor, is the last. The cards show
- *  the comment's text (`preview`), so its ADF stays out of the page. */
+/** One page of Jira's `notificationGroup`, `first` long: a short page, or one without a cursor, is the last. */
 export function groupPage(
   nodes: unknown,
   pageInfo: { hasNextPage?: unknown; endCursor?: unknown } | null | undefined,
   first: number,
 ): InboxGroupPage {
-  const notes = (Array.isArray(nodes) ? nodes : []).flatMap((n) => {
-    const note = mapNote(n);
-    if (!note) return [];
-    const { doc: _, ...rest } = note;
-    return [rest];
-  });
+  const notes = (Array.isArray(nodes) ? nodes : []).flatMap((n) => mapNote(n) ?? []);
   // Jira reports a next page after the last one too; an empty or short page ends it.
   return {
     notes,
@@ -135,14 +128,6 @@ const actorOf = (a: any): InboxActor | null =>
   a?.displayName
     ? { name: str(a.displayName), ...(a.avatarURL ? { avatar: str(a.avatarURL) } : {}) }
     : null;
-const parseDoc = (data: unknown) => {
-  if (typeof data !== "string") return data ?? undefined;
-  try {
-    return JSON.parse(data);
-  } catch {
-    return data || undefined;
-  }
-};
 /** The comment a Jira link points at: `focusedCommentId=…` or `#comment-…`. */
 export const commentIdOf = (link: string) =>
   link.match(/[?&]focusedCommentId=(\d+)/)?.[1] ?? link.match(/#comment-(\d+)/)?.[1] ?? "";
@@ -160,15 +145,13 @@ export function mapNote(raw: any): InboxNote | null {
     template = (Array.isArray(raw.analyticsAttributes) ? raw.analyticsAttributes : []).find(
       (a: any) => a?.key === "messageTemplateId",
     )?.value,
-    data = (content.bodyItems ?? []).find((b: any) => b?.document?.data)?.document?.data,
-    doc = parseDoc(data);
+    data = (content.bodyItems ?? []).find((b: any) => b?.document?.data)?.document?.data;
   return {
     id: str(raw.notificationId),
     actor: actorOf(content.actor),
     kind: kindOf(str(content.type), message, str(template)),
     message,
     preview: adfText(data),
-    ...(doc !== undefined ? { doc } : {}),
     time: str(raw.timestamp),
     status: str(content.entity?.status),
     link,

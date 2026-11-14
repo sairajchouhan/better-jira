@@ -7,6 +7,8 @@ import {
   adfText,
   commentAnchor,
   describe,
+  GROUP_FIRST,
+  groupPage,
   groupSummary,
   issueTypeOf,
   prioritize,
@@ -73,7 +75,6 @@ group("mapFeed", () => {
         kind: "mentioned",
         message: "Sairaj Chouhan mentioned you in a comment",
         preview: "Hey @cloud sairaj can you take a look?",
-        doc: JSON.parse(live.headNotification.content.bodyItems[0]!.document.data),
         time: "2026-11-08T11:34:52.439Z",
         unread: true,
         category: "direct",
@@ -253,6 +254,13 @@ test("unreadCount counts Jira's unread rows beyond the loaded pages, less local 
 
 test("an undone ⌥U counts rows being marked unread that Jira's last list and the loaded pages lack (R3-inbox-D5)", () => {
   expect(unreadCount([], [], { far: { read: false }, gone: { read: false, deleted: true } })).toBe(1);
+});
+
+test("R3 G23: the feed and its group pages carry a comment's text, not its ADF, which no card reads", () => {
+  const [row] = mapFeed([live]);
+  expect(row?.preview).toBe("Hey @cloud sairaj can you take a look?");
+  expect(row).not.toHaveProperty("doc");
+  expect(groupPage([live.headNotification], {}, GROUP_FIRST).notes[0]).not.toHaveProperty("doc");
 });
 
 test("a Jira system notification's row label leaves no gap for its missing key (R3-inbox-D7)", () => {

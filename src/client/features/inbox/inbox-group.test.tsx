@@ -59,7 +59,7 @@ test("R3 G20: expanding a group shows the feed's first page at once, without rea
 
 test("R3 G20: a grouped comment's card is clamped to three lines, as Linear's comment card (truncate: 3)", () => {
   const long = "A long made-up comment that goes on. ".repeat(40).trim();
-  const comment = { ...note, id: "c1", kind: "comment", message: "Kim commented on a task", preview: long, doc: { type: "doc", content: [] } } as InboxNote;
+  const comment = { ...note, id: "c1", kind: "comment", message: "Kim commented on a task", preview: long } as InboxNote;
   const html = renderToStaticMarkup(<InboxGroupNote note={comment} mirrored={false} />);
   expect(html).toMatch(/<div [^>]*data-lines="3"[^>]*style="--lines:3">A long made-up comment/);
   expect(html).toContain("View comment");
