@@ -95,6 +95,7 @@ const COMMAND_ICONS: Record<string, IconName> = {
   back: "arrow-left",
   sidebar: "side",
   "customize-sidebar": "side",
+  preferences: "user",
   details: "side",
   display: "display",
   layout: "display",

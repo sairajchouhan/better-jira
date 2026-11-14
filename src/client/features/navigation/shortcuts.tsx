@@ -453,6 +453,14 @@ export const shortcuts: Shortcut[] = [
     group: "Navigation",
     run: overlay("customize-sidebar"),
   },
+  // Linear's "Preferences" (Go, G then S, Navigation group `fO`): opens its preferences modal (features/navigation/preferences.tsx).
+  {
+    id: "preferences",
+    name: "Preferences",
+    group: "Navigation",
+    hotkey: ["G", "S"],
+    run: overlay("preferences"),
+  },
   ...Array.from({ length: 9 }, (_, i): Shortcut => ({
     id: `team-${i + 1}`,
     name: `Go to team / board ${i + 1}`,

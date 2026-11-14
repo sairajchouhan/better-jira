@@ -2434,3 +2434,111 @@ test("R3-relations-D8: removing a Jira link resource leaves no bare-URL row whil
   actions.removeResource(key, "spec");
   expect(issueResources(get().issues.get(key)!).map((r) => r.url)).toEqual([]);
 });
+
+/** A board with a started (In Progress) column, the automations set to `automations`, and a clean-up for the stored preference. */
+async function autoAssignSetup(automations: object) {
+  const { get, set, ME } = await import("./store");
+  const { automationsKey } = await import("./browser-preferences");
+  const { navigate, ui } = await import("@/client/features/navigation/app-navigation");
+  Object.assign(ME, { id: "me", name: "Me" });
+  const board: Board = {
+    id: 1,
+    name: "Personal",
+    columns: [
+      { name: "Todo", statuses: [{ id: "todo", name: "Todo", category: "new" }] },
+      { name: "Doing", statuses: [{ id: "doing", name: "In Progress", category: "indeterminate" }] },
+      { name: "Done", statuses: [{ id: "done", name: "Done", category: "done" }] },
+    ],
+  };
+  set({ boards: [board], issues: new Map(), full: new Map() });
+  navigate({ board: 1 });
+  localStorage.setItem(automationsKey(), JSON.stringify(automations));
+  return {
+    assignee: (key: string) => get().issues.get(key)?.assignee ?? null,
+    done: () => {
+      localStorage.removeItem(automationsKey());
+      ui.send({ type: "overlay.close" });
+    },
+  };
+}
+
+test("C16: both automations are off by default: nothing is assigned on create or start", async () => {
+  const { actions } = await import("./issue-actions");
+  const t = await autoAssignSetup({});
+  try {
+    const plain = actions.create("Plain")!;
+    expect(t.assignee(plain)).toBeNull();
+    actions.status(plain, "doing");
+    expect(t.assignee(plain)).toBeNull();
+  } finally {
+    t.done();
+  }
+});
+
+test("C16: Auto-assign to self assigns a new issue to you unless No assignee or a person was chosen, composer included", async () => {
+  const { get } = await import("./store");
+  const { actions, beginCreate } = await import("./issue-actions");
+  const t = await autoAssignSetup({ autoAssignToSelf: true });
+  try {
+    expect(t.assignee(actions.create("Mine")!)).toMatchObject({ id: "me" });
+    expect(t.assignee(actions.create("Nobody", { assignee: null })!)).toBeNull();
+    expect(t.assignee(actions.create("Ann's", { assignee: { id: "ann", name: "Ann" } })!)).toMatchObject({ id: "ann" });
+    // The composer opens with you in its assignee chip; a draft that says "No assignee" keeps it.
+    beginCreate();
+    expect(get().draft.assignee).toMatchObject({ id: "me" });
+    beginCreate({ assignee: null });
+    expect(get().draft.assignee).toBeNull();
+    // It never assigns on a move.
+    const todo = actions.create("Todo", { assignee: null })!;
+    actions.status(todo, "doing");
+    expect(t.assignee(todo)).toBeNull();
+  } finally {
+    t.done();
+  }
+});
+
+test("C16: On move to started status assigns an unassigned issue to you, in the same undo step as the move", async () => {
+  const { get } = await import("./store");
+  const { actions } = await import("./issue-actions");
+  const { undoEdit } = await import("./undo-history");
+  const t = await autoAssignSetup({ assignToSelfWhenStarted: true });
+  try {
+    expect(t.assignee(actions.create("Not on create")!)).toBeNull();
+    const started = actions.create("Start me")!;
+    // Not started (to do, done) assigns no one.
+    actions.status(started, "done");
+    expect(t.assignee(started)).toBeNull();
+    actions.status(started, "todo");
+    actions.status(started, "doing");
+    expect(get().issues.get(started)).toMatchObject({ status: "doing", assignee: { id: "me" } });
+    undoEdit();
+    expect(get().issues.get(started)).toMatchObject({ status: "todo", assignee: null });
+    // An assigned issue keeps its assignee.
+    const anns = actions.create("Ann's", { assignee: { id: "ann", name: "Ann" } })!;
+    actions.status(anns, "doing");
+    expect(t.assignee(anns)).toMatchObject({ id: "ann" });
+  } finally {
+    t.done();
+  }
+});
+
+test("C16: a drag into a started column assigns you, unless the same drop picks No assignee", async () => {
+  const { get } = await import("./store");
+  const { actions } = await import("./issue-actions");
+  const t = await autoAssignSetup({ assignToSelfWhenStarted: true });
+  try {
+    const dragged = actions.create("Dragged")!;
+    actions.drop(dragged, 1, [{ by: "status", id: "Doing" }]);
+    expect(t.assignee(dragged)).toMatchObject({ id: "me" });
+    for (const groups of [
+      [{ by: "status", id: "Doing" }, { by: "assignee", id: "$none" }],
+      [{ by: "assignee", id: "$none" }, { by: "status", id: "Doing" }],
+    ] as const) {
+      const key = actions.create("Dragged to nobody")!;
+      actions.drop(key, 1, [...groups]);
+      expect(get().issues.get(key)).toMatchObject({ status: "doing", assignee: null });
+    }
+  } finally {
+    t.done();
+  }
+});

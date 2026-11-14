@@ -13,6 +13,8 @@ export const COMMAND_KEYWORDS: Readonly<Record<string, string>> = {
   // "Collapse/Expand navigation sidebar".
   sidebar: "hide show sidebar",
   "customize-sidebar": "customize sidebar navigation",
+  // "Preferences" (Go, G then S).
+  preferences: "go preferences account user personal",
   // Navigation: Open issue / document / user, the Go to scopes, Open favorite.
   "open-issue": "recent search",
   "open-document": "goto",

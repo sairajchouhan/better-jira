@@ -42,6 +42,7 @@ export type Overlay =
   | "users"
   | "add-board"
   | "customize-sidebar"
+  | "preferences"
   | "subscribers"
   | "reminder"
   | "inbox-actions"

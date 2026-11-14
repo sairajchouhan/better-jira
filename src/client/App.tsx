@@ -21,6 +21,7 @@ import { Button } from "@/client/components/button";
 import { ShortcutHelp, useLinearHotkeys } from "@/client/features/navigation/shortcuts";
 import { useRecordVisits } from "@/client/features/navigation/recents";
 import { RouteTitle } from "@/client/features/navigation/route-title-updater";
+import { Preferences } from "@/client/features/navigation/preferences";
 import { BoardView } from "@/client/routes/board-view";
 import { ViewPeek } from "@/client/features/views/view-peek";
 import {
@@ -129,6 +130,7 @@ function Shell({ children }: { children: ReactNode }) {
       {overlay === "search" && <IssueSearch />}
       {overlay === "shortcuts" && <ShortcutHelp />}
       {overlay === "add-board" && <AddBoard />}
+      {overlay === "preferences" && <Preferences />}
       {overlay === "help" && <HelpMenu />}
       {overlay !== "help" && isPalettePage(overlay) && <CommandPalette page={overlay} />}
       {current && overlay === "assign" && <PropertyPicker issue={current} field="assignee" />}

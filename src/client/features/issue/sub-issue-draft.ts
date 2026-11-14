@@ -3,6 +3,8 @@ import { ME } from "@/client/state/store";
 import { documentHasMedia, normalizeDocument, type AdfDocument } from "@/shared/document";
 import { adfToText } from "@/client/features/editor/adf";
 import { statusType } from "@/shared/inbox-model";
+import { createAssignee, type AutoAssignPreferences } from "@/shared/auto-assign";
+import { savedAutomations } from "@/client/state/browser-preferences";
 
 
 /** Where one issue's inline sub-issue draft is kept across reloads. */
@@ -19,10 +21,16 @@ export type SubIssueDraft = {
  * (startup-entry `w2.create`, `ye.priority=s||f.priority`), so the inline composer starts at the parent's priority
  * (R3-create-D10); the project is the parent's (`createSubIssue`: `project:n.project?.value`). The assignee is the
  * parent's only when that is you, or when every existing sub-issue (`children`) has it (`f.assignee===e?ye.assignee=e:
- * f.children.length>0&&f.children.elements.every(e=>e.assignee===f.assignee)`); else none. The status follows the
- * parent's state type (see `subIssueStatus`).
+ * f.children.length>0&&f.children.elements.every(e=>e.assignee===f.assignee)`); else you with "Auto-assign to self" on (the
+ * same `Issue.create`, right after: shared/auto-assign.ts), else none. The status follows the parent's state type (see
+ * `subIssueStatus`).
  */
-export const subIssueDefaults = (parent: Issue, board: Board, children: readonly Issue[] = []): IssueDraft => ({
+export const subIssueDefaults = (
+  parent: Issue,
+  board: Board,
+  children: readonly Issue[] = [],
+  automations: AutoAssignPreferences = savedAutomations(),
+): IssueDraft => ({
   parent: parent.key,
   project: parent.project,
   assignee:
@@ -30,7 +38,7 @@ export const subIssueDefaults = (parent: Issue, board: Board, children: readonly
     ((!!ME.id && parent.assignee.id === ME.id) ||
       (children.length > 0 && children.every((child) => child.assignee?.id === parent.assignee!.id)))
       ? parent.assignee
-      : null,
+      : (createAssignee(undefined, ME, automations) ?? null),
   priority: parent.priority,
   status: subIssueStatus(parent, board),
   labels: [],

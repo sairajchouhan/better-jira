@@ -4,6 +4,7 @@
  * (local-database.ts); a preference failure never touches it.
  */
 import { parsePreferences, type Display, type Preferences } from "@/shared/view-model";
+import { AUTO_ASSIGN_DEFAULTS, parseAutoAssign, type AutoAssignPreferences } from "@/shared/auto-assign";
 import type { View } from "./store";
 
 const VIEWS = "better-jira:views:v1",
@@ -12,6 +13,7 @@ const VIEWS = "better-jira:views:v1",
   DEFAULTS = "better-jira:defaults:v1",
   SAVED_VIEWS = "better-jira:saved-views:v1",
   VIEW_DETAILS = "better-jira:view-details:v1",
+  AUTOMATIONS = "better-jira:automations:v1",
   OWNER = "better-jira:preferences-owner";
 let namespace = "";
 const scoped = (key: string) => (namespace ? `${key}:${namespace}` : key);
@@ -103,6 +105,10 @@ export function onFavoritesChange(fn: () => void) {
       if (event.key === scoped(FAVORITES)) fn();
     });
 }
+/** Where the account's "Automations and workflows" preferences live (Linear keeps them per user). */
+export const automationsKey = () => scoped(AUTOMATIONS);
+/** Read at the moment an issue is created or moved, so a change in Preferences (or another tab) applies to the next one. */
+export const savedAutomations = (): AutoAssignPreferences => readJson(AUTOMATIONS, AUTO_ASSIGN_DEFAULTS, parseAutoAssign);
 /** Where saved views are cached for the current account. */
 export const savedViewsKey = () => scoped(SAVED_VIEWS);
 

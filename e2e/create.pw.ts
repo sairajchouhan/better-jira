@@ -283,3 +283,54 @@ test("C5: the composer keeps its whole draft across a reload, a backdrop press m
     expect(await page.waitFor<string>(`${title}?.value`)).toBe("");
   });
 });
+
+/** Linear's "Automations and workflows" preferences, seeded for the fixture's account (browser-preferences `automationsKey`). */
+const automations = (value: object) =>
+  `if(!sessionStorage.seededAutomations){sessionStorage.seededAutomations=1;localStorage.setItem(${JSON.stringify(
+    PREFS_KEY.replace("better-jira:views:v1", "better-jira:automations:v1"),
+  )},${JSON.stringify(JSON.stringify(value))});}`;
+
+test("C16: Preferences' auto-assign automations: you on a new issue, and on an unassigned issue moved to started, one undo", async ({
+  open,
+}) => {
+  const page = await open("", { setup: automations({ autoAssignToSelf: true, assignToSelfWhenStarted: true }) });
+  await page.waitFor(`!!document.querySelector('[data-key="TEST-1"]')`);
+  const switchOn = (name: string) =>
+    `document.querySelector('[role=dialog][aria-label="Preferences"] [role=switch][aria-label="${name}"]')?.checked`;
+  await test.step("G then S opens Preferences with both automations under Automations and workflows", async () => {
+    await page.key("g");
+    await page.key("s");
+    await page.waitFor(`!!document.querySelector('[role=dialog][aria-label="Preferences"]')`);
+    expect(await page.eval(`document.querySelector('[role=dialog][aria-label="Preferences"]').textContent.includes("Automations and workflows")`)).toBe(true);
+    expect(await page.eval(switchOn("Auto-assign to self"))).toBe(true);
+    expect(await page.eval(switchOn("On move to started status, assign to yourself"))).toBe(true);
+    await page.key("Escape");
+    await page.waitFor(`!document.querySelector('[role=dialog][aria-label="Preferences"]')`);
+  });
+  await test.step("C: the composer starts assigned to you", async () => {
+    await page.key("c");
+    await page.waitFor(pill("Assignee: Audit user"));
+    await page.key("Escape");
+    await page.waitFor(`!document.querySelector('[role=dialog][aria-label="Create issue"]')`);
+  });
+  const card = (column: string) => `document.querySelector('[data-board-column="${column}"] [data-key="TEST-1"]')`;
+  await test.step("S › Doing on unassigned TEST-1 assigns you; ⌘Z takes back the move and the assignment together", async () => {
+    await page.hover('[data-key="TEST-1"]');
+    await page.key("s");
+    await page.waitFor(`!!document.querySelector('[role=dialog][aria-label="Change status"]')`);
+    await page.type("Doing");
+    await page.key("Enter");
+    await page.waitFor(`!!${card("Doing")}?.querySelector('[title="Audit user"]')`);
+    await page.key("z", "meta");
+    await page.waitFor(`!!${card("Todo")}`);
+    expect(await page.eval(`!!${card("Todo")}.querySelector('[title="Audit user"]')`)).toBe(false);
+  });
+  await test.step("an issue assigned to someone else keeps its assignee when started", async () => {
+    await page.hover('[data-key="TEST-2"]');
+    await page.key("s");
+    await page.waitFor(`!!document.querySelector('[role=dialog][aria-label="Change status"]')`);
+    await page.type("Doing");
+    await page.key("Enter");
+    await page.waitFor(`!!document.querySelector('[data-board-column="Doing"] [data-key="TEST-2"] [title="Alex"]')`);
+  });
+});

@@ -26,6 +26,8 @@ import {
 import { showIssueCreated, showNotification } from "./app-notifications";
 import { assignableUsers, statusById, statuses } from "@/shared/board-catalog";
 import { createDefaults } from "@/shared/create-defaults";
+import { createAssignee, startAssignee } from "@/shared/auto-assign";
+import { savedAutomations } from "./browser-preferences";
 import { viewSettings } from "@/client/features/views/view-settings";
 import { navigate, ui } from "@/client/features/navigation/app-navigation";
 import { adfToText } from "@/client/features/editor/adf";
@@ -63,11 +65,15 @@ export function beginCreate(draft: IssueDraft = {}): boolean {
     set({ perf: "Retry local storage before creating an issue" });
     return false;
   }
-  const status = scopeStatus();
+  const status = scopeStatus(),
+    composed: IssueDraft = { ...(status ? { status } : {}), ...(get().mine ? { assignee: ME } : {}), ...draft };
+  // Linear's composer edits an issue `Issue.create` already made, so "Auto-assign to self" shows you in its assignee
+  // chip, where "No assignee" can still clear it (shared/auto-assign.ts).
+  const assignee = createAssignee(composed.assignee, ME, savedAutomations());
   ui.send({
     type: "overlay.open",
     overlay: "create",
-    draft: { ...(status ? { status } : {}), ...(get().mine ? { assignee: ME } : {}), ...draft },
+    draft: assignee === undefined ? composed : { ...composed, assignee },
   });
   return true;
 }
@@ -94,6 +100,8 @@ export function beginCreateInView(draft: IssueDraft = {}): boolean {
 }
 
 const now = () => new Date().toISOString();
+/** Linear's `assignToState` options: `skipSelfAssign` when the same edit already chose the assignee. */
+type StatusOptions = { skipSelfAssign?: boolean };
 /** On a writable site a crop uploads as a new Jira attachment, which takes the original's place in the description. Read-only sites keep it as a local view edit. */
 export async function saveCrop(key: string, id: string, crop: ImageCrop, file: File) {
   const edit = () => ({ ...get().issues.get(key)?.mediaEdits?.[id], crop });
@@ -422,6 +430,8 @@ export const actions = {
       epicLocked(issue, lookup)
     )
       return;
+    // A drop into an assignee group chooses the assignee itself, so a started column doesn't also assign you (`skipSelfAssign`).
+    const skipSelfAssign = groups.some(({ by }) => by === "assignee");
     // One drag, including its column and row changes, is one undoable edit.
     record(key, `move ${key}`, () => {
       if (rank !== undefined) patchIssue(key, { rank });
@@ -429,10 +439,10 @@ export const actions = {
         const current = get().issues.get(key)!;
         if (by === "status") {
           const col = board.columns.findIndex((c) => c.name === id);
-          if (col >= 0) actions.move(key, col);
+          if (col >= 0) actions.move(key, col, { skipSelfAssign });
         } else if (by === "category") {
           const status = statuses(board).find((s) => s.category === id);
-          if (status) actions.status(key, status.id);
+          if (status) actions.status(key, status.id, { skipSelfAssign });
         } else if (by === "assignee")
           actions.assign(
             key,
@@ -473,16 +483,22 @@ export const actions = {
     });
   },
   /** Move to a column's first status; no-op if the issue is already in that column. */
-  move(key: string, col: number) {
+  move(key: string, col: number, options: StatusOptions = {}) {
     const c = boardOf(key)?.columns[col];
     if (c?.statuses[0] && !c.statuses.some((x) => x.id === get().issues.get(key)?.status))
-      actions.status(key, c.statuses[0].id);
+      actions.status(key, c.statuses[0].id, options);
   },
-  status(key: string, id: string) {
+  /**
+   * Every status change (S, ⌘K, the issue menu, a drag, the sidebar's status) comes through here, as all of Linear's go through
+   * `Issue.assignToState`: so "On move to started status, assign to yourself" assigns an unassigned issue in the same undo step
+   * as the move, with no toast of its own (shared/auto-assign.ts).
+   */
+  status(key: string, id: string, { skipSelfAssign = false }: StatusOptions = {}) {
     const i = get().issues.get(key);
     const s = statusById(boardOf(key), id);
     ui.send({ type: "overlay.close" });
     if (!i || !s || i.status === id) return;
+    const assignee = startAssignee(i, s.category, ME, savedAutomations(), skipSelfAssign);
     timed(`move ${key} → ${s.name}`, () =>
       record(key, `move ${key}`, () =>
         patchIssue(key, {
@@ -490,6 +506,7 @@ export const actions = {
           statusSince: now(),
           started: i.started ?? (s.category === "indeterminate" ? now() : undefined),
           resolved: s.category === "done" ? (i.resolved ?? now()) : null,
+          ...(assignee ? { assignee: { ...assignee } } : {}),
         }),
       ),
     );
@@ -692,6 +709,8 @@ export const actions = {
       ...fields
     } = draft;
     const document = normalizeDocument(descriptionDoc ?? draft.description ?? "");
+    // "Auto-assign to self" for creates that skip the composer (sub-issues, inline sub-issue rows); null stays "No assignee".
+    const assignee = createAssignee(fields.assignee, ME, savedAutomations());
     timed(`create ${key}`, () =>
       record(key, `create ${key}`, () => {
         const issue: Issue = {
@@ -714,6 +733,7 @@ export const actions = {
           watchersComplete: true,
           project: [...get().issues.values()].find((i) => i.board === board.id)?.project,
           ...fields,
+          ...(assignee !== undefined ? { assignee } : {}),
           description: adfToText(document),
           status: status.id,
           resolved: status.category === "done" ? now() : null,

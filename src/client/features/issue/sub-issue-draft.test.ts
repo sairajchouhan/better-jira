@@ -64,3 +64,15 @@ test("R3 G14: a new sub-issue's status follows the parent's state type, as Linea
   expect(subIssueStatus({ status: "wont" }, noBacklog)).toBe("todo");
   expect(subIssueDefaults({ key: "P-1", board: 1, status: "backlog" } as Issue, board).status).toBe("backlog");
 });
+
+test("C16: with Auto-assign to self on, a sub-issue nothing assigns starts with you; an inherited assignee still wins", () => {
+  const board: Board = { id: 1, name: "B", columns: [{ name: "Todo", statuses: [{ id: "todo", name: "Todo", category: "new" }] }] };
+  const ann = { id: "ann", name: "Ann" },
+    on = { autoAssignToSelf: true, assignToSelfWhenStarted: false },
+    off = { autoAssignToSelf: false, assignToSelfWhenStarted: false };
+  const parent = { key: "P-1", board: 1, assignee: null } as Issue;
+  expect(subIssueDefaults(parent, board, [], on).assignee).toBe(ME);
+  expect(subIssueDefaults(parent, board, [], off).assignee).toBeNull();
+  const child = { key: "P-2", board: 1, parent: "P-1", assignee: ann } as Issue;
+  expect(subIssueDefaults({ ...parent, assignee: ann }, board, [child], on).assignee).toEqual(ann);
+});
