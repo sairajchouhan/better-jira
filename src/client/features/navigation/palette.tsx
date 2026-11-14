@@ -1,3 +1,4 @@
+import { EntityIdentifier } from "@/client/components/entity-identifier";
 import { type Issue } from "@/shared/issue-model";
 import {
   useActiveView,
@@ -339,7 +340,7 @@ function IssueRow({ issue: i, onOpen }: { issue: Issue; onOpen?: () => void }) {
       icon={s ? <StatusIcon status={s} /> : <TypeDot type={i.type} />}
       hint={<Avatar user={i.assignee} size={18} />}
     >
-      <span className="palette-issue-key">{i.key}</span>
+      <EntityIdentifier className="palette-issue-key">{i.key}</EntityIdentifier>
       {i.summary}
     </Menu.Item>
   );

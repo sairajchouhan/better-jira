@@ -1,3 +1,4 @@
+import { EntityIdentifier } from "@/client/components/entity-identifier";
 import { type Issue, type User } from "@/shared/issue-model";
 /* oxlint-disable react/immutability -- Session callbacks and mutable imperative models are intentionally owned outside React state. */
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
@@ -298,7 +299,7 @@ export function MentionMenu({
         id: `issue:${issue.key}`,
         label: (
           <>
-            <span className="text-fg-3">{issue.key}</span> {issue.summary}
+            <EntityIdentifier className="text-fg-3">{issue.key}</EntityIdentifier> {issue.summary}
           </>
         ),
         icon: status && <StatusIcon status={status} />,

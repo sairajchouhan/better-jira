@@ -65,6 +65,7 @@ import { copyIssue, copyIssueLink } from "@/client/features/issue/issue-copy";
 import { PropertyTrigger } from "@/client/components/property-trigger";
 import { LabelChip } from "@/client/components/label-chip";
 import { Text } from "@/client/components/text";
+import { EntityIdentifier } from "@/client/components/entity-identifier";
 // Loaded with the page, as Linear's preview (PBe) is: a lazy viewer suspends, and React's Suspense throttle holds it ~300ms (BJ-233).
 import { ImageViewer } from "@/client/features/media/image-viewer";
 
@@ -139,12 +140,12 @@ function IssueKey({ issue }: { issue: Issue }) {
     <>
       <TypeDot type={issue.type} />
       <a
-        className="tracking-[-0.24px] text-fg-2 hover:text-fg"
+        className="text-fg-2 hover:text-fg"
         href={issueURL(issue)}
         target="_blank"
         rel="noreferrer"
       >
-        {issue.key}
+        <EntityIdentifier>{issue.key}</EntityIdentifier>
       </a>
     </>
   );

@@ -69,3 +69,16 @@ test("no font comes from a package or another host", async () => {
   expect(await Bun.file(new URL("App.tsx", dir)).text()).not.toContain("@fontsource");
   expect(css).not.toMatch(/url\(\s*["']?(https?:)?\/\/|@import\s+["']@fontsource/);
 });
+
+test("every issue key renders through EntityIdentifier, Linear's WP: tnum, cpsp, calt and −.02em", async () => {
+  const idCss = await Bun.file(new URL("components/entity-identifier.css", dir)).text();
+  expect(idCss).toContain('font-feature-settings: "tnum", "cpsp", "calt";');
+  expect(idCss).toContain("letter-spacing: -0.02em;");
+  const bare: string[] = [];
+  for await (const path of new Bun.Glob("**/*.tsx").scan({ cwd: dir.pathname })) {
+    const source = await Bun.file(new URL(path, dir)).text();
+    // A key printed straight into a <span> or <a> bypasses the identifier's features and tracking.
+    for (const m of source.matchAll(/<(span|a)\b[^>]*>\s*\{\w+\.key\}\s*<\/\1>/g)) bare.push(`${path}: ${m[0]}`);
+  }
+  expect(bare).toEqual([]);
+});

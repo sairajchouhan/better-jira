@@ -174,4 +174,10 @@ test("the app renders Linear's font: self-hosted Inter Variable, its stack, feat
       `(()=>{const k=document.createElement('kbd');k.className='ui-keycap';k.textContent='0';document.body.append(k);const s=getComputedStyle(k),r=[s.fontFamily.split(',')[0],s.fontFeatureSettings];k.remove();return r})()`,
     ),
   ).toEqual(['"Inter Variable"', '"cv08", "zero"']);
+  // The issue key is Linear's WP (Xxt.entityIdentifier): "tnum","cpsp","calt" and −.02em of its own size.
+  expect(
+    await page.waitFor(
+      `(()=>{const k=document.querySelector('.ui-entity-id');if(!k)return;const s=getComputedStyle(k);return [s.fontFeatureSettings,Math.round(parseFloat(s.letterSpacing)/parseFloat(s.fontSize)*100)/100]})()`,
+    ),
+  ).toEqual(['"calt", "cpsp", "tnum"', -0.02]); // Chrome lists features in tag order
 });

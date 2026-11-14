@@ -2556,7 +2556,6 @@ li[data-done="true"] > .todo-content {
   width: 88px;
   flex-shrink: 0;
   font-size: 12px;
-  letter-spacing: -0.24px;
   color: var(--menu-fg-3);
 }
 /* Search's filter and ordering controls, under the results and outside cmdk. */

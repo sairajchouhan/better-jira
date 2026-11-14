@@ -1,3 +1,4 @@
+import { EntityIdentifier } from "./entity-identifier";
 import { type Issue } from "@/shared/issue-model";
 import { createContext, use, type ReactNode } from "react";
 
@@ -46,7 +47,7 @@ export function CommandMenuTitle({ issue }: { issue: Issue }) {
   return (
     <div className="command-menu-title">
       <span className="command-menu-chip">
-        <span className="command-menu-key">{issue.key}</span>
+        <EntityIdentifier className="command-menu-key">{issue.key}</EntityIdentifier>
         <span aria-hidden>·</span>
         <span className="truncate">{issue.summary}</span>
       </span>

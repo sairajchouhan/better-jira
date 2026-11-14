@@ -1,3 +1,4 @@
+import { EntityIdentifier } from "@/client/components/entity-identifier";
 import { type Board, type Issue, type IssueDraft, type JiraOptions, type User } from "@/shared/issue-model";
 import { EmptyState } from "@/client/components/empty-state";
 import { typedResourceURL } from "@/shared/issue-resource";
@@ -141,7 +142,7 @@ function PendingRelation({ related, remove }: { related: NonNullable<IssueDraft[
                     if (issue) navigate({ board: issue.board, selected: issue.key, panel: true, view: get().view });
                   }}
                 >
-                  <span className="mr-2 text-[var(--menu-fg-3)]">{related.key}</span>
+                  <EntityIdentifier className="mr-2 text-[var(--menu-fg-3)]">{related.key}</EntityIdentifier>
                   {issue?.summary}
                 </Menu.Item>
               </Menu.Group>
@@ -1432,7 +1433,7 @@ export function Relations({ issue }: { issue: Issue }) {
       disabled={disabled.has(i.key)}
       hint={disabled.get(i.key)}
     >
-      <span className="mr-2 text-[var(--menu-fg-3)]">{i.key}</span>
+      <EntityIdentifier className="mr-2 text-[var(--menu-fg-3)]">{i.key}</EntityIdentifier>
       <span className="truncate text-[var(--menu-fg)]">{i.summary}</span>
     </Menu.Item>
   );

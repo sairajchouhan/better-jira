@@ -1,3 +1,4 @@
+import { EntityIdentifier } from "@/client/components/entity-identifier";
 import { type Issue } from "@/shared/issue-model";
 import { Text } from "@/client/components/text";
 import { SubIssueProgressButton } from "@/client/components/sub-issue-progress-button";
@@ -144,7 +145,7 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
         <span className="grid size-3.5 shrink-0 place-items-center">
           <StatusIcon status={status(parent)} />
         </span>
-        <span className="shrink-0 font-[450] text-fg-3">{parent.key}</span>
+        <EntityIdentifier className="shrink-0 font-[450] text-fg-3">{parent.key}</EntityIdentifier>
         <span className="truncate font-medium text-fg">{parent.summary}</span>
       </AppLink>
       <SubIssueProgressButton
@@ -736,7 +737,7 @@ function SubIssueRow({
           <PriorityIcon name={child.priority} />,
         )}
       {display.properties.includes("id") && (
-        <span className="px-1 text-fg-3">{child.key}</span>
+        <EntityIdentifier className="px-1 text-fg-3">{child.key}</EntityIdentifier>
       )}
       {/* Text has no anchor variant; preserve the native issue link. */}
       <AppLink
@@ -833,9 +834,9 @@ function ChildrenMenu({ parent, current, anchor, close }: { parent: Issue; curre
                       if (child.key !== current) openIssue(child);
                     }}
                   >
-                    <span className="mr-2 text-[var(--menu-fg-3)]">
+                    <EntityIdentifier className="mr-2 text-[var(--menu-fg-3)]">
                       {child.key}
-                    </span>
+                    </EntityIdentifier>
                     {child.summary}
                   </Menu.Item>
                 ))}

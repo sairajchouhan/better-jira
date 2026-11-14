@@ -58,6 +58,7 @@ import { shortDate } from "@/client/lib/due-date";
 import { Button, IconButton } from "@/client/components/button";
 import { CountBadge } from "@/client/components/count-badge";
 import { Text } from "@/client/components/text";
+import { EntityIdentifier } from "@/client/components/entity-identifier";
 import "./board-column.css";
 // Memoised: an overlay opening (⌘K) re-renders App, and must not re-render every board.
 export const BoardView = memo(function BoardView({
@@ -950,9 +951,9 @@ const BoardCard = memo(function BoardCard({
       >
         <div className="flex flex-col gap-1.5 pr-[34px] pl-1">
           {show("id") && (
-            <span className="truncate text-[12px] leading-[normal] font-[450] tracking-[-0.24px] text-card-fg-3 tabular-nums">
+            <EntityIdentifier className="truncate text-[12px] leading-[normal] font-[450] text-card-fg-3">
               {issue.key}
-            </span>
+            </EntityIdentifier>
           )}
           <div className="flex items-start gap-1.5">
             {show("status") && <IssueStatus issue={issue} className="mt-px" />}

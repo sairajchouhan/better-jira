@@ -1,3 +1,4 @@
+import { EntityIdentifier } from "@/client/components/entity-identifier";
 import type { ReactNode } from "react";
 import { Avatar } from "@/client/components/avatar";
 import { HoverCard } from "@/client/components/hover-card";
@@ -45,7 +46,7 @@ function IssueCard({ relation, issue }: { relation: Relation; issue?: Issue }) {
   return (
           <div data-issue-hover={relation.key}>
             <div className="mb-1.5 flex items-center justify-between gap-4 text-fg-3">
-              <span>{relation.key}</span>
+              <EntityIdentifier>{relation.key}</EntityIdentifier>
               {issue?.assignee ? (
                 <span className="flex items-center gap-1.5">
                   <Avatar user={issue.assignee} size={16} />

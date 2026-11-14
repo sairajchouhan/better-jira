@@ -42,6 +42,7 @@ import { useCommand, focusNode } from "./commands";
 import { markAllRead, useInboxBadge } from "@/client/features/inbox/inbox";
 import { SectionDisclosure } from "@/client/components/section-disclosure";
 import { SelectRow } from "@/client/components/display-options";
+import { EntityIdentifier } from "@/client/components/entity-identifier";
 import { useStoredState } from "@/client/state/stored-state";
 
 /** Linear's sidebar preferences (BJ-76): collapsed sections, and when Inbox and My issues show (Customize sidebar). */
@@ -571,7 +572,7 @@ export function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue
             <a aria-current="page" className={CRUMB_LAST} href={issueURL(issue)} target="_blank" rel="noreferrer">
               <span className={CRUMB_ICON}><TypeDot type={issue.type} /></span>
               <span data-crumb-issue className="flex min-w-0">
-                <span className="mr-[5.6px] shrink-0 tracking-[-0.24px]">{issue.key}</span>
+                <EntityIdentifier className="mr-[5.6px] shrink-0">{issue.key}</EntityIdentifier>
                 <span className="truncate">{issue.summary}</span>
               </span>
             </a>
