@@ -235,3 +235,51 @@ test("B7: an assignee filter naming two people sets no assignee and offers both 
     await page.eval(`[...document.querySelectorAll('${menu} [cmdk-item]')].map(n=>n.dataset.value)`),
   ).toEqual(["No assignee", "Audit user audit-me", "Alex alex", "Morgan Example catalog-0"]);
 });
+
+test("C5: the composer keeps its whole draft across a reload, a backdrop press minimizes it, and creating or discarding drops it", async ({
+  open,
+}) => {
+  const page = await open();
+  const dialog = `document.querySelector('[role=dialog][aria-label="Create issue"]')`;
+  await test.step("a reload mid-compose brings back the title, description and properties on the next C (Linear's `CreateIssue_<user>__DRAFT__`)", async () => {
+    await page.key("c");
+    await page.waitFor(`document.activeElement===${title}`);
+    await page.type("Kept across reload");
+    await page.key("Enter");
+    await page.type("Kept body");
+    await page.click('[aria-label^="Priority:"]');
+    await page.type("high");
+    await page.key("Enter");
+    await page.waitFor(`!!document.querySelector('[aria-label="Priority: High"]')`);
+    await page.reload();
+    expect(await page.eval(`!!${dialog}`)).toBe(false);
+    await page.key("c");
+    expect(await page.waitFor<string>(`${title}?.value`)).toBe("Kept across reload");
+    expect(await page.eval(`document.getElementById("create-description").textContent`)).toBe("Kept body");
+    expect(await page.eval(`!!document.querySelector('[aria-label="Priority: High"]')`)).toBe(true);
+  });
+  await test.step("a press on the backdrop closes it without asking and keeps the draft (Linear's `handleMinimize`)", async () => {
+    await page.clickAt(5, 5);
+    await page.waitFor(`!${dialog}`);
+    expect(await page.eval(`!!document.querySelector('[role=dialog][aria-label="Save to drafts?"]')`)).toBe(false);
+    await page.key("c");
+    expect(await page.waitFor<string>(`${title}?.value`)).toBe("Kept across reload");
+  });
+  await test.step("Discard drops the kept draft: the next C, even after a reload, is empty", async () => {
+    await page.key("Escape");
+    await page.page.getByRole("dialog", { name: "Save to drafts?" }).getByRole("button", { name: "Discard" }).click();
+    await page.waitFor(`!${dialog}`);
+    await page.reload();
+    await page.key("c");
+    expect(await page.waitFor<string>(`${title}?.value`)).toBe("");
+    expect(await page.eval(`!!document.querySelector('[aria-label="Priority: High"]')`)).toBe(false);
+  });
+  await test.step("creating the issue drops the kept draft", async () => {
+    await page.type("Created then gone");
+    await page.key("Enter", "meta");
+    await page.waitFor(`!${dialog}`);
+    await page.reload();
+    await page.key("c");
+    expect(await page.waitFor<string>(`${title}?.value`)).toBe("");
+  });
+});
