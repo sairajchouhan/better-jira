@@ -183,9 +183,11 @@ export const MOVES = [
 ] as const;
 type MoveId = (typeof MOVES)[number][0];
 /** Whether Move… lists the move for `issue` (Linear's `applicable`), and why it is disabled when it is listed but can't run
- *  (`disabledReason`): up/down/top/bottom need a manually ordered group. */
+ *  (`disabledReason`): up/down/top/bottom need a manually ordered group. Linear's moves need the list's own metadata
+ *  (`c4`/`kvr` read `metadataOfType(bX)`), so they apply only while the board is on screen: never on a full-page issue,
+ *  a document or the Inbox, where ⌥←/⌥→ would write the issue's status to Jira (R3-palette-shortcuts-D1). */
 export function moveAvailability(id: MoveId, issue: Issue | undefined, s = get()): { disabledReason?: string } | null {
-  if (!issue) return null;
+  if (!issue || !listVisible(s)) return null;
   if (id === "column-left" || id === "column-right")
     return columnTarget(issue, id === "column-left" ? -1 : 1, s) ? {} : null;
   if (!canReorder(issue, id === "reorder-top" || id === "reorder-up" ? -1 : 1, s)) return null;
@@ -750,6 +752,8 @@ export const shortcuts: Shortcut[] = [
     group: "List / Board",
     hotkey: "Space",
     issue: true,
+    // A focused list row, as Linear's list keys: nothing to peek on a full-page issue (R3-palette-shortcuts-D1).
+    when: boardVisible,
     // The card under the pointer, as S/A/P/L act on (`target()`); Linear's list focus follows the pointer.
     run: issueAction((issue) => navigate({ selected: issue.key, panel: true, view: "side" })),
   },
@@ -759,6 +763,7 @@ export const shortcuts: Shortcut[] = [
     group: "List / Board",
     hotkey: "Enter",
     issue: true,
+    when: boardVisible,
     run: () => (get().inbox ? openRow() : navigate({ panel: true, view: "page" })),
   },
   {
@@ -800,6 +805,8 @@ export const shortcuts: Shortcut[] = [
     name,
     hotkey,
     group: "List / Board",
+    // Up/down also step through issues on the issue page and rows in the Inbox; left/right walk board columns only.
+    ...(horizontal ? { when: listVisible } : {}),
     run: () => move(dir, horizontal),
   })),
   ...(
@@ -848,7 +855,7 @@ export const shortcuts: Shortcut[] = [
     group: "List / Board",
     hotkey: "T",
     issue: true,
-    when: (s) => viewSettings(s.board, s).display.layout === "list",
+    when: (s) => listVisible(s) && viewSettings(s.board, s).display.layout === "list",
     run: () => collapse(),
   },
   {
@@ -856,7 +863,7 @@ export const shortcuts: Shortcut[] = [
     name: "Collapse/expand all groups",
     group: "List / Board",
     hotkey: "Alt+T",
-    when: (s) => viewSettings(s.board, s).display.layout === "list",
+    when: (s) => listVisible(s) && viewSettings(s.board, s).display.layout === "list",
     run: () => collapse(true),
   },
   {
@@ -945,6 +952,10 @@ export const shortcuts: Shortcut[] = [
 /** Board filters and display act only while the board is on screen, not behind a full-page issue or a document. */
 function boardVisible(s = get()) {
   return !s.document && (!s.panel || s.view !== "page");
+}
+/** The issue list or board itself is on screen: the board, not the Inbox's notification list in its place. */
+function listVisible(s = get()) {
+  return boardVisible(s) && !s.inbox;
 }
 /** A shortcut's registry hotkey by id, for every `shortcut`/`keys` prop; "" when it has none. Caps come from
  *  `chordKeys`, which already draws Help's "Shift+?" as "?". */

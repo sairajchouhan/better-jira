@@ -162,6 +162,26 @@ describe("Move (R3-board-D1, D2)", () => {
       ["Move to bottom", "This group is not ordered manually"],
     ]);
   });
+
+  test("R3-palette-shortcuts-D1: board moves never run off the board, so ⌥→/⌥↑ on the issue page or in the Inbox write nothing", async () => {
+    const { runShortcut, shortcutApplies, shortcuts } = await import("@/client/features/navigation/shortcuts");
+    const listOnly = ["reorder-up", "reorder-down", "reorder-top", "reorder-bottom", "column-left", "column-right", "peek", "open", "left", "right"];
+    const offBoard = [
+      { selected: "M-1", panel: true, view: "page" as const },
+      { selected: "M-1", inbox: true },
+    ];
+    for (const at of offBoard) {
+      setup((p) => (p.display.ordering = "manual"));
+      navigate(at);
+      // No Move… submenu at all: every move is inapplicable.
+      expect(issueMenuEntries(get().issues.get("M-1")!, { openDialog: () => {}, close: () => {}, presentation: "row" }).some((e) => e.name === "Move")).toBe(false);
+      for (const id of ["column-right", "reorder-down", "reorder-bottom"]) runShortcut(id);
+      expect([get().issues.get("M-1")!.status, get().issues.get("M-1")!.rank]).toEqual(["todo", "a"]);
+      // ⌘K lists only what applies, so none of the board's moves show either.
+      const listed = shortcuts.filter((e) => listOnly.includes(e.id) && shortcutApplies(e)).map((e) => e.id);
+      expect(listed).toEqual(at.inbox ? ["peek", "open"] : []);
+    }
+  });
 });
 
 test("R3-issue-fields-D1: a writable site's Priority submenu has no No priority row, as Jira can't clear it", () => {
