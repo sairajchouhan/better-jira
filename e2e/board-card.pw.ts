@@ -375,10 +375,12 @@ test("board colours: the Add new issue pill, the column backdrop and the header 
     );
     expect([r.h, r.text, r.svg]).toEqual([28, "", 16]);
     expect(r.w).toBe(r.card - 2); // 320 beside a 322px card: both inside the 324px item column, 2px margins
+    // Linear's thinPixel (0.5px) border: Chromium snaps a border under one device pixel to 1px at the suite's DPR 1.
+    expect(await page.eval(`parseFloat(getComputedStyle(${add}).getPropertyValue("--thin-pixel"))`)).toBe(0.5);
     expect(await style(add, "backgroundColor", "borderTopColor", "borderTopWidth", "borderRadius", "transitionProperty")).toEqual([
       "lch(9.232 0.85 272 / 0.5)",
       "lch(16.793 1.93 272)",
-      "0.5px",
+      "1px",
       "9999px",
       "border, background-color, color, opacity",
     ]);

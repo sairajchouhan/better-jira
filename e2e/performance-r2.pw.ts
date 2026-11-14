@@ -2,12 +2,20 @@ import { test, expect, fixture, PREFS_KEY } from "./app";
 
 test("BJ-110 keeps the document visible while its first editor chunk loads", async ({ open }) => {
   const app = await open();
-  const initial = await app.page.evaluate(() => performance.getEntriesByType("resource").filter((r: any) => r.initiatorType === "script").map(r => r.name));
-  for (const url of initial) {
+  // The start-up scripts: the entry module and every chunk it imports statically. Chunks fetched later by a dynamic import are
+  // not among them, even when the page warms one on idle before the first key (R3-issue-fields-D7 warms chrono for Shift+D).
+  const staticImport = /\b(?:import|export)\s*(?:[\w$*{},\s]*?from\s*)?"([^"]+\.js)"/g;
+  const queue = await app.page.evaluate(() => [...document.querySelectorAll<HTMLScriptElement>("script[type=module][src]")].map((s) => s.src));
+  const initial = new Set<string>();
+  for (let url = queue.shift(); url; url = queue.shift()) {
+    if (initial.has(url)) continue;
+    initial.add(url);
     const code = await (await app.page.request.get(url)).text();
     expect(code).not.toContain("Invalid content for node");
     expect(code).not.toContain("sept:9,\"sept.\":9");
+    for (const [, path] of code.matchAll(staticImport)) queue.push(new URL(path!, url).href);
   }
+  expect(initial.size).toBeGreaterThan(1);
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
   let editorRequested = false;
