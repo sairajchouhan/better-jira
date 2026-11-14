@@ -264,7 +264,7 @@ test("an epic parent shows as Project and on the title line only: no Parent, Par
     await p.waitFor(`new URLSearchParams(location.search).get('issue')==='TEST-7'`);
   });
 
-  await test.step("an issue in the epic: Project names it, Remove has no parent, ⌘⇧P offers no epic, ⌘⇧↑ opens nothing", async () => {
+  await test.step("an issue in the epic: Project names it, Remove has no parent, ⌘⇧P offers no epic, ⌘⇧↑ opens the epic", async () => {
     await p.goto("?issue=TEST-2&view=page");
     await p.waitFor(`document.getElementById('prop-project')?.textContent.includes("Fixture epic")`);
     // The epic is never a Parent property in the sidebar (BJ-247).
@@ -281,11 +281,16 @@ test("an epic parent shows as Project and on the title line only: no Parent, Par
     // Jira takes only an epic above a Task, and an epic is a project: no parent issue is offered.
     expect(await items(RELATIONS)).toEqual([]);
     await p.key("Escape");
-    // Open parent issue (⌘⇧↑) has no parent issue to open.
+    // Open parent issue (⌘⇧↑) opens what the Sub-issue of line names: the epic (BJ-289).
+    await p.eval("document.activeElement?.blur()");
+    await p.key("ArrowUp", "meta", "shift");
+    await p.waitFor(`new URLSearchParams(location.search).get('issue')==='TEST-7'`);
+    // The epic has no parent: ⌘⇧↑ stays on it.
+    await p.waitFor(`!!document.querySelector('[data-sub-issues="TEST-7"]')`);
     await p.eval("document.activeElement?.blur()");
     await p.key("ArrowUp", "meta", "shift");
     await sleep(150);
-    expect(await p.eval(`new URLSearchParams(location.search).get('issue')`)).toBe("TEST-2");
+    expect(await p.eval(`new URLSearchParams(location.search).get('issue')`)).toBe("TEST-7");
   });
 
   await test.step("the epic's detail lists its issues as Jira's epic page does (BJ-280), has no parent line; ⌘⇧P opens nothing", async () => {
@@ -301,13 +306,17 @@ test("an epic parent shows as Project and on the title line only: no Parent, Par
     expect(await p.eval(`!!document.querySelector('${RELATIONS}')`)).toBe(false);
   });
 
-  await test.step("a Subtask's parent issue still shows as Sub-issue of, and the parent lists it", async () => {
+  await test.step("a Subtask's parent issue still shows as Sub-issue of, ⌘⇧↑ opens it, and the parent lists it", async () => {
     await p.goto("?issue=TEST-6&view=page");
     await p.waitFor(`document.querySelector('[data-parent-link]')?.textContent.includes("TEST-5")`);
     // Its ring lists its Task's sub-issues, never the epic's.
     await p.click("[data-parent-progress]");
     await p.waitFor(`!!document.querySelector('[role=dialog][aria-label="Open sub-issues of TEST-5"] [cmdk-item]')`);
     await p.key("Escape");
+    // ⌘⇧↑ opens its Task, never the epic (BJ-289).
+    await p.eval("document.activeElement?.blur()");
+    await p.key("ArrowUp", "meta", "shift");
+    await p.waitFor(`new URLSearchParams(location.search).get('issue')==='TEST-5'`);
     await p.goto("?issue=TEST-5&view=page");
     await p.waitFor(`!!document.querySelector('[data-sub-issue="TEST-6"]')`);
   });

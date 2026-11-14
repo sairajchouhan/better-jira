@@ -293,7 +293,7 @@ describe("BJ-247: an epic parent is the issue's Project, never its Parent", () =
     expect(get().issues.get("E-3")?.parent).toBeUndefined();
   });
 
-  test("⌘K and keys: Open parent issue follows parent issues only; Open sub-issue and the title line's ⌘⇧→ reach an epic's issues too; an epic has no Set parent issue", async () => {
+  test("⌘K and keys: Open parent issue (⌘⇧↑), Open sub-issue and ⌘⇧→ reach an epic's issues too; an epic has no Set parent issue", async () => {
     const { canRunShortcut } = await import("@/client/features/navigation/shortcuts");
     setup();
     ui.send({ type: "overlay.close" });
@@ -303,9 +303,28 @@ describe("BJ-247: an epic parent is the issue's Project, never its Parent", () =
     };
     // BJ-280: the epic's Sub-issues section lists E-2, so Open sub-issue reaches it.
     expect(on("E-1")).toEqual(["child-open"]);
-    // BJ-289: E-2's Sub-issue of line names its epic, so ⌘⇧→ opens the epic's sub-issues; ⌘⇧↑ still has no parent issue.
-    expect(on("E-2")).toEqual(["sub-issues-of-parent", "child-open", "parent-set"]);
+    // BJ-289: E-2's Sub-issue of line names its epic, so ⌘⇧↑ opens the epic and ⌘⇧→ its sub-issues.
+    expect(on("E-2")).toEqual(["parent-open", "sub-issues-of-parent", "child-open", "parent-set"]);
     expect(on("E-3")).toEqual(["parent-open", "sub-issues-of-parent", "parent-set"]);
+    // An issue in no epic and under no Task has nothing to open.
+    expect(on("E-4")).toEqual(["parent-set"]);
+  });
+
+  test("BJ-289: Open parent issue (⌘⇧↑) opens the Task above a Subtask, else the epic; an epic and an orphan have none", async () => {
+    const { shortcuts } = await import("@/client/features/navigation/shortcuts");
+    const open = shortcuts.find((s) => s.id === "parent-open")!;
+    setup();
+    ui.send({ type: "overlay.close" });
+    const up = (key: string) => {
+      navigate({ board: 1, selected: key, panel: true, document: null, inbox: false, mine: false });
+      if (!open.when!(get(), get().issues.get(key))) return null;
+      open.run();
+      return get().selected;
+    };
+    expect(up("E-2")).toBe("E-1");
+    expect(up("E-3")).toBe("E-2");
+    expect(up("E-1")).toBeNull();
+    expect(up("E-4")).toBeNull();
   });
 
   test("a sub-issue can't be moved to a project group: that would take its parent issue away", async () => {

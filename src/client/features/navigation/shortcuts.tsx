@@ -12,7 +12,7 @@ import { canMergeOverlay } from "@/shared/saved-view-model";
 import { boardView, filterCount, groupStep, visibleOrder } from "@/shared/view-model";
 import { forgetIssueIntents, post, run as command } from "./commands";
 import { canHaveSubIssues } from "@/shared/issue-properties";
-import { epicLocked, epicOf, listsSubIssues, nestable, parentOf, subIssueParent, titleParentOf } from "@/shared/epics";
+import { epicLocked, epicOf, listsSubIssues, nestable, subIssueParent, titleParentOf } from "@/shared/epics";
 import { childrenByParent } from "@/client/features/issue/sub-issue-model";
 import { getHotkeyManager, type Hotkey, type HotkeyChord } from "@tanstack/react-hotkeys";
 import { boardOf, get, isWatching, ME, set, useStore, type Overlay } from "@/client/state/store";
@@ -76,9 +76,8 @@ const selected = (s = get()) => {
   const key = acting ?? (s.overlay && s.target) ?? (!s.document && s.selected);
   return key ? s.issues.get(key) : undefined;
 };
-/** The issue's parent issue, never its epic (shared/epics.ts parentOf). */
-const parentIn = (s: State, issue: Issue | undefined) => issue && parentOf(issue, (key) => s.issues.get(key));
-/** The issue the "Sub-issue of" line names: the parent Task, else the epic (shared/epics.ts titleParentOf, BJ-289). */
+/** The issue the "Sub-issue of" line names, and ⌘⇧↑ and ⌘⇧→ open: the parent Task, else the epic (shared/epics.ts titleParentOf,
+ *  BJ-289). */
 const titleParentIn = (s: State, issue: Issue | undefined) => issue && titleParentOf(issue, (key) => s.issues.get(key));
 /** Linear: an issue shortcut acts on the row under the pointer or keyboard focus, as its row menu's hints promise: a sub-issue row
  *  (its section answers the command), else a board card or list row (IssueTarget's `data-key`, ISSUE-10). */
@@ -709,9 +708,11 @@ export const shortcuts: Shortcut[] = [
     group: "Issues",
     hotkey: "Mod+Shift+ArrowUp",
     issue: true,
-    when: (s) => !!s.issues.get(parentIn(s, selected(s)) ?? ""),
+    // Linear's OPEN_PARENT_ISSUE is applicable while the issue has a parent and opens it. Ours opens what the "Sub-issue of" line
+    // names: the parent Task, else the epic (titleParentOf, BJ-289); an epic or an issue in neither has none, so it is hidden.
+    when: (s) => !!s.issues.get(titleParentIn(s, selected(s)) ?? ""),
     run: issueAction((i) => {
-      const parent = get().issues.get(parentIn(get(), i) ?? "");
+      const parent = get().issues.get(titleParentIn(get(), i) ?? "");
       if (parent) navigate({ board: parent.board, selected: parent.key, panel: true });
     }),
   },

@@ -64,11 +64,11 @@ export function listedUnder(issue: Parented, lookup: IssueLookup): string | unde
   return level !== undefined && level > 1 ? undefined : issue.parent;
 }
 /**
- * The issue the "Sub-issue of" line under an issue's title names, and whose sub-issues its ring and ⌘⇧→ open: its parent issue
- * (`parentOf`) when it has one, else its epic, so an issue in an epic points back to the epic that lists it (BJ-289, the user's
- * deviation from Linear, .raj/done.md; it completes BJ-280's epic Sub-issues section). That is the issue whose Sub-issues section
- * lists it (`listedUnder`). A sub-task names its parent, never the epic; an epic or an initiative names none. Only the title line
- * and its ⌘⇧→ read this: the epic stays out of the Parent property, Remove › Parent and every other Parent surface (`parentOf`).
+ * The issue the "Sub-issue of" line under an issue's title names, that Open parent issue (⌘⇧↑) opens, and whose sub-issues its
+ * ring and ⌘⇧→ open: its parent issue (`parentOf`) when it has one, else its epic, so an issue in an epic points back to the epic
+ * that lists it (BJ-289, the user's deviation from Linear, .raj/done.md; it completes BJ-280's epic Sub-issues section). That is the issue whose Sub-issues section
+ * lists it (`listedUnder`). A sub-task names its parent, never the epic; an epic or an initiative names none. Only the title line,
+ * ⌘⇧↑ and ⌘⇧→ read this: the epic stays out of the Parent property, Remove › Parent and every other Parent surface (`parentOf`).
  */
 export function titleParentOf(issue: Leveled & Parented, lookup: IssueLookup): string | undefined {
   return nestable(issue) ? listedUnder(issue, lookup) : undefined;
