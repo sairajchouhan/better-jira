@@ -1,4 +1,5 @@
-import { type Issue } from "@/shared/issue-model";
+import { type Board, type Issue } from "@/shared/issue-model";
+import { statusById } from "@/shared/board-catalog";
 import { listedUnder } from "@/shared/epics";
 import {
   ORDERINGS,
@@ -66,6 +67,59 @@ export function childrenByParent(issues: ReadonlyMap<string, Issue>): ChildrenIn
   indexes.set(issues, children);
   return children;
 }
+/** An issue's status on its own board, as every sub-issue list, count and menu reads it; "new" when the board doesn't know it. */
+export const statusOf = (boards: readonly Board[], child: Issue) => {
+  const board = boards.find((b) => b.id === child.board),
+    columns = board?.columns ?? [],
+    result = statusById(board, child.status);
+  return {
+    name: result?.name ?? child.status,
+    category: result?.category ?? "new",
+    order: columns.findIndex((c) => c.statuses.some((s) => s.id === child.status)),
+  };
+};
+
+export type SubIssueCount = { readonly done: number; readonly total: number };
+/** Which sub-issues a count takes: Linear's board card counts the direct children (IssueList `wd`: `t.children`), its list row every
+ *  level below (issueWidgetFieldPreferences `at`: `t.descendants`). */
+export type SubIssueScope = "children" | "descendants";
+const counts = new WeakMap<ReadonlyMap<string, Issue>, WeakMap<readonly Board[], Map<string, SubIssueCount | null>>>();
+/**
+ * How many of `key`'s sub-issues are done, out of how many: Linear's sub-issue progress (`done/total`, done is `doneAt`, a status in
+ * the done category). The sub-issues are the ones its Sub-issues section lists (`childrenByParent`), so an epic counts its issues
+ * (BJ-280). Undefined when it has none. Cached per issues snapshot and boards, so every row and card reading it in one render pays
+ * once, and the result is a stable reference for a store selector.
+ */
+export function subIssueCount(
+  issues: ReadonlyMap<string, Issue>,
+  boards: readonly Board[],
+  key: string,
+  scope: SubIssueScope,
+): SubIssueCount | undefined {
+  let byBoards = counts.get(issues);
+  if (!byBoards) counts.set(issues, (byBoards = new WeakMap()));
+  let cache = byBoards.get(boards);
+  if (!cache) byBoards.set(boards, (cache = new Map()));
+  const id = `${scope}:${key}`;
+  if (!cache.has(id)) {
+    const index = childrenByParent(issues);
+    let done = 0,
+      total = 0;
+    const seen = new Set([key]),
+      pending = [...(index.get(key) ?? [])];
+    while (pending.length) {
+      const issue = pending.pop()!;
+      if (seen.has(issue.key)) continue;
+      seen.add(issue.key);
+      total++;
+      if (statusOf(boards, issue).category === "done") done++;
+      if (scope === "descendants") pending.push(...(index.get(issue.key) ?? []));
+    }
+    cache.set(id, total ? { done, total } : null);
+  }
+  return cache.get(id) ?? undefined;
+}
+
 export function subIssueRows(
   parent: string,
   issues: Issue[] | ReadonlyMap<string, Issue>,

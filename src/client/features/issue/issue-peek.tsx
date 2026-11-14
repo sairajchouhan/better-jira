@@ -5,7 +5,7 @@ import { DueIcon, Icon, LabelDot, PriorityIcon, StatusIcon } from "@/client/comp
 import { useStore } from "@/client/state/store";
 import { Adf } from "@/client/features/editor/adf";
 import { childrenByParent } from "./sub-issue-model";
-import { statusOf } from "./sub-issues";
+import { statusOf } from "./sub-issue-model";
 import { Text } from "@/client/components/text";
 import { statusDuration } from "@/shared/view-model";
 import { epicName, epicOf } from "@/shared/epics";

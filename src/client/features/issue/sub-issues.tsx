@@ -24,8 +24,7 @@ import {
   ProgressRing,
   StatusIcon,
 } from "@/client/components/icons";
-import { MenuSurface } from "@/client/components/menu-surface";
-import { Menu } from "@/client/components/menu";
+import { ChildrenMenu } from "./sub-issue-menu";
 import {
   StatusMenu,
   PriorityMenu,
@@ -38,7 +37,7 @@ import { InlineEditor } from "@/client/features/editor/rich-editor-loader";
 import { useCommand } from "@/client/features/navigation/commands";
 import { get, useStore } from "@/client/state/store";
 import { actions } from "@/client/state/issue-actions";
-import { navigate, ui } from "@/client/features/navigation/app-navigation";
+import { ui } from "@/client/features/navigation/app-navigation";
 import { AppLink } from "@/client/features/navigation/app-link";
 import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { Avatar } from "@/client/components/avatar";
@@ -52,12 +51,14 @@ import { shortcutTitle } from "@/client/components/keycap";
 import { canHaveSubIssues } from "@/shared/issue-properties";
 import { parentOf } from "@/shared/epics";
 import {
-  childrenByParent,
   defaultSubIssueDisplay,
+  statusOf,
+  subIssueCount,
   SUB_ISSUE_ORDERINGS as orderings,
   SUB_ISSUE_PROPERTIES as properties,
   movedOrder,
   subIssueRows,
+  type SubIssueCount,
   type SubIssueDisplay,
   type SubIssueMove,
   withMoveEntry,
@@ -95,25 +96,6 @@ function parseDisplay(value: unknown): SubIssueDisplay {
   } as SubIssueDisplay;
 }
 type Boards = ReturnType<typeof get>["boards"];
-export const statusOf = (boards: Boards, child: Issue) => {
-  const board = boards.find((b) => b.id === child.board),
-    columns = board?.columns ?? [],
-    result = statusById(board, child.status);
-  return {
-    name: result?.name ?? child.status,
-    category: result?.category ?? "new",
-    order: columns.findIndex((c) =>
-      c.statuses.some((s) => s.id === child.status),
-    ),
-  };
-};
-const openIssue = (target: Issue) =>
-  navigate({
-    board: target.board,
-    selected: target.key,
-    panel: true,
-    view: get().view,
-  });
 
 /** Linear's "Sub-issue of" line under a child's title: the parent link, and a progress pill whose menu lists the parent's sub-issues (⌘⇧→). */
 export function SubIssueOf({ issue }: { issue: Issue }) {
@@ -210,18 +192,6 @@ export function SubIssues({ issue }: { issue: Issue }) {
     meta: { form, titleInput, scope, onClickCapture },
   } = useSubIssueComposer(issue, board, namespace, setCollapsed);
   const status = (child: Issue) => statusOf(boards, child);
-  // Direct children per row, for Linear's "0/2" progress pill.
-  const progress = useMemo(() => {
-    const counts = new Map<string, [number, number]>();
-    for (const [parent, children] of childrenByParent(all)) {
-      counts.set(parent, [
-        children.filter((i) => status(i).category === "done").length,
-        children.length,
-      ]);
-    }
-    return counts;
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
-  }, [all, boards]);
   const [manualOrder, setManualOrder] = useStoredState<string[]>(`${namespace}:manual-order:v1:${issue.key}`, raw => Array.isArray(raw) ? raw.filter((key): key is string => typeof key === "string") : [], []);
   const model = useMemo(
     () => subIssueRows(issue.key, all, display, status, Date.now(), reveal, manualOrder),
@@ -375,7 +345,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
             rows={model.rows}
             display={display}
             boards={boards}
-            progress={progress.get(child.key)}
+            progress={subIssueCount(all, boards, child.key, "children")}
             onDrop={
               manual
                 ? (dragged, after) => {
@@ -645,7 +615,7 @@ function SubIssueRow({
   rows: { depth: number }[];
   display: SubIssueDisplay;
   boards: Boards;
-  progress?: [number, number];
+  progress?: SubIssueCount;
   active: boolean;
   openMenu: (anchor: HTMLElement, point: { x: number; y: number }) => void;
 }) {
@@ -754,7 +724,7 @@ function SubIssueRow({
       >
         <span className="truncate">{child.summary}</span>
       </AppLink>
-      {progress && <SubIssueProgressButton data-row-progress variant="row" completed={progress[0]} total={progress[1]} aria-label={`Open sub-issues of ${child.key}`} aria-expanded={!!childrenMenu} onClick={e => setChildrenMenu(e.currentTarget)} />}
+      {progress && <SubIssueProgressButton data-row-progress variant="row" completed={progress.done} total={progress.total} aria-label={`Open sub-issues of ${child.key}`} aria-expanded={!!childrenMenu} onClick={e => setChildrenMenu(e.currentTarget)} />}
       {childrenMenu && <ChildrenMenu parent={child} anchor={childrenMenu} close={() => setChildrenMenu(null)} />}
 
       {/* Linear's row badges (RAJ-54 blocking 1, RAJ-55 blocked 1; Opus review 4): a red relation icon and how many issues. */}
@@ -810,48 +780,6 @@ function SubIssueRow({
         )}
     </div>
   );
-}
-
-function ChildrenMenu({ parent, current, anchor, close }: { parent: Issue; current?: string; anchor: HTMLElement; close: () => void }) {
- const all = useStore(s => s.issues), boards = useStore(s => s.boards);
- const status = (i: Issue) => statusOf(boards, i);
- const siblings = subIssueRows(parent.key, all, defaultSubIssueDisplay(), status).rows.filter(row => row.depth === 0).map(row => row.issue);
- return (        <MenuSurface
-          label={`Open sub-issues of ${parent.key}`}
-          anchor={anchor}
-          close={() => close()}
-          fit
-        >
-          <Menu style={{ width: 347 }}>
-            <Menu.Input
-              hideWhenEmpty
-              autoFocus
-              aria-label={`Open sub-issues of ${parent.key}…`}
-            />
-            <Menu.List>
-              <Menu.Group heading="Navigation">
-                {siblings.map((child) => (
-                  <Menu.Item
-                    key={child.key}
-                    value={`${child.key} ${child.summary}`}
-                    icon={<StatusIcon status={status(child)} />}
-                    checked={child.key === current}
-                    hint={<Avatar user={child.assignee ?? null} size={14} />}
-                    onSelect={() => {
-                      close();
-                      if (child.key !== current) openIssue(child);
-                    }}
-                  >
-                    <EntityIdentifier className="mr-2 text-[var(--menu-fg-3)]">
-                      {child.key}
-                    </EntityIdentifier>
-                    {child.summary}
-                  </Menu.Item>
-                ))}
-              </Menu.Group>
-            </Menu.List>
-          </Menu>
-        </MenuSurface>);
 }
 
 /** A sub-issue row's due date: Linear's list rows lead it with the due icon, orange within a week and red on the day and after.

@@ -18,7 +18,8 @@ import { Button, IconButton } from "@/client/components/button";
 import { createSubIssue, issueMenuEntries, type IssueMenuDialog } from "./issue-menu";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
 /* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
-import { SubIssues, statusOf } from "./sub-issues";
+import { SubIssues } from "./sub-issues";
+import { statusOf } from "./sub-issue-model";
 import { attachmentSplit } from "./issue-attachments";
 import { SUMMARY_MAX, switchBoard } from "./composer-draft";
 import { draftEligible, readLocalDraft, resumeDraft, useComposerLocalDraft } from "./composer-local-draft";

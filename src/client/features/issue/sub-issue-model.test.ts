@@ -1,4 +1,4 @@
-import { type Issue } from "@/shared/issue-model";
+import { type Board, type Issue } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
 
 import { ORDERINGS, PROPERTIES } from "@/shared/view-model";
@@ -10,6 +10,8 @@ import {
   withMoveEntry,
   subIssueRows,
   childrenByParent,
+  statusOf,
+  subIssueCount,
 } from "./sub-issue-model";
 const issue = (key: string, parent?: string, status = "todo", rank = ""): Issue => ({
   key,
@@ -184,4 +186,40 @@ test("BJ-280: an epic's section lists its issues as Jira's epic page does, each 
   // The progress counts the epic's own issues, as any parent's counts its children.
   expect([model.completed, model.total]).toEqual([1, 3]);
   expect(subIssueRows("TASK", byKey, defaultSubIssueDisplay(), status).rows.map((r) => r.issue.key)).toEqual(["SUB"]);
+});
+
+test("BJ-281: the sub-issue badge counts what the Sub-issues section lists: a parent's sub-issues, an epic's issues, done by status", () => {
+  const boards: Board[] = [
+    {
+      id: 1,
+      name: "Board",
+      columns: [
+        { name: "Todo", statuses: [{ id: "todo", name: "Todo", category: "new" }] },
+        { name: "Doing", statuses: [{ id: "doing", name: "Doing", category: "indeterminate" }] },
+        { name: "Done", statuses: [{ id: "done", name: "Done", category: "done" }] },
+      ],
+    },
+  ];
+  const epic = { ...issue("EPIC"), type: "Epic" };
+  const task = { ...issue("TASK", "EPIC", "doing"), type: "Task" };
+  const bug = { ...issue("BUG", "EPIC", "done"), type: "Bug" };
+  const subDone = { ...issue("SUB-1", "TASK", "done"), type: "Sub-task" };
+  const subOpen = { ...issue("SUB-2", "TASK"), type: "Sub-task" };
+  const lone = issue("LONE");
+  const byKey = new Map([epic, task, bug, subDone, subOpen, lone].map((i) => [i.key, i]));
+  // A card counts the direct sub-issues (Linear `wd`: t.children); an epic's are its issues (BJ-280).
+  expect(subIssueCount(byKey, boards, "EPIC", "children")).toEqual({ done: 1, total: 2 });
+  expect(subIssueCount(byKey, boards, "TASK", "children")).toEqual({ done: 1, total: 2 });
+  // A row counts every level below (Linear `at`: t.descendants); "in progress" isn't done.
+  expect(subIssueCount(byKey, boards, "EPIC", "descendants")).toEqual({ done: 2, total: 4 });
+  // No sub-issues, no badge.
+  expect(subIssueCount(byKey, boards, "LONE", "children")).toBeUndefined();
+  expect(subIssueCount(byKey, boards, "SUB-1", "descendants")).toBeUndefined();
+  // The same snapshot answers with the same object, so a store selector re-renders nothing; a new snapshot counts again.
+  expect(subIssueCount(byKey, boards, "EPIC", "children")).toBe(subIssueCount(byKey, boards, "EPIC", "children")!);
+  const next = new Map(byKey).set("TASK", { ...task, status: "done" });
+  expect(subIssueCount(next, boards, "EPIC", "children")).toEqual({ done: 2, total: 2 });
+  // The badge's count and the section's header agree.
+  const model = subIssueRows("EPIC", byKey, defaultSubIssueDisplay(), (i) => statusOf(boards, i));
+  expect(subIssueCount(byKey, boards, "EPIC", "descendants")).toEqual({ done: model.completed, total: model.total });
 });
