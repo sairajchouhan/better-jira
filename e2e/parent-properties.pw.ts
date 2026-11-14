@@ -566,7 +566,8 @@ test("RAJ-52: relations: Mark as menus, sidebar pills, Activity rows and Issue o
     await page.waitFor(`!!document.querySelector('[data-relation="related:TEST-1"]')`);
     await mark("blocked by", "Mark as › Blocked by…", "TEST-2");
     await page.waitFor(`!!document.querySelector('[data-relation="blocked:TEST-2"]')`);
-    // Like Linear, the menu leaves out an issue that is already related, so it cannot be marked twice.
+    // Like Linear (startup-root mI's disableWithReason, R3-relations-D6), a search lists an issue that is already related
+    // disabled, with its reason, so it cannot be marked twice.
     await page.click("#issue-options");
     await page.type("related to");
     await page.waitFor(
@@ -575,12 +576,12 @@ test("RAJ-52: relations: Mark as menus, sidebar pills, Activity rows and Issue o
     await page.key("Enter");
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Find related issue'`);
     await page.type("TEST-1");
-    await page.waitFor(
-      `document.querySelector('[role=dialog][aria-label="Issue relations"]')?.textContent.includes('No matching issues')`,
-    );
-    expect(await page.eval(`!!document.querySelector('[cmdk-item][data-value="TEST-1"]')`)).toBe(
-      false,
-    );
+    const linked = `document.querySelector('[role=dialog][aria-label="Issue relations"] [cmdk-item][data-value="TEST-1"]')`;
+    await page.waitFor(`${linked}?.getAttribute('aria-disabled')==='true'`);
+    expect(await page.eval(`${linked}.textContent.includes('Already referenced')`)).toBe(true);
+    await page.key("Enter");
+    await sleep(200);
+    expect(await page.eval(`document.querySelectorAll('[data-relation="related:TEST-1"]').length`)).toBe(1);
     await page.key("Escape");
     await page.waitFor(`!document.querySelector('[role=dialog]')`);
     expect(

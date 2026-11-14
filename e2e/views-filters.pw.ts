@@ -28,7 +28,7 @@ test("filter menu: the first F after load opens it without a loading step, and t
     await page.hover("text=Due date");
     await page.waitFor(`!!document.querySelector('input[aria-label="Due date"]')`);
     await page.click("text=Overdue");
-    await page.waitFor(`${chips}.includes("Due datebeforetoday")`);
+    await page.waitFor(`${chips}.includes("Due datebeforeOverdue")`);
     await page.waitFor(`${stored}?.filters?.children?.[0]?.values?.[0]==="P0D"`);
   });
 });
