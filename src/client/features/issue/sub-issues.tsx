@@ -44,6 +44,7 @@ import { statusById } from "@/shared/board-catalog";
 import { PropertyPicker, type IssueField } from "./personal-controls";
 import { ResourceForm } from "./issue-resources";
 import { shortDate } from "@/client/lib/due-date";
+import { fullTime } from "./issue-dates";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
 import { canHaveChildren } from "@/shared/issue-properties";
@@ -843,12 +844,20 @@ function ChildrenMenu({ parent, current, anchor, close }: { parent: Issue; curre
         </MenuSurface>);
 }
 
-/** A sub-issue row's due date: Linear's list rows lead it with the due icon, orange within a week and red on the day and after. */
-export function SubIssueDue({ issue }: { issue: Pick<Issue, "due" | "resolved"> }) {
+/** A sub-issue row's due date: Linear's list rows lead it with the due icon, orange within a week and red on the day and after.
+ *  Like Linear's due badge (`UJn`, startup-root: an action badge running `oK`), a click opens the due date picker, through
+ *  PropertyPicker as every other row control. */
+export function SubIssueDue({ issue }: { issue: Issue }) {
   return (
-    <span className="flex shrink-0 items-center gap-1 text-fg-3">
+    <FieldMenuButton
+      className={`flex shrink-0 items-center gap-1 ${button}`}
+      title={`Due ${fullTime(`${issue.due}T00:00:00`)}`}
+      aria-label={`Change due for ${issue.key}`}
+      menu={PropertyPicker}
+      menuProps={{ issue, field: "due" }}
+    >
       <DueIcon due={issue.due!} resolved={issue.resolved} />
       <time dateTime={issue.due!}>{shortDate(issue.due!, undefined, true)}</time>
-    </span>
+    </FieldMenuButton>
   );
 }
