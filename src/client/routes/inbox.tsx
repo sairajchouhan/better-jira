@@ -14,7 +14,6 @@ import { Icon, StatusIcon, TypeDot, type IconName } from "@/client/components/ic
 import { FILTER_FIELDS, describe, groupSummary, rowLabel, feedCategory, hasFilters, missingIssueNote, shortAgo, snoozeChoices, snoozeTime, type FilterField, type InboxItem, type InboxView } from "@/shared/inbox-model";
 import { CommentCard, InboxGroupUpdates } from "@/client/features/inbox/inbox-group";
 import { fullTime } from "@/client/features/issue/issue-dates";
-import { Adf } from "@/client/features/editor/adf";
 import { copyIssue, type CopyKind } from "@/client/features/issue/issue-copy";
 import { Menu } from "@/client/components/menu";
 import { MenuSurface } from "@/client/components/menu-surface";
@@ -854,9 +853,9 @@ export function InboxNotification({ row }: { row: InboxItem }) {
           {shortAgo(row.time)}
         </time>
       </Text>
-      {(row.doc !== undefined || row.preview) && (
+      {row.preview && (
         <CommentCard href={row.link || undefined} className="mt-3">
-          <Adf node={row.doc ?? row.preview} />
+          {row.preview}
         </CommentCard>
       )}
       <div className="mt-4">

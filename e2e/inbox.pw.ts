@@ -603,3 +603,17 @@ test("prod parity: a group's earlier notifications unfold in the pane, and a com
     );
   });
 });
+
+test("R3 G22 #29: outside the mirror, the pane's head comment card is three lines at most, even for a long rich comment", async ({ open }) => {
+  const p = await fresh(open, { inboxRichOutside: true });
+  await p.click(`[data-inbox-row*="issue/9"]`);
+  const clamp = `document.querySelector('[data-comment-card] [data-lines]')`;
+  await p.waitFor(`${clamp}?.textContent.includes("Made-up finding 1")`);
+  const box = await p.eval<{ height: number; line: number; full: number }>(
+    // One line's height: the first character's box (the small variant's line-height is "normal").
+    `(()=>{const e=${clamp},t=document.createTreeWalker(e,NodeFilter.SHOW_TEXT).nextNode(),r=document.createRange();r.setStart(t,0);r.setEnd(t,1);return {height:e.getBoundingClientRect().height,line:r.getBoundingClientRect().height,full:e.scrollHeight}})()`,
+  );
+  // Clamped: at most three lines tall, while the comment itself runs much longer.
+  expect(box.height).toBeLessThanOrEqual(box.line * 3 + 1);
+  expect(box.full).toBeGreaterThan(box.line * 3 + 1);
+});

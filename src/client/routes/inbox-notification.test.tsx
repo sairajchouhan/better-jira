@@ -25,3 +25,20 @@ test("R3 G21: the pane's head comment for an issue outside the mirror is clamped
   expect(html).toMatch(/<blockquote data-comment-card[^>]*><div [^>]*data-lines="3"[^>]*>.*A long made-up comment/);
   expect(html).toContain("View comment");
 });
+
+test("R3 G22 #29: the pane's head comment card holds the comment's plain text, as Linear's card (bodyTextContent), so the clamp counts its lines", () => {
+  const doc = {
+    type: "doc",
+    version: 1,
+    content: [
+      { type: "paragraph", content: [{ type: "text", text: "First made-up paragraph, ", marks: [{ type: "strong" }] }, { type: "text", text: "with more." }] },
+      { type: "bulletList", content: [{ type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "A made-up point" }] }] }] },
+    ],
+  };
+  const html = renderToStaticMarkup(
+    <InboxNotification row={{ ...row, preview: "First made-up paragraph, with more. A made-up point", doc } as InboxItem} />,
+  );
+  // A rich doc's root is a flow-root box: Chrome's -webkit-line-clamp stops counting lines at it, and the card grew to 588 px.
+  const clamp = html.match(/<div [^>]*data-lines="3"[^>]*>(.*?)<\/div>/)?.[1];
+  expect(clamp).toBe("First made-up paragraph, with more. A made-up point");
+});

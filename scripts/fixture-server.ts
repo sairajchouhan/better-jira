@@ -342,7 +342,8 @@ const notification = (
   category: "direct" | "watching",
   read: boolean,
   minutesAgo: number,
-  comment?: string,
+  /** The comment's text, or its ADF blocks for a rich one. */
+  comment?: string | object[],
 ) => ({
   groupId: `ari:cloud:jira:fixture:issue/${n}`,
   groupSize: 1,
@@ -371,7 +372,8 @@ const notification = (
                 data: JSON.stringify({
                   type: "doc",
                   version: 1,
-                  content: [{ type: "paragraph", content: [{ type: "text", text: comment }] }],
+                  content:
+                    typeof comment === "string" ? [{ type: "paragraph", content: [{ type: "text", text: comment }] }] : comment,
                 }),
               },
             },
@@ -399,7 +401,24 @@ const grouped = (head: ReturnType<typeof notification>, ...older: ReturnType<typ
   children: [head, ...older].map((n) => n.headNotification) as unknown[],
 });
 /** `extra` appends that many older notifications on issues outside the mirror, so the list pages; read unless `extraUnread`. */
-const freshInbox = (extra = 0, extraUnread = false) => ({
+/** A long rich comment, made up: paragraphs with marks and a list, many lines when unclamped (R3 prod parity #29). */
+const longRichComment = [
+  ...Array.from({ length: 4 }, (_, i) => ({
+    type: "paragraph",
+    content: [
+      { type: "text", text: `Made-up finding ${i + 1}: `, marks: [{ type: "strong" }] },
+      { type: "text", text: "the widget renders twice when the panel opens, and the second copy keeps the old value. ".repeat(3) },
+    ],
+  })),
+  {
+    type: "bulletList",
+    content: ["Open the panel", "Change the value", "Close and reopen"].map((text) => ({
+      type: "listItem",
+      content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+    })),
+  },
+];
+const freshInbox = (extra = 0, extraUnread = false, richOutside = false) => ({
   unseen: 4,
   nodes: [
     // Jira's newest is an update and leads; the assignment under it stays folded (Linear's prioritize promotes mentions).
@@ -464,7 +483,9 @@ const freshInbox = (extra = 0, extraUnread = false) => ({
       60 * 24 * 9,
     ),
     grouped(
-      notification(9, "OUT-9", "Outside the mirror", "updated", "Sam updated a task", "watching", false, 60 * 24 * 400),
+      richOutside
+        ? notification(9, "OUT-9", "Outside the mirror", "updated", "Sam commented on a task", "watching", false, 60 * 24 * 400, longRichComment)
+        : notification(9, "OUT-9", "Outside the mirror", "updated", "Sam updated a task", "watching", false, 60 * 24 * 400),
       notification(9, "OUT-9", "Outside the mirror", "updated", "Kim commented on a task", "watching", false, 60 * 24 * 401, "Earlier comment"),
       notification(9, "OUT-9", "Outside the mirror", "updated", "Lee changed a task from To Do to Doing", "watching", false, 60 * 24 * 402),
     ),
@@ -862,7 +883,7 @@ async function handle(req: Request) {
       labels: settings.catalog?.labels ?? [],
       users: settings.catalog?.users ?? [],
     };
-    inbox = freshInbox(settings.inboxExtra ?? 0, settings.inboxExtraUnread ?? false);
+    inbox = freshInbox(settings.inboxExtra ?? 0, settings.inboxExtraUnread ?? false, settings.inboxRichOutside ?? false);
     inboxFail = settings.inboxFail ?? false;
     inboxDelay = settings.inboxDelay ?? 0;
     inboxWriteDelays = settings.inboxWriteDelays ?? [];
