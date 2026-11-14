@@ -1,5 +1,5 @@
 import { storedMediaIds } from "./issue-attachments";
-import { remember, type Uploaded } from "@/client/state/jira-media";
+import { remember, UploadRefused, type Uploaded } from "@/client/state/jira-media";
 
 /**
  * Files a comment composer uploads go to Jira at once. Each is noted here before it starts, so one a reload cut off
@@ -54,6 +54,33 @@ export function settleDraftUploads(namespace: string, ids: string[], locals?: st
       return locals?.[index] ? [{ ...entry, local: locals[index] }] : [];
     }),
   );
+}
+/**
+ * Notes `files` while `upload` sends them (it gets the notes' ids as the uploads' client ids), then settles the notes:
+ * saved files keep theirs with their local ids, a refusal drops them. A send with no answer (a reload cut it off) keeps
+ * them, so the cleaner asks the server what it made and removes it (R3-comments-D1).
+ */
+export async function trackDraftUploads<T extends { id: string }>(
+  namespace: string,
+  key: string,
+  files: File[],
+  upload: (ids: string[]) => Promise<T[]>,
+  writable = true,
+): Promise<T[]> {
+  const noted = writable ? noteDraftUploads(namespace, key, files) : [];
+  let saved: T[];
+  try {
+    saved = await upload(noted);
+  } catch (error) {
+    if (error instanceof UploadRefused) settleDraftUploads(namespace, noted);
+    throw error;
+  }
+  settleDraftUploads(
+    namespace,
+    noted,
+    saved.map((file) => file.id),
+  );
+  return saved;
 }
 
 const slot = (entry: DraftUpload) => `better-jira:upload:${entry.key}:${entry.local}`;

@@ -5,7 +5,9 @@ import {
   readDraftUploads,
   settleDraftUploads,
   SETTLE_MS,
+  trackDraftUploads,
 } from "./draft-uploads";
+import { UploadRefused } from "@/client/state/jira-media";
 
 const media = (id: string) => ({
   type: "doc",
@@ -144,6 +146,59 @@ test("sync review 2-1: an upload matched by name and size after a lost answer is
     expect(removed).toEqual([]);
     expect(kept.sort()).toEqual(["201", "202"]);
     expect(readDraftUploads("ns2")).toEqual([]);
+  } finally {
+    if (previous) Object.defineProperty(globalThis, "localStorage", previous);
+    else delete (globalThis as any).localStorage;
+  }
+});
+
+test("R3-comments-D1: an upload a reload cut off keeps its note, so the cleaner removes what the server made", async () => {
+  const slots = new Map<string, string>();
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      get length() {
+        return slots.size;
+      },
+      key: (i: number) => [...slots.keys()][i] ?? null,
+      getItem: (key: string) => slots.get(key) ?? null,
+      setItem: (key: string, value: string) => slots.set(key, value),
+      removeItem: (key: string) => slots.delete(key),
+    },
+  });
+  try {
+    const big = [new File(["x".repeat(8)], "big.bin")];
+    // The reload aborts the send: fetch rejects with no answer, but the server still finishes the upload.
+    const cut = trackDraftUploads("ns3", "KAN-3", big, async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    await expect(cut).rejects.toThrow("Failed to fetch");
+    const [entry] = readDraftUploads("ns3");
+    expect(entry?.name).toBe("big.bin");
+    const removed: string[] = [];
+    await cleanDraftUploads(
+      "ns3",
+      "[]",
+      {
+        full: async () => ({ fields: { attachment: [{ id: "301", filename: "big.bin", size: 8 }] } }),
+        remove: async (_key, id) => void removed.push(id),
+        uploaded: async (client) => (client === entry?.id ? { id: "301" } : undefined),
+      },
+      Date.now() + SETTLE_MS,
+    );
+    expect(removed).toEqual(["301"]);
+    expect(readDraftUploads("ns3")).toEqual([]);
+    // A refusal answered by the server made nothing: its note goes at once.
+    await expect(
+      trackDraftUploads("ns3", "KAN-3", big, async () => {
+        throw new UploadRefused("Too big");
+      }),
+    ).rejects.toThrow("Too big");
+    expect(readDraftUploads("ns3")).toEqual([]);
+    // A saved file keeps its note with its local id until the cleaner settles it.
+    await trackDraftUploads("ns3", "KAN-3", big, async () => [{ id: "l-big" }]);
+    expect(readDraftUploads("ns3").map((e) => e.local)).toEqual(["l-big"]);
   } finally {
     if (previous) Object.defineProperty(globalThis, "localStorage", previous);
     else delete (globalThis as any).localStorage;

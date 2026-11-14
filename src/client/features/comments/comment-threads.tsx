@@ -21,7 +21,7 @@ import { currentKey } from "@/client/state/jira-sync";
 import { addLocalFiles } from "@/client/state/local-database";
 import { commentDraftKey, onRejectedComment, restoreRejectedDraft } from "./rejected-comment";
 import { readStored, writeStored } from "@/client/state/stored-state";
-import { noteDraftUploads, settleDraftUploads } from "@/client/features/issue/draft-uploads";
+import { trackDraftUploads } from "@/client/features/issue/draft-uploads";
 import { mentionDraft, visibleComments, type IssueComment } from "./comment-thread";
 
 /**
@@ -45,18 +45,13 @@ export function useDraftFiles(key: string) {
   useEffect(() => () => sweep.later.cancel(), [sweep]);
   return {
     onFiles: async (files: File[]) => {
-      const namespace = get().namespace,
-        noted = get().writable ? noteDraftUploads(namespace, key, files) : [];
-      let saved: Awaited<ReturnType<typeof addIssueFiles>> = [];
-      try {
-        saved = await addIssueFiles(key, files, noted);
-      } finally {
-        settleDraftUploads(
-          namespace,
-          noted,
-          saved.map((file) => file.id),
-        );
-      }
+      const saved = await trackDraftUploads(
+        get().namespace,
+        key,
+        files,
+        (ids) => addIssueFiles(key, files, ids),
+        get().writable,
+      );
       for (const file of saved) uploaded.current.add(file.id);
       return saved;
     },

@@ -27,6 +27,10 @@ export function remember(key: string, id: string, value?: Uploaded) {
   } catch {}
 }
 
+/** The server answered an upload with a refusal: nothing was attached. Any other failure (a reload cutting the send off)
+ *  leaves the server to finish it. */
+export class UploadRefused extends Error {}
+
 let uploading = 0;
 // A reload mid-upload can't resume it, so the browser asks first (the file would miss its place in the description).
 if (typeof window !== "undefined")
@@ -50,7 +54,7 @@ async function postAttachment(
       body,
     });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(result.error ?? "Could not upload the file to Jira.");
+    if (!response.ok) throw new UploadRefused(result.error ?? "Could not upload the file to Jira.");
     return result as Uploaded;
   } finally {
     uploading--;
