@@ -88,6 +88,18 @@ type SubmenuHandle = {
 const MenuLevelContext = createContext<MenuLevel | null>(null);
 
 /**
+ * What a pointer move onto row `next` does, given the row the pointer was last on (`under`) and the highlighted row: a move
+ * within the highlighted row does nothing, so a submenu a key closed stays closed; entering a row, or moving on one a key moved
+ * the highlight off, highlights it and opens its submenu. Entering the row that already holds the highlight still opens its
+ * submenu ("enter"): cmdk selects a pristine menu's first row unseen, and the pointer reaching it must open it (Linear's
+ * openSubMenuOnFocus).
+ */
+export function pointerStep(next: string, under: string | null, highlighted: string): "stay" | "enter" | "highlight" {
+  if (next !== highlighted) return "highlight";
+  return next === under ? "stay" : "enter";
+}
+
+/**
  * The cmdk root, owning the highlight so every menu shares Linear's J4e rules:
  * - A highlight change closes any other open submenu. A highlight moved by a navigation key previews a submenu row after 300ms;
  *   one moved by the pointer opens it at once. Rows the pointer crosses on its way into an open submenu are covered by the
@@ -107,6 +119,7 @@ function MenuRoot({
   onValueChange,
   onKeyDown,
   onPointerMove,
+  onPointerLeave,
   onChange,
   children,
   ...props
@@ -116,10 +129,11 @@ function MenuRoot({
   const [own, setOwn] = useState(defaultValue ?? "");
   const highlighted = value ?? own;
   const submenus = useRef(new Map<string, SubmenuHandle>());
-  // Whether the last key moved the highlight; whether it was ↑/↓; whether to scroll the highlight into view.
+  // Whether the last key moved the highlight; whether it was ↑/↓; whether to scroll the highlight into view; the row the pointer is on.
   const previews = useRef(false),
     arrowed = useRef(false),
-    scrolls = useRef(false);
+    scrolls = useRef(false),
+    under = useRef<string | null>(null);
   const highlight = (next: string) => {
     setOwn(next);
     onValueChange?.(next);
@@ -183,12 +197,20 @@ function MenuRoot({
           onPointerMove?.(event);
           previews.current = false;
           const row = (event.target as Element).closest<HTMLElement>("[cmdk-item]");
-          if (!row || row.closest("[cmdk-root]") !== root.current || row.getAttribute("aria-disabled") === "true")
+          if (!row || row.closest("[cmdk-root]") !== root.current || row.getAttribute("aria-disabled") === "true") {
+            under.current = null;
             return;
+          }
           const next = row.getAttribute("data-value") ?? "";
-          if (next === highlighted) return;
-          highlight(next);
+          const step = pointerStep(next, under.current, highlighted);
+          under.current = next;
+          if (step === "stay") return;
+          if (step === "highlight") highlight(next);
           if (event.pointerType !== "touch") submenus.current.get(next)?.hover({ x: event.clientX, y: event.clientY });
+        }}
+        onPointerLeave={(event) => {
+          onPointerLeave?.(event);
+          under.current = null;
         }}
         onChange={(event) => {
           onChange?.(event);
@@ -497,35 +519,62 @@ const stay = (settled: RefObject<{ row: number; y: number } | null>): Middleware
   },
 });
 
+/** Writes the safe triangle from `point` to `popup`'s box into `node`'s style, or hides it while the pointer is inside the popup. */
+function drawTriangle(node: HTMLElement, popup: HTMLElement | null, { x, y }: Point) {
+  const box = popup?.getBoundingClientRect(),
+    style = box && safeTriangle(box, x, y);
+  node.style.cssText = style
+    ? Object.entries(style)
+        .map(([key, value]) => `${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}:${value}`)
+        .join(";")
+    : "display:none";
+}
+
 /**
  * Linear's JCe: an invisible box over the parent menu, from the pointer (sampled every 50ms, as Linear's throttled qCe) to the
  * submenu, clipped to the triangle between them (safeTriangle). Rows under it get no pointer events, so a diagonal move into the
  * submenu crosses other rows without opening theirs. It follows the pointer by writing its style, never by re-rendering.
+ * `placed` is null until floating-ui has placed the submenu and then changes whenever it moves: the triangle is drawn against
+ * the box the submenu has, never the unplaced one, which would leave it over the wrong parent rows while the pointer rests.
  */
-function SafeTriangle({ popup, from }: { popup: RefObject<HTMLElement | null>; from: RefObject<Point | null> }) {
+function SafeTriangle({
+  popup,
+  from,
+  placed,
+}: {
+  popup: RefObject<HTMLElement | null>;
+  from: RefObject<Point | null>;
+  placed: string | null;
+}) {
   const ref = useRef<HTMLDivElement>(null);
+  // The point the triangle was last sampled at, and whether the submenu has its place to draw against.
+  const at = useRef<Point | null>(null),
+    ready = useRef(false);
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
-    const paint = ({ x, y }: Point) => {
-      const box = popup.current?.getBoundingClientRect(),
-        style = box && safeTriangle(box, x, y);
-      node.style.cssText = style
-        ? Object.entries(style)
-            .map(([key, value]) => `${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}:${value}`)
-            .join(";")
-        : "display:none";
-    };
-    // Where the pointer was when it opened the submenu, so the first move toward it is already covered.
-    if (from.current) paint(from.current);
-    const throttle = new Throttler(paint, { wait: 50, leading: true, trailing: true });
+    const throttle = new Throttler(
+      (point: Point) => {
+        at.current = point;
+        if (ready.current) drawTriangle(node, popup.current, point);
+      },
+      { wait: 50, leading: true, trailing: true },
+    );
     const move = (event: PointerEvent) => throttle.maybeExecute({ x: event.clientX, y: event.clientY });
     addEventListener("pointermove", move, { passive: true });
     return () => {
       removeEventListener("pointermove", move);
       throttle.cancel();
     };
-  }, [popup, from]);
+  }, [popup]);
+  // Once the submenu is placed, and again whenever it moves, the triangle is redrawn from the last sample: at first, where the
+  // pointer opened the submenu, so the first move toward it is already covered.
+  useEffect(() => {
+    ready.current = placed !== null;
+    const node = ref.current,
+      point = at.current ?? from.current;
+    if (node && ready.current && point) drawTriangle(node, popup.current, point);
+  }, [placed, popup, from]);
   return <div ref={ref} aria-hidden data-safe-triangle style={{ display: "none" }} />;
 }
 
@@ -578,7 +627,7 @@ function MenuSubmenu({
     if (next) level?.actions.opened(value);
     onOpenChange(next);
   };
-  const { refs, floatingStyles, isPositioned } = useFloating({
+  const { refs, floatingStyles, isPositioned, x, y } = useFloating({
     nodeId,
     open,
     onOpenChange: (next) => {
@@ -746,7 +795,7 @@ function MenuSubmenu({
               }
             }}
           >
-            <SafeTriangle popup={refs.floating} from={hoveredAt} />
+            <SafeTriangle popup={refs.floating} from={hoveredAt} placed={isPositioned ? `${x},${y}` : null} />
             {children}
           </div>,
           container.current,
