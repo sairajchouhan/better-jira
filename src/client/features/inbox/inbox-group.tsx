@@ -1,6 +1,6 @@
 /**
  * A row's earlier notifications: Jira's bell folds a group behind "+3 updates from Priya Chopra and others" and expands it
- * five at a time. Shown in Linear's look for a folded run of activity (`ActivityHistoryCollapse`): one muted line with the
+ * to the head and five more, then five at a time. Shown in Linear's look for a folded run of activity (`ActivityHistoryCollapse`): one muted line with the
  * expand chevrons, unfolding into activity-style rows (avatar, sentence, time) with each comment under its row.
  */
 import { useCallback, useState, useSyncExternalStore } from "react";
@@ -9,14 +9,23 @@ import { queryClient } from "@/client/state/server-data";
 import { Avatar } from "@/client/components/avatar";
 import { Button } from "@/client/components/button";
 import { Text } from "@/client/components/text";
-import { Adf } from "@/client/features/editor/adf";
 import { ActivityEntry, ExpandActivityIcon } from "@/client/features/issue/activity-entry";
 import { activityTime, fullTime } from "@/client/features/issue/issue-dates";
-import { commentAnchor, describe, groupSummary, type InboxGroupPage, type InboxItem, type InboxNote } from "@/shared/inbox-model";
+import {
+  commentAnchor,
+  describe,
+  GROUP_PAGE,
+  GROUP_SHOWN,
+  groupSummary,
+  type InboxGroupPage,
+  type InboxItem,
+  type InboxNote,
+} from "@/shared/inbox-model";
 import { type User } from "@/shared/issue-model";
 
 type GroupData = InfiniteData<InboxGroupPage, string>;
-/** The group's pages, keyed by its head: a new notification on the issue starts the list again. */
+/** The group's pages, keyed by its head: a new notification on the issue starts the list again. The feed's copy of the first
+ *  page seeds it, so the group opens at once and only later pages are fetched. */
 function groupQuery(row: InboxItem) {
   return {
     queryKey: ["inbox-group", row.id, row.head],
@@ -32,6 +41,7 @@ function groupQuery(row: InboxItem) {
     getNextPageParam: (last: InboxGroupPage, pages: InboxGroupPage[]) =>
       last.more && last.cursor && pages.reduce((n, p) => n + p.notes.length, 0) < row.count ? last.cursor : undefined,
     staleTime: 60_000,
+    ...(row.group ? { initialData: { pages: [row.group], pageParams: [""] } } : {}),
   };
 }
 
@@ -39,13 +49,16 @@ function useGroupNotes(row: InboxItem) {
   const [observer] = useState(
     () => new InfiniteQueryObserver<InboxGroupPage, Error, GroupData, string[], string>(queryClient, groupQuery(row)),
   );
+  const current = () => observer.getCurrentResult();
   return useSyncExternalStore(
     useCallback((listener) => observer.subscribe(listener), [observer]),
-    () => observer.getCurrentResult(),
+    current,
+    current,
   );
 }
 
-/** One notification as an activity row; a comment's text follows in a card, with a link to the comment itself. */
+/** One notification as an activity row; a comment's text follows in a card, three lines at most as Linear's comment card
+ *  (`truncate: 3`, `wrap: "pretty"`, small labelBase), with a link to the comment itself. */
 export function InboxGroupNote({ note, mirrored }: { note: InboxNote; mirrored: boolean }) {
   const anchor = commentAnchor(note);
   // An issue open here links to its comment on this page; otherwise Jira's own link opens the comment in Jira.
@@ -63,11 +76,11 @@ export function InboxGroupNote({ note, mirrored }: { note: InboxNote; mirrored: 
       >
         <span className="text-fg-2">{describe({ ...note, preview: "" })}</span>
       </ActivityEntry>
-      {(note.doc !== undefined || note.preview) && (
+      {note.preview && (
         <blockquote className="ml-[30px] rounded-lg border border-line px-3 py-2">
-          <div className="text-[13px] text-fg-2">
-            <Adf node={note.doc ?? note.preview} />
-          </div>
+          <Text as="p" variant="small" color="base" wrap="pretty" lines={3}>
+            {note.preview}
+          </Text>
           {href && (
             <a
               href={href}
@@ -83,9 +96,17 @@ export function InboxGroupNote({ note, mirrored }: { note: InboxNote; mirrored: 
   );
 }
 
-function GroupNotes({ row, mirrored }: { row: InboxItem; mirrored: boolean }) {
+/** The group's notifications: the head and five more, then five more per "Show more", fetching a page only when the
+ *  loaded ones run out. */
+export function InboxGroupNotes({ row, mirrored }: { row: InboxItem; mirrored: boolean }) {
   const { data, error, isPending, hasNextPage, isFetchingNextPage, fetchNextPage, refetch } = useGroupNotes(row);
+  const [shown, setShown] = useState(GROUP_SHOWN);
   const notes = data?.pages.flatMap((p) => p.notes) ?? [];
+  const showMore = () => {
+    const next = shown + GROUP_PAGE;
+    setShown(next);
+    if (notes.length < next && hasNextPage) void fetchNextPage();
+  };
   if (isPending) return <Text as="p" variant="mini" color="muted" className="px-[11px]">Loading updates…</Text>;
   if (error && !notes.length)
     return (
@@ -99,18 +120,12 @@ function GroupNotes({ row, mirrored }: { row: InboxItem; mirrored: boolean }) {
   return (
     <>
       <ul aria-label="Notifications on this issue" className="flex flex-col gap-3">
-        {notes.map((note) => (
+        {notes.slice(0, shown).map((note) => (
           <InboxGroupNote key={note.id} note={note} mirrored={mirrored} />
         ))}
       </ul>
-      {hasNextPage && (
-        <Button
-          variant="muted"
-          size="small"
-          className="self-start"
-          disabled={isFetchingNextPage}
-          onClick={() => void fetchNextPage()}
-        >
+      {(notes.length > shown || hasNextPage) && (
+        <Button variant="muted" size="small" className="self-start" disabled={isFetchingNextPage} onClick={showMore}>
           {isFetchingNextPage ? "Loading…" : "Show more"}
         </Button>
       )}
@@ -143,7 +158,7 @@ export function InboxGroupUpdates({ row, mirrored }: { row: InboxItem; mirrored:
           {summary}
         </button>
       </ActivityEntry>
-      {open && <GroupNotes key={row.head} row={row} mirrored={mirrored} />}
+      {open && <InboxGroupNotes key={row.head} row={row} mirrored={mirrored} />}
     </section>
   );
 }
