@@ -22,6 +22,16 @@
     padding: 0;
     list-style: none;
     pointer-events: none;
+    /* ⌥T focuses the region itself (tabindex -1); the toast that takes focus next shows the ring. */
+    outline: none;
+  }
+  /* React Aria's Toast: a focusable alertdialog around the card. */
+  .ui-toast-entry {
+    outline: none;
+  }
+  .ui-toast-entry[data-focus-visible] > .ui-toast {
+    outline: 1px solid var(--accent);
+    outline-offset: 2px;
   }
   @media (max-width: 640px) {
     .ui-toast-viewport {

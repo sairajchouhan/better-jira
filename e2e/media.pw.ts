@@ -106,7 +106,7 @@ test("Jira media: nothing fetched for the board, exact attachments and byte rang
     await page.context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await page.click(`${at} [aria-label="Copy link"]`);
     await page.waitFor(
-      `document.querySelector('[aria-label="Notifications"]')?.textContent.includes('File URL copied to clipboard')`,
+      `document.querySelector('.ui-toast-viewport')?.textContent.includes('File URL copied to clipboard')`,
     );
     expect(await page.eval(`navigator.clipboard.readText()`)).toBe(
       `${fixture.url}api/issues/TEST-1/attachments/103`,

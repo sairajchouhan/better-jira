@@ -1,16 +1,33 @@
-import { createContext, use, useEffect, useMemo, useSyncExternalStore, type ComponentProps, type ReactNode } from "react";
+import { createContext, use, useEffect, useMemo, useRef, type ComponentProps, type ReactNode } from "react";
+import { useHotkey } from "@tanstack/react-hotkeys";
+import {
+  Button,
+  Text,
+  UNSTABLE_Toast as AriaToast,
+  UNSTABLE_ToastContent as AriaToastContent,
+  UNSTABLE_ToastRegion as ToastRegion,
+  type QueuedToast as AriaQueuedToast,
+  type TextProps,
+} from "react-aria-components";
 import { Icon } from "./icons";
-import { toasts, type ToastQueue } from "./toast-queue";
+import { toasts, type QueuedToast, type ToastQueue } from "./toast-queue";
 import "./control-tokens.css";
 import "./toast.css";
 
 /** Linear's ToastPresenter (`V`, `B`, `R`, ToastPresenter.DGg7fNYy.js). */
 export const TOAST = { WIDTH: 384, VIEWPORT_MARGIN: 32, OFFSET: 24, MOBILE_OFFSET: 16, GAP: 8, VISIBLE: 4 } as const;
 
+/** sonner's Toaster `hotkey` default, `["altKey","KeyT"]` (dist.DuPC_NI1.js): focuses the toasts. */
+export const TOAST_HOTKEY = "Alt+[KeyT]";
+
 const ToastContext = createContext<{ dismiss: () => void } | null>(null);
 
-/** One visible toast: dismisses itself after its duration (paused while the queue is held) and gives its slots a way to close it. */
-function Entry({ queue, id, duration, revision, children }: { queue: ToastQueue; id: string; duration: number; revision: number; children: ReactNode }) {
+/**
+ * One visible toast: React Aria's Toast (a focusable `alertdialog` that names itself from its title and description slots),
+ * dismissing itself after its duration (paused while the queue is held) and giving its slots a way to close it.
+ */
+export function ToastEntry({ queue, toast }: { queue: ToastQueue; toast: AriaQueuedToast<QueuedToast> }) {
+  const { id, duration, revision, content } = toast.content;
   const context = useMemo(() => ({ dismiss: () => queue.dismiss(id) }), [queue, id]);
   useEffect(() => {
     if (duration === Infinity) return;
@@ -18,15 +35,19 @@ function Entry({ queue, id, duration, revision, children }: { queue: ToastQueue;
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- show() restarts the timer via revision; update() preserves it.
   }, [queue, context, duration, revision]);
   return (
-    <li>
-      <ToastContext value={context}>{children}</ToastContext>
-    </li>
+    <AriaToast toast={toast} className="ui-toast-entry">
+      <ToastContext value={context}>{content}</ToastContext>
+    </AriaToast>
   );
 }
 
-/** Renders the queue's visible toasts, bottom right, as one polite live region. Mount once. */
+/**
+ * Renders the queue's visible toasts, bottom right, in React Aria's ToastRegion: a landmark (F6) that holds every deadline
+ * while the pointer is on it or focus is in it, and returns focus where it came from when its toasts are gone, as sonner's
+ * Toaster does (`R.current.focus({preventScroll:!0})`). Mount once.
+ */
 export function ToastViewport({ queue = toasts }: { queue?: ToastQueue }) {
-  const visible = useSyncExternalStore(queue.subscribe, queue.visible, queue.visible);
+  const region = useRef<HTMLDivElement>(null);
   // Toasts wait while the tab is hidden, as sonner's pauseWhenPageIsHidden does.
   useEffect(() => {
     const sync = () => queue.hold("hidden", document.hidden);
@@ -35,26 +56,21 @@ export function ToastViewport({ queue = toasts }: { queue?: ToastQueue }) {
     return () => {
       document.removeEventListener("visibilitychange", sync);
       queue.hold("hidden", false);
-      queue.hold("hover", false);
+      queue.hold("region", false);
     };
   }, [queue]);
-  // Always mounted, so screen readers already watch the live region when the first toast lands. The pointer on any
-  // toast holds them all (sonner's Toaster onMouseEnter/onMouseLeave).
+  // sonner's keydown listener runs from anywhere, text fields included.
+  useHotkey(TOAST_HOTKEY, () => region.current?.focus(), { ignoreInputs: false });
   return (
-    <ol
-      aria-live="polite"
-      aria-label="Notifications"
+    <ToastRegion
+      ref={region}
+      queue={queue}
+      // sonner's section label, `${containerAriaLabel} ${hotkey}`.
+      aria-label="Notifications alt+T"
       className="ui-toast-viewport"
-      onMouseEnter={() => queue.hold("hover", true)}
-      onMouseMove={() => queue.hold("hover", true)}
-      onMouseLeave={() => queue.hold("hover", false)}
     >
-      {visible.toReversed().map((toast) => (
-        <Entry key={toast.id} queue={queue} id={toast.id} duration={toast.duration} revision={toast.revision}>
-          {toast.content}
-        </Entry>
-      ))}
-    </ol>
+      {({ toast }) => <ToastEntry queue={queue} toast={toast} />}
+    </ToastRegion>
   );
 }
 
@@ -65,8 +81,9 @@ export function useToast() {
   return context;
 }
 
+/** The card, React Aria's ToastContent: the part read out when the toast lands. */
 function ToastRoot({ className = "", ...props }: ComponentProps<"div">) {
-  return <div className={`ui-toast ${className}`} {...props} />;
+  return <AriaToastContent className={`ui-toast ${className}`} {...props} />;
 }
 
 /** The 14px image before a toast's title (Linear's toast `icon`); the lines under the title then start under its text. */
@@ -74,19 +91,22 @@ function ToastIcon({ className = "", ...props }: ComponentProps<"span">) {
   return <span aria-hidden className={`ui-toast-icon ${className}`} {...props} />;
 }
 
+/** React Aria's close slot: the toast's Button that closes it. */
 function Close({ label = "Dismiss" }: { label?: string }) {
-  const { dismiss } = useToast();
   return (
-    <button type="button" aria-label={label} className="ui-toast-close" onClick={dismiss}>
+    <Button slot="close" aria-label={label} className="ui-toast-close">
       <Icon name="close" size={12} />
-    </button>
+    </Button>
   );
 }
 
+type SlotText = Omit<TextProps, "slot" | "elementType" | "className"> & { className?: string; children?: ReactNode };
+
 /** A toast's content, passed to `toasts.show(<Toast>…</Toast>)`. */
 export const Toast = Object.assign(ToastRoot, {
-  Title: ({ className = "", ...props }: ComponentProps<"p">) => (
-    <p className={`ui-toast-title ${className}`} {...props} />
+  /** The toast's name (React Aria's title slot). */
+  Title: ({ className = "", ...props }: SlotText) => (
+    <Text slot="title" elementType="p" className={`ui-toast-title ${className}`} {...props} />
   ),
   Icon: ToastIcon,
   /** Linear's success image: a white check on a green disc. */
@@ -99,8 +119,9 @@ export const Toast = Object.assign(ToastRoot, {
   Subject: ({ className = "", ...props }: ComponentProps<"p">) => (
     <p className={`ui-toast-subject ${className}`} {...props} />
   ),
-  Description: ({ className = "", ...props }: ComponentProps<"p">) => (
-    <p className={`ui-toast-description ${className}`} {...props} />
+  /** The toast's description (React Aria's description slot). */
+  Description: ({ className = "", ...props }: SlotText) => (
+    <Text slot="description" elementType="p" className={`ui-toast-description ${className}`} {...props} />
   ),
   Actions: ({ className = "", ...props }: ComponentProps<"div">) => <div className={`ui-toast-actions ${className}`} {...props} />,
   /** A text action ("Undo", "View issue"); the toast closes after it runs. */

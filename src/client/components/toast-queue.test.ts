@@ -87,3 +87,34 @@ test("R3-chrome-D4: deadlines wait while the queue is held (pointer on the toast
     jest.useRealTimers();
   }
 });
+
+test("React Aria's region reads the newest first by id, and its close and pause reach the queue", () => {
+  jest.useFakeTimers();
+  try {
+    const queue = createToastQueue();
+    for (const id of ["a", "b", "c", "d", "e"]) queue.show(id, { id, duration: Infinity });
+    expect(queue.visibleToasts.map((toast) => [toast.key, toast.content.id])).toEqual([
+      ["e", "e"],
+      ["d", "d"],
+      ["c", "c"],
+      ["b", "b"],
+    ]);
+    const snapshot = queue.visibleToasts;
+    queue.hold("hidden", false);
+    expect(queue.visibleToasts).toBe(snapshot);
+    queue.close("e");
+    expect(ids(queue)).toEqual(["a", "b", "c", "d"]);
+    let gone = false;
+    queue.countdown(1000, () => (gone = true));
+    queue.pauseAll();
+    jest.advanceTimersByTime(5000);
+    expect(gone).toBe(false);
+    queue.resumeAll();
+    jest.advanceTimersByTime(1000);
+    expect(gone).toBe(true);
+    queue.clear();
+    expect(queue.visibleToasts).toEqual([]);
+  } finally {
+    jest.useRealTimers();
+  }
+});

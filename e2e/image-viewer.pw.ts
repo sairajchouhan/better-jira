@@ -82,13 +82,13 @@ test("image preview: layered Escape, zoom, pan within edges, and copying link an
     await page.click('#description [aria-label="Full screen"]');
     await page.click('[aria-label="Preview"] [aria-label="Copy link"]');
     await page.waitFor(
-      `document.querySelector('[aria-label="Notifications"]')?.textContent.includes('Link copied')`,
+      `document.querySelector('.ui-toast-viewport')?.textContent.includes('Link copied')`,
     );
     // SOL2-2: text presence alone misses a toast hidden behind the opaque preview.
     expect(await page.eval(`!!document.querySelector('[aria-label="Preview"]')`)).toBe(true);
-    expect(await page.eval(`document.querySelectorAll('[aria-label="Notifications"]').length`)).toBe(1);
+    expect(await page.eval(`document.querySelectorAll('.ui-toast-viewport').length`)).toBe(1);
     expect(await page.eval(`(() => {
-      const toast = [...document.querySelectorAll('[aria-label="Notifications"] .ui-toast')]
+      const toast = [...document.querySelectorAll('.ui-toast-viewport .ui-toast')]
         .find(node => node.textContent.includes('Link copied'));
       const rect = toast.getBoundingClientRect();
       return toast.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
@@ -98,7 +98,7 @@ test("image preview: layered Escape, zoom, pan within edges, and copying link an
     );
     await page.click('[aria-label="Preview"] [aria-label="Copy image"]');
     await page.waitFor(
-      `document.querySelector('[aria-label="Notifications"]')?.textContent.includes('Image copied')`,
+      `document.querySelector('.ui-toast-viewport')?.textContent.includes('Image copied')`,
     );
     expect(
       await page.eval(
@@ -112,14 +112,14 @@ test("image preview: layered Escape, zoom, pan within edges, and copying link an
     await page.waitFor(`${preview}?.naturalWidth===319`);
     await page.click('[aria-label="Preview"] [aria-label="Copy link"]');
     await page.waitFor(
-      `document.querySelector('[aria-label="Notifications"]')?.textContent.includes('Link copied')`,
+      `document.querySelector('.ui-toast-viewport')?.textContent.includes('Link copied')`,
     );
     expect(await page.eval(`navigator.clipboard.readText()`)).toBe(
       `${fixture.url}api/issues/TEST-2/attachments/102`,
     );
     await page.click('[aria-label="Preview"] [aria-label="Copy image"]');
     await page.waitFor(
-      `document.querySelector('[aria-label="Notifications"]')?.textContent.includes('Image copied')`,
+      `document.querySelector('.ui-toast-viewport')?.textContent.includes('Image copied')`,
     );
     expect(
       await page.eval(

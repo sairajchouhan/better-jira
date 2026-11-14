@@ -86,6 +86,11 @@ test("create composer: a draft written, closed, reopened, given properties and c
     ).toMatch(/^Issue createdTEST-NEW\d+ – .+View issue$/); // #20: Linear's "Issue created", the key and title, View issue and close
     expect(await page.eval(`!!document.querySelector('[data-toast] .ui-toast-check')&&!!document.querySelector('[data-toast] [aria-label="Dismiss"]')`)).toBe(true);
     expect(await page.eval(`!!document.getElementById("summary")`)).toBe(false);
+    // sonner's ⌥T (Linear's Toaster) focuses the toasts, React Aria's ToastRegion; Tab then reaches the toast itself.
+    await page.key("KeyT", "alt");
+    expect(await page.eval(`document.activeElement?.matches('.ui-toast-viewport[role=region][aria-label="Notifications alt+T"]')`)).toBe(true);
+    await page.key("Tab");
+    expect(await page.eval(`document.activeElement?.matches('.ui-toast-entry[role=alertdialog]')`)).toBe(true);
     await page.click("text=View issue");
     expect(
       await page.waitFor<string>(
