@@ -341,6 +341,14 @@ export function PresetRow({
 }
 
 export type Preset = { label: string; op: Rule["op"]; value: string; typed?: boolean };
+/** A date rule's value as its chip names it: Linear's date block labels a value by its preset's name (`yF` label: Due date's
+ *  `P0D` is "Overdue"), else a relative day ("today") or the date. */
+export function dateValueLabel(field: Field, value: string, date: (value: string) => string) {
+  return (
+    datePresets(field, "").find((p) => p.value === value && !p.typed)?.label ??
+    (value === "P0D" ? "today" : date(value))
+  );
+}
 const UNIT: Record<string, [number, string]> = {
   d: [1, "day"],
   w: [7, "week"],

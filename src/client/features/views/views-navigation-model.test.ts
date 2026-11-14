@@ -9,6 +9,9 @@ test("feedback distinguishes saved definition and temporary overlay, including p
   expect(resultFeedback(0,3,false,true)).toEqual({text:"No issues matching the filters",saved:false,hidden:3});
   expect(resultFeedback(2,5,true,true)?.text).toBe("3 issues hidden by filters");
   expect(resultFeedback(4,4,true,false)).toBeNull();
+  // R3-views-filters-D-8: an empty scope with nothing hidden by filters is just empty.
+  expect(resultFeedback(0,0,false,false)).toBeNull();
+  expect(resultFeedback(0,0,false,true)).toBeNull();
 });
 test("details summarize result assignees and labels with counts", () => {
   const issues = [{assignee:{name:"Raj"},labels:["bug","bug"]},{assignee:null,labels:["bug","ui"]}] as Issue[];

@@ -17,7 +17,7 @@ import {
   type RefObject,
 } from "react";
 import { MenuSurface, POPOVER_SURFACE, Popover } from "@/client/components/menu-surface";
-import { filterChoices, plural, PropertyFilter, useFilterCatalog } from "@/client/features/filters/property-filter";
+import { dateValueLabel, filterChoices, plural, PropertyFilter, useFilterCatalog } from "@/client/features/filters/property-filter";
 import { Menu } from "@/client/components/menu";
 import { usePristine } from "@/client/components/menu-pristine";
 import { menuFilter } from "@/client/lib/fuzzy-score";
@@ -428,7 +428,7 @@ function RuleChip({
     ["within", "next"].includes(c.op) || c.field === "statusAge"
       ? `${value} day${Number(value) === 1 ? "" : "s"}`
       : isDate(c.field)
-        ? value === "P0D" ? "today" : shortDate(value)
+        ? dateValueLabel(c.field, value, shortDate)
         : (choice?.label ?? value);
   return (
     <div className="view-filter-chip" onKeyDown={removeOnKey(remove)}>
@@ -949,11 +949,13 @@ function RuleEditor({
   );
 }
 
-function PropertySyncNotice() {
+/** Jira's property load under a menu or panel. It wraps to the width its menu already has and never widens it: `w-0 min-w-full`
+ *  adds nothing to the menu's max-content width (R3-views-filters-D-6: the filter menu jumped from 206 to 356px, over an open submenu). */
+export function PropertySyncNotice() {
   const progress = useStore((s) => s.propertySync);
   if (!progress.pending && !progress.errors) return null;
   return (
-    <Text as="div" role="status" variant="micro" color="muted" className="border-t-[length:var(--thin-pixel)] border-[var(--border-faint-thin)] px-2 py-2">
+    <Text as="div" role="status" variant="micro" color="muted" className="w-0 min-w-full border-t-[length:var(--thin-pixel)] border-[var(--border-faint-thin)] px-2 py-2">
       {progress.pending
         ? `Loading Jira properties… ${progress.completed} / ${progress.total}. Results update as data arrives.`
         : `Some Jira properties could not be read on ${progress.errors} issues. Restricted watcher lists are excluded from subscriber filters.`}
