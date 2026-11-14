@@ -3,6 +3,7 @@ import { lastToastLink, showNotification } from "@/client/state/app-notification
 import { toasts } from "@/client/components/toast-queue";
 import { recentIssues } from "./recents";
 import { isMyIssues } from "./navigation";
+import { issueCrumbs, pageIssue, stepIssues } from "./issue-trail";
 import { useEffect, useState } from "react";
 import { VIEW_SHORTCUT_IDS, viewShortcutId } from "@/client/features/views/view-shortcut";
 import { createToolbarView } from "@/client/features/views/view-toolbar-actions";
@@ -117,9 +118,14 @@ function move(direction: number, horizontal = false) {
     cols = order(),
     flat = [...new Map(cols.flat().map((i) => [i.key, i])).values()];
   if (s.panel && !horizontal) {
-    const index = flat.findIndex((i) => i.key === s.selected);
-    const next = flat[index < 0 ? 0 : index + direction];
-    if (next) navigate({ selected: next.key });
+    // On an issue page, ↑/↓ step through what its counter counts (the list it opened over, or the Sub-issues section it opened
+    // from) and keep the trail, as Linear's `jf` steps the siblings of the breadcrumb's list state.
+    const page = pageIssue(s) ? s.issues.get(s.selected!) : undefined;
+    const list = page ? stepIssues(issueCrumbs(page, s.trail, s.issues, s.boards), flat) : flat;
+    const index = list.findIndex((i) => i.key === s.selected);
+    if (page && index < 0) return;
+    const next = list[index < 0 ? 0 : index + direction];
+    if (next) navigate({ selected: next.key, trail: s.trail });
     return;
   }
   const col = cols.findIndex((c) => c.some((i) => i.key === s.selected)),
@@ -498,7 +504,7 @@ export const shortcuts: Shortcut[] = [
     when: (s) => !!lastViewed(s),
     run: () => {
       const issue = lastViewed(get());
-      if (issue) navigate({ board: issue.board, selected: issue.key, panel: true });
+      if (issue) navigate({ board: issue.board, selected: issue.key, panel: true, trail: null });
     },
   },
   {
@@ -510,7 +516,7 @@ export const shortcuts: Shortcut[] = [
     run: () => {
       // Like the toast's View issue: a key Jira has since replaced still finds the issue.
       const issue = get().issues.get(currentKey(lastToastLink() ?? ""));
-      if (issue) navigate({ board: issue.board, selected: issue.key, panel: true });
+      if (issue) navigate({ board: issue.board, selected: issue.key, panel: true, trail: null });
     },
   },
   {

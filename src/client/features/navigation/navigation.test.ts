@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createMemoryHistory } from "@tanstack/react-router";
-import { placeOf, transition, type NavigationData, type NavigationEvent, type Place, type Screen } from "./navigation";
+import { placeOf, restoredTrail, transition, type NavigationData, type NavigationEvent, type Place, type Screen } from "./navigation";
 import { emptyOverlay, viewForRoute, type SavedView, type ViewDraft } from "@/shared/saved-view-model";
 import { defaultPreferences } from "@/shared/view-model";
 import { createAppRouter, legacyPlace, locationOf, type RouteContext } from "@/client/routes/tree";
@@ -46,6 +46,7 @@ const start: Screen = {
   editorDraft: null,
   linkView: false,
   favorite: null,
+  trail: null,
 };
 const data = (patch: Partial<NavigationData> = {}): NavigationData => ({
   savedViews: [view()],
@@ -250,4 +251,33 @@ test("a favorite's origin follows the screen as Linear's favoriteId does: kept o
   expect(run([{ type: "open-view", view: view(), favorite: "view:v1" }, { type: "open-view", view: view() }]).screen.favorite).toBeNull();
   expect(run([{ type: "go", to: { favorite: "board:1" } }, restore(board1)]).screen.favorite).toBeNull();
   expect(run([{ type: "restore", place: board1, draft: null, favorite: "board:1" }]).screen.favorite).toBe("board:1");
+});
+
+test("an issue page's trail is kept by its steps and its history entry, and a reload starts afresh (Linear's breadcrumb stack)", () => {
+  const d = data({ issue: (key) => ({ "A-1": { key: "A-1", board: 1 }, "A-2": { key: "A-2", board: 1 }, "A-3": { key: "A-3", board: 1 } })[key] });
+  const epicPage = run([{ type: "go", to: { board: 1, selected: "A-1", panel: true, view: "page" } }], d);
+  // Opened from the board, the page is over its list.
+  expect(epicPage.screen.trail).toBe("list");
+  // Opened from A-1's Sub-issues section, then from A-2's: the trail grows.
+  const child = transition({ ...epicPage.screen, trail: null }, { type: "go", to: { selected: "A-2", panel: true, view: "page", trail: { parent: "A-1" } } }, d);
+  expect(child.screen.trail).toEqual({ path: ["A-1"] });
+  const grandchild = transition(child.screen, { type: "go", to: { selected: "A-3", panel: true, view: "page", trail: { parent: "A-2" } } }, d);
+  expect(grandchild.screen.trail).toEqual({ path: ["A-1", "A-2"] });
+  // ↑/↓ name the trail; a link opened unnamed, ⌘K (null) or a sidebar favorite reset it; closing the page drops it.
+  expect(transition(child.screen, { type: "go", to: { selected: "A-3", trail: child.screen.trail } }, d).screen.trail).toEqual({ path: ["A-1"] });
+  expect(transition(child.screen, { type: "go", to: { selected: "A-3", panel: true } }, d).screen.trail).toBeNull();
+  expect(transition(child.screen, { type: "go", to: { selected: "A-3", panel: true, trail: null } }, d).screen.trail).toBeNull();
+  expect(transition(child.screen, { type: "go", to: { selected: "A-3", panel: true, favorite: "A-3", trail: "list" } }, d).screen.trail).toBeNull();
+  expect(transition(child.screen, { type: "moved", screen: { panel: false } }, d).screen.trail).toBeNull();
+  // The history entry carries it; Back restores it, a reload (still loading) doesn't.
+  const place = placeOf(grandchild.screen, () => "all");
+  expect(place).toMatchObject({ to: "issue", key: "A-3", trail: { path: ["A-1", "A-2"] } });
+  expect((locationOf(place, context) as { state?: { trail?: unknown } }).state?.trail).toEqual({ path: ["A-1", "A-2"] });
+  const state = { trail: { path: ["A-1", "A-2"] } };
+  expect(restoredTrail(state, false)).toEqual(state.trail);
+  expect(restoredTrail(state, true)).toBeUndefined();
+  const back = { type: "restore", place, draft: null, trail: restoredTrail(state, false) } as const;
+  expect(run([back], d).screen.trail).toEqual({ path: ["A-1", "A-2"] });
+  const reload = { type: "restore", place, draft: null, trail: restoredTrail(state, true) } as const;
+  expect(run([reload], d).screen.trail).toBeNull();
 });

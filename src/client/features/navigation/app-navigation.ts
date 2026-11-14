@@ -8,7 +8,7 @@ import { createActor } from "xstate";
 import { Debouncer } from "@tanstack/pacer";
 import { createBrowserHistory, createMemoryHistory, redirect, type ParsedLocation } from "@tanstack/react-router";
 import { uiMachine, inspector, type UiContext } from "@/client/state/machines";
-import { MACHINE_FIELDS, placeOf, transition, type Destination, type NavigationEvent, type Place, type Screen } from "./navigation";
+import { MACHINE_FIELDS, placeOf, restoredTrail, transition, type Destination, type NavigationEvent, type Place, type Screen } from "./navigation";
 import { commit, get, set, subscribe, type State } from "@/client/state/store";
 import { currentKey } from "@/client/state/jira-sync";
 import { createViewDraft, editViewDraft, updateSavedView, viewError } from "@/client/features/views/saved-views";
@@ -66,6 +66,8 @@ export function linkTo(to: Destination) {
     t.screen.favorite,
   );
 }
+/** A destination's address, as a plain link's `href`. */
+export const linkHref = (to: Destination) => router.buildLocation(linkTo(to) as never).href;
 /** A route location carrying the favorite its screen was opened from in history state, as Linear's `favoriteId`. */
 export function withFavorite<T extends object>(target: T, favorite: string | null | undefined): T {
   if (!favorite) return target;
@@ -100,6 +102,7 @@ const screen = (s = get()): Screen => ({
   editorDraft: s.editorDraft,
   linkView: s.linkView,
   favorite: s.favorite,
+  trail: s.trail,
 });
 const data = () => ({
   savedViews: get().savedViews,
@@ -162,12 +165,13 @@ function current() {
   const location = router.buildLocation(target as never);
   return { place, target, location };
 }
-/** Same address, opened from the same favorite and, on an issue page, the same list under it. */
+/** Same address, opened from the same favorite and, on an issue page, the same list under it, reached the same way. */
 const sameAddress = (a: ParsedLocation, b: ParsedLocation) =>
   a.pathname === b.pathname &&
   a.searchStr === b.searchStr &&
   a.state.favorite === b.state.favorite &&
-  JSON.stringify(a.state.over) === JSON.stringify(b.state.over);
+  JSON.stringify(a.state.over) === JSON.stringify(b.state.over) &&
+  JSON.stringify(a.state.trail) === JSON.stringify(b.state.trail);
 /** Shows the screen's place in the address: a new history entry, or `replace` this one. */
 function showAddress(replace = false) {
   const { target, location } = current(),
@@ -188,7 +192,13 @@ const issueOf = (l: ParsedLocation) =>
 function show(place: Place, location: ParsedLocation) {
   if (location.href !== router.latestLocation.href) return;
   if (navigationReady && sameAddress(current().location, location)) return;
-  go({ type: "restore", place, draft: drafts.read(location.pathname), favorite: location.state.favorite });
+  go({
+    type: "restore",
+    place,
+    draft: drafts.read(location.pathname),
+    favorite: location.state.favorite,
+    trail: restoredTrail(location.state, !navigationReady),
+  });
   // The address names the screen differently (an issue beside another board's list): show its own address, once.
   const { target, location: shown } = current();
   if (location.state.settled || sameAddress(shown, location)) return;

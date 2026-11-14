@@ -29,7 +29,7 @@ import { externalTitle, faviconSrc, linkBadgeText } from "@/shared/smart-link";
 import { SubIssueProgressButton } from "@/client/components/sub-issue-progress-button";
 import { shortcutTitle } from "@/client/components/keycap";
 import { IssueHoverCard } from "./issue-hover-card";
-import { ChildrenMenu, openIssue } from "./sub-issue-menu";
+import { ChildrenMenu, openSubIssue } from "./sub-issue-menu";
 import { childrenByParent, subIssueCount } from "./sub-issue-model";
 
 const openExternal = (url: string) => void window.open(url, "_blank", "noopener,noreferrer");
@@ -379,7 +379,7 @@ export function SubIssueBadge({ issue, layout }: { issue: Issue; layout: "board"
       onClick={(e) => {
         if (anchor) return setAnchor(null);
         // Linear opens a lone direct sub-issue on a click, and lists it when the keyboard pressed the badge (`keyboardInvoked`).
-        if (children?.length === 1 && e.detail > 0) openIssue(children[0]!);
+        if (children?.length === 1 && e.detail > 0) openSubIssue(children[0]!, issue.key);
         else setAnchor(e.currentTarget);
       }}
     />

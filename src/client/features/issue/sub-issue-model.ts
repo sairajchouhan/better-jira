@@ -241,6 +241,32 @@ export function subIssueRows(
   };
 }
 
+const direct = new WeakMap<ReadonlyMap<string, Issue>, WeakMap<readonly Board[], Map<string, readonly Issue[]>>>();
+/**
+ * `parent`'s own sub-issues in its Sub-issues section's order (Linear's default: manual, completed shown), the one list that Open
+ * sub-issue… menus and the issue page opened from that section (its counter, ↑/↓) step through. Cached per issues snapshot and
+ * boards, so a store selector gets a stable reference.
+ */
+export function directSubIssues(
+  issues: ReadonlyMap<string, Issue>,
+  boards: readonly Board[],
+  parent: string,
+): readonly Issue[] {
+  let byBoards = direct.get(issues);
+  if (!byBoards) direct.set(issues, (byBoards = new WeakMap()));
+  let cache = byBoards.get(boards);
+  if (!cache) byBoards.set(boards, (cache = new Map()));
+  let list = cache.get(parent);
+  if (!list) {
+    const status = (issue: Issue) => statusOf(boards, issue);
+    list = subIssueRows(parent, issues, defaultSubIssueDisplay(), status)
+      .rows.filter((row) => row.depth === 0)
+      .map((row) => row.issue);
+    cache.set(parent, list);
+  }
+  return list;
+}
+
 /**
  * `entries` with Move… where Linear's issue menu lists it (startup-root `aAr`: Ko(Copy…), Convert to…, Make a copy…, Move…
  * (`Lvr`), Open in, Ko(Favorite)): inside the Copy group right after Make a copy…, with no divider of its own; just above the

@@ -8,6 +8,7 @@ import { decodeOverlay, emptyOverlay, encodeOverlay, type SavedView, type ViewDr
 import type { View } from "@/client/state/store";
 import type { PersonTab } from "@/shared/people";
 import { keptFavorite } from "./sidebar-active";
+import { nextTrail, type Trail, type TrailStep } from "./issue-trail";
 
 export type Screen = {
   board: number;
@@ -30,6 +31,8 @@ export type Screen = {
   linkView: boolean;
   /** The sidebar favorite this screen was opened from (Linear's `location.state.favoriteId`); see sidebar-active.ts. */
   favorite: string | null;
+  /** How the open issue page was reached, for its breadcrumb and counter (issue-trail.ts); null off a page or when reached directly. */
+  trail: Trail | null;
 };
 /** The fields the ui machine also holds, for Escape and the toolbar. */
 export const MACHINE_FIELDS = ["board", "view", "selected", "panel", "document", "inbox", "mine"] as const;
@@ -50,6 +53,9 @@ export type Destination = {
   /** Opened from this sidebar favorite, or (null) from a sidebar row that is none; omitted, the screen keeps the
    *  favorite while it still shows it. */
   favorite?: string | null;
+  /** How an issue page opens: from a parent's Sub-issues section (`{ parent }`), with a given trail, or (null) afresh, as Linear's
+   *  `resetBreadcrumb` link state. Omitted: issue-trail.ts `nextTrail` decides. */
+  trail?: TrailStep;
 };
 export type NavigationEvent =
   /** Go somewhere: a new board leaves the open view or editor, and fills in how that board opens issues. */
@@ -62,8 +68,9 @@ export type NavigationEvent =
   | { type: "discard-editor" }
   | { type: "draft"; draft: ViewDraft }
   | { type: "filters"; filters: FilterGroup }
-  /** Show what an address names: a reload, a link, Back or Forward. `draft` is the editor draft saved for that address. */
-  | { type: "restore"; place: Place; draft: ViewDraft | null; favorite?: string };
+  /** Show what an address names: a reload, a link, Back or Forward. `draft` is the editor draft saved for that address; `trail`
+   *  the issue page's, kept only on Back and Forward (`restoredTrail`). */
+  | { type: "restore"; place: Place; draft: ViewDraft | null; favorite?: string; trail?: Trail };
 /** A list screen: what a board, view, My issues or the inbox shows, with the issue open beside it. */
 export type ListPlace =
   | { to: "board"; board: number; scope: Scope; issue?: string }
@@ -71,8 +78,9 @@ export type ListPlace =
   | { to: "editor"; id?: string; issue?: string }
   | { to: "person"; person: string | null; tab: PersonTab; issue?: string }
   | { to: "inbox"; issue?: string };
-/** What an address names (routes/tree.tsx maps each to its path). An issue page keeps the list it opened over. */
-export type Place = ListPlace | { to: "issue"; key: string; document?: string; over?: ListPlace };
+/** What an address names (routes/tree.tsx maps each to its path). An issue page keeps the list it opened over, and how it was
+ *  reached (its history entry's state, never its path). */
+export type Place = ListPlace | { to: "issue"; key: string; document?: string; over?: ListPlace; trail?: Trail };
 export type NavigationData = {
   savedViews: SavedView[];
   preferences: Record<number, Preferences>;
@@ -203,8 +211,29 @@ const go = (screen: Screen, to: Destination, data: NavigationData) => {
 
 export function transition(screen: Screen, event: NavigationEvent, data: NavigationData): Transition {
   const out = step(screen, event, data);
-  return { ...out, screen: { ...out.screen, favorite: favoriteAfter(screen, event, out.screen) } };
+  return {
+    ...out,
+    screen: { ...out.screen, favorite: favoriteAfter(screen, event, out.screen), trail: trailAfter(screen, event, out.screen) },
+  };
 }
+/** The next issue page's trail (issue-trail.ts `nextTrail`): a restore brings its entry's, a sidebar favorite starts afresh (Linear's
+ *  `favoriteId` resets the stack), any other step names one or leaves it to `nextTrail`. */
+function trailAfter(prev: Screen, event: NavigationEvent, next: Screen): Trail | null {
+  switch (event.type) {
+    case "restore":
+      return nextTrail(prev, next, event.trail ?? null);
+    case "go":
+      return nextTrail(prev, next, event.to.favorite ? null : event.to.trail);
+    default:
+      return nextTrail(prev, next);
+  }
+}
+/**
+ * The trail a history entry's issue page restores: none while the page loads (a reload or a pasted link starts afresh, as Linear's
+ * breadcrumb store starts empty: its constructor finds no items for the location and calls `resetItems`), its own on Back and
+ * Forward (`handleGoBackAndForward` reads the entry's saved items).
+ */
+export const restoredTrail = (state: { trail?: Trail }, loading: boolean): Trail | undefined => (loading ? undefined : state.trail);
 /** The favorite the next screen comes from: the one a step names, else the one it still keeps (sidebar-active.ts). */
 function favoriteAfter(prev: Screen, event: NavigationEvent, next: Screen): string | null {
   switch (event.type) {
@@ -318,7 +347,9 @@ export function placeOf(s: Screen, scopeOf: (board: number) => Scope): Place {
   const open = s.panel && s.selected ? s.selected : undefined,
     page = !!open && (s.view === "page" || !!s.document);
   const list = listOf(s, scopeOf, page ? undefined : open);
-  return page ? { to: "issue", key: open!, ...(s.document ? { document: s.document } : {}), over: list } : list;
+  return page
+    ? { to: "issue", key: open!, ...(s.document ? { document: s.document } : {}), over: list, ...(s.trail ? { trail: s.trail } : {}) }
+    : list;
 }
 function listOf(s: Screen, scopeOf: (board: number) => Scope, open: string | undefined): ListPlace {
   const issue = open ? { issue: open } : {};

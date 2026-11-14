@@ -4,6 +4,7 @@ import { useMemo, useSyncExternalStore } from "react";
 import { defaultPreferences, type Display, type Preferences } from "@/shared/view-model";
 import { type UiContext } from "./machines";
 import type { Screen } from "@/client/features/navigation/navigation";
+import type { Trail } from "@/client/features/navigation/issue-trail";
 
 
 import type { PersonTab } from "@/shared/people";
@@ -117,6 +118,8 @@ export type State = {
   linkView: boolean;
   /** The sidebar favorite the screen was opened from; see navigation.ts. */
   favorite: string | null;
+  /** How the open issue page was reached (navigation/issue-trail.ts). */
+  trail: Trail | null;
   overlayFilters: import("@/shared/view-model").FilterGroup;
   viewPreferences: Preferences | null;
   effectiveViewPreferences: Preferences | null;
@@ -181,6 +184,7 @@ let state: State = {
   activeViewId: null,
   linkView: false,
   favorite: null,
+  trail: null,
   overlayFilters: emptyOverlay(),
   viewPreferences: null,
   effectiveViewPreferences: null,

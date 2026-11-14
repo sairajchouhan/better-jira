@@ -20,6 +20,7 @@ import {
 } from "@tanstack/react-router";
 import { Suspense } from "react";
 import type { ListPlace, Place } from "@/client/features/navigation/navigation";
+import type { Trail } from "@/client/features/navigation/issue-trail";
 import { isPersonTab, type PersonTab } from "@/shared/people";
 import { viewPath, type SavedView } from "@/shared/saved-view-model";
 import type { Scope } from "@/shared/view-model";
@@ -35,6 +36,8 @@ declare module "@tanstack/history" {
     settled?: boolean;
     /** The sidebar favorite this entry was opened from (Linear's `favoriteId`), so Back and reload keep its row active. */
     favorite?: string;
+    /** On an issue page: how it was reached (issue-trail.ts), so Back and Forward keep its breadcrumb; a reload drops it. */
+    trail?: Trail;
   }
 }
 
@@ -334,7 +337,7 @@ export function locationOf(place: Place, context: Pick<RouteContext, "view">) {
     case "inbox":
       return { to: "/inbox", search: issue } as const;
     case "issue": {
-      const state = place.over ? { over: place.over } : {};
+      const state = { ...(place.over ? { over: place.over } : {}), ...(place.trail ? { trail: place.trail } : {}) };
       return place.document
         ? ({ to: "/issue/$key/document/$id", params: { key: place.key, id: place.document }, state } as const)
         : ({ to: "/issue/$key/{-$slug}", params: { key: place.key, slug: undefined }, state } as const);

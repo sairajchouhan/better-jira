@@ -25,7 +25,8 @@ function viewIssue(issueKey: string, id: string) {
       onClick={() => {
         toasts.dismiss(id);
         const key = currentKey(issueKey);
-        navigate({ selected: key, panel: true, board: get().issues.get(key)?.board });
+        // Linear's toast link opens the issue afresh (`kX`: `state: { resetBreadcrumb: true }`).
+        navigate({ selected: key, panel: true, board: get().issues.get(key)?.board, trail: null });
       }}
     >
       View issue

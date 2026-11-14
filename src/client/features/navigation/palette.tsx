@@ -231,7 +231,8 @@ function openChoice({ destination: to, favorite }: NavigationChoice) {
   close();
   // Linear's Open favorite links carry `favoriteId` like the sidebar row, so the favorite's row lights, not its board.
   if ("view" in to) return openSavedView(to.view, favorite);
-  navigate({ ...to, favorite: favorite ?? null });
+  // ⌘K opens a page afresh (Linear's `resetBreadcrumb: true`).
+  navigate({ ...to, favorite: favorite ?? null, trail: null });
 }
 /** The open board's grouping or ordering choices as rows, the current one checked; picking one writes the board's display as the
  *  Display menu's select does, and closes the menu. */
@@ -376,7 +377,7 @@ const openNewTab = (url: string) => (close(), void window.open(url, "_blank", "n
 const openIssue = (i: Issue) =>
   newTab
     ? openNewTab(appURL(i))
-    : timed(`open ${i.key}`, () => (close(), navigate({ board: i.board, selected: i.key, panel: true }), ui.send({ type: "query.set", query: "" })));
+    : timed(`open ${i.key}`, () => (close(), navigate({ board: i.board, selected: i.key, panel: true, trail: null }), ui.send({ type: "query.set", query: "" })));
 
 /** An issue row: status, key, title and assignee; picking it opens the issue on its board. */
 function IssueRow({ issue: i, onOpen }: { issue: Issue; onOpen?: () => void }) {

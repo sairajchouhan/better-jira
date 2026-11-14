@@ -49,7 +49,8 @@ import { fullTime } from "./issue-dates";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
 import { canHaveSubIssues } from "@/shared/issue-properties";
-import { titleParentOf, type TitleLineVariant } from "@/shared/epics";
+import { listedUnder, titleParentOf, type TitleLineVariant } from "@/shared/epics";
+import type { TrailStep } from "@/client/features/navigation/issue-trail";
 import {
   defaultSubIssueDisplay,
   PARENT_LINE,
@@ -136,7 +137,8 @@ function ParentLine({ variant, issue, parent }: { variant: TitleLineVariant; iss
       <AppLink
         data-parent-link
         className="issue-parent-link"
-        to={{ board: parent.board, selected: parent.key, panel: true }}
+        // Linear's "Sub-issue of" link opens the parent afresh (`resetBreadcrumb: true`).
+        to={{ board: parent.board, selected: parent.key, panel: true, trail: null }}
       >
         <span className="grid size-3.5 shrink-0 place-items-center">
           <StatusIcon status={statusOf(boards, parent)} />
@@ -603,6 +605,11 @@ const continues = (rows: { depth: number }[], index: number, level: number) => {
   return false;
 };
 
+/** The trail step of a page opened from a Sub-issues row: from the issue it is listed under. */
+const fromSection = (child: Issue): TrailStep => {
+  const parent = listedUnder(child, (key) => get().issues.get(key));
+  return parent ? { parent } : null;
+};
 function SubIssueRow({
   child,
   onDrop,
@@ -730,7 +737,8 @@ function SubIssueRow({
       {/* Text has no anchor variant; preserve the native issue link. */}
       <AppLink
         className="flex min-w-0 flex-1 items-center gap-2 py-1.5 text-[13px] font-medium text-fg"
-        to={{ board: child.board, selected: child.key, panel: true, view: get().view }}
+        // Opened from this section, the page's breadcrumb runs through the issue the row sits under (navigation/issue-trail.ts).
+        to={{ board: child.board, selected: child.key, panel: true, view: get().view, trail: fromSection(child) }}
       >
         <span className="truncate">{child.summary}</span>
       </AppLink>
