@@ -7,7 +7,7 @@ import { IssueHoverCard } from "./issue-hover-card";
  */
 import { absoluteDate, fullTime, activityTime } from "./issue-dates";
 import { DescriptionHistoryLink } from "./description-history";
-import { useState, type ComponentProps, type ReactNode } from "react";
+import { useState, type HTMLAttributes, type ReactNode } from "react";
 import type { RunPlace, TimelineEvent } from "@/client/features/comments/comment-threads";
 import { collapseLabel, partition, type SummaryItem } from "./activity-collapse";
 import { statusById, statuses } from "@/shared/board-catalog";
@@ -653,19 +653,23 @@ export function ActivityRun({ events, place }: { events: ActivityItem[]; place: 
   return (
     <>
       {before.map((event) => event.node)}
-      <li data-activity-collapsed className="activity-event">
-        <button
-          type="button"
-          aria-label="Expand all activity"
-          onClick={() => setOpen(true)}
-          className="grid size-[14px] place-items-center text-fg-3 hover:text-fg-2"
-        >
-          <ExpandActivityIcon />
-        </button>
+      <ActivityEntry
+        data-activity-collapsed
+        icon={
+          <button
+            type="button"
+            aria-label="Expand all activity"
+            onClick={() => setOpen(true)}
+            className="grid size-[14px] place-items-center text-fg-3 hover:text-fg-2"
+          >
+            <ExpandActivityIcon />
+          </button>
+        }
+      >
         <button type="button" onClick={() => setOpen(true)} className="text-left hover:text-fg-2">
           {label}
         </button>
-      </li>
+      </ActivityEntry>
       {after.map((event) => event.node)}
     </>
   );
@@ -702,25 +706,38 @@ export function ActivityRowWords({ row, issue }: { row: ActivityRow; issue: Issu
 /**
  * Linear's `ActivityHistoryEntry`: the icon in its own box, then the words, " · " and the time as one run of text, so a long
  * row wraps beside the icon, never under it, and the time ends the last line (non-breaking spaces and Linear's `nowrap` date
- * keep "· time" together). `detail` sits under the row, as Linear's expanded changes do.
+ * keep "· time" together). A row without a time (Linear's folded "Show N events" row, which its PR timeline renders through the
+ * same entry, `eo` in PullRequestTitleInput, with no timestamp) is the icon and its words alone. `detail` sits under the row,
+ * as Linear's expanded changes do. A row outside a list (the inbox's folded-group line) renders as a `div`.
  */
 export function ActivityEntry({
+  as: Row = "li",
   icon,
   time,
   detail,
   children,
   ...props
-}: { icon: ReactNode; time: ReactNode; detail?: ReactNode; children: ReactNode } & Omit<ComponentProps<"li">, "className">) {
+}: {
+  as?: "li" | "div";
+  icon: ReactNode;
+  time?: ReactNode;
+  detail?: ReactNode;
+  children: ReactNode;
+} & Omit<HTMLAttributes<HTMLElement>, "className">) {
   return (
-    <li {...props} className="activity-event">
+    <Row {...props} className="activity-event">
       <span className="activity-event-icon">{icon}</span>
       <span className="activity-event-text">
         <span className="activity-event-words">{children}</span>
-        {"\u00a0·\u00a0"}
-        <span className="whitespace-nowrap">{time}</span>
+        {time !== undefined && (
+          <>
+            {"\u00a0·\u00a0"}
+            <span className="whitespace-nowrap">{time}</span>
+          </>
+        )}
       </span>
       {detail}
-    </li>
+    </Row>
   );
 }
 

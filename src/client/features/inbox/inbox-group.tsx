@@ -10,7 +10,7 @@ import { Avatar } from "@/client/components/avatar";
 import { Button } from "@/client/components/button";
 import { Text } from "@/client/components/text";
 import { Adf } from "@/client/features/editor/adf";
-import { ExpandActivityIcon } from "@/client/features/issue/activity-entry";
+import { ActivityEntry, ExpandActivityIcon } from "@/client/features/issue/activity-entry";
 import { activityTime, fullTime } from "@/client/features/issue/issue-dates";
 import { commentAnchor, describe, groupSummary, type InboxGroupPage, type InboxItem, type InboxNote } from "@/shared/inbox-model";
 import { type User } from "@/shared/issue-model";
@@ -46,19 +46,23 @@ function useGroupNotes(row: InboxItem) {
 }
 
 /** One notification as an activity row; a comment's text follows in a card, with a link to the comment itself. */
-function Note({ note, mirrored }: { note: InboxNote; mirrored: boolean }) {
+export function InboxGroupNote({ note, mirrored }: { note: InboxNote; mirrored: boolean }) {
   const anchor = commentAnchor(note);
   // An issue open here links to its comment on this page; otherwise Jira's own link opens the comment in Jira.
   const href = mirrored && anchor ? `#${anchor}` : note.link;
   return (
     <li data-inbox-note={note.id} className="flex flex-col gap-1.5">
-      <span className="activity-event">
-        <Avatar user={note.actor ? ({ id: note.actor.name, ...note.actor } as User) : null} size={14} />
+      <ActivityEntry
+        as="div"
+        icon={<Avatar user={note.actor ? ({ id: note.actor.name, ...note.actor } as User) : null} size={14} />}
+        time={
+          <time dateTime={note.time} title={fullTime(note.time)}>
+            {activityTime(note.time)}
+          </time>
+        }
+      >
         <span className="text-fg-2">{describe({ ...note, preview: "" })}</span>
-        <time dateTime={note.time} title={fullTime(note.time)}>
-          {activityTime(note.time)}
-        </time>
-      </span>
+      </ActivityEntry>
       {(note.doc !== undefined || note.preview) && (
         <blockquote className="ml-[30px] rounded-lg border border-line px-3 py-2">
           <div className="text-[13px] text-fg-2">
@@ -96,7 +100,7 @@ function GroupNotes({ row, mirrored }: { row: InboxItem; mirrored: boolean }) {
     <>
       <ul aria-label="Notifications on this issue" className="flex flex-col gap-3">
         {notes.map((note) => (
-          <Note key={note.id} note={note} mirrored={mirrored} />
+          <InboxGroupNote key={note.id} note={note} mirrored={mirrored} />
         ))}
       </ul>
       {hasNextPage && (
@@ -121,20 +125,24 @@ export function InboxGroupUpdates({ row, mirrored }: { row: InboxItem; mirrored:
   if (!summary) return null;
   return (
     <section aria-label="Grouped notifications" className="flex flex-col gap-2">
-      <span className="activity-event">
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-label={open ? "Hide grouped notifications" : "Show grouped notifications"}
-          onClick={() => setOpen(!open)}
-          className="grid size-[14px] place-items-center text-fg-3 hover:text-fg-2"
-        >
-          <ExpandActivityIcon />
-        </button>
+      <ActivityEntry
+        as="div"
+        icon={
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-label={open ? "Hide grouped notifications" : "Show grouped notifications"}
+            onClick={() => setOpen(!open)}
+            className="grid size-[14px] place-items-center text-fg-3 hover:text-fg-2"
+          >
+            <ExpandActivityIcon />
+          </button>
+        }
+      >
         <button type="button" onClick={() => setOpen(!open)} className="text-left hover:text-fg-2">
           {summary}
         </button>
-      </span>
+      </ActivityEntry>
       {open && <GroupNotes key={row.head} row={row} mirrored={mirrored} />}
     </section>
   );

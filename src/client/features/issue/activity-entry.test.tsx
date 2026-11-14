@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Issue } from "@/shared/issue-model";
-import { ActivityEntry, ActivityIcon, ActivityRowWords, describeActivity, priorityRank, titleChangeLabel } from "./activity-entry";
+import { ActivityEntry, ActivityIcon, ActivityRowWords, ActivityRun, describeActivity, priorityRank, titleChangeLabel, type ActivityItem } from "./activity-entry";
 import { DescriptionHistoryProvider } from "./description-history";
 import { activityRows, type ActivityField, type PropertyActivity } from "./issue-activity";
 
@@ -302,4 +302,23 @@ test("prod parity #36: an activity row keeps its icon in its own box and its tim
       '<span class="activity-event-text"><span class="activity-event-words"><span>Ada Example</span> moved from To Do to In Progress</span>' +
       ' · <span class="whitespace-nowrap"><time>2h ago</time></span></span></li>',
   );
+});
+
+test("R3 G18: the folded \"Show N events\" row keeps its chevron in the icon box, so a long summary wraps beside it", () => {
+  const had = Object.getOwnPropertyDescriptor(globalThis, "location");
+  if (!had) Object.defineProperty(globalThis, "location", { configurable: true, value: { hash: "" } });
+  try {
+    const events: ActivityItem[] = Array.from({ length: 9 }, (_, i) => ({
+      at: `2025-01-0${i + 1}T10:00:00Z`,
+      anchor: `activity-${i}`,
+      summary: [{ action: "changed", value: "status", weight: 1 }],
+      node: <li key={i}>{i}</li>,
+    }));
+    const html = renderToStaticMarkup(<ol><ActivityRun events={events} place={{ position: "only" }} /></ol>);
+    const folded = /<li data-activity-collapsed="true" class="activity-event">(.*?)<\/li>/.exec(html)?.[1] ?? "";
+    expect(folded).toStartWith('<span class="activity-event-icon"><button type="button" aria-label="Expand all activity"');
+    expect(/class="activity-event-text">(.*)<\/span>$/.exec(folded)?.[1]?.replace(/<[^>]+>/g, "")).toBe("Show 3 events: changed status…");
+  } finally {
+    if (!had) Reflect.deleteProperty(globalThis, "location");
+  }
 });
