@@ -17,6 +17,12 @@ import { kept, useCommand } from "@/client/features/navigation/commands";
 import { duePresets, shortDate } from "@/client/lib/due-date";
 import { MenuSurface as Modal } from "@/client/components/menu-surface";
 const DateInput = lazy(() => import("./date-input").then((m) => ({ default: m.DateInput })));
+let dueParser: typeof import("@/client/lib/due-parse").parseDueDate | undefined;
+/** The due menu's parser (chrono, its one heavy import), kept once loaded so a later menu has it on its first render. */
+export const loadDueParser = () => import("@/client/lib/due-parse").then((m) => (dueParser = m.parseDueDate));
+// Fetched and evaluated once the page is idle, like media, so the first Shift+D doesn't pay for chrono (R3-issue-fields-D7).
+if (typeof window !== "undefined")
+  (window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 200)))(() => void loadDueParser());
 import type { ReactNode } from "react";
 import { Menu } from "@/client/components/menu";
 import { MenuSurface, MenuSurfaceContext } from "@/client/components/menu-surface";
@@ -485,16 +491,15 @@ export function DueRows({
   onPick: (due: string | null) => void;
   onCustom: () => void;
 }) {
-  const [parseDue, setParseDue] = useState<typeof import("@/client/lib/due-parse").parseDueDate>();
+  const [parseDue, setParseDue] = useState(() => dueParser);
   useEffect(() => {
+    if (parseDue) return;
     let active = true;
-    void import("@/client/lib/due-parse").then(
-      ({ parseDueDate }) => active && setParseDue(() => parseDueDate),
-    );
+    void loadDueParser().then((parse) => active && setParseDue(() => parse));
     return () => {
       active = false;
     };
-  }, []);
+  }, [parseDue]);
   const parsed = parseDue?.(query) ?? null;
   return (
     <>
