@@ -49,28 +49,41 @@ export function descriptionVersions(
 export type DiffPart = { kind: "same" | "added" | "removed"; text: string };
 /** Past this many token pairs the diff gives up, as Linear's (`RRe` budget) does, and the whole text reads as replaced. */
 const DIFF_BUDGET = 4_000_000;
+/** Linear's word tokens (`R8`, jsdiff's `diffWordsWithSpace`): a line break, a run of word characters, a run of other
+ *  whitespace, or one other character. */
+const WORD = "a-zA-Z0-9_\\u{AD}\\u{C0}-\\u{D6}\\u{D8}-\\u{F6}\\u{F8}-\\u{2C6}\\u{2C8}-\\u{2D7}\\u{2DE}-\\u{2FF}\\u{1E00}-\\u{1EFF}";
+const TOKEN = new RegExp(`(\\r?\\n)|[${WORD}]+|[^\\S\\n\\r]+|[^${WORD}]`, "gu");
+/** Linear's merge distance (prosemirror-changeset `minUnchanged`, `Q6`): changes closer than this many unchanged characters
+ *  are one change, so a rewritten run reads as one deletion and one addition, not old and new words in turn. */
+const minUnchanged = (a: number, b: number) => Math.min(15, Math.max(2, Math.floor(Math.max(a, b) / 10)));
 
 /** A word diff of `before` → `after`: Linear's inline changes (`inline-change-addition` / `inline-change-deletion`), on Jira's
- *  wiki-markup text. Whitespace runs are tokens of their own, so line breaks survive. */
+ *  wiki-markup text. Line breaks are tokens of their own, so they survive. */
 export function wordDiff(before: string, after: string): DiffPart[] {
-  const a = before.split(/(\s+)/).filter(Boolean),
-    b = after.split(/(\s+)/).filter(Boolean);
+  const a = before.match(TOKEN) ?? [],
+    b = after.match(TOKEN) ?? [];
   let start = 0;
   while (start < a.length && start < b.length && a[start] === b[start]) start++;
   let end = 0;
   while (end < a.length - start && end < b.length - start && a[a.length - 1 - end] === b[b.length - 1 - end]) end++;
   const x = a.slice(start, a.length - end),
     y = b.slice(start, b.length - end);
-  const parts: DiffPart[] = [];
-  const push = (kind: DiffPart["kind"], text: string) => {
-    const last = parts.at(-1);
-    if (last?.kind === kind) last.text += text;
-    else parts.push({ kind, text });
+  // The middle as unchanged runs and changes, each change its removed and added text.
+  type Change = { removed: string; added: string };
+  type Chunk = { same: string } | Change;
+  const isChange = (chunk: Chunk | undefined): chunk is Change => !!chunk && !("same" in chunk);
+  const chunks: Chunk[] = [];
+  const put = (kind: DiffPart["kind"], text: string) => {
+    const last = chunks.at(-1);
+    if (kind === "same") {
+      if (last && !isChange(last)) last.same += text;
+      else chunks.push({ same: text });
+    } else if (isChange(last)) last[kind] += text;
+    else chunks.push({ removed: "", added: "", [kind]: text });
   };
-  for (const token of a.slice(0, start)) push("same", token);
   if (x.length * y.length > DIFF_BUDGET) {
-    for (const token of x) push("removed", token);
-    for (const token of y) push("added", token);
+    put("removed", x.join(""));
+    put("added", y.join(""));
   } else {
     // Longest common subsequence, filled from the end so the walk below reads forward.
     const width = y.length + 1;
@@ -85,16 +98,44 @@ export function wordDiff(before: string, after: string): DiffPart[] {
       j = 0;
     while (i < x.length || j < y.length) {
       if (i < x.length && j < y.length && x[i] === y[j]) {
-        push("same", x[i]!);
+        put("same", x[i]!);
         i++;
         j++;
-      } else if (i < x.length && (j === y.length || table[(i + 1) * width + j]! >= table[i * width + j + 1]!)) {
-        // A replacement reads old, then new, as Linear's deletion sits before its addition.
-        push("removed", x[i++]!);
-      } else push("added", y[j++]!);
+      } else if (i < x.length && (j === y.length || table[(i + 1) * width + j]! >= table[i * width + j + 1]!))
+        put("removed", x[i++]!);
+      else put("added", y[j++]!);
     }
   }
-  for (const token of a.slice(a.length - end)) push("same", token);
+  // Fold short unchanged runs between two changes into one change (Linear's `e8` merge). A line break stays a boundary:
+  // Linear diffs each paragraph as its own node, so a change never runs across one.
+  const gap = minUnchanged(x.join("").length, y.join("").length);
+  const merged: Chunk[] = [];
+  for (let k = 0; k < chunks.length; k++) {
+    const chunk = chunks[k]!,
+      last = merged.at(-1),
+      next = chunks[k + 1];
+    if (!isChange(chunk) && isChange(last) && isChange(next) && chunk.same.length < gap && !chunk.same.includes("\n")) {
+      last.removed += chunk.same + next.removed;
+      last.added += chunk.same + next.added;
+      k++;
+    } else merged.push({ ...chunk });
+  }
+  const parts: DiffPart[] = [];
+  const push = (kind: DiffPart["kind"], text: string) => {
+    if (!text) return;
+    const last = parts.at(-1);
+    if (last?.kind === kind) last.text += text;
+    else parts.push({ kind, text });
+  };
+  push("same", a.slice(0, start).join(""));
+  // A replacement reads old, then new, as Linear's deletion sits before its addition.
+  for (const chunk of merged)
+    if (!isChange(chunk)) push("same", chunk.same);
+    else {
+      push("removed", chunk.removed);
+      push("added", chunk.added);
+    }
+  push("same", a.slice(a.length - end).join(""));
   return parts;
 }
 

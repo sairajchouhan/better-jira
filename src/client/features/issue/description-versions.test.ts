@@ -58,3 +58,24 @@ test("prod parity #8: versions bucket by day as Linear's list does (Today, Yeste
   expect(versionBucket(at(2026, 8, 20), now)).toBe("1 month ago");
   expect(versionBucket(at(2024, 10, 20), now)).toBe("1 year ago");
 });
+
+test("prod parity #35: a rewritten sentence reads as one deletion then one addition, not old and new words in turn", () => {
+  // Made-up rewrite: no word of the old sentence survives, only the single spaces between words.
+  const parts = wordDiff(
+    "Intro\nNotes from the call are linked in thread 4821 on DEMO-7.\nOutro",
+    "Intro\n*Clip* !Demo capture 2026-01-02 at 10.11.12.mov|width=300!\nOutro",
+  );
+  expect(parts).toEqual([
+    { kind: "same", text: "Intro\n" },
+    { kind: "removed", text: "Notes from the call are linked in thread 4821 on DEMO-7." },
+    { kind: "added", text: "*Clip* !Demo capture 2026-01-02 at 10.11.12.mov|width=300!" },
+    { kind: "same", text: "\nOutro" },
+  ]);
+  // A one-word edit far from the next stays its own change, with the unchanged words around it.
+  expect(wordDiff("Open the entry, then save it to the stack", "Open the draft, then save it to the stack")).toEqual([
+    { kind: "same", text: "Open the " },
+    { kind: "removed", text: "entry" },
+    { kind: "added", text: "draft" },
+    { kind: "same", text: ", then save it to the stack" },
+  ]);
+});
