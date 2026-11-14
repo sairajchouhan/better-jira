@@ -123,3 +123,17 @@ test("prod parity #34: the issue menu's history holds Jira's edits and this app'
   expect(current?.text).toBe("Newer text");
   expect(versions.map((v) => restoreBlocker(v, current) === undefined)).toEqual([false, true, false, false]);
 });
+
+test("R3 G21 #38: inserted image lines are marked whole, not one `!` late, as Linear marks an inserted paragraph", () => {
+  const before = "Intro\n\n!old.png|thumbnail!\n\nOutro";
+  const after = "Intro\n\n!new-a.png|thumbnail!\n\n!new-b.png|thumbnail!\n\n!old.png|thumbnail!\n\nOutro";
+  expect(wordDiff(before, after)).toEqual([
+    { kind: "same", text: "Intro\n\n" },
+    { kind: "added", text: "!new-a.png|thumbnail!\n\n!new-b.png|thumbnail!\n\n" },
+    { kind: "same", text: "!old.png|thumbnail!\n\nOutro" },
+  ]);
+  // A removed line is marked whole the same way.
+  expect(wordDiff(after, before).filter((p) => p.kind === "removed")).toEqual([
+    { kind: "removed", text: "!new-a.png|thumbnail!\n\n!new-b.png|thumbnail!\n\n" },
+  ]);
+});

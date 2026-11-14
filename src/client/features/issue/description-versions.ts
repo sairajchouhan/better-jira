@@ -176,7 +176,53 @@ export function wordDiff(before: string, after: string): DiffPart[] {
       push("added", chunk.added);
     }
   push("same", a.slice(a.length - end).join(""));
-  return parts;
+  return slideToLines(parts);
+}
+
+/** How well a change edge sits between `before` and `after` tokens: at a line start or end best, then at a space. */
+const edge = (before: string | undefined, after: string | undefined) =>
+  before === undefined || after === undefined || before.endsWith("\n") || after.startsWith("\n")
+    ? 2
+    : /^\s/.test(after) || /\s$/.test(before)
+      ? 1
+      : 0;
+
+/**
+ * Slides each pure insertion or deletion along the unchanged text around it to the place whose edges sit best, so added lines
+ * read as whole lines. The diff alone keeps a shared leading token in the unchanged prefix: inserting `!b!⏎⏎` before `!c!`
+ * marks `b!⏎⏎!` with the first `!` outside. Linear never shows that: its diff (`calculateDiff`, prosemirror-recreate-transform
+ * with `wordDiffs`) compares paragraphs as nodes first, so an inserted paragraph is marked whole.
+ */
+function slideToLines(parts: DiffPart[]): DiffPart[] {
+  const out = parts.map((part) => ({ ...part }));
+  for (let k = 0; k < out.length; k++) {
+    const part = out[k]!,
+      prev = out[k - 1],
+      next = out[k + 1];
+    if (part.kind === "same" || (prev && prev.kind !== "same") || (next && next.kind !== "same")) continue;
+    let left: string[] = prev?.text.match(TOKEN) ?? [],
+      change: string[] = part.text.match(TOKEN) ?? [],
+      right: string[] = next?.text.match(TOKEN) ?? [];
+    // Leftmost place first, then each place to the right; the best scoring wins, the rightmost of equals.
+    while (left.length && left.at(-1) === change.at(-1)) {
+      change = [left.at(-1)!, ...change.slice(0, -1)];
+      right = [left.at(-1)!, ...right];
+      left = left.slice(0, -1);
+    }
+    let best = { score: -1, left, change, right };
+    for (;;) {
+      const score = edge(left.at(-1), change[0]) + edge(change.at(-1), right[0]);
+      if (score >= best.score) best = { score, left, change, right };
+      if (!right.length || right[0] !== change[0]) break;
+      left = [...left, change[0]!];
+      change = [...change.slice(1), right[0]!];
+      right = right.slice(1);
+    }
+    if (prev) prev.text = best.left.join("");
+    part.text = best.change.join("");
+    if (next) next.text = best.right.join("");
+  }
+  return out.filter((part) => part.text);
 }
 
 /** Linear's day buckets for the version list (`BDt`): Today, Yesterday, then "N days/weeks/months/years ago". */
