@@ -98,7 +98,7 @@ test("R3-palette-shortcuts-D2: G then a key Linear binds as a G-chord never fall
   const { reservedChords } = await import("./shortcuts");
   const chords = [...shortcuts, ...reservedChords].filter((s) => Array.isArray(s.hotkey) && s.hotkey[0] === "G");
   // Linear's G-chords (startup-root.CnUSfl4j.js `keyboardShortcut:{key:["g", …]}`), including Preferences (G S) and views (G U).
-  for (const key of [..."-ABCDEFIJLMNPQRSTUVWX"]) expect(chords.some((s) => (s.hotkey as string[])[1] === key)).toBe(true);
+  for (const key of "-ABCDEFIJLMNPQRSTUVWX") expect(chords.some((s) => (s.hotkey as string[])[1] === key)).toBe(true);
   // The single keys QA saw fire after G (S status, P priority, L labels, U read state) are all held by a chord.
   for (const id of ["status", "priority", "labels", "inbox-read"]) {
     const key = shortcuts.find((s) => s.id === id)!.hotkey;
