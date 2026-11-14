@@ -186,17 +186,18 @@ header:has(.view-editor):has(.ui-filter-bar) > div:nth-child(2) > button:last-ch
   overflow-y: auto;
   padding: 8px 8px 12px;
 }
-.view-icon-list [cmdk-group-heading] {
+.view-icon-list section {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 28px);
+}
+.view-icon-list header {
+  grid-column: 1 / -1;
   padding: 8px 6px 4px;
   color: var(--fg-3);
   font-size: 12px;
   font-weight: 500;
 }
-.view-icon-list [cmdk-group-items] {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, 28px);
-}
-.view-icon-list [cmdk-item] {
+.view-icon {
   display: grid;
   place-items: center;
   height: 28px;
@@ -204,11 +205,13 @@ header:has(.view-editor):has(.ui-filter-bar) > div:nth-child(2) > button:last-ch
   color: var(--fg-3);
   font-size: 18px;
   cursor: pointer;
+  outline: none;
 }
-.view-icon-list [data-current] {
+.view-icon.is-current {
   color: var(--fg);
 }
-.view-icon-list [data-selected="true"] {
+.view-icon[data-focused],
+.view-icon[data-hovered] {
   background: var(--menu-sel);
   color: var(--fg);
 }

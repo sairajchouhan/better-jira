@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Command } from "cmdk";
+import { Autocomplete, Header, Input, ListBox, ListBoxItem, ListBoxSection, SearchField } from "react-aria-components";
 import { Icon, type IconName } from "@/client/components/icons";
 import { MenuSurface } from "@/client/components/menu-surface";
 import { NO_AUTOFILL } from "@/client/components/field";
+import { menuFilter } from "@/client/lib/fuzzy-score";
 
 /** Linear's view colours (2026-11-11 capture). Grey is stored as "gray"; Linear fills it #bec2c8 in every theme. */
 export const VIEW_COLORS = [
@@ -139,49 +140,48 @@ export function ViewIconPicker({
             />
           </label>
         </div>
-        <Command loop key={tab}>
-          <Command.Input
-            {...NO_AUTOFILL}
-            autoFocus
-            className="view-icon-search"
-            placeholder="Search icons…"
-          />
-          <Command.List className="view-icon-list">
-            <Command.Empty className="view-icon-empty">No icons found</Command.Empty>
+        {/* A grid of glyphs, not a list of actions: React Aria's ListBox in its grid layout (arrows move across and down) rather
+            than Menu, searched by Autocomplete with Linear's one score. A row's text is its name and its category. */}
+        <Autocomplete key={tab} filter={(text, search) => menuFilter(text, search) > 0}>
+          <SearchField aria-label="Search icons" autoFocus>
+            <Input {...NO_AUTOFILL} className="view-icon-search" placeholder="Search icons…" />
+          </SearchField>
+          <ListBox
+            aria-label={tab}
+            layout="grid"
+            className="view-icon-list"
+            renderEmptyState={() => <div className="view-icon-empty">No icons found</div>}
+            onAction={(key) => onIcon(String(key))}
+          >
             {tab === "Icons"
               ? GLYPH_GROUPS.map(([group, names]) => (
-                  <Command.Group key={group} heading={group}>
+                  <ListBoxSection key={group} id={group}>
+                    <Header>{group}</Header>
                     {names.map((name) => (
-                      <Command.Item
+                      <ListBoxItem
                         key={name}
-                        value={name}
-                        keywords={[group]}
+                        id={name}
+                        textValue={`${name} ${group}`}
                         aria-label={name}
-                        data-current={icon === name || undefined}
-                        onSelect={() => onIcon(name)}
+                        className={icon === name ? "view-icon is-current" : "view-icon"}
                       >
                         <Icon name={name} size={16} />
-                      </Command.Item>
+                      </ListBoxItem>
                     ))}
-                  </Command.Group>
+                  </ListBoxSection>
                 ))
               : EMOJI_GROUPS.map(([group, list]) => (
-                  <Command.Group key={group} heading={group}>
+                  <ListBoxSection key={group} id={group}>
+                    <Header>{group}</Header>
                     {list.map(([glyph, name]) => (
-                      <Command.Item
-                        key={glyph}
-                        value={`${name} ${glyph}`}
-                        keywords={[group]}
-                        aria-label={name}
-                        onSelect={() => onIcon(glyph)}
-                      >
+                      <ListBoxItem key={glyph} id={glyph} textValue={`${name} ${glyph} ${group}`} aria-label={name} className="view-icon">
                         {glyph}
-                      </Command.Item>
+                      </ListBoxItem>
                     ))}
-                  </Command.Group>
+                  </ListBoxSection>
                 ))}
-          </Command.List>
-        </Command>
+          </ListBox>
+        </Autocomplete>
       </div>
     </MenuSurface>
   );
