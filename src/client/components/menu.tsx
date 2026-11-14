@@ -100,6 +100,17 @@ export function pointerStep(next: string, under: string | null, highlighted: str
 }
 
 /**
+ * Where the highlight goes once the rows are `values`: when the highlighted row, seen in an earlier render (`shown`), left the
+ * list, onto the first row, as Linear's command menu moves a focused row id it no longer finds to the first action (`B6e`);
+ * otherwise nowhere (null). cmdk alone can't: it reselects while the leaving rows are still in the DOM, so a whole group going
+ * (⌘K's issue commands after ⌫ drops the issue) leaves the highlight on a removed row (R3-palette-shortcuts-D3).
+ */
+export function vanishedHighlight(highlighted: string, shown: string | null, values: string[]): string | null {
+  if (!highlighted || shown !== highlighted || values.includes(highlighted)) return null;
+  return values[0] ?? null;
+}
+
+/**
  * The cmdk root, owning the highlight so every menu shares Linear's J4e rules:
  * - A highlight change closes any other open submenu. A highlight moved by a navigation key previews a submenu row after 300ms;
  *   one moved by the pointer opens it at once. Rows the pointer crosses on its way into an open submenu are covered by the
@@ -172,6 +183,14 @@ function MenuRoot({
     scrolls.current = true;
     highlight(all[to]!.getAttribute("data-value") ?? "");
   };
+  const shown = useRef<string | null>(null);
+  // Reads the rendered rows, which every child render can change, so it runs after each render.
+  useLayoutEffect(() => {
+    const values = rows().map((row) => row.getAttribute("data-value") ?? "");
+    const next = vanishedHighlight(highlighted, shown.current, values);
+    if (values.includes(highlighted)) shown.current = highlighted;
+    if (next !== null) highlight(next);
+  });
   // cmdk scrolls its own keyboard moves before a controlled value lands, so the menu scrolls the highlight itself (the rows'
   // aria-selected catches up a render later, so the row is found by its value).
   useLayoutEffect(() => {

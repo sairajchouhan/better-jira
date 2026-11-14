@@ -86,6 +86,8 @@ test("6.1: ⌘K is Linear's command menu: no backdrop, one frame, icons on every
     expect(await p.eval(`!!${palette}.querySelector('[cmdk-group]')?.querySelector('[cmdk-group-heading]')?.textContent`)).toBe(false);
     await p.key("Backspace");
     await p.waitFor(`!${palette}.querySelector('.command-menu-title')`);
+    // R3-palette-shortcuts-D3: the first remaining row takes the highlight, so Enter still runs something.
+    await p.waitFor(`${palette}.querySelector('[cmdk-item]')?.getAttribute('aria-selected')==='true'`);
     await p.key("Escape");
   });
 });
