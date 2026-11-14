@@ -20,6 +20,7 @@ import { EmptyState, LoadingState } from "@/client/components/empty-state";
 import { Button } from "@/client/components/button";
 import { ShortcutHelp, useLinearHotkeys } from "@/client/features/navigation/shortcuts";
 import { useRecordVisits } from "@/client/features/navigation/recents";
+import { RouteTitle } from "@/client/features/navigation/route-title-updater";
 import { BoardView } from "@/client/routes/board-view";
 import {
   Sidebar,
@@ -88,6 +89,7 @@ function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       <Hotkeys />
+      <RouteTitle />
       <div className="flex min-h-0 flex-1">
         <Sidebar boards={boards} />
         <Tooltips />
