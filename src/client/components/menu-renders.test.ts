@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { backKey, openedFor, openedIn } from "./menu";
+import { openedFor, openedIn } from "./menu";
+import { backKey } from "./menu-keys";
 import { Row } from "./action-menu";
 import { FilterEntry } from "@/client/features/filters/filter-menu";
 import { LabelRow } from "@/client/features/issue/property-menu";

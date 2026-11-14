@@ -48,6 +48,7 @@ import { Shortcut, type Keys } from "./keycap";
 import { NO_AUTOFILL } from "@/client/components/field";
 import { menuFilter } from "@/client/lib/fuzzy-score";
 import { safeTriangle, TRIANGLE_EXPIRY, triangleStays } from "./safe-triangle";
+import { menuKey, navigates } from "./menu-keys";
 
 // The geometry lives on its own so menu-surface.tsx can share it without importing this module back.
 export { MENU, menuRoom };
@@ -316,10 +317,6 @@ function useListHeight(root: RefObject<HTMLDivElement | null>, measured: boolean
   }, [root, measured]);
 }
 
-// Linear's J4e moves the highlight on these, and only these let a highlighted submenu row open its preview (canOpenSubmenuOnFocus).
-const NAVIGATION = new Set(["ArrowDown", "ArrowUp", "Tab", "PageDown", "PageUp", "Home", "End"]);
-// J4e's Ctrl+n/j and Ctrl+p/k (Emacs and vi) step like ↓ and ↑.
-const CTRL_STEPS: Record<string, number> = { n: 1, j: 1, p: -1, k: -1 };
 // Linear's _6e: a keyboard highlight resting on a submenu row previews its submenu after this long.
 const PREVIEW_DELAY = 300;
 // React Aria's SubmenuTrigger opens on hover after `delay`; Linear opens at once, from Menu's own pointer handling, so its timer is
@@ -374,13 +371,6 @@ export function openedIn(level: { highlight: (value: string) => void; highlighte
  * and only once the popup is `placed`, as an unplaced popup is hidden and can't take focus.
  */
 export const focusOnOpen = (opened: Pick<Opened, "how">, placed: boolean) => placed && opened.how === "focus";
-/** A plain ← or Backspace: the keys that step back out of a submenu. */
-export const backKey = (event: { key: string; altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) =>
-  (event.key === "ArrowLeft" || event.key === "Backspace") &&
-  !event.altKey &&
-  !event.ctrlKey &&
-  !event.metaKey &&
-  !event.shiftKey;
 
 /**
  * What one menu level shares with its list, rows and submenus (Linear's i3e). One value for the menu's life, as i3e is memoised:
@@ -746,106 +736,73 @@ function MenuRoot({
       at = key === null ? -1 : order.indexOf(key),
       row = rowOf(list, key),
       search = target instanceof HTMLInputElement ? target : null,
-      plain = !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey,
       afterArrow = arrowed.current;
-    const ctrlStep = event.ctrlKey && !event.metaKey && !event.altKey ? CTRL_STEPS[event.key] : undefined;
-    input.current = NAVIGATION.has(event.key) || ctrlStep ? "navigation" : "other";
+    input.current = navigates(event) ? "navigation" : "other";
     if (event.key !== " ") arrowed.current = event.key === "ArrowDown" || event.key === "ArrowUp";
-    const handled = () => {
-      event.preventDefault();
-      event.stopPropagation();
-    };
-    /** Moves the highlight `step` rows, wrapping, or with `clamp` stopping at the ends (Linear's handleMoveFocus). */
-    const move = (step: number, clamp = false) => {
-      handled();
-      const to = stepIndex(at, step, order.length, clamp);
-      if (to >= 0) highlight(state, order[to]!);
-    };
-    const end = (last: boolean) => {
-      handled();
-      if (order.length) highlight(state, order[last ? order.length - 1 : 0]!);
-    };
+    // The row showing this digit, when one does in this level.
+    const numbered = /^\d$/.test(event.key)
+      ? [...(list?.querySelectorAll<HTMLElement>(`[data-number="${event.key}"]`) ?? [])].find(
+          (item) => item.closest(".menu") === root.current,
+        )
+      : undefined;
+    const action = menuKey({
+      key: event.key,
+      altKey: event.altKey,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      shiftKey: event.shiftKey,
+      repeat: event.repeat,
+      search: search && { value: search.value, start: search.selectionStart, end: search.selectionEnd },
+      row: row && { checkbox: row.hasAttribute("aria-checked"), submenu: key !== null && isSubmenuRow(state, key) },
+      numbered: !!numbered,
+      inSubmenu: !!submenu,
+      childOpen: !!level.actions.opened(),
+      afterArrow,
+      hasSurface: !!surface,
+      page: Math.max(1, Math.floor((list?.clientHeight ?? 0) / MENU.ITEM_HEIGHT)),
+    });
+    if (action.type === "none") return;
+    // Autocomplete would clear the highlight on an arrow it doesn't use; the caret still moves.
+    if (action.type === "caret") return event.stopPropagation();
+    // Past Autocomplete (which would only clear the search) to whatever owns the menu.
+    if (action.type === "release") return event.preventDefault();
+    event.preventDefault();
+    event.stopPropagation();
     // A checkbox row toggles from its checkbox, which keeps the menu open; any other row picks (a click React Aria reads as a press).
     const toggle = (item: HTMLElement) => (item.querySelector<HTMLElement>("input.menu-checkbox") ?? item).click();
-    if (ctrlStep) return move(ctrlStep);
-    // With the search empty, a number key picks the row showing it (Linear's picker numbers: 0 for "No priority").
-    if (/^\d$/.test(event.key) && plain && !search?.value) {
-      const numbered = [...(list?.querySelectorAll<HTMLElement>(`[data-number="${event.key}"]`) ?? [])].find(
-        (item) => item.closest(".menu") === root.current,
-      );
-      if (numbered) {
-        handled();
-        numbered.click();
+    switch (action.type) {
+      case "move": {
+        const to = stepIndex(at, action.step, order.length, action.clamp ?? false);
+        if (to >= 0) highlight(state, order[to]!);
+        return;
       }
-      return;
-    }
-    switch (event.key) {
-      case "ArrowDown":
-      case "ArrowUp":
-        if (event.metaKey || event.altKey) return end(event.key === "ArrowDown");
-        return move(event.key === "ArrowDown" ? 1 : -1);
-      case "Tab":
-        return move(event.shiftKey ? -1 : 1);
-      case "Home":
-      case "End":
-        return end(event.key === "End");
-      case "PageDown":
-      case "PageUp": {
-        const page = Math.max(1, Math.floor((list?.clientHeight ?? 0) / MENU.ITEM_HEIGHT));
-        return move(event.key === "PageDown" ? page : -page, true);
-      }
-      case "ArrowRight":
-        // Autocomplete would clear the highlight on an arrow it doesn't use; the caret still moves.
-        event.stopPropagation();
-        if (key !== null && isSubmenuRow(state, key) && (!search || search.selectionStart === search.value.length)) {
-          handled();
-          level.actions.open(key, "focus");
-        }
+      case "end":
+        if (order.length) highlight(state, order[action.last ? order.length - 1 : 0]!);
         return;
-      case "ArrowLeft":
-      case "Backspace":
-        // Autocomplete would clear the highlight on an arrow it doesn't use; the caret still moves.
-        if (event.key === "ArrowLeft") event.stopPropagation();
-        // A plain ← at the start of the search, or Backspace on an empty one (not a held key that just emptied it), steps back one
-        // level. This one handler on the open submenu's menu, not a hotkey per submenu row (which cost every hover to re-sync).
-        if (!submenu || !backKey(event)) return;
-        if (
-          event.key === "ArrowLeft"
-            ? search?.value && !(search.selectionStart === 0 && search.selectionEnd === 0)
-            : !search || search.value || event.repeat
-        )
-          return;
-        handled();
-        submenu.back();
-        return;
-      case " ":
-        if (!row) {
-          if (search?.value) return;
-          return move(1);
-        }
-        if (search?.value && !(afterArrow && plain && row.hasAttribute("aria-checked"))) return;
-        handled();
-        toggle(row);
-        return;
-      case "Enter": {
-        handled();
-        if (!row) return;
-        if (!row.hasAttribute("aria-checked")) return row.click();
-        if (event.shiftKey) return toggle(row);
+      case "number":
+        return numbered?.click();
+      case "open":
+        return level.actions.open(key!, "focus");
+      case "back":
+        return submenu?.back();
+      case "closeChild":
+        return level.actions.close();
+      case "toggle":
+        return row && toggle(row);
+      case "pick":
+        return row?.click();
+      case "pickClose": {
         const node = root.current;
-        row.click();
+        row?.click();
         // A row that closes the menu itself unmounts it first.
         setTimeout(() => {
           if (node?.isConnected) surface?.close();
         });
         return;
       }
-      case "Escape":
-        // Closes every level (Linear's closeParent), here: React Aria's search input stops the key before it can bubble to the
-        // surface's own Escape (and Autocomplete would only clear the search).
-        handled();
-        surface?.close();
-        return;
+      case "close":
+        // Every level (Linear's closeParent): React Aria's search input stops the key before it can bubble to the surface's own Escape.
+        return surface?.close();
     }
   };
   const pointerMove = (event: PointerEvent<HTMLDivElement>) => {
