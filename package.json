@@ -37,6 +37,7 @@
     "prosemirror-transform": "^1.12.5",
     "prosemirror-view": "^1.42.9",
     "react": "^19",
+    "react-aria-components": "^1.22.1",
     "react-dom": "^19",
     "tailwindcss": "^4.1.11",
     "xstate": "^5.33.3"

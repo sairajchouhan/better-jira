@@ -1502,10 +1502,8 @@ li[data-done="true"] > .todo-content {
   flex: 0 0 48px;
   height: 28px;
 }
-/* Linear's tooltip (RAJ-52 property hover): menu surface, 5px 8px, 12px/450, bordered key caps. */
+/* Linear's tooltip (RAJ-52 property hover): menu surface, 5px 8px, 12px/450, bordered key caps. React Aria's Tooltip places it. */
 .app-tooltip {
-  position: fixed;
-  z-index: 60;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1532,6 +1530,16 @@ li[data-done="true"] > .todo-content {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+/* Linear's interactive tooltip wrapper (`Vwe` → `Gwe`): a transparent `Pwe` (4px) pad before and after the card on its main
+   axis, so the pointer crosses from the trigger into the card without leaving both. React Aria names the side it opened on. */
+.hover-card[data-placement="top"],
+.hover-card[data-placement="bottom"] {
+  padding-block: 4px;
+}
+.hover-card[data-placement="left"],
+.hover-card[data-placement="right"] {
+  padding-inline: 4px;
 }
 .video-tooltip {
   position: absolute;

@@ -1,39 +1,36 @@
-import { useId, useState, type ReactNode } from "react";
-import {
-  autoUpdate,
-  flip,
-  FloatingPortal,
-  offset,
-  safePolygon,
-  shift,
-  useDismiss,
-  useFloating,
-  useFocus,
-  useHover,
-  useInteractions,
-  type Placement,
-} from "@floating-ui/react";
+import { useState, type ReactNode, type RefObject } from "react";
+import { Tooltip, TooltipTrigger } from "react-aria-components";
+import { TOOLTIP, useTooltipTrigger } from "./tooltip";
 
-/** Where a card opens and where it flips to. Linear's interactive tooltip (`Rwe`) opens `top-start`; an issue card (`Hft`) `top`;
- *  relation pills `left`. */
-const PLACEMENTS = {
-  top: ["top", ["bottom"]],
-  "top-start": ["top-start", ["bottom-start", "top-end", "bottom-end"]],
-  left: ["left", ["left-start", "left-end"]],
-} as const satisfies Record<string, readonly [Placement, readonly Placement[]]>;
+/** Linear's interactive tooltip (`Rwe` with `interactive`) as React Aria values. */
+export const HOVER_CARD = {
+  /** `Rwe`: `transitionDelay ?? (interactive ? 550 : 450)`. */
+  delay: 550,
+  /** Linear hides the card as the pointer leaves unless it moved straight into the card (`relatedTarget` inside the popover), so
+   *  it has no close delay. React Aria decides that with a close delay instead, cancelled once the pointer is over the card. The
+   *  card sits flush against its trigger (`mainAxis: 0` plus `Pwe` padding), so a short one is enough to cross; 100ms matches the
+   *  pause `Lwe.schedule(…, 100)` gives Linear's popover state after a hide. Inferred, not read from Linear. */
+  closeDelay: 100,
+} as const;
+
+/** Where a card opens; React Aria flips it to the other side when there is no room. Linear's interactive tooltip (`Rwe`) opens
+ *  `top-start`; an issue card (`Hft`) `top`; relation pills and the sidebar's pull request rows `left`. */
+const PLACEMENTS = { top: "top", "top-start": "top start", left: "left" } as const;
 
 /**
- * Linear's interactive tooltip (`$` with `interactive`, startup-root `Rwe`): opens 550ms after the pointer settles on the trigger,
- * stays open while the pointer crosses to it, closes when a press on the trigger opens that trigger's own menu. One surface for the
- * issue, user, link and pull request cards. `label` names it for tests and screen readers. `display="inline"` is Linear's
- * `style: { display: "inline" }` on a trigger inside a run of text (an Activity row's issue, `Ao`), so it wraps with the words.
+ * Linear's interactive tooltip (`$` with `interactive`, startup-root `Rwe`) on React Aria's `TooltipTrigger` and `Tooltip`: opens
+ * 550ms after the pointer rests on the trigger, stays open while the pointer crosses into it, closes when a press on the trigger
+ * opens that trigger's own menu. React Aria keeps one tooltip or card open at a time: resting on the next trigger closes this one.
+ * One surface for the issue, user, link and pull request cards. `label` names it for tests and screen readers. `display="inline"`
+ * is Linear's `style: { display: "inline" }` on a trigger inside a run of text (an Activity row's issue, `Ao`), so it wraps with
+ * the words.
  */
 export function HoverCard({
   content,
   placement = "top-start",
   label,
   display = "inline-flex",
-  delay = 550,
+  delay = HOVER_CARD.delay,
   children,
 }: {
   /** The card body, mounted only while the card is open. */
@@ -46,66 +43,47 @@ export function HoverCard({
   delay?: number;
   children: ReactNode;
 }) {
-  const [side, fallbacks] = PLACEMENTS[placement];
-  const [open, setOpen] = useState(false);
-  // Linear's closeOnPointerDown: a press on the trigger hides the card, so the trigger's menu or link takes over, and it stays
-  // hidden until the pointer leaves the trigger.
-  const [pressed, setPressed] = useState(false);
-  const id = useId();
-  const {
-    refs: { setReference, setFloating },
-    floatingStyles,
-    context,
-  } = useFloating({
-    open,
-    onOpenChange: setOpen,
-    placement: side,
-    strategy: "fixed",
-    whileElementsMounted: autoUpdate,
-    middleware: [offset(8), flip({ fallbackPlacements: [...fallbacks] }), shift({ padding: 10 })],
-  });
-  const hover = useHover(context, {
-    enabled: !pressed,
-    mouseOnly: true,
-    delay: { open: delay, close: 400 },
-    handleClose: safePolygon(),
-  });
-  const focus = useFocus(context, { enabled: !pressed });
-  const dismiss = useDismiss(context);
-  const { getReferenceProps, getFloatingProps } = useInteractions([hover, focus, dismiss]);
   return (
-    <>
-      <span
-        ref={setReference}
-        className={display === "inline" ? "inline" : "inline-flex min-w-0 max-w-full"}
-        {...getReferenceProps({
-          onPointerDown: () => {
-            setPressed(true);
-            setOpen(false);
-          },
-          onPointerLeave: () => setPressed(false),
-        })}
-        aria-describedby={open ? id : undefined}
+    <TooltipTrigger delay={delay} closeDelay={HOVER_CARD.closeDelay}>
+      <HoverCardTrigger display={display}>{children}</HoverCardTrigger>
+      {/* Linear's `Vwe` wrapper: a transparent 4px (`Pwe`) pad on the card's main axis (`Gwe`), so it meets its trigger. */}
+      <Tooltip
+        placement={PLACEMENTS[placement]}
+        offset={0}
+        containerPadding={TOOLTIP.containerPadding}
+        aria-label={label}
+        className="hover-card"
       >
-        {children}
-      </span>
-      {open ? (
-        <FloatingPortal>
-          <div
-            ref={setFloating}
-            style={floatingStyles}
-            {...getFloatingProps()}
-            id={id}
-            role="tooltip"
-            aria-label={label}
-            data-hover-card={label}
-            className="z-50 w-max min-w-[220px] max-w-[380px] rounded-lg border border-[var(--menu-line)] bg-[var(--menu)] px-2 py-[5px] text-xs text-[var(--menu-fg)] shadow-[var(--menu-shadow)]"
-          >
-            {content}
-          </div>
-        </FloatingPortal>
-      ) : null}
-    </>
+        <div
+          data-hover-card={label}
+          className="w-max min-w-[220px] max-w-[380px] rounded-lg border border-[var(--menu-line)] bg-[var(--menu)] px-2 py-[5px] text-xs text-[var(--menu-fg)] shadow-[var(--menu-shadow)]"
+        >
+          {content}
+        </div>
+      </Tooltip>
+    </TooltipTrigger>
+  );
+}
+
+/** The card's trigger: a span around the caller's control, handling the pointer and focus as React Aria's own trigger does
+ *  (`useTooltipTrigger`): a mouse or pen rest opens it after the delay, keyboard focus anywhere inside opens it at once, leaving
+ *  closes it after the close delay, and a press closes it until the pointer comes back. */
+function HoverCardTrigger({ display, children }: { display: "inline-flex" | "inline"; children: ReactNode }) {
+  const { state, triggerRef, id } = useTooltipTrigger();
+  return (
+    <span
+      ref={triggerRef as RefObject<HTMLSpanElement | null>}
+      className={display === "inline" ? "inline" : "inline-flex min-w-0 max-w-full"}
+      data-hover-card-trigger=""
+      aria-describedby={state.isOpen ? id : undefined}
+      onPointerEnter={(event) => event.pointerType !== "touch" && state.open(false)}
+      onPointerLeave={(event) => event.pointerType !== "touch" && state.close()}
+      onPointerDown={() => state.close(true)}
+      onFocus={(event) => event.target.matches(":focus-visible") && state.open(true)}
+      onBlur={() => state.close(true)}
+    >
+      {children}
+    </span>
   );
 }
 

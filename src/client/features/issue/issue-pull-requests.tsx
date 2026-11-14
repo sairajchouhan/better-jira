@@ -74,12 +74,15 @@ export function PullRequestList({ prs, collapseKey }: { prs: PullRequest[]; coll
 /** Linear's sidebar pull request row (`pg`): a DetailButton link with the status icon, the title, the review's mark while it is open
  *  (approved, changes requested; `mg`) and a chevron that shows on hover. It opens the pull request in a new tab (`navigationProps` for
  *  a review outside Linear); right-click is Linear's pull request menu (`Bl` = `lhn`); a 150ms rest shows its card on the left. */
+/** IssueDetailsPaneSidebar's row tooltip: `transitionDelay: 150` beside `position: "left"`, `interactive: true`. */
+export const PULL_REQUEST_ROW_CARD_DELAY = 150;
+
 export function IssuePullRequestRow({ pr }: { pr: PullRequest }) {
   const review = reviewDecision(pr);
   return (
     <div className="issue-pull-request-row" data-pull-request-row={pr.number || pr.url}>
       <ContextMenu label="Pull request options" entries={() => pullRequestActions(pr)}>
-        <HoverCard label="Pull request" placement="left" delay={150} content={<PullRequestCard pr={pr} />}>
+        <HoverCard label="Pull request" placement="left" delay={PULL_REQUEST_ROW_CARD_DELAY} content={<PullRequestCard pr={pr} />}>
           <PropertyTrigger.Link
             href={pr.url}
             target="_blank"

@@ -79,6 +79,7 @@
 /* V_.tooltip: beside the pointer, centred on it, 4px radius, 16px off the handle on the panel's outer side. */
 .resize-tooltip.app-tooltip {
   position: absolute;
+  z-index: 60;
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
