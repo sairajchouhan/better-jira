@@ -55,6 +55,96 @@ function assigneeChoices(issue: Issue) {
 /** A menu's "create sub-issue" acts on the menu's issue, never the selection: closing the menu clears its target. */
 export const createSubIssue = (issue: Issue) =>
   requestAnimationFrame(() => runShortcut("sub-issue", issue.key));
+/** Each submenu matches its picker (S, P, A, L, Shift+D): Linear's placeholder, number keys, and the same rows. */
+const property = (name: string, icon: IconName, id: string, entry: Omit<ActionEntry, "name" | "icon">): ActionEntry => ({
+  name,
+  icon,
+  shortcut: hotkeyOf(id),
+  ...entry,
+});
+const numbered = (from: number) => (entry: ActionEntry, i: number) => ({
+  ...entry,
+  number: i + from <= 9 ? i + from : undefined,
+});
+/**
+ * The issue's Status, Priority, Assignee and Labels actions with their values as children (Linear's RCn, Odn, Xun and eK), each
+ * value writing through `actions` (undoable) and then closing. `menu` names them as Linear does there: "contextual" for a
+ * right-click menu ("Status", "Assignee"), "command" for ⌘K ("Change status…", "Assign to…"), where the name, without its "…",
+ * is the breadcrumb of a value hoisted into the root search ("Change status › In Progress").
+ */
+export function issuePropertyEntries(issue: Issue, { close, menu }: { close: () => void; menu: "contextual" | "command" }) {
+  const command = menu === "command";
+  const board = boardOf(issue.key),
+    boardIssues = [...get().issues.values()].filter((i) => i.board === issue.board);
+  const choose = (write: () => void) => () => {
+    write();
+    close();
+  };
+  return {
+    status: property(command ? "Change status…" : "Status", "status", "status", {
+      placeholder: "Change status…",
+      children: statuses(board)
+        .map((s) => ({
+          name: s.name,
+          image: createElement(StatusIcon, { status: s }),
+          selected: s.id === issue.status,
+          run: choose(() => actions.status(issue.key, s.id)),
+        }))
+        .map(numbered(1)),
+    }),
+    priority: property("Priority", "priority", "priority", {
+      placeholder: issue.priority ? "Change priority to…" : "Set priority to…",
+      nameAsParent: issue.priority ? "Change priority to" : "Set priority to",
+      children: [
+        ...(clearPriorityRow(get().writable) ? [""] : []),
+        ...priorityChoices(get().options, boardIssues, get().writable),
+      ].map((p, i, rows) => ({
+        name: p || "No priority",
+        image: createElement(PriorityIcon, { name: p || undefined }),
+        selected: p === (issue.priority ?? ""),
+        // Linear numbers No priority 0, so the named rows keep 1… when Jira can't clear the priority.
+        number: rows[0] ? i + 1 : i,
+        run: choose(() => actions.patch(issue.key, { priority: p || undefined })),
+      })),
+    }),
+    // The submenu is the A picker's rows (AssigneeRows) on the issue's live assignee; these children, from the same groups,
+    // are the root search's "Assignee › x".
+    assignee: property(command ? "Assign to…" : "Assignee", "user", "assign", {
+      placeholder: "Assign to…",
+      hoistFrom: 3,
+      rows: (query) => createElement(IssueAssigneeRows, { issue: issue.key, query }),
+      children: assigneeChoices(issue).map(({ user, team }) => ({
+        name: user?.name ?? "No assignee",
+        image: createElement(Avatar, { user, size: 16 }),
+        selected: (issue.assignee?.id ?? null) === (user?.id ?? null),
+        keywords: user ? personKeywords(user.name, { me: user.id === ME.id, team }) : ["unassigned"],
+        // Linear's keywordsExactMatch on your own row: "me" finds you.
+        exact: user?.id === ME.id ? ["me"] : undefined,
+        run: choose(() => actions.assign(issue.key, user)),
+      })),
+    }),
+    // The submenu is the L picker's checkbox rows on the issue's live labels; these children are the root search's "Add label › x".
+    labels: property("Labels", "label", "labels", {
+      placeholder: issue.labels.length ? "Change or add labels…" : "Add labels…",
+      hoistFrom: 3,
+      nameAsParent: (label) => (label.selected ? "Change label" : "Add label"),
+      rows: (query) => createElement(IssueLabelRows, { issue: issue.key, query }),
+      children: knownLabels(boardIssues, get().options.labels).map((label) => {
+        const on = issue.labels.includes(label);
+        return {
+          name: label,
+          image: createElement(Icon, { name: "label", size: 16 }),
+          selected: on,
+          run: choose(() =>
+            actions.patch(issue.key, {
+              labels: on ? issue.labels.filter((l) => l !== label) : [...issue.labels, label],
+            }),
+          ),
+        };
+      }),
+    }),
+  };
+}
 export function issueMenuEntries(
   issue: Issue,
   {
@@ -83,85 +173,7 @@ export function issueMenuEntries(
   };
   // A right-click on a card or list row (Linear's contextual menu) lists each property's choices in a submenu (BJ-26);
   // the shortcut still opens the full picker.
-  const board = boardOf(issue.key),
-    boardIssues = [...get().issues.values()].filter((i) => i.board === issue.board);
-  const choose = (write: () => void) => () => {
-    write();
-    close();
-  };
-  // Each submenu matches its picker (S, P, A, L, Shift+D): Linear's placeholder, number keys, and the same rows.
-  const property = (name: string, icon: IconName, id: string, entry: Omit<ActionEntry, "name" | "icon">): ActionEntry => ({
-    name,
-    icon,
-    shortcut: hotkeyOf(id),
-    ...entry,
-  });
-  const numbered = (from: number) => (entry: ActionEntry, i: number) => ({
-    ...entry,
-    number: i + from <= 9 ? i + from : undefined,
-  });
-  const inline = {
-    status: property("Status", "status", "status", {
-      placeholder: "Change status…",
-      children: statuses(board)
-        .map((s) => ({
-          name: s.name,
-          image: createElement(StatusIcon, { status: s }),
-          selected: s.id === issue.status,
-          run: choose(() => actions.status(issue.key, s.id)),
-        }))
-        .map(numbered(1)),
-    }),
-    priority: property("Priority", "priority", "priority", {
-      placeholder: issue.priority ? "Change priority to…" : "Set priority to…",
-      nameAsParent: issue.priority ? "Change priority to" : "Set priority to",
-      children: [
-        ...(clearPriorityRow(get().writable) ? [""] : []),
-        ...priorityChoices(get().options, boardIssues, get().writable),
-      ].map((p, i, rows) => ({
-        name: p || "No priority",
-        image: createElement(PriorityIcon, { name: p || undefined }),
-        selected: p === (issue.priority ?? ""),
-        // Linear numbers No priority 0, so the named rows keep 1… when Jira can't clear the priority.
-        number: rows[0] ? i + 1 : i,
-        run: choose(() => actions.patch(issue.key, { priority: p || undefined })),
-      })),
-    }),
-    // The submenu is the A picker's rows (AssigneeRows) on the issue's live assignee; these children, from the same groups,
-    // are the root search's "Assignee › x".
-    assignee: property("Assignee", "user", "assign", {
-      placeholder: "Assign to…",
-      hoistFrom: 3,
-      rows: (query) => createElement(IssueAssigneeRows, { issue: issue.key, query }),
-      children: assigneeChoices(issue).map(({ user, team }) => ({
-        name: user?.name ?? "No assignee",
-        image: createElement(Avatar, { user, size: 16 }),
-        selected: (issue.assignee?.id ?? null) === (user?.id ?? null),
-        keywords: user ? personKeywords(user.name, { me: user.id === ME.id, team }) : undefined,
-        run: choose(() => actions.assign(issue.key, user)),
-      })),
-    }),
-    // The submenu is the L picker's checkbox rows on the issue's live labels; these children are the root search's "Add label › x".
-    labels: property("Labels", "label", "labels", {
-      placeholder: issue.labels.length ? "Change or add labels…" : "Add labels…",
-      hoistFrom: 3,
-      nameAsParent: (label) => (label.selected ? "Change label" : "Add label"),
-      rows: (query) => createElement(IssueLabelRows, { issue: issue.key, query }),
-      children: knownLabels(boardIssues, get().options.labels).map((label) => {
-        const on = issue.labels.includes(label);
-        return {
-          name: label,
-          image: createElement(Icon, { name: "label", size: 16 }),
-          selected: on,
-          run: choose(() =>
-            actions.patch(issue.key, {
-              labels: on ? issue.labels.filter((l) => l !== label) : [...issue.labels, label],
-            }),
-          ),
-        };
-      }),
-    }),
-  };
+  const inline = issuePropertyEntries(issue, { close, menu: "contextual" });
   const picker = (name: string, icon: IconName, id: string): ActionEntry => ({
     name,
     icon,

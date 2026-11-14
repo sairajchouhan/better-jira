@@ -2,11 +2,11 @@ import { type Board, type Issue } from "@/shared/issue-model";
 import { describe, expect, test } from "bun:test";
 import { defaultPreferences, type Preferences } from "@/shared/view-model";
 import type { ActionEntry } from "@/client/components/action-menu";
-import { get, set } from "@/client/state/store";
+import { get, ME, set } from "@/client/state/store";
 import { navigate, ui } from "@/client/features/navigation/app-navigation";
 import { handle } from "@/client/features/navigation/commands";
 
-import { issueBreadcrumbEntries, issueMenuEntries } from "./issue-menu";
+import { issueBreadcrumbEntries, issueMenuEntries, issuePropertyEntries } from "./issue-menu";
 
 const issue: Issue = {
   key: "TEST-2",
@@ -209,4 +209,25 @@ test("R3-issue-fields-D1: a writable site's Priority submenu has no No priority 
   } finally {
     set({ writable, options });
   }
+});
+
+test("A3: the property values ⌘K hoists carry Linear's command-menu breadcrumbs and search words", () => {
+  const command = issuePropertyEntries(issue, { close: () => {}, menu: "command" }),
+    contextual = issuePropertyEntries(issue, { close: () => {}, menu: "contextual" });
+  // Linear's RCn and Xun: "Change status…" and "Assign to…" in ⌘K, "Status" and "Assignee" in a right-click menu.
+  expect([command.status.name, command.assignee.name]).toEqual(["Change status…", "Assign to…"]);
+  expect([contextual.status.name, contextual.assignee.name]).toEqual(["Status", "Assignee"]);
+  // Odn and eK name their values' breadcrumb themselves; assignee and labels hoist from 3 characters, status and priority from 2.
+  expect(command.priority.nameAsParent).toBe("Set priority to");
+  expect([command.status.hoistFrom, command.priority.hoistFrom, command.assignee.hoistFrom, command.labels.hoistFrom]).toEqual([
+    undefined,
+    undefined,
+    3,
+    3,
+  ]);
+  // "unassigned" finds No assignee; "me" is an exact keyword on your own row only.
+  const users = command.assignee.children!;
+  expect(users.find((u) => u.name === "No assignee")?.keywords).toEqual(["unassigned"]);
+  expect(users.find((u) => u.name === ME.name)?.exact).toEqual(["me"]);
+  expect(users.filter((u) => u.exact).length).toBe(1);
 });

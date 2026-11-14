@@ -4,8 +4,11 @@ import {
   breadcrumbKeywords,
   breadcrumbScore,
   fuzzyScore,
+  hoistValues,
+  HOISTED_PER_PARENT,
   menuFilter,
   MIN_APPLICABILITY,
+  workflowOrder,
 } from "./fuzzy-score";
 import { COMMAND_KEYWORDS, VIEW_COMMAND_KEYWORDS } from "@/client/features/navigation/command-keywords";
 
@@ -99,4 +102,24 @@ test("B2: Linear's score corrections: exact names and exact keywords score 1, a 
   expect(actionScore({ name: "Blocking issue", parents: ["Remove"] }, "ckin")).toBeCloseTo(MIN_APPLICABILITY + 0.1);
   expect(actionScore({ name: "Blocking issue", parents: ["Remove"] }, "emov")).toBeCloseTo(MIN_APPLICABILITY + 0.05);
   expect(actionScore({ name: "Blocking issue", parents: ["Remove"] }, "zq")).toBeLessThan(MIN_APPLICABILITY);
+});
+
+test("A3: a status a query starts scores 0.84 less 0.001 per workflow step, so \"in\" lists statuses in workflow order", () => {
+  const status = (name: string, index: number) => ({ name, parents: ["Change status"], override: workflowOrder(name, index) });
+  expect(actionScore(status("In Progress", 2), "in prog")).toBeCloseTo(0.838);
+  expect(actionScore(status("In Review", 3), "in")).toBeLessThan(actionScore(status("In Progress", 2), "in"));
+  // A full name is not a prefix match: it keeps its own score.
+  expect(actionScore(status("Done", 4), "done")).toBeCloseTo(0.85);
+});
+
+test("A3: values hoist into ⌘K from the parent's minimum input, at most 10 per parent in the parent's order", () => {
+  const labels = Array.from({ length: 14 }, (_, i) => ({ name: `label-${String(i).padStart(2, "0")}`, parents: ["Add label"] }));
+  expect(hoistValues(labels, "la", 3)).toEqual([]);
+  const listed = hoistValues(labels, "lab", 3);
+  expect(listed).toHaveLength(HOISTED_PER_PARENT);
+  expect(listed.map(([, v]) => v.name)).toEqual(labels.slice(0, 10).map((l) => l.name));
+  // Status and priority hoist from 2 characters, counted untrimmed as Linear does; a miss never counts towards the 10.
+  const statuses = [{ name: "Todo" }, { name: "In Progress" }, { name: "Done" }].map((s) => ({ ...s, parents: ["Change status"] }));
+  expect(hoistValues(statuses, "i", 2)).toEqual([]);
+  expect(hoistValues(statuses, "in", 2).map(([, v]) => v.name)).toEqual(["In Progress"]);
 });

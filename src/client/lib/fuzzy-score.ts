@@ -307,3 +307,28 @@ export function actionScore(action: ScoredAction, search: string): number {
   if (action.override) score = action.override(score, search.trim());
   return Number(score.toFixed(6));
 }
+/** Linear's status `scoreOverride` (`PCn.scoreForOrdering`): a hoisted status whose name starts with a shorter query scores 0.84,
+ *  less 0.001 per step down the workflow, so "in" lists the statuses in workflow order. */
+export const workflowOrder =
+  (name: string, index: number) =>
+  (score: number, search: string): number => {
+    const n = name.toLowerCase(),
+      q = search.toLowerCase();
+    return q && q.length < n.length && n.startsWith(q) ? 0.84 - index * 0.001 : score;
+  };
+/** Linear's `limitSubActionsInRootMenu` default (`abt(10)`): at most this many of one parent's values in the root search. */
+export const HOISTED_PER_PARENT = 10;
+/**
+ * Linear's root-menu hoisting (`shouldHoistSubActions`, then the cap): once the untrimmed query has `from` characters, a parent's
+ * values that score at least 0.24, the first `HOISTED_PER_PARENT` of them in the parent's own order.
+ */
+export function hoistValues<T extends ScoredAction>(values: readonly T[], search: string, from: number): [number, T][] {
+  if (!search.length || search.length < from) return [];
+  const hits: [number, T][] = [];
+  for (const value of values) {
+    const score = actionScore(value, search);
+    if (score >= MIN_APPLICABILITY) hits.push([score, value]);
+    if (hits.length === HOISTED_PER_PARENT) break;
+  }
+  return hits;
+}

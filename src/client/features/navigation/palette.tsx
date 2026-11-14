@@ -12,7 +12,7 @@ import { canMergeOverlay } from "@/shared/saved-view-model";
 import { createToolbarView } from "@/client/features/views/view-toolbar-actions";
 import { useMemo, useState, type ReactNode } from "react";
 import { navigationChoices, type NavigationChoice } from "./quick-navigation";
-import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
+import { ActionLabel, ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { Icon, StatusIcon, TypeDot, type IconName } from "@/client/components/icons";
 import { get, set, timed, useStore, statusOf, ME } from "@/client/state/store";
 import { currentKey } from "@/client/state/jira-sync";
@@ -24,7 +24,8 @@ import { MenuSurface } from "@/client/components/menu-surface";
 import { Menu } from "@/client/components/menu";
 import { COMMAND_MENU_WIDTH, CommandMenuTitle } from "@/client/components/command-menu";
 import { Avatar } from "@/client/components/avatar";
-import { actionScore, MIN_APPLICABILITY, type ScoredAction } from "@/client/lib/fuzzy-score";
+import { actionScore, hoistValues, MIN_APPLICABILITY, workflowOrder, type ScoredAction } from "@/client/lib/fuzzy-score";
+import { issuePropertyEntries } from "@/client/features/issue/issue-menu";
 import { COMMAND_KEYWORDS, VIEW_COMMAND_KEYWORDS } from "./command-keywords";
 import {
   matchDocuments,
@@ -56,19 +57,22 @@ import {
 
 /** `keys`: the hotkey that does the same thing, drawn after the name. `id` keys the row when names repeat (its value keeps the name).
  *  It is scored as Linear scores an action (`actionScore`): by its name, `keywords` and, for a hoisted value, its `parents`. */
-type Cmd = ScoredAction & { id?: string; keys?: Keys; icon?: ReactNode; disabled?: boolean; run: () => void };
+type Cmd = ScoredAction & { id?: string; keys?: Keys; icon?: ReactNode; disabled?: boolean; checked?: boolean; run: () => void };
 
-/** One command row (Linear's command-menu Item, Fgn): icon, name, shortcut; ⌘K's commands and every nested page's choices. */
+/** One command row (Linear's command-menu Item, Fgn): icon, name, shortcut; ⌘K's commands and every nested page's choices. A value
+ *  hoisted from a parent leads with its breadcrumb ("Change status › In Progress", Linear's M4e) and checks the current value. */
 function CommandRow({ cmd: c }: { cmd: Cmd }) {
+  const label = [...(c.parents ?? []), c.name].join(" › ");
   return (
     <Menu.Item
-      value={`cmd:${c.id ? `${c.id} ` : ""}${c.name}`}
+      value={`cmd:${c.id ? `${c.id} ` : ""}${label}`}
       disabled={c.disabled}
       onSelect={c.run}
       icon={c.icon}
+      checked={c.checked}
       shortcut={c.keys?.length ? c.keys : undefined}
     >
-      {c.name}
+      <ActionLabel name={label} />
     </Menu.Item>
   );
 }
@@ -147,6 +151,40 @@ const ranked = (cmds: Cmd[], q: string): (readonly [number, Cmd])[] =>
         .filter(([score]) => score >= MIN_APPLICABILITY)
         .sort(([a], [b]) => b - a)
     : cmds.map((c) => [0, c] as const);
+
+/** The targeted issue's commands whose values ⌘K lists once enough is typed (Linear's subActionsHoisting on RCn, Odn, Xun and
+ *  eK), by registry id: status and priority from 2 characters, assignee and labels from 3 (each entry's hoistFrom). */
+const HOISTED = [
+  ["status", "status"],
+  ["priority", "priority"],
+  ["assign", "assignee"],
+  ["labels", "labels"],
+] as const;
+/** The values of each applicable command above, scored with their breadcrumb, at most 10 per command (`hoistValues`). Picking one
+ *  writes through the issue's actions, which undo, and closes the palette. */
+function hoistedValues(issue: Issue, q: string, applies: (id: string) => boolean): (readonly [number, Cmd])[] {
+  const entries = issuePropertyEntries(issue, { close, menu: "command" });
+  return HOISTED.flatMap(([id, key]) => {
+    const parent = entries[key];
+    if (!applies(id) || !parent.children) return [];
+    const { nameAsParent } = parent;
+    const values = parent.children.map(
+      (child, index): Cmd => ({
+        id: `${id}:${child.name}`,
+        name: child.name,
+        // Linear's getParentActionLabel: nameAsParent, else the parent's name without its "…".
+        parents: [typeof nameAsParent === "function" ? nameAsParent(child) : (nameAsParent ?? parent.name.replaceAll("…", ""))],
+        keywords: child.keywords,
+        exact: child.exact,
+        override: id === "status" ? workflowOrder(child.name, index) : undefined,
+        icon: child.image,
+        checked: child.selected,
+        run: () => child.run?.(),
+      }),
+    );
+    return hoistValues(values, q, parent.hoistFrom ?? 2);
+  });
+}
 
 /** Linear's nested "Open …" command pages (`nameAsParent`, `searchShortcut.keyword` in startup-root.CnUSfl4j.js): their
  *  chord opens the palette on the page, with the parent's name as the input's chip; ⌫ in the empty input leaves it. */
@@ -578,7 +616,15 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
     { name: "Create new view…", keys: hotkeyOf("view-create"), icon: commandIcon("view-create"), run: viewAction(createToolbarView) },
   ], q) }] : [
     // The targeted issue's group is headless: Linear promotes its name to the menu's title (`promoteToTitle`).
-    { key: "target", heading: undefined, priority: TARGET_PRIORITY, rows: ranked(issueCmds, q) },
+    // Hoisted values join the targeted issue's group (Linear's groupWhenLifted), ranked with its commands.
+    {
+      key: "target",
+      heading: undefined,
+      priority: TARGET_PRIORITY,
+      rows: [...ranked(issueCmds, q), ...(scoped ? hoistedValues(scoped, q, (id) => applyingIds.has(id)) : [])].sort(
+        ([a], [b]) => b - a,
+      ),
+    },
     { key: "view", heading: `View · ${activeView?.name ?? ""}`, priority: VIEW_PRIORITY, rows: ranked(viewCommands, q) },
     ...[...byGroup].map(([group, cmds]) => ({ key: group, heading: group, priority: groupPriority(group, at), rows: ranked(cmds, q) })),
   ];

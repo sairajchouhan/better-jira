@@ -45,6 +45,8 @@ export type ActionEntry = {
   disabledReason?: string;
   /** Other words a filter finds the entry by (a language's aliases). */
   keywords?: string[];
+  /** Linear's keywordsExactMatch: a query equal to one of these is an exact hit ("me" on your own assignee row). */
+  exact?: string[];
 };
 type Container = RefObject<HTMLDivElement | null>;
 type Ranked = { entry: ActionEntry; score: number };
@@ -54,7 +56,9 @@ const HOIST_FROM = 2,
   MIN_SCORE = 0.24,
   PARENT_HIT = MIN_SCORE + 0.05;
 const score = (entry: ActionEntry, query: string) =>
-  menuFilter(entry.name, query, entry.keywords && [entry.name, ...entry.keywords]);
+  entry.exact?.includes(query.trim().toLowerCase())
+    ? 1
+    : menuFilter(entry.name, query, entry.keywords && [entry.name, ...entry.keywords]);
 /** Children listed under `parent` once the query is long enough, named by their breadcrumb and scored by their own name; a weak
  *  match that the breadcrumb contains ("remove" → "Remove › Blocking issue …") scores PARENT_HIT (Linear's secondaryString). */
 function hoisted(parent: ActionEntry, query: string, prefix = ""): Ranked[] {
@@ -251,7 +255,7 @@ function Row({
     return (
       <Menu.Submenu
         value={entry.name}
-        label={<Label name={entry.name} />}
+        label={<ActionLabel name={entry.name} />}
         icon={icon}
         shortcut={entry.shortcut}
         hint={hint}
@@ -280,7 +284,7 @@ function Row({
         onToggle={() => entry.run?.()}
         data-number={entry.number}
       >
-        <Label name={entry.name} />
+        <ActionLabel name={entry.name} />
       </CheckRow>
     );
   return (
@@ -298,7 +302,7 @@ function Row({
         entry.run?.();
       }}
     >
-      <Label name={entry.name} />
+      <ActionLabel name={entry.name} />
     </Menu.Item>
   );
 }
@@ -363,7 +367,7 @@ export function ContextMenu({
   );
 }
 /** Listed descendants read "Parent › Child": the path dimmed with a chevron between parts, as in Linear (M4e's labelMuted breadcrumbs). */
-function Label({ name }: { name: string }) {
+export function ActionLabel({ name }: { name: string }) {
   const path = name.split(" › "),
     last = path.pop();
   return (
