@@ -708,7 +708,7 @@ test("#2: a description with an issue chip saves whichever build made its base; 
 
 test("R3-palette-shortcuts-D7: a write Jira has answers within the settle wait, naming the issue its slow copy read leaves unsettled", async () => {
   answer = () => ({});
-  let read!: (copy: any) => void;
+  let read: ((copy: any) => void) | undefined;
   refreshing = () => new Promise((resolve) => (read = resolve));
   jest.useFakeTimers();
   try {
@@ -726,7 +726,7 @@ test("R3-palette-shortcuts-D7: a write Jira has answers within the settle wait, 
     // The read the tab sends again (no ops) waits for Jira's copy.
     const reread = applyOps("K-7", [], 1).then((w) => (written = w));
     jest.advanceTimersByTime(SETTLE_WAIT * 2);
-    read({ issue: { key: "K-7" }, full: null });
+    read!({ issue: { key: "K-7" }, full: null });
     await reread;
     expect(written!.issue).toEqual({ key: "K-7" });
   } finally {
