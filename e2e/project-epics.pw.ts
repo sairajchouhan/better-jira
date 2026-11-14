@@ -186,3 +186,97 @@ test("\"No project\" filter: the composer starts with no project", async ({ open
   await p.key("c");
   await p.waitFor(`!!document.querySelector('${COMPOSER} [aria-label="Project: No project"]')`);
 });
+
+/**
+ * BJ-247: an epic parent is the issue's Project, never its Parent (shared/epics.ts parentOf), as Linear keeps `issue.parent` and
+ * `issue.project` apart. Fixture with `epics` and `subtask`: TEST-2 and TEST-3 sit in epic TEST-7; TEST-6 is a Subtask of TEST-5.
+ */
+test("an epic parent shows only as Project: no parent line, sub-issues, Parent filter, grouping, nesting or ⌘⇧P", async ({ open }) => {
+  await fixture.reset({ writable: true, epics: true, subtask: true });
+  const p = await open();
+  await p.waitFor(`${cards}===8`);
+  const RELATIONS = '[role="dialog"][aria-label="Issue relations"]';
+  const items = (dialog: string) =>
+    p.eval<string[]>(`[...document.querySelectorAll('${dialog} [cmdk-item]')].map(n=>n.getAttribute('data-value'))`);
+
+  await test.step("Show sub-issues off hides the Subtask only; the epic's issues stay", async () => {
+    await prefs(p, { subIssues: false });
+    await p.waitFor(`${cards}===7`);
+    expect(await p.eval(`!!document.querySelector('[data-key="TEST-2"]')&&!!document.querySelector('[data-key="TEST-3"]')`)).toBe(true);
+    expect(await p.eval(`!!document.querySelector('[data-key="TEST-6"]')`)).toBe(false);
+    await prefs(p, {});
+    await p.waitFor(`${cards}===8`);
+  });
+
+  await test.step("grouping by parent: the epic's issues are in No parent, and only TEST-5 names a group", async () => {
+    await prefs(p, { columns: "parent", properties: ["id"] });
+    await p.waitFor(`!!document.querySelector('[data-board-column="No parent"]')`);
+    const columns = await p.eval<string[]>(`[...document.querySelectorAll('[data-board-column]')].map(n=>n.dataset.boardColumn)`);
+    expect(columns.some((c) => c.includes("TEST-7"))).toBe(false);
+    expect(columns.some((c) => c.includes("TEST-5"))).toBe(true);
+    expect(
+      await p.eval<string[]>(`[...document.querySelectorAll('[data-board-column="No parent"] [data-key]')].map(n=>n.dataset.key)`),
+    ).toEqual(expect.arrayContaining(["TEST-2", "TEST-3", "TEST-7"]));
+    await prefs(p, {});
+    await p.waitFor(`${cards}===8`);
+  });
+
+  await test.step("Filter › Parent issue lists TEST-5, never the epic", async () => {
+    await p.click('[aria-label="Add filter"]');
+    await p.hover("text=Parent issue");
+    await p.waitFor(`!!document.querySelector('[aria-label="Filter Parent issue"] [cmdk-item]')`);
+    const rows = await p.eval<string[]>(
+      `[...document.querySelectorAll('[aria-label="Filter Parent issue"] [cmdk-item]')].map(n=>n.dataset.value)`,
+    );
+    expect(rows.join()).toContain("TEST-5");
+    expect(rows.join()).not.toContain("TEST-7");
+    await p.key("Escape");
+    await p.key("Escape");
+  });
+
+  await test.step("an issue in the epic: Project names it, no Sub-issue of line, Remove has no parent, ⌘⇧P offers no epic", async () => {
+    await p.goto("?issue=TEST-2&view=page");
+    await p.waitFor(`document.getElementById('prop-project')?.textContent.includes("Fixture epic")`);
+    expect(await p.eval(`!!document.querySelector('[data-parent-link]')`)).toBe(false);
+    await p.click("#issue-options");
+    await p.type("remove");
+    await sleep(150); // a Remove › Parent issue row would show by now
+    expect((await items('[role="dialog"][aria-label="Issue options"]')).join()).not.toContain("Parent issue TEST-7");
+    await p.key("Escape");
+    await p.eval("document.activeElement?.blur()");
+    await p.key("p", "meta", "shift");
+    await p.waitFor(`!!document.querySelector('${RELATIONS}')`);
+    await sleep(150); // no parent shows up late
+    // Jira takes only an epic above a Task, and an epic is a project: no parent issue is offered.
+    expect(await items(RELATIONS)).toEqual([]);
+    await p.key("Escape");
+    // Open parent issue (⌘⇧↑) has no parent issue to open.
+    await p.eval("document.activeElement?.blur()");
+    await p.key("ArrowUp", "meta", "shift");
+    await sleep(150);
+    expect(await p.eval(`new URLSearchParams(location.search).get('issue')`)).toBe("TEST-2");
+  });
+
+  await test.step("the epic's detail lists no sub-issues and offers none; ⌘⇧P opens nothing", async () => {
+    await p.goto("?issue=TEST-7&view=page");
+    await p.waitFor(`!!document.getElementById('comment')`);
+    expect(await p.eval(`document.querySelectorAll('[data-sub-issue]').length`)).toBe(0);
+    expect(await p.eval(`!!document.querySelector('[data-create-child]')`)).toBe(false);
+    await p.eval("document.activeElement?.blur()");
+    await p.key("p", "meta", "shift");
+    await sleep(150); // no relations picker opens
+    expect(await p.eval(`!!document.querySelector('${RELATIONS}')`)).toBe(false);
+  });
+
+  await test.step("a Subtask's parent issue still shows as Sub-issue of, and the parent lists it", async () => {
+    await p.goto("?issue=TEST-6&view=page");
+    await p.waitFor(`document.querySelector('[data-parent-link]')?.textContent.includes("TEST-5")`);
+    await p.goto("?issue=TEST-5&view=page");
+    await p.waitFor(`!!document.querySelector('[data-sub-issue="TEST-6"]')`);
+  });
+
+  await test.step("no Parent surface wrote a parent", async () => {
+    const { writes } = await fixture.log();
+    expect(writes.some((w: any) => w.ops.some((o: any) => o.op === "fields" && "parent" in o.fields))).toBe(false);
+  });
+});
