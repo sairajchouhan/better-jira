@@ -273,6 +273,96 @@
   }
 }
 
+/* The boot shell (index.html #loading), Linear's splash from its index.html: a fixed layer in the sidebar colour holding
+   the framed main panel and a 32px grey logo that fades in (fadeIn .4s ease-out 1s both) at the panel's centre, with
+   "Loading…" fading in under it after about 8.8s (its body.loadingText class at 8s, then a .8s transition delayed .8s).
+   The panel takes the real <main>'s box (App.tsx Shell: 244px sidebar, my-2 mr-2 above the 28px status bar, rounded-xl,
+   0.5px --frame border, --panel, --frame-shadow), so the app replaces it without a jump. boot-shell.ts adds body.loaded
+   (opacity 0 over .1s) and removes it. Colours of the logo are Linear's --content-color. */
+:root {
+  --boot-sidebar: 244px;
+  --boot-logo: #b0b5c0;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --boot-logo: #6b6f76;
+  }
+}
+/* A hidden sidebar (the head script) and below 768px (the sidebar's max-md:hidden) leave the panel at the left edge. */
+html.sidebar-hidden {
+  --boot-sidebar: 0px;
+}
+@media (max-width: 767px) {
+  :root {
+    --boot-sidebar: 0px;
+  }
+}
+@keyframes boot-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+#loading {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  overflow: hidden;
+  pointer-events: none;
+  background-color: var(--app);
+  color: var(--boot-logo);
+  font-family: var(--font-regular);
+  font-weight: 500;
+  -webkit-font-smoothing: antialiased;
+  transition: opacity 0.1s;
+}
+body.loaded #loading {
+  opacity: 0;
+}
+#loading-panel {
+  flex-grow: 1;
+  margin: 0.5rem 0.5rem calc(0.5rem + 1.75rem) var(--boot-sidebar);
+  border: 0.5px solid var(--frame);
+  border-radius: var(--radius-xl);
+  background-color: var(--panel);
+  box-shadow: var(--frame-shadow);
+}
+#loading-content {
+  position: absolute;
+  top: 50%;
+  left: calc(50% - 220px);
+  width: 440px;
+  height: 64px;
+  margin-top: -32px;
+  margin-left: calc(var(--boot-sidebar) / 2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: boot-fade-in 0.4s ease-out 1s both;
+}
+#loading-mark {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+}
+#loading-logo {
+  fill: currentColor;
+  transform: translateZ(0);
+}
+#loading-text {
+  position: relative;
+  top: 8px;
+  margin-bottom: -8px;
+  max-width: 450px;
+  font-size: 13px;
+  text-align: center;
+  animation: boot-fade-in 0.8s ease-out 8.8s both;
+}
+
 @layer base {
   /* No macOS rubber-band bounce at the top/bottom; the horizontal axis stays default so a two-finger swipe still goes back/forward. */
   html,

@@ -39,6 +39,13 @@ export function EmptyState({
   );
 }
 
+/** Keeps the boot shell (index.html #loading) over whatever it holds until that has its first data: boot-shell.ts hands
+ *  over only once no `data-app-loading` element is left. Linear's boot fallback positioner (`mr`, LoadApplicationLayout),
+ *  which wraps its fallbacks the same way. After boot the shell is gone and the children show as they are. */
+export function AppLoading({ className = "", ...props }: ComponentProps<"div">) {
+  return <div data-app-loading aria-busy className={`flex min-h-0 flex-1 flex-col ${className}`} {...props} />;
+}
+
 /** Waiting on data: one muted line, announced politely. */
 export function LoadingState({ children = "Loading…", ...props }: ComponentProps<"div">) {
   return (

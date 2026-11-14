@@ -9,10 +9,13 @@ import { StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { App } from "./App";
 import { ignoreBenignErrors } from "./lib/benign-errors";
+import { handOverBootShell } from "./boot-shell";
 
 ignoreBenignErrors(window);
 
 const elem = document.getElementById("root")!;
+// Watching starts before the first render, so the shell goes as soon as the app paints its first screen.
+handOverBootShell(elem);
 const app = (
   <StrictMode>
     <App />

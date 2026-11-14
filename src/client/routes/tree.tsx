@@ -23,7 +23,7 @@ import type { ListPlace, Place } from "@/client/features/navigation/navigation";
 import { isPersonTab, type PersonTab } from "@/shared/people";
 import { viewPath, type SavedView } from "@/shared/saved-view-model";
 import type { Scope } from "@/shared/view-model";
-import { EmptyState, LoadingState } from "@/client/components/empty-state";
+import { AppLoading, EmptyState, LoadingState } from "@/client/components/empty-state";
 import { Button, ButtonLink } from "@/client/components/button";
 import { useStore } from "@/client/state/store";
 
@@ -290,7 +290,12 @@ export function createAppRouter(history: RouterHistory, context: RouteContext) {
     // Back and Forward land where each entry was scrolled; a new navigation opens the issue at its top.
     scrollRestoration: typeof document !== "undefined",
     scrollToTopSelectors: ['[data-scroll-restoration-id="issue-body"]', '[data-scroll-restoration-id="document-body"]'],
-    defaultPendingComponent: () => <LoadingState>Loading…</LoadingState>,
+    // Linear wraps its route fallbacks in the boot fallback positioner, so a route still loading at boot keeps the shell.
+    defaultPendingComponent: () => (
+      <AppLoading>
+        <LoadingState />
+      </AppLoading>
+    ),
   });
 }
 export type AppRouter = ReturnType<typeof createAppRouter>;

@@ -7,8 +7,10 @@ import { parsePreferences, type Display, type Preferences } from "@/shared/view-
 import { AUTO_ASSIGN_DEFAULTS, parseAutoAssign, type AutoAssignPreferences } from "@/shared/auto-assign";
 import type { View } from "./store";
 
+/** Whether the sidebar is hidden ("hidden" or "shown"), unscoped: index.html's head script reads it before first paint. */
+export const SIDEBAR_STATE_KEY = "better-jira:sidebar";
 const VIEWS = "better-jira:views:v1",
-  SIDEBAR = "better-jira:sidebar",
+  SIDEBAR = SIDEBAR_STATE_KEY,
   FAVORITES = "better-jira:favorites:v1",
   DEFAULTS = "better-jira:defaults:v1",
   SAVED_VIEWS = "better-jira:saved-views:v1",

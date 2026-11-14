@@ -16,7 +16,7 @@ import {
 } from "@/client/features/issue/personal-controls";
 import { Tooltips } from "@/client/components/tooltip";
 import { ToastViewport } from "@/client/components/toast";
-import { EmptyState, LoadingState } from "@/client/components/empty-state";
+import { AppLoading, EmptyState } from "@/client/components/empty-state";
 import { Button } from "@/client/components/button";
 import { ShortcutHelp, useLinearHotkeys } from "@/client/features/navigation/shortcuts";
 import { useRecordVisits } from "@/client/features/navigation/recents";
@@ -43,7 +43,8 @@ const Devtools =
     ? () => null
     : lazy(() => import("@tanstack/react-router-devtools").then((m) => ({ default: m.TanStackRouterDevtools })));
 
-/** Waits for the boards, then for the router to show the address, so the first paint is the address's screen. */
+/** Waits for the boards, then for the router to show the address, so the first paint is the address's screen. Until then
+ *  the boot shell (index.html #loading) stays over the page; a load error hands over to the error. */
 export function App() {
   const ready = useStore((s) => s.boards.length > 0);
   const loadError = useStore((s) => s.loadError);
@@ -67,7 +68,7 @@ export function App() {
         <p>Retrying automatically…</p>
       </EmptyState>
     ) : (
-      <LoadingState className="h-screen">Loading your Jira mirror…</LoadingState>
+      <AppLoading className="h-screen" />
     );
   return <RouterProvider router={router} InnerWrap={Shell} />;
 }

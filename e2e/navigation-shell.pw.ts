@@ -148,3 +148,60 @@ test("navigation shell: sidebar, My issues URL, palettes and shortcut search", a
     expect(await p.eval(`getComputedStyle(document.querySelector('button[aria-label="Menu"]')).display`)).toBe("none");
   });
 });
+
+test("boot shell: Linear's splash paints before the app, lines up with its panel and hands over without a jump", async ({ open }) => {
+  const app = await open();
+  const page = app.page;
+  const box = (selector: string) =>
+    `(()=>{const r=document.querySelector(${JSON.stringify(selector)})?.getBoundingClientRect();return r?[r.x,r.y,r.width,r.height].map(Math.round):null})()`;
+  // Holds the boards request so the shell can be measured; each reload takes a fresh gate.
+  let release = () => {};
+  let gate = Promise.resolve();
+  const hold = () => (gate = new Promise<void>((r) => (release = r)));
+  await page.route("**/api/boards", async (route) => {
+    await gate;
+    await route.continue();
+  });
+  const bootAndMeasure = async () => {
+    hold();
+    await page.reload();
+    await app.waitFor(`!!document.getElementById('loading-panel')`);
+    expect(await app.eval(`document.getElementById('root').textContent`)).toBe("");
+    const panel = await app.eval<number[]>(box("#loading-panel"));
+    release();
+    await app.waitFor(`!document.getElementById('loading')&&document.body.classList.contains('loaded')&&!!document.querySelector('[data-key]')`, 15000);
+    expect(await app.eval(box("main"))).toEqual(panel);
+    return panel;
+  };
+
+  await test.step("the shell: sidebar colour, the panel right of the 244px column, our logo fading in after 1s", async () => {
+    hold();
+    await page.reload();
+    await app.waitFor(`!!document.getElementById('loading-content')`);
+    expect(await app.eval(`getComputedStyle(document.getElementById('loading')).backgroundColor`)).toBe(
+      await app.eval(`getComputedStyle(document.body).backgroundColor`),
+    );
+    expect((await app.eval<number[]>(box("#loading-panel")))[0]).toBe(244);
+    expect(await app.eval(`getComputedStyle(document.getElementById('loading-panel')).borderRadius`)).toBe("12px");
+    expect(await app.eval(box("#loading-logo"))).toEqual(expect.arrayContaining([32, 32]));
+    // Linear's dark --content-color.
+    expect(await app.eval(`getComputedStyle(document.querySelector('#loading-logo path')).fill`)).toBe("rgb(107, 111, 118)");
+    expect(Number(await app.eval(`getComputedStyle(document.getElementById('loading-content')).opacity`))).toBeLessThan(0.5);
+    await app.waitFor(`getComputedStyle(document.getElementById('loading-content')).opacity==='1'`, 3000);
+    // "Loading…" under the logo stays invisible until ~8.8s.
+    expect(await app.eval(`getComputedStyle(document.getElementById('loading-text')).opacity`)).toBe("0");
+    release();
+    await app.waitFor(`!document.getElementById('loading')&&!!document.querySelector('[data-key]')`, 15000);
+  });
+
+  await test.step("the app's <main> takes the panel's exact box", async () => {
+    expect((await bootAndMeasure())[0]).toBe(244);
+  });
+
+  await test.step("a hidden sidebar is read before first paint: no column, and still no jump", async () => {
+    await app.eval(`localStorage.setItem('better-jira:sidebar','hidden')`);
+    expect((await bootAndMeasure())[0]).toBe(0);
+    await app.eval(`localStorage.setItem('better-jira:sidebar','shown')`);
+  });
+  await page.unroute("**/api/boards");
+});
