@@ -114,7 +114,7 @@ describe("Move (R3-board-D1, D2)", () => {
     navigate({ board: 1, selected: null, panel: false, document: null, inbox: false, mine: false });
   };
   const moves = (key: string) =>
-    find(issueMenuEntries(get().issues.get(key)!, { openDialog: () => {}, close: () => {}, presentation: "row" }), ["Move"])
+    find(issueMenuEntries(get().issues.get(key)!, { openDialog: () => {}, close: () => {}, presentation: "row" }), ["Move…"])
       .children!.map((e) => [e.name, e.disabledReason ?? ""]);
 
   test("Move right/left skip a hidden column, from the menu and from ⌥→", async () => {
@@ -125,7 +125,7 @@ describe("Move (R3-board-D1, D2)", () => {
       ["Move left", ""],
     ]);
     find(issueMenuEntries(get().issues.get("M-3")!, { openDialog: () => {}, close: () => {}, presentation: "row" }), [
-      "Move",
+      "Move…",
       "Move right",
     ]).run!();
     expect(get().issues.get("M-3")!.status).toBe("done");
@@ -135,6 +135,16 @@ describe("Move (R3-board-D1, D2)", () => {
     expect(get().issues.get("M-3")!.status).toBe("todo");
     // Nothing visible to the right of Done: no Move right, and ⌥→ does nothing.
     expect(moves("M-4").map(([name]) => name)).toEqual(["Move left"]);
+  });
+
+  test("R3 G13: the board row menu has one Move… in the Copy group after Make a copy…, no divider, as Linear's issue menu (aAr)", () => {
+    setup();
+    const entries = issueMenuEntries(get().issues.get("M-1")!, { openDialog: () => {}, close: () => {}, presentation: "row" });
+    const names = entries.map((e) => e.name);
+    expect(names.filter((n) => n.startsWith("Move"))).toEqual(["Move…"]);
+    expect(names.slice(names.indexOf("Copy"), names.indexOf("Copy") + 3)).toEqual(["Copy", "Make a copy…", "Move…"]);
+    expect(entries.find((e) => e.name === "Move…")).toMatchObject({ icon: "move", search: "hidden" });
+    expect(entries.find((e) => e.name === "Move…")!.divider).toBeUndefined();
   });
 
   test("Linear's names and order; up/down/top/bottom disabled with its reason when the group isn't ordered manually", () => {

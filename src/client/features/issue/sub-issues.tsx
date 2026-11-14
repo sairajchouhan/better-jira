@@ -30,7 +30,7 @@ import {
   LabelsMenu,
   DueMenu,
 } from "./property-menu";
-import { issueMenuEntries } from "./issue-menu";
+import { issueMenuEntries, moveMenu } from "./issue-menu";
 import { InlineEditor } from "@/client/features/editor/rich-editor-loader";
 import { useCommand } from "@/client/features/navigation/commands";
 import { get, useStore } from "@/client/state/store";
@@ -252,17 +252,12 @@ export function SubIssues({ issue }: { issue: Issue }) {
       },
     });
     // Linear's applicability: up moves exist below the top, down moves above the bottom.
-    return {
-      name: "Move…",
-      icon: "move",
-      search: "hidden",
-      children: [
-        ...(at > 0 ? [step("Move to top", "top", "arrow-up"), step("Move up", "up", "arrow-up")] : []),
-        ...(at < siblings.length - 1
-          ? [step("Move down", "down", "arrow-down"), step("Move to bottom", "bottom", "arrow-down")]
-          : []),
-      ],
-    };
+    return moveMenu([
+      ...(at > 0 ? [step("Move to top", "top", "arrow-up"), step("Move up", "up", "arrow-up")] : []),
+      ...(at < siblings.length - 1
+        ? [step("Move down", "down", "arrow-down"), step("Move to bottom", "bottom", "arrow-down")]
+        : []),
+    ]);
   };
   const change = (patch: Partial<SubIssueDisplay>) => {
     if (

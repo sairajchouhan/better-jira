@@ -7,6 +7,7 @@ import { ui } from "@/client/features/navigation/app-navigation";
 import { toggleFavorite } from "@/client/features/navigation/favorites";
 import { canHaveChildren, needsParent } from "@/shared/issue-properties";
 import { createIssueDocument } from "./issue-resources";
+import { withMoveEntry } from "./sub-issue-model";
 import { MOVES, moveAvailability, runShortcut, hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { copyIssue, copyKinds, copyIcons, copyShortcuts } from "./issue-copy";
 import { reminderSubmenu } from "@/client/features/reminders/reminders";
@@ -391,18 +392,15 @@ export function issueMenuEntries(
             children: properties,
           },
           ...actionsAfter,
-          ...(presentation === "row" && moves.length
-            ? [
-                {
-                  name: "Move",
-                  icon: "chevron" as const,
-                  divider: true,
-                  children: moves,
-                },
-              ]
-            : []),
           remove,
         ]
       : [due, ...properties, ...actionsAfter, remove];
-  return entries;
+  return presentation === "row" && moves.length ? withMoveEntry(entries, moveMenu(moves)) : entries;
 }
+/** Linear's Move… (`Lvr`): found by its sub-actions, not its own name; where it sits is `withMoveEntry`'s. */
+export const moveMenu = (children: ActionEntry[]): ActionEntry => ({
+  name: "Move…",
+  icon: "move",
+  search: "hidden",
+  children,
+});
