@@ -37,6 +37,9 @@ export function startPoll() {
     document.addEventListener("visibilitychange", listen);
   }
 }
+const eventHandlers = new Map<"views", () => void>();
+/** Runs `handler` when the server's event stream sends `kind`: "views" when any tab saved, renamed or deleted a view. */
+export const onServerEvent = (kind: "views", handler: () => void) => void eventHandlers.set(kind, handler);
 /** The server pushes "changed" when Jira did, so the poll runs at once; the timer is only a backstop. A visible tab stays connected, naming its open issue,
  * which the server then checks every few seconds; a hidden tab disconnects, letting the server poll Jira slowly. */
 let events: EventSource | undefined, eventsFor: string | undefined;
@@ -54,7 +57,9 @@ function listen() {
       ? queryClient.invalidateQueries({ queryKey: ["inbox"] })
       : e.data === "boards"
         ? refreshBoards().catch(() => {})
-        : poll.refetch());
+        : e.data === "views"
+          ? eventHandlers.get("views")?.()
+          : poll.refetch());
 }
 /** Boards added or removed on the server since load, by this tab or another: the list, the new boards' issues (a removed
  *  board's leave), and their default view. */

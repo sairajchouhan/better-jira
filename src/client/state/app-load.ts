@@ -11,7 +11,7 @@ import {
   resumeSync,
   unsentWrites,
 } from "./jira-sync";
-import { fetchJson, loadFull, preloadFull, queryClient, startPoll } from "./server-data";
+import { fetchJson, loadFull, onServerEvent, preloadFull, queryClient, startPoll } from "./server-data";
 import {
   flushLocalChanges,
   localDataBlocked,
@@ -120,9 +120,10 @@ async function loadApplication() {
   resumeSync(local.changes);
   if (!listening) {
     listening = true;
-    window.addEventListener("focus", () => {
-      void refreshSavedViews().catch(viewError);
-    });
+    const reloadViews = () => void refreshSavedViews().catch(viewError);
+    window.addEventListener("focus", reloadViews);
+    // Another tab saved, renamed or deleted a view: re-read them now, not on the next focus (R3-views-filters-D-5).
+    onServerEvent("views", reloadViews);
     startNavigation();
     window.addEventListener("beforeunload", (event) => {
       // Jobs waiting on another tab's create are saved, and replayed by whichever tab sends that create.

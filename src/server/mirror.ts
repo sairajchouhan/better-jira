@@ -50,7 +50,8 @@ const PAGE = 100;
 const PARALLEL = 4;
 
 const db = new Database(configuration.cachePath, { create: true, strict: true });
-export const views = viewRepository(db);
+// Every open tab re-reads the views when one changes; `notify` is defined below and only runs after a write.
+export const views = viewRepository(db, () => notify("views"));
 db.run("PRAGMA journal_mode = WAL");
 db.run(`CREATE TABLE IF NOT EXISTS issues (
   key TEXT PRIMARY KEY, board INTEGER NOT NULL, seen INTEGER NOT NULL, slim TEXT NOT NULL, full TEXT NOT NULL)`);
@@ -216,7 +217,7 @@ async function syncBoard(board: number) {
   return keys.length > 0;
 }
 
-type Client = { issue?: string; send: (kind?: "changed" | "inbox" | "boards") => void };
+type Client = { issue?: string; send: (kind?: "changed" | "inbox" | "boards" | "views") => void };
 const live = (g.live ??= { clients: new Set(), wake: () => {} });
 /** An open, visible tab, and the issue it shows. Jira is polled fast while one is connected; the first one syncs at once. Returns the disconnect. */
 export function watch(client: Client) {
@@ -225,7 +226,7 @@ export function watch(client: Client) {
   return () => void live.clients.delete(client);
 }
 /** Tells every open tab the mirror changed, so it refetches now instead of on its timer. */
-const notify = (kind?: "inbox" | "boards") => {
+const notify = (kind?: "inbox" | "boards" | "views") => {
   for (const client of live.clients) client.send(kind);
 };
 

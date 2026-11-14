@@ -253,3 +253,19 @@ test("a view keeps its hidden, collapsed and ordered groups; one stored before v
   });
   db.close();
 });
+test("R3-views-filters-D-5: every successful write tells open tabs, reads and failures don't", async () => {
+  const db = new Database(":memory:");
+  let changes = 0;
+  const r = viewRepository(db, () => changes++);
+  const created = await (await r.handle(req("POST", draft), "site/a")).json();
+  expect(changes).toBe(1);
+  await r.handle(req("GET"), "site/a");
+  expect(changes).toBe(1);
+  await r.handle(req("PUT", { name: "Renamed" }), "site/a", created.id);
+  expect(changes).toBe(2);
+  await r.handle(req("PUT", { name: " " }), "site/a", created.id);
+  expect(changes).toBe(2);
+  await r.handle(req("DELETE"), "site/a", created.id);
+  expect(changes).toBe(3);
+  db.close();
+});
