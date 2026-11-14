@@ -9,8 +9,8 @@ test("BJ-165: O F / O T / O V open the ⌘K palette frame on their page; Help fa
   const p = await open();
   await test.step("O T is the palette, its chip names the page, ⌫ leaves it for the root", async () => {
     await p.keys("ot");
-    await p.waitFor(`!!${dialog("Open team")}&&!!${input}`);
-    expect(await p.eval(`${dialog("Open team")}.textContent`)).toContain("Team");
+    await p.waitFor(`!!${dialog("Open space")}&&!!${input}`);
+    expect(await p.eval(`${dialog("Open space")}.textContent`)).toContain("Space");
     expect(await p.eval<string[]>(rows)).toContain("Browser audit");
     await p.key("Backspace");
     await p.waitFor(`${input}?.placeholder==='Type a command or search…'`);
@@ -141,7 +141,7 @@ test("BJ-64: a keyword and a space in ⌘K focuses search on that entity type", 
   const p = await open();
   await p.key("k", "meta");
   await p.type("t ");
-  await p.waitFor(`!!${dialog("Open team")}&&${input}?.value===''`);
+  await p.waitFor(`!!${dialog("Open space")}&&${input}?.value===''`);
   expect(await p.eval<string[]>(rows)).toContain("Browser audit");
   await p.key("Backspace");
   await p.type("i ");

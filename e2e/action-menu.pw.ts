@@ -220,7 +220,7 @@ test("CORE-18 / CORE-26: a context menu opens 4px right of and 1px above the poi
     const row = `[...document.querySelectorAll('nav[aria-label="Main navigation"] a')].find(b=>b.textContent.includes('Browser audit'))`;
     const r = await page.eval<{ x: number; y: number }>(`(r=>({x:r.x+20,y:r.y+10}))(${row}.getBoundingClientRect())`);
     await page.page.mouse.click(r.x, r.y, { button: "right" });
-    await page.waitFor(exists(dialog("Board options")));
+    await page.waitFor(exists(dialog("Space options")));
     await page.page.mouse.move(r.x + 400, r.y + 300);
     await sleep(100);
     const hover = await page.eval<string>(

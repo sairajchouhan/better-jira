@@ -42,7 +42,7 @@ test("BJ-139: CSV uses Linear's columns, status names and No priority", () => {
     [issue({ labels: ["Epic", "UI"], assignee: { id: "u", name: "Raj" } })],
     board,
   ).split("\r\n");
-  expect(head).toStartWith('"ID","Team","Title","Description","Status","Estimate","Priority"');
+  expect(head).toStartWith('"ID","Space","Title","Description","Status","Estimate","Priority"');
   expect(row).toStartWith('"RAJ-1","SAM1 board","Title","","To Do","","No priority"');
   expect(row).toContain('"Raj","Epic, UI"');
   expect(row).not.toContain("10000");

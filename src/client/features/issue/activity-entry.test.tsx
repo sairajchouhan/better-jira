@@ -60,9 +60,9 @@ test("BJ-40: Linear's wording for the kinds Linear has (status, priority, assign
   expect(words(event("estimate", 2, 5))).toBe("increased estimate from 2 to 5");
   expect(words(event("estimate", 5, 2))).toBe("lowered estimate from 5 to 2");
   expect(words(event("estimate", 2, null))).toBe("removed estimate");
-  // A Jira project move keeps Jira's word: it is the Jira project, not the epic.
+  // A Jira project move reads Space: the Jira project is the space (Linear's team), not the epic.
   expect(words(event("project", { id: "1", name: "Old" }, { id: "2", name: "New" }))).toBe(
-    "changed project from Old to New",
+    "changed space from Old to New",
   );
   const sprint = (...names: string[]) => names.map((name) => ({ id: name.replace(/\D/g, ""), name }));
   expect(words(event("cycle", null, sprint("Auto Draft Sprint 10")))).toBe("added issue to Auto Draft Sprint 10");
@@ -148,7 +148,7 @@ test("BJ-196: project names expose the old and new issue keys", () => {
   expect(markup).toContain('title="OLD-1"');
   expect(markup).toContain('title="NEW-1"');
   // Prod parity #10: Jira lists the Key change as its own row; people search by old keys, so they are in the text.
-  expect(words(move)).toBe("changed project from Old (OLD-1) to New (NEW-1)");
+  expect(words(move)).toBe("changed space from Old (OLD-1) to New (NEW-1)");
 });
 
 test("prod parity #12: a status change names the resolution its transition set", () => {
@@ -353,7 +353,7 @@ test("R3 G21 #39: a project move's issue keys never break at their hyphen", () =
   expect(html).toContain('<span class="whitespace-nowrap">(ALP-7)</span>');
   expect(html).toContain('<span class="whitespace-nowrap">(BET-9)</span>');
   expect(words(event("project", { id: "1", name: "Alpha", key: "ALP-7" }, { id: "2", name: "Beta", key: "BET-9" }))).toBe(
-    "changed project from Alpha (ALP-7) to Beta (BET-9)",
+    "changed space from Alpha (ALP-7) to Beta (BET-9)",
   );
 });
 

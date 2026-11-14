@@ -463,7 +463,7 @@ test("R2-inbox-D5: a row whose issue isn't mirrored takes its project's name fro
   ).toEqual(["a", "b"]);
   expect(facetsOf(outside, undefined, undefined, projects).project).toBe("OUT");
   expect(facetsOf(item({ id: "d", key: "" }), undefined, undefined, projects).project).toBe(
-    "No project",
+    "No space",
   );
 });
 

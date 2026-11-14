@@ -20,6 +20,10 @@ export const COMMAND_KEYWORDS: Readonly<Record<string, string>> = {
   "open-document": "goto",
   "open-user": "goto member",
   "favorite-open": "goto",
+  // Linear's Team is called Space here (user's call, 2026-11-14): "team" and "board" still find Open space, Add space and Go to space N.
+  "team-open": "team board",
+  "board-add": "team board",
+  ...Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`team-${i + 1}`, "team board"])),
   active: "open",
   backlog: "open",
   all: "open",

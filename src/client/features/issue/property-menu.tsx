@@ -182,7 +182,7 @@ export function StatusMenu({ anchor, board, value, onChange, close }: FieldMenuP
 }
 /**
  * The assignee rows (Linear's `Qun`), built by `assigneeGroups`: No assignee (0) and you (1), the current assignee, then
- * "Suggested", "Team members" and, once the search has two characters, "Users from other teams". Rows rank by Linear's people
+ * "Suggested", "Team members" and, once the search has two characters, "Users from other spaces". Rows rank by Linear's people
  * score (personKeywords), so "me" lifts you to the top. One component for the A picker and Issue options › Assignee.
  */
 export function AssigneeRows({
@@ -226,7 +226,7 @@ export function AssigneeRows({
         <Menu.Group heading={groups.teamHeading}>{groups.team.map((u) => row(u, board !== undefined))}</Menu.Group>
       )}
       {listsOtherPeople(query) && groups.others.length > 0 && (
-        <Menu.Group heading="Users from other teams">{groups.others.map((u) => row(u))}</Menu.Group>
+        <Menu.Group heading="Users from other spaces">{groups.others.map((u) => row(u))}</Menu.Group>
       )}
     </>
   );

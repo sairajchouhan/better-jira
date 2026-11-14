@@ -3,7 +3,7 @@ import { IssueHoverCard } from "./issue-hover-card";
  * One property row's words and icon, in Linear's wording (its issue-history chunk `IssueCommentsAndHistory`, read 2026-11-12):
  * the entry builders `ws` (status), `Es` (priority), `Os` (assignee), `ks` (title), `As`/`js` (labels), `tc` (estimate),
  * `ic` (due date), `Us` (parent), `Ws` (team), `Js` (cycle), `Qs` (project, the issue's epic here), `ec` (milestone) and
- * `Hs` (relations). A Jira project move keeps Jira's word ("changed project from …"): it is the Jira project, not the epic.
+ * `Hs` (relations). A Jira project move reads Space ("changed space from …"): the Jira project is the space (Linear's team), not the epic.
  * Jira-only kinds (resolution, component, files, custom fields) read plainly in the same pattern: "changed Fix version from A to B".
  */
 import { absoluteDate, fullTime, activityTime } from "./issue-dates";
@@ -257,16 +257,16 @@ export function describeActivity(event: PropertyActivity, issue: Issue, then = f
       if (after === null)
         return (
           <>
-            removed from project <B>{name(before)}</B>
+            removed from space <B>{name(before)}</B>
           </>
         );
       return before === null ? (
         <>
-          added to project <B>{name(after)}</B>
+          added to space <B>{name(after)}</B>
         </>
       ) : (
         <>
-          changed project from <B title={(before as NamedValue)?.key}>{name(before)}</B>
+          changed space from <B title={(before as NamedValue)?.key}>{name(before)}</B>
           <IssueKey value={before} /> to <B title={(after as NamedValue)?.key}>{name(after)}</B>
           <IssueKey value={after} />
         </>

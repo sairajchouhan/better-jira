@@ -377,7 +377,7 @@ export function CreateIssue() {
         <div className="create-issue-header">
           <Text variant="mini" color="muted" wrap="truncate" className="flex flex-1 items-center gap-1.5">
             <PropertyPill
-              label="Board"
+              label="Space"
               current={board.name}
               value={board.name}
               icon={<Icon name="board" size={14} />}
@@ -1572,7 +1572,7 @@ export function AddBoard() {
     [error, setError] = useState("");
   const close = () => ui.send({ type: "overlay.close" });
   return (
-    <Dialog label="Add board" close={close} width={440}>
+    <Dialog label="Add space" close={close} width={440}>
       <form
         onSubmit={async (e) => {
           e.preventDefault();
@@ -1629,7 +1629,7 @@ export function AddBoard() {
             variant="borderless"
             size="medium"
           >
-            {busy ? "Adding…" : "Add board"}
+            {busy ? "Adding…" : "Add space"}
           </Button>
         </Dialog.Footer>
       </form>
@@ -1638,5 +1638,5 @@ export function AddBoard() {
 }
 
 function ComposerBoardMenu({ boards, value, onChange, anchor, close }: { boards: Board[]; value: number; onChange: (board: number) => void; anchor: HTMLElement | null; close: () => void }) {
- return <Modal label="Choose board" anchor={anchor} close={close} fit><Menu><Menu.Input autoFocus aria-label="Choose board" /><Menu.List>{boards.map(board => <Menu.Item key={board.id} value={board.name} checked={board.id === value} onSelect={() => { onChange(board.id); close(); }}>{board.name}</Menu.Item>)}</Menu.List></Menu></Modal>;
+ return <Modal label="Choose space" anchor={anchor} close={close} fit><Menu><Menu.Input autoFocus aria-label="Choose space" /><Menu.List>{boards.map(board => <Menu.Item key={board.id} value={board.name} checked={board.id === value} onSelect={() => { onChange(board.id); close(); }}>{board.name}</Menu.Item>)}</Menu.List></Menu></Modal>;
 }

@@ -133,7 +133,7 @@ test("assignee picker (Linear's Qun): No assignee, me, the current assignee, the
   expect(ids(g.assigned)).toEqual([null, "me", "b"]);
   // The current assignee is listed once, at the top, not again under Team members.
   expect(ids(g.team)).toEqual(["a"]);
-  expect(g.teamHeading).toBe("Team members");
+  expect(g.teamHeading).toBe("Space members");
   expect(ids(g.others)).toEqual(["c", "j"]);
 });
 

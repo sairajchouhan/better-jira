@@ -410,7 +410,7 @@ export type FilterField = keyof Facets;
 export const FILTER_FIELDS: [FilterField, string][] = [
   ["type", "Notification type"],
   ["from", "From"],
-  ["project", "Project"],
+  ["project", "Space"],
   ["priority", "Issue priority"],
   ["statusType", "Issue status type"],
 ];
@@ -451,7 +451,7 @@ export function facetsOf(
   return {
     type: TYPE[item.kind],
     from: item.actor?.name ?? "Jira",
-    project: issue?.project?.name ?? (prefix ? (projects?.get(prefix) ?? prefix) : "No project"),
+    project: issue?.project?.name ?? (prefix ? (projects?.get(prefix) ?? prefix) : "No space"),
     priority: PRIORITY[issue ? priorityRank(issue.priority) : 4]!,
     statusType: statusType(status ?? { name: item.status, category: "" }),
   };

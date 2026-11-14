@@ -119,7 +119,7 @@ export const boardCopyURL = (board: Board, shortcut?: ActionEntry["shortcut"]): 
   name: "Copy URL",
   icon: "link",
   shortcut,
-  run: () => copy(boardURL(board), "Board URL copied to clipboard"),
+  run: () => copy(boardURL(board), "Space URL copied to clipboard"),
 });
 
 /**
@@ -147,7 +147,7 @@ export function boardEntries(board: Board, shortcut?: ActionEntry["shortcut"]): 
             icon: "close",
             run: () =>
               void removeBoard(board.id).then(
-                () => showNotification({ text: `Removed ${board.name}`, detail: "Add it again from Add board." }),
+                () => showNotification({ text: `Removed ${board.name}`, detail: "Add it again from Add space." }),
                 (error: Error) => set({ perf: error.message }),
               ),
           },

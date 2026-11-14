@@ -35,7 +35,7 @@ export type AssigneeGroups = {
   assigned: (User | null)[];
   suggested: User[];
   team: User[];
-  teamHeading: "Team members" | "Members";
+  teamHeading: "Space members" | "Members";
   others: User[];
 };
 export function assigneeGroups({
@@ -72,7 +72,7 @@ export function assigneeGroups({
   const others = byName(take([...jiraUsers, ...all.flatMap((i) => (i.assignee ? [i.assignee] : []))]));
   return board === undefined
     ? { assigned, suggested: picked, team: byName([...team, ...others]), teamHeading: "Members", others: [] }
-    : { assigned, suggested: picked, team, teamHeading: "Team members", others };
+    : { assigned, suggested: picked, team, teamHeading: "Space members", others };
 }
 /** Linear lists people outside the team only once the search has more than one character. */
 export const listsOtherPeople = (query: string) => query.trim().length > 1;

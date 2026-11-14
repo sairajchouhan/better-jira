@@ -181,10 +181,10 @@ export function Sidebar({ boards }: { boards: Board[] }) {
         <SidebarMore prefs={prefs} />
 
         <SectionHeading
-          label="Boards"
+          label="Your spaces"
           expanded={expanded("boards")}
           onToggle={() => toggle("boards")}
-          addLabel="Add board"
+          addLabel="Add space"
           onAdd={() => ui.send({ type: "overlay.open", overlay: "add-board" })}
         />
         {expanded("boards") && boards.map((b) => {
@@ -197,7 +197,7 @@ export function Sidebar({ boards }: { boards: Board[] }) {
             </SidebarLink>
           );
           return (
-            <ContextMenu key={b.id} label="Board options" entries={() => boardEntries(b, hotkeyOf("copy-url"))}>
+            <ContextMenu key={b.id} label="Space options" entries={() => boardEntries(b, hotkeyOf("copy-url"))}>
               {item}
             </ContextMenu>
           );
@@ -533,7 +533,7 @@ export function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue
     >
       <SidebarToggle />
       {!mine || activeView ? <>{/* Linear's team crumb (`Api` → `vBn`): right-click for Copy URL. */}
-      <ContextMenu label="Board options" entries={() => [boardCopyURL(board, hotkeyOf("copy-url"))]}>
+      <ContextMenu label="Space options" entries={() => [boardCopyURL(board, hotkeyOf("copy-url"))]}>
         <AppLink to={allIssues} aria-label={board.name} title={board.name} onClick={clearBoardTools} className={CRUMB}>
           <span aria-hidden="true" className={CRUMB_ICON}>
             <span className="grid size-4 place-items-center rounded-[4px] bg-accent text-[9px] font-semibold text-white">{board.name[0]}</span>

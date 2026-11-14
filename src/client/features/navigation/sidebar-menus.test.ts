@@ -123,7 +123,7 @@ test("a sidebar board's menu is Linear's team menu (g3) with what Jira backs", a
   entries[2]!.run!();
   await Bun.sleep(0);
   expect(written).toEqual([`${location.origin}/board/7/all`]);
-  expect(latestNotification()?.text).toBe("Board URL copied to clipboard");
+  expect(latestNotification()?.text).toBe("Space URL copied to clipboard");
   entries[1]!.run!();
   expect(opened).toEqual(["https://jira.test/secure/RapidView.jspa?rapidView=7"]);
 });

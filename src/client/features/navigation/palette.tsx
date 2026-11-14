@@ -209,7 +209,7 @@ function hoistedValues(issue: Issue, q: string, applies: (id: string) => boolean
  *  chord opens the palette on the page, with the parent's name as the input's chip; ⌫ in the empty input leaves it. */
 const PAGES = {
   favorites: { parent: "Favorite", label: "Open favorite", keyword: "f" },
-  boards: { parent: "Team", label: "Open team", keyword: "t" },
+  boards: { parent: "Space", label: "Open space", keyword: "t" },
   views: { parent: "View", label: "Open view", keyword: "v" },
   issues: { parent: "Issue", label: "Open issue", keyword: "i" },
   documents: { parent: "Document", label: "Open document", keyword: "d" },

@@ -85,7 +85,7 @@ export const SEARCH_FILTER_FIELDS = [
   ["status", "Status"],
   ["priority", "Priority"],
   ["labels", "Labels"],
-  ["board", "Board"],
+  ["board", "Space"],
 ] as const;
 export type SearchFilter = { field: (typeof SEARCH_FILTER_FIELDS)[number][0]; values: string[] };
 /** Each filter keeps issues with any of its values; filters on different properties all apply. */

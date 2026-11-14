@@ -443,12 +443,12 @@ export const shortcuts: Shortcut[] = [
   },
   {
     id: "team-open",
-    name: "Open a team / board",
+    name: "Open space",
     group: "Navigation",
     hotkey: ["O", "T"],
     run: overlay("boards"),
   },
-  { id: "board-add", name: "Add board", group: "Navigation", run: overlay("add-board") },
+  { id: "board-add", name: "Add space", group: "Navigation", run: overlay("add-board") },
   {
     id: "customize-sidebar",
     name: "Customize sidebar",
@@ -465,7 +465,7 @@ export const shortcuts: Shortcut[] = [
   },
   ...Array.from({ length: 9 }, (_, i): Shortcut => ({
     id: `team-${i + 1}`,
-    name: `Go to team / board ${i + 1}`,
+    name: `Go to space ${i + 1}`,
     group: "Navigation",
     hotkey: `Control+Shift+${i + 1}` as Hotkey,
     when: (s) => !!s.boards[i],

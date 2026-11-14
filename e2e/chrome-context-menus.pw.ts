@@ -41,8 +41,8 @@ test("sidebar Inbox, My issues, board rows and the empty sidebar open Linear's m
   });
 
   await test.step("a board row: Linear's team row with what Jira backs", async () => {
-    await rightClick(page, link("Browser audit"), "Board options");
-    const names = await rows(page, "Board options");
+    await rightClick(page, link("Browser audit"), "Space options");
+    const names = await rows(page, "Space options");
     expect(names.slice(0, 3)).toEqual([expect.stringMatching(/^(Un)?[Ff]avorite$/), "Board settings", "Copy URL"]);
     await page.key("Escape");
   });

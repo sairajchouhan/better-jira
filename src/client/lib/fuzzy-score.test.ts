@@ -79,6 +79,10 @@ test("B2: ⌘K finds a command by Linear's keywords as well as its name", () => 
     ["Open document", "open-document", "goto"],
     ["Open user", "open-user", "goto"],
     ["Copy issue id", "copy-id", "identifier"],
+    // Linear's Team reads Space here; "team" still finds it.
+    ["Open space", "team-open", "team"],
+    ["Add space", "board-add", "team"],
+    ["Go to space 1", "team-1", "team"],
   ] as const) {
     expect(actionScore({ name }, query)).toBeLessThan(MIN_APPLICABILITY);
     expect(found(name, id, query)).toBeGreaterThanOrEqual(MIN_APPLICABILITY);

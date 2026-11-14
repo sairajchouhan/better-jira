@@ -161,18 +161,18 @@ test("B8: the A picker and Assignee › list No assignee, you, the current assig
     await expect(page.page.locator(MENU)).toHaveCount(0);
   });
 
-  await test.step("Assignee › on an unassigned card: Alex under Team members; Morgan only from the second character", async () => {
+  await test.step("Assignee › on an unassigned card: Alex under Space members; Morgan only from the second character", async () => {
     await rightClick(page, '[data-key="TEST-1"]');
     await page.hover(`${MENU} [cmdk-item][data-value="Assignee"]`);
     await page.waitFor(`!!document.querySelector('${SUBMENU} [cmdk-item]')`);
     expect(await page.eval(rows(SUBMENU))).toEqual(["No assignee", "Audit user audit-me", "Alex alex"]);
-    expect(await page.eval(headings(SUBMENU))).toEqual(["Team members"]);
+    expect(await page.eval(headings(SUBMENU))).toEqual(["Space members"]);
     await page.click(`${SUBMENU} input`);
     await page.type("m");
     expect(await page.eval(rows(SUBMENU))).not.toContain("Morgan Example catalog-0");
     await page.type("o");
     await page.waitFor(`${rows(SUBMENU)}.includes("Morgan Example catalog-0")`);
-    expect(await page.eval(headings(SUBMENU))).toContain("Users from other teams");
+    expect(await page.eval(headings(SUBMENU))).toContain("Users from other spaces");
     await page.key("Escape");
     await expect(page.page.locator(MENU)).toHaveCount(0);
   });
