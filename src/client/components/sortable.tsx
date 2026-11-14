@@ -1,4 +1,4 @@
-import { createContext, use, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { createContext, use, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import "./sortable.css";
 
 /**
@@ -6,6 +6,13 @@ import "./sortable.css";
  * its handle (`role=button`, `aria-roledescription="sortable"`), the dragged row follows the pointer and the rows it
  * passes slide out of its way, and the order changes only on drop. The keyboard works as dnd-kit's KeyboardSensor:
  * Space or Enter picks the row up, the arrow keys move it, Space or Enter drops it and Escape puts it back.
+ *
+ * Linear's sidebar favourites are the same dnd-kit sortable without a handle (startup-root `LN`/`IN`): the whole row drags
+ * once the pointer has moved 4px (`MouseSensor` distance 4), so a click still follows the row's link, and Escape puts it
+ * back; they have no keyboard sensor. That is `Sortable.Surface`, in place of `Sortable.Handle`.
+ *
+ * Not React Aria's drag and drop: its collection drags are native HTML drags, whose image the browser draws translucent and
+ * fixed, while these rows follow the pointer and slide aside as dnd-kit's do.
  */
 type Drag = { id: string; from: number; to: number; height: number; startY: number; dy: number; by: "pointer" | "keyboard" };
 type Context = {
@@ -25,6 +32,10 @@ const useSortable = () => {
 /** Where the dragged row would land: `from` moved by whole rows, inside the list. */
 export const dropIndex = (from: number, dy: number, height: number, count: number) =>
   Math.max(0, Math.min(count - 1, from + Math.round(dy / height)));
+
+/** dnd-kit's distance constraint: a press becomes a drag once the pointer has moved more than this many pixels. */
+export const ACTIVATION_DISTANCE = 4;
+export const activates = (dx: number, dy: number) => Math.hypot(dx, dy) > ACTIVATION_DISTANCE;
 
 /** How far a row shifts while `drag` is under way: the dragged row by its pointer (or its keyboard slots), every row it
  *  passed by one row the other way. */
@@ -146,6 +157,71 @@ function Handle({ label, children }: { label?: string; children: ReactNode }) {
   );
 }
 
+/** The whole row as the drag surface (Linear's favourites): a press that moves past `ACTIVATION_DISTANCE` drags the row, and
+ *  the click it ends with is swallowed, so the link inside does not open; a press that stays put is a click. */
+function Surface({ children }: { children: ReactNode }) {
+  const { ids, drag, start, update, drop } = useSortable();
+  const item = use(ItemContext);
+  if (!item) throw new Error("Sortable.Surface renders inside Sortable.Item");
+  const press = useRef<{ x: number; y: number } | null>(null);
+  const mine = drag?.id === item.id;
+  // dnd-kit cancels on Escape from anywhere (a capture keydown on the document), with no focus needed on the row.
+  useEffect(() => {
+    if (!mine) return;
+    const cancel = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      drop(false);
+    };
+    document.addEventListener("keydown", cancel, true);
+    return () => document.removeEventListener("keydown", cancel, true);
+  }, [mine, drop]);
+  const swallowClick = () => {
+    const swallow = (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    window.addEventListener("click", swallow, { capture: true, once: true });
+    setTimeout(() => window.removeEventListener("click", swallow, { capture: true }));
+  };
+  return (
+    <div
+      className="ui-sortable-surface"
+      onPointerDown={(e) => {
+        if (e.button === 0 && !drag) press.current = { x: e.clientX, y: e.clientY };
+      }}
+      onPointerMove={(e) => {
+        if (mine && drag.by === "pointer") {
+          const dy = e.clientY - drag.startY;
+          update({ dy, to: dropIndex(drag.from, dy, drag.height, ids.length) });
+          return;
+        }
+        const from = press.current;
+        if (!from || drag || !activates(e.clientX - from.x, e.clientY - from.y)) return;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        const height = e.currentTarget.closest(".ui-sortable-item")?.getBoundingClientRect().height ?? 32;
+        const dy = e.clientY - from.y;
+        start({ id: item.id, from: item.index, to: dropIndex(item.index, dy, height, ids.length), height, startY: from.y, dy, by: "pointer" });
+      }}
+      onPointerUp={() => {
+        press.current = null;
+        if (!mine) return;
+        swallowClick();
+        drop(true);
+      }}
+      onPointerCancel={() => {
+        press.current = null;
+        if (mine) drop(false);
+      }}
+      // A link or image inside would start the browser's own drag of its URL.
+      onDragStart={(e) => e.preventDefault()}
+    >
+      {children}
+    </div>
+  );
+}
+
 /** Linear's drag-handle glyph: two columns of three dots, 6 x 10. */
 function Grip() {
   return (
@@ -161,5 +237,6 @@ function Grip() {
 
 Sortable.Item = Item;
 Sortable.Handle = Handle;
+Sortable.Surface = Surface;
 Sortable.Grip = Grip;
 export { Sortable };

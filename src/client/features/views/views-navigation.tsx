@@ -16,6 +16,7 @@ import { FavoriteButton } from "@/client/features/navigation/favorite-button";
 import { ViewMenu } from "@/client/features/views/view-editor";
 import { Button, IconButton } from "@/client/components/button";
 import { Tabs } from "@/client/components/tabs";
+import { Sortable } from "@/client/components/sortable";
 import { Text } from "@/client/components/text";
 import { CountBadge } from "@/client/components/count-badge";
 import { resultFeedback, viewSummaries } from "./views-navigation-model";
@@ -33,30 +34,30 @@ export function ViewFavorites({ expanded, onToggle }: { expanded: boolean; onTog
     const document = id.startsWith("document:") ? findIssueDocument(issues.values(), id.slice(9)) : undefined;
     const issue = issues.get(id), board = id.startsWith("board:") ? boards.find(b => b.id === Number(id.split(":")[1])) : undefined;
     if (!view && !document && !issue && !board) return [];
+
     const content = <>{view ? <SavedViewIcon view={view} /> : document ? <Icon name="file" /> : <span className="text-fg-3">☆</span>}<span className="truncate">{view?.name ?? (document ? document.resource.title || "New document" : issue ? `${issue.key} ${issue.summary}` : board?.name)}</span></>;
     // Each row is the sidebar's one link, marked by the shared rule: active only when the screen came from this favorite.
     const row = { place: favoritePlace(id), favorite: id };
-    // Drag a favorite onto another to reorder (BJ-75).
-    const props = {
-      draggable: true,
-      "data-favorite": id,
-      onDragStart: (e: React.DragEvent<HTMLAnchorElement>) => e.dataTransfer.setData("text/plain", id),
-      onDragOver: (e: React.DragEvent<HTMLAnchorElement>) => e.preventDefault(),
-      onDrop: (e: React.DragEvent<HTMLAnchorElement>) => { e.preventDefault(); moveFavorite(e.dataTransfer.getData("text/plain"), id); },
-      className: "w-full",
-    };
+    // The row drags by its surface (BJ-75), so the link itself is never the browser's own drag of its URL.
+    const props = { draggable: false, "data-favorite": id, className: "w-full" };
     const link = view
       ? <SidebarViewLink row={row} view={view} {...props}>{content}</SidebarViewLink>
       : <SidebarLink row={row} to={document ? { board: document.issue.board, selected: document.issue.key, panel: true, document: document.resource.id } : issue ? { board: issue.board, selected: issue.key, panel: true } : { board: board!.id, panel: false, selected: null }} {...props}>{content}</SidebarLink>;
     // Linear's favorite row (`d5n`) has one menu for every kind of favorite: Copy URL, Open in new tab, ┄ Remove favorite.
     const url = () => board ? boardURL(board) : placeURL(view ? { to: "view", id: view.id } : document ? { to: "issue", key: document.issue.key, document: document.resource.id } : { to: "issue", key: issue!.key });
-    return [<ContextMenu key={id} label="Favorite options" entries={() => favoriteEntries(id, url)}>{link}</ContextMenu>];
+    return [{ id, row: <ContextMenu label="Favorite options" entries={() => favoriteEntries(id, url)}>{link}</ContextMenu> }];
   });
+  // Linear's favourites reorder as a dnd-kit sortable dragged by the whole row (startup-root `LN`): a drop takes the slot of
+  // the row it lands on.
   return rows.length ? (
     <div className="mt-5">
       <SectionDisclosure expanded={expanded} onExpandedChange={onToggle}>
         <div className="mb-1"><SectionDisclosure.Trigger label="Favorites" /></div>
-        <SectionDisclosure.Panel>{rows}</SectionDisclosure.Panel>
+        <SectionDisclosure.Panel>
+          <Sortable ids={rows.map((r) => r.id)} onMove={moveFavorite}>
+            {rows.map(({ id, row }) => <Sortable.Item key={id} id={id}><Sortable.Surface>{row}</Sortable.Surface></Sortable.Item>)}
+          </Sortable>
+        </SectionDisclosure.Panel>
       </SectionDisclosure>
     </div>
   ) : null;

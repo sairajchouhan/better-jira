@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { dropIndex, rowShift } from "./sortable";
+import { activates, dropIndex, rowShift } from "./sortable";
 
 describe("Sortable", () => {
   test("a drop lands whole rows away from where the drag began, inside the list", () => {
@@ -15,5 +15,12 @@ describe("Sortable", () => {
     const up = { ...down, from: 3, to: 1, dy: -60, by: "keyboard" as const };
     expect([0, 1, 2, 3].map((i) => rowShift(i, up))).toEqual([0, 32, 32, -64]);
     expect(rowShift(0, null)).toBe(0);
+  });
+  test("a row surface drags only once the pointer has moved more than 4px, as dnd-kit's distance constraint", () => {
+    expect(activates(0, 0)).toBe(false);
+    expect(activates(4, 0)).toBe(false);
+    expect(activates(0, -4)).toBe(false);
+    expect(activates(3, 3)).toBe(true);
+    expect(activates(0, 5)).toBe(true);
   });
 });
