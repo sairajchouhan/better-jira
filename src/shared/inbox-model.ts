@@ -10,27 +10,49 @@ export type InboxKind =
   | "status"
   | "created"
   | "updated";
-/** One row: Jira groups notifications per issue (groupId = the issue's ARI), like Linear; the newest one heads it. */
-export type InboxItem = {
+export type InboxActor = { name: string; avatar?: string };
+/** One Jira notification: a row's own, or one of the earlier ones its group folds in. */
+export type InboxNote = {
   id: string;
-  /** The head notification. A new notification on the issue changes it, which resets local state kept for the old one. */
-  head: string;
-  key: string;
-  title: string;
-  /** Status name at notification time, as Jira sent it. */
-  status: string;
-  url: string;
-  actor: { name: string; avatar?: string } | null;
+  actor: InboxActor | null;
   kind: InboxKind;
   /** Jira's own sentence, e.g. "Ana changed a task from To Do to Done". */
   message: string;
   /** Comment text, for comments, mentions and reactions. */
   preview: string;
+  /** The comment itself (ADF), so its links and formatting survive in the pane. */
+  doc?: unknown;
   time: string;
+  /** Status name at notification time, as Jira sent it. */
+  status: string;
+  /** Where Jira's own notification leads: the comment (`focusedCommentId`), or the issue. */
+  link: string;
+  /** The comment it is about, when it is about one. */
+  commentId: string;
   unread: boolean;
-  category: "direct" | "watching";
-  count: number;
 };
+/** One row: Jira groups notifications per issue (groupId = the issue's ARI), like Linear. The row shows the group's main
+ *  notification (Linear's `BW.prioritize`), which is the newest one unless a recent mention or assignment is in the group. */
+export type InboxItem = Omit<InboxNote, "id"> & {
+  id: string;
+  /** The head notification. A new notification on the issue changes it, which resets local state kept for the old one. */
+  head: string;
+  key: string;
+  title: string;
+  /** The issue's address, without Jira's comment or assignment context. */
+  url: string;
+  /** The issue type, from Jira's sentence ("updated a story"): Jira's feed names it only there and in its icon. */
+  issueType: string;
+  /** Newest activity in the group: the row's time and order, as Jira's head. */
+  time: string;
+  category: "direct" | "watching";
+  /** Notifications in the group, this one included (Jira's `groupSize`). */
+  count: number;
+  /** Who sent the group's other notifications, newest first: Jira's "+3 updates from Priya and others". */
+  others: InboxActor[];
+};
+/** One page of a row's notifications (`/api/inbox/group`); `cursor` asks for the next one. */
+export type InboxGroupPage = { notes: InboxNote[]; more: boolean; cursor?: string };
 /** One page of Jira's feed; `cursor` asks for the next one. Jira can return a short or empty page before the end. */
 export type InboxFeed = {
   unseen: number;
@@ -67,103 +89,246 @@ export function adfText(doc: unknown): string {
   return walk(node).replace(/\s+/g, " ").trim();
 }
 
-export function kindOf(type: string, message: string): InboxKind {
+/** `template` is Jira's `messageTemplateId`: a comment template is a comment whatever its sentence says (a bot's "added a note"). */
+export function kindOf(type: string, message: string, template = ""): InboxKind {
   if (/\bunassigned\b/i.test(message)) return "unassigned";
   if (/\bassigned\b.*\bto you\b/i.test(message)) return "assigned";
   if (type === "mentioned" || /\bmentioned you\b/i.test(message)) return "mentioned";
   if (/\breacted\b/i.test(message)) return "reaction";
-  if (/\b(commented|replied)\b/i.test(message)) return "comment";
+  if (template === "jira-issue-comment" || /\b(commented|replied)\b/i.test(message)) return "comment";
   if (/\bchanged\b.* from .+ to .+/i.test(message)) return "status";
   if (type === "created" && /\bcreated\b/i.test(message)) return "created";
   return "updated";
 }
 
-/** Maps `notifications.notificationFeed` nodes; anything missing degrades to empty text rather than dropping the row. */
-export function mapFeed(nodes: unknown): InboxItem[] {
+const actorOf = (a: any): InboxActor | null =>
+  a?.displayName
+    ? { name: str(a.displayName), ...(a.avatarURL ? { avatar: str(a.avatarURL) } : {}) }
+    : null;
+const parseDoc = (data: unknown) => {
+  if (typeof data !== "string") return data ?? undefined;
+  try {
+    return JSON.parse(data);
+  } catch {
+    return data || undefined;
+  }
+};
+/** The comment a Jira link points at: `focusedCommentId=…` or `#comment-…`. */
+export const commentIdOf = (link: string) =>
+  link.match(/[?&]focusedCommentId=(\d+)/)?.[1] ?? link.match(/#comment-(\d+)/)?.[1] ?? "";
+
+/** The issue page's id for the comment a notification is about: Linear links a comment as `#comment-<id>`. */
+export const commentAnchor = (note: Pick<InboxNote, "commentId">) =>
+  note.commentId ? `comment-${note.commentId}` : "";
+
+/** One `InfluentsNotificationItem` (a feed head or a group child); null when it can't be read. */
+export function mapNote(raw: any): InboxNote | null {
+  const content = raw?.content;
+  if (!raw?.notificationId || !content) return null;
+  const link = str(content.url) || str(content.entity?.url),
+    message = str(content.message),
+    template = (Array.isArray(raw.analyticsAttributes) ? raw.analyticsAttributes : []).find(
+      (a: any) => a?.key === "messageTemplateId",
+    )?.value,
+    data = (content.bodyItems ?? []).find((b: any) => b?.document?.data)?.document?.data,
+    doc = parseDoc(data);
+  return {
+    id: str(raw.notificationId),
+    actor: actorOf(content.actor),
+    kind: kindOf(str(content.type), message, str(template)),
+    message,
+    preview: adfText(data),
+    ...(doc !== undefined ? { doc } : {}),
+    time: str(raw.timestamp),
+    status: str(content.entity?.status),
+    link,
+    commentId: commentIdOf(link),
+    unread: raw.readState !== "read",
+  };
+}
+
+/** Linear's mention window (`zW.PRIORITIZE_MENTION_NOTIFICATION_IN_LAST_HOURS`). */
+const PRIORITY_WINDOW = 72 * 3_600_000;
+/** Linear's `BW.prioritize` (startup-entry, 2026-11-14): unread before read, newest first, then a mention from the last 72 hours
+ *  to the front, and never a reaction in front of something else. Jira's assignments to you count as mentions here: both are
+ *  addressed to you, and Jira's group would otherwise hide one behind "updated a story". */
+export function prioritize<T extends Pick<InboxNote, "id" | "kind" | "time" | "unread">>(
+  notes: T[],
+  now = Date.now(),
+): T[] {
+  const pool = notes.some((n) => n.unread) ? notes.filter((n) => n.unread) : [...notes];
+  pool.sort((a, b) => b.time.localeCompare(a.time) || a.id.localeCompare(b.id));
+  const toFront = (i: number) => i > 0 && pool.unshift(...pool.splice(i, 1));
+  toFront(
+    pool.findIndex(
+      (n) =>
+        (n.kind === "mentioned" || n.kind === "assigned") &&
+        now - Date.parse(n.time) < PRIORITY_WINDOW,
+    ),
+  );
+  if (pool.length > 1 && pool[0]!.kind === "reaction")
+    toFront(pool.findIndex((n) => n.kind !== "reaction"));
+  // Everything else follows newest first, so the list under the row reads like Jira's.
+  const rest = notes
+    .filter((n) => !pool.includes(n))
+    .sort((a, b) => b.time.localeCompare(a.time));
+  return [...pool, ...rest];
+}
+
+/** The distinct people behind `notes`, in order, leaving out `except`. */
+function actorsOf(actors: (InboxActor | null)[], except?: string) {
+  const seen = new Set(except ? [except] : []);
+  return actors.flatMap((a) => (a && !seen.has(a.name) && seen.add(a.name) ? [a] : []));
+}
+
+/** Maps `notifications.notificationFeed` nodes; anything missing degrades to empty text rather than dropping the row.
+ *  `children` holds each group's notifications (`notificationGroup`), when they were read, so the row can lead with Linear's
+ *  main notification rather than Jira's newest. */
+export function mapFeed(
+  nodes: unknown,
+  children: Record<string, unknown[]> = {},
+  now = Date.now(),
+): InboxItem[] {
   if (!Array.isArray(nodes)) return [];
   return nodes.flatMap((node: any): InboxItem[] => {
     const head = node?.headNotification,
-      content = head?.content;
-    if (!node?.groupId || !head?.notificationId || !content) return [];
+      content = head?.content,
+      headNote = mapNote(head);
+    if (!node?.groupId || !headNote) return [];
     const url = str(content.entity?.url) || str(content.url),
       pathKey = (content.path ?? [])
         .map((p: any) => str(p?.title))
         .find((t: string) => ISSUE_KEY.test(t)),
       key = pathKey ?? url.match(/\/browse\/([A-Z][A-Z0-9_]+-\d+)/)?.[1] ?? "",
-      message = str(content.message),
-      states: unknown[] = Array.isArray(node.readStates) ? node.readStates : [];
+      states: unknown[] = Array.isArray(node.readStates) ? node.readStates : [],
+      unread = states.length ? states.includes("unread") : head.readState !== "read",
+      group = (children[str(node.groupId)] ?? []).flatMap((c) => mapNote(c) ?? []),
+      notes = group.some((n) => n.id === headNote.id) ? group : [headNote, ...group],
+      [main = headNote, ...rest] = group.length ? prioritize(notes, now) : [headNote],
+      others = group.length
+        ? actorsOf(rest.map((n) => n.actor), main.actor?.name)
+        : actorsOf((Array.isArray(node.additionalActors) ? node.additionalActors : []).map(actorOf));
+    const { id: _, ...shown } = main;
     return [
       {
+        ...shown,
+        // The row keeps Jira's group state and newest time: Jira reads and orders groups, not their notifications.
         id: str(node.groupId),
-        head: str(head.notificationId),
+        head: headNote.id,
         key,
-        title: str(content.entity?.title) || message,
-        status: str(content.entity?.status),
-        url: url.replace(/\?.*$/, "") || url,
-        actor: content.actor?.displayName
-          ? {
-              name: str(content.actor.displayName),
-              ...(content.actor.avatarURL ? { avatar: str(content.actor.avatarURL) } : {}),
-            }
-          : null,
-        kind: kindOf(str(content.type), message),
-        message,
-        preview: adfText(
-          (content.bodyItems ?? []).find((b: any) => b?.document?.data)?.document?.data,
-        ),
-        time: str(head.timestamp),
-        unread: states.length ? states.includes("unread") : head.readState !== "read",
+        title: str(content.entity?.title) || headNote.message,
+        status: headNote.status,
+        url: url.replace(/[?#].*$/, "") || url,
+        issueType: issueTypeOf(headNote.message) || issueTypeOf(main.message),
+        time: headNote.time,
+        unread,
         category: head.category === "watching" ? "watching" : "direct",
-        count: Number(node.groupSize) || 1,
+        count: Math.max(Number(node.groupSize) || 1, notes.length),
+        others,
       },
     ];
   });
 }
 
-/** The row's second line, in Linear's words (its notification presenters, 2026-11-08). */
-export function describe(item: InboxItem): string {
-  const who = item.actor?.name ?? "Someone",
-    preview = item.preview ? `: ${item.preview}` : "";
-  switch (item.kind) {
+/** Jira's sentence names the issue type ("updated a story", "changed a work item from …", "commented on an epic"). */
+export function issueTypeOf(message: string): string {
+  const m = message.match(
+    /\b(?:updated|changed|assigned|unassigned|created|commented on|replied to|reacted to|mentioned you on|resolved|deleted|moved|linked|attached \w+ to) an? ([a-z][a-z-]*(?: item)?)\b/i,
+  );
+  const type = m?.[1]?.toLowerCase();
+  return type && type !== "comment" ? type[0]!.toUpperCase() + type.slice(1) : "";
+}
+
+/** Old and new status of a status change. Jira's sentence is "… from A to B", and either name may hold " to ", so the
+ *  status Jira sent (the new one) splits it. */
+export function statusChange(note: Pick<InboxNote, "message" | "status">) {
+  const m = note.message.match(/ from (.+)$/);
+  if (!m) return null;
+  const tail = m[1]!;
+  if (note.status && tail.endsWith(` to ${note.status}`))
+    return { from: tail.slice(0, -` to ${note.status}`.length), to: note.status };
+  const at = tail.lastIndexOf(" to ");
+  return at > 0 ? { from: tail.slice(0, at), to: tail.slice(at + 4) } : null;
+}
+
+/** Jira's group line, in its words: "+1 update from Hitesh Shetty", "+3 updates from Priya Chopra and others". */
+export function groupSummary(item: Pick<InboxItem, "count" | "others">): string {
+  const n = item.count - 1;
+  if (n < 1) return "";
+  const [first, ...more] = item.others;
+  return `+${n} update${n === 1 ? "" : "s"}${first ? ` from ${first.name}${more.length ? " and others" : ""}` : ""}`;
+}
+
+/** A notification's sentence: Linear's words (its notification presenters, 2026-11-08), carrying everything Jira's sentence
+ *  says: the issue type ("assigned the story to you"), both statuses of a change, and where a mention is. */
+export function describe(note: Pick<InboxNote, "actor" | "kind" | "message" | "preview" | "status">): string {
+  const who = note.actor?.name ?? "Someone",
+    preview = note.preview ? `: ${note.preview}` : "",
+    type = issueTypeOf(note.message).toLowerCase();
+  switch (note.kind) {
     case "assigned":
-      return `${who} assigned the issue to you`;
+      return `${who} assigned the ${type || "issue"} to you`;
     case "unassigned":
-      return `${who} unassigned your issue`;
+      return `${who} unassigned your ${type || "issue"}`;
     case "mentioned":
       // Jira says "mentioned you on a task" for a description mention and "in a comment" for a comment.
-      return /\bmentioned you on\b/i.test(item.message)
-        ? `${who} mentioned you in an issue description`
-        : `${who} mentioned you${preview}`;
+      return /\bmentioned you on\b/i.test(note.message)
+        ? `${who} mentioned you in ${type ? `the ${type}` : "an issue"} description`
+        : `${who} mentioned you in a comment${preview}`;
     case "comment":
-      return `${who} commented${preview}`;
+      return `${who} ${/\breplied\b/i.test(note.message) ? "replied" : "commented"}${preview}`;
     case "reaction":
       return `${who} reacted to${preview || " your comment"}`;
     case "status": {
-      const to = item.message.match(/ to (.+)$/)?.[1] ?? item.status;
-      if (/cancel|won't|declined/i.test(to)) return `Marked as canceled by ${who}`;
-      if (/done|closed|resolved|complete/i.test(to)) return `Marked as completed by ${who}`;
-      return `Status updated by ${who}`;
+      const change = statusChange(note),
+        to = change?.to ?? note.status,
+        // Linear's WAn.getStatusChangeText; the change itself is Jira's, which Linear shows only as the new state's icon.
+        phrase = /cancel|won't|declined/i.test(to)
+          ? "Marked as canceled"
+          : /done|closed|resolved|complete/i.test(to)
+            ? "Marked as completed"
+            : "Status updated";
+      return `${phrase} by ${who}${change ? `: ${change.from} → ${change.to}` : ""}`;
     }
     case "created":
-      return `${who} created a new issue`;
+      return `${who} created a new ${type || "issue"}`;
     default:
-      return item.message || `${who} updated the issue`;
+      return note.message || `${who} updated the issue`;
   }
 }
 
 /** A row's accessible name; a Jira system notification has no key, so no gap is left for one (R3-inbox-D7). */
 export const rowLabel = (item: InboxItem) =>
-  [item.unread ? "Unread" : "Read", item.key, item.title, describe(item)].filter(Boolean).join(" ");
+  [
+    item.unread ? "Unread" : "Read",
+    item.key,
+    item.title,
+    (item.issueType || item.status) && `· ${[item.issueType, item.status].filter(Boolean).join(", ")}`,
+    describe(item),
+    groupSummary(item) && `· ${groupSummary(item)}`,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
-/** Linear's list times: "now", "5m", "3h", "2d", "4w", "1y". */
+const UNITS: [string, number][] = [
+  ["m", 1],
+  ["h", 60],
+  ["d", 1440],
+  ["w", 10080],
+  ["y", 525600],
+];
+/** Linear's list times ("now", "5m", "3h", "2d", "4w", "1y"), rounded to the nearest unit as Jira's bell is: 1.99 days old reads
+ *  "2d" as Jira's "2 days ago" does, not "1d". */
 export function shortAgo(iso: string, now = Date.now()): string {
-  const m = Math.floor((now - Date.parse(iso)) / 60_000);
+  const m = (now - Date.parse(iso)) / 60_000;
   if (!(m >= 1)) return "now";
-  if (m < 60) return `${m}m`;
-  if (m < 1440) return `${Math.floor(m / 60)}h`;
-  if (m < 10080) return `${Math.floor(m / 1440)}d`;
-  if (m < 525600) return `${Math.floor(m / 10080)}w`;
-  return `${Math.floor(m / 525600)}y`;
+  for (let i = 0; i < UNITS.length; i++) {
+    const [unit, size] = UNITS[i]!,
+      value = Math.round(m / size),
+      next = UNITS[i + 1];
+    if (!next || value < next[1] / size) return `${value}${unit}`;
+  }
+  return "now";
 }
 
 /** Linear's snooze times: "Sun, 8 Nov, 7:13 PM". */

@@ -156,6 +156,18 @@ const server = serve({
         }
       }),
     },
+    // A row's earlier notifications (Jira's "+3 updates from …"), five at a time.
+    "/api/inbox/group": localOnly(async (req) => {
+      const params = new URL(req.url).searchParams,
+        id = params.get("id") ?? "";
+      if (!id.startsWith("ari:cloud:")) return Response.json({ error: "Invalid request" }, { status: 400 });
+      try {
+        return Response.json(await inbox.group(id, params.get("after") || undefined));
+      } catch (e) {
+        console.error("[inbox]", String(e).slice(0, 300));
+        return Response.json({ error: "Could not read Jira notifications." }, { status: 503 });
+      }
+    }),
     "/api/properties": localOnly(() => Response.json(mirror.properties())),
     "/api/options": localOnly(async () => {
       try {

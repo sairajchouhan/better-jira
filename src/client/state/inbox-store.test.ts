@@ -19,6 +19,10 @@ const row = (id: string, unread = true): InboxItem => ({
   unread,
   category: "direct",
   count: 1,
+  link: "",
+  commentId: "",
+  issueType: "",
+  others: [],
 });
 function setup(writable = true, send: InboxPorts["send"] = async () => null) {
   const queryClient = new QueryClient({

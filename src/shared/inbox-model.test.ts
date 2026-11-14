@@ -5,7 +5,12 @@ import {
   focusGroups,
   statusType,
   adfText,
+  commentAnchor,
   describe,
+  groupSummary,
+  issueTypeOf,
+  prioritize,
+  statusChange,
   kindOf,
   mapFeed,
   missingIssueNote,
@@ -61,14 +66,19 @@ group("mapFeed", () => {
         title: "Another YOooooo",
         status: "In Progress",
         url: "https://cloudsairaj.atlassian.net/browse/KAN-16",
+        link: URL,
+        commentId: "10039",
+        issueType: "",
         actor: { name: "Sairaj Chouhan", avatar: "https://secure.gravatar.com/avatar/x" },
         kind: "mentioned",
         message: "Sairaj Chouhan mentioned you in a comment",
         preview: "Hey @cloud sairaj can you take a look?",
+        doc: JSON.parse(live.headNotification.content.bodyItems[0]!.document.data),
         time: "2026-11-08T11:34:52.439Z",
         unread: true,
         category: "direct",
         count: 1,
+        others: [],
       },
     ]);
   });
@@ -130,29 +140,75 @@ const item = (patch: Partial<InboxItem>): InboxItem => ({
   unread: true,
   category: "direct",
   count: 1,
+  link: "",
+  commentId: "",
+  issueType: "",
+  others: [],
   ...patch,
 });
 
 test("describe uses Linear's wording", () => {
-  expect(describe(item({ kind: "assigned" }))).toBe("Ana assigned the issue to you");
-  expect(describe(item({ kind: "mentioned", preview: "hi" }))).toBe("Ana mentioned you: hi");
+  expect(describe(item({ kind: "assigned", message: "Ana assigned an issue to you" }))).toBe("Ana assigned the issue to you");
+  expect(describe(item({ kind: "mentioned", message: "Ana mentioned you in a comment", preview: "hi" }))).toBe(
+    "Ana mentioned you in a comment: hi",
+  );
   expect(describe(item({ kind: "comment", preview: "ok" }))).toBe("Ana commented: ok");
+  expect(describe(item({ kind: "comment", message: "Ana replied to a comment", preview: "ok" }))).toBe("Ana replied: ok");
   expect(describe(item({ kind: "reaction" }))).toBe("Ana reacted to your comment");
-  const status = (message: string) => describe(item({ kind: "status", message }));
-  expect(status("Ana changed a task from To Do to Done")).toBe("Marked as completed by Ana");
-  expect(status("Ana changed a task from To Do to Cancelled")).toBe("Marked as canceled by Ana");
-  expect(status("Ana changed a task from To Do to In Review")).toBe("Status updated by Ana");
-  expect(describe(item({ kind: "created", actor: null }))).toBe("Someone created a new issue");
+  expect(describe(item({ kind: "created", actor: null, message: "" }))).toBe("Someone created a new issue");
   expect(describe(item({}))).toBe("Ana updated a task");
+});
+
+test("prod parity #5/#6: a status change keeps both statuses, even a name holding ' to '", () => {
+  const status = (message: string, to = "") => describe(item({ kind: "status", message, status: to }));
+  expect(status("Ana changed a task from Ready to deploy to Done", "Done")).toBe(
+    "Marked as completed by Ana: Ready to deploy → Done",
+  );
+  expect(status("Ana changed a task from To Do to Cancelled", "Cancelled")).toBe(
+    "Marked as canceled by Ana: To Do → Cancelled",
+  );
+  expect(status("Ana changed a task from In Progress to Review", "Review")).toBe(
+    "Status updated by Ana: In Progress → Review",
+  );
+  // The new status may hold " to " too: the status Jira sent splits the sentence.
+  expect(statusChange({ message: "Ana changed a bug from Doing to Ready to deploy", status: "Ready to deploy" })).toEqual({
+    from: "Doing",
+    to: "Ready to deploy",
+  });
+});
+
+test("prod parity #7/#8/#16: Jira's issue type survives in the words and the row", () => {
+  expect(issueTypeOf("Sahil Chalke assigned a task to you")).toBe("Task");
+  expect(issueTypeOf("Hitesh Shetty created a story")).toBe("Story");
+  expect(issueTypeOf("Epic Bot commented on an epic")).toBe("Epic");
+  expect(issueTypeOf("Ana changed a work item from To Do to Done")).toBe("Work item");
+  expect(issueTypeOf("Ana mentioned you in a comment")).toBe("");
+  expect(describe(item({ kind: "assigned", message: "Ana assigned a bug to you" }))).toBe("Ana assigned the bug to you");
+  expect(describe(item({ kind: "created", message: "Ana created a story" }))).toBe("Ana created a new story");
+  expect(mapFeed([{ ...live, headNotification: { ...live.headNotification, content: { ...live.headNotification.content, message: "Ana updated a story" } } }])[0]?.issueType).toBe("Story");
+});
+
+test("prod parity #9/#13: a comment notification keeps Jira's link to the comment and its anchor on the issue page", () => {
+  const [row] = mapFeed([live]);
+  expect(row?.link).toContain("focusedCommentId=10039");
+  expect(row?.url).toBe("https://cloudsairaj.atlassian.net/browse/KAN-16");
+  expect(commentAnchor(row!)).toBe("comment-10039");
+  expect(commentAnchor(item({}))).toBe("");
+});
+
+test("prod parity #11: the row's accessible name carries the type, status and group", () => {
+  expect(rowLabel(item({ issueType: "Task", status: "Review", count: 3, others: [{ name: "Bo" }, { name: "Cy" }] }))).toBe(
+    "Unread KAN-1 T · Task, Review Ana updated a task · +2 updates from Bo and others",
+  );
 });
 
 test("a description mention reads as Linear's (Jira says 'on a task'); a missing issue in a mirrored project is called deleted", () => {
   expect(describe(item({ kind: "mentioned", message: "Ana mentioned you on a task" }))).toBe(
-    "Ana mentioned you in an issue description",
+    "Ana mentioned you in the task description",
   );
   expect(
     describe(item({ kind: "mentioned", message: "Ana mentioned you in a comment", preview: "hi" })),
-  ).toBe("Ana mentioned you: hi");
+  ).toBe("Ana mentioned you in a comment: hi");
   expect(missingIssueNote("KAN-9", new Set(["KAN"]))).toContain("may have been deleted");
   expect(missingIssueNote("OUT-9", new Set(["KAN"]))).toContain("outside your mirrored boards");
 });
@@ -230,6 +286,64 @@ test("shortAgo matches Linear's list times", () => {
     "1y",
   ]);
   expect(shortAgo("", now)).toBe("now");
+});
+
+test("prod parity #20: list times round to the nearest unit, as Jira's bell does", () => {
+  const now = Date.parse("2026-11-08T12:00:00Z"),
+    ago = (days: number) => shortAgo(new Date(now - days * 86_400_000).toISOString(), now);
+  expect(ago(1.99)).toBe("2d"); // Jira: "2 days ago"
+  expect(ago(10.7)).toBe("2w"); // Jira: "2 weeks ago"
+  expect(ago(6.6)).toBe("1w");
+  expect(ago(23.5 / 24)).toBe("1d");
+  expect(shortAgo(new Date(now - 59.6 * 60_000).toISOString(), now)).toBe("1h");
+});
+
+group("prod parity #14/#15: groups", () => {
+  const note = (id: string, message: string, hoursAgo: number, actor = message.split(" ")[0]!) => ({
+    notificationId: id,
+    timestamp: new Date(Date.parse("2026-11-08T12:00:00Z") - hoursAgo * 3_600_000).toISOString(),
+    readState: "read",
+    content: { type: "updated", message, url: "https://x.atlassian.net/browse/AB-7", actor: { displayName: actor } },
+  });
+  const node = (head: ReturnType<typeof note>, actors: string[]) => ({
+    groupId: "ari:cloud:jira:x:issue/7",
+    groupSize: actors.length + 1,
+    readStates: ["read"],
+    additionalActors: actors.map((displayName) => ({ displayName })),
+    headNotification: { ...head, category: "direct", content: { ...head.content, entity: { title: "Seven", status: "In Progress" } } },
+  });
+  const now = Date.parse("2026-11-08T12:00:00Z");
+  test("Jira's '+N updates from X and others'", () => {
+    const [one] = mapFeed([node(note("h", "Kai updated a story", 1), ["Hana"])], {}, now);
+    expect(groupSummary(one!)).toBe("+1 update from Hana");
+    const [many] = mapFeed([node(note("h", "Kai updated a story", 1), ["Pia", "Ola", "Pia"])], {}, now);
+    const [same] = mapFeed([node(note("h", "Kai updated a story", 1), ["Pia", "Pia"])], {}, now);
+    expect(groupSummary(same!)).toBe("+2 updates from Pia");
+    expect(many!.count).toBe(4);
+    expect(groupSummary(many!)).toBe("+3 updates from Pia and others");
+    expect(groupSummary(item({}))).toBe("");
+  });
+  test("a recent assignment under a newer update leads the row (Linear's prioritize); the row keeps Jira's newest time", () => {
+    const head = note("h", "Kai updated a story", 1),
+      assign = note("a", "Hana assigned a story to you", 20);
+    const [row] = mapFeed([node(head, ["Hana"])], { "ari:cloud:jira:x:issue/7": [head, assign] }, now);
+    expect(row).toMatchObject({ kind: "assigned", actor: { name: "Hana" }, head: "h", time: head.timestamp, count: 2 });
+    expect(groupSummary(row!)).toBe("+1 update from Kai");
+    // Older than Linear's 72 hours, it stays behind the newest.
+    const old = note("a", "Hana assigned a story to you", 24 * 14);
+    expect(mapFeed([node(head, ["Hana"])], { "ari:cloud:jira:x:issue/7": [head, old] }, now)[0]?.kind).toBe("updated");
+  });
+  test("prioritize: unread first, newest first, a recent mention to the front, never a reaction first", () => {
+    const n = (id: string, kind: InboxItem["kind"], hoursAgo: number, unread = false) => ({
+      id,
+      kind,
+      unread,
+      time: new Date(now - hoursAgo * 3_600_000).toISOString(),
+    });
+    expect(prioritize([n("u", "updated", 1), n("m", "mentioned", 5)], now).map((x) => x.id)).toEqual(["m", "u"]);
+    expect(prioritize([n("r", "reaction", 1), n("c", "comment", 5)], now).map((x) => x.id)).toEqual(["c", "r"]);
+    expect(prioritize([n("u", "updated", 1), n("c", "comment", 5, true)], now)[0]?.id).toBe("c");
+  });
 });
 
 test("visibleItems applies local state, filters and ordering", () => {
