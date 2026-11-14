@@ -1099,6 +1099,9 @@ function MenuItem({
   const muted = ariaDisabled === true || ariaDisabled === "true";
   return (
     <AriaMenuItem
+      // React Aria can't change a mounted row's id (it throws, unmounting the app): a row whose value changes, like the labels
+      // picker's "Create new label" row as you type, is a new row.
+      key={value}
       id={value}
       textValue={value}
       // Kept on React Aria's node for the ranking (menuFilter's keywords) and the keys (rowKeys); not DOM attributes.
@@ -1443,7 +1446,8 @@ function MenuSubmenu({
 }) {
   return (
     // React Aria keys a SubmenuTrigger's node by its `id`, which its types leave out.
-    <SubmenuTrigger delay={NO_HOVER_OPEN} {...({ id: SUBMENU + value, keywords } as object)}>
+    // Keyed by its value for the same reason as Menu.Item: React Aria can't change a mounted row's id.
+    <SubmenuTrigger key={value} delay={NO_HOVER_OPEN} {...({ id: SUBMENU + value, keywords } as object)}>
       <AriaMenuItem id={value} textValue={value} {...({ keywords } as object)} data-value={value} className="menu-item">
         <ItemContent {...slots} submenu>
           {label}

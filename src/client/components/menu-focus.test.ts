@@ -45,3 +45,8 @@ test("focus entering a submenu shows its highlight, on the first row when it hol
   expect(source).toMatch(/node\.addEventListener\("focusin", entered\)/);
   expect(source).toMatch(/const entered = [^]*?enteredHighlight\(/);
 });
+
+test("a row whose value changes (the labels picker's create row as you type) is a new row, as React Aria can't change an id", () => {
+  expect(source).toMatch(/<AriaMenuItem\s+(\/\/[^\n]*\s+)*key=\{value\}\s+id=\{value\}/);
+  expect(source).toMatch(/<SubmenuTrigger key=\{value\}/);
+});
