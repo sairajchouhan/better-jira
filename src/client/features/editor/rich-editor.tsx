@@ -25,7 +25,7 @@ import { inlineRules } from "./editor-inline-rules";
 import { linkPlugin, linkSelected } from "./editor-links";
 import { LinkPopover } from "./link-popover";
 import { activeSlash, dismissSlash, matchingSlashCommands, slashPlugin } from "./slash-commands";
-import { setList, taskBackspace, taskEnter, taskItemView, toggleTask } from "./editor-checklist";
+import { setList, taskBackspace, taskEnter, taskIds, taskItemView, toggleTask } from "./editor-checklist";
 import { blockRules, dividerKey, headingBackspace, insertDivider, lineBreak, slashTipPlugin } from "./editor-blocks";
 import { EditorIcon, type EditorGlyph } from "./editor-icons";
 import { ActionMenu } from "@/client/components/action-menu";
@@ -282,6 +282,7 @@ export function RichEditor(props: EditorEngineProps) {
           emojiRules,
           issueReferenceRules((key) => (get().issues.has(key) ? jiraIssueURL(key) : null)),
           history(),
+          taskIds,
           codeHighlightPlugin(),
           keymap(codeBlockKeys),
           keymap({

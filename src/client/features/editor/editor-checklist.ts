@@ -1,7 +1,7 @@
 import { chainCommands } from "prosemirror-commands";
 import { InputRule } from "prosemirror-inputrules";
 import { Fragment, type Node as EditorNode } from "prosemirror-model";
-import { NodeSelection, TextSelection, type Command, type Transaction } from "prosemirror-state";
+import { NodeSelection, Plugin, TextSelection, type Command, type Transaction } from "prosemirror-state";
 import type { EditorView, NodeView } from "prosemirror-view";
 import { toggleList } from "./editor-commands";
 import { richSchema } from "./rich-document";
@@ -15,6 +15,29 @@ const nodes = richSchema.nodes,
   listItem = nodes.listItem!,
   bulletList = nodes.bulletList!,
   orderedList = nodes.orderedList!;
+
+/**
+ * Jira keys a checklist and each of its items by a localId. A list or item made here (a new checklist, Enter, a paste)
+ * or one that copies another's id gets a fresh one on the node, which it keeps from then on: every save sends the same
+ * ids instead of minting new ones at each save (QA-3 description D4).
+ */
+export const taskIds = new Plugin({
+  appendTransaction(transactions, _old, state) {
+    if (!transactions.some((tr) => tr.docChanged)) return null;
+    const seen = new Set<string>();
+    let tr: Transaction | null = null;
+    state.doc.descendants((node, pos) => {
+      if (node.type === taskList || node.type === taskItem) {
+        const id = node.attrs.localId as string | null;
+        if (!id || seen.has(id))
+          (tr ??= state.tr).setNodeMarkup(pos, undefined, { ...node.attrs, localId: crypto.randomUUID() });
+        else seen.add(id);
+      }
+      return !node.isTextblock;
+    });
+    return tr;
+  },
+});
 
 /** Puts the caret in the `index`th text block inside the node at `at`, `offset` characters in. */
 function caretIn(tr: Transaction, at: number, index: number, offset: number) {

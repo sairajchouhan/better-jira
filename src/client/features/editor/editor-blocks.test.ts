@@ -11,7 +11,7 @@ import {
   lineBreak,
   toggleCallout,
 } from "./editor-blocks";
-import { setList, taskBackspace, taskEnter, toggleChecklist, toggleTask } from "./editor-checklist";
+import { setList, taskBackspace, taskEnter, taskIds, toggleChecklist, toggleTask } from "./editor-checklist";
 import { mediaCaretPlugin } from "./media-caret";
 import { fromEditorDocument, richSchema as s, toEditorDocument, type AdfDocument } from "./rich-document";
 
@@ -85,6 +85,28 @@ test("BJ-173: `[ ]` and `[]` start a checklist; it round-trips as Jira's taskLis
     ],
   };
   expect(fromEditorDocument(toEditorDocument(jira))).toEqual(jira);
+});
+
+test("QA-3 description D4: a checklist made here keeps its localIds across saves, and a copied id is replaced", () => {
+  let st = EditorState.create({ doc: n.doc!.create(null, [p("intro")]), plugins: [taskIds] });
+  const ids = (doc: EditorNode) => {
+    const list = fromEditorDocument(doc).content!.find((node) => node.type === "taskList")!;
+    return [list.attrs!.localId, ...list.content!.map((item) => item.attrs!.localId)];
+  };
+  st = st.apply(st.tr.insert(st.doc.content.size, tasks(["one", "TODO"], ["two", "TODO"])));
+  const first = ids(st.doc);
+  expect(first.every((id) => typeof id === "string" && id)).toBe(true);
+  expect(new Set(first).size).toBe(3);
+  // Another edit, then another save: the same ids.
+  st = st.apply(st.tr.insertText("!", 2));
+  expect(ids(st.doc)).toEqual(first);
+  expect(ids(st.doc)).toEqual(first);
+  // An item that copies another's id (a split keeping its attrs) gets its own.
+  const item = st.doc.lastChild!.firstChild!;
+  st = st.apply(st.tr.insert(st.doc.content.size - 1, n.taskItem!.create(item.attrs, s.text("three"))));
+  const after = ids(st.doc);
+  expect(after.slice(0, 3)).toEqual(first);
+  expect(new Set(after).size).toBe(4);
 });
 
 test("BJ-173: ⌘↵ ticks the caret's item (or every selected one); Enter adds an unticked item, or leaves on an empty one", () => {
@@ -226,3 +248,4 @@ test("§4: ⌫ at a heading's start makes it text; ⇧↵ breaks the line; two s
   expect(sunk.doc.firstChild!.firstChild!.childCount).toBe(2);
   expect(sunk.doc.textContent).toBe("one");
 });
+

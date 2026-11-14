@@ -151,8 +151,10 @@ export const richSchema = new Schema({
       parseDOM: [{ tag: "li" }],
     },
     // Ours (data-task-*) and Linear's (data-type=todo_*) checklists paste as Jira tasks; listed before ul/li so they win.
+    // Jira keys a checklist and each item by a localId, kept on the node so every save sends the same one (QA-3 D4).
     taskList: {
       ...block("ul", "taskItem+"),
+      attrs: { ...attrs, localId: { default: null } },
       parseDOM: [
         { tag: "ul[data-task-list]", priority: 60 },
         { tag: 'ul[data-type="todo_list"]', priority: 60 },
@@ -162,7 +164,7 @@ export const richSchema = new Schema({
     taskItem: {
       ...block("li", "inline*"),
       group: undefined,
-      attrs: { ...attrs, state: { default: "TODO" } },
+      attrs: { ...attrs, state: { default: "TODO" }, localId: { default: null } },
       defining: true,
       parseDOM: [
         { tag: "li[data-task-state]", priority: 60, getAttrs: (dom) => ({ state: dom.getAttribute("data-task-state") === "DONE" ? "DONE" : "TODO" }) },
@@ -318,14 +320,15 @@ const fields: Record<string, Record<string, unknown>> = {
   heading: { level: 2 },
   orderedList: { order: 1 },
   codeBlock: { language: null },
-  taskItem: { state: "TODO" },
+  taskList: { localId: null },
+  taskItem: { state: "TODO", localId: null },
   panel: { panelType: "info" },
   expand: { title: "" },
   tableCell: { colspan: 1, rowspan: 1, colwidth: null },
   tableHeader: { colspan: 1, rowspan: 1, colwidth: null },
 };
 /** Attributes Jira rejects a node or mark without, so they are sent even when they equal the default. */
-const REQUIRED = new Set(["heading.level", "taskItem.state", "subsup.type", "expand.title", "panel.panelType"]);
+const REQUIRED = new Set(["heading.level", "taskItem.state", "taskList.localId", "taskItem.localId", "subsup.type", "expand.title", "panel.panelType"]);
 /** Jira's marks allowed together with inline code. */
 const WITH_CODE = new Set(["code", "link", "opaqueMark", "textMetadata"]);
 const markFields: Record<string, Record<string, unknown>> = {
@@ -428,7 +431,7 @@ function fromEditorNode(node: EditorNode): AdfNode {
       for (const key of Object.keys(fields[String(original?.data.type)] ?? {}))
         delete baseAttrs[key];
     let attrs = exportedAttrs(node.type.name, baseAttrs, node.attrs, fields[node.type.name]);
-    // Jira requires a task's localId; a task made here (Enter at the end of one, a new checklist) has none yet.
+    // Jira requires a task's localId. An editor mints it once on the node (taskIds); a document built elsewhere has none yet.
     if (["taskList", "taskItem"].includes(node.type.name) && !attrs?.localId)
       attrs = { ...attrs, localId: crypto.randomUUID() };
     // Auto detect stores no language: Jira's codeBlock language is a string or absent.
