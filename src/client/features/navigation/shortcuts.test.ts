@@ -130,3 +130,26 @@ test("R3-palette-shortcuts-D6: ⌥1/⌥2 and their ⌘K rows apply only in the p
   expect(tabs.map((s) => shortcutApplies(s, { ...at, inbox: false }))).toEqual([false, false]);
   changeView({ priorityInbox: false });
 });
+test("C12: ⌥⇧G Change grouping and ⌥⇧O View ordering… open their command pages on the list or board, filed under Display options", async () => {
+  const { get } = await import("@/client/state/store");
+  const { shortcutApplies, runShortcut } = await import("./shortcuts");
+  const { paletteGroupOf } = await import("./palette-groups");
+  const { isPalettePage } = await import("./palette");
+  const grouping = shortcuts.find((s) => s.id === "grouping")!;
+  const ordering = shortcuts.find((s) => s.id === "ordering")!;
+  expect([grouping.name, grouping.hotkey, paletteGroupOf(grouping)]).toEqual(["Change grouping", "Alt+Shift+G", "Display options"]);
+  expect([ordering.name, ordering.hotkey, paletteGroupOf(ordering)]).toEqual(["View ordering…", "Alt+Shift+O", "Display options"]);
+  const board = { ...get(), document: null, panel: false, inbox: false };
+  expect(shortcutApplies(grouping, board)).toBe(true);
+  // Not over the Inbox's list, nor behind a full-page issue.
+  expect(shortcutApplies(grouping, { ...board, inbox: true })).toBe(false);
+  expect(shortcutApplies(ordering, { ...board, panel: true, view: "page" })).toBe(false);
+  runShortcut("grouping");
+  expect(get().overlay).toBe("grouping");
+  expect(isPalettePage(get().overlay)).toBe(true);
+  runShortcut("ordering");
+  expect(get().overlay).toBe("ordering");
+  expect(isPalettePage("ordering")).toBe(true);
+  const { ui } = await import("./app-navigation");
+  ui.send({ type: "overlay.close" });
+});

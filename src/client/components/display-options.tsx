@@ -62,9 +62,9 @@ function Row(props: Omit<ComponentProps<"div">, "className">) {
  * `jxr` Label: miniPlus labelMuted. `row` centres beside its control; `full` (`$fullWidth`) spans the section with
  * 8px above and 4px below, over a block such as the Display properties chips.
  */
-function Label({ variant = "row", children }: { variant?: "row" | "full"; children: ReactNode }) {
+function Label({ variant = "row", title, children }: { variant?: "row" | "full"; title?: string; children: ReactNode }) {
   return (
-    <Text as="div" variant="miniPlus" color="muted" data-label={variant} className="ui-vo-label">
+    <Text as="div" variant="miniPlus" color="muted" data-label={variant} className="ui-vo-label" title={title}>
       {children}
     </Text>
   );
@@ -198,18 +198,21 @@ export function SelectRow({
   value,
   options,
   onChange,
+  labelTip,
   children,
 }: {
   label: string;
   value: string;
   options: readonly (readonly [string, string])[];
   onChange: (value: string) => void;
+  /** The label's tooltip: the command that opens these choices and its shortcut (Linear's `wZ` shortcutAction label). */
+  labelTip?: string;
   /** A SmallIconButton shown before the select. */
   children?: ReactNode;
 }) {
   return (
     <Row>
-      <Label>{label}</Label>
+      <Label title={labelTip}>{label}</Label>
       <SelectWithToggleWrapper>
         <SelectButton label={label} value={value} options={options} onChange={onChange} />
         {children}

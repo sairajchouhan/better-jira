@@ -1,7 +1,8 @@
 import { expect, test, PREFS_KEY, type App } from "./app";
 
 // Right-click menus on the chrome and on group headers, as Linear builds them (startup-root.CnUSfl4j.js `yPn`, `O$n`, `g3`, `Api`, `Ffr`;
-// IssueList.CUOYX8Am.js `qu`; useListContextualActions.C9ILezPv.js `h`; CollapseListGroupButton `x`/`S`). Row names come from src/client/features/navigation/sidebar-menus.ts
+// IssueList.CUOYX8Am.js `qu`; useListContextualActions.C9ILezPv.js `h`; CollapseListGroupButton `x`/`S`; useGroupingMenu `d`,
+// useOrderingMenu `_`). Row names come from src/client/features/navigation/sidebar-menus.ts
 // and personal-controls.tsx `groupMenuEntries`.
 const NAV = 'nav[aria-label="Main navigation"]';
 const menu = (label: string) => `[role="dialog"][aria-label="${label}"]`;
@@ -74,6 +75,7 @@ test("a list group header opens Linear's list group menu on right-click, and Col
 });
 
 const LIST_SETUP = `localStorage.setItem(${JSON.stringify(PREFS_KEY)},JSON.stringify({1:{display:{layout:'list'}}}))`;
+const stored = `JSON.parse(localStorage.getItem(${JSON.stringify(PREFS_KEY)})??"{}")[1]`;
 const expanded = `[...document.querySelectorAll('main button[aria-label^="Collapse "][aria-expanded="true"]')].length`;
 const collapsedCount = `[...document.querySelectorAll('main button[aria-label^="Expand "][aria-expanded="false"]')].length`;
 
@@ -102,6 +104,47 @@ test("C11: ⌥-click on a group's chevron and its Collapse all / Expand all togg
     expect((await rows(page, `Group ${name}`)).slice(0, 2)).toEqual(["Expand", "Expand all"]);
     await page.click(`${menu(`Group ${name}`)} [cmdk-item][data-value="Expand all"]`);
     await page.waitFor(`${expanded}===${groups}`);
+  });
+});
+
+test("C12: ⌥⇧G and ⌥⇧O open the grouping and ordering choices without the Display menu; ⌘K lifts them as you type", async ({ open }) => {
+  const page = await open("/board/1/all", { setup: LIST_SETUP });
+
+  await test.step("⌥⇧G: Change grouping, the current grouping checked; picking Assignee regroups the list", async () => {
+    await page.key("KeyG", "alt", "shift");
+    const dialog = page.page.locator(menu("Change grouping"));
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator("[cmdk-item]", { hasText: /^Status$/ }).locator(".menu-checkmark")).toBeVisible();
+    await dialog.locator("[cmdk-item]", { hasText: /^Assignee$/ }).click();
+    await expect(dialog).toBeHidden();
+    await page.waitFor(`${stored}?.display?.columns==="assignee"`);
+  });
+
+  await test.step("⌥⇧O: View ordering…, Manual then By <field>; picking By title orders by title", async () => {
+    await page.key("KeyO", "alt", "shift");
+    const dialog = page.page.locator(menu("View ordering…"));
+    await expect(dialog).toBeVisible();
+    const names = await dialog.locator("[cmdk-item]").allTextContents();
+    expect(names.slice(0, 2)).toEqual(["Manual", "By title"]);
+    await dialog.locator("[cmdk-item]", { hasText: /^By title$/ }).click();
+    await page.waitFor(`${stored}?.display?.ordering==="title"`);
+  });
+
+  await test.step("⌘K: Change grouping lists from 2 characters, View ordering's values from 5", async () => {
+    await page.key("k", "meta");
+    await page.type("prio");
+    const palette = page.page.locator(menu("Search issues and commands"));
+    await expect(palette.locator("[cmdk-item]", { hasText: "Change grouping › Priority" })).toBeVisible();
+    await expect(palette.locator("[cmdk-item]", { hasText: "View ordering › By priority" })).toHaveCount(0);
+    await page.type("r");
+    await expect(palette.locator("[cmdk-item]", { hasText: "View ordering › By priority" })).toBeVisible();
+    await page.key("Escape");
+  });
+
+  await test.step("the Display menu's Grouping and Ordering labels name their commands and shortcuts", async () => {
+    await page.key("V", "shift");
+    await expect(page.page.locator('[data-label="row"][title^="Change grouping ("]')).toHaveText("Grouping");
+    await expect(page.page.locator('[data-label="row"][title^="View ordering… ("]')).toHaveText("Ordering");
   });
 });
 

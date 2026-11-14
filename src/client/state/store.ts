@@ -20,6 +20,8 @@ import {
 export type Overlay =
   | null
   | "palette"
+  | "grouping"
+  | "ordering"
   | "assign"
   | "status"
   | "create"

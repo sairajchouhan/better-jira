@@ -20,7 +20,15 @@ import { currentKey } from "@/client/state/jira-sync";
 import { navigate, openSavedView, preloadOnHover, ui } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
 import { peopleOf } from "@/shared/people";
-import { filterCount } from "@/shared/view-model";
+import { filterCount, type Display } from "@/shared/view-model";
+import { setDisplay, useViewSettings } from "@/client/features/views/view-settings";
+import {
+  GROUPING_ACTION,
+  ORDERING_ACTION,
+  groupingChoices,
+  hoistedViewChoices,
+  orderingChoices,
+} from "@/client/features/views/view-choices";
 import { MenuSurface } from "@/client/components/menu-surface";
 import { Menu } from "@/client/components/menu";
 import { COMMAND_MENU_WIDTH, CommandMenuTitle } from "@/client/components/command-menu";
@@ -100,6 +108,9 @@ const COMMAND_ICONS: Record<string, IconName> = {
   display: "display",
   layout: "display",
   "collapse-all": "display",
+  // Linear's grouping image (useGroupingMenu `u`: three stacked bars) and ordering image (useOrderingMenu `m`: arrows up and down).
+  grouping: "list",
+  ordering: "sort-desc",
   "copy-page": "link",
   "dismiss-toast": "close",
   "toast-open": "external",
@@ -205,6 +216,9 @@ const PAGES = {
   users: { parent: "User", label: "Open user", keyword: "u" },
   /** Linear's `?` Help action (`mAt`, search input hidden) when the sidebar's Help button isn't there to anchor its menu. */
   help: { parent: "Help", label: "Help", keyword: undefined },
+  /** ⌥⇧G and ⌥⇧O: the command menu on the action's sub-actions, its name as the chip (useGroupingMenu `d`, useOrderingMenu `_`). */
+  grouping: { parent: GROUPING_ACTION.parent, label: GROUPING_ACTION.name, keyword: undefined },
+  ordering: { parent: ORDERING_ACTION.parent, label: ORDERING_ACTION.name, keyword: undefined },
 } as const;
 export type PalettePage = keyof typeof PAGES;
 export const isPalettePage = (overlay: string | null): overlay is PalettePage => !!overlay && overlay in PAGES;
@@ -219,8 +233,22 @@ function openChoice({ destination: to, favorite }: NavigationChoice) {
   if ("view" in to) return openSavedView(to.view, favorite);
   navigate({ ...to, favorite: favorite ?? null });
 }
+/** The open board's grouping or ordering choices as rows, the current one checked; picking one writes the board's display as the
+ *  Display menu's select does, and closes the menu. */
+function viewChoiceRows(kind: "grouping" | "ordering", display: Display): Cmd[] {
+  const board = get().board;
+  const apply = (patch: Partial<Display>) => timed("display", () => setDisplay(board, patch));
+  return (kind === "grouping" ? groupingChoices(display, apply) : orderingChoices(display, apply)).map((choice) => ({
+    id: `${kind}:${choice.name}`,
+    name: choice.name,
+    keywords: choice.keywords,
+    checked: choice.selected,
+    run: () => (close(), choice.run?.()),
+  }));
+}
 /** A page's rows, unfiltered. */
 function usePageRows(page: PalettePage): Cmd[] {
+  const display = useViewSettings(useStore((s) => s.board)).display;
   const boards = useStore((s) => s.boards);
   const savedViews = useStore((s) => s.savedViews);
   const favorites = useStore((s) => s.favorites);
@@ -236,6 +264,7 @@ function usePageRows(page: PalettePage): Cmd[] {
     }));
   if (page === "help")
     return [{ name: "Keyboard shortcuts", keys: hotkeyOf("shortcuts"), icon: commandIcon("shortcuts"), run: () => ui.send({ type: "overlay.open", overlay: "shortcuts" }) }];
+  if (page === "grouping" || page === "ordering") return viewChoiceRows(page, display);
   const icon = commandIcon(page === "boards" ? "team-open" : page === "views" ? "view-open" : "favorite-open");
   return navigationChoices(page, { boards, savedViews, favorites, issues }).map((choice) => ({
     id: choice.id,
@@ -627,6 +656,7 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
   const issues = useStore((s) => s.issues);
   const boards = useStore((s) => s.boards);
   const boardId = useStore((s) => s.board);
+  const display = useViewSettings(boardId).display;
   const inInbox = useStore((s) => s.inbox);
   // The ids of the shortcuts that apply now, as a string, so the palette re-renders only when that set changes.
   const applicable = useStore((s) => shortcuts.filter((e) => shortcutApplies(e, s)).map((e) => e.id).join(" "));
@@ -711,7 +741,22 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
       ),
     },
     { key: "view", heading: `View · ${activeView?.name ?? ""}`, priority: VIEW_PRIORITY, rows: ranked(viewCommands, q) },
-    ...[...byGroup].map(([group, cmds]) => ({ key: group, heading: group, priority: groupPriority(group, at), rows: ranked(cmds, q) })),
+    ...[...byGroup].map(([group, cmds]) => ({
+      key: group,
+      heading: group,
+      priority: groupPriority(group, at),
+      rows:
+        group === "Display options"
+          ? [
+              ...ranked(cmds, q),
+              ...hoistedViewChoices(
+                { grouping: viewChoiceRows("grouping", display), ordering: viewChoiceRows("ordering", display) },
+                q,
+                (id) => applyingIds.has(id),
+              ),
+            ].sort(([a], [b]) => b - a)
+          : ranked(cmds, q),
+    })),
   ];
   const groups = orderGroups(
     // The group of the best-scoring row first (orderGroups ranks lower first).

@@ -29,6 +29,9 @@ export const COMMAND_KEYWORDS: Readonly<Record<string, string>> = {
   "view-create": "new custom",
   "view-save": "add",
   display: "view preferences display options",
+  // useGroupingMenu `d` ("grouping") and useOrderingMenu `_` (its values' "order ordering").
+  grouping: "grouping",
+  ordering: "order ordering",
   "copy-page": "url link",
   "toast-open": "go to recently created last latest open recent notification",
   // Notifications.

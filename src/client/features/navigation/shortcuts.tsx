@@ -6,6 +6,7 @@ import { isMyIssues } from "./navigation";
 import { useEffect, useState } from "react";
 import { VIEW_SHORTCUT_IDS, viewShortcutId } from "@/client/features/views/view-shortcut";
 import { createToolbarView } from "@/client/features/views/view-toolbar-actions";
+import { GROUPING_ACTION, ORDERING_ACTION } from "@/client/features/views/view-choices";
 import { activeView, saveOverlayToView } from "@/client/features/views/saved-views";
 import { canMergeOverlay } from "@/shared/saved-view-model";
 import { boardView, filterCount, groupStep, visibleOrder } from "@/shared/view-model";
@@ -898,6 +899,24 @@ export const shortcuts: Shortcut[] = [
     hotkey: "Alt+T",
     when: (s) => listVisible(s) && viewSettings(s.board, s).display.layout === "list",
     run: () => collapse(true),
+  },
+  {
+    // Linear's useGroupingMenu `d` (⌥⇧G): the command menu on the grouping choices, without the Display menu.
+    id: "grouping",
+    name: GROUPING_ACTION.name,
+    group: "List / Board",
+    hotkey: "Alt+Shift+G",
+    when: listVisible,
+    run: overlay("grouping"),
+  },
+  {
+    // Linear's useOrderingMenu `_` (⌥⇧O): the command menu on the ordering choices.
+    id: "ordering",
+    name: ORDERING_ACTION.name,
+    group: "List / Board",
+    hotkey: "Alt+Shift+O",
+    when: listVisible,
+    run: overlay("ordering"),
   },
   {
     id: "find",

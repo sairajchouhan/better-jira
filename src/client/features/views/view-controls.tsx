@@ -30,7 +30,8 @@ import { TextInput } from "@/client/components/field";
 import { Text } from "@/client/components/text";
 import { LoadingState } from "@/client/components/empty-state";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
-import type { Keys } from "@/client/components/keycap";
+import { shortcutTitle, type Keys } from "@/client/components/keycap";
+import { GROUPING_ACTION, ORDERING_ACTION, groupingOptions } from "./view-choices";
 import { shortDate } from "@/client/lib/due-date";
 import { ME, timed, useStore } from "@/client/state/store";
 import { ui } from "@/client/features/navigation/app-navigation";
@@ -290,8 +291,9 @@ function DisplayOptions({
         <SelectRow
           label={isBoard ? "Columns" : "Grouping"}
           value={d.columns}
-          options={GROUPINGS.filter(([v]) => !isBoard || v !== "none")}
+          options={groupingOptions(d.layout)}
           onChange={(v) => patch({ columns: v as Display["columns"] })}
+          labelTip={shortcutTitle(GROUPING_ACTION.name, hotkeyOf("grouping"))}
         >
           {/* Linear's `Aat`: only a grouping whose groups can be custom-ordered offers Group ordering. */}
           {canOrderGroups(d.columns) && (
@@ -311,6 +313,7 @@ function DisplayOptions({
           value={d.ordering}
           options={ORDERINGS}
           onChange={(v) => patch({ ordering: v as Display["ordering"] })}
+          labelTip={shortcutTitle(ORDERING_ACTION.name, hotkeyOf("ordering"))}
         >
           <ViewOptions.SmallIconButton
             label="Reverse issue order"

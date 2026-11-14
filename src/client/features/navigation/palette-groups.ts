@@ -28,6 +28,9 @@ const BY_ID: Record<string, PaletteGroup> = {
   display: "Display options",
   layout: "Display options",
   "collapse-all": "Display options",
+  // Linear's grouping and ordering actions are in ZD (`ltt`, useRegisterToggleSelectActionFactory / useOrderingMenu `group`).
+  grouping: "Display options",
+  ordering: "Display options",
   new: "Issues",
   "new-full": "Issues",
 };
