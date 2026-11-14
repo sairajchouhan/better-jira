@@ -310,74 +310,77 @@ export function IssueResources({ issue }: { issue: Issue }) {
         ];
   return (
     <section aria-label="Resources" className="issue-resources">
-      <div className="-ml-1.5 flex items-center pr-2 text-fg-3">
-        <SectionDisclosure label="Resources" expanded={!collapsed} onToggle={() => setCollapsed(!collapsed)} />
-        <span className="flex-1" />
-        <IconButton
-          label="Add resource to issue"
-          aria-expanded={!!menu}
-          onClick={(e) => setMenu(e.currentTarget)}
-          variant="borderless"
-          size="medium"
-        >
-          <Icon name="plus" />
-        </IconButton>
-      </div>
-      {!collapsed &&
-        resources.map((resource) => (
-          <div
-            key={resource.id}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              setOptions({
-                anchor:
-                  event.currentTarget.querySelector<HTMLElement>(
-                    '[aria-label^="Options for "]',
-                  ) ?? event.currentTarget,
-                resource,
-                point: { x: event.clientX, y: event.clientY },
-              });
-            }}
-            data-open={options?.resource.id === resource.id || undefined}
-            className="resource-row group/resource"
+      <SectionDisclosure expanded={!collapsed} onExpandedChange={(open) => setCollapsed(!open)}>
+        <div className="-ml-1.5 flex items-center pr-2 text-fg-3">
+          <SectionDisclosure.Trigger label="Resources" />
+          <span className="flex-1" />
+          <IconButton
+            label="Add resource to issue"
+            aria-expanded={!!menu}
+            onClick={(e) => setMenu(e.currentTarget)}
+            variant="borderless"
+            size="medium"
           >
-            {resource.kind === "link" ? (
-              <LinkIcon src={resource.preview?.icon} />
-            ) : (
-              <Icon name={resource.kind === "document" ? "file" : "branch"} />
-            )}
-            {/* Text has no anchor/time element variant; preserve native link and timestamp semantics. */}
-            {resource.kind === "document" ? (
-              <AppLink
-                data-resource-id={resource.id}
-                to={{ board: issue.board, selected: issue.key, document: resource.id, panel: true }}
-                className="min-w-0 flex-1 truncate font-medium text-fg"
+            <Icon name="plus" />
+          </IconButton>
+        </div>
+        <SectionDisclosure.Panel>
+          {resources.map((resource) => (
+            <div
+              key={resource.id}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setOptions({
+                  anchor:
+                    event.currentTarget.querySelector<HTMLElement>(
+                      '[aria-label^="Options for "]',
+                    ) ?? event.currentTarget,
+                  resource,
+                  point: { x: event.clientX, y: event.clientY },
+                });
+              }}
+              data-open={options?.resource.id === resource.id || undefined}
+              className="resource-row group/resource"
+            >
+              {resource.kind === "link" ? (
+                <LinkIcon src={resource.preview?.icon} />
+              ) : (
+                <Icon name={resource.kind === "document" ? "file" : "branch"} />
+              )}
+              {/* Text has no anchor/time element variant; preserve native link and timestamp semantics. */}
+              {resource.kind === "document" ? (
+                <AppLink
+                  data-resource-id={resource.id}
+                  to={{ board: issue.board, selected: issue.key, document: resource.id, panel: true }}
+                  className="min-w-0 flex-1 truncate font-medium text-fg"
+                >
+                  {resource.title || "New document"}
+                </AppLink>
+              ) : (
+                <LinkText resource={resource} />
+              )}
+              <time
+                aria-label={`Updated at ${new Date(resource.updated).toLocaleString()}`}
+                dateTime={resource.updated}
+                title={new Date(resource.updated).toLocaleString()}
+                className="ml-auto text-fg-3"
               >
-                {resource.title || "New document"}
-              </AppLink>
-            ) : (
-              <LinkText resource={resource} />
-            )}
-            <time
-              aria-label={`Updated at ${new Date(resource.updated).toLocaleString()}`}
-              dateTime={resource.updated}
-              title={new Date(resource.updated).toLocaleString()}
-              className="ml-auto text-fg-3"
-            >
-              {resourceAge(resource.updated)}
-            </time>
-            <IconButton
-              label={`Options for ${resource.title || "New document"}`}
-              className="-ml-1 shrink-0 opacity-0 group-hover/resource:opacity-100 focus:opacity-100 aria-expanded:opacity-100"
-              aria-expanded={options?.resource.id === resource.id}
-              onClick={(e) => setOptions({ anchor: e.currentTarget, resource })}
-              variant="borderless"
-              size="small"
-            >
-              <Icon name="dots" size={14} />
-            </IconButton>
-          </div>
-        ))}
+                {resourceAge(resource.updated)}
+              </time>
+              <IconButton
+                label={`Options for ${resource.title || "New document"}`}
+                className="-ml-1 shrink-0 opacity-0 group-hover/resource:opacity-100 focus:opacity-100 aria-expanded:opacity-100"
+                aria-expanded={options?.resource.id === resource.id}
+                onClick={(e) => setOptions({ anchor: e.currentTarget, resource })}
+                variant="borderless"
+                size="small"
+              >
+                <Icon name="dots" size={14} />
+              </IconButton>
+            </div>
+          ))}
+        </SectionDisclosure.Panel>
+      </SectionDisclosure>
       {menu && (
         <ActionMenu
           label="Add resource"

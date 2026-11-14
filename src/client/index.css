@@ -2309,7 +2309,8 @@ li[data-done="true"] > .todo-content {
 .resource-row[data-open] {
   background: var(--row-hover);
 }
-.issue-resources > div:first-child + .resource-row {
+/* The first row under the header toggle (rows sit in the section's boxless disclosure panel). */
+.issue-resources [role="group"] > .resource-row:first-child {
   margin-top: 9px;
 }
 .resource-row + .resource-row {

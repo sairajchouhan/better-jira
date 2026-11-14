@@ -46,17 +46,12 @@ const SIDEBAR_KEY = "better-jira:sidebar:v1";
 
 // --- chrome ---
 
-/** A sidebar section's heading (Boards, Views): its caret collapses the section and a hover "+" adds to it. */
-function SectionHeading({ label, expanded, onToggle, addLabel, onAdd }: {
-  label: string;
-  expanded: boolean;
-  onToggle: () => void;
-  addLabel: string;
-  onAdd: () => void;
-}) {
+/** A sidebar section's heading (Boards, Views), inside its `SectionDisclosure`: its caret collapses the section and a hover "+"
+ *  adds to it. */
+function SectionHeading({ label, addLabel, onAdd }: { label: string; addLabel: string; onAdd: () => void }) {
   return (
     <div className="group mt-5 mb-1 flex items-center">
-      <SectionDisclosure label={label} expanded={expanded} onToggle={onToggle} />
+      <SectionDisclosure.Trigger label={label} />
       <IconButton
         label={addLabel}
         variant="muted"
@@ -176,44 +171,44 @@ export function Sidebar({ boards }: { boards: Board[] }) {
         )}
         <SidebarMore prefs={prefs} />
 
-        <SectionHeading
-          label="Your spaces"
-          expanded={expanded("boards")}
-          onToggle={() => toggle("boards")}
-          addLabel="Add space"
-          onAdd={() => ui.send({ type: "overlay.open", overlay: "add-board" })}
-        />
-        {expanded("boards") && boards.map((b) => {
-          const item = (
-            <SidebarLink key={b.id} row={{ place: { to: "board", board: b.id } }} to={{ board: b.id, selected: null, panel: false }}>
-              <span className="grid size-4 shrink-0 place-items-center rounded-[4px] bg-sel text-[9px] font-semibold text-fg-2">
-                {b.name[0]}
-              </span>
-              <span className="truncate">{b.name}</span>
-            </SidebarLink>
-          );
-          return (
-            <ContextMenu key={b.id} label="Space options" entries={() => boardEntries(b, hotkeyOf("copy-url"))}>
-              {item}
-            </ContextMenu>
-          );
-        })}
+        <SectionDisclosure expanded={expanded("boards")} onExpandedChange={() => toggle("boards")}>
+          <SectionHeading
+            label="Your spaces"
+            addLabel="Add space"
+            onAdd={() => ui.send({ type: "overlay.open", overlay: "add-board" })}
+          />
+          <SectionDisclosure.Panel>
+          {boards.map((b) => {
+            const item = (
+              <SidebarLink key={b.id} row={{ place: { to: "board", board: b.id } }} to={{ board: b.id, selected: null, panel: false }}>
+                <span className="grid size-4 shrink-0 place-items-center rounded-[4px] bg-sel text-[9px] font-semibold text-fg-2">
+                  {b.name[0]}
+                </span>
+                <span className="truncate">{b.name}</span>
+              </SidebarLink>
+            );
+            return (
+              <ContextMenu key={b.id} label="Space options" entries={() => boardEntries(b, hotkeyOf("copy-url"))}>
+                {item}
+              </ContextMenu>
+            );
+          })}
+          </SectionDisclosure.Panel>
+        </SectionDisclosure>
         {/* Views is a section like Boards: every saved view inline, edited from its row's menu. */}
-        <SectionHeading
-          label="Views"
-          expanded={expanded("views")}
-          onToggle={() => toggle("views")}
-          addLabel="New view"
-          onAdd={() => openViewEditor(createViewDraft("custom"))}
-        />
-        {expanded("views") && views.map((v) => (
-          <ViewContextMenu key={v.id} view={v}>
-            <SidebarViewLink row={{ place: { to: "view", id: v.id } }} view={v}>
-              <SavedViewIcon view={v} />
-              <span className="truncate">{v.name}</span>
-            </SidebarViewLink>
-          </ViewContextMenu>
-        ))}
+        <SectionDisclosure expanded={expanded("views")} onExpandedChange={() => toggle("views")}>
+          <SectionHeading label="Views" addLabel="New view" onAdd={() => openViewEditor(createViewDraft("custom"))} />
+          <SectionDisclosure.Panel>
+            {views.map((v) => (
+              <ViewContextMenu key={v.id} view={v}>
+                <SidebarViewLink row={{ place: { to: "view", id: v.id } }} view={v}>
+                  <SavedViewIcon view={v} />
+                  <span className="truncate">{v.name}</span>
+                </SidebarViewLink>
+              </ViewContextMenu>
+            ))}
+          </SectionDisclosure.Panel>
+        </SectionDisclosure>
         <ViewFavorites expanded={expanded("favorites")} onToggle={() => toggle("favorites")} />
         <Button
           variant="muted"

@@ -52,7 +52,14 @@ export function ViewFavorites({ expanded, onToggle }: { expanded: boolean; onTog
     const url = () => board ? boardURL(board) : placeURL(view ? { to: "view", id: view.id } : document ? { to: "issue", key: document.issue.key, document: document.resource.id } : { to: "issue", key: issue!.key });
     return [<ContextMenu key={id} label="Favorite options" entries={() => favoriteEntries(id, url)}>{link}</ContextMenu>];
   });
-  return rows.length ? <div className="mt-5"><div className="mb-1"><SectionDisclosure label="Favorites" expanded={expanded} onToggle={onToggle} /></div>{expanded && rows}</div> : null;
+  return rows.length ? (
+    <div className="mt-5">
+      <SectionDisclosure expanded={expanded} onExpandedChange={onToggle}>
+        <div className="mb-1"><SectionDisclosure.Trigger label="Favorites" /></div>
+        <SectionDisclosure.Panel>{rows}</SectionDisclosure.Panel>
+      </SectionDisclosure>
+    </div>
+  ) : null;
 }
 export function ViewDetails({ view, issues }: { view: SavedView; issues: Issue[] }) {
   const summaries = viewSummaries(issues);

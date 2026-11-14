@@ -302,78 +302,81 @@ export function SubIssues({ issue }: { issue: Issue }) {
       aria-label="Sub-issues"
       className="mt-[14px] text-[13px]"
     >
-      {!!model.total && (
-        <div className="-ml-1.5 mb-2 flex items-center gap-1.5 pr-2">
-          <SectionDisclosure label="Sub-issues" expanded={!collapsed} onToggle={() => setCollapsed(!collapsed)} />
-          <Text
-            data-sub-progress
-            className="ml-0.5 flex items-center gap-1.5"
-            as="span"
-            variant="mini"
-            color="muted"
-          >
-            <ProgressRing value={model.completed / model.total} />
-            {model.completed}/{model.total}
-          </Text>
-          <span className="flex-1" />
-          {model.hiddenCompleted > 0 && (
-            <Button
-              onClick={() => setReveal(!reveal)}
-              variant="borderless"
-              size="small"
+      <SectionDisclosure expanded={!collapsed} onExpandedChange={(open) => setCollapsed(!open)}>
+        {!!model.total && (
+          <div className="-ml-1.5 mb-2 flex items-center gap-1.5 pr-2">
+            <SectionDisclosure.Trigger label="Sub-issues" />
+            <Text
+              data-sub-progress
+              className="ml-0.5 flex items-center gap-1.5"
+              as="span"
+              variant="mini"
+              color="muted"
             >
-              {reveal ? "Hide" : "Show"} {model.hiddenCompleted} completed
-            </Button>
-          )}
-          <IconButton
-            ref={settingsTrigger}
-            label="Sub-issue display options"
-            aria-expanded={settings}
-            onClick={() => setSettings(!settings)}
-            variant="borderless"
-            size="medium"
-          >
-            <Icon name="display" size={14} />
-          </IconButton>
-          <IconButton
-            data-create-child
-            label="Create new sub-issue"
-            onClick={start}
-            variant="borderless"
-            size="medium"
-          >
-            <Icon name="plus" size={14} />
-          </IconButton>
-        </div>
-      )}
-      {!collapsed &&
-        model.rows.map(({ issue: child, depth, contextOnly }, index) => (
-          <SubIssueRow
-            key={child.key}
-            child={child}
-            depth={depth}
-            contextOnly={contextOnly}
-            index={index}
-            rows={model.rows}
-            display={display}
-            boards={boards}
-            progress={subIssueCount(all, boards, child.key, "children")}
-            onDrop={
-              manual
-                ? (dragged, after) => {
-                    const source = get().issues.get(dragged);
-                    if (!source || source.parent !== child.parent || dragged === child.key) return;
-                    const rest = siblingsOf(child).filter((k) => k !== dragged);
-                    moveChild(dragged, { to: rest.indexOf(child.key) + (after ? 1 : 0) });
-                  }
-                : undefined
-            }
-            active={rowMenu?.key === child.key}
-            openMenu={(anchor, point) =>
-              setRowMenu({ anchor, key: child.key, point })
-            }
-          />
-        ))}
+              <ProgressRing value={model.completed / model.total} />
+              {model.completed}/{model.total}
+            </Text>
+            <span className="flex-1" />
+            {model.hiddenCompleted > 0 && (
+              <Button
+                onClick={() => setReveal(!reveal)}
+                variant="borderless"
+                size="small"
+              >
+                {reveal ? "Hide" : "Show"} {model.hiddenCompleted} completed
+              </Button>
+            )}
+            <IconButton
+              ref={settingsTrigger}
+              label="Sub-issue display options"
+              aria-expanded={settings}
+              onClick={() => setSettings(!settings)}
+              variant="borderless"
+              size="medium"
+            >
+              <Icon name="display" size={14} />
+            </IconButton>
+            <IconButton
+              data-create-child
+              label="Create new sub-issue"
+              onClick={start}
+              variant="borderless"
+              size="medium"
+            >
+              <Icon name="plus" size={14} />
+            </IconButton>
+          </div>
+        )}
+        <SectionDisclosure.Panel>
+          {model.rows.map(({ issue: child, depth, contextOnly }, index) => (
+            <SubIssueRow
+              key={child.key}
+              child={child}
+              depth={depth}
+              contextOnly={contextOnly}
+              index={index}
+              rows={model.rows}
+              display={display}
+              boards={boards}
+              progress={subIssueCount(all, boards, child.key, "children")}
+              onDrop={
+                manual
+                  ? (dragged, after) => {
+                      const source = get().issues.get(dragged);
+                      if (!source || source.parent !== child.parent || dragged === child.key) return;
+                      const rest = siblingsOf(child).filter((k) => k !== dragged);
+                      moveChild(dragged, { to: rest.indexOf(child.key) + (after ? 1 : 0) });
+                    }
+                  : undefined
+              }
+              active={rowMenu?.key === child.key}
+              openMenu={(anchor, point) =>
+                setRowMenu({ anchor, key: child.key, point })
+              }
+            />
+          ))}
+        </SectionDisclosure.Panel>
+      </SectionDisclosure>
       {!model.total && !creating && canHaveSubIssues(get(), issue) && (
         <Button
           data-create-child

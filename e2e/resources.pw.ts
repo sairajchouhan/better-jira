@@ -160,6 +160,12 @@ test("issue resources: documents and links are created, kept, removed and undone
     await page.click('[aria-label="Collapse resources section"]');
     expect(await page.eval(`document.querySelector('a[href*="/pull/17"]')`)).toBeNull();
     await page.click('[aria-label="Expand resources section"]');
+    // React Aria's Disclosure: the toggle names the panel that holds the rows.
+    expect(
+      await page.eval(
+        `document.getElementById(document.querySelector('[aria-label="Collapse resources section"]').getAttribute('aria-controls'))?.contains(document.querySelector('a[href*="/pull/17"]'))`,
+      ),
+    ).toBe(true);
     await page.hover('a[href="https://example.com/design"]');
     await page.click('[aria-label="Options for Design reference"]');
     await page.click('[cmdk-item][data-value="Remove…"]');
