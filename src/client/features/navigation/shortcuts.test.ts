@@ -108,3 +108,17 @@ test("R3-palette-shortcuts-D2: G then a key Linear binds as a G-chord never fall
   // Reserved chords are inert: not commands, so ⌘K and the shortcut help never list them.
   expect(reservedChords.every((c) => !shortcuts.includes(c))).toBe(true);
 });
+
+test("R3-palette-shortcuts-D6: ⌥1/⌥2 and their ⌘K rows apply only in the priority inbox, as Linear gates on priorityInboxEnabled", async () => {
+  const { get } = await import("@/client/state/store");
+  const { changeView } = await import("@/client/features/inbox/inbox");
+  const { shortcutApplies } = await import("./shortcuts");
+  const tabs = shortcuts.filter((s) => s.id === "inbox-priority" || s.id === "inbox-other");
+  const at = { ...get(), inbox: true };
+  changeView({ priorityInbox: false });
+  expect(tabs.map((s) => shortcutApplies(s, at))).toEqual([false, false]);
+  changeView({ priorityInbox: true });
+  expect(tabs.map((s) => shortcutApplies(s, at))).toEqual([true, true]);
+  expect(tabs.map((s) => shortcutApplies(s, { ...at, inbox: false }))).toEqual([false, false]);
+  changeView({ priorityInbox: false });
+});

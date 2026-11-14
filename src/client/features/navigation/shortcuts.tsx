@@ -414,8 +414,10 @@ export const shortcuts: Shortcut[] = [
     name,
     hotkey,
     group: "Inbox",
-    run: () => priorityInbox() && showTab(tab),
-    when: (s) => s.inbox,
+    run: () => showTab(tab),
+    // The tabs exist only in the priority inbox; the Inbox's own display option, outside the store, read per key and ⌘K open
+    // (R3-palette-shortcuts-D6).
+    when: (s) => s.inbox && priorityInbox(),
   })),
   {
     id: "mine",
