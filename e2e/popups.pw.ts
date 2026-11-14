@@ -295,3 +295,33 @@ test("label menu from the properties panel opens beside its row, 4.5px left, 5.5
   expect(await page.eval(`document.activeElement===document.querySelector(${JSON.stringify(trigger)})`)).toBe(true);
   await page.close();
 });
+
+test("Dialog: Tab reaches a link inside it and wraps, the page behind is inert, Escape hands focus back (React Aria's Modal)", async ({
+  open,
+}) => {
+  const page = await open("");
+  await page.waitFor(`!!document.querySelector('[data-key="TEST-1"]')`);
+  const PREFS = dialog("Preferences");
+  await page.key("g");
+  await page.key("s");
+  await page.waitFor(`!!document.querySelector('${PREFS}')`);
+  await sleep(50);
+  // The old trap's FOCUSABLE list had no a[href], so Tab skipped links and let focus leave; React Aria walks every tabbable.
+  await page.eval(
+    `(()=>{const a=document.createElement("a");a.href="#trap";a.textContent="trap link";document.querySelector('${PREFS}').append(a)})()`,
+  );
+  let reached = false;
+  for (let i = 0; i < 60 && !reached; i++) {
+    await page.key("Tab");
+    expect(await inside(page, PREFS)).toBe(true);
+    reached = (await focused(page)) === "trap link";
+  }
+  expect(reached).toBe(true);
+  await trapsTab(page, PREFS);
+  expect(await page.eval(`document.querySelector('[data-key="TEST-1"]').closest('[inert]') !== null`)).toBe(true);
+  await page.key("Escape");
+  await page.waitFor(`!document.querySelector('${PREFS}')`);
+  expect(await inside(page, PREFS)).toBe(false);
+  expect(await page.eval(`document.activeElement !== document.body`)).toBe(true);
+  await page.close();
+});

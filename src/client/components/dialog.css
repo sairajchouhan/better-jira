@@ -6,6 +6,62 @@
  * differently in Linear (Customize sidebar's 24px `rX`) overrides a slot with utilities, as Linear passes `sx`.
  */
 @layer components {
+  /* The backdrop: bgModalOverlay over the whole window (Linear's side panel dims with its `g_` backdrop, bgModalOverlay at
+     opacity .95). `.ui-modal` lays the box out by placement; it never transforms, so fixed menus inside stay anchored. */
+  .ui-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: var(--modal-overlay);
+  }
+  .ui-modal-overlay[data-placement="side"] {
+    background: color-mix(in srgb, var(--modal-overlay) 95%, transparent);
+  }
+  .ui-modal {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    outline: none;
+  }
+  .ui-modal-box {
+    outline: none;
+  }
+  /* `top`: 12vh down, centred, at most 80vh tall and 12px inside the window's sides. */
+  [data-placement="top"] > .ui-modal {
+    padding: 12vh 12px 0;
+  }
+  [data-placement="top"] .ui-modal-box {
+    flex: none;
+    max-height: 80vh;
+  }
+  /* `third`: Linear's DialogPresenter (`uo.show`, styles `jY`): spacers growing 1 and 2 above and below put the box a third of
+     the free height down, 16px inside the window at the least. */
+  [data-placement="third"] > .ui-modal {
+    padding: 0 16px;
+  }
+  [data-placement="third"] .ui-modal-box {
+    flex: 0 1 auto;
+    max-height: calc(100% - 32px);
+  }
+  .ui-modal-spacer-above,
+  .ui-modal-spacer-below {
+    flex: 1 1 0;
+    min-height: 16px;
+  }
+  .ui-modal-spacer-below {
+    flex-grow: 2;
+  }
+  /* `side`: Linear's keyboard-shortcuts panel (HelpCenter): 360px wide, 12px inside the window's top, right and bottom. */
+  [data-placement="side"] .ui-modal-box {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    bottom: 12px;
+    width: min(360px, calc(100% - 24px));
+  }
+
   /* Linear's Modal compound (startup-root.CnUSfl4j.js `qF`/`JF`/`YF`, styles `XF`). The header (`modalHeaderContainer`):
      a 16px row with 48px on the right for the Close button, which sits 16px in, centred (`closeIconButton`). */
   .ui-dialog-header {
