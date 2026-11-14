@@ -1,6 +1,25 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from "react";
+import { Popover, PopoverContext } from "react-aria-components";
 import { Tooltip, useTooltip } from "./tooltip";
-import { CARD_FALLBACKS, keepsCardOpen, safeArea, sideOf, TOOLTIP, TOOLTIP_TIMING, type Placement } from "./tooltip-rules";
+import {
+  CARD_FALLBACKS,
+  choosePlacement,
+  keepsCardOpen,
+  safeArea,
+  sideOf,
+  TOOLTIP,
+  TOOLTIP_TIMING,
+  type Placement,
+} from "./tooltip-rules";
 
 /**
  * The tooltip's interactive form (Linear's `$` with `interactive`, startup-root `Rwe`): the same core as every tooltip (one open
@@ -9,6 +28,13 @@ import { CARD_FALLBACKS, keepsCardOpen, safeArea, sideOf, TOOLTIP, TOOLTIP_TIMIN
  * closes the moment the pointer leaves unless it went into the card (`keepsCardOpen`). One surface for the issue, user, link and
  * pull request cards. `label` names it for tests and screen readers. `display="inline"` is Linear's `style: { display: "inline" }`
  * on a trigger inside a run of text (an Activity row's issue, `Ao`), so it wraps with the words.
+ *
+ * The card is React Aria's preview popover (`Popover trigger="PreviewTrigger"`, non-modal): a `dialog` a keyboard user can Tab into
+ * from its trigger, which hands focus back to the trigger as it closes. Its trigger is ours, not React Aria's `PreviewTrigger`:
+ * that one forces its child into the tab order, takes Enter from a button inside, keeps a page-wide warm-up instead of Linear's
+ * delay that restarts on every move, and closes by a pointer hull wider than Linear's `Jwe` strip; and our triggers wrap any
+ * control in a span (a menu button with its own `aria-haspopup`, a link, plain text). So the tooltip core's store opens and closes
+ * it, as it does every tooltip.
  */
 export function HoverCard({
   content,
@@ -31,21 +57,103 @@ export function HoverCard({
   return (
     <Tooltip.Root timing={{ ...TOOLTIP_TIMING.card, delay }}>
       <HoverCardTrigger display={display}>{children}</HoverCardTrigger>
-      <Tooltip.Surface placement={placement} fallbacks={CARD_FALLBACKS} offset={0} label={label} className="hover-card">
+      <HoverCardSurface placement={placement} label={label}>
         <HoverCardZone label={label}>{content}</HoverCardZone>
-      </Tooltip.Surface>
+      </HoverCardSurface>
     </Tooltip.Root>
+  );
+}
+
+/**
+ * The card's surface: React Aria's non-modal `Popover` against the trigger, flush with it (`offset` 0) and `Fwe` (12px) inside the
+ * window, opened and closed by the store. Where it opens is Linear's `Bwe` (`placement` when it fits, else the first of
+ * `CARD_FALLBACKS` that does), measured as it opens, as the tooltip surface does. Escape stays with the store (one press hides it
+ * and goes on to the page), so React Aria's own Escape is off; its close on scroll or on focus leaving the card closes it in the
+ * store. While open, the trigger is described by it.
+ */
+function HoverCardSurface({ placement, label, children }: { placement: Placement; label?: string; children: ReactNode }) {
+  const { id, isOpen, triggerRef, surfaceRef, actions } = useTooltip();
+  const [chosen, setChosen] = useState(placement);
+  const choose = useEffectEvent(() => {
+    const trigger = triggerRef.current,
+      box = surfaceRef.current?.getBoundingClientRect();
+    if (!trigger || !box) return;
+    setChosen(
+      choosePlacement({
+        placements: [placement, ...CARD_FALLBACKS],
+        reference: trigger.getBoundingClientRect(),
+        floating: { width: box.width, height: box.height },
+        viewport: { width: innerWidth, height: innerHeight },
+        offset: 0,
+      }),
+    );
+  });
+  useLayoutEffect(() => {
+    if (isOpen) choose();
+  }, [isOpen]);
+  useLayoutEffect(() => {
+    const trigger = triggerRef.current;
+    if (!isOpen || !trigger) return;
+    const before = trigger.getAttribute("aria-describedby");
+    trigger.setAttribute("aria-describedby", before ? `${before} ${id}` : id);
+    return () => {
+      if (before) trigger.setAttribute("aria-describedby", before);
+      else trigger.removeAttribute("aria-describedby");
+    };
+  }, [isOpen, id, triggerRef]);
+  return (
+    // A card inside a React Aria menu or dialog trigger must not take that trigger's popover settings.
+    <PopoverContext value={null}>
+      <Popover
+        ref={surfaceRef}
+        // React Aria passes `id` through to the dialog; its props type leaves it out.
+        {...({ id } as object)}
+        trigger="PreviewTrigger"
+        isNonModal
+        isKeyboardDismissDisabled
+        isOpen={isOpen}
+        onOpenChange={(open) => !open && actions.close()}
+        triggerRef={triggerRef}
+        placement={chosen.replace("-", " ") as never}
+        shouldFlip={false}
+        offset={0}
+        containerPadding={TOOLTIP.containerPadding}
+        aria-label={label}
+        className="hover-card"
+      >
+        {children}
+      </Popover>
+    </PopoverContext>
   );
 }
 
 /** Whether `node` is inside the open card. */
 const inCard = (card: RefObject<HTMLElement | null>, node: EventTarget | null) => node instanceof Node && !!card.current?.contains(node);
 
+/** What Tab from the trigger moves to in the open card: its first control. */
+const CARD_TABBABLE = 'a[href], button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])';
+
 /** The card's trigger: a span around the caller's control. A mouse or pen rest opens the card (each move restarts the delay),
  *  keyboard focus inside opens it at once, a press closes it until the pointer comes back, and leaving closes it unless the pointer
- *  went into the card. */
+ *  went into the card. Tab while the card is open moves into it (React Aria's `usePreviewTrigger`, whose card sits at the end of the
+ *  page); focus handed back as the card closes doesn't open it again. */
 function HoverCardTrigger({ display, children }: { display: "inline-flex" | "inline"; children: ReactNode }) {
-  const { surfaceRef, triggerRef, actions } = useTooltip();
+  const { isOpen, surfaceRef, triggerRef, actions } = useTooltip();
+  const restoring = useRef(false);
+  useEffect(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    // React Aria's FocusScope announces the focus it gives back as the card closes; taking it here keeps it from reopening the card.
+    const restore = (event: Event) => {
+      if (!(event.target instanceof HTMLElement)) return;
+      event.preventDefault();
+      restoring.current = true;
+      event.target.focus();
+      restoring.current = false;
+    };
+    trigger.addEventListener("react-aria-focus-scope-restore", restore);
+    return () => trigger.removeEventListener("react-aria-focus-scope-restore", restore);
+  }, [triggerRef]);
   return (
     <span
       ref={triggerRef as RefObject<HTMLSpanElement | null>}
@@ -57,7 +165,14 @@ function HoverCardTrigger({ display, children }: { display: "inline-flex" | "inl
         if (event.pointerType !== "touch" && !keepsCardOpen(inCard(surfaceRef, event.relatedTarget) ? "card" : "elsewhere")) actions.leave();
       }}
       onPointerDown={() => actions.close()}
-      onFocus={(event) => event.target.matches(":focus-visible") && actions.focus()}
+      onFocus={(event) => !restoring.current && event.target.matches(":focus-visible") && actions.focus()}
+      onKeyDown={(event) => {
+        if (event.key !== "Tab" || event.shiftKey || !isOpen) return;
+        const first = [...(surfaceRef.current?.querySelectorAll<HTMLElement>(CARD_TABBABLE) ?? [])].find((node) => node.getClientRects().length);
+        if (!first) return;
+        event.preventDefault();
+        first.focus();
+      }}
       onBlur={(event) => !inCard(surfaceRef, event.relatedTarget) && actions.close()}
     >
       {children}

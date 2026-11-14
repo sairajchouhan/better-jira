@@ -431,6 +431,23 @@ test("BJ-253: the issue sidebar opens with Linear's Diffs section: its pull requ
     await page.page.mouse.move(1, 1);
   });
 
+  await test.step("the card is React Aria's preview dialog: it describes its trigger, Tab moves into it, and focus handed back as it closes doesn't reopen it", async () => {
+    const link = `document.querySelector('[data-pull-request-row="#41"] a')`;
+    const card = `document.querySelector('[data-hover-card="Pull request"]')`;
+    await page.eval(`${link}.focus({focusVisible:true})`);
+    await page.waitFor(`!!${card}`, 450);
+    const dialog = `${card}.closest('[role="dialog"]')`;
+    expect(await page.eval(`[${dialog}?.getAttribute("aria-label"),${link}.closest('[data-hover-card-trigger]').getAttribute("aria-describedby")?.split(" ").includes(${dialog}.id)]`)).toEqual(["Pull request", true]);
+    await page.key("Tab");
+    expect(await page.eval(`${card}.contains(document.activeElement)`)).toBe(true);
+    // Escape hides the card; focus goes back to the row's link, and the card stays shut.
+    await page.key("Escape");
+    await page.waitFor(`!${card}&&document.activeElement===${link}`, 450);
+    await page.page.waitForTimeout(700);
+    expect(await page.eval(`!${card}`)).toBe(true);
+    await page.eval(`document.activeElement.blur()`);
+  });
+
   await test.step("right-click opens Linear's pull request menu; Open in GitHub opens it", async () => {
     const r = await page.rect('[data-pull-request-row="#42"] a');
     await page.page.mouse.click(r.x + 10, r.y + r.height / 2, { button: "right" });
