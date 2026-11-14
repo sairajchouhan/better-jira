@@ -720,12 +720,13 @@ export function InboxList() {
   );
 }
 
-/** Above the open issue: the notification's group ("+3 updates from …"), which unfolds into each of its notifications. */
+/** Above the open issue, in its scroller: the notification's group ("+3 updates from …"), which unfolds into each of its
+ *  notifications. */
 export function InboxIssueGroup() {
   const row = useSelectedRow();
   if (!row || row.count < 2) return null;
   return (
-    <div className="shrink-0 border-b border-line px-3 py-2">
+    <div data-inbox-issue-group className="border-b border-line px-3 py-2">
       <InboxGroupUpdates key={row.id} row={row} mirrored />
     </div>
   );

@@ -588,6 +588,10 @@ test("prod parity: a group's earlier notifications unfold in the pane, and a com
     await p.waitFor(`document.body.innerText.includes("+1 update from Alex")`);
     await p.click(`button[aria-label="Show grouped notifications"]`);
     await p.waitFor(`document.querySelectorAll('[data-inbox-note]').length === 2`);
+    // R3 G15 #27: the group scrolls with the issue in one scroller, so a long group never hides the issue.
+    expect(await p.eval(`!!document.querySelector('[data-inbox-issue-group]')?.closest('.issue-detail-body')`)).toBe(true);
+    // R3 G15: no board position counter in the inbox's issue header (Linear's is the issue list's own).
+    expect(await p.eval(`!!document.querySelector('[aria-label="Issue position"]')`)).toBe(false);
   });
   await test.step("#9/#13: a comment notification opens the issue at the comment Jira links to", async () => {
     await p.click(`[data-inbox-row*="issue/4"]`);
