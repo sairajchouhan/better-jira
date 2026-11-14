@@ -20,6 +20,7 @@ import {
   matchesFilters,
   matchesRule,
   navigationIssues,
+  listPosition,
   operatorsFor,
   parentName,
   parsePreferences,
@@ -214,6 +215,12 @@ describe("view selection", () => {
     const groups = buckets([all[0]!, all[1]!], "label", board, all).map((g) => g.issues);
     expect(groups.flat().filter((i) => i.key === "A-1")).toHaveLength(2);
     expect(navigationIssues(groups).map((i) => i.key)).toEqual(["A-1", "A-2"]);
+  });
+  test("the issue stepper shows only for an issue in a list of two or more, as Linear's jf", () => {
+    expect(listPosition([all[0]!, all[1]!], "A-2")).toEqual({ index: 1, total: 2 });
+    expect(listPosition([all[0]!, all[1]!], "Z-9")).toBeUndefined();
+    expect(listPosition([all[0]!], "A-1")).toBeUndefined();
+    expect(listPosition([], "A-1")).toBeUndefined();
   });
   test("column and row creation carries type, priority and assignee defaults into the draft", () => {
     expect(draftForGroup("type", "Bug", board, all, "active")).toEqual({ type: "Bug" });

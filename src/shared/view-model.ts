@@ -801,6 +801,13 @@ export const navigationIssues = (columns: Issue[][]): Issue[] => [
   ...new Map(columns.flat().map((i) => [i.key, i])).values(),
 ];
 
+/** Where `key` sits in the stepper's list, or none when the list can't be stepped: Linear's `jf` (IssueList) hides the whole
+ *  position-and-arrows control when the issue isn't in its siblings or there's only one (`if(i<0||r.length<=1)return null`). */
+export function listPosition(issues: Issue[], key: string): { index: number; total: number } | undefined {
+  const index = issues.findIndex((i) => i.key === key);
+  return index < 0 || issues.length <= 1 ? undefined : { index, total: issues.length };
+}
+
 /** A board's groups as columns: status columns outside the scope drop out. `universe` is the board's issues. */
 export function boardColumns(
   visible: Issue[],

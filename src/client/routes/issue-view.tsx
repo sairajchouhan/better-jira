@@ -47,7 +47,7 @@ import { flushLocalChanges } from "@/client/state/local-database";
 import { isLocalIssue } from "@/client/state/local-edits";
 import { navigate, ui } from "@/client/features/navigation/app-navigation";
 import { interruptedUploads } from "@/client/state/jira-media";
-import { navigationIssues, visibleOrder } from "@/shared/view-model";
+import { listPosition, navigationIssues, visibleOrder } from "@/shared/view-model";
 import { PersonalIssueDetails } from "@/client/features/issue/personal-controls";
 import { SubIssueOf } from "@/client/features/issue/sub-issues";
 import { Avatar } from "@/client/components/avatar";
@@ -249,33 +249,30 @@ function IssueBody({ issue, lead }: { issue: Issue; lead?: ReactNode }) {
   );
 }
 
-/** Linear shows position, then next and previous, within the current visible view. */
+/** Linear shows position, then next and previous, within the current visible view, and nothing when the issue isn't in it or
+ *  it holds only this issue (see `listPosition`). */
 function Stepper({ issueKey }: { issueKey: string }) {
   const order = useStore((s) => visibleOrder(s, ME.id));
-  const flat = useMemo(() => navigationIssues(order), [order]);
-  const i = flat.findIndex((x) => x.key === issueKey);
+  const position = useMemo(() => listPosition(navigationIssues(order), issueKey), [order, issueKey]);
+  if (!position) return null;
+  const { index, total } = position;
   return (
     <div className="mr-1 flex items-center gap-0.5">
-      {i >= 0 && (
-        <span
-          aria-label="Issue position"
-          className="mr-2 whitespace-nowrap tabular-nums text-fg-3 max-sm:hidden"
-        >
-          {i + 1}
-          <span className="text-fg-4"> / {flat.length}</span>
-        </span>
-      )}
+      <span aria-label="Issue position" className="mr-2 whitespace-nowrap tabular-nums text-fg-3 max-sm:hidden">
+        {index + 1}
+        <span className="text-fg-4"> / {total}</span>
+      </span>
       <IconButton
         label="Next"
         shortcut="J"
         alternate="ArrowDown"
         variant="muted"
-        disabled={i < 0 || i >= flat.length - 1}
+        disabled={index >= total - 1}
         onClick={() => runShortcut("down")}
       >
         <Icon name="down" />
       </IconButton>
-      <IconButton label="Previous" shortcut="K" alternate="ArrowUp" variant="muted" disabled={i <= 0} onClick={() => runShortcut("up")}>
+      <IconButton label="Previous" shortcut="K" alternate="ArrowUp" variant="muted" disabled={index === 0} onClick={() => runShortcut("up")}>
         <Icon name="up" />
       </IconButton>
     </div>
