@@ -49,7 +49,7 @@ import { fullTime } from "./issue-dates";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
 import { canHaveSubIssues } from "@/shared/issue-properties";
-import { parentOf } from "@/shared/epics";
+import { titleParentOf } from "@/shared/epics";
 import {
   defaultSubIssueDisplay,
   statusOf,
@@ -97,7 +97,8 @@ function parseDisplay(value: unknown): SubIssueDisplay {
 }
 type Boards = ReturnType<typeof get>["boards"];
 
-/** Linear's "Sub-issue of" line under a child's title: the parent link, and a progress pill whose menu lists the parent's sub-issues (⌘⇧→). */
+/** Linear's "Sub-issue of" line under a child's title: the parent link, and a progress pill whose menu lists the parent's sub-issues (⌘⇧→).
+ *  An issue in an epic with no parent Task names the epic here (BJ-289, the user's deviation from Linear). */
 export function SubIssueOf({ issue }: { issue: Issue }) {
   const all = useStore((s) => s.issues),
     boards = useStore((s) => s.boards),
@@ -108,12 +109,13 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
     setMenu(progress.current);
     return true;
   });
-  // An epic parent is the issue's project, shown in the Project pill, never here (shared/epics.ts parentOf).
-  const parentKey = parentOf(issue, (key) => all.get(key));
+  // The parent Task, else the epic that lists this issue (BJ-289, shared/epics.ts titleParentOf); never a Parent property.
+  const parentKey = titleParentOf(issue, (key) => all.get(key));
   const parent = parentKey ? all.get(parentKey) : undefined;
   if (!parent) return null;
   const status = (i: Issue) => statusOf(boards, i),
-    model = subIssueRows(parent.key, all, defaultSubIssueDisplay(), status);
+    // Every level below, as the parent's Sub-issues section header counts (cached per snapshot, BJ-281).
+    count = subIssueCount(all, boards, parent.key, "descendants");
   return (
     <Text
       className="issue-parent-line"
@@ -141,10 +143,10 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
         aria-label={`Open sub-issues of ${parent.key}`}
         onClick={(event) => setMenu(event.currentTarget)}
         variant="header"
-        completed={model.completed}
-        total={model.total}
+        completed={count?.done ?? 0}
+        total={count?.total ?? 0}
         aria-expanded={!!menu}
-        />
+      />
       {menu && (
         <ChildrenMenu parent={parent} current={issue.key} anchor={menu} close={() => setMenu(null)} />
       )}

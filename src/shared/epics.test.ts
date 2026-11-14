@@ -13,6 +13,7 @@ import {
   lookupIn,
   parentOf,
   subIssueParent,
+  titleParentOf,
 } from "./epics";
 import { buckets, defaultPreferences, draftForGroup, listRows, matchesRule, selectIssues, type Rule } from "./view-model";
 import { opsFor } from "./jira-ops";
@@ -237,6 +238,23 @@ test("BJ-280: an epic's Sub-issues section lists its issues; a sub-task stays un
   // Still never a Parent: the duplicate BJ-247 fixed stays fixed.
   expect(parentOf(inBilling, lookup)).toBeUndefined();
   expect([initiative, billing, inBilling, subTask].map(listsSubIssues)).toEqual([false, true, true, true]);
+});
+
+// BJ-289: the user's deviation from Linear (.raj/done.md): the "Sub-issue of" line under the title names the parent Task, else the
+// epic, so an issue in an epic points back to the epic whose Sub-issues section lists it (BJ-280). Parent itself stays epic-free.
+test("BJ-289: the title line names the parent Task first, else the epic; an epic or an orphan names none", () => {
+  // A Subtask names its Task, never the epic above it.
+  expect(titleParentOf(subTask, lookup)).toBe("E-10");
+  // A Task in an epic with no parent Task names the epic.
+  expect(titleParentOf(inBilling, lookup)).toBe("E-2");
+  expect(titleParentOf(issue("E-20", { parent: "E-99", parentLevel: 1 }), lookup)).toBe("E-99");
+  // An epic names neither its initiative nor a parent Jira sent without a level; an orphan names nothing.
+  expect(titleParentOf(billing, lookup)).toBeUndefined();
+  expect(titleParentOf(issue("E-24", { type: "Epic", parent: "E-95" }), lookup)).toBeUndefined();
+  expect(titleParentOf(initiative, lookup)).toBeUndefined();
+  expect(titleParentOf(loose, lookup)).toBeUndefined();
+  // The Parent stays the Task alone: the BJ-247 duplicate stays fixed.
+  expect(parentOf(inBilling, lookup)).toBeUndefined();
 });
 
 test("BJ-280: adding from an epic's section puts the new issue in the epic as the Epic picker does", () => {

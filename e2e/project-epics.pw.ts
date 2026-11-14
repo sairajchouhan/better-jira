@@ -190,8 +190,10 @@ test("\"No epic\" filter: the composer starts with no project", async ({ open })
 /**
  * BJ-247: an epic parent is the issue's Project, never its Parent (shared/epics.ts parentOf), as Linear keeps `issue.parent` and
  * `issue.project` apart. Fixture with `epics` and `subtask`: TEST-2 and TEST-3 sit in epic TEST-7; TEST-6 is a Subtask of TEST-5.
+ * BJ-289, the user's deviation from Linear (.raj/done.md): the "Sub-issue of" line under the title alone names the epic
+ * (shared/epics.ts titleParentOf); every Parent surface stays epic-free.
  */
-test("an epic parent shows only as Project: no parent line, sub-issues, Parent filter, grouping, nesting or ⌘⇧P", async ({ open }) => {
+test("an epic parent shows as Project and on the title line only: no Parent, Parent filter, grouping, nesting or ⌘⇧P", async ({ open }) => {
   await fixture.reset({ writable: true, epics: true, subtask: true });
   const p = await open();
   await p.waitFor(`${cards}===8`);
@@ -234,10 +236,39 @@ test("an epic parent shows only as Project: no parent line, sub-issues, Parent f
     await p.key("Escape");
   });
 
-  await test.step("an issue in the epic: Project names it, no Sub-issue of line, Remove has no parent, ⌘⇧P offers no epic", async () => {
+  await test.step("BJ-289: an issue in the epic with no parent Task: its Sub-issue of line names the epic, with the epic's progress", async () => {
+    await p.goto("?issue=TEST-2&view=page");
+    await p.waitFor(`document.querySelector('[data-parent-link]')?.textContent.includes("TEST-7")`);
+    // The line reads as a parent's does: label, the epic's status, key and title, then its issues' progress (TEST-2 and TEST-3).
+    expect(
+      await p.eval<string[]>(`[...document.querySelector('[data-parent-link]').parentElement.children].map(n=>n.textContent)`),
+    ).toEqual(["Sub-issue of", "TEST-7Fixture epic", expect.stringMatching(/^\d\/2$/)]);
+    expect(await p.eval(`document.querySelector('[data-parent-progress]').getAttribute('aria-label')`)).toBe("Open sub-issues of TEST-7");
+    // The ring opens Open sub-issue… over the epic's issues, this one checked; picking the other opens it.
+    await p.click("[data-parent-progress]");
+    const MENU7 = '[role=dialog][aria-label="Open sub-issues of TEST-7"]';
+    await p.waitFor(`document.querySelectorAll('${MENU7} [cmdk-item]').length===2`);
+    expect(
+      await p.eval<string[]>(`[...document.querySelectorAll('${MENU7} [cmdk-item]')].map(n=>n.textContent.slice(0,6)).sort()`),
+    ).toEqual(["TEST-2", "TEST-3"]);
+    await p.click(`${MENU7} [cmdk-item][data-value^="TEST-3 "]`);
+    await p.waitFor(`new URLSearchParams(location.search).get('issue')==='TEST-3'`);
+    // ⌘⇧→ (Open sub-issues of parent) opens the same menu, as the line and the shortcut read one helper.
+    await p.waitFor(`document.querySelector('[data-parent-link]')?.textContent.includes("TEST-7")`);
+    await p.eval("document.activeElement?.blur()");
+    await p.key("ArrowRight", "meta", "shift");
+    await p.waitFor(`document.querySelectorAll('${MENU7} [cmdk-item]').length===2`);
+    await p.key("Escape");
+    // Clicking the epic opens it.
+    await p.click("[data-parent-link]");
+    await p.waitFor(`new URLSearchParams(location.search).get('issue')==='TEST-7'`);
+  });
+
+  await test.step("an issue in the epic: Project names it, Remove has no parent, ⌘⇧P offers no epic, ⌘⇧↑ opens nothing", async () => {
     await p.goto("?issue=TEST-2&view=page");
     await p.waitFor(`document.getElementById('prop-project')?.textContent.includes("Fixture epic")`);
-    expect(await p.eval(`!!document.querySelector('[data-parent-link]')`)).toBe(false);
+    // The epic is never a Parent property in the sidebar (BJ-247).
+    expect(await p.eval(`!!document.getElementById('prop-parent')`)).toBe(false);
     await p.click("#issue-options");
     await p.type("remove");
     await sleep(150); // a Remove › Parent issue row would show by now
@@ -273,6 +304,10 @@ test("an epic parent shows only as Project: no parent line, sub-issues, Parent f
   await test.step("a Subtask's parent issue still shows as Sub-issue of, and the parent lists it", async () => {
     await p.goto("?issue=TEST-6&view=page");
     await p.waitFor(`document.querySelector('[data-parent-link]')?.textContent.includes("TEST-5")`);
+    // Its ring lists its Task's sub-issues, never the epic's.
+    await p.click("[data-parent-progress]");
+    await p.waitFor(`!!document.querySelector('[role=dialog][aria-label="Open sub-issues of TEST-5"] [cmdk-item]')`);
+    await p.key("Escape");
     await p.goto("?issue=TEST-5&view=page");
     await p.waitFor(`!!document.querySelector('[data-sub-issue="TEST-6"]')`);
   });
@@ -348,12 +383,20 @@ test("BJ-280: an epic's Sub-issues section lists, adds and removes its issues; a
     expect(await badge("TEST-5")).toBe("0/1");
   });
 
-  await test.step("a child names the epic once, as Epic: no Sub-issue of line, and its Subtask's parent line is still TEST-5", async () => {
+  await test.step("BJ-289: a child names the epic as Epic and on its Sub-issue of line, never as Parent; its Subtask's line stays TEST-5", async () => {
     await p.goto("?issue=TEST-2&view=page");
     await p.waitFor(`document.getElementById('prop-project')?.textContent.includes("Fixture epic")`);
-    expect(await p.eval(`!!document.querySelector('[data-parent-link]')`)).toBe(false);
+    await p.waitFor(`document.querySelector('[data-parent-link]')?.textContent.includes("TEST-7")`);
+    expect(await p.eval(`!!document.getElementById('prop-parent')`)).toBe(false);
+    // The ring counts what the epic's section header counts: TEST-2, TEST-3, TEST-5 and its Subtask TEST-6.
+    expect(await p.eval(`document.querySelector('[data-parent-progress]').textContent`)).toMatch(/^\d\/4$/);
+    // TEST-5 now sits in the epic with no parent Task: its line names the epic too.
+    await p.goto("?issue=TEST-5&view=page");
+    await p.waitFor(`document.querySelector('[data-parent-link]')?.textContent.includes("TEST-7")`);
+    // A Subtask names its Task, never the epic above it.
     await p.goto("?issue=TEST-6&view=page");
     await p.waitFor(`document.querySelector('[data-parent-link]')?.textContent.includes("TEST-5")`);
+    expect(await p.eval(`document.querySelector('[data-parent-link]').textContent.includes("TEST-7")`)).toBe(false);
   });
 
   await test.step("the inline add row creates the issue in the epic, writing the epic as the Epic picker does", async () => {
