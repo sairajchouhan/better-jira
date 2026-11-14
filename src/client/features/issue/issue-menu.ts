@@ -7,7 +7,7 @@ import { ui } from "@/client/features/navigation/app-navigation";
 import { toggleFavorite } from "@/client/features/navigation/favorites";
 import { canHaveChildren, needsParent } from "@/shared/issue-properties";
 import { createIssueDocument } from "./issue-resources";
-import { canRunShortcut, runShortcut, hotkeyOf } from "@/client/features/navigation/shortcuts";
+import { MOVES, moveAvailability, runShortcut, hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { copyIssue, copyKinds, copyIcons, copyShortcuts } from "./issue-copy";
 import { reminderSubmenu } from "@/client/features/reminders/reminders";
 import { post } from "@/client/features/navigation/commands";
@@ -358,22 +358,12 @@ export function issueMenuEntries(
 
     run: () => actions.remove(issue.key),
   };
-  const moves = (
-    [
-      ["column-left", "Left column"],
-      ["column-right", "Right column"],
-      ["reorder-top", "To top of group"],
-      ["reorder-up", "One position up"],
-      ["reorder-down", "One position down"],
-      ["reorder-bottom", "To bottom of group"],
-    ] as const
-  )
-    .filter(([id]) => canRunShortcut(id))
-    .map(([id, name]) => ({
-      name,
-      shortcut: hotkeyOf(id),
-      run: () => runShortcut(id, issue.key),
-    }));
+  // Linear's Move… (`Lvr`, includeDisabledSubActions): its six moves in order, those the issue can't make left out, and
+  // up/down/top/bottom listed but disabled with its reason while the group isn't ordered manually.
+  const moves = MOVES.flatMap(([id, name]): ActionEntry[] => {
+    const move = moveAvailability(id, issue);
+    return move ? [{ name, shortcut: hotkeyOf(id), disabledReason: move.disabledReason, run: () => runShortcut(id, issue.key) }] : [];
+  });
   const entries: ActionEntry[] =
     presentation !== "detail"
       ? [

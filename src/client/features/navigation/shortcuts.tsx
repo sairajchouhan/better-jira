@@ -8,7 +8,7 @@ import { VIEW_SHORTCUT_IDS, viewShortcutId } from "@/client/features/views/view-
 import { createToolbarView } from "@/client/features/views/view-toolbar-actions";
 import { activeView, saveOverlayToView } from "@/client/features/views/saved-views";
 import { canMergeOverlay } from "@/shared/saved-view-model";
-import { filterCount, visibleOrder } from "@/shared/view-model";
+import { boardView, filterCount, groupStep, visibleOrder } from "@/shared/view-model";
 import { forgetIssueIntents, post, run as command } from "./commands";
 import { canHaveChildren } from "@/shared/issue-properties";
 import { formatForDisplay, getHotkeyManager, type Hotkey } from "@tanstack/react-hotkeys";
@@ -19,12 +19,7 @@ import { redoEdit, undoEdit } from "@/client/state/undo-history";
 import { isLocalIssue } from "@/client/state/local-edits";
 import { navigate, ui, pageURL } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
-import {
-  buckets,
-  columnInScope,
-  orderGroups,
-  rankBetween,
-} from "@/shared/view-model";
+import { buckets, rankBetween } from "@/shared/view-model";
 import {
   clearFilters,
   setDisplay,
@@ -134,19 +129,23 @@ function move(direction: number, horizontal = false) {
   } else next = cols[col]?.[row + direction];
   if (next) navigate({ selected: next.key });
 }
+/** The status Move left/right takes the issue to on a status-grouped board: the first status of the nearest group the board
+ *  shows (Linear's `Pvr`/`Fvr`, board layout only: `kvr`). */
+function columnTarget(issue: Issue, direction: number, s = get()) {
+  const view = boardView(s, ME.id);
+  if (!view || view.prefs.display.columns !== "status" || view.prefs.display.layout !== "board") return undefined;
+  const group = groupStep(view.columns, view.prefs, issue.key, direction);
+  return group && boardOf(issue.key)?.columns.find((c) => c.name === group.id)?.statuses[0];
+}
 function moveColumn(direction: number) {
-  const issue = selected();
-  if (!issue) return;
-  const board = boardOf(issue.key)!,
-    prefs = viewSettings(issue.board);
-  // Status columns step in the board's shown order, the Group ordering panel's when the view has one.
-  const choices = orderGroups(
-    board.columns.filter((c) => columnInScope(c, prefs.scope)).map((c) => ({ ...c, id: c.name })),
-    prefs.order.status ?? [],
-  );
-  const at = choices.findIndex((c) => c.statuses.some((s) => s.id === issue.status));
-  const target = choices[at + direction]?.statuses[0];
-  if (at >= 0 && target) actions.status(issue.key, target.id);
+  const issue = selected(),
+    status = issue && columnTarget(issue, direction);
+  if (issue && status) actions.status(issue.key, status.id);
+}
+/** Whether `issue` can step `direction` within its group, to an edge with `edge` (Linear's `Vvr`/`Bvr`: not already first/last). */
+function canReorder(issue: Issue, direction: number, s = get()) {
+  const list = visibleOrder(s, ME.id).find((c) => c.some((i) => i.key === issue.key));
+  return !!list && list.length > 1 && list.at(direction < 0 ? 0 : -1)!.key !== issue.key;
 }
 function reorder(direction: number, edge = false) {
   const issue = selected();
@@ -167,6 +166,25 @@ function reorder(direction: number, edge = false) {
   actions.drop(issue.key, issue.board, [], descending ? rankBetween(b, a) : rankBetween(a, b));
 }
 const manual = (s = get()) => viewSettings(s.board, s).display.ordering === "manual";
+/** Linear's Move… sub-actions (`Ivr`), in its order. */
+export const MOVES = [
+  ["reorder-top", "Move to top"],
+  ["reorder-up", "Move up"],
+  ["column-right", "Move right"],
+  ["reorder-down", "Move down"],
+  ["column-left", "Move left"],
+  ["reorder-bottom", "Move to bottom"],
+] as const;
+type MoveId = (typeof MOVES)[number][0];
+/** Whether Move… lists the move for `issue` (Linear's `applicable`), and why it is disabled when it is listed but can't run
+ *  (`disabledReason`): up/down/top/bottom need a manually ordered group. */
+export function moveAvailability(id: MoveId, issue: Issue | undefined, s = get()): { disabledReason?: string } | null {
+  if (!issue) return null;
+  if (id === "column-left" || id === "column-right")
+    return columnTarget(issue, id === "column-left" ? -1 : 1, s) ? {} : null;
+  if (!canReorder(issue, id === "reorder-top" || id === "reorder-up" ? -1 : 1, s)) return null;
+  return manual(s) ? {} : { disabledReason: "This group is not ordered manually" };
+}
 function scope(value: "active" | "backlog" | "all", mine = false) {
   navigate({ mine, ...(!mine && isMyIssues(get()) ? { board: get().board } : {}), panel: false, selected: null, scope: value });
 }
@@ -787,7 +805,11 @@ export const shortcuts: Shortcut[] = [
     hotkey,
     group: "List / Board",
     issue: true,
-    when: manual,
+    // Moves act on the selection (or a menu's issue), never the card that slides under the pointer as the board re-lays out.
+    when: (s: State) => {
+      const move = moveAvailability(id, selected(s), s);
+      return !!move && !move.disabledReason;
+    },
     run: () => reorder(dir, edge),
   })),
   {
@@ -796,7 +818,7 @@ export const shortcuts: Shortcut[] = [
     group: "List / Board",
     hotkey: "Alt+ArrowLeft",
     issue: true,
-    when: (s) => viewSettings(s.board, s).display.columns === "status",
+    when: (s) => !!moveAvailability("column-left", selected(s), s),
     run: () => moveColumn(-1),
   },
   {
@@ -805,7 +827,7 @@ export const shortcuts: Shortcut[] = [
     group: "List / Board",
     hotkey: "Alt+ArrowRight",
     issue: true,
-    when: (s) => viewSettings(s.board, s).display.columns === "status",
+    when: (s) => !!moveAvailability("column-right", selected(s), s),
     run: () => moveColumn(1),
   },
   {

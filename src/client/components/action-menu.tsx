@@ -41,6 +41,8 @@ export type ActionEntry = {
   /** A drawn icon in place of `icon` (Linear's action `image`): a status, priority or avatar. */
   image?: ReactNode;
   divider?: boolean;
+  /** Listed but greyed out and inert, with this reason as its tooltip (Linear's disabledReason, shown as the row's hintText). */
+  disabledReason?: string;
   /** Other words a filter finds the entry by (a language's aliases). */
   keywords?: string[];
 };
@@ -277,6 +279,8 @@ function Row({
   return (
     <Menu.Item
       value={entry.name}
+      disabled={!!entry.disabledReason}
+      title={entry.disabledReason}
       icon={icon}
       checked={entry.selected}
       shortcut={entry.shortcut}

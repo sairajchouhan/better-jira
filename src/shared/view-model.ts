@@ -904,27 +904,42 @@ export type OrderState = {
   editorDraft?: unknown;
 };
 const noPreferences = defaultPreferences();
-let lastOrder: { inputs: unknown[]; order: Issue[][] } | undefined;
-/** The active board's issues in on-screen order, as the board shows them: J/K, ←/→ and the issue page's stepper all follow it.
- *  Memoised on its inputs, so a store selector can return it. */
-export function visibleOrder(state: OrderState, me: string): Issue[][] {
+let lastView: { inputs: unknown[]; view: BoardView } | undefined;
+/** The active board as it is laid out: its effective settings, every group in shown order (hidden ones included), and the
+ *  visible groups' issues in on-screen order. Memoised on its inputs, so a store selector can return it. */
+type BoardView = { board: Board; prefs: Preferences; columns: Bucket[]; order: Issue[][] };
+export function boardView(state: OrderState, me: string): BoardView | undefined {
   const personal = state.mine && !state.activeViewId && !state.editorDraft && !state.inbox;
   const current = state.boards.find((b) => b.id === state.board);
-  if (!current) return [];
+  if (!current) return undefined;
   const board = personal ? myIssuesBoard(state.boards, current) : current;
   const prefs = state.effectiveViewPreferences ?? state.preferences[personal ? 0 : board.id] ?? noPreferences,
     mine = state.mine || !!state.savedViews.find((v) => v.id === state.activeViewId)?.mine,
     who = personal ? personIssues(state.person ?? me, state.personTab ?? "assigned", me) : mine,
     inputs = [state.issues, board, prefs, mine, state.query, me, state.person, state.personTab];
-  if (lastOrder?.inputs.every((x, i) => x === inputs[i])) return lastOrder.order;
+  if (lastView?.inputs.every((x, i) => x === inputs[i])) return lastView.view;
   const all = [...state.issues.values()],
     visible = selectIssues(all, board, prefs, who, state.query, me, Date.now(), personal),
     universe = personal ? all : all.filter((i) => i.board === board.id),
     hidden = prefs.hidden[prefs.display.columns] ?? [],
-    shown = boardColumns(visible, board, prefs, universe).filter((c) => !hidden.includes(c.id)),
+    columns = boardColumns(visible, board, prefs, universe),
+    shown = columns.filter((c) => !hidden.includes(c.id)),
     order = layoutOrder(shown, groupLayout(shown, visible, board, prefs.display), prefs, universe);
-  lastOrder = { inputs, order };
-  return order;
+  lastView = { inputs, view: { board, prefs, columns, order } };
+  return lastView.view;
+}
+/** The active board's issues in on-screen order, as the board shows them: J/K, ←/→ and the issue page's stepper all follow it. */
+export const visibleOrder = (state: OrderState, me: string): Issue[][] => boardView(state, me)?.order ?? [];
+
+/** The group a card in `key`'s group moves to by Move left/right (Linear's `Rvr`/`zvr`): the nearest one in `direction` that the
+ *  board shows, skipping hidden groups and, unless Show empty groups is on, empty ones (Linear's `Gvr`); none at the edge. */
+export function groupStep(columns: Bucket[], prefs: Preferences, key: string, direction: number): Bucket | undefined {
+  const at = columns.findIndex((c) => c.issues.some((i) => i.key === key));
+  if (at < 0) return undefined;
+  const shown = new Set(groupVisibility(columns, prefs).show);
+  for (let i = at + direction; i >= 0 && i < columns.length; i += direction)
+    if (shown.has(columns[i]!)) return columns[i];
+  return undefined;
 }
 
 export function draftForGroup(

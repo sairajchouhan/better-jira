@@ -1,5 +1,6 @@
-import { type Issue } from "@/shared/issue-model";
-import { expect, test } from "bun:test";
+import { type Board, type Issue } from "@/shared/issue-model";
+import { describe, expect, test } from "bun:test";
+import { defaultPreferences, type Preferences } from "@/shared/view-model";
 import type { ActionEntry } from "@/client/components/action-menu";
 import { get, set } from "@/client/state/store";
 import { navigate, ui } from "@/client/features/navigation/app-navigation";
@@ -83,4 +84,72 @@ test("Change subscribers on a hovered sub-issue row opens that issue's subscribe
     stopSubs();
   }
   expect([keys, get().selected]).toEqual([[child.key], child.key]);
+});
+
+describe("Move (R3-board-D1, D2)", () => {
+  const board: Board = {
+    id: 1,
+    name: "Board",
+    columns: ["Todo", "In Progress", "In Review", "Done"].map((name) => ({
+      name,
+      statuses: [{ id: name.toLowerCase(), name, category: name === "Done" ? "done" : "indeterminate" }],
+    })),
+  };
+  const card = (key: string, status: string, rank: string): Issue => ({ ...issue, key, status, rank });
+  const setup = (patch: (p: Preferences) => void = () => {}) => {
+    const prefs = defaultPreferences();
+    prefs.hidden = { status: ["In Review"] };
+    patch(prefs);
+    set({
+      boards: [board],
+      preferences: { 1: prefs },
+      effectiveViewPreferences: null,
+      issues: new Map(
+        [card("M-1", "todo", "a"), card("M-2", "todo", "b"), card("M-3", "in progress", "a"), card("M-4", "done", "a")].map(
+          (i) => [i.key, i],
+        ),
+      ),
+    });
+    ui.send({ type: "overlay.close" });
+    navigate({ board: 1, selected: null, panel: false, document: null, inbox: false, mine: false });
+  };
+  const moves = (key: string) =>
+    find(issueMenuEntries(get().issues.get(key)!, { openDialog: () => {}, close: () => {}, presentation: "row" }), ["Move"])
+      .children!.map((e) => [e.name, e.disabledReason ?? ""]);
+
+  test("Move right/left skip a hidden column, from the menu and from ⌥→", async () => {
+    const { runShortcut } = await import("@/client/features/navigation/shortcuts");
+    setup();
+    expect(moves("M-3")).toEqual([
+      ["Move right", ""],
+      ["Move left", ""],
+    ]);
+    find(issueMenuEntries(get().issues.get("M-3")!, { openDialog: () => {}, close: () => {}, presentation: "row" }), [
+      "Move",
+      "Move right",
+    ]).run!();
+    expect(get().issues.get("M-3")!.status).toBe("done");
+    navigate({ selected: "M-3" });
+    runShortcut("column-left");
+    // In Progress emptied when M-3 left it, and an empty group is hidden on the board too (Linear's `Gvr`): it lands in Todo.
+    expect(get().issues.get("M-3")!.status).toBe("todo");
+    // Nothing visible to the right of Done: no Move right, and ⌥→ does nothing.
+    expect(moves("M-4").map(([name]) => name)).toEqual(["Move left"]);
+  });
+
+  test("Linear's names and order; up/down/top/bottom disabled with its reason when the group isn't ordered manually", () => {
+    setup();
+    expect(moves("M-1")).toEqual([
+      ["Move right", ""],
+      ["Move down", ""],
+      ["Move to bottom", ""],
+    ]);
+    expect(moves("M-2").map(([name]) => name)).toEqual(["Move to top", "Move up", "Move right"]);
+    setup((p) => (p.display.ordering = "priority"));
+    expect(moves("M-1")).toEqual([
+      ["Move right", ""],
+      ["Move down", "This group is not ordered manually"],
+      ["Move to bottom", "This group is not ordered manually"],
+    ]);
+  });
 });
