@@ -1,4 +1,4 @@
-import { expect, test, shownDocument, shownIssue } from "./app";
+import { expect, fixture, test, shownDocument, shownIssue } from "./app";
 
 /** Package P (palette, search, navigation): Linear's nested "Open …" pages, recents and search. */
 const dialog = (label: string) => `document.querySelector('[role=dialog][aria-label="${label}"]')`;
@@ -235,4 +235,101 @@ test("BJ-62: Search's Filter bar narrows results by priority and the chip remove
   expect(await p.eval<string>(keys)).not.toContain("TEST-1");
   await p.click('[aria-label="Remove Priority filter"]');
   await p.waitFor(`!${dialog("Search issues")}.textContent.includes('Priority is')`);
+});
+
+test("A3, B2, B5: ⌘K lists the issue's values, finds commands by Linear's keywords, and copies the issue as a prompt", async ({ open }) => {
+  const copied = `window.__copied=[];Object.defineProperty(navigator,'clipboard',{value:{writeText:async t=>{window.__copied.push(t)}}})`;
+  const p = await open("", { setup: copied });
+  const values = `[...document.querySelectorAll('[cmdk-item]')].map(n=>n.getAttribute('data-value'))`;
+  const selectedValue = `document.querySelector('[cmdk-item][data-selected=true]')?.getAttribute('data-value')`;
+  const clear = () =>
+    p.eval(
+      `(()=>{const i=document.querySelector('[cmdk-input]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'');i.dispatchEvent(new Event('input',{bubbles:true}))})()`,
+    );
+  const scoped = async () => {
+    await p.eval("document.activeElement?.blur()");
+    await p.key("k", "meta");
+    await p.waitFor(`!!document.querySelector('.command-menu-title')`);
+  };
+  await p.key("j");
+  await p.waitFor(`!!document.querySelector("[data-key][data-selected=true]")`);
+  const issue = await p.eval<string>(`document.querySelector("[data-key][data-selected=true]").getAttribute("data-key")`);
+  const doing = `document.querySelector('[cmdk-item][data-value="cmd:status:Doing Change status › Doing"]')`;
+
+  await test.step("A3: status and priority values hoist from 2 characters, assignee from 3, with Linear's breadcrumb", async () => {
+    await scoped();
+    await p.type("d");
+    await p.waitFor(`!!document.querySelector('[cmdk-item]')`);
+    expect(await p.eval<string[]>(values)).not.toContain("cmd:status:Doing Change status › Doing");
+    await p.type("o");
+    await p.waitFor(`${values}.includes('cmd:status:Doing Change status › Doing')`);
+    // Linear's PCn: a status the query starts, in workflow order (Doing before Done).
+    const listed = await p.eval<string[]>(values);
+    expect(listed.indexOf("cmd:status:Doing Change status › Doing")).toBeLessThan(listed.indexOf("cmd:status:Done Change status › Done"));
+    await clear();
+    await p.type("al");
+    await p.waitFor(`!!document.querySelector('[cmdk-item]')`);
+    expect(await p.eval<string[]>(values)).not.toContain("cmd:assign:Alex Assign to › Alex");
+    await p.type("e");
+    await p.waitFor(`${values}.includes('cmd:assign:Alex Assign to › Alex')`);
+    await p.key("Escape");
+  });
+
+  await test.step("A3: \"doin\" then ↵ sets the status through the undoable write", async () => {
+    const before = (await fixture.log()).writes.length;
+    await scoped();
+    await p.type("doin");
+    await p.waitFor(`${selectedValue}==='cmd:status:Doing Change status › Doing'`);
+    await p.key("Enter");
+    await p.waitFor(`!document.querySelector('[cmdk-input]')`);
+    await expect.poll(async () => (await fixture.log()).writes.length).toBeGreaterThan(before);
+    await scoped();
+    await p.type("doin");
+    await p.waitFor(`!!${doing}?.querySelector('.menu-checkmark')`);
+    await p.key("Escape");
+    await p.eval("document.activeElement?.blur()");
+    await p.key("z", "meta");
+    await scoped();
+    await p.type("doin");
+    // Undone: Doing is no longer the issue's checked status.
+    await p.waitFor(`!!${doing}&&!${doing}.querySelector('.menu-checkmark')`);
+    await p.key("Escape");
+  });
+
+  await test.step("B2: keywords find Undo, the sidebar toggle and Open document", async () => {
+    await p.eval("document.activeElement?.blur()");
+    await p.key("k", "meta");
+    await p.waitFor(`!!document.querySelector('[cmdk-input]')`);
+    for (const [query, name] of [
+      ["revert", "Undo"],
+      ["hide sidebar", "Toggle left sidebar"],
+      ["goto", "Open document"],
+    ] as const) {
+      await clear();
+      await p.type(query);
+      await p.waitFor(`${values}.includes(${JSON.stringify(`cmd:${name}`)})`);
+    }
+    await p.key("Escape");
+  });
+
+  await test.step("B5: ⌘⌥P copies Linear's prompt with its toast; ⌘K offers the coding tools from 2 characters", async () => {
+    await p.eval("document.activeElement?.blur()");
+    await p.key("p", "meta", "alt");
+    await p.waitFor(`window.__copied.length===1`);
+    const prompt = await p.eval<string>(`window.__copied[0]`);
+    expect(prompt.startsWith(`Work on Jira issue ${issue}:\n\nSuggested branch name: audit/${issue.toLowerCase()}-`)).toBe(true);
+    await p.waitFor(`[...document.querySelectorAll('[data-toast]')].some(t=>t.textContent.includes('Prompt copied to clipboard'))`);
+    await scoped();
+    await p.type("cu");
+    await p.waitFor(`${values}.includes('cmd:copy-prompt:Open in Cursor Work on issue › Open in Cursor')`);
+    for (const tool of ["Claude Code desktop", "Codex desktop", "T3 Code"]) {
+      await clear();
+      await p.type(tool.slice(0, 4).toLowerCase());
+      await p.waitFor(`${values}.includes(${JSON.stringify(`cmd:copy-prompt:Open in ${tool} Work on issue › Open in ${tool}`)})`);
+    }
+    await clear();
+    await p.type("prompt");
+    await p.waitFor(`${values}.includes('cmd:Copy as prompt')`);
+    await p.key("Escape");
+  });
 });
