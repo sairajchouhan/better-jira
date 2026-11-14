@@ -276,7 +276,6 @@ async function loop() {
         (moved) => moved && notify("inbox"),
         (e) => console.error("[inbox]", String(e).slice(0, 200)),
       );
-    await enrichProjects();
     void enrichProperties().catch((e) => console.error("[properties]", String(e).slice(0, 200)));
     await new Promise<void>((resolve) => {
       live.wake = resolve;
@@ -563,34 +562,6 @@ export const saveViewDefault = (id: number, display: object) =>
 let enriching = false;
 let propertyProgress = { pending: 0, completed: 0, errors: 0 };
 
-async function enrichProjects() {
-  const projects = db
-    .query<{ key: string }, []>(
-      "SELECT DISTINCT json_extract(slim,'$.project.key') AS key FROM issues",
-    )
-    .all();
-  for (const { key } of projects) {
-    if (!key) continue;
-    const saved = getMeta(`project-info:${key}`);
-    if (saved && Date.now() - JSON.parse(saved).synced < FULL_SYNC_EVERY_MS) continue;
-    try {
-      const project = await jira(`/rest/api/3/project/${encodeURIComponent(key)}`, {
-        signal: AbortSignal.timeout(30000),
-      });
-      const u = project.lead;
-      setMeta(
-        `project-info:${key}`,
-        JSON.stringify({
-          synced: Date.now(),
-          lead: u ? jiraUser(u) : null,
-        }),
-      );
-    } catch (e) {
-      console.error(`[properties] project ${key}:`, String(e).slice(0, 200));
-    }
-  }
-}
-
 /** Extra reads never sit on the board's request path. Cache them across process restarts. */
 async function enrichProperties() {
   if (enriching) return;
@@ -716,7 +687,6 @@ export const properties = () =>
         `SELECT i.key,i.slim,p.data,p.source_updated FROM issues i LEFT JOIN issue_properties p ON p.key=i.key WHERE i.board IN (${BOARDS.join(",")})`,
       )
       .all(),
-    (key) => JSON.parse(getMeta(`project-info:${key}`) ?? "null"),
     propertyProgress.pending,
   );
 

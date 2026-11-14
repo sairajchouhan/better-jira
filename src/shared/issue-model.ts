@@ -72,6 +72,10 @@ export type Issue = {
   assignee: User | null;
   labels: string[];
   parent?: string;
+  /** Jira's hierarchy level of this issue's type (Initiative 2, Epic 1, Task 0, Sub-task -1); absent on fixture and local issues. */
+  level?: number;
+  /** Jira's hierarchy level of the parent's type, so an epic parent the mirror doesn't hold is still known (shared/epics.ts). */
+  parentLevel?: number;
   rank?: string;
   comments: number;
   updated: string;
@@ -102,7 +106,6 @@ export type Issue = {
   /** Whether this Jira user watches the issue, from the mirror list; `watchers` wins once loaded (R2-issue-fields-D9). */
   watching?: boolean;
   estimate?: number;
-  projectLead?: User | null;
   attachments?: {
     id: string;
     name: string;

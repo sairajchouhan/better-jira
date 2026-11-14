@@ -62,6 +62,7 @@ import {
   type Grouping,
 } from "@/shared/view-model";
 import { clearPriorityRow, statuses, projectChoices } from "@/shared/board-catalog";
+import { epicLocked, epicOf, epicPatch, isEpic } from "@/shared/epics";
 import {
   setDisplay,
   setOnlyRule,
@@ -339,7 +340,9 @@ export function CreateIssue() {
     .split(",")
     .map((l) => l.trim())
     .filter(Boolean);
-  const projectValue = draft.project === null && !writable ? null : project;
+  // The composer's project is its epic, the new issue's Jira parent; a sub-issue's follows its parent (shared/epics.ts).
+  const draftEpic = parentIssue && isEpic(parentIssue) ? parentIssue : undefined;
+  const epicPill = !epicLocked({ type }) && (!draft.parent || draftEpic);
   // Linear's "…" after the chips (More actions): what the modal can add besides properties.
   const extraActions: ActionEntry[] = [
     ...(subIssuesAllowed
@@ -474,19 +477,21 @@ export function CreateIssue() {
                 setDraft({ ...draft, assignee }),
             }}
           />
-          <PropertyPill
-            label="Project"
-            current={projectValue?.name ?? "No project"}
-            value={projectValue?.name}
-            icon={<Icon name="layers" size={14} />}
-            menu={ProjectMenu}
-            menuProps={{
-              board,
-              value: projectValue,
-              onChange: (project: Issue["project"]) =>
-                setDraft({ ...draft, project, milestones: [] }),
-            }}
-          />
+          {epicPill && (
+            <PropertyPill
+              label="Project"
+              current={draftEpic?.summary ?? "No project"}
+              value={draftEpic?.summary}
+              icon={<Icon name="layers" size={14} />}
+              menu={ProjectMenu}
+              menuProps={{
+                board,
+                project: project?.key,
+                value: draftEpic?.key ?? null,
+                onChange: (epic: string | null) => setDraft({ ...draft, ...epicPatch(epic) }),
+              }}
+            />
+          )}
           <PropertyPill
             label="Labels"
             current={labels || "No labels"}
@@ -769,19 +774,20 @@ function IssueLabelsMenu({ issue, anchor, close }: IssueMenuProps) {
   );
 }
 
+/** The issue's project is its epic, set through its Jira parent; its Jira project never changes (shared/epics.ts). */
 function IssueProjectMenu({ issue, anchor, close }: IssueMenuProps) {
-  const writable = useStore((s) => s.writable);
   const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
-  const props = { board, anchor, close };
-  const patch = (value: Partial<Issue>) => actions.patch(issue.key, value);
+  const epic = useStore((s) => epicOf(issue, (key) => s.issues.get(key)));
   return (
     <ProjectMenu
-      {...props}
-      value={issue.project}
-      choices={writable ? (issue.project ? [issue.project] : []) : undefined}
-      onChange={(project) => {
-        if (project?.key !== issue.project?.key)
-          patch({ project, milestones: [] });
+      board={board}
+      anchor={anchor}
+      close={close}
+      project={issue.project?.key}
+      value={epic ?? null}
+      onChange={(next) => {
+        // Defence in depth: the triggers hide for an epic or a sub-issue, and Jira would refuse the parent anyway.
+        if (!epicLocked(issue) && next !== (epic ?? null)) actions.patch(issue.key, epicPatch(next));
       }}
     />
   );

@@ -86,6 +86,8 @@ export function issueProjection(siteFields: any[] | null) {
         labels: f.labels,
         attachments: issueAttachments(i),
         parent: f.parent?.key,
+        level: f.issuetype?.hierarchyLevel,
+        parentLevel: f.parent?.fields?.issuetype?.hierarchyLevel,
         rank: f[rank],
         comments: f.comment?.total ?? 0,
         updated: f.updated,
@@ -116,7 +118,7 @@ export function issueProjection(siteFields: any[] | null) {
 }
 export type IssueProjection = ReturnType<typeof issueProjection>;
 /** Bump when `slim`'s output changes: the mirror re-projects every stored issue on its next start. */
-export const SLIM_VERSION = "10";
+export const SLIM_VERSION = "11";
 
 /** A mirrored issue with what enrichment stored for it (null until enriched). */
 export type PropertyRow = {
@@ -128,22 +130,15 @@ export type PropertyRow = {
 
 /**
  * Each issue's properties for `/api/properties`: the whole slim row (so edits made directly in Jira reach open clients),
- * its project's lead, and what enrichment stored, when that was stored for the issue's current revision.
+ * and what enrichment stored, when that was stored for the issue's current revision.
  * `pending` is how many issues the enrichment still has queued.
  */
-export function propertyEntries(
-  rows: PropertyRow[],
-  projectInfo: (key: string) => { lead?: unknown } | null,
-  pending: number,
-) {
+export function propertyEntries(rows: PropertyRow[], pending: number) {
   let missing = 0,
     errors = 0;
-  const projects = new Map<string, { lead?: unknown } | null>();
   const entries = Object.fromEntries(
     rows.map((r) => {
       const slim = JSON.parse(r.slim);
-      const projectKey = slim.project?.key;
-      if (projectKey && !projects.has(projectKey)) projects.set(projectKey, projectInfo(projectKey));
       const fresh = r.source_updated === slim.updated;
       if (!fresh) missing++;
       const data = fresh && r.data ? JSON.parse(r.data) : {};
@@ -153,7 +148,6 @@ export function propertyEntries(
         r.key,
         {
           ...slim,
-          projectLead: projects.get(projectKey)?.lead,
           ...extra,
           links: [...new Set([...(slim.links ?? []), ...remoteLinks])],
         },

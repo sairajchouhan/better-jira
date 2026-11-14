@@ -62,7 +62,12 @@ const DATE_ENTRIES: Entry[] = [
   })),
   { field: "statusAge", name: "Time in current status" },
 ];
+// Linear's Project properties as live RAJ lists them (`gZt`: bXt status, SXt priority, CXt labels, EXt lead, OXt milestone name),
+// read off the issue's epic (shared/epics.ts); the lead is the epic's assignee. Milestone stays the issue's Jira fix version.
 const PROJECT: Entry[] = [
+  { name: "Project status", field: "projectStatus", glyph: "Status" },
+  { name: "Project priority", field: "projectPriority", glyph: "Priority" },
+  { name: "Project labels", field: "projectLabels", glyph: "Labels" },
   { name: "Project lead", field: "projectLead", glyph: "Assignee" },
   { name: "Milestone name", field: "milestone", glyph: "Project properties" },
 ];
@@ -79,6 +84,9 @@ const SEARCHED: [Field, string[]][] = [
   ["labels", ["Labels"]],
   ["relations", ["Relations"]],
   ["project", ["Project"]],
+  ["projectStatus", ["Project properties", "Project status"]],
+  ["projectPriority", ["Project properties", "Project priority"]],
+  ["projectLabels", ["Project properties", "Project labels"]],
   ["projectLead", ["Project properties", "Project lead"]],
   ["milestone", ["Project properties", "Milestone name"]],
   ["watchers", ["Subscribers"]],

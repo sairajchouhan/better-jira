@@ -84,7 +84,6 @@ const issueFields = new Set([
   "watchers",
   "watchersComplete",
   "estimate",
-  "projectLead",
   "attachments",
   "reactions",
   "mediaEdits",

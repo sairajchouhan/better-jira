@@ -2,6 +2,7 @@ import { type Board, type Issue, type IssueDraft } from "@/shared/issue-model";
 
 import { personIssues, type PersonTab } from "./people";
 import { statusById } from "./board-catalog";
+import { epicName, epicOf, lookupIn, type IssueLookup } from "./epics";
 
 export type Grouping =
   | "none"
@@ -64,6 +65,9 @@ export type Field =
   | "pullRequests"
   | "started"
   | "estimate"
+  | "projectStatus"
+  | "projectPriority"
+  | "projectLabels"
   | "projectLead";
 export type Operator =
   | "is"
@@ -178,7 +182,13 @@ FIELDS.push(
 );
 ORDERINGS.push(["estimate", "Estimate"]);
 FIELDS.push(["estimate", "Estimate"]);
-FIELDS.push(["projectLead", "Project lead"]);
+// Linear's Project properties (`gZt`), read off the issue's epic: its status, priority, labels and assignee as lead.
+FIELDS.push(
+  ["projectStatus", "Project status"],
+  ["projectPriority", "Project priority"],
+  ["projectLabels", "Project labels"],
+  ["projectLead", "Project lead"],
+);
 /** One label per id across every menu: pick rows from a shared table (ORDERINGS, PROPERTIES) instead of retyping labels. */
 export function pickLabels<T extends string, K extends T>(
   table: readonly (readonly [T, string])[],
@@ -208,7 +218,8 @@ OPERATORS.push(["gt", "greater than"], ["lt", "less than"], ["isAll", "include a
 export const isNumeric = (field: Field) =>
   field === "statusAge" || field === "pullRequests" || field === "estimate";
 /** Linear's `collection` fields (FilterBlockHelper): an issue has several values, so a rule asks for any or all of them. */
-const isCollection = (field: Field) => field === "labels" || field === "watchers";
+const isCollection = (field: Field) =>
+  field === "labels" || field === "watchers" || field === "projectLabels";
 /** Linear's operators per kind: choices are/aren't one of a list, text contains, dates and numbers compare. Status and type are never empty.
  *  `count` is how many values the rule has: collections offer their all-of operators only for several (pass Infinity for every operator). */
 export const operatorsFor = (field: Field, count = 1): [Operator, string][] => {
@@ -379,6 +390,12 @@ export const priorityRank = (p?: string) =>
         : /low|minor/i.test(p ?? "")
           ? 3
           : 4;
+/** The issue's epic (its project), from `issues`. */
+const epicIn = (i: Issue, issues: Issue[]) => {
+  const lookup = lookupIn(issues),
+    key = epicOf(i, lookup);
+  return key ? lookup(key) : undefined;
+};
 export function valuesFor(i: Issue, field: Field, issues: Issue[]): string[] {
   switch (field) {
     case "status":
@@ -389,8 +406,10 @@ export function valuesFor(i: Issue, field: Field, issues: Issue[]): string[] {
       return i.creator ? [i.creator.id] : [];
     case "labels":
       return i.labels;
-    case "project":
-      return i.project ? [i.project.key] : [];
+    case "project": {
+      const epic = epicOf(i, lookupIn(issues));
+      return epic ? [epic] : [];
+    }
     case "type":
       return i.type ? [i.type] : [];
     case "priority":
@@ -433,8 +452,20 @@ export function valuesFor(i: Issue, field: Field, issues: Issue[]): string[] {
       return i.prCount ? [String(i.prCount)] : [];
     case "estimate":
       return i.estimate === undefined ? [] : [String(i.estimate)];
-    case "projectLead":
-      return i.projectLead ? [i.projectLead.id] : [];
+    case "projectStatus": {
+      const status = epicIn(i, issues)?.status;
+      return status ? [status] : [];
+    }
+    case "projectPriority": {
+      const priority = epicIn(i, issues)?.priority;
+      return priority ? [priority] : [];
+    }
+    case "projectLabels":
+      return epicIn(i, issues)?.labels ?? [];
+    case "projectLead": {
+      const lead = epicIn(i, issues)?.assignee;
+      return lead ? [lead.id] : [];
+    }
   }
 }
 
@@ -446,7 +477,6 @@ export function matchesRule(
   now = Date.now(),
 ): boolean {
   if (r.field === "watchers" && !i.watchersComplete) return false;
-  if (r.field === "projectLead" && i.projectLead === undefined) return false;
   const actual = valuesFor(i, r.field, issues);
   if (r.op === "empty") return !actual.length;
   if (r.op === "notEmpty") return !!actual.length;
@@ -531,7 +561,12 @@ export type Bucket = {
   issues: Issue[];
   statusIds?: string[];
 };
-function groupValues(i: Issue, by: Grouping, board: Board): { id: string; name: string }[] {
+function groupValues(
+  i: Issue,
+  by: Grouping,
+  board: Board,
+  lookup: IssueLookup,
+): { id: string; name: string }[] {
   switch (by) {
     case "none":
       return [{ id: "all", name: "All issues" }];
@@ -556,8 +591,10 @@ function groupValues(i: Issue, by: Grouping, board: Board): { id: string; name: 
     }
     case "assignee":
       return [{ id: i.assignee?.id ?? "$none", name: i.assignee?.name ?? "No assignee" }];
-    case "project":
-      return [{ id: i.project?.key ?? "$none", name: i.project?.name ?? "No project" }];
+    case "project": {
+      const epic = epicOf(i, lookup);
+      return [epic ? { id: epic, name: epicName(epic, lookup) } : { id: "$none", name: "No project" }];
+    }
     case "priority":
       return [{ id: i.priority ?? "$none", name: i.priority ?? "No priority" }];
     case "type":
@@ -577,13 +614,15 @@ export const parentName = (key: string, issues: Issue[]) => {
   return summary ? `${key} ${summary}` : key;
 };
 
-/** `order` is the Group ordering panel's stored order for this grouping (see orderGroups). */
+/** `order` is the Group ordering panel's stored order for this grouping (see orderGroups). `lookup` finds an issue's epic
+ *  for the Project grouping, from the universe unless the caller holds more (a lane's issues don't hold their epics). */
 export function buckets(
   items: Issue[],
   by: Grouping,
   board: Board,
   universe = items,
   order: readonly string[] = [],
+  lookup: IssueLookup = lookupIn(universe),
 ): Bucket[] {
   const map = new Map<string, Bucket>();
   if (by === "status")
@@ -596,10 +635,11 @@ export function buckets(
         issues: [],
       });
   for (const i of universe)
-    for (const v of groupValues(i, by, board))
+    for (const v of groupValues(i, by, board, lookup))
       if (!map.has(v.id)) map.set(v.id, { ...v, issues: [] });
   if (by === "none" && !map.size) map.set("all", { id: "all", name: "All issues", issues: [] });
-  for (const i of items) for (const v of groupValues(i, by, board)) map.get(v.id)?.issues.push(i);
+  for (const i of items)
+    for (const v of groupValues(i, by, board, lookup)) map.get(v.id)?.issues.push(i);
   if (by === "parent")
     for (const b of map.values()) if (b.id !== "$none") b.name = parentName(b.id, universe);
   const result = [...map.values()];
@@ -857,15 +897,19 @@ export function resultsFeedback(
   };
 }
 
-/** A view's shown groups bucketed once: a list's non-empty rows per group, or a board's swimlanes and cards per lane and column. */
-export function groupLayout(shown: Bucket[], visible: Issue[], board: Board, d: Display) {
+/** A view's shown groups bucketed once: a list's non-empty rows per group, or a board's swimlanes and cards per lane and column.
+ *  `universe` (the board's issues) names each lane's project. */
+export function groupLayout(shown: Bucket[], visible: Issue[], board: Board, d: Display, universe = visible) {
+  const lookup = lookupIn(universe);
   if (d.layout === "list")
     return {
       rows: [] as Bucket[],
       cells: [] as Issue[][][],
-      sections: shown.map((c) => buckets(c.issues, d.rows, board, c.issues).filter((r) => r.issues.length)),
+      sections: shown.map((c) =>
+        buckets(c.issues, d.rows, board, c.issues, [], lookup).filter((r) => r.issues.length),
+      ),
     };
-  const rows = buckets(visible, d.rows, board, visible);
+  const rows = buckets(visible, d.rows, board, visible, [], lookup);
   return { rows, cells: boardCells(shown, rows), sections: [] as Bucket[][] };
 }
 
@@ -932,7 +976,7 @@ export function boardView(state: OrderState, me: string): BoardView | undefined 
     hidden = prefs.hidden[prefs.display.columns] ?? [],
     columns = boardColumns(visible, board, prefs, universe),
     shown = columns.filter((c) => !hidden.includes(c.id)),
-    order = layoutOrder(shown, groupLayout(shown, visible, board, prefs.display), prefs, universe);
+    order = layoutOrder(shown, groupLayout(shown, visible, board, prefs.display, universe), prefs, universe);
   lastView = { inputs, view: { board, prefs, columns, order } };
   return lastView.view;
 }
@@ -971,8 +1015,8 @@ export function draftForGroup(
       return { assignee: issues.find((i) => i.assignee?.id === id)?.assignee ?? null };
     case "priority":
       return { priority: id === "$none" ? "" : id };
-    case "project":
-      return { project: issues.find((i) => i.project?.key === id)?.project ?? null };
+    case "project": // the epic is the issue's Jira parent; its Jira project stays the board's
+      return id === "$none" ? {} : { parent: id };
     case "label":
       return { labels: id === "$none" ? [] : [id] };
     case "parent":

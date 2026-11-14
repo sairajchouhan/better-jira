@@ -2,6 +2,7 @@ import { type Issue, type Board, type User } from "@/shared/issue-model";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Avatar } from "@/client/components/avatar";
 import { statuses } from "@/shared/board-catalog";
+import { epicOf, isEpic, lookupIn } from "@/shared/epics";
 import { FilterIcon } from "./filter-icons";
 import { hue, PriorityIcon, StatusIcon, TypeDot } from "@/client/components/icons";
 import { Menu } from "@/client/components/menu";
@@ -68,7 +69,10 @@ export function useFilterCatalog(): FilterCatalog {
   );
 }
 
-/** Linear's order: "No …" first, then "Current user", then the values (priorities by rank, the rest by name). */
+const BY_RANK: Field[] = ["priority", "projectPriority"];
+/** Linear's order: "No …" first, then "Current user", then the values (priorities by rank, statuses by column, the rest by name).
+ *  Project is the issue's epic and Project properties are the epic's own fields (shared/epics.ts): the board's epics, and any
+ *  epic an issue names that the mirror doesn't hold, by its key. */
 export function filterChoices(
   field: Field,
   board: Board,
@@ -95,8 +99,21 @@ export function filterChoices(
       label,
       icon: <FilterIcon name={glyph} />,
     }));
-  if (field === "priority") for (const p of catalog.priorities ?? []) add(p, p, <PriorityIcon name={p} />);
+  if (field === "priority" || field === "projectPriority")
+    for (const p of catalog.priorities ?? []) add(p, p, <PriorityIcon name={p} />);
   if (field === "labels") for (const l of catalog.labels ?? []) add(l, l, dot(l));
+  const epics = issues.filter(isEpic);
+  if (field === "projectStatus")
+    statuses(board)
+      .filter((s) => epics.some((e) => e.status === s.id))
+      .forEach((s) => add(s.id, s.name, <StatusIcon status={s} />));
+  const lookup = lookupIn(issues);
+  for (const e of epics) {
+    if (field === "project") add(e.key, e.summary, <FilterIcon name="Project" />);
+    if (field === "projectPriority" && e.priority) add(e.priority, e.priority, <PriorityIcon name={e.priority} />);
+    if (field === "projectLabels") for (const l of e.labels) add(l, l, dot(l));
+    if (field === "projectLead" && e.assignee) add(e.assignee.id, e.assignee.name, person(e.assignee));
+  }
   for (const i of issues) {
     if (field === "assignee" || field === "creator") {
       const u = i[field];
@@ -105,8 +122,8 @@ export function filterChoices(
     if (field === "labels") for (const l of i.labels) add(l, l, dot(l));
     if (field === "priority" && i.priority)
       add(i.priority, i.priority, <PriorityIcon name={i.priority} />);
-    if (field === "project" && i.project)
-      add(i.project.key, i.project.name, <FilterIcon name="Project" />);
+    const epic = field === "project" ? epicOf(i, lookup) : undefined;
+    if (epic && !opts.has(epic)) add(epic, epic, <FilterIcon name="Project" />);
     if (field === "type" && i.type) add(i.type, i.type, <TypeDot type={i.type} />);
     if (field === "parent" && i.parent)
       add(i.parent, parentName(i.parent, issues), <FilterIcon name="Parent issues" />);
@@ -114,22 +131,22 @@ export function filterChoices(
       for (const version of i.milestones ?? []) add(version.id, version.name);
     if (field === "watchers")
       for (const user of i.watchers ?? []) add(user.id, user.name, person(user));
-    if (field === "projectLead" && i.projectLead)
-      add(i.projectLead.id, i.projectLead.name, person(i.projectLead));
   }
   const out = [...opts.values()];
   const special = (c: Choice) => (c.value === "$none" ? 0 : c.value === "$me" ? 1 : 2);
   const order = (a: Choice, b: Choice) =>
-    field === "priority"
+    BY_RANK.includes(field)
       ? priorityRank(a.label) - priorityRank(b.label) || a.label.localeCompare(b.label)
       : a.label.localeCompare(b.label);
-  if (field !== "status")
+  if (field !== "status" && field !== "projectStatus")
     out.sort((a, b) => special(a) - special(b) || (special(a) < 2 ? 0 : order(a, b)));
-  for (const o of out) o.count = countWhere(matching, { field, op: "is", values: [o.value] });
+  // Counted against the board's issues, so an epic the other filters hide still names its issues' project.
+  for (const o of out) o.count = countWhere(matching, { field, op: "is", values: [o.value] }, issues);
   return out;
 }
-export const countWhere = (issues: Issue[], rule: Omit<Rule, "id">) =>
-  issues.filter((i) => matchesRule(i, { id: "count", ...rule }, issues, ME.id)).length;
+/** How many of `issues` match `rule`; `universe` is where an issue's epic and sub-issues are looked up. */
+export const countWhere = (issues: Issue[], rule: Omit<Rule, "id">, universe = issues) =>
+  issues.filter((i) => matchesRule(i, { id: "count", ...rule }, universe, ME.id)).length;
 /** Linear: "3 issues", "1 issue"; nothing for none. */
 export const issueCount = (n?: number) => (n ? `${n} issue${n === 1 ? "" : "s"}` : "");
 /** Linear's multi-value chip label noun and empty text: "2 assignees", "3 statuses", "No matching priorities". */

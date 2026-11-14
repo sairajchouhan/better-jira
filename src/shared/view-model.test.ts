@@ -296,7 +296,7 @@ describe("view selection", () => {
       creator: { id: "me", name: "Me" },
       priority: "High",
       labels: ["ui"],
-      project: { key: "P", name: "Project" },
+      project: { key: "P", name: "Jira project" },
       type: "Bug",
       parent: "A-0",
       relations: [{ key: "A-1", kind: "blocking" }],
@@ -310,7 +310,6 @@ describe("view selection", () => {
       milestones: [{ id: "m1", name: "Release" }],
       watchers: [{ id: "me", name: "Me" }],
       watchersComplete: true,
-      projectLead: { id: "me", name: "Me" },
       prCount: 2,
       estimate: 3,
     });
@@ -321,7 +320,11 @@ describe("view selection", () => {
       ["priority", "is", "High", "Low"],
       ["labels", "is", "ui", "api"],
       ["relations", "is", "blocking", "blocked"],
-      ["project", "is", "P", "other"],
+      // Project is the epic (A-0, below) and Project properties are its fields, never the Jira project.
+      ["project", "is", "A-0", "P"],
+      ["projectStatus", "is", "doing", "todo"],
+      ["projectPriority", "is", "Urgent", "High"],
+      ["projectLabels", "is", "roadmap", "ui"],
       ["type", "is", "Bug", "Task"],
       ["parent", "is", "A-0", "A-99"],
       ["milestone", "is", "m1", "other"],
@@ -338,9 +341,16 @@ describe("view selection", () => {
       ["pullRequests", "gt", "1", "3"],
       ["estimate", "gt", "2", "4"],
     ];
+    const epic = issue("A-0", {
+      type: "Epic",
+      status: "doing",
+      priority: "Urgent",
+      labels: ["roadmap"],
+      assignee: { id: "me", name: "Me" },
+    });
     for (const [field, op, matching, other] of cases) {
-      expect(matchesRule(rich, rule(field, [matching], op), [...all, rich], "me", now)).toBe(true);
-      expect(matchesRule(rich, rule(field, [other], op), [...all, rich], "me", now)).toBe(false);
+      expect(matchesRule(rich, rule(field, [matching], op), [...all, epic, rich], "me", now)).toBe(true);
+      expect(matchesRule(rich, rule(field, [other], op), [...all, epic, rich], "me", now)).toBe(false);
     }
   });
 });

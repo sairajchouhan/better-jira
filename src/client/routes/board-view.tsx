@@ -1,5 +1,6 @@
 import { fullTime } from "@/client/features/issue/issue-dates";
 import { type Board, type Issue } from "@/shared/issue-model";
+import { epicLocked, epicName, epicOf } from "@/shared/epics";
 import { VirtualItems } from "@/client/components/virtual-items";
 import { isMyIssues } from "@/client/features/navigation/navigation";
 import { personIssues } from "@/shared/people";
@@ -107,8 +108,8 @@ export const BoardView = memo(function BoardView({
   // One pass per data change: shown and hidden groups, a list's rows per group, a board's cards per lane and column.
   const groups = useMemo(() => groupVisibility(columns, prefs), [columns, prefs]);
   const layout = useMemo(
-    () => ({ ...groups, ...groupLayout(groups.show, visible, board, d) }),
-    [groups, visible, board, d],
+    () => ({ ...groups, ...groupLayout(groups.show, visible, board, d, universe) }),
+    [groups, visible, board, d, universe],
   );
   const { hidden, hiddenIds, show } = layout;
   // The Group ordering panel lists the groups this view shows (Linear's ViewOptionsGroupsContext).
@@ -715,6 +716,30 @@ function FieldBadge({ issue, field, label, title, className, children }: FieldCo
   );
 }
 
+/** The card's Project badge: the issue's epic (shared/epics.ts), opening the project picker. */
+function ProjectBadge({ issue }: { issue: Issue }) {
+  const epic = useStore((s) => epicOf(issue, (key) => s.issues.get(key)));
+  const name = useStore((s) => (epic ? epicName(epic, (key) => s.issues.get(key)) : undefined));
+  if (!name) return null;
+  const content = (
+    <>
+      <Badge.Icon>
+        <Icon name="layers" />
+      </Badge.Icon>
+      <Badge.Text>{name}</Badge.Text>
+    </>
+  );
+  // An epic or a sub-issue can't pick its project (epicLocked), so its badge only names it, as the detail pill does.
+  const locked = epicLocked(issue);
+  return locked ? (
+    <Badge data-project-badge title={`${name}: ${locked}`}>{content}</Badge>
+  ) : (
+    <FieldBadge issue={issue} field="project" label="Project" title={name}>
+      {content}
+    </FieldBadge>
+  );
+}
+
 /** A bare property icon (status, priority leading a row, the assignee's avatar) that opens its menu: Linear's brightening trigger. */
 function FieldIcon({ issue, field, label, title, className, children }: FieldControl) {
   return (
@@ -791,14 +816,7 @@ function IssueProperties({ issue, display: d, labels }: { issue: Issue; display:
           <Badge.Text>{issue.type}</Badge.Text>
         </FieldBadge>
       )}
-      {show("project") && issue.project && (
-        <FieldBadge issue={issue} field="project" label="Project" title={issue.project.name}>
-          <Badge.Icon>
-            <Icon name="layers" />
-          </Badge.Icon>
-          <Badge.Text>{issue.project.name}</Badge.Text>
-        </FieldBadge>
-      )}
+      {show("project") && <ProjectBadge issue={issue} />}
       {show("milestone") &&
         issue.milestones?.map((v) => (
           <FieldBadge key={v.id} issue={issue} field="milestone" label="Milestone" title={`Jira fix version: ${v.name}`}>

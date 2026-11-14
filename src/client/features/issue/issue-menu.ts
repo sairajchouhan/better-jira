@@ -6,6 +6,7 @@ import { isLocalIssue, hasLocalJiraChanges } from "@/client/state/local-edits";
 import { ui } from "@/client/features/navigation/app-navigation";
 import { toggleFavorite } from "@/client/features/navigation/favorites";
 import { canHaveChildren, needsParent } from "@/shared/issue-properties";
+import { epicChoices, epicLocked, epicOf, epicPatch } from "@/shared/epics";
 import { createIssueDocument } from "./issue-resources";
 import { withMoveEntry } from "./sub-issue-model";
 import { MOVES, moveAvailability, runShortcut, hotkeyOf } from "@/client/features/navigation/shortcuts";
@@ -76,6 +77,8 @@ export function issuePropertyEntries(issue: Issue, { close, menu }: { close: () 
   const command = menu === "command";
   const board = boardOf(issue.key),
     boardIssues = [...get().issues.values()].filter((i) => i.board === issue.board);
+  const epic = epicOf(issue, (key) => get().issues.get(key)),
+    projectLocked = epicLocked(issue);
   const choose = (write: () => void) => () => {
     write();
     close();
@@ -143,6 +146,26 @@ export function issuePropertyEntries(issue: Issue, { close, menu }: { close: () 
         };
       }),
     }),
+    // Linear's contextual "Project" (`zBn`, `isContextualMenu`): the ⇧P picker's rows, the project being the issue's epic.
+    project: property("Project", "layers", "project", {
+      placeholder: epic ? "Move to project…" : "Add to project…",
+      nameAsParent: epic ? "Move to project" : "Add to project",
+      hoistFrom: 3,
+      disabledReason: projectLocked,
+      children: projectLocked
+        ? undefined
+        : [
+            { key: null, name: "No project" },
+            ...epicChoices(boardIssues, board, { project: issue.project?.key, current: epic }),
+          ].map(({ key, name }, i) => ({
+            name,
+            icon: "layers" as const,
+            selected: key === (epic ?? null),
+            // Linear's "No project" takes 0 (`YBn` numkeyShortcut); the projects have none.
+            number: i === 0 ? 0 : undefined,
+            run: choose(() => actions.patch(issue.key, epicPatch(key))),
+          })),
+    }),
   };
 }
 export function issueMenuEntries(
@@ -174,12 +197,6 @@ export function issueMenuEntries(
   // A right-click on a card or list row (Linear's contextual menu) lists each property's choices in a submenu (BJ-26);
   // the shortcut still opens the full picker.
   const inline = issuePropertyEntries(issue, { close, menu: "contextual" });
-  const picker = (name: string, icon: IconName, id: string): ActionEntry => ({
-    name,
-    icon,
-    shortcut: hotkeyOf(id),
-    run: () => openDialog(id as IssueMenuDialog),
-  });
   const due = property("Due date", "calendar", "due", {
     placeholder: "Try: 24h, 7 days, Feb 9",
     hoistFrom: Infinity,
@@ -402,9 +419,7 @@ export function issueMenuEntries(
           inline.assignee,
           due,
           inline.labels,
-          ...(presentation === "sub-issue" && !get().writable
-            ? [picker("Project", "layers", "project")]
-            : []),
+          inline.project,
           {
             name: "More properties",
             icon: "square-dots",

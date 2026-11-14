@@ -43,7 +43,7 @@ const story = {
     duedate: "2026-11-30",
     project: { key: "CS", name: "Content Stack" },
     labels: ["backend", "q4"],
-    parent: { key: "CS-100", fields: { summary: "Importer epic", issuetype: { name: "Epic" } } },
+    parent: { key: "CS-100", fields: { summary: "Importer epic", issuetype: { name: "Epic", hierarchyLevel: 1 } } },
     issuelinks: [
       { type: { name: "Blocks" }, outwardIssue: { key: "CS-150" } },
       { type: { name: "Blocks" }, inwardIssue: { key: "CS-90" } },
@@ -122,6 +122,9 @@ test("projects a full Jira record into the board's slim issue", () => {
       { id: "30002", name: "notes.txt", type: "text/plain", size: 512, url: "/api/issues/CS-142/attachments/30002" },
     ],
     parent: "CS-100",
+    // Jira's hierarchy levels, so the epic parent is known as the issue's project (shared/epics.ts).
+    level: 0,
+    parentLevel: 1,
     rank: "0|i0028f:",
     comments: 4,
     updated: "2026-11-02T12:30:00.000+0000",
@@ -178,6 +181,8 @@ test("a sparse record: missing optional fields project to the app's empty values
     labels: undefined,
     attachments: [],
     parent: undefined,
+    level: undefined,
+    parentLevel: undefined,
     rank: undefined,
     comments: 0,
     updated: "2026-11-01T00:00:00.000+0000",
@@ -268,8 +273,6 @@ test("properties: slim row, project lead and the enrichment for the current revi
   const p = issueProjection(siteFields);
   const fresh = p.slim(story, 7);
   const stale = p.slim({ ...story, key: "CS-143" }, 7);
-  const lead = { id: "acc-9", name: "Lead", avatar: undefined };
-  const lookups: string[] = [];
   const result = propertyEntries(
     [
       {
@@ -293,14 +296,11 @@ test("properties: slim row, project lead and the enrichment for the current revi
       },
       { key: "OPS-1", slim: JSON.stringify({ key: "OPS-1", updated: "u", project: { key: "OPS" } }), source_updated: null, data: null },
     ],
-    (key) => (lookups.push(key), key === "CS" ? { lead } : null),
     0,
   );
-  expect(lookups).toEqual(["CS", "OPS"]); // one lookup per project
   expect(result.progress).toEqual({ total: 3, pending: 2, completed: 1, errors: 1 });
   expect(result.entries["CS-142"]).toEqual({
     ...JSON.parse(JSON.stringify(fresh)),
-    projectLead: lead,
     status: "10001",
     startedAt: "2026-10-02T00:00:00.000+0000",
     watchers: [],
@@ -311,7 +311,7 @@ test("properties: slim row, project lead and the enrichment for the current revi
   });
   // Enrichment for an older revision is withheld until it is redone.
   expect(result.entries["CS-143"]!.watchers).toBeUndefined();
-  expect(result.entries["OPS-1"]).toEqual({ key: "OPS-1", updated: "u", project: { key: "OPS" }, projectLead: undefined, links: [] });
+  expect(result.entries["OPS-1"]).toEqual({ key: "OPS-1", updated: "u", project: { key: "OPS" }, links: [] });
   // The enrichment queue's own count wins while it is larger.
-  expect(propertyEntries([], () => null, 40).progress).toEqual({ total: 0, pending: 40, completed: 0, errors: 0 });
+  expect(propertyEntries([], 40).progress).toEqual({ total: 0, pending: 40, completed: 0, errors: 0 });
 });

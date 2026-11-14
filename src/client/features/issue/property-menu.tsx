@@ -7,7 +7,6 @@ import {
   listsOtherPeople,
   labelSections,
   priorityChoices,
-  projectChoices,
   milestoneChoices,
   statuses,
 } from "@/shared/board-catalog";
@@ -31,6 +30,7 @@ import { Menu } from "@/client/components/menu";
 import { MenuSurface, MenuSurfaceContext } from "@/client/components/menu-surface";
 import { CheckRow } from "@/client/components/action-menu";
 import { actions } from "@/client/state/issue-actions";
+import { epicChoices } from "@/shared/epics";
 import { CommandMenu, useCommandTarget } from "@/client/components/command-menu";
 
 /** Linear's property menu (RAJ-52 status, priority, assignee and labels): 208px wide beside the open issue's property button, a 36px
@@ -359,51 +359,60 @@ export function TypeMenu({
     </PropertyMenu>
   );
 }
+/** A project row's cmdk value: its name, then its key, so a search finds an epic by either. */
+const epicValue = (epic: { key: string; name: string }) => `${epic.name} ${epic.key}`;
+/**
+ * Linear's project picker (`zBn`, ⇧P): "No project" (number 0, `YBn`), then the epics `epicChoices` lists; Linear's project is a
+ * Jira epic (shared/epics.ts). `value` is the epic's key; `project` the Jira project the issue is in, whose epics it can join.
+ */
 export function ProjectMenu({
   anchor,
   board,
   value,
   onChange,
   close,
-  choices: restricted,
-}: FieldMenuProps<Issue["project"]> & {
-  choices?: NonNullable<Issue["project"]>[];
-}) {
-  const { issues, writable } = useCatalog(board);
-  const choices = restricted ?? projectChoices(issues);
+  project,
+}: FieldMenuProps<string | null> & { project?: string }) {
+  const { issues } = useCatalog(board);
+  const [query, setQuery] = useState("");
+  const choices = epicChoices(issues, board, { project, current: value ?? undefined, query });
+  const current = choices.find((e) => e.key === value);
   return (
     <PropertyMenu
       label="Change project"
-      placeholder="Change project…"
+      // Linear's `subActionPlaceholder`: "Add to project…" with none yet, else "Move to project…".
+      placeholder={value ? "Move to project…" : "Add to project…"}
+      hotkey={hotkeyOf("project")}
       anchor={anchor}
       close={close}
-      current={value?.name ?? "No project"}
+      current={current ? epicValue(current) : "No project"}
+      query={query}
+      onQuery={setQuery}
     >
-      {!writable && (
+      <PickerRow
+        value="No project"
+        current={!value}
+        number={0}
+        icon={<Icon name="layers" />}
+        onSelect={() => {
+          onChange(null);
+          close();
+        }}
+      >
+        No project
+      </PickerRow>
+      {choices.map((epic) => (
         <PickerRow
-          value="No project"
-          current={!value}
+          key={epic.key}
+          value={epicValue(epic)}
+          current={epic.key === value}
           icon={<Icon name="layers" />}
           onSelect={() => {
-            onChange(null);
+            onChange(epic.key);
             close();
           }}
         >
-          No project
-        </PickerRow>
-      )}
-      {choices.map((p) => (
-        <PickerRow
-          key={p.key}
-          value={p.name}
-          current={p.key === value?.key}
-          icon={<Icon name="layers" />}
-          onSelect={() => {
-            onChange(p);
-            close();
-          }}
-        >
-          {p.name}
+          {epic.name}
         </PickerRow>
       ))}
     </PropertyMenu>

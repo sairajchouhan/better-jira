@@ -11,12 +11,12 @@ import { canMergeOverlay } from "@/shared/saved-view-model";
 import { boardView, filterCount, groupStep, visibleOrder } from "@/shared/view-model";
 import { forgetIssueIntents, post, run as command } from "./commands";
 import { canHaveChildren } from "@/shared/issue-properties";
+import { epicLocked, epicOf } from "@/shared/epics";
 import { getHotkeyManager, type Hotkey, type HotkeyChord } from "@tanstack/react-hotkeys";
 import { boardOf, get, isWatching, ME, set, useStore, type Overlay } from "@/client/state/store";
 import { actions, beginCreate, beginCreateInView } from "@/client/state/issue-actions";
 import { currentKey } from "@/client/state/jira-sync";
 import { redoEdit, undoEdit } from "@/client/state/undo-history";
-import { isLocalIssue } from "@/client/state/local-edits";
 import { navigate, ui, pageURL } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
 import { buckets, rankBetween } from "@/shared/view-model";
@@ -541,9 +541,16 @@ export const shortcuts: Shortcut[] = [
     hotkey,
     group: "Issues",
     issue: true,
-    // Jira can't move an issue to another project: only an issue made here, not yet in Jira, picks one (R2-issue-fields-D8).
+    // The project is the issue's epic (shared/epics.ts): only a standard issue picks one, and Linear's `zBn` reads "Move to
+    // project…" once the issue is in one. The Jira project itself never changes.
     ...(id === "project"
-      ? { when: (s: State, issue?: Issue) => !s.writable || isLocalIssue(issue?.key ?? "") }
+      ? {
+          when: (_: State, issue?: Issue) => !!issue && !epicLocked(issue),
+          label: () => {
+            const issue = target();
+            return issue && epicOf(issue, (key) => get().issues.get(key)) ? "Move to project" : "Add to project";
+          },
+        }
       : {}),
     run: issueOverlay(value),
   })),

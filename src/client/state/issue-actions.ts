@@ -33,6 +33,7 @@ import { type Grouping } from "@/shared/view-model";
 import { documentHasMedia, normalizeDocument, textToAdf, type AdfDocument } from "@/shared/document";
 import { reminderTime } from "@/client/features/reminders/reminder-display";
 import { typeChoices, childTypes, canHaveChildren } from "@/shared/issue-properties";
+import { epicLocked, epicOf, epicPatch } from "@/shared/epics";
 import { replyParent, visibleCommentTotal } from "@/client/features/comments/comment-thread";
 
 import {
@@ -412,6 +413,14 @@ export const actions = {
       )
     )
       return;
+    // Only a standard issue goes into an epic, its project (shared/epics.ts): a drop moving an epic or a sub-issue to another
+    // project group is ignored, as the type menu ignores a drop it can't make.
+    const lookup = (k: string) => get().issues.get(k);
+    if (
+      groups.some(({ by, id }) => by === "project" && id !== (epicOf(issue, lookup) ?? "$none")) &&
+      epicLocked(issue)
+    )
+      return;
     // One drag, including its column and row changes, is one undoable edit.
     record(key, `move ${key}`, () => {
       if (rank !== undefined) patchIssue(key, { rank });
@@ -432,11 +441,8 @@ export const actions = {
                 ? ME
                 : ([...get().issues.values()].find((i) => i.assignee?.id === id)?.assignee ?? null),
           );
-        else if (by === "project")
-          actions.patch(key, {
-            project: [...get().issues.values()].find((i) => i.project?.key === id)?.project ?? null,
-            milestones: [],
-          });
+        else if (by === "project" && id !== (epicOf(current, lookup) ?? "$none"))
+          actions.patch(key, epicPatch(id === "$none" ? null : id));
         else if (by === "priority" || by === "type")
           actions.patch(key, { [by]: id === "$none" ? undefined : id });
         else if (by === "label")

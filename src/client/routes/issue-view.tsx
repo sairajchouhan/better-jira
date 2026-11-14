@@ -42,10 +42,10 @@ import { actions, addIssueFiles } from "@/client/state/issue-actions";
 import { loadFull } from "@/client/state/server-data";
 import { currentKey, firstKey } from "@/client/state/jira-sync";
 import { flushLocalChanges } from "@/client/state/local-database";
-import { isLocalIssue } from "@/client/state/local-edits";
 import { navigate, ui } from "@/client/features/navigation/app-navigation";
 import { interruptedUploads } from "@/client/state/jira-media";
 import { listPosition, navigationIssues, visibleOrder } from "@/shared/view-model";
+import { epicLocked, epicName, epicOf } from "@/shared/epics";
 import { PersonalIssueDetails } from "@/client/features/issue/personal-controls";
 import { SubIssueOf } from "@/client/features/issue/sub-issues";
 import { Avatar } from "@/client/components/avatar";
@@ -467,9 +467,30 @@ const Placeholder = ({ wide, short }: { wide: string; short: string }) => (
     <span className="property-short">{short}</span>
   </>
 );
+/** Linear's project row, mapped to the issue's epic (shared/epics.ts): a standard issue picks it; an epic (its own project) and a
+ *  sub-issue (its parent's) show it read-only, with why. The Jira project is never changed here. */
+function ProjectProperty({ issue }: { issue: Issue }) {
+  const epic = useStore((s) => epicOf(issue, (key) => s.issues.get(key)));
+  const name = useStore((s) => (epic ? epicName(epic, (key) => s.issues.get(key)) : undefined));
+  const locked = epicLocked(issue);
+  return locked ? (
+    <PropertyPill id="prop-project" title={locked} icon={<Icon name="layers" />}>
+      {name ?? "No project"}
+    </PropertyPill>
+  ) : (
+    <PropertyPill
+      id="prop-project"
+      overlay="project"
+      tip={epic ? "Move to project" : "Add to project"}
+      state={epic ? "value" : "empty"}
+      icon={<Icon name="layers" />}
+    >
+      {name ?? <Placeholder wide="Add to project" short="Project" />}
+    </PropertyPill>
+  );
+}
 function Properties({ issue }: { issue: Issue }) {
   const status = statusOf(issue);
-  const writable = useStore((s) => s.writable);
   return (
     <div data-properties className="text-[13px] font-medium">
       <PropertySection name="Properties">
@@ -557,25 +578,7 @@ function Properties({ issue }: { issue: Issue }) {
         )}
       </PropertySection>
       <PropertySection name="Project">
-        {/* Jira can't move an issue between projects, so with Jira writes an issue already in Jira shows its project read-only (R2-issue-fields-D8). */}
-        {!writable || isLocalIssue(issue.key) ? (
-          <PropertyPill
-            id="prop-project"
-            overlay="project"
-            state={issue.project ? "value" : "empty"}
-            icon={<Icon name="layers" />}
-          >
-            {issue.project?.name ?? <Placeholder wide="Add to project" short="Project" />}
-          </PropertyPill>
-        ) : (
-          <PropertyPill
-            id="prop-project"
-            title="Jira can't move an issue to another project"
-            icon={<Icon name="layers" />}
-          >
-            {issue.project?.name ?? "No project"}
-          </PropertyPill>
-        )}
+        <ProjectProperty issue={issue} />
         {issue.milestones?.length ? (
           <PropertyPill id="prop-milestone" overlay="milestone" icon={<Icon name="calendar" />}>
             {issue.milestones.map((m) => m.name).join(", ")}

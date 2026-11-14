@@ -7,6 +7,7 @@ import { jiraIssueURL } from "./issue-urls";
 import { get, statusOf } from "@/client/state/store";
 import type { Issue } from "@/shared/issue-model";
 import type { Relation } from "@/shared/relations";
+import { epicName, epicOf } from "@/shared/epics";
 
 /** Linear Hft/Wft/Kft: interactive issue card, 550ms. One card for relation pills, Activity's relation rows and issue
  *  mention chips; it opens above by default, as on an issue mention chip; relation pills pass `left`. The body uses mirror data
@@ -38,6 +39,9 @@ export function IssueHoverCard({
 
 function IssueCard({ relation, issue }: { relation: Relation; issue?: Issue }) {
   const status = issue ? statusOf(issue) : relation.issue?.status;
+  // The project is the issue's epic (shared/epics.ts), read from the mirror as the card opens.
+  const lookup = (key: string) => get().issues.get(key),
+    epic = issue && epicOf(issue, lookup);
   return (
           <div data-issue-hover={relation.key}>
             <div className="mb-1.5 flex items-center justify-between gap-4 text-fg-3">
@@ -78,7 +82,7 @@ function IssueCard({ relation, issue }: { relation: Relation; issue?: Issue }) {
                   {status.name}
                 </span>
               ) : null}
-              {issue?.project ? <span>{issue.project.name}</span> : null}
+              {epic ? <span>{epicName(epic, lookup)}</span> : null}
               {issue?.priority ? (
                 <span className="flex items-center gap-1.5">
                   <PriorityIcon name={issue.priority} />
