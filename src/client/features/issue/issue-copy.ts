@@ -119,6 +119,8 @@ export const copyKinds = [
   "issue as Markdown",
   "everything as Markdown",
   "git branch name",
+  // Linear's wX, after the branch in its Copy submenu (TX).
+  "as prompt",
 ] as const;
 export type CopyKind = (typeof copyKinds)[number];
 /** Linear's Copy submenu icon and shortcut per kind, shared by the issue and sub-issue row menus. */
@@ -130,6 +132,7 @@ export const copyIcons = {
   "issue as Markdown": "file",
   "everything as Markdown": "file",
   "git branch name": "branch",
+  "as prompt": "clipboard",
 } as const;
 export const copyShortcuts: Partial<Record<CopyKind, string>> = {
   ID: "copy-id",
@@ -138,12 +141,18 @@ export const copyShortcuts: Partial<Record<CopyKind, string>> = {
   "title as link": "copy-link",
   "everything as Markdown": "copy-markdown",
   "git branch name": "copy-branch",
+  "as prompt": "copy-prompt",
 };
 const slug = (text: string) =>
   text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
+/** Linear's default prompt template (`DAt` in startup-root.CnUSfl4j.js, with the suggested branch name on), naming Jira. */
+export const PROMPT_TEMPLATE = "Work on Jira issue {{issue.identifier}}:\n\nSuggested branch name: {{issue.branchName}}\n\n{{context}}";
+/** Linear's `AAt`: the template with each known placeholder replaced, an unknown value by nothing. */
+export const fillPrompt = (values: { "issue.identifier": string; "issue.branchName": string; context: string }, template = PROMPT_TEMPLATE) =>
+  template.replace(/\{\{(issue\.identifier|issue\.branchName|context)\}\}/g, (_, key: keyof typeof values) => values[key] ?? "");
 /** `user` prefixes the git branch name like Linear's `raj/drft-53-title`. */
 export function issueCopy(
   kind: CopyKind,
@@ -168,6 +177,13 @@ export function issueCopy(
       const owner = slug(user.split(/\s+/)[0] ?? "");
       return `${owner ? `${owner}/` : ""}${issue.key.toLowerCase()}-${slug(issue.summary)}`;
     }
+    case "as prompt":
+      // Linear fills its template from the server's issuePromptContext; ours is the issue as Copy everything as Markdown copies it.
+      return fillPrompt({
+        "issue.identifier": issue.key,
+        "issue.branchName": issueCopy("git branch name", issue, full, url, status, user),
+        context: issueCopy("everything as Markdown", issue, full, url, status, user),
+      });
     default: {
       const description = adfToMarkdown(full?.fields.description ?? issue.description);
       const base = `# ${escape(title)}\n\n${description}`;
@@ -194,6 +210,9 @@ export function copyToast(kind: CopyKind, issue: Pick<Issue, "key">, copied: str
       return { text: `Issue "${issue.key}" description copied to clipboard` };
     case "everything as Markdown":
       return { text: `Issue "${issue.key}" content copied to clipboard` };
+    case "as prompt":
+      // Linear's wX: an info toast with the copy icon.
+      return { text: "Prompt copied to clipboard", icon: "copy" };
     case "git branch name":
       return {
         text: copied,
@@ -203,22 +222,27 @@ export function copyToast(kind: CopyKind, issue: Pick<Issue, "key">, copied: str
 }
 /** Linear's Copy page URL (⌘⇧C) toast. */
 export const PAGE_URL_COPIED: Notification = { text: "Current URL copied to clipboard" };
-/** Copies one projection of the issue and confirms it with Linear's toast. "everything as Markdown" loads the
+/** Copies one projection of the issue and confirms it with Linear's toast. "everything as Markdown" and the prompt load the
  *  comments first. `url` is the issue's link unless the caller has a better one (an inbox notification's). */
 export async function copyIssue(kind: CopyKind, issue: Issue, url = issueURL(issue)) {
   if (kind === "URL") return copyIssueLink(url);
   try {
-    if (kind === "everything as Markdown" && !get().full.has(issue.key) && !isLocalIssue(issue.key)) {
-      await loadFull(issue.key);
-      if (!get().full.has(issue.key)) throw new Error("Issue details unavailable");
-    }
-    const status = statusOf(issue)?.name ?? issue.status;
-    const text = issueCopy(kind, issue, get().full.get(issue.key), url, status, ME.name);
+    const text = await issueText(kind, issue, url);
     await navigator.clipboard.writeText(text);
     showNotification(copyToast(kind, issue, text));
   } catch {
     set({ perf: "Could not access the clipboard" });
   }
+}
+
+/** One projection of the issue as copied; the full issue (comments) is loaded first for the kinds that include it. */
+export async function issueText(kind: CopyKind, issue: Issue, url = issueURL(issue)): Promise<string> {
+  if ((kind === "everything as Markdown" || kind === "as prompt") && !get().full.has(issue.key) && !isLocalIssue(issue.key)) {
+    await loadFull(issue.key);
+    if (!get().full.has(issue.key)) throw new Error("Issue details unavailable");
+  }
+  const status = statusOf(issue)?.name ?? issue.status;
+  return issueCopy(kind, issue, get().full.get(issue.key), url, status, ME.name);
 }
 
 /** The same URL clipboard feedback for mirrored and cross-project relation rows. */

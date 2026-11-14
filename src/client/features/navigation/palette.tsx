@@ -26,6 +26,7 @@ import { COMMAND_MENU_WIDTH, CommandMenuTitle } from "@/client/components/comman
 import { Avatar } from "@/client/components/avatar";
 import { actionScore, hoistValues, MIN_APPLICABILITY, workflowOrder, type ScoredAction } from "@/client/lib/fuzzy-score";
 import { issuePropertyEntries } from "@/client/features/issue/issue-menu";
+import { workOnIssueEntry } from "@/client/features/issue/coding-tools";
 import { COMMAND_KEYWORDS, VIEW_COMMAND_KEYWORDS } from "./command-keywords";
 import {
   matchDocuments,
@@ -152,18 +153,20 @@ const ranked = (cmds: Cmd[], q: string): (readonly [number, Cmd])[] =>
         .sort(([a], [b]) => b - a)
     : cmds.map((c) => [0, c] as const);
 
-/** The targeted issue's commands whose values ⌘K lists once enough is typed (Linear's subActionsHoisting on RCn, Odn, Xun and
- *  eK), by registry id: status and priority from 2 characters, assignee and labels from 3 (each entry's hoistFrom). */
+/** The targeted issue's commands whose values ⌘K lists once enough is typed (Linear's subActionsHoisting on RCn, Odn, Xun, eK
+ *  and Work on issue's K5t), by the registry id that must apply: status, priority and the coding tools from 2 characters, assignee
+ *  and labels from 3 (each entry's hoistFrom). */
 const HOISTED = [
   ["status", "status"],
   ["priority", "priority"],
   ["assign", "assignee"],
   ["labels", "labels"],
+  ["copy-prompt", "work"],
 ] as const;
 /** The values of each applicable command above, scored with their breadcrumb, at most 10 per command (`hoistValues`). Picking one
  *  writes through the issue's actions, which undo, and closes the palette. */
 function hoistedValues(issue: Issue, q: string, applies: (id: string) => boolean): (readonly [number, Cmd])[] {
-  const entries = issuePropertyEntries(issue, { close, menu: "command" });
+  const entries = { ...issuePropertyEntries(issue, { close, menu: "command" }), work: workOnIssueEntry(issue, close) };
   return HOISTED.flatMap(([id, key]) => {
     const parent = entries[key];
     if (!applies(id) || !parent.children) return [];
@@ -177,7 +180,7 @@ function hoistedValues(issue: Issue, q: string, applies: (id: string) => boolean
         keywords: child.keywords,
         exact: child.exact,
         override: id === "status" ? workflowOrder(child.name, index) : undefined,
-        icon: child.image,
+        icon: child.image ?? (child.icon && <Icon name={child.icon} size={16} />),
         checked: child.selected,
         run: () => child.run?.(),
       }),

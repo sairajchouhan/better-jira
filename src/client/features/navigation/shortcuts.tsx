@@ -722,6 +722,8 @@ export const shortcuts: Shortcut[] = [
       ["copy-link", "Copy issue title as link", "Mod+C", "title as link"],
       ["copy-issue-markdown", "Copy issue as Markdown", undefined, "issue as Markdown"],
       ["copy-markdown", "Copy everything as Markdown", "Mod+Alt+C", "everything as Markdown"],
+      // Linear's wX: ⌘⌥P, which runs even from a text field (runWithInputFocus).
+      ["copy-prompt", "Copy as prompt", "Mod+Alt+P", "as prompt"],
     ] as const
   ).map(([id, name, hotkey, kind]) => ({
     id,
@@ -1064,7 +1066,8 @@ export function useLinearHotkeys() {
             ignoreInputs: !(
               entry.id === "shortcuts" ||
               entry.id === "commands" ||
-              entry.id === "sub-issue"
+              entry.id === "sub-issue" ||
+              entry.id === "copy-prompt"
             ),
             ignoreDefaultPrevented: true,
             afterDelegatedHandlers: true,
