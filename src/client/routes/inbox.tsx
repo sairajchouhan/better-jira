@@ -1,6 +1,6 @@
 import { type Issue } from "@/shared/issue-model";
 /** Linear's Inbox over Jira's in-app notifications. Read state goes to Jira; delete and snooze stay in this browser, because Jira's notification API has neither. */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type Ref } from "react";
 import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { Avatar } from "@/client/components/avatar";
 import { Button, ButtonLink, IconButton } from "@/client/components/button";
@@ -8,6 +8,7 @@ import { CountBadge } from "@/client/components/count-badge";
 import { EmptyState, LoadingState } from "@/client/components/empty-state";
 import { FutureTimeStep } from "@/client/features/reminders/future-time-step";
 import { FilterChip } from "@/client/components/filter-chip";
+import { FindField } from "@/client/components/find-field";
 import { Tabs } from "@/client/components/tabs";
 import { Text } from "@/client/components/text";
 import { Icon, StatusIcon, TypeDot, type IconName } from "@/client/components/icons";
@@ -19,6 +20,7 @@ import { Menu } from "@/client/components/menu";
 import { MenuSurface } from "@/client/components/menu-surface";
 import { ConfirmDialog } from "@/client/components/dialog";
 import { hotkeyOf, runShortcut } from "@/client/features/navigation/shortcuts";
+import { focusNode, useCommand } from "@/client/features/navigation/commands";
 import { shortcutTitle } from "@/client/components/keycap";
 import { get, isWatching, useStore } from "@/client/state/store";
 import { preloadOnHover, ui } from "@/client/features/navigation/app-navigation";
@@ -26,7 +28,7 @@ import { SidebarToggle } from "@/client/features/navigation/app-chrome";
 import { useSearch } from "@tanstack/react-router";
 import { toggleFavorite } from "@/client/features/navigation/favorites";
 
-import { changeView, toggleFilter, clearFilters, selectRow, toggleRead, markAllRead, deleteRow, deleteAll, openSnooze, snoozeRow, showTab, inbox, statusOf, ROW_PARAM, useFeed, useSelected, useView, useLocal, useUnreadCount, orderOf, facets, itemsOf, clearUnseen, useConfirmation } from "@/client/features/inbox/inbox";
+import { changeView, toggleFilter, clearFilters, selectRow, toggleRead, markAllRead, deleteRow, deleteAll, openSnooze, snoozeRow, showTab, inbox, statusOf, ROW_PARAM, useFeed, useSelected, useView, useShownView, useFind, openFind, setFind, closeFind, useLocal, useUnreadCount, orderOf, facets, itemsOf, clearUnseen, useConfirmation } from "@/client/features/inbox/inbox";
 import { InboxIssuePane } from "./issue-view";
 import { firstKey } from "@/client/state/jira-sync";
 import { SelectRow, Toggle, ViewOptions } from "@/client/components/display-options";
@@ -35,7 +37,7 @@ const copyRow = (item: InboxItem, kind: CopyKind) =>
   copyIssue(kind, { key: item.key, summary: item.title } as Issue, item.url);
 
 function useInboxOrder() {
-  const v = useView();
+  const v = useShownView();
   const { data } = useFeed(feedCategory(v));
   const own = useLocal();
   const selected = useSelected();
@@ -502,10 +504,32 @@ function FilterChips({ v }: { v: InboxView }) {
   );
 }
 
+/** Linear's "Find in inbox…" (Inbox `qt`). In the priority inbox it takes the tabs' place, 32px with a Close button, and the
+ *  find looks through both tabs; otherwise it floats over the header's right end (ContentViewHeaderInlineSearch: top 6px,
+ *  right 4px, 160px at most, over the buttons) with a Clear button while it holds text. */
+function InboxFind({ ref, place }: { ref: Ref<HTMLInputElement>; place: "tabs" | "header" }) {
+  const term = useFind().term;
+  const tabs = place === "tabs";
+  return (
+    <FindField
+      ref={ref}
+      placeholder="Find in inbox…"
+      defaultValue={term}
+      onValueChange={setFind}
+      onClose={closeFind}
+      size={tabs ? "normal" : "medium"}
+      className={tabs ? "ml-1 min-w-0 flex-1" : "absolute top-1.5 right-1 z-10 w-[160px] max-w-[50vw]"}
+      inputClassName={tabs ? "rounded-[6px] bg-panel" : "bg-panel"}
+    >
+      {tabs ? <FindField.Close /> : <FindField.Clear />}
+    </FindField>
+  );
+}
+
 /** The list pane: Linear's 416px column with its own 44px header. Older pages load as the end of the list scrolls into view. */
 export function InboxList() {
   const v = useView();
-  const feed = useFeed(feedCategory(v));
+  const feed = useFeed(feedCategory(useShownView()));
   const {
     data,
     error,
@@ -526,7 +550,19 @@ export function InboxList() {
     point: { x: number; y: number };
   } | null>(null);
   const list = useRef<HTMLDivElement>(null),
-    end = useRef<HTMLDivElement>(null);
+    end = useRef<HTMLDivElement>(null),
+    findRef = useRef<HTMLInputElement>(null);
+  const find = useFind(),
+    findShown = find.open || !!find.term;
+  // ⌘F opens the field, or takes focus back to it with its term selected (Linear's focusSearchAction).
+  useCommand("focus-find", () => {
+    openFind();
+    const taken = focusNode(findRef.current);
+    if (taken) findRef.current!.select();
+    return taken;
+  });
+  // The find goes with the inbox: it opens empty on the next visit, as Linear's resets on a fresh one.
+  useEffect(() => closeFind, []);
   const unseen = all?.pages[0]?.unseen ?? 0;
   useEffect(() => {
     if (unseen) void clearUnseen();
@@ -562,7 +598,8 @@ export function InboxList() {
     return () => observer.disconnect();
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Reobserve the load sentinel after a page appends rows.
   }, [hasNextPage, isFetchingNextPage, pages, fetchNextPage]);
-  const filtered = hasFilters(v) || v.unreadOnly;
+  // Linear's filtered empty state (Inbox `Bt`): what the filters and the find hide, and a way to clear them.
+  const hidden = base.length - rows.length;
   // Boolean selectors: another overlay opening elsewhere must not re-render the list.
   const actionsOpen = useStore((s) => s.overlay === "inbox-actions"),
     filterOpen = useStore((s) => s.overlay === "inbox-filter"),
@@ -572,7 +609,7 @@ export function InboxList() {
       aria-label="Inbox"
       className="flex w-[416px] shrink-0 flex-col border-r-[0.5px] border-frame max-md:w-full"
     >
-      <header className="flex h-11 shrink-0 items-center gap-1 border-b-[0.5px] border-frame px-2">
+      <header className="relative flex h-11 shrink-0 items-center gap-1 border-b-[0.5px] border-frame px-2">
         <SidebarToggle />
         <Text as="h2" variant="smallPlus" color="base" className="px-2.5">
           Inbox
@@ -587,7 +624,9 @@ export function InboxList() {
         >
           <Icon name="dots" />
         </IconButton>
-        {v.priorityInbox && (
+        {v.priorityInbox && findShown ? (
+          <InboxFind ref={findRef} place="tabs" />
+        ) : v.priorityInbox ? (
           <Tabs
             value={v.tab}
             onValueChange={(tab) => showTab(tab as InboxView["tab"])}
@@ -601,7 +640,7 @@ export function InboxList() {
               </Tabs.Tab>
             </Tabs.List>
           </Tabs>
-        )}
+        ) : null}
         <span className="flex-1" />
         <IconButton
           label={v.unreadOnly ? "Show read" : "Show unreads only"}
@@ -633,6 +672,7 @@ export function InboxList() {
         >
           <Icon name="display" />
         </IconButton>
+        {findShown && !v.priorityInbox && <InboxFind ref={findRef} place="header" />}
       </header>
       <FilterChips v={v} />
       <div
@@ -689,14 +729,32 @@ export function InboxList() {
             <EmptyState
               role="status"
               className="h-full"
-              title={
-                items.length && filtered
-                  ? v.unreadOnly && !hasFilters(v)
-                    ? "No unreads"
-                    : "No matching notifications"
-                  : "No notifications"
+              title={hidden > 0 ? "No matching notifications" : v.unreadOnly ? "No unreads" : "No notifications"}
+              actions={
+                hidden > 0 && (
+                  <Button
+                    variant="muted"
+                    size="small"
+                    icon={<Icon name="x" size={12} />}
+                    onClick={() => {
+                      clearFilters();
+                      closeFind();
+                    }}
+                  >
+                    Clear Filters
+                  </Button>
+                )
               }
-            />
+            >
+              {hidden > 0 && (
+                <Text variant="mini" color="muted" data-inbox-hidden>
+                  <Text variant="miniPlus" color="base">
+                    {hidden} notification{hidden === 1 ? "" : "s"}
+                  </Text>{" "}
+                  hidden by filters
+                </Text>
+              )}
+            </EmptyState>
           ))}
         {rows.length > 0 && isFetchingNextPage && (
           <LoadingState className="py-2">

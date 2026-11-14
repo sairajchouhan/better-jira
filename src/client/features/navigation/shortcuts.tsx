@@ -874,8 +874,9 @@ export const shortcuts: Shortcut[] = [
     group: "Filters",
     hotkey: "Mod+F",
     when: boardVisible,
+    // The Inbox's own field (Linear's "Find in inbox…") takes it there and keeps its state with the inbox.
     run: () => {
-      set({ findInView: true });
+      if (!get().inbox) set({ findInView: true });
       post("focus-find", undefined);
     },
   },
