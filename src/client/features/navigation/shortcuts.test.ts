@@ -93,3 +93,18 @@ test("R3-issue-fields-D5: Space peeks the card under the pointer, the one S/A/P/
   expect([get().selected, get().panel, get().view]).toEqual(["PK-2", true, "side"]);
 });
 
+
+test("R3-palette-shortcuts-D2: G then a key Linear binds as a G-chord never falls through to that key's own shortcut", async () => {
+  const { reservedChords } = await import("./shortcuts");
+  const chords = [...shortcuts, ...reservedChords].filter((s) => Array.isArray(s.hotkey) && s.hotkey[0] === "G");
+  // Linear's G-chords (startup-root.CnUSfl4j.js `keyboardShortcut:{key:["g", …]}`), including Preferences (G S) and views (G U).
+  for (const key of [..."-ABCDEFIJLMNPQRSTUVWX"]) expect(chords.some((s) => (s.hotkey as string[])[1] === key)).toBe(true);
+  // The single keys QA saw fire after G (S status, P priority, L labels, U read state) are all held by a chord.
+  for (const id of ["status", "priority", "labels", "inbox-read"]) {
+    const key = shortcuts.find((s) => s.id === id)!.hotkey;
+    expect(chords.some((s) => (s.hotkey as string[])[1] === key)).toBe(true);
+  }
+  for (const chord of reservedChords) expect(() => parseHotkey(chord.hotkey!, "mac")).not.toThrow();
+  // Reserved chords are inert: not commands, so ⌘K and the shortcut help never list them.
+  expect(reservedChords.every((c) => !shortcuts.includes(c))).toBe(true);
+});

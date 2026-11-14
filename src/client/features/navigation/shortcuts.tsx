@@ -11,7 +11,7 @@ import { canMergeOverlay } from "@/shared/saved-view-model";
 import { boardView, filterCount, groupStep, visibleOrder } from "@/shared/view-model";
 import { forgetIssueIntents, post, run as command } from "./commands";
 import { canHaveChildren } from "@/shared/issue-properties";
-import { formatForDisplay, getHotkeyManager, type Hotkey } from "@tanstack/react-hotkeys";
+import { formatForDisplay, getHotkeyManager, type Hotkey, type HotkeyChord } from "@tanstack/react-hotkeys";
 import { boardOf, get, isWatching, ME, set, useStore, type Overlay } from "@/client/state/store";
 import { actions, beginCreate } from "@/client/state/issue-actions";
 import { currentKey } from "@/client/state/jira-sync";
@@ -996,6 +996,14 @@ export function hotkeyEnabled(entry: Shortcut, s: State, issue: Issue | undefine
     shortcutApplies(entry, s, issue)
   );
 }
+/** Linear binds G then each of these keys (`keyboardShortcut:{key:["g", …]}` in startup-root.CnUSfl4j.js: Preferences, projects,
+ *  views, Loops, cycles…), and its resolver tries the whole sequence before the last key alone. The ones we have no command
+ *  for are reserved as inert chords, so G then S/P/L/U/T/V never falls through to that key's own shortcut
+ *  (R3-palette-shortcuts-D2: G U toggled a notification's read state in Atlassian). */
+const LINEAR_G_CHORD_KEYS = [..."-ABCDEFIJLMNPQRSTUVWX"] as HotkeyChord[];
+export const reservedChords: Shortcut[] = LINEAR_G_CHORD_KEYS.filter(
+  (key) => !shortcuts.some((s) => Array.isArray(s.hotkey) && s.hotkey[0] === "G" && s.hotkey[1] === key),
+).map((key) => ({ id: `reserved-g-${key}`, name: `G then ${key}`, group: "Navigation", hotkey: ["G", key], run: () => {} }));
 /** Registers the keyboard map once. Which shortcuts are enabled is worked out from the store at each key press,
  *  before the hotkey listener sees it, so a store change (a Jira poll) re-renders and re-registers nothing. */
 export function useLinearHotkeys() {
@@ -1027,7 +1035,7 @@ export function useLinearHotkeys() {
       }
     };
     document.addEventListener("keydown", handle);
-    const bound = shortcuts
+    const bound = [...shortcuts, ...reservedChords]
       .filter((entry) => entry.hotkey && !VIEW_SHORTCUT_IDS.includes(entry.id))
       .map((entry) => ({
         entry,
