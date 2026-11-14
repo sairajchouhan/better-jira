@@ -232,6 +232,22 @@ test("A3: the property values ⌘K hoists carry Linear's command-menu breadcrumb
   expect(users.filter((u) => u.exact).length).toBe(1);
 });
 
+test("C3: Issue options › Status and Project search as the S and ⇧P pickers: workflow order, and Linear's No project keywords", async () => {
+  const { searchActions } = await import("@/client/components/action-menu");
+  const board: Board = {
+    id: 1,
+    name: "Board",
+    columns: ["Backlog", "Todo", "Doing", "Review", "Done"].map((name) => ({
+      name,
+      statuses: [{ id: name.toLowerCase(), name, category: name === "Done" ? "done" : "indeterminate" }],
+    })),
+  };
+  set({ boards: [board], issues: new Map([[issue.key, issue]]) });
+  const entries = issuePropertyEntries(issue, { close: () => {}, menu: "contextual" });
+  expect(searchActions(entries.status.children!, "do").slice(0, 2).map((e) => e.name)).toEqual(["Doing", "Done"]);
+  expect(searchActions(entries.project.children ?? [], "epic").map((e) => e.name)).toContain("No project");
+});
+
 describe("BJ-247: an epic parent is the issue's Project, never its Parent", () => {
   const board: Board = {
     id: 1,

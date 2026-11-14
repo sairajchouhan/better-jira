@@ -123,3 +123,75 @@ test("A3: values hoist into ⌘K from the parent's minimum input, at most 10 per
   expect(hoistValues(statuses, "i", 2)).toEqual([]);
   expect(hoistValues(statuses, "in", 2).map(([, v]) => v.name)).toEqual(["In Progress"]);
 });
+
+import { hoistedRow, rowKeywords, typoScore } from "./fuzzy-score";
+import { duePresets } from "./due-date";
+
+/** A picker row as PickerRow hands it to menuFilter: its name, then rowKeywords. */
+const row = (name: string, query: string, search: Parameters<typeof rowKeywords>[0] = {}, parents?: string[]) =>
+  menuFilter(name, query, [name, ...rowKeywords(search)], { parents });
+
+test("C3: the S picker lists the statuses a query starts in workflow order, from 0.999 less 0.001 a step (PCn submenu base)", () => {
+  // Shorter names score higher on their own ("In Review" over "In Progress"); the workflow order wins.
+  expect(row("In Progress", "in", { order: 1 })).toBeCloseTo(0.998);
+  expect(row("In Review", "in", { order: 2 })).toBeCloseTo(0.997);
+  expect(row("Done", "do", { order: 4 })).toBeLessThan(row("Doing", "do", { order: 2 }));
+  // A whole name is no prefix match: it keeps its own score, so an exact query still picks it.
+  expect(row("Done", "done", { order: 4 })).toBe(1);
+});
+
+test("C3: a status hoisted into a root menu orders from 0.84 (PCn hoisted base), under its parent's breadcrumb", () => {
+  expect(row("Doing", "do", { order: 2 }, ["Status"])).toBeCloseTo(0.838);
+  expect(row("Done", "do", { order: 4 }, ["Status"])).toBeCloseTo(0.836);
+  // ⌘K reads the same order from the value's keywords.
+  expect(hoistedRow("Doing", rowKeywords({ order: 2 })).override!(0.5, "do")).toBeCloseTo(0.838);
+  expect(hoistedRow("Doing", ["open"]).keywords).toEqual(["open"]);
+});
+
+test("C3: a picker row is found by Linear's keywords through its secondary string", () => {
+  for (const [name, keywords, query] of [
+    ["Custom…", "select specific pick", "pick"],
+    ["Remove due date", "clear delete", "clear"],
+    ["No project", "epic delete", "epic"],
+    ["No milestone", "project", "project"],
+    ["Tomorrow", "tom", "tom"],
+  ] as const) {
+    expect(row(name, query, { keywords })).toBeGreaterThanOrEqual(MIN_APPLICABILITY);
+    if (query !== "tom") expect(row(name, query)).toBe(0);
+  }
+  // The secondary string counts ×0.85: a keyword hit ranks under the same hit on a name.
+  expect(row("Custom…", "pick", { keywords: "select specific pick" })).toBeLessThan(row("Pick", "pick"));
+});
+
+test("C3: a pinned row is listed whatever is typed (skipFilterScoring): a typed date first, Create new label last", () => {
+  expect(row("Due", "feb 9", { pin: "first" })).toBe(1);
+  const create = row("Create new label", "zzz", { pin: "last" });
+  expect(create).toBeGreaterThan(0);
+  expect(create).toBeLessThan(row("bug", "b"));
+});
+
+test("C3: a row under 0.24 is left out, as Linear's filterAndSortByScores", () => {
+  // Found only by a scattered subsequence of its no-space secondary string, and not by the typo fallback either.
+  expect(row("Restore mirrored Jira version", "remind")).toBe(0);
+  expect(menuFilter("Priya", "py", personKeywords("Priya"))).toBe(0);
+});
+
+test("C3: a typo below 0.24 is rescued by Linear's fallback (H8.scoreAll, then 0.4 + score × 0.45)", () => {
+  // "asign" in "assignee": one character skipped, two runs of which one starts the word, the term not whole, at 0.
+  expect(typoScore("assignee", "asign")).toBeCloseTo((5 / 6) * 0.45 + 0.5 * 0.25 + 0 + 0.1);
+  expect(actionScore({ name: "Assignee" }, "asign")).toBeCloseTo(0.4 + typoScore("assignee", "asign") * 0.45, 5);
+  expect(row("Assignee", "asign")).toBeGreaterThanOrEqual(MIN_APPLICABILITY);
+  // Terms are found in order, across words; one missing character is no match.
+  expect(typoScore("restore mirrored jira version", "remove")).toBeGreaterThan(0);
+  expect(typoScore("restore mirrored jira version", "remind")).toBe(0);
+  // Two whole terms, each starting a word, with the space between them skipped (uFuzzy's interIns).
+  expect(typoScore("in progress", "in prog")).toBeCloseTo((6 / 7) * 0.45 + 0.25 + 0.2 + 0.1);
+});
+
+test("C3: the due presets carry Linear's keywords (gfn)", () => {
+  expect(duePresets().map((p) => [p.name, p.keywords])).toEqual([
+    ["Tomorrow", "tom"],
+    ["End of this week", "end this week"],
+    ["In one week", "one week"],
+  ]);
+});

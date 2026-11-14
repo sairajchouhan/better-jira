@@ -18,7 +18,7 @@ import { DueRows, IssueAssigneeRows, IssueLabelRows } from "./property-menu";
 import type { ActionEntry } from "@/client/components/action-menu";
 import { Icon, PriorityIcon, StatusIcon, type IconName } from "@/client/components/icons";
 import { Avatar } from "@/client/components/avatar";
-import { personKeywords } from "@/client/lib/fuzzy-score";
+import { personKeywords, rowKeywords } from "@/client/lib/fuzzy-score";
 import {
   assigneeGroups,
   clearPriorityRow,
@@ -88,8 +88,10 @@ export function issuePropertyEntries(issue: Issue, { close, menu }: { close: () 
     status: property(command ? "Change status…" : "Status", "status", "status", {
       placeholder: "Change status…",
       children: statuses(board)
-        .map((s) => ({
+        .map((s, i) => ({
           name: s.name,
+          // The S picker's rows: their place in the workflow orders the names a query starts (PCn.createScoreOverride).
+          keywords: rowKeywords({ order: i }),
           image: createElement(StatusIcon, { status: s }),
           selected: s.id === issue.status,
           run: choose(() => actions.status(issue.key, s.id)),
@@ -160,6 +162,8 @@ export function issuePropertyEntries(issue: Issue, { close, menu }: { close: () 
             ...epicChoices(boardIssues, board, { project: issue.project?.key, current: epic }),
           ].map(({ key, name }, i) => ({
             name,
+            // The ⇧P picker's: "No project" by `VBn`'s keywords, an epic by its key too.
+            keywords: rowKeywords({ keywords: key ?? "epic delete" }),
             icon: "layers" as const,
             selected: key === (epic ?? null),
             // Linear's "No project" takes 0 (`YBn` numkeyShortcut); the projects have none.

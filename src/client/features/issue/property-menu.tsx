@@ -11,7 +11,7 @@ import {
   statuses,
 } from "@/shared/board-catalog";
 import { useStore, ME } from "@/client/state/store";
-import { menuFilter, personKeywords } from "@/client/lib/fuzzy-score";
+import { menuFilter, personKeywords, rowKeywords } from "@/client/lib/fuzzy-score";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { Button } from "@/client/components/button";
 import { LoadingState } from "@/client/components/empty-state";
@@ -35,7 +35,8 @@ import { CommandMenu, useCommandTarget } from "@/client/components/command-menu"
 
 /** Linear's property menu (RAJ-52 status, priority, assignee and labels): 208px wide beside the open issue's property button, a 36px
  *  filter with the key that opens it at its right, rows 6px below. Inside a `CommandTarget` (a shortcut over a card or row) the same
- *  menu is Linear's command menu on that issue instead (ISSUE-11). With an empty filter, a row's number key picks it, as in Linear. */
+ *  menu is Linear's command menu on that issue instead (ISSUE-11). With an empty filter, a row's number key picks it, as in Linear.
+ *  Every picker searches with Linear's one action score (menuFilter); a row's `keywords` say what it is found by. */
 export function PropertyMenu({
   label,
   placeholder,
@@ -47,7 +48,6 @@ export function PropertyMenu({
   onQuery,
   side,
   onKeyDown,
-  filter,
   children,
 }: {
   label: string;
@@ -61,15 +61,13 @@ export function PropertyMenu({
   onQuery?: (value: string) => void;
   side?: "left";
   onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
-  /** The rows' search score; cmdk's own by default. */
-  filter?: typeof menuFilter;
   children: ReactNode;
 }) {
   const target = useCommandTarget();
   const menu = (
     <Menu
       defaultValue={current}
-      filter={filter}
+      filter={menuFilter}
       style={target ? undefined : { width: 206 }}
       onKeyDown={onKeyDown}
     >
@@ -115,6 +113,7 @@ export function PickerRow({
   number?: number;
   /** Trailing text; the number key by default. */
   hint?: ReactNode;
+  /** What the row is searched by instead of its value: its name, then `rowKeywords` or personKeywords (menuFilter). */
   keywords?: string[];
   onSelect: () => void;
   children: ReactNode;
@@ -161,24 +160,23 @@ export function StatusMenu({ anchor, board, value, onChange, close }: FieldMenuP
       close={close}
       current={statuses(board).find((s) => s.id === value)?.name}
     >
-      {board?.columns
-        .flatMap((c) => c.statuses.map((s) => ({ ...s, column: c.name })))
-        .map((s, i) => (
-          <PickerRow
-            key={s.id}
-            value={s.name}
-            keywords={[s.column]}
-            icon={<StatusIcon status={s} />}
-            current={value === s.id}
-            number={i < 9 ? i + 1 : undefined}
-            onSelect={() => {
-              onChange(s.id);
-              close();
-            }}
-          >
-            {s.name}
-          </PickerRow>
-        ))}
+      {statuses(board).map((s, i) => (
+        <PickerRow
+          key={s.id}
+          value={s.name}
+          // Linear's status rows have no keywords; their place in the workflow orders the names a query starts (PCn).
+          keywords={[s.name, ...rowKeywords({ order: i })]}
+          icon={<StatusIcon status={s} />}
+          current={value === s.id}
+          number={i < 9 ? i + 1 : undefined}
+          onSelect={() => {
+            onChange(s.id);
+            close();
+          }}
+        >
+          {s.name}
+        </PickerRow>
+      ))}
     </PropertyMenu>
   );
 }
@@ -270,7 +268,6 @@ export function AssigneeMenu({
       current={value ? assigneeValue(value) : "No assignee"}
       query={query}
       onQuery={setQuery}
-      filter={menuFilter}
     >
       <AssigneeRows
         board={board?.id}
@@ -393,6 +390,8 @@ export function ProjectMenu({
     >
       <PickerRow
         value="No project"
+        // `YBn` takes `VBn`'s keywords.
+        keywords={["No project", ...rowKeywords({ keywords: "epic delete" })]}
         current={!value}
         number={0}
         icon={<Icon name="layers" />}
@@ -407,6 +406,7 @@ export function ProjectMenu({
         <PickerRow
           key={epic.key}
           value={epicValue(epic)}
+          keywords={[epic.name, ...rowKeywords({ keywords: epic.key })]}
           current={epic.key === value}
           icon={<Icon name="layers" />}
           onSelect={() => {
@@ -439,6 +439,8 @@ export function MilestoneMenu({
     >
       <PickerRow
         value="No milestone"
+        // `JBn` takes `GBn`'s keywords.
+        keywords={["No milestone", ...rowKeywords({ keywords: "project" })]}
         current={!value.length}
         icon={<Icon name="calendar" />}
         onSelect={() => {
@@ -513,6 +515,8 @@ export function LabelRows({
       {query.trim() && !exact && (
         <Menu.Item
           value={`Create ${query}`}
+          // Linear's create row: `skipFilterScoring` and `sortPriority: -1/0`, so it stays, under every label that matches.
+          keywords={["Create new label", ...rowKeywords({ pin: "last" })]}
           icon={<Icon name="plus" size={14} />}
           // Like Enter on an existing label: apply it and close, so the menu never shows a list without it.
           onSelect={() => {
@@ -557,8 +561,9 @@ export function LabelsMenu({ anchor, board, value, onChange, close }: FieldMenuP
     </PropertyMenu>
   );
 }
-/** The due-date rows (Linear's due action, recalculateOnInput): a typed date like "24h" or "Feb 9" first, then Custom…, the presets and,
- *  with a date set, Remove. One component for the Shift+D picker and Issue options › Due date. The parser (chrono) loads with it. */
+/** The due-date rows (Linear's due action `oK`, its rows from `cfn` and `gfn`): Remove due date with a date set, Custom…, the presets
+ *  and a typed date like "24h" or "Feb 9", drawn first and always listed (skipFilterScoring). One component for the Shift+D picker
+ *  and Issue options › Due date. The parser (chrono) loads with it. */
 export function DueRows({
   query,
   value,
@@ -585,7 +590,7 @@ export function DueRows({
       {parsed && (
         <PickerRow
           value={`Due ${query}`}
-          keywords={[query]}
+          keywords={["Due", ...rowKeywords({ pin: "first" })]}
           icon={<Icon name="calendar" />}
           hint={shortDate(parsed)}
           onSelect={() => onPick(parsed)}
@@ -593,13 +598,29 @@ export function DueRows({
           Due
         </PickerRow>
       )}
-      <PickerRow value="Custom…" icon={<Icon name="calendar" />} onSelect={onCustom}>
+      {value && (
+        <PickerRow
+          value="Remove due date"
+          keywords={["Remove due date", ...rowKeywords({ keywords: "clear delete" })]}
+          icon={<Icon name="close" />}
+          onSelect={() => onPick(null)}
+        >
+          Remove due date
+        </PickerRow>
+      )}
+      <PickerRow
+        value="Custom…"
+        keywords={["Custom…", ...rowKeywords({ keywords: "select specific pick" })]}
+        icon={<Icon name="calendar" />}
+        onSelect={onCustom}
+      >
         Custom…
       </PickerRow>
       {duePresets().map((preset) => (
         <PickerRow
           key={preset.name}
           value={preset.name}
+          keywords={[preset.name, ...rowKeywords({ keywords: preset.keywords })]}
           icon={<Icon name="calendar" />}
           current={value === preset.due}
           hint={shortDate(preset.due)}
@@ -608,11 +629,6 @@ export function DueRows({
           {preset.name}
         </PickerRow>
       ))}
-      {value && (
-        <PickerRow value="Remove due date" icon={<Icon name="close" />} onSelect={() => onPick(null)}>
-          Remove due date
-        </PickerRow>
-      )}
     </>
   );
 }

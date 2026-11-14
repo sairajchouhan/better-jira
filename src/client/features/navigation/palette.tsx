@@ -25,7 +25,7 @@ import { MenuSurface } from "@/client/components/menu-surface";
 import { Menu } from "@/client/components/menu";
 import { COMMAND_MENU_WIDTH, CommandMenuTitle } from "@/client/components/command-menu";
 import { Avatar } from "@/client/components/avatar";
-import { actionScore, hoistValues, MIN_APPLICABILITY, workflowOrder, type ScoredAction } from "@/client/lib/fuzzy-score";
+import { actionScore, hoistedRow, hoistValues, MIN_APPLICABILITY, type ScoredAction } from "@/client/lib/fuzzy-score";
 import { issuePropertyEntries } from "@/client/features/issue/issue-menu";
 import { workOnIssueEntry } from "@/client/features/issue/coding-tools";
 import { COMMAND_KEYWORDS, VIEW_COMMAND_KEYWORDS } from "./command-keywords";
@@ -177,14 +177,13 @@ function hoistedValues(issue: Issue, q: string, applies: (id: string) => boolean
     if (!applies(id) || !parent.children) return [];
     const { nameAsParent } = parent;
     const values = parent.children.map(
-      (child, index): Cmd => ({
+      (child): Cmd => ({
         id: `${id}:${child.name}`,
         name: child.name,
         // Linear's getParentActionLabel: nameAsParent, else the parent's name without its "…".
         parents: [typeof nameAsParent === "function" ? nameAsParent(child) : (nameAsParent ?? parent.name.replaceAll("…", ""))],
-        keywords: child.keywords,
+        ...hoistedRow(child.name, child.keywords),
         exact: child.exact,
-        override: id === "status" ? workflowOrder(child.name, index) : undefined,
         icon: child.image ?? (child.icon && <Icon name={child.icon} size={16} />),
         checked: child.selected,
         run: () => child.run?.(),

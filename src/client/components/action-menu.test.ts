@@ -57,3 +57,20 @@ test("ISSUE-8: a child is found by its parent's label too, below the rows its ow
   expect(names("remove").slice(0, 2)).toEqual(["Remove", "Remove › Blocking issue TEST-2"]);
   expect(names("rem")).toContain("Remove › Blocking issue TEST-2");
 });
+
+import { rowKeywords } from "@/client/lib/fuzzy-score";
+
+/** The fixture board's workflow, as issuePropertyEntries lists it: each status with its place (Linear's indexInWorkflow). */
+const workflow = ["Backlog", "Todo", "Doing", "Review", "Done"].map((name, i) =>
+  leaf(name, { keywords: rowKeywords({ order: i }) }),
+);
+
+test("C3: the right-click Status submenu ranks the statuses a query starts in workflow order, as the S picker does", () => {
+  expect(searchActions(workflow, "do").slice(0, 2).map((e) => e.name)).toEqual(["Doing", "Done"]);
+});
+
+test("C3: hoisted into the right-click root, statuses keep workflow order under their breadcrumb", () => {
+  const root = [{ name: "Status", children: workflow }, leaf("Duplicate issue")];
+  const hits = searchActions(root, "do").map((e) => e.name);
+  expect(hits.indexOf("Status › Doing")).toBeLessThan(hits.indexOf("Status › Done"));
+});

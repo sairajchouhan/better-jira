@@ -11,12 +11,14 @@ export function duePresets(reference = new Date()) {
   };
   return (
     [
-      ["Tomorrow", day(1)],
-      ["End of this week", day((5 - reference.getDay() + 7) % 7)],
-      ["In one week", day(7)],
+      // Linear's preset keywords (`gfn`): "tom", "end this week", "one week".
+      ["Tomorrow", day(1), "tom"],
+      ["End of this week", day((5 - reference.getDay() + 7) % 7), "end this week"],
+      ["In one week", day(7), "one week"],
     ] as const
-  ).map(([name, date]) => ({
+  ).map(([name, date, keywords]) => ({
     name,
+    keywords,
     due: dateOnly(date),
     label: shortDate(dateOnly(date), reference),
   }));

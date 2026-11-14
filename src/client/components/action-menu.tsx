@@ -43,7 +43,7 @@ export type ActionEntry = {
   divider?: boolean;
   /** Listed but greyed out and inert, with this reason as its tooltip (Linear's disabledReason, shown as the row's hintText). */
   disabledReason?: string;
-  /** Other words a filter finds the entry by (a language's aliases). */
+  /** Other words a filter finds the entry by (a language's aliases), or `rowKeywords` (a status's workflow place). */
   keywords?: string[];
   /** Linear's keywordsExactMatch: a query equal to one of these is an exact hit ("me" on your own assignee row). */
   exact?: string[];
@@ -51,25 +51,21 @@ export type ActionEntry = {
 type Container = RefObject<HTMLDivElement | null>;
 type Ranked = { entry: ActionEntry; score: number };
 
-const HOIST_FROM = 2,
-  // Linear's DEFAULT_MIN_APPLICABILITY_SCORE, and what a weaker hit that its parent labels contain scores instead.
-  MIN_SCORE = 0.24,
-  PARENT_HIT = MIN_SCORE + 0.05;
-const score = (entry: ActionEntry, query: string) =>
+const HOIST_FROM = 2;
+/** One scorer for every row (menuFilter, Linear's scoreAction); `parents`, a hoisted row's breadcrumb. */
+const score = (entry: ActionEntry, query: string, parents?: string[]) =>
   entry.exact?.includes(query.trim().toLowerCase())
     ? 1
-    : menuFilter(entry.name, query, entry.keywords && [entry.name, ...entry.keywords]);
-/** Children listed under `parent` once the query is long enough, named by their breadcrumb and scored by their own name; a weak
- *  match that the breadcrumb contains ("remove" → "Remove › Blocking issue …") scores PARENT_HIT (Linear's secondaryString). */
-function hoisted(parent: ActionEntry, query: string, prefix = ""): Ranked[] {
+    : menuFilter(entry.name, query, entry.keywords && [entry.name, ...entry.keywords], { parents });
+/** Children listed under `parent` once the query is long enough, named by their breadcrumb and scored as Linear's hoisted action:
+ *  by their name, and by the breadcrumb too ×0.85, 0.15 lower ("remove" → "Remove › Blocking issue …", secondaryString). */
+function hoisted(parent: ActionEntry, query: string, parents: string[] = []): Ranked[] {
   if (!parent.children || query.length < (parent.hoistFrom ?? HOIST_FROM)) return [];
   return parent.children.flatMap((child) => {
     const { nameAsParent = parent.name } = parent;
-    const path = `${prefix}${typeof nameAsParent === "function" ? nameAsParent(child) : nameAsParent} › `;
-    const own = score(child, query),
-      inPath = query.length > 2 && path.toLowerCase().includes(query.toLowerCase());
+    const path = [...parents, typeof nameAsParent === "function" ? nameAsParent(child) : nameAsParent];
     return [
-      { entry: { ...child, name: path + child.name }, score: own < MIN_SCORE && inPath ? PARENT_HIT : own },
+      { entry: { ...child, name: [...path, child.name].join(" › ") }, score: score(child, query, path) },
       ...hoisted(child, query, path),
     ];
   });

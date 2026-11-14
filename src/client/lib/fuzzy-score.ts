@@ -169,21 +169,74 @@ export function fuzzyScore(text: string | string[], query = ""): number {
 export const prioritize = (score: number, by = 1) => score * 1.01 ** by;
 export const deprioritize = (score: number, by = 1) => score * 0.99 ** by;
 /**
- * cmdk's `filter` with Linear's score: pass it to every searchable menu (`<Menu filter={menuFilter}>`) so all menus rank alike.
- * A row's `keywords`, when given, are the text it is searched by instead of its value, so a value can stay a unique id
- * ("Status To Do 3") while the row matches on its label ("To Do") alone.
+ * cmdk's `filter` with Linear's score: pass it to every searchable menu (`<Menu filter={menuFilter}>`) so all menus rank alike, as
+ * Linear scores every action menu's rows with one `Yn.scoreAction` (startup-entry.Dt5YDWdY.js). A row's `keywords`, when given,
+ * are what it is searched by instead of its value, so a value can stay a unique id ("Status To Do 3") while the row matches on its
+ * label ("To Do") alone: the first is its name, the rest Linear's `keywords` (`rowKeywords` adds a status's workflow place and a
+ * pinned row). As in Linear's `filterAndSortByScores`, a row or person under 0.24 is left out, once the typo fallback has had a go
+ * ("asign" → Assignee). `parents`: the labels of the menus a row is hoisted out of ("Status"), so it scores as Linear's hoisted
+ * action: found by them too, 0.15 lower, and a status ordered from the hoisted base (`PCn.scoreForOrdering`).
  */
-export const menuFilter = (value: string, search: string, keywords?: string[]) => {
+export function menuFilter(
+  value: string,
+  search: string,
+  keywords?: string[],
+  { parents }: { parents?: string[] } = {},
+): number {
   if (keywords?.some((k) => k.startsWith(PERSON)))
-    return personScore(
-      keywords.filter((k) => !k.startsWith(PERSON)),
-      search,
-      { me: keywords.includes(`${PERSON}me`), team: keywords.includes(`${PERSON}team`) },
+    return applicable(
+      personScore(keywords.filter((k) => !k.startsWith(PERSON)), search, {
+        me: keywords.includes(`${PERSON}me`),
+        team: keywords.includes(`${PERSON}team`),
+      }),
     );
   const crumbs = keywords?.find((k) => k.startsWith(CRUMBS));
   if (crumbs) return breadcrumbScore(keywords!.filter((k) => k !== crumbs), crumbs.slice(CRUMBS.length), search);
-  return fuzzyScore(keywords?.length ? keywords : value, search);
+  const { aliases, order, pin } = parseRow(keywords);
+  if (pin === "first") return 1;
+  // Linear's sortPriority −∞ on a skipFilterScoring row: listed whatever is typed, under every row that matches.
+  if (pin === "last") return Number.MIN_VALUE;
+  const [name = value, ...words] = aliases.length ? aliases : [value];
+  const base = parents?.length ? HOISTED_PREFIX : SUBMENU_PREFIX;
+  return applicable(
+    actionScore(
+      { name, keywords: words, parents, override: order === undefined ? undefined : workflowOrder(name, order, base) },
+      search,
+    ),
+  );
+}
+/** Linear's `filterAndSortByScores`: a row under 0.24 is left out. */
+const applicable = (score: number) => (score >= MIN_APPLICABILITY ? score : 0);
+
+const ORDER = "\u0002",
+  PIN = "\u0003";
+/** What a picker row is found by beyond its name (Linear's action fields). */
+export type RowSearch = {
+  /** Linear's `keywords`: other words the row is found by, through its secondary string ("clear delete" on Remove due date). */
+  keywords?: string;
+  /** A status's place in the workflow (`indexInWorkflow`), for its `scoreOverride: PCn.createScoreOverride`. */
+  order?: number;
+  /** Linear's `skipFilterScoring`: listed whatever is typed, "first" scoring 1 (a typed date), "last" under every match (Create new
+   *  label, `sortPriority: -1/0`). */
+  pin?: "first" | "last";
 };
+/** A row's cmdk `keywords` after its name, for menuFilter: its Linear keywords, workflow place and pin. One encoding for every
+ *  picker row (PickerRow) and action-menu value (ActionEntry.keywords), so S, P, L, due and their right-click submenus score alike. */
+export const rowKeywords = ({ keywords, order, pin }: RowSearch): string[] => [
+  ...(keywords ? [keywords] : []),
+  ...(order === undefined ? [] : [`${ORDER}${order}`]),
+  ...(pin ? [`${PIN}${pin}`] : []),
+];
+/** rowKeywords read back: the plain keywords, and the workflow place and pin they carry. */
+export function parseRow(keywords: readonly string[] = []) {
+  const order = keywords.find((k) => k.startsWith(ORDER)),
+    pin = keywords.find((k) => k.startsWith(PIN));
+  return {
+    aliases: keywords.filter((k) => k !== order && k !== pin),
+    order: order === undefined ? undefined : Number(order.slice(ORDER.length)),
+    pin: pin?.slice(PIN.length) as RowSearch["pin"],
+  };
+}
 
 /** Linear's DEFAULT_MIN_APPLICABILITY_SCORE: below it a hit is weak. */
 export const MIN_APPLICABILITY = 0.24;
@@ -287,16 +340,32 @@ export function actionStrings({ name, keywords, parents = [] }: ScoredAction) {
   return { name: plain.toLowerCase(), main: main.toLowerCase(), secondary: secondary.filter(Boolean).join(" ").toLowerCase() };
 }
 /**
- * Linear's command score: the better of the name (mainString) and the parents, name and keywords (secondaryString) ×0.85; then
- * `applyScoreCorrections`: 1 for an exact name or exact keyword, −0.15 for a hoisted row, and below 0.24 on a query of 3+
- * characters 0.34 when the name contains it, else 0.29 when the secondary string does; then the action's `scoreOverride`.
- * Linear's uFuzzy fallback for typos below 0.24 is left out, as in breadcrumbScore.
+ * Linear's command score (`Yn.scoreAction`): the better of the name (mainString) and the parents, name and keywords
+ * (secondaryString) ×0.85, then `applyScoreCorrections`. Below 0.24 its typo fallback has a go (`applyFuzzyScoreFallback`): the
+ * name's typo score, as `getFuzzyActionScore` maps it, corrected the same way, kept when that reaches 0.24.
  */
 export function actionScore(action: ScoredAction, search: string): number {
   const q = search.trim().toLowerCase(),
     strings = actionStrings(action);
   if (!q) return 1;
-  let score = Math.max(fuzzyScore(strings.main, q), fuzzyScore(strings.secondary, q) * SECONDARY);
+  const raw = Math.max(fuzzyScore(strings.main, q), fuzzyScore(strings.secondary, q) * SECONDARY),
+    score = corrected(action, strings, q, search, raw);
+  if (score >= MIN_APPLICABILITY) return score;
+  const typo = typoScore(strings.name, q);
+  if (!typo) return score;
+  const fallback = corrected(action, strings, q, search, FUZZY_FLOOR + typo * (SECONDARY - FUZZY_FLOOR));
+  return fallback >= MIN_APPLICABILITY ? fallback : score;
+}
+/** `applyScoreCorrections`: 1 for an exact name or exact keyword, −0.15 for a hoisted row, and below 0.24 on a query of 3+
+ *  characters 0.34 when the name contains it, else 0.29 when the secondary string does; then the action's `scoreOverride`. */
+function corrected(
+  action: ScoredAction,
+  strings: ReturnType<typeof actionStrings>,
+  q: string,
+  search: string,
+  raw: number,
+): number {
+  let score = raw;
   const nameVariants = new Set(variants(strings.name));
   if (variants(q).some((v) => nameVariants.has(v)) || action.exact?.some((k) => k.toLowerCase() === q)) score = 1;
   if (action.parents?.length) score -= HOISTED;
@@ -307,15 +376,81 @@ export function actionScore(action: ScoredAction, search: string): number {
   if (action.override) score = action.override(score, search.trim());
   return Number(score.toFixed(6));
 }
-/** Linear's status `scoreOverride` (`PCn.scoreForOrdering`): a hoisted status whose name starts with a shorter query scores 0.84,
- *  less 0.001 per step down the workflow, so "in" lists the statuses in workflow order. */
+/** `n5`: the least a typo hit maps to (0.24 + 0.15 + 0.01), so one survives a hoisted row's −0.15. */
+const FUZZY_FLOOR = MIN_APPLICABILITY + HOISTED + 0.01;
+const TERM_SPLIT = /[^A-Za-z\d']+/,
+  WORD_CHAR = /[\p{L}\p{N}]/u;
+/**
+ * Linear's typo score (`H8.scoreAll`, uFuzzy with `intraIns: 1/0, intraChars: "."`): the query's terms found in order in the text,
+ * any characters skipped, at the leftmost place they fit; 0 when they don't. 0.45 for few skipped characters, 0.25 for runs that
+ * start a word, 0.2 for terms found whole, 0.1 for an early start.
+ */
+export function typoScore(text: string, query: string): number {
+  const terms = plain(query)
+      .replace(/"|(^|\s)-+/g, "$1")
+      .split(TERM_SPLIT)
+      .filter(Boolean)
+      .map((t) => t.toLowerCase()),
+    length = terms.join("").length;
+  if (!length) return 0;
+  const source = plain(text),
+    low = source.toLowerCase();
+  const at: number[] = [];
+  let from = 0,
+    intra = 0,
+    inter = 0,
+    whole = 0;
+  for (const term of terms) {
+    let first = -1,
+      last = -1;
+    for (const char of term) {
+      const i = low.indexOf(char, last < 0 ? from : last + 1);
+      if (i < 0) return 0;
+      if (first < 0) first = i;
+      else intra += i - last - 1;
+      last = i;
+      at.push(i);
+    }
+    if (at.length > term.length) inter += first - from;
+    if (last - first + 1 === term.length) whole++;
+    from = last + 1;
+  }
+  // The matched characters' runs, and how many of them start a word.
+  let runs = 0,
+    starts = 0;
+  at.forEach((i, n) => {
+    if (n > 0 && at[n - 1] === i - 1) return;
+    runs++;
+    if (i === 0 || !WORD_CHAR.test(source.charAt(i - 1))) starts++;
+  });
+  return (
+    (length / (length + intra + inter)) * 0.45 +
+    (starts / Math.max(1, runs)) * 0.25 +
+    Math.min(1, whole / terms.length) * 0.2 +
+    (1 / (1 + at[0]!)) * 0.1
+  );
+}
+/** `PCn.HOISTED_PREFIX_MATCH_BASE_SCORE` (a status listed in the root search) and `SUBMENU_PREFIX_MATCH_BASE_SCORE` (in the S picker). */
+export const HOISTED_PREFIX = 0.84,
+  SUBMENU_PREFIX = 0.999;
+/** Linear's `hc` (`UO`): NFKD with the accents dropped (lodash deburr). */
+const plain = (s: string) => s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+/** Linear's status `scoreOverride` (`PCn.scoreForOrdering` in startup-root.CnUSfl4j.js): a status whose name starts with a shorter
+ *  query scores `base` (0.999 in the status picker, 0.84 hoisted into a root search), less 0.001 per step down the workflow, so "in"
+ *  lists the statuses in workflow order whatever their length. */
 export const workflowOrder =
-  (name: string, index: number) =>
+  (name: string, index: number, base = HOISTED_PREFIX) =>
   (score: number, search: string): number => {
-    const n = name.toLowerCase(),
-      q = search.toLowerCase();
-    return q && q.length < n.length && n.startsWith(q) ? 0.84 - index * 0.001 : score;
+    const n = plain(name).toLowerCase(),
+      q = plain(search).toLowerCase();
+    return q && q.length < n.length && n.startsWith(q) ? base - index * 0.001 : score;
   };
+/** A value's rowKeywords as the action fields actionScore reads once it is hoisted into a root search (⌘K): its keywords, and a
+ *  status's workflow order at the hoisted base (0.84). */
+export function hoistedRow(name: string, keywords?: readonly string[]): Pick<ScoredAction, "keywords" | "override"> {
+  const { aliases, order } = parseRow(keywords);
+  return { keywords: aliases, override: order === undefined ? undefined : workflowOrder(name, order, HOISTED_PREFIX) };
+}
 /** Linear's `limitSubActionsInRootMenu` default (`abt(10)`): at most this many of one parent's values in the root search. */
 export const HOISTED_PER_PARENT = 10;
 /**

@@ -229,3 +229,41 @@ test("CORE-18 / CORE-26: a context menu opens 4px right of and 1px above the poi
     expect(await page.eval<string>(`getComputedStyle(${row}).backgroundColor`)).toBe(hover);
   });
 });
+
+test("C3: every property picker searches with Linear's one action score: statuses a query starts in workflow order, rows by Linear's keywords", async ({
+  open,
+}) => {
+  const page = await open("", { setup: writable });
+  const rows = (scope: string) =>
+    page.eval<string[]>(`[...document.querySelectorAll('${scope} [cmdk-item]')].map(n=>n.dataset.value)`);
+  const first = (scope: string, value: string) =>
+    page.waitFor(`document.querySelector('${scope} [cmdk-item]')?.dataset.value === ${JSON.stringify(value)}`);
+
+  // The S picker: "do" lists Doing before Done in workflow order (PCn.scoreForOrdering), though "Done" alone scores higher.
+  const PICKER = dialog("Change status");
+  await page.keys("j");
+  await page.key("s");
+  await page.waitFor(exists(PICKER));
+  await page.type("do");
+  await first(PICKER, "Doing");
+  expect((await rows(PICKER)).slice(0, 2)).toEqual(["Doing", "Done"]);
+  await page.key("Escape");
+  await page.waitFor(gone(PICKER));
+
+  // Issue options › Status ranks the same way.
+  const STATUS = dialog("Status");
+  await intoSubmenu(page, 1, "Status");
+  await page.type("do");
+  await first(STATUS, "Doing");
+  expect((await rows(STATUS)).slice(0, 2)).toEqual(["Doing", "Done"]);
+  await page.key("Escape");
+  await page.key("Escape");
+  await page.waitFor(gone(MENU));
+
+  // Issue options › Due date finds Custom… by Linear's keywords ("select specific pick"), and nothing else.
+  const DUE = dialog("Due date");
+  await intoSubmenu(page, 4, "Due date");
+  await page.type("pick");
+  await first(DUE, "Custom…");
+  expect(await rows(DUE)).toEqual(["Custom…"]);
+});
