@@ -3,6 +3,7 @@ import { ActivityEntry, ActivityPropertyRow, LinkedTarget } from "@/client/featu
 import { fullTime } from "@/client/features/issue/issue-dates";
 import { type Issue } from "@/shared/issue-model";
 import { useLocation } from "@tanstack/react-router";
+import { Group } from "react-aria-components";
 import { pageURL } from "@/client/features/navigation/app-navigation";
 import { activityTime as ago } from "@/client/features/issue/issue-dates";
 import { DescriptionHistoryProvider } from "@/client/features/issue/description-history";
@@ -68,7 +69,6 @@ import { shortDate } from "@/client/lib/due-date";
 import { IssueBreadcrumbs, PageHeader, useIssueCrumbs } from "@/client/features/navigation/breadcrumbs";
 import { stepIssues } from "@/client/features/navigation/issue-trail";
 import { Button, IconButton } from "@/client/components/button";
-import { Toolbar } from "@/client/components/toolbar";
 import { ContextMenu, type ActionEntry } from "@/client/components/action-menu";
 import { copyIssue, copyIssueLink } from "@/client/features/issue/issue-copy";
 import { PropertyTrigger } from "@/client/components/property-trigger";
@@ -226,7 +226,8 @@ function IssueBody({ issue, lead }: { issue: Issue; lead?: ReactNode }) {
   useCommentsSeen(issue.key, body);
   return (
     <div ref={body} className="issue-detail-body" data-scroll-restoration-id="issue-body">
-      <Toolbar label="Copy issue" className="issue-copy-toolbar">
+      {/* Linear's issue copy buttons (`pIn`) sit in a plain group; its one role=toolbar, with arrow keys, is the node toolbar. */}
+      <Group aria-label="Copy issue" className="issue-copy-toolbar">
         {COPY_ACTIONS.map(([action, label, icon]) => (
           <IconButton
             key={action}
@@ -238,7 +239,7 @@ function IssueBody({ issue, lead }: { issue: Issue; lead?: ReactNode }) {
             <Icon name={icon} />
           </IconButton>
         ))}
-      </Toolbar>
+      </Group>
       {lead}
       <div className="issue-detail-grid" data-properties-hidden={propertiesHidden || undefined}>
         <div className="issue-detail-title">

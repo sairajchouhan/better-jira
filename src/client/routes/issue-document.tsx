@@ -3,7 +3,8 @@ import { type Issue, type User } from "@/shared/issue-model";
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 import { FavoriteButton } from "@/client/features/navigation/favorite-button";
 import { DocumentBreadcrumbs, PageHeader } from "@/client/features/navigation/breadcrumbs";
-import { createContext, use, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, use, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { ColorSwatch, Group, ToggleButton } from "react-aria-components";
 import { Debouncer } from "@tanstack/pacer";
 import { Icon } from "@/client/components/icons";
 import { Menu } from "@/client/components/menu";
@@ -741,17 +742,19 @@ function DocumentIcon({ resource, issue }: { resource: IssueResource; issue: Iss
             className="h-9 w-full border-b border-line-2 bg-transparent px-3 text-[13px] outline-none placeholder:text-fg-3"
           />
           {tab === "icons" && (
-            <div className="my-2 flex gap-2" aria-label="Icon color">
+            // Linear's icon picker colours (`t_`): one tabbable button per colour, each with its name as a tooltip.
+            <Group className="my-2 flex gap-2" aria-label="Icon color">
               {iconColors.map(([label, color]) => (
-                <button
+                <ToggleButton
                   key={color}
                   aria-label={label}
-                  title={label}
-                  aria-pressed={resource.icon?.color === color}
+                  isSelected={resource.icon?.color === color}
+                  onChange={() => paint(color)}
                   className="size-5 rounded-full border border-transparent aria-pressed:border-fg"
-                  style={{ background: color }}
-                  onClick={() => paint(color)}
-                />
+                  render={(dom) => <button {...(dom as ComponentProps<"button">)} title={label} />}
+                >
+                  <ColorSwatch color={color} className="size-full rounded-full" />
+                </ToggleButton>
               ))}
               <input
                 type="color"
@@ -760,7 +763,7 @@ function DocumentIcon({ resource, issue }: { resource: IssueResource; issue: Iss
                 className="size-5 cursor-default rounded-full border-0 bg-transparent p-0"
                 onChange={(event) => paint(event.target.value)}
               />
-            </div>
+            </Group>
           )}
           {/* Picker cells: a 20px icon or a 24px emoji fills the cell, which no Button size draws. */}
           <div className="grid grid-cols-5 gap-1">
