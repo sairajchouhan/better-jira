@@ -75,3 +75,14 @@ export function pullRequestList(details: any[], providers: string[] = []): PullR
 /** Linear's PR status label (`bj.statusLabel`). */
 export const pullRequestStatus = (pr: PullRequest) =>
   ({ open: "Open", merged: "Merged", declined: "Closed", draft: "Draft" })[pr.status];
+
+type PullRequestFields = { prCount?: number; prStatus?: PullRequest["status"] };
+/** An issue's pull request count and state with Jira's development index as the judge of whether it has any. Jira's Development
+ *  field (`customfield_10000`) is a cached summary that lags the index: it can list no pull request for an issue the index links
+ *  one to, or still list one that was unlinked. `linked` is the index's answer (JQL `development[pullrequests].all > 0`); unknown
+ *  leaves the field's answer. Where they agree the field's count and state stand; an issue the field misses counts one, with no
+ *  state, until the badge reads its detail. */
+export function withLinkedPullRequests<T extends PullRequestFields>(issue: T, linked: boolean | undefined): T {
+  if (linked === undefined || linked === !!issue.prCount) return issue;
+  return { ...issue, prCount: linked ? 1 : 0, prStatus: undefined };
+}

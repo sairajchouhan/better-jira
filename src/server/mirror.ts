@@ -4,7 +4,7 @@ import { jira, JiraError } from "./jira";
 import { boardFromInput, withoutAddedBoard } from "./config";
 import { detailCache } from "./detail-cache";
 import { historyCache, readHistory } from "./issue-history";
-import { readPullRequests } from "./pull-requests";
+import { linkedPullRequests, readPullRequests } from "./pull-requests";
 import { missingLinkTitles, recentlyTouched, storeRemoteLinks } from "./remote-links";
 import { attachmentGateway, jiraAttachmentReader } from "@/shared/attachment-media";
 import { saveAddedBoard, serverAuth } from "./server-config";
@@ -98,6 +98,10 @@ const getMeta = (k: string) =>
   db.query<{ v: string }, [string]>("SELECT v FROM meta WHERE k = ?").get(k)?.v;
 const setMeta = (k: string, v: string) =>
   db.query("INSERT OR REPLACE INTO meta VALUES (?, ?)").run(k, v);
+/** Which issues have pull requests, by Jira's development index; the Development field each issue carries lags it. */
+const linkedPrs = linkedPullRequests({ get: getMeta, set: setMeta });
+/** An issue as the board and search read it: the projection, with the development index's say on its pull requests. */
+const slimOf = (raw: any, board: number) => linkedPrs.apply(projection.slim(raw, board), board);
 const source = JSON.stringify({ site: configuration.site, email: configuration.email });
 if (getMeta("source") && getMeta("source") !== source)
   throw new Error(
@@ -125,7 +129,7 @@ const save = db.transaction((board: number, issues: any[], seen: number) => {
       key: i.key,
       board,
       seen,
-      slim: JSON.stringify(projection.slim(i, board)),
+      slim: JSON.stringify(slimOf(i, board)),
       full: JSON.stringify(i),
     });
   }
@@ -196,6 +200,33 @@ async function incrementalSync(board: number): Promise<string[]> {
   return keys;
 }
 
+const prsProbed = new Map<number, number>();
+/** Re-reads which of the board's issues Jira's development index links pull requests to, on the probe's cadence, and re-projects
+ *  the issues whose answer changed. Linking a pull request leaves an issue's `updated` alone, so the sync never re-reads it, and
+ *  its Development field can say none. Returns whether any issue changed. */
+async function syncLinkedPullRequests(board: number) {
+  if (Date.now() - (prsProbed.get(board) ?? 0) < PROBE_MS) return false;
+  prsProbed.set(board, Date.now());
+  const keys = await linkedPrs.refresh(jira, board);
+  const rows = db
+    .query<{ key: string; slim: string; full: string }, [number]>("SELECT key, slim, full FROM issues WHERE board = ?")
+    .all(board)
+    .filter((row) => !keys || keys.includes(row.key));
+  const update = db.query("UPDATE issues SET slim = ? WHERE key = ?");
+  let changed = false;
+  db.transaction(() => {
+    for (const row of rows) {
+      // From the stored Jira record, so an issue the index links again gets the field's own count and state back.
+      const slim = JSON.parse(row.slim),
+        next = slimOf(JSON.parse(row.full), board);
+      if (next.prCount === slim.prCount && next.prStatus === slim.prStatus) continue;
+      update.run(JSON.stringify({ ...slim, prCount: next.prCount, prStatus: next.prStatus }), row.key);
+      changed = true;
+    }
+  })();
+  return changed;
+}
+
 const probed = new Map<number, number>();
 /** Returns whether the mirror changed. */
 async function syncBoard(board: number) {
@@ -233,9 +264,11 @@ const notify = (kind?: "inbox" | "boards" | "views") => {
 async function loop() {
   for (;;) {
     const changed = await Promise.all(
-      BOARDS.map((b) =>
-        syncBoard(b).catch((e) => (console.error(`[sync] board ${b}:`, e.message), false)),
-      ),
+      BOARDS.map(async (b) => {
+        const synced = await syncBoard(b).catch((e) => (console.error(`[sync] board ${b}:`, e.message), false));
+        const prs = await syncLinkedPullRequests(b).catch((e) => (console.error(`[prs] board ${b}:`, e.message), false));
+        return synced || prs;
+      }),
     );
     if (changed.includes(true)) notify();
     if (live.clients.size)
@@ -318,7 +351,7 @@ export async function start() {
         .all();
       const update = db.query("UPDATE issues SET slim = ? WHERE key = ?");
       for (const row of rows)
-        update.run(JSON.stringify(projection.slim(JSON.parse(row.full), row.board)), row.key);
+        update.run(JSON.stringify(slimOf(JSON.parse(row.full), row.board)), row.key);
       setMeta("slim-version", SLIM_VERSION);
     })();
   }
@@ -459,7 +492,7 @@ export async function refresh(
   save(target, [raw], Date.now());
   db.query("DELETE FROM issue_details WHERE key = ?").run(raw.key);
   const [full, w] = await Promise.all([details.read(raw.key, true), watching]),
-    issue = projection.slim(raw, target);
+    issue = slimOf(raw, target);
   const { watchers, watchersComplete } = watcherList(w);
   const old = db
     .query<{ data: string; source_updated: string }, [string]>(

@@ -1,5 +1,14 @@
 import { expect, test } from "bun:test";
-import { leadingStatus, pullRequestBadgeText, pullRequestList, pullRequestProviders, pullRequestStatus, pullRequestTool } from "./pull-requests";
+import {
+  leadingStatus,
+  pullRequestBadgeText,
+  pullRequestList,
+  pullRequestProviders,
+  pullRequestStatus,
+  pullRequestTool,
+  withLinkedPullRequests,
+  type PullRequest,
+} from "./pull-requests";
 
 test("the providers are those Jira's development summary counts pull requests for", () => {
   expect(
@@ -60,4 +69,20 @@ test("each pull request keeps its target branch and its review tool's name, for 
   expect(named!.tool).toBe("Forge");
   expect(pullRequestList([{ detail: [{ pullRequests: [pr] }] }])[0]!.tool).toBeUndefined();
   expect(["githube", "stash", "gitlab"].map((type) => pullRequestTool(type))).toEqual(["GitHub", "Bitbucket", "GitLab"]);
+});
+
+test("Jira's development index decides whether an issue has pull requests; its stale Development field only fills in the count", () => {
+  const pr = (v: { prCount?: number; prStatus?: PullRequest["status"] }) => v;
+  // The field lists none, the index links one: the badge shows, counting one until its detail is read.
+  expect(withLinkedPullRequests(pr({ prCount: 0 }), true)).toEqual({ prCount: 1, prStatus: undefined });
+  expect(withLinkedPullRequests(pr({}), true)).toEqual({ prCount: 1, prStatus: undefined });
+  // The field still lists an unlinked one: no badge.
+  expect(withLinkedPullRequests(pr({ prCount: 2, prStatus: "open" }), false)).toEqual({ prCount: 0, prStatus: undefined });
+  // They agree: the field's count and state stand, the same object.
+  const both = { prCount: 3, prStatus: "merged" as const };
+  expect(withLinkedPullRequests(both, true)).toBe(both);
+  const none = { prCount: 0 };
+  expect(withLinkedPullRequests(none, false)).toBe(none);
+  // The index not read yet: the field's answer.
+  expect(withLinkedPullRequests(none, undefined)).toBe(none);
 });
