@@ -26,6 +26,11 @@ import {
   type PullRequest,
 } from "@/shared/pull-requests";
 import { externalTitle, faviconSrc, linkBadgeText } from "@/shared/smart-link";
+import { SubIssueProgressButton } from "@/client/components/sub-issue-progress-button";
+import { shortcutTitle } from "@/client/components/keycap";
+import { IssueHoverCard } from "./issue-hover-card";
+import { ChildrenMenu, openIssue } from "./sub-issue-menu";
+import { childrenByParent, subIssueCount } from "./sub-issue-model";
 
 const openExternal = (url: string) => void window.open(url, "_blank", "noopener,noreferrer");
 
@@ -344,6 +349,53 @@ export async function goToPullRequests(issue: Issue) {
   if (run("open-pull-requests", issue.key)) return;
   const prs = await fetchPullRequests(issue).catch(() => []);
   if (prs[0]) openExternal(prs[0].url);
+}
+
+// ——— Sub-issues (Linear's board card `wd` in IssueList, list row `at` in issueWidgetFieldPreferences) ———
+
+/**
+ * Linear's sub-issue badge, on every issue with sub-issues (no display property turns it off): the progress ring and "done/total",
+ * the sub-issues its Sub-issues section lists (`subIssueCount`, so an epic counts its issues). A card counts its direct sub-issues
+ * (`t.children`), a row every level below (`t.descendants`). A click is "Open sub-issue…" (`c_r`): a lone sub-issue opens, otherwise
+ * (or from the keyboard) the menu of the direct sub-issues opens under the badge. With one sub-issue its hover is that issue's card
+ * (Linear's `Ir` titled "Sub-issue"); with more, the action's name and ⌘⇧↓ as the tooltip.
+ */
+export function SubIssueBadge({ issue, layout }: { issue: Issue; layout: "board" | "list" }) {
+  const count = useStore((s) => subIssueCount(s.issues, s.boards, issue.key, layout === "board" ? "children" : "descendants"));
+  const children = useStore((s) => childrenByParent(s.issues).get(issue.key));
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  if (!count) return null;
+  // A count of one, at either depth, is one direct sub-issue.
+  const only = count.total === 1 ? children?.[0] : undefined;
+  const badge = (
+    <SubIssueProgressButton
+      variant="badge"
+      completed={count.done}
+      total={count.total}
+      aria-label={`Sub-issues of ${issue.key}: ${count.done} of ${count.total} done`}
+      aria-haspopup="dialog"
+      aria-expanded={!!anchor}
+      title={only ? undefined : shortcutTitle("Open sub-issue…", hotkeyOf("child-open"))}
+      onClick={(e) => {
+        if (anchor) return setAnchor(null);
+        // Linear opens a lone direct sub-issue on a click, and lists it when the keyboard pressed the badge (`keyboardInvoked`).
+        if (children?.length === 1 && e.detail > 0) openIssue(children[0]!);
+        else setAnchor(e.currentTarget);
+      }}
+    />
+  );
+  return (
+    <>
+      {only ? (
+        <IssueHoverCard relation={{ key: only.key, kind: "sub-issue" }} issue={only}>
+          {badge}
+        </IssueHoverCard>
+      ) : (
+        badge
+      )}
+      {anchor && <ChildrenMenu parent={issue} anchor={anchor} close={() => setAnchor(null)} />}
+    </>
+  );
 }
 
 // ——— Comments and creator: no Linear card badge; each reuses Linear's nearest behaviour ———

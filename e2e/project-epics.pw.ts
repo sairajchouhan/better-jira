@@ -319,6 +319,35 @@ test("BJ-280: an epic's Sub-issues section lists, adds and removes its issues; a
     expect(await p.eval(`document.querySelector('[data-sub-issue="TEST-5"] [data-row-progress]')?.textContent`)).toBe("0/1");
   });
 
+  await test.step("BJ-281: cards and rows carry Linear's sub-issue badge, counted as the Sub-issues section counts, with no display toggle", async () => {
+    // The section header counts every level below the epic, as Linear's list row badge (`at`: t.descendants) does.
+    const header = await p.eval<string>(`document.querySelector('${SECTION} [data-sub-progress]').textContent`);
+    const badge = (key: string) => p.eval<string | null>(`document.querySelector('[data-key="${key}"] [data-sub-issue-progress]')?.textContent ?? null`);
+    await p.goto("/board/1/all");
+    // Only the identifier is on: the badge isn't a display property, so it stays (Linear `bd`: showSubIssues = children.length > 0).
+    await prefs(p, { layout: "board", properties: ["id"] });
+    await p.waitFor(`!!document.querySelector('[data-key="TEST-7"] [data-sub-issue-progress]')`);
+    // A card counts its direct sub-issues (Linear `wd`: t.children): the epic's three issues, and TEST-5's one Subtask.
+    expect(await badge("TEST-7")).toMatch(/^\d\/3$/);
+    expect(await badge("TEST-5")).toBe("0/1");
+    expect(await badge("TEST-1")).toBeNull();
+    expect(await p.eval(`document.querySelector('[data-key="TEST-7"] [data-sub-issue-progress] svg circle')?.closest('.ui-badge-icon')?.getBoundingClientRect().height`)).toBe(14);
+    // Several sub-issues: a click lists the direct ones under the badge ("Open sub-issue…"); the card doesn't open.
+    expect(await p.eval(`document.querySelector('[data-key="TEST-7"] [data-sub-issue-progress]').title`)).toMatch(/^Open sub-issue…/);
+    await p.click('[data-key="TEST-7"] [data-sub-issue-progress]');
+    await p.waitFor(`document.querySelectorAll('[role=dialog][aria-label="Open sub-issues of TEST-7"] [cmdk-item]').length===3`);
+    await p.key("Escape");
+    // One sub-issue: a click opens it, as Linear's Open sub-issue does for a lone child.
+    await p.click('[data-key="TEST-5"] [data-sub-issue-progress]');
+    await p.waitFor(`location.search.includes("TEST-6")`);
+    await p.goto("/board/1/all");
+    await prefs(p, { layout: "list", properties: ["id"] });
+    await p.waitFor(`!!document.querySelector('[data-key="TEST-7"] [data-sub-issue-progress]')`);
+    // A row counts every level below, so the epic's row reads what its section's header reads.
+    expect(await badge("TEST-7")).toBe(header);
+    expect(await badge("TEST-5")).toBe("0/1");
+  });
+
   await test.step("a child names the epic once, as Epic: no Sub-issue of line, and its Subtask's parent line is still TEST-5", async () => {
     await p.goto("?issue=TEST-2&view=page");
     await p.waitFor(`document.getElementById('prop-project')?.textContent.includes("Fixture epic")`);

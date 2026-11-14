@@ -29,7 +29,7 @@ import {
 } from "react";
 import { Badge, IconMenuButton } from "@/client/components/badge";
 import { PropertyPicker, type IssueField } from "@/client/features/issue/personal-controls";
-import { CommentBadge, CreatorBadge, LinkBadges, PullRequestBadge } from "@/client/features/issue/card-badges";
+import { CommentBadge, CreatorBadge, LinkBadges, PullRequestBadge, SubIssueBadge } from "@/client/features/issue/card-badges";
 import { DueIcon, Icon, LabelDot, PriorityIcon, StatusIcon, TypeDot } from "@/client/components/icons";
 import { ME, get, set, timed, useStore, statusOf } from "@/client/state/store";
 import { actions, beginCreateInView } from "@/client/state/issue-actions";
@@ -790,7 +790,8 @@ function IssueLabels({ issue, max }: { issue: Issue; max: number }) {
   );
 }
 
-/** The display's property badges after the title, in Linear's card order (`wd`); a row fits one label, a card five. */
+/** The display's property badges after the title, in Linear's card order (`wd`); a row fits one label, a card five. A card ends with
+ *  its sub-issue badge. */
 function IssueProperties({ issue, display: d, labels }: { issue: Issue; display: Display; labels: number }) {
   const show = (p: Property) => d.properties.includes(p);
   const clock = useStore((s) => (d.properties.includes("statusAge") ? s.clock : 0));
@@ -834,6 +835,8 @@ function IssueProperties({ issue, display: d, labels }: { issue: Issue; display:
       {show("labels") && <IssueLabels issue={issue} max={labels} />}
       {show("pullRequests") && !!issue.prCount && <PullRequestBadge issue={issue} layout={d.layout} />}
       {show("links") && <LinkBadges issue={issue} />}
+      {/* Linear's card ends its badges with the sub-issues one, after links (IssueList `wd`); a row has it after its title. */}
+      {d.layout === "board" && <SubIssueBadge issue={issue} layout="board" />}
       {show("comments") && <CommentBadge issue={issue} />}
       {show("creator") && <CreatorBadge issue={issue} />}
     </>
@@ -917,7 +920,11 @@ const IssueRow = memo(function IssueRow({
           </Text>
         )}
         {show("status") && <IssueStatus issue={issue} />}
-        <span className="min-w-32 flex-1 truncate font-medium">{issue.summary}</span>
+        {/* Linear's row: the sub-issue badge leads its badge container, right after the title (issueWidgetFieldPreferences `at`). */}
+        <span className="flex min-w-32 flex-1 items-center gap-3 overflow-hidden">
+          <span className="truncate font-medium">{issue.summary}</span>
+          <SubIssueBadge issue={issue} layout="list" />
+        </span>
         <span className="flex max-w-[45%] shrink-0 items-center gap-1 overflow-hidden">
           <IssueProperties issue={issue} display={d} labels={1} />
         </span>
