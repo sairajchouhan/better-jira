@@ -13,6 +13,8 @@ import {
   issueFromText,
   referenceSelection,
   toggleExpand,
+  expandOf,
+  expandTitleKey,
   moveBlock,
   pasteLink,
   removeLink,
@@ -555,6 +557,34 @@ test("BJ-68: a collapsible section wraps top-level blocks, round-trips as Jira's
   toggleExpand(list, (tr) => (listed = list.apply(tr)));
   expect(listed.doc.firstChild!.firstChild!.type.name).toBe("bulletList");
   expect(jiraErrors(fromEditorDocument(wrapped.doc))).toEqual([]);
+});
+
+test("QA-3 description D5: a collapsible section takes a short line as its title, as Linear's does, and gives it back", () => {
+  const br = n.hardBreak!.create();
+  const title = (blocks: any[]) => {
+    const section = expandOf(blocks);
+    return [section.attrs.title, section.content.childCount, section.textContent];
+  };
+  expect(title([p("Title text")])).toEqual(["Title text", 1, ""]);
+  expect(title([p("one two three four five six seven")])).toEqual(["", 1, "one two three four five six seven"]);
+  expect(title([n.heading!.create({ level: 2 }, s.text("Head")), p("body")])).toEqual(["Head", 1, "body"]);
+  expect(title([n.paragraph!.create(null, [s.text("Head"), br, s.text("body")])])).toEqual(["Head", 1, "body"]);
+  expect(title([p("a"), p("b")])).toEqual(["", 2, "ab"]);
+  // ⇧⌘6 on a line: its text is the title, the body an empty line, and the title field takes the caret.
+  const before = state([p("Title text"), p("after")], "Title text");
+  let meta: unknown;
+  const { after } = run((st, dispatch) => toggleExpand(st, (tr) => ((meta = tr.getMeta(expandTitleKey)), dispatch!(tr))), before);
+  expect(fromEditorDocument(after.doc).content![0]).toEqual({
+    type: "expand",
+    attrs: { title: "Title text" },
+    content: [{ type: "paragraph" }],
+  });
+  expect(meta).toBe(0);
+  // `>>> ` on an empty line makes an empty section; on a line with text after the caret, that text is the title.
+  expect(typeInto(empty(), ">>> ").doc.firstChild!.attrs.title).toBe("");
+  // Unwrapping gives the title back as the first line.
+  const { after: unwrapped } = run(toggleExpand, after);
+  expect(unwrapped.doc.firstChild!.textContent).toBe("Title text");
 });
 
 test("BJ-69: selected text starts an issue: first line the title, the rest its description", () => {

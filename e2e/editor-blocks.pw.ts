@@ -28,9 +28,11 @@ test("BJ-68: a collapsible section from >>> saves as Jira's expand with its titl
   await newLine(page);
   await page.type(">>> ");
   await page.waitFor(`!!document.querySelector('#description .rich-expand')`);
-  await page.type("Hidden body");
-  await page.click('[aria-label="Collapsible section title"]');
+  // QA-3 D5: the title takes the caret, as Linear's heading does; Enter moves on to the body.
+  await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Collapsible section title'`);
   await page.type("Details");
+  await page.key("Enter");
+  await page.type("Hidden body");
   await page.click("#description p");
   await waitSaved((doc) =>
     doc.content.some(

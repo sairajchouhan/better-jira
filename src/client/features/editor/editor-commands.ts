@@ -7,7 +7,7 @@ import {
 } from "prosemirror-inputrules";
 import type { Node as EditorNode, NodeRange } from "prosemirror-model";
 import { liftListItem, sinkListItem, wrapInList } from "prosemirror-schema-list";
-import { EditorState, TextSelection, type Command, type Transaction } from "prosemirror-state";
+import { EditorState, Plugin, PluginKey, TextSelection, type Command, type Transaction } from "prosemirror-state";
 import { findWrapping, liftTarget } from "prosemirror-transform";
 import { addRowAfter, goToNextCell, isInTable } from "prosemirror-tables";
 import { inlineCardNode, richSchema, safeLink } from "./rich-document";
@@ -222,20 +222,72 @@ export const insertTable: Command = (state, dispatch) => {
   return true;
 };
 
+const words = (node: EditorNode) => node.textContent.split(/\s+/).filter(Boolean).length;
+/**
+ * Linear's `tRe` (startup-root): the section's heading is the first block when it is a heading, else the only block when
+ * it is a paragraph of under 7 words, or that paragraph's line before its first hard break; the rest is the body (an
+ * empty paragraph when nothing is left). Jira's expand keeps its heading as a plain-text title.
+ */
+export function expandOf(blocks: EditorNode[]): EditorNode {
+  const [first] = blocks,
+    paragraph = richSchema.nodes.paragraph!;
+  let title = "",
+    body = blocks;
+  if (first?.type === richSchema.nodes.heading) {
+    title = first.textContent;
+    body = blocks.slice(1);
+  } else if (blocks.length === 1 && first?.type === paragraph) {
+    const inline: EditorNode[] = [];
+    first.forEach((child) => void inline.push(child));
+    const br = inline.findIndex((child) => child.type === richSchema.nodes.hardBreak),
+      head = br < 0 ? first : paragraph.create(null, inline.slice(0, br));
+    if (words(head) < 7) {
+      title = head.textContent;
+      body = br < 0 || br === inline.length - 1 ? [] : [paragraph.create(null, inline.slice(br + 1))];
+    }
+  }
+  return richSchema.nodes.expand!.create({ title }, body.length ? body : paragraph.create());
+}
+/** The section a transaction just made, whose title field takes the focus (Linear puts the caret in its heading). */
+export const expandTitleKey = new PluginKey<number | null>("expandTitle");
+export const expandTitlePlugin = new Plugin<number | null>({
+  key: expandTitleKey,
+  state: {
+    init: () => null,
+    apply: (tr, at) =>
+      tr.getMeta(expandTitleKey) ?? (at !== null && tr.getMeta("appendedTransaction") ? tr.mapping.map(at) : null),
+  },
+});
+/** Wraps the selection's top-level blocks in a collapsible section (expandOf). False where Jira allows no expand. */
+function wrapInExpand(tr: Transaction) {
+  const { $from, $to } = tr.selection,
+    range = $from.blockRange($to, (node) => node.type.name === "doc");
+  if (!range || !findWrapping(range, richSchema.nodes.expand!)) return false;
+  const blocks: EditorNode[] = [];
+  for (let i = range.startIndex; i < range.endIndex; i++) blocks.push(range.parent.child(i));
+  tr.replaceWith(range.start, range.end, expandOf(blocks));
+  tr.setSelection(TextSelection.near(tr.doc.resolve(range.start + 1))).setMeta(expandTitleKey, range.start);
+  return true;
+}
 /** ⇧⌘6 / toolbar Collapse: wraps the selected top-level blocks in a collapsible section (Jira's expand), or, inside one,
- * lifts its blocks back out. Nothing happens where Jira allows no expand (inside a list, quote or table). */
+ * lifts its blocks back out, its title first as a paragraph (Linear's `$Le`). Nothing happens where Jira allows no
+ * expand (inside a list, quote or table). */
 export const toggleExpand: Command = (state, dispatch) => {
-  const { $from, $to } = state.selection,
+  const { $from } = state.selection,
     expand = richSchema.nodes.expand!;
   for (let d = $from.depth; d > 0; d--)
     if ($from.node(d).type === expand) {
-      dispatch?.(state.tr.replaceWith($from.before(d), $from.after(d), $from.node(d).content).scrollIntoView());
+      const section = $from.node(d),
+        title: string = section.attrs.title,
+        content = title
+          ? section.content.addToStart(richSchema.nodes.paragraph!.create(null, richSchema.text(title)))
+          : section.content;
+      dispatch?.(state.tr.replaceWith($from.before(d), $from.after(d), content).scrollIntoView());
       return true;
     }
-  const range = $from.blockRange($to, (node) => node.type.name === "doc"),
-    wrapping = range && findWrapping(range, expand);
-  if (!range || !wrapping) return false;
-  dispatch?.(state.tr.wrap(range, wrapping).scrollIntoView());
+  const tr = state.tr;
+  if (!wrapInExpand(tr)) return false;
+  dispatch?.(tr.scrollIntoView());
   return true;
 };
 
@@ -261,7 +313,13 @@ export const markdownRules = inputRules({
       (match, node) => node.childCount + node.attrs.order === Number(match[1]),
     ),
     wrappingInputRule(/^\s*>\s$/, richSchema.nodes.blockquote!),
-    wrappingInputRule(/^>>>\s$/, richSchema.nodes.expand!),
+    // Linear's rule: the line becomes a section (its text the title, as ⇧⌘6 makes it), and the title takes the caret.
+    new InputRule(/^>>>\s$/, (state, _match, start, end) => {
+      // Only a top-level line: in a list, quote or table the text stays (Linear's `gb`).
+      if (state.doc.resolve(start).depth !== 1) return null;
+      const tr = state.tr.delete(start, end);
+      return wrapInExpand(tr) ? tr : null;
+    }),
     textblockTypeInputRule(/^```$/, richSchema.nodes.codeBlock!),
     // `|--` in a paragraph starts a table. A Markdown header row just above (`| a | b |`) becomes its header; otherwise it is 2×2, like the toolbar's.
     new InputRule(/^\|--$/, (state, _match, start) => {

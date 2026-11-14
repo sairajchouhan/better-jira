@@ -5,6 +5,7 @@ import type { EditorView, NodeView } from "prosemirror-view";
 import { IconButton } from "@/client/components/button";
 import { Icon } from "@/client/components/icons";
 import { NO_AUTOFILL } from "@/client/components/field";
+import { expandTitleKey } from "./editor-commands";
 
 /** A collapsible section (Jira's expand): a disclosure and a title above its editable blocks. Jira stores no open state,
  * so a section shows collapsed when loaded and open when just made (empty). */
@@ -26,7 +27,9 @@ export function expandNodeView(
     open = !initial.textContent && initial.childCount === 1,
     // Remounts the title field only when the title changed elsewhere (undo), so typing keeps its caret.
     revision = 0,
-    typed = initial.attrs.title as string;
+    typed = initial.attrs.title as string,
+    // Just made by ⇧⌘6, the toolbar or `>>> `: the title takes the caret, as Linear's heading does (QA-3 D5).
+    focusTitle = expandTitleKey.getState(view.state) === getPos();
   const setTitle = (title: string) => {
     const pos = getPos();
     typed = title;
@@ -58,6 +61,12 @@ export function expandNodeView(
           aria-label="Collapsible section title"
           placeholder="Add section title…"
           defaultValue={current.attrs.title}
+          ref={(input) => {
+            if (!input || !focusTitle) return;
+            focusTitle = false;
+            input.focus();
+            input.setSelectionRange(0, 0);
+          }}
           onChange={(event) => setTitle(event.currentTarget.value)}
           onKeyDown={(event) => {
             if (event.key !== "Enter" && event.key !== "ArrowDown") return;
