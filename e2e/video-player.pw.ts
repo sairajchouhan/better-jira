@@ -45,7 +45,7 @@ test("inline video player: Linear keys, volume, tooltips, revealed controls, dow
     expect(await page.eval(`${video}.currentTime`)).toBeCloseTo(4, 0);
     await page.key("ArrowLeft");
     expect(await page.eval(`${video}.currentTime`)).toBe(0);
-    await page.eval(`document.querySelector('${root} [aria-label="Seek slider"]').focus()`);
+    await page.eval(`document.querySelector('${root} [aria-label="Seek slider"] input').focus()`);
     await page.key(">", "shift");
     expect(await page.eval(`${video}.playbackRate`)).toBe(1.25);
     expect(

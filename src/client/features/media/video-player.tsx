@@ -2,6 +2,7 @@ import { Button, ButtonLink, IconButton } from "@/client/components/button";
 import { shortcutTitle } from "@/client/components/keycap";
 import { notifyMedia } from "./media-toast";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { Slider, SliderThumb, SliderTrack, type SliderProps } from "react-aria-components";
 import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 import { Debouncer } from "@tanstack/pacer";
 import type { Attachment } from "@/shared/attachment-media";
@@ -53,6 +54,28 @@ function Glyph({ name }: { name: "play" | "pause" | "volume" | "muted" | "pip" }
   );
 }
 
+/**
+ * The player's seek and volume sliders, React Aria's Slider rendered twice. Linear's `GUe` (seek) and `VUe` (volume) are one
+ * `role="slider"` track each, driven by the shared `KUe` pointer hook: press jumps to the pointer and dragging follows it
+ * (startup-root.CnUSfl4j.js). Their arrow keys belong to the player (`qUe`), so the player's capture-phase hotkeys take
+ * them before React Aria's thumb does.
+ */
+export function VideoSlider({
+  className,
+  ...props
+}: { className: string } & Omit<SliderProps<number>, "className" | "children">) {
+  return (
+    <Slider {...props} className={`video-slider ${className}`}>
+      <SliderTrack
+        className="video-slider-track"
+        // The played or set part is the track's gradient stop, as the native range input's was.
+        style={({ state }) => ({ "--video-progress": `${state.getThumbPercent(0) * 100}%` }) as CSSProperties}
+      >
+        <SliderThumb className="video-slider-thumb" />
+      </SliderTrack>
+    </Slider>
+  );
+}
 type Snapshot = { time: number; volume: number; muted: boolean; rate: number; paused: boolean };
 export function VideoPlayer({
   file,
@@ -88,6 +111,8 @@ export function VideoPlayer({
   const broken = useRef(false);
   const openingFocus = useRef(false);
   const lastVolume = useRef(1);
+  // Linear's seek slider pauses playback while it is scrubbed and resumes on release (`GUe`'s `d.current`).
+  const resumeAfterScrub = useRef(false);
   const snapshot = () => {
     const v = video.current;
     if (v && v.readyState >= 1 && !broken.current && !restoring.current && !v.error)
@@ -196,7 +221,7 @@ export function VideoPlayer({
         hotkey: "ArrowLeft",
         callback: (event) =>
           arrow(event, () =>
-            event.target instanceof Element && event.target.getAttribute("aria-label") === "Volume"
+            event.target instanceof Element && event.target.closest(".video-volume-slider")
               ? changeVolume((video.current?.volume ?? 1) - 0.05)
               : seek((video.current?.currentTime ?? 0) - 5),
           ),
@@ -206,7 +231,7 @@ export function VideoPlayer({
         hotkey: "ArrowRight",
         callback: (event) =>
           arrow(event, () =>
-            event.target instanceof Element && event.target.getAttribute("aria-label") === "Volume"
+            event.target instanceof Element && event.target.closest(".video-volume-slider")
               ? changeVolume((video.current?.volume ?? 1) + 0.05)
               : seek((video.current?.currentTime ?? 0) + 5),
           ),
@@ -361,7 +386,6 @@ export function VideoPlayer({
     }
     setWaiting(false);
   };
-  const percent = duration ? (elapsed / duration) * 100 : 0;
   const playLabel = playing ? "Pause" : ended ? "Replay" : "Play";
   // Expanded video keeps its live player mounted; a modal portal would restart playback.
   return (
@@ -561,32 +585,44 @@ export function VideoPlayer({
                 <Glyph name={muted || volume === 0 ? "muted" : "volume"} />
               </IconButton>
               <div className="video-volume-popup">
-                <input
+                <VideoSlider
                   aria-label="Volume"
-                  type="range"
-                  min={0}
-                  max={1}
+                  className="video-volume-slider"
+                  orientation="vertical"
+                  minValue={0}
+                  maxValue={1}
                   step={0.05}
+                  // Linear's volume reads as `${n}% volume`.
+                  formatOptions={{ style: "percent" }}
                   value={muted ? 0 : volume}
-                  onChange={(event) => changeVolume(Number(event.target.value))}
-                  style={{ "--video-progress": `${(muted ? 0 : volume) * 100}%` } as CSSProperties}
+                  onChange={changeVolume}
                 />
               </div>
             </div>
             <span className="video-time" aria-label={`Elapsed ${time(elapsed)}`}>
               {time(elapsed)}
             </span>
-            <input
+            <VideoSlider
               aria-label="Seek slider"
-              aria-valuetext={`${Math.floor(elapsed)} seconds of ${Math.floor(duration)} seconds`}
-              type="range"
-              min={0}
-              max={duration || 1}
+              className="video-seek"
+              minValue={0}
+              maxValue={duration || 1}
               step={0.01}
+              formatOptions={{ style: "unit", unit: "second", unitDisplay: "long", maximumFractionDigits: 0 }}
               value={Math.min(elapsed, duration || 1)}
-              disabled={!duration || !!error}
-              onChange={(event) => seek(Number(event.target.value))}
-              style={{ "--video-progress": `${percent}%` } as CSSProperties}
+              isDisabled={!duration || !!error}
+              onPointerDownCapture={(event) => {
+                const v = video.current;
+                if (event.button !== 0 || !v || v.paused) return;
+                resumeAfterScrub.current = true;
+                v.pause();
+              }}
+              onChange={seek}
+              onChangeEnd={() => {
+                if (!resumeAfterScrub.current) return;
+                resumeAfterScrub.current = false;
+                void video.current?.play().catch(() => {});
+              }}
             />
             <span className="video-time" aria-label={`Duration ${time(duration)}`}>
               {time(duration)}

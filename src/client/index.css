@@ -1552,32 +1552,27 @@ li[data-done="true"] > .todo-content {
 .hover-card[data-placement="right"] > .hover-card-zone {
   padding-inline: 4px;
 }
-.video-controls input[type="range"] {
-  display: block;
-  appearance: none;
+/* React Aria's Slider (VideoSlider): a 4px track, filled up to the thumb, and a 2x12 thumb. */
+.video-slider {
   min-width: 12px;
   flex: 1;
   height: 4px;
   margin: 0 4px;
+}
+.video-slider-track {
+  position: relative;
+  height: 100%;
   border-radius: 4px;
-  outline: none;
   background: linear-gradient(
     to right,
     rgb(255 255 255 / 0.95) var(--video-progress),
     rgb(255 255 255 / 0.22) var(--video-progress)
   );
 }
-.video-controls input[type="range"]::-webkit-slider-thumb {
-  appearance: none;
+.video-slider-thumb {
+  top: 50%;
   width: 2px;
   height: 12px;
-  border-radius: 1px;
-  background: white;
-}
-.video-controls input[type="range"]::-moz-range-thumb {
-  width: 2px;
-  height: 12px;
-  border: 0;
   border-radius: 1px;
   background: white;
 }
@@ -1609,26 +1604,23 @@ li[data-done="true"] > .todo-content {
   display: grid;
   place-items: center;
 }
-.video-volume-popup input[type="range"] {
-  writing-mode: vertical-lr;
-  direction: rtl;
+.video-volume-slider {
   min-width: 0;
   flex: none;
   width: 4px;
   height: 56px;
   margin: 0;
+}
+.video-volume-slider .video-slider-track {
+  width: 100%;
   background: linear-gradient(
     to top,
     white var(--video-progress),
     rgb(255 255 255 / 0.22) var(--video-progress)
   );
 }
-.video-volume-popup input[type="range"]::-webkit-slider-thumb {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-.video-volume-popup input[type="range"]::-moz-range-thumb {
+.video-volume-slider .video-slider-thumb {
+  left: 50%;
   width: 8px;
   height: 8px;
   border-radius: 50%;
