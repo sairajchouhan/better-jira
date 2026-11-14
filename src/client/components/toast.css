@@ -13,7 +13,8 @@
     --toast-overlay-base: 1000;
     z-index: calc(var(--toast-overlay-base) + var(--toast-layer));
     display: flex;
-    flex-direction: column;
+    /* Newest first in the DOM, as sonner prepends each toast, and drawn nearest the corner. */
+    flex-direction: column-reverse;
     gap: 8px;
     width: 384px;
     max-width: calc(100vw - 32px);

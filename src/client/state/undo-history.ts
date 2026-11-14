@@ -5,7 +5,7 @@ import { type Issue } from "@/shared/issue-model";
  * Jira only that step's inverse, and with Jira writes revert only the fields the step changed, so newer Jira values
  * and other people's additions survive.
  */
-import { NOTIFICATION_ID, latestNotification } from "./app-notifications";
+import { dismissNotificationsWithout } from "./app-notifications";
 import { navigate, ui } from "@/client/features/navigation/app-navigation";
 
 import type { LocalEdit, LocalState, Snapshot } from "./local-data";
@@ -20,7 +20,6 @@ import {
 import { get, set } from "./store";
 import { currentKey, hasPendingWrite, send, touch } from "./jira-sync";
 import { queueSave } from "./local-database";
-import { toasts } from "@/client/components/toast-queue";
 
 const undo: LocalEdit[] = [],
   redo: LocalEdit[] = [];
@@ -204,9 +203,7 @@ export function undoEdit() {
   redo.push(edit);
   set({ undoCount: undo.length, redoCount: redo.length, perf: `Undid ${edit.label}` });
   // Undoing a create removes the issue its toast offers to open.
-  const toastKey = latestNotification()?.key;
-  if (toastKey && !get().issues.has(currentKey(toastKey)))
-    toasts.dismiss(NOTIFICATION_ID);
+  dismissNotificationsWithout((key) => get().issues.has(currentKey(key)));
   queueSave();
 }
 export function redoEdit() {

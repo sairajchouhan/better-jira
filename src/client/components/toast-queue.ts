@@ -13,9 +13,44 @@ export function createToastQueue(limit = 4) {
     visible: readonly QueuedToast[] = [],
     counter = 0,
     revision = 0;
-  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  /**
+   * Every toast deadline stops counting while something holds the queue (the pointer on the toasts, a hidden tab) and
+   * resumes with the time it had left: sonner's toast effect pauses while `expanded || interacting || isDocumentHidden`
+   * and keeps `remainingTime` (dist.DuPC_NI1.js, Linear's Toaster).
+   */
+  const holds = new Set<string>(),
+    running = new Set<{ pause(): void; resume(): void }>();
+  function countdown(ms: number, fn: () => void) {
+    let left = ms,
+      started = 0,
+      timer: ReturnType<typeof setTimeout> | undefined;
+    const entry = {
+      pause() {
+        if (timer === undefined) return;
+        clearTimeout(timer);
+        timer = undefined;
+        left -= Date.now() - started;
+      },
+      resume() {
+        if (timer !== undefined) return;
+        started = Date.now();
+        timer = setTimeout(() => {
+          running.delete(entry);
+          fn();
+        }, Math.max(0, left));
+        timer.unref?.();
+      },
+    };
+    running.add(entry);
+    if (!holds.size) entry.resume();
+    return () => {
+      entry.pause();
+      running.delete(entry);
+    };
+  }
+  const timers = new Map<string, () => void>();
   const clearTimer = (id: string) => {
-    clearTimeout(timers.get(id));
+    timers.get(id)?.();
     timers.delete(id);
   };
   const listeners = new Set<() => void>(),
@@ -34,11 +69,7 @@ export function createToastQueue(limit = 4) {
      * Replacing an id restarts its deadline; update only changes content. */
     show(content: ReactNode, { id = `toast-${++counter}`, duration = 4000, expiresIn }: { id?: string; duration?: number; expiresIn?: number } = {}) {
       clearTimer(id);
-      if (expiresIn !== undefined && expiresIn !== Infinity) {
-        const timer = setTimeout(() => dismiss(id), expiresIn);
-        timer.unref?.();
-        timers.set(id, timer);
-      }
+      if (expiresIn !== undefined && expiresIn !== Infinity) timers.set(id, countdown(expiresIn, () => dismiss(id)));
       const toast = { id, content, duration, revision: ++revision };
       set(toasts.some((t) => t.id === id) ? toasts.map((t) => (t.id === id ? toast : t)) : [...toasts, toast]);
       return id;
@@ -51,10 +82,21 @@ export function createToastQueue(limit = 4) {
         set(toasts.map((toast) => toast.id === id ? { ...toast, content } : toast));
     },
     dismiss,
+    /** Runs `fn` after `ms` of unheld time (a visible toast's duration); returns the cancel. */
+    countdown,
+    /** Holds (`on`) or releases one reason to pause every deadline: "hover", "hidden". */
+    hold(reason: string, on: boolean) {
+      const was = holds.size > 0;
+      if (on) holds.add(reason);
+      else holds.delete(reason);
+      if (was !== holds.size > 0) for (const entry of running) if (holds.size) entry.pause(); else entry.resume();
+    },
     dismissAll() {
       for (const id of timers.keys()) clearTimer(id);
       if (toasts.length) set([]);
     },
+    /** Every queued toast, shown or waiting, oldest first. */
+    all: () => toasts,
     /** The toasts on screen, oldest first (the newest sits nearest the corner). */
     visible: () => visible,
     subscribe(listener: () => void) {

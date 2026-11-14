@@ -7,8 +7,12 @@ import { currentKey } from "./jira-sync";
 import { isLocalIssue } from "./local-edits";
 import { navigate } from "@/client/features/navigation/app-navigation";
 
-/** Existing confirmations replace one another; inbox undo keeps its own slot. */
-export const NOTIFICATION_ID = "ui-machine";
+/** Each confirmation is a toast of its own, so a second one stacks over the first (up to the queue's four) instead of
+ *  replacing it: Linear shows every `new U(…).show()` as a new sonner toast (ToastPresenter `visibleToasts: 4`, gap 8).
+ *  Inbox undo keeps its own single slot. */
+const CONFIRMATION = "confirmation-";
+let confirmations = 0;
+const nextConfirmation = () => `${CONFIRMATION}${++confirmations}`;
 export const INBOX_NOTIFICATION_ID = "inbox";
 /** `icon` is the image before the text, as Linear's info toasts carry one (the copy icon on "Copied issue link to clipboard"). */
 export type Notification = { text: string; detail?: string; key?: string; undo?: () => void; icon?: IconName };
@@ -87,12 +91,12 @@ function IssueCreatedContent({ notice, id }: ContentProps) {
 const CONTENTS = [NotificationContent, IssueCreatedContent];
 
 /** Queue-owned lifetime keeps the existing 5s confirmations independent of presenter mounting. */
-export function showNotification(notice: Notification, id = NOTIFICATION_ID) {
+export function showNotification(notice: Notification, id = nextConfirmation()) {
   return toasts.show(<NotificationContent notice={notice} id={id} />, { id, duration: Infinity, expiresIn: 5000 });
 }
-/** "Issue created" for a new issue, in the confirmations' slot so Open link from last toast finds it. */
+/** "Issue created" for a new issue, a confirmation like the others so Open link from last toast finds it. */
 export function showIssueCreated(key: string) {
-  const id = NOTIFICATION_ID;
+  const id = nextConfirmation();
   return toasts.show(<IssueCreatedContent notice={{ text: "Issue created", key }} id={id} />, {
     id,
     duration: Infinity,
@@ -100,19 +104,33 @@ export function showIssueCreated(key: string) {
   });
 }
 
-function latestContent(): ReactElement<ContentProps> | undefined {
-  const content = toasts.find(NOTIFICATION_ID)?.content;
-  return isValidElement<ContentProps>(content) && CONTENTS.includes(content.type as never) ? content : undefined;
+/** The queued confirmations, newest first, with their content. */
+function confirmationsNewestFirst() {
+  return toasts.all().flatMap((toast) => {
+    const content = toast.content;
+    return toast.id.startsWith(CONFIRMATION) && isValidElement<ContentProps>(content) && CONTENTS.includes(content.type as never)
+      ? [{ id: toast.id, content }]
+      : [];
+  }).reverse() as { id: string; content: ReactElement<ContentProps> }[];
 }
+/** Whether a confirmation is queued (reminders wait for it). */
+export const hasConfirmation = () => toasts.all().some((toast) => toast.id.startsWith(CONFIRMATION));
+/** The newest confirmation still queued (Linear's Open link from last toast reads the last toast). */
 export function latestNotification(): Notification | undefined {
-  return latestContent()?.props.notice;
+  return confirmationsNewestFirst()[0]?.content.props.notice;
+}
+/** Closes the confirmations about issues that are gone (an undone create). */
+export function dismissNotificationsWithout(exists: (key: string) => boolean) {
+  for (const { id, content } of confirmationsNewestFirst())
+    if (content.props.notice.key && !exists(content.props.notice.key)) toasts.dismiss(id);
 }
 
 /** Rekey the queued content without restarting its lifetime. */
 export function rekeyNotification(from: string, to: string) {
-  const content = latestContent();
-  const notice = content?.props.notice;
-  if (!content || notice?.key !== from) return;
-  const text = notice.text.replace(new RegExp(`${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\d)`, "g"), to);
-  toasts.update(NOTIFICATION_ID, cloneElement(content, { notice: { ...notice, key: to, text } }));
+  for (const { id, content } of confirmationsNewestFirst()) {
+    const notice = content.props.notice;
+    if (notice.key !== from) continue;
+    const text = notice.text.replace(new RegExp(`${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\d)`, "g"), to);
+    toasts.update(id, cloneElement(content, { notice: { ...notice, key: to, text } }));
+  }
 }

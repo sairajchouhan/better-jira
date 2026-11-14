@@ -1,5 +1,5 @@
 import { type Board } from "@/shared/issue-model";
-import { latestNotification, NOTIFICATION_ID } from "./app-notifications";
+import { latestNotification, hasConfirmation } from "./app-notifications";
 import { toasts } from "@/client/components/toast-queue";
 import { expect, test } from "bun:test";
 
@@ -616,14 +616,13 @@ test("B5: creating stays on the board with a toast, Create more toasts too, and 
   const { undoEdit } = await import("./undo-history");
   const { navigate } = await import("@/client/features/navigation/app-navigation");
   navigate({ panel: false, selected: null });
-  toasts.dismiss(NOTIFICATION_ID);
+  toasts.dismissAll();
   const key = actions.create("Toasted")!;
   expect(get().panel).toBe(false);
   expect(get().selected).toBe(key);
   expect(latestNotification()).toEqual({ text: "Issue created", key });
-  expect(toasts.find(NOTIFICATION_ID)).toBeDefined();
-  expect(toasts.has(NOTIFICATION_ID)).toBe(true);
-  toasts.dismiss(NOTIFICATION_ID);
+  expect(hasConfirmation()).toBe(true);
+  toasts.dismissAll();
   const more = actions.create("Created with more", {}, true)!;
   expect(latestNotification()).toEqual({ text: "Issue created", key: more });
   undoEdit();
@@ -2408,14 +2407,14 @@ test("R3-create-D7: an open issue deleted in Jira says so, and its sub-issue dra
   navigate({ board: 1, selected: issue.key, panel: true, view: "page" });
   const draft = subIssueDraftKey("ns", issue.key);
   localStorage.setItem(draft, JSON.stringify({ title: "Child" }));
-  toasts.dismiss(NOTIFICATION_ID);
+  toasts.dismissAll();
   // A write's answer finds the issue gone from Jira.
   adoptJira(issue.key, { issue: null }, false);
   expect(get().issues.has(issue.key)).toBe(false);
   expect(get().selected).toBeNull();
   expect(latestNotification()?.text).toBe("GONE-1 was deleted in Jira");
   expect(localStorage.getItem(draft)).toBeNull();
-  toasts.dismiss(NOTIFICATION_ID);
+  toasts.dismissAll();
   set({ writable: false, namespace: "" });
 });
 

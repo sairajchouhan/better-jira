@@ -9,15 +9,14 @@ export const TOAST = { WIDTH: 384, VIEWPORT_MARGIN: 32, OFFSET: 24, MOBILE_OFFSE
 
 const ToastContext = createContext<{ dismiss: () => void } | null>(null);
 
-/** One visible toast: dismisses itself after its duration and gives its slots a way to close it. */
+/** One visible toast: dismisses itself after its duration (paused while the queue is held) and gives its slots a way to close it. */
 function Entry({ queue, id, duration, revision, children }: { queue: ToastQueue; id: string; duration: number; revision: number; children: ReactNode }) {
   const context = useMemo(() => ({ dismiss: () => queue.dismiss(id) }), [queue, id]);
   useEffect(() => {
     if (duration === Infinity) return;
-    const timer = setTimeout(context.dismiss, duration);
-    return () => clearTimeout(timer);
+    return queue.countdown(duration, context.dismiss);
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- show() restarts the timer via revision; update() preserves it.
-  }, [context, duration, revision]);
+  }, [queue, context, duration, revision]);
   return (
     <li>
       <ToastContext value={context}>{children}</ToastContext>
@@ -28,10 +27,29 @@ function Entry({ queue, id, duration, revision, children }: { queue: ToastQueue;
 /** Renders the queue's visible toasts, bottom right, as one polite live region. Mount once. */
 export function ToastViewport({ queue = toasts }: { queue?: ToastQueue }) {
   const visible = useSyncExternalStore(queue.subscribe, queue.visible, queue.visible);
-  // Always mounted, so screen readers already watch the live region when the first toast lands.
+  // Toasts wait while the tab is hidden, as sonner's pauseWhenPageIsHidden does.
+  useEffect(() => {
+    const sync = () => queue.hold("hidden", document.hidden);
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      document.removeEventListener("visibilitychange", sync);
+      queue.hold("hidden", false);
+      queue.hold("hover", false);
+    };
+  }, [queue]);
+  // Always mounted, so screen readers already watch the live region when the first toast lands. The pointer on any
+  // toast holds them all (sonner's Toaster onMouseEnter/onMouseLeave).
   return (
-    <ol aria-live="polite" aria-label="Notifications" className="ui-toast-viewport">
-      {visible.map((toast) => (
+    <ol
+      aria-live="polite"
+      aria-label="Notifications"
+      className="ui-toast-viewport"
+      onMouseEnter={() => queue.hold("hover", true)}
+      onMouseMove={() => queue.hold("hover", true)}
+      onMouseLeave={() => queue.hold("hover", false)}
+    >
+      {visible.toReversed().map((toast) => (
         <Entry key={toast.id} queue={queue} id={toast.id} duration={toast.duration} revision={toast.revision}>
           {toast.content}
         </Entry>

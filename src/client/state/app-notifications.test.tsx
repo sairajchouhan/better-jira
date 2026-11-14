@@ -1,6 +1,6 @@
 import { afterEach, expect, jest, test } from "bun:test";
 import { type ReactElement, type ReactNode, Children, isValidElement } from "react";
-import { showNotification, latestNotification, rekeyNotification, NOTIFICATION_ID } from "./app-notifications";
+import { showNotification, latestNotification, rekeyNotification, hasConfirmation } from "./app-notifications";
 import { toasts, createToastQueue } from "@/client/components/toast-queue";
 import { Toast } from "@/client/components/toast";
 
@@ -9,19 +9,25 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-test("confirmation replacement restarts five seconds; rekey preserves the remaining lifetime", () => {
+test("R3-chrome-D5: confirmations stack up to four instead of replacing one another; each keeps its own five seconds", () => {
   jest.useFakeTimers();
+  toasts.dismissAll();
   showNotification({ text: "Created A-NEW2", key: "A-NEW2" });
   jest.advanceTimersByTime(4000);
   showNotification({ text: "Created A-NEW3", key: "A-NEW3" });
-  expect(toasts.visible().filter((toast) => toast.id === NOTIFICATION_ID)).toHaveLength(1);
-  jest.advanceTimersByTime(4000);
+  for (const text of ["Copied", "Copied", "Copied"]) showNotification({ text });
+  // Linear's Toaster shows the newest four; the oldest waits unshown.
+  expect(toasts.visible()).toHaveLength(4);
+  expect(toasts.all()).toHaveLength(5);
   rekeyNotification("A-NEW", "A-40");
-  expect(latestNotification()?.key).toBe("A-NEW3");
+  expect(toasts.all().filter((t) => (t.content as ReactElement<{ notice: { key?: string } }>).props.notice.key === "A-40")).toHaveLength(0);
+  // Open link from last toast follows the newest confirmation with an issue; rekey preserves its lifetime.
+  expect(latestNotification()?.text).toBe("Copied");
   rekeyNotification("A-NEW3", "A-37");
-  expect(latestNotification()).toEqual({ text: "Created A-37", key: "A-37" });
-  jest.advanceTimersByTime(999);
-  expect(latestNotification()).toBeDefined();
+  jest.advanceTimersByTime(1000);
+  expect(toasts.all()).toHaveLength(4); // A-NEW2's five seconds are up
+  jest.advanceTimersByTime(3999);
+  expect(toasts.all().map((t) => (t.content as ReactElement<{ notice: { text: string } }>).props.notice.text)).toEqual(["Created A-37", "Copied", "Copied", "Copied"]);
   jest.advanceTimersByTime(1);
   expect(latestNotification()).toBeUndefined();
 });
@@ -37,8 +43,8 @@ function actionIn(node: ReactNode): ReactElement<{ onClick: () => void }> | unde
 
 test("the queued undo toast runs the action belonging to that toast", () => {
   let undone = 0;
-  showNotification({ text: "Deleted notification", undo: () => undone++ });
-  const content = toasts.find(NOTIFICATION_ID)!.content as ReactElement<{ notice: unknown }>;
+  const id = showNotification({ text: "Deleted notification", undo: () => undone++ });
+  const content = toasts.find(id)!.content as ReactElement<{ notice: unknown }>;
   const body = (content.type as (props: typeof content.props) => ReactNode)(content.props);
   const action = actionIn(body);
   expect(action).toBeDefined();
@@ -46,24 +52,24 @@ test("the queued undo toast runs the action belonging to that toast", () => {
   expect(undone).toBe(1);
 });
 
-test("reminder deferral follows the queue confirmation slot through replace, rekey, expiry and dismissal", () => {
+test("reminder deferral follows the queued confirmations through rekey, expiry and dismissal", () => {
   jest.useFakeTimers();
   const deferrals: boolean[] = [];
-  const stop = toasts.subscribe(() => deferrals.push(toasts.has(NOTIFICATION_ID)));
-  expect(toasts.has(NOTIFICATION_ID)).toBe(false);
+  const stop = toasts.subscribe(() => deferrals.push(hasConfirmation()));
+  expect(hasConfirmation()).toBe(false);
   toasts.show("View created", { id: "view", duration: Infinity });
-  expect(toasts.has(NOTIFICATION_ID)).toBe(false);
+  expect(hasConfirmation()).toBe(false);
   showNotification({ text: "Created A-NEW1", key: "A-NEW1" });
-  expect(toasts.has(NOTIFICATION_ID)).toBe(true);
+  expect(hasConfirmation()).toBe(true);
   rekeyNotification("A-NEW1", "A-1");
-  expect(toasts.has(NOTIFICATION_ID)).toBe(true);
+  expect(hasConfirmation()).toBe(true);
   showNotification({ text: "Copied" });
   jest.advanceTimersByTime(5000);
-  expect(toasts.has(NOTIFICATION_ID)).toBe(false);
-  showNotification({ text: "Copied again" });
-  toasts.dismiss(NOTIFICATION_ID);
-  expect(toasts.has(NOTIFICATION_ID)).toBe(false);
-  expect(deferrals).toEqual([false, true, true, true, false, true, false]);
+  expect(hasConfirmation()).toBe(false);
+  const id = showNotification({ text: "Copied again" });
+  toasts.dismiss(id);
+  expect(hasConfirmation()).toBe(false);
+  expect(deferrals).toEqual([false, true, true, true, true, false, true, false]);
   stop();
 });
 
@@ -85,7 +91,7 @@ test("View issue dismisses the toast that owns the action", () => {
   const body = (content.type as (props: typeof content.props) => ReactNode)(content.props);
   actionIn(body)!.props.onClick();
   expect(toasts.has(id)).toBe(false);
-  expect(toasts.has(NOTIFICATION_ID)).toBe(true);
+  expect(hasConfirmation()).toBe(true);
 });
 
 import { renderToStaticMarkup } from "react-dom/server";

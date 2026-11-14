@@ -1,5 +1,5 @@
 import { type Issue } from "@/shared/issue-model";
-import { NOTIFICATION_ID } from "@/client/state/app-notifications";
+import { hasConfirmation } from "@/client/state/app-notifications";
 import { toasts } from "@/client/components/toast-queue";
 import { useSyncExternalStore } from "react";
 import { IconButton } from "@/client/components/button";
@@ -229,7 +229,6 @@ export function ReminderControl({ issue }: { issue: Issue }) {
     </>
   );
 }
-const hasConfirmation = () => toasts.has(NOTIFICATION_ID);
 
 /** A single nearest-deadline timer, including overdue reminders restored after a reload. It re-arms only when the next
  *  reminder changes, not on every poll. */
