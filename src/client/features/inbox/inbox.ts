@@ -105,6 +105,7 @@ export const inbox = createInboxStore({
         ?.scrollIntoView({ block: "nearest" }),
     );
   },
+  shown: () => get().inbox,
   clearSelection: () => {
     keepRowInUrl(null);
     navigate({ selected: null, panel: false, inbox: true });
@@ -149,6 +150,7 @@ export const {
 } = inbox;
 export const { itemsOf, facets, orderOf, clearUnseen, openFind, setFind, closeFind } = inbox;
 const { subscribe, localState, viewState, feed, dropLocal, markRead } = inbox;
+
 export const useLocal = () => useSyncExternalStore(subscribe, localState);
 export const useView = () => useSyncExternalStore(subscribe, viewState);
 /** The view the list applies: the stored view plus the ⌘F find term. */

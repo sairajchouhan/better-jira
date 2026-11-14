@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { QueryClient } from "@tanstack/query-core";
-import { createInboxStore, deleteQuestion, type InboxPorts, type Feed, type DeleteConfirmation } from "./inbox-store";
+import { createInboxStore, deleteQuestion, READ_DELAY, type InboxPorts, type Feed, type DeleteConfirmation } from "./inbox-store";
 import { unreadCount } from "@/shared/inbox-model";
 import { DEFAULT_VIEW, type InboxItem } from "@/shared/inbox-model";
 
@@ -38,6 +38,9 @@ function setup(writable = true, send: InboxPorts["send"] = async () => null) {
   const messages: string[] = [],
     opened: string[] = [];
   const state = { issues: new Map(), clock: Date.now() };
+  // A manual clock for the delayed read: `flush` runs what is due, `timers` shows what waits.
+  const timers: { fn: () => void; ms: number }[] = [];
+  const view = { inbox: true };
   const ports: InboxPorts = {
     queryClient,
     get: () => state,
@@ -59,9 +62,21 @@ function setup(writable = true, send: InboxPorts["send"] = async () => null) {
       opened.push("clear");
     },
     confirm: async () => true,
+    shown: () => view.inbox,
+    later: (fn, ms) => {
+      const timer = { fn, ms };
+      timers.push(timer);
+      return () => void timers.splice(timers.indexOf(timer) >>> 0, 1);
+    },
+  };
+  const flush = () => {
+    for (const timer of timers.splice(0)) timer.fn();
   };
   return {
     store: createInboxStore(ports),
+    timers,
+    flush,
+    view,
     items,
     saved,
     messages,
@@ -81,6 +96,7 @@ test("read-only marks persist locally, and each store owns its selection and und
   const a = setup(false),
     b = setup(false);
   a.store.selectRow(a.items[0]);
+  a.flush();
   expect(a.store.localState()["head-1"]).toEqual({ read: true });
   expect(a.store.selected()).toBe("1");
   expect(b.store.selected()).toBeNull();
@@ -201,6 +217,7 @@ test("keyboard movement follows filtered display order and keeps the newly read 
   a.store.changeView({ ordering: "oldest", unreadOnly: true });
   a.store.moveRow(1);
   expect(a.store.selected()).toBe("3");
+  a.flush();
   expect(a.store.selectedRow()?.unread).toBe(false);
   a.store.moveRow(1);
   expect(a.store.selected()).toBe("2");
@@ -213,6 +230,7 @@ test("keyboard movement follows filtered display order and keeps the newly read 
 test("snooze removal advances selection and undo restores prior local state and selection", () => {
   const a = setup(false);
   a.store.selectRow(a.items[0]);
+  a.flush();
   const until = Date.now() + 3_600_000;
   a.store.snoozeRow(until);
   expect(a.store.selected()).toBe("2");
@@ -275,7 +293,8 @@ function recording(writable = true) {
 test("undoing a delete puts the selection back without marking the row read in Jira (R3-inbox-D1)", async () => {
   const a = recording();
   a.store.restoreSelection("1");
-  a.store.deleteRow(); // Linear activates the next row: a visit, so it is read
+  a.store.deleteRow(); // Linear activates the next row: a visit, so it is read once it has shown 300 ms
+  a.flush();
   a.store.undoInbox();
   await tick();
   expect(a.store.selected()).toBe("1");
@@ -297,6 +316,7 @@ test("a bulk delete that removes the selected row moves on without marking the n
 test("a read cut off by a reload is sent again on the next load (R3-inbox-D2)", async () => {
   const gone = setup(true, () => new Promise(() => {})); // the page goes away mid-write
   gone.store.selectRow(gone.items[0]);
+  gone.flush();
   await tick();
   const next = recording();
   Object.assign(next.saved, gone.saved);
@@ -381,4 +401,63 @@ test("bulk delete confirmations use Linear's wording, naming the priority inbox'
   expect(deleteQuestion("completed", { priorityInbox: true, tab: "direct" }).title).toBe(
     "Delete all read notifications for completed issues in the Priority inbox?",
   );
+});
+
+test("B1: a selected row is read only after it has shown for Linear's 300 ms, by key or click alike", async () => {
+  const a = recording();
+  a.store.selectRow(a.items[0]); // a click
+  expect(a.timers.map((t) => t.ms)).toEqual([READ_DELAY]);
+  expect(READ_DELAY).toBe(300);
+  expect(a.store.localState()["head-1"]).toBeUndefined();
+  await tick();
+  expect(a.calls).toEqual([]);
+  a.flush();
+  await tick();
+  expect(a.calls).toEqual([{ action: "read", groups: ["1"] }]);
+});
+
+test("B1: J/K through rows marks none of the rows passed, only the one that stays", async () => {
+  const a = recording();
+  a.store.moveRow(1); // 1
+  a.store.moveRow(1); // 2
+  a.store.moveRow(1); // 3
+  expect(a.store.selected()).toBe("3");
+  expect(a.timers).toHaveLength(1); // each move cancels the last row's read
+  a.flush();
+  await tick();
+  expect(a.calls).toEqual([{ action: "read", groups: ["3"] }]);
+  expect(a.store.localState()["head-1"]).toBeUndefined();
+  expect(a.store.localState()["head-2"]).toBeUndefined();
+});
+
+test("B1: leaving the inbox, an undo that moves the selection back, or U on the row cancels its pending read", async () => {
+  const left = recording();
+  left.store.selectRow(left.items[0]);
+  left.view.inbox = false; // the notification no longer shows
+  left.flush();
+  await tick();
+  expect(left.calls).toEqual([]);
+
+  const undone = recording();
+  undone.store.restoreSelection("1");
+  undone.store.deleteRow(); // selects row 2, a visit
+  undone.store.undoInbox(); // back to row 1 within 300 ms: row 2 never showed long enough
+  undone.flush();
+  await tick();
+  expect(undone.calls).toEqual([]);
+  expect(undone.store.selected()).toBe("1");
+
+  const toggled = recording();
+  toggled.store.selectRow(toggled.items[0]);
+  toggled.store.toggleRead(); // U reads it now
+  expect(toggled.timers).toHaveLength(0);
+  await tick();
+  expect(toggled.calls).toEqual([{ action: "read", groups: ["1"] }]);
+});
+
+test("B1: an already read row starts no timer", () => {
+  const a = recording();
+  a.items[0]!.unread = false;
+  a.store.selectRow(a.items[0]);
+  expect(a.timers).toHaveLength(0);
 });

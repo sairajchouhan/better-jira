@@ -46,6 +46,17 @@ export type InboxPorts = {
   openRow: (item: InboxItem, open: "side" | "page") => void;
   clearSelection: () => void;
   confirm: (question: DeleteConfirmation) => Promise<boolean>;
+  /** Whether the inbox is the screen: a row's delayed read lands only while its notification still shows. */
+  shown: () => boolean;
+  /** Runs `fn` after `ms`; returns its cancel. */
+  later?: (fn: () => void, ms: number) => () => void;
+};
+/** Linear's `MarkNotificationAsRead` `A` (2026-11-14): the open notification is marked read 300 ms after it shows, so rows
+ *  that J/K or the mouse pass through stay unread. Showing another notification, or none, before then cancels it. */
+export const READ_DELAY = 300;
+const timeout = (fn: () => void, ms: number) => {
+  const id = setTimeout(fn, ms);
+  return () => clearTimeout(id);
 };
 /** Linear's wording for each bulk delete's confirmation; the priority inbox names its tab. Linear's "completed" also covers
  *  reviews, which Jira has none of. */
@@ -381,21 +392,42 @@ export function createInboxStore(ports: InboxPorts) {
       if (rows.length) void markRead(rows, value);
     }
   }
-  /** Selects and opens a row without marking it read: undo and bulk deletes put the selection back or move it on, which is
-   *  not a visit (R3-inbox-D1). */
-  function showRow(item: InboxItem, open: "side" | "page" = "side") {
+  /** The pending delayed read (`READ_DELAY`) of the row that shows. */
+  let pendingRead: { id: string; cancel: () => void } | undefined;
+  function cancelRead(id?: string) {
+    if (!pendingRead || (id !== undefined && pendingRead.id !== id)) return;
+    pendingRead.cancel();
+    pendingRead = undefined;
+  }
+  function reveal(item: InboxItem, open: "side" | "page") {
     selectedId = item.id;
     emit();
     ports.openRow(item, open);
   }
-  /** A visit: Linear marks the notification read as it opens. */
+  /** Selects and opens a row without marking it read: undo and bulk deletes put the selection back or move it on, which is
+   *  not a visit (R3-inbox-D1). It cancels the read of the row it replaces. */
+  function showRow(item: InboxItem, open: "side" | "page" = "side") {
+    cancelRead();
+    reveal(item, open);
+  }
+  /** A visit, by key or click alike: Linear marks the notification read once it has shown for `READ_DELAY`. */
   function selectRow(
     item: InboxItem | undefined,
     open: "side" | "page" = "side",
   ) {
     if (!item) return;
-    if (item.unread) void markRead([item], true);
-    showRow(item, open);
+    cancelRead();
+    if (item.unread) {
+      const cancel = (ports.later ?? timeout)(() => {
+        pendingRead = undefined;
+        // Linear's timer goes with the notification view: only the row still showing in the inbox is read.
+        if (selectedId !== item.id || !ports.shown()) return;
+        const row = selectedRow() ?? item;
+        if (row.unread) void markRead([row], true);
+      }, READ_DELAY);
+      pendingRead = { id: item.id, cancel };
+    }
+    reveal(item, open);
   }
   function moveRow(direction: number) {
     const rows = shownRows(),
@@ -405,6 +437,8 @@ export function createInboxStore(ports: InboxPorts) {
   const openRow = () => selectRow(selectedRow(), "page");
   /** Linear's U. */
   function toggleRead(row = selectedRow()) {
+    // An explicit U wins over the pending read of the row it acts on.
+    if (row) cancelRead(row.id);
     if (row)
       void markRead(
         [row],
@@ -459,6 +493,7 @@ export function createInboxStore(ports: InboxPorts) {
     if (selectedId && gone.has(selectedId)) {
       if (next) activate(next);
       else {
+        cancelRead();
         selectedId = null;
         emit();
         ports.clearSelection();
@@ -589,6 +624,7 @@ export function createInboxStore(ports: InboxPorts) {
     subscribe,
     localState,
     viewState,
+    cancelRead: () => cancelRead(),
     shownView,
     findState,
     openFind,

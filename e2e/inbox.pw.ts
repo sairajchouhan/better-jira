@@ -319,7 +319,8 @@ test("triaging rows: unread-only, toast undo, other tabs, rows outside the mirro
   });
   await test.step("The toast's Undo undoes its own action, not the newest", async () => {
     await p.click(`[data-inbox-row*="issue/2"]`);
-    await p.waitFor(`${current}.includes("TEST-2")`);
+    // Read once it has been selected for 300 ms (Linear's `MarkNotificationAsRead`).
+    await p.waitFor(`${current}.startsWith("Read TEST-2")`);
     await p.key("e");
     await p.waitFor(
       `${rows}.length === 6 && ${current}.includes("TEST-1") && ${toastText}.includes("Notification deleted")`,
@@ -444,7 +445,7 @@ test("a long inbox: older pages on scroll, undo by Z and toast, the row menu, ‚å
     await p.eval(`document.querySelector('[data-inbox-row]').scrollIntoView()`);
     // E deletes with Linear's toast; Z brings the row back and selects it again.
     await p.key("j");
-    await p.waitFor(`${current}.includes("TEST-2")`);
+    await p.waitFor(`${current}.startsWith("Read TEST-2")`);
     await p.key("e");
     await p.waitFor(
       `${rows}.length === 46 && document.querySelector('[data-toast]')?.textContent.includes("Notification deleted")`,
@@ -619,3 +620,4 @@ test("R3 G22 #29: outside the mirror, the pane's head comment card is three line
   expect(box.height).toBeLessThanOrEqual(box.line * 3 + 1);
   expect(box.full).toBeGreaterThan(box.line * 3 + 1);
 });
+
