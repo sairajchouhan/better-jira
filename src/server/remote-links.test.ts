@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
+import { remoteLinkData } from "./issue-projection";
 import { recentlyTouched, storeRemoteLinks } from "./remote-links";
 
 function cache() {
@@ -18,11 +19,15 @@ const row = (db: Database, key: string, updated: string, synced: number) => {
 test("R2-D1: a web link Jira added without bumping `updated` reaches the property cache", () => {
   const db = cache();
   row(db, "KAN-141", "2026-11-08T20:17:11.777+0000", Date.parse("2026-11-08T20:17:12Z"));
-  expect(storeRemoteLinks(db, "KAN-141", ["https://example.com/qa-vf-link-marker"])).toBe(true);
-  expect(storeRemoteLinks(db, "KAN-141", ["https://example.com/qa-vf-link-marker"])).toBe(false);
-  const data = db.query<{ data: string }, []>("SELECT data FROM issue_properties").get()!.data;
-  expect(JSON.parse(data).remoteLinks).toEqual(["https://example.com/qa-vf-link-marker"]);
-  expect(storeRemoteLinks(db, "KAN-999", ["https://x.test"])).toBe(false); // not enriched yet
+  const url = "https://example.com/qa-vf-link-marker";
+  expect(storeRemoteLinks(db, "KAN-141", remoteLinkData([{ object: { url, title: url } }]))).toBe(true);
+  expect(storeRemoteLinks(db, "KAN-141", remoteLinkData([{ object: { url, title: url } }]))).toBe(false);
+  const data = () => JSON.parse(db.query<{ data: string }, []>("SELECT data FROM issue_properties").get()!.data);
+  expect(data()).toEqual({ remoteLinks: [url], linkTitles: {} });
+  // R3-board-D3: a title set in Jira reaches the card, which names the link by it.
+  expect(storeRemoteLinks(db, "KAN-141", remoteLinkData([{ object: { url, title: "Marker" } }, { object: {} }]))).toBe(true);
+  expect(data()).toEqual({ remoteLinks: [url], linkTitles: { [url]: "Marker" } });
+  expect(storeRemoteLinks(db, "KAN-999", remoteLinkData([{ object: { url: "https://x.test" } }]))).toBe(false); // not enriched yet
 });
 
 test("R2-D1: issues enriched right after an update are read again until 15 min have passed", () => {

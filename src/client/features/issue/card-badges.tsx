@@ -24,10 +24,12 @@ const openExternal = (url: string) => void window.open(url, "_blank", "noopener,
 // ——— Links (Linear `mt`, "Open link…" `ht`, card `gt`) ———
 
 type Link = { url: string; title: string; subtitle: string; origin?: string };
-const linkOf = (url: string): Link => {
-  if (!URL.canParse(url)) return { url, title: url, subtitle: url };
+/** A link as its badge, card and menu name it: Jira's title when the web link has one (Linear's link card `gt` shows the
+ *  attachment's title), else a name read from the URL. */
+export const linkOf = (url: string, title?: string): Link => {
+  if (!URL.canParse(url)) return { url, title: title ?? url, subtitle: url };
   const parsed = new URL(url);
-  return { url, title: externalTitle(parsed), subtitle: url, origin: parsed.origin };
+  return { url, title: title ?? externalTitle(parsed), subtitle: url, origin: parsed.origin };
 };
 const LinkImage = ({ link }: { link: Link }) => (
   <LinkIcon src={link.origin && faviconSrc(link.origin)} size={14} className="rounded-[3px]" />
@@ -62,7 +64,7 @@ function LinksCard({ links }: { links: Link[] }) {
 /** Linear's link badges (`mt`): under three links, one badge each (its icon and short name) that opens it; from three, one count
  *  badge, with the links' icon when they share a source, that opens "Open link…" listing them. Hover shows the links' card. */
 export function LinkBadges({ issue }: { issue: Issue }) {
-  const links = (issue.links ?? []).map(linkOf);
+  const links = (issue.links ?? []).map((url) => linkOf(url, issue.linkTitles?.[url]));
   if (!links.length) return null;
   if (links.length < 3)
     return links.map((link) => (

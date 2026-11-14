@@ -1,16 +1,21 @@
 import type { Database } from "bun:sqlite";
+import type { RemoteLinks } from "./issue-projection";
 
 /** Jira doesn't bump `updated` when a web link is added, so every fresh read of an issue's remote links updates the
  * property cache the Links filter reads (R2-D1). True when they changed. */
-export function storeRemoteLinks(db: Database, key: string, urls: string[]): boolean {
+export function storeRemoteLinks(db: Database, key: string, links: RemoteLinks): boolean {
   const row = db
     .query<{ data: string }, [string]>("SELECT data FROM issue_properties WHERE key = ?")
     .get(key);
   if (!row) return false;
   const data = JSON.parse(row.data);
-  if (JSON.stringify(data.remoteLinks ?? []) === JSON.stringify(urls)) return false;
+  if (
+    JSON.stringify(data.remoteLinks ?? []) === JSON.stringify(links.remoteLinks) &&
+    JSON.stringify(data.linkTitles ?? {}) === JSON.stringify(links.linkTitles)
+  )
+    return false;
   db.query("UPDATE issue_properties SET data = ? WHERE key = ?").run(
-    JSON.stringify({ ...data, remoteLinks: urls }),
+    JSON.stringify({ ...data, ...links }),
     key,
   );
   return true;

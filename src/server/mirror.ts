@@ -16,7 +16,7 @@ import {
   type IssueProjection,
   jiraUser,
   propertyEntries,
-  remoteLinkUrls,
+  remoteLinkData,
   watcherList,
   type PropertyRow,
 } from "./issue-projection";
@@ -272,7 +272,7 @@ async function watchOpenIssues() {
           storeRemoteLinks(
             db,
             key,
-            remoteLinkUrls(remote),
+            remoteLinkData(remote),
           )
         ) {
           db.query("DELETE FROM issue_details WHERE key = ?").run(key); // the panel's web links too
@@ -397,7 +397,7 @@ const details = detailCache(db, async (key) => {
     storeRemoteLinks(
       db,
       key,
-      detail.remotelinks.map((l: { url: string }) => l.url),
+      remoteLinkData(remotelinks),
     )
   )
     notify();
@@ -643,10 +643,13 @@ async function enrichProperties() {
             }
             try {
               // Jira web links live outside the search fields; the Links filter matches them too.
-              data.remoteLinks = remoteLinkUrls(
-                await jira<any[]>(`/rest/api/3/issue/${encodeURIComponent(row.key)}/remotelink`, {
-                  signal: AbortSignal.timeout(30000),
-                }),
+              Object.assign(
+                data,
+                remoteLinkData(
+                  await jira<any[]>(`/rest/api/3/issue/${encodeURIComponent(row.key)}/remotelink`, {
+                    signal: AbortSignal.timeout(30000),
+                  }),
+                ),
               );
             } catch {
               errors.push("Web links unavailable");

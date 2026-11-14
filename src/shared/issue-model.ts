@@ -85,6 +85,8 @@ export type Issue = {
   /** Every comment's text, for search (BJ-27). */
   commentText?: string;
   links?: string[];
+  /** Jira's title for a web link in `links`, by URL, where it has one beyond the URL. */
+  linkTitles?: Record<string, string>;
   resources?: IssueResource[];
   commentStates?: Record<string, CommentState>;
   reminder?: { at: string; delivered?: boolean } | null;

@@ -19,9 +19,18 @@ export function watcherList(w: { watchers?: any[]; watchCount?: number }) {
   return { watchers, watchersComplete: watchers.length === w.watchCount };
 }
 
-/** Jira's `/remotelink` answer: the web links' URLs. */
-export const remoteLinkUrls = (links: any[]): string[] =>
-  links.flatMap((l) => (l.object?.url ? [l.object.url] : []));
+/** Jira's `/remotelink` answer as the property cache keeps it: the web links' URLs, and the title Jira gives each one where it
+ *  is more than the URL, which the card's link badge and hover card show (Linear's link card `gt` titles a link by its title). */
+export function remoteLinkData(links: any[]): RemoteLinks {
+  const linked = links.filter((l) => typeof l.object?.url === "string");
+  return {
+    remoteLinks: linked.map((l) => l.object.url),
+    linkTitles: Object.fromEntries(
+      linked.flatMap((l) => (l.object.title?.trim() && l.object.title !== l.object.url ? [[l.object.url, l.object.title]] : [])),
+    ),
+  };
+}
+export type RemoteLinks = { remoteLinks: string[]; linkTitles: Record<string, string> };
 
 /**
  * The projection for one Jira site. Custom field IDs differ per site, so rank and story points are found in the site's
