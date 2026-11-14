@@ -54,7 +54,7 @@ import { DocumentBodyEditor, CommentComposer } from "@/client/features/editor/ri
 import { hotkeyOf, runShortcut } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
 import { post, useCommand, focusNode } from "@/client/features/navigation/commands";
-import { InboxIssueActions } from "./inbox";
+import { InboxIssueActions, InboxIssueGroup } from "./inbox";
 import { SplitPanel } from "@/client/features/issue/split-panel";
 import { descriptionNotice, descriptionSession, type DescriptionPorts } from "@/client/features/issue/description-session";
 import { shortDate } from "@/client/lib/due-date";
@@ -123,6 +123,7 @@ export const InboxIssuePane = memo(function InboxIssuePane({ issue }: { issue: I
       <IssueHeader issue={issue} switchTo="page" actions={<InboxIssueActions />}>
         <IssueKey issue={issue} />
       </IssueHeader>
+      <InboxIssueGroup />
       <IssueBody issue={issue} />
     </aside>
   );

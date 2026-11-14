@@ -245,6 +245,14 @@ function followHash(event: MouseEvent) {
   router.history.push(link.pathname + link.search + link.hash, router.state.location.state);
   window.dispatchEvent(new HashChangeEvent("hashchange"));
 }
+/** Points the shown page's address at a spot on it (an issue's comment) in place, and lets the page follow it, as a
+ *  click on a link to it does (`followHash`). */
+export function showAnchor(anchor: string) {
+  const shown = router.latestLocation;
+  if (shown.hash === anchor) return;
+  router.history.replace(`${shown.pathname}${shown.searchStr}#${anchor}`, shown.state);
+  window.dispatchEvent(new HashChangeEvent("hashchange"));
+}
 /** The board's Issues › All. Leaves any view first, so its scope and details stay untouched. */
 export function openAllIssues(board: number) {
   navigate({ board, scope: "all", selected: null, panel: false });

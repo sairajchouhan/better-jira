@@ -1,10 +1,10 @@
 /** The Inbox's state and actions: what shortcuts, the sidebar badge and the inbox screen share. The screen itself
  *  (routes/inbox.tsx) loads with its route. Read state goes to Jira; delete and snooze stay in this browser. */
 import { useCallback, useEffect, useSyncExternalStore } from "react";
-import { unreadCount } from "@/shared/inbox-model";
+import { commentAnchor, unreadCount } from "@/shared/inbox-model";
 import { statusOf as issueStatusOf, get, set, useStore } from "@/client/state/store";
 import { queryClient } from "@/client/state/server-data";
-import { navigate, router, ui } from "@/client/features/navigation/app-navigation";
+import { navigate, router, showAnchor, ui } from "@/client/features/navigation/app-navigation";
 import { createInboxStore, type Category, type DeleteConfirmation } from "@/client/state/inbox-store";
 import { readStored, writeStored } from "@/client/state/stored-state";
 
@@ -92,6 +92,9 @@ export const inbox = createInboxStore({
         view: open,
         inbox: true,
       });
+      // A comment notification opens the issue at its comment, as Jira's link does (`focusedCommentId`).
+      const anchor = commentAnchor(item);
+      if (anchor) requestAnimationFrame(() => showAnchor(anchor));
     } else {
       navigate({ selected: null, panel: false, inbox: true });
       keepRowInUrl(item.id);

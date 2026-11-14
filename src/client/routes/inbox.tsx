@@ -10,8 +10,11 @@ import { FutureTimeStep } from "@/client/features/reminders/future-time-step";
 import { FilterChip } from "@/client/components/filter-chip";
 import { Tabs } from "@/client/components/tabs";
 import { Text } from "@/client/components/text";
-import { Icon, StatusIcon, type IconName } from "@/client/components/icons";
-import { FILTER_FIELDS, describe, rowLabel, feedCategory, hasFilters, missingIssueNote, shortAgo, snoozeChoices, snoozeTime, type FilterField, type InboxItem, type InboxView } from "@/shared/inbox-model";
+import { Icon, StatusIcon, TypeDot, type IconName } from "@/client/components/icons";
+import { FILTER_FIELDS, describe, groupSummary, rowLabel, feedCategory, hasFilters, missingIssueNote, shortAgo, snoozeChoices, snoozeTime, type FilterField, type InboxItem, type InboxView } from "@/shared/inbox-model";
+import { InboxGroupUpdates } from "@/client/features/inbox/inbox-group";
+import { fullTime } from "@/client/features/issue/issue-dates";
+import { Adf } from "@/client/features/editor/adf";
 import { copyIssue, type CopyKind } from "@/client/features/issue/issue-copy";
 import { Menu } from "@/client/components/menu";
 import { MenuSurface } from "@/client/components/menu-surface";
@@ -88,9 +91,10 @@ function Row({
   const issue = useStore((s) => s.issues.get(item.key));
   const status = issue && statusOf(issue.key);
   const ink = item.unread ? "title" : "muted";
+  const summary = groupSummary(item);
   return (
     <a
-      href={item.url}
+      href={item.link || item.url}
       data-inbox-row={item.id}
       data-unread={item.unread || undefined}
       aria-current={selected || undefined}
@@ -125,6 +129,12 @@ function Row({
       <Actor item={item} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-2.5">
         <span className="flex min-w-0 items-center">
+          {/* Jira names the type in every notification; the app marks it with the issue view's type dot. */}
+          {(issue?.type || item.issueType) && (
+            <span className="mr-1.5 grid shrink-0 place-items-center">
+              <TypeDot type={issue?.type || item.issueType} />
+            </span>
+          )}
           {item.key && (
             <Text variant="small" color={ink} className="mr-1 shrink-0">
               {item.key}
@@ -141,11 +151,10 @@ function Row({
                 aria-hidden
               />
             )}
-            {status ? (
-              <StatusIcon status={status} />
-            ) : item.status ? (
-              <span title={item.status}>
-                <StatusIcon status={{ name: item.status, category: "" }} />
+            {/* Jira prints the status name; Linear shows its icon, so the name is the icon's tooltip. */}
+            {status || item.status ? (
+              <span title={status?.name ?? item.status} data-inbox-status>
+                <StatusIcon status={status ?? { name: item.status, category: "" }} />
               </span>
             ) : null}
           </span>
@@ -154,8 +163,16 @@ function Row({
           <Text variant="mini" color="muted" wrap="truncate">
             {describe(item)}
           </Text>
+          {/* Jira's "+3 updates from Priya Chopra and others", short here; the pane lists them. */}
+          {summary && (
+            <Text variant="mini" color="muted" className="shrink-0" title={summary} data-inbox-more>
+              +{item.count - 1}
+            </Text>
+          )}
           <Text variant="mini" color="muted" className="ml-auto shrink-0">
-            {shortAgo(item.time, now)}
+            <time dateTime={item.time} title={fullTime(item.time)}>
+              {shortAgo(item.time, now)}
+            </time>
           </Text>
         </span>
       </span>
@@ -703,6 +720,17 @@ export function InboxList() {
   );
 }
 
+/** Above the open issue: the notification's group ("+3 updates from …"), which unfolds into each of its notifications. */
+export function InboxIssueGroup() {
+  const row = useSelectedRow();
+  if (!row || row.count < 2) return null;
+  return (
+    <div className="shrink-0 border-b border-line px-3 py-2">
+      <InboxGroupUpdates key={row.id} row={row} mirrored />
+    </div>
+  );
+}
+
 /** Linear's notification actions in the open issue's header, while the inbox is open. */
 export function InboxIssueActions() {
   const row = useSelectedRow();
@@ -774,7 +802,7 @@ export function InboxPane() {
             </IconButton>
           ))}
           <span className="flex-1" />
-          <ButtonLink variant="link" size="small" href={row.url} target="_blank" rel="noreferrer">
+          <ButtonLink variant="link" size="small" href={row.link || row.url} target="_blank" rel="noreferrer">
             Open in Jira <Icon name="external" />
           </ButtonLink>
         </div>
@@ -782,16 +810,23 @@ export function InboxPane() {
           <Text as="h1" variant="title2">
             {row.title}
           </Text>
-          <Text as="p" variant="small" color="base" className="mt-3">
-            {row.message}
+          <Text as="p" variant="small" color="muted" className="mt-1">
+            {[row.issueType, row.key, row.status, row.category === "watching" ? "Watching" : "Direct"].filter(Boolean).join(" · ")}
           </Text>
-          {row.preview && (
-            <blockquote className="mt-3 rounded-lg border border-line px-3 py-2">
-              <Text variant="small" color="base">
-                {row.preview}
-              </Text>
+          <Text as="p" variant="small" color="base" className="mt-3">
+            {describe({ ...row, preview: "" })}{" "}
+            <time dateTime={row.time} title={fullTime(row.time)} className="text-fg-3">
+              {shortAgo(row.time)}
+            </time>
+          </Text>
+          {(row.doc !== undefined || row.preview) && (
+            <blockquote className="mt-3 rounded-lg border border-line px-3 py-2 text-[13px] text-fg-2">
+              <Adf node={row.doc ?? row.preview} />
             </blockquote>
           )}
+          <div className="mt-4">
+            <InboxGroupUpdates key={row.id} row={row} mirrored={false} />
+          </div>
           <Text as="p" variant="mini" color="muted" className="mt-4">
             {missingIssueNote(
               row.key,
