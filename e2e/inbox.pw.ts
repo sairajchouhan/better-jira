@@ -70,9 +70,10 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
       "TEST-6",
       "OUT-9",
     ]);
-    // TEST-2 is a group: Jira's newest is "Sam updated a task", and the assignment under it leads (Linear's prioritize).
+    // TEST-2 is a group: Jira's newest, "Sam updated a task", leads; Linear's prioritize promotes only mentions (R3 G15).
+    // The summary names whom Jira names (its additionalActors).
     expect(labels[0]).toBe(
-      "Unread TEST-2 Browser fixture 2 · Task Alex assigned the task to you · +1 update from Sam",
+      "Unread TEST-2 Browser fixture 2 · Task Sam updated a task · +1 update from Alex",
     );
     expect(labels[1]).toContain("Alex mentioned you in a comment: Can you check this?");
     expect(labels[2]).toContain("Marked as completed by Sam: Doing → Done");
@@ -584,7 +585,7 @@ test("prod parity: a group's earlier notifications unfold in the pane, and a com
   });
   await test.step("#15: above an open issue, the same list", async () => {
     await p.click(`[data-inbox-row*="issue/2"]`);
-    await p.waitFor(`document.body.innerText.includes("+1 update from Sam")`);
+    await p.waitFor(`document.body.innerText.includes("+1 update from Alex")`);
     await p.click(`button[aria-label="Show grouped notifications"]`);
     await p.waitFor(`document.querySelectorAll('[data-inbox-note]').length === 2`);
   });

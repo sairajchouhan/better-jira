@@ -330,15 +330,28 @@ group("prod parity #14/#15: groups", () => {
     expect(groupSummary(many!)).toBe("+3 updates from Pia and others");
     expect(groupSummary(item({}))).toBe("");
   });
-  test("a recent assignment under a newer update leads the row (Linear's prioritize); the row keeps Jira's newest time", () => {
+  test("R3 G15: a recent assignment under a newer update stays folded; only a mention leads (Linear's prioritize)", () => {
     const head = note("h", "Kai updated a story", 1),
       assign = note("a", "Hana assigned a story to you", 20);
     const [row] = mapFeed([node(head, ["Hana"])], { "ari:cloud:jira:x:issue/7": [head, assign] }, now);
-    expect(row).toMatchObject({ kind: "assigned", actor: { name: "Hana" }, head: "h", time: head.timestamp, count: 2 });
-    expect(groupSummary(row!)).toBe("+1 update from Kai");
-    // Older than Linear's 72 hours, it stays behind the newest.
-    const old = note("a", "Hana assigned a story to you", 24 * 14);
-    expect(mapFeed([node(head, ["Hana"])], { "ari:cloud:jira:x:issue/7": [head, old] }, now)[0]?.kind).toBe("updated");
+    expect(row).toMatchObject({ kind: "updated", actor: { name: "Kai" }, head: "h", time: head.timestamp, count: 2 });
+    const mention = note("m", "Hana mentioned you in a comment", 20);
+    const [led] = mapFeed([node(head, ["Hana"])], { "ari:cloud:jira:x:issue/7": [head, mention] }, now);
+    expect(led).toMatchObject({ kind: "mentioned", actor: { name: "Hana" }, head: "h", time: head.timestamp });
+  });
+  test("R3 G15: the summary names whom Jira names (its additionalActors), even the actor who leads the row", () => {
+    // Jira: "+1 update from Kai" on a group whose head and other notification are both Kai's.
+    const head = note("h", "Kai changed a task from In Progress to Review", 1),
+      assign = note("a", "Kai assigned a task to you", 2);
+    const [one] = mapFeed([node(head, ["Kai"])], { "ari:cloud:jira:x:issue/7": [head, assign] }, now);
+    expect(groupSummary(one!)).toBe("+1 update from Kai");
+    // Jira: "+3 updates from Pia and others", whoever is newest among the loaded notifications.
+    const kids = [head, note("b", "Automation updated a task", 2), note("c", "Pia updated a task", 3), note("d", "Ola updated a task", 4)];
+    const [many] = mapFeed([node(head, ["Pia", "Ola", "Automation"])], { "ari:cloud:jira:x:issue/7": kids }, now);
+    expect(groupSummary(many!)).toBe("+3 updates from Pia and others");
+    // Without Jira's actors, the loaded notifications name them.
+    const [bare] = mapFeed([node(head, [])], { "ari:cloud:jira:x:issue/7": [head, assign] }, now);
+    expect(groupSummary(bare!)).toBe("+1 update from Kai");
   });
   test("prioritize: unread first, newest first, a recent mention to the front, never a reaction first", () => {
     const n = (id: string, kind: InboxItem["kind"], hoursAgo: number, unread = false) => ({

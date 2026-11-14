@@ -402,7 +402,7 @@ const grouped = (head: ReturnType<typeof notification>, ...older: ReturnType<typ
 const freshInbox = (extra = 0, extraUnread = false) => ({
   unseen: 4,
   nodes: [
-    // Jira's newest is an update; the row leads with the assignment under it (Linear's prioritize).
+    // Jira's newest is an update and leads; the assignment under it stays folded (Linear's prioritize promotes mentions).
     grouped(
       notification(2, "TEST-2", "Browser fixture 2", "updated", "Sam updated a task", "direct", false, 5),
       notification(2, "TEST-2", "Browser fixture 2", "updated", "Alex assigned a task to you", "direct", false, 10),

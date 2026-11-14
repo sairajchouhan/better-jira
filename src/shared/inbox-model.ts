@@ -150,8 +150,8 @@ export function mapNote(raw: any): InboxNote | null {
 /** Linear's mention window (`zW.PRIORITIZE_MENTION_NOTIFICATION_IN_LAST_HOURS`). */
 const PRIORITY_WINDOW = 72 * 3_600_000;
 /** Linear's `BW.prioritize` (startup-entry, 2026-11-14): unread before read, newest first, then a mention from the last 72 hours
- *  to the front, and never a reaction in front of something else. Jira's assignments to you count as mentions here: both are
- *  addressed to you, and Jira's group would otherwise hide one behind "updated a story". */
+ *  to the front (`zW.doesNotificationHaveIncreasedPriority`: `Dm.allMentionNotificationTypes` only, so an assignment stays in
+ *  its place), and never a reaction in front of something else. */
 export function prioritize<T extends Pick<InboxNote, "id" | "kind" | "time" | "unread">>(
   notes: T[],
   now = Date.now(),
@@ -162,8 +162,7 @@ export function prioritize<T extends Pick<InboxNote, "id" | "kind" | "time" | "u
   toFront(
     pool.findIndex(
       (n) =>
-        (n.kind === "mentioned" || n.kind === "assigned") &&
-        now - Date.parse(n.time) < PRIORITY_WINDOW,
+        n.kind === "mentioned" && now - Date.parse(n.time) < PRIORITY_WINDOW,
     ),
   );
   if (pool.length > 1 && pool[0]!.kind === "reaction")
@@ -175,9 +174,9 @@ export function prioritize<T extends Pick<InboxNote, "id" | "kind" | "time" | "u
   return [...pool, ...rest];
 }
 
-/** The distinct people behind `notes`, in order, leaving out `except`. */
-function actorsOf(actors: (InboxActor | null)[], except?: string) {
-  const seen = new Set(except ? [except] : []);
+/** The distinct people behind `notes`, in order. */
+function actorsOf(actors: (InboxActor | null)[]) {
+  const seen = new Set<string>();
   return actors.flatMap((a) => (a && !seen.has(a.name) && seen.add(a.name) ? [a] : []));
 }
 
@@ -205,9 +204,10 @@ export function mapFeed(
       group = (children[str(node.groupId)] ?? []).flatMap((c) => mapNote(c) ?? []),
       notes = group.some((n) => n.id === headNote.id) ? group : [headNote, ...group],
       [main = headNote, ...rest] = group.length ? prioritize(notes, now) : [headNote],
-      others = group.length
-        ? actorsOf(rest.map((n) => n.actor), main.actor?.name)
-        : actorsOf((Array.isArray(node.additionalActors) ? node.additionalActors : []).map(actorOf));
+      // The summary names whom Jira's bell names ("+1 update from Sahil", even when Sahil also leads): Jira's
+      // `additionalActors`, in its order. The loaded notifications stand in only when Jira sent none.
+      jiraActors = actorsOf((Array.isArray(node.additionalActors) ? node.additionalActors : []).map(actorOf)),
+      others = jiraActors.length ? jiraActors : actorsOf(rest.map((n) => n.actor));
     const { id: _, ...shown } = main;
     return [
       {

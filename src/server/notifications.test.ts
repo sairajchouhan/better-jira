@@ -93,7 +93,7 @@ test("prod parity #14/#15: the feed reads every group's notifications in one req
         });
       if (body.operationName === "InboxGroups")
         return Response.json({
-          data: { notifications: { g0: { nodes: [note("h1", "Kai updated a task", 5), note("a1", "Hana assigned a task to you", 30)] } } },
+          data: { notifications: { g0: { nodes: [note("h1", "Kai updated a task", 5), note("a1", "Hana mentioned you in a comment", 30)] } } },
         });
       if (body.operationName === "InboxGroup")
         return Response.json({
@@ -115,7 +115,8 @@ test("prod parity #14/#15: the feed reads every group's notifications in one req
     expect(groups).toHaveLength(1);
     expect(groups[0]!.variables).toMatchObject({ g0: "ari:cloud:jira:c:issue/1" });
     expect(groups[0]!.query).toContain("notificationGroup(groupId: $g0");
-    expect(page.items[0]).toMatchObject({ kind: "assigned", head: "h1", others: [{ name: "Kai" }] });
+    // The read group lets a recent mention lead (Linear's prioritize); the summary keeps Jira's additionalActors (R3 G15).
+    expect(page.items[0]).toMatchObject({ kind: "mentioned", head: "h1", others: [{ name: "Hana" }] });
     expect(page.items[1]).toMatchObject({ kind: "updated", count: 1 });
     const first = await group("ari:cloud:jira:c:issue/1");
     expect(first.notes.map((n) => n.id)).toEqual(["n1", "n2", "n3", "n4", "n5"]);
