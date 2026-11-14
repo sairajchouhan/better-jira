@@ -78,3 +78,23 @@ test("BJ-228: a file's size reads as Linear's pL: B, KB, MB, GB 1024 apart, at m
   expect(formatFileSize(2.5 * 1073741824, "en-US")).toBe("2.5 GB");
   expect(formatFileSize(Number.NaN, "en-US")).toBe("Unknown size");
 });
+
+test("QA-3 description D6: an image or video gets width handles; a file block never does", async () => {
+  const { resizableMedia } = await import("./media-layout");
+  const single = (attrs: Record<string, unknown>) => ({
+    type: "mediaSingle",
+    attrs: { layout: "center" },
+    content: [{ type: "media", attrs: { type: "file", collection: "c", ...attrs } }],
+  });
+  const file = (id: string, type: string) => ({ id, name: id, type, size: 1, url: `/api/issues/K-1/attachments/${id}` });
+  const attachments = [file("10", "text/plain"), file("11", "image/png"), file("12", "video/mp4"), { ...file("13", "application/pdf"), mediaId: "m13" }];
+  expect(resizableMedia(single({ id: "10" }), attachments)).toBe(false);
+  expect(resizableMedia(single({ id: "m13" }), attachments)).toBe(false);
+  expect(resizableMedia(single({ id: "11" }), attachments)).toBe(true);
+  expect(resizableMedia(single({ id: "12" }), attachments)).toBe(true);
+  // Not listed: Jira gives every image it stores dimensions; a file has none.
+  expect(resizableMedia(single({ id: "99", width: 800, height: 600 }), attachments)).toBe(true);
+  expect(resizableMedia(single({ id: "98" }), undefined)).toBe(false);
+  expect(resizableMedia({ type: "mediaSingle", content: [{ type: "media", attrs: { type: "external", url: "https://x.test/a.png" } }] }, [])).toBe(true);
+  expect(resizableMedia({ type: "mediaGroup", content: [] }, [])).toBe(false);
+});

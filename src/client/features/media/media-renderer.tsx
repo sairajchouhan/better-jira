@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { MediaProps } from "./media-loader";
 import type { Attachment } from "@/shared/attachment-media";
 import { Adf } from "@/client/features/editor/adf";
-import { downloadURL, mediaContainerStyle, mediaDimensions, safeExternalImage } from "./media-layout";
+import { downloadURL, isShownImage, mediaContainerStyle, mediaDimensions, safeExternalImage } from "./media-layout";
 import { VideoPlayer } from "./video-player";
 import { FileMedia } from "./file-media";
 import { ImageMedia } from "./image-media";
@@ -210,7 +210,7 @@ function LoadedMedia({
         <FileMedia file={file} issueKey={issueKey} onSelect={onSelect} />
       ) : file.type.startsWith("video/") ? (
         <VideoPlayer key={file.url} file={file} onSize={setIntrinsic} onSelect={onSelect} />
-      ) : external || /^image\/(png|jpeg|gif|webp|avif|bmp)$/.test(file.type) ? (
+      ) : external || isShownImage(file.type) ? (
         <ImageMedia
           key={file.url}
           file={file}

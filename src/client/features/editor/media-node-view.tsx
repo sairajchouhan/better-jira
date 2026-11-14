@@ -3,7 +3,12 @@ import type { Node as EditorNode } from "prosemirror-model";
 import type { NodeView } from "prosemirror-view";
 import type { MediaProps } from "@/client/features/media/media-loader";
 import { MediaView } from "@/client/features/media/media-loader";
-import { dragWidth, mediaContainerStyle, resizedMedia } from "@/client/features/media/media-layout";
+import {
+  dragWidth,
+  mediaContainerStyle,
+  resizableMedia,
+  resizedMedia,
+} from "@/client/features/media/media-layout";
 import type { AdfNode } from "@/shared/document";
 export type MediaNodeView = NodeView & { updateContext: () => void };
 
@@ -17,17 +22,26 @@ export function mediaNodeView(
 ): MediaNodeView {
   const dom = document.createElement(initial.isInline ? "span" : "div");
   dom.contentEditable = "false";
-  // A resizable image keeps its media in an inner box, so the resize handles beside it stay outside React's root.
+  // A resizable mediaSingle keeps its media in an inner box, so the resize handles beside it stay outside React's root.
   const resizable = !!resize && initial.type.name === "mediaSingle",
-    body = resizable ? document.createElement("div") : dom;
-  if (resizable) dom.append(body, ...(["left", "right"] as const).map((side) => resizeHandle(side)));
+    body = resizable ? document.createElement("div") : dom,
+    handles = resizable ? (["left", "right"] as const).map((side) => resizeHandle(side)) : [];
+  if (resizable) dom.append(body, ...handles);
   const root = createRoot(body);
   let current = initial,
     previous = context();
   const render = () => {
+    const raw: AdfNode = current.attrs.raw,
+      // QA-3 D6: a file block has no width handles and always takes the full width, as Linear's file node.
+      file = resizable && !resizableMedia(raw, previous.attachments);
+    for (const handle of handles) handle.hidden = file;
     dom.removeAttribute("style");
-    Object.assign(dom.style, mediaContainerStyle(current.attrs.raw), resizable ? { position: "relative" } : {});
-    root.render(<MediaView node={current.attrs.raw} {...previous} embedded />);
+    Object.assign(
+      dom.style,
+      mediaContainerStyle(file ? { ...raw, attrs: { ...raw.attrs, width: undefined } } : raw),
+      resizable ? { position: "relative" } : {},
+    );
+    root.render(<MediaView node={raw} {...previous} embedded />);
   };
   /** BJ-54: Linear's width handles at the image's sides, for the pointer (out of the Tab order, so keyboard focus moves
    * from the media straight on). Jira keeps the width as a percentage. */

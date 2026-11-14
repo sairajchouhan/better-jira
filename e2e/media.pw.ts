@@ -88,6 +88,10 @@ test("Jira media: nothing fetched for the board, exact attachments and byte rang
     expect(await page.eval(`getComputedStyle(${toolbar}).opacity`)).toBe("0");
     await page.hover(`${at} .file-media-name`);
     await page.waitFor(`getComputedStyle(${toolbar}).opacity==='1'`);
+    // QA-3 D6: no width handles on a file block, hovered or not (Linear's file node has no width).
+    expect(
+      await page.eval(`[...${block}.closest('.ProseMirror > *').querySelectorAll('.media-resize-handle')].filter(h=>h.checkVisibility()).length`),
+    ).toBe(0);
     expect(
       await page.eval(`[...${toolbar}.querySelectorAll('.ui-button')].map(b=>b.getAttribute('aria-label'))`),
     ).toEqual(["Copy link", "Download"]);

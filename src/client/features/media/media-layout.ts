@@ -4,6 +4,7 @@ export function downloadURL(url: string): string {
 
 import type { CSSProperties } from "react";
 import type { AdfNode } from "@/shared/document";
+import type { Attachment } from "@/shared/attachment-media";
 export function mediaDimensions(node: AdfNode): { width: number; height: number } | undefined {
   const width = Number(node.attrs?.width),
     height = Number(node.attrs?.height);
@@ -56,6 +57,22 @@ export function dragWidth(
   const centred = !["align-start", "align-end", "wrap-left", "wrap-right"].includes(String(layout ?? "center"));
   const grow = (side === "right" ? dx : -dx) * (centred ? 2 : 1);
   return Math.max(10, Math.min(100, Math.round(((start + grow) / Math.max(1, column)) * 100)));
+}
+/** The image types rich text shows as an image; any other file is a file block. */
+export const isShownImage = (type: string) => /^image\/(png|jpeg|gif|webp|avif|bmp)$/.test(type);
+/**
+ * Whether a mediaSingle gets width handles: an image or a video does, a file block never does (Linear's `file` node has
+ * only href, name, size and mimetype; no width). The file's type comes from the issue's attachments; one not listed is
+ * an image when Jira gave it dimensions, as Jira does for every image it stores.
+ */
+export function resizableMedia(node: AdfNode, attachments: Attachment[] | undefined): boolean {
+  if (node.type !== "mediaSingle") return false;
+  const media = (Array.isArray(node.content) ? node.content : []).find((child) => child?.type === "media");
+  if (!media) return false;
+  if (media.attrs?.type === "external") return true;
+  const id = String(media.attrs?.id ?? ""),
+    file = attachments?.find((a) => a.id === id || a.mediaId === id);
+  return file ? isShownImage(file.type) || file.type.startsWith("video/") : !!mediaDimensions(media);
 }
 /** A mediaSingle at `width` percent, as Jira stores a resized image; a wide or full-width one becomes centred. */
 export function resizedMedia(node: AdfNode, width: number): AdfNode {
