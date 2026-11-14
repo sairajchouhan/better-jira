@@ -2420,6 +2420,54 @@ li[data-done="true"] > .todo-content {
 [data-menu-open] > [data-relation] .relation-pill {
   background: var(--control-tertiary-hover);
 }
+/* Linear's issue sidebar pull request row (IssueDetailsPaneSidebar `pg`, styles `vg`/`fg`): the DetailButton hugs its content (width
+   fit-content, 6px right, no column gap), the status icon 6px before the title; hovering the row paints half of controlTertiaryHover,
+   at once (transition 0s). The review mark sits 8px after the title; the 12px chevron box 4px after, shown on hover or focus. */
+.issue-pull-request-row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+}
+.issue-pull-request-row .ui-property-trigger {
+  width: fit-content;
+  column-gap: 0;
+  padding-right: 6px;
+  text-decoration: none;
+  transition-duration: 0s;
+}
+.issue-pull-request-row .ui-property-trigger > svg:first-child {
+  margin-right: 6px;
+}
+.issue-pull-request-row .ui-property-trigger:is(:hover, :active, :focus-visible),
+.issue-pull-request-row:is(:hover, :active) .ui-property-trigger,
+.issue-pull-request-row [data-menu-open] .ui-property-trigger {
+  background: color-mix(in srgb, var(--control-tertiary-hover) 50%, transparent);
+}
+.issue-pull-request-title {
+  min-width: 0;
+  overflow: hidden;
+}
+.issue-pull-request-review {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  margin-left: 8px;
+}
+.issue-pull-request-go {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  color: var(--fg-3);
+  opacity: 0;
+}
+.issue-pull-request-row:is(:hover, :active, :focus-within) .issue-pull-request-go {
+  opacity: 1;
+}
 .reaction-pill {
   display: flex;
   height: 28px;

@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 import {
+  issuePullRequestOrder,
   leadingStatus,
+  pullRequestCardStatus,
+  pullRequestSections,
+  reviewDecision,
   mergePullRequests,
   pullRequestBadgeText,
   pullRequestList,
@@ -133,4 +137,64 @@ test("GitHub's pull requests add to an issue's count and state; one both sources
     prCount: 2,
     prStatus: "open",
   });
+});
+
+// ——— The issue sidebar's "Diffs" list (Linear IssueDetailsPaneSidebar `Qh`, `xg`, `yg`, `mg`) ———
+
+const row = (n: number, status: PullRequest["status"], updated = `2026-11-${String(n).padStart(2, "0")}T10:00:00Z`): PullRequest => ({
+  url: `https://github.com/acme/app/pull/${n}`,
+  title: `Change ${n}`,
+  number: `#${n}`,
+  status,
+  updated,
+});
+const numbers = (prs: PullRequest[]) => prs.map((pr) => pr.number);
+
+test("the issue sidebar lists open pull requests (draft and in review too) first, then merged, then closed; newest first in each", () => {
+  const prs = [row(1, "declined"), row(2, "merged"), row(3, "draft"), row(4, "open"), row(5, "merged"), row(6, "inReview")];
+  expect(numbers(issuePullRequestOrder(prs))).toEqual(["#6", "#4", "#3", "#5", "#2", "#1"]);
+});
+
+test("three rows show; the rest fold under Show N more only when that hides two or more", () => {
+  const four = [1, 2, 3, 4].map((n) => row(n, "open"));
+  expect(pullRequestSections(four)).toEqual({ shown: four, more: [], closed: [], closedFold: false });
+  const five = [1, 2, 3, 4, 5].map((n) => row(n, "open"));
+  const sections = pullRequestSections(five);
+  expect([numbers(sections.shown), numbers(sections.more)]).toEqual([["#1", "#2", "#3"], ["#4", "#5"]]);
+});
+
+test("closed pull requests sit apart: one shows outright, two or more fold under their own toggle", () => {
+  const one = pullRequestSections([row(1, "open"), row(2, "declined")]);
+  expect([numbers(one.shown), numbers(one.closed), one.closedFold]).toEqual([["#1"], ["#2"], false]);
+  const two = pullRequestSections([row(1, "open"), row(2, "declined"), row(3, "declined")]);
+  expect([numbers(two.shown), numbers(two.more), numbers(two.closed), two.closedFold]).toEqual([["#1"], [], ["#2", "#3"], true]);
+});
+
+test("when both the extra rows and the closed ones can fold, they fold together under one Show N more", () => {
+  const prs = [1, 2, 3, 4, 5].map((n) => row(n, "open")).concat([row(6, "declined"), row(7, "declined")]);
+  const sections = pullRequestSections(prs);
+  expect([numbers(sections.shown), numbers(sections.more), sections.closed]).toEqual([["#1", "#2", "#3"], ["#4", "#5", "#6", "#7"], []]);
+});
+
+test("an issue whose pull requests are all closed lists them as its rows", () => {
+  const prs = [row(1, "declined"), row(2, "declined")];
+  expect(pullRequestSections(prs)).toEqual({ shown: prs, more: [], closed: [], closedFold: false });
+});
+
+test("an open pull request's row names its review: changes requested over approved; none once merged or closed", () => {
+  expect(reviewDecision({ ...row(1, "approved"), changesRequested: true })).toEqual({ label: "Changes requested", status: "blocked" });
+  expect(reviewDecision(row(1, "approved"))).toEqual({ label: "Approved", status: "approved" });
+  expect(reviewDecision(row(1, "inReview"))).toBeUndefined();
+  expect(reviewDecision({ ...row(1, "merged"), changesRequested: true })).toBeUndefined();
+});
+
+test("the pull request card's status line leaves reviews out: in review and approved are Open", () => {
+  expect((["open", "inReview", "approved", "draft", "merged", "declined"] as const).map((s) => pullRequestCardStatus(row(1, s)))).toEqual([
+    "Open",
+    "Open",
+    "Open",
+    "Draft",
+    "Merged",
+    "Closed",
+  ]);
 });

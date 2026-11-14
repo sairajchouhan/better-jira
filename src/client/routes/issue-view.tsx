@@ -67,6 +67,8 @@ import { PropertyTrigger } from "@/client/components/property-trigger";
 import { LabelChip } from "@/client/components/label-chip";
 import { Text } from "@/client/components/text";
 import { EntityIdentifier } from "@/client/components/entity-identifier";
+import { IssueDetailsSection } from "@/client/features/issue/issue-details-section";
+import { IssueDiffs } from "@/client/features/issue/issue-pull-requests";
 // Loaded with the page, as Linear's preview (PBe) is: a lazy viewer suspends, and React's Suspense throttle holds it ~300ms (BJ-233).
 import { ImageViewer } from "@/client/features/media/image-viewer";
 
@@ -466,14 +468,6 @@ function PropertyPill({
     </PropertyTrigger>
   );
 }
-function PropertySection({ name, children }: { name: string; children: ReactNode }) {
-  return (
-    <section className="flex flex-col items-start gap-1 [&+section]:mt-[33px]">
-      <Text as="h3" variant="smallPlus" color="muted" className="mb-1.5 px-2">{name}</Text>
-      {children}
-    </section>
-  );
-}
 /** A label wide enough for the side panel, shortened in a narrow one. */
 const Placeholder = ({ wide, short }: { wide: string; short: string }) => (
   <>
@@ -507,7 +501,9 @@ function Properties({ issue }: { issue: Issue }) {
   const status = statusOf(issue);
   return (
     <div data-properties className="text-[13px] font-medium">
-      <PropertySection name="Properties">
+      {/* Linear's sidebar opens with its pull requests (`q_` → "Diffs", `Cg`), above Properties. */}
+      <IssueDiffs issue={issue} />
+      <IssueDetailsSection name="Properties">
         <PropertyPill
           id="prop-status"
           overlay="status"
@@ -553,9 +549,9 @@ function Properties({ issue }: { issue: Issue }) {
             {shortDate(issue.due, undefined, true)}
           </PropertyPill>
         )}
-      </PropertySection>
+      </IssueDetailsSection>
       {/* Linear (RAJ-52): one 25px chip per label, its dot and name, then a round + button; clicking either opens the label menu beside it. */}
-      <PropertySection name="Labels">
+      <IssueDetailsSection name="Labels">
         {issue.labels.length ? (
           <div className="flex min-h-7 max-w-full flex-wrap gap-1.5 pt-0.5 pl-[1.5px]">
             {issue.labels.map((label) => (
@@ -590,23 +586,23 @@ function Properties({ issue }: { issue: Issue }) {
             <Placeholder wide="Add label" short="Labels" />
           </PropertyPill>
         )}
-      </PropertySection>
-      <PropertySection name="Project">
+      </IssueDetailsSection>
+      <IssueDetailsSection name="Project">
         <ProjectProperty issue={issue} />
         {issue.milestones?.length ? (
           <PropertyPill id="prop-milestone" overlay="milestone" icon={<Icon name="calendar" />}>
             {issue.milestones.map((m) => m.name).join(", ")}
           </PropertyPill>
         ) : null}
-      </PropertySection>
+      </IssueDetailsSection>
       {/* Linear (RAJ-52): a section per relation kind after Project, each related issue a 28px pill (its status and title) with a round remove button on hover. */}
       {/* Linear's sections in its order, then any other Jira link kind under Jira's own phrase ("Is caused by"). */}
       {relationSections(issue.relations ?? []).map(({ kind, heading, rows }) => (
-        <PropertySection key={kind} name={heading}>
+        <IssueDetailsSection key={kind} name={heading}>
           {rows.map((r) => (
             <RelationRow key={r.key} issueKey={issue.key} relation={r} />
           ))}
-        </PropertySection>
+        </IssueDetailsSection>
       ))}
     </div>
   );

@@ -21,6 +21,7 @@
   --red-base-hover: lch(53% 73 29); /* redBaseHover */
   --red-text: lch(50% 80 29); /* redText = h(redBase, {}, {l: 50, c: 80}): getTextColor keeps redBase's hue 29 */
   --red-tint: color-mix(in lch, var(--red-base) 20%, var(--panel)); /* redTint over bgBase */
+  --green-tint: color-mix(in lch, var(--green-base) 20%, var(--panel)); /* greenTint = Em.mix(base, greenBase, ze), as redTint */
   --border-solid-thin: lch(84.44% 0 282); /* bgBorderSolidThin (retina): the input border */
   --border-solid-highlight: lch(76.44% 0 282); /* highlightVariant(bgBorderSolid): ghost button border, input hover border */
   --elevated-border-thin: lch(91.9% 0 282); /* elevatedTheme().bgBorderThin: the segmented indicator's ring */
@@ -38,6 +39,7 @@
     --green-base: lch(60% 64.37 141.95);
     --red-text: lch(80% 80 29);
     --red-tint: color-mix(in lch, var(--red-base) 3%, var(--panel));
+    --green-tint: color-mix(in lch, var(--green-base) 3%, var(--panel));
     --border-solid-thin: lch(27.12% 1.48 272);
     --border-solid-highlight: lch(24.32% 6.48 272);
     --elevated-border-thin: lch(22.193% 1.93 272);

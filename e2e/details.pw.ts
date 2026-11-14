@@ -352,3 +352,83 @@ test("reloading an issue page reads its record alongside the app's load, so the 
   expect(frames.filter((f) => f.skeleton)).toEqual([]);
   expect(new Set(frames.map((f) => f.subIssues)).size).toBe(1);
 });
+
+/** TEST-2 links five pull requests (Jira counts them with the issue): two open with reviews, one draft, one open, one merged, and
+ *  two closed. window.open and the pull request reads stay in the test. */
+const SIDEBAR_PRS = [
+  { url: "https://github.com/example/app/pull/41", title: "Queue the save", number: "#41", status: "inReview", changesRequested: true, repo: "app", author: "ana-dev", branch: "fix/queue", tool: "GitHub", updated: "2026-11-12T10:00:00Z" },
+  { url: "https://github.com/example/app/pull/42", title: "Retry the send", number: "#42", status: "approved", repo: "app", tool: "GitHub", updated: "2026-11-11T10:00:00Z" },
+  { url: "https://github.com/example/app/pull/43", title: "Draft the board", number: "#43", status: "draft", repo: "app", tool: "GitHub", updated: "2026-11-10T10:00:00Z" },
+  { url: "https://github.com/example/app/pull/44", title: "Open the panel", number: "#44", status: "open", repo: "app", tool: "GitHub", updated: "2026-11-09T10:00:00Z" },
+  { url: "https://github.com/example/app/pull/45", title: "Merge the fixture", number: "#45", status: "merged", repo: "app", tool: "GitHub", updated: "2026-11-13T10:00:00Z" },
+  { url: "https://github.com/example/app/pull/46", title: "Close the old", number: "#46", status: "declined", repo: "app", tool: "GitHub", updated: "2026-11-08T10:00:00Z" },
+  { url: "https://github.com/example/app/pull/47", title: "Close the older", number: "#47", status: "declined", repo: "app", tool: "GitHub", updated: "2026-11-07T10:00:00Z" },
+];
+const sidebarPrSetup = `(()=>{window.__opened=[];window.open=(u)=>{window.__opened.push(String(u));return null};const real=fetch;window.fetch=async(input,init)=>{const path=new URL(String(input),location.href).pathname;
+ if(path==='/api/issues/TEST-2/pull-requests')return Response.json(${JSON.stringify(SIDEBAR_PRS)});
+ if(path==='/api/issues'){const issues=await (await real(input,init)).json();return Response.json(issues.map(i=>i.key==='TEST-2'?{...i,prCount:${SIDEBAR_PRS.length},prStatus:'open'}:i));}
+ return real(input,init);};})()`;
+
+test("BJ-253: the issue sidebar opens with Linear's Diffs section: its pull requests, their reviews, card and menu", async ({ open }) => {
+  const page = await open("?issue=TEST-2&view=page", { setup: sidebarPrSetup });
+  const section = `[...document.querySelectorAll('.issue-detail-properties section')].find(s=>s.querySelector('h3')?.textContent==='Diffs')`;
+  const rows = `[...${section}.querySelectorAll('[data-pull-request-row]')].map(r=>r.dataset.pullRequestRow)`;
+  await page.waitFor(`!!${section}`);
+
+  await test.step("Diffs comes first, above Properties; three rows show, open first (newest first), the rest under Show N more", async () => {
+    expect(await page.eval(`[...document.querySelectorAll('.issue-detail-properties h3')].map(h=>h.textContent).slice(0,2)`)).toEqual([
+      "Diffs",
+      "Properties",
+    ]);
+    expect(await page.eval(rows)).toEqual(["#41", "#42", "#43"]);
+    // Two more open/merged rows and two closed ones can all fold, so they fold together (Linear's `yg`).
+    expect(await page.eval(`${section}.querySelector('[data-show-more]').textContent`)).toBe("Show 4 more");
+    await page.click(".issue-detail-properties [data-show-more]");
+    await page.waitFor(`${rows}.length===7`);
+    expect(await page.eval(rows)).toEqual(["#41", "#42", "#43", "#44", "#45", "#46", "#47"]);
+    expect(await page.eval(`${section}.querySelector('[data-show-more]').textContent`)).toBe("Show less");
+  });
+
+  await test.step("an open row with a review carries its mark; the row is a 28px link that opens the pull request in a new tab", async () => {
+    const row = (n: string) => `${section}.querySelector('[data-pull-request-row="${n}"] a')`;
+    expect(
+      await page.eval(
+        `[${row("#41")}.getAttribute('aria-label'),${row("#41")}.querySelector('[data-review-status]')?.dataset.reviewStatus,${row("#42")}.querySelector('[data-review-status]')?.dataset.reviewStatus,!!${row("#44")}.querySelector('[data-review-status]'),${row("#41")}.target,${row("#41")}.getBoundingClientRect().height]`,
+      ),
+    ).toEqual(["Queue the save, Changes requested", "blocked", "approved", false, "_blank", 28]);
+    // Linear's trailing chevron shows only while the row is hovered.
+    const go = `${row("#44")}.querySelector('.issue-pull-request-go')`;
+    expect(await page.eval(`getComputedStyle(${go}).opacity`)).toBe("0");
+    await page.hover('[data-pull-request-row="#44"] a');
+    await page.waitFor(`getComputedStyle(${go}).opacity==="1"`);
+  });
+
+  await test.step("resting on a row for 150ms shows Linear's pull request card on its left", async () => {
+    const r = await page.rect('[data-pull-request-row="#41"] a');
+    await page.page.mouse.move(1, 1);
+    await page.page.mouse.move(r.x + r.width / 2, r.y + r.height / 2);
+    const card = `document.querySelector('[data-hover-card="Pull request"]')`;
+    await page.waitFor(`${card}?.textContent.includes("Queue the save")`, 450);
+    const box = await page.eval<DOMRect>(`${card}.getBoundingClientRect().toJSON()`);
+    expect(box.right).toBeLessThanOrEqual(r.x);
+    expect(await page.eval(`${card}.textContent`)).toContain("app#41");
+  });
+
+  await test.step("right-click opens Linear's pull request menu; Open in GitHub opens it", async () => {
+    const r = await page.rect('[data-pull-request-row="#42"] a');
+    await page.page.mouse.click(r.x + 10, r.y + r.height / 2, { button: "right" });
+    const menu = page.page.locator('[role="dialog"][aria-label="Pull request options"]');
+    await expect(menu).toBeVisible();
+    expect(await menu.locator("[cmdk-item]").allTextContents()).toEqual(["Open in GitHub", "Copy"]);
+    await menu.locator('[cmdk-item][data-value="Open in GitHub"]').click();
+    await expect.poll(() => page.eval<string[]>("window.__opened")).toEqual(["https://github.com/example/app/pull/42"]);
+  });
+});
+
+test("BJ-253: the side panel shows the issue's pull requests too, and an issue with none shows no Diffs section", async ({ open }) => {
+  const page = await open("?issue=TEST-2&view=side", { setup: sidebarPrSetup });
+  await page.waitFor(`!!document.querySelector('[data-pull-request-row="#41"]')`);
+  await page.key("j");
+  await page.waitFor(`!document.querySelector('[data-pull-request-row]')`);
+  expect(await page.eval(`[...document.querySelectorAll('h3')].some(h=>h.textContent==='Diffs')`)).toBe(false);
+});

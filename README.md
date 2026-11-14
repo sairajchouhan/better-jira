@@ -26,7 +26,7 @@ This verifies configuration, credentials, and board access without changing file
 
 ### Pull requests from GitHub
 
-Cards and rows show the pull requests Jira's development panel links, plus those GitHub links straight to an issue key: a key in the pull request's branch name, title, or body (`feat/ABC-12-tidy`, `Tidy the cache (ABC-12)`). This covers organisations Jira's GitHub app isn't connected to. The server only reads from GitHub. It never comments, reviews, or edits.
+Cards, rows and the issue's sidebar (its "Diffs" section, as in Linear) show the pull requests Jira's development panel links, plus those GitHub links straight to an issue key: a key in the pull request's branch name, title, or body (`feat/ABC-12-tidy`, `Tidy the cache (ABC-12)`). This covers organisations Jira's GitHub app isn't connected to. The server only reads from GitHub. It never comments, reviews, or edits.
 
 - **Token:** the GitHub CLI's own login (`gh auth token`, its active account), read at runtime and kept in memory. Set `GITHUB_TOKEN` to use another token instead. Neither is logged or saved.
 - **Sources:** `GITHUB_PR_SOURCES` lists organisations (`acme`) and repositories (`acme/app`), comma separated. When it is unset, the server reads the owners of your own recent pull requests. `GITHUB_PR_SOURCES=off` turns GitHub off.

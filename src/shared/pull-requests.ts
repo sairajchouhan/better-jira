@@ -122,3 +122,57 @@ export function withGitHubPullRequests<T extends PullRequestFields>(issue: T, gi
   const count = (jiraUrls ? jiraUrls.length : jira) + extra.length;
   return { ...issue, prCount: count, prStatus: leadingStatus([...(issue.prStatus ? [{ status: issue.prStatus }] : []), ...github]) };
 }
+
+// ——— The issue's sidebar list (Linear's "Diffs" section: IssueDetailsPaneSidebar `Cg` → `yg` → `pg`) ———
+
+/** Linear's `$h`: an issue's pull request rows put open ones (open, in review, approved, draft) first, merged next, closed last. */
+const sidebarRank = (pr: Pick<PullRequest, "status">) => (pr.status === "declined" ? 2 : pr.status === "merged" ? 1 : 0);
+/** Linear's issue sidebar order (`Qh`): by `$h`, then the newest first. Linear sorts by when the pull request was linked
+ *  (`createdAt`); neither Jira nor GitHub says that, so the last update stands in. */
+export const issuePullRequestOrder = (prs: PullRequest[]) =>
+  prs.toSorted(
+    (a, b) => sidebarRank(a) - sidebarRank(b) || (Date.parse(b.updated ?? "") || 0) - (Date.parse(a.updated ?? "") || 0),
+  );
+
+/** Linear's `bg`: the rows the sidebar shows before "Show N more". */
+export const SIDEBAR_PULL_REQUESTS = 3;
+/** Linear's `Ok.canHide`: a toggle never hides a single row. */
+const canHide = (count: number) => count >= 2;
+
+export type PullRequestSections = {
+  /** Always shown. */
+  shown: PullRequest[];
+  /** Behind "Show N more" / "Show less": the rows past the first three, with the closed ones when both can hide. */
+  more: PullRequest[];
+  /** Below the rest when they don't fold into `more`: shown outright when one, else behind "N closed" / "Hide closed". */
+  closed: PullRequest[];
+  closedFold: boolean;
+};
+/** How Linear's sidebar list (`yg` with `xg` and `Ok.split`) lays out an issue's pull requests, already in `issuePullRequestOrder`.
+ *  Closed ones set apart unless every one is closed; three rows show, the rest fold under "Show N more" when that hides two or more;
+ *  when that fold exists and the closed ones can fold too, they join it, otherwise they get their own "N closed" toggle (from two). */
+export function pullRequestSections(prs: PullRequest[]): PullRequestSections {
+  const open = prs.filter((pr) => pr.status !== "declined");
+  const [rows, closed] = open.length ? [open, prs.filter((pr) => pr.status === "declined")] : [prs, []];
+  const split = canHide(rows.length - SIDEBAR_PULL_REQUESTS);
+  const shown = split ? rows.slice(0, SIDEBAR_PULL_REQUESTS) : rows;
+  const hidden = split ? rows.slice(SIDEBAR_PULL_REQUESTS) : [];
+  const closedFold = canHide(closed.length);
+  if (hidden.length && closedFold) return { shown, more: [...hidden, ...closed], closed: [], closedFold: false };
+  return { shown, more: hidden, closed, closedFold };
+}
+
+/** Linear's review answer on an open pull request's row (`mg`): changes requested wins over approved. */
+export type ReviewDecision = { label: "Changes requested"; status: "blocked" } | { label: "Approved"; status: "approved" };
+const isOpen = (pr: Pick<PullRequest, "status">) => pr.status !== "merged" && pr.status !== "declined";
+export function reviewDecision(pr: PullRequest): ReviewDecision | undefined {
+  if (!isOpen(pr)) return undefined;
+  if (pr.changesRequested) return { label: "Changes requested", status: "blocked" };
+  if (pr.status === "approved") return { label: "Approved", status: "approved" };
+  return undefined;
+}
+
+/** Linear's pull request card status line (`statusForPopoversAndActions` with `showReviewStatus: false`): an open pull request is
+ *  "Open" whatever its reviews say; a draft "Draft"; else merged or closed. */
+export const pullRequestCardStatus = (pr: PullRequest) =>
+  ({ open: "Open", inReview: "Open", approved: "Open", draft: "Draft", merged: "Merged", declined: "Closed" })[pr.status];

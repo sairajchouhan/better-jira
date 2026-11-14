@@ -32,12 +32,19 @@ function PropertyTriggerRoot({
   );
 }
 
+/** The same pill as a link: a row that goes somewhere rather than opening a picker (Linear's DetailButton rendered `as` a link, e.g.
+ *  an issue sidebar's pull request row, `pg`). */
+function PropertyTriggerLink({ className = "", ...props }: ComponentProps<"a">) {
+  return <a data-state="value" className={`ui-property-trigger ${className}`} {...props} />;
+}
+
 const slot = (name: string) =>
   function Slot({ className = "", ...props }: ComponentProps<"span">) {
     return <span className={`ui-property-trigger-${name} ${className}`} {...props} />;
   };
 
 export const PropertyTrigger = Object.assign(PropertyTriggerRoot, {
+  Link: PropertyTriggerLink,
   /** The status/priority/avatar glyph, centred in a 16px box (14px on rows). */
   Icon: slot("icon"),
   /** The value or placeholder, truncated. */

@@ -33,6 +33,7 @@ export function HoverCard({
   placement = "top-start",
   label,
   display = "inline-flex",
+  delay = 550,
   children,
 }: {
   /** The card body, mounted only while the card is open. */
@@ -40,6 +41,9 @@ export function HoverCard({
   placement?: keyof typeof PLACEMENTS;
   label?: string;
   display?: "inline-flex" | "inline";
+  /** Linear's `transitionDelay`: how long the pointer rests before the card opens (550ms unless the trigger says otherwise; an issue
+   *  sidebar's pull request row says 150). */
+  delay?: number;
   children: ReactNode;
 }) {
   const [side, fallbacks] = PLACEMENTS[placement];
@@ -63,7 +67,7 @@ export function HoverCard({
   const hover = useHover(context, {
     enabled: !pressed,
     mouseOnly: true,
-    delay: { open: 550, close: 400 },
+    delay: { open: delay, close: 400 },
     handleClose: safePolygon(),
   });
   const focus = useFocus(context, { enabled: !pressed });

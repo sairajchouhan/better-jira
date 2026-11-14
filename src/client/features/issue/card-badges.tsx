@@ -3,8 +3,9 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { QueryObserver } from "@tanstack/query-core";
 import { Avatar } from "@/client/components/avatar";
 import { Badge } from "@/client/components/badge";
+import { Text } from "@/client/components/text";
 import { HoverCard, MoreList } from "@/client/components/hover-card";
-import { Icon, PullRequestStatusIcon } from "@/client/components/icons";
+import { Icon, PullRequestStatusIcon, ReviewStatusIcon } from "@/client/components/icons";
 import { LinkIcon } from "@/client/components/link-icon";
 import { ActionMenu, ContextMenu, type ActionEntry } from "@/client/components/action-menu";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
@@ -16,7 +17,14 @@ import { commentCount } from "@/client/features/media/media-edits";
 import { fullTime } from "./issue-dates";
 import { queryClient } from "@/client/state/server-data";
 import type { Issue, User } from "@/shared/issue-model";
-import { leadingStatus, pullRequestBadgeText, pullRequestStatus, type PullRequest } from "@/shared/pull-requests";
+import {
+  leadingStatus,
+  pullRequestBadgeText,
+  pullRequestCardStatus,
+  pullRequestStatus,
+  reviewDecision,
+  type PullRequest,
+} from "@/shared/pull-requests";
 import { externalTitle, faviconSrc, linkBadgeText } from "@/shared/smart-link";
 
 const openExternal = (url: string) => void window.open(url, "_blank", "noopener,noreferrer");
@@ -114,8 +122,9 @@ const pullRequestQuery = (issue: PullRequestIssue, enabled = true) => ({
 /** The issue's pull requests from Jira's development panel and GitHub: one read per issue every five minutes, or when its count or
  *  state changes, shared by its badge, card and menu. */
 export const fetchPullRequests = (issue: PullRequestIssue) => queryClient.fetchQuery(pullRequestQuery(issue));
-/** `read`: whether mounting reads them (a single PR's badge needs its number); otherwise this only shows what a hover or click read. */
-function usePullRequests(issue: PullRequestIssue, read = true) {
+/** `read`: whether mounting reads them (a single PR's badge needs its number, the issue's sidebar its list); otherwise this only
+ *  shows what a hover or click read. */
+export function usePullRequests(issue: PullRequestIssue, read = true) {
   const { key, prCount, prStatus } = issue;
   const [observer] = useState(
     () => new QueryObserver<PullRequest[], Error, PullRequest[], PullRequest[], PullRequestKey>(queryClient, pullRequestQuery(issue, read)),
@@ -139,6 +148,42 @@ function PullRequestRow({ pr }: { pr: PullRequest }) {
         </span>
       </span>
     </a>
+  );
+}
+
+/** Linear's pull request card (`PK` → `Hhn`): the status icon beside the title (three lines at most, it opens the pull request) over
+ *  the repository and number, the author at the end; under them the status without reviews (`pullRequestCardStatus`) and, when a
+ *  reviewer answered, the review's mark. */
+export function PullRequestCard({ pr }: { pr: PullRequest }) {
+  const review = reviewDecision(pr);
+  return (
+    <div className="flex max-w-[320px] min-w-0 flex-col gap-2 py-1" data-pull-request-card={pr.number}>
+      <a href={pr.url} target="_blank" rel="noreferrer" className="flex min-w-0 items-start gap-2 rounded-[4px]">
+        <PullRequestStatusIcon status={pr.status} size={16} />
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <Text variant="smallPlus" color="base" lines={3}>
+            {pr.title}
+          </Text>
+          {(pr.repo || pr.number) && (
+            <Text variant="mini" color="muted">
+              {pr.repo}
+              {pr.number}
+            </Text>
+          )}
+        </span>
+        {pr.author && (
+          <span className="flex shrink-0 items-center">
+            <Avatar user={{ id: pr.author, name: pr.author }} size={16} title={null} />
+          </span>
+        )}
+      </a>
+      <div className="flex items-end gap-2">
+        <Text variant="small" color="muted" wrap="nowrap" className="flex-1">
+          {pullRequestCardStatus(pr)}
+        </Text>
+        {review && <ReviewStatusIcon status={review.status} label={review.label} size="small" />}
+      </div>
+    </div>
   );
 }
 
