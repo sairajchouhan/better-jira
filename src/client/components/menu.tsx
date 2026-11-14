@@ -369,6 +369,11 @@ export function openedIn(level: { highlight: (value: string) => void; highlighte
   if (key !== level.highlighted) level.highlight(key);
 }
 
+/**
+ * Whether an opening of a submenu moves focus into it now: only one a key opened (Linear's openSubMenuForFocusedItem, `focus: !0`),
+ * and only once the popup is `placed`, as an unplaced popup is hidden and can't take focus.
+ */
+export const focusOnOpen = (opened: Pick<Opened, "how">, placed: boolean) => placed && opened.how === "focus";
 /** A plain ← or Backspace: the keys that step back out of a submenu. */
 export const backKey = (event: { key: string; altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) =>
   (event.key === "ArrowLeft" || event.key === "Backspace") &&
@@ -395,9 +400,13 @@ type Level = {
     input: () => HTMLInputElement | null;
     /** The highlight to start with, given the rows shown. */
     initial: (order: string[]) => string | null;
+    /** Moves the highlight to `key`, taking React Aria's focus only where the level may (takesFocus). */
+    highlight: (key: string | null) => void;
     /** The highlight moved from `previous` to `key`. */
     moved: (key: string | null, previous: string | null) => void;
     open: (key: string, how: Opened["how"], at?: Point) => void;
+    /** The pointer over `target` at `at`: highlights the row it is on and opens that row's submenu (Linear's row mouseenter). */
+    point: (target: Element, at: Point, touch: boolean) => void;
     close: () => void;
     /** Closes every level: the surface. */
     closeAll: () => void;
@@ -442,10 +451,48 @@ export function vanishedHighlight(highlighted: string, shown: string | null, val
   return values[0] ?? null;
 }
 
-const highlight = (state: TreeState | null, key: string | null) => {
+/** What a list last showed: its highlight, its search (null until it has shown a row), its controlled value and its rows. */
+type Seen = { key: string | null; search: string | null; value: string | undefined; order: string[] };
+const UNSEEN: Seen = { key: null, search: null, value: undefined, order: [] };
+
+/**
+ * Where the list's highlight goes this render (`next`, undefined to leave it) and what to remember of it. The menu's start
+ * (`initial`) waits for its first rows: React Aria builds a collection on a second pass, so a list mounting inside an opening
+ * submenu renders with none at first, and choosing then would open the submenu with nothing highlighted. After that: onto `value`
+ * when its owner moves it, onto the first row after a search, onto the first when the highlighted row left the list (B6e).
+ */
+export function settleHighlight(
+  last: Seen,
+  now: { key: string | null; search: string; value: string | undefined; order: string[] },
+  initial: (order: string[]) => string | null,
+): { next: string | null | undefined; seen: Seen } {
+  const { key, search, value, order } = now;
+  if (last.search === null)
+    return order.length
+      ? { next: initial(order), seen: { key, search, value, order } }
+      : { next: undefined, seen: { ...last, key } };
+  let next: string | null | undefined;
+  if (value !== undefined && value !== last.value && order.includes(value)) next = value;
+  else if (last.search !== search) next = order[0] ?? null;
+  else if (key !== null) next = vanishedHighlight(key, last.order.includes(key) ? key : null, order) ?? undefined;
+  return { next, seen: { key, search, value, order } };
+}
+
+/**
+ * Whether a level's highlight takes React Aria's focus with it (its row's data-focused and virtual focus). A submenu focus hasn't
+ * entered yet keeps its highlight to itself: taking virtual focus would take it from the parent the user is still in (Linear's
+ * submenu has no focus over its parent until requestFocus). Focus entering it then shows it (Linear's M3e).
+ */
+export const takesFocus = (inSubmenu: boolean, holdsFocus: boolean) => !inSubmenu || holdsFocus;
+
+/** The row a submenu highlights as focus enters it: the one it holds, else its first (M3e's `onMoveFocus("first")`). */
+export const enteredHighlight = (key: string | null, order: string[]) =>
+  key !== null && order.includes(key) ? key : (order[0] ?? null);
+
+const highlight = (state: TreeState | null, key: string | null, focus = true) => {
   const manager = state?.selectionManager;
   if (!manager) return;
-  manager.setFocused(true);
+  if (focus) manager.setFocused(true);
   manager.setFocusedKey(key);
 };
 const rowOf = (list: HTMLElement | null, key: string | null) =>
@@ -558,9 +605,9 @@ function MenuRoot({
   };
   // The level's actions run from its rows' handlers and its list's layout effects, so they read its props through a ref, brought up
   // to date before any layout effect of this commit runs (the list's among them).
-  const latest = useRef({ value, defaultValue, start, onValueChange, surface });
+  const latest = useRef({ value, defaultValue, start, onValueChange, surface, submenu });
   useInsertionEffect(() => {
-    latest.current = { value, defaultValue, start, onValueChange, surface };
+    latest.current = { value, defaultValue, start, onValueChange, surface, submenu };
   });
   // One value for the menu's life (Linear's i3e memoises it the same way): its actions only read refs and the store, so the React
   // Compiler keeps the first one (no useState initializer: one reading refs runs during render and makes the compiler skip the menu,
@@ -583,6 +630,12 @@ function MenuRoot({
         if (start === "none" || (start === "opener" && openedByPointer())) return null;
         return order[0] ?? null;
       },
+      highlight: (key) =>
+        highlight(
+          shared.current.state,
+          key,
+          takesFocus(!!latest.current.submenu, !!root.current?.contains(document.activeElement)),
+        ),
       moved: (key, previous) => {
         if (key !== null || previous !== null) latest.current.onValueChange?.(key ?? "");
         clearTimeout(preview.current);
@@ -602,7 +655,7 @@ function MenuRoot({
         if (opened.get()?.key !== key || how === "focus") opened.set({ key, how, at });
         const { state } = shared.current;
         openedIn(
-          { highlighted: (state?.selectionManager.focusedKey as string | null) ?? "", highlight: (k) => highlight(state, k) },
+          { highlighted: (state?.selectionManager.focusedKey as string | null) ?? "", highlight: level.actions.highlight },
           key,
         );
       },
@@ -611,6 +664,27 @@ function MenuRoot({
         storeOf(store).set(null);
       },
       closeAll: () => latest.current.surface?.close(),
+      point: (target, at, touch) => {
+        input.current = "pointer";
+        const row = target.closest<HTMLElement>('[role^="menuitem"]');
+        const { state } = shared.current;
+        if (
+          !row ||
+          row.closest(".menu") !== root.current ||
+          row.hasAttribute("data-disabled") ||
+          row.getAttribute("aria-disabled") === "true" ||
+          !row.dataset.key
+        ) {
+          under.current = null;
+          return;
+        }
+        const next = row.dataset.key;
+        const step = pointerStep(next, under.current, (state?.selectionManager.focusedKey as string | null) ?? "");
+        under.current = next;
+        if (step === "stay") return;
+        if (step === "highlight") level.actions.highlight(next);
+        if (!touch && isSubmenuRow(state, next)) level.actions.open(next, "pointer", at);
+      },
     },
   };
   const open = useSyncExternalStore(level.actions.subscribe, level.actions.opened, level.actions.opened);
@@ -641,8 +715,20 @@ function MenuRoot({
     const keep = (event: FocusEvent) => {
       if (!event.isTrusted && !node.contains(document.activeElement)) event.stopPropagation();
     };
+    // Focus entering a submenu from outside it shows its highlight, on the first row when it has none (Linear's M3e).
+    const entered = (event: FocusEvent) => {
+      const from = event.relatedTarget;
+      if (!event.isTrusted || !latest.current.submenu || (from instanceof Node && node.contains(from))) return;
+      if ((event.target as Element).closest(".menu") !== node) return;
+      const { state, order } = shared.current;
+      highlight(state, enteredHighlight((state?.selectionManager.focusedKey as string | null) ?? null, order));
+    };
     node.addEventListener("focusin", keep, true);
-    return () => node.removeEventListener("focusin", keep, true);
+    node.addEventListener("focusin", entered);
+    return () => {
+      node.removeEventListener("focusin", keep, true);
+      node.removeEventListener("focusin", entered);
+    };
   }, []);
   const keyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
@@ -760,26 +846,7 @@ function MenuRoot({
     onPointerMove?.(event);
     const target = event.target as Element;
     if (target.closest(".menu") !== root.current) return;
-    input.current = "pointer";
-    const row = target.closest<HTMLElement>('[role^="menuitem"]');
-    const { state } = shared.current;
-    if (
-      !row ||
-      row.closest(".menu") !== root.current ||
-      row.hasAttribute("data-disabled") ||
-      row.getAttribute("aria-disabled") === "true" ||
-      !row.dataset.key
-    ) {
-      under.current = null;
-      return;
-    }
-    const next = row.dataset.key;
-    const step = pointerStep(next, under.current, (state?.selectionManager.focusedKey as string | null) ?? "");
-    under.current = next;
-    if (step === "stay") return;
-    if (step === "highlight") highlight(state, next);
-    if (event.pointerType !== "touch" && isSubmenuRow(state, next))
-      level.actions.open(next, "pointer", { x: event.clientX, y: event.clientY });
+    level.actions.point(target, { x: event.clientX, y: event.clientY }, event.pointerType === "touch");
   };
   return (
     <LevelContext value={level}>
@@ -878,12 +945,7 @@ function MenuRows(props: RootProps) {
     return same ? collection : relink(collection, rows);
   }, [props.collection, scores]);
   const order = useMemo(() => rowKeys(shown).map(String), [shown]);
-  const seen = useRef<{ key: string | null; search: string | null; value: string | undefined; order: string[] }>({
-    key: null,
-    search: null,
-    value: undefined,
-    order: [],
-  });
+  const seen = useRef<Seen>(UNSEEN);
   const key = (state.selectionManager.focusedKey as string | null | undefined) ?? null;
   useLayoutEffect(() => {
     level.actions.share(
@@ -891,14 +953,10 @@ function MenuRows(props: RootProps) {
       leadsWithHeading(shown as unknown as RankCollection),
     );
     const last = seen.current;
-    let next: string | null | undefined;
-    const { value, search } = list;
-    if (last.search === null) next = level.actions.initial(order);
-    else if (value !== undefined && value !== last.value && order.includes(value)) next = value;
-    else if (last.search !== search) next = order[0] ?? null;
-    else if (key !== null) next = vanishedHighlight(key, last.order.includes(key) ? key : null, order) ?? undefined;
-    seen.current = { key, search, value, order };
-    if (next !== undefined && next !== key) highlight(state, next);
+    const settled = settleHighlight(last, { key, search: list.search, value: list.value, order }, level.actions.initial);
+    seen.current = settled.seen;
+    const { next } = settled;
+    if (next !== undefined && next !== key) level.actions.highlight(next);
     else if (key !== last.key) level.actions.moved(key, last.key);
   });
   const Root = base.CollectionRoot;
@@ -1296,11 +1354,13 @@ function OpenSubmenu({
     level.actions.close();
     parentInput()?.focus();
   };
-  // A submenu opened by a key takes focus at once; the pointer's and a preview's leave it in the parent.
+  // A submenu opened by a key takes focus (Linear's requestFocus) as soon as it is placed: until then it is `visibility: hidden`,
+  // which focus() skips without a word. The pointer's and a preview's leave focus in the parent.
+  const placed = place !== null;
   useLayoutEffect(() => {
-    if (opened.how === "focus") focusInside();
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- On each opening; the helper reads the popup.
-  }, [opened]);
+    if (focusOnOpen(opened, placed)) focusInside();
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- On each opening, once placed; the helper reads the popup.
+  }, [opened, placed]);
   // Closing with focus inside hands it back to the parent menu.
   useEffect(() => {
     const node = popup.current;
