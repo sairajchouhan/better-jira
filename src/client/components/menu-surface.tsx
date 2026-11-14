@@ -13,6 +13,7 @@ import {
   type RefObject,
 } from "react";
 import { createPortal, flushSync } from "react-dom";
+import { menuRoom } from "./menu";
 
 /** What a popup offers the menus inside it: closing it (every level at once), as a menu's Enter or a submenu's Escape does. */
 export const MenuSurfaceContext = createContext<{ close: () => void } | null>(null);
@@ -341,15 +342,18 @@ export function MenuSurface({
         natural = node.scrollHeight + node.offsetHeight - node.clientHeight, // scrollHeight leaves out the border, which max-height (border-box) includes
         h = Math.min(natural, innerHeight - 24);
       // no transform: it would re-anchor nested fixed menus
-      if (point)
+      if (point) {
+        // Linear's _3e room for a menu at a point (no row: `y`, the window less VIEWPORT_PADDING each end), and S3e's clamp to 10px
+        // inside the window (`nT`), so a menu as tall as its room sits 10px from the top.
+        const room = menuRoom(innerHeight);
         return {
           position: "fixed",
           width: fit ? undefined : w,
           left: Math.max(10, Math.min(innerWidth - w - 10, point.x + 4)),
-          // Clamped to its own max-height, so a menu taller than the window keeps 10px off both edges.
-          top: Math.max(10, Math.min(innerHeight - Math.min(natural, innerHeight - 20) - 10, point.y - 1)),
-          maxHeight: innerHeight - 20,
+          top: Math.max(10, Math.min(innerHeight - Math.min(natural, room) - 10, point.y - 1)),
+          maxHeight: room,
         };
+      }
       if (placement === "side")
         return { position: "fixed", top: 12, right: 12, bottom: 12, width: Math.min(360, innerWidth - 24) };
       if (command) {
@@ -365,7 +369,10 @@ export function MenuSurface({
       if (anchored && r?.width && innerWidth >= 600) {
         const below = innerHeight - r.bottom - 12,
           above = r.top - 12;
-        const maxHeight = Math.max(100, Math.min(h, Math.max(below, above)));
+        // From the window alone, never the menu's height: the menu cuts its list to this (useListHeight), and a cap taken from a cut
+        // menu would never let it grow back as the window grows.
+        const maxHeight = Math.max(100, Math.max(below, above)),
+          shown = Math.min(h, maxHeight);
         if (side === "left" && r.left - w - gap >= 12)
           return {
             position: "fixed",
@@ -381,7 +388,7 @@ export function MenuSurface({
           top: Math.max(
             12,
             Math.min(
-              innerHeight - maxHeight - 12,
+              innerHeight - shown - 12,
               below >= h || below >= above
                 ? (rounding === "pixel" ? Math.round(r.bottom) : r.bottom) + gap
                 : r.top - h - gap,

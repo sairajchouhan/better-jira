@@ -5,6 +5,7 @@ import {
   FloatingNode,
   offset,
   shift,
+  size,
   useFloating,
   useFloatingNodeId,
   type Middleware,
@@ -21,6 +22,7 @@ import {
   useRef,
   useState,
   type ComponentProps,
+  type CSSProperties,
   type KeyboardEvent,
   type ReactNode,
   type RefObject,
@@ -182,6 +184,134 @@ function useRowWidth(root: RefObject<HTMLDivElement | null>, measured: boolean) 
   }, [root, measured]);
 }
 
+/** Linear's v3e: a list too tall for its room is cut where the last row in view still shows at least this share of itself. */
+export const LAST_ROW_SHOWN = 0.55;
+
+/**
+ * The most a menu may be tall (Linear's `_3e` `D`, startup-root.CnUSfl4j.js): the window less Vw.VIEWPORT_PADDING above and below
+ * (`y = height - 2 * VIEWPORT_PADDING`). A submenu, opened beside its row (`positioning: "horizontal"`), may instead run from that row
+ * to VIEWPORT_PADDING off the bottom when that is over half the window (`height - row.top - VIEWPORT_PADDING > height * .5`).
+ */
+export function menuRoom(windowHeight: number, rowTop?: number): number {
+  const below = rowTop === undefined ? 0 : windowHeight - rowTop - MENU.VIEWPORT_PADDING;
+  return below > windowHeight * 0.5 ? below : windowHeight - 2 * MENU.VIEWPORT_PADDING;
+}
+
+/**
+ * How tall a menu's list may be: its own height (`own`, its natural height or its own CSS cap), the window's room less what the
+ * popup shows around the list (`popup`, the popup's height less the list's), and each box around it with a max-height of its own
+ * (`boxes`: that max-height and the box's height less the list's).
+ */
+export function listRoom(
+  own: number,
+  boxes: readonly { max: number; around: number }[],
+  popup?: { room: number; around: number },
+): number {
+  return Math.min(own, popup ? popup.room - popup.around : Infinity, ...boxes.map((box) => box.max - box.around));
+}
+
+/**
+ * Linear's `_3e` height for a list of `natural` height given `room`: all of it when it fits; otherwise the tallest cut that fits
+ * where the last row in view shows at least LAST_ROW_SHOWN of itself (`O`'s `Math.ceil(offset + rowHeight * v3e)` per row, then
+ * `b3e`: the last of those at most the room, else the first). `rows` are each row's top and height inside the list, its padding
+ * included, in order.
+ */
+export function listHeight(rows: readonly { top: number; height: number }[], natural: number, room: number): number {
+  if (natural <= room) return natural;
+  const cuts = rows.map((row) => Math.ceil(row.top + row.height * LAST_ROW_SHOWN)).sort((a, b) => a - b);
+  if (!cuts.length) return room;
+  let cut = cuts[0]!;
+  for (const at of cuts) if (at <= room) cut = at;
+  return cut;
+}
+
+// What _3e counts as rows: Linear's action, divider, text divider and group header rows, and the empty state.
+const HEIGHT_ROWS =
+  "[cmdk-item], [cmdk-group-heading], [cmdk-separator], .menu-group-header, .menu-text-divider, .menu-empty, [data-list-row]";
+// The popup a menu sits in: a modal surface, a submenu or a toolbar popover.
+const POPUP = '[role="dialog"], [data-popover]';
+
+/**
+ * One `_3e` measure of the menu `node`: caps its list's max-height so the menu stays inside its room (menuRoom, and every box
+ * around it with a max-height of its own), cut so the last row in view shows at least LAST_ROW_SHOWN. The search and anything else
+ * outside the list stay put; only the list scrolls. A menu outside any popup is only cut to its list's own cap.
+ */
+function fitHeight(node: HTMLElement) {
+  const list = [...node.querySelectorAll<HTMLElement>("[cmdk-list]")].find((l) => l.closest("[cmdk-root]") === node);
+  if (!list) return;
+  const popup = node.closest<HTMLElement>(POPUP);
+  const boxes: HTMLElement[] = [];
+  if (popup)
+    for (let box = list.parentElement; box; box = box.parentElement) {
+      boxes.push(box);
+      if (box === popup) break;
+    }
+  const scrolled = list.scrollTop;
+  // What each box shows around the list, read with the list collapsed so no box's own cap cuts it (and offsetHeight leaves out
+  // what overflows it, such as a submenu's safe triangle). Two writes, each followed by its batch of reads.
+  list.style.maxHeight = "0px";
+  const collapsed = list.offsetHeight;
+  const caps = boxes.map((box) => {
+    const max = getComputedStyle(box).maxHeight;
+    return { max: max.endsWith("px") ? parseFloat(max) : Infinity, around: box.offsetHeight - collapsed };
+  });
+  // Back to its own cap (Menu.List's maxHeight) or its natural height.
+  list.style.maxHeight = "";
+  const own = list.offsetHeight,
+    natural = list.scrollHeight;
+  const room = listRoom(
+    own,
+    caps.filter((cap) => cap.max < Infinity),
+    caps.length ? { room: menuRoom(innerHeight), around: caps.at(-1)!.around } : undefined,
+  );
+  let height = natural;
+  if (natural > room) {
+    const top = list.getBoundingClientRect().top - list.scrollTop;
+    const rows = [...list.querySelectorAll<HTMLElement>(HEIGHT_ROWS)]
+      .filter((row) => row.closest("[cmdk-root]") === node && row.getClientRects().length)
+      .map((row) => {
+        const box = row.getBoundingClientRect();
+        return { top: box.top - top, height: box.height };
+      });
+    height = listHeight(rows, natural, room);
+  }
+  if (height < own) list.style.maxHeight = `${height}px`;
+  list.scrollTop = scrolled;
+}
+
+/**
+ * Sizes a menu's height as Linear's `_3e` does (fitHeight), by writing its list's max-height (no re-render): as it mounts, as its
+ * rows change, as its popup is placed or moved (a submenu's room comes from its row), and as the window resizes. Not throttled, as
+ * Linear works it out on every render: a mutation batch is one measure, before the frame paints, so a popup never shows uncut.
+ */
+function useListHeight(root: RefObject<HTMLDivElement | null>, measured: boolean) {
+  useLayoutEffect(() => {
+    const node = root.current;
+    if (!node || !measured) return;
+    const measure = () => fitHeight(node);
+    measure();
+    const observer = new MutationObserver(measure);
+    observer.observe(node, { childList: true, subtree: true, characterData: true });
+    const popup = node.closest(POPUP);
+    if (popup) observer.observe(popup, { attributes: true, attributeFilter: ["style"] });
+    // A frame on, after the popup's own placement has taken the new window size.
+    let frame = 0;
+    const resized = () => {
+      if (!frame)
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          measure();
+        });
+    };
+    addEventListener("resize", resized, { passive: true });
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+      removeEventListener("resize", resized);
+    };
+  }, [root, measured]);
+}
+
 // cmdk's own row query: every enabled row, in order.
 const ROWS = '[cmdk-item]:not([aria-disabled="true"])';
 // Linear's J4e moves the highlight on these, and only these let a highlighted submenu row open its preview (canOpenSubmenuOnFocus).
@@ -244,7 +374,7 @@ export function vanishedHighlight(highlighted: string, shown: string | null, val
  *
  * Its width is `width`: by default measured from its rows as Linear's `k3e` does (useRowWidth); a number is Linear's `fixedWidth`
  * (a property picker's 206px); "auto" leaves it to the box around it and its rows' content, for the menus that aren't Linear's `IB`
- * (the command menu's 720px, a Select's list).
+ * (the command menu's 720px, a Select's list). Every `IB` menu (not "auto") is as tall as Linear's `_3e` allows (useListHeight).
  */
 function MenuRoot({
   className = "",
@@ -263,6 +393,7 @@ function MenuRoot({
 }: ComponentProps<typeof Command> & { width?: number | "auto" }) {
   const root = useRef<HTMLDivElement>(null);
   useRowWidth(root, width === undefined);
+  useListHeight(root, width !== "auto");
   const surface = use(MenuSurfaceContext);
   const [own, setOwn] = useState(defaultValue ?? "");
   const highlighted = value ?? own;
@@ -477,13 +608,17 @@ function MenuInput({
   );
 }
 
-/** Linear's N6e: the scrolling rows, 6px above and below. Keyboard scrolling keeps ITEM_SCROLL_MARGIN of context past the highlight. */
+/**
+ * Linear's N6e: the scrolling rows, 6px above and below. Keyboard scrolling keeps ITEM_SCROLL_MARGIN of context past the highlight.
+ * `maxHeight` is Linear's `maxHeight` prop, a cap of the menu's own (`--list-max`, index.css); the menu cuts it further to its room
+ * (useListHeight owns the list's max-height).
+ */
 function MenuList({ maxHeight, ...props }: ComponentProps<typeof Command.List> & { maxHeight?: string }) {
   return (
     <Command.List
       {...props}
       className="menu-list"
-      style={{ maxHeight, scrollPaddingBlock: MENU.ITEM_SCROLL_MARGIN }}
+      style={{ "--list-max": maxHeight, scrollPaddingBlock: MENU.ITEM_SCROLL_MARGIN } as CSSProperties}
     />
   );
 }
@@ -802,6 +937,14 @@ function MenuSubmenu({
       // Linear's x3e: a submenu keeps to a side, only swapping right and left, and is clamped 10px inside the window down and 12px
       // across (over its parent when neither side fits); it never drops under its row.
       flip({ padding: 12, crossAxis: false }),
+      // Its room (_3e for "horizontal"): from its row to the bottom when that is over half the window, else the window less 16px
+      // each end; its menu cuts its list to fit (useListHeight), and shift then moves it up into the window.
+      size({
+        apply: ({ elements }) => {
+          const room = menuRoom(innerHeight, elements.reference.getBoundingClientRect().top);
+          elements.floating.style.maxHeight = `${room}px`;
+        },
+      }),
       shift({ padding: { top: 10, bottom: 10, left: 12, right: 12 }, crossAxis: true }),
       keep,
     ],

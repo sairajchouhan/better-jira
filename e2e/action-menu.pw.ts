@@ -109,6 +109,96 @@ test("k3e: Issue options › Labels is as wide as the labels on screen, 400px at
   expect(await width(LABELS)).toBeCloseTo(400, 0);
 });
 
+/** The list of the menu in `scope` (its own, not a submenu's) and the boxes _3e sizes: the popup, its search and its list. */
+const heightOf = (page: App, scope: string) =>
+  page.eval<{ popup: DOMRect; input: DOMRect; list: DOMRect; scrolls: boolean; popupScrolls: boolean; lastShown: number }>(
+    `(()=>{const d=document.querySelector('${scope}'),root=d.querySelector('[cmdk-root]'),l=[...root.querySelectorAll('[cmdk-list]')].find(n=>n.closest('[cmdk-root]')===root),
+      lb=l.getBoundingClientRect(),rows=[...l.querySelectorAll('[cmdk-item]')].map(n=>n.getBoundingClientRect()).filter(r=>r.bottom>lb.top&&r.top<lb.bottom),last=rows.at(-1);
+      return {popup:d.getBoundingClientRect().toJSON(),input:root.querySelector('.menu-input').getBoundingClientRect().toJSON(),list:lb.toJSON(),
+        scrolls:l.scrollHeight>l.clientHeight,popupScrolls:d.scrollHeight>d.clientHeight+1,lastShown:last?(Math.min(last.bottom,lb.bottom)-last.top)/last.height:1}})()`,
+  );
+
+test("_3e: Issue options › Labels on a 1044-label board stays 16px inside the window, its search fixed and its list scrolling", async ({
+  open,
+}) => {
+  // Made-up names in the shape of a large Jira site's labels, one very long one last (k3e must still see it once scrolled to).
+  const long = `zz-${"very-long-made-up-label-".repeat(8)}end`;
+  const labels = [...Array.from({ length: 1043 }, (_, i) => `label-${String(i).padStart(4, "0")}`), long];
+  await fixture.reset({ catalog: { priorities: [], labels, users: [] } });
+  const page = await open("", { setup: writable, width: 1440, height: 969 });
+  const LABELS = dialog("Labels");
+  await rightClick(page);
+  await page.hover(`${MENU} [cmdk-item][data-value="Labels"]`);
+  await page.waitFor(exists(`${LABELS} [data-label="${long}"]`));
+  await sleep(200);
+  const opened = await heightOf(page, LABELS);
+  // Linear's _3e: the window less Vw.VIEWPORT_PADDING (16) each end at most, and S3e keeps it 10px inside the window.
+  expect(opened.popup.height).toBeLessThanOrEqual(969 - 32 + 1);
+  expect(opened.popup.top).toBeGreaterThanOrEqual(10 - 0.5);
+  expect(opened.popup.bottom).toBeLessThanOrEqual(969 - 10 + 0.5);
+  // Only the list scrolls, cut where the last row in view shows at least 55% of itself (v3e).
+  expect(opened.scrolls).toBe(true);
+  expect(opened.popupScrolls).toBe(false);
+  expect(opened.lastShown).toBeGreaterThanOrEqual(0.55);
+  expect(opened.input.top).toBeGreaterThanOrEqual(opened.popup.top);
+  // Scrolled to its end, the search stays where it was, the long label is reachable, and k3e grows the menu to fit it (400px).
+  const width = await page.eval<number>(`document.querySelector('${LABELS}').getBoundingClientRect().width`);
+  expect(width).toBeLessThan(260);
+  await page.eval(
+    `(()=>{const root=document.querySelector('${LABELS} [cmdk-root]');[...root.querySelectorAll('[cmdk-list]')].find(n=>n.closest('[cmdk-root]')===root).scrollTop=1e9})()`,
+  );
+  await sleep(200);
+  const scrolled = await heightOf(page, LABELS);
+  expect(scrolled.input.top).toBeCloseTo(opened.input.top, 0);
+  expect(await page.eval(`(()=>{const r=document.querySelector('${LABELS} [data-label="${long}"]').getBoundingClientRect(),l=document.querySelector('${LABELS} [cmdk-list]').getBoundingClientRect();return r.top>=l.top&&r.bottom<=l.bottom})()`)).toBe(true);
+  expect(await page.eval<number>(`document.querySelector('${LABELS}').getBoundingClientRect().width`)).toBeCloseTo(400, 0);
+  await page.key("Escape");
+});
+
+test("_3e: a submenu's keyboard highlight scrolls into view with ITEM_SCROLL_MARGIN (24px) of rows past it", async ({ open }) => {
+  const labels = Array.from({ length: 200 }, (_, i) => `label-${String(i).padStart(3, "0")}`);
+  await fixture.reset({ catalog: { priorities: [], labels, users: [] } });
+  const page = await open("", { setup: writable, width: 1440, height: 600 });
+  const LABELS = dialog("Labels");
+  await rightClick(page);
+  await page.hover(`${MENU} [cmdk-item][data-value="Labels"]`);
+  await page.waitFor(exists(`${LABELS} [data-label="label-199"]`));
+  await page.page.focus(`${LABELS} input:not(.menu-checkbox)`);
+  const rows = Math.ceil((await heightOf(page, LABELS)).list.height / 32) + 3;
+  for (let i = 0; i < rows; i++) await page.key("ArrowDown");
+  await sleep(100);
+  const gap = await page.eval<number>(
+    `(()=>{const l=document.querySelector('${LABELS} [cmdk-list]').getBoundingClientRect(),r=document.querySelector('${LABELS} [cmdk-item][data-selected=true]').getBoundingClientRect();return l.bottom-r.bottom})()`,
+  );
+  expect(gap).toBeGreaterThanOrEqual(24 - 1);
+  expect(gap).toBeLessThanOrEqual(24 + 32);
+  await page.key("Escape");
+});
+
+test("_3e: a picker taller than its room keeps its search and scrolls its list, and grows back with the window", async ({ open }) => {
+  const labels = Array.from({ length: 300 }, (_, i) => `label-${String(i).padStart(3, "0")}`);
+  await fixture.reset({ catalog: { priorities: [], labels, users: [] } });
+  const page = await open("?issue=TEST-2&view=page", { setup: writable, width: 1440, height: 300 });
+  const PICKER = dialog("Change labels");
+  await page.waitFor(exists("#prop-labels"));
+  await page.clickAt(5, 200);
+  await page.key("l");
+  await page.waitFor(exists(`${PICKER} .menu`));
+  await sleep(100);
+  const small = await heightOf(page, PICKER);
+  expect(small.scrolls).toBe(true);
+  expect(small.popupScrolls).toBe(false);
+  expect(small.popup.bottom).toBeLessThanOrEqual(300);
+  expect(small.lastShown).toBeGreaterThanOrEqual(0.55);
+  // A taller window gives the list its room back (the popup's cap comes from the window, not from the cut menu).
+  await page.page.setViewportSize({ width: 1440, height: 900 });
+  await sleep(200);
+  const tall = await heightOf(page, PICKER);
+  expect(tall.list.height).toBeGreaterThan(small.list.height + 100);
+  expect(tall.popupScrolls).toBe(false);
+  await page.key("Escape");
+});
+
 test("CORE-7: the inbox filter's values are checkbox rows that keep the menu open", async ({ open }) => {
   const page = await open();
   await page.click("nav a:has([data-inbox-badge])");

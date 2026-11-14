@@ -450,8 +450,10 @@ body.loaded #loading {
 .menu-input input::placeholder {
   color: var(--menu-fg-3);
 }
-/* N6e: 6px above and below the rows. */
+/* N6e: 6px above and below the rows. --list-max is Menu.List's own cap (Linear's maxHeight); useListHeight (menu.tsx) writes the
+   max-height that keeps the menu in its room (_3e), so only the list scrolls and the search stays put. */
 .menu-list {
+  max-height: var(--list-max, none);
   overflow-y: auto;
   padding: 6px 0;
 }
