@@ -334,14 +334,16 @@ export function MenuSurface({
     anchor ?? fallback,
     (r, node) => {
       const w = Math.min(fit ? node.getBoundingClientRect().width : width, innerWidth - 24),
-        h = Math.min(node.scrollHeight + node.offsetHeight - node.clientHeight, innerHeight - 24); // scrollHeight leaves out the border, which max-height (border-box) includes
+        natural = node.scrollHeight + node.offsetHeight - node.clientHeight, // scrollHeight leaves out the border, which max-height (border-box) includes
+        h = Math.min(natural, innerHeight - 24);
       // no transform: it would re-anchor nested fixed menus
       if (point)
         return {
           position: "fixed",
           width: fit ? undefined : w,
           left: Math.max(10, Math.min(innerWidth - w - 10, point.x + 4)),
-          top: Math.max(10, Math.min(innerHeight - h - 10, point.y - 1)),
+          // Clamped to its own max-height, so a menu taller than the window keeps 10px off both edges.
+          top: Math.max(10, Math.min(innerHeight - Math.min(natural, innerHeight - 20) - 10, point.y - 1)),
           maxHeight: innerHeight - 20,
         };
       if (placement === "side")
