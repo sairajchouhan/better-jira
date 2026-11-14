@@ -234,14 +234,15 @@ function usePopupFocus(
   return { keys, opener };
 }
 
+// A field you type into: not a checkbox, a colour well or any other input that is really a button (the view icon picker's custom
+// colour sits above its search).
+export const TEXT_INPUT = `input${["file", "checkbox", "radio", "color", "range", "button", "submit", "reset", "image", "hidden"]
+  .map((type) => `:not([type="${type}"])`)
+  .join("")}`;
 // Keep focus a child already took (autoFocus); else prefer a text field over the first button in DOM order. Dialog uses it too.
-export const MENU_FOCUS = [
-  "[data-autofocus]",
-  'input:not([type="file"]):not([type="checkbox"]),textarea,[contenteditable="true"]',
-  'button,[tabindex="0"]',
-];
+export const MENU_FOCUS = ["[data-autofocus]", `${TEXT_INPUT},textarea,[contenteditable="true"]`, 'button,[tabindex="0"]'];
 // A search when there is one; else the popup itself, so no control shows a focus ring until Tab (Linear's focus-trap start).
-const POPOVER_FOCUS = ['input:not([type="checkbox"])', "[data-popover]"];
+const POPOVER_FOCUS = [TEXT_INPUT, "[data-popover]"];
 
 /**
  * A toolbar menu (Linear's menuPosition) in a fixed popup under its trigger: "bottom-left" 4px under it, flush and rounded;

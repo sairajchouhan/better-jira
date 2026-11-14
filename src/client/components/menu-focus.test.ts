@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { enteredHighlight, focusOnOpen, settleHighlight, takesFocus } from "./menu";
+import { MENU_FOCUS, TEXT_INPUT } from "./menu-surface";
 
 const source = await Bun.file(new URL("./menu.tsx", import.meta.url)).text();
 const UNSEEN = { key: null, search: null, value: undefined, order: [] as string[] };
@@ -49,4 +50,11 @@ test("focus entering a submenu shows its highlight, on the first row when it hol
 test("a row whose value changes (the labels picker's create row as you type) is a new row, as React Aria can't change an id", () => {
   expect(source).toMatch(/<AriaMenuItem\s+(\/\/[^\n]*\s+)*key=\{value\}\s+id=\{value\}/);
   expect(source).toMatch(/<SubmenuTrigger key=\{value\}/);
+});
+
+test("a popup's first focus goes to a field you type in, never a colour well, radio or other button-like input", () => {
+  for (const type of ["color", "checkbox", "radio", "range", "file", "button", "submit", "hidden"])
+    expect(TEXT_INPUT).toContain(`:not([type="${type}"])`);
+  expect(TEXT_INPUT).not.toContain('[type="text"]');
+  expect(MENU_FOCUS[1]!.startsWith(TEXT_INPUT)).toBe(true);
 });
