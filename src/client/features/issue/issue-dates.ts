@@ -51,19 +51,22 @@ export function activityTime(iso: string, now = Date.now()): string {
   return `${value}${unit} ${delta < 0 ? "from now" : "ago"}`;
 }
 
+// Formatters are built once: `toLocaleString` with options builds a new one per call, a fifth of a millisecond each, and
+// every board card's dates call these as it mounts.
+const WEEKDAY = new Intl.DateTimeFormat("en-US", { weekday: "short" });
+const FULL = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+const ABSOLUTE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+const ABSOLUTE_YEAR = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
+
 // Linear's exact-time label: "Sat Nov 7, 2026, 07:49:03" (24-hour, with seconds).
 export const fullTime = (iso: string) => {
   const d = new Date(iso);
-  return `${d.toLocaleDateString("en-US", { weekday: "short" })} ${d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })}`;
+  return `${WEEKDAY.format(d)} ${FULL.format(d)}`;
 };
 
 /** Linear's `formatAbsoluteDate` (startup-root): "MMM d", with ", yyyy" when the date is not in this year. A date-only value
  *  ("2026-11-07") is that local day. */
 export function absoluteDate(value: string | Date, now = new Date()): string {
   const date = typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00`) : new Date(value);
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
-  });
+  return (date.getFullYear() === now.getFullYear() ? ABSOLUTE : ABSOLUTE_YEAR).format(date);
 }

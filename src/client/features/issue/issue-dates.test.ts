@@ -1,5 +1,5 @@
-import { expect, test } from "bun:test";
-import { activityTime, fullTime } from "./issue-dates";
+import { expect, spyOn, test } from "bun:test";
+import { absoluteDate, activityTime, fullTime } from "./issue-dates";
 
 const now = Date.parse("2026-11-12T12:00:00Z");
 const at = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
@@ -22,4 +22,20 @@ test("old Activity dates remain relative and support future timestamps", () => {
 
 test("absolute timestamps share Linear’s weekday and 24-hour seconds format", () => {
   expect(fullTime("2026-11-07T07:49:03")).toBe("Sat Nov 7, 2026 at 07:49:03");
+});
+
+test("absolute dates are Linear's MMM d, with the year outside this one", () => {
+  expect(absoluteDate("2026-11-07", new Date("2026-12-01T10:00"))).toBe("Nov 7");
+  expect(absoluteDate("2025-11-07", new Date("2026-12-01T10:00"))).toBe("Nov 7, 2025");
+});
+
+test("date labels reuse built formatters: a board card's dates never build one per call as it mounts", () => {
+  const fail = () => { throw new Error("built a formatter per call"); };
+  const spies = [spyOn(Date.prototype, "toLocaleString").mockImplementation(fail), spyOn(Date.prototype, "toLocaleDateString").mockImplementation(fail)];
+  try {
+    expect(fullTime("2026-11-07T07:49:03")).toBe("Sat Nov 7, 2026 at 07:49:03");
+    expect(absoluteDate("2026-11-07", new Date("2026-12-01T10:00"))).toBe("Nov 7");
+  } finally {
+    for (const spy of spies) spy.mockRestore();
+  }
 });
