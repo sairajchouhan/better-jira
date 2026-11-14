@@ -1,11 +1,8 @@
 import { type Board } from "@/shared/issue-model";
-import { FloatingTree } from "@floating-ui/react";
-import { memo, useState, type Dispatch, type ReactNode, type RefObject, type SetStateAction } from "react";
+import { memo, useState, type ReactNode } from "react";
 import { FilterIcon } from "./filter-icons";
 import { Icon, type IconName } from "@/client/components/icons";
 import { Menu } from "@/client/components/menu";
-import { usePristine } from "@/client/components/menu-pristine";
-import { menuFilter } from "@/client/lib/fuzzy-score";
 import { ui } from "@/client/features/navigation/app-navigation";
 import { datePresets, FieldValues, Path, PresetRow, PropertyFilter, useFieldFilter } from "./property-filter";
 
@@ -22,7 +19,6 @@ type Entry = {
   divider?: boolean;
   path?: string[];
 };
-type Container = RefObject<HTMLDivElement | null>;
 const UNAVAILABLE = "This field belongs to Linear and is not available on mirrored Jira issues.";
 // Linear's order and groups (RAJ, 2026-11-11), less its AI, agent, suggested-label and template entries; Jira-only fields close the last group.
 const CATEGORIES: Entry[] = [
@@ -105,31 +101,19 @@ const closeMenu = () => ui.send({ type: "toolbar.close" });
  */
 export default function FilterMenu({
   board,
-  container,
   footer,
   side,
   openedBy,
   onAdvanced,
 }: {
   board: Board;
-  container: Container;
   footer?: ReactNode;
   side: "left" | "right";
   openedBy: "pointer" | "keyboard";
   onAdvanced: () => void;
 }) {
   return (
-    <FloatingTree>
-      <FilterLevel
-        board={board}
-        container={container}
-        entries={CATEGORIES}
-        footer={footer}
-        side={side}
-        openedBy={openedBy}
-        onAdvanced={onAdvanced}
-      />
-    </FloatingTree>
+    <FilterLevel board={board} entries={CATEGORIES} footer={footer} side={side} openedBy={openedBy} onAdvanced={onAdvanced} />
   );
 }
 
@@ -148,7 +132,6 @@ function EntryLabel({ entry }: { entry: Entry }) {
  */
 function FilterLevel({
   board,
-  container,
   entries,
   name,
   footer,
@@ -157,7 +140,6 @@ function FilterLevel({
   onAdvanced,
 }: {
   board: Board;
-  container: Container;
   entries: Entry[];
   name?: string;
   footer?: ReactNode;
@@ -165,43 +147,32 @@ function FilterLevel({
   openedBy?: "pointer" | "keyboard";
   onAdvanced: () => void;
 }) {
-  const [open, setOpen] = useState<string | null>(null);
   const [info, setInfo] = useState("");
   const [query, setQuery] = useState("");
-  const start = usePristine(openedBy === "pointer");
   const q = query.trim();
   const hoist = !name && q.length >= HOIST_FROM;
   const shown = q && !name ? [...entries, ...NESTED] : entries;
   return (
     <Menu
-      filter={menuFilter}
+      search={query}
+      onSearchChange={setQuery}
+      start={openedBy === "pointer" ? "none" : "first"}
       // A submenu's room is its row's (Menu.Submenu); the root's toolbar popover has no room of its own, so it keeps this cap.
       className={name ? "filter-menu filter-sub" : "filter-menu max-h-[calc(100vh-140px)]"}
-      {...start.props}
     >
       <Menu.Input
         autoFocus={!name}
         aria-label={name ? `Filter ${name}` : "Add Filter…"}
         placeholder={name ? "Filter…" : "Add Filter…"}
         hotkey={name ? undefined : "F"}
-        value={query}
-        onValueChange={(value) => {
-          setQuery(value);
-          setOpen(null);
-          start.wake();
-        }}
       />
-      {/* cmdk reorders rows in place while ranking; a fresh list when the search clears restores Linear's order. */}
-      <Menu.List key={q ? "search" : "all"}>
+      <Menu.List>
         <Menu.Empty>No matching options</Menu.Empty>
         {shown.map((entry) => (
           <FilterEntry
             key={(entry.path?.join() ?? "") + entry.name}
             entry={entry}
-            open={open === entry.name}
-            setOpen={setOpen}
             board={board}
-            container={container}
             side={side}
             onAdvanced={onAdvanced}
             onInfo={setInfo}
@@ -230,24 +201,18 @@ function FilterLevel({
 }
 
 /**
- * One category row. Memoised and told only whether it is the open one, so moving the highlight or the open submenu re-renders the
- * two rows that changed, not all of them (each Menu.Submenu runs floating-ui when it renders).
+ * One category row. Memoised: its level re-renders on each keystroke in its search and on each info line, which re-renders a row
+ * only when its entry changes. Which submenu is open lives in React Aria's menu (Menu.Submenu), so no row is told it.
  */
 export const FilterEntry = memo(function FilterEntry({
   entry,
-  open,
-  setOpen,
   board,
-  container,
   side,
   onAdvanced,
   onInfo,
 }: {
   entry: Entry;
-  open: boolean;
-  setOpen: Dispatch<SetStateAction<string | null>>;
   board: Board;
-  container: Container;
   side: "left" | "right";
   onAdvanced: () => void;
   onInfo: (reason: string) => void;
@@ -261,7 +226,6 @@ export const FilterEntry = memo(function FilterEntry({
           icon={<EntryIcon entry={entry} />}
           aria-disabled={entry.reason ? true : undefined}
           onSelect={() => {
-            setOpen(null);
             if (entry.reason) onInfo(entry.reason);
             else onAdvanced();
           }}
@@ -275,29 +239,17 @@ export const FilterEntry = memo(function FilterEntry({
           icon={<EntryIcon entry={entry} />}
           side={side}
           popupLabel={`${entry.name} filter`}
-          container={container}
-          open={open}
-          onOpenChange={(next) =>
-            setOpen((current) => (next ? entry.name : current === entry.name ? null : current))
-          }
         >
           {entry.group ? (
             <FilterLevel
               board={board}
-              container={container}
               entries={entry.group === "dates" ? DATE_ENTRIES : PROJECT}
               name={entry.name}
               side={side}
               onAdvanced={onAdvanced}
             />
           ) : (
-            <PropertyFilter
-              field={entry.field!}
-              name={entry.name}
-              board={board}
-              autoFocus={false}
-              onBack={() => setOpen(null)}
-            />
+            <PropertyFilter field={entry.field!} name={entry.name} board={board} autoFocus={false} />
           )}
         </Menu.Submenu>
       )}

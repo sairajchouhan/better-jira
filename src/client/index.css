@@ -453,9 +453,13 @@ body.loaded #loading {
 /* N6e: 6px above and below the rows. --list-max is Menu.List's own cap (Linear's maxHeight); useListHeight (menu.tsx) writes the
    max-height that keeps the menu in its room (_3e), so only the list scrolls and the search stays put. */
 .menu-list {
-  max-height: var(--list-max, none);
+  /* Capped before useListHeight measures, so the Virtualizer's first pass lays out a window's rows, not the whole list. */
+  max-height: min(var(--list-max, 100vh), calc(100vh - 32px));
   overflow-y: auto;
   padding: 6px 0;
+  /* React Aria's useSafelyMouseToSubmenu turns the parent menu's pointer events off while the pointer heads for a submenu; Linear's
+     safe triangle (SafeTriangle, menu.tsx) already covers the rows on the way, and the rows must keep their hover. */
+  pointer-events: auto !important;
 }
 /* k3e: a measured menu's list adds nothing to its width (Linear's list is `width: var(--row-width)` around absolutely placed
    rows); useRowWidth (menu.tsx) gives the menu its width from the rows on screen instead, so the widest row far down never sets it. */
@@ -463,8 +467,7 @@ body.loaded #loading {
   contain: inline-size;
 }
 /* eT.getListPadding: the top padding only applies when the first row is an action, not a header or divider. */
-.menu-list:has(> [cmdk-list-sizer] > :first-child > [cmdk-group-heading]),
-.menu-list:has(> [cmdk-list-sizer] > :first-child:is(.menu-group-header, .menu-text-divider, .menu-divider)) {
+.menu-list[data-lead="heading"] {
   padding-top: 0;
 }
 /* v6e/S6e: a full-width 32px row owns 14px/18px padding; its highlight is inset 6px with radius 8. labelBase, labelTitle when focused. */
@@ -488,12 +491,12 @@ body.loaded #loading {
   z-index: -1;
   border-radius: 8px;
 }
-/* The highlighted row is cmdk's selection, except that an action menu opened by pointer highlights none until navigation (Linear's focusedIndex -1). */
-.menu-item[data-selected="true"]:is(:hover, :not([data-pristine] *))::before,
+/* The highlighted row is React Aria's virtual focus (an action menu opened by pointer starts with none: Linear's focusedIndex -1). */
+.menu-item[data-focused]::before,
 .menu-item[aria-expanded="true"]::before {
   background: var(--menu-sel);
 }
-.menu-item[data-selected="true"]:is(:hover, :not([data-pristine] *)) {
+.menu-item[data-focused] {
   color: var(--fg);
 }
 .menu-item[aria-disabled="true"],
@@ -563,7 +566,7 @@ body.loaded #loading {
 .menu-item[aria-expanded="true"] .menu-arrow {
   color: var(--menu-fg-3);
 }
-.menu-item[data-selected="true"]:is(:hover, :not([data-pristine] *)) .menu-arrow {
+.menu-item[data-focused] .menu-arrow {
   color: var(--fg);
 }
 /* A description row: label and a muted mini line, 8px from the top; 48px for one line. */
@@ -599,7 +602,7 @@ body.loaded #loading {
   border-radius: 3px;
   opacity: 0;
 }
-.menu-item[data-selected="true"]:is(:hover, :not([data-pristine] *)) > .menu-checkbox,
+.menu-item[data-focused] > .menu-checkbox,
 .menu-item[aria-checked="true"] > .menu-checkbox {
   opacity: 1;
 }
@@ -617,7 +620,6 @@ body.loaded #loading {
   transform: rotate(-45deg);
 }
 /* aT: 30px, 8px/14px padding, miniPlus (12px/500), labelMuted. */
-.menu-group [cmdk-group-heading],
 .menu-group-header {
   display: flex;
   height: 30px;
@@ -2571,7 +2573,7 @@ li[data-done="true"] > .todo-content {
   color: var(--fg);
 }
 /* Linear's "Mark as" command menu (RAJ-52): 30px 12px/500 headings, 46px rows whose 42px highlight is inset 2px, and a 35px hint footer. */
-.mark-list [cmdk-group-heading] {
+.mark-list .menu-group-header {
   display: flex;
   height: 30px;
   align-items: center;
@@ -2651,7 +2653,6 @@ li[data-done="true"] > .todo-content {
   max-width: none;
 }
 /* Agn and Ngn: the command menu's group headers sit 12px in, its text dividers 20px. */
-.command-menu .menu-group [cmdk-group-heading],
 .command-menu .menu-group-header {
   padding-inline: 12px;
 }
@@ -2681,7 +2682,7 @@ li[data-done="true"] > .todo-content {
   font-size: 12px;
   color: var(--menu-fg-3);
 }
-/* Search's filter and ordering controls, under the results and outside cmdk. */
+/* Search's filter and ordering controls, under the results and outside the menu. */
 .palette-footer {
   flex-shrink: 0;
   border-top: 0.5px solid var(--menu-divider);

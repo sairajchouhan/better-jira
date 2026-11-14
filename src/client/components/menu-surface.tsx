@@ -1,4 +1,3 @@
-import { autoUpdate } from "@floating-ui/react";
 import {
   createContext,
   use,
@@ -8,11 +7,11 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent,
-  type MouseEvent,
   type ReactNode,
   type RefObject,
 } from "react";
 import { createPortal, flushSync } from "react-dom";
+import { Popover as AriaPopover } from "react-aria-components";
 import { anchoredPlacement, menuRoom } from "./menu-geometry";
 
 /** What a popup offers the menus inside it: closing it (every level at once), as a menu's Enter or a submenu's Escape does. */
@@ -77,11 +76,41 @@ export const SIDE_PANEL_SURFACE =
   "view-popup side-panel flex flex-col overflow-clip rounded-xl border border-solid border-[var(--border-faint)] bg-[var(--panel)] text-fg-2 shadow-[var(--menu-shadow)] [--sel:var(--menu-sel)]";
 
 /**
+ * Keeps a fixed popup placed: runs `compute` now and again as the window resizes, as anything outside the popup scrolls (the
+ * anchor's scroll parents among them) and as the popup itself resizes, and hands each result to `apply`. The first result is applied
+ * as it comes (the caller is a layout effect, which React commits before paint); later ones are flushed at once, as a ResizeObserver
+ * or a scroll runs before the browser paints and a plain update would land a frame late (the Help menu jumping as it opened). The
+ * anchor's own resizes and layout shifts are deliberately not watched, so a menu stays put while the issue it edits changes.
+ * Returns the stop.
+ */
+export function watchPlacement<T>(floating: HTMLElement, compute: () => T, apply: (value: T) => void) {
+  let mounted = false;
+  const run = () => {
+    const next = compute();
+    if (mounted) flushSync(() => apply(next));
+    else apply(next);
+  };
+  run();
+  mounted = true;
+  const resized = new ResizeObserver(run);
+  resized.observe(floating);
+  const scrolled = (event: Event) => {
+    if (event.target instanceof Node && floating.contains(event.target)) return;
+    run();
+  };
+  addEventListener("scroll", scrolled, { capture: true, passive: true });
+  addEventListener("resize", run);
+  return () => {
+    resized.disconnect();
+    removeEventListener("scroll", scrolled, { capture: true });
+    removeEventListener("resize", run);
+  };
+}
+
+/**
  * The one placement engine every popup uses. `place` turns the anchor's box (null without one) and the popup node into the popup's
- * fixed style; floating-ui's autoUpdate runs it again on resize, on scrolls of the anchor's or popup's scroll parents, and when the
- * popup resizes. It deliberately ignores the anchor's own resizes and layout shifts, so a menu stays put while the issue it edits
- * changes. A popup at a point or the caret computes that box inside `place`. A new anchor or `key` re-places; `false` leaves the node
- * alone. `place` is read fresh each time.
+ * fixed style, again whenever watchPlacement says it may have moved. A popup at a point or the caret computes that box inside
+ * `place`. A new anchor or `key` re-places; `false` leaves the node alone. `place` is read fresh each time.
  */
 export function usePlacement<T extends HTMLElement>(
   ref: RefObject<T | null>,
@@ -90,28 +119,12 @@ export function usePlacement<T extends HTMLElement>(
   key: string | false,
 ) {
   const [style, setStyle] = useState<CSSProperties>();
-  const update = useEffectEvent((sync: boolean) => {
-    const node = ref.current;
-    if (!node) return;
-    const next = place(anchor?.getBoundingClientRect() ?? null, node);
-    // autoUpdate's later calls come from a ResizeObserver or a scroll, which run before the browser paints; a plain setState would
-    // commit after that paint, so one frame shows the popup where its old size put it (the Help menu jumping as it opened).
-    if (sync) flushSync(() => setStyle(next));
-    else setStyle(next);
-  });
+  const compute = useEffectEvent((node: T) => place(anchor?.getBoundingClientRect() ?? null, node));
   useLayoutEffect(() => {
     const node = ref.current;
     if (key === false || !node) return;
-    // A virtual reference, so the anchor's scroll parents are watched but not its size.
-    const reference = {
-      getBoundingClientRect: () => anchor?.getBoundingClientRect() ?? new DOMRect(),
-      contextElement: anchor ?? undefined,
-    };
-    // The first call runs inside this layout effect, where React already commits before paint (and flushSync may not run).
-    let mounted = false;
-    const cleanup = autoUpdate(reference, node, () => update(mounted), { layoutShift: false });
-    mounted = true;
-    return cleanup;
+    return watchPlacement(node, () => compute(node), setStyle);
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- A new anchor re-places, though `compute` reads it fresh.
   }, [ref, anchor, key]);
   return key === false ? undefined : style;
 }
@@ -221,12 +234,6 @@ function usePopupFocus(
   return { keys, opener };
 }
 
-/** A press on a backdrop closes its popup and nothing else: no focus moves to <body> (the opener gets it back), no click lands below. */
-function outside(e: MouseEvent, close: () => void) {
-  e.preventDefault();
-  close();
-}
-
 // Keep focus a child already took (autoFocus); else prefer a text field over the first button in DOM order. Dialog uses it too.
 export const MENU_FOCUS = [
   "[data-autofocus]",
@@ -269,29 +276,54 @@ export function Popover({
     placement,
   );
   const elevation = useElevation();
-  return createPortal(
+  return (
     <MenuSurfaceContext value={{ close }}>
-      <div className="fixed inset-0" style={{ zIndex: 40 }} onMouseDown={(e) => outside(e, close)} />
-      <div
+      <AriaPopover
+        isOpen
+        onOpenChange={(open) => {
+          if (!open) close();
+        }}
+        triggerRef={trigger}
+        shouldCloseOnInteractOutside={outsideOf}
         ref={popup}
         data-popover
-        tabIndex={-1}
         {...elevation.props}
-        className="fixed z-40 max-w-[calc(100vw-24px)] outline-none"
-        style={style}
-        onKeyDown={(e) => {
-          e.stopPropagation();
-          keys(e);
-        }}
+        className="max-w-[calc(100vw-24px)] outline-none"
+        style={{ ...placed(style), zIndex: 40 }}
       >
-        <ElevationScope level={elevation.level}>{children}</ElevationScope>
-      </div>
-    </MenuSurfaceContext>,
-    document.body,
+        {/* React Aria's Popover takes no key handlers; its own Escape covers the popover itself while it holds focus. */}
+        <div
+          className="contents"
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            keys(e);
+          }}
+        >
+          <ElevationScope level={elevation.level}>{children}</ElevationScope>
+        </div>
+      </AriaPopover>
+    </MenuSurfaceContext>
   );
 }
 
-/** A modal menu over a backdrop that closes it, with measured placement and a centered small-screen fallback (Dialog is the modal box). */
+/** A press in another popup (a Select's list or a submenu opened from inside, portalled elsewhere) is not outside this one. */
+const outsideOf = (element: Element) => !element.closest("[data-surface], [data-popover], .menu-submenu");
+
+/** Our fixed placement over React Aria's own (absolute, with top/left or bottom/right of its choosing). */
+function placed(style: CSSProperties | undefined): CSSProperties {
+  if (!style) return { position: "fixed", top: 0, left: 0, visibility: "hidden" };
+  return {
+    position: "fixed",
+    top: "auto",
+    left: "auto",
+    right: "auto",
+    bottom: "auto",
+    maxHeight: "none",
+    ...style,
+  };
+}
+
+/** A modal menu, React Aria's Popover, with measured placement and a centered small-screen fallback (Dialog is the modal box). */
 /** `fit` sizes the surface to its content, like Linear's action menus. */
 /** `command` places Linear's command menu (RAJ-52 "Mark as"): centred, 110px from the top, no backdrop or padding. */
 /** `point` is a right-click's raw clientX/clientY: the menu opens 4px right of and 1px above it (Linear's list-row context menu, CORE-18),
@@ -408,33 +440,43 @@ export function MenuSurface({
     },
     [anchorId, anchored, width, label, gap, rounding, side, align, command, point?.x, point?.y].join(),
   );
+  const [trigger] = useState(() => ({ current: anchor ?? fallback ?? null }));
+  // A menu is React Aria's Popover: modal, over a clear underlay that takes the press outside it, with everything else inert while it
+  // is open. Escape and Tab inside it stay ours (usePopupFocus). An unanchored menu (12vh from the top) dims the page behind it.
   return (
-    <div
-      className={`fixed inset-0 z-50 ${anchored || command ? "" : "bg-[var(--modal-overlay)]"}`}
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) outside(e, dismiss);
-      }}
-    >
-      <div
+    <>
+      {!anchored &&
+        !command &&
+        createPortal(<div aria-hidden className="fixed inset-0 z-50 bg-[var(--modal-overlay)]" />, document.body)}
+      <AriaPopover
+        isOpen
+        onOpenChange={(open) => {
+          if (!open) dismiss();
+        }}
+        triggerRef={trigger}
+        shouldCloseOnInteractOutside={outsideOf}
         ref={ref}
-        style={style}
-        role="dialog"
-        aria-modal="true"
         aria-label={label}
         {...elevation.props}
         data-surface="menu"
         className={`${MENU_POPUP} overflow-y-auto ${fit ? "w-max min-w-[175px] scroll-py-6 max-w-[min(500px,calc(100vw-24px))]" : command ? "flex flex-col overflow-hidden" : "p-3"}`}
-        onKeyDown={(e) => {
-          if (!((e.metaKey || e.ctrlKey) && ["k", "/"].includes(e.key.toLowerCase())))
-            e.stopPropagation(); // ⌘K reaches the app so it can toggle the command menu
-          keys(e);
-        }}
+        style={{ ...placed(style), zIndex: 50 }}
       >
-        <MenuSurfaceContext value={{ close }}>
-          <ElevationScope level={elevation.level}>{children}</ElevationScope>
-        </MenuSurfaceContext>
-      </div>
-    </div>
+        {/* React Aria's Popover takes no key handlers; its own Escape covers the popover itself while it holds focus. */}
+        <div
+          className="contents"
+          onKeyDown={(e) => {
+            if (!((e.metaKey || e.ctrlKey) && ["k", "/"].includes(e.key.toLowerCase())))
+              e.stopPropagation(); // ⌘K reaches the app so it can toggle the command menu
+            keys(e);
+          }}
+        >
+          <MenuSurfaceContext value={{ close }}>
+            <ElevationScope level={elevation.level}>{children}</ElevationScope>
+          </MenuSurfaceContext>
+        </div>
+      </AriaPopover>
+    </>
   );
 }
 

@@ -1375,7 +1375,7 @@ export function Relations({ issue }: { issue: Issue }) {
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- Memo invalidation follows draft identity or relation inputs; render-local helpers would invalidate every render.
     [all, query, kind, issue],
   );
-  // cmdk selects the first row as the query changes, so the group holding the best match goes first.
+  // The menu highlights the first row as the query changes, so the group holding the best match goes first.
   const relatedFirst =
     !recent[0] ||
     (!!relatedIssues[0] &&
@@ -1430,7 +1430,7 @@ export function Relations({ issue }: { issue: Issue }) {
   // Linear's onOpenNestedCommandMenu: the actions open over this menu, Esc comes back to it, and running one closes both.
   const [nested, setNested] = useState<{ issue: Issue; point?: { x: number; y: number } } | null>(null);
   const moreActions = (target: Issue) => {
-    const rect = document.querySelector("[cmdk-item][data-selected=true]")?.getBoundingClientRect();
+    const rect = document.querySelector(".menu-item[data-focused]")?.getBoundingClientRect();
     setNested({ issue: target, point: rect ? { x: rect.right - 200, y: rect.top } : undefined });
   };
   const closingAll = (entries: ActionEntry[]): ActionEntry[] =>
@@ -1462,13 +1462,18 @@ export function Relations({ issue }: { issue: Issue }) {
     {/* Command-style relations retain MenuSurface: Dialog has no command placement variant. */}
     <Modal label="Issue relations" close={close} command width={peek ? 720 + 415 : 720}>
       <Menu
-        shouldFilter={false}
+        filter="none"
+        search={query}
+        onSearchChange={(value) => {
+          setQuery(value);
+          setPeek(false);
+        }}
         width="auto"
         value={selected}
         onValueChange={setSelected}
         data-kind={kind}
         className="flex min-h-0 flex-col"
-        // Capture: the menu's own ArrowRight (open a submenu) and cmdk's Enter come after.
+        // Capture: the menu's own ArrowRight (open a submenu) and Enter come after.
         onKeyDownCapture={(e) => {
           const input = e.target as HTMLInputElement;
           if (e.key === "Enter" && e.altKey && candidate) {
@@ -1494,11 +1499,6 @@ export function Relations({ issue }: { issue: Issue }) {
             aria-label="Find related issue"
             placeholder={mark.placeholder.replace("{key}", issue.key)}
             className="h-10 w-full rounded-xl bg-transparent px-3 text-[13px] text-[var(--menu-fg)] outline-none placeholder:text-[var(--menu-placeholder)]"
-            value={query}
-            onValueChange={(value) => {
-              setQuery(value);
-              setPeek(false);
-            }}
           />
         </div>
         <div className="flex min-h-0">

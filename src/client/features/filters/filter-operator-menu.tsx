@@ -1,7 +1,5 @@
 import { Menu } from "@/client/components/menu";
-import { usePristine } from "@/client/components/menu-pristine";
 import type { OpenedBy } from "@/client/components/filter-block";
-import { menuFilter } from "@/client/lib/fuzzy-score";
 
 /**
  * A FilterBlock's operator menu, for every filter bar: Linear's type-to-filter search hidden until typing, titled by the current
@@ -21,15 +19,14 @@ export function FilterOperatorMenu<Op extends string>({
   openedBy: OpenedBy;
   pick: (op: Op) => void;
 }) {
-  const start = usePristine(openedBy === "pointer");
+  const pointer = openedBy === "pointer";
   return (
-    <Menu filter={menuFilter} defaultValue={current} {...start.props}>
+    <Menu defaultValue={pointer ? undefined : current} start={pointer ? "none" : "first"}>
       <Menu.Input
         hideWhenEmpty
         autoFocus
         aria-label={`Filter ${name} operators`}
         placeholder={operators.find(([op]) => op === current)?.[1]}
-        onValueChange={start.wake}
       />
       <Menu.List>
         <Menu.Empty>No matching operators</Menu.Empty>

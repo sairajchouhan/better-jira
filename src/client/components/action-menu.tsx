@@ -1,10 +1,8 @@
-import { FloatingTree } from "@floating-ui/react";
-import { memo, use, useRef, useState, type ComponentProps, type ReactNode, type RefObject } from "react";
+import { memo, use, useState, type ComponentProps, type ReactNode } from "react";
 import { menuFilter } from "@/client/lib/fuzzy-score";
 import { Icon, type IconName } from "./icons";
 import type { Keys } from "./keycap";
 import { Menu } from "./menu";
-import { usePristine } from "./menu-pristine";
 import { MenuSurface, MenuSurfaceContext, MENU_POPUP, useElevation } from "./menu-surface";
 import { NoMatchesFooter, splitByMatches } from "./no-matches";
 import { useOpenActionMenu } from "./open-action-menus";
@@ -48,7 +46,6 @@ export type ActionEntry = {
   /** Linear's keywordsExactMatch: a query equal to one of these is an exact hit ("me" on your own assignee row). */
   exact?: string[];
 };
-type Container = RefObject<HTMLDivElement | null>;
 type Ranked = { entry: ActionEntry; score: number };
 
 const HOIST_FROM = 2;
@@ -115,7 +112,6 @@ export function ActionMenu({
    *  search stays hidden until typing starts. */
   placeholder?: string;
 }) {
-  const container = useRef<HTMLDivElement>(null);
   useOpenActionMenu(close);
   return (
     <MenuSurface
@@ -128,17 +124,7 @@ export function ActionMenu({
       align={align}
       point={point}
     >
-      <div ref={container}>
-        <FloatingTree>
-          <Level
-            entries={entries}
-            label={label}
-            container={container}
-            placeholder={placeholder}
-            highlight={highlight}
-          />
-        </FloatingTree>
-      </div>
+      <Level entries={entries} label={label} placeholder={placeholder} highlight={highlight} />
     </MenuSurface>
   );
 }
@@ -149,7 +135,6 @@ function Level({
   entries,
   rows,
   label,
-  container,
   nested = false,
   placeholder,
   search,
@@ -158,7 +143,6 @@ function Level({
   entries: ActionEntry[];
   rows?: (query: string) => ReactNode;
   label: string;
-  container: Container;
   nested?: boolean;
   placeholder?: string;
   search?: "hidden";
@@ -166,9 +150,7 @@ function Level({
 }) {
   const elevation = useElevation();
   const [reveal, setReveal] = useState(false);
-  const [query, setQuery] = useState(""),
-    [open, setOpen] = useState<string | null>(null);
-  const start = usePristine(highlight ? false : undefined);
+  const [query, setQuery] = useState("");
   // Linear lists a menu's actions as it opens. A row that appears while it is open (an edit adding "Restore mirrored Jira version")
   // would widen the menu under the pointer and hand the hover to another row, so it keeps the rows it opened with, each still live.
   const [opened] = useState(() => new Set(entries.map((e) => e.name)));
@@ -184,25 +166,22 @@ function Level({
   const choices = rows || !q ? own : searchActions(reveal ? available : own, q);
   return (
     <Menu
-      shouldFilter={!!rows}
-      filter={menuFilter}
+      search={query}
+      onSearchChange={setQuery}
+      // Drawn from the search, a submenu's rows are ranked by Menu; the entries are ranked by searchActions, hoisting included.
+      filter={rows ? menuFilter : "none"}
+      // Opened by a key it highlights its first row; by the pointer, none (Linear's keyboardInvoked).
+      start={highlight ? "first" : "opener"}
       // Opened by a key, a submenu starts on its current value (Linear's focusedIndex); a multi-select one on its first row.
       defaultValue={nested ? own.find((e) => e.selected)?.name : undefined}
       {...(nested ? elevation.props : {})}
       className={nested ? `${MENU_POPUP} w-max min-w-[175px] max-w-[min(500px,calc(100vw-24px))]` : ""}
-      {...start.props}
     >
       <Menu.Input
         hideWhenEmpty={(!nested && !placeholder) || search === "hidden"}
         autoFocus={!nested}
         aria-label={`Find ${label.toLowerCase()}`}
         placeholder={reveal && hidden.length ? label : (placeholder ?? "Filter…")}
-        value={query}
-        onValueChange={(value) => {
-          setQuery(value);
-          setOpen(null);
-          start.wake();
-        }}
       />
       {/* No height cap of its own: the surface stops 10px inside the window and scrolls (Linear's VIEWPORT_PADDING). */}
       <Menu.List>
@@ -211,21 +190,15 @@ function Level({
           ? rows(q)
           : choices.map((entry) => [
               !q && entry.divider && <Menu.Divider key={`-${entry.name}`} />,
-              <Row key={entry.name} entry={entry} container={container} open={open === entry.name} setOpen={setOpen} />,
+              <Row key={entry.name} entry={entry} />,
             ])}
         {hidden.length > 0 && !reveal && (
-          <NoMatchesFooter
-            count={hidden.length}
-            onReveal={() => {
-              setReveal(true);
-              start.wake();
-            }}
-          />
+          <NoMatchesFooter count={hidden.length} onReveal={() => setReveal(true)} />
         )}
         {hidden.length > 0 && reveal && !q && [
           <Menu.Divider key="-no-matches" />,
           ...hidden.map((entry) => (
-            <Row key={entry.name} entry={entry} container={container} open={open === entry.name} setOpen={setOpen} />
+            <Row key={entry.name} entry={entry} />
           )),
         ]}
       </Menu.List>
@@ -233,18 +206,9 @@ function Level({
   );
 }
 
-/** Memoised and told only whether it is the open one, so a submenu opening or closing re-renders its own row, not every row. */
-export const Row = memo(function Row({
-  entry,
-  container,
-  open,
-  setOpen,
-}: {
-  entry: ActionEntry;
-  container: Container;
-  open: boolean;
-  setOpen: (update: (current: string | null) => string | null) => void;
-}) {
+/** Memoised: the level re-renders on every keystroke in its search, which re-renders a row only when its entry changes. Its
+ *  submenu's open state lives in React Aria's menu (Menu.Submenu), so no row is told it. */
+export const Row = memo(function Row({ entry }: { entry: ActionEntry }) {
   const surface = use(MenuSurfaceContext);
   const icon = entry.image ?? (entry.icon && <Icon name={entry.icon} size={16} />);
   const hint = entry.hint ?? entry.number;
@@ -256,9 +220,6 @@ export const Row = memo(function Row({
         icon={icon}
         shortcut={entry.shortcut}
         hint={hint}
-        open={open}
-        onOpenChange={(next) => setOpen((cur) => (next ? entry.name : cur === entry.name ? null : cur))}
-        container={container}
       >
         <Level
           nested
@@ -267,7 +228,6 @@ export const Row = memo(function Row({
           label={entry.name}
           placeholder={entry.placeholder}
           search={entry.search}
-          container={container}
         />
       </Menu.Submenu>
     );
@@ -337,7 +297,10 @@ export function CheckRow({
 }
 
 /** A right-click on `children` opens an ActionMenu at the pointer, as Linear's row menus do; `entries` is read as it opens. While it is
- *  open the row keeps its hover background (`data-menu-open`, index.css), as Linear's does. */
+ *  open the row keeps its hover background (`data-menu-open`, index.css), as Linear's does. Not React Aria's MenuTrigger
+ *  `trigger="contextMenu"`: that one needs a pressable trigger element (these rows are `display: contents` around links and cards)
+ *  and places its popover by React Aria's rules, where Linear's opens 4px right of and 1px above the press, clamped 10px inside the
+ *  window (MenuSurface's `point`). */
 export function ContextMenu({
   label,
   entries,

@@ -128,7 +128,7 @@ export function CaretMenu({
   const list = useRef<HTMLDivElement>(null);
   const elevation = useElevation();
   useLayoutEffect(() => {
-    list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+    list.current?.querySelector("[data-focused]")?.scrollIntoView({ block: "nearest" });
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Scroll the newly active result into view.
   }, [active]);
   const hidden = !items.length && empty === null;
@@ -193,7 +193,8 @@ export function CaretMenu({
     <Menu
       ref={list}
       aria-label={label}
-      shouldFilter={false}
+      label={label}
+      filter="none"
       value={items[Math.min(active, items.length - 1)]?.id ?? ""}
       onValueChange={(id) => {
         const i = items.findIndex((item) => item.id === id);

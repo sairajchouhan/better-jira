@@ -1,37 +1,52 @@
-/* oxlint-disable react/refs -- The submenu reads its floating node and focus target from refs in event handlers and floating-ui callbacks. */
-import {
-  autoUpdate,
-  flip,
-  FloatingNode,
-  offset,
-  shift,
-  size,
-  useFloating,
-  useFloatingNodeId,
-  type Middleware,
-} from "@floating-ui/react";
+/* oxlint-disable react/refs -- Rows, popups and the level's shared state are read from refs in event handlers and layout effects. */
 import { Throttler } from "@tanstack/pacer";
-import { Command } from "cmdk";
 import {
   createContext,
   use,
   useEffect,
-  useId,
+  useInsertionEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ComponentProps,
+  type ContextType,
   type CSSProperties,
   type KeyboardEvent,
+  type PointerEvent,
   type ReactNode,
+  type Ref,
   type RefObject,
 } from "react";
-import { createPortal } from "react-dom";
+import {
+  Autocomplete,
+  CollectionRendererContext,
+  Header,
+  Input,
+  ListLayout,
+  Menu as AriaMenu,
+  MenuItem as AriaMenuItem,
+  MenuSection,
+  MenuStateContext,
+  Popover as AriaPopover,
+  PopoverContext,
+  RootMenuTriggerStateContext,
+  Separator,
+  SubmenuTrigger,
+  TextField,
+  Virtualizer,
+  type Key,
+  type Rect,
+} from "react-aria-components";
 import { Icon } from "./icons";
-import { MenuSurfaceContext } from "./menu-surface";
-import { MENU, menuRoom } from "./menu-geometry";
+import { MenuSurfaceContext, watchPlacement } from "./menu-surface";
+import { MENU, menuRoom, settle, submenuPlacement } from "./menu-geometry";
+import { arrange, EMPTY_STATE, relink, rowKeys, stepIndex, type RankCollection, type RankNode } from "./menu-rank";
+import { openedByPointer } from "./menu-pristine";
 import { Shortcut, type Keys } from "./keycap";
 import { NO_AUTOFILL } from "@/client/components/field";
+import { menuFilter } from "@/client/lib/fuzzy-score";
 import { safeTriangle } from "./safe-triangle";
 
 // The geometry lives on its own so menu-surface.tsx can share it without importing this module back.
@@ -73,11 +88,40 @@ export function renderedRows(
   return [Math.max(0, first - overscan), Math.min(rows.length, last + 1 + overscan)];
 }
 
+/**
+ * Linear's list is react-window with `overscanCount: 10`; React Aria's Virtualizer lays a menu's rows out with ListLayout, which
+ * renders only the rows crossing the visible band. This one renders OVERSCAN rows past each end as well, so a menu renders what
+ * Linear's renders (and k3e measures the same rows).
+ */
+export class MenuLayout extends ListLayout<unknown> {
+  override getVisibleLayoutInfos(rect: Rect) {
+    return super.getVisibleLayoutInfos(overscanned(rect));
+  }
+}
+/** `rect` grown by OVERSCAN rows above and below, never above the list's top. */
+export function overscanned<R extends { y: number; height: number; copy(): R }>(rect: R, rows = OVERSCAN): R {
+  const band = rect.copy(),
+    pad = rows * MENU.ITEM_HEIGHT;
+  band.y = Math.max(0, rect.y - pad);
+  band.height = rect.y + rect.height + pad - band.y;
+  return band;
+}
+const LAYOUT = { estimatedRowHeight: MENU.ITEM_HEIGHT, estimatedHeadingHeight: 30 };
+
 // What k3e measures: Linear's `[data-list-row]`, which its search row, action rows and empty state carry.
 const LIST_ROWS = ".menu-input, .menu-item, .menu-empty, [data-list-row]";
 
-/** The band of the window `node` shows: the window, cut by every ancestor that clips its overflow up to the first fixed one (a
- *  submenu is fixed beside the menu it is portalled into, so that menu's scroll box doesn't clip it). */
+/** The menu `node`'s own list (a submenu's list is inside its popup, portalled elsewhere, but a menu inline in a row may nest). */
+const ownList = (node: HTMLElement) =>
+  [...node.querySelectorAll<HTMLElement>(".menu-list")].find((list) => list.closest(".menu") === node) ?? null;
+/** The menu `node`'s own search field. */
+const ownInput = (node: HTMLElement | null) =>
+  node
+    ? ([...node.querySelectorAll<HTMLInputElement>(".menu-input input")].find((input) => input.closest(".menu") === node) ??
+      null)
+    : null;
+
+/** The band of the window `node` shows: the window, cut by every ancestor that clips its overflow up to the first fixed one. */
 function visibleBand(node: Element) {
   let top = 0,
     bottom = innerHeight;
@@ -100,11 +144,11 @@ function visibleBand(node: Element) {
  */
 function fitRows(node: HTMLElement, current: number | undefined, floor: number) {
   const rows = [...node.querySelectorAll<HTMLElement>(LIST_ROWS)].filter(
-    (row) => row.closest("[cmdk-root]") === node && row.getClientRects().length,
+    (row) => row.closest(".menu") === node && row.getClientRects().length,
   );
   const [start, end] = renderedRows(
     rows.map((row) => row.getBoundingClientRect()),
-    visibleBand(node.querySelector("[cmdk-list]") ?? node),
+    visibleBand(ownList(node) ?? node),
   );
   const shown = rows.slice(start, end);
   const widths = shown.map((row) => row.style.width);
@@ -119,8 +163,8 @@ function fitRows(node: HTMLElement, current: number | undefined, floor: number) 
 
 /**
  * Sizes a menu as `k3e` does, by writing its root's min-width (no re-render): as it mounts, as its rows change (a search, rows
- * arriving: at once and once more within 150ms, Linear's throttle), and as it scrolls or the window resizes. The list adds nothing
- * to the menu's width itself (`contain: inline-size`, index.css), so a long list's widest row far down never sets it.
+ * arriving, the list scrolling new rows in: at once and once more within 150ms, Linear's throttle), and as the window resizes. The
+ * Virtualizer places rows absolutely, so the list adds nothing to the menu's width itself, as Linear's `width: var(--row-width)` list.
  */
 function useRowWidth(root: RefObject<HTMLDivElement | null>, measured: boolean) {
   useLayoutEffect(() => {
@@ -136,30 +180,25 @@ function useRowWidth(root: RefObject<HTMLDivElement | null>, measured: boolean) 
     const rows = new MutationObserver(() => changed.maybeExecute());
     rows.observe(node, { childList: true, subtree: true, characterData: true });
     let frame = 0;
-    const moved = (event: Event) => {
-      const target = event.target;
-      if (target instanceof Node && !target.contains(node) && !node.contains(target)) return;
+    const resized = () => {
       if (!frame)
         frame = requestAnimationFrame(() => {
           frame = 0;
           measure();
         });
     };
-    addEventListener("scroll", moved, { capture: true, passive: true });
-    addEventListener("resize", moved);
+    addEventListener("resize", resized);
     return () => {
       rows.disconnect();
       changed.cancel();
       cancelAnimationFrame(frame);
-      removeEventListener("scroll", moved, { capture: true });
-      removeEventListener("resize", moved);
+      removeEventListener("resize", resized);
     };
   }, [root, measured]);
 }
 
 /** Linear's v3e: a list too tall for its room is cut where the last row in view still shows at least this share of itself. */
 export const LAST_ROW_SHOWN = 0.55;
-
 
 /**
  * How tall a menu's list may be: its own height (`own`, its natural height or its own CSS cap), the window's room less what the
@@ -191,9 +230,9 @@ export function listHeight(rows: readonly { top: number; height: number }[], nat
 
 // What _3e counts as rows: Linear's action, divider, text divider and group header rows, and the empty state.
 const HEIGHT_ROWS =
-  "[cmdk-item], [cmdk-group-heading], [cmdk-separator], .menu-group-header, .menu-text-divider, .menu-empty, [data-list-row]";
-// The popup a menu sits in: a modal surface, a submenu or a toolbar popover.
-const POPUP = '[role="dialog"], [data-popover]';
+  '[role^="menuitem"], .menu-group-header, .menu-divider, .menu-text-divider, .menu-empty, [data-list-row]';
+// The popup a menu sits in: a surface, a submenu or a toolbar popover.
+const POPUP = '[data-surface], [data-popover], .menu-submenu, [role="dialog"]';
 
 /**
  * One `_3e` measure of the menu `node`: caps its list's max-height so the menu stays inside its room (menuRoom, and every box
@@ -201,7 +240,7 @@ const POPUP = '[role="dialog"], [data-popover]';
  * outside the list stay put; only the list scrolls. A menu outside any popup is only cut to its list's own cap.
  */
 function fitHeight(node: HTMLElement) {
-  const list = [...node.querySelectorAll<HTMLElement>("[cmdk-list]")].find((l) => l.closest("[cmdk-root]") === node);
+  const list = ownList(node);
   if (!list) return;
   const popup = node.closest<HTMLElement>(POPUP);
   const boxes: HTMLElement[] = [];
@@ -232,11 +271,12 @@ function fitHeight(node: HTMLElement) {
   if (natural > room) {
     const top = list.getBoundingClientRect().top - list.scrollTop;
     const rows = [...list.querySelectorAll<HTMLElement>(HEIGHT_ROWS)]
-      .filter((row) => row.closest("[cmdk-root]") === node && row.getClientRects().length)
+      .filter((row) => row.closest(".menu") === node && row.getClientRects().length)
       .map((row) => {
         const box = row.getBoundingClientRect();
         return { top: box.top - top, height: box.height };
-      });
+      })
+      .sort((a, b) => a.top - b.top);
     height = listHeight(rows, natural, room);
   }
   if (height < own) list.style.maxHeight = `${height}px`;
@@ -276,41 +316,114 @@ function useListHeight(root: RefObject<HTMLDivElement | null>, measured: boolean
   }, [root, measured]);
 }
 
-// cmdk's own row query: every enabled row, in order.
-const ROWS = '[cmdk-item]:not([aria-disabled="true"])';
 // Linear's J4e moves the highlight on these, and only these let a highlighted submenu row open its preview (canOpenSubmenuOnFocus).
 const NAVIGATION = new Set(["ArrowDown", "ArrowUp", "Tab", "PageDown", "PageUp", "Home", "End"]);
+// J4e's Ctrl+n/j and Ctrl+p/k (Emacs and vi) step like ↓ and ↑.
+const CTRL_STEPS: Record<string, number> = { n: 1, j: 1, p: -1, k: -1 };
+// Linear's _6e: a keyboard highlight resting on a submenu row previews its submenu after this long.
+const PREVIEW_DELAY = 300;
+// React Aria's SubmenuTrigger opens on hover after `delay`; Linear opens at once, from Menu's own pointer handling, so its timer is
+// pushed out of reach (the largest delay setTimeout takes).
+const NO_HOVER_OPEN = 2_147_483_647;
+// A submenu's SubmenuTrigger key: its action row keeps the row's value, which the highlight and onValueChange use.
+const SUBMENU = "submenu:";
 
-/** What one menu level shares with its submenu rows (Linear's i3e). */
-type MenuLevel = {
-  actions: {
-    /** Adds a submenu row, so a highlight change can close it or preview it; returns the removal. */
-    register: (value: string, submenu: SubmenuHandle) => () => void;
-    /** A submenu opened: its row takes the highlight. */
-    opened: (value: string) => void;
-  };
-  meta: { root: () => HTMLDivElement | null };
-};
 type Point = { x: number; y: number };
-export type SubmenuHandle = {
-  open: boolean;
-  close: () => void;
-  preview: () => void;
-  /** The pointer highlighted the row at `at`: open the submenu without moving focus (Linear's openSubMenuOnFocus). */
-  hover: (at: Point) => void;
-};
-const MenuLevelContext = createContext<MenuLevel | null>(null);
+/** The open submenu of a level: its row's value, how it opened (focus moves in only for "focus"), and where the pointer was. */
+type Opened = { key: string; how: "pointer" | "preview" | "focus"; at?: Point };
+type TreeState = NonNullable<ContextType<typeof MenuStateContext>>;
+type TriggerState = NonNullable<ContextType<typeof RootMenuTriggerStateContext>>;
+/** A score for `value` against `search`, 0 to leave the row out: menuFilter's shape. */
+export type MenuFilter = (value: string, search: string, keywords?: string[]) => number;
 
-/** A submenu row opened: it takes the level's highlight, unless it holds it already. `level` is the level as last rendered. */
+/** The list's state and its rows in the order shown, which the list hands its level once it renders. */
+type Shared = { state: TreeState | null; order: string[]; list: HTMLElement | null };
+
+/** A level's open submenu, held outside React so each submenu row subscribes to its own (openedFor) and only the rows whose
+ *  answer changes re-render. */
+type OpenedStore = { get: () => Opened | null; set: (next: Opened | null) => void; subscribe: (listener: () => void) => () => void };
+function openedStore(): OpenedStore {
+  let opened: Opened | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => opened,
+    set: (next) => {
+      if (next === opened) return;
+      opened = next;
+      for (const listener of listeners) listener();
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+/** What submenu row `value` sees of its level's open submenu: the opening when it is its own, else null. The same object while it
+ *  stays open, so a row whose answer is unchanged doesn't re-render. */
+export const openedFor = (opened: Opened | null, value: string) => (opened?.key === value ? opened : null);
+/** The level's store, made as it is first asked for. */
+const storeOf = (ref: RefObject<OpenedStore | null>) => (ref.current ??= openedStore());
+
+/** A submenu row opening takes its level's highlight, unless it holds it already. `level` is the level as it is now. */
 export function openedIn(level: { highlight: (value: string) => void; highlighted: string }, key: string) {
   if (key !== level.highlighted) level.highlight(key);
 }
+
+/** A plain ← or Backspace: the keys that step back out of a submenu. */
+export const backKey = (event: { key: string; altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) =>
+  (event.key === "ArrowLeft" || event.key === "Backspace") &&
+  !event.altKey &&
+  !event.ctrlKey &&
+  !event.metaKey &&
+  !event.shiftKey;
+
+/**
+ * What one menu level shares with its list, rows and submenus (Linear's i3e). One value for the menu's life, as i3e is memoised:
+ * its actions read the level's latest props and state through refs, so a highlight, a search or a submenu opening never re-renders
+ * every submenu row through it. What does change per render (the search and the ranking) is the list's (ListContext), read once per
+ * level; which submenu is open is the store's, read per row (openedFor).
+ */
+type Level = {
+  actions: {
+    /** The level's open submenu, an external store (useSyncExternalStore). */
+    subscribe: (listener: () => void) => () => void;
+    opened: () => Opened | null;
+    /** The list's state and its rows in order, handed up once the list renders. */
+    /** `heading`: the list opens on a heading or divider rather than a row. */
+    share: (shared: Shared, heading: boolean) => void;
+    /** The level's own search (a submenu hands focus back to it). */
+    input: () => HTMLInputElement | null;
+    /** The highlight to start with, given the rows shown. */
+    initial: (order: string[]) => string | null;
+    /** The highlight moved from `previous` to `key`. */
+    moved: (key: string | null, previous: string | null) => void;
+    open: (key: string, how: Opened["how"], at?: Point) => void;
+    close: () => void;
+    /** Closes every level: the surface. */
+    closeAll: () => void;
+  };
+};
+const LevelContext = createContext<Level | null>(null);
+/** What the level's search, input and list render with: one consumer of each per level, never one per row. */
+type List = {
+  search: string;
+  /** The controlled highlight (MenuRoot's `value`), which the list follows when its owner moves it. */
+  value: string | undefined;
+  /** The scores the last filter pass gave, by node key; null while nothing is filtered. */
+  scores: Map<Key, number> | null;
+  /** React Aria's Menu filter for the search, which fills `scores`. */
+  filter: ((text: string, node: RankNode) => boolean) | undefined;
+  label: string;
+};
+const ListContext = createContext<List | null>(null);
+/** What a submenu gives the menu inside it: stepping back to its parent (← and Backspace). */
+const SubmenuContext = createContext<{ back: () => void } | null>(null);
 
 /**
  * What a pointer move onto row `next` does, given the row the pointer was last on (`under`) and the highlighted row: a move
  * within the highlighted row does nothing, so a submenu a key closed stays closed; entering a row, or moving on one a key moved
  * the highlight off, highlights it and opens its submenu. Entering the row that already holds the highlight still opens its
- * submenu ("enter"): cmdk selects a pristine menu's first row unseen, and the pointer reaching it must open it (Linear's
+ * submenu ("enter"), as a menu that opened with its first row highlighted must open it when the pointer reaches it (Linear's
  * openSubMenuOnFocus).
  */
 export function pointerStep(next: string, under: string | null, highlighted: string): "stay" | "enter" | "highlight" {
@@ -321,284 +434,513 @@ export function pointerStep(next: string, under: string | null, highlighted: str
 /**
  * Where the highlight goes once the rows are `values`: when the highlighted row, seen in an earlier render (`shown`), left the
  * list, onto the first row, as Linear's command menu moves a focused row id it no longer finds to the first action (`B6e`);
- * otherwise nowhere (null). cmdk alone can't: it reselects while the leaving rows are still in the DOM, so a whole group going
- * (⌘K's issue commands after ⌫ drops the issue) leaves the highlight on a removed row (R3-palette-shortcuts-D3).
+ * otherwise nowhere (null). A whole group going (⌘K's issue commands after ⌫ drops the issue) must not leave the highlight on a
+ * removed row (R3-palette-shortcuts-D3).
  */
 export function vanishedHighlight(highlighted: string, shown: string | null, values: string[]): string | null {
   if (!highlighted || shown !== highlighted || values.includes(highlighted)) return null;
   return values[0] ?? null;
 }
 
+const highlight = (state: TreeState | null, key: string | null) => {
+  const manager = state?.selectionManager;
+  if (!manager) return;
+  manager.setFocused(true);
+  manager.setFocusedKey(key);
+};
+const rowOf = (list: HTMLElement | null, key: string | null) =>
+  key == null ? null : (list?.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`) ?? null);
+const isSubmenuRow = (state: TreeState | null, key: string | null) => {
+  const parent = key == null ? null : state?.collection.getItem(key)?.parentKey;
+  return parent != null && state?.collection.getItem(parent)?.type === "submenutrigger";
+};
+
+/** Hands the root node to the caller's `ref` too; a module function, as the React Compiler won't compile a component that
+ *  writes to a prop. */
+function forward(ref: Ref<HTMLDivElement> | undefined, node: HTMLDivElement | null) {
+  if (typeof ref === "function") ref(node);
+  else if (ref) ref.current = node;
+}
+
+type MenuRootProps = Omit<ComponentProps<"div">, "onChange" | "defaultValue"> & {
+  /** The search, controlled; `defaultSearch` starts an uncontrolled one. */
+  search?: string;
+  defaultSearch?: string;
+  onSearchChange?: (search: string) => void;
+  /** How rows are scored against the search (menuFilter, every menu's by default); "none" lists every row as given. */
+  filter?: MenuFilter | "none";
+  /** The highlighted row's value, controlled; `defaultValue` is the row highlighted as the menu opens. */
+  value?: string;
+  defaultValue?: string;
+  onValueChange?: (value: string) => void;
+  /** The highlight as the menu opens with no `value`: the first row; none (Linear's focusedIndex -1, the first ↓ lands on the first
+   *  row); or "opener": none when a pointer opened the menu, the first row when a key did (Linear's keyboardInvoked). */
+  start?: "first" | "none" | "opener";
+  width?: number | "auto";
+  /** The list's accessible name. */
+  label?: string;
+};
+
 /**
- * The cmdk root, owning the highlight so every menu shares Linear's J4e rules:
+ * Linear's action menu (`IB`/`B3e`) on React Aria's Autocomplete and Menu: the search keeps focus and the highlight is React Aria's
+ * virtual focus, which this root drives with Linear's J4e rules for every menu:
  * - A highlight change closes any other open submenu. A highlight moved by a navigation key previews a submenu row after 300ms;
  *   one moved by the pointer opens it at once. Rows the pointer crosses on its way into an open submenu are covered by the
  *   submenu's safe triangle, so they never see it (Linear's JCe).
- * - Tab and Shift+Tab step like ↓ and ↑; PageDown and PageUp move a page and stop at the ends.
+ * - ↓/↑ (and Ctrl+n/j/p/k) step, wrapping; with ⌘ or ⌥ they jump to the ends, as Home and End do. Tab and Shift+Tab step like ↓
+ *   and ↑; PageDown and PageUp move a page and stop at the ends.
  * - → opens the highlighted submenu row when the caret is at the end of the search.
  * - Space, with the search empty (or mid-search right after ↑/↓ on a checkbox row), opens a submenu row, toggles a checkbox row
  *   and keeps the menu open, or picks any other row.
- * - Enter on a checkbox row picks it and closes the menu; Shift+Enter toggles it and keeps the menu open.
+ * - Enter picks the highlighted row; on a checkbox row it picks it and closes the menu, Shift+Enter toggles it and keeps it open.
  * - With the search empty, a digit picks the row whose `data-number` it is.
+ * - Typing ranks the rows best first (menuFilter), as Linear's B3e lists its results, and highlights the first.
  *
  * Its width is `width`: by default measured from its rows as Linear's `k3e` does (useRowWidth); a number is Linear's `fixedWidth`
- * (a property picker's 206px); "auto" leaves it to the box around it and its rows' content, for the menus that aren't Linear's `IB`
- * (the command menu's 720px, a Select's list). Every `IB` menu (not "auto") is as tall as Linear's `_3e` allows (useListHeight).
+ * (a property picker's 206px); "auto" also leaves the box around it to set it, for the menus that aren't Linear's `IB` (the command
+ * menu's 720px, a Select's list). Every `IB` menu (not "auto") is as tall as Linear's `_3e` allows (useListHeight).
  */
 function MenuRoot({
-  className = "",
-  width,
-  style,
-  ref,
+  search: searchProp,
+  defaultSearch = "",
+  onSearchChange,
+  filter = menuFilter,
   value,
   defaultValue,
   onValueChange,
+  start = "first",
+  width,
+  label,
+  className = "",
+  style,
+  ref,
   onKeyDown,
   onPointerMove,
   onPointerLeave,
-  onChange,
   children,
   ...props
-}: ComponentProps<typeof Command> & { width?: number | "auto" }) {
+}: MenuRootProps) {
   const root = useRef<HTMLDivElement>(null);
-  useRowWidth(root, width === undefined);
+  useRowWidth(root, typeof width !== "number");
   useListHeight(root, width !== "auto");
   const surface = use(MenuSurfaceContext);
-  const [own, setOwn] = useState(defaultValue ?? "");
-  const highlighted = value ?? own;
-  const submenus = useRef(new Map<string, SubmenuHandle>());
-  // Whether the last key moved the highlight; whether it was ↑/↓; whether to scroll the highlight into view; the row the pointer is on.
-  const previews = useRef(false),
+  const submenu = use(SubmenuContext);
+  const [ownSearch, setOwnSearch] = useState(defaultSearch);
+  const search = searchProp ?? ownSearch;
+  const store = useRef<OpenedStore>(null);
+  const shared = useRef<Shared>({ state: null, order: [], list: null });
+  // How the highlight last moved (a navigation key previews a submenu row), whether the last key was ↑/↓, the row under the pointer,
+  // and the pending preview.
+  const input = useRef<"navigation" | "pointer" | "other">("other"),
     arrowed = useRef(false),
-    scrolls = useRef(false),
-    under = useRef<string | null>(null);
-  const highlight = (next: string) => {
-    setOwn(next);
-    onValueChange?.(next);
-    for (const [key, submenu] of submenus.current) if (key !== next) submenu.close();
-    if (previews.current) submenus.current.get(next)?.preview();
-  };
-  // The level's actions run from its rows' handlers, after this render has committed, so they read its highlight through a ref.
-  const latest = useRef({ highlight, highlighted });
-  useLayoutEffect(() => {
-    latest.current = { highlight, highlighted };
-  });
-  // One value for the menu's life: a highlight change re-renders this menu, never every submenu row through the context
-  // (Linear's i3e memoises it the same way).
-  // Its actions only read refs, so the React Compiler keeps one value for the menu's life (no useState initializer: one reading refs
-  // runs during render and makes the compiler skip the menu, BJ-233).
-  const level: MenuLevel = {
-    actions: {
-      register: (key, submenu) => {
-        submenus.current.set(key, submenu);
-        return () => {
-          if (submenus.current.get(key) === submenu) submenus.current.delete(key);
-        };
+    under = useRef<string | null>(null),
+    preview = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(preview.current), []);
+  // The scores of one search, filled as React Aria's Menu filters its collection and read as the list ranks what it kept.
+  const ranking = useMemo(() => {
+    if (filter === "none" || !search) return { scores: null, filter: undefined };
+    const scores = new Map<Key, number>();
+    return {
+      scores,
+      filter: (text: string, node: RankNode) => {
+        const score = filter(text, search, node.props.keywords as string[] | undefined);
+        scores.set(node.key, score);
+        return score > 0;
       },
-      opened: (key) => openedIn(latest.current, key),
-    },
-    meta: { root: () => root.current },
+    };
+  }, [filter, search]);
+  const list: List = {
+    search,
+    value,
+    scores: ranking.scores,
+    filter: ranking.filter,
+    label: label ?? props["aria-label"] ?? "Menu",
   };
-  const rows = () =>
-    [...(root.current?.querySelectorAll<HTMLElement>(ROWS) ?? [])].filter(
-      (row) => row.closest("[cmdk-root]") === root.current,
-    );
-  /** Moves the highlight `step` rows, wrapping, or with `clamp` stopping at the ends (Linear's handleMoveFocus). */
-  const move = (step: number, clamp = false) => {
-    const all = rows(),
-      // A pristine menu (Linear's focusedIndex -1) shows no highlight, so the first step lands on an end.
-      at = root.current?.hasAttribute("data-pristine")
-        ? -1
-        : all.findIndex((row) => row.getAttribute("aria-selected") === "true"),
-      n = all.length;
-    if (!n) return;
-    const to =
-      at < 0 ? (step > 0 ? 0 : n - 1) : clamp ? Math.max(0, Math.min(n - 1, at + step)) : (at + step + n) % n;
-    scrolls.current = true;
-    highlight(all[to]!.getAttribute("data-value") ?? "");
-  };
-  const shown = useRef<string | null>(null);
-  // Reads the rendered rows, which every child render can change, so it runs after each render.
-  useLayoutEffect(() => {
-    const values = rows().map((row) => row.getAttribute("data-value") ?? "");
-    const next = vanishedHighlight(highlighted, shown.current, values);
-    if (values.includes(highlighted)) shown.current = highlighted;
-    if (next !== null) highlight(next);
+  // The level's actions run from its rows' handlers and its list's layout effects, so they read its props through a ref, brought up
+  // to date before any layout effect of this commit runs (the list's among them).
+  const latest = useRef({ value, defaultValue, start, onValueChange, surface });
+  useInsertionEffect(() => {
+    latest.current = { value, defaultValue, start, onValueChange, surface };
   });
-  // cmdk scrolls its own keyboard moves before a controlled value lands, so the menu scrolls the highlight itself (the rows'
-  // aria-selected catches up a render later, so the row is found by its value).
+  // One value for the menu's life (Linear's i3e memoises it the same way): its actions only read refs and the store, so the React
+  // Compiler keeps the first one (no useState initializer: one reading refs runs during render and makes the compiler skip the menu,
+  // BJ-233).
+  const level: Level = {
+    actions: {
+      subscribe: (listener) => storeOf(store).subscribe(listener),
+      opened: () => storeOf(store).get(),
+      share: (next, heading) => {
+        shared.current = next;
+        // eT.getListPadding: no top padding over a leading heading or divider (index.css), told by the first node shown, as the
+        // virtualized rows' DOM order isn't the list's.
+        if (next.list) next.list.dataset.lead = heading ? "heading" : "row";
+      },
+      input: () => ownInput(root.current),
+      initial: (order) => {
+        const { value, defaultValue, start } = latest.current;
+        const wanted = value ?? defaultValue;
+        if (wanted !== undefined && order.includes(wanted)) return wanted;
+        if (start === "none" || (start === "opener" && openedByPointer())) return null;
+        return order[0] ?? null;
+      },
+      moved: (key, previous) => {
+        if (key !== null || previous !== null) latest.current.onValueChange?.(key ?? "");
+        clearTimeout(preview.current);
+        const opened = storeOf(store),
+          now = opened.get();
+        if (key !== null && now && now.key !== key) opened.set(null);
+        if (key === null || input.current !== "navigation" || !isSubmenuRow(shared.current.state, key)) return;
+        rowOf(shared.current.list, key)?.scrollIntoView({ block: "nearest" });
+        preview.current = setTimeout(() => {
+          if (shared.current.state?.selectionManager.focusedKey === key && opened.get()?.key !== key)
+            opened.set({ key, how: "preview" });
+        }, PREVIEW_DELAY);
+      },
+      open: (key, how, at) => {
+        clearTimeout(preview.current);
+        const opened = storeOf(store);
+        if (opened.get()?.key !== key || how === "focus") opened.set({ key, how, at });
+        const { state } = shared.current;
+        openedIn(
+          { highlighted: (state?.selectionManager.focusedKey as string | null) ?? "", highlight: (k) => highlight(state, k) },
+          key,
+        );
+      },
+      close: () => {
+        clearTimeout(preview.current);
+        storeOf(store).set(null);
+      },
+      closeAll: () => latest.current.surface?.close(),
+    },
+  };
+  const open = useSyncExternalStore(level.actions.subscribe, level.actions.opened, level.actions.opened);
+  // React Aria's SubmenuTrigger reads its open state from a root menu trigger state; each level gives its own, holding only its own
+  // open submenu at index 0, so a row's level is 0 however deep it is or when it mounts (a virtualized row scrolled in while a
+  // submenu is open would otherwise take level 1). Closing every level is closing the surface. A new one only as a submenu opens or
+  // closes: every SubmenuTrigger reads it (its row's aria-expanded), as React Aria re-renders each on every highlight move anyway.
+  const trigger: TriggerState = {
+    isOpen: true,
+    setOpen: () => {},
+    open: () => {},
+    toggle: () => {},
+    focusStrategy: null,
+    point: null,
+    setPoint: () => {},
+    close: () => level.actions.closeAll(),
+    expandedKeysStack: { length: 0, 0: open ? SUBMENU + open.key : undefined } as unknown as Key[],
+    openSubmenu: (key) => level.actions.open(String(key).slice(SUBMENU.length), "focus"),
+    closeSubmenu: (key) => {
+      if (SUBMENU + level.actions.opened()?.key === key) level.actions.close();
+    },
+  };
+  // Autocomplete moves its input's focus to the search whenever a row takes virtual focus. A submenu the pointer or a preview
+  // opened leaves focus in its parent (Linear's yieldFocus), so its rows' virtual focus stays inside it until focus moves in.
   useLayoutEffect(() => {
-    if (!scrolls.current) return;
-    scrolls.current = false;
-    rows()
-      .find((row) => row.getAttribute("data-value") === highlighted)
-      ?.scrollIntoView({ block: "nearest" });
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Runs when the highlight changes; `rows` reads the DOM.
-  }, [highlighted]);
+    const node = root.current;
+    if (!node) return;
+    const keep = (event: FocusEvent) => {
+      if (!event.isTrusted && !node.contains(document.activeElement)) event.stopPropagation();
+    };
+    node.addEventListener("focusin", keep, true);
+    return () => node.removeEventListener("focusin", keep, true);
+  }, []);
+  const keyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest(".menu") !== root.current) return;
+    onKeyDown?.(event);
+    if (event.defaultPrevented || event.nativeEvent.isComposing) return;
+    const { state, order, list } = shared.current;
+    const key = (state?.selectionManager.focusedKey as string | null | undefined) ?? null,
+      at = key === null ? -1 : order.indexOf(key),
+      row = rowOf(list, key),
+      search = target instanceof HTMLInputElement ? target : null,
+      plain = !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey,
+      afterArrow = arrowed.current;
+    const ctrlStep = event.ctrlKey && !event.metaKey && !event.altKey ? CTRL_STEPS[event.key] : undefined;
+    input.current = NAVIGATION.has(event.key) || ctrlStep ? "navigation" : "other";
+    if (event.key !== " ") arrowed.current = event.key === "ArrowDown" || event.key === "ArrowUp";
+    const handled = () => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    /** Moves the highlight `step` rows, wrapping, or with `clamp` stopping at the ends (Linear's handleMoveFocus). */
+    const move = (step: number, clamp = false) => {
+      handled();
+      const to = stepIndex(at, step, order.length, clamp);
+      if (to >= 0) highlight(state, order[to]!);
+    };
+    const end = (last: boolean) => {
+      handled();
+      if (order.length) highlight(state, order[last ? order.length - 1 : 0]!);
+    };
+    // A checkbox row toggles from its checkbox, which keeps the menu open; any other row picks (a click React Aria reads as a press).
+    const toggle = (item: HTMLElement) => (item.querySelector<HTMLElement>("input.menu-checkbox") ?? item).click();
+    if (ctrlStep) return move(ctrlStep);
+    // With the search empty, a number key picks the row showing it (Linear's picker numbers: 0 for "No priority").
+    if (/^\d$/.test(event.key) && plain && !search?.value) {
+      const numbered = [...(list?.querySelectorAll<HTMLElement>(`[data-number="${event.key}"]`) ?? [])].find(
+        (item) => item.closest(".menu") === root.current,
+      );
+      if (numbered) {
+        handled();
+        numbered.click();
+      }
+      return;
+    }
+    switch (event.key) {
+      case "ArrowDown":
+      case "ArrowUp":
+        if (event.metaKey || event.altKey) return end(event.key === "ArrowDown");
+        return move(event.key === "ArrowDown" ? 1 : -1);
+      case "Tab":
+        return move(event.shiftKey ? -1 : 1);
+      case "Home":
+      case "End":
+        return end(event.key === "End");
+      case "PageDown":
+      case "PageUp": {
+        const page = Math.max(1, Math.floor((list?.clientHeight ?? 0) / MENU.ITEM_HEIGHT));
+        return move(event.key === "PageDown" ? page : -page, true);
+      }
+      case "ArrowRight":
+        // Autocomplete would clear the highlight on an arrow it doesn't use; the caret still moves.
+        event.stopPropagation();
+        if (key !== null && isSubmenuRow(state, key) && (!search || search.selectionStart === search.value.length)) {
+          handled();
+          level.actions.open(key, "focus");
+        }
+        return;
+      case "ArrowLeft":
+      case "Backspace":
+        // Autocomplete would clear the highlight on an arrow it doesn't use; the caret still moves.
+        if (event.key === "ArrowLeft") event.stopPropagation();
+        // A plain ← at the start of the search, or Backspace on an empty one (not a held key that just emptied it), steps back one
+        // level. This one handler on the open submenu's menu, not a hotkey per submenu row (which cost every hover to re-sync).
+        if (!submenu || !backKey(event)) return;
+        if (
+          event.key === "ArrowLeft"
+            ? search?.value && !(search.selectionStart === 0 && search.selectionEnd === 0)
+            : !search || search.value || event.repeat
+        )
+          return;
+        handled();
+        submenu.back();
+        return;
+      case " ":
+        if (!row) {
+          if (search?.value) return;
+          return move(1);
+        }
+        if (search?.value && !(afterArrow && plain && row.hasAttribute("aria-checked"))) return;
+        handled();
+        toggle(row);
+        return;
+      case "Enter": {
+        handled();
+        if (!row) return;
+        if (!row.hasAttribute("aria-checked")) return row.click();
+        if (event.shiftKey) return toggle(row);
+        const node = root.current;
+        row.click();
+        // A row that closes the menu itself unmounts it first.
+        setTimeout(() => {
+          if (node?.isConnected) surface?.close();
+        });
+        return;
+      }
+      case "Escape":
+        // Past Autocomplete (which would clear the search) to the surface, which closes every level.
+        event.preventDefault();
+    }
+  };
+  const pointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    onPointerMove?.(event);
+    const target = event.target as Element;
+    if (target.closest(".menu") !== root.current) return;
+    input.current = "pointer";
+    const row = target.closest<HTMLElement>('[role^="menuitem"]');
+    const { state } = shared.current;
+    if (!row || row.closest(".menu") !== root.current || row.hasAttribute("data-disabled") || !row.dataset.key) {
+      under.current = null;
+      return;
+    }
+    const next = row.dataset.key;
+    const step = pointerStep(next, under.current, (state?.selectionManager.focusedKey as string | null) ?? "");
+    under.current = next;
+    if (step === "stay") return;
+    if (step === "highlight") highlight(state, next);
+    if (event.pointerType !== "touch" && isSubmenuRow(state, next))
+      level.actions.open(next, "pointer", { x: event.clientX, y: event.clientY });
+  };
   return (
-    <MenuLevelContext value={level}>
-      <Command
-        loop
-        {...props}
-        value={highlighted}
-        disablePointerSelection
-        onValueChange={(next) => {
-          scrolls.current = true;
-          highlight(next);
-        }}
-        onPointerMove={(event) => {
-          onPointerMove?.(event);
-          previews.current = false;
-          const row = (event.target as Element).closest<HTMLElement>("[cmdk-item]");
-          if (!row || row.closest("[cmdk-root]") !== root.current || row.getAttribute("aria-disabled") === "true") {
-            under.current = null;
-            return;
-          }
-          const next = row.getAttribute("data-value") ?? "";
-          const step = pointerStep(next, under.current, highlighted);
-          under.current = next;
-          if (step === "stay") return;
-          if (step === "highlight") highlight(next);
-          if (event.pointerType !== "touch") submenus.current.get(next)?.hover({ x: event.clientX, y: event.clientY });
-        }}
-        onPointerLeave={(event) => {
-          onPointerLeave?.(event);
-          under.current = null;
-        }}
-        onChange={(event) => {
-          onChange?.(event);
-          if ((event.target as Element).closest("[cmdk-root]") !== root.current) return;
-          // Linear closes a preview when the search changes.
-          previews.current = false;
-          for (const submenu of submenus.current.values()) submenu.close();
-        }}
-        onKeyDown={(event) => {
-          onKeyDown?.(event);
-          const target = event.target as HTMLElement;
-          if (event.defaultPrevented || event.nativeEvent.isComposing || target.closest("[cmdk-root]") !== root.current)
-            return;
-          const search = target instanceof HTMLInputElement ? target : null,
-            pristine = root.current?.hasAttribute("data-pristine"),
-            row = pristine ? undefined : rows().find((item) => item.getAttribute("aria-selected") === "true"),
-            plain = !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey,
-            afterArrow = arrowed.current;
-          previews.current =
-            NAVIGATION.has(event.key) || (event.ctrlKey && ["n", "j", "p", "k"].includes(event.key));
-          if (event.key !== " ") arrowed.current = event.key === "ArrowDown" || event.key === "ArrowUp";
-          // A checkbox row toggles from its checkbox, which keeps the menu open; any other row picks.
-          const toggle = (item: HTMLElement) =>
-            (item.querySelector<HTMLElement>("input.menu-checkbox") ?? item).click();
-          // A pristine menu has no highlight for cmdk's own ↓ to step from, so its first ↓, ↑ or Space lands on an end itself
-          // (and so previews a submenu row there).
-          if (pristine && (event.key === "ArrowDown" || event.key === "ArrowUp" || (event.key === " " && !search?.value))) {
-            event.preventDefault();
-            move(event.key === "ArrowUp" ? -1 : 1);
-            return;
-          }
-          // With the search empty, a number key picks the row showing it (Linear's picker numbers: 0 for "No priority").
-          if (/^\d$/.test(event.key) && plain && !search?.value) {
-            const numbered = rows().find((item) => item.dataset.number === event.key);
-            if (numbered) {
-              event.preventDefault();
-              numbered.click();
-            }
-            return;
-          }
-          switch (event.key) {
-            case "Tab":
-              event.preventDefault();
-              move(event.shiftKey ? -1 : 1);
-              return;
-            case "PageDown":
-            case "PageUp": {
-              event.preventDefault();
-              const list = root.current?.querySelector("[cmdk-list]");
-              const page = Math.max(1, Math.floor((list?.clientHeight ?? 0) / MENU.ITEM_HEIGHT));
-              move(event.key === "PageDown" ? page : -page, true);
-              return;
-            }
-            case "ArrowRight":
-              if (
-                row?.hasAttribute("aria-haspopup") &&
-                (!search || search.selectionStart === search.value.length)
-              ) {
-                event.preventDefault();
-                row.click();
-              }
-              return;
-            case " ":
-              if (!row || (search?.value && !(afterArrow && plain && row.hasAttribute("aria-checked")))) return;
-              event.preventDefault();
-              toggle(row);
-              return;
-            case "Enter":
-              if (!row?.hasAttribute("aria-checked")) return;
-              if (event.shiftKey) {
-                event.preventDefault();
-                toggle(row);
-              } else {
-                const node = root.current;
-                // After cmdk's own Enter has picked the row; a row that closes the menu itself unmounts it first.
-                setTimeout(() => {
-                  if (node?.isConnected) surface?.close();
-                });
-              }
-          }
-        }}
-        ref={(node) => {
-          root.current = node;
-          if (typeof ref === "function") ref(node);
-          else if (ref) ref.current = node;
-        }}
-        data-width={width === undefined ? "rows" : undefined}
-        style={typeof width === "number" ? { ...style, width } : style}
-        className={`menu ${className}`}
-      >
-        {children}
-      </Command>
-    </MenuLevelContext>
+    <LevelContext value={level}>
+      <ListContext value={list}>
+        <RootMenuTriggerStateContext value={trigger}>
+          <Autocomplete
+            inputValue={search}
+            onInputChange={(next) => {
+              setOwnSearch(next);
+              onSearchChange?.(next);
+              // Linear closes a preview when the search changes.
+              level.actions.close();
+            }}
+            disableAutoFocusFirst
+          >
+            <div
+              {...props}
+              ref={(node) => {
+                root.current = node;
+                forward(ref, node);
+              }}
+              data-width={width === undefined ? "rows" : undefined}
+              style={typeof width === "number" ? { ...style, width } : style}
+              className={`menu ${className}`}
+              onKeyDownCapture={(event) => {
+                props.onKeyDownCapture?.(event);
+                if (!event.isPropagationStopped()) keyDown(event);
+              }}
+              onPointerMove={pointerMove}
+              onPointerLeave={(event) => {
+                onPointerLeave?.(event);
+                under.current = null;
+              }}
+              // A press in the search keeps the highlight (Autocomplete clears it).
+              onPointerDownCapture={(event) => {
+                props.onPointerDownCapture?.(event);
+                const target = event.target as Element;
+                if (target instanceof HTMLInputElement && target.closest(".menu") === root.current) event.stopPropagation();
+              }}
+            >
+              {children}
+            </div>
+          </Autocomplete>
+        </RootMenuTriggerStateContext>
+      </ListContext>
+    </LevelContext>
   );
 }
 
 /** Linear's Zw: a 36px search row over a hairline, with an optional trailing `hotkey` (the registry chord that opens the menu, drawn as
  *  Linear's small Shortcut: ign's inputAdditionalContent). `hideWhenEmpty` keeps it focused but visually hidden until typing starts
- *  (B3e's hideInputWhenEmpty, used by action menus). */
+ *  (B3e's hideInputWhenEmpty, used by action menus). Its text is the menu's `search`. */
 function MenuInput({
   hotkey,
   hideWhenEmpty = false,
   chip,
+  className,
+  "aria-label": label,
   ...props
-}: ComponentProps<typeof Command.Input> & {
+}: Omit<ComponentProps<typeof Input>, "value" | "defaultValue" | "onChange" | "className"> & {
+  className?: string;
   hotkey?: string | readonly string[];
   hideWhenEmpty?: boolean;
   /** Drawn before the search: the nested command page's parent name (Linear's `nameAsParent` chip). */
   chip?: ReactNode;
 }) {
-  const hidden = hideWhenEmpty && !props.value;
+  const hidden = hideWhenEmpty && !use(ListContext)?.search;
   return (
-    <div className={hidden ? "sr-only" : "menu-input"}>
+    <TextField aria-label={label ?? props.placeholder} className={hidden ? "sr-only" : `menu-input ${className ?? ""}`}>
       {chip && <span className="menu-input-chip">{chip}</span>}
-      <Command.Input {...NO_AUTOFILL} {...props} className={hidden ? "sr-only" : undefined} />
+      <Input {...NO_AUTOFILL} {...props} className={hidden ? "sr-only" : undefined} />
       {hotkey && <Shortcut aria-hidden keys={hotkey} size="small" />}
-    </div>
+    </TextField>
+  );
+}
+
+type RootProps = ComponentProps<ContextType<typeof CollectionRendererContext>["CollectionRoot"]>;
+const BaseRendererContext = createContext<ContextType<typeof CollectionRendererContext> | null>(null);
+
+/**
+ * The rows as Menu shows them, between React Aria's Menu and the Virtualizer that lays them out: ranked by the search (arrange),
+ * with the empty state only when no row is listed. Hands the level the list's state and its rows in order, and keeps the
+ * highlight where Linear's B3e keeps it: on the first row after a search, back on the first when the highlighted row left the
+ * list, on `value` when its owner moves it.
+ */
+function MenuRows(props: RootProps) {
+  const base = use(BaseRendererContext)!;
+  const level = use(LevelContext)!;
+  const list = use(ListContext)!;
+  const state = use(MenuStateContext)!;
+  const { scores } = list;
+  const shown = useMemo(() => {
+    const collection = props.collection as unknown as RankCollection;
+    const rows = arrange(collection, scores ? (node) => scores.get(node.key) ?? 0 : undefined);
+    const same = !scores && rows.length === [...collection].length;
+    return same ? collection : relink(collection, rows);
+  }, [props.collection, scores]);
+  const order = useMemo(() => rowKeys(shown).map(String), [shown]);
+  const seen = useRef<{ key: string | null; search: string | null; value: string | undefined; order: string[] }>({
+    key: null,
+    search: null,
+    value: undefined,
+    order: [],
+  });
+  const key = (state.selectionManager.focusedKey as string | null | undefined) ?? null;
+  useLayoutEffect(() => {
+    level.actions.share(
+      { state, order, list: props.scrollRef?.current ?? null },
+      leadsWithHeading(shown as unknown as RankCollection),
+    );
+    const last = seen.current;
+    let next: string | null | undefined;
+    const { value, search } = list;
+    if (last.search === null) next = level.actions.initial(order);
+    else if (value !== undefined && value !== last.value && order.includes(value)) next = value;
+    else if (last.search !== search) next = order[0] ?? null;
+    else if (key !== null) next = vanishedHighlight(key, last.order.includes(key) ? key : null, order) ?? undefined;
+    seen.current = { key, search, value, order };
+    if (next !== undefined && next !== key) highlight(state, next);
+    else if (key !== last.key) level.actions.moved(key, last.key);
+  });
+  const Root = base.CollectionRoot;
+  return <Root {...props} collection={shown as unknown as RootProps["collection"]} />;
+}
+
+/** Whether a list opens on a heading, a text divider or a divider rather than a row (or the empty state). */
+export function leadsWithHeading(collection: RankCollection): boolean {
+  const [first] = collection;
+  if (!first) return false;
+  if (first.type === "section") return [...collection.getChildren(first.key)][0]?.type === "header";
+  return first.type === "separator" || (first.type === "header" && !first.props[EMPTY_STATE]);
+}
+
+/** React Aria's Virtualizer renderer with MenuRows as its root, so the rows it lays out are the ranked ones. */
+function RankedRows({ children }: { children: ReactNode }) {
+  const base = use(CollectionRendererContext);
+  const renderer = useMemo(() => ({ ...base, CollectionRoot: MenuRows }), [base]);
+  return (
+    <BaseRendererContext value={base}>
+      <CollectionRendererContext value={renderer}>{children}</CollectionRendererContext>
+    </BaseRendererContext>
   );
 }
 
 /**
- * Linear's N6e: the scrolling rows, 6px above and below. Keyboard scrolling keeps ITEM_SCROLL_MARGIN of context past the highlight.
- * `maxHeight` is Linear's `maxHeight` prop, a cap of the menu's own (`--list-max`, index.css); the menu cuts it further to its room
- * (useListHeight owns the list's max-height).
+ * Linear's N6e: the scrolling rows, 6px above and below, virtualized as Linear's react-window list is (MenuLayout, 10 rows of
+ * overscan). Keyboard scrolling keeps ITEM_SCROLL_MARGIN of context past the highlight. `maxHeight` is Linear's `maxHeight` prop, a
+ * cap of the menu's own (`--list-max`, index.css); the menu cuts it further to its room (useListHeight owns the list's max-height).
  */
-function MenuList({ maxHeight, ...props }: ComponentProps<typeof Command.List> & { maxHeight?: string }) {
+function MenuList({ maxHeight, children }: { maxHeight?: string; children: ReactNode }) {
+  const level = use(ListContext)!;
   return (
-    <Command.List
-      {...props}
-      className="menu-list"
-      style={{ "--list-max": maxHeight, scrollPaddingBlock: MENU.ITEM_SCROLL_MARGIN } as CSSProperties}
-    />
+    <Virtualizer layout={MenuLayout} layoutOptions={LAYOUT}>
+      <RankedRows>
+        <AriaMenu
+          aria-label={level.label}
+          // Autocomplete hands React Aria's Menu a `filter` through context; the level gives its own, which scores each row for the
+          // ranking (it reads the same node fields, RankNode).
+          {...({ filter: level.filter } as object)}
+          shouldCloseOnSelect={false}
+          autoFocus={false}
+          className="menu-list"
+          style={{ "--list-max": maxHeight, scrollPaddingBlock: MENU.ITEM_SCROLL_MARGIN } as CSSProperties}
+        >
+          {children}
+        </AriaMenu>
+      </RankedRows>
+    </Virtualizer>
   );
 }
-
 type ItemSlots = {
   /** The 16px icon column. */
   icon?: ReactNode;
@@ -616,6 +958,9 @@ type ItemSlots = {
   /** A muted second line; the row grows to fit it. */
   description?: ReactNode;
 };
+
+// The checkbox's own press toggles it alone: kept from the row, which React Aria would press (pick) too.
+const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
 
 /** Linear's v6e row content: [checkbox] [icon] label [checkmark] [hint ▶], in that order whatever the menu. */
 function ItemContent({
@@ -640,7 +985,10 @@ function ItemContent({
             aria-label={checkboxLabel}
             checked={checkbox}
             onChange={onCheckboxClick}
-            onClick={(event) => event.stopPropagation()}
+            onClick={stop}
+            onPointerDown={stop}
+            onPointerUp={stop}
+            onMouseDown={stop}
             className="menu-checkbox"
           />
         ) : (
@@ -678,8 +1026,32 @@ function ItemContent({
   );
 }
 
+type MenuItemProps = ItemSlots & {
+  /** The row's id and search text; unique within its menu. */
+  value: string;
+  /** What the row is searched by instead of its value (menuFilter). */
+  keywords?: string[];
+  onSelect?: () => void;
+  disabled?: boolean;
+  "aria-disabled"?: boolean | "true" | "false";
+  /** A multi-select row without a drawn checkbox. */
+  "aria-checked"?: boolean;
+  title?: string;
+  /** The digit that picks the row (Linear's picker numbers). */
+  "data-number"?: number | string;
+  onPointerDown?: ComponentProps<"div">["onPointerDown"];
+  children: ReactNode;
+};
+
 /** Linear's Item: a full-width 32px row owning 14/18 padding; its highlight is inset 6px with radius 8 (fT.itemContainer). */
 function MenuItem({
+  value,
+  keywords,
+  onSelect,
+  disabled,
+  "aria-disabled": ariaDisabled,
+  "aria-checked": ariaChecked,
+  title,
   icon,
   checkbox,
   onCheckboxClick,
@@ -690,12 +1062,29 @@ function MenuItem({
   description,
   children,
   ...props
-}: Omit<ComponentProps<typeof Command.Item>, "className" | "children"> &
-  ItemSlots & { children: ReactNode }) {
+}: MenuItemProps) {
+  const checks = checkbox ?? ariaChecked;
   return (
-    <Command.Item
-      aria-checked={checkbox ?? props["aria-checked"]}
+    <AriaMenuItem
+      id={value}
+      textValue={value}
+      // Kept on React Aria's node for the ranking (menuFilter's keywords); not a DOM attribute.
+      {...({ keywords } as object)}
+      isDisabled={disabled || ariaDisabled === true || ariaDisabled === "true"}
+      onAction={onSelect}
       {...props}
+      render={
+        checks !== undefined || title
+          ? (dom) => (
+              <div
+                {...(dom as ComponentProps<"div">)}
+                title={title}
+                role={checks !== undefined ? "menuitemcheckbox" : (dom as ComponentProps<"div">).role}
+                aria-checked={checks}
+              />
+            )
+          : undefined
+      }
       className="menu-item"
     >
       <ItemContent
@@ -710,77 +1099,61 @@ function MenuItem({
       >
         {children}
       </ItemContent>
-    </Command.Item>
+    </AriaMenuItem>
   );
 }
 
-/** A cmdk group under Linear's 30px GroupHeader (aT); filtering hides it with its last row. */
-function MenuGroup(props: Omit<ComponentProps<typeof Command.Group>, "className">) {
-  return <Command.Group {...props} className="menu-group" />;
-}
-
-/** Linear's GroupHeader (aT) outside a cmdk group. */
-function MenuGroupHeader({ children }: { children: ReactNode }) {
+/** A group of rows under Linear's 30px GroupHeader (aT); a search leaves it out with its last row. */
+function MenuGroup({ heading, children }: { heading?: ReactNode; children: ReactNode }) {
   return (
-    <div role="presentation" className="menu-group-header">
+    <MenuSection className="menu-group">
+      {heading != null && <Header className="menu-group-header">{heading}</Header>}
       {children}
-    </div>
+    </MenuSection>
   );
 }
 
-/** Linear's Divider (pT): 12px with a centred hairline. Hidden while the menu is filtered. */
+/** Linear's GroupHeader (aT) outside a group. */
+function MenuGroupHeader({ children }: { children: ReactNode }) {
+  return <Header className="menu-group-header">{children}</Header>;
+}
+
+/** Linear's Divider (pT): 12px with a centred hairline. Hidden while the menu is searched. */
 function MenuDivider() {
-  return <Command.Separator className="menu-divider" />;
+  return <Separator className="menu-divider" />;
 }
 
 /** Linear's TextDivider (O6e): a 30px muted caption between rows. */
 function MenuTextDivider({ children }: { children: ReactNode }) {
-  return <div className="menu-text-divider">{children}</div>;
+  return <Header className="menu-text-divider">{children}</Header>;
 }
 
-/** Linear's 42px empty state. `always` shows it outside cmdk's own filtering (menus with shouldFilter={false}).
- *  Linear derives it from its rows during render (B3e), so a menu never opens showing it. cmdk's Empty reads its count, which is 0
- *  on the first commit, before the rows register: a popup measured then is 42px too tall and jumps when it re-measures (the
- *  sidebar Help menu). So it waits one commit for cmdk to count the rows. */
+/** Linear's 42px empty state, shown only while no row is listed (B3e derives it from its rows during render, so a menu never opens
+ *  showing it); `always` shows it whatever is listed, for menus that list their own rows (filter "none"). */
 function MenuEmpty({ children, always = false }: { children: ReactNode; always?: boolean }) {
-  const [counted, setCounted] = useState(always);
-  // oxlint-disable-next-line react/set-state-in-effect -- waits for cmdk's store, external to React, to register the rows
-  useLayoutEffect(() => setCounted(true), []);
-  if (always) return <div className="menu-empty">{children}</div>;
-  return counted ? <Command.Empty className="menu-empty">{children}</Command.Empty> : null;
+  return (
+    <Header className="menu-empty" {...{ [EMPTY_STATE]: always ? "always" : "empty" }}>
+      {children}
+    </Header>
+  );
 }
-
-type Container = RefObject<HTMLElement | null>;
 
 /** How far the row's edge on `side` sits inside its popup's border, so the submenu overlaps the popup by Linear's 2px. */
-function edgeInset(row: Element, side: "right" | "left") {
+function popupEdge(row: Element) {
   const box = row.getBoundingClientRect();
+  let left = box.left,
+    right = box.right;
   for (let node = row.parentElement; node; node = node.parentElement) {
     const style = getComputedStyle(node);
-    if (parseFloat(side === "right" ? style.borderRightWidth : style.borderLeftWidth)) {
+    if (parseFloat(style.borderRightWidth) || parseFloat(style.borderLeftWidth)) {
       const edge = node.getBoundingClientRect();
-      return side === "right" ? edge.right - box.right : box.left - edge.left;
+      left = edge.left;
+      right = edge.right;
+      break;
     }
   }
-  return 0;
+  return { left, right };
 }
-
-/** Keeps an open submenu where it first settled while its row stays put. Typing in its search shrinks the list from the bottom, as in
- *  Linear: re-aligning on a list with no first row, or un-shifting a shorter one, would move the search out from under the pointer
- *  and close the menu. Each opening mounts a new popup node, which starts over. One per submenu (`useState(stay)`): the memory is
- *  the middleware's own, since a ref handed to it during render would make the React Compiler skip the row (BJ-233). */
-export const stay = (): Middleware => {
-  let settled: { popup: Element; row: number; y: number } | null = null;
-  return {
-    name: "stay",
-    fn: ({ y, rects, elements }) => {
-      const row = rects.reference.y;
-      if (settled?.popup === elements.floating && settled.row === row) return { y: settled.y };
-      settled = { popup: elements.floating, row, y };
-      return {};
-    },
-  };
-};
 
 /** Writes the safe triangle from `point` to `popup`'s box into `node`'s style, or hides it while the pointer is inside the popup. */
 function drawTriangle(node: HTMLElement, popup: HTMLElement | null, { x, y }: Point) {
@@ -797,18 +1170,12 @@ function drawTriangle(node: HTMLElement, popup: HTMLElement | null, { x, y }: Po
  * Linear's JCe: an invisible box over the parent menu, from the pointer (sampled every 50ms, as Linear's throttled qCe) to the
  * submenu, clipped to the triangle between them (safeTriangle). Rows under it get no pointer events, so a diagonal move into the
  * submenu crosses other rows without opening theirs. It follows the pointer by writing its style, never by re-rendering.
- * `placed` is null until floating-ui has placed the submenu and then changes whenever it moves: the triangle is drawn against
- * the box the submenu has, never the unplaced one, which would leave it over the wrong parent rows while the pointer rests.
+ * `placed` is null until the submenu has its place and then changes whenever it moves: the triangle is drawn against the box the
+ * submenu has, never the unplaced one, which would leave it over the wrong parent rows while the pointer rests.
+ * React Aria's own submenu guard (useSafelyMouseToSubmenu) turns the parent's pointer events off by its own estimate instead; the
+ * menu list keeps them on (index.css) so this one decides.
  */
-function SafeTriangle({
-  popup,
-  from,
-  placed,
-}: {
-  popup: RefObject<HTMLElement | null>;
-  from: RefObject<Point | null>;
-  placed: string | null;
-}) {
+function SafeTriangle({ popup, from, placed }: { popup: RefObject<HTMLElement | null>; from?: Point; placed: string | null }) {
   const ref = useRef<HTMLDivElement>(null);
   // The point the triangle was last sampled at, and whether the submenu has its place to draw against.
   const at = useRef<Point | null>(null),
@@ -823,7 +1190,7 @@ function SafeTriangle({
       },
       { wait: 50, leading: true, trailing: true },
     );
-    const move = (event: PointerEvent) => throttle.maybeExecute({ x: event.clientX, y: event.clientY });
+    const move = (event: globalThis.PointerEvent) => throttle.maybeExecute({ x: event.clientX, y: event.clientY });
     addEventListener("pointermove", move, { passive: true });
     return () => {
       removeEventListener("pointermove", move);
@@ -835,35 +1202,155 @@ function SafeTriangle({
   useEffect(() => {
     ready.current = placed !== null;
     const node = ref.current,
-      point = at.current ?? from.current;
+      point = at.current ?? from;
     if (node && ready.current && point) drawTriangle(node, popup.current, point);
   }, [placed, popup, from]);
   return <div ref={ref} aria-hidden data-safe-triangle style={{ display: "none" }} />;
 }
 
-/** A plain ← or Backspace: the keys that step back out of a submenu. */
-export const backKey = (event: { key: string; altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) =>
-  (event.key === "ArrowLeft" || event.key === "Backspace") &&
-  !event.altKey &&
-  !event.ctrlKey &&
-  !event.metaKey &&
-  !event.shiftKey;
+/**
+ * The open submenu's popup: React Aria's Popover (non-modal, mounted in the root popup so it shares its focus scope), placed beside
+ * its row as Linear's x3e places it (submenuPlacement) and kept there while its row stays put (settle). The pointer over its rows
+ * takes focus in; over its safe triangle it is on its way out, so it yields focus back to the parent menu, as on leaving it
+ * (Linear's requestFocus and yieldFocus). ← and Backspace on an empty search step back; Escape closes every level.
+ */
+function SubmenuPopup({ value, side, label, children }: { value: string; side: "right" | "left"; label: string; children: ReactNode }) {
+  const level = use(LevelContext)!;
+  // Subscribed to its own row's answer only, so a submenu opening or closing re-renders the two rows that changed.
+  const seen = () => openedFor(level.actions.opened(), value);
+  const opened = useSyncExternalStore(level.actions.subscribe, seen, seen);
+  if (!opened) return null;
+  return (
+    <OpenSubmenu level={level} opened={opened} side={side} label={label}>
+      {children}
+    </OpenSubmenu>
+  );
+}
+
+function OpenSubmenu({
+  level,
+  opened,
+  side,
+  label,
+  children,
+}: {
+  level: Level;
+  opened: Opened;
+  side: "right" | "left";
+  label: string;
+  children: ReactNode;
+}) {
+  const surface = use(MenuSurfaceContext);
+  // SubmenuTrigger hands its popover the row it opens from.
+  const row = (use(PopoverContext) as { triggerRef?: RefObject<HTMLElement | null> } | null)?.triggerRef;
+  const popup = useRef<HTMLDivElement>(null);
+  const [place, setPlace] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
+  useLayoutEffect(() => {
+    const node = popup.current,
+      anchor = row?.current;
+    if (!node || !anchor) return;
+    let settled: { row: number; top: number } | null = null;
+    return watchPlacement(node, () => {
+      const box = anchor.getBoundingClientRect(),
+        frame = node.getBoundingClientRect(),
+        first = node.querySelector('[role^="menuitem"]');
+      const next = submenuPlacement({
+        row: box,
+        edge: popupEdge(anchor),
+        width: node.offsetWidth,
+        height: node.scrollHeight + node.offsetHeight - node.clientHeight,
+        first: first ? first.getBoundingClientRect().top - frame.top : 0,
+        side,
+        view: { width: innerWidth, height: innerHeight },
+      });
+      const kept = settle(settled, box.top, next.top);
+      settled = kept.settled;
+      return { ...next, top: kept.top };
+    }, setPlace);
+  }, [row, side]);
+  const parentInput = level.actions.input;
+  /** Linear's yieldFocus: focus goes back to the parent menu, so its Escape and keys work, and the submenu stays open. */
+  const yieldFocus = () => {
+    if (popup.current?.contains(document.activeElement)) parentInput()?.focus();
+  };
+  const focusInside = () => {
+    const node = popup.current;
+    (node?.querySelector<HTMLElement>(".menu-input input") ?? node?.querySelector<HTMLElement>("select,button,.menu[tabindex]"))?.focus();
+  };
+  const back = () => {
+    level.actions.close();
+    parentInput()?.focus();
+  };
+  // A submenu opened by a key takes focus at once; the pointer's and a preview's leave it in the parent.
+  useLayoutEffect(() => {
+    if (opened.how === "focus") focusInside();
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- On each opening; the helper reads the popup.
+  }, [opened]);
+  // Closing with focus inside hands it back to the parent menu.
+  useEffect(() => {
+    const node = popup.current;
+    return () => {
+      const active = document.activeElement;
+      if (!active || active === document.body || node?.contains(active)) parentInput()?.focus();
+    };
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Cleanup resolves the parent menu's input when the submenu closes.
+  }, []);
+  return (
+    <AriaPopover
+      isOpen
+      onOpenChange={(open) => {
+        if (!open) surface?.close();
+      }}
+      isKeyboardDismissDisabled
+      // A press in another popup of this menu (a Select's list, a nested submenu) isn't outside it.
+      shouldCloseOnInteractOutside={(element) => !element.closest("[data-surface], [data-popover], .menu-submenu")}
+      className="menu-submenu"
+      style={{
+        position: "fixed",
+        top: place?.top ?? 0,
+        left: place?.left ?? 0,
+        right: "auto",
+        bottom: "auto",
+        maxHeight: place?.maxHeight,
+        zIndex: 60,
+        visibility: place ? "visible" : "hidden",
+      }}
+    >
+      <div
+        ref={popup}
+        // Its own dialog, so React Aria's Popover neither takes focus as it opens (a preview keeps it in the parent) nor traps it.
+        role="dialog"
+        aria-label={label}
+        className="menu-submenu-box"
+        style={{ maxHeight: place?.maxHeight }}
+        onPointerMove={(event) => {
+          const target = event.target as Element;
+          if (!event.currentTarget.contains(target) || event.buttons) return;
+          if (target.hasAttribute("data-safe-triangle")) yieldFocus();
+          else if (!event.currentTarget.contains(document.activeElement)) focusInside();
+        }}
+        onPointerLeave={(event) => {
+          if (!event.buttons) yieldFocus();
+        }}
+      >
+        <SafeTriangle popup={popup} from={opened.at} placed={place ? `${place.left},${place.top}` : null} />
+        <SubmenuContext value={{ back }}>{children}</SubmenuContext>
+      </div>
+    </AriaPopover>
+  );
+}
 
 /**
- * A row that opens a nested menu (Linear's Item `SubMenu`): the pointer highlighting it opens it, ArrowRight, Enter or Space opens and
- * focuses it, a keyboard highlight that rests on the row for 300ms previews it without moving focus (Linear's _6e). The pointer
- * entering the submenu focuses it; leaving it hands focus back to this menu and leaves it open (Linear's requestFocus and
- * yieldFocus), until this menu's highlight moves to another row. ArrowLeft and Backspace on an empty search return to this menu;
- * Escape closes the whole menu, as Linear's does. It opens beside the row on `side`,
- * overlapping its menu by 2px, with its first row level with this one, and only swaps sides when it doesn't fit. The nested menu is
- * portalled into `container` so it stays inside the parent popup's focus scope.
+ * A row that opens a nested menu (Linear's Item `SubMenu`), on React Aria's SubmenuTrigger: the pointer highlighting it opens it,
+ * →, Enter or Space opens and focuses it, a keyboard highlight that rests on the row for 300ms previews it without moving focus
+ * (Linear's _6e). The pointer entering the submenu focuses it; leaving it hands focus back to this menu and leaves it open, until
+ * this menu's highlight moves to another row. It opens beside the row on `side`, overlapping its menu by 2px, with its first row
+ * level with this one, and only swaps sides when it doesn't fit.
  */
 function MenuSubmenu({
   value,
   label,
-  open,
-  onOpenChange,
-  container,
+  keywords,
   side = "right",
   popupLabel = value,
   children,
@@ -871,204 +1358,24 @@ function MenuSubmenu({
 }: Omit<ItemSlots, "checkbox" | "onCheckboxClick" | "checkboxLabel" | "checked" | "description"> & {
   value: string;
   label: ReactNode;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  container: Container;
+  keywords?: string[];
   side?: "right" | "left";
   /** The nested menu's accessible name; the row's value by default. */
   popupLabel?: string;
   children: ReactNode;
 }) {
-  const id = useId(),
-    nodeId = useFloatingNodeId(),
-    level = use(MenuLevelContext),
-    surface = use(MenuSurfaceContext),
-    row = useRef<HTMLDivElement>(null),
-    focusOnOpen = useRef(false),
-    // A keyboard preview keeps focus in the parent menu until → or the pointer moves in.
-    previewing = useRef(false),
-    previewTimer = useRef<ReturnType<typeof setTimeout>>(undefined),
-    // Where the pointer opened the submenu from, the safe triangle's first corner.
-    hoveredAt = useRef<Point | null>(null),
-    [keep] = useState(stay);
-  const setOpen = (next: boolean) => {
-    // An explicit open or close supersedes a pending keyboard preview, which would otherwise reopen a menu just closed.
-    clearTimeout(previewTimer.current);
-    if (next) level?.actions.opened(value);
-    onOpenChange(next);
-  };
-  const { refs, floatingStyles, isPositioned, x, y } = useFloating({
-    nodeId,
-    open,
-    onOpenChange: (next) => {
-      focusOnOpen.current = false;
-      previewing.current = false;
-      setOpen(next);
-    },
-    placement: side === "right" ? "right-start" : "left-start",
-    strategy: "fixed",
-    whileElementsMounted: autoUpdate,
-    middleware: [
-      offset(({ elements }) => {
-        const first = elements.floating.querySelector("[cmdk-item]");
-        return {
-          mainAxis: edgeInset(elements.reference as Element, side) - 2,
-          alignmentAxis: first
-            ? elements.floating.getBoundingClientRect().top - first.getBoundingClientRect().top
-            : 0,
-        };
-      }),
-      // Linear's x3e: a submenu keeps to a side, only swapping right and left, and is clamped 10px inside the window down and 12px
-      // across (over its parent when neither side fits); it never drops under its row.
-      flip({ padding: 12, crossAxis: false }),
-      // Its room (_3e for "horizontal"): from its row to the bottom when that is over half the window, else the window less 16px
-      // each end; its menu cuts its list to fit (useListHeight), and shift then moves it up into the window.
-      size({
-        apply: ({ elements }) => {
-          const room = menuRoom(innerHeight, elements.reference.getBoundingClientRect().top);
-          elements.floating.style.maxHeight = `${room}px`;
-        },
-      }),
-      shift({ padding: { top: 10, bottom: 10, left: 12, right: 12 }, crossAxis: true }),
-      keep,
-    ],
-  });
-  const parentInput = () => level?.meta.root()?.querySelector<HTMLInputElement>("input");
-  /** Linear's yieldFocus: focus goes back to the parent menu, so its Escape and keys work, and the submenu stays open. */
-  const yieldFocus = () => {
-    if (refs.floating.current?.contains(document.activeElement)) parentInput()?.focus();
-  };
-  const focusInside = () => {
-    previewing.current = false;
-    const node = refs.floating.current;
-    (node?.querySelector<HTMLElement>("input") ?? node?.querySelector<HTMLElement>("select,button"))?.focus();
-  };
-  const back = () => {
-    setOpen(false);
-    parentInput()?.focus();
-  };
-  useEffect(() =>
-    level?.actions.register(value, {
-      open,
-      close: () => {
-        clearTimeout(previewTimer.current);
-        if (open) onOpenChange(false);
-      },
-      hover: (at) => {
-        if (open) return;
-        hoveredAt.current = at;
-        focusOnOpen.current = false;
-        previewing.current = false;
-        setOpen(true);
-      },
-      preview: () => {
-        clearTimeout(previewTimer.current);
-        previewTimer.current = setTimeout(() => {
-          if (open || row.current?.getAttribute("aria-selected") !== "true") return;
-          focusOnOpen.current = false;
-          previewing.current = true;
-          setOpen(true);
-        }, 300);
-      },
-    }),
-  );
-  useEffect(() => () => clearTimeout(previewTimer.current), []);
-  useEffect(() => {
-    if (open && isPositioned && focusOnOpen.current) {
-      focusInside();
-      focusOnOpen.current = false;
-    }
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Focus only on the open/positioned transition; the render-local helper changes each render.
-  }, [open, isPositioned]);
-  useEffect(() => {
-    if (!open) return;
-    const node = refs.floating.current;
-    return () => {
-      // By the time this runs the submenu's node is gone, and the focus it held has fallen to <body>.
-      const active = document.activeElement;
-      if (!active || active === document.body || node?.contains(active)) parentInput()?.focus();
-    };
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Cleanup resolves the parent menu's input when the submenu closes.
-  }, [open, refs.floating]);
-  useEffect(() => {
-    if (!open) hoveredAt.current = null;
-  }, [open]);
   return (
-    <FloatingNode id={nodeId}>
-      <Command.Item
-        ref={(node) => {
-          row.current = node;
-          refs.setReference(node);
-        }}
-        value={value}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={open ? id : undefined}
-        onSelect={() => {
-          focusOnOpen.current = true;
-          if (open) focusInside();
-          else setOpen(true);
-        }}
-        className="menu-item"
-      >
+    // React Aria keys a SubmenuTrigger's node by its `id`, which its types leave out.
+    <SubmenuTrigger delay={NO_HOVER_OPEN} {...({ id: SUBMENU + value, keywords } as object)}>
+      <AriaMenuItem id={value} textValue={value} {...({ keywords } as object)} className="menu-item">
         <ItemContent {...slots} submenu>
           {label}
         </ItemContent>
-      </Command.Item>
-      {open &&
-        container.current &&
-        createPortal(
-          <div
-            id={id}
-            // Through a function: the setter itself as `ref` makes the React Compiler skip this row (BJ-233).
-            ref={(node) => refs.setFloating(node)}
-            style={{ ...floatingStyles, visibility: isPositioned ? "visible" : "hidden" }}
-            role="dialog"
-            aria-label={popupLabel}
-            // The pointer over the submenu's rows takes focus in; over its safe triangle it is on its way out, so it yields. Events
-            // from a nested submenu (portalled beside this one, a React child) are that one's to handle.
-            onPointerMove={(event) => {
-              const target = event.target as Element;
-              if (!event.currentTarget.contains(target) || event.buttons) return;
-              if (target.hasAttribute("data-safe-triangle")) yieldFocus();
-              else if (!event.currentTarget.contains(document.activeElement)) focusInside();
-            }}
-            onPointerLeave={(event) => {
-              if (!event.buttons) yieldFocus();
-            }}
-            // cmdk moves focus to a menu's search when it first highlights a row; a preview hands it straight back.
-            onFocus={() => {
-              if (previewing.current) parentInput()?.focus();
-            }}
-            // ← at the start of the search, or Backspace on an empty one (not a held key that just emptied it), steps back one level.
-            // On the open popup itself, not a hotkey per row: every submenu row registering two bindings, re-synced on each of its
-            // renders, cost every hover. Held before the search sees them, as the bindings were (captured, never passed on).
-            onKeyDownCapture={(event: KeyboardEvent) => {
-              const target = event.target as Element;
-              if (!event.currentTarget.contains(target) || !backKey(event)) return;
-              event.stopPropagation();
-              const input = target instanceof HTMLInputElement ? target : null;
-              if (event.key === "ArrowLeft" ? input?.value && input.selectionStart !== 0 : !input || input.value || event.repeat)
-                return;
-              event.preventDefault();
-              back();
-            }}
-            // Escape closes every level (Linear's closeParent); Tab moves this menu's highlight and reaches the popup's focus trap.
-            onKeyDown={(event: KeyboardEvent) => {
-              if (event.key === "Tab") return;
-              event.stopPropagation();
-              if (event.key === "Escape" && surface) {
-                event.preventDefault();
-                surface.close();
-              }
-            }}
-          >
-            <SafeTriangle popup={refs.floating} from={hoveredAt} placed={isPositioned ? `${x},${y}` : null} />
-            {children}
-          </div>,
-          container.current,
-        )}
-    </FloatingNode>
+      </AriaMenuItem>
+      <SubmenuPopup value={value} side={side} label={popupLabel}>
+        {children}
+      </SubmenuPopup>
+    </SubmenuTrigger>
   );
 }
 

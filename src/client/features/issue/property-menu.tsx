@@ -13,7 +13,7 @@ import {
   statuses,
 } from "@/shared/board-catalog";
 import { useStore, ME } from "@/client/state/store";
-import { menuFilter, personKeywords, rowKeywords } from "@/client/lib/fuzzy-score";
+import { personKeywords, rowKeywords } from "@/client/lib/fuzzy-score";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { LoadingState } from "@/client/components/empty-state";
 import { kept, useCommand } from "@/client/features/navigation/commands";
@@ -69,7 +69,8 @@ export function PropertyMenu({
   const menu = (
     <Menu
       defaultValue={current}
-      filter={menuFilter}
+      search={query}
+      onSearchChange={onQuery}
       width={target ? "auto" : 206}
       onKeyDown={onKeyDown}
     >
@@ -78,8 +79,6 @@ export function PropertyMenu({
         placeholder={placeholder}
         aria-label={placeholder}
         hotkey={target ? undefined : hotkey}
-        value={query}
-        onValueChange={onQuery}
       />
       <Menu.List maxHeight={LIMIT_HEIGHT}>
         <Menu.Empty>No results</Menu.Empty>

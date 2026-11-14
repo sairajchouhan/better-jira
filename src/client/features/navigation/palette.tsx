@@ -342,7 +342,9 @@ function PaletteFrame({
       >
         {title && <CommandMenuTitle issue={title} />}
         <Menu
-          shouldFilter={false}
+          filter="none"
+          search={q}
+          onSearchChange={setQ}
           width="auto"
           // The highlighted issue (arrow keys or pointer) loads before it is picked.
           onValueChange={(value) => {
@@ -353,8 +355,6 @@ function PaletteFrame({
           <Menu.Input
             autoFocus
             aria-label={label}
-            value={q}
-            onValueChange={setQ}
             onKeyDown={(e) => e.key === "Backspace" && !q && onBackspace?.()}
             placeholder={placeholder}
             chip={chip}

@@ -243,7 +243,7 @@ export function ImageMedia({
             setSelected(true);
             setOpen(false);
             requestAnimationFrame(() => {
-              if (!document.querySelector("[cmdk-input]")) trigger.current?.focus();
+              if (!document.querySelector(".menu-input input")) trigger.current?.focus();
             });
           }}
         />

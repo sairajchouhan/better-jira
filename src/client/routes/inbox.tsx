@@ -421,13 +421,11 @@ function SnoozeMenu({ close }: { close: () => void }) {
         />
       ) : (
         // Linear's snooze options are an action menu (IB): the first choice is highlighted, arrows move, typing filters.
-        <Menu shouldFilter={false}>
+        <Menu filter="none" search={query} onSearchChange={setQuery}>
           <Menu.Input
             autoFocus
             aria-label="Snooze time"
             placeholder={invoked === "keyboard" ? "Snooze notification until…" : TIME_PLACEHOLDER}
-            value={query}
-            onValueChange={setQuery}
           />
           <Menu.List>
             <SnoozeRows item={item} query={query} close={close} onCustom={() => setCustom(true)} />

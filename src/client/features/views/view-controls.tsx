@@ -147,7 +147,6 @@ function AddFilterButton({
             <FilterMenu
               key={board.id}
               board={board}
-              container={popup}
               footer={<PropertySyncNotice />}
               // Submenus open away from the trigger's edge: right of the chip row's "+", left of the toolbar button.
               side={placement === "bottom-left" ? "right" : "left"}

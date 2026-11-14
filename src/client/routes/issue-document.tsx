@@ -621,13 +621,11 @@ function DocumentPeople({
       close={close}
       fit
     >
-      <Menu>
+      <Menu search={query} onSearchChange={setQuery}>
         <Menu.Input
           autoFocus
           placeholder={kind === "owner" ? "Change owner…" : "Change subscribers…"}
           aria-label={kind === "owner" ? "Find document owner" : "Find document subscribers"}
-          value={query}
-          onValueChange={setQuery}
         />
         <Menu.List>
           <Menu.Empty>No people found</Menu.Empty>

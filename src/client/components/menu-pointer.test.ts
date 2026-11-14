@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { pointerStep, stay } from "./menu";
+import { pointerStep } from "./menu";
+import { settle } from "./menu-geometry";
 
-test("the pointer entering a pristine menu's first row opens its submenu, though cmdk already selected that row unseen", () => {
-  // A right-click menu opens pristine with cmdk's value on its first row, Status; the pointer then reaches Status.
+test("the pointer entering a menu's first row opens its submenu, though a key highlighted that row before the pointer came", () => {
+  // A menu opened by a key highlights its first row, Status; the pointer then reaches Status.
   expect(pointerStep("Status", null, "Status")).toBe("enter");
 });
 
@@ -26,23 +27,17 @@ test("R3-palette-shortcuts-D3: when the highlighted row leaves the list, the hig
   expect(vanishedHighlight("Change issue status", "Change issue status", [])).toBeNull();
 });
 
-describe("stay", () => {
-  // A middleware call as floating-ui makes it: only the fields `stay` reads.
-  const place = (keep: ReturnType<typeof stay>, popup: object, row: number, y: number) =>
-    keep.fn({ y, rects: { reference: { y: row } }, elements: { floating: popup } } as never);
-
+describe("settle", () => {
   test("an open submenu keeps where it first settled while its row stays put", () => {
-    const keep = stay(),
-      popup = {};
-    expect(place(keep, popup, 100, 96)).toEqual({});
-    expect(place(keep, popup, 100, 140)).toEqual({ y: 96 });
+    const first = settle(null, 100, 96);
+    expect(first.top).toBe(96);
+    // Its search shrank the list, so a fresh placement would move it to 140: it stays at 96.
+    expect(settle(first.settled, 100, 140).top).toBe(96);
   });
 
   test("a moved row, or the submenu opened again, settles anew", () => {
-    const keep = stay(),
-      popup = {};
-    place(keep, popup, 100, 96);
-    expect(place(keep, popup, 132, 128)).toEqual({});
-    expect(place(keep, {}, 132, 150)).toEqual({});
+    const first = settle(null, 100, 96);
+    expect(settle(first.settled, 132, 128)).toEqual({ top: 128, settled: { row: 132, top: 128 } });
+    expect(settle(null, 132, 150).top).toBe(150);
   });
 });

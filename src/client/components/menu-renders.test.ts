@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { backKey, openedIn } from "./menu";
+import { backKey, openedFor, openedIn } from "./menu";
 import { Row } from "./action-menu";
 import { FilterEntry } from "@/client/features/filters/filter-menu";
 import { LabelRow } from "@/client/features/issue/property-menu";
@@ -12,6 +12,13 @@ test("a submenu row opening takes its level's highlight unless it already holds 
   openedIn(level("Status"), "Status");
   openedIn(level("Status"), "Labels");
   expect(highlighted).toEqual(["Labels"]);
+});
+
+test("each submenu row sees only its own opening, the same object while it stays open, so the other rows never re-render", () => {
+  const status = { key: "Status", how: "pointer" as const };
+  expect(openedFor(status, "Status")).toBe(status);
+  expect(openedFor(status, "Labels")).toBeNull();
+  expect(openedFor(null, "Status")).toBeNull();
 });
 
 test("a menu level's context value is made once for the menu's life, so a highlight change never re-renders every submenu row", async () => {

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { anchoredPlacement, LIMIT_HEIGHT, MENU, menuRoom } from "./menu-geometry";
+import { anchoredPlacement, LIMIT_HEIGHT, MENU, menuRoom, submenuPlacement } from "./menu-geometry";
 import * as menu from "./menu";
 
 const at = (top: number, bottom: number, width = 120) => ({ top, bottom, width });
@@ -45,4 +45,34 @@ test("menu.tsx re-exports the geometry it used to own, and menu-surface.tsx no l
   const geometry = await Bun.file(new URL("./menu-geometry.ts", import.meta.url)).text();
   expect(surface).not.toMatch(/from "\.\/menu"/);
   expect(geometry).not.toMatch(/from "\.\/menu(-surface)?"/);
+});
+
+const submenu = (over: Partial<Parameters<typeof submenuPlacement>[0]> = {}) =>
+  submenuPlacement({
+    row: { top: 200 },
+    edge: { left: 400, right: 640 },
+    width: 240,
+    height: 300,
+    first: 6,
+    side: "right",
+    view: { width: 1200, height: 900 },
+    ...over,
+  });
+
+test("a submenu opens on its side, 2px over its menu's border, its first row level with its row (Linear's x3e)", () => {
+  // Room below the row is 900 - 200 - 16, over half the window, so that is its cap.
+  expect(submenu()).toEqual({ left: 638, top: 194, maxHeight: 684 });
+});
+
+test("a submenu swaps sides only when its own doesn't fit and the other does", () => {
+  expect(submenu({ edge: { left: 760, right: 1000 } }).left).toBe(522);
+  expect(submenu({ side: "left", edge: { left: 100, right: 340 } }).left).toBe(338);
+});
+
+test("when neither side fits, a submenu keeps its side and is clamped 12px inside the window, over its menu (S3e)", () => {
+  expect(submenu({ edge: { left: 100, right: 400 }, view: { width: 500, height: 900 } }).left).toBe(248);
+});
+
+test("a submenu near the bottom is moved up to stay 10px inside the window, its cap the whole window's room", () => {
+  expect(submenu({ row: { top: 800 } })).toEqual({ left: 638, top: 590, maxHeight: 900 - 2 * MENU.VIEWPORT_PADDING });
 });

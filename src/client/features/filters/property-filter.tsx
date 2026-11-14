@@ -11,7 +11,7 @@ import { hue, PriorityIcon, StatusIcon, TypeDot } from "@/client/components/icon
 import { Menu } from "@/client/components/menu";
 import { LIMIT_HEIGHT } from "@/client/components/menu-geometry";
 import { NoMatchesFooter, splitByMatches } from "@/client/components/no-matches";
-import { breadcrumbKeywords, menuFilter } from "@/client/lib/fuzzy-score";
+import { breadcrumbKeywords } from "@/client/lib/fuzzy-score";
 import { Select } from "@/client/components/select";
 import { Button } from "@/client/components/button";
 import { TextInput } from "@/client/components/field";
@@ -508,7 +508,8 @@ export function PropertyFilter({
   ruleId?: string;
   name: string;
   board: Board;
-  onBack: () => void;
+  /** Called when a chip's inline editor is done (a submenu closes with the whole menu instead). */
+  onBack?: () => void;
   inline?: boolean;
   autoFocus?: boolean;
 }) {
@@ -525,7 +526,7 @@ export function PropertyFilter({
   const text = field === "content" || field === "links";
   const done = () => {
     ui.send({ type: "toolbar.close" });
-    if (inline) onBack();
+    if (inline) onBack?.();
   };
   const form = (
     <form
@@ -590,8 +591,6 @@ export function PropertyFilter({
       autoFocus={autoFocus}
       placeholder={placeholder}
       aria-label={label}
-      value={search}
-      onValueChange={setSearch}
     />
   );
   // Linear's chip editor and the numeric Jira fields keep the operator form.
@@ -601,7 +600,7 @@ export function PropertyFilter({
   if (dated) {
     const presets = datePresets(field, search);
     return (
-      <Menu shouldFilter={false} className="filter-menu filter-sub">
+      <Menu search={search} onSearchChange={setSearch} filter="none" className="filter-menu filter-sub">
         {searchRow(field === "due" ? "Try: 1 week ago, 1 week from now…" : "Filter…", name)}
         <Menu.List maxHeight={LIMIT_HEIGHT}>
           {!presets.length && <Menu.Empty always>{noMatches(name)}</Menu.Empty>}
@@ -625,7 +624,7 @@ export function PropertyFilter({
   if (text && !inline) {
     const noun = field === "content" ? "content" : "link";
     return (
-      <Menu shouldFilter={false} className="filter-menu filter-sub">
+      <Menu search={search} onSearchChange={setSearch} filter="none" className="filter-menu filter-sub">
         {searchRow()}
         <Menu.List>
           <Menu.Item
@@ -644,7 +643,7 @@ export function PropertyFilter({
   }
   return (
     <div className={inline ? "" : "filter-menu filter-sub"}>
-      <Menu filter={menuFilter}>
+      <Menu search={search} onSearchChange={setSearch}>
         {searchRow()}
         <Menu.List maxHeight={inline ? "300px" : LIMIT_HEIGHT}>
           <Menu.Empty>{noMatches(name)}</Menu.Empty>
