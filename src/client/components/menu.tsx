@@ -527,16 +527,20 @@ function edgeInset(row: Element, side: "right" | "left") {
 
 /** Keeps an open submenu where it first settled while its row stays put. Typing in its search shrinks the list from the bottom, as in
  *  Linear: re-aligning on a list with no first row, or un-shifting a shorter one, would move the search out from under the pointer
- *  and close the menu. */
-const stay = (settled: RefObject<{ row: number; y: number } | null>): Middleware => ({
-  name: "stay",
-  fn: ({ y, rects }) => {
-    const row = rects.reference.y;
-    if (settled.current?.row === row) return { y: settled.current.y };
-    settled.current = { row, y };
-    return {};
-  },
-});
+ *  and close the menu. Each opening mounts a new popup node, which starts over. One per submenu (`useState(stay)`): the memory is
+ *  the middleware's own, since a ref handed to it during render would make the React Compiler skip the row (BJ-233). */
+export const stay = (): Middleware => {
+  let settled: { popup: Element; row: number; y: number } | null = null;
+  return {
+    name: "stay",
+    fn: ({ y, rects, elements }) => {
+      const row = rects.reference.y;
+      if (settled?.popup === elements.floating && settled.row === row) return { y: settled.y };
+      settled = { popup: elements.floating, row, y };
+      return {};
+    },
+  };
+};
 
 /** Writes the safe triangle from `point` to `popup`'s box into `node`'s style, or hides it while the pointer is inside the popup. */
 function drawTriangle(node: HTMLElement, popup: HTMLElement | null, { x, y }: Point) {
@@ -638,8 +642,7 @@ function MenuSubmenu({
     previewTimer = useRef<ReturnType<typeof setTimeout>>(undefined),
     // Where the pointer opened the submenu from, the safe triangle's first corner.
     hoveredAt = useRef<Point | null>(null),
-    // Where the open submenu first settled, keyed by its row's top (see `stay`).
-    settled = useRef<{ row: number; y: number } | null>(null);
+    [keep] = useState(stay);
   const setOpen = (next: boolean) => {
     // An explicit open or close supersedes a pending keyboard preview, which would otherwise reopen a menu just closed.
     clearTimeout(previewTimer.current);
@@ -671,12 +674,9 @@ function MenuSubmenu({
       // across (over its parent when neither side fits); it never drops under its row.
       flip({ padding: 12, crossAxis: false }),
       shift({ padding: { top: 10, bottom: 10, left: 12, right: 12 }, crossAxis: true }),
-      stay(settled),
+      keep,
     ],
   });
-  useEffect(() => {
-    if (!open) settled.current = null;
-  }, [open]);
   const parentInput = () => level?.meta.root.current?.querySelector<HTMLInputElement>("input");
   /** Linear's yieldFocus: focus goes back to the parent menu, so its Escape and keys work, and the submenu stays open. */
   const yieldFocus = () => {
@@ -785,7 +785,8 @@ function MenuSubmenu({
         createPortal(
           <div
             id={id}
-            ref={refs.setFloating}
+            // Through a function: the setter itself as `ref` makes the React Compiler skip this row (BJ-233).
+            ref={(node) => refs.setFloating(node)}
             style={{ ...floatingStyles, visibility: isPositioned ? "visible" : "hidden" }}
             role="dialog"
             aria-label={popupLabel}
