@@ -1,28 +1,18 @@
 import { type Board, type Issue, type IssueDraft } from "@/shared/issue-model";
 import { useEffect, useRef, useState } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { get, ME, set } from "@/client/state/store";
+import { get, set } from "@/client/state/store";
 import { actions } from "@/client/state/issue-actions";
 import { addLocalFiles, restoreLocalFiles } from "@/client/state/local-database";
 import { discardLateMedia, documentHasMedia, lateMediaDiscarded, normalizeDocument, type AdfDocument } from "@/shared/document";
 import { rankBetween } from "@/shared/view-model";
 import { childrenByParent } from "./sub-issue-model";
-import { emptySubIssueDraft, readSubIssueDraft, saveSubIssueDraft, type SubIssueDraft } from "./sub-issue-draft";
+import { emptySubIssueDraft, readSubIssueDraft, saveSubIssueDraft, subIssueDefaults, type SubIssueDraft } from "./sub-issue-draft";
 
 /** Owns draft persistence, file restoration, late uploads, and submission for one keyed issue. */
 export function useSubIssueComposer(issue: Issue, board: Board, namespace: string, setCollapsed: (value: boolean) => void) {
   const [creating, setCreating] = useState(false), [confirming, setConfirming] = useState(false);
-  const initial = (): IssueDraft => ({
-    parent: issue.key,
-    project: issue.project,
-    assignee: ME,
-    priority: undefined,
-    status:
-      board.columns
-        .find((c) => !/backlog/i.test(c.name) && c.statuses.some((s) => s.category === "new"))
-        ?.statuses.find((s) => s.category === "new")?.id ?? board.columns[0]?.statuses[0]?.id,
-    labels: [],
-  });
+  const initial = (): IssueDraft => subIssueDefaults(issue, board);
   const draftKey = `better-jira:sub-issue-draft:v1:${namespace}:${issue.key}`;
   const [value, setValue] = useState(() => readSubIssueDraft(draftKey, initial())),
     pending = useRef(value),

@@ -1,4 +1,5 @@
-import { type Issue, type IssueDraft } from "@/shared/issue-model";
+import { type Board, type Issue, type IssueDraft } from "@/shared/issue-model";
+import { ME } from "@/client/state/store";
 import { documentHasMedia, normalizeDocument, type AdfDocument } from "@/shared/document";
 import { adfToText } from "@/client/features/editor/adf";
 
@@ -9,6 +10,22 @@ export type SubIssueDraft = {
   files: NonNullable<Issue["attachments"]>;
   properties: IssueDraft;
 };
+/**
+ * A new sub-issue's properties. Linear's `Issue.create` with a parent sets `priority = priority || parent.priority`
+ * (startup-entry `w2.create`, `ye.priority=s||f.priority`), so the inline composer starts at the parent's priority
+ * (R3-create-D10); the project is the parent's (`createSubIssue`: `project:n.project?.value`).
+ */
+export const subIssueDefaults = (parent: Issue, board: Board): IssueDraft => ({
+  parent: parent.key,
+  project: parent.project,
+  assignee: ME,
+  priority: parent.priority,
+  status:
+    board.columns
+      .find((c) => !/backlog/i.test(c.name) && c.statuses.some((s) => s.category === "new"))
+      ?.statuses.find((s) => s.category === "new")?.id ?? board.columns[0]?.statuses[0]?.id,
+  labels: [],
+});
 export const emptySubIssueDraft = (properties: IssueDraft): SubIssueDraft => ({
   title: "",
   description: normalizeDocument(""),
