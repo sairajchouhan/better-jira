@@ -512,9 +512,12 @@ test("a long inbox: older pages on scroll, undo by Z and toast, the row menu, âŒ
   await test.step("R2-inbox-D2: Delete all hides older pages too, and Z brings every row back", async () => {
     await p.reload();
     await p.waitFor(`${rows}.length === 20 && ${badge} === "45"`);
-    await p.eval(`window.confirm = () => true`);
     await p.click(`[aria-label="Notification actions"]`);
     await p.click(`[cmdk-item][data-value="Delete all"]`);
+    // R3-inbox-D6: Linear's confirmation dialog, not the browser's confirm().
+    const confirmDialog = `[role=dialog][aria-label="Delete all notifications?"]`;
+    await p.waitFor(`document.querySelector('${confirmDialog}')?.innerText.includes("This will delete all notifications in your inbox.")`);
+    await p.click(`${confirmDialog} button[data-autofocus]`);
     await p.waitFor(`document.body.innerText.includes("No notifications")`);
     await sleep(1000); // no older page may bring rows back
     expect(await p.eval(`${rows}.length`)).toBe(0);

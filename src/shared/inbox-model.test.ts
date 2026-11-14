@@ -9,6 +9,7 @@ import {
   kindOf,
   mapFeed,
   missingIssueNote,
+  rowLabel,
   shortAgo,
   snoozeChoices,
   snoozeTime,
@@ -185,6 +186,16 @@ test("unreadCount counts Jira's unread rows beyond the loaded pages, less local 
   ).toBe(61 - 3 + 1);
   // Without Jira's list (an older server), the loaded rows still count.
   expect(unreadCount(undefined, loaded, {}, now)).toBe(1);
+});
+
+test("an undone ⌥U counts rows being marked unread that Jira's last list and the loaded pages lack (R3-inbox-D5)", () => {
+  expect(unreadCount([], [], { far: { read: false }, gone: { read: false, deleted: true } })).toBe(1);
+});
+
+test("a Jira system notification's row label leaves no gap for its missing key (R3-inbox-D7)", () => {
+  const system = item({ key: "", title: "View work", kind: "updated", message: "You have 1 item due today" });
+  expect(rowLabel(system)).not.toContain("  ");
+  expect(rowLabel(system)).toStartWith("Unread View work");
 });
 
 test("adfText flattens ADF and its JSON string", () => {

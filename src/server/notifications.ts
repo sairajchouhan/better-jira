@@ -133,6 +133,16 @@ export const markAllRead = () =>
     {},
   );
 
+/** ⌥U: every unread row but the `except` heads (rows snoozed in the browser, which Linear leaves unread: R3-inbox-D3).
+ *  With none, Jira marks its whole feed in one call; otherwise the rest go by group. Returns the groups marked. */
+export async function readAll(except: string[]) {
+  const skip = new Set(except),
+    groups = (await unreadGroups()).filter((g) => !skip.has(g.head)).map((g) => g.id);
+  if (!skip.size) await markAllRead();
+  else for (let i = 0; i < groups.length; i += 50) await mark(groups.slice(i, i + 50), true);
+  return groups;
+}
+
 /** Opening the inbox clears Jira's bell count, as opening the bell does. */
 export const clearUnseen = () =>
   gateway(

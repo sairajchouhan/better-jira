@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { QueryClient } from "@tanstack/query-core";
-import { createInboxStore, type InboxPorts, type Feed } from "./inbox-store";
+import { createInboxStore, deleteQuestion, type InboxPorts, type Feed, type DeleteConfirmation } from "./inbox-store";
+import { unreadCount } from "@/shared/inbox-model";
 import { DEFAULT_VIEW, type InboxItem } from "@/shared/inbox-model";
 
 const row = (id: string, unread = true): InboxItem => ({
@@ -53,7 +54,7 @@ function setup(writable = true, send: InboxPorts["send"] = async () => null) {
     clearSelection: () => {
       opened.push("clear");
     },
-    confirm: () => true,
+    confirm: async () => true,
   };
   return {
     store: createInboxStore(ports),
@@ -255,4 +256,111 @@ test("a mirror poll with unchanged inbox facets preserves the order selector's i
   const polled = a.store.orderOf(data, own, view, now, null, new Map());
   expect(polled).toBe(first);
   a.ports.queryClient.clear();
+});
+
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+function recording(writable = true) {
+  const calls: object[] = [];
+  const a = setup(writable, async (body) => {
+    calls.push(body);
+    return null;
+  });
+  return { ...a, calls };
+}
+
+test("undoing a delete puts the selection back without marking the row read in Jira (R3-inbox-D1)", async () => {
+  const a = recording();
+  a.store.restoreSelection("1");
+  a.store.deleteRow(); // Linear activates the next row: a visit, so it is read
+  a.store.undoInbox();
+  await tick();
+  expect(a.store.selected()).toBe("1");
+  expect(a.calls).toEqual([{ action: "read", groups: ["2"] }]);
+  expect(a.store.selectedRow()?.unread).toBe(true);
+});
+
+test("a bulk delete that removes the selected row moves on without marking the next one read (R3-inbox-D1)", async () => {
+  const a = recording();
+  a.items[0]!.unread = false;
+  a.store.restoreSelection("1");
+  await a.store.deleteAll("read");
+  await tick();
+  expect(a.store.selected()).toBe("2");
+  expect(a.calls).toEqual([]);
+  expect(a.store.localState()["head-1"]).toEqual({ deleted: true });
+});
+
+test("a read cut off by a reload is sent again on the next load (R3-inbox-D2)", async () => {
+  const gone = setup(true, () => new Promise(() => {})); // the page goes away mid-write
+  gone.store.selectRow(gone.items[0]);
+  await tick();
+  const next = recording();
+  Object.assign(next.saved, gone.saved);
+  expect(next.store.localState()["head-1"]).toEqual({ read: true });
+  next.store.resumeWrites();
+  next.store.resumeWrites(); // once per load
+  await tick();
+  await tick();
+  expect(next.calls).toEqual([{ action: "read", groups: ["1"] }]);
+  expect(next.saved.pending).toEqual({});
+  expect(next.store.localState()["head-1"]).toBeUndefined();
+});
+
+test("⌥U leaves snoozed rows unread in Jira and marks unloaded unread rows at once (R3-inbox-D3, D5)", async () => {
+  const gate = deferred();
+  const calls: object[] = [];
+  const a = setup(true, async (body) => {
+    calls.push(body);
+    await gate.promise;
+    return { groups: [] };
+  });
+  const data = a.ports.queryClient.getQueryData<{ pages: Feed[] }>(["inbox", "all"])!;
+  data.pages[0]!.unread = [
+    { id: "1", head: "head-1" },
+    { id: "2", head: "head-2" },
+    { id: "far", head: "head-far" },
+  ];
+  a.store.snoozeRow(Date.now() + 3_600_000, a.items[0]);
+  const done = a.store.markAllRead();
+  await tick();
+  expect(calls).toEqual([{ action: "read-all", except: ["head-1"] }]);
+  const own = a.store.localState();
+  expect(own["head-far"]).toEqual({ read: true });
+  expect(own["head-1"]?.read).toBeUndefined();
+  expect(unreadCount(data.pages[0]!.unread, a.items, own)).toBe(0);
+  gate.resolve();
+  await done;
+});
+
+test("Delete all completed takes only read rows of completed issues, after Linear's confirmation (R3-inbox-D4, D6)", async () => {
+  const a = recording(false);
+  const asked: DeleteConfirmation[] = [];
+  let answer = false;
+  a.ports.confirm = async (question) => (asked.push(question), answer);
+  a.items[0]!.status = "Done";
+  a.items[0]!.unread = false;
+  a.items[1]!.status = "Done";
+  await a.store.deleteAll("completed");
+  expect(a.store.localState()).toEqual({});
+  answer = true;
+  await a.store.deleteAll("completed");
+  expect(asked[0]).toEqual({
+    title: "Delete all read notifications for completed issues?",
+    description: "This will delete all read notifications about issues that were marked as done or canceled.",
+  });
+  expect(a.store.localState()).toEqual({ "head-1": { deleted: true } });
+});
+
+test("bulk delete confirmations use Linear's wording, naming the priority inbox's tab", () => {
+  expect(deleteQuestion("all", DEFAULT_VIEW)).toEqual({
+    title: "Delete all notifications?",
+    description: "This will delete all notifications in your inbox.",
+  });
+  expect(deleteQuestion("read", { priorityInbox: true, tab: "watching" })).toEqual({
+    title: "Delete all read notifications?",
+    description: "This will delete all read notifications in the Other inbox.",
+  });
+  expect(deleteQuestion("completed", { priorityInbox: true, tab: "direct" }).title).toBe(
+    "Delete all read notifications for completed issues in the Priority inbox?",
+  );
 });

@@ -5,7 +5,7 @@ import { unreadCount } from "@/shared/inbox-model";
 import { statusOf as issueStatusOf, get, set, useStore } from "@/client/state/store";
 import { queryClient } from "@/client/state/server-data";
 import { navigate, router, ui } from "@/client/features/navigation/app-navigation";
-import { createInboxStore, type Category } from "@/client/state/inbox-store";
+import { createInboxStore, type Category, type DeleteConfirmation } from "@/client/state/inbox-store";
 import { readStored, writeStored } from "@/client/state/stored-state";
 
 const storageKey = (name: string) =>
@@ -21,16 +21,37 @@ function keepRowInUrl(id: string | null) {
   if ((search[ROW_PARAM] ?? null) === id) return;
   void router.navigate({ to: "/inbox", search: { ...search, [ROW_PARAM]: id ?? undefined }, replace: true } as never);
 }
+/** Set as the page goes away. A reload must not undo a read mid-write (R3-inbox-D2): `keepalive` lets the request finish, and
+ *  a write cut off while leaving never settles here, so its local mark and pending entry stay for the next load to resend. */
+let leaving = false;
+globalThis.addEventListener?.("pagehide", () => {
+  leaving = true;
+});
 async function send(body: object) {
   const res = await fetch("/api/inbox", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    keepalive: true,
+  }).catch((error: unknown) => {
+    if (leaving) return new Promise<never>(() => {});
+    throw error;
   });
   const reply = await res.json().catch(() => null);
   if (!res.ok) throw new Error(reply?.error ?? "Jira refused");
   return reply as { groups?: string[] } | null;
 }
+
+/** The bulk delete waiting for Linear's confirmation dialog (R3-inbox-D6); the inbox screen renders it. */
+type Confirmation = DeleteConfirmation & { answer: (ok: boolean) => void };
+let confirmation: Confirmation | null = null;
+const confirmListeners = new Set<() => void>();
+const subscribeConfirmation = (l: () => void) => (
+  confirmListeners.add(l),
+  () => void confirmListeners.delete(l)
+);
+export const useConfirmation = () =>
+  useSyncExternalStore(subscribeConfirmation, () => confirmation);
 
 export const inbox = createInboxStore({
   queryClient,
@@ -85,7 +106,19 @@ export const inbox = createInboxStore({
     keepRowInUrl(null);
     navigate({ selected: null, panel: false, inbox: true });
   },
-  confirm: (message) => confirm(message),
+  confirm: (question) =>
+    new Promise((resolve) => {
+      confirmation?.answer(false);
+      confirmation = {
+        ...question,
+        answer: (ok) => {
+          confirmation = null;
+          confirmListeners.forEach((l) => l());
+          resolve(ok);
+        },
+      };
+      confirmListeners.forEach((l) => l());
+    }),
 });
 globalThis.addEventListener?.("storage", (event) => {
   const key = (event as StorageEvent).key;
@@ -138,6 +171,8 @@ export function useUnreadCount() {
 /** The sidebar badge. It is always mounted, so it also brings back expired snoozes: unread, as Linear does, and in Jira too. */
 export function useInboxBadge() {
   const { count, data, own, now } = useUnreadCount();
+  // Mounted once the account is known, so the stored writes a reload cut off are this account's.
+  useEffect(() => inbox.resumeWrites(), []);
   useEffect(() => {
     const due = itemsOf(data).filter(
       (i) => (own[i.head]?.snoozed ?? Infinity) <= now,

@@ -151,6 +151,10 @@ export function describe(item: InboxItem): string {
   }
 }
 
+/** A row's accessible name; a Jira system notification has no key, so no gap is left for one (R3-inbox-D7). */
+export const rowLabel = (item: InboxItem) =>
+  [item.unread ? "Unread" : "Read", item.key, item.title, describe(item)].filter(Boolean).join(" ");
+
 /** Linear's list times: "now", "5m", "3h", "2d", "4w", "1y". */
 export function shortAgo(iso: string, now = Date.now()): string {
   const m = Math.floor((now - Date.parse(iso)) / 60_000);
@@ -175,7 +179,8 @@ export const missingIssueNote = (key: string, mirroredProjects: Set<string>) =>
     ? "This issue is no longer in your boards. It may have been deleted."
     : "This issue is outside your mirrored boards, so it opens in Jira.";
 
-/** Linear's unread count: Jira's unread rows (all of them from `unread`, plus the loaded ones), less this browser's deletes, snoozes and read marks. */
+/** Linear's unread count: Jira's unread rows (all of them from `unread`, plus the loaded ones), plus rows being marked unread
+ *  here (an undone ⌥U reaches unloaded rows: R3-inbox-D5), less this browser's deletes, snoozes and read marks. */
 export function unreadCount(
   unread: { head: string }[] | undefined,
   items: InboxItem[],
@@ -183,7 +188,8 @@ export function unreadCount(
   now = Date.now(),
 ): number {
   const heads = new Set(unread?.map((u) => u.head));
-  for (const i of items) if (i.unread || local[i.head]?.read === false) heads.add(i.head);
+  for (const i of items) if (i.unread) heads.add(i.head);
+  for (const head in local) if (local[head]!.read === false) heads.add(head);
   let count = 0;
   for (const head of heads) {
     const own = local[head];

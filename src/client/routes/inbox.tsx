@@ -11,10 +11,11 @@ import { FilterChip } from "@/client/components/filter-chip";
 import { Tabs } from "@/client/components/tabs";
 import { Text } from "@/client/components/text";
 import { Icon, StatusIcon, type IconName } from "@/client/components/icons";
-import { FILTER_FIELDS, describe, feedCategory, hasFilters, missingIssueNote, shortAgo, snoozeChoices, snoozeTime, type FilterField, type InboxItem, type InboxView } from "@/shared/inbox-model";
+import { FILTER_FIELDS, describe, rowLabel, feedCategory, hasFilters, missingIssueNote, shortAgo, snoozeChoices, snoozeTime, type FilterField, type InboxItem, type InboxView } from "@/shared/inbox-model";
 import { copyIssue, type CopyKind } from "@/client/features/issue/issue-copy";
 import { Menu } from "@/client/components/menu";
 import { MenuSurface } from "@/client/components/menu-surface";
+import { ConfirmDialog } from "@/client/components/dialog";
 import { hotkeyOf, runShortcut } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
 import { get, isWatching, useStore } from "@/client/state/store";
@@ -22,7 +23,7 @@ import { preloadOnHover, ui } from "@/client/features/navigation/app-navigation"
 import { useSearch } from "@tanstack/react-router";
 import { toggleFavorite } from "@/client/features/navigation/favorites";
 
-import { changeView, toggleFilter, clearFilters, selectRow, toggleRead, markAllRead, deleteRow, deleteAll, openSnooze, snoozeRow, showTab, inbox, statusOf, ROW_PARAM, useFeed, useSelected, useView, useLocal, useUnreadCount, orderOf, facets, itemsOf, clearUnseen } from "@/client/features/inbox/inbox";
+import { changeView, toggleFilter, clearFilters, selectRow, toggleRead, markAllRead, deleteRow, deleteAll, openSnooze, snoozeRow, showTab, inbox, statusOf, ROW_PARAM, useFeed, useSelected, useView, useLocal, useUnreadCount, orderOf, facets, itemsOf, clearUnseen, useConfirmation } from "@/client/features/inbox/inbox";
 import { InboxIssuePane } from "./issue-view";
 import { firstKey } from "@/client/state/jira-sync";
 import { SelectRow, Toggle, ViewOptions } from "@/client/components/display-options";
@@ -92,7 +93,7 @@ function Row({
       data-inbox-row={item.id}
       data-unread={item.unread || undefined}
       aria-current={selected || undefined}
-      aria-label={`${item.unread ? "Unread" : "Read"} ${item.key} ${item.title} ${describe(item)}`}
+      aria-label={rowLabel(item)}
       onClick={(e) => {
         if (e.metaKey || e.ctrlKey || e.shiftKey) return;
         e.preventDefault();
@@ -375,6 +376,22 @@ function InboxDisplayOptions({ close }: { close: () => void }) {
         />
       </ViewOptions.Content>
     </ViewOptions.Popover>
+  );
+}
+
+/** Linear's confirmation (`gi`) for Delete all, Delete all read and Delete all completed, in place of the browser's
+ *  `confirm()` (R3-inbox-D6). */
+function DeleteAllConfirm() {
+  const ask = useConfirmation();
+  if (!ask) return null;
+  return (
+    <ConfirmDialog
+      title={ask.title}
+      description={ask.description}
+      confirmLabel="Delete all"
+      onConfirm={() => ask.answer(true)}
+      close={() => ask.answer(false)}
+    />
   );
 }
 
@@ -671,6 +688,7 @@ export function InboxList() {
         <div ref={end} data-inbox-end aria-hidden className="h-px" />
       </div>
       <Menus base={base} />
+      <DeleteAllConfirm />
       {menu && (
         <ActionMenu
           label="Notification options"

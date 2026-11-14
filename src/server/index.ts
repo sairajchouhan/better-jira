@@ -129,7 +129,7 @@ const server = serve({
             { error: "Jira writes are disabled for this site." },
             { status: 403 },
           );
-        let body: { action?: unknown; groups?: unknown };
+        let body: { action?: unknown; groups?: unknown; except?: unknown };
         try {
           body = await req.json();
         } catch {
@@ -142,10 +142,11 @@ const server = serve({
           if ((body.action === "read" || body.action === "unread") && groups.length)
             await inbox.mark(groups, body.action === "read");
           else if (body.action === "read-all") {
-            // Jira marks its whole feed; the groups it changed let ⌥U's undo reach rows that were never loaded.
-            const groups = (await inbox.unreadGroups()).map((g) => g.id);
-            await inbox.markAllRead();
-            return Response.json({ ok: true, groups });
+            // The groups it changed let ⌥U's undo reach rows that were never loaded.
+            const except = Array.isArray(body.except)
+              ? body.except.filter((h): h is string => typeof h === "string")
+              : [];
+            return Response.json({ ok: true, groups: await inbox.readAll(except) });
           } else if (body.action === "seen") await inbox.clearUnseen();
           else return Response.json({ error: "Invalid request" }, { status: 400 });
           return Response.json({ ok: true });

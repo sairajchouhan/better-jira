@@ -25,6 +25,10 @@ import {
 
 export type Feed = InboxFeed & { writable: boolean };
 export type Category = "all" | "direct" | "watching";
+/** What a read write needs of a row: its Jira group and its head notification. Rows on unloaded pages have only these. */
+export type InboxRow = Pick<InboxItem, "id" | "head">;
+/** Linear's confirmation for the bulk deletes: a title and a description, confirmed with a red "Delete all". */
+export type DeleteConfirmation = { title: string; description: string };
 export type InboxPorts = {
   queryClient: QueryClient;
   get: () => { issues: Map<string, Issue>; clock: number };
@@ -39,8 +43,30 @@ export type InboxPorts = {
   send: (body: object) => Promise<{ groups?: string[] } | null>;
   openRow: (item: InboxItem, open: "side" | "page") => void;
   clearSelection: () => void;
-  confirm: (message: string) => boolean;
+  confirm: (question: DeleteConfirmation) => Promise<boolean>;
 };
+/** Linear's wording for each bulk delete's confirmation; the priority inbox names its tab. Linear's "completed" also covers
+ *  reviews, which Jira has none of. */
+export function deleteQuestion(
+  which: "all" | "read" | "completed",
+  view: Pick<InboxView, "priorityInbox" | "tab">,
+): DeleteConfirmation {
+  const inbox = view.priorityInbox
+    ? `the ${view.tab === "direct" ? "Priority" : "Other"} inbox`
+    : "your inbox";
+  if (which === "completed") {
+    const where = view.priorityInbox ? ` in ${inbox}` : "";
+    return {
+      title: `Delete all read notifications for completed issues${where}?`,
+      description: `This will delete all read notifications${where} about issues that were marked as done or canceled.`,
+    };
+  }
+  const what = which === "read" ? "read notifications" : "notifications";
+  return {
+    title: `Delete all ${what}?`,
+    description: `This will delete all ${what} in ${inbox}.`,
+  };
+}
 export function createInboxStore(ports: InboxPorts) {
   const { queryClient, get, set, ui, statusOf, read, save, send } = ports;
 
@@ -244,17 +270,25 @@ export function createInboxStore(ports: InboxPorts) {
    *  so rapid U presses end where the last one did, here and in Jira; sent together they could land out of order (R2-inbox-D1). */
   const wanted = new Map<string, boolean>(),
     queues = new Map<string, Promise<unknown>>();
+  /** Read writes not yet confirmed, by head, kept in storage: a reload mid-write sends them again (R3-inbox-D2). */
+  type Pending = Record<string, { group: string; read: boolean }>;
+  function editPending(change: (pending: Pending) => void) {
+    const pending = read<Pending>("pending", {});
+    change(pending);
+    save("pending", pending);
+  }
   /** Per head: the newest markRead call, the only one that drops the local override. */
   const marking = new Map<string, number>();
   let marks = 0;
   /** Shown at once; on a writable site Jira takes it and the local override goes once the feed agrees, or at once if Jira refuses.
-   *  A `label` makes it undoable. `all` marks Jira's whole feed read, and the groups Jira changed join `groups` for the undo. */
+   *  A `label` makes it undoable. `all` marks Jira's whole feed read but for its `except` heads (snoozed rows), and the groups
+   *  Jira changed join `groups` for the undo. */
   async function markRead(
-    items: InboxItem[],
+    items: InboxRow[],
     value: boolean,
     label?: string,
     groups = items.map((i) => i.id),
-    all = false,
+    all?: { except: string[] },
   ) {
     if (!items.length) return;
     if (label)
@@ -263,12 +297,23 @@ export function createInboxStore(ports: InboxPorts) {
       mark = ++marks;
     for (const head of heads) marking.set(head, mark);
     setLocal(heads, { read: value });
-    if (!firstPage()?.writable) return;
+    // Unknown (no page yet) is a write resumed at boot; the server refuses it if the site is read-only.
+    if (firstPage()?.writable === false) return;
+    editPending((pending) => {
+      for (const i of items) pending[i.head] = { group: i.id, read: value };
+    });
     const mine = [...groups];
     for (const group of mine) wanted.set(group, value);
     const job = Promise.all(mine.map((g) => queues.get(g))).then(async () => {
       if (all) {
-        const changed = (await send({ action: "read-all" }))?.groups ?? [];
+        const changed =
+          (
+            await send(
+              all.except.length
+                ? { action: "read-all", except: all.except }
+                : { action: "read-all" },
+            )
+          )?.groups ?? [];
         groups.push(...changed.filter((g) => !groups.includes(g)));
       } else
         await sendGroups(
@@ -291,18 +336,40 @@ export function createInboxStore(ports: InboxPorts) {
         }
       const latest = heads.filter((h) => marking.get(h) === mark);
       for (const head of latest) marking.delete(head);
+      editPending((pending) => {
+        for (const head of latest) delete pending[head];
+      });
       dropLocal(latest, "read");
     }
   }
+  /** Sends the read writes a reload cut off, once per page load; the feed refetches when they land. */
+  let resumed = false;
+  function resumeWrites() {
+    if (resumed) return;
+    resumed = true;
+    const pending = Object.entries(read<Pending>("pending", {}));
+    for (const value of [true, false]) {
+      const rows = pending
+        .filter(([, p]) => p.read === value)
+        .map(([head, p]) => ({ id: p.group, head }));
+      if (rows.length) void markRead(rows, value);
+    }
+  }
+  /** Selects and opens a row without marking it read: undo and bulk deletes put the selection back or move it on, which is
+   *  not a visit (R3-inbox-D1). */
+  function showRow(item: InboxItem, open: "side" | "page" = "side") {
+    selectedId = item.id;
+    emit();
+    ports.openRow(item, open);
+  }
+  /** A visit: Linear marks the notification read as it opens. */
   function selectRow(
     item: InboxItem | undefined,
     open: "side" | "page" = "side",
   ) {
     if (!item) return;
-    selectedId = item.id;
-    emit();
     if (item.unread) void markRead([item], true);
-    ports.openRow(item, open);
+    showRow(item, open);
   }
   function moveRow(direction: number) {
     const rows = shownRows(),
@@ -319,16 +386,26 @@ export function createInboxStore(ports: InboxPorts) {
         row.unread ? "mark as read" : "mark as unread",
       );
   }
-  /** Linear's ⌥U: every row in the current view. With no tab or filter, Jira marks its whole feed. */
+  /** Linear's ⌥U: every row in the current view. With no tab or filter, Jira marks its whole feed, unloaded rows too, but
+   *  never a snoozed one unless snoozed rows show (Linear's `markAllAsRead(i, e => t || !e.snoozedUntilAt)`, R3-inbox-D3).
+   *  Every unread row Jira listed is marked here at once, so the badge needn't wait for the refetch (R3-inbox-D5). */
   function markAllRead() {
-    const v = viewState();
-    return markRead(
-      shownRows().filter((r) => r.unread),
-      true,
-      "mark notifications as read",
-      undefined,
-      !v.priorityInbox && !hasFilters(v),
-    );
+    const v = viewState(),
+      rows: InboxRow[] = shownRows().filter((r) => r.unread);
+    const label = "mark notifications as read";
+    if (v.priorityInbox || hasFilters(v)) return markRead(rows, true, label);
+    const own = localState(),
+      now = get().clock;
+    const except = v.showSnoozed
+      ? []
+      : Object.keys(own).filter((head) => (own[head]?.snoozed ?? 0) > now);
+    const skip = new Set([...rows.map((r) => r.head), ...except]);
+    for (const u of firstPage()?.unread ?? [])
+      if (!skip.has(u.head)) {
+        rows.push(u);
+        skip.add(u.head);
+      }
+    return markRead(rows, true, label, undefined, { except });
   }
   /** Removes rows here, selects the next one as Linear does, and offers Linear's undo toast. Returns what the undo restores, so more rows can join it. */
   function hide(
@@ -336,6 +413,7 @@ export function createInboxStore(ports: InboxPorts) {
     patch: Local,
     label: string,
     toast: string,
+    activate: (item: InboxItem) => void = selectRow,
   ) {
     if (!items.length) return;
     const before = new Map(items.map((i) => [i.head, localState()[i.head]])),
@@ -351,7 +429,7 @@ export function createInboxStore(ports: InboxPorts) {
       patch,
     );
     if (selectedId && gone.has(selectedId)) {
-      if (next) selectRow(next);
+      if (next) activate(next);
       else {
         selectedId = null;
         emit();
@@ -360,7 +438,7 @@ export function createInboxStore(ports: InboxPorts) {
     }
     toastUndo = remember(label, () => {
       putLocal([...before.keys()], (_, head) => before.get(head));
-      if (was && gone.has(was.id)) selectRow(was);
+      if (was && gone.has(was.id)) showRow(was);
     });
     showNotification({ text: toast, undo: undoInboxToast }, INBOX_NOTIFICATION_ID);
     return before;
@@ -377,25 +455,26 @@ export function createInboxStore(ports: InboxPorts) {
   }
   const closed = (item: InboxItem) =>
     ["Completed", "Canceled", "Duplicate"].includes(facets(item).statusType);
-  /** Linear's Delete all: the whole feed, not just the loaded rows. The loaded ones go at once; older pages load and join the same undo (R2-inbox-D2). */
+  /** Linear's Delete all, Delete all read and Delete all completed (`zEn`, `LEn`, `FEn`): the whole feed, not just the loaded rows.
+   *  The loaded ones go at once; older pages load and join the same undo (R2-inbox-D2). "Completed" takes only read rows of
+   *  done or canceled issues that aren't snoozed (Linear's `eEn`, R3-inbox-D4). A bulk delete is not a visit: when it removes
+   *  the selected row, the next one is selected without being marked read (R3-inbox-D1). */
   async function deleteAll(which: "all" | "read" | "completed") {
+    const v = viewState(),
+      now = get().clock;
+    const snoozed = (r: InboxItem) => (localState()[r.head]?.snoozed ?? 0) > now;
     const matches = (r: InboxItem) =>
-      which === "read" ? !r.unread : which === "completed" ? closed(r) : true;
-    const what =
       which === "read"
-        ? "read notifications"
+        ? !r.unread
         : which === "completed"
-          ? "notifications for completed issues"
-          : "notifications";
-    const rows = shownRows();
+          ? !r.unread && !snoozed(r) && closed(r)
+          : true;
     if (
-      !rows.length ||
-      !ports.confirm(
-        `Delete all ${what}? Jira keeps them; this hides them in better-jira.`,
-      )
+      !shownRows().length ||
+      !(await ports.confirm(deleteQuestion(which, v)))
     )
       return;
-    const items = rows.filter(matches),
+    const items = shownRows().filter(matches),
       toast =
         items.length === 1 ? "Notification deleted" : "Notifications deleted";
     const before = hide(
@@ -403,9 +482,9 @@ export function createInboxStore(ports: InboxPorts) {
       { deleted: true },
       "delete notifications",
       toast,
+      showRow,
     );
-    const v = viewState(),
-      observer = feed(feedCategory(v));
+    const observer = feed(feedCategory(v));
     let result = observer.getCurrentResult();
     // ponytail: 20 pages (about 1,000 notifications) at most; anything older still shows.
     for (let i = 0; i < 20 && result.hasNextPage && !result.isError; i++)
@@ -420,7 +499,13 @@ export function createInboxStore(ports: InboxPorts) {
     ).filter(matches);
     if (!rest.length) return;
     if (!before)
-      return void hide(rest, { deleted: true }, "delete notifications", toast);
+      return void hide(
+        rest,
+        { deleted: true },
+        "delete notifications",
+        toast,
+        showRow,
+      );
     for (const r of rest) before.set(r.head, localState()[r.head]);
     setLocal(
       rest.map((r) => r.head),
@@ -476,6 +561,7 @@ export function createInboxStore(ports: InboxPorts) {
     localState,
     viewState,
     selected: () => selectedId,
+    resumeWrites,
     restoreSelection: (id: string) => {
       selectedId = id;
       emit();
