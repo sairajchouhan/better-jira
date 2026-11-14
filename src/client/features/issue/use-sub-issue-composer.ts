@@ -1,5 +1,5 @@
 import { type Board, type Issue, type IssueDraft } from "@/shared/issue-model";
-import { useEffect, useRef, useState } from "react";
+import { type MouseEvent, useEffect, useRef, useState } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { get, set } from "@/client/state/store";
 import { actions } from "@/client/state/issue-actions";
@@ -171,8 +171,12 @@ export function useSubIssueComposer(issue: Issue, board: Board, namespace: strin
   };
   const submitFromButton = () =>
     form.current?.querySelector<HTMLButtonElement>(".rich-editor-submit")?.click();
-  // ⌘⇧↵ starts the next draft from the defaults; ⌘↵ from the sub-issue it creates.
+  // ⌘⇧↵ or a Shift-click on Create starts the next draft from the defaults; ⌘↵ or a plain click from the sub-issue it
+  // creates. Linear's sub-issue composer (`xm`) reads the save event: `n.shiftKey||…?l(Cm(t.team,h,t)):l(Cm(t.team,h,t,r))`.
   const shifted = useRef(false);
+  const onClickCapture = (event: MouseEvent) => {
+    if (event.shiftKey && (event.target as Element).closest(".rich-editor-submit")) shifted.current = true;
+  };
   useHotkey("Mod+Enter", submitFromButton, {
     target: titleInput,
     capture: true,
@@ -200,5 +204,5 @@ export function useSubIssueComposer(issue: Issue, board: Board, namespace: strin
   return { state: { title, description, files, draft, editor, creating, confirming },
     actions: { update, setProperties, addFiles, onLateMedia, start, discard, cancel, submit, setConfirming },
     // The editor's late-media scope; the composer applies its rules itself.
-    meta: { form, titleInput, scope } };
+    meta: { form, titleInput, scope, onClickCapture } };
 }

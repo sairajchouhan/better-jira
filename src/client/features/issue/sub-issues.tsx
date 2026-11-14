@@ -202,7 +202,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
   const {
     state: { title, description, files, draft, editor, creating, confirming },
     actions: { update, setProperties, addFiles, onLateMedia, start, discard, cancel, submit, setConfirming },
-    meta: { form, titleInput, scope },
+    meta: { form, titleInput, scope, onClickCapture },
   } = useSubIssueComposer(issue, board, namespace, setCollapsed);
   const status = (child: Issue) => statusOf(boards, child);
   // Direct children per row, for Linear's "0/2" progress pill.
@@ -402,6 +402,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
         <div
           ref={form}
           tabIndex={-1}
+          onClickCapture={onClickCapture}
           aria-label="Create sub-issue"
           className="sub-issue-composer outline-none mt-3 rounded-lg border border-line-2 bg-card p-3"
         >
