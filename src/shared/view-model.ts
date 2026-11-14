@@ -412,6 +412,18 @@ const epicIn = (i: Issue, issues: Issue[]) => {
     key = epicOf(i, lookup);
   return key ? lookup(key) : undefined;
 };
+const parents = new WeakMap<readonly Issue[], Set<string>>();
+/** The keys some issue in `issues` names as its parent, built once per list: a Relations pass asks it for every issue, where a
+ *  scan per issue made the pass quadratic. */
+export function parentKeys(issues: readonly Issue[]): Set<string> {
+  let keys = parents.get(issues);
+  if (!keys) {
+    keys = new Set();
+    for (const x of issues) if (x.parent) keys.add(x.parent);
+    parents.set(issues, keys);
+  }
+  return keys;
+}
 export function valuesFor(i: Issue, field: Field, issues: Issue[]): string[] {
   switch (field) {
     case "status":
@@ -438,7 +450,7 @@ export function valuesFor(i: Issue, field: Field, issues: Issue[]): string[] {
       // Parent and sub-issue mean parent issues only: an epic's issues are its project's (shared/epics.ts parentOf).
       return [
         ...(parentOf(i, lookupIn(issues)) ? ["child"] : []),
-        ...(hierarchyLevel(i) < 1 && issues.some((x) => x.parent === i.key) ? ["parent"] : []),
+        ...(hierarchyLevel(i) < 1 && parentKeys(issues).has(i.key) ? ["parent"] : []),
         ...(i.relations?.length ? ["related"] : []),
         ...(i.relations ?? []).map((r) => r.kind),
       ];
@@ -555,6 +567,34 @@ export function matchesRule(
   return ["isNot", "notContains"].includes(r.op) ? !hit : hit;
 }
 
+/**
+ * How many of `issues` match `{ field, op: "is", values: [value] }` for every value at once: what `matchesRule` gives value by
+ * value, in one pass over the issues instead of one per value (a picker counting 1,000 labels over 1,000 issues made a million
+ * rule checks per open). "$none" counts issues with no value and "$me" those holding `me`. Dates and numbers compare rather than
+ * match, so those fields count value by value.
+ */
+export function valueCounts(
+  issues: readonly Issue[],
+  field: Field,
+  universe: Issue[],
+  me: string,
+  now = Date.now(),
+): (value: string) => number {
+  if (isNumeric(field) || isDate(field))
+    return (value) =>
+      issues.filter((i) => matchesRule(i, { id: "count", field, op: "is", values: [value] }, universe, me, now)).length;
+  const counts = new Map<string, number>();
+  let none = 0;
+  for (const i of issues) {
+    // matchesRule: an issue whose watchers aren't all loaded matches no watchers rule, "$none" included.
+    if (field === "watchers" && !i.watchersComplete) continue;
+    const actual = valuesFor(i, field, universe);
+    if (!actual.length) none++;
+    for (const value of new Set(actual)) counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+  return (value) => (value === "$none" ? none : (counts.get(value === "$me" ? me : value) ?? 0));
+}
+
 export function matchesFilters(
   i: Issue,
   group: FilterGroup,
@@ -630,8 +670,9 @@ function groupValues(
 }
 
 /** A parent shows as "KEY Title" when its issue is known, like Linear. */
-export const parentName = (key: string, issues: Issue[]) => {
-  const summary = issues.find((i) => i.key === key)?.summary;
+export const parentName = (key: string, issues: readonly Issue[] | IssueLookup) => {
+  // A key lookup (one index per list), not a scan of every issue for every parent.
+  const summary = (typeof issues === "function" ? issues : lookupIn(issues))(key)?.summary;
   return summary ? `${key} ${summary}` : key;
 };
 
@@ -662,7 +703,7 @@ export function buckets(
   for (const i of items)
     for (const v of groupValues(i, by, board, lookup)) map.get(v.id)?.issues.push(i);
   if (by === "parent")
-    for (const b of map.values()) if (b.id !== "$none") b.name = parentName(b.id, universe);
+    for (const b of map.values()) if (b.id !== "$none") b.name = parentName(b.id, lookup);
   const result = [...map.values()];
   if (by === "priority") result.sort((a, b) => priorityRank(a.name) - priorityRank(b.name));
   else if (by !== "status" && by !== "category")
