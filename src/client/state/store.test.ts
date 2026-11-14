@@ -2418,3 +2418,20 @@ test("R3-create-D7: an open issue deleted in Jira says so, and its sub-issue dra
   toasts.dismiss(NOTIFICATION_ID);
   set({ writable: false, namespace: "" });
 });
+
+test("R3-relations-D8: removing a Jira link resource leaves no bare-URL row while Jira deletes it", async () => {
+  const { get, set } = await import("./store");
+  const { actions } = await import("./issue-actions");
+  const { issueResources } = await import("@/shared/issue-resource");
+  const key = actions.create("Linked page")!,
+    url = "https://example.test/spec";
+  set({
+    issues: new Map(get().issues).set(key, {
+      ...get().issues.get(key)!,
+      links: [url],
+      resources: [{ id: "spec", kind: "link", title: "Spec", url, updated: "2000-01-01T00:00:00Z" }],
+    }),
+  });
+  actions.removeResource(key, "spec");
+  expect(issueResources(get().issues.get(key)!).map((r) => r.url)).toEqual([]);
+});

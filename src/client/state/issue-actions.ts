@@ -226,11 +226,22 @@ export const actions = {
     record(
       key,
       `${resource.kind === "document" ? "delete document" : "remove resource"} ${resource.title || "New document"} on ${key}`,
-      () =>
+      () => {
         patchIssue(key, {
           resources,
           attachments: issue.attachments?.filter((a) => !removed.has(a.id) || retained.has(a.id)),
-        }),
+        });
+        // The projection's `links` lists the remote link's URL until Jira's copy comes back; left there, it shows as a bare-URL
+        // row while Jira deletes it (R3-relations-D8). Not pinned as a local field: the next read of Jira owns it again.
+        const now = get().issues.get(key);
+        if (resource.url && now?.links?.includes(resource.url))
+          set({
+            issues: new Map(get().issues).set(key, {
+              ...now,
+              links: now.links.filter((url) => url !== resource.url),
+            }),
+          });
+      },
     );
   },
   /** `restore` always keeps the replaced version, however recent the last edit was. */
