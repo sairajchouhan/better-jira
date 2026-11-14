@@ -7,6 +7,7 @@ import { adfToText } from "@/client/features/editor/adf";
 import { showNotification } from "@/client/state/app-notifications";
 import { Text } from "@/client/components/text";
 import { IssuePeek } from "./issue-peek";
+import { IssueDescriptionHistory } from "./description-history";
 import { Tabs } from "@/client/components/tabs";
 import { CountBadge } from "@/client/components/count-badge";
 import { Shortcut, Keycap } from "@/client/components/keycap";
@@ -22,7 +23,6 @@ import { SUMMARY_MAX, switchBoard } from "./composer-draft";
 import { shortDate } from "@/client/lib/due-date";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { createContext, use, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
-import { Adf } from "@/client/features/editor/adf";
 import { ComposerEditor } from "@/client/features/editor/rich-editor-loader";
 import { MediaView } from "@/client/features/media/media-loader";
 import { normalizeDocument, documentHasMedia } from "@/shared/document";
@@ -976,58 +976,8 @@ export function IssueOptions({ issue }: { issue: Issue }) {
   const historyOpen = view === "history";
   const linkOpen = view === "link" || view === "pull-request";
   const resourceKind = view === "pull-request" ? "pull-request" : "link";
-  if (historyOpen)
-    return (
-      <Dialog label="Description history" close={close}>
-        <Dialog.Header>
-          <Dialog.Title>Description history</Dialog.Title>
-        </Dialog.Header>
-        <Dialog.Body>
-        <Text className="mb-3" as="p" variant="mini" color="muted">
-          Your locally saved description revisions.
-        </Text>
-        {[...(issue.descriptionHistory ?? [])].reverse().map((entry, index) => (
-          <div key={index} className="mb-3 rounded-md border border-line-2 p-3">
-            <Text className="mb-2" as="div" variant="micro" color="muted">
-              {new Date(entry.at).toLocaleString()}
-            </Text>
-            <div>
-              {entry.document ? (
-                <Adf node={entry.document} />
-              ) : (
-                <p className="whitespace-pre-wrap">
-                  {entry.text || "Empty description"}
-                </p>
-              )}
-            </div>
-            <Button
-              onClick={() => {
-                actions.description(
-                  issue.key,
-                  entry.document ?? entry.text,
-                  true,
-                );
-                close();
-              }}
-              variant="borderless"
-              size="medium"
-              className="mt-2"
-            >
-              Restore this description
-            </Button>
-          </div>
-        ))}
-        {!issue.descriptionHistory?.length && (
-          <p>No local description changes yet.</p>
-        )}
-        </Dialog.Body>
-        <Dialog.Footer>
-          <Button onClick={close} variant="borderless" size="medium">
-            Close
-          </Button>
-        </Dialog.Footer>
-      </Dialog>
-    );
+  // One dialog for both ways in, as Linear's (`Xz` → `sJt`): Jira's versions and this app's kept revisions together.
+  if (historyOpen) return <IssueDescriptionHistory issue={issue} close={close} />;
   if (linkOpen)
     return <ResourceForm issue={issue} kind={resourceKind} close={close} />;
   const entries = issueMenuEntries(issue, {

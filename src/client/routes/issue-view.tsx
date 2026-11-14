@@ -963,7 +963,12 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
           )}
         </button>
       </div>
-      <DescriptionHistoryProvider events={activity} created={{ at: created, actor: creator }}>
+      <DescriptionHistoryProvider
+        issueKey={issue.key}
+        events={activity}
+        created={{ at: created, actor: creator }}
+        revisions={issue.descriptionHistory}
+      >
         <ol className="space-y-3">
           <CommentThreads
             issue={issue}

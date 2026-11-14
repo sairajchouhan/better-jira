@@ -233,15 +233,18 @@ test("issue activity, related-issue search and description history", async ({ op
     await page.click("#summary");
     await page.click("#issue-options");
     await page.click('[cmdk-item][data-value="Show description history"]');
-    await page.click("text=Restore this description");
+    // Prod parity #34: the menu opens the one Issue description dialog; the kept revision sits in its version list.
+    const dialog = `document.querySelector('[role="dialog"][aria-label="Issue description"]')`;
+    await page.waitFor(`!!${dialog}?.querySelector('[data-version^="local-"]')`);
+    await page.click('[role="dialog"] [data-version^="local-"]');
+    await page.click("text=Restore version");
     await page.waitFor(
       `!document.getElementById('description')?.textContent.includes('Newest description at risk')`,
     );
     await page.click("#issue-options");
     await page.click('[cmdk-item][data-value="Show description history"]');
-    expect(
-      await page.eval(`document.querySelector('[aria-label="Description history"]').textContent`),
-    ).toContain("Newest description at risk");
+    await page.click('[role="dialog"] [data-version^="local-"]');
+    expect(await page.eval(`${dialog}.textContent`)).toContain("Newest description at risk");
   });
 });
 

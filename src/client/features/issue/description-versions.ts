@@ -2,18 +2,26 @@
  * The issue's description versions, read from Jira's changelog, for Linear's description history (startup-root `Xz` "Show
  * description history" → `Kz.show` → `sJt`): a version list grouped by day (`LDt`/`BDt`), each version shown against the one
  * before it with its changes highlighted (`VRe`, "Highlight changes"). Jira's changelog holds the whole text on both sides
- * of each edit, so every version and its predecessor are known without a second request.
+ * of each edit, so every version and its predecessor are known without a second request. The description revisions this app
+ * kept locally (edits replaced here, refused or unsent text) join the same list, as Linear's timeline (`IDt`) merges its
+ * history entries and agent checkpoints into one.
  */
+import type { AdfDocument } from "@/shared/document";
+import type { Issue } from "@/shared/issue-model";
+import type { HistoryEntry } from "@/shared/jira-history";
 import type { Actor, PropertyActivity } from "./issue-activity";
+import { mergeHistory } from "./jira-history";
 
-/** One description version: what an edit (or the issue's creation) left, and the text it replaced. */
+/** One description version: what an edit (or the issue's creation) left, and the text it replaced. A `local` version is a
+ *  revision this app kept, with its document so it can be restored. */
 export type DescriptionVersion = {
   id: string;
-  kind: "history" | "creation";
+  kind: "history" | "creation" | "local";
   at?: string;
   actor?: Actor;
   text: string;
   previous?: string;
+  document?: AdfDocument;
 };
 
 /** Newest first, as Linear's list (`RDt` sorts by snapshot time, latest on top). The text the first edit replaced is the
@@ -21,6 +29,7 @@ export type DescriptionVersion = {
 export function descriptionVersions(
   events: readonly PropertyActivity[],
   created?: { at?: string; actor?: Actor | null },
+  revisions: Issue["descriptionHistory"] = [],
 ): DescriptionVersion[] {
   const edits = events
     .filter((event) => event.field === "description")
@@ -43,7 +52,38 @@ export function descriptionVersions(
       actor: created?.actor ?? undefined,
       text: text(first.before),
     });
-  return versions.toReversed();
+  const local = revisions.map(
+    (revision, i): DescriptionVersion => ({
+      id: `local-${i}`,
+      kind: "local",
+      at: revision.at,
+      text: revision.text,
+      document: revision.document,
+    }),
+  );
+  const time = (version: DescriptionVersion) => (version.at ? Date.parse(version.at) : -Infinity);
+  return local.length ? [...versions, ...local].toSorted((a, b) => time(b) - time(a)) : versions.toReversed();
+}
+
+/** Every version of the issue's description, from its mirrored record and Jira's changelog: what the issue menu's "Show
+ *  description history" opens wherever the menu is (a list row has no Activity mounted to hand its events over). */
+export const issueDescriptionVersions = (issue: Issue, history: readonly HistoryEntry[]) =>
+  descriptionVersions(
+    mergeHistory(issue.activity ?? [], history),
+    { at: issue.created, actor: issue.creator },
+    issue.descriptionHistory,
+  );
+
+/** The issue's description now: the newest version read from Jira. A local revision is text this app set aside, never the
+ *  current one. */
+export const currentVersion = (versions: readonly DescriptionVersion[]) => versions.find((v) => v.kind !== "local");
+
+/** Why Linear's "Restore version" is off for a version (`sJt`'s disabled reasons), or nothing when it can be restored. Jira's
+ *  changelog keeps past descriptions as wiki-markup text, not documents, so only a revision this app kept restores. */
+export function restoreBlocker(version: DescriptionVersion, current: DescriptionVersion | undefined): string | undefined {
+  if (version === current) return "This is the current version, you cannot restore it";
+  if (version.kind === "creation") return "";
+  if (version.kind !== "local") return "Jira keeps past descriptions as text only, so this version can't be restored";
 }
 
 export type DiffPart = { kind: "same" | "added" | "removed"; text: string };

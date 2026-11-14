@@ -1,6 +1,15 @@
 import { expect, test } from "bun:test";
 import type { PropertyActivity } from "./issue-activity";
-import { descriptionVersions, versionBucket, wordDiff } from "./description-versions";
+import type { Issue } from "@/shared/issue-model";
+import type { HistoryEntry } from "@/shared/jira-history";
+import {
+  currentVersion,
+  descriptionVersions,
+  issueDescriptionVersions,
+  restoreBlocker,
+  versionBucket,
+  wordDiff,
+} from "./description-versions";
 
 // Made-up fixtures in the shape of Jira's description changelog items (whole wiki-markup text on both sides).
 const ada = { id: "ada", name: "Ada Example" },
@@ -78,4 +87,39 @@ test("prod parity #35: a rewritten sentence reads as one deletion then one addit
     { kind: "added", text: "draft" },
     { kind: "same", text: ", then save it to the stack" },
   ]);
+});
+
+test("prod parity #34: the issue menu's history holds Jira's edits and this app's kept revisions in one list, newest first", () => {
+  // Made-up shapes: Jira's changelog as the server sends it, and one revision this app set aside (a refused edit).
+  const history = [
+    {
+      id: "10",
+      at: "2026-03-01T10:00:00Z",
+      actor: ada,
+      items: [{ field: "description", fieldId: "description", from: null, fromText: "Old text", to: null, toText: "New text" }],
+    },
+    {
+      id: "11",
+      at: "2026-03-03T10:00:00Z",
+      actor: lin,
+      items: [{ field: "description", fieldId: "description", from: null, fromText: "New text", to: null, toText: "Newer text" }],
+    },
+  ];
+  const issue = {
+    key: "ABC-1",
+    created: "2026-02-28T09:00:00Z",
+    creator: ada,
+    descriptionHistory: [{ text: "My refused text", at: "2026-03-02T10:00:00Z" }],
+  } as unknown as Issue;
+  const versions = issueDescriptionVersions(issue, history as HistoryEntry[]);
+  expect(versions.map((v) => [v.kind, v.text])).toEqual([
+    ["history", "Newer text"],
+    ["local", "My refused text"],
+    ["history", "New text"],
+    ["creation", "Old text"],
+  ]);
+  // The current version is Jira's newest, never a kept revision; only a kept revision can be restored.
+  const current = currentVersion(versions);
+  expect(current?.text).toBe("Newer text");
+  expect(versions.map((v) => restoreBlocker(v, current) === undefined)).toEqual([false, true, false, false]);
 });

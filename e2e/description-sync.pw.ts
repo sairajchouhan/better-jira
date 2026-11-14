@@ -177,6 +177,8 @@ test("edits that couldn't be sent: restore, offline and reload", async ({ open }
     );
     await page.click("#issue-options");
     await page.click("text=Show description history");
+    // The one Issue description dialog lists it as a revision this app kept (prod parity #34).
+    await page.click('[role="dialog"][aria-label="Issue description"] [data-version^="local-"]');
     await page.waitFor(
       `document.querySelector('[role="dialog"]')?.textContent.includes('offline1')`,
     );

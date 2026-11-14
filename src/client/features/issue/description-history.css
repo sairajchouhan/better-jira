@@ -18,11 +18,18 @@
   overflow: auto;
   padding: 16px 20px 24px;
 }
+/* Linear's change island (\`MDt\`): the Highlight changes switch and its action buttons ("Restore version") on one row. */
+.description-history-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  margin-bottom: 12px;
+}
 .description-history-switch {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
   cursor: pointer;
 }
 .description-history-text {

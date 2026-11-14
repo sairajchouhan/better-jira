@@ -174,7 +174,7 @@ test("prod parity #8: an \"updated the description\" row opens the description h
   const plain = renderToStaticMarkup(<>{describeActivity(edit, issue)}</>);
   expect(plain).toBe("updated the description");
   const linked = renderToStaticMarkup(
-    <DescriptionHistoryProvider events={[edit]}>{describeActivity(edit, issue)}</DescriptionHistoryProvider>,
+    <DescriptionHistoryProvider issueKey="ABC-1" events={[edit]}>{describeActivity(edit, issue)}</DescriptionHistoryProvider>,
   );
   expect(linked).toContain('title="Show description history"');
   expect(linked).toContain("<button");
