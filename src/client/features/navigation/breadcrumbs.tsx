@@ -1,17 +1,20 @@
 /**
- * The header breadcrumb, on React Aria's Breadcrumbs (an `ol` of `li`, the last one current): a board or view's
- * `Space › Issues|View`, and an issue page's crumbs from how it was reached (issue-trail.ts `issueCrumbs`): over a list, the
- * list's crumbs then the issue; otherwise Linear's issue form (startup-root `Hpi`), `EPIC-KEY › Parent… › KEY Title`.
+ * The header breadcrumb, on React Aria's Breadcrumbs (an `ol` of `li`, the last one current), in the one header row every page
+ * shares (`PageHeader`), so it sits at the same inset everywhere. A board reads `Space`, a view `Space › View`, an issue page
+ * `Space › KEY Title` over a list, or Linear's issue form (startup-root `Hpi`) under the space, `Space › EPIC-KEY › Parent… › KEY
+ * Title`, and a document `Space › KEY › Title`. No Issues crumb: it led to the same board as the space (the user's choice over
+ * Linear, .raj/done.md 2026-11-14).
  */
-import { useMemo, type ReactNode } from "react";
+import { useMemo, type ReactNode, type Ref } from "react";
 import { Breadcrumb, Breadcrumbs, Link } from "react-aria-components";
 import { type Board, type Issue } from "@/shared/issue-model";
 import { peopleOf } from "@/shared/people";
-import { Icon, TypeDot } from "@/client/components/icons";
+import { Icon, StatusIcon, TypeDot } from "@/client/components/icons";
 import { IconButton } from "@/client/components/button";
 import { ContextMenu } from "@/client/components/action-menu";
 import { EntityIdentifier } from "@/client/components/entity-identifier";
-import { boardOf, set, useStore } from "@/client/state/store";
+import { set, useStore } from "@/client/state/store";
+import { statusById } from "@/shared/board-catalog";
 import { issueURL } from "@/client/features/issue/issue-urls";
 import { copyEntries, issueBreadcrumbEntries } from "@/client/features/issue/issue-menu";
 import { useActiveView, useSavedViews } from "@/client/features/views/saved-views";
@@ -23,7 +26,7 @@ import { linkHref, ui } from "./app-navigation";
 import type { Destination } from "./navigation";
 import { hotkeyOf, runShortcut } from "./shortcuts";
 import { boardCopyURL } from "./sidebar-menus";
-import { issueCrumbs, pageIssue, type AncestorCrumb as AncestorCrumbModel, type IssueCrumbs } from "./issue-trail";
+import { issueCrumbs, pageIssue, spaceOf, type AncestorCrumb as AncestorCrumbModel, type IssueCrumbs } from "./issue-trail";
 
 // Linear's breadcrumb (linear.app/…/view/…, 2026-11-11 computed styles): 24px links padded 0 5px 0 4px with matching
 // negative margins, 16px icon + 6px, 13px/500 text at line-height normal, "›" with 8px sides lifted 2px; hover bg
@@ -60,10 +63,24 @@ export function SidebarToggle() {
   );
 }
 
+// Linear's header row (linear.md: 44px, 0.5px frame border, 8px sides); the crumbs sit 10px further in. Both live here, once, so
+// the board, a view, an issue page and a document put the breadcrumb at the same spot (the user's report: the issue page's sat 6px
+// left of the board's).
+export const PAGE_HEADER = "flex h-11 shrink-0 items-center border-b-[0.5px] border-frame px-2";
+export const CRUMB_BAR = "flex min-w-0 items-center pl-2.5 text-[13px] leading-[normal] font-medium text-fg-2";
+/** The header row of every page that leads with the breadcrumb (board, view, issue, document) and of the issue side panel. */
+export function PageHeader({ className = "", ref, children }: { className?: string; ref?: Ref<HTMLDivElement>; children: ReactNode }) {
+  return (
+    <div ref={ref} data-page-header className={`${PAGE_HEADER} ${className}`}>
+      {children}
+    </div>
+  );
+}
+
 /** The bar: the sidebar toggle, then the crumbs, each a Breadcrumb (React Aria marks the last one current). */
 function CrumbBar({ children }: { children: ReactNode }) {
   return (
-    <nav aria-label="Breadcrumb" className="flex min-w-0 items-center text-[13px] leading-[normal] font-medium text-fg-2">
+    <nav aria-label="Breadcrumb" className={CRUMB_BAR}>
       <SidebarToggle />
       <Breadcrumbs className="flex min-w-0 items-center">{children}</Breadcrumbs>
     </nav>
@@ -107,12 +124,13 @@ const clearBoardTools = () => {
 };
 const allIssues = (board: Board) => ({ board: board.id, scope: "all", selected: null, panel: false }) as const;
 
-/** Linear's team crumb (`Api` → `vBn`): its initial and name; right-click for Copy URL. */
+/** Linear's team crumb (`Api` → `vBn`): its initial and name, opening the board's issues; right-click for Copy URL. It leads
+ *  every breadcrumb but My issues', and on the board it is the current page that still links (it clears the board's search). */
 function SpaceCrumb({ board }: { board: Board }) {
   return (
     <Crumb id="space">
       <ContextMenu label="Space options" entries={() => [boardCopyURL(board, hotkeyOf("copy-url"))]}>
-        <CrumbLink to={allIssues(board)} aria-label={board.name} title={board.name} onPress={clearBoardTools} className={CRUMB}>
+        <CrumbLink to={allIssues(board)} aria-label={board.name} title={board.name} isDisabled={false} onPress={clearBoardTools} className={CRUMB}>
           <span aria-hidden="true" className={CRUMB_ICON}>
             <span className="grid size-4 place-items-center rounded-[4px] bg-accent text-[9px] font-semibold text-white">{board.name[0]}</span>
           </span>
@@ -122,11 +140,11 @@ function SpaceCrumb({ board }: { board: Board }) {
     </Crumb>
   );
 }
-/** The list crumb: Issues, My issues or a person's name. Current, it still links (it clears the board's search). Under an issue it
- *  gives way below 640px. */
-function IssuesCrumb({ board, label }: { board: Board; label: string }) {
+/** My issues' crumb, or a person's name on their page: the list itself, with no space before it. Current, it still links (it
+ *  clears the search). Under an issue it gives way below 640px. */
+function PersonalCrumb({ board, label }: { board: Board; label: string }) {
   return (
-    <Crumb id="issues" className="shrink-0 max-sm:[&:not([data-current])]:hidden">
+    <Crumb id="personal" className="shrink-0 max-sm:[&:not([data-current])]:hidden">
       <CrumbLink to={allIssues(board)} aria-label={label} isDisabled={false} onPress={clearBoardTools} className={CRUMB}>
         {label}
       </CrumbLink>
@@ -211,9 +229,40 @@ function IssueCrumb({ issue }: { issue: Issue }) {
   );
 }
 
-/** What the list crumbs show for a board, My issues, a person or a view: the space (not on My issues itself), the list's name, and
- *  the custom view open (or being edited) in its place. */
-function useListCrumbs() {
+/** A document's issue: its status and key, back to the issue's page; the title is its tooltip. */
+function DocumentIssueCrumb({ issue }: { issue: Issue }) {
+  const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
+  const status = statusById(board, issue.status) ?? { name: issue.status, category: "new" as const };
+  return (
+    <Crumb id="document-issue" className="shrink-0">
+      <CrumbLink to={{ document: null }} aria-label="Back to issue" title={issue.summary} className={CRUMB}>
+        <span aria-hidden="true" className={CRUMB_ICON}><StatusIcon status={status} /></span>
+        <EntityIdentifier>{issue.key}</EntityIdentifier>
+      </CrumbLink>
+    </Crumb>
+  );
+}
+/** The open document: the file icon and its title, plain text like a view's crumb. */
+function DocumentCrumb({ title }: { title: string }) {
+  return (
+    <Crumb id="document">
+      <span aria-current="page" className="flex h-6 min-w-0 items-center">
+        <span aria-hidden="true" className={CRUMB_ICON}><Icon name="file" size={14} /></span>
+        <span className="truncate text-fg">{title}</span>
+      </span>
+    </Crumb>
+  );
+}
+
+/** What the list crumbs are for a board, My issues, a person or a view. */
+type ListCrumb =
+  /** A board: the space alone. */
+  | { kind: "board" }
+  /** A custom view open (or being edited): the space, then the view. */
+  | { kind: "view"; view: SavedView }
+  /** My issues or a person's issues: that list's name, no space. */
+  | { kind: "personal"; label: string };
+function useListCrumb(): ListCrumb {
   const mine = useStore((s) => s.mine);
   const person = useStore((s) => s.person);
   const issues = useStore((s) => s.issues);
@@ -226,20 +275,17 @@ function useListCrumbs() {
   const draft = useStore((s) => s.editorDraft);
   const saved = useSavedViews().find((v) => v.id === draft?.id);
   const current = draft && saved ? { ...saved, ...draft, id: saved.id } : activeView;
-  return {
-    space: !mine || !!activeView,
-    label: !activeView && mine ? personal : "Issues",
-    view: current?.kind === "custom" ? current : null,
-  };
+  if (current?.kind === "custom") return { kind: "view", view: current };
+  return mine && !activeView ? { kind: "personal", label: personal } : { kind: "board" };
 }
 
-/** A board, My issues, a person's issues or a view: `Space › Issues|View`. */
+/** A board, My issues, a person's issues or a view: `Space`, `Space › View`, or `My issues`. */
 export function BoardBreadcrumbs({ board }: { board: Board }) {
-  const list = useListCrumbs();
+  const list = useListCrumb();
   return (
     <CrumbBar>
-      {list.space && <SpaceCrumb board={board} />}
-      {list.view ? <ViewCrumb view={list.view} /> : <IssuesCrumb board={board} label={list.label} />}
+      {list.kind === "personal" ? <PersonalCrumb board={board} label={list.label} /> : <SpaceCrumb board={board} />}
+      {list.kind === "view" && <ViewCrumb view={list.view} />}
     </CrumbBar>
   );
 }
@@ -249,32 +295,43 @@ export function useIssueCrumbs(issue: Issue | undefined): IssueCrumbs | null {
   const page = useStore((s) => (issue && pageIssue(s) === issue.key ? s.trail : undefined));
   const issues = useStore((s) => s.issues);
   const boards = useStore((s) => s.boards);
+  const current = useStore((s) => s.board);
   return useMemo(
-    () => (issue && page !== undefined ? issueCrumbs(issue, page, issues, boards) : null),
-    [issue, page, issues, boards],
+    () => (issue && page !== undefined ? issueCrumbs(issue, page, issues, boards, current) : null),
+    [issue, page, issues, boards, current],
   );
 }
 
-/** An issue page's breadcrumb: over a list, `Space › Issues|View › KEY Title`; else `EPIC-KEY › Parent… › KEY Title`. */
+/** An issue page's breadcrumb, under its space: over a list, `Space › KEY Title` (My issues: `My issues › KEY Title`); else
+ *  `Space › EPIC-KEY › Parent… › KEY Title`. */
 export function IssueBreadcrumbs({ issue }: { issue: Issue }) {
-  const crumbs = useIssueCrumbs(issue) ?? { form: "list" };
-  return crumbs.form === "list" ? <ListIssueBreadcrumbs issue={issue} /> : (
+  const crumbs = useIssueCrumbs(issue);
+  const fallback = useStore((s) => (crumbs ? undefined : spaceOf(issue, s.boards, s.board)));
+  const space = crumbs ? crumbs.space : fallback;
+  return (
     <CrumbBar>
-      {crumbs.epic && (crumbs.compactEpic ? <EpicIconCrumbItem epic={crumbs.epic} /> : <EpicCrumbItem epic={crumbs.epic} />)}
-      {crumbs.parents.map((parent, i) => <ParentCrumbItem key={parent.key} parent={parent} last={i === crumbs.parents.length - 1} />)}
+      {!crumbs || crumbs.form === "list" ? <ListLeadCrumb space={space} /> : space && <SpaceCrumb board={space} />}
+      {crumbs?.form === "hierarchy" && crumbs.epic && (crumbs.compactEpic ? <EpicIconCrumbItem epic={crumbs.epic} /> : <EpicCrumbItem epic={crumbs.epic} />)}
+      {crumbs?.form === "hierarchy" && crumbs.parents.map((parent, i) => <ParentCrumbItem key={parent.key} parent={parent} last={i === crumbs.parents.length - 1} />)}
       <IssueCrumb issue={issue} />
     </CrumbBar>
   );
 }
-/** An issue page over a list: the list's crumbs, always Issues (a view's name shows only on the view itself), then the issue. */
-function ListIssueBreadcrumbs({ issue }: { issue: Issue }) {
-  const list = useListCrumbs(),
-    board = boardOf(issue.key)!;
+/** Over a list, what leads the issue: the space, or My issues' crumb (a view's name shows only on the view itself). */
+function ListLeadCrumb({ space }: { space: Board | undefined }) {
+  const list = useListCrumb();
+  if (!space) return null;
+  return list.kind === "personal" ? <PersonalCrumb board={space} label={list.label} /> : <SpaceCrumb board={space} />;
+}
+
+/** A document's breadcrumb: `Space › KEY › Title`, the key back to its issue. */
+export function DocumentBreadcrumbs({ issue, title }: { issue: Issue; title: string }) {
+  const space = useStore((s) => spaceOf(issue, s.boards, s.board));
   return (
     <CrumbBar>
-      {list.space && <SpaceCrumb board={board} />}
-      <IssuesCrumb board={board} label={list.label} />
-      <IssueCrumb issue={issue} />
+      {space && <SpaceCrumb board={space} />}
+      <DocumentIssueCrumb issue={issue} />
+      <DocumentCrumb title={title} />
     </CrumbBar>
   );
 }

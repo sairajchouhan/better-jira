@@ -9,11 +9,13 @@ import { directSubIssues } from "@/client/features/issue/sub-issue-model";
 
 /**
  * The way an issue page was reached, kept in its history entry like Linear's `itemsLookup_`:
- * - `"list"`: over a list (a board, a view, My issues, the inbox): `Space › Issues|View › KEY`, and the list's counter.
- * - `{ path }`: from Sub-issues sections, outermost first (`addModel` pushing each issue): `Epic › Task › KEY`, and the counter
- *   through the last one's sub-issues.
- * - none (null): a direct link, a reload, ⌘K, a toast or a link in content (Linear's `resetBreadcrumb`, `resetItems`): `Epic › KEY`
- *   and no counter.
+ * - `"list"`: over a list (a board, a view, the inbox): `Space › KEY` (My issues: `My issues › KEY`), and the list's counter.
+ * - `{ path }`: from Sub-issues sections, outermost first (`addModel` pushing each issue): `Space › Epic › Task › KEY`, and the
+ *   counter through the last one's sub-issues.
+ * - none (null): a direct link, a reload, ⌘K, a toast or a link in content (Linear's `resetBreadcrumb`, `resetItems`):
+ *   `Space › Epic › KEY` and no counter.
+ * Every form leads with the issue's space: Linear starts at the project and has an Issues crumb; the user chose otherwise
+ * (.raj/done.md, 2026-11-14).
  */
 export type Trail = "list" | { readonly path: readonly string[] };
 /** What a step does to the trail: open from `parent`'s Sub-issues section, set it outright, or (null) start afresh. */
@@ -47,12 +49,17 @@ export function nextTrail(prev: PageScreen, next: Omit<PageScreen, "trail">, ste
  */
 export type AncestorCrumb = { key: string; title: string; issue?: Issue; trail: Trail | null };
 export type IssueCrumbs =
-  /** Over the list it opened from: the list's own crumbs, and its counter. */
-  | { form: "list" }
-  /** Linear's `Hpi`: the epic, the parents it was opened through, then the issue. `siblings` are what the counter and ↑/↓ step
-   *  through: the last parent's sub-issues, or none when the page was reached directly. `compactEpic` shows the epic as its icon
-   *  alone, as `Hpi` does once the stack holds more than two issues (`iconOnly: r.length > 2`). */
-  | { form: "hierarchy"; epic?: AncestorCrumb; parents: readonly AncestorCrumb[]; siblings?: readonly Issue[]; compactEpic: boolean };
+  /** Over the list it opened from: the space (or the personal list's crumb), then the issue, and the list's counter. */
+  | { form: "list"; space?: Board }
+  /** Linear's `Hpi` under the space: the epic, the parents it was opened through, then the issue. `siblings` are what the counter
+   *  and ↑/↓ step through: the last parent's sub-issues, or none when the page was reached directly. `compactEpic` shows the epic
+   *  as its icon alone, as `Hpi` does once the stack holds more than two issues (`iconOnly: r.length > 2`): the space crumb is not
+   *  an issue, so it doesn't count (it truncates instead). */
+  | { form: "hierarchy"; space?: Board; epic?: AncestorCrumb; parents: readonly AncestorCrumb[]; siblings?: readonly Issue[]; compactEpic: boolean };
+
+/** The space an issue's breadcrumb leads with: the issue's own board, or `current` when no loaded board holds it. */
+export const spaceOf = (issue: Issue, boards: readonly Board[], current?: number | null): Board | undefined =>
+  boards.find((b) => b.id === issue.board) ?? boards.find((b) => b.id === current);
 
 const epicCrumb = (key: string | undefined, lookup: IssueLookup): AncestorCrumb | undefined =>
   key ? { key, title: epicName(key, lookup), issue: lookup(key), trail: null } : undefined;
@@ -71,7 +78,7 @@ function leadsTo(path: readonly string[], key: string, lookup: IssueLookup): boo
 const shownParents = (parents: AncestorCrumb[]) => (parents.length <= 2 ? parents : [parents[0]!, parents.at(-1)!]);
 
 /**
- * The open issue page's breadcrumb from its trail. Over a list: the list's crumbs. From Sub-issues sections: the epic of the first
+ * The open issue page's breadcrumb from its trail, under the issue's space (`spaceOf`). Over a list: the list's crumb. From Sub-issues sections: the epic of the first
  * issue in the trail (`Hpi`: `u` is the first issue in the stack, `f` its project), or that issue itself when it is the epic, then
  * the other issues as parent crumbs, and the counter through the last one's sub-issues. A trail that no longer leads here (a
  * parent changed), or none (a link, a reload, ⌘K), falls back to the issue's own epic and no counter, as Linear's empty stack does.
@@ -81,8 +88,10 @@ export function issueCrumbs(
   trail: Trail | null,
   issues: ReadonlyMap<string, Issue>,
   boards: readonly Board[],
+  current?: number | null,
 ): IssueCrumbs {
-  if (trail === "list") return { form: "list" };
+  const space = spaceOf(issue, boards, current);
+  if (trail === "list") return { form: "list", space };
   const lookup: IssueLookup = (key) => issues.get(key);
   if (trail && trail.path.length && leadsTo(trail.path, issue.key, lookup)) {
     const [first, ...rest] = trail.path as [string, ...string[]];
@@ -95,6 +104,7 @@ export function issueCrumbs(
     });
     return {
       form: "hierarchy",
+      space,
       epic: epicCrumb(top ? first : epicOf(lookup(first)!, lookup), lookup),
       parents: shownParents(parents),
       siblings: directSubIssues(issues, boards, trail.path.at(-1)!),
@@ -102,7 +112,7 @@ export function issueCrumbs(
     };
   }
   const own = epicOf(issue, lookup);
-  return { form: "hierarchy", epic: epicCrumb(own === issue.key ? undefined : own, lookup), parents: [], compactEpic: false };
+  return { form: "hierarchy", space, epic: epicCrumb(own === issue.key ? undefined : own, lookup), parents: [], compactEpic: false };
 }
 
 /**

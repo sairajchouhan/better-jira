@@ -1,5 +1,5 @@
 import { type Board } from "@/shared/issue-model";
-import { BoardBreadcrumbs } from "./breadcrumbs";
+import { BoardBreadcrumbs, PageHeader } from "./breadcrumbs";
 import { SidebarLink, SidebarViewLink, sidebarRowClass } from "./sidebar-link";
 import { FavoriteButton } from "./favorite-button";
 import { useActiveView, useSavedViews, createViewDraft } from "@/client/features/views/saved-views";
@@ -490,8 +490,8 @@ export function BoardHeader() {
   const personTab = useStore((s) => s.personTab);
   return (
     <header className="shrink-0">
-      <div className="flex h-11 items-center justify-between border-b-[0.5px] border-frame px-2">
-        <div className="flex min-w-0 items-center pr-1 pl-2.5 text-[13px] font-medium text-fg-2">
+      <PageHeader className="justify-between">
+        <div className="flex min-w-0 items-center pr-1 text-[13px] font-medium text-fg-2">
           <BoardBreadcrumbs board={board!} />
           {/* Linear: star, then ⋯ — 28px round buttons, 14px glyphs, 4px apart; hover fills --crumb-hover and whitens the glyph. */}
           <FavoriteButton id={favoriteId} className="ml-2 shrink-0" />
@@ -509,7 +509,7 @@ export function BoardHeader() {
         <Button variant="muted" size="medium" icon={<Icon name="plus" />} onClick={() => beginCreateInView()}>
           New issue
         </Button>
-      </div>
+      </PageHeader>
       {/* Linear: custom views (and their editor) show only the breadcrumb, no team tabs. The editor floats this row's
           controls into its card, so a custom draft collapses the row. */}
       <div className={`flex flex-wrap items-center gap-1 px-2 ${custom && draft ? "" : "min-h-[43.5px] py-1"}`}>

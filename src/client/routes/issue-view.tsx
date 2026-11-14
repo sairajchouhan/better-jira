@@ -65,7 +65,7 @@ import { useCommentsSeen, useIssueVisit } from "@/client/features/inbox/issue-vi
 import { SplitPanel } from "@/client/features/issue/split-panel";
 import { descriptionNotice, descriptionSession, type DescriptionPorts } from "@/client/features/issue/description-session";
 import { shortDate } from "@/client/lib/due-date";
-import { IssueBreadcrumbs, useIssueCrumbs } from "@/client/features/navigation/breadcrumbs";
+import { IssueBreadcrumbs, PageHeader, useIssueCrumbs } from "@/client/features/navigation/breadcrumbs";
 import { stepIssues } from "@/client/features/navigation/issue-trail";
 import { Button, IconButton } from "@/client/components/button";
 import { ContextMenu, type ActionEntry } from "@/client/components/action-menu";
@@ -146,8 +146,9 @@ export const InboxIssuePane = memo(function InboxIssuePane({ issue }: { issue: I
 });
 
 function IssueKey({ issue }: { issue: Issue }) {
+  // pl-1: the side panel's key keeps its 12px inset inside the shared header row's 8px.
   return (
-    <>
+    <span className="flex shrink-0 items-center gap-1.5 pl-1">
       <TypeDot type={issue.type} />
       <a
         className="text-fg-2 hover:text-fg"
@@ -157,7 +158,7 @@ function IssueKey({ issue }: { issue: Issue }) {
       >
         <EntityIdentifier>{issue.key}</EntityIdentifier>
       </a>
-    </>
+    </span>
   );
 }
 
@@ -178,7 +179,7 @@ function IssueHeader({
 }) {
   const optionsOpen = useStore((s) => s.overlay === "options");
   return (
-    <div className="issue-detail-header flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-3 text-[12px] text-fg-3">
+    <PageHeader className="issue-detail-header gap-1.5 text-[12px] text-fg-3">
       {children}
       <FavoriteButton id={issue.key} noun="issue" className="shrink-0" />
       <IconButton
@@ -204,7 +205,7 @@ function IssueHeader({
       <IconButton label="Close" shortcut="Escape" variant="muted" onClick={closePanel}>
         <Icon name="close" />
       </IconButton>
-    </div>
+    </PageHeader>
   );
 }
 

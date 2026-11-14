@@ -1,11 +1,11 @@
 import { type Issue, type User } from "@/shared/issue-model";
-import { AppLink } from "@/client/features/navigation/app-link";
 /* oxlint-disable react/immutability -- Session callbacks and mutable imperative models are intentionally owned outside React state. */
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 import { FavoriteButton } from "@/client/features/navigation/favorite-button";
+import { DocumentBreadcrumbs, PageHeader } from "@/client/features/navigation/breadcrumbs";
 import { createContext, use, useEffect, useRef, useState, type ReactNode } from "react";
 import { Debouncer } from "@tanstack/pacer";
-import { Icon, StatusIcon } from "@/client/components/icons";
+import { Icon } from "@/client/components/icons";
 import { Menu } from "@/client/components/menu";
 import { MenuSurface } from "@/client/components/menu-surface";
 import { Button, IconButton } from "@/client/components/button";
@@ -17,7 +17,6 @@ import { Text } from "@/client/components/text";
 import { DocumentBodyEditor } from "@/client/features/editor/rich-editor-loader";
 import { COMPOSER_TITLE, focusEditorAt, titleKeyDown } from "@/client/features/editor/title-flow";
 import { Adf } from "@/client/features/editor/adf";
-import { statusById } from "@/shared/board-catalog";
 import { adfToMarkdown } from "@/client/features/issue/issue-copy";
 import { normalizeDocument, type AdfDocument } from "@/shared/document";
 import { get, ME, set, useStore, usePeople } from "@/client/state/store";
@@ -33,7 +32,7 @@ import { useCommand } from "@/client/features/navigation/commands";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { emojiOptions } from "@/client/features/comments/reactions";
 import { ReminderMenu, reminderSubmenu } from "@/client/features/reminders/reminders";
-/** The header breadcrumb, the favorite star and the icon-picker cells: no primitive yet (see the note at each). */
+/** The icon-picker cells: no primitive yet (see the note at each). */
 const BUTTON = "rounded px-2 py-1.5 text-[13px] text-fg-2 hover:bg-(--control-tertiary-hover)";
 type Draft = { title: string; body: AdfDocument };
 /** The `/issue/KEY-1/document/<id>` route: the open issue's document. */
@@ -431,31 +430,10 @@ function DocumentHeader() {
     if (name === "subscribers") setPeople({ anchor: root.current!, kind: "subscribers" });
     return true;
   });
-  const status = statusById(
-    get().boards.find((b) => b.id === issue.board),
-    issue.status,
-  ) ?? { name: issue.status, category: "new" };
   return (
     <>
-      <header
-        ref={root}
-        className="document-header flex h-11 shrink-0 items-center gap-1 border-b border-line px-3 text-[13px] text-fg-3"
-      >
-        {/* A breadcrumb: Linear's Breadcrumbs has no primitive yet (P0 left it out), so it keeps its own frame. */}
-        <AppLink
-          to={{ document: null }}
-          aria-label="Back to issue"
-          title={issue.summary}
-          className={`${BUTTON} flex shrink-0 items-center gap-2`}
-        >
-          <StatusIcon status={status} />
-          {issue.key}
-        </AppLink>
-        <span aria-hidden>›</span>
-        <Icon name="file" size={14} />
-        <Text variant="small" color="base" wrap="truncate" className="min-w-0">
-          {title}
-        </Text>
+      <PageHeader ref={root} className="document-header gap-1 text-[13px] text-fg-3">
+        <DocumentBreadcrumbs issue={issue} title={title} />
         <FavoriteButton id={`document:${resource.id}`} noun="document" />
         <IconButton
           label="Document options"
@@ -497,7 +475,7 @@ function DocumentHeader() {
         >
           <Icon name="bell" />
         </IconButton>
-      </header>
+      </PageHeader>
       {options && (
         <ActionMenu
           anchor={options}
