@@ -11,7 +11,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { Tooltip as AriaTooltip, TooltipTriggerStateContext } from "react-aria-components";
+import { Tooltip as AriaTooltip, TooltipTrigger } from "react-aria-components";
 import { Keycap } from "./keycap";
 import {
   choosePlacement,
@@ -83,11 +83,16 @@ export function useTooltip() {
   return root;
 }
 
+/** React Aria's wait before a surface the pointer left closes, set past any real wait (setTimeout's largest): cards close by
+ *  Linear's pointer-out rule instead (`keepsCardOpen`). */
+const NEVER = 2 ** 31 - 1;
+
 /**
- * One tooltip: an id in the store, its timing, and its trigger ref. It hands React Aria's `Tooltip` a trigger state that is the
- * store's, so React Aria places, portals and names the surface while the store alone opens and closes it. React Aria's own calls
- * map back: its close on scroll (`close(true)`) hides; its hover start and end over the surface do nothing, since cards keep
- * Linear's pointer-out rule (`keepsCardOpen`).
+ * One tooltip: an id in the store, its timing, and its trigger ref, around React Aria's `TooltipTrigger` held open by the store.
+ * React Aria places, portals and names the surface and ties it to the trigger; the store alone opens it, with Linear's delays and
+ * one open at a time (React Aria's 1500ms delay and 500ms cooldown, never restarted by a move, can't say Linear's). So React Aria's
+ * trigger handling is off (`isDisabled`, `shouldCloseOnPress={false}`), and its own closes map back: the close on scroll hides,
+ * and the close after the pointer leaves a card never comes (`NEVER`).
  */
 function TooltipRoot({ timing, children }: { timing: Timing; children: ReactNode }) {
   const store = use(StoreContext);
@@ -103,10 +108,19 @@ function TooltipRoot({ timing, children }: { timing: Timing; children: ReactNode
     close: () => store.close(id),
   };
   useEffect(() => () => store.close(id), [store, id]);
-  const ariaState = { isOpen, open: () => {}, close: (immediate?: boolean) => immediate && store.close(id) };
   return (
     <RootContext value={{ id, isOpen, triggerRef, surfaceRef, actions }}>
-      <TooltipTriggerStateContext value={ariaState as never}>{children}</TooltipTriggerStateContext>
+      <TooltipTrigger
+        isOpen={isOpen}
+        onOpenChange={(open) => {
+          if (!open) store.close(id);
+        }}
+        isDisabled
+        shouldCloseOnPress={false}
+        closeDelay={NEVER}
+      >
+        {children}
+      </TooltipTrigger>
     </RootContext>
   );
 }
@@ -131,7 +145,7 @@ function TooltipSurface({
   label?: string;
   children: ReactNode;
 }) {
-  const { id, isOpen, triggerRef, surfaceRef: surface } = useTooltip();
+  const { isOpen, triggerRef, surfaceRef: surface } = useTooltip();
   const [chosen, setChosen] = useState(placement);
   const choose = useEffectEvent(() => {
     const trigger = triggerRef.current,
@@ -150,21 +164,21 @@ function TooltipSurface({
   useLayoutEffect(() => {
     if (isOpen) choose();
   }, [isOpen]);
+  // React Aria's TooltipTrigger gives the surface its id and describes a React Aria trigger by it; ours is a plain element.
   useLayoutEffect(() => {
-    const trigger = triggerRef.current;
-    if (!isOpen || !trigger) return;
+    const trigger = triggerRef.current,
+      id = surface.current?.id;
+    if (!isOpen || !trigger || !id) return;
     const before = trigger.getAttribute("aria-describedby");
     trigger.setAttribute("aria-describedby", before ? `${before} ${id}` : id);
     return () => {
       if (before) trigger.setAttribute("aria-describedby", before);
       else trigger.removeAttribute("aria-describedby");
     };
-  }, [isOpen, id, triggerRef]);
+  }, [isOpen, triggerRef, surface]);
   return (
     <AriaTooltip
       ref={surface}
-      // React Aria passes `id` through to the element (filterDOMProps); its props type leaves it out.
-      {...({ id } as object)}
       triggerRef={triggerRef}
       placement={chosen.replace("-", " ") as never}
       shouldFlip={false}

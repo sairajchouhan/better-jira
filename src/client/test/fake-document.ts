@@ -8,7 +8,7 @@ export function renderWithFakeDocument<T>(render: () => T): T {
   const win = g.window;
   const stubElement = !!win && !win.HTMLElement;
   g.document = { activeElement: null, getElementById: () => null, addEventListener() {}, removeEventListener() {} };
-  if (stubElement) win.HTMLElement = class {};
+  if (stubElement) win.HTMLElement = function HTMLElement() {};
   try {
     return render();
   } finally {
