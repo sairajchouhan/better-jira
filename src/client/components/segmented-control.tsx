@@ -1,15 +1,16 @@
-import type { ComponentProps } from "react";
+import { Tab, TabList, Tabs, type Key, type TabListProps, type TabProps } from "react-aria-components";
 import type { ButtonSize } from "./button";
-import { TablistProvider, useTablistProps, useTabProps } from "./tablist";
+import { SELECT_ON_RELEASE } from "./tabs";
 import "./control-tokens.css";
 import "./segmented-control.css";
 
 /**
- * Linear's SegmentedControl (`J4`, trigger/indicator `$Tr`, sizes `eEr`, startup-root.CnUSfl4j.js). Segment sizes are
+ * Linear's SegmentedControl (`J4`, trigger/indicator `$Tr`, sizes `eEr`, startup-root.CnUSfl4j.js): Base UI Tabs with
+ * `activationMode` "automatic" by default, so arrows select as they move and wrap, as React Aria's Tabs do. Segment sizes are
  * the Button table; the track and selected fill swap tertiary shades between light and dark.
  */
 
-/** A pill of mutually exclusive choices; arrows move (and, by default, select), Home/End jump to the ends. */
+/** A pill of mutually exclusive choices; name it with `aria-label`. */
 function SegmentedControlRoot({
   value,
   onValueChange,
@@ -17,23 +18,22 @@ function SegmentedControlRoot({
   width = "content",
   className = "",
   ...props
-}: Pick<ComponentProps<typeof TablistProvider>, "value" | "onValueChange"> & {
+}: {
+  value: string;
+  onValueChange: (value: string) => void;
   size?: ButtonSize;
   width?: "content" | "full";
-} & ComponentProps<"div">) {
+  className?: string;
+} & Omit<TabListProps<object>, "className">) {
   return (
-    <TablistProvider value={value} onValueChange={onValueChange}>
-      <SegmentList data-size={size} data-width={width} className={`ui-segmented ${className}`} {...props} />
-    </TablistProvider>
+    <Tabs selectedKey={value} onSelectionChange={(key: Key) => onValueChange(String(key))} className="contents">
+      <TabList data-size={size} data-width={width} className={`ui-segmented ${className}`} {...props} />
+    </Tabs>
   );
 }
 
-function SegmentList(props: ComponentProps<"div">) {
-  return <div {...useTablistProps()} {...props} />;
-}
-
 export const SegmentedControl = Object.assign(SegmentedControlRoot, {
-  Segment: function Segment({ value, className = "", onClick, ...props }: { value: string } & ComponentProps<"button">) {
-    return <button className={`ui-segment ${className}`} {...useTabProps(value, onClick)} {...props} />;
-  },
+  Segment: ({ value, className = "", ...props }: { value: string; className?: string } & Omit<TabProps, "id" | "className">) => (
+    <Tab id={value} className={`ui-segment ${className}`} {...SELECT_ON_RELEASE} {...props} />
+  ),
 });

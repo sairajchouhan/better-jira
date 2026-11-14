@@ -31,17 +31,17 @@
     font-weight: 500;
     white-space: nowrap;
   }
-  .ui-segment:not([data-active]):is(:hover, :active):not(:disabled) {
+  .ui-segment:not([data-selected]):is([data-hovered], [data-pressed]):not([data-disabled]) {
     color: var(--fg-2);
   }
   /* The selected segment wears $Tr.indicator: the opposite tertiary fill plus J4.List's ring, `0 0 0 thinPixel
      elevated.bgBorderThin, elevated.shadowLow` (the elevated shadowLow equals the base one at these contrasts). */
-  .ui-segment[data-active] {
+  .ui-segment[data-selected] {
     background: var(--tab);
     box-shadow: 0 0 0 var(--thin-pixel) var(--elevated-border-thin), var(--frame-shadow);
     color: var(--fg-2);
   }
-  .ui-segment:disabled {
+  .ui-segment[data-disabled] {
     pointer-events: none;
     opacity: 0.6;
   }
@@ -68,7 +68,7 @@
     .ui-segmented {
       background: var(--tab);
     }
-    .ui-segment[data-active] {
+    .ui-segment[data-selected] {
       background: var(--tab-on);
     }
   }

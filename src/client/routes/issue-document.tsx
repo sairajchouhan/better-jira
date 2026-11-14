@@ -716,8 +716,10 @@ function DocumentIcon({ resource, issue }: { resource: IssueResource; issue: Iss
           close={() => setAnchor(null)}
           width={320}
         >
+          {/* Linear's icon picker list: `activateOnFocus:!0`, looping (startup-root, the `icon`/`emoji` triggers). */}
           <Tabs
             value={tab}
+            activation="automatic"
             onValueChange={(value) => {
               setTab(value as typeof tab);
               setQuery("");

@@ -98,12 +98,21 @@ test("Linear parity: hidden counts, merge conflicts, editor chrome, draft tab, p
     expect(await page.eval(`document.querySelector('[aria-label="View details"] [role=tab][aria-selected=true]').textContent`)).toBe("Labels");
     // BJ-145: Linear's 32px pills, sized from their labels.
     expect(await page.eval(`[...document.querySelectorAll('[aria-label="View details"] [role=tab]')].map(t=>t.getBoundingClientRect().height)`)).toEqual([32, 32]);
-    // SOLF-03: summary tabs use one roving tab stop and the shared keyboard model.
+    // SOLF-03: summary tabs use one roving tab stop and Linear's `sq` keys (activateOnFocus false, loopFocus false): arrows
+    // move focus and stop at the ends, Enter or Space selects.
     const selectedSummary = `document.querySelector('[aria-label="View details"] [role=tab][aria-selected=true]')`;
-    for (const [key, label] of [["ArrowRight", "Assignees"], ["End", "Labels"], ["Home", "Assignees"], ["ArrowLeft", "Labels"]]) {
+    for (const [key, focused, selected] of [
+      ["ArrowLeft", "Assignees", "Labels"],
+      ["Enter", "Assignees", "Assignees"],
+      ["ArrowLeft", "Assignees", "Assignees"],
+      ["End", "Labels", "Assignees"],
+      [" ", "Labels", "Labels"],
+      ["ArrowRight", "Labels", "Labels"],
+      ["Home", "Assignees", "Labels"],
+    ]) {
       await page.key(key!);
-      expect(await page.eval(`${selectedSummary}.textContent`)).toBe(label);
-      expect(await page.eval(`document.activeElement === ${selectedSummary}`)).toBe(true);
+      expect(await page.eval(`document.activeElement.textContent`)).toBe(focused);
+      expect(await page.eval(`${selectedSummary}.textContent`)).toBe(selected);
       expect(await page.eval(`document.querySelectorAll('[aria-label="View details"] [role=tab][tabindex="0"]').length`)).toBe(1);
       expect(await page.eval(`document.querySelector('[aria-label="View details"] [role=tabpanel]').getAttribute('aria-labelledby') === ${selectedSummary}.id`)).toBe(true);
     }

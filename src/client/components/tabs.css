@@ -39,7 +39,7 @@
     box-shadow: 0 0 0 var(--thin-pixel) var(--tab-on-ring);
     color: var(--fg);
   }
-  .ui-tab:disabled {
+  .ui-tab[data-disabled] {
     opacity: 0.6;
   }
 }
