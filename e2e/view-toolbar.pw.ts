@@ -43,7 +43,7 @@ test("segmented chips edit operators and values independently, Save offers creat
       await page.waitFor(`!document.querySelector('body > div.fixed.z-40')`);
     }
     await page.click('[aria-label="priority operator"]');
-    await page.click('[cmdk-item][data-value="isNot"]');
+    await page.click('[role^=menuitem][data-value="isNot"]');
     await page.click('[aria-label="priority value"]');
     await page.waitFor(
       `!!document.querySelector('input[aria-label="Filter Priority"]')`,

@@ -47,7 +47,7 @@ test("the issue page looks and feels like Linear: timestamp tooltip, focus ring,
     await page.eval("document.activeElement?.blur()");
   });
   await test.step("every control on the issue page and in its menus keeps the default arrow cursor; only text fields show a text cursor", async () => {
-    const bad = `[...document.querySelectorAll('button,a[href],[role=button],[role=menuitem],[role=option],[cmdk-item],summary,label,select,input[type=checkbox],input[type=range]')].filter(n=>n.getClientRects().length&&!n.closest('[contenteditable=true]')).map(n=>[n.getAttribute('aria-label')||n.textContent.trim().slice(0,30)||n.tagName,getComputedStyle(n).cursor]).filter(([,c])=>c!=='default')`;
+    const bad = `[...document.querySelectorAll('button,a[href],[role=button],[role=menuitem],[role=option],[role^=menuitem],summary,label,select,input[type=checkbox],input[type=range]')].filter(n=>n.getClientRects().length&&!n.closest('[contenteditable=true]')).map(n=>[n.getAttribute('aria-label')||n.textContent.trim().slice(0,30)||n.tagName,getComputedStyle(n).cursor]).filter(([,c])=>c!=='default')`;
     expect(await page.eval(bad)).toEqual([]);
     expect(
       await page.eval(
@@ -68,10 +68,10 @@ test("the issue page looks and feels like Linear: timestamp tooltip, focus ring,
     }
   });
   await test.step("RAJ-52: action menus open with no row highlighted: Enter does nothing, ArrowDown highlights the first row and ArrowUp the last", async () => {
-    const lit = `[...document.querySelectorAll('[role=dialog] [cmdk-item]')].filter(n=>getComputedStyle(n,'::before').backgroundColor!=='rgba(0, 0, 0, 0)').map(n=>n.dataset.value)`;
+    const lit = `[...document.querySelectorAll('[role=dialog] [role^=menuitem]')].filter(n=>getComputedStyle(n,'::before').backgroundColor!=='rgba(0, 0, 0, 0)').map(n=>n.dataset.value)`;
     const menu = async () => {
       await page.click("#issue-options");
-      await page.waitFor(`!!document.querySelector('[role=dialog] [cmdk-item]')`);
+      await page.waitFor(`!!document.querySelector('[role=dialog] [role^=menuitem]')`);
       await sleep(100); // no row lights up late
     };
     await menu();
@@ -84,7 +84,7 @@ test("the issue page looks and feels like Linear: timestamp tooltip, focus ring,
     ]).toEqual([1, []]);
     await page.key("ArrowRight");
     await sleep(150); // no submenu opens
-    expect(await page.eval(`document.querySelectorAll('[role=dialog] [cmdk-list]').length`)).toBe(
+    expect(await page.eval(`document.querySelectorAll('[role=dialog] .menu-list').length`)).toBe(
       1,
     );
     await page.key("ArrowDown");
@@ -136,9 +136,9 @@ test("an issue's favourite, assignee, project and milestone change and survive a
     const pick = async (id: string, menu: string, row: string) => {
       await page.click(`#${id}`);
       await page.waitFor(
-        `!!document.querySelector('[role=dialog][aria-label="${menu}"] [cmdk-item][data-value="${row}"]')`,
+        `!!document.querySelector('[role=dialog][aria-label="${menu}"] [role^=menuitem][data-value="${row}"]')`,
       );
-      await page.click(`[role=dialog][aria-label="${menu}"] [cmdk-item][data-value="${row}"]`);
+      await page.click(`[role=dialog][aria-label="${menu}"] [role^=menuitem][data-value="${row}"]`);
       await page.waitFor(`!document.querySelector('[role=dialog][aria-label="${menu}"]')`);
     };
     await pick("prop-assignee", "Assign issue", "Alex alex");
@@ -156,9 +156,9 @@ test("an issue's favourite, assignee, project and milestone change and survive a
     await pick("prop-project", "Change epic", "Fixture epic TEST-7");
     await page.key("M", "shift");
     await page.waitFor(
-      `!!document.querySelector('[role=dialog][aria-label="Set milestone"] [cmdk-item][data-value="Beta"]')`,
+      `!!document.querySelector('[role=dialog][aria-label="Set milestone"] [role^=menuitem][data-value="Beta"]')`,
     );
-    await page.click('[role=dialog][aria-label="Set milestone"] [cmdk-item][data-value="Beta"]');
+    await page.click('[role=dialog][aria-label="Set milestone"] [role^=menuitem][data-value="Beta"]');
     await page.waitFor(`document.getElementById('prop-milestone')?.textContent.includes('Beta')`);
     await page.reload();
     await page.waitFor(
@@ -233,7 +233,7 @@ test("RAJ-52: action menus sit where Linear puts them: Issue options left-aligne
       `document.querySelector(${JSON.stringify(sel)}).scrollIntoView({block:'center'})`,
     );
     await page.eval(`document.querySelector(${JSON.stringify(sel)}).click()`);
-    await page.waitFor(`!!document.querySelector('[role=dialog] [cmdk-item]')`);
+    await page.waitFor(`!!document.querySelector('[role=dialog] [role^=menuitem]')`);
     const r = await stable<[Box, Box]>(
       page,
       `[(${R})(document.querySelector(${JSON.stringify(sel)})),(${R})([...document.querySelectorAll('[role=dialog]')].at(-1))]`,
@@ -251,7 +251,7 @@ test("RAJ-52: action menus sit where Linear puts them: Issue options left-aligne
     );
     for (const type of ["mouseMoved", "mousePressed", "mouseReleased"])
       await page.cmd("Input.dispatchMouseEvent", { type, x, y, button: "right", clickCount: 1 });
-    await page.waitFor(`!!document.querySelector('[role=dialog] [cmdk-item]')`);
+    await page.waitFor(`!!document.querySelector('[role=dialog] [role^=menuitem]')`);
     const m = await stable<Box>(
       page,
       `(${R})([...document.querySelectorAll('[role=dialog]')].at(-1))`,
@@ -265,7 +265,7 @@ test("RAJ-52: action menus sit where Linear puts them: Issue options left-aligne
       `!!document.getElementById('comment')&&!!document.querySelector('[data-sub-issue]')`,
     );
     await page.click("#issue-options");
-    await page.click('[cmdk-item][data-value="Add link…"]');
+    await page.click('[role^=menuitem][data-value="Add link…"]');
     await page.type("https://example.com/spec");
     await page.click('[aria-label="Link title"]');
     await page.type("Spec");
@@ -291,16 +291,16 @@ test("RAJ-52: action menus sit where Linear puts them: Issue options left-aligne
   await test.step("menu rows keep Linear's padding and separator bands, in the menu border colour", async () => {
     // Inside, Linear keeps 6px above and below the rows and a 12px band per separator: 165px for Open link, Copy link | Edit… | Remove… (0.5px border; headless draws 1px).
     await page.click('[aria-label="Options for Spec"]');
-    await page.waitFor(`!!document.querySelector('[role=dialog] [cmdk-item]')`);
+    await page.waitFor(`!!document.querySelector('[role=dialog] [role^=menuitem]')`);
     expect(
       await page.eval(
-        `(()=>{const d=[...document.querySelectorAll('[role=dialog]')].at(-1),D=d.getBoundingClientRect(),i=[...d.querySelectorAll('[cmdk-item]')].map(n=>n.getBoundingClientRect());return [i[0].top-D.top,i[2].top-i[1].bottom,i[3].top-i[2].bottom,D.bottom-i[3].bottom,D.height].map(Math.round)})()`,
+        `(()=>{const d=[...document.querySelectorAll('[role=dialog]')].at(-1),D=d.getBoundingClientRect(),i=[...d.querySelectorAll('[role^=menuitem]')].map(n=>n.getBoundingClientRect());return [i[0].top-D.top,i[2].top-i[1].bottom,i[3].top-i[2].bottom,D.bottom-i[3].bottom,D.height].map(Math.round)})()`,
       ),
     ).toEqual([7, 12, 12, 7, 166]);
     // Separators are Menu.Divider's 0.5px line in Linear's bgBorderFaintThin (fT's divider), not the faint --line-2.
     expect(
       await page.eval(
-        `[...[...document.querySelectorAll('[role=dialog]')].at(-1).querySelectorAll('[cmdk-separator]')].map(n=>getComputedStyle(n,'::after').borderBottomColor)`,
+        `[...[...document.querySelectorAll('[role=dialog]')].at(-1).querySelectorAll('.menu-divider')].map(n=>getComputedStyle(n,'::after').borderBottomColor)`,
       ),
     ).toEqual(["lch(20.28 1.93 272)", "lch(20.28 1.93 272)"]);
     await page.key("Escape");

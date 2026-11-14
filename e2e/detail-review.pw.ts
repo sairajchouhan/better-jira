@@ -164,7 +164,7 @@ test("issue comments: card outsets, timestamps and deep links, whitespace and su
     await page.key("Escape");
     await page.click('[aria-label="Change subscribers"]');
     await page.type("Audit Me");
-    const checked = `document.querySelector('[cmdk-item][data-selected=true]').getAttribute('aria-checked')`;
+    const checked = `document.querySelector('[role^=menuitem][data-focused]').getAttribute('aria-checked')`;
     expect(await page.eval(checked)).toBe("false");
     // FILTER-10: Shift+Enter toggles and keeps the menu open (plain Enter closes it).
     await page.key("Enter", "shift");

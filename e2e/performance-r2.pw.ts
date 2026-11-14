@@ -128,7 +128,7 @@ test("BJ-filter-speed: on a 1,100-issue board with 1,044 labels, each Add filter
   await fixture.reset({ bulk: 1100, bulkVariety: 60, catalog: { priorities: ["Urgent", "High", "Normal", "Low"], labels, users: [] } });
   const app = await open();
   await app.click('[aria-label="Add filter"]');
-  const menu = app.page.locator('[data-popover] [cmdk-root]').first();
+  const menu = app.page.locator('[data-popover] .menu').first();
   await expect(menu).toBeVisible();
   // Long frames since the last reset; the menu's rows and their submenus are what runs.
   await app.page.evaluate(() => {
@@ -137,11 +137,11 @@ test("BJ-filter-speed: on a 1,100-issue board with 1,044 labels, each Add filter
     new PerformanceObserver((list) => { for (const e of list.getEntries()) w.longFrames.push(e.duration); }).observe({ type: "long-animation-frame" });
   });
   for (const name of ["Status", "Assignee", "Creator", "Priority", "Labels", "Relations", "Subscribers", "Issue type"]) {
-    const row = menu.locator(`[cmdk-item][data-value="${name}"]`);
+    const row = menu.locator(`[role^=menuitem][data-value="${name}"]`);
     const box = (await row.boundingBox())!;
     const started = Date.now();
     await app.page.mouse.move(box.x + 40, box.y + box.height / 2);
-    await expect(app.page.locator(`[role="dialog"][aria-label="${name} filter"] [cmdk-item]`).first()).toBeVisible();
+    await expect(app.page.locator(`[role="dialog"][aria-label="${name} filter"] [role^=menuitem]`).first()).toBeVisible();
     // Before: Labels 714ms, Assignee 349ms on this data; after: 250ms and 110ms. The budget leaves CI headroom.
     expect(Date.now() - started).toBeLessThan(600);
   }
@@ -156,18 +156,18 @@ test("BJ-filter-speed: toggling a label in the Labels filter keeps its list, and
   await app.click('[aria-label="Add filter"]');
   await app.hover("text=Labels");
   const sub = app.page.locator('[role="dialog"][aria-label="Labels filter"]');
-  const rows = sub.locator("[cmdk-item]");
+  const rows = sub.locator("[role^=menuitem]");
   await expect(rows.nth(3)).toBeVisible();
   const before = await rows.count();
   // Each row's node is tagged; a toggle that rebuilt the list would drop the tags.
-  await sub.evaluate((node) => node.querySelectorAll("[cmdk-item]").forEach((row, i) => row.setAttribute("data-tag", String(i))));
+  await sub.evaluate((node) => node.querySelectorAll("[role^=menuitem]").forEach((row, i) => row.setAttribute("data-tag", String(i))));
   await sub.hover();
   await rows.nth(1).click();
   await rows.nth(2).click();
   await expect(rows.nth(1)).toHaveAttribute("aria-checked", "true");
   await expect(rows.nth(2)).toHaveAttribute("aria-checked", "true");
   expect(await rows.count()).toBe(before);
-  expect(await sub.locator("[cmdk-item][data-tag]").count()).toBe(before);
+  expect(await sub.locator("[role^=menuitem][data-tag]").count()).toBe(before);
   await app.page.keyboard.press("ArrowLeft");
   await expect(sub).toBeHidden();
   await expect(app.page.locator('[aria-label="Add Filter…"]')).toBeFocused();

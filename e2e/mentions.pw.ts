@@ -2,7 +2,7 @@ import { expect, test } from "./app";
 
 const chips = (editor: string) =>
   `[...document.querySelectorAll('${editor} .mention-chip')].map(n=>n.dataset.mentionId+':'+n.textContent).join('|')`;
-const options = `[...document.querySelectorAll('[aria-label="Mention people"] [role=option]')].map(n=>(n.ariaSelected==='true'?'*':'')+n.querySelector('.menu-name').textContent).join('|')`;
+const options = `[...document.querySelectorAll('[aria-label="Mention people"] [role^=menuitem]')].map(n=>(n.hasAttribute('data-focused')?'*':'')+n.querySelector('.menu-name').textContent).join('|')`;
 
 test("@ mentions: the people picker in the description, the comment composer and a new sub-issue", async ({
   open,
@@ -25,7 +25,7 @@ test("@ mentions: the people picker in the description, the comment composer and
     await page.waitFor(`${options}.split('|').length === 3`);
     // Photos load through the same-origin avatar proxy; a broken avatar URL keeps the initial.
     const face = (name: string) =>
-      `[...document.querySelectorAll('[aria-label="Mention people"] [role=option]')].find(n=>n.textContent.includes(${JSON.stringify(name)}))`;
+      `[...document.querySelectorAll('[aria-label="Mention people"] [role^=menuitem]')].find(n=>n.textContent.includes(${JSON.stringify(name)}))`;
     await page.waitFor(
       `(()=>{const i=${face("Alex")}.querySelector('img[src^="/api/avatar"]');return !!i&&i.complete&&i.naturalWidth>0})()`,
     );

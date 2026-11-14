@@ -52,7 +52,7 @@ test("BJ-42 / BJ-57 / BJ-43: the slash, emoji and @ menus insert blocks, emoji a
   const page = await open("?issue=TEST-2&view=page");
   const menu = (label: string) =>
     page.waitFor<string[]>(
-      `(()=>{const items=[...document.querySelectorAll('[aria-label="${label}"] [cmdk-item] .menu-name')].map(n=>n.textContent);return items.length&&items})()`,
+      `(()=>{const items=[...document.querySelectorAll('[aria-label="${label}"] [role^=menuitem] .menu-name')].map(n=>n.textContent);return items.length&&items})()`,
     );
   await test.step("BJ-42: / then a name, Enter: a divider", async () => {
     await newLine(page);
@@ -72,10 +72,10 @@ test("BJ-42 / BJ-57 / BJ-43: the slash, emoji and @ menus insert blocks, emoji a
   await test.step("BJ-43: @ an issue key picks the issue; a typed key becomes a reference too", async () => {
     await page.type(" see @TEST-3");
     await page.waitFor(
-      `[...document.querySelectorAll('[aria-label="Mention people"] [cmdk-item]')].some(n=>n.textContent.startsWith('TEST-3'))`,
+      `[...document.querySelectorAll('[aria-label="Mention people"] [role^=menuitem]')].some(n=>n.textContent.startsWith('TEST-3'))`,
     );
     await page.eval(
-      `[...document.querySelectorAll('[aria-label="Mention people"] [cmdk-item]')].find(n=>n.querySelector('.menu-name').textContent.startsWith('TEST-3')).click()`,
+      `[...document.querySelectorAll('[aria-label="Mention people"] [role^=menuitem]')].find(n=>n.querySelector('.menu-name').textContent.startsWith('TEST-3')).click()`,
     );
     await page.type("and TEST-4 ");
   });

@@ -99,7 +99,7 @@ test("document header, menus and shortcuts act on the document, preserve the par
     await page.click('[aria-label^="Document display options"]');
     await page.click('[role="dialog"] input[type="checkbox"]');
     await page.click('[aria-label^="Owned by:"]');
-    await page.click('[cmdk-item][data-value="Alex"]');
+    await page.click('[role^=menuitem][data-value="Alex"]');
     await page.click('[aria-label^="Document display options"]');
     expect(await page.eval(`document.querySelector('[aria-label^="Owned by:"]').textContent`)).toBe(
       "Alex",
@@ -109,8 +109,8 @@ test("document header, menus and shortcuts act on the document, preserve the par
     expect(
       await page.eval(`document.querySelector('input[aria-label="Audit user"]').checked`),
     ).toBe(true);
-    await page.click('[cmdk-item][data-value="Audit user"]');
-    await page.click('[cmdk-item][data-value="Alex"]');
+    await page.click('[role^=menuitem][data-value="Audit user"]');
+    await page.click('[role^=menuitem][data-value="Alex"]');
     expect(
       await page.eval(`document.querySelector('input[aria-label="Audit user"]').checked`),
     ).toBe(false);
@@ -152,17 +152,17 @@ test("document header, menus and shortcuts act on the document, preserve the par
     await page.waitFor(
       `document.activeElement?.getAttribute('aria-label')==='Find document options'`,
     );
-    await page.hover('[cmdk-item][data-value="Copy"]');
+    await page.hover('[role^=menuitem][data-value="Copy"]');
     await page.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Copy"]')`);
     expect(
       await page.eval(
-        `!!document.querySelector('[role="dialog"][aria-label="Document options"] [cmdk-item][data-value="Download"]')`,
+        `!!document.querySelector('[role="dialog"][aria-label="Document options"] [role^=menuitem][data-value="Download"]')`,
       ),
     ).toBe(true);
     // Linear (RAJ-52 synthetic document): two groups break after Rename… and Remind me, and every item and Copy child has an icon.
     expect(
       await page.eval(
-        `['Document options','Copy'].map(l=>{const m=document.querySelector('[role="dialog"][aria-label="'+l+'"]');return [m.querySelectorAll('[cmdk-separator]').length,[...m.querySelectorAll('[cmdk-item]')].every(n=>n.querySelector('svg'))]})`,
+        `['Document options','Copy'].map(l=>{const m=document.querySelector('[role="dialog"][aria-label="'+l+'"]');return [m.querySelectorAll('.menu-divider').length,[...m.querySelectorAll('[role^=menuitem]')].every(n=>n.querySelector('svg'))]})`,
       ),
     ).toEqual([
       [2, true],
@@ -171,15 +171,15 @@ test("document header, menus and shortcuts act on the document, preserve the par
     // Linear opens the submenu to the right, overlapping by 2px, first row level with Copy, and wide enough for its shortcuts.
     expect(
       await page.eval(
-        `(()=>{const menu=document.querySelector('[role="dialog"][aria-label="Document options"]').getBoundingClientRect(),sub=document.querySelector('[role="dialog"][aria-label="Copy"]'),box=sub.querySelector('[cmdk-root]').getBoundingClientRect(),row=document.querySelector('[cmdk-item][data-value="Copy"]').getBoundingClientRect(),first=sub.querySelector('[cmdk-item]').getBoundingClientRect();return [Math.round(menu.right-box.left),Math.abs(first.top-row.top)<=1,[...sub.querySelectorAll('[cmdk-item]')].every(n=>n.scrollWidth<=n.clientWidth)]})()`,
+        `(()=>{const menu=document.querySelector('[role="dialog"][aria-label="Document options"]').getBoundingClientRect(),sub=document.querySelector('[role="dialog"][aria-label="Copy"]'),box=sub.querySelector('.menu').getBoundingClientRect(),row=document.querySelector('[role^=menuitem][data-value="Copy"]').getBoundingClientRect(),first=sub.querySelector('[role^=menuitem]').getBoundingClientRect();return [Math.round(menu.right-box.left),Math.abs(first.top-row.top)<=1,[...sub.querySelectorAll('[role^=menuitem]')].every(n=>n.scrollWidth<=n.clientWidth)]})()`,
       ),
     ).toEqual([2, true, true]);
-    await page.click('[cmdk-item][data-value="Copy title"]');
+    await page.click('[role^=menuitem][data-value="Copy title"]');
     expect(await page.eval("navigator.clipboard.readText()")).toBe("Reference document");
     await page.click('[aria-label="Document options"]');
     await page.type("content");
     await page.waitFor(
-      `!!document.querySelector('[cmdk-item][data-value="Copy › Copy content as Markdown"]')`,
+      `!!document.querySelector('[role^=menuitem][data-value="Copy › Copy content as Markdown"]')`,
     );
     await page.key("Enter");
     expect(await page.eval("navigator.clipboard.readText()")).toBe(
@@ -199,8 +199,8 @@ test("document header, menus and shortcuts act on the document, preserve the par
     await page.key("Escape");
     await page.waitFor(`!document.querySelector('[role="dialog"][aria-label="Document options"]')`);
     await page.click('[aria-label="Document options"]');
-    await page.hover('[cmdk-item][data-value="Copy"]');
-    await page.click('[cmdk-item][data-value="Copy title as link"]');
+    await page.hover('[role^=menuitem][data-value="Copy"]');
+    await page.click('[role^=menuitem][data-value="Copy title as link"]');
     const link = await page.eval<string>("navigator.clipboard.readText()");
     expect(link).toContain("[Reference document](http://127.0.0.1:");
     expect(link).toContain("/issue/TEST-2/document/");
@@ -208,7 +208,7 @@ test("document header, menus and shortcuts act on the document, preserve the par
     await page.click('[aria-label="Document options"]');
     // Ranked by score (ISSUE-8), the search starts on Download as markdown.
     await page.type("Markdown");
-    await page.waitFor(`document.querySelector('[cmdk-item][aria-selected="true"]')?.dataset.value==='Download › Download as markdown'`);
+    await page.waitFor(`document.querySelector('[role^=menuitem][data-focused]')?.dataset.value==='Download › Download as markdown'`);
     await page.key("Enter");
     const file = await downloaded(download, "Reference document.md");
     expect(await file.text()).toBe("# Reference document\n\nA durable document body");
@@ -227,17 +227,17 @@ test("document header, menus and shortcuts act on the document, preserve the par
     expect(documentOfHref(await copied())).toBe(id);
     await page.click('[aria-label="Document options"]');
     await page.type("copy URL");
-    await page.waitFor(`!!document.querySelector('[cmdk-item][data-value="Copy › Copy URL"]')`);
+    await page.waitFor(`!!document.querySelector('[role^=menuitem][data-value="Copy › Copy URL"]')`);
     await page.key("Enter");
     expect(documentOfHref(await copied())).toBe(id);
     await page.click('[aria-label="Document options"]');
-    await page.hover('[cmdk-item][data-value="Copy"]');
-    await page.click('[cmdk-item][data-value="Copy title as link"]');
+    await page.hover('[role^=menuitem][data-value="Copy"]');
+    await page.click('[role^=menuitem][data-value="Copy title as link"]');
     expect(await copied()).toStartWith("[Spec \\[v2\\] a\\\\b/c:d*?](http");
     const download = page.page.waitForEvent("download");
     await page.click('[aria-label="Document options"]');
     await page.type("Markdown");
-    await page.waitFor(`document.querySelector('[cmdk-item][aria-selected="true"]')?.dataset.value==='Download › Download as markdown'`);
+    await page.waitFor(`document.querySelector('[role^=menuitem][data-focused]')?.dataset.value==='Download › Download as markdown'`);
     await page.key("Enter");
     expect(await (await downloaded(download, "Spec [v2] a-b-c-d--.md")).text()).toBe(
       `# ${title}\n\nBody`,
@@ -324,7 +324,7 @@ test("document header, menus and shortcuts act on the document, preserve the par
     );
     expect(
       await page.eval(
-        `[...document.querySelectorAll('[role="dialog"][aria-label="Document options"] [cmdk-item]')].map(n=>n.getAttribute('data-value'))`,
+        `[...document.querySelectorAll('[role="dialog"][aria-label="Document options"] [role^=menuitem]')].map(n=>n.getAttribute('data-value'))`,
       ),
     ).toEqual([
       "Duplicate",
@@ -337,23 +337,23 @@ test("document header, menus and shortcuts act on the document, preserve the par
       "Show document history",
       "Delete",
     ]);
-    await page.hover('[cmdk-item][data-value="Copy"]');
+    await page.hover('[role^=menuitem][data-value="Copy"]');
     await expect
       .poll(() =>
         page.eval(
-          `[...document.querySelectorAll('[role="dialog"][aria-label="Copy"] [cmdk-item]')].map(n=>n.getAttribute('data-value'))`,
+          `[...document.querySelectorAll('[role="dialog"][aria-label="Copy"] [role^=menuitem]')].map(n=>n.getAttribute('data-value'))`,
         ),
       )
       .toEqual(["Copy URL", "Copy title", "Copy title as link", "Copy content as Markdown"]);
     // Leave Copy for a plain row and let its submenu close first: moving straight from Copy to Download lets Copy's
     // pending hover-close clear whichever submenu is open, so Download's would close a moment after opening.
-    await page.hover('[cmdk-item][data-value="Favorite"]');
+    await page.hover('[role^=menuitem][data-value="Favorite"]');
     await page.waitFor(`!document.querySelector('[role="dialog"][aria-label="Copy"]')`);
-    await page.hover('[cmdk-item][data-value="Download"]');
+    await page.hover('[role^=menuitem][data-value="Download"]');
     await expect
       .poll(() =>
         page.eval(
-          `[...document.querySelectorAll('[role="dialog"][aria-label="Download"] [cmdk-item]')].map(n=>n.getAttribute('data-value'))`,
+          `[...document.querySelectorAll('[role="dialog"][aria-label="Download"] [role^=menuitem]')].map(n=>n.getAttribute('data-value'))`,
         ),
       )
       .toEqual(["Download as markdown", "Download as PDF"]);
@@ -365,7 +365,7 @@ test("document header, menus and shortcuts act on the document, preserve the par
     );
     await page.type("PDF");
     await page.waitFor(
-      `!!document.querySelector('[cmdk-item][data-value="Download › Download as PDF"]')`,
+      `!!document.querySelector('[role^=menuitem][data-value="Download › Download as PDF"]')`,
     );
     await page.key("Enter");
     await page.waitFor("window.printed===1");
@@ -445,8 +445,8 @@ test("document header, menus and shortcuts act on the document, preserve the par
     await page.waitFor(`!!document.activeElement?.dataset.resourceId`);
     await page.key("o");
     await page.key("f");
-    await page.waitFor(`!!document.querySelector('[cmdk-item][data-value*="Favorite document"]')`);
-    await page.click('[cmdk-item][data-value*="Favorite document"]');
+    await page.waitFor(`!!document.querySelector('[role^=menuitem][data-value*="Favorite document"]')`);
+    await page.click('[role^=menuitem][data-value*="Favorite document"]');
     await page.waitFor(opened);
     await page.eval(
       `(async()=>{const name=(await indexedDB.databases()).find(d=>d.name.startsWith('better-jira:local:v1:')).name;const db=await new Promise(r=>{const o=indexedDB.open(name);o.onsuccess=()=>r(o.result);});const tx=db.transaction('state','readwrite'),store=tx.objectStore('state');const w=await new Promise(r=>{const q=store.get('workspace');q.onsuccess=()=>r(q.result);});for(const c of w.changes)for(const r of c.issue?.resources??[])if(r.kind==='document')r.icon={name:'retired-icon',color:'#eb5757'};store.put(w,'workspace');await new Promise(r=>tx.oncomplete=r);db.close();})()`,
@@ -590,7 +590,7 @@ test("document history, narrow and measured layouts, the hidden board and remind
     const page = await open(DOC_PAGE, { width: 720, height: 650 });
     await page.waitFor(`!!document.getElementById('comment')`);
     await page.click("#issue-options");
-    await page.click('[cmdk-item][data-value="Add document…"]');
+    await page.click('[role^=menuitem][data-value="Add document…"]');
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Document title'`);
     await page.type("Long");
     await page.click("#resource-document");
@@ -633,16 +633,16 @@ test("document history, narrow and measured layouts, the hidden board and remind
     await page.key("ArrowDown");
     expect(
       await page.eval(
-        `(()=>{const m=document.querySelector('[role="dialog"][aria-label="Document options"]'),c=getComputedStyle(m);return [c.backgroundColor,c.borderTopColor,c.boxShadow.match(/lch\\(/g).length,getComputedStyle(m.querySelector('[cmdk-item][data-selected=true]'),'::before').backgroundColor]})()`,
+        `(()=>{const m=document.querySelector('[role="dialog"][aria-label="Document options"]'),c=getComputedStyle(m);return [c.backgroundColor,c.borderTopColor,c.boxShadow.match(/lch\\(/g).length,getComputedStyle(m.querySelector('[role^=menuitem][data-focused]'),'::before').backgroundColor]})()`,
       ),
     ).toEqual(["lch(12.72 0.85 272)", "lch(21.36 1.93 272)", 3, "lch(20.82 1.3 272)"]);
-    await page.hover('[cmdk-item][data-value="Copy"]');
+    await page.hover('[role^=menuitem][data-value="Copy"]');
     await page.waitFor(
-      `!!document.querySelector('[role="dialog"][aria-label="Copy"] [cmdk-root]')`,
+      `!!document.querySelector('[role="dialog"][aria-label="Copy"] .menu')`,
     );
     expect(
       await page.eval(
-        `getComputedStyle(document.querySelector('[role="dialog"][aria-label="Copy"] [cmdk-root]')).backgroundColor`,
+        `getComputedStyle(document.querySelector('[role="dialog"][aria-label="Copy"] .menu')).backgroundColor`,
       ),
     ).toBe("lch(12.72 0.85 272)");
     await page.key("Escape");
@@ -656,11 +656,11 @@ test("document history, narrow and measured layouts, the hidden board and remind
       ),
     ).toEqual(["32px", 466]);
     await page.key("s");
-    await page.waitFor(`!!document.querySelector('[cmdk-item][data-selected=true]')`);
+    await page.waitFor(`!!document.querySelector('[role^=menuitem][data-focused]')`);
     // The status picker (S) is one of the App pickers; Linear's S/P pickers share the menu surface.
     expect(
       await page.eval(
-        `(()=>{const i=document.querySelector('[cmdk-item][data-selected=true]'),m=i.closest('[role="dialog"]'),c=getComputedStyle(m);return [c.backgroundColor,c.borderTopColor,getComputedStyle(i,'::before').backgroundColor]})()`,
+        `(()=>{const i=document.querySelector('[role^=menuitem][data-focused]'),m=i.closest('[role="dialog"]'),c=getComputedStyle(m);return [c.backgroundColor,c.borderTopColor,getComputedStyle(i,'::before').backgroundColor]})()`,
       ),
     ).toEqual(["lch(12.72 0.85 272)", "lch(21.36 1.93 272)", "lch(20.82 1.3 272)"]);
   });
@@ -718,16 +718,16 @@ test("document history, narrow and measured layouts, the hidden board and remind
       `document.body.textContent.includes('Reminder set')&&!document.querySelector('[aria-label="Custom reminder time"]')`,
     );
     await page.click('[aria-label="Document options"]');
-    await page.hover('[cmdk-item][data-value="Remind me"]');
+    await page.hover('[role^=menuitem][data-value="Remind me"]');
     await page.waitFor(
-      `!!document.querySelector('[role="dialog"][aria-label="Remind me"] [cmdk-item]')`,
+      `!!document.querySelector('[role="dialog"][aria-label="Remind me"] [role^=menuitem]')`,
     );
     expect(
       await page.eval(
-        `[...document.querySelectorAll('[role="dialog"][aria-label="Remind me"] [cmdk-item]')].map(n=>n.getAttribute('data-value')).at(-1)`,
+        `[...document.querySelectorAll('[role="dialog"][aria-label="Remind me"] [role^=menuitem]')].map(n=>n.getAttribute('data-value')).at(-1)`,
       ),
     ).toBe("Custom…");
-    await page.click('[cmdk-item][data-value="An hour from now"]');
+    await page.click('[role^=menuitem][data-value="An hour from now"]');
     await page.waitFor(`document.body.textContent.includes('Reminder set')`);
     await page.waitFor(SAVED);
     await page.page.addInitScript("const now=Date.now;Date.now=()=>now()+3601000");

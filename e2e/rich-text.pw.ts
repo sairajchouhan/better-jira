@@ -35,7 +35,7 @@ test("the full-page description editor: toolbar state, tables, drops, rendering 
     await page.waitFor(`document.querySelector('[aria-label="Text style"]')?.disabled===true`);
     await page.click('[aria-label="List"]');
     expect(
-      await page.eval(`[...document.querySelectorAll('[aria-label="List"] [cmdk-item] .menu-name')].map(n=>n.textContent)`),
+      await page.eval(`[...document.querySelectorAll('[aria-label="List"] [role^=menuitem] .menu-name')].map(n=>n.textContent)`),
     ).toEqual(expect.arrayContaining(["List", "Numbered list", "Checklist"]));
     await page.key("Escape");
   });

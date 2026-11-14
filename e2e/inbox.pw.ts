@@ -18,13 +18,13 @@ const badge = `(document.querySelector('[data-inbox-badge]')?.textContent ?? '')
 const current = `(document.querySelector('[data-inbox-row][aria-current]')?.getAttribute('aria-label') ?? '')`;
 const toastText = `(document.querySelector('[data-toast]')?.textContent ?? '')`;
 const item = (menu: string, value: string) =>
-  `[role=dialog][aria-label="${menu}"] [cmdk-item][data-value="${value}"]`;
+  `[role=dialog][aria-label="${menu}"] [role^=menuitem][data-value="${value}"]`;
 const toggle = (label: string) =>
   `[...document.querySelectorAll('label')].find(l=>l.textContent.trim().startsWith(${JSON.stringify(label)})).querySelector('input').click()`;
 async function choose(p: Page, label: string, value: string) {
   await p.click(`button[aria-label^="${label}: "]`);
   await p.click(
-    `[role=dialog][aria-label="${label}"] [cmdk-item][data-value$=" ${value}"]`,
+    `[role=dialog][aria-label="${label}"] [role^=menuitem][data-value$=" ${value}"]`,
   );
 }
 const rowMenu = (n: number) =>
@@ -126,7 +126,7 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
     await p.key("Escape");
     // F opens Linear's filter menu; each field lists the values the rows have, with counts.
     await p.key("f");
-    await p.click(`[cmdk-item][data-value="Notification type"]`);
+    await p.click(`[role^=menuitem][data-value="Notification type"]`);
     await p.waitFor(
       `document.querySelector('${item("Notification type", "Mentions")}')?.textContent.includes("1 notification")`,
     );
@@ -136,7 +136,7 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
       `document.querySelector('[data-inbox-chip="type"]')?.textContent === "Notification typeisMentions"`,
     );
     await p.click(`[aria-label="Add filter"]`);
-    await p.click(`[cmdk-item][data-value="Notification type"]`);
+    await p.click(`[role^=menuitem][data-value="Notification type"]`);
     await p.click(item("Notification type", "Comments and replies"));
     await p.waitFor(`${rowKeys} === "TEST-1,TEST-4"`);
     await p.waitFor(
@@ -147,7 +147,7 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
       `document.querySelectorAll('[data-inbox-chip="type"] .ui-filter-value .ui-filter-icons svg').length === 2`,
     );
     await p.click(`[aria-label="Add filter"]`);
-    await p.click(`[cmdk-item][data-value="Issue priority"]`);
+    await p.click(`[role^=menuitem][data-value="Issue priority"]`);
     await p.click(item("Issue priority", "Urgent"));
     await p.waitFor(`${rowKeys} === "TEST-4"`);
     await p.click(`[aria-label="Remove Notification type filter"]`);
@@ -169,13 +169,13 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
     ).toEqual([0, true, true]);
     await p.type("prio");
     await p.waitFor(
-      `(v=>v.length>0&&v.every(x=>x.startsWith("Issue priority")))([...document.querySelectorAll('${FILTER_MENU} [cmdk-item]')].map(n=>n.dataset.value))`,
+      `(v=>v.length>0&&v.every(x=>x.startsWith("Issue priority")))([...document.querySelectorAll('${FILTER_MENU} [role^=menuitem]')].map(n=>n.dataset.value))`,
     );
     await p.key("Escape");
     await p.waitFor(`!document.querySelector('${FILTER_MENU}')`);
     // Filters persist across reloads, like Linear's view.
     await p.key("f");
-    await p.click(`[cmdk-item][data-value="Project"]`);
+    await p.click(`[role^=menuitem][data-value="Project"]`);
     await p.click(item("Project", "OUT"));
     await p.waitFor(`${rowKeys} === "OUT-9"`);
     await p.reload();
@@ -220,14 +220,14 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
     await p.waitFor(`${current}.includes("TEST-1")`);
     await p.key("j");
     await p.key("h");
-    const snooze = `document.querySelector('${SNOOZE} [cmdk-item][data-selected=true]')?.dataset.value`;
+    const snooze = `document.querySelector('${SNOOZE} [role^=menuitem][data-focused]')?.dataset.value`;
     await p.waitFor(`${snooze} === "An hour from now"`);
     // Opened by its key, Linear's snooze menu names its search "Snooze notification until…" (keyboardInvoked).
     expect(await p.eval(`document.activeElement.placeholder`)).toBe("Snooze notification until…");
     await p.key("ArrowDown");
     // The second choice is "In 3 hours", or "This evening" from 15:00 (Linear's order by time), in the browser's time zone.
     await p.waitFor(
-      `${snooze} === document.querySelectorAll('${SNOOZE} [cmdk-item]')[1]?.dataset.value`,
+      `${snooze} === document.querySelectorAll('${SNOOZE} [role^=menuitem]')[1]?.dataset.value`,
     );
     await p.key("Enter");
     // The split view moves on without a toast (Linear's mEn toasts only from the full page).
@@ -236,7 +236,7 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
     await p.key("z");
     await p.waitFor(`${rows}.length === 6`);
     await p.click(`[aria-label="Notification actions"]`);
-    const action = `document.querySelector('[role=dialog][aria-label="Notification actions"] [cmdk-item][data-selected=true]')?.dataset.value`;
+    const action = `document.querySelector('[role=dialog][aria-label="Notification actions"] [role^=menuitem][data-focused]')?.dataset.value`;
     await p.key("ArrowDown");
     await p.waitFor(`${action} === "Mark all as read"`);
     await p.key("ArrowDown");
@@ -255,7 +255,7 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
     // The row menu shows Snooze…'s H (Linear's contextual name, pEn.name).
     await p.eval(rowMenu(3));
     await p.waitFor(
-      `document.querySelector('[aria-label="Notification options"] [cmdk-item][data-value="Snooze…"]')?.textContent.endsWith("H")`,
+      `document.querySelector('[aria-label="Notification options"] [role^=menuitem][data-value="Snooze…"]')?.textContent.endsWith("H")`,
     );
     await p.key("Escape");
     await p.waitFor(`!document.querySelector('[role=dialog]')`);
@@ -380,7 +380,7 @@ test("triaging rows: unread-only, toast undo, other tabs, rows outside the mirro
   await test.step("R2-inbox-D7: a past custom snooze time shows its error in the dialog, which goes with it", async () => {
     await p.key("j");
     await p.key("h");
-    await p.click(`[cmdk-item][data-value="Custom…"]`);
+    await p.click(`[role^=menuitem][data-value="Custom…"]`);
     const setValue = (v: string) =>
       p.eval(
         `(()=>{const i=[...document.querySelectorAll('[role=dialog] input')].find(i=>i.labels?.[0]?.textContent==='Snooze until');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,${JSON.stringify(v)});i.dispatchEvent(new Event('input',{bubbles:true}))})()`,
@@ -473,7 +473,7 @@ test("a long inbox: older pages on scroll, undo by Z and toast, the row menu, �
     await p.waitFor(`${rows}.length === 47 && ${current}.includes("TEST-2")`);
     // H snoozes for an hour; Z unsnoozes.
     await p.key("h");
-    await p.click(`${SNOOZE} [cmdk-item][data-value="An hour from now"]`);
+    await p.click(`${SNOOZE} [role^=menuitem][data-value="An hour from now"]`);
     await p.waitFor(`${rows}.length === 46`);
     await p.key("z");
     await p.waitFor(`${rows}.length === 47`);
@@ -495,17 +495,17 @@ test("a long inbox: older pages on scroll, undo by Z and toast, the row menu, �
     // Right-click: Linear's row menu, acting on that row without selecting it.
     await p.eval(rowMenu(3));
     await p.waitFor(
-      `["Mark as read","Delete notification","Snooze","Favorite","Copy"].every(v=>document.querySelector('[role=dialog][aria-label="Notification options"] [cmdk-item][data-value="'+v+'"]'))`,
+      `["Mark as read","Delete notification","Snooze","Favorite","Copy"].every(v=>document.querySelector('[role=dialog][aria-label="Notification options"] [role^=menuitem][data-value="'+v+'"]'))`,
     );
-    await p.click(`[cmdk-item][data-value="Favorite"]`);
+    await p.click(`[role^=menuitem][data-value="Favorite"]`);
     await p.waitFor(
       `!document.querySelector('[aria-label="Notification options"]')`,
     );
     await p.eval(rowMenu(3));
     await p.waitFor(
-      `!!document.querySelector('[cmdk-item][data-value="Remove from favorites"]')`,
+      `!!document.querySelector('[role^=menuitem][data-value="Remove from favorites"]')`,
     );
-    await p.click(`[cmdk-item][data-value="Delete notification"]`);
+    await p.click(`[role^=menuitem][data-value="Delete notification"]`);
     await p.waitFor(
       `${rows}.length === 46 && !${rowText}.some(l=>l.includes("TEST-3")) && ${current}.includes("TEST-2")`,
     );
@@ -531,7 +531,7 @@ test("a long inbox: older pages on scroll, undo by Z and toast, the row menu, �
     await p.reload();
     await p.waitFor(`${rows}.length === 20 && ${badge} === "45"`);
     await p.click(`[aria-label="Notification actions"]`);
-    await p.click(`[cmdk-item][data-value="Delete all"]`);
+    await p.click(`[role^=menuitem][data-value="Delete all"]`);
     // R3-inbox-D6: Linear's confirmation dialog, not the browser's confirm().
     const confirmDialog = `[role=dialog][aria-label="Delete all notifications?"]`;
     await p.waitFor(`document.querySelector('${confirmDialog}')?.innerText.includes("This will delete all notifications in your inbox.")`);
@@ -552,29 +552,29 @@ test("BJ-192 8.8 8.9: filter values: fewer than ten inline with no zero counts; 
   });
   const p = await open("?inbox=1");
   await p.waitFor(`${rows}.length > 0`);
-  const footer = '[cmdk-item][data-value^="Show "][data-value$="with no matches"]';
+  const footer = '[role^=menuitem][data-value^="Show "][data-value$="with no matches"]';
   await test.step("Issue status type: all seven values inline; one nothing matches shows no count", async () => {
     await p.click("#inbox-filter");
-    await p.hover('[cmdk-item][data-value="Issue status type"]');
-    await p.waitFor(`!!document.querySelector('[cmdk-item][data-value="Duplicate"]')`);
+    await p.hover('[role^=menuitem][data-value="Issue status type"]');
+    await p.waitFor(`!!document.querySelector('[role^=menuitem][data-value="Duplicate"]')`);
     expect(await p.eval(`!!document.querySelector('${footer}')`)).toBe(false);
-    expect(await p.eval(`document.querySelector('[cmdk-item][data-value="Duplicate"] .menu-hint')`)).toBe(null);
+    expect(await p.eval(`document.querySelector('[role^=menuitem][data-value="Duplicate"] .menu-hint')`)).toBe(null);
     await p.key("Escape");
   });
   await test.step("From: matched senders, the footer; revealed, a divider, the rest without counts and the field's name as the search placeholder", async () => {
     await p.click("#inbox-filter");
-    await p.hover('[cmdk-item][data-value="From"]');
+    await p.hover('[role^=menuitem][data-value="From"]');
     await p.waitFor(`!!document.querySelector('${footer}')`);
-    expect(await p.eval(`!!document.querySelector('[cmdk-item][data-value="Ada Example"]')`)).toBe(false);
+    expect(await p.eval(`!!document.querySelector('[role^=menuitem][data-value="Ada Example"]')`)).toBe(false);
     await p.click(footer);
-    await p.waitFor(`!!document.querySelector('[cmdk-item][data-value="Ada Example"]')`);
+    await p.waitFor(`!!document.querySelector('[role^=menuitem][data-value="Ada Example"]')`);
     expect(await p.eval(`!!document.querySelector('${footer}')`)).toBe(false);
-    expect(await p.eval(`document.querySelector('[cmdk-item][data-value="Ada Example"] .menu-hint')`)).toBe(null);
+    expect(await p.eval(`document.querySelector('[role^=menuitem][data-value="Ada Example"] .menu-hint')`)).toBe(null);
     expect(
-      await p.eval(`(()=>{const items=[...document.querySelectorAll('[cmdk-item]')],ada=items.find(n=>n.dataset.value==="Ada Example");return ada.previousElementSibling?.hasAttribute('cmdk-separator')||ada.parentElement.querySelector('[cmdk-separator]')!==null})()`),
+      await p.eval(`(()=>{const items=[...document.querySelectorAll('[role^=menuitem]')],ada=items.find(n=>n.dataset.value==="Ada Example");return ada.closest('.menu').querySelector('.menu-divider')!==null})()`),
     ).toBe(true);
     expect(
-      await p.eval(`[...document.querySelectorAll('[cmdk-input]')].map(i=>i.placeholder).includes('From')`),
+      await p.eval(`[...document.querySelectorAll('.menu-input input')].map(i=>i.placeholder).includes('From')`),
     ).toBe(true);
   });
 });
@@ -585,7 +585,7 @@ test("one filter component: the inbox's applied filter is the views' FilterBlock
   await p.waitFor(`${rows}.length === 7`);
   const chip = `document.querySelector('[data-inbox-chip="type"]')`;
   await p.key("f");
-  await p.click(`[cmdk-item][data-value="Notification type"]`);
+  await p.click(`[role^=menuitem][data-value="Notification type"]`);
   await p.click(item("Notification type", "Mentions"));
   await p.waitFor(`${rowKeys} === "TEST-1"`);
   await test.step("Linear's segmented block (field | operator | value | ×) in Linear's panel card, as on a board", async () => {
@@ -599,7 +599,7 @@ test("one filter component: the inbox's applied filter is the views' FilterBlock
   });
   await test.step("the operator segment switches to Linear's 'is not'", async () => {
     await p.click(`[aria-label="Notification type operator"]`);
-    await p.click(`[role=dialog][aria-label="Notification type operator"] [cmdk-item][data-value="isNot"]`);
+    await p.click(`[role=dialog][aria-label="Notification type operator"] [role^=menuitem][data-value="isNot"]`);
     await p.waitFor(`${rows}.length === 6 && !${rowKeys}.split(",").includes("TEST-1")`);
     await p.waitFor(`${chip}?.textContent === "Notification typeis notMentions"`);
   });
@@ -617,7 +617,7 @@ test("one filter component: the inbox's applied filter is the views' FilterBlock
     await p.click(`[aria-label="Remove Notification type filter"]`);
     await p.waitFor(`${rows}.length === 7 && !${chip}`);
     await p.key("f");
-    await p.click(`[cmdk-item][data-value="Notification type"]`);
+    await p.click(`[role^=menuitem][data-value="Notification type"]`);
     await p.click(item("Notification type", "Mentions"));
     await p.waitFor(`${rowKeys} === "TEST-1" && ${chip}?.textContent === "Notification typeisMentions"`);
   });
@@ -752,7 +752,7 @@ test("B1 B6 B10: a row reads after 300 ms selected, opening an issue reads its n
     const p = await fresh(open, {}, "?inbox=1", { setup });
     await p.waitFor(`${rows}.length === 7`);
     await p.click(`[aria-label="Notification actions"]`);
-    await p.click(`[cmdk-item][data-value="Desktop notifications"]`);
+    await p.click(`[role^=menuitem][data-value="Desktop notifications"]`);
     await p.waitFor(`!!document.querySelector('[role=dialog][aria-label="Desktop notifications"]')`);
     await p.eval(toggle("Enable desktop notifications"));
     await p.waitFor(`Notification.permission === "granted"`);
@@ -813,7 +813,7 @@ test("snooze like Linear: typed times, Show snoozed keeps the row with its snooz
   await test.step("pEn / _F: a typed time ('2 days') is a row named as Linear names it", async () => {
     await p.key("h");
     await p.type("2 days");
-    await p.waitFor(`document.querySelector('${SNOOZE} [cmdk-item]')?.textContent.startsWith("In 2 days")`);
+    await p.waitFor(`document.querySelector('${SNOOZE} [role^=menuitem]')?.textContent.startsWith("In 2 days")`);
     await p.key("Enter");
     await p.waitFor(`!document.querySelector('${SNOOZE}')`);
   });
@@ -828,10 +828,10 @@ test("snooze like Linear: typed times, Show snoozed keeps the row with its snooz
   await test.step("pEn: Unsnooze leads a snoozed row's menu with 'Snoozed for' and a divider; Z snoozes it again", async () => {
     await p.key("h");
     await p.waitFor(
-      `document.querySelector('${SNOOZE} [cmdk-item]')?.dataset.value === "Unsnooze notification"`,
+      `document.querySelector('${SNOOZE} [role^=menuitem]')?.dataset.value === "Unsnooze notification"`,
     );
-    expect(await p.eval(`document.querySelector('${SNOOZE} [cmdk-item]').textContent.includes("Snoozed for")`)).toBe(true);
-    expect(await p.eval(`!!document.querySelector('${SNOOZE} [cmdk-item] + [cmdk-separator]')`)).toBe(true);
+    expect(await p.eval(`document.querySelector('${SNOOZE} [role^=menuitem]').textContent.includes("Snoozed for")`)).toBe(true);
+    expect(await p.eval(`!!document.querySelector('${SNOOZE} [role^=menuitem] + .menu-divider')`)).toBe(true);
     await p.key("Enter");
     await p.waitFor(`${line} === ""`);
     await p.key("z");
@@ -839,10 +839,10 @@ test("snooze like Linear: typed times, Show snoozed keeps the row with its snooz
   });
   await test.step("The row menu's Snooze… reads typed times under Linear's placeholder, with its keywords", async () => {
     await p.eval(rowMenu(3));
-    await p.click(`[aria-label="Notification options"] [cmdk-item][data-value="Snooze…"]`);
+    await p.click(`[aria-label="Notification options"] [role^=menuitem][data-value="Snooze…"]`);
     await p.waitFor(`document.activeElement?.placeholder === "Try: 4 pm, 2 days, in 5 weeks…"`);
     await p.type("1h");
-    await p.waitFor(`!!document.querySelector('[role=dialog] [cmdk-item][data-value="An hour from now"]')`);
+    await p.waitFor(`!!document.querySelector('[role=dialog] [role^=menuitem][data-value="An hour from now"]')`);
     await p.key("Escape");
     await p.key("Escape");
     await p.waitFor(`!document.querySelector('[role=dialog]')`);
@@ -855,7 +855,7 @@ test("snooze like Linear: typed times, Show snoozed keeps the row with its snooz
     await p.click(`[data-inbox-row*="issue/1"]`);
     await p.key("Enter");
     await p.key("h");
-    await p.click(`${SNOOZE} [cmdk-item][data-value="An hour from now"]`);
+    await p.click(`${SNOOZE} [role^=menuitem][data-value="An hour from now"]`);
     await p.waitFor(`${toastText}.includes("Notification snoozed")`);
     await p.waitFor(`${current} === ""`);
   });

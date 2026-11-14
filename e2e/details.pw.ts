@@ -14,21 +14,21 @@ test("issue details: priority picker, reactions, favourites, navigation and prop
   await test.step("I12: the priority picker lists priorities ranked Urgent to Low, each with its icon", async () => {
     await page.key("j");
     await page.key("p");
-    await page.waitFor(`document.querySelectorAll("[cmdk-item]").length>1`);
+    await page.waitFor(`document.querySelectorAll("[role^=menuitem]").length>1`);
     expect(
       await page.eval(
-        `[...document.querySelectorAll("[cmdk-item]")].map(i=>i.textContent.replace(/[0-9]$/,""))`,
+        `[...document.querySelectorAll("[role^=menuitem]")].map(i=>i.textContent.replace(/[0-9]$/,""))`,
       ),
     ).toEqual(["No priority", "Urgent", "High", "Normal", "Low"]);
     expect(
       await page.eval(
-        `[...document.querySelectorAll("[cmdk-item]")].every(i=>i.querySelector("svg"))`,
+        `[...document.querySelectorAll("[role^=menuitem]")].every(i=>i.querySelector("svg"))`,
       ),
     ).toBe(true);
     // Jira's "Urgent" takes Linear's urgent icon (the filled square with "!"), not the no-priority dashes.
     expect(
       await page.eval(
-        `[...document.querySelectorAll("[cmdk-item]")].map(i=>!!i.querySelector("svg rect[rx='3']"))`,
+        `[...document.querySelectorAll("[role^=menuitem]")].map(i=>!!i.querySelector("svg rect[rx='3']"))`,
       ),
     ).toEqual([false, true, false, false, false]);
     await page.key("Escape");
@@ -453,8 +453,8 @@ test("BJ-253: the issue sidebar opens with Linear's Diffs section: its pull requ
     await page.page.mouse.click(r.x + 10, r.y + r.height / 2, { button: "right" });
     const menu = page.page.locator('[role="dialog"][aria-label="Pull request options"]');
     await expect(menu).toBeVisible();
-    expect(await menu.locator("[cmdk-item]").allTextContents()).toEqual(["Open in GitHub", "Copy"]);
-    await menu.locator('[cmdk-item][data-value="Open in GitHub"]').click();
+    expect(await menu.locator("[role^=menuitem]").allTextContents()).toEqual(["Open in GitHub", "Copy"]);
+    await menu.locator('[role^=menuitem][data-value="Open in GitHub"]').click();
     await expect.poll(() => page.eval<string[]>("window.__opened")).toEqual(["https://github.com/example/app/pull/42"]);
   });
 });

@@ -3,7 +3,7 @@ import { expect, test, sleep, type App as Page, fixture } from "./app";
 /** Writable fixture: TEST-6 is a Subtask of TEST-5, the rest are Tasks in project TEST ("Audit"), and there are no epics. */
 const items = (p: Page, dialog: string) =>
   p.eval<string[]>(
-    `[...document.querySelectorAll('[role="dialog"][aria-label="${dialog}"] [cmdk-item]')].map(n=>n.getAttribute('data-value'))`,
+    `[...document.querySelectorAll('[role="dialog"][aria-label="${dialog}"] [role^=menuitem]')].map(n=>n.getAttribute('data-value'))`,
   );
 const optionsAre = async (p: Page, search: string, expected: string[]) => {
   await p.click("#issue-options");
@@ -49,10 +49,10 @@ test("Jira's hierarchy rules: a Subtask's options, a Task's parents, project and
     // Linear's Project is the Jira epic: with no epics on the board ⇧P offers only No project, and "Audit" (the Jira
     // project, Linear's team) is never a choice.
     await p.key("p", "shift");
-    await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Change epic"] [cmdk-item]')`);
+    await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Change epic"] [role^=menuitem]')`);
     expect(
       await p.eval<string[]>(
-        `[...document.querySelectorAll('[role="dialog"][aria-label="Change epic"] [cmdk-item]')].map(n=>n.querySelector(".menu-name")?.textContent)`,
+        `[...document.querySelectorAll('[role="dialog"][aria-label="Change epic"] [role^=menuitem]')].map(n=>n.querySelector(".menu-name")?.textContent)`,
       ),
     ).toEqual(["No epic"]);
     await p.key("Escape");
@@ -63,10 +63,10 @@ test("Jira's hierarchy rules: a Subtask's options, a Task's parents, project and
       const dialog = label === "Issue type" ? "Change issue type" : "Change epic";
       await p.click(`[role="dialog"][aria-label="Create issue"] button[title="${label}"]`);
       await p.waitFor(
-        `!!document.querySelector('[role="dialog"][aria-label="${dialog}"] [cmdk-item]')`,
+        `!!document.querySelector('[role="dialog"][aria-label="${dialog}"] [role^=menuitem]')`,
       );
       const found = await p.eval<string[]>(
-        `[...document.querySelectorAll('[role="dialog"][aria-label="${dialog}"] [cmdk-item]')].map(n=>n.querySelector(".menu-name")?.textContent)`,
+        `[...document.querySelectorAll('[role="dialog"][aria-label="${dialog}"] [role^=menuitem]')].map(n=>n.querySelector(".menu-name")?.textContent)`,
       );
       await p.key("Escape");
       return found;
@@ -97,11 +97,11 @@ test("the relations search selects the exact match first, filters Related issues
   open,
 }) => {
   const p = await open("?issue=TEST-2&view=page", { setup: partial });
-  const selected = `document.querySelector('[role="dialog"][aria-label="Issue relations"] [cmdk-item][data-selected=true]')?.getAttribute('data-value')`;
+  const selected = `document.querySelector('[role="dialog"][aria-label="Issue relations"] [role^=menuitem][data-focused]')?.getAttribute('data-value')`;
   const mark = async (name: string, search: string) => {
     await p.click("#issue-options");
     await p.type(name);
-    await p.waitFor(`!!document.querySelector('[cmdk-item][data-value="Mark as › ${name}"]')`);
+    await p.waitFor(`!!document.querySelector('[role^=menuitem][data-value="Mark as › ${name}"]')`);
     await p.key("Enter");
     await p.waitFor(`document.activeElement?.getAttribute('aria-label')==='Find related issue'`);
     await p.type(search);

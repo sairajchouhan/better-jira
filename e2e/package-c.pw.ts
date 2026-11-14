@@ -11,7 +11,7 @@ test("BJ-49: inline sub-issue composer offers a due date", async ({ open }) => {
   const page = await open("?issue=TEST-2&view=page");
   await page.click('[data-create-child]');
   await page.click('[aria-label="Sub-issue due date. No due date"]');
-  await page.click('[cmdk-item][data-value="Tomorrow"]');
+  await page.click('[role^=menuitem][data-value="Tomorrow"]');
   expect(await page.eval(`document.querySelector('[aria-label^="Sub-issue due date."]').textContent`)).toMatch(/\d{4}-\d{2}-\d{2}/);
 });
 
@@ -39,13 +39,13 @@ test("BJ-31: composer creates and removes new labels", async ({ open }) => {
 test("BJ-48: remove a pending relation before creating", async ({ open }) => {
   const page = await open("?issue=TEST-2&view=page");
   await page.click('#issue-options');
-  await page.hover('[cmdk-item][data-value="Create related"]');
-  await page.click('[cmdk-item][data-value="Blocked issue…"]');
+  await page.hover('[role^=menuitem][data-value="Create related"]');
+  await page.click('[role^=menuitem][data-value="Blocked issue…"]');
   await page.waitFor(`document.querySelector('[data-pending-relation]')?.textContent === '1 blocked'`);
   // BJ-48: the chip opens Linear's "Open blocked issues" list, where the pending relation is removed.
   await page.click('[data-pending-relation]');
   await page.waitFor(`document.querySelector('[role=dialog][aria-label="Open blocked issues"]')?.textContent.includes('TEST-2')`);
-  expect(await page.eval(`document.querySelector('[role=dialog][aria-label="Open blocked issues"] [cmdk-group-heading]').textContent`)).toBe("Blocked by");
+  expect(await page.eval(`document.querySelector('[role=dialog][aria-label="Open blocked issues"] .menu-group-header').textContent`)).toBe("Blocked by");
   await page.click('[role=dialog][aria-label="Open blocked issues"] [aria-label="Remove relation"]');
   expect(await page.eval(`!!document.querySelector('[data-pending-relation]')`)).toBe(false);
 });
@@ -55,7 +55,7 @@ test("BJ-60: choose another board inside the composer", async ({ open }) => {
   const page = await open("", { setup });
   await page.key("c");
   await page.page.getByRole("button", { name: /^Board:/ }).click();
-  await page.click('[cmdk-item][data-value="Other board"]');
+  await page.click('[role^=menuitem][data-value="Other board"]');
   expect(await page.eval(`!!document.querySelector('[aria-label="Status: Open"]')`)).toBe(true);
 });
 
@@ -99,7 +99,7 @@ test("BJ-58: add and remove a pending link in the composer", async ({ open }) =>
   await page.key("c");
   // #5: Linear keeps the composer's extra actions under the chip row's More actions.
   await page.click('[role=dialog][aria-label="Create issue"] [aria-label="More actions"]');
-  await page.click('[cmdk-item][data-value="Add link…"]');
+  await page.click('[role^=menuitem][data-value="Add link…"]');
   await page.page.getByRole("textbox", { name: "New issue link URL" }).fill("https://example.com/reference");
   await page.page.getByRole("button", { name: "Add link", exact: true }).click();
   await page.waitFor(`!!document.querySelector('[aria-label="Remove link https://example.com/reference"]')`);
@@ -112,7 +112,7 @@ test("BJ-59: compose sub-issues before creating their parent", async ({ open }) 
   await page.key("c");
   await page.type("Pending family");
   await page.click('[role=dialog][aria-label="Create issue"] [aria-label="More actions"]');
-  await page.click('[cmdk-item][data-value="Add sub-issue"]');
+  await page.click('[role^=menuitem][data-value="Add sub-issue"]');
   await page.page.getByRole("textbox", { name: "Pending sub-issue 1" }).fill("Pending child");
   // The composer is no longer a form (R3-create-D1/D3), so Create issue is found by its name, not as a submit button.
   await page.eval(`(() => { const submit = [...document.querySelectorAll('[role=dialog][aria-label="Create issue"] button')].find(b => b.textContent === "Create issue"); submit.click(); submit.click(); })()`);

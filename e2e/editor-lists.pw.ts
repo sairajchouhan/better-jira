@@ -13,7 +13,7 @@ test("description block conversions keep Jira-valid structure", async ({ open })
     // The toolbar's list menu is off in a heading (as Linear's), so select the item rather than the whole document.
     await page.key("ArrowLeft", "meta", "shift");
     await page.click('[aria-label="List"]');
-    await page.eval(`[...document.querySelectorAll('[aria-label="List"] [cmdk-item]')].find(n=>n.querySelector('.menu-name').textContent==='Numbered list').click()`);
+    await page.eval(`[...document.querySelectorAll('[aria-label="List"] [role^=menuitem]')].find(n=>n.querySelector('.menu-name').textContent==='Numbered list').click()`);
     expect(
       await page.waitFor<string>(`document.querySelector('#description ol li')?.textContent`),
     ).toContain("QA item");
@@ -40,7 +40,7 @@ test("description block conversions keep Jira-valid structure", async ({ open })
     await page.waitFor(`!!document.querySelector('#description blockquote p')`);
     await page.key("a", "meta");
     await page.click('[aria-label="Text style"]');
-    await page.eval(`[...document.querySelectorAll('[aria-label="Text style"] [cmdk-item]')].find(n=>n.querySelector('.menu-name').textContent==='Heading 1').click()`);
+    await page.eval(`[...document.querySelectorAll('[aria-label="Text style"] [role^=menuitem]')].find(n=>n.querySelector('.menu-name').textContent==='Heading 1').click()`);
     expect(
       await page.waitFor<string>(
         `[...document.querySelectorAll('#description h1')].map(n=>n.textContent).join('|')`,

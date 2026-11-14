@@ -42,7 +42,7 @@ test("board menus: status, create, due date, palette toggle and selection look",
     await sleep(100);
     expect(await page.eval(inViewport("Change status"))).toBe(true);
     const [menu, input, row] = await page.eval<DOMRect[]>(
-      `${JSON.stringify([dialog("Change status"), `${dialog("Change status")} input`, `${dialog("Change status")} [cmdk-item]`])}.map(s=>document.querySelector(s).getBoundingClientRect().toJSON())`,
+      `${JSON.stringify([dialog("Change status"), `${dialog("Change status")} input`, `${dialog("Change status")} [role^=menuitem]`])}.map(s=>document.querySelector(s).getBoundingClientRect().toJSON())`,
     );
     expect(menu!.width).toBe(720);
     expect(Math.abs(menu!.left + menu!.width / 2 - 720)).toBeLessThan(1);
@@ -145,10 +145,10 @@ test("menu styling at 1272px: trigger highlight, row colours and submenu widths 
     await page.eval(`document.activeElement.blur()`);
     expect(await bg("#prop-status")).toBe(rest);
     await page.click("#issue-options");
-    await page.waitFor(`!!document.querySelector('[role=dialog] [cmdk-item]')`);
+    await page.waitFor(`!!document.querySelector('[role=dialog] [role^=menuitem]')`);
     await away();
     expect(await bg("#issue-options")).not.toBe(rest);
-    const row = `[...document.querySelectorAll('[role=dialog] [cmdk-item]')].find(n=>n.querySelector('[data-submenu-arrow]')&&n.querySelector('.menu-hint'))`;
+    const row = `[...document.querySelectorAll('[role=dialog] [role^=menuitem]')].find(n=>n.querySelector('[data-submenu-arrow]')&&n.querySelector('.menu-hint'))`;
     expect(
       await page.eval(
         `(()=>{const r=${row};const label=[...r.querySelectorAll('span')].find(s=>!s.children.length&&s.textContent===r.textContent.replace(r.querySelector('.menu-hint').textContent,'').trim());return [getComputedStyle(label).color,getComputedStyle(r.querySelector('.menu-hint')).color,getComputedStyle(r.querySelector('[data-submenu-arrow]')).color,getComputedStyle(r.querySelector('[data-submenu-arrow]'),'::before').content]})()`,
@@ -157,12 +157,12 @@ test("menu styling at 1272px: trigger highlight, row colours and submenu widths 
   });
   await test.step("a submenu is as wide as its widest row, never a fixed width (Opus review 4: S1)", async () => {
     // Issue options is still open from the step before.
-    await page.waitFor(`!!document.querySelector('[cmdk-item][data-value="Copy"]')`);
-    await page.click('[cmdk-item][data-value="Copy"]');
-    await page.waitFor(`!!document.querySelector('[role=dialog][aria-label="Copy"] [cmdk-item]')`);
+    await page.waitFor(`!!document.querySelector('[role^=menuitem][data-value="Copy"]')`);
+    await page.click('[role^=menuitem][data-value="Copy"]');
+    await page.waitFor(`!!document.querySelector('[role=dialog][aria-label="Copy"] [role^=menuitem]')`);
     // Its width equals its own max-content width (rows stretch, so they cannot be summed).
     const [menu, content] = await page.eval<[number, number]>(
-      `(()=>{const root=document.querySelector('[role=dialog][aria-label="Copy"] [cmdk-root]'),actual=root.getBoundingClientRect().width,old=root.style.width;root.style.width='max-content';const fit=root.getBoundingClientRect().width;root.style.width=old;return [actual,Math.max(174,fit)]})()`,
+      `(()=>{const root=document.querySelector('[role=dialog][aria-label="Copy"] .menu'),actual=root.getBoundingClientRect().width,old=root.style.width;root.style.width='max-content';const fit=root.getBoundingClientRect().width;root.style.width=old;return [actual,Math.max(174,fit)]})()`,
     );
     expect(menu).toBeCloseTo(content, 0);
     expect(menu).toBeLessThan(360);

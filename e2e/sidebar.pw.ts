@@ -15,7 +15,7 @@ test("BJ-75: favorites reorder by drag and leave from their context menu", async
   await p.eval(
     `(()=>{const n=document.querySelector('[data-favorite="TEST-2"]'),r=n.getBoundingClientRect();n.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:r.x+20,clientY:r.y+10}))})()`,
   );
-  await p.click('[role="dialog"][aria-label="Favorite options"] [cmdk-item][data-value="Remove favorite"]');
+  await p.click('[role="dialog"][aria-label="Favorite options"] [role^=menuitem][data-value="Remove favorite"]');
   await p.waitFor(`${order}.join()==="board:1,TEST-1"`);
   await p.reload();
   expect(await p.waitFor(`${order}.length===2&&${order}`)).toEqual(["board:1", "TEST-1"]);
@@ -37,7 +37,7 @@ test("BJ-76: sidebar sections collapse and stay so; Customize sidebar hides My i
   await p.key("k", "meta");
   await p.type("Customize sidebar");
   await p.waitFor(
-    `document.querySelector('[cmdk-item][data-selected=true]')?.textContent?.includes('Customize sidebar')`,
+    `document.querySelector('[role^=menuitem][data-focused]')?.textContent?.includes('Customize sidebar')`,
   );
   await p.key("Enter");
   await p.click('[role="dialog"][aria-label="Customize sidebar"] [aria-label="My issues: Always show"]');
@@ -66,15 +66,15 @@ test("BJ-76: rows set to Don't show stay reachable from More; the Views section 
     expect(await p.eval(`[...${nav}.querySelectorAll('button')].some(b=>b.textContent.trim()==='More')`)).toBe(false);
     await p.key("k", "meta");
     await p.type("Customize sidebar");
-    await p.waitFor(`document.querySelector('[cmdk-item][data-selected=true]')?.textContent?.includes('Customize sidebar')`);
+    await p.waitFor(`document.querySelector('[role^=menuitem][data-focused]')?.textContent?.includes('Customize sidebar')`);
     await p.key("Enter");
     await p.click('[role="dialog"][aria-label="Customize sidebar"] [aria-label="My issues: Always show"]');
     await p.click("text=Don't show");
     await p.key("Escape");
     await p.waitFor(`!document.querySelector('[role="dialog"][aria-label="Customize sidebar"]')`);
     await p.eval(`[...${nav}.querySelectorAll('button')].find(b=>b.textContent.trim()==='More').click()`);
-    await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="More"] [cmdk-item][data-value="My issues"]')`);
-    await p.click('[role="dialog"][aria-label="More"] [cmdk-item][data-value="My issues"]');
+    await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="More"] [role^=menuitem][data-value="My issues"]')`);
+    await p.click('[role="dialog"][aria-label="More"] [role^=menuitem][data-value="My issues"]');
     await p.waitFor(`location.pathname.startsWith('/my-issues')`);
   } finally {
     await p.eval(`fetch('/api/views').then(r=>r.json()).then(views=>Promise.all(views.filter(v=>v.name==='Sidebar view').map(v=>fetch('/api/views/'+v.id,{method:'DELETE'}))))`);

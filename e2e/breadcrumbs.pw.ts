@@ -155,8 +155,8 @@ test("issue breadcrumb follows how the page was reached: a link, an epic's Sub-i
     expect(await page.eval(`document.querySelector('${parent}').getAttribute('aria-current')`)).toBeNull();
     // Right-click: the parent's copy rows.
     await page.page.locator(parent).click({ button: "right" });
-    await page.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Issue options"] [cmdk-item]')`);
-    expect(await page.eval(`document.querySelector('[role="dialog"][aria-label="Issue options"] [cmdk-item]').textContent`)).toContain("Copy ID");
+    await page.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Issue options"] [role^=menuitem]')`);
+    expect(await page.eval(`document.querySelector('[role="dialog"][aria-label="Issue options"] [role^=menuitem]').textContent`)).toContain("Copy ID");
     await page.key("Escape");
     await page.click(parent);
     await page.waitFor(`location.pathname==='/issue/TEST-5'`);

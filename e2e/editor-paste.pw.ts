@@ -49,7 +49,7 @@ test("BJ-174 rows 17, 56: a YouTube link offers Embed video; Tab embeds it, Esc 
   await fixture.reset({ writable: true });
   const page = await open("?issue=TEST-2&view=page");
   const url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
-  const items = `[...document.querySelectorAll('[aria-label="Pasted link"] [cmdk-item]')].map(n=>n.textContent)`;
+  const items = `[...document.querySelectorAll('[aria-label="Pasted link"] [role^=menuitem]')].map(n=>n.textContent)`;
   await newLine(page);
   await paste(page, { "text/plain": url });
   expect(await page.waitFor<string[]>(`(()=>{const i=${items};return i.length&&i})()`)).toEqual([

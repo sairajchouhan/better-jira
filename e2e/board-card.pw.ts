@@ -61,7 +61,7 @@ test("every property on a board card is its own control that opens its menu at t
 
   await test.step("due date badge → Due date below it", async () => {
     await opensItsMenu(page, "TEST-1", "Due date", "Due date", "below", async () => {
-      await page.click('[role="dialog"][aria-label="Due date"] [cmdk-item][data-value="Tomorrow"]');
+      await page.click('[role="dialog"][aria-label="Due date"] [role^=menuitem][data-value="Tomorrow"]');
       // The fixture keeps no due date (the setup script injects it), so check the write itself.
       await expect.poll(async () => JSON.stringify((await fixture.log()).writes.at(-1)?.ops ?? [])).toContain('"due"');
     });
@@ -209,9 +209,9 @@ test("the link, pull request, comment and creator badges behave like Linear's", 
     await page.click(`[data-key="TEST-1"] [aria-label="Links on TEST-1"]`);
     await page.waitFor(`!document.querySelector('[data-hover-card="Links"]')`);
     const menu = `document.querySelector('[role="dialog"][aria-label="Open link…"]')`;
-    await page.waitFor(`${menu}?.querySelectorAll("[cmdk-item]").length===3`);
+    await page.waitFor(`${menu}?.querySelectorAll("[role^=menuitem]").length===3`);
     expect(await page.eval(shownIssue)).toBe(null);
-    await page.click(`[role="dialog"][aria-label="Open link…"] [cmdk-item]:nth-child(3)`);
+    await page.click(`[role="dialog"][aria-label="Open link…"] [role^=menuitem]:nth-child(3)`);
     await expect.poll(() => opened(page)).toEqual(["https://docs.google.com/document/d/1"]);
     expect(await page.eval(shownIssue)).toBe(null);
   });
@@ -247,12 +247,12 @@ test("the link, pull request, comment and creator badges behave like Linear's", 
     expect(await page.eval(`[${hover}.querySelectorAll("[data-pull-request]").length,${hover}.querySelectorAll("[data-pull-request-card]").length]`)).toEqual([2, 0]);
     await page.click(`[data-key="TEST-1"] [aria-label="Pull requests on TEST-1"]`);
     const menu = `document.querySelector('[role="dialog"][aria-label="Go to linked pull requests…"]')`;
-    await page.waitFor(`${menu}?.querySelectorAll("[cmdk-item]").length===2`);
+    await page.waitFor(`${menu}?.querySelectorAll("[role^=menuitem]").length===2`);
     const box = await page.eval<DOMRect>(rect(menu));
     const chip = await page.eval<DOMRect>(rect(prs));
     expect(Math.abs(box.left - chip.left)).toBeLessThanOrEqual(1);
     expect(box.top).toBeGreaterThan(chip.bottom);
-    await page.click(`[role="dialog"][aria-label="Go to linked pull requests…"] [cmdk-item]:nth-child(1)`);
+    await page.click(`[role="dialog"][aria-label="Go to linked pull requests…"] [role^=menuitem]:nth-child(1)`);
     await expect.poll(() => opened(page)).toContain("https://github.com/example/app/pull/12");
     expect(await page.eval(shownIssue)).toBe(null);
   });
@@ -310,12 +310,12 @@ test("one pull request's badge opens Linear's pull request menu at the pointer; 
       // The shared ContextMenu's placement at the pointer (e2e/context-menu.pw.ts): within the 4px menu gap.
       expect(Math.abs(box.x - at.x)).toBeLessThan(10);
       expect(Math.abs(box.y - at.y)).toBeLessThan(10);
-      expect(await menu.locator("[cmdk-item]").allTextContents()).toEqual(["Open in GitHub", "Copy"]);
+      expect(await menu.locator("[role^=menuitem]").allTextContents()).toEqual(["Open in GitHub", "Copy"]);
       expect(await page.eval(`!!document.querySelector('[role="dialog"][aria-label="Issue options"]')`)).toBe(false);
       expect(await page.eval(shownIssue)).toBe(null);
     });
     await test.step(`${layout}: Open in GitHub opens the pull request`, async () => {
-      await menu.locator('[cmdk-item][data-value="Open in GitHub"]').click();
+      await menu.locator('[role^=menuitem][data-value="Open in GitHub"]').click();
       await expect.poll(() => opened(page)).toEqual(["https://github.com/example/app/pull/7"]);
       await expect(menu).toHaveCount(0);
     });
@@ -326,8 +326,8 @@ test("one pull request's badge opens Linear's pull request menu at the pointer; 
         ["Copy target branch name", "main", "Branch name copied to clipboard"],
       ] as const) {
         await rightClick();
-        await menu.locator('[cmdk-item][data-value="Copy"]').hover();
-        const rows = page.page.locator('[cmdk-item][data-value^="Copy "]');
+        await menu.locator('[role^=menuitem][data-value="Copy"]').hover();
+        const rows = page.page.locator('[role^=menuitem][data-value^="Copy "]');
         await expect(rows).toHaveCount(3);
         expect(await rows.evaluateAll((items) => items.map((i) => i.getAttribute("data-value")))).toEqual([
           "Copy GitHub URL",
@@ -338,7 +338,7 @@ test("one pull request's badge opens Linear's pull request menu at the pointer; 
         await expect(page.page.locator('input[aria-label="Find copy"]')).toHaveClass(/sr-only/);
         // Linear's Copy branch name carries its ⇧⌘. shortcut (`bK`).
         expect(await rows.nth(1).textContent()).toContain(".");
-        await page.page.locator(`[cmdk-item][data-value="${row}"]`).click();
+        await page.page.locator(`[role^=menuitem][data-value="${row}"]`).click();
         await expect.poll(() => page.eval<string[]>("window.__copied.at(-1)")).toBe(text);
         await page.waitFor(`[...document.querySelectorAll('[data-toast]')].some(t=>t.textContent.includes(${JSON.stringify(toast)})&&t.textContent.includes(${JSON.stringify(text)}))`);
       }
@@ -346,8 +346,8 @@ test("one pull request's badge opens Linear's pull request menu at the pointer; 
     await test.step(`${layout}: BJ-216 ⇧⌘. copies nothing while the menu is open, even with focus outside it; closed, it is the issue's command`, async () => {
       const copies = () => page.eval<number>("window.__copied.length");
       await rightClick();
-      await menu.locator('[cmdk-item][data-value="Copy"]').hover();
-      await expect(page.page.locator('[cmdk-item][data-value="Copy branch name"]')).toBeVisible();
+      await menu.locator('[role^=menuitem][data-value="Copy"]').hover();
+      await expect(page.page.locator('[role^=menuitem][data-value="Copy branch name"]')).toBeVisible();
       const before = await copies();
       // Linear's open action menu runs no global shortcut (isActionMenuOpen), whether focus is in the menu…
       await page.page.keyboard.press("Meta+Shift+Period");

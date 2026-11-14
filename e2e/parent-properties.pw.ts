@@ -59,7 +59,7 @@ test('a sub-issue\'s parent: the "Sub-issue of" line, its sub-issue list, and re
     expect(Math.round((pill[0]! - link![0]! - link![2]!) * 10) / 10).toBe(4); // Linear: 70 tall for one row (30 heading, 32 rows, 6 under, 2 border).
     expect(
       await page.eval(
-        `[document.querySelector('[cmdk-group-heading]').textContent,[...document.querySelectorAll('[role=dialog] [cmdk-item]')].map(i=>[i.querySelector('.menu-name').textContent,!!i.querySelector('.menu-checkmark')])]`,
+        `[document.querySelector('.menu-group-header').textContent,[...document.querySelectorAll('[role=dialog] [role^=menuitem]')].map(i=>[i.querySelector('.menu-name').textContent,!!i.querySelector('.menu-checkmark')])]`,
       ),
     ).toEqual([
       "Navigation",
@@ -70,7 +70,7 @@ test('a sub-issue\'s parent: the "Sub-issue of" line, its sub-issue list, and re
     ]);
     // Typing filters it and Enter opens the match; Escape closes without moving.
     await page.type("fixture 6");
-    await page.waitFor(`document.querySelectorAll('[role=dialog] [cmdk-item]').length===1`);
+    await page.waitFor(`document.querySelectorAll('[role=dialog] [role^=menuitem]').length===1`);
     await page.key("Enter");
     await page.waitFor(
       `${shownIssue}==='TEST-6'&&document.querySelector('[data-parent-link]')?.textContent.includes('TEST-2')`,
@@ -99,19 +99,19 @@ test('a sub-issue\'s parent: the "Sub-issue of" line, its sub-issue list, and re
     await page.goto("?issue=TEST-6&view=page");
     await page.waitFor(`!!document.querySelector('[data-parent-link]')`);
     await page.click("#issue-options");
-    await page.waitFor(`!!document.querySelector('[cmdk-item][data-value="Remove"]')`);
+    await page.waitFor(`!!document.querySelector('[role^=menuitem][data-value="Remove"]')`);
     // Linear's Remove glyph: a flag with an ×.
     expect(
       await page.eval(
-        `document.querySelector('[cmdk-item][data-value="Remove"] svg path').getAttribute('d').endsWith('M13.5 11.5l-3 3')`,
+        `document.querySelector('[role^=menuitem][data-value="Remove"] svg path').getAttribute('d').endsWith('M13.5 11.5l-3 3')`,
       ),
     ).toBe(true);
-    await page.click('[cmdk-item][data-value="Remove"]');
+    await page.click('[role^=menuitem][data-value="Remove"]');
     await page.waitFor(
-      `[...document.querySelectorAll('[cmdk-item]')].some(i=>i.textContent==='Parent issue TEST-2 Browser fixture 2')`,
+      `[...document.querySelectorAll('[role^=menuitem]')].some(i=>i.textContent==='Parent issue TEST-2 Browser fixture 2')`,
     );
     await page.eval(
-      `[...document.querySelectorAll('[cmdk-item]')].find(i=>i.textContent==='Parent issue TEST-2 Browser fixture 2').click()`,
+      `[...document.querySelectorAll('[role^=menuitem]')].find(i=>i.textContent==='Parent issue TEST-2 Browser fixture 2').click()`,
     );
     await page.waitFor(`!document.querySelector('[data-parent-link]')`);
     // Reload only once it is saved (mid-save the page's beforeunload guard holds the reload).
@@ -381,7 +381,7 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
     ]);
     // A property change adds an event row 28.8px under the previous one.
     await page.key("p");
-    await page.waitFor(`!!document.querySelector('[role=dialog] [cmdk-item]')`);
+    await page.waitFor(`!!document.querySelector('[role=dialog] [role^=menuitem]')`);
     await page.type("Low");
     await page.key("Enter");
     await page.waitFor(`document.querySelectorAll('.activity-event').length===2`);
@@ -397,7 +397,7 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
     );
     await page.clickAt(5, 600);
     const R = `const r=e=>{const b=e.getBoundingClientRect();return [Math.round(b.x*10)/10,Math.round(b.y*10)/10,Math.round(b.width*10)/10,Math.round(b.height*10)/10]};`;
-    const menu = `(()=>{${R}const d=document.querySelector('[role=dialog]'),box=d.getBoundingClientRect(),rel=e=>{const b=e.getBoundingClientRect();return [Math.round((b.x-box.x)*10)/10,Math.round((b.y-box.y)*10)/10,Math.round(b.width*10)/10,Math.round(b.height*10)/10]};return {box:r(d),input:rel(d.querySelector('input')),key:d.querySelector('.menu-input kbd')?.textContent,rows:[...d.querySelectorAll('[cmdk-item]')].map(o=>[o.textContent,rel(o)[0],rel(o)[2],rel(o)[3],rel(o.querySelector('.menu-icon'))[0],rel(o.querySelector('.menu-name'))[0],o.querySelector('.menu-hint')?Math.round(rel(o.querySelector('.menu-hint'))[0]+rel(o.querySelector('.menu-hint'))[2]):null,o.dataset.selected]),items:[...d.querySelectorAll('[cmdk-item],[cmdk-separator],[cmdk-group-heading]')].map(n=>n.hasAttribute('cmdk-item')?n.textContent:n.hasAttribute('cmdk-separator')?'—':'#'+n.textContent)}})()`;
+    const menu = `(()=>{${R}const d=document.querySelector('[role=dialog]'),box=d.getBoundingClientRect(),rel=e=>{const b=e.getBoundingClientRect();return [Math.round((b.x-box.x)*10)/10,Math.round((b.y-box.y)*10)/10,Math.round(b.width*10)/10,Math.round(b.height*10)/10]};return {box:r(d),input:rel(d.querySelector('input')),key:d.querySelector('.menu-input kbd')?.textContent,rows:[...d.querySelectorAll('[role^=menuitem]')].map(o=>[o.textContent,rel(o)[0],rel(o)[2],rel(o)[3],rel(o.querySelector('.menu-icon'))[0],rel(o.querySelector('.menu-name'))[0],o.querySelector('.menu-hint')?Math.round(rel(o.querySelector('.menu-hint'))[0]+rel(o.querySelector('.menu-hint'))[2]):null,o.dataset.selected]),items:[...d.querySelectorAll('[role^=menuitem],.menu-divider,.menu-group-header')].map(n=>n.matches('[role^=menuitem]')?n.textContent:n.matches('.menu-divider')?'—':'#'+n.textContent)}})()`;
     // Status: 208px under the pill, a 36px filter with S at its right, full-width 32px rows (Linear's IB item: the highlight is inset, not the row), icon at 15, text at 39, numbers ending 19px in, the current status active.
     const pill = await page.eval<number[]>(
       `(()=>{${R}return r(document.getElementById('prop-status'))})()`,
@@ -430,7 +430,7 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
     // Only the current status carries Linear's 16px check, before its number: 149.5px into the row's highlight (6px inside the row).
     expect(
       await page.eval(
-        `[...document.querySelectorAll('[role=dialog] [cmdk-item]')].filter(o=>o.querySelector('.menu-checkmark')).map(o=>{const b=o.getBoundingClientRect(),c=o.querySelector('.menu-checkmark svg').getBoundingClientRect();return [o.textContent.replace(/[0-9]/g,''),Math.abs(c.x-b.x-6-149.5)<0.5,c.width]})`,
+        `[...document.querySelectorAll('[role=dialog] [role^=menuitem]')].filter(o=>o.querySelector('.menu-checkmark')).map(o=>{const b=o.getBoundingClientRect(),c=o.querySelector('.menu-checkmark svg').getBoundingClientRect();return [o.textContent.replace(/[0-9]/g,''),Math.abs(c.x-b.x-6-149.5)<0.5,c.width]})`,
       ),
     ).toEqual([["Done", true, 16]]);
     await page.key("Escape");
@@ -494,7 +494,7 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
     await page.waitFor(`!!document.querySelector('[role=dialog] .menu')`);
     l = await page.eval<any>(menu);
     expect(Math.round((chip[0]! - l.box[0] - l.box[2]) * 10) / 10).toBe(4.5);
-    await page.click('[role=dialog] [cmdk-item][data-value="ui"]');
+    await page.click('[role=dialog] [role^=menuitem][data-value="ui"]');
     await page.waitFor(
       `!document.querySelector('[role=dialog]')&&!document.querySelector('[data-label-chip]')`,
     );
@@ -557,13 +557,13 @@ test("RAJ-52: relations: Mark as menus, sidebar pills, Activity rows and Issue o
     const mark = async (query: string, item: string, key: string) => {
       await page.click("#issue-options");
       await page.type(query);
-      await page.waitFor(`!!document.querySelector('[cmdk-item][data-value="${item}"]')`);
+      await page.waitFor(`!!document.querySelector('[role^=menuitem][data-value="${item}"]')`);
       await page.key("Enter");
       await page.waitFor(
         `document.activeElement?.getAttribute('aria-label')==='Find related issue'`,
       );
       await page.type(key);
-      await page.waitFor(`!!document.querySelector('[cmdk-item][data-value="${key}"]')`);
+      await page.waitFor(`!!document.querySelector('[role^=menuitem][data-value="${key}"]')`);
       await page.key("Enter");
     };
     await mark("related to", "Mark as › Related to…", "TEST-1");
@@ -575,12 +575,12 @@ test("RAJ-52: relations: Mark as menus, sidebar pills, Activity rows and Issue o
     await page.click("#issue-options");
     await page.type("related to");
     await page.waitFor(
-      `!!document.querySelector('[cmdk-item][data-value="Mark as › Related to…"]')`,
+      `!!document.querySelector('[role^=menuitem][data-value="Mark as › Related to…"]')`,
     );
     await page.key("Enter");
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Find related issue'`);
     await page.type("TEST-1");
-    const linked = `document.querySelector('[role=dialog][aria-label="Issue relations"] [cmdk-item][data-value="TEST-1"]')`;
+    const linked = `document.querySelector('[role=dialog][aria-label="Issue relations"] [role^=menuitem][data-value="TEST-1"]')`;
     await page.waitFor(`${linked}?.getAttribute('aria-disabled')==='true'`);
     expect(await page.eval(`${linked}.textContent.includes('Already referenced')`)).toBe(true);
     await page.key("Enter");
@@ -660,11 +660,11 @@ test("RAJ-52: relations: Mark as menus, sidebar pills, Activity rows and Issue o
     await page.click("#issue-options");
     await page.type("remove");
     await page.waitFor(
-      `!!document.querySelector('[cmdk-item][data-value="Remove › Blocking issue TEST-2 Browser fixture 2"]')`,
+      `!!document.querySelector('[role^=menuitem][data-value="Remove › Blocking issue TEST-2 Browser fixture 2"]')`,
     );
     expect(
       await page.eval(
-        `[...document.querySelectorAll('[cmdk-item]')].map(n=>n.dataset.value).filter(v=>v.startsWith('Remove › '))`,
+        `[...document.querySelectorAll('[role^=menuitem]')].map(n=>n.dataset.value).filter(v=>v.startsWith('Remove › '))`,
       ),
     ).toEqual([
       "Remove › Related issue TEST-1 Rich browser fixture",
@@ -702,18 +702,18 @@ test("RAJ-52: relations: Mark as menus, sidebar pills, Activity rows and Issue o
     const D = `document.querySelector('[role=dialog][aria-label="Issue relations"]')`;
     const markAs = async (item: string) => {
       await page.click("#issue-options");
-      await page.hover('[cmdk-item][data-value="Mark as"]');
-      await page.click(`[cmdk-item][data-value="${item}"]`);
+      await page.hover('[role^=menuitem][data-value="Mark as"]');
+      await page.click(`[role^=menuitem][data-value="${item}"]`);
       await page.waitFor(
         `document.activeElement?.getAttribute('aria-label')==='Find related issue'`,
       );
     };
-    const look = `(()=>{const d=${D};return [d.querySelector('input').placeholder,[...d.querySelectorAll('[cmdk-group-heading]')].map(h=>h.textContent),d.querySelector('[cmdk-item][data-value="create"]')?.textContent??null,d.querySelector('.mark-footer > span').textContent,!!d.querySelector('select')]})()`;
+    const look = `(()=>{const d=${D};return [d.querySelector('input').placeholder,[...d.querySelectorAll('.menu-group-header')].map(h=>h.textContent),d.querySelector('[role^=menuitem][data-value="create"]')?.textContent??null,d.querySelector('.mark-footer > span').textContent,!!d.querySelector('select')]})()`;
     await markAs("Related to…");
     // Relations now renders the shared Menu input, heading and row geometry.
     expect(
       await page.eval(
-        `(()=>{const d=${D},r=d.getBoundingClientRect(),row=d.querySelector('[cmdk-item]'),f=d.querySelector('.mark-footer');return [[r.x,r.y,r.width],getComputedStyle(d.parentElement).backgroundColor,getComputedStyle(d).borderRadius,d.querySelector('input').getBoundingClientRect().height,d.querySelector('[cmdk-group-heading]').getBoundingClientRect().height,row.getBoundingClientRect().height,!!row.querySelector('.menu-icon'),row.classList.contains('menu-item'),f.getBoundingClientRect().height,getComputedStyle(f).borderTopColor]})()`,
+        `(()=>{const d=${D},r=d.getBoundingClientRect(),row=d.querySelector('[role^=menuitem]'),f=d.querySelector('.mark-footer');return [[r.x,r.y,r.width],getComputedStyle(d.parentElement).backgroundColor,getComputedStyle(d).borderRadius,d.querySelector('input').getBoundingClientRect().height,d.querySelector('.menu-group-header').getBoundingClientRect().height,row.getBoundingClientRect().height,!!row.querySelector('.menu-icon'),row.classList.contains('menu-item'),f.getBoundingClientRect().height,getComputedStyle(f).borderTopColor]})()`,
       ),
     ).toEqual([
       [276, 110, 720],
@@ -738,7 +738,7 @@ test("RAJ-52: relations: Mark as menus, sidebar pills, Activity rows and Issue o
     await page.key("ArrowDown");
     expect(
       await page.eval(
-        `(()=>{const s=${D}.querySelector('[cmdk-item][data-selected=true]'),b=getComputedStyle(s,'::before');return [b.backgroundColor,b.height,b.borderRadius]})()`,
+        `(()=>{const s=${D}.querySelector('[role^=menuitem][data-focused]'),b=getComputedStyle(s,'::before');return [b.backgroundColor,b.height,b.borderRadius]})()`,
       ),
     ).toEqual(["lch(20.82 1.3 272)", "32px", "8px"]);
     await page.key("ArrowUp");
@@ -746,7 +746,7 @@ test("RAJ-52: relations: Mark as menus, sidebar pills, Activity rows and Issue o
     await page.waitFor(`${D}.querySelector('.mark-footer > span').textContent==='↵Select'`);
     await page.type("TEST-1");
     await page.waitFor(
-      `!${D}.querySelector('[cmdk-item][data-value="create"]')&&[...${D}.querySelectorAll('[cmdk-group-heading]')].map(h=>h.textContent).join()==='Issues'`,
+      `!${D}.querySelector('[role^=menuitem][data-value="create"]')&&[...${D}.querySelectorAll('.menu-group-header')].map(h=>h.textContent).join()==='Issues'`,
     );
     await page.key("Enter");
     await page.waitFor(`!!document.querySelector('[data-relation="related:TEST-1"]')`);
@@ -761,7 +761,7 @@ test("RAJ-52: relations: Mark as menus, sidebar pills, Activity rows and Issue o
     ]);
     expect(
       await page.eval(
-        `${D}.querySelector('[cmdk-item][data-value="related:TEST-1"]')?.textContent`,
+        `${D}.querySelector('[role^=menuitem][data-value="related:TEST-1"]')?.textContent`,
       ),
     ).toBe("TEST-1Rich browser fixture");
     await page.key("Escape");
@@ -798,7 +798,7 @@ test("RAJ-52: relations: Mark as menus, sidebar pills, Activity rows and Issue o
       ["Recent", "Create"],
       "Add sub-issue…" +
         (await page.eval(
-          `document.querySelector('[cmdk-item][data-value="create"] .ui-shortcut').textContent`,
+          `document.querySelector('[role^=menuitem][data-value="create"] .ui-shortcut').textContent`,
         )),
       "↵Add as sub-issue",
       false,

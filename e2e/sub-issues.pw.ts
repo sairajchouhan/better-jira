@@ -38,7 +38,7 @@ test("the sub-issue tree: progress, guide lines and display preferences", async 
     await page.waitFor(`document.querySelector('[data-sub-issues]').textContent.includes('1/1')`);
     expect(await page.eval(`document.querySelectorAll('[data-sub-issue]').length`)).toBe(1);
     await page.page.getByRole("button", { name: /^Completed issues: / }).click();
-    await page.page.getByRole("dialog", { name: "Completed issues" }).getByRole("option", { name: "None" }).click();
+    await page.page.locator("[data-surface=select]").getByRole("option", { name: "None" }).click();
     await page.waitFor(`document.querySelectorAll('[data-sub-issue]').length===0`);
     await page.key("Escape");
     await page.click("text=Show 1 completed");
@@ -176,7 +176,7 @@ test("the sub-issue tree: progress, guide lines and display preferences", async 
     await page.waitFor(`!!document.querySelector('[data-sub-issue="TEST-4"]')`);
     await page.click('[aria-label="Change status for TEST-4"]');
     expect(
-      await page.eval(`[...document.querySelectorAll('[cmdk-item]')].map(e=>e.textContent)`),
+      await page.eval(`[...document.querySelectorAll('[role^=menuitem]')].map(e=>e.textContent)`),
     ).toEqual(["Open1", "Shipped2"]);
     await page.key("Escape");
     await page.click('[data-sub-issue="TEST-4"] a');
@@ -206,7 +206,7 @@ test("sub-issue row properties change locally, undo, sort and persist with no Ji
     await page.click("text=Labels");
     await page.key("Escape");
     await page.click('[aria-label="Change labels for TEST-4"]');
-    await page.click('[cmdk-item][data-value="test"]');
+    await page.click('[role^=menuitem][data-value="test"]');
     expect(
       await page.eval(`document.querySelector('[aria-label="Change labels for TEST-4"]').title`),
     ).toBe("");
@@ -224,7 +224,7 @@ test("sub-issue row properties change locally, undo, sort and persist with no Ji
   await test.step("row status, priority and labels change locally, undo, sort and persist with no Jira writes", async () => {
     await page.waitFor(`!!document.querySelector('[data-sub-issue="TEST-3"]')`);
     await page.click('[aria-label="Change status for TEST-3"]');
-    await page.click('[role=dialog] [cmdk-item][data-value="Todo"]');
+    await page.click('[role=dialog] [role^=menuitem][data-value="Todo"]');
     await page.waitFor(`document.querySelector('[data-sub-issues]').textContent.includes('0/3')`);
     await page.click('[aria-label="Undo"]');
     await page.waitFor(`document.querySelector('[data-sub-issues]').textContent.includes('1/3')`);
@@ -232,7 +232,7 @@ test("sub-issue row properties change locally, undo, sort and persist with no Ji
     await show(page, "Priority", "Labels");
     await page.key("Escape");
     await page.click('[aria-label="Change priority for TEST-4"]');
-    await page.click('[cmdk-item][data-value="Urgent"]');
+    await page.click('[role^=menuitem][data-value="Urgent"]');
     expect(
       await page.eval(`document.querySelector('[aria-label="Change priority for TEST-4"]').title`),
     ).toBe("Urgent");
@@ -246,7 +246,7 @@ test("sub-issue row properties change locally, undo, sort and persist with no Ji
     ).toContain("ui");
     await page.click('[aria-label="Sub-issue display options"]');
     await page.page.getByRole("button", { name: /^Ordering: / }).click();
-    await page.page.getByRole("dialog", { name: "Ordering" }).getByRole("option", { name: "Priority" }).click();
+    await page.page.locator("[data-surface=select]").getByRole("option", { name: "Priority" }).click();
     await page.key("Escape");
     expect(
       await page.eval(
@@ -277,7 +277,7 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
       page.eval(
         `document.querySelector('[data-sub-issue="${key}"]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))`,
       );
-    const names = `[...document.querySelectorAll('[role="dialog"][aria-label="Sub-issue actions"] [cmdk-item]')].map(n=>n.getAttribute('data-value'))`;
+    const names = `[...document.querySelectorAll('[role="dialog"][aria-label="Sub-issue actions"] [role^=menuitem]')].map(n=>n.getAttribute('data-value'))`;
     await page.waitFor(`!!document.querySelector('[data-sub-issue="TEST-4"]')`);
     await menu("TEST-4");
     await page.waitFor(
@@ -306,7 +306,7 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
     // Linear's Status ring and Priority bars, not a check mark and a list.
     expect(
       await page.eval(
-        `['Status','Priority','More properties','Create related','Remove','Copy'].map(v=>document.querySelector('[cmdk-item][data-value="'+v+'"] svg path').getAttribute('d').slice(0,12))`,
+        `['Status','Priority','More properties','Create related','Remove','Copy'].map(v=>document.querySelector('[role^=menuitem][data-value="'+v+'"] svg path').getAttribute('d').slice(0,12))`,
       ),
     ).toEqual([
       "M8 1a7 7 0 1",
@@ -318,11 +318,11 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
     ]);
     expect(
       await page.eval(
-        `[['More properties','M13 13.5h.01'],['Create related','M10 12.5h4'],['Remove','M13.5 11.5l-3 3']].map(([v,end])=>document.querySelector('[cmdk-item][data-value="'+v+'"] svg path').getAttribute('d').endsWith(end))`,
+        `[['More properties','M13 13.5h.01'],['Create related','M10 12.5h4'],['Remove','M13.5 11.5l-3 3']].map(([v,end])=>document.querySelector('[role^=menuitem][data-value="'+v+'"] svg path').getAttribute('d').endsWith(end))`,
       ),
     ).toEqual([true, true, true]);
-    await page.hover('[cmdk-item][data-value="Status"]');
-    await page.click('[role="dialog"][aria-label="Status"] [cmdk-item][data-value="Done"]');
+    await page.hover('[role^=menuitem][data-value="Status"]');
+    await page.click('[role="dialog"][aria-label="Status"] [role^=menuitem][data-value="Done"]');
     await page.waitFor(
       `document.querySelector('[aria-label="Change status for TEST-4"]')?.title==='Done'`,
     );
@@ -332,7 +332,7 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
     await menu("TEST-4");
     await page.type("parent");
     await page.waitFor(`${names}.some(n=>n.startsWith('Remove › Parent issue TEST-3 '))`);
-    await page.click('[cmdk-item][data-value^="Remove › Parent issue TEST-3 "]');
+    await page.click('[role^=menuitem][data-value^="Remove › Parent issue TEST-3 "]');
     await page.waitFor(`!document.querySelector('[data-sub-issue="TEST-4"]')`);
     await page.eval("document.activeElement?.blur()");
     await page.key("z", "meta");
@@ -341,12 +341,12 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
     await menu("TEST-4");
     expect(
       await page.eval(
-        `[document.querySelectorAll('[role="dialog"][aria-label="Sub-issue actions"] [cmdk-separator]').length,...['Status','Epic'].map(value=>{const row=document.querySelector('[cmdk-item][data-value="'+value+'"]');return {label:row.querySelector('.menu-name').textContent,shortcut:[...row.querySelectorAll('.ui-shortcut kbd')].map(n=>n.textContent).join(' ')};})]`,
+        `[document.querySelectorAll('[role="dialog"][aria-label="Sub-issue actions"] .menu-divider').length,...['Status','Epic'].map(value=>{const row=document.querySelector('[role^=menuitem][data-value="'+value+'"]');return {label:row.querySelector('.menu-name').textContent,shortcut:[...row.querySelectorAll('.ui-shortcut kbd')].map(n=>n.textContent).join(' ')};})]`,
       ),
     ).toEqual([4, { label: "Status", shortcut: "S" }, { label: "Epic", shortcut: "⇧ P" }]);
-    await page.hover('[cmdk-item][data-value="Labels"]');
+    await page.hover('[role^=menuitem][data-value="Labels"]');
     const labelRow = page.page.locator(
-      '[role="dialog"][aria-label="Labels"] [cmdk-item][data-value="test"]',
+      '[role="dialog"][aria-label="Labels"] [role^=menuitem][data-value="test"]',
     );
     await labelRow.waitFor();
     // ISSUE-1: Labels › is the L picker's checkbox rows; a checked label offers to remove it.
@@ -354,24 +354,24 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
     const had = (await checked.count()) > 0;
     await labelRow.click();
     await menu("TEST-4");
-    await page.hover('[cmdk-item][data-value="Labels"]');
+    await page.hover('[role^=menuitem][data-value="Labels"]');
     await expect(checked).toHaveCount(had ? 0 : 1);
     await page.key("Escape");
     // Project uses the same controlled menu as the issue properties.
     const project = async (row: string) => {
       await menu("TEST-4");
-      await page.click('[cmdk-item][data-value="Epic"]');
+      await page.click('[role^=menuitem][data-value="Epic"]');
       await page.click(
-        `[role="dialog"][aria-label="Change epic"] [cmdk-item][data-value="${row}"]`,
+        `[role="dialog"][aria-label="Change epic"] [role^=menuitem][data-value="${row}"]`,
       );
     };
     await project("No epic");
     await project("Audit");
     await menu("TEST-4");
-    await page.click('[cmdk-item][data-value="Epic"]');
+    await page.click('[role^=menuitem][data-value="Epic"]');
     await expect(
       page.page.locator(
-        '[role="dialog"][aria-label="Change epic"] [cmdk-item][data-value="Audit"] svg',
+        '[role="dialog"][aria-label="Change epic"] [role^=menuitem][data-value="Audit"] svg',
       ),
     ).toHaveCount(2);
     await page.key("Escape");
@@ -379,11 +379,11 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
     const tomorrow = "Tomorrow"; // Linear reads near due dates relatively (R2-issue-fields-D7).
     // Linear lists neither submenu's rows in the root search (no subActionsHoisting), so each is picked from its submenu.
     await menu("TEST-4");
-    await page.hover('[cmdk-item][data-value="Due date"]');
-    await page.click('[role="dialog"][aria-label="Due date"] [cmdk-item][data-value="Tomorrow"]');
+    await page.hover('[role^=menuitem][data-value="Due date"]');
+    await page.click('[role="dialog"][aria-label="Due date"] [role^=menuitem][data-value="Tomorrow"]');
     await menu("TEST-4");
-    await page.hover('[cmdk-item][data-value="Remind me"]');
-    await page.click('[role="dialog"][aria-label="Remind me"] [cmdk-item][data-value="An hour from now"]');
+    await page.hover('[role^=menuitem][data-value="Remind me"]');
+    await page.click('[role="dialog"][aria-label="Remind me"] [role^=menuitem][data-value="An hour from now"]');
     await page.waitFor(`!document.querySelector('[aria-label="Sub-issue actions"]')`);
     expect(
       await page.eval(
@@ -403,13 +403,13 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
       `document.querySelector('[data-sub-issue="TEST-4"]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))`,
     );
     await page.type("blocking");
-    await page.waitFor(`!!document.querySelector('[cmdk-item][data-value="Mark as › Blocking…"]')`);
-    await page.click('[cmdk-item][data-value="Mark as › Blocking…"]');
+    await page.waitFor(`!!document.querySelector('[role^=menuitem][data-value="Mark as › Blocking…"]')`);
+    await page.click('[role^=menuitem][data-value="Mark as › Blocking…"]');
     await page.waitFor(
       `document.activeElement?.tagName==='INPUT'&&!!document.activeElement.closest('[aria-label="Issue relations"]')`,
     );
     await page.type("TEST-5");
-    await page.waitFor(`!!document.querySelector('[cmdk-item][data-value="TEST-5"]')`);
+    await page.waitFor(`!!document.querySelector('[role^=menuitem][data-value="TEST-5"]')`);
     await page.key("Enter");
     await page.waitFor(`!document.querySelector('[role="dialog"][aria-label="Issue relations"]')`);
     const badges = `[...document.querySelectorAll('[data-row-relation]')].map(n=>[n.closest('[data-sub-issue]').dataset.subIssue,n.dataset.rowRelation,n.textContent,n.querySelector('[data-relation-icon]')?.dataset.relationIcon,n.title])`;
@@ -428,8 +428,8 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
         `document.activeElement?.getAttribute('aria-label')==='Find sub-issue actions'`,
       );
       await page.type(filter);
-      await page.waitFor(`!!document.querySelector('[cmdk-item][data-value="${item}"]')`);
-      await page.click(`[cmdk-item][data-value="${item}"]`);
+      await page.waitFor(`!!document.querySelector('[role^=menuitem][data-value="${item}"]')`);
+      await page.click(`[role^=menuitem][data-value="${item}"]`);
     };
     await page.waitFor(`!!document.querySelector('[data-sub-issue="TEST-4"]')`);
     // Copy: Linear's icons and the ⌘C hint on "title as link".
@@ -438,11 +438,11 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
     );
     await page.type("title as link");
     await page.waitFor(
-      `!!document.querySelector('[cmdk-item][data-value="Copy › Copy title as link"]')`,
+      `!!document.querySelector('[role^=menuitem][data-value="Copy › Copy title as link"]')`,
     );
     expect(
       await page.eval(
-        `[!!document.querySelector('[cmdk-item][data-value="Copy › Copy title as link"] svg'),{label:document.querySelector('[cmdk-item][data-value="Copy › Copy title as link"] .menu-name').textContent,shortcut:[...document.querySelectorAll('[cmdk-item][data-value="Copy › Copy title as link"] .ui-shortcut kbd')].map(n=>n.textContent).join(' ')}]`,
+        `[!!document.querySelector('[role^=menuitem][data-value="Copy › Copy title as link"] svg'),{label:document.querySelector('[role^=menuitem][data-value="Copy › Copy title as link"] .menu-name').textContent,shortcut:[...document.querySelectorAll('[role^=menuitem][data-value="Copy › Copy title as link"] .ui-shortcut kbd')].map(n=>n.textContent).join(' ')}]`,
       ),
     ).toEqual([true, { label: "CopyCopy title as link", shortcut: "⌘ C" }]);
     await page.key("Escape");
@@ -466,7 +466,7 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
     await menu("TEST-4", "related to", "Mark as › Related to…");
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Find related issue'`);
     await page.type("TEST-3");
-    await page.waitFor(`!!document.querySelector('[cmdk-item][data-value="TEST-3"]')`);
+    await page.waitFor(`!!document.querySelector('[role^=menuitem][data-value="TEST-3"]')`);
     await page.key("Enter");
     await page.waitFor(`!document.querySelector('[role="dialog"][aria-label="Issue relations"]')`);
     expect(
@@ -561,7 +561,7 @@ test("the inline sub-issue composer: shortcuts, Escape, drafts and descriptions"
     await page.click("[data-create-child]");
     await page.type("Carried child");
     await page.click('[aria-label^="Sub-issue priority."]');
-    await page.click('[cmdk-item][data-value="High"]');
+    await page.click('[role^=menuitem][data-value="High"]');
     await page.click('[aria-label="Sub-issue title"]');
     await page.key("Enter", "meta");
     await page.waitFor(`document.querySelector('[data-sub-issues]').textContent.includes('Carried child')`);
@@ -579,7 +579,7 @@ test("the inline sub-issue composer: shortcuts, Escape, drafts and descriptions"
     await page.click("[data-create-child]");
     await page.type("Unfinished child");
     await page.click('[aria-label^="Sub-issue priority."]');
-    await page.click('[cmdk-item][data-value="High"]');
+    await page.click('[role^=menuitem][data-value="High"]');
     await page.click('[aria-label="Sub-issue description"]');
     await page.type("Keep this unfinished body");
     await page.eval(
@@ -849,7 +849,7 @@ test("sub-issue field menus include Jira users and labels absent from every issu
   await page.key("Escape");
   await page.click('[aria-label="Change labels for TEST-4"]');
   await expect(
-    page.page.locator('[aria-label="Change labels"] [cmdk-item][data-value="jira-only"]'),
+    page.page.locator('[aria-label="Change labels"] [role^=menuitem][data-value="jira-only"]'),
   ).toHaveCount(1);
 });
 
@@ -898,7 +898,7 @@ test("a sub-issue row with three links shows one count badge that opens Open lin
   await page.waitFor(`!!${badge}`);
   expect(await page.eval(`[${badge}.textContent,${badge}.classList.contains('ui-badge')]`)).toEqual(["3", true]);
   await page.click('[data-sub-issue="TEST-3"] [aria-label="Links on TEST-3"]');
-  await page.waitFor(`document.querySelector('[role="dialog"][aria-label="Open link…"]')?.querySelectorAll("[cmdk-item]").length===3`);
+  await page.waitFor(`document.querySelector('[role="dialog"][aria-label="Open link…"]')?.querySelectorAll("[role^=menuitem]").length===3`);
 });
 
 test("a sub-issue row's single pull request badge opens Linear's pull request menu on right-click", async ({ open }) => {
@@ -915,7 +915,7 @@ test("a sub-issue row's single pull request badge opens Linear's pull request me
   await page.page.mouse.click(r.x + 3, r.y + r.height / 2, { button: "right" });
   const menu = page.page.locator('[role="dialog"][aria-label="Pull request options"]');
   await expect(menu).toBeVisible();
-  expect(await menu.locator("[cmdk-item]").allTextContents()).toEqual(["Open in GitHub", "Copy"]);
-  await menu.locator('[cmdk-item][data-value="Open in GitHub"]').click();
+  expect(await menu.locator("[role^=menuitem]").allTextContents()).toEqual(["Open in GitHub", "Copy"]);
+  await menu.locator('[role^=menuitem][data-value="Open in GitHub"]').click();
   await expect.poll(() => page.eval<string[]>("window.__opened")).toEqual([pr.url]);
 });

@@ -8,7 +8,7 @@ const writeCount = (n: number) =>
   `(async()=>(await (await fetch('/__fixture')).json()).writes.length===${n})()`;
 const menuItems = (p: Page) =>
   p.waitFor<string[]>(
-    `(()=>{const items=[...document.querySelectorAll('[role="dialog"][aria-label="Change issue type"] [cmdk-item]')].map(n=>n.textContent);return items.length&&items})()`,
+    `(()=>{const items=[...document.querySelectorAll('[role="dialog"][aria-label="Change issue type"] [role^=menuitem]')].map(n=>n.textContent);return items.length&&items})()`,
   );
 
 // Without Jira's type list (createmeta failed), the menu falls back to the project's types; Jira refuses Subtask → Task.
@@ -33,7 +33,7 @@ test("changing an issue's type: a subtask's limits, the pill, undo/redo, Issue o
     await q.waitFor(typeText);
     await q.key("t", "shift");
     expect(await menuItems(q)).toEqual(["Subtask", "Task"]);
-    await q.click('[role="dialog"][aria-label="Change issue type"] [cmdk-item][data-value="Task"]');
+    await q.click('[role="dialog"][aria-label="Change issue type"] [role^=menuitem][data-value="Task"]');
     const toast = await q.waitFor<string>(`document.querySelector("[data-toast]")?.textContent`);
     expect(toast).toContain("Jira did not save the change to TEST-6");
     expect(toast).toContain("Use Move in Jira");
@@ -50,7 +50,7 @@ test("changing an issue's type: a subtask's limits, the pill, undo/redo, Issue o
     // Epic (level 1) and Subtask (level -1) need Jira's Move: only Task's level is offered.
     expect(await menuItems(p)).toEqual(["Task", "Story"]);
     await p.click(
-      '[role="dialog"][aria-label="Change issue type"] [cmdk-item][data-value="Story"]',
+      '[role="dialog"][aria-label="Change issue type"] [role^=menuitem][data-value="Story"]',
     );
     await p.waitFor(`${typeText}==='Story'`);
     await p.waitFor(writeCount(base + 1));
@@ -76,15 +76,15 @@ test("changing an issue's type: a subtask's limits, the pill, undo/redo, Issue o
     await p.goto("?issue=TEST-3&view=page");
     await p.waitFor(typeText);
     await p.click("#issue-options");
-    await p.click('[cmdk-item][data-value="Issue type"]');
-    await p.click('[role="dialog"][aria-label="Change issue type"] [cmdk-item][data-value="Story"]');
+    await p.click('[role^=menuitem][data-value="Issue type"]');
+    await p.click('[role="dialog"][aria-label="Change issue type"] [role^=menuitem][data-value="Story"]');
     await p.waitFor(`${typeText}==='Story'`);
     await p.eval(`document.activeElement?.blur()`);
     await p.key("k", "meta");
     await p.type("issue type");
-    await p.click('[cmdk-item][data-value="cmd:Change issue type"]');
+    await p.click('[role^=menuitem][data-value="cmd:Change issue type"]');
     expect(await menuItems(p)).toEqual(["Task", "Story"]);
-    await p.click('[role="dialog"][aria-label="Change issue type"] [cmdk-item][data-value="Task"]');
+    await p.click('[role="dialog"][aria-label="Change issue type"] [role^=menuitem][data-value="Task"]');
     await p.waitFor(`${typeText}==='Task'`);
     await p.waitFor(writeCount(base + 5));
     expect((await writes()).slice(base + 3)).toEqual([

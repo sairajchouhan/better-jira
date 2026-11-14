@@ -8,8 +8,10 @@ const CARD = '[data-key="TEST-2"]';
 const exists = (selector: string) => `!!document.querySelector(${JSON.stringify(selector)})`;
 const gone = (selector: string) => `!document.querySelector(${JSON.stringify(selector)})`;
 const selected = (page: App, scope: string) =>
-  page.eval<string>(`document.querySelector('${scope} [cmdk-item][data-selected=true]')?.dataset.value ?? ""`);
-const pristine = (scope: string) => `!!document.querySelector('${scope} [cmdk-root]')?.hasAttribute("data-pristine")`;
+  page.eval<string>(`document.querySelector('${scope} [role^=menuitem][data-focused]')?.dataset.value ?? ""`);
+// Opened by the pointer, a menu highlights no row until a key or the pointer moves (Linear's focusedIndex -1).
+const pristine = (scope: string) =>
+  `(()=>{const m=document.querySelector('${scope} .menu');return !!m&&!m.querySelector('[role^=menuitem][data-focused]')})()`;
 
 /** A writable site faked in the page, so edits apply and land in `window.__ops`. */
 const writable = `(()=>{const real=fetch;window.__ops=[];
@@ -41,7 +43,7 @@ test("ISSUE-1 / ISSUE-13: Issue options › Labels is the L picker's checkbox ro
   const page = await open("", { setup: writable });
   const LABELS = dialog("Labels");
   await rightClick(page);
-  await page.hover(`${MENU} [cmdk-item][data-value="Labels"]`);
+  await page.hover(`${MENU} [role^=menuitem][data-value="Labels"]`);
   await page.waitFor(exists(LABELS));
   // The issue's own label first, checked, then the workspace's, each with a leading checkbox (the L picker's rows).
   expect(
@@ -68,8 +70,8 @@ test("ISSUE-1 / ISSUE-13: Issue options › Labels is the L picker's checkbox ro
   expect(await page.eval(`document.querySelector('${LABELS} input:not(.menu-checkbox)').value`)).toBe("");
   // A new name offers Linear's "Create new label".
   await page.type("fresh one");
-  await page.waitFor(exists(`${LABELS} [cmdk-item][data-value="Create fresh one"]`));
-  expect(await page.eval(`document.querySelector('${LABELS} [cmdk-item][data-value="Create fresh one"]').textContent`)).toBe(
+  await page.waitFor(exists(`${LABELS} [role^=menuitem][data-value="Create fresh one"]`));
+  expect(await page.eval(`document.querySelector('${LABELS} [role^=menuitem][data-value="Create fresh one"]').textContent`)).toBe(
     'Create new label: "fresh-one"',
   );
 });
@@ -85,7 +87,7 @@ test("k3e: Issue options › Labels is as wide as the labels on screen, 400px at
   const LABELS = dialog("Labels");
   const width = (selector: string) => page.eval<number>(`document.querySelector('${selector}').getBoundingClientRect().width`);
   await rightClick(page);
-  await page.hover(`${MENU} [cmdk-item][data-value="Labels"]`);
+  await page.hover(`${MENU} [role^=menuitem][data-value="Labels"]`);
   await page.waitFor(exists(`${LABELS} [data-label="${long}"]`));
   await sleep(200); // past k3e's 150ms trailing measure
   // Every label is listed, but only the rows on screen (and ten past them) size the menu: the long label far down doesn't.
@@ -112,8 +114,8 @@ test("k3e: Issue options › Labels is as wide as the labels on screen, 400px at
 /** The list of the menu in `scope` (its own, not a submenu's) and the boxes _3e sizes: the popup, its search and its list. */
 const heightOf = (page: App, scope: string) =>
   page.eval<{ popup: DOMRect; input: DOMRect; list: DOMRect; scrolls: boolean; popupScrolls: boolean; lastShown: number }>(
-    `(()=>{const d=document.querySelector('${scope}'),root=d.querySelector('[cmdk-root]'),l=[...root.querySelectorAll('[cmdk-list]')].find(n=>n.closest('[cmdk-root]')===root),
-      lb=l.getBoundingClientRect(),rows=[...l.querySelectorAll('[cmdk-item]')].map(n=>n.getBoundingClientRect()).filter(r=>r.bottom>lb.top&&r.top<lb.bottom),last=rows.at(-1);
+    `(()=>{const d=document.querySelector('${scope}'),root=d.querySelector('.menu'),l=[...root.querySelectorAll('.menu-list')].find(n=>n.closest('.menu')===root),
+      lb=l.getBoundingClientRect(),rows=[...l.querySelectorAll('[role^=menuitem]')].map(n=>n.getBoundingClientRect()).filter(r=>r.bottom>lb.top&&r.top<lb.bottom),last=rows.at(-1);
       return {popup:d.getBoundingClientRect().toJSON(),input:root.querySelector('.menu-input').getBoundingClientRect().toJSON(),list:lb.toJSON(),
         scrolls:l.scrollHeight>l.clientHeight,popupScrolls:d.scrollHeight>d.clientHeight+1,lastShown:last?(Math.min(last.bottom,lb.bottom)-last.top)/last.height:1}})()`,
   );
@@ -128,7 +130,7 @@ test("_3e: Issue options › Labels on a 1044-label board stays 16px inside the 
   const page = await open("", { setup: writable, width: 1440, height: 969 });
   const LABELS = dialog("Labels");
   await rightClick(page);
-  await page.hover(`${MENU} [cmdk-item][data-value="Labels"]`);
+  await page.hover(`${MENU} [role^=menuitem][data-value="Labels"]`);
   await page.waitFor(exists(`${LABELS} [data-label="${long}"]`));
   await sleep(200);
   const opened = await heightOf(page, LABELS);
@@ -145,12 +147,12 @@ test("_3e: Issue options › Labels on a 1044-label board stays 16px inside the 
   const width = await page.eval<number>(`document.querySelector('${LABELS}').getBoundingClientRect().width`);
   expect(width).toBeLessThan(260);
   await page.eval(
-    `(()=>{const root=document.querySelector('${LABELS} [cmdk-root]');[...root.querySelectorAll('[cmdk-list]')].find(n=>n.closest('[cmdk-root]')===root).scrollTop=1e9})()`,
+    `(()=>{const root=document.querySelector('${LABELS} .menu');[...root.querySelectorAll('.menu-list')].find(n=>n.closest('.menu')===root).scrollTop=1e9})()`,
   );
   await sleep(200);
   const scrolled = await heightOf(page, LABELS);
   expect(scrolled.input.top).toBeCloseTo(opened.input.top, 0);
-  expect(await page.eval(`(()=>{const r=document.querySelector('${LABELS} [data-label="${long}"]').getBoundingClientRect(),l=document.querySelector('${LABELS} [cmdk-list]').getBoundingClientRect();return r.top>=l.top&&r.bottom<=l.bottom})()`)).toBe(true);
+  expect(await page.eval(`(()=>{const r=document.querySelector('${LABELS} [data-label="${long}"]').getBoundingClientRect(),l=document.querySelector('${LABELS} .menu-list').getBoundingClientRect();return r.top>=l.top&&r.bottom<=l.bottom})()`)).toBe(true);
   expect(await page.eval<number>(`document.querySelector('${LABELS}').getBoundingClientRect().width`)).toBeCloseTo(400, 0);
   await page.key("Escape");
 });
@@ -161,14 +163,14 @@ test("_3e: a submenu's keyboard highlight scrolls into view with ITEM_SCROLL_MAR
   const page = await open("", { setup: writable, width: 1440, height: 600 });
   const LABELS = dialog("Labels");
   await rightClick(page);
-  await page.hover(`${MENU} [cmdk-item][data-value="Labels"]`);
+  await page.hover(`${MENU} [role^=menuitem][data-value="Labels"]`);
   await page.waitFor(exists(`${LABELS} [data-label="label-199"]`));
   await page.page.focus(`${LABELS} input:not(.menu-checkbox)`);
   const rows = Math.ceil((await heightOf(page, LABELS)).list.height / 32) + 3;
   for (let i = 0; i < rows; i++) await page.key("ArrowDown");
   await sleep(100);
   const gap = await page.eval<number>(
-    `(()=>{const l=document.querySelector('${LABELS} [cmdk-list]').getBoundingClientRect(),r=document.querySelector('${LABELS} [cmdk-item][data-selected=true]').getBoundingClientRect();return l.bottom-r.bottom})()`,
+    `(()=>{const l=document.querySelector('${LABELS} .menu-list').getBoundingClientRect(),r=document.querySelector('${LABELS} [role^=menuitem][data-focused]').getBoundingClientRect();return l.bottom-r.bottom})()`,
   );
   expect(gap).toBeGreaterThanOrEqual(24 - 1);
   expect(gap).toBeLessThanOrEqual(24 + 32);
@@ -204,9 +206,9 @@ test("CORE-7: the inbox filter's values are checkbox rows that keep the menu ope
   await page.click("nav a:has([data-inbox-badge])");
   await page.waitFor(`document.querySelectorAll('[data-inbox-row]').length === 7`);
   await page.click("#inbox-filter");
-  await page.hover(`${dialog("Filter")} [cmdk-item][data-value="Notification type"]`);
+  await page.hover(`${dialog("Filter")} [role^=menuitem][data-value="Notification type"]`);
   const TYPE = dialog("Notification type");
-  await page.waitFor(exists(`${TYPE} [cmdk-item][data-value="Mentions"] input.menu-checkbox`));
+  await page.waitFor(exists(`${TYPE} [role^=menuitem][data-value="Mentions"] input.menu-checkbox`));
   await page.click(`${TYPE} [aria-label="Add Mentions"]`);
   await page.waitFor(`document.querySelectorAll('[data-inbox-row]').length === 1`);
   expect(await page.eval(exists(TYPE))).toBe(true);
@@ -226,7 +228,7 @@ test("ISSUE-2 / ISSUE-4 / ISSUE-5: a property submenu shows its search with Line
   expect(input[1]).toBe(false);
   // Keyboard-opened, the highlight starts on the issue's priority (the checked row), not the first row.
   const current = await page.eval<string>(
-    `document.querySelector('${PRIORITY} [cmdk-item]:has(.menu-checkmark)')?.dataset.value ?? ""`,
+    `document.querySelector('${PRIORITY} [role^=menuitem]:has(.menu-checkmark)')?.dataset.value ?? ""`,
   );
   expect(current).not.toBe("");
   expect(await selected(page, PRIORITY)).toBe(current);
@@ -238,11 +240,11 @@ test("ISSUE-2 / ISSUE-4 / ISSUE-5: a property submenu shows its search with Line
   await intoSubmenu(page, 1, "Status");
   expect(await page.eval(`document.querySelector('${STATUS} input:not(.menu-checkbox)').placeholder`)).toBe("Change status…");
   expect(
-    await page.eval(`[...document.querySelectorAll('${STATUS} [cmdk-item]')].slice(0,2).map(n=>n.dataset.number)`),
+    await page.eval(`[...document.querySelectorAll('${STATUS} [role^=menuitem]')].slice(0,2).map(n=>n.dataset.number)`),
   ).toEqual(["1", "2"]);
   // A digit picks the row showing it: any row but the current status, so the pick is a change.
   const digit = await page.eval<string>(
-    `[...document.querySelectorAll('${STATUS} [cmdk-item]')].find(n=>!n.querySelector('.menu-checkmark')).dataset.number`,
+    `[...document.querySelectorAll('${STATUS} [role^=menuitem]')].find(n=>!n.querySelector('.menu-checkmark')).dataset.number`,
   );
   await page.key(digit);
   await page.waitFor(gone(MENU));
@@ -255,21 +257,21 @@ test("ISSUE-3: Due date and Remind me read a typed time, like their pickers", as
   await intoSubmenu(page, 4, "Due date");
   expect(await page.eval(`document.querySelector('${DUE} input').placeholder`)).toBe("Try: 24h, 7 days, Feb 9");
   await page.type("24h");
-  await page.waitFor(exists(`${DUE} [cmdk-item][data-value="Due 24h"]`));
+  await page.waitFor(exists(`${DUE} [role^=menuitem][data-value="Due 24h"]`));
   await page.key("Enter");
   await page.waitFor(gone(MENU));
   await page.waitFor(`window.__ops.some(w=>w.key==='TEST-2'&&JSON.stringify(w.ops).includes('due'))`);
 
   await rightClick(page);
   await page.type("remind");
-  await page.waitFor(`document.querySelector('${MENU} [cmdk-item][data-selected=true]')?.dataset.value === "Remind me"`);
+  await page.waitFor(`document.querySelector('${MENU} [role^=menuitem][data-focused]')?.dataset.value === "Remind me"`);
   await page.key("Enter");
   const REMIND = dialog("Remind me");
   await page.waitFor(`!!document.activeElement?.closest('${REMIND}')`);
   await page.type("in 2 days");
   // The typed time is the first row, valued by its ISO time, ahead of Custom….
   await page.waitFor(
-    `/^\\d{4}-\\d\\d-\\d\\dT/.test(document.querySelector('${REMIND} [cmdk-item]')?.dataset.value ?? "")`,
+    `/^\\d{4}-\\d\\d-\\d\\dT/.test(document.querySelector('${REMIND} [role^=menuitem]')?.dataset.value ?? "")`,
   );
 });
 
@@ -287,7 +289,7 @@ test("ISSUE-15 / CORE-6: a pointer open is pristine, a key open highlights; the 
   const page = await open();
   await test.step("ISSUE-15: a submenu the pointer opens has no highlight", async () => {
     await rightClick(page);
-    await page.hover(`${MENU} [cmdk-item][data-value="Status"]`);
+    await page.hover(`${MENU} [role^=menuitem][data-value="Status"]`);
     await page.waitFor(exists(dialog("Status")));
     expect(await page.eval(pristine(dialog("Status")))).toBe(true);
     await page.key("Escape");
@@ -300,7 +302,7 @@ test("ISSUE-15 / CORE-6: a pointer open is pristine, a key open highlights; the 
     await page.waitFor(exists(COLUMN));
     expect(await page.eval(pristine(COLUMN))).toBe(false);
     expect(await selected(page, COLUMN)).toBe(
-      await page.eval<string>(`document.querySelector('${COLUMN} [cmdk-item]').dataset.value`),
+      await page.eval<string>(`document.querySelector('${COLUMN} [role^=menuitem]').dataset.value`),
     );
     await page.key("Escape");
     await page.waitFor(gone(COLUMN));
@@ -310,7 +312,7 @@ test("ISSUE-15 / CORE-6: a pointer open is pristine, a key open highlights; the 
       await rightClick(page);
       expect(await page.eval(pristine(MENU))).toBe(true);
       await page.key(key);
-      await page.waitFor(`document.querySelector('${MENU} [cmdk-item][data-selected=true]')?.dataset.value === "Status"`);
+      await page.waitFor(`document.querySelector('${MENU} [role^=menuitem][data-focused]')?.dataset.value === "Status"`);
       expect(await page.eval(pristine(MENU))).toBe(false);
       if (key !== " ") await page.waitFor(exists(dialog("Status")), 2000);
       await page.key("Escape");
@@ -324,7 +326,7 @@ test("ISSUE-17: hoisted rows read Linear's parent names with a chevron; nothing 
   const page = await open();
   await rightClick(page);
   await page.type("tes");
-  const row = `${MENU} [cmdk-item][data-value="Change label › test"]`;
+  const row = `${MENU} [role^=menuitem][data-value="Change label › test"]`;
   await page.waitFor(exists(row));
   expect(await page.eval(exists(`${row} svg`))).toBe(true);
   await page.type("zzz");
@@ -360,9 +362,9 @@ test("C3: every property picker searches with Linear's one action score: statuse
 }) => {
   const page = await open("", { setup: writable });
   const rows = (scope: string) =>
-    page.eval<string[]>(`[...document.querySelectorAll('${scope} [cmdk-item]')].map(n=>n.dataset.value)`);
+    page.eval<string[]>(`[...document.querySelectorAll('${scope} [role^=menuitem]')].map(n=>n.dataset.value)`);
   const first = (scope: string, value: string) =>
-    page.waitFor(`document.querySelector('${scope} [cmdk-item]')?.dataset.value === ${JSON.stringify(value)}`);
+    page.waitFor(`document.querySelector('${scope} [role^=menuitem]')?.dataset.value === ${JSON.stringify(value)}`);
 
   // The S picker: "do" lists Doing before Done in workflow order (PCn.scoreForOrdering), though "Done" alone scores higher.
   const PICKER = dialog("Change status");

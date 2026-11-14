@@ -40,20 +40,20 @@ test("draft reload, cancel, create toast, edit, duplicate and themed delete", as
       `Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async t=>{window.__copied=t}}})`,
     );
     await p.getByRole("button", { name: "Issue view options" }).click();
-    await p.getByRole("option", { name: "Copy link", exact: true }).click();
+    await p.getByRole("menuitem", { name: "Copy link", exact: true }).click();
     await expect(p.locator("[data-toast]").filter({ hasText: /^View link copied to clipboard$/ })).toBeVisible(); // BJ-145
     expect(await app.eval("window.__copied")).toBe(new URL(route, p.url()).href);
     await p
       .getByRole("button", { name: "Issue view options" })
       .click();
-    await p.getByRole("option", { name: "Edit…", exact: true }).click();
+    await p.getByRole("menuitem", { name: "Edit…", exact: true }).click();
     await expect(p).toHaveURL(new RegExp(`${route}/edit`));
     await p
       .getByRole("textbox", { name: "View name", exact: true })
       .fill("Renamed");
     await p.getByRole("button", { name: "Save", exact: true }).click();
     await p.getByRole("button", { name: "Issue view options" }).click();
-    await p.getByRole("option", { name: "Duplicate…", exact: true }).click();
+    await p.getByRole("menuitem", { name: "Duplicate…", exact: true }).click();
     await expect(
       p.getByRole("textbox", { name: "View name", exact: true }),
     ).toHaveValue("");

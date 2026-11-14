@@ -1,7 +1,7 @@
 import { expect, fixture, test } from "./app";
 
 const typeMenu = '[role="dialog"][aria-label="Change issue type"]';
-const choices = `[...document.querySelectorAll('${typeMenu} [cmdk-item]')].map(item => item.getAttribute('data-value'))`;
+const choices = `[...document.querySelectorAll('${typeMenu} [role^=menuitem]')].map(item => item.getAttribute('data-value'))`;
 
 test("Issue options opens the same type picker as the issue property", async ({
   open,
@@ -15,10 +15,10 @@ test("Issue options opens the same type picker as the issue property", async ({
   expect(propertyChoices).toEqual(["Task", "Story"]);
   await page.key("Escape");
   await page.click("#issue-options");
-  await page.click('[cmdk-item][data-value="Issue type"]');
+  await page.click('[role^=menuitem][data-value="Issue type"]');
   await page.waitFor(`!!document.querySelector('${typeMenu}')`);
   expect(await page.eval(choices)).toEqual(propertyChoices);
-  await page.click(`${typeMenu} [cmdk-item][data-value="Story"]`);
+  await page.click(`${typeMenu} [role^=menuitem][data-value="Story"]`);
   await page.waitFor(
     `document.getElementById('prop-type')?.textContent==='Story'`,
   );

@@ -10,7 +10,7 @@ const PICKER = '[role="dialog"][aria-label="Change epic"]';
 const cards = `document.querySelectorAll('[data-key]').length`;
 const names = (p: App, dialog: string) =>
   p.eval<string[]>(
-    `[...document.querySelectorAll('${dialog} [cmdk-item]')].map(n=>n.querySelector(".menu-name")?.textContent??n.dataset.value)`,
+    `[...document.querySelectorAll('${dialog} [role^=menuitem]')].map(n=>n.querySelector(".menu-name")?.textContent??n.dataset.value)`,
   );
 const wrote = (p: App, key: string, parent: string | null) =>
   expect
@@ -33,14 +33,14 @@ test("Project is the issue's epic: filter, card badge, grouping, ⇧P, right-cli
   await test.step("Filter › Project lists No epic and the board's epics with their issue counts, never the Jira project", async () => {
     await p.click('[aria-label="Add filter"]');
     await p.hover("text=Epic");
-    await p.waitFor(`!!document.querySelector('[aria-label="Filter Epic"] [cmdk-item]')`);
+    await p.waitFor(`!!document.querySelector('[aria-label="Filter Epic"] [role^=menuitem]')`);
     const rows = await p.eval<string[]>(
-      `[...document.querySelectorAll('[aria-label="Filter Epic"] [cmdk-item]')].map(n=>n.dataset.value)`,
+      `[...document.querySelectorAll('[aria-label="Filter Epic"] [role^=menuitem]')].map(n=>n.dataset.value)`,
     );
     expect(rows).toEqual(["No epic $none", "Fixture epic TEST-7", "Shipped epic TEST-8"]);
     expect(rows.join()).not.toContain("Audit");
-    expect(await p.eval(`document.querySelector('[aria-label="Filter Epic"] [cmdk-item][data-value="Fixture epic TEST-7"]').textContent`)).toContain("3 issues");
-    await p.click('[aria-label="Filter Epic"] [cmdk-item][data-value="Fixture epic TEST-7"]');
+    expect(await p.eval(`document.querySelector('[aria-label="Filter Epic"] [role^=menuitem][data-value="Fixture epic TEST-7"]').textContent`)).toContain("3 issues");
+    await p.click('[aria-label="Filter Epic"] [role^=menuitem][data-value="Fixture epic TEST-7"]');
     // The epic lists with its issues, as a Linear project page does.
     await p.waitFor(`${cards}===3`);
     await p.key("Escape");
@@ -48,7 +48,7 @@ test("Project is the issue's epic: filter, card badge, grouping, ⇧P, right-cli
     await p.waitFor(`${cards}===8`);
     await p.click('[aria-label="Add filter"]');
     await p.hover("text=Epic");
-    await p.click('[aria-label="Filter Epic"] [cmdk-item][data-value="No epic $none"]');
+    await p.click('[aria-label="Filter Epic"] [role^=menuitem][data-value="No epic $none"]');
     await p.waitFor(`${cards}===4`);
     await p.key("Escape");
     await p.click('[aria-label="Remove project filter"]');
@@ -59,9 +59,9 @@ test("Project is the issue's epic: filter, card badge, grouping, ⇧P, right-cli
     await p.click('[aria-label="Add filter"]');
     await p.hover("text=Epic properties");
     await p.hover("text=Epic status");
-    await p.waitFor(`!!document.querySelector('[aria-label="Filter Epic status"] [cmdk-item]')`);
+    await p.waitFor(`!!document.querySelector('[aria-label="Filter Epic status"] [role^=menuitem]')`);
     expect(
-      await p.eval<string[]>(`[...document.querySelectorAll('[aria-label="Filter Epic status"] [cmdk-item]')].map(n=>n.dataset.value)`),
+      await p.eval<string[]>(`[...document.querySelectorAll('[aria-label="Filter Epic status"] [role^=menuitem]')].map(n=>n.dataset.value)`),
     ).toEqual(expect.arrayContaining([expect.stringContaining("Todo"), expect.stringContaining("Done")]));
     await p.key("Escape");
   });
@@ -84,19 +84,19 @@ test("Project is the issue's epic: filter, card badge, grouping, ⇧P, right-cli
     await p.waitFor(`${cards}===8`);
     const r = await p.rect('[data-key="TEST-4"]');
     await p.page.mouse.click(r.x + r.width / 2, r.y + r.height / 2, { button: "right" });
-    await p.hover(`${MENU} [cmdk-item][data-value="Epic"]`);
-    await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Epic"] [cmdk-item]')`);
+    await p.hover(`${MENU} [role^=menuitem][data-value="Epic"]`);
+    await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Epic"] [role^=menuitem]')`);
     // Linear hides a completed project unless it is current or searched for.
     expect(await names(p, '[role="dialog"][aria-label="Epic"]')).toEqual(["No epic", "Fixture epic"]);
-    await p.click('[role="dialog"][aria-label="Epic"] [cmdk-item][data-value="Fixture epic"]');
+    await p.click('[role="dialog"][aria-label="Epic"] [role^=menuitem][data-value="Fixture epic"]');
     await wrote(p, "TEST-4", "TEST-7");
   });
 
   await test.step("an epic is a project itself: its right-click Project row is disabled", async () => {
     const r = await p.rect('[data-key="TEST-7"]');
     await p.page.mouse.click(r.x + r.width / 2, r.y + r.height / 2, { button: "right" });
-    await p.waitFor(`!!document.querySelector('${MENU} [cmdk-item][data-value="Epic"]')`);
-    expect(await p.eval(`document.querySelector('${MENU} [cmdk-item][data-value="Epic"]').getAttribute('aria-disabled')`)).toBe("true");
+    await p.waitFor(`!!document.querySelector('${MENU} [role^=menuitem][data-value="Epic"]')`);
+    expect(await p.eval(`document.querySelector('${MENU} [role^=menuitem][data-value="Epic"]').getAttribute('aria-disabled')`)).toBe("true");
     await p.key("Escape");
   });
 
@@ -106,7 +106,7 @@ test("Project is the issue's epic: filter, card badge, grouping, ⇧P, right-cli
     expect(await p.eval(`document.getElementById('prop-project')?.tagName`)).toBe("BUTTON");
     await p.eval("document.activeElement?.blur()");
     await p.key("p", "shift");
-    await p.waitFor(`!!document.querySelector('${PICKER} [cmdk-item]')`);
+    await p.waitFor(`!!document.querySelector('${PICKER} [role^=menuitem]')`);
     expect(await p.eval(`document.querySelector('${PICKER} input')?.placeholder`)).toBe("Add to epic…");
     expect(await names(p, PICKER)).toEqual(["No epic", "Fixture epic"]);
     await p.type("shi");
@@ -116,7 +116,7 @@ test("Project is the issue's epic: filter, card badge, grouping, ⇧P, right-cli
     await p.waitFor(`document.getElementById('prop-project')?.textContent.includes("Fixture epic")`);
     await p.eval("document.activeElement?.blur()");
     await p.key("p", "shift");
-    await p.waitFor(`!!document.querySelector('${PICKER} [cmdk-item]')`);
+    await p.waitFor(`!!document.querySelector('${PICKER} [role^=menuitem]')`);
     expect(await p.eval(`document.querySelector('${PICKER} input')?.placeholder`)).toBe("Move to epic…");
     await p.key("0");
     await wrote(p, "TEST-2", null);
@@ -173,7 +173,7 @@ test("a project filter naming two epics sets none and lists both first in the co
   await p.key("c");
   await p.waitFor(`!!document.querySelector('${COMPOSER} [aria-label="Epic: No epic"]')`);
   await p.click(`${COMPOSER} [aria-label="Epic: No epic"]`);
-  await p.waitFor(`!!document.querySelector('${PICKER} [cmdk-item]')`);
+  await p.waitFor(`!!document.querySelector('${PICKER} [role^=menuitem]')`);
   // Shipped epic is done, so it shows only because the filter names it; the filter's order holds.
   expect(await names(p, PICKER)).toEqual(["No epic", "Shipped epic", "Fixture epic"]);
 });
@@ -199,7 +199,7 @@ test("an epic parent shows as Project and on the title line only: no Parent, Par
   await p.waitFor(`${cards}===8`);
   const RELATIONS = '[role="dialog"][aria-label="Issue relations"]';
   const items = (dialog: string) =>
-    p.eval<string[]>(`[...document.querySelectorAll('${dialog} [cmdk-item]')].map(n=>n.getAttribute('data-value'))`);
+    p.eval<string[]>(`[...document.querySelectorAll('${dialog} [role^=menuitem]')].map(n=>n.getAttribute('data-value'))`);
 
   await test.step("Show sub-issues off hides the Subtask only; the epic's issues stay", async () => {
     await prefs(p, { subIssues: false });
@@ -226,9 +226,9 @@ test("an epic parent shows as Project and on the title line only: no Parent, Par
   await test.step("Filter › Parent issue lists TEST-5, never the epic", async () => {
     await p.click('[aria-label="Add filter"]');
     await p.hover("text=Parent issue");
-    await p.waitFor(`!!document.querySelector('[aria-label="Filter Parent issue"] [cmdk-item]')`);
+    await p.waitFor(`!!document.querySelector('[aria-label="Filter Parent issue"] [role^=menuitem]')`);
     const rows = await p.eval<string[]>(
-      `[...document.querySelectorAll('[aria-label="Filter Parent issue"] [cmdk-item]')].map(n=>n.dataset.value)`,
+      `[...document.querySelectorAll('[aria-label="Filter Parent issue"] [role^=menuitem]')].map(n=>n.dataset.value)`,
     );
     expect(rows.join()).toContain("TEST-5");
     expect(rows.join()).not.toContain("TEST-7");
@@ -250,17 +250,17 @@ test("an epic parent shows as Project and on the title line only: no Parent, Par
     await p.click("[data-parent-progress]");
     const MENU7 = '[role=dialog][aria-label="Open epic issues of TEST-7"]';
     expect(await p.eval(`document.querySelector('${MENU7} input')?.getAttribute('aria-label')`)).toBe("Open epic issues of TEST-7…");
-    await p.waitFor(`document.querySelectorAll('${MENU7} [cmdk-item]').length===2`);
+    await p.waitFor(`document.querySelectorAll('${MENU7} [role^=menuitem]').length===2`);
     expect(
-      await p.eval<string[]>(`[...document.querySelectorAll('${MENU7} [cmdk-item]')].map(n=>n.textContent.slice(0,6)).sort()`),
+      await p.eval<string[]>(`[...document.querySelectorAll('${MENU7} [role^=menuitem]')].map(n=>n.textContent.slice(0,6)).sort()`),
     ).toEqual(["TEST-2", "TEST-3"]);
-    await p.click(`${MENU7} [cmdk-item][data-value^="TEST-3 "]`);
+    await p.click(`${MENU7} [role^=menuitem][data-value^="TEST-3 "]`);
     await p.waitFor(`new URLSearchParams(location.search).get('issue')==='TEST-3'`);
     // ⌘⇧→ opens the same menu, as the line and the shortcut read one helper.
     await p.waitFor(`document.querySelector('[data-parent-link]')?.textContent.includes("TEST-7")`);
     await p.eval("document.activeElement?.blur()");
     await p.key("ArrowRight", "meta", "shift");
-    await p.waitFor(`document.querySelectorAll('${MENU7} [cmdk-item]').length===2`);
+    await p.waitFor(`document.querySelectorAll('${MENU7} [role^=menuitem]').length===2`);
     await p.key("Escape");
     // Clicking the epic opens it.
     await p.click("[data-parent-link]");
@@ -314,7 +314,7 @@ test("an epic parent shows as Project and on the title line only: no Parent, Par
     await p.waitFor(`document.querySelector('[data-parent-link]')?.textContent.includes("TEST-5")`);
     // Its ring lists its Task's sub-issues, never the epic's.
     await p.click("[data-parent-progress]");
-    await p.waitFor(`!!document.querySelector('[role=dialog][aria-label="Open sub-issues of TEST-5"] [cmdk-item]')`);
+    await p.waitFor(`!!document.querySelector('[role=dialog][aria-label="Open sub-issues of TEST-5"] [role^=menuitem]')`);
     await p.key("Escape");
     // ⌘⇧↑ opens its Task, never the epic (BJ-289).
     await p.eval("document.activeElement?.blur()");
@@ -354,7 +354,7 @@ test("BJ-280: an epic's Sub-issues section lists, adds and removes its issues; a
     await p.waitFor(`document.getElementById('prop-project')?.tagName==='BUTTON'`);
     await p.eval("document.activeElement?.blur()");
     await p.key("p", "shift");
-    await p.waitFor(`!!document.querySelector('${PICKER} [cmdk-item]')`);
+    await p.waitFor(`!!document.querySelector('${PICKER} [role^=menuitem]')`);
     await p.type("Fixture");
     await p.key("Enter");
     await wrote(p, "TEST-5", "TEST-7");
@@ -383,7 +383,7 @@ test("BJ-280: an epic's Sub-issues section lists, adds and removes its issues; a
     expect(await p.eval(`document.querySelector('[data-key="TEST-7"] [data-sub-issue-progress]').title`)).toMatch(/^Open sub-issue…/);
     await p.click('[data-key="TEST-7"] [data-sub-issue-progress]');
     // The epic's menu is worded as its epic issues here too (BJ-289).
-    await p.waitFor(`document.querySelectorAll('[role=dialog][aria-label="Open epic issues of TEST-7"] [cmdk-item]').length===3`);
+    await p.waitFor(`document.querySelectorAll('[role=dialog][aria-label="Open epic issues of TEST-7"] [role^=menuitem]').length===3`);
     await p.key("Escape");
     // One sub-issue: a click opens it, as Linear's Open sub-issue does for a lone child.
     await p.click('[data-key="TEST-5"] [data-sub-issue-progress]');
@@ -459,9 +459,9 @@ test("BJ-280: an epic's Sub-issues section lists, adds and removes its issues; a
     const r = await p.rect('[data-sub-issue="TEST-3"]');
     await p.page.mouse.click(r.x + 3, r.y + r.height / 2, { button: "right" });
     const menu = '[role="dialog"][aria-label="Sub-issue actions"]';
-    await p.hover(`${menu} [cmdk-item][data-value="Epic"]`);
-    await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Epic"] [cmdk-item]')`);
-    await p.click('[role="dialog"][aria-label="Epic"] [cmdk-item][data-value="No epic"]');
+    await p.hover(`${menu} [role^=menuitem][data-value="Epic"]`);
+    await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Epic"] [role^=menuitem]')`);
+    await p.click('[role="dialog"][aria-label="Epic"] [role^=menuitem][data-value="No epic"]');
     await wrote(p, "TEST-3", null);
     await p.waitFor(`!document.querySelector('[data-sub-issue="TEST-3"]')`);
   });

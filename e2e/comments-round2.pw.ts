@@ -50,7 +50,7 @@ test("R2 comments: undo/redo, refusals, image comments and the first @", async (
     await page.eval(`window.__at=performance.now()`);
     await page.type("@");
     const shown = await page.waitFor<number>(
-      `document.querySelector('[aria-label="Mention people"] [role=option]')&&performance.now()-window.__at`,
+      `document.querySelector('[aria-label="Mention people"] [role^=menuitem]')&&performance.now()-window.__at`,
     );
     // type() itself waits 60 ms after the key.
     expect(shown).toBeLessThan(200);

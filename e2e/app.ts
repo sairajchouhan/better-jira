@@ -32,7 +32,7 @@ export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** A DOM lookup expression: CSS selector, or `text=Label` for the first button or link with that accessible text. */
 export function q(selector: string) {
   if (selector.startsWith("text="))
-    return `[...document.querySelectorAll("button,a,[role=button],[cmdk-item],[role=option]")].find(n=>(n.getAttribute("aria-label")??n.textContent??"").trim()===${JSON.stringify(selector.slice(5))})`;
+    return `[...document.querySelectorAll("button,a,[role=button],[role^=menuitem],[role=option]")].find(n=>(n.getAttribute("aria-label")??n.textContent??"").trim()===${JSON.stringify(selector.slice(5))})`;
   // A hovered control's title is parked in data-title while the app tooltip shows it.
   return `(document.querySelector(${JSON.stringify(selector)})??document.querySelector(${JSON.stringify(selector.replaceAll("[title=", "[data-title="))}))`;
 }
@@ -43,7 +43,7 @@ const engine = () => {
     const selector = decodeURIComponent(encoded);
     if (selector.startsWith("text=")) {
       const label = selector.slice(5);
-      return [...root.querySelectorAll("button,a,[role=button],[cmdk-item],[role=option]")].filter(
+      return [...root.querySelectorAll("button,a,[role=button],[role^=menuitem],[role=option]")].filter(
         (n) => (n.getAttribute("aria-label") ?? n.textContent ?? "").trim() === label,
       );
     }

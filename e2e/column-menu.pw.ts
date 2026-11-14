@@ -10,10 +10,10 @@ for (const scheme of ["dark", "light"] as const) {
     await page.page.emulateMedia({ colorScheme: scheme });
     await page.click('[aria-label="Options for Todo"]');
     const menu = '[role="dialog"][aria-label="Column Todo"]';
-    await page.waitFor(`!!document.querySelector('${menu} [cmdk-item]')`);
+    await page.waitFor(`!!document.querySelector('${menu} [role^=menuitem]')`);
     expect(
       await page.eval(
-        `(()=>{const p=document.querySelector('${menu}'),list=p.querySelector('[cmdk-list]'),row=p.querySelector('[cmdk-item]'),s=getComputedStyle(p),l=getComputedStyle(list),r=getComputedStyle(row),h=getComputedStyle(row,'::before'),b=p.getBoundingClientRect(),t=document.querySelector('[aria-label="Options for Todo"]').getBoundingClientRect();return {padding:s.padding,radius:s.borderRadius,listPadding:l.padding,height:row.getBoundingClientRect().height,rowPadding:r.padding,font:r.fontSize,weight:getComputedStyle(row.querySelector('.menu-name')).fontWeight,family:r.fontFamily,gap:getComputedStyle(row.querySelector('.menu-label')).gap,highlightRadius:h.borderRadius,highlightLeft:h.left,highlightRight:h.right,left:b.left-Math.round(t.left),top:b.top-Math.round(t.bottom),items:[...p.querySelectorAll('[cmdk-item]')].map(n=>n.textContent),color:getComputedStyle(row.querySelector('span span')).color,background:s.backgroundColor,border:s.borderColor}})()`,
+        `(()=>{const p=document.querySelector('${menu}'),list=p.querySelector('.menu-list'),row=p.querySelector('[role^=menuitem]'),s=getComputedStyle(p),l=getComputedStyle(list),r=getComputedStyle(row),h=getComputedStyle(row,'::before'),b=p.getBoundingClientRect(),t=document.querySelector('[aria-label="Options for Todo"]').getBoundingClientRect();return {padding:s.padding,radius:s.borderRadius,listPadding:l.padding,height:row.getBoundingClientRect().height,rowPadding:r.padding,font:r.fontSize,weight:getComputedStyle(row.querySelector('.menu-name')).fontWeight,family:r.fontFamily,gap:getComputedStyle(row.querySelector('.menu-label')).gap,highlightRadius:h.borderRadius,highlightLeft:h.left,highlightRight:h.right,left:b.left-Math.round(t.left),top:b.top-Math.round(t.bottom),items:[...p.querySelectorAll('[role^=menuitem]')].map(n=>n.textContent),color:getComputedStyle(row.querySelector('span span')).color,background:s.backgroundColor,border:s.borderColor}})()`,
       ),
     ).toEqual({
       padding: "0px",
@@ -42,7 +42,7 @@ for (const scheme of ["dark", "light"] as const) {
     await page.type("Hide");
     expect(
       await page.eval(
-        `document.querySelector('${menu} [cmdk-item]').textContent`,
+        `document.querySelector('${menu} [role^=menuitem]').textContent`,
       ),
     ).toBe("Hide column");
     await page.key("Escape");
@@ -77,14 +77,14 @@ test("completed column has Linear's recency action, including in swimlane header
   await page.click('[aria-label="Options for Done"]');
   expect(
     await page.eval(
-      `[...document.querySelectorAll('[aria-label="Column Done"] [cmdk-item]')].map(n=>n.textContent)`,
+      `[...document.querySelectorAll('[aria-label="Column Done"] [role^=menuitem]')].map(n=>n.textContent)`,
     ),
   ).toEqual(["Hide column", "Order completed by recency"]);
   await page.click("text=Order completed by recency");
   await page.click('[aria-label="Options for Done"]');
   expect(
     await page.eval(
-      `!!document.querySelector('[aria-label="Column Done"] [cmdk-item]:last-child svg')`,
+      `!!document.querySelector('[aria-label="Column Done"] [role^=menuitem]:last-child svg')`,
     ),
   ).toBe(true);
 });

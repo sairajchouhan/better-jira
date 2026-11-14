@@ -58,17 +58,17 @@ test("toolbar popups: Filter, Display and the chip row + open at Linear's offset
   await test.step("Filter submenu: left of its row, 4.5px apart, 43px above it (floating-ui rounding)", async () => {
     await page.click(FILTER);
     await page.waitFor(`document.activeElement?.placeholder==="Add Filter…"`);
-    await page.hover('[cmdk-item][data-value="Status"]');
+    await page.hover('[role^=menuitem][data-value="Status"]');
     await page.waitFor(`!!document.querySelector('${dialog("Status filter")}')`);
     await sleep(50);
     const [row, sub] = [
-      await rect(page, '[cmdk-item][data-value="Status"]'),
+      await rect(page, '[role^=menuitem][data-value="Status"]'),
       await rect(page, dialog("Status filter")),
     ];
     // Menu.Submenu overlaps its parent's outer edge by 2px: 4.5px left of the row's highlight, which is 6.5px inside in Linear.
     near(sub.right, (await rect(page, TOOLBAR)).left + 2);
     // Menu.Submenu puts its first row level with the opener (43px under its top in Linear, where the 0.5px borders stay 0.5px).
-    const first = await rect(page, `${dialog("Status filter")} [cmdk-item]`);
+    const first = await rect(page, `${dialog("Status filter")} [role^=menuitem]`);
     near(first.top, Math.round(row.top));
     // Hover opens it without taking focus; ArrowRight on the row moves focus into its search, ArrowLeft back.
     expect(await focused(page)).toBe("Add Filter…");
@@ -124,7 +124,7 @@ test("toolbar popups: Filter, Display and the chip row + open at Linear's offset
 
   await test.step("Save filters (MenuSurface, align end): 5px under Save, right edges flush", async () => {
     await page.click('[aria-label="priority operator"]');
-    await page.click('[cmdk-item][data-value="isNot"]');
+    await page.click('[role^=menuitem][data-value="isNot"]');
     await page.click("text=Save");
     await page.waitFor(`!!document.querySelector('${dialog("Save filters")}')`);
     await sleep(50);
@@ -236,7 +236,7 @@ test("mention menu: 4px under the @, focus stays in the editor", async ({ open }
   await page.key("End");
   await page.type(" @");
   const MENU = '[aria-label="Mention people"]';
-  await page.waitFor(`document.querySelectorAll('${MENU} [role=option]').length===3`);
+  await page.waitFor(`document.querySelectorAll('${MENU} [role^=menuitem]').length===3`);
   const at = await page.eval<Box>(
     `(()=>{const w=document.createTreeWalker(document.querySelector('#description'),NodeFilter.SHOW_TEXT);let n,last;while(n=w.nextNode())if(n.data.includes('@'))last=n;const r=document.createRange(),i=last.data.lastIndexOf('@');r.setStart(last,i);r.setEnd(last,i+1);return r.getBoundingClientRect().toJSON()})()`,
   );
@@ -247,7 +247,7 @@ test("mention menu: 4px under the @, focus stays in the editor", async ({ open }
   // The list drops its top padding under a leading heading (Linear's GroupHeader rule).
   expect(menu.height).toBe(3 * 32 + 30 + 6 + 2);
   // #10: Linear's groups, each under its heading: Users first.
-  expect(await page.eval(`[...document.querySelectorAll('${MENU} [cmdk-group-heading]')].map(n=>n.textContent)`)).toEqual(["Users"]);
+  expect(await page.eval(`[...document.querySelectorAll('${MENU} .menu-group-header')].map(n=>n.textContent)`)).toEqual(["Users"]);
   expect(await page.eval(`document.querySelector('#description').contains(document.activeElement)`)).toBe(true);
   await page.key("Escape");
   await page.waitFor(`!document.querySelector('${MENU}')`);
@@ -263,8 +263,8 @@ test("#10: with no room under the caret the mention menu opens 4px above it, Use
   // TEST-2 is cloned by TEST-1: a bare @ offers that related issue under the people.
   await page.type("@");
   const MENU = '[aria-label="Mention people"]';
-  await page.waitFor(`[...document.querySelectorAll('${MENU} [cmdk-group-heading]')].length===2`);
-  expect(await page.eval(`[...document.querySelectorAll('${MENU} [cmdk-group-heading]')].map(n=>n.textContent)`)).toEqual(["Users", "Issues"]);
+  await page.waitFor(`[...document.querySelectorAll('${MENU} .menu-group-header')].length===2`);
+  expect(await page.eval(`[...document.querySelectorAll('${MENU} .menu-group-header')].map(n=>n.textContent)`)).toEqual(["Users", "Issues"]);
   const at = await page.eval<Box>(
     `(()=>{const w=document.createTreeWalker(document.querySelector('#comment'),NodeFilter.SHOW_TEXT);let n,last;while(n=w.nextNode())if(n.data.includes('@'))last=n;const r=document.createRange(),i=last.data.lastIndexOf('@');r.setStart(last,i);r.setEnd(last,i+1);return r.getBoundingClientRect().toJSON()})()`,
   );

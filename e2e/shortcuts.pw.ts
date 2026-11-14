@@ -53,7 +53,7 @@ test("keyboard help, Linear sequences, and no shortcuts while typing", async ({ 
     await p.waitFor(`!${panel}`);
     await p.key("?", "shift");
     await p.waitFor(`!!document.querySelector('${dialog("Help")}')`);
-    await p.click(`[cmdk-item][data-value="Keyboard shortcuts"]`);
+    await p.click(`[role^=menuitem][data-value="Keyboard shortcuts"]`);
     await p.waitFor(`!!document.querySelector('${dialog("Keyboard Shortcuts")}')`);
     await p.key("Escape");
     await p.waitFor(`!document.querySelector('[role=dialog]')`);
@@ -75,9 +75,9 @@ test("keyboard help, Linear sequences, and no shortcuts while typing", async ({ 
       `document.querySelector('nav')?.textContent.includes('My issues')&&!document.querySelector('[role=dialog]')`,
     );
     await p.keys("oi");
-    await p.waitFor(`!!document.querySelector('[cmdk-input]')`);
+    await p.waitFor(`!!document.querySelector('.menu-input input')`);
     await p.key("Escape");
-    await p.waitFor(`!document.querySelector('[cmdk-input]')`);
+    await p.waitFor(`!document.querySelector('.menu-input input')`);
   });
   await test.step("Letter sequences and issue commands do not run while typing", async () => {
     await p.key("c");
@@ -220,7 +220,7 @@ test("undo, find in view and issue keys, end to end", async ({ open }) => {
     await p.waitFor(`document.getElementById('prop-assignee').textContent.includes('Audit user')`);
     await p.key("d", "shift");
     // Linear's due menu: a click on a preset applies it at once.
-    await p.click('[role="dialog"][aria-label="Due date"] [cmdk-item][data-value="Tomorrow"]');
+    await p.click('[role="dialog"][aria-label="Due date"] [role^=menuitem][data-value="Tomorrow"]');
     await p.waitFor(`!document.querySelector('[role="dialog"][aria-label="Due date"]')`);
     await p.waitFor(`!!document.getElementById('prop-due')`);
     await p.key("d", "meta", "shift");
@@ -338,7 +338,7 @@ test("B9: Space opens Linear's view peek over the board, which follows focus and
     await p.key(" ");
     await p.waitFor(`!!${peek}`);
     await p.key("k", "meta");
-    await p.waitFor(`!${peek}&&!!document.querySelector('[cmdk-input]')`);
+    await p.waitFor(`!${peek}&&!!document.querySelector('.menu-input input')`);
     await p.key("Escape");
   });
   await test.step("clicking a card opens it and closes the peek", async () => {

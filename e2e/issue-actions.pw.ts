@@ -1,7 +1,7 @@
 import { expect, fixture, test, shownIssue } from "./app";
 
 const OPTIONS = '[role="dialog"][aria-label="Issue options"]';
-const optionValues = `[...document.querySelectorAll('${OPTIONS} [cmdk-item]')].map(n=>n.getAttribute('data-value'))`;
+const optionValues = `[...document.querySelectorAll('${OPTIONS} [role^=menuitem]')].map(n=>n.getAttribute('data-value'))`;
 
 test("issue options follow Linear's action tree, with descendant search and submenus that act on the issue", async ({
   open,
@@ -9,7 +9,7 @@ test("issue options follow Linear's action tree, with descendant search and subm
   const page = await open("?issue=TEST-2&view=page");
   await page.waitFor(`!!document.getElementById('comment')`);
   // Linear's look: filter focused but hidden until typing, grouped with separators, an icon per item, shortcut hints on submenus, content-fitted width.
-  const look = `(()=>{const m=document.querySelector('${OPTIONS}'),input=m.querySelector('input'),items=[...m.querySelectorAll('[cmdk-item]')];return {input:input.getBoundingClientRect().width>1,separators:m.querySelectorAll('[cmdk-separator]').length,icons:items.filter(n=>n.querySelector('svg:not(:last-child)')||n.firstElementChild?.querySelector('svg')).length,items:items.length,due:{label:items[0].querySelector('.menu-name').textContent,shortcut:[...items[0].querySelectorAll('.ui-shortcut kbd')].map(n=>n.textContent).join('')},width:Math.round(m.getBoundingClientRect().width)}})()`;
+  const look = `(()=>{const m=document.querySelector('${OPTIONS}'),input=m.querySelector('input'),items=[...m.querySelectorAll('[role^=menuitem]')];return {input:input.getBoundingClientRect().width>1,separators:m.querySelectorAll('.menu-divider').length,icons:items.filter(n=>n.querySelector('svg:not(:last-child)')||n.firstElementChild?.querySelector('svg')).length,items:items.length,due:{label:items[0].querySelector('.menu-name').textContent,shortcut:[...items[0].querySelectorAll('.ui-shortcut kbd')].map(n=>n.textContent).join('')},width:Math.round(m.getBoundingClientRect().width)}})()`;
 
   await test.step("the menu lists Linear's action tree, with its glyphs, groups, hints and fitted width", async () => {
     await page.click("#issue-options");
@@ -32,7 +32,7 @@ test("issue options follow Linear's action tree, with descendant search and subm
     // Linear's Create related (square with +) and Copy (clipboard) glyphs.
     expect(
       await page.eval(
-        `['Create related','Copy'].map(v=>document.querySelector('${OPTIONS} [cmdk-item][data-value="'+v+'"] svg path').getAttribute('d').slice(0,12))`,
+        `['Create related','Copy'].map(v=>document.querySelector('${OPTIONS} [role^=menuitem][data-value="'+v+'"] svg path').getAttribute('d').slice(0,12))`,
       ),
     ).toEqual(["M8 13.5H4.5a", "M5.5 3h-1A1."]);
     const before = await page.eval<{
@@ -52,7 +52,7 @@ test("issue options follow Linear's action tree, with descendant search and subm
   await test.step("typing searches descendants and shows the filter without separators", async () => {
     await page.type("blocked");
     await page.waitFor(
-      `!!document.querySelector('[cmdk-item][data-value="Create related › Blocked issue…"]')`,
+      `!!document.querySelector('[role^=menuitem][data-value="Create related › Blocked issue…"]')`,
     );
     // Ranked by score (ISSUE-8): the shorter "Blocked by…" matches better.
     expect(await page.eval(optionValues)).toEqual([
@@ -68,14 +68,14 @@ test("issue options follow Linear's action tree, with descendant search and subm
 
   await test.step("R2-issue-fields-D7: Due date › Tomorrow sets tomorrow's local date, shown Linear-style as Tomorrow", async () => {
     await page.click("#issue-options");
-    await page.hover('[cmdk-item][data-value="Due date"]');
-    await page.click('[cmdk-item][data-value="Tomorrow"]');
+    await page.hover('[role^=menuitem][data-value="Due date"]');
+    await page.click('[role^=menuitem][data-value="Tomorrow"]');
     await page.waitFor(`document.getElementById('prop-due')?.textContent.includes('Tomorrow')`);
   });
 
   await test.step("Favorite toggles the issue favorite and closes", async () => {
     await page.click("#issue-options");
-    await page.click('[cmdk-item][data-value="Favorite"]');
+    await page.click('[role^=menuitem][data-value="Favorite"]');
     await page.waitFor(
       `document.querySelector('[aria-label="Remove issue from favorites"]')?.getAttribute('aria-checked')==='true'`,
     );
@@ -84,13 +84,13 @@ test("issue options follow Linear's action tree, with descendant search and subm
 
   await test.step("Copy ›: every row has an icon, and title as link shows ⌘C", async () => {
     await page.click("#issue-options");
-    await page.hover('[cmdk-item][data-value="Copy"]');
+    await page.hover('[role^=menuitem][data-value="Copy"]');
     await page.waitFor(
-      `!!document.querySelector('[role="dialog"][aria-label="Copy"] [cmdk-item]')`,
+      `!!document.querySelector('[role="dialog"][aria-label="Copy"] [role^=menuitem]')`,
     );
     expect(
       await page.eval(
-        `(()=>{const m=document.querySelector('[role="dialog"][aria-label="Copy"]');return [[...m.querySelectorAll('[cmdk-item]')].every(n=>n.querySelector('svg')),{label:m.querySelector('[cmdk-item][data-value="Copy title as link"] .menu-name').textContent,shortcut:[...m.querySelectorAll('[cmdk-item][data-value="Copy title as link"] .ui-shortcut kbd')].map(n=>n.textContent).join(' ')}]})()`,
+        `(()=>{const m=document.querySelector('[role="dialog"][aria-label="Copy"]');return [[...m.querySelectorAll('[role^=menuitem]')].every(n=>n.querySelector('svg')),{label:m.querySelector('[role^=menuitem][data-value="Copy title as link"] .menu-name').textContent,shortcut:[...m.querySelectorAll('[role^=menuitem][data-value="Copy title as link"] .ui-shortcut kbd')].map(n=>n.textContent).join(' ')}]})()`,
       ),
     ).toEqual([true, { label: "Copy title as link", shortcut: "⌘ C" }]);
     await page.key("Escape");
@@ -103,23 +103,23 @@ test("issue options follow Linear's action tree, with descendant search and subm
 
   await test.step("Mark as › Parent of… makes the chosen issue a sub-issue of this one", async () => {
     await page.click("#issue-options");
-    await page.hover('[cmdk-item][data-value="Mark as"]');
-    await page.click('[cmdk-item][data-value="Parent of…"]');
+    await page.hover('[role^=menuitem][data-value="Mark as"]');
+    await page.click('[role^=menuitem][data-value="Parent of…"]');
     await page.waitFor(
       `document.querySelector('[role="dialog"][aria-label="Issue relations"] [data-kind]')?.dataset.kind==='child'`,
     );
     await page.click('[aria-label="Find related issue"]');
     await page.type("TEST-3");
     await page.click(
-      '[role="dialog"][aria-label="Issue relations"] [cmdk-item][data-value="TEST-3"]',
+      '[role="dialog"][aria-label="Issue relations"] [role^=menuitem][data-value="TEST-3"]',
     );
     await page.waitFor(`!!document.querySelector('[data-sub-issue="TEST-3"]')`);
   });
 
   await test.step("Create related › Blocked issue… creates a new issue blocked by this one, undone in one step", async () => {
     await page.click("#issue-options");
-    await page.hover('[cmdk-item][data-value="Create related"]');
-    await page.click('[cmdk-item][data-value="Blocked issue…"]');
+    await page.hover('[role^=menuitem][data-value="Create related"]');
+    await page.click('[role^=menuitem][data-value="Blocked issue…"]');
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Issue title'`);
     await page.type("Blocked follow-up");
     await page.key("Enter", "meta");
@@ -148,9 +148,9 @@ test("issue activity, related-issue search and description history", async ({ op
     const pick = async (key: string, value: string) => {
       await page.eval("document.activeElement?.blur()");
       await page.key(key);
-      await page.waitFor(`!!document.querySelector('[cmdk-item][data-value="${value}"]')`);
-      await page.click(`[cmdk-item][data-value="${value}"]`);
-      await page.waitFor(`!document.querySelector('[cmdk-item][data-value="${value}"]')`);
+      await page.waitFor(`!!document.querySelector('[role^=menuitem][data-value="${value}"]')`);
+      await page.click(`[role^=menuitem][data-value="${value}"]`);
+      await page.waitFor(`!document.querySelector('[role^=menuitem][data-value="${value}"]')`);
     };
     const original = "Low",
       other = "Urgent"; // fixture TEST-2 priority
@@ -192,16 +192,16 @@ test("issue activity, related-issue search and description history", async ({ op
     await page.click("#issue-options");
     await page.type("related to");
     await page.waitFor(
-      `!!document.querySelector('[cmdk-item][data-value="Mark as › Related to…"]')`,
+      `!!document.querySelector('[role^=menuitem][data-value="Mark as › Related to…"]')`,
     );
     await page.key("Enter");
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Find related issue'`);
     await page.type("TEST");
     await page.waitFor(
-      `document.querySelectorAll('[role="dialog"][aria-label="Issue relations"] [cmdk-item]').length>1`,
+      `document.querySelectorAll('[role="dialog"][aria-label="Issue relations"] [role^=menuitem]').length>1`,
     );
     const second = await page.eval<string>(
-      `document.querySelectorAll('[role="dialog"][aria-label="Issue relations"] [cmdk-item]')[1].getAttribute('data-value')`,
+      `document.querySelectorAll('[role="dialog"][aria-label="Issue relations"] [role^=menuitem]')[1].getAttribute('data-value')`,
     );
     await page.key("ArrowDown");
     await page.key("Enter");
@@ -214,7 +214,7 @@ test("issue activity, related-issue search and description history", async ({ op
     await page.key("Enter");
     await page.type("related to");
     await page.waitFor(
-      `!!document.querySelector('[cmdk-item][data-value="Mark as › Related to…"]')`,
+      `!!document.querySelector('[role^=menuitem][data-value="Mark as › Related to…"]')`,
     );
     await page.key("Enter");
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Find related issue'`);
@@ -232,7 +232,7 @@ test("issue activity, related-issue search and description history", async ({ op
     await page.cmd("Input.insertText", { text: "Newest description at risk" });
     await page.click("#summary");
     await page.click("#issue-options");
-    await page.click('[cmdk-item][data-value="Show description history"]');
+    await page.click('[role^=menuitem][data-value="Show description history"]');
     // Prod parity #34: the menu opens the one Issue description dialog; the kept revision sits in its version list.
     const dialog = `document.querySelector('[role="dialog"][aria-label="Issue description"]')`;
     await page.waitFor(`!!${dialog}?.querySelector('[data-version^="local-"]')`);
@@ -242,7 +242,7 @@ test("issue activity, related-issue search and description history", async ({ op
       `!document.getElementById('description')?.textContent.includes('Newest description at risk')`,
     );
     await page.click("#issue-options");
-    await page.click('[cmdk-item][data-value="Show description history"]');
+    await page.click('[role^=menuitem][data-value="Show description history"]');
     await page.click('[role="dialog"] [data-version^="local-"]');
     expect(await page.eval(`${dialog}.textContent`)).toContain("Newest description at risk");
   });

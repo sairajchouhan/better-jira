@@ -25,7 +25,7 @@ test("custom identity, sidebar, favorite, details, palette and tab identity", as
     await page.key('k','meta');
     await page.waitFor(`document.body.textContent.includes('View · Directory custom')`);
     // R3-palette-shortcuts-D4: one favorite row, the view group's, as Linear's JD; none under Views.
-    expect(await page.eval(`[...document.querySelectorAll('[cmdk-item]')].map(n=>n.textContent).filter(t=>/favorite/i.test(t)&&/view/i.test(t)).length`)).toBe(1);
+    expect(await page.eval(`[...document.querySelectorAll('[role^=menuitem]')].map(n=>n.textContent).filter(t=>/favorite/i.test(t)&&/view/i.test(t)).length`)).toBe(1);
     await page.key('Escape');
     await page.click('[aria-label=Breadcrumb] a[aria-label="Browser audit"]');
     await page.click('text=Named tab');
@@ -133,15 +133,15 @@ test("Linear parity: hidden counts, merge conflicts, editor chrome, draft tab, p
     expect(await page.eval(`!!document.querySelector('.ui-filter-block')`)).toBe(true);
     expect((await page.eval<any[]>(`fetch('/api/views').then(r=>r.json())`)).find(v => v.id === saved.id).filters.children[0].values).toEqual(["High"]);
     await page.key("k", "meta");
-    await page.click('[cmdk-item][data-value="cmd:Save to…"]');
-    await page.waitFor(`!!document.querySelector('[cmdk-item][data-disabled=true]')`);
-    expect(await page.eval(`document.querySelector('[cmdk-item][data-disabled=true]').textContent`)).toContain("Cannot merge these filters into the view");
+    await page.click('[role^=menuitem][data-value="cmd:Save to…"]');
+    await page.waitFor(`!!document.querySelector('[role^=menuitem][data-disabled=true]')`);
+    expect(await page.eval(`document.querySelector('[role^=menuitem][data-disabled=true]').textContent`)).toContain("Cannot merge these filters into the view");
     await page.key("Escape");
     // Without an overlay ⌘K still lists Save to….
     await page.page.goto(`${origin}/view/${saved.id}?board=1`);
     await page.waitFor(`!!document.querySelector('[role=status]') && !document.querySelector('.ui-filter-block')`);
     await page.key("k", "meta");
-    await page.waitFor(`!!document.querySelector('[cmdk-item][data-value="cmd:Save to…"]')`);
+    await page.waitFor(`!!document.querySelector('[role^=menuitem][data-value="cmd:Save to…"]')`);
     await page.key("Escape");
     // Edit mode: base chips are the definition, not a temporary overlay.
     await page.page.goto(`${origin}/view/${saved.id}/edit`);
@@ -207,7 +207,7 @@ test("BJ-149: reopening Add filter creates a separate AND condition", async ({ o
       await page.key("f");
       await page.hover('text=Priority');
       await page.waitFor(`!!document.querySelector('[aria-label="Filter Priority"]')`);
-      await page.click(`[aria-label="Priority filter"] [cmdk-item][data-value="${priority} ${priority}"]`);
+      await page.click(`[aria-label="Priority filter"] [role^=menuitem][data-value="${priority} ${priority}"]`);
       await page.key("Escape");
     }
     expect(await page.eval(`document.querySelectorAll('.ui-filter-block').length`)).toBe(2);
@@ -222,12 +222,12 @@ test("BJ-61: hidden display feedback opens options and reveals completed issues"
   try {
     await page.click('[aria-label="Display options"]');
     await page.click('[aria-label="Completed issues: All"]');
-    await page.click('[cmdk-item][data-value="None none"]');
+    await page.page.locator("[data-surface=select]").getByRole("option", { name: "None" }).click();
     await page.key('Escape');
     await page.waitFor(`document.body.textContent.includes('hidden by display options')`);
     await page.click('text=Show options');
     await page.click('[aria-label="Completed issues: None"]');
-    await page.click('[cmdk-item][data-value="All all"]');
+    await page.page.locator("[data-surface=select]").getByRole("option", { name: "All" }).click();
     await page.key('Escape');
     await page.waitFor(`!document.body.textContent.includes('hidden by display options')`);
   } finally { await page.close(); }

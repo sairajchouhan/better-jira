@@ -8,7 +8,7 @@ const ISSUE_MENU = dialog("Issue options");
 const exists = (selector: string) => `!!document.querySelector(${JSON.stringify(selector)})`;
 const gone = (selector: string) => `!document.querySelector(${JSON.stringify(selector)})`;
 const selected = (page: App, scope = "") =>
-  page.eval<string>(`document.querySelector('${scope} [cmdk-item][data-selected=true]')?.dataset.value ?? ""`);
+  page.eval<string>(`document.querySelector('${scope} [role^=menuitem][data-focused]')?.dataset.value ?? ""`);
 const centre = async (page: App, selector: string) => {
   const r = await page.rect(selector);
   return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
@@ -28,7 +28,7 @@ async function openFilter(page: App) {
   await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Add Filter…"`);
   // A clicked filter menu opens pristine (FILTER-15): the first ArrowDown only reveals the first row, as a keyboard open starts.
   await page.key("ArrowDown");
-  await page.waitFor(`document.querySelector('${ROOT}')?.closest("[cmdk-root]")?.querySelector("[cmdk-item][data-selected=true]")?.dataset.value === "Advanced filter"`);
+  await page.waitFor(`document.querySelector('${ROOT}')?.closest(".menu")?.querySelector("[role^=menuitem][data-focused]")?.dataset.value === "Advanced filter"`);
 }
 
 async function rightClick(page: App, selector: string) {
@@ -41,25 +41,25 @@ test("FILTER-1 / CORE-14: a fast move into a submenu across other rows keeps it 
   const page = await open();
   await test.step("FILTER-1: Add filter › Status, crossing Assignee and Creator", async () => {
     await openFilter(page);
-    await page.hover('[cmdk-item][data-value="Status"]');
+    await page.hover('[role^=menuitem][data-value="Status"]');
     await page.waitFor(exists(dialog("Status filter")));
     // The submenu opens on the left with its first row level with Status; aim at its last row, below Assignee and Creator.
-    const last = `${dialog("Status filter")} [cmdk-item]:last-of-type`;
+    const last = `${dialog("Status filter")} [role^=menuitem]:last-of-type`;
     const target = await centre(page, last);
     await page.page.mouse.move(target.x, target.y, { steps: 5 });
     await sleep(200);
     expect(await page.eval(exists(dialog("Status filter")))).toBe(true);
     expect(await page.eval(exists(dialog("Assignee filter")))).toBe(false);
     // Rows crossed on the way don't take the highlight from Status.
-    expect(await selected(page, `[cmdk-root]:has(${ROOT})`)).toBe("Status");
+    expect(await selected(page, `.menu:has(${ROOT})`)).toBe("Status");
     await page.key("Escape");
   });
   await test.step("CORE-14: issue options › Status, crossing Priority and Assignee", async () => {
     await rightClick(page, '[data-key="TEST-2"]');
-    await page.hover(`${ISSUE_MENU} [cmdk-item][data-value="Status"]`);
+    await page.hover(`${ISSUE_MENU} [role^=menuitem][data-value="Status"]`);
     await page.waitFor(exists(dialog("Status")));
-    const items = await page.eval<number>(`document.querySelectorAll('${dialog("Status")} [cmdk-item]').length`);
-    const target = await centre(page, `${dialog("Status")} [cmdk-item]:nth-child(${Math.min(items, 4)})`);
+    const items = await page.eval<number>(`document.querySelectorAll('${dialog("Status")} [role^=menuitem]').length`);
+    const target = await centre(page, `${dialog("Status")} [role^=menuitem]:nth-child(${Math.min(items, 4)})`);
     await page.page.mouse.move(target.x, target.y, { steps: 5 });
     await sleep(200);
     expect(await page.eval(exists(dialog("Status")))).toBe(true);
@@ -71,10 +71,10 @@ test("FILTER-1 / CORE-14: a fast move into a submenu across other rows keeps it 
 test("R3-relations-D3: a slow diagonal move into a submenu keeps it open and Status highlighted", async ({ open }) => {
   const page = await open();
   await openFilter(page);
-  await page.hover('[cmdk-item][data-value="Status"]');
+  await page.hover('[role^=menuitem][data-value="Status"]');
   await page.waitFor(exists(dialog("Status filter")));
-  const start = await centre(page, '[cmdk-item][data-value="Status"]');
-  const target = await centre(page, `${dialog("Status filter")} [cmdk-item]:last-of-type`);
+  const start = await centre(page, '[role^=menuitem][data-value="Status"]');
+  const target = await centre(page, `${dialog("Status filter")} [role^=menuitem]:last-of-type`);
   // A person's diagonal: small steps with pauses longer than the 50ms the triangle follows the pointer at.
   for (let i = 1; i <= 12; i++) {
     await page.page.mouse.move(start.x + ((target.x - start.x) * i) / 12, start.y + ((target.y - start.y) * i) / 12);
@@ -82,16 +82,16 @@ test("R3-relations-D3: a slow diagonal move into a submenu keeps it open and Sta
   }
   await sleep(200);
   expect(await page.eval(exists(dialog("Status filter")))).toBe(true);
-  expect(await selected(page, `[cmdk-root]:has(${ROOT})`)).toBe("Status");
+  expect(await selected(page, `.menu:has(${ROOT})`)).toBe("Status");
   await page.key("Escape");
 });
 
 test("R3-views-filters-D-1: leaving a submenu keeps it open, hands focus back to the parent, and Escape still closes", async ({ open }) => {
   const page = await open();
   await openFilter(page);
-  await page.hover('[cmdk-item][data-value="Status"]');
+  await page.hover('[role^=menuitem][data-value="Status"]');
   await page.waitFor(exists(dialog("Status filter")));
-  const inside = await centre(page, `${dialog("Status filter")} [cmdk-item]:first-of-type`);
+  const inside = await centre(page, `${dialog("Status filter")} [role^=menuitem]:first-of-type`);
   await page.page.mouse.move(inside.x, inside.y, { steps: 4 });
   // Off both menus, to the far corner of the page.
   await page.page.mouse.move(5, 5, { steps: 8 });
@@ -121,18 +121,18 @@ test("CORE-1 / CORE-2: a dropdown inside Display options closes alone, by Escape
   await page.waitFor(exists(DISPLAY));
   await test.step("CORE-1: Escape closes only the dropdown and focuses its combobox; the next closes Display", async () => {
     await page.click(GROUPING);
-    await page.waitFor(exists('[cmdk-item][data-selected=true]'));
+    await page.waitFor(exists('[role^=menuitem][data-focused]'));
     await page.key("Escape");
-    await page.waitFor(gone("[cmdk-item]"));
+    await page.waitFor(gone("[role^=menuitem]"));
     expect(await page.eval(exists(DISPLAY))).toBe(true);
     expect(await page.eval(`document.activeElement?.matches('${GROUPING}')`)).toBe(true);
   });
   await test.step("CORE-2: a press on the Display panel closes the dropdown, focus returns to it, and Escape still closes Display", async () => {
     await page.click(GROUPING);
-    await page.waitFor(exists("[cmdk-item]"));
+    await page.waitFor(exists("[role^=menuitem]"));
     const panel = await page.rect(DISPLAY);
     await page.clickAt(panel.x + 8, panel.y + panel.height - 8);
-    await page.waitFor(gone("[cmdk-item]"));
+    await page.waitFor(gone("[role^=menuitem]"));
     expect(await page.eval(`document.activeElement?.matches('${GROUPING}')`)).toBe(true);
     await page.key("Escape");
     await page.waitFor(gone(DISPLAY));
@@ -189,9 +189,9 @@ test("FILTER-7 / CORE-12 / ISSUE-13: Space opens a submenu row and toggles a che
   await page.key(" ");
   await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Filter Status"`);
   const SUB = dialog("Status filter");
-  const first = await page.eval<string>(`document.querySelector('${SUB} [cmdk-item][data-selected=true]').dataset.value`);
+  const first = await page.eval<string>(`document.querySelector('${SUB} [role^=menuitem][data-focused]').dataset.value`);
   await page.key(" ");
-  await page.waitFor(`document.querySelector('${SUB} [cmdk-item][data-selected=true]')?.getAttribute("aria-checked")==="true"`);
+  await page.waitFor(`document.querySelector('${SUB} [role^=menuitem][data-focused]')?.getAttribute("aria-checked")==="true"`);
   expect(await page.eval(`document.activeElement.value`)).toBe("");
   expect(await page.eval(exists(SUB))).toBe(true);
   // Mid-search, Space types unless the last key was ↑/↓ on a checkbox row.
@@ -199,7 +199,7 @@ test("FILTER-7 / CORE-12 / ISSUE-13: Space opens a submenu row and toggles a che
   await page.key("ArrowUp");
   expect(await selected(page, SUB)).toBe(first);
   await page.key(" ");
-  await page.waitFor(`document.querySelector('${SUB} [cmdk-item][data-selected=true]')?.getAttribute("aria-checked")==="false"`);
+  await page.waitFor(`document.querySelector('${SUB} [role^=menuitem][data-focused]')?.getAttribute("aria-checked")==="false"`);
   await page.key("Escape");
 });
 
@@ -245,7 +245,7 @@ test("FILTER-14 / ISSUE-14 / CORE-11: Tab, Shift+Tab, PageDown and PageUp move t
   const page = await open("", { width: 900, height: 500 });
   await openFilter(page);
   const order = await page.eval<string[]>(
-    `[...document.querySelectorAll('[cmdk-root]:has(${ROOT}) [cmdk-item]:not([aria-disabled="true"])')].map(n=>n.dataset.value)`,
+    `[...document.querySelectorAll('.menu:has(${ROOT}) [role^=menuitem]:not([aria-disabled="true"])')].map(n=>n.dataset.value)`,
   );
   expect(await selected(page)).toBe(order[0]);
   await page.key("Tab");
@@ -284,15 +284,15 @@ test("FILTER-17 / CORE-23: ArrowRight opens a submenu only with the caret at the
 test("FILTER-21 / CORE-3: a submenu keeps beside its parent in a small window", async ({ open }) => {
   const page = await open("", { width: 900, height: 500 });
   await openFilter(page);
-  await page.hover('[cmdk-item][data-value="Dates"]');
+  await page.hover('[role^=menuitem][data-value="Dates"]');
   await page.waitFor(exists(dialog("Dates filter")));
-  await page.hover(`${dialog("Dates filter")} [cmdk-item][data-value="Completed date"]`);
+  await page.hover(`${dialog("Dates filter")} [role^=menuitem][data-value="Completed date"]`);
   await page.waitFor(exists(dialog("Completed date filter")));
   await sleep(100);
   const [parent, sub, row] = [
     await page.rect(dialog("Dates filter")),
     await page.rect(dialog("Completed date filter")),
-    await page.rect(`${dialog("Dates filter")} [cmdk-item][data-value="Completed date"]`),
+    await page.rect(`${dialog("Dates filter")} [role^=menuitem][data-value="Completed date"]`),
   ];
   // Beside its parent (2px overlap), never under or over it, and inside the window's 10px margin.
   expect(sub.right <= parent.left + 2.5 || sub.left >= parent.right - 2.5).toBe(true);
@@ -307,7 +307,7 @@ test("FILTER-21 / CORE-3: a submenu keeps beside its parent in a small window", 
 test("CORE-20: arrowing keeps 24px of rows past the highlight, and a wrap to the first row scrolls to the top", async ({ open }) => {
   const page = await open("", { width: 900, height: 500 });
   await openFilter(page);
-  const LIST = `[cmdk-root]:has(${ROOT}) [cmdk-list]`;
+  const LIST = `.menu:has(${ROOT}) .menu-list`;
   expect(await page.eval(`document.querySelector('${LIST}').scrollHeight>document.querySelector('${LIST}').clientHeight`)).toBe(true);
   await page.key("End");
   await page.key("ArrowDown");
@@ -316,7 +316,7 @@ test("CORE-20: arrowing keeps 24px of rows past the highlight, and a wrap to the
   for (let i = 0; i < 9; i++) await page.key("ArrowDown");
   await sleep(50);
   const gap = await page.eval<number>(
-    `(()=>{const l=document.querySelector('${LIST}').getBoundingClientRect(),r=document.querySelector('${LIST} [cmdk-item][data-selected=true]').getBoundingClientRect();return l.bottom-r.bottom})()`,
+    `(()=>{const l=document.querySelector('${LIST}').getBoundingClientRect(),r=document.querySelector('${LIST} [role^=menuitem][data-focused]').getBoundingClientRect();return l.bottom-r.bottom})()`,
   );
   expect(gap).toBeGreaterThanOrEqual(23);
   await page.key("Escape");
@@ -359,13 +359,13 @@ test("ISSUE-18: after a status change moves the card, focus returns to its new n
   await page.page.locator(card).first().focus();
   await page.eval(`window.__old=document.querySelector('${card}')`);
   await rightClick(page, card);
-  await page.hover(`${ISSUE_MENU} [cmdk-item][data-value="Status"]`);
+  await page.hover(`${ISSUE_MENU} [role^=menuitem][data-value="Status"]`);
   const STATUS = dialog("Status");
-  await page.waitFor(`!!document.querySelector('${STATUS} [cmdk-item] .menu-checkmark')`);
+  await page.waitFor(`!!document.querySelector('${STATUS} [role^=menuitem] .menu-checkmark')`);
   const target = await page.eval<string>(
-    `[...document.querySelectorAll('${STATUS} [cmdk-item]')].find(n=>!n.querySelector('.menu-checkmark'))?.dataset.value`,
+    `[...document.querySelectorAll('${STATUS} [role^=menuitem]')].find(n=>!n.querySelector('.menu-checkmark'))?.dataset.value`,
   );
-  await page.click(`${STATUS} [cmdk-item][data-value="${target}"]`);
+  await page.click(`${STATUS} [role^=menuitem][data-value="${target}"]`);
   await page.waitFor(gone(ISSUE_MENU));
   await page.waitFor(`document.activeElement?.closest('[data-key]')?.dataset.key==="TEST-2"`, 2000);
   // The card really re-rendered as a new node, so plain focus return had nothing to go back to.

@@ -17,7 +17,7 @@ test("documents in an issue: forms, full pages, drafts, flushes and undo", async
     await page.waitFor(`!!document.getElementById('comment')`);
     for (let i = 0; i < 2; i++) {
       await page.click("#issue-options");
-      await page.click('[cmdk-item][data-value="Add link…"]');
+      await page.click('[role^=menuitem][data-value="Add link…"]');
       await page.type("https://example.com/same");
       await page.click("text=Add link");
     }
@@ -28,9 +28,9 @@ test("documents in an issue: forms, full pages, drafts, flushes and undo", async
     await page.eval("document.activeElement?.blur()");
     await page.key("k", "meta");
     await page.type("priority");
-    expect(await page.eval(`document.querySelectorAll('[cmdk-item]').length`)).toBe(0);
+    expect(await page.eval(`document.querySelectorAll('[role^=menuitem]').length`)).toBe(0);
     await page.key("Escape");
-    await page.waitFor(`!document.querySelector('[cmdk-input]')`);
+    await page.waitFor(`!document.querySelector('.menu-input input')`);
     await page.eval("document.activeElement?.blur()");
     await page.key("Escape");
     await page.waitFor(`!!document.getElementById('comment')`);
@@ -177,7 +177,7 @@ test("missing documents and legacy links leave the board and the issue usable", 
     await page.waitFor(`!!document.querySelector('[href="https://example.com/legacy"]')`);
     await page.hover('[href="https://example.com/legacy"]');
     await page.click('[aria-label="Options for https://example.com/legacy"]');
-    await page.click('[cmdk-item][data-value="Remove…"]');
+    await page.click('[role^=menuitem][data-value="Remove…"]');
     await page.click(
       '[role=dialog][aria-label="Remove this link from the issue?"] button[data-autofocus]',
     );

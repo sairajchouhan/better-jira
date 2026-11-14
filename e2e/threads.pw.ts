@@ -115,11 +115,11 @@ test("one thread's life: draft, send, Linear's card and menus, react, resolve, r
       `document.querySelector('.comment-reply').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))`,
     );
     await page.waitFor(
-      `!!document.querySelector('[role="dialog"][aria-label="Comment options"] [cmdk-item]')`,
+      `!!document.querySelector('[role="dialog"][aria-label="Comment options"] [role^=menuitem]')`,
     );
     expect(
       await page.eval(
-        `[...document.querySelectorAll('[role="dialog"][aria-label="Comment options"] [cmdk-item]')].map(n=>n.textContent)`,
+        `[...document.querySelectorAll('[role="dialog"][aria-label="Comment options"] [role^=menuitem]')].map(n=>n.textContent)`,
       ),
     ).toEqual([
       "Edit",
@@ -133,7 +133,7 @@ test("one thread's life: draft, send, Linear's card and menus, react, resolve, r
     ]);
     expect(
       await page.eval(
-        `(()=>{const m=document.querySelector('[role="dialog"][aria-label="Comment options"]');return [m.querySelectorAll('[cmdk-separator]').length,[...m.querySelectorAll('[cmdk-item]')].every(n=>n.querySelector('svg'))]})()`,
+        `(()=>{const m=document.querySelector('[role="dialog"][aria-label="Comment options"]');return [m.querySelectorAll('.menu-divider').length,[...m.querySelectorAll('[role^=menuitem]')].every(n=>n.querySelector('svg'))]})()`,
       ),
     ).toEqual([4, true]);
     await page.key("Escape");
@@ -252,7 +252,7 @@ test("mirrored comment edits and thread state survive a fresh Jira detail respon
     await page.hover("[data-comment]");
     await page.click('[aria-label="Comment options"]');
     await page.waitFor(
-      `!![...document.querySelectorAll('[cmdk-item]')].find(e=>e.textContent==='Subscribe to thread')`,
+      `!![...document.querySelectorAll('[role^=menuitem]')].find(e=>e.textContent==='Subscribe to thread')`,
     );
   });
 });

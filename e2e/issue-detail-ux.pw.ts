@@ -23,7 +23,7 @@ test("sub-issue rows: shortcuts act on the row, collapse persists, the composer 
     // A menu shortcut opens beside the row and changes the row's issue.
     await p.hover('[data-sub-issue="TEST-4"]');
     await p.key("s");
-    await p.click('[role="dialog"][aria-label="Change status"] [cmdk-item][data-value="Review"]');
+    await p.click('[role="dialog"][aria-label="Change status"] [role^=menuitem][data-value="Review"]');
     await p.waitFor(`${statusTitle("TEST-4")}==='Review'`);
     expect(await p.eval(`document.getElementById('prop-status').textContent`)).toContain("Todo");
     // ⌘⌫ deletes the hovered row (local site: no confirmation) and the parent stays open.
@@ -46,7 +46,7 @@ test("sub-issue rows: shortcuts act on the row, collapse persists, the composer 
       `document.querySelector('[data-sub-issue="TEST-3"]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))`,
     );
     await p.type("copy id");
-    await p.click('[cmdk-item][data-value="Copy › Copy ID"]');
+    await p.click('[role^=menuitem][data-value="Copy › Copy ID"]');
     await p.waitFor(`/"TEST-3" copied to clipboard|Could not access the clipboard/.test(document.body.textContent)`);
   });
 
@@ -55,7 +55,7 @@ test("sub-issue rows: shortcuts act on the row, collapse persists, the composer 
     await p.click('[aria-label="Create new sub-issue"]');
     await p.click('[aria-label^="Sub-issue priority"]');
     await p.click(
-      '[role="dialog"][aria-label="Set priority"] [cmdk-item][data-value="High"]',
+      '[role="dialog"][aria-label="Set priority"] [role^=menuitem][data-value="High"]',
     );
     expect(
       await p.eval(`document.querySelector('[aria-label^="Sub-issue priority"]').textContent`),
@@ -76,7 +76,7 @@ test("sub-issue rows: shortcuts act on the row, collapse persists, the composer 
     expect(await p.eval(chips)).toEqual(["Low", "Cancel"]);
     // A Shift-click on Create starts from the defaults too (`xm` reads the save event's `shiftKey`).
     await p.click('[aria-label^="Sub-issue priority"]');
-    await p.click('[role="dialog"][aria-label="Set priority"] [cmdk-item][data-value="High"]');
+    await p.click('[role="dialog"][aria-label="Set priority"] [role^=menuitem][data-value="High"]');
     await p.click('[aria-label="Sub-issue title"]');
     await p.type("Shift-click create");
     await p.eval(
@@ -95,7 +95,7 @@ test("sub-issue rows: shortcuts act on the row, collapse persists, the composer 
     await p.keys("mr");
     await p.waitFor(`document.activeElement?.getAttribute('aria-label')==='Find related issue'`);
     await p.type("TEST-1");
-    await p.waitFor(`!!document.querySelector('[cmdk-item][data-value="TEST-1"]')`);
+    await p.waitFor(`!!document.querySelector('[role^=menuitem][data-value="TEST-1"]')`);
     await p.key("Enter");
     const href = await p.waitFor<string>(
       `document.querySelector('[data-relation="related:TEST-1"] a')?.href`,
@@ -115,17 +115,17 @@ test("sub-issue rows: shortcuts act on the row, collapse persists, the composer 
     await p.eval("document.activeElement?.blur()");
     await p.keys("mr");
     await p.type("TEST-1");
-    await p.waitFor(`!!document.querySelector('[cmdk-item][data-value="TEST-1"]')`);
+    await p.waitFor(`!!document.querySelector('[role^=menuitem][data-value="TEST-1"]')`);
     await p.key("Enter");
     await p.waitFor(`!!document.querySelector('[data-relation="related:TEST-1"] a')`);
     await menu("related");
-    await p.hover('[role="dialog"][aria-label="Relation options"] [cmdk-item][data-value="Change to…"]');
-    await p.click('[role="dialog"][aria-label="Change to…"] [cmdk-item][data-value="Blocked by"]');
+    await p.hover('[role="dialog"][aria-label="Relation options"] [role^=menuitem][data-value="Change to…"]');
+    await p.click('[role="dialog"][aria-label="Change to…"] [role^=menuitem][data-value="Blocked by"]');
     await p.waitFor(
       `!!document.querySelector('[data-relation="blocked:TEST-1"]')&&!document.querySelector('[data-relation="related:TEST-1"]')`,
     );
     await menu("blocked");
-    await p.click('[role="dialog"][aria-label="Relation options"] [cmdk-item][data-value="Remove relation"]');
+    await p.click('[role="dialog"][aria-label="Relation options"] [role^=menuitem][data-value="Remove relation"]');
     await p.waitFor(`!document.querySelector('[data-relation$=":TEST-1"]')`);
   });
 
@@ -133,7 +133,7 @@ test("sub-issue rows: shortcuts act on the row, collapse persists, the composer 
     await p.eval("document.activeElement?.blur()");
     await p.keys("mr");
     await p.type("TEST-1");
-    await p.waitFor(`document.querySelector('[cmdk-item][data-selected=true]')?.dataset.value==="TEST-1"`);
+    await p.waitFor(`document.querySelector('[role^=menuitem][data-focused]')?.dataset.value==="TEST-1"`);
     await p.key("ArrowRight");
     await p.waitFor(`document.querySelector('[aria-label="Quick look"]')?.textContent.includes("TEST-1")`);
     await p.key("ArrowLeft");
@@ -170,7 +170,7 @@ test("editing an issue's fields: pickers close and apply, Jira renames wait for 
     ).toContain("brand-new");
     await p.eval("document.activeElement?.blur()");
     await p.key("d", "shift");
-    await p.click('[role="dialog"][aria-label="Due date"] [cmdk-item][data-value="Tomorrow"]');
+    await p.click('[role="dialog"][aria-label="Due date"] [role^=menuitem][data-value="Tomorrow"]');
     await p.waitFor(`!document.querySelector('[role="dialog"][aria-label="Due date"]')`);
     // Linear reads near due dates relatively (R2-issue-fields-D7).
     expect(await p.waitFor<string>(`document.getElementById('prop-due')?.textContent`)).toBe(
@@ -178,13 +178,13 @@ test("editing an issue's fields: pickers close and apply, Jira renames wait for 
     );
     await p.eval("document.activeElement?.blur()");
     await p.key("h", "shift");
-    await p.click('[role="dialog"][aria-label="Remind me"] [cmdk-item][data-value="Custom…"]');
+    await p.click('[role="dialog"][aria-label="Remind me"] [role^=menuitem][data-value="Custom…"]');
     await p.eval(
       `const i=document.querySelector('[aria-label="Custom reminder time"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'2020-01-01T10:00');i.dispatchEvent(new Event('input',{bubbles:true}))`,
     );
     await p.click("text=Back");
     await p.waitFor(
-      `[...document.querySelectorAll('[role="dialog"][aria-label="Remind me"] [cmdk-item]')].some(n=>n.dataset.value==='An hour from now')`,
+      `[...document.querySelectorAll('[role="dialog"][aria-label="Remind me"] [role^=menuitem]')].some(n=>n.dataset.value==='An hour from now')`,
     );
     await p.key("Escape");
     await p.waitFor(`!document.querySelector('[role="dialog"]')`);
@@ -440,7 +440,7 @@ test("BJ-195: related issue hover cards and external Copy link", async ({ open }
   await p.waitFor(`!document.querySelector('[data-issue-hover="OTHER-41"]')`);
   await p.context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await p.page.locator(related).click({ button: "right" });
-  await p.click('[cmdk-item][data-value="Copy link"]');
+  await p.click('[role^=menuitem][data-value="Copy link"]');
   // #13: Linear's toast, with the copy icon and a close button.
   await p.waitFor(`document.querySelector('[data-toast]')?.textContent==='Copied issue link to clipboard'`);
   expect(await p.eval(`!!document.querySelector('[data-toast] .ui-toast-icon svg')&&!!document.querySelector('[data-toast] [aria-label="Dismiss"]')`)).toBe(true);

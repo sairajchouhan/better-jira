@@ -2,8 +2,8 @@ import { expect, fixture, test, shownDocument, shownIssue } from "./app";
 
 /** Package P (palette, search, navigation): Linear's nested "Open …" pages, recents and search. */
 const dialog = (label: string) => `document.querySelector('[role=dialog][aria-label="${label}"]')`;
-const rows = `[...document.querySelectorAll('[cmdk-item]')].map(n=>n.textContent)`;
-const input = `document.querySelector('[cmdk-input]')`;
+const rows = `[...document.querySelectorAll('[role^=menuitem]')].map(n=>n.textContent)`;
+const input = `document.querySelector('.menu-input input')`;
 
 test("BJ-165: O F / O T / O V open the ⌘K palette frame on their page; Help falls back to the palette; picker inputs are named", async ({ open }) => {
   const p = await open();
@@ -49,7 +49,7 @@ test("BJ-165: O F / O T / O V open the ⌘K palette frame on their page; Help fa
 test("6.1: ⌘K is Linear's command menu: no backdrop, one frame, icons on every command, Linear's group order", async ({ open }) => {
   const p = await open();
   const palette = dialog("Search issues and commands");
-  const headings = `[...document.querySelectorAll('[cmdk-group-heading]')].map(n=>n.textContent)`;
+  const headings = `[...document.querySelectorAll('.menu-group-header')].map(n=>n.textContent)`;
   await test.step("unscoped: centred 720px at 110px, nothing dimmed, a single rounded frame", async () => {
     await p.eval("document.activeElement?.blur()");
     await p.key("k", "meta");
@@ -63,11 +63,11 @@ test("6.1: ⌘K is Linear's command menu: no backdrop, one frame, icons on every
         `[...${palette}.querySelectorAll('*')].filter(n=>{const s=getComputedStyle(n);return s.boxShadow!=='none'||parseFloat(s.borderRadius)>=12}).length`,
       ),
     ).toBe(0);
-    expect(await p.eval(`[...${palette}.querySelectorAll('[cmdk-item]')].filter(n=>!n.querySelector('.menu-icon svg')).map(n=>n.textContent)`)).toEqual([]);
+    expect(await p.eval(`[...${palette}.querySelectorAll('[role^=menuitem]')].filter(n=>!n.querySelector('.menu-icon svg')).map(n=>n.textContent)`)).toEqual([]);
     // A row's shortcut sits at the menu's right edge, 20px in.
     expect(
       await p.eval(
-        `(()=>{const row=${palette}.querySelector('[cmdk-item] .menu-hint').closest('[cmdk-item]');return Math.round(row.getBoundingClientRect().right-row.querySelector('.menu-hint').getBoundingClientRect().right)})()`,
+        `(()=>{const row=${palette}.querySelector('[role^=menuitem] .menu-hint').closest('[role^=menuitem]');return Math.round(row.getBoundingClientRect().right-row.querySelector('.menu-hint').getBoundingClientRect().right)})()`,
       ),
     ).toBe(20);
     const shown = await p.eval<string[]>(headings);
@@ -83,18 +83,18 @@ test("6.1: ⌘K is Linear's command menu: no backdrop, one frame, icons on every
     await p.key("k", "meta");
     await p.waitFor(`!!${palette}?.querySelector('.command-menu-title')`);
     expect(await p.eval(`${palette}.querySelector('.command-menu-title').textContent`)).toMatch(/^TEST-\d+·/);
-    expect(await p.eval(`!!${palette}.querySelector('[cmdk-group]')?.querySelector('[cmdk-group-heading]')?.textContent`)).toBe(false);
+    expect(await p.eval(`!!${palette}.querySelector('.menu-group')?.querySelector('.menu-group-header')?.textContent`)).toBe(false);
     await p.key("Backspace");
     await p.waitFor(`!${palette}.querySelector('.command-menu-title')`);
     // R3-palette-shortcuts-D3: the first remaining row takes the highlight, so Enter still runs something.
-    await p.waitFor(`${palette}.querySelector('[cmdk-item]')?.getAttribute('aria-selected')==='true'`);
+    await p.waitFor(`${palette}.querySelector('[role^=menuitem]')?.hasAttribute('data-focused')`);
     await p.key("Escape");
   });
 });
 
 const heading = (name: string) =>
-  `[...document.querySelectorAll('[cmdk-group]')].find(g=>g.querySelector('[cmdk-group-heading]')?.textContent===${JSON.stringify(name)})`;
-const groupRows = (name: string) => `[...(${heading(name)}?.querySelectorAll('[cmdk-item]')??[])].map(n=>n.textContent)`;
+  `[...document.querySelectorAll('.menu-group')].find(g=>g.querySelector('.menu-group-header')?.textContent===${JSON.stringify(name)})`;
+const groupRows = (name: string) => `[...(${heading(name)}?.querySelectorAll('[role^=menuitem]')??[])].map(n=>n.textContent)`;
 
 test("BJ-35: search and O I list recently opened issues and recent searches", async ({ open }) => {
   const p = await open();
@@ -108,15 +108,15 @@ test("BJ-35: search and O I list recently opened issues and recent searches", as
   await p.waitFor(`${groupRows("Recent")}.length===2`);
   expect((await p.eval<string[]>(groupRows("Recent"))).map((t) => t.slice(0, 6))).toEqual(["TEST-3", "TEST-2"]);
   await p.type("fixture 4");
-  await p.waitFor(`document.querySelector('[cmdk-item][data-selected=true]')?.textContent.includes('TEST-4')`);
+  await p.waitFor(`document.querySelector('[role^=menuitem][data-focused]')?.textContent.includes('TEST-4')`);
   await p.key("Enter");
   await p.waitFor(`${shownIssue}==='TEST-4'`);
   await p.key("Escape");
   await p.keys("oi");
   await p.waitFor(`!!document.querySelector('[role=dialog][aria-label="Open issue"]')&&${groupRows("Recent searches")}.length===1`);
   expect((await p.eval<string[]>(groupRows("Recent")))[0]).toContain("TEST-4");
-  await p.click(`[cmdk-item][data-value="search:fixture 4"]`);
-  expect(await p.eval(`document.querySelector('[cmdk-input]').value`)).toBe("fixture 4");
+  await p.click(`[role^=menuitem][data-value="search:fixture 4"]`);
+  expect(await p.eval(`document.querySelector('.menu-input input').value`)).toBe("fixture 4");
 });
 
 test("BJ-46: ⌘K opens the last viewed issue", async ({ open }) => {
@@ -132,7 +132,7 @@ test("BJ-46: ⌘K opens the last viewed issue", async ({ open }) => {
   await p.key("Escape");
   await p.key("k", "meta");
   await p.type("last viewed");
-  await p.waitFor(`document.querySelector('[cmdk-item][data-selected=true]')?.textContent==='Open last viewed issue'`);
+  await p.waitFor(`document.querySelector('[role^=menuitem][data-focused]')?.textContent==='Open last viewed issue'`);
   await p.key("Enter");
   await p.waitFor(`${shownIssue}==='TEST-2'`);
 });
@@ -147,7 +147,7 @@ test("BJ-64: a keyword and a space in ⌘K focuses search on that entity type", 
   await p.type("i ");
   await p.waitFor(`!!${dialog("Open issue")}`);
   await p.type("fixture 4");
-  await p.waitFor(`document.querySelector('[cmdk-item][data-selected=true]')?.textContent.includes('TEST-4')`);
+  await p.waitFor(`document.querySelector('[role^=menuitem][data-focused]')?.textContent.includes('TEST-4')`);
 });
 
 test("BJ-65: search and O D find a document by its body text and open it", async ({ open }) => {
@@ -217,7 +217,7 @@ test("BJ-28: My issues has Assigned, Created, Subscribed and Activity tabs, each
 });
 
 const clickItem = (scope: string, text: string) =>
-  `[...document.querySelectorAll('${scope} [cmdk-item]')].find(n=>n.textContent.trim()===${JSON.stringify(text)})?.click()`;
+  `[...document.querySelectorAll('${scope} [role^=menuitem]')].find(n=>n.textContent.trim()===${JSON.stringify(text)})?.click()`;
 
 test("BJ-62: Search's Filter bar narrows results by priority and the chip removes it", async ({ open }) => {
   const p = await open();
@@ -226,12 +226,12 @@ test("BJ-62: Search's Filter bar narrows results by priority and the chip remove
   await p.click('[role=dialog][aria-label="Search issues"] button[aria-label="Filter"]');
   await p.waitFor(`!!${dialog("Filter")}`);
   await p.eval(clickItem('[role=dialog][aria-label="Filter"]', "Priority"));
-  await p.waitFor(`[...document.querySelectorAll('[role=dialog][aria-label="Filter"] [cmdk-item]')].some(n=>n.textContent.trim()==='Urgent')`);
+  await p.waitFor(`[...document.querySelectorAll('[role=dialog][aria-label="Filter"] [role^=menuitem]')].some(n=>n.textContent.trim()==='Urgent')`);
   await p.eval(clickItem('[role=dialog][aria-label="Filter"]', "Urgent"));
   await p.waitFor(`!${dialog("Filter")}&&!!${dialog("Search issues")}`);
   // The search's filters are the board's FilterBlock: Priority | is | Urgent | ×.
   await p.waitFor(`${dialog("Search issues")}.querySelector('[aria-label="Search filters"] .ui-filter-block')?.textContent==="PriorityisUrgent"`);
-  const keys = `[...${dialog("Search issues")}.querySelectorAll('[cmdk-item]')].map(n=>n.textContent).join('|')`;
+  const keys = `[...${dialog("Search issues")}.querySelectorAll('[role^=menuitem]')].map(n=>n.textContent).join('|')`;
   await p.waitFor(`${keys}.includes('TEST-4')`);
   expect(await p.eval<string>(keys)).not.toContain("TEST-1");
   await p.click('[aria-label="Remove Priority filter"]');
@@ -241,11 +241,11 @@ test("BJ-62: Search's Filter bar narrows results by priority and the chip remove
 test("A3, B2, B5: ⌘K lists the issue's values, finds commands by Linear's keywords, and copies the issue as a prompt", async ({ open }) => {
   const copied = `window.__copied=[];Object.defineProperty(navigator,'clipboard',{value:{writeText:async t=>{window.__copied.push(t)}}})`;
   const p = await open("", { setup: copied });
-  const values = `[...document.querySelectorAll('[cmdk-item]')].map(n=>n.getAttribute('data-value'))`;
-  const selectedValue = `document.querySelector('[cmdk-item][data-selected=true]')?.getAttribute('data-value')`;
+  const values = `[...document.querySelectorAll('[role^=menuitem]')].map(n=>n.getAttribute('data-value'))`;
+  const selectedValue = `document.querySelector('[role^=menuitem][data-focused]')?.getAttribute('data-value')`;
   const clear = () =>
     p.eval(
-      `(()=>{const i=document.querySelector('[cmdk-input]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'');i.dispatchEvent(new Event('input',{bubbles:true}))})()`,
+      `(()=>{const i=document.querySelector('.menu-input input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'');i.dispatchEvent(new Event('input',{bubbles:true}))})()`,
     );
   const scoped = async () => {
     await p.eval("document.activeElement?.blur()");
@@ -255,12 +255,12 @@ test("A3, B2, B5: ⌘K lists the issue's values, finds commands by Linear's keyw
   await p.key("j");
   await p.waitFor(`!!document.querySelector("[data-key][data-selected=true]")`);
   const issue = await p.eval<string>(`document.querySelector("[data-key][data-selected=true]").getAttribute("data-key")`);
-  const doing = `document.querySelector('[cmdk-item][data-value="cmd:status:Doing Change status › Doing"]')`;
+  const doing = `document.querySelector('[role^=menuitem][data-value="cmd:status:Doing Change status › Doing"]')`;
 
   await test.step("A3: status and priority values hoist from 2 characters, assignee from 3, with Linear's breadcrumb", async () => {
     await scoped();
     await p.type("d");
-    await p.waitFor(`!!document.querySelector('[cmdk-item]')`);
+    await p.waitFor(`!!document.querySelector('[role^=menuitem]')`);
     expect(await p.eval<string[]>(values)).not.toContain("cmd:status:Doing Change status › Doing");
     await p.type("o");
     await p.waitFor(`${values}.includes('cmd:status:Doing Change status › Doing')`);
@@ -269,7 +269,7 @@ test("A3, B2, B5: ⌘K lists the issue's values, finds commands by Linear's keyw
     expect(listed.indexOf("cmd:status:Doing Change status › Doing")).toBeLessThan(listed.indexOf("cmd:status:Done Change status › Done"));
     await clear();
     await p.type("al");
-    await p.waitFor(`!!document.querySelector('[cmdk-item]')`);
+    await p.waitFor(`!!document.querySelector('[role^=menuitem]')`);
     expect(await p.eval<string[]>(values)).not.toContain("cmd:assign:Alex Assign to › Alex");
     await p.type("e");
     await p.waitFor(`${values}.includes('cmd:assign:Alex Assign to › Alex')`);
@@ -282,7 +282,7 @@ test("A3, B2, B5: ⌘K lists the issue's values, finds commands by Linear's keyw
     await p.type("doin");
     await p.waitFor(`${selectedValue}==='cmd:status:Doing Change status › Doing'`);
     await p.key("Enter");
-    await p.waitFor(`!document.querySelector('[cmdk-input]')`);
+    await p.waitFor(`!document.querySelector('.menu-input input')`);
     await expect.poll(async () => (await fixture.log()).writes.length).toBeGreaterThan(before);
     await scoped();
     await p.type("doin");
@@ -300,7 +300,7 @@ test("A3, B2, B5: ⌘K lists the issue's values, finds commands by Linear's keyw
   await test.step("B2: keywords find Undo, the sidebar toggle and Open document", async () => {
     await p.eval("document.activeElement?.blur()");
     await p.key("k", "meta");
-    await p.waitFor(`!!document.querySelector('[cmdk-input]')`);
+    await p.waitFor(`!!document.querySelector('.menu-input input')`);
     for (const [query, name] of [
       ["revert", "Undo"],
       ["hide sidebar", "Toggle left sidebar"],
@@ -338,18 +338,18 @@ test("A3, B2, B5: ⌘K lists the issue's values, finds commands by Linear's keyw
 test("C7: a Jira or app issue link pasted into ⌘K, or a key typed alone, offers that issue first; ↵ opens it, ⌘↵ in a new tab", async ({ open }) => {
   const p = await open();
   await p.eval(`window.open=(url)=>{window.__opened=url;return null}`);
-  const first = `document.querySelector('[cmdk-item]')`;
+  const first = `document.querySelector('[role^=menuitem]')`;
   const opened = () => p.eval<string | null>(`(()=>{const u=window.__opened??null;window.__opened=null;return u})()`);
   const paste = async (text: string) => {
     await p.eval("document.activeElement?.blur()");
     await p.key("k", "meta");
-    await p.waitFor(`!!document.querySelector('[cmdk-input]')`);
+    await p.waitFor(`!!document.querySelector('.menu-input input')`);
     await p.page.keyboard.insertText(text);
   };
   await test.step("a /browse/ link on this site: the issue is the first row, and ↵ opens it here", async () => {
     await paste("https://example.atlassian.net/browse/TEST-3");
-    await p.waitFor(`${first}?.getAttribute('data-value')==='TEST-3'&&${first}.getAttribute('data-selected')==='true'`);
-    expect(await p.eval(`[...document.querySelectorAll('[cmdk-item][data-value="TEST-3"]')].length`)).toBe(1);
+    await p.waitFor(`${first}?.getAttribute('data-value')==='TEST-3'&&${first}.hasAttribute('data-focused')`);
+    expect(await p.eval(`[...document.querySelectorAll('[role^=menuitem][data-value="TEST-3"]')].length`)).toBe(1);
     await p.key("Enter");
     await p.waitFor(`${shownIssue}==='TEST-3'`);
   });
@@ -358,7 +358,7 @@ test("C7: a Jira or app issue link pasted into ⌘K, or a key typed alone, offer
     await p.waitFor(`${first}?.getAttribute('data-value')==='TEST-4'`);
     await p.key("Enter", "meta");
     expect(await opened()).toBe(`${new URL(p.page.url()).origin}/issue/TEST-4`);
-    await p.waitFor(`!document.querySelector('[cmdk-input]')`);
+    await p.waitFor(`!document.querySelector('.menu-input input')`);
   });
   await test.step("this app's own issue link, and a key typed alone in any case", async () => {
     await paste(`${new URL(p.page.url()).origin}/issue/TEST-2`);

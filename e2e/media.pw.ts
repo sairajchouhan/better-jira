@@ -131,7 +131,7 @@ test("Jira media: nothing fetched for the board, exact attachments and byte rang
       expect(await page.eval(`new URLSearchParams(location.search).get('issue')`)).toBe("TEST-2");
       expect(
         await page.eval(
-          `!!document.querySelector('[aria-label="Add Filter…"],[cmdk-input],[role=dialog]:not([data-video-player])')`,
+          `!!document.querySelector('[aria-label="Add Filter…"],.menu-input input,[role=dialog]:not([data-video-player])')`,
         ),
       ).toBe(false);
     }

@@ -7,7 +7,7 @@ async function options(page: Page, name: string) {
 /** Adds a link through Issue options › Add link…, with a title when given. */
 async function addLink(page: Page, url: string, title?: string) {
   await page.click("#issue-options");
-  await page.click('[cmdk-item][data-value="Add link…"]');
+  await page.click('[role^=menuitem][data-value="Add link…"]');
   await page.type(url);
   if (title) {
     await page.click('[aria-label="Link title"]');
@@ -40,7 +40,7 @@ test("issue resources: documents and links are created, kept, removed and undone
       `document.getElementById('resource-document')?.textContent.includes('document.txt')`,
     );
     await page.click('[aria-label="Document options"]');
-    await page.click('[cmdk-item][data-value="Delete"]');
+    await page.click('[role^=menuitem][data-value="Delete"]');
     await page.waitFor(
       `document.activeElement?.textContent==='Delete'&&!!document.querySelector('[role=dialog][aria-label^=Delete]')`,
     );
@@ -49,7 +49,7 @@ test("issue resources: documents and links are created, kept, removed and undone
       `!document.querySelector('[role=dialog][aria-label^=Delete]')&&!!document.getElementById('resource-document')`,
     );
     await page.click('[aria-label="Document options"]');
-    await page.click('[cmdk-item][data-value="Delete"]');
+    await page.click('[role^=menuitem][data-value="Delete"]');
     await page.click("text=Delete");
     await page.waitFor(`!!document.getElementById('comment')`);
     expect(await page.eval(`document.querySelector('[aria-label="Resources"]')`)).toBeNull();
@@ -136,7 +136,7 @@ test("issue resources: documents and links are created, kept, removed and undone
     await page.goto("?issue=TEST-2&view=page");
     await page.waitFor(`!!document.getElementById('comment')`);
     await page.click("#issue-options");
-    await page.click('[cmdk-item][data-value="Add link…"]');
+    await page.click('[role^=menuitem][data-value="Add link…"]');
     await page.type("javascript:alert(1)");
     await page.click("text=Add link");
     await page.waitFor(`!!document.querySelector('[role=alert]')`);
@@ -168,7 +168,7 @@ test("issue resources: documents and links are created, kept, removed and undone
     ).toBe(true);
     await page.hover('a[href="https://example.com/design"]');
     await page.click('[aria-label="Options for Design reference"]');
-    await page.click('[cmdk-item][data-value="Remove…"]');
+    await page.click('[role^=menuitem][data-value="Remove…"]');
     await page.click(
       '[role=dialog][aria-label="Remove this link from the issue?"] button[data-autofocus]',
     );
@@ -190,7 +190,7 @@ test("resource rows: Linear's row menus, and link unfurls kept across undo and r
   await page.waitFor(`!!document.getElementById('comment')`);
 
   await test.step("resource row menus follow Linear: links open, copy, edit the title and confirm removal; documents open, copy their URL and confirm deletion", async () => {
-    const items = `[...document.querySelectorAll('[role="dialog"][aria-label="Resource options"] [cmdk-item]')].map(n=>n.getAttribute('data-value'))`;
+    const items = `[...document.querySelectorAll('[role="dialog"][aria-label="Resource options"] [role^=menuitem]')].map(n=>n.getAttribute('data-value'))`;
     await addLink(page, "https://example.com/spec", "Spec");
     await page.waitFor(`!!document.querySelector('a[href="https://example.com/spec"]')`);
     // Linear confirms the link and lists it in Activity while it stays attached.
@@ -235,21 +235,21 @@ test("resource rows: Linear's row menus, and link unfurls kept across undo and r
       await page.click(`[aria-label="Options for ${name}"]`);
       await page.waitFor(`${items}.length>0`);
     };
-    const menuLook = `(()=>{const m=document.querySelector('[role="dialog"][aria-label="Resource options"]');return [m.querySelectorAll('[cmdk-separator]').length,[...m.querySelectorAll('[cmdk-item]')].every(n=>n.querySelector('svg'))]})()`;
+    const menuLook = `(()=>{const m=document.querySelector('[role="dialog"][aria-label="Resource options"]');return [m.querySelectorAll('.menu-divider').length,[...m.querySelectorAll('[role^=menuitem]')].every(n=>n.querySelector('svg'))]})()`;
     await menu("Spec");
     expect(await page.eval(items)).toEqual(["Open link", "Copy link", "Edit…", "Remove…"]);
     expect(await page.eval(menuLook)).toEqual([2, true]);
-    await page.click('[cmdk-item][data-value="Open link"]');
+    await page.click('[role^=menuitem][data-value="Open link"]');
     expect(await page.eval(`window.opened[0].slice(0,2)`)).toEqual([
       "https://example.com/spec",
       "_blank",
     ]);
     await menu("Spec");
-    await page.click('[cmdk-item][data-value="Copy link"]');
+    await page.click('[role^=menuitem][data-value="Copy link"]');
     await page.waitFor(`window.copied.length===1`);
     expect(await page.eval("window.copied[0]")).toBe("https://example.com/spec");
     await menu("Spec");
-    await page.click('[cmdk-item][data-value="Edit…"]');
+    await page.click('[role^=menuitem][data-value="Edit…"]');
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Link title'`);
     expect(
       await page.eval(
@@ -264,7 +264,7 @@ test("resource rows: Linear's row menus, and link unfurls kept across undo and r
     );
     await page.waitFor(`/linked Final spec ·/.test(${linked})`);
     await menu("Final spec");
-    await page.click('[cmdk-item][data-value="Remove…"]');
+    await page.click('[role^=menuitem][data-value="Remove…"]');
     await page.waitFor(
       `document.activeElement?.textContent==='Remove'&&!!document.querySelector('[role=dialog][aria-label="Remove this link from the issue?"]')`,
     );
@@ -274,13 +274,13 @@ test("resource rows: Linear's row menus, and link unfurls kept across undo and r
       true,
     );
     await menu("Final spec");
-    await page.click('[cmdk-item][data-value="Remove…"]');
+    await page.click('[role^=menuitem][data-value="Remove…"]');
     await page.waitFor(`document.activeElement?.textContent==='Remove'`);
     await page.key("Enter");
     await page.waitFor(`!document.querySelector('a[href="https://example.com/spec"]')`);
     expect(await page.eval(`!!document.querySelector('[data-activity="link"]')`)).toBe(false);
     await page.click("#issue-options");
-    await page.click('[cmdk-item][data-value="Add document…"]');
+    await page.click('[role^=menuitem][data-value="Add document…"]');
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Document title'`);
     await page.type("Row doc");
     const id = await page.eval<string>(`${shownDocument}`);
@@ -289,20 +289,20 @@ test("resource rows: Linear's row menus, and link unfurls kept across undo and r
     await menu("Row doc");
     expect(await page.eval(items)).toEqual(["Open document", "Copy URL", "Delete"]);
     expect(await page.eval(menuLook)).toEqual([0, true]);
-    await page.click('[cmdk-item][data-value="Copy URL"]');
+    await page.click('[role^=menuitem][data-value="Copy URL"]');
     await page.waitFor(`window.copied.length===2`);
     expect(documentOfHref(await page.eval<string>("window.copied[1]"))).toBe(
       id,
     );
     await menu("Row doc");
-    await page.click('[cmdk-item][data-value="Open document"]');
+    await page.click('[role^=menuitem][data-value="Open document"]');
     await page.waitFor(
       `${shownDocument}==='${id}'&&!!document.getElementById('resource-document')`,
     );
     await page.click('[aria-label="Back to issue"]');
     await page.waitFor(`!!document.getElementById('comment')`);
     await menu("Row doc");
-    await page.click('[cmdk-item][data-value="Delete"]');
+    await page.click('[role^=menuitem][data-value="Delete"]');
     await page.waitFor(
       `document.activeElement?.textContent==='Delete'&&!!document.querySelector('[role=dialog][aria-label='+JSON.stringify('Delete "Row doc"?')+']')`,
     );
@@ -409,7 +409,7 @@ test("resource rows and open-menu triggers follow Linear (RAJ-52): 36px rows 1px
       .poll(async () => (await lit('[aria-label="Options for Spec"]'))[2])
       .toBe("lch(9.345 0.85 272)");
     await page.click('[aria-label="Options for Spec"]');
-    await page.waitFor(`!!document.querySelector('[role=dialog] [cmdk-item]')`);
+    await page.waitFor(`!!document.querySelector('[role=dialog] [role^=menuitem]')`);
     await park();
     await sleep(200); // it must stay lit once the pointer has left and any fade would have run
     expect(await lit('[aria-label="Options for Spec"]')).toEqual([
@@ -427,7 +427,7 @@ test("resource rows and open-menu triggers follow Linear (RAJ-52): 36px rows 1px
     );
     await page.hover("[data-comment] .comment-body");
     await page.click('[data-comment] [aria-label="Comment options"]');
-    await page.waitFor(`!!document.querySelector('[role=dialog] [cmdk-item]')`);
+    await page.waitFor(`!!document.querySelector('[role=dialog] [role^=menuitem]')`);
     await park();
     await sleep(200); // it must stay lit once the pointer has left and any fade would have run
     expect(

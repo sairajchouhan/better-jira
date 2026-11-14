@@ -131,7 +131,7 @@ test("display preferences: card dates, filter chips, empty views and pill menus"
       "OR group · 1 rule",
     ]);
     await page.click('[aria-label="priority operator"]');
-    await page.click('[cmdk-item][data-value="empty"]');
+    await page.click('[role^=menuitem][data-value="empty"]');
     await page.waitFor(`${chips}.includes("Priorityis empty")`);
     await page.key("Escape");
   });
@@ -467,10 +467,10 @@ test("popup elevation: a Select lists one level up, a menu or submenu over anoth
     await page.key("c");
     await page.click('[role=dialog][aria-label="Create issue"] [aria-label="More actions"]');
     const MORE = '[role=dialog][aria-label="More actions"]';
-    await page.waitFor(`!!document.querySelector('${MORE} [cmdk-item]')`);
+    await page.waitFor(`!!document.querySelector('${MORE} [role^=menuitem]')`);
     expect(
       await page.eval(
-        `(()=>{const s=document.querySelector('${MORE}');return [s.dataset.elevation,getComputedStyle(s).backgroundColor,getComputedStyle(s.querySelector('[cmdk-item]:not([data-selected=true])')).color]})()`,
+        `(()=>{const s=document.querySelector('${MORE}');return [s.dataset.elevation,getComputedStyle(s).backgroundColor,getComputedStyle(s.querySelector('[role^=menuitem]:not([data-focused])')).color]})()`,
       ),
     ).toEqual(["1", DARK.surface.bg, "lch(91.178 1.425 272)"]);
     await page.key("Escape");
@@ -482,19 +482,19 @@ test("popup elevation: a Select lists one level up, a menu or submenu over anoth
     await p.eval("document.activeElement?.blur()");
     await p.keys("mr");
     await p.type("TEST-1");
-    await p.waitFor(`document.querySelector('[cmdk-item][data-selected=true]')?.dataset.value==="TEST-1"`);
+    await p.waitFor(`document.querySelector('[role^=menuitem][data-focused]')?.dataset.value==="TEST-1"`);
     await p.key("Enter", "alt");
     const MORE = '[role="dialog"][aria-label="More actions"]';
     await p.waitFor(`!!document.querySelector('${MORE}')`);
     const paintOf = (selector: string) =>
-      `(()=>{const s=document.querySelector(${JSON.stringify(selector)});return [s.closest('[data-elevation]').dataset.elevation,getComputedStyle(s).backgroundColor,getComputedStyle(s.querySelector('[cmdk-item]:not([data-selected=true])')).color]})()`;
+      `(()=>{const s=document.querySelector(${JSON.stringify(selector)});return [s.closest('[data-elevation]').dataset.elevation,getComputedStyle(s).backgroundColor,getComputedStyle(s.querySelector('[role^=menuitem]:not([data-focused])')).color]})()`;
     expect(await p.eval(paintOf(MORE))).toEqual(["1", DARK.surface.bg, "lch(91.178 1.425 272)"]);
-    const row = await p.eval<string>(`document.querySelector('${MORE} [cmdk-item][aria-haspopup]')?.dataset.value ?? ""`);
+    const row = await p.eval<string>(`document.querySelector('${MORE} [role^=menuitem][aria-haspopup]')?.dataset.value ?? ""`);
     expect(row).not.toBe("");
-    await p.hover(`${MORE} [cmdk-item][data-value=${JSON.stringify(row)}]`);
-    const id = await p.waitFor<string>(`document.querySelector('${MORE} [cmdk-item][aria-expanded=true]')?.getAttribute('aria-controls')`);
-    const SUBMENU = `[id="${id}"] [cmdk-root]`;
-    await p.waitFor(`!!document.querySelector(${JSON.stringify(SUBMENU)})?.querySelector('[cmdk-item]')`);
+    await p.hover(`${MORE} [role^=menuitem][data-value=${JSON.stringify(row)}]`);
+    const id = await p.waitFor<string>(`document.querySelector('${MORE} [role^=menuitem][aria-expanded=true]')?.getAttribute('aria-controls')`);
+    const SUBMENU = `[id="${id}"] .menu`;
+    await p.waitFor(`!!document.querySelector(${JSON.stringify(SUBMENU)})?.querySelector('[role^=menuitem]')`);
     expect(await p.eval(paintOf(SUBMENU))).toEqual(["1", DARK.surface.bg, "lch(91.178 1.425 272)"]);
   });
 });
@@ -539,7 +539,7 @@ test("dialogs paint Linear's elevated theme over bgModalOverlay; a menu inside k
       ).toEqual({ elevation: "dialog", box: linear.box, overlay: linear.overlay });
       expect(await page.eval(solidAlphaThin(CREATE))).toBe(linear.solidAlphaThin.dialog);
       await page.click(`${CREATE} [aria-label="More actions"]`);
-      await page.waitFor(`!!document.querySelector('${MORE} [cmdk-item]')`);
+      await page.waitFor(`!!document.querySelector('${MORE} [role^=menuitem]')`);
       expect(await page.eval(`getComputedStyle(document.querySelector('${MORE}')).backgroundColor`)).toBe(linear.menu);
       expect(await page.eval(solidAlphaThin(MORE))).toBe(linear.solidAlphaThin.menu);
       await page.key("Escape");

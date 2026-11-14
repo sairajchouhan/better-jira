@@ -7,7 +7,7 @@ import { expect, test, PREFS_KEY, type App } from "./app";
 const NAV = 'nav[aria-label="Main navigation"]';
 const menu = (label: string) => `[role="dialog"][aria-label="${label}"]`;
 const rows = (page: App, label: string) =>
-  page.eval<string[]>(`[...document.querySelectorAll('${menu(label)} [cmdk-item]')].map(n=>n.dataset.value)`);
+  page.eval<string[]>(`[...document.querySelectorAll('${menu(label)} [role^=menuitem]')].map(n=>n.dataset.value)`);
 
 /** A real right button press on the first element matching `locator`, as Chrome fires `contextmenu` from it. */
 async function rightClick(page: App, target: ReturnType<App["page"]["locator"]>, label: string) {
@@ -35,7 +35,7 @@ test("sidebar Inbox, My issues, board rows and the empty sidebar open Linear's m
   await test.step("My issues: Customize sidebar opens the dialog", async () => {
     await rightClick(page, link("My issues"), "My issues options");
     expect(await rows(page, "My issues options")).toEqual(["Visibility", "Customize sidebar", "Copy link", "Open in new tab"]);
-    await page.click(`${menu("My issues options")} [cmdk-item][data-value="Customize sidebar"]`);
+    await page.click(`${menu("My issues options")} [role^=menuitem][data-value="Customize sidebar"]`);
     await expect(page.page.locator(menu("Customize sidebar"))).toBeVisible();
     await page.key("Escape");
   });
@@ -70,7 +70,7 @@ test("a list group header opens Linear's list group menu on right-click, and Col
   const header = page.page.locator('section:has(button[aria-label="Collapse Todo"]) > div').first();
   await rightClick(page, header, "Group Todo");
   expect(await rows(page, "Group Todo")).toEqual(["Collapse", "Collapse all", "Select all in group", "Hide group"]);
-  await page.click(`${menu("Group Todo")} [cmdk-item][data-value="Collapse"]`);
+  await page.click(`${menu("Group Todo")} [role^=menuitem][data-value="Collapse"]`);
   await expect(page.page.locator('button[aria-label="Expand Todo"]')).toBeVisible();
 });
 
@@ -102,7 +102,7 @@ test("C11: ⌥-click on a group's chevron and its Collapse all / Expand all togg
     const name = (await other.getAttribute("aria-label"))!.replace(/^Expand /, "");
     await rightClick(page, page.page.locator(`[data-list-group="${name}"]`), `Group ${name}`);
     expect((await rows(page, `Group ${name}`)).slice(0, 2)).toEqual(["Expand", "Expand all"]);
-    await page.click(`${menu(`Group ${name}`)} [cmdk-item][data-value="Expand all"]`);
+    await page.click(`${menu(`Group ${name}`)} [role^=menuitem][data-value="Expand all"]`);
     await page.waitFor(`${expanded}===${groups}`);
   });
 });
@@ -114,8 +114,8 @@ test("C12: ⌥⇧G and ⌥⇧O open the grouping and ordering choices without th
     await page.key("KeyG", "alt", "shift");
     const dialog = page.page.locator(menu("Change grouping"));
     await expect(dialog).toBeVisible();
-    await expect(dialog.locator("[cmdk-item]", { hasText: /^Status$/ }).locator(".menu-checkmark")).toBeVisible();
-    await dialog.locator("[cmdk-item]", { hasText: /^Assignee$/ }).click();
+    await expect(dialog.locator("[role^=menuitem]", { hasText: /^Status$/ }).locator(".menu-checkmark")).toBeVisible();
+    await dialog.locator("[role^=menuitem]", { hasText: /^Assignee$/ }).click();
     await expect(dialog).toBeHidden();
     await page.waitFor(`${stored}?.display?.columns==="assignee"`);
   });
@@ -124,9 +124,9 @@ test("C12: ⌥⇧G and ⌥⇧O open the grouping and ordering choices without th
     await page.key("KeyO", "alt", "shift");
     const dialog = page.page.locator(menu("View ordering…"));
     await expect(dialog).toBeVisible();
-    const names = await dialog.locator("[cmdk-item]").allTextContents();
+    const names = await dialog.locator("[role^=menuitem]").allTextContents();
     expect(names.slice(0, 2)).toEqual(["Manual", "By title"]);
-    await dialog.locator("[cmdk-item]", { hasText: /^By title$/ }).click();
+    await dialog.locator("[role^=menuitem]", { hasText: /^By title$/ }).click();
     await page.waitFor(`${stored}?.display?.ordering==="title"`);
   });
 
@@ -134,10 +134,10 @@ test("C12: ⌥⇧G and ⌥⇧O open the grouping and ordering choices without th
     await page.key("k", "meta");
     await page.type("prio");
     const palette = page.page.locator(menu("Search issues and commands"));
-    await expect(palette.locator("[cmdk-item]", { hasText: "Change grouping › Priority" })).toBeVisible();
-    await expect(palette.locator("[cmdk-item]", { hasText: "View ordering › By priority" })).toHaveCount(0);
+    await expect(palette.locator("[role^=menuitem]", { hasText: "Change grouping › Priority" })).toBeVisible();
+    await expect(palette.locator("[role^=menuitem]", { hasText: "View ordering › By priority" })).toHaveCount(0);
     await page.type("r");
-    await expect(palette.locator("[cmdk-item]", { hasText: "View ordering › By priority" })).toBeVisible();
+    await expect(palette.locator("[role^=menuitem]", { hasText: "View ordering › By priority" })).toBeVisible();
     await page.key("Escape");
   });
 

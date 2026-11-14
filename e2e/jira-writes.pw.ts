@@ -85,18 +85,18 @@ test("Jira writes: a rejected write rolls back, created issues open by their Jir
     await p.goto("?issue=TEST-2&view=page"); // a fresh load: no toasts or recorded ops from the step before
     await p.waitFor(`!!document.getElementById('comment')`);
     await p.click("#issue-options");
-    await p.hover('[cmdk-item][data-value="Create related"]');
-    await p.click('[cmdk-item][data-value="Parent issue…"]');
+    await p.hover('[role^=menuitem][data-value="Create related"]');
+    await p.click('[role^=menuitem][data-value="Parent issue…"]');
     await p.waitFor(`document.activeElement?.getAttribute('aria-label')==='Issue title'`);
     // Only Epic (one level above Task) is offered.
     await p.waitFor(`!!document.querySelector('[aria-label="Issue type: Epic"]')`);
     await p.click('[aria-label="Issue type: Epic"]');
     expect(
       await p.waitFor<string[]>(
-        `(()=>{const items=[...document.querySelectorAll('[role="dialog"][aria-label="Change issue type"] [cmdk-item]')].map(n=>n.textContent);return items.length&&items})()`,
+        `(()=>{const items=[...document.querySelectorAll('[role="dialog"][aria-label="Change issue type"] [role^=menuitem]')].map(n=>n.textContent);return items.length&&items})()`,
       ),
     ).toEqual(["Epic"]);
-    await p.click('[role="dialog"][aria-label="Change issue type"] [cmdk-item]');
+    await p.click('[role="dialog"][aria-label="Change issue type"] [role^=menuitem]');
     await p.waitFor(`!document.querySelector('[role="dialog"][aria-label="Change issue type"]')`);
     await p.eval(
       `document.querySelector('[aria-label="Create issue"] [aria-label="Issue title"]').focus()`,
@@ -127,8 +127,8 @@ test("Jira writes: a rejected write rolls back, created issues open by their Jir
     });
     await p.waitFor(`!!document.getElementById('comment')`);
     await p.click("#issue-options");
-    await p.hover('[cmdk-item][data-value="Create related"]');
-    await p.click('[cmdk-item][data-value="Parent issue…"]');
+    await p.hover('[role^=menuitem][data-value="Create related"]');
+    await p.click('[role^=menuitem][data-value="Parent issue…"]');
     expect(await p.waitFor<string>(`document.querySelector('[role="alert"]')?.textContent`)).toBe(
       "Jira has no issue type above Task, so TEST-2 can't have a parent.",
     );

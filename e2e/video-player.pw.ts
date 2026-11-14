@@ -121,17 +121,17 @@ test("inline video player: Linear keys, volume, tooltips, revealed controls, dow
     await page.waitFor(`${controlsOpacity}==='0'`);
     await page.eval(`${video}.focus()`);
     await page.key("k", "meta");
-    await page.waitFor(`!!document.querySelector('[cmdk-input]')`);
+    await page.waitFor(`!!document.querySelector('.menu-input input')`);
     await page.key("Escape");
     await page.hover("#description video");
     await page.click(`${root} [aria-label="Full window (keyboard shortcut f)"]`);
     await page.key("k", "meta");
     await page.waitFor(
-      `!!document.querySelector('[cmdk-input]')&&!document.querySelector('${root}[data-expanded="true"]')`,
+      `!!document.querySelector('.menu-input input')&&!document.querySelector('${root}[data-expanded="true"]')`,
     );
-    expect(await page.eval(`document.activeElement.hasAttribute('cmdk-input')`)).toBe(true);
+    expect(await page.eval(`document.activeElement.matches('.menu-input input')`)).toBe(true);
     await page.key("Escape");
-    await page.waitFor(`!document.querySelector('[cmdk-input]')`);
+    await page.waitFor(`!document.querySelector('.menu-input input')`);
   });
   await test.step("pointer focus does not pin controls, expanded idle hides, and Tab reveals them", async () => {
     await page.hover("#description video");

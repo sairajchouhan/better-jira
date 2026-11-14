@@ -10,7 +10,7 @@ window.fetch=async(input,init)=>{const path=new URL(String(input),location.href)
 };
 Object.defineProperty(navigator,'clipboard',{value:{writeText:async t=>{window.__copied=t}}});})()`;
 const MENU = '[role="dialog"][aria-label="Issue options"]';
-const selectedItem = (page: App) => page.page.locator("[cmdk-item][data-selected=true]");
+const selectedItem = (page: App) => page.page.locator("[role^=menuitem][data-focused]");
 
 /** A real right button press on the element's centre, as Chrome fires `contextmenu` from it. */
 async function rightClick(page: App, selector: string) {
@@ -50,7 +50,7 @@ await new Promise(requestAnimationFrame);return performance.now()-t})()`,
     expect(await page.eval(`!!document.querySelector('[data-key][data-selected]')`)).toBe(false);
     expect(
       await page.eval<string[]>(
-        `[...document.querySelectorAll('${MENU} [cmdk-item]')].map(n=>n.dataset.value)`,
+        `[...document.querySelectorAll('${MENU} [role^=menuitem]')].map(n=>n.dataset.value)`,
       ),
     ).toEqual(
       expect.arrayContaining([
@@ -112,13 +112,13 @@ await new Promise(requestAnimationFrame);return performance.now()-t})()`,
 
   await test.step("BJ-26: Status › lists the statuses inline and lands a status op on the right-clicked card", async () => {
     await rightClick(page, card);
-    await page.hover(`${MENU} [cmdk-item][data-value="Status"]`);
+    await page.hover(`${MENU} [role^=menuitem][data-value="Status"]`);
     const STATUS = '[role="dialog"][aria-label="Status"]';
-    await page.waitFor(`!!document.querySelector('${STATUS} [cmdk-item] .menu-checkmark')`);
+    await page.waitFor(`!!document.querySelector('${STATUS} [role^=menuitem] .menu-checkmark')`);
     const target = await page.eval<string>(
-      `[...document.querySelectorAll('${STATUS} [cmdk-item]')].find(n=>!n.querySelector('.menu-checkmark'))?.dataset.value`,
+      `[...document.querySelectorAll('${STATUS} [role^=menuitem]')].find(n=>!n.querySelector('.menu-checkmark'))?.dataset.value`,
     );
-    await page.click(`${STATUS} [cmdk-item][data-value="${target}"]`);
+    await page.click(`${STATUS} [role^=menuitem][data-value="${target}"]`);
     await page.waitFor(
       `window.__ops.some(w=>w.key==='TEST-2'&&w.ops.some(o=>o.op==='status'))`,
       8000,
@@ -133,7 +133,7 @@ test("list row menu: Copy › Copy ID copies that row's key", async ({ open }) =
   await page.waitFor(`!!document.querySelector('[data-key="TEST-3"].min-h-11')`);
   await rightClick(page, '[data-key="TEST-3"]');
   await page.type("copy id");
-  await page.waitFor(`!!document.querySelector('[cmdk-item][data-value="Copy › Copy ID"]')`);
+  await page.waitFor(`!!document.querySelector('[role^=menuitem][data-value="Copy › Copy ID"]')`);
   await page.key("Enter");
   await page.waitFor(`window.__copied==='TEST-3'`);
   await expect(page.page.locator(MENU)).toHaveCount(0);
@@ -146,15 +146,15 @@ test("B8: the A picker and Assignee › list No assignee, you, the current assig
   await fixture.reset({ catalog: { priorities: [], labels: [], users: ["Morgan Example"] } });
   const page = await open("", { setup });
   const rows = (menu: string) =>
-    `[...document.querySelectorAll('${menu} [cmdk-item]')].map(n=>n.dataset.value)`;
+    `[...document.querySelectorAll('${menu} [role^=menuitem]')].map(n=>n.dataset.value)`;
   const headings = (menu: string) =>
-    `[...document.querySelectorAll('${menu} [cmdk-group-heading]')].map(n=>n.textContent)`;
+    `[...document.querySelectorAll('${menu} .menu-group-header')].map(n=>n.textContent)`;
   const SUBMENU = '[role="dialog"][aria-label="Assignee"]';
 
   await test.step("Assignee › on an assigned card: the current assignee comes after you, with no team heading left", async () => {
     await rightClick(page, '[data-key="TEST-2"]');
-    await page.hover(`${MENU} [cmdk-item][data-value="Assignee"]`);
-    await page.waitFor(`!!document.querySelector('${SUBMENU} [cmdk-item]')`);
+    await page.hover(`${MENU} [role^=menuitem][data-value="Assignee"]`);
+    await page.waitFor(`!!document.querySelector('${SUBMENU} [role^=menuitem]')`);
     expect(await page.eval(rows(SUBMENU))).toEqual(["No assignee", "Audit user audit-me", "Alex alex"]);
     expect(await page.eval(headings(SUBMENU))).toEqual([]);
     await page.key("Escape");
@@ -163,8 +163,8 @@ test("B8: the A picker and Assignee › list No assignee, you, the current assig
 
   await test.step("Assignee › on an unassigned card: Alex under Space members; Morgan only from the second character", async () => {
     await rightClick(page, '[data-key="TEST-1"]');
-    await page.hover(`${MENU} [cmdk-item][data-value="Assignee"]`);
-    await page.waitFor(`!!document.querySelector('${SUBMENU} [cmdk-item]')`);
+    await page.hover(`${MENU} [role^=menuitem][data-value="Assignee"]`);
+    await page.waitFor(`!!document.querySelector('${SUBMENU} [role^=menuitem]')`);
     expect(await page.eval(rows(SUBMENU))).toEqual(["No assignee", "Audit user audit-me", "Alex alex"]);
     expect(await page.eval(headings(SUBMENU))).toEqual(["Space members"]);
     await page.click(`${SUBMENU} input`);
@@ -181,10 +181,10 @@ test("B8: the A picker and Assignee › list No assignee, you, the current assig
   await test.step("A on the same card: the same rows; 0 and 1 are the only number keys", async () => {
     await page.hover('[data-key="TEST-1"]');
     await page.key("a");
-    await page.waitFor(`!!document.querySelector('${PICKER} [cmdk-item]')`);
+    await page.waitFor(`!!document.querySelector('${PICKER} [role^=menuitem]')`);
     expect(await page.eval(rows(PICKER))).toEqual(["No assignee", "Audit user audit-me", "Alex alex"]);
     expect(
-      await page.eval(`[...document.querySelectorAll('${PICKER} [cmdk-item]')].map(n=>n.dataset.number??null)`),
+      await page.eval(`[...document.querySelectorAll('${PICKER} [role^=menuitem]')].map(n=>n.dataset.number??null)`),
     ).toEqual(["0", "1", null]);
   });
 

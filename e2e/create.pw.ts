@@ -160,7 +160,7 @@ test("R3-create-D3/D8/D9: composer keys stay in the composer and focus stays in 
   await test.step("D8: Remove relation keeps focus in the composer", async () => {
     await page.click("#issue-options");
     await page.type("blocked issue");
-    await page.click('[cmdk-item][data-value="Create related › Blocked issue…"]');
+    await page.click('[role^=menuitem][data-value="Create related › Blocked issue…"]');
     await page.waitFor(`document.activeElement===${title}`);
     await page.click("[data-pending-relation]");
     await page.click('[aria-label="Remove relation"]');
@@ -234,12 +234,12 @@ test("B7: an assignee filter naming two people sets no assignee and offers both 
   await page.waitFor(pill("Assignee: Unassigned"));
   await page.click('[role=dialog][aria-label="Create issue"] [aria-label="Assignee: Unassigned"]');
   const menu = '[role=dialog][aria-label="Assign issue"]';
-  await page.waitFor(`!!document.querySelector('${menu} [cmdk-group-heading]')`);
+  await page.waitFor(`!!document.querySelector('${menu} .menu-group-header')`);
   expect(
-    await page.eval(`[...document.querySelectorAll('${menu} [cmdk-group-heading]')].map(n=>n.textContent)`),
+    await page.eval(`[...document.querySelectorAll('${menu} .menu-group-header')].map(n=>n.textContent)`),
   ).toEqual(["Suggested"]);
   expect(
-    await page.eval(`[...document.querySelectorAll('${menu} [cmdk-item]')].map(n=>n.dataset.value)`),
+    await page.eval(`[...document.querySelectorAll('${menu} [role^=menuitem]')].map(n=>n.dataset.value)`),
   ).toEqual(["No assignee", "Audit user audit-me", "Alex alex", "Morgan Example catalog-0"]);
 });
 

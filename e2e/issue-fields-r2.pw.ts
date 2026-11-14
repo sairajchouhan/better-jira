@@ -15,7 +15,7 @@ window.fetch=async(input,init)=>{const path=new URL(String(input),location.href)
 const ops = `window.__ops.flat()`;
 const ready = `!!document.getElementById('comment')`;
 const items = (dialog: string) =>
-  `[...document.querySelectorAll('[role="dialog"][aria-label="${dialog}"] [cmdk-item]')].map(n=>n.dataset.value)`;
+  `[...document.querySelectorAll('[role="dialog"][aria-label="${dialog}"] [role^=menuitem]')].map(n=>n.dataset.value)`;
 
 test("R2 issue fields on a writable site: remote links, watching, palette commands, rapid status", async ({
   open,
@@ -24,10 +24,10 @@ test("R2 issue fields on a writable site: remote links, watching, palette comman
   await test.step("R2-issue-fields-D2: Restore mirrored Jira version keeps the issue's Jira remote links", async () => {
     await page.waitFor(`${ready}&&document.body.textContent.includes('QA link')`);
     await page.key("d", "shift");
-    await page.click('[role="dialog"][aria-label="Due date"] [cmdk-item][data-value="Tomorrow"]');
+    await page.click('[role="dialog"][aria-label="Due date"] [role^=menuitem][data-value="Tomorrow"]');
     await page.waitFor(`${ops}.some(o=>o.op==='fields')`);
     await page.click("#issue-options");
-    await page.click('[cmdk-item][data-value="Restore mirrored Jira version"]');
+    await page.click('[role^=menuitem][data-value="Restore mirrored Jira version"]');
     await page.waitFor(`document.body.textContent.includes('Restored mirrored Jira version')`);
     await sleep(300);
     // Restore adopts Jira's version and writes nothing (R2-D3), so it can never delete Jira's links.
@@ -45,7 +45,7 @@ test("R2 issue fields on a writable site: remote links, watching, palette comman
       for(const status of ["Doing","Review","Done","Backlog"]){
         document.activeElement?.blur();
         document.body.dispatchEvent(new KeyboardEvent("keydown",{key:"s",code:"KeyS",bubbles:true,cancelable:true}));
-        (await until(()=>document.querySelector(menu+' [cmdk-item][data-value="'+status+'"]'))).click();
+        (await until(()=>document.querySelector(menu+' [role^=menuitem][data-value="'+status+'"]'))).click();
         await until(()=>!document.querySelector(menu));
       }
     })()`);
@@ -66,7 +66,7 @@ test("R2 issue fields on a writable site: remote links, watching, palette comman
     await p.waitFor(ready);
     await p.key("k", "meta");
     const commands = await p.waitFor<string[]>(
-      `(()=>{const v=[...document.querySelectorAll('[cmdk-item]')].map(n=>n.dataset.value);return v.length>5&&v})()`,
+      `(()=>{const v=[...document.querySelectorAll('[role^=menuitem]')].map(n=>n.dataset.value);return v.length>5&&v})()`,
     );
     expect(commands).toContain("cmd:Un-assign from me");
     expect(commands).toContain("cmd:Copy issue as Markdown");
@@ -87,10 +87,10 @@ test("R2 issue fields on a writable site: remote links, watching, palette comman
     });
     await p.waitFor(ready);
     await p.key("p");
-    await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Set priority"] [cmdk-item]')`);
+    await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Set priority"] [role^=menuitem]')`);
     expect(
       await p.eval(
-        `!!document.querySelector('[role="dialog"][aria-label="Set priority"] [cmdk-item][data-value="No priority"]')`,
+        `!!document.querySelector('[role="dialog"][aria-label="Set priority"] [role^=menuitem][data-value="No priority"]')`,
       ),
     ).toBe(false);
   });
@@ -104,7 +104,7 @@ test("R2 issue fields on a read-only site: reminder pill, hyphenated labels, Shi
     await page.waitFor(ready);
     await page.key("h", "shift");
     await page.click(
-      '[role="dialog"][aria-label="Remind me"] [cmdk-item][data-value="An hour from now"]',
+      '[role="dialog"][aria-label="Remind me"] [role^=menuitem][data-value="An hour from now"]',
     );
     await page.click('[aria-label^="Reminder scheduled"]');
     await page.waitFor(
@@ -148,7 +148,7 @@ test("Due date › Custom… is Linear's due-date dialog: typed dates preview on
   const custom = async () => {
     await page.eval("document.activeElement?.blur()");
     await page.key("d", "shift");
-    await page.click('[role="dialog"][aria-label="Due date"] [cmdk-item][data-value="Custom…"]');
+    await page.click('[role="dialog"][aria-label="Due date"] [role^=menuitem][data-value="Custom…"]');
   };
   await page.waitFor(ready);
   await test.step("the dialog: 562px, the field focused, two months, Jump to today hidden on today's month", async () => {

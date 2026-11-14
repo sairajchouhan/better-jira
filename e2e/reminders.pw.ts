@@ -14,7 +14,7 @@ test("reminders: schedule, reschedule, cancel, and overdue delivery after reopen
       ),
     ).toEqual([720, "TEST-2", "Remind me at…"]);
     expect(
-      await page.eval(`[...document.querySelectorAll('[role=dialog][aria-label="Remind me"] [cmdk-item]')].map(n=>n.dataset.value).slice(0,2)`),
+      await page.eval(`[...document.querySelectorAll('[role=dialog][aria-label="Remind me"] [role^=menuitem]')].map(n=>n.dataset.value).slice(0,2)`),
     ).toEqual(["An hour from now", "In 3 hours"]);
     await page.key("Enter");
     await page.waitFor(`!!document.querySelector('[aria-label^="Reminder scheduled"]')`);
@@ -27,7 +27,7 @@ test("reminders: schedule, reschedule, cancel, and overdue delivery after reopen
     await page.click('[aria-label^="Reminder scheduled"]');
     await page.click("text=Reschedule reminder");
     await page.type("in 2 hours");
-    await page.waitFor(`document.querySelectorAll('[role="dialog"] [cmdk-item]').length===2`);
+    await page.waitFor(`document.querySelectorAll('[role="dialog"] [role^=menuitem]').length===2`);
     await page.key("Enter");
     await page.waitFor(`!!document.querySelector('[aria-label^="Reminder scheduled"]')`);
     const label = await page.eval<string>(
@@ -43,8 +43,8 @@ test("reminders: schedule, reschedule, cancel, and overdue delivery after reopen
   await test.step("overdue reminders deliver once after reopening the app", async () => {
     const page = await open("?issue=TEST-2&view=page");
     await page.click("#issue-options");
-    await page.click('[cmdk-item][data-value="Remind me"]');
-    await page.click('[cmdk-item][data-value="An hour from now"]');
+    await page.click('[role^=menuitem][data-value="Remind me"]');
+    await page.click('[role^=menuitem][data-value="An hour from now"]');
     await page.waitFor(
       `document.querySelector('[aria-label="Local save status"]').textContent.includes('Saved')`,
     );
@@ -68,7 +68,7 @@ test("reminders: schedule, reschedule, cancel, and overdue delivery after reopen
   await test.step("several overdue reminders each appear in order and custom Escape restores focus", async () => {
     const page = await open("?issue=TEST-2&view=page");
     await page.click("#issue-options");
-    await page.click('[cmdk-item][data-value="Remind me"]');
+    await page.click('[role^=menuitem][data-value="Remind me"]');
     await page.click("text=Custom…");
     await page.waitFor(`!!document.querySelector('[aria-label="Custom reminder time"]')`);
     expect(
@@ -79,8 +79,8 @@ test("reminders: schedule, reschedule, cancel, and overdue delivery after reopen
     for (const key of ["TEST-2", "TEST-3"]) {
       await page.goto(`?issue=${key}&view=page`);
       await page.click("#issue-options");
-      await page.click('[cmdk-item][data-value="Remind me"]');
-      await page.click('[cmdk-item][data-value="An hour from now"]');
+      await page.click('[role^=menuitem][data-value="Remind me"]');
+      await page.click('[role^=menuitem][data-value="An hour from now"]');
       await page.waitFor(
         `document.querySelector('[aria-label="Local save status"]').textContent.includes('Saved')`,
       );

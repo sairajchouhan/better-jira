@@ -20,9 +20,9 @@ const rows = (page: Page) =>
     `[...document.querySelector('#description table').rows].map(r=>[...r.cells].map(c=>(c.tagName==='TH'?'H:':'')+c.textContent))`,
   );
 const pick = async (page: Page, menu: string, item: string) => {
-  await page.waitFor(`!!document.querySelector('[aria-label="${menu}"] [cmdk-item]')`);
+  await page.waitFor(`!!document.querySelector('[aria-label="${menu}"] [role^=menuitem]')`);
   await page.eval(
-    `[...document.querySelectorAll('[aria-label="${menu}"] [cmdk-item]')].find(n=>n.textContent.startsWith(${JSON.stringify(item)})).click()`,
+    `[...document.querySelectorAll('[aria-label="${menu}"] [role^=menuitem]')].find(n=>n.textContent.startsWith(${JSON.stringify(item)})).click()`,
   );
 };
 /** Hovers a cell, then clicks its row or column handle (the pointer slides along the row or column to reach it). */

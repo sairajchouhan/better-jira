@@ -2,11 +2,11 @@ import { expect, test, sleep, type App as Page, fixture, shownDocument, shownIss
 
 const nav = `document.querySelector('nav[aria-label="Main navigation"]')`;
 const navShown = `(()=>{const n=${nav};return !!n&&n.getClientRects().length>0})()`;
-const rows = `[...document.querySelectorAll('[cmdk-item]')].map(n=>n.textContent)`;
-const highlighted = `document.querySelector('[cmdk-item][data-selected=true]')?.textContent`;
+const rows = `[...document.querySelectorAll('[role^=menuitem]')].map(n=>n.textContent)`;
+const highlighted = `document.querySelector('[role^=menuitem][data-focused]')?.textContent`;
 async function palette(p: Page, query: string) {
   await p.key("k", "meta");
-  await p.waitFor(`!!document.querySelector('[cmdk-input]')`);
+  await p.waitFor(`!!document.querySelector('.menu-input input')`);
   await p.type(query);
 }
 
@@ -49,7 +49,7 @@ test("navigation shell: sidebar, My issues URL, palettes and shortcut search", a
     );
     expect(await page.eval(highlighted)).toContain("Open sub-issue");
     await page.key("Escape");
-    await page.waitFor(`!document.querySelector('[cmdk-input]')`);
+    await page.waitFor(`!document.querySelector('.menu-input input')`);
   });
   await test.step("R1-D62: ⌘K names the favorite toggle from the issue's state", async () => {
     await page.key("j");
@@ -108,7 +108,7 @@ test("navigation shell: sidebar, My issues URL, palettes and shortcut search", a
     await p.waitFor(`!${rows}.some(t=>t.includes('Add filter'))`);
     for (const name of ["Show display options", "Find in view", "Move down"]) {
       await p.eval(
-        `(()=>{const i=document.querySelector('[cmdk-input]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'');i.dispatchEvent(new Event('input',{bubbles:true}))})()`,
+        `(()=>{const i=document.querySelector('.menu-input input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'');i.dispatchEvent(new Event('input',{bubbles:true}))})()`,
       );
       await p.type(name);
       await sleep(100);

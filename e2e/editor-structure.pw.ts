@@ -32,7 +32,7 @@ const lineStart = (page: Page, ...mods: string[]) => page.key("ArrowLeft", "meta
 const lineEnd = (page: Page) => page.key("ArrowRight", "meta");
 const menuItems = (page: Page, label: string) =>
   page.waitFor<string[]>(
-    `(()=>{const items=[...document.querySelectorAll('[aria-label="${label}"] [cmdk-item] .menu-name')].map(n=>n.textContent);return items.length&&items})()`,
+    `(()=>{const items=[...document.querySelectorAll('[aria-label="${label}"] [role^=menuitem] .menu-name')].map(n=>n.textContent);return items.length&&items})()`,
   );
 
 test("BJ-173: `[ ]` starts a checklist; a click and ⌘↵ tick it, done items dim, and Jira gets a taskList", async ({ open }) => {
@@ -100,7 +100,7 @@ test("BJ-173: ⌘⇧7, the slash Checklist and the toolbar's list menu all make 
   await page.type("two");
   await lineStart(page, "shift");
   await page.click('[aria-label="List"]');
-  await page.eval(`[...document.querySelectorAll('[aria-label="List"] [cmdk-item]')].find(n=>n.querySelector('.menu-name').textContent==='List').click()`);
+  await page.eval(`[...document.querySelectorAll('[aria-label="List"] [role^=menuitem]')].find(n=>n.querySelector('.menu-name').textContent==='List').click()`);
   await page.waitFor(`!document.querySelector('#description li[data-task-state]')`);
   expect(await page.eval(`[...document.querySelectorAll('#description ul > li')].some(li=>li.textContent==='two')`)).toBe(true);
 });
@@ -232,7 +232,7 @@ test("rows 51/52/72: the slash menu is Linear's (240px, icons, order) and an emp
   ]);
   const menu = await page.rect('[aria-label="Insert block"]');
   expect(menu.width).toBe(240);
-  expect(await page.eval(`document.querySelectorAll('[aria-label="Insert block"] [cmdk-item] svg').length`)).toBeGreaterThanOrEqual(14);
+  expect(await page.eval(`document.querySelectorAll('[aria-label="Insert block"] [role^=menuitem] svg').length`)).toBeGreaterThanOrEqual(14);
   await page.type("warn");
   expect(await menuItems(page, "Insert block")).toEqual(["Callout"]);
 });

@@ -42,21 +42,21 @@ n.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clien
 /** Sets another priority on a board card through its right-click menu. Returns the priority picked. */
 async function setPriority(page: Page, key: string) {
   await cardMenu(page, key);
-  await page.hover(`${MENU} [cmdk-item][data-value="Priority"]`);
+  await page.hover(`${MENU} [role^=menuitem][data-value="Priority"]`);
   const pick = await page.waitFor<string>(
-    `[...document.querySelectorAll('[role="dialog"][aria-label="Priority"] [cmdk-item]')].map(n=>n.dataset.value).find(v=>v&&v!=='Normal'&&v!=='No priority')`,
+    `[...document.querySelectorAll('[role="dialog"][aria-label="Priority"] [role^=menuitem]')].map(n=>n.dataset.value).find(v=>v&&v!=='Normal'&&v!=='No priority')`,
   );
-  await page.click(`[role="dialog"][aria-label="Priority"] [cmdk-item][data-value="${pick}"]`);
+  await page.click(`[role="dialog"][aria-label="Priority"] [role^=menuitem][data-value="${pick}"]`);
   return pick;
 }
 /** Moves a board card to another status through its right-click menu. */
 async function setStatus(page: Page, key: string) {
   await cardMenu(page, key);
-  await page.hover(`${MENU} [cmdk-item][data-value="Status"]`);
+  await page.hover(`${MENU} [role^=menuitem][data-value="Status"]`);
   const pick = await page.waitFor<string>(
-    `[...document.querySelectorAll('[role="dialog"][aria-label="Status"] [cmdk-item]')].map(n=>n.dataset.value).find(v=>v&&!/backlog/i.test(v))`,
+    `[...document.querySelectorAll('[role="dialog"][aria-label="Status"] [role^=menuitem]')].map(n=>n.dataset.value).find(v=>v&&!/backlog/i.test(v))`,
   );
-  await page.click(`[role="dialog"][aria-label="Status"] [cmdk-item][data-value="${pick}"]`);
+  await page.click(`[role="dialog"][aria-label="Status"] [role^=menuitem][data-value="${pick}"]`);
 }
 const sentTo = (key: string) => `window.__ops.filter(w=>w.key==='${key}').flatMap(w=>w.ops)`;
 
@@ -145,11 +145,11 @@ test("two tabs: a taken-over create keeps its order and the closed tab's latest 
     await two.waitFor(`!!document.querySelector('[data-key="${key}"]')`);
     // A related issue made in tab two links to the issue tab one is creating, so its create waits for that key.
     await cardMenu(two, key);
-    await two.click(`${MENU} [cmdk-item][data-value="Create related"]`);
+    await two.click(`${MENU} [role^=menuitem][data-value="Create related"]`);
     const issue = await two.waitFor<string>(
-      `[...document.querySelectorAll('[role="dialog"] [cmdk-item]')].map(n=>n.dataset.value).find(v=>/^(Create related › )?Issue…$/.test(v))`,
+      `[...document.querySelectorAll('[role="dialog"] [role^=menuitem]')].map(n=>n.dataset.value).find(v=>/^(Create related › )?Issue…$/.test(v))`,
     );
-    await two.click(`[role="dialog"] [cmdk-item][data-value="${issue}"]`);
+    await two.click(`[role="dialog"] [role^=menuitem][data-value="${issue}"]`);
     await two.waitFor(
       `document.activeElement===document.querySelector('[aria-label="Issue title"]')`,
     );

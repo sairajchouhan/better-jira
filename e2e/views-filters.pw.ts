@@ -64,10 +64,10 @@ test("R2-D5: a chip switched from is empty back to is and closed without a value
   });
   try {
     await page.click('[aria-label="priority operator"]');
-    await page.click('[cmdk-item][data-value="empty"]'); // is empty
+    await page.click('[role^=menuitem][data-value="empty"]'); // is empty
     await page.waitFor(`${chips}.includes("Priorityis empty")`);
     await page.click('[aria-label="priority operator"]');
-    await page.click('[cmdk-item][data-value="is"]'); // is
+    await page.click('[role^=menuitem][data-value="is"]'); // is
     await page.waitFor(`${chips}.includes("Priorityis")`);
     await page.key("Escape");
     await page.waitFor(`!${chips}.some(c=>c.startsWith("Priority"))`);

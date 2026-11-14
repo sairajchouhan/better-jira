@@ -1,7 +1,7 @@
 import { expect, test } from "./app";
 
-const rows = `[...document.querySelectorAll('[aria-label="Mention people"] [role=option]')]`;
-const selected = `${rows}.findIndex(n=>n.ariaSelected==='true')`;
+const rows = `[...document.querySelectorAll('[aria-label="Mention people"] [role^=menuitem]')]`;
+const selected = `${rows}.findIndex(n=>n.hasAttribute('data-focused'))`;
 
 test("BJ-180: ⌥↑/⌥↓ jump between the @ menu's groups; → peeks the issue, ← closes it", async ({ open }) => {
   const page = await open("?issue=TEST-2&view=page");

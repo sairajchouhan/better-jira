@@ -112,7 +112,7 @@ test("thread actions by keyboard and menu: undo and redo around a reminder, link
     await page.hover("[data-comment]");
     await page.click('[aria-label="Comment options"]');
     const names = await page.eval<string[]>(
-      `[...document.querySelectorAll('[cmdk-item]')].map(e=>e.textContent)`,
+      `[...document.querySelectorAll('[role^=menuitem]')].map(e=>e.textContent)`,
     );
     expect(names).not.toContain("Edit");
     expect(names).not.toContain("Delete");
@@ -123,8 +123,8 @@ test("thread actions by keyboard and menu: undo and redo around a reminder, link
     // The reminder set "an hour from now" falls due 7 s later.
     await page.eval(`const now=Date.now;Date.now=()=>now()+3593000`);
     await page.click("#issue-options");
-    await page.click('[cmdk-item][data-value="Remind me"]');
-    await page.click('[cmdk-item][data-value="An hour from now"]');
+    await page.click('[role^=menuitem][data-value="Remind me"]');
+    await page.click('[role^=menuitem][data-value="An hour from now"]');
     await page.click("#comment");
     await page.type("Temporary edit");
     await page.key("Enter", "meta");
