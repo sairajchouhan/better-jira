@@ -190,7 +190,7 @@ test("editing an issue's fields: pickers close and apply, Jira renames wait for 
     await p.waitFor(`!document.querySelector('[role="dialog"]')`);
   });
 
-  await test.step("R1-D23, R1-D28: a Jira rename never replaces a title being typed, and an empty title comes back", async () => {
+  await test.step("R1-D23, R1-D28, BJ-258, BJ-259: a Jira rename never replaces a title being typed, Escape keeps the draft, and an empty title comes back with Linear's toast", async () => {
     await p.click("#summary");
     await p.key("a", "meta");
     await p.type("my draft");
@@ -203,14 +203,22 @@ test("editing an issue's fields: pickers close and apply, Jira renames wait for 
     expect(
       await p.eval(`[document.activeElement.id,document.getElementById('summary').value]`),
     ).toEqual(["summary", "my draft"]);
+    // BJ-258: Escape leaves the title and its blur saves the draft (Linear's shared-editor Escape: qL, else KL); the
+    // page stays.
     await p.key("Escape");
-    await p.waitFor(`document.getElementById('summary').value==='Renamed in Jira'`);
+    await p.waitFor(`document.activeElement?.id!=='summary'`);
+    expect(await p.eval(`document.getElementById('summary').value`)).toBe("my draft");
+    expect(await p.eval(`location.search.includes('view=page')`)).toBe(true);
     await p.click("#summary");
     await p.key("a", "meta");
     await p.key("Backspace");
-    // Enter now hands the caret to the description (C14); leaving the empty title still brings it back.
+    // Enter now hands the caret to the description (C14); leaving the empty title brings it back, and BJ-259 says why
+    // with Linear's error toast (IssueDetailsPaneSidebar Oh d).
     await p.key("Enter");
-    await p.waitFor(`document.getElementById('summary').value==='Renamed in Jira'`);
+    await p.waitFor(`document.getElementById('summary').value==='my draft'`);
+    await p.waitFor(
+      `[...document.querySelectorAll('[data-toast]')].some(t=>t.textContent.includes('Title cannot be empty')&&t.textContent.includes('Reverted the title to its previous value'))`,
+    );
   });
 
   await test.step("R1-D46: Tab leaves the composer description for the property pills", async () => {
@@ -296,6 +304,31 @@ test("C14: Enter in the title moves the caret into the description, as Linear's 
     await p.key("ArrowUp");
     await p.waitFor(`document.activeElement?.getAttribute('aria-label')==='Issue title'`);
     expect(await p.eval(`(t=>t.selectionStart===t.value.length)(document.activeElement)`)).toBe(true);
+  });
+});
+
+test("BJ-258: Escape in the side panel's title keeps the edit and the panel; a second Escape closes it", async ({ open }) => {
+  const p = await open("?issue=TEST-2&view=side");
+  await p.waitFor(`!!document.getElementById('summary')`);
+  await p.click("#summary");
+  await p.key("a", "meta");
+  await p.type("Kept by Escape");
+  await p.key("ArrowLeft", "shift");
+  await test.step("the first Escape collapses the selection to its end and stays in the title (qL)", async () => {
+    await p.key("Escape");
+    expect(
+      await p.eval(`(t=>[document.activeElement===t,t.selectionStart===t.selectionEnd,t.selectionEnd===t.value.length])(document.getElementById('summary'))`),
+    ).toEqual([true, true, true]);
+  });
+  await test.step("the next leaves it (KL), saving the edit, and the global Escape doesn't close the panel", async () => {
+    await p.key("Escape");
+    await p.waitFor(`document.activeElement?.id!=='summary'`);
+    expect(await p.eval(`document.getElementById('summary').value`)).toBe("Kept by Escape");
+    expect(await p.eval(`new URLSearchParams(location.search).get('issue')`)).toBe("TEST-2");
+  });
+  await test.step("with the title left, Escape closes the panel as before", async () => {
+    await p.key("Escape");
+    await p.waitFor(`!new URLSearchParams(location.search).has('issue')`);
   });
 });
 

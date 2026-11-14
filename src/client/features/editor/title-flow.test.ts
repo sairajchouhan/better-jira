@@ -3,17 +3,19 @@ import type { KeyboardEvent } from "react";
 import { EditorState, TextSelection } from "prosemirror-state";
 import {
   COMPOSER_TITLE,
+  EMPTY_TITLE_TOAST,
   FOCUS_AT_EVENT,
   focusEditorAt,
   titleKeyAction,
   titleKeyDown,
+  titleOnLeave,
   type FocusAt,
   type TitleFlow,
 } from "./title-flow";
 import { dropOpenedLine, leavesForTitle, placeCaret } from "./editor-title-flow";
 import { richSchema as s } from "./rich-document";
 
-const ISSUE: TitleFlow = { enter: "new-line-at-end", arrows: "all" };
+const ISSUE: TitleFlow = { enter: "new-line-at-end", arrows: "all", escape: "title" };
 const key = (name: string, mods: Partial<Record<"shiftKey" | "altKey" | "metaKey" | "ctrlKey" | "isComposing", boolean>> = {}) => ({
   key: name,
   shiftKey: false,
@@ -60,6 +62,33 @@ test("↓ at the title's end goes to the start of the description; → too unles
   expect(titleKeyAction(key("ArrowDown"), caret(9), { ...ISSUE, arrows: "up-down" })).toEqual({ type: "next", at: "start" });
 });
 
+test("Escape in the issue view's title leaves it, keeping the edit; a selection collapses to its end first (shared-editor zt(qL, KL))", () => {
+  expect(titleKeyAction(key("Escape"), caret(5), ISSUE)).toEqual({ type: "blur" });
+  expect(titleKeyAction(key("Escape"), caret(2, 5), ISSUE)).toEqual({ type: "collapse" });
+});
+
+test("Escape with a modifier is not the keymap's Escape, and a composer's title leaves Escape to its composer (f$)", () => {
+  for (const mod of ["shiftKey", "altKey", "metaKey", "ctrlKey"] as const)
+    expect(titleKeyAction(key("Escape", { [mod]: true }), caret(5), ISSUE)).toBeNull();
+  expect(titleKeyAction(key("Escape", { isComposing: true }), caret(5), ISSUE)).toBeNull();
+  expect(titleKeyAction(key("Escape"), caret(5), COMPOSER_TITLE)).toBeNull();
+  expect(titleKeyAction(key("Escape"), caret(2, 5), COMPOSER_TITLE)).toBeNull();
+});
+
+test("leaving a cleared title reverts it with Linear's error toast (Oh d); blank counts as cleared, as Jira rejects it", () => {
+  expect(titleOnLeave("", "Fix login")).toEqual({ type: "empty" });
+  expect(titleOnLeave("   ", "Fix login")).toEqual({ type: "empty" });
+  expect(EMPTY_TITLE_TOAST).toEqual({
+    text: "Title cannot be empty",
+    detail: "Reverted the title to its previous value",
+  });
+});
+
+test("leaving a title saves only a typed change, so a title Jira has since replaced is never written back", () => {
+  expect(titleOnLeave("Fix login page", "Fix login")).toEqual({ type: "save", title: "Fix login page" });
+  expect(titleOnLeave("Fix login", "Fix login")).toEqual({ type: "keep" });
+});
+
 /** A title input's key event, enough for titleKeyDown. */
 function keyEvent(name: string, start: number, end = start, mods = {}) {
   const input = {
@@ -101,6 +130,16 @@ test("the title's handler hands the caret on and swallows the key", () => {
   const altCaret = keyEvent("Enter", 5, 5, { altKey: true });
   handler(altCaret.react);
   expect(altCaret.input.blurred).toBe(true);
+
+  // Escape is swallowed too, so the global Escape neither closes the side panel nor leaves the page (vwe.handleEvent).
+  const escape = keyEvent("Escape", 5);
+  handler(escape.react);
+  expect(escape.event.prevented).toBe(true);
+  expect(escape.input.blurred).toBe(true);
+  const escapeSelection = keyEvent("Escape", 2, 5);
+  handler(escapeSelection.react);
+  expect([escapeSelection.input.selectionStart, escapeSelection.input.selectionEnd]).toEqual([5, 5]);
+  expect(escapeSelection.input.blurred).toBe(false);
 
   const typing = keyEvent("a", 9);
   handler(typing.react);

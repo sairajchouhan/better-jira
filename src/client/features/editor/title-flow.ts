@@ -12,9 +12,15 @@ export type TitleEnter = "new-line-at-end" | "start";
 /** Linear's `onlyMoveToInputOnUpDownKeys`. `all`: → at the title's end and ← at the description's start move too.
  *  `up-down`: only ↓ and ↑, for when something sits between the two (the issue view's parent line, `Th` `l`). */
 export type TitleArrows = "all" | "up-down";
-export type TitleFlow = { enter: TitleEnter; arrows: TitleArrows };
+/** Who answers Escape in the title. `title`: the title itself, as Linear's shared editor keymap does
+ *  (`t1e` `Ry("shared-editor", { Escape: zt(qL, KL…) })`): a selection collapses to its end, else the title is left and
+ *  its blur saves the edit. Handling it marks the key used, so the global Escape (`vwe.handleEvent` stops at
+ *  `defaultPrevented`) neither closes the side panel nor leaves the page. `surface`: the composer around the title keeps
+ *  its own Escape (the create modal's draft prompt, the sub-issue composer's cancel; Linear's `f$` on the form). */
+export type TitleEscape = "title" | "surface";
+export type TitleFlow = { enter: TitleEnter; arrows: TitleArrows; escape: TitleEscape };
 /** Every title but the issue view's: the composers' (`fZn`'s `zQ`), which set neither flag. */
-export const COMPOSER_TITLE: TitleFlow = { enter: "start", arrows: "all" };
+export const COMPOSER_TITLE: TitleFlow = { enter: "start", arrows: "all", escape: "surface" };
 /** Where the caret lands in the description: Linear's `focusAtStart()` and `focusNewLineAtStart()`. */
 export type FocusAt = "start" | "new-line";
 
@@ -22,9 +28,9 @@ type Key = Pick<KeyboardEvent, "key" | "shiftKey" | "altKey" | "metaKey" | "ctrl
 type Caret = { start: number; end: number; length: number };
 export type TitleAction =
   | { type: "next"; at: FocusAt }
-  /** ⌥↵ with text selected: the caret goes to the selection's end (`JL` = `qL` then `KL`). */
+  /** ⌥↵ or Escape with text selected: the caret goes to the selection's end (`qL`). */
   | { type: "collapse" }
-  /** ⌥↵ at a caret: leave the title (`KL`). */
+  /** ⌥↵ or Escape at a caret: leave the title (`KL`); its blur saves. */
   | { type: "blur" }
   /** ⇧↵: a title is one line, so the newline is dropped. */
   | { type: "ignore" };
@@ -41,11 +47,28 @@ export function titleKeyAction(key: Key, caret: Caret, flow: TitleFlow): TitleAc
     // `aJn`: a new line only when the caret was at the end of the title; Enter mid-title never splits it.
     return { type: "next", at: flow.enter === "new-line-at-end" && atEnd ? "new-line" : "start" };
   }
+  // A ProseMirror keymap's plain "Escape" matches no modifier.
+  if (key.key === "Escape") {
+    if (flow.escape !== "title" || key.altKey || key.ctrlKey || key.metaKey || key.shiftKey) return null;
+    return collapsed ? { type: "blur" } : { type: "collapse" };
+  }
   // `iJn`: ↓ (or →, unless up-down only) at the end, with nothing selected, moves to the start of the description.
   if ((key.key === "ArrowDown" || (key.key === "ArrowRight" && flow.arrows === "all")) && atEnd)
     return { type: "next", at: "start" };
   return null;
 }
+
+/** What leaving a title does with what was typed (Linear's issue title `Oh` `d`, on blur). `empty`: the title was cleared,
+ *  so it goes back to the one before with an error toast ("Title cannot be empty"). `save`: a typed change. `keep`:
+ *  nothing typed, so a title Jira has since replaced is never written back. Linear tests the raw value (`!o`); Jira
+ *  rejects a blank summary too, so blank counts as empty here, as Linear's pull request title (`Bo`) trims. */
+export type TitleLeave = { type: "empty" } | { type: "save"; title: string } | { type: "keep" };
+export function titleOnLeave(typed: string, before: string): TitleLeave {
+  if (!typed.trim()) return { type: "empty" };
+  return typed === before ? { type: "keep" } : { type: "save", title: typed };
+}
+/** Linear's toast for a cleared title: `new Le(E.error, "Title cannot be empty", "Reverted the title to its previous value")`. */
+export const EMPTY_TITLE_TOAST = { text: "Title cannot be empty", detail: "Reverted the title to its previous value" } as const;
 
 /** The event the description editor listens for; it calls preventDefault once it has placed the caret. */
 export const FOCUS_AT_EVENT = "title-flow-focus";

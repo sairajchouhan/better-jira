@@ -50,7 +50,13 @@ import { PersonalIssueDetails } from "@/client/features/issue/personal-controls"
 import { SubIssueOf } from "@/client/features/issue/sub-issues";
 import { Avatar } from "@/client/components/avatar";
 import { DocumentBodyEditor, CommentComposer } from "@/client/features/editor/rich-editor-loader";
-import { focusEditorAt, titleKeyDown, type TitleFlow } from "@/client/features/editor/title-flow";
+import {
+  EMPTY_TITLE_TOAST,
+  focusEditorAt,
+  titleKeyDown,
+  titleOnLeave,
+  type TitleFlow,
+} from "@/client/features/editor/title-flow";
 import { hotkeyOf, runShortcut } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
 import { post, useCommand, focusNode } from "@/client/features/navigation/commands";
@@ -286,6 +292,7 @@ function Stepper({ issueKey }: { issueKey: string }) {
 const issueTitleFlow = (issue: Issue): TitleFlow => ({
   enter: "new-line-at-end",
   arrows: issue.parent ? "up-down" : "all",
+  escape: "title",
 });
 /** The issue body holding a title or description, so the peek and the page each find their own pair. */
 const issueBodyOf = (node: Element | null | undefined) => node?.closest(".issue-detail-body");
@@ -316,19 +323,15 @@ function Title({ issue }: { issue: Issue }) {
       rows={1}
       onFocus={(e) => { start.current = e.target.value; setDraft(e.target.value); }}
       onBlur={(e) => {
-        // Only an edit saves: an unchanged field never writes back a title Jira has since replaced.
-        if (e.target.value !== start.current) actions.summary(issue.key, e.target.value);
-        // An empty title isn't saved: show the current one again.
+        const left = titleOnLeave(e.target.value, start.current);
+        if (left.type === "empty") showNotification(EMPTY_TITLE_TOAST);
+        else if (left.type === "save") actions.summary(issue.key, left.title);
+        // Show the store's title: the saved edit, or the one before an emptied title.
         e.target.value = get().issues.get(issue.key)?.summary ?? issue.summary;
         setDraft(null);
       }}
       onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          e.currentTarget.value = start.current;
-          e.currentTarget.blur();
-          return;
-        }
-        // Leaving the title saves it (onBlur), as Linear's title saves on blur.
+        // Leaving the title, by Escape too, saves it (onBlur), as Linear's title saves on blur.
         titleKeyDown(issueTitleFlow(issue), (at) => {
           // While the editor loads, its stand-in has no id: focus it once it arrives, as ⌃⇧I does.
           if (!focusEditorAt(issueBodyOf(ref.current)?.querySelector<HTMLElement>("#description"), at))
