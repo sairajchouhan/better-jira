@@ -205,6 +205,8 @@ let clientFailures = 0,
   epics = false,
   /** Speed checks: this many extra issues on each of two boards, like a real team board. */
   bulk = 0,
+  /** Spreads the bulk issues over this many made-up people and four times as many labels (speed measurements). */
+  bulkVariety = 0,
   /** Board 2 was added from the app. */
   added = false,
   /** BJ-15: TEST-1's Jira links reach issues outside the board and use link types Linear has no kind for. */
@@ -282,8 +284,18 @@ const bulkIssues = () =>
       assignee: people[i % 3]!,
       due: i % 7 ? null : "2026-11-20",
       resolved: i % 5 === 4 ? "2026-11-07T10:00:00Z" : null,
+      // `bulkVariety` spreads the bulk issues over that many made-up people and labels, with watchers, as a large work board is.
+      ...(bulkVariety ? varied(i) : {}),
     })),
   );
+const variedPerson = (n: number) => ({ id: `person-${n}`, name: `Person ${String(n).padStart(3, "0")}`, avatar: null });
+const varied = (i: number) => ({
+  assignee: i % 9 ? variedPerson(i % bulkVariety) : null,
+  creator: variedPerson((i * 7) % bulkVariety),
+  labels: [`label-${i % (bulkVariety * 4)}`, `label-${(i * 13) % (bulkVariety * 4)}`],
+  watchers: [0, 1, 2].map((k) => variedPerson((i + k * 11) % bulkVariety)),
+  watchersComplete: true,
+});
 const listed = () =>
   [
     ...issues,
@@ -896,6 +908,7 @@ async function handle(req: Request) {
     createdIssues.clear();
     descriptions.clear();
     bulk = settings.bulk ?? 0;
+    bulkVariety = settings.bulkVariety ?? 0;
     added = false;
     history = settings.history ?? {};
     historyDelay = settings.historyDelay ?? 0;
