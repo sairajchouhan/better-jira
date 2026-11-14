@@ -76,7 +76,7 @@ function Actor({ item }: { item: InboxItem }) {
   );
 }
 
-function Row({
+export function Row({
   item,
   selected,
   now,
@@ -97,7 +97,7 @@ function Row({
       data-inbox-row={item.id}
       data-unread={item.unread || undefined}
       aria-current={selected || undefined}
-      aria-label={rowLabel(item)}
+      aria-label={rowLabel(item, status?.name)}
       onClick={(e) => {
         if (e.metaKey || e.ctrlKey || e.shiftKey) return;
         e.preventDefault();

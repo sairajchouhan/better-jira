@@ -71,10 +71,12 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
       "OUT-9",
     ]);
     // TEST-2 is a group: Jira's newest, "Sam updated a task", leads; Linear's prioritize promotes only mentions (R3 G15).
-    // The summary names whom Jira names (its additionalActors).
+    // The summary names whom Jira names (its additionalActors). The status is the one the row's icon shows, the issue's
+    // current one (R3 G22).
     expect(labels[0]).toBe(
-      "Unread TEST-2 Browser fixture 2 · Task Sam updated a task · +1 update from Alex",
+      "Unread TEST-2 Browser fixture 2 · Task, Todo Sam updated a task · +1 update from Alex",
     );
+    expect(await p.eval(`document.querySelector('[data-inbox-row*="issue/2"] [data-inbox-status]')?.title`)).toBe("Todo");
     expect(labels[1]).toContain("Alex mentioned you in a comment: Can you check this?");
     expect(labels[2]).toContain("Marked as completed by Sam: Doing → Done");
     expect(labels[3]).toStartWith("Read TEST-4");

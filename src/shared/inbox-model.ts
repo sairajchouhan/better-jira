@@ -329,13 +329,14 @@ export function describe(note: Pick<InboxNote, "actor" | "kind" | "message" | "p
   }
 }
 
-/** A row's accessible name; a Jira system notification has no key, so no gap is left for one (R3-inbox-D7). */
-export const rowLabel = (item: InboxItem) =>
+/** A row's accessible name; a Jira system notification has no key, so no gap is left for one (R3-inbox-D7). `status` is the
+ *  one the row's icon shows (the mirrored issue's current status), so a screen reader hears what the eye sees. */
+export const rowLabel = (item: InboxItem, status = item.status) =>
   [
     item.unread ? "Unread" : "Read",
     item.key,
     item.title,
-    (item.issueType || item.status) && `· ${[item.issueType, item.status].filter(Boolean).join(", ")}`,
+    (item.issueType || status) && `· ${[item.issueType, status].filter(Boolean).join(", ")}`,
     describe(item),
     groupSummary(item) && `· ${groupSummary(item)}`,
   ]
