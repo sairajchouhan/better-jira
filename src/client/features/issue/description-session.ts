@@ -2,6 +2,7 @@ import { adfToText } from "@/client/features/editor/document-text";
 import { createActor, type ActorOptions, type AnyActorLogic } from "xstate";
 import { normalizeDocument, type AdfDocument } from "@/shared/document";
 import { autosaveMachine, inspector } from "@/client/state/machines";
+import { DESCRIPTION_CONFLICT } from "@/shared/jira-ops";
 
 /**
  * One issue description being edited: unsaved typing, its reload draft, and the conflict when Jira's text moves under
@@ -207,3 +208,23 @@ export function descriptionSession(
   };
 }
 export type DescriptionSession = ReturnType<typeof descriptionSession>;
+
+/**
+ * The bar over a description Jira didn't take, and whether saves wait until a version is picked. `conflict` is the
+ * session's (Jira moved under unsaved typing); `rejected` and `error` are the refused version and Jira's reason kept in the
+ * store. A conflict counts wherever its text sits in the reason (a created issue's catch-up wraps it), and a refused
+ * version whose reason is gone is still never shown as saved (QA-3 D3).
+ */
+export function descriptionNotice(conflict: boolean, rejected: boolean, error: string | undefined) {
+  const reason = error || (rejected ? DESCRIPTION_CONFLICT : undefined),
+    refusedConflict = !!reason?.includes(DESCRIPTION_CONFLICT);
+  return {
+    held: conflict || refusedConflict,
+    message: conflict
+      ? "Jira's copy of this description changed. Your edits aren't saved."
+      : refusedConflict
+        ? "Someone changed this description in Jira. Your version isn't saved."
+        : reason &&
+          `Jira didn't save this description (${reason.replace(/^description:\s*/i, "").replace(/\.$/, "")}). Edit it to try again, or use Jira's version.`,
+  };
+}

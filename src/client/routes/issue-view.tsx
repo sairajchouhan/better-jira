@@ -45,7 +45,6 @@ import { currentKey, firstKey } from "@/client/state/jira-sync";
 import { flushLocalChanges } from "@/client/state/local-database";
 import { isLocalIssue } from "@/client/state/local-edits";
 import { navigate, ui } from "@/client/features/navigation/app-navigation";
-import { DESCRIPTION_CONFLICT } from "@/shared/jira-ops";
 import { interruptedUploads } from "@/client/state/jira-media";
 import { navigationIssues, visibleOrder } from "@/shared/view-model";
 import { PersonalIssueDetails } from "@/client/features/issue/personal-controls";
@@ -57,7 +56,7 @@ import { shortcutTitle } from "@/client/components/keycap";
 import { post, useCommand, focusNode } from "@/client/features/navigation/commands";
 import { InboxIssueActions } from "./inbox";
 import { SplitPanel } from "@/client/features/issue/split-panel";
-import { descriptionSession, type DescriptionPorts } from "@/client/features/issue/description-session";
+import { descriptionNotice, descriptionSession, type DescriptionPorts } from "@/client/features/issue/description-session";
 import { shortDate } from "@/client/lib/due-date";
 import { BoardBreadcrumbs } from "@/client/features/navigation/app-chrome";
 import { Button, IconButton } from "@/client/components/button";
@@ -592,7 +591,10 @@ const descriptionPorts: DescriptionPorts = {
     removeItem: (name) => localStorage.removeItem(name),
   },
   read: (key) => get().full.get(key)?.fields.description,
-  refused: (key) => get().full.get(key)?.descriptionError === DESCRIPTION_CONFLICT,
+  refused: (key) => {
+    const f = get().full.get(key);
+    return descriptionNotice(false, !!f?.descriptionRejected, f?.descriptionError).held;
+  },
   write: (key, doc) => actions.description(key, doc),
   discard: (key, unsaved) => actions.discardDescription(key, unsaved),
   persist: flushLocalChanges,
@@ -622,8 +624,7 @@ function Description({ issue }: { issue: Issue }) {
   const f = useStore((s) => s.full.get(issue.key));
   const error = useStore((s) => s.fullErrors.get(issue.key));
   // A description Jira refused stays in the editor (beside Jira's copy in the store) until a version is picked or it is edited.
-  const refusal = f?.descriptionError,
-    content = f ? (f.descriptionRejected ?? f.fields.description ?? "") : undefined;
+  const content = f ? (f.descriptionRejected ?? f.fields.description ?? "") : undefined;
   // Normalizing and serializing the whole document is only redone when Jira's copy (or the refused one) changes.
   const stored = useMemo(
     () => (content !== undefined ? JSON.stringify(normalizeDocument(content)) : ""),
@@ -637,7 +638,7 @@ function Description({ issue }: { issue: Issue }) {
   const snapshot = useSyncExternalStore(session.subscribe, session.getSnapshot),
     { revision, draft, conflict } = snapshot;
   // Jira's text changed under unsaved typing; or Jira refused the save because someone else changed it. Saves wait until the person picks a version.
-  const held = conflict || refusal === DESCRIPTION_CONFLICT;
+  const { held, message } = descriptionNotice(conflict, !!f?.descriptionRejected, f?.descriptionError);
   // Re-observed on focus changes too: a focused editor keeps its own text until it blurs.
   useEffect(() => {
     if (session.observe(stored, !!section.current?.contains(document.activeElement)))
@@ -671,12 +672,6 @@ function Description({ issue }: { issue: Issue }) {
       });
   }, [issue.key]);
   useEffect(() => () => session.flush(), [session]);
-  const message = conflict
-    ? "Jira's copy of this description changed. Your edits aren't saved."
-    : refusal === DESCRIPTION_CONFLICT
-      ? "Someone changed this description in Jira. Your version isn't saved."
-      : refusal &&
-        `Jira didn't save this description (${refusal.replace(/^description:\s*/i, "").replace(/\.$/, "")}). Edit it to try again, or use Jira's version.`;
   return (
     <section
       ref={section}

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { normalizeDocument, type AdfDocument } from "@/shared/document";
-import { descriptionSession } from "./description-session";
+import { descriptionNotice, descriptionSession } from "./description-session";
+import { DESCRIPTION_CONFLICT } from "@/shared/jira-ops";
 
 const doc = (text: string, media?: string): AdfDocument =>
   normalizeDocument({
@@ -293,4 +294,22 @@ test("without a clock port, the 600ms save runs on real timers", async () => {
   session.edit(doc("typed"));
   await Bun.sleep(650);
   expect(writes).toEqual([doc("typed")]);
+});
+
+test("QA-3 description D3: a refused description shows its bar and holds saves even when its reason is wrapped or gone", () => {
+  const conflictBar = "Someone changed this description in Jira. Your version isn't saved.";
+  // A refused version whose reason was lost is never shown as saved.
+  expect(descriptionNotice(false, true, undefined)).toEqual({ held: true, message: conflictBar });
+  // A created issue's catch-up wraps the conflict in its own sentence.
+  expect(
+    descriptionNotice(false, true, `Jira didn't take the edits made to K-34 since it was created: ${DESCRIPTION_CONFLICT}`),
+  ).toEqual({ held: true, message: conflictBar });
+  expect(descriptionNotice(false, true, DESCRIPTION_CONFLICT)).toEqual({ held: true, message: conflictBar });
+  // Any other refusal shows Jira's reason and doesn't hold saves; nothing refused shows nothing.
+  expect(descriptionNotice(false, true, "description: Too long.")).toEqual({
+    held: false,
+    message: "Jira didn't save this description (Too long). Edit it to try again, or use Jira's version.",
+  });
+  expect(descriptionNotice(false, false, undefined)).toEqual({ held: false, message: undefined });
+  expect(descriptionNotice(true, false, undefined).held).toBe(true);
 });
