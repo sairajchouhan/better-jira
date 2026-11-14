@@ -9,6 +9,7 @@ import tailwind from "bun-plugin-tailwind";
 import { attachmentGateway } from "../src/shared/attachment-media";
 import { previewFrom } from "../src/server/link-preview";
 import { mapFeed, mapNote } from "../src/shared/inbox-model";
+import { markGroup } from "./fixture-inbox";
 import { boardFromInput } from "../src/server/config";
 import { avatarProxy, memoryAvatarCache } from "../src/shared/avatar-proxy";
 
@@ -516,20 +517,16 @@ async function inboxRoute(req: Request, url: URL) {
   } else {
     const { action, groups = [] } = await req.json();
     if (action === "read" || action === "unread") await Bun.sleep(inboxWriteDelays.shift() ?? 0);
-    const marks = (node: (typeof inbox.nodes)[number], read: boolean) => {
-      node.readStates = [read ? "read" : "unread"];
-      node.headNotification.readState = read ? "read" : "unread";
-    };
     if (inboxFail && action !== "seen") {
       status = 502;
       body = { error: "Jira did not update the notification." };
     } else if (action === "read" || action === "unread")
       inbox.nodes
         .filter((n) => groups.includes(n.groupId))
-        .forEach((n) => marks(n, action === "read"));
+        .forEach((n) => markGroup(n, action === "read"));
     else if (action === "read-all") {
       body = { ok: true, groups: unreadGroups().map((g) => g.id) };
-      inbox.nodes.forEach((n) => marks(n, true));
+      inbox.nodes.forEach((n) => markGroup(n, true));
     } else if (action === "seen") inbox.unseen = 0;
     else {
       status = 400;
