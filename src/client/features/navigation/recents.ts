@@ -14,6 +14,27 @@ const push = (kind: Kind, value: string) =>
 
 /** Issue keys, most recently opened first. */
 export const recentIssues = () => read("issues");
+/**
+ * Recent keys as the issues they name, newest first, at most `limit`, leaving out `skip` and keys with no issue. A key opened
+ * before Jira gave the issue its own (`KAN-NEW1`, then `KAN-313`) names the same issue as that key: it is listed once
+ * (R3-views-filters-D-9).
+ */
+export function resolveRecents<T extends { key: string }>(
+  keys: string[],
+  find: (key: string) => T | undefined,
+  skip: string | null,
+  limit: number,
+): T[] {
+  const seen = new Set<string>(),
+    out: T[] = [];
+  for (const key of keys) {
+    const issue = find(key);
+    if (!issue || issue.key === skip || seen.has(issue.key)) continue;
+    seen.add(issue.key);
+    if (out.push(issue) === limit) break;
+  }
+  return out;
+}
 export const recentSearches = () => read("searches");
 export const recordSearch = (query: string) => {
   if (query.trim()) push("searches", query.trim());

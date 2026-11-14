@@ -40,7 +40,7 @@ import { FilterIcon } from "@/client/features/filters/filter-icons";
 import { IconButton } from "@/client/components/button";
 import { useStoredState } from "@/client/state/stored-state";
 import { SelectRow } from "@/client/components/display-options";
-import { recentIssues, recentSearches, recordSearch } from "./recents";
+import { recentIssues, recentSearches, recordSearch, resolveRecents } from "./recents";
 import { hotkeyOf, runShortcut, shortcutApplies, shortcuts } from "./shortcuts";
 import { type Keys } from "@/client/components/keycap";
 import {
@@ -359,10 +359,7 @@ function IssueRows({
   );
   const [recent] = useState(() => {
     const open = get().panel ? get().selected : null;
-    return recentIssues().flatMap((key) => {
-      const issue = issues.get(currentKey(key));
-      return issue && issue.key !== open ? [issue] : [];
-    }).slice(0, 10);
+    return resolveRecents(recentIssues(), (key) => issues.get(currentKey(key)), open, 10);
   });
   const [searches] = useState(recentSearches);
   const searching = !!q.trim() || filters.length > 0;
