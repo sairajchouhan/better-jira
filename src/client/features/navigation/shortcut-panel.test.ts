@@ -32,3 +32,15 @@ test("the shortcuts panel puts General first and follows Linear's section order"
   ]);
   expect(sections[0]!.rows.map((r) => r.id)).toEqual(["commands", "back", "search", "help", "shortcuts", "undo"]);
 });
+
+test("R3-palette-shortcuts-D5: searching the caps a row draws finds it, so \"ctrl\" finds ⌃M as \"control\" and \"⌃\" do", async () => {
+  const { shortcutMatches } = await import("./shortcut-panel");
+  const row = { name: "Open comment", group: "Issues", hotkey: "Control+M" };
+  for (const query of ["ctrl", "Ctrl M", "control", "⌃"]) expect(shortcutMatches(row, query, true)).toBe(true);
+  // Off a Mac ⌘ is drawn as Ctrl too.
+  expect(shortcutMatches({ name: "Open command menu", group: "General", hotkey: "Mod+K" }, "ctrl k", false)).toBe(true);
+  expect(shortcutMatches({ name: "Change status", group: "Issues", hotkey: "S" }, "ctrl", true)).toBe(false);
+  // A single letter stays a whole key name.
+  expect(shortcutMatches({ name: "Set due date", group: "Issues", hotkey: "Shift+D" }, "shift d", true)).toBe(true);
+  expect(shortcutMatches({ name: "Change priority", group: "Issues", hotkey: "P" }, "shift d", true)).toBe(false);
+});

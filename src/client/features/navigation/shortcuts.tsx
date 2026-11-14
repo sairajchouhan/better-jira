@@ -11,7 +11,7 @@ import { canMergeOverlay } from "@/shared/saved-view-model";
 import { boardView, filterCount, groupStep, visibleOrder } from "@/shared/view-model";
 import { forgetIssueIntents, post, run as command } from "./commands";
 import { canHaveChildren } from "@/shared/issue-properties";
-import { formatForDisplay, getHotkeyManager, type Hotkey, type HotkeyChord } from "@tanstack/react-hotkeys";
+import { getHotkeyManager, type Hotkey, type HotkeyChord } from "@tanstack/react-hotkeys";
 import { boardOf, get, isWatching, ME, set, useStore, type Overlay } from "@/client/state/store";
 import { actions, beginCreate } from "@/client/state/issue-actions";
 import { currentKey } from "@/client/state/jira-sync";
@@ -34,7 +34,7 @@ import { actionMenuOpen } from "@/client/components/open-action-menus";
 import { TextInput } from "@/client/components/field";
 import { Shortcut as KeyboardShortcut, type Keys } from "@/client/components/keycap";
 import { Text } from "@/client/components/text";
-import { shortcutSections } from "./shortcut-panel";
+import { shortcutMatches, shortcutSections } from "./shortcut-panel";
 import { goToPullRequests } from "@/client/features/issue/card-badges";
 import {
   clearFilters as clearInboxFilters,
@@ -1105,21 +1105,7 @@ export function ShortcutHelp() {
     })),
     ...codeBlockBindings.map((b) => ({ ...b, id: `editor-${b.id}`, group: "Code block" })),
   ];
-  const words = query
-    .toLowerCase()
-    .split(/[+\s]+/)
-    .filter(Boolean);
-  const matches = catalog.filter((s) => {
-    const names = formatForDisplay(s.hotkey, { useSymbols: false, sequenceSeparator: " then " });
-    const raw = Array.isArray(s.hotkey) ? s.hotkey.join(" ") : s.hotkey;
-    const glyphs = formatForDisplay(s.hotkey, { sequenceSeparator: " then " });
-    const text = `${s.name} ${s.group} ${names} ${raw} ${glyphs}`.toLowerCase();
-    const tokens = text.split(/[^\p{L}\p{N}]+/u);
-    // A single letter is a key name, so it must be a whole word: "shift d" is not every name with a d in it.
-    return words.every((word) =>
-      word.length === 1 && /[\p{L}\p{N}]/u.test(word) ? tokens.includes(word) : text.includes(word),
-    );
-  });
+  const matches = catalog.filter((s) => shortcutMatches(s, query));
   return (
     <Dialog label="Keyboard Shortcuts" placement="side" close={() => ui.send({ type: "overlay.close" })}>
       {/* HelpCenter's own header (`On`), not the Modal header: regularPlus labelTitle, a spacer, the small Close inline. */}

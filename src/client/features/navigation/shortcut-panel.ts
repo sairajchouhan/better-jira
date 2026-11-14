@@ -1,3 +1,5 @@
+import { formatForDisplay, type Hotkey } from "@tanstack/react-hotkeys";
+import { chordKeys, isMac } from "@/client/components/keycap";
 /**
  * The keyboard-shortcuts panel's order, from Linear's HelpCenter chunk (HelpCenter.RUjT1v_p.js): its sections in Linear's order,
  * General first, and General's rows in Linear's order (Open command menu, Save or submit, Send comment, Back, Open search,
@@ -44,4 +46,20 @@ export function shortcutSections<T extends { id: string; group: string }>(rows: 
               .map(({ row }) => row)
           : rows,
     }));
+}
+
+/** Whether the panel's search `query` finds the row: every word in its name, group or keys, the keys spelled as TanStack names
+ *  them ("Control"), as registered ("Control+M"), as glyphs ("⌃") and as the caps the row draws ("Ctrl", R3-palette-shortcuts-D5).
+ *  A single letter is a key name, so it must be a whole word: "shift d" is not every name with a d in it. */
+export function shortcutMatches(row: { name: string; group: string; hotkey: Hotkey | string }, query: string, mac = isMac()): boolean {
+  const words = query.toLowerCase().split(/[+\s]+/).filter(Boolean);
+  const hotkey = row.hotkey as Hotkey;
+  const chords: string[] = Array.isArray(hotkey) ? hotkey : [hotkey as string];
+  const platform = mac ? "mac" : "windows";
+  const names = formatForDisplay(hotkey, { platform, useSymbols: false, sequenceSeparator: " then " });
+  const glyphs = formatForDisplay(hotkey, { platform, sequenceSeparator: " then " });
+  const caps = chords.map((chord) => chordKeys(chord, mac).join(" ")).join(" then ");
+  const text = `${row.name} ${row.group} ${names} ${chords.join(" ")} ${glyphs} ${caps}`.toLowerCase();
+  const tokens = text.split(/[^\p{L}\p{N}]+/u);
+  return words.every((word) => (word.length === 1 && /[\p{L}\p{N}]/u.test(word) ? tokens.includes(word) : text.includes(word)));
 }
