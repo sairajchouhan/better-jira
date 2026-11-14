@@ -133,12 +133,14 @@ export const markAllRead = () =>
     {},
   );
 
-/** ⌥U: every unread row but the `except` heads (rows snoozed in the browser, which Linear leaves unread: R3-inbox-D3).
- *  With none, Jira marks its whole feed in one call; otherwise the rest go by group. Returns the groups marked. */
+/** ⌥U: every unread row but the `except` heads (rows snoozed or deleted in the browser, which Linear leaves unread: R3-inbox-D3).
+ *  When none of them is unread, Jira marks its whole feed in one call; otherwise the rest go by group. Returns the groups marked. */
 export async function readAll(except: string[]) {
   const skip = new Set(except),
-    groups = (await unreadGroups()).filter((g) => !skip.has(g.head)).map((g) => g.id);
-  if (!skip.size) await markAllRead();
+    unread = await unreadGroups(),
+    groups = unread.filter((g) => !skip.has(g.head)).map((g) => g.id);
+  // Skipped heads that are already read (old deletes kept in the browser) still allow the one-call path.
+  if (groups.length === unread.length) await markAllRead();
   else for (let i = 0; i < groups.length; i += 50) await mark(groups.slice(i, i + 50), true);
   return groups;
 }

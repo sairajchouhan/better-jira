@@ -387,7 +387,8 @@ export function createInboxStore(ports: InboxPorts) {
       );
   }
   /** Linear's ⌥U: every row in the current view. With no tab or filter, Jira marks its whole feed, unloaded rows too, but
-   *  never a snoozed one unless snoozed rows show (Linear's `markAllAsRead(i, e => t || !e.snoozedUntilAt)`, R3-inbox-D3).
+   *  never a deleted one, nor a snoozed one unless snoozed rows show (Linear's `markAllAsRead(i, e => t || !e.snoozedUntilAt)`
+   *  over the listed rows, R3-inbox-D3).
    *  Every unread row Jira listed is marked here at once, so the badge needn't wait for the refetch (R3-inbox-D5). */
   function markAllRead() {
     const v = viewState(),
@@ -396,9 +397,10 @@ export function createInboxStore(ports: InboxPorts) {
     if (v.priorityInbox || hasFilters(v)) return markRead(rows, true, label);
     const own = localState(),
       now = get().clock;
-    const except = v.showSnoozed
-      ? []
-      : Object.keys(own).filter((head) => (own[head]?.snoozed ?? 0) > now);
+    // Deleted rows are gone from Linear's list, so its ⌥U never reaches them: they stay unread in Jira too (R3 G10).
+    const except = Object.keys(own).filter(
+      (head) => own[head]?.deleted || (!v.showSnoozed && (own[head]?.snoozed ?? 0) > now),
+    );
     const skip = new Set([...rows.map((r) => r.head), ...except]);
     for (const u of firstPage()?.unread ?? [])
       if (!skip.has(u.head)) {

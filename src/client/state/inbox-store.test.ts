@@ -332,6 +332,20 @@ test("⌥U leaves snoozed rows unread in Jira and marks unloaded unread rows at 
   await done;
 });
 
+test("⌥U leaves deleted (hidden) unread rows unread in Jira, as Linear's list never shows them (R3 G10)", async () => {
+  const calls: object[] = [];
+  const a = setup(true, async (body) => (calls.push(body), { groups: [] }));
+  const data = a.ports.queryClient.getQueryData<{ pages: Feed[] }>(["inbox", "all"])!;
+  data.pages[0]!.unread = [
+    { id: "2", head: "head-2" },
+    { id: "far", head: "head-far" },
+  ];
+  a.store.deleteRow(a.items[1]);
+  await a.store.markAllRead();
+  expect(calls).toEqual([{ action: "read-all", except: ["head-2"] }]);
+  expect(a.store.localState()["head-2"]?.read).toBeUndefined();
+});
+
 test("Delete all completed takes only read rows of completed issues, after Linear's confirmation (R3-inbox-D4, D6)", async () => {
   const a = recording(false);
   const asked: DeleteConfirmation[] = [];
