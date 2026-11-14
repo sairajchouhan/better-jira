@@ -333,3 +333,50 @@ test("A3, B2, B5: ⌘K lists the issue's values, finds commands by Linear's keyw
     await p.key("Escape");
   });
 });
+
+test("C7: a Jira or app issue link pasted into ⌘K, or a key typed alone, offers that issue first; ↵ opens it, ⌘↵ in a new tab", async ({ open }) => {
+  const p = await open();
+  await p.eval(`window.open=(url)=>{window.__opened=url;return null}`);
+  const first = `document.querySelector('[cmdk-item]')`;
+  const opened = () => p.eval<string | null>(`(()=>{const u=window.__opened??null;window.__opened=null;return u})()`);
+  const paste = async (text: string) => {
+    await p.eval("document.activeElement?.blur()");
+    await p.key("k", "meta");
+    await p.waitFor(`!!document.querySelector('[cmdk-input]')`);
+    await p.page.keyboard.insertText(text);
+  };
+  await test.step("a /browse/ link on this site: the issue is the first row, and ↵ opens it here", async () => {
+    await paste("https://example.atlassian.net/browse/TEST-3");
+    await p.waitFor(`${first}?.getAttribute('data-value')==='TEST-3'&&${first}.getAttribute('data-selected')==='true'`);
+    expect(await p.eval(`[...document.querySelectorAll('[cmdk-item][data-value="TEST-3"]')].length`)).toBe(1);
+    await p.key("Enter");
+    await p.waitFor(`${shownIssue}==='TEST-3'`);
+  });
+  await test.step("a board link's selectedIssue: ⌘↵ opens the issue's page here in a new tab", async () => {
+    await paste("https://example.atlassian.net/jira/software/projects/TEST/boards/1?selectedIssue=TEST-4");
+    await p.waitFor(`${first}?.getAttribute('data-value')==='TEST-4'`);
+    await p.key("Enter", "meta");
+    expect(await opened()).toBe(`${new URL(p.page.url()).origin}/issue/TEST-4`);
+    await p.waitFor(`!document.querySelector('[cmdk-input]')`);
+  });
+  await test.step("this app's own issue link, and a key typed alone in any case", async () => {
+    await paste(`${new URL(p.page.url()).origin}/issue/TEST-2`);
+    await p.waitFor(`${first}?.getAttribute('data-value')==='TEST-2'`);
+    await p.key("Escape");
+    await paste("test5");
+    await p.waitFor(`${first}?.getAttribute('data-value')==='TEST-5'`);
+    await p.key("Escape");
+  });
+  await test.step("an issue off every board: the server's read of it, opening Jira's page", async () => {
+    await paste("https://example.atlassian.net/browse/OPS-7");
+    await p.waitFor(`${first}?.getAttribute('data-value')==='jira:OPS-7'`);
+    expect(await p.eval<string>(`${first}.textContent`)).toMatch(/OPS-7.*Rotate the staging keys/);
+    await p.key("Enter");
+    expect(await opened()).toBe("https://example.atlassian.net/browse/OPS-7");
+  });
+  await test.step("a link no issue answers: Linear's No issues found for this link", async () => {
+    await paste("https://other.atlassian.net/browse/PX-3");
+    await p.waitFor(`${first}?.textContent==='No issues found for this link'`);
+    await p.key("Escape");
+  });
+});

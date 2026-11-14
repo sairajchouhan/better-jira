@@ -46,7 +46,11 @@ import { useStoredState } from "@/client/state/stored-state";
 import { SelectRow } from "@/client/components/display-options";
 import { recentIssues, recentSearches, recordSearch, resolveRecents } from "./recents";
 import { hotkeyOf, runShortcut, shortcutApplies, shortcuts } from "./shortcuts";
-import { type Keys } from "@/client/components/keycap";
+import { isMac, type Keys } from "@/client/components/keycap";
+import { appURL, jiraIssueURL } from "@/client/features/issue/issue-urls";
+import { useSmartLinkDetails } from "@/client/state/smart-link-details";
+import { browseURL, opensNewTab, pastedIssue, pastedRow, type PastedIssue } from "./pasted-issue";
+import type { SmartLinkDetails } from "@/shared/smart-link";
 import {
   groupPriority,
   LISTED_BY_VIEW_GROUP,
@@ -295,7 +299,14 @@ function PaletteFrame({
 }) {
   return (
     <MenuSurface label={label} close={close} command width={COMMAND_MENU_WIDTH}>
-      <div className="command-menu palette">
+      <div
+        className="command-menu palette"
+        // Before cmdk runs the pick: whether it opens a new tab.
+        onKeyDownCapture={(e) => {
+          if (e.key === "Enter") holdNewTab(e);
+        }}
+        onClickCapture={holdNewTab}
+      >
         {title && <CommandMenuTitle issue={title} />}
         <Menu
           shouldFilter={false}
@@ -327,8 +338,16 @@ function PaletteFrame({
 /** Linear's command-menu list height without a peek (vgn in startup-root.CnUSfl4j.js). */
 const PALETTE_LIST_HEIGHT = 450;
 
+/** Whether ⌘ (Ctrl off a Mac) was held for the Enter or click that picks a row, read as the pick runs (Linear's `fu.metaKey`). */
+let newTab = false;
+const holdNewTab = (event: { metaKey: boolean; ctrlKey: boolean }) => void (newTab = opensNewTab(event, isMac()));
+const openNewTab = (url: string) => (close(), void window.open(url, "_blank", "noopener"));
+
+/** Opens the issue on its board; ⌘↵ or ⌘-click opens its page in a new tab (Linear's `openPage({ newTab: fu.metaKey })`). */
 const openIssue = (i: Issue) =>
-  timed(`open ${i.key}`, () => (close(), navigate({ board: i.board, selected: i.key, panel: true }), ui.send({ type: "query.set", query: "" })));
+  newTab
+    ? openNewTab(appURL(i))
+    : timed(`open ${i.key}`, () => (close(), navigate({ board: i.board, selected: i.key, panel: true }), ui.send({ type: "query.set", query: "" })));
 
 /** An issue row: status, key, title and assignee; picking it opens the issue on its board. */
 function IssueRow({ issue: i, onOpen }: { issue: Issue; onOpen?: () => void }) {
@@ -345,6 +364,53 @@ function IssueRow({ issue: i, onOpen }: { issue: Issue; onOpen?: () => void }) {
     </Menu.Item>
   );
 }
+
+/** An issue only Jira has (a pasted link or typed key off every board): the server's read-only status and title. It opens
+ *  on Jira's page, as a smart link to it does. */
+function JiraIssueRow({ issueKey, details }: { issueKey: string; details: SmartLinkDetails }) {
+  return (
+    <Menu.Item
+      value={`jira:${issueKey}`}
+      onSelect={() => openNewTab(jiraIssueURL(issueKey))}
+      icon={details.status ? <StatusIcon status={details.status} /> : <Icon name="link" size={16} />}
+    >
+      <EntityIdentifier className="palette-issue-key">{issueKey}</EntityIdentifier>
+      {details.title}
+    </Menu.Item>
+  );
+}
+/** Linear's "No issues found for this link" (`url-no-results`): a link no issue answers; picking it does nothing. */
+function MissingIssueRow() {
+  return (
+    <Menu.Item value="pasted:none" onSelect={() => {}} icon={<Icon name="info" size={16} />}>
+      No issues found for this link
+    </Menu.Item>
+  );
+}
+/** The store's key for what the query names (a renamed key resolves to the issue's key now), so the search below skips it. */
+const pastedKey = (pasted: PastedIssue | undefined) =>
+  pasted && pasted.kind !== "elsewhere" ? currentKey(pasted.key) : undefined;
+/** The issue a pasted link or typed key names, first (pasted-issue.ts): the store's issue, else the server's read of it. */
+function PastedIssueGroup({ pasted }: { pasted: PastedIssue | undefined }) {
+  const site = useStore((s) => s.site);
+  const key = pastedKey(pasted);
+  const issue = useStore((s) => (key ? s.issues.get(key) : undefined));
+  const details = useSmartLinkDetails(key && site ? browseURL(site, key) : "", !!key && !!site && !issue);
+  const row = pastedRow(pasted, issue, details);
+  if (!row) return null;
+  return (
+    <Menu.Group>
+      {row.kind === "app" ? (
+        <IssueRow issue={row.issue} />
+      ) : row.kind === "jira" ? (
+        <JiraIssueRow issueKey={row.key} details={row.details} />
+      ) : (
+        <MissingIssueRow />
+      )}
+    </Menu.Group>
+  );
+}
+const pastedIn = (q: string, site: string) => pastedIssue(q, { site, origin: location.origin });
 
 /** The "Issues (n)" group for a typed query; opening one remembers the query as a recent search. */
 function IssueResults({ results, q }: { results: Issue[]; q: string }) {
@@ -398,6 +464,7 @@ function IssueRows({
   filters?: SearchFilter[];
 }) {
   const all = useStore((s) => s.issues);
+  const site = useStore((s) => s.site);
   const issues = useMemo(
     () =>
       filters.length
@@ -412,7 +479,15 @@ function IssueRows({
   const [searches] = useState(recentSearches);
   const searching = !!q.trim() || filters.length > 0;
   const results = useMemo(() => (searching ? matchIssues(issues, q, ordering) : []), [searching, q, issues, ordering]);
-  if (searching) return <IssueResults results={results} q={q} />;
+  const pasted = pastedIn(q, site);
+  const lifted = pastedKey(pasted);
+  if (searching)
+    return (
+      <>
+        <PastedIssueGroup pasted={pasted} />
+        <IssueResults results={lifted ? results.filter((i) => i.key !== lifted) : results} q={q} />
+      </>
+    );
   if (!recent.length && !searches.length)
     return (
       <IssueResults
@@ -573,7 +648,13 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
     { name: "Make a copy as new view…", run: viewAction(() => openViewEditor(duplicateViewDraft(activeView.id))) },
     { name: "Delete view", run: () => setDeletingView(true) },
   ] : []).map((c) => ({ ...c, keywords: VIEW_COMMAND_KEYWORDS[c.name] }));
-  const results = useMemo(() => (q.trim() ? matchIssues(issues, q) : []), [q, issues]);
+  const site = useStore((s) => s.site);
+  const pasted = pastedIn(q, site);
+  const lifted = pastedKey(pasted);
+  const results = useMemo(
+    () => (q.trim() ? matchIssues(issues, q).filter((i) => i.key !== lifted) : []),
+    [q, issues, lifted],
+  );
 
   const command = (entry: (typeof shortcuts)[number]): Cmd => ({
     name: entry.label?.() ?? entry.name,
@@ -651,6 +732,7 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
       title={scoped}
       onBackspace={() => (savingTo ? setSavingTo(false) : setScopeKey(null))}
     >
+      <PastedIssueGroup pasted={pasted} />
       {groups.map((g) => (
         <Menu.Group key={g.key} heading={g.heading}>
           {g.rows.map(([, c]) => <CommandRow key={c.id ?? c.name} cmd={c} />)}

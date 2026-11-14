@@ -119,6 +119,11 @@ const smartLinkDetails: Record<string, unknown> = {
     status: { name: "In Review", category: "indeterminate" },
   },
   "https://example.atlassian.net/wiki/spaces/ENG/pages/123456/Release+checklist": { title: "Release checklist (v2)" },
+  // ⌘K reads a pasted link's issue by its /browse/ page.
+  "https://example.atlassian.net/browse/OPS-7": {
+    title: "Rotate the staging keys",
+    status: { name: "In Review", category: "indeterminate" },
+  },
 };
 const board = {
   id: 1,
