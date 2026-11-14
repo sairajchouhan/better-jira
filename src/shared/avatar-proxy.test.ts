@@ -28,6 +28,12 @@ test("avatarSrc routes absolute URLs through the proxy only", () => {
   expect(avatarSrc(undefined)).toBeUndefined();
 });
 
+test("an SVG avatar (Jira's logo on system notifications) loads directly: the proxy refuses SVG (R3-inbox-D7)", () => {
+  const logo = "https://jira-frontend-bifrost.prod-east.frontend.public.atl-paas.net/assets/jira-logo-blue.fef30c77.svg";
+  expect(avatarSrc(logo)).toBe(logo);
+  expect(avatarSrc(`${logo}?v=2`)).toBe(`${logo}?v=2`);
+});
+
 test("rejects bad URLs and hosts outside the site and avatar CDNs", async () => {
   const { fetcher, calls } = fake({});
   const proxy = avatarProxy({ site: SITE, cache: memoryAvatarCache(), fetcher });

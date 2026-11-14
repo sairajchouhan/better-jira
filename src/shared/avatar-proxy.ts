@@ -2,8 +2,13 @@
  * and site-hosted avatars need a Jira login. So the browser loads every avatar through this same-origin proxy. */
 import { avatar48 } from "./avatar-url";
 
+const SVG = /\.svg(?:[?#]|$)/i;
 export const avatarSrc = (url?: string) =>
-  url && /^https?:\/\//.test(url) ? `/api/avatar?url=${encodeURIComponent(avatar48(url)!)}` : url;
+  // The proxy refuses SVG (it could carry script on this origin); an <img> runs none, so an SVG (Jira's own logo on system
+  // notifications) loads directly instead of failing with a 404 (R3-inbox-D7).
+  url && /^https?:\/\//.test(url) && !SVG.test(url)
+    ? `/api/avatar?url=${encodeURIComponent(avatar48(url)!)}`
+    : url;
 
 export type AvatarCache = {
   get(url: string): { type: string; body: Uint8Array; at: number } | undefined;
