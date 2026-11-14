@@ -1,34 +1,12 @@
-import { useEffect, useState, useSyncExternalStore, type MouseEvent, type ReactNode } from "react";
-import { QueryObserver } from "@tanstack/query-core";
+import { useSyncExternalStore, type MouseEvent, type ReactNode } from "react";
 import { IssueHoverCard } from "@/client/features/issue/issue-hover-card";
 import { Icon, StatusIcon } from "@/client/components/icons";
 import { LinkIcon } from "@/client/components/link-icon";
 import { navigate } from "@/client/features/navigation/app-navigation";
-import { queryClient } from "@/client/state/server-data";
+import { useSmartLinkDetails } from "@/client/state/smart-link-details";
 import { get, statusOf, subscribe } from "@/client/state/store";
 import { safeLink } from "@/shared/document";
-import { faviconSrc, smartLink, type SmartLink as Target, type SmartLinkDetails } from "@/shared/smart-link";
-
-type Key = readonly ["smart-link", string];
-const detailsQuery = (url: string, enabled: boolean) => ({
-  queryKey: ["smart-link", url] as Key,
-  queryFn: async (): Promise<SmartLinkDetails | null> => {
-    const response = await fetch(`/api/smart-link?url=${encodeURIComponent(url)}`);
-    return response.ok ? response.json() : null;
-  },
-  enabled,
-  staleTime: Infinity,
-});
-/** The server's one cached read behind a link on this Jira site (an issue off the board, a Confluence page); the same
- *  URL anywhere on screen shares it. Nothing for other sites. */
-function useServerDetails(url: string, enabled: boolean) {
-  const [observer] = useState(
-    () => new QueryObserver<SmartLinkDetails | null, Error, SmartLinkDetails | null, SmartLinkDetails | null, Key>(queryClient, detailsQuery(url, enabled)),
-  );
-  useEffect(() => observer.setOptions(detailsQuery(url, enabled)), [observer, url, enabled]);
-  const result = () => observer.getCurrentResult();
-  return useSyncExternalStore((changed) => observer.subscribe(changed), result, result).data;
-}
+import { faviconSrc, smartLink, type SmartLink as Target } from "@/shared/smart-link";
 
 /** Linear's mention chip (startup-root `jE`): an image kept on the first line with its text, then a muted prefix (an issue's
  *  key) and the label. One chip for every smart link kind, in read-only documents and the editor alike. */
@@ -71,7 +49,7 @@ export function MentionChip(props: { kind: "person"; id: string; label: string }
 function IssueLink({ link }: { link: Extract<Target, { kind: "issue" }> }) {
   const mirror = () => (link.site === get().site ? get().issues.get(link.key) : undefined);
   const mirrored = useSyncExternalStore(subscribe, mirror, mirror);
-  const details = useServerDetails(link.url, !mirrored && link.site === get().site);
+  const details = useSmartLinkDetails(link.url, !mirrored && link.site === get().site);
   const status = mirrored ? statusOf(mirrored) : details?.status;
   return (
     <IssueHoverCard relation={{ kind: "related", key: link.key, issue: { summary: mirrored?.summary ?? details?.title ?? link.key, status: status ?? { name: "", category: "new" } } }} issue={mirrored}>
@@ -96,7 +74,7 @@ function IssueLink({ link }: { link: Extract<Target, { kind: "issue" }> }) {
 }
 
 function PageLink({ link }: { link: Extract<Target, { kind: "confluence" }> }) {
-  const details = useServerDetails(link.url, !!link.pageId && link.site === get().site);
+  const details = useSmartLinkDetails(link.url, !!link.pageId && link.site === get().site);
   return <MentionChip kind="confluence" href={link.url} image={<Icon name="file" />} label={details?.title || link.title} />;
 }
 
