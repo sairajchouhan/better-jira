@@ -2,7 +2,7 @@ import { expect, test, PREFS_KEY, type App } from "./app";
 
 // Every dropdown renders through src/client/components/menu.tsx, Linear's one menu primitive (startup-root.CnUSfl4j.js: IB/B3e, Vw, fT).
 // One geometry for all of them, so a per-menu drift fails here.
-const probe = `(()=>{const m=[...document.querySelectorAll('.menu')].at(-1),list=m.querySelector('.menu-list'),items=[...m.querySelectorAll('[cmdk-item]')],row=items.find(n=>!n.querySelector('.menu-checkbox'))??items[0],r=getComputedStyle(row),h=getComputedStyle(row,'::before'),hovered=items.find(n=>n.matches('[data-selected=true]'));return {list:getComputedStyle(list).padding,height:row.getBoundingClientRect().height,padding:r.padding,font:r.fontSize,highlight:[h.left,h.right,h.borderRadius],selected:hovered?getComputedStyle(hovered,'::before').backgroundColor:null,shared:items.every(n=>n.classList.contains('menu-item'))}})()`;
+const probe = `(()=>{const m=document.querySelector('.menu-item:hover')?.closest('.menu')??[...document.querySelectorAll('.menu')].at(-1),list=m.querySelector('.menu-list'),items=[...m.querySelectorAll('[cmdk-item]')],row=items.find(n=>!n.querySelector('.menu-checkbox'))??items[0],r=getComputedStyle(row),h=getComputedStyle(row,'::before'),hovered=items.find(n=>n.matches('[data-selected=true]'));return {list:getComputedStyle(list).padding,height:row.getBoundingClientRect().height,padding:r.padding,font:r.fontSize,highlight:[h.left,h.right,h.borderRadius],selected:hovered?getComputedStyle(hovered,'::before').backgroundColor:null,shared:items.every(n=>n.classList.contains('menu-item'))}})()`;
 
 const expected = (scheme: "dark" | "light") => ({
   list: "6px 0px",
@@ -14,7 +14,9 @@ const expected = (scheme: "dark" | "light") => ({
   shared: true,
 });
 
-/** Hovers the menu's first plain row (cmdk highlights it), then reads the shared geometry. */
+/** Hovers the menu's first plain row (cmdk highlights it), then reads the shared geometry of the menu that row is in. When that
+ *  row is a submenu row (Issue options' Status) hovering it opens its submenu, Linear's openSubMenuOnFocus (startup-root): the
+ *  probe stays on the hovered row's menu, not the newer submenu whose first row cmdk selected unseen. */
 async function measure(page: App) {
   await page.waitFor(`!!document.querySelector('.menu .menu-item')`);
   await page.page

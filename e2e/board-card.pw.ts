@@ -403,12 +403,14 @@ test("board colours: the Add new issue pill, the column backdrop and the header 
     expect((await style(col, "backgroundColor"))[0]).toBe("rgba(0, 0, 0, 0)");
   });
   await test.step("header view tabs: controlTertiary, controlTertiaryHover under the pointer, controlTertiarySelected when current", async () => {
+    // The board opens on its All issues tab (defaultPreferences scope "all"), so that is the current, pressed tab.
     const tab = (name: string) => `[...document.querySelectorAll('button[aria-pressed]')].find(b=>b.textContent===${JSON.stringify(name)})`;
-    expect((await style(tab("Active"), "backgroundColor", "color"))).toEqual(["lch(16.706 0.979 272)", "lch(100 0 272)"]);
+    expect((await style(tab("All issues"), "backgroundColor", "color"))).toEqual(["lch(16.706 0.979 272)", "lch(100 0 272)"]);
     expect((await style(tab("Backlog"), "backgroundColor", "height", "borderRadius"))).toEqual(["lch(10.149 0.593 272)", "28px", "9999px"]);
-    await page.hover('button[aria-pressed="false"]:text-is("Backlog")');
+    // The suite's hover takes CSS only; Playwright's role locator finds the tab by its name and pressed state.
+    await page.page.getByRole("button", { name: "Backlog", exact: true, pressed: false }).hover();
     await page.waitFor(`getComputedStyle(${tab("Backlog")}).backgroundColor==="lch(14.006 0.593 272)"`);
-    await page.hover('button[aria-pressed="true"]:text-is("Active")');
-    await page.waitFor(`getComputedStyle(${tab("Active")}).backgroundColor==="lch(16.706 0.979 272)"`);
+    await page.page.getByRole("button", { name: "All issues", exact: true, pressed: true }).hover();
+    await page.waitFor(`getComputedStyle(${tab("All issues")}).backgroundColor==="lch(16.706 0.979 272)"`);
   });
 });

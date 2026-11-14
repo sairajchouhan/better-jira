@@ -136,7 +136,8 @@ test("Jira writes: a rejected write rolls back, created issues open by their Jir
     await p.key("Enter", "meta");
     await sleep(300); // a create would be sent within this window
     expect(await p.eval(`window.__ops.length`)).toBe(0);
-    expect(await p.eval(`document.querySelector('button[type="submit"]').disabled`)).toBe(true);
+    // Create issue is a plain button since the composer stopped being a form (6f6e37e): find it by its label.
+    expect(await p.eval(`[...document.querySelectorAll('button')].find(b=>b.textContent==='Create issue').disabled`)).toBe(true);
   });
 });
 
