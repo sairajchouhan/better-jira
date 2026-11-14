@@ -247,7 +247,7 @@ export function CreateIssue() {
   const submission = useMemo(() => crypto.randomUUID(), [draftIndex]);
   const submit = () => {
     if (!title.trim() || filesBusy || noParentType || (draft.subIssues?.some(t => t.trim()) && !canHaveChildren(get(), { type, project }))) return;
-    const { fromSelection, ...fields } = draft;
+    const { fromSelection, suggestedAssignees: _suggested, ...fields } = draft;
     const key = actions.create(
       title,
       {
@@ -469,6 +469,7 @@ export function CreateIssue() {
             menuProps={{
               board,
               value: draft.assignee ?? null,
+              suggested: draft.suggestedAssignees,
               onChange: (assignee: User | null) =>
                 setDraft({ ...draft, assignee }),
             }}

@@ -13,7 +13,7 @@ import { Icon, TypeDot } from "@/client/components/icons";
 import { set, timed, useStore } from "@/client/state/store";
 import { issueURL } from "@/client/features/issue/issue-urls";
 import { issueBreadcrumbEntries } from "@/client/features/issue/issue-menu";
-import { actions, beginCreate } from "@/client/state/issue-actions";
+import { actions, beginCreateInView } from "@/client/state/issue-actions";
 import { retryLocalStorage } from "@/client/state/app-load";
 import { dismissWriteError } from "@/client/state/jira-sync";
 import { dismissRecoveryNotice, downloadLocalBackup } from "@/client/state/local-database";
@@ -166,7 +166,7 @@ export function Sidebar({ boards }: { boards: Board[] }) {
         <SideItem onClick={() => runShortcut("search")}>
           <Icon name="search" /> Search <Shortcut className="ml-auto" keys={hotkeyOf("search")} size="small" />
         </SideItem>
-        <SideItem onClick={() => beginCreate()}>
+        <SideItem onClick={() => beginCreateInView()}>
           <Icon name="plus" /> New issue <Shortcut className="ml-auto" keys={hotkeyOf("new")} size="small" />
         </SideItem>
         {/* Like Linear, My issues is a sidebar view rather than a tab beside Active/Backlog/All. */}
@@ -615,7 +615,7 @@ export function BoardHeader() {
         <IconButton label="Search issues" variant="muted" size="small" onClick={() => runShortcut("search")} className="ml-auto md:hidden">
           <Icon name="search" />
         </IconButton>
-        <Button variant="muted" size="medium" icon={<Icon name="plus" />} onClick={() => beginCreate()}>
+        <Button variant="muted" size="medium" icon={<Icon name="plus" />} onClick={() => beginCreateInView()}>
           New issue
         </Button>
       </div>

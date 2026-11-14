@@ -1,4 +1,4 @@
-import { expect, test } from "./app";
+import { expect, fixture, test, PREFS_KEY } from "./app";
 
 const title = `document.querySelector('[aria-label="Issue title"]')`;
 
@@ -178,4 +178,60 @@ test("R3-create-D3/D8/D9: composer keys stay in the composer and focus stays in 
     await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Pending sub-issue 2"`);
     expect(await page.eval(`!!document.querySelector('[role=dialog][aria-label="Create issue"]')`)).toBe(true);
   });
+});
+
+/** Opens the app with these filters on the fixture board (TEST-2: Todo, Alex, Low, label "test"). */
+const filtered = (children: object[]) => {
+  const prefs = { 1: { filters: { id: "root", join: "and", children } } };
+  return `if(!sessionStorage.seeded){sessionStorage.seeded=1;localStorage.setItem(${JSON.stringify(PREFS_KEY)},${JSON.stringify(JSON.stringify(prefs))});}`;
+};
+const pill = (name: string) => `!!document.querySelector('[role=dialog][aria-label="Create issue"] [aria-label="${name}"]')`;
+
+test("B7: a new issue takes its properties from the view's filters (Linear's create defaults)", async ({ open }) => {
+  const page = await open("", {
+    setup: filtered([
+      { id: "l", field: "labels", op: "is", values: ["test"] },
+      { id: "p", field: "priority", op: "is", values: ["Low"] },
+      { id: "a", field: "assignee", op: "is", values: ["alex"] },
+      { id: "s", field: "status", op: "isNot", values: ["done"] },
+    ]),
+  });
+  await page.waitFor(`!!document.querySelector('[data-key="TEST-2"]')`);
+  await test.step("C: label, priority and assignee come from the filters; an \"is not\" filter sets nothing", async () => {
+    await page.key("c");
+    await page.waitFor(pill("Labels: test"));
+    expect(await page.eval(pill("Priority: Low"))).toBe(true);
+    expect(await page.eval(pill("Assignee: Alex"))).toBe(true);
+    expect(await page.eval(pill("Status: Done"))).toBe(false);
+    await page.key("Escape");
+    await page.waitFor(`!document.querySelector('[role=dialog][aria-label="Create issue"]')`);
+  });
+  await test.step("a column's +: the column's status, and the filters for the rest", async () => {
+    await page.hover('[data-board-column="Doing"]');
+    await page.click('[data-board-column="Doing"] [aria-label="Add new issue"]');
+    await page.waitFor(pill("Status: Doing"));
+    expect(await page.eval(pill("Labels: test"))).toBe(true);
+    expect(await page.eval(pill("Assignee: Alex"))).toBe(true);
+    await page.key("Escape");
+    await page.waitFor(`!document.querySelector('[role=dialog][aria-label="Create issue"]')`);
+  });
+});
+
+test("B7: an assignee filter naming two people sets no assignee and offers both under Suggested", async ({ open }) => {
+  await fixture.reset({ writable: true, catalog: { priorities: [], labels: [], users: ["Morgan Example"] } });
+  const page = await open("", {
+    setup: filtered([{ id: "a", field: "assignee", op: "is", values: ["alex", "catalog-0"] }]),
+  });
+  await page.waitFor(`!!document.querySelector('[data-key="TEST-2"]')`);
+  await page.key("c");
+  await page.waitFor(pill("Assignee: Unassigned"));
+  await page.click('[role=dialog][aria-label="Create issue"] [aria-label="Assignee: Unassigned"]');
+  const menu = '[role=dialog][aria-label="Assign issue"]';
+  await page.waitFor(`!!document.querySelector('${menu} [cmdk-group-heading]')`);
+  expect(
+    await page.eval(`[...document.querySelectorAll('${menu} [cmdk-group-heading]')].map(n=>n.textContent)`),
+  ).toEqual(["Suggested"]);
+  expect(
+    await page.eval(`[...document.querySelectorAll('${menu} [cmdk-item]')].map(n=>n.dataset.value)`),
+  ).toEqual(["No assignee", "Audit user audit-me", "Alex alex", "Morgan Example catalog-0"]);
 });

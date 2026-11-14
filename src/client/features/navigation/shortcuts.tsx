@@ -13,7 +13,7 @@ import { forgetIssueIntents, post, run as command } from "./commands";
 import { canHaveChildren } from "@/shared/issue-properties";
 import { getHotkeyManager, type Hotkey, type HotkeyChord } from "@tanstack/react-hotkeys";
 import { boardOf, get, isWatching, ME, set, useStore, type Overlay } from "@/client/state/store";
-import { actions, beginCreate } from "@/client/state/issue-actions";
+import { actions, beginCreate, beginCreateInView } from "@/client/state/issue-actions";
 import { currentKey } from "@/client/state/jira-sync";
 import { redoEdit, undoEdit } from "@/client/state/undo-history";
 import { isLocalIssue } from "@/client/state/local-edits";
@@ -511,7 +511,7 @@ export const shortcuts: Shortcut[] = [
     name: "New issue",
     group: "Issues",
     hotkey: "C",
-    run: () => beginCreate(),
+    run: () => beginCreateInView(),
   },
   {
     id: "new-full",
@@ -520,7 +520,7 @@ export const shortcuts: Shortcut[] = [
     hotkey: "V",
     run: () => {
       // Only a composer that opened takes the full-screen intent; a refused create (storage down) leaves none behind.
-      if (beginCreate()) post("create-expanded", undefined);
+      if (beginCreateInView()) post("create-expanded", undefined);
     },
   },
   ...(

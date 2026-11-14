@@ -24,7 +24,8 @@ import {
   withJiraLinks,
 } from "./local-edits";
 import { showIssueCreated, showNotification } from "./app-notifications";
-import { statusById, statuses } from "@/shared/board-catalog";
+import { assignableUsers, statusById, statuses } from "@/shared/board-catalog";
+import { createDefaults } from "@/shared/create-defaults";
 import { viewSettings } from "@/client/features/views/view-settings";
 import { navigate, ui } from "@/client/features/navigation/app-navigation";
 import { adfToText } from "@/client/features/editor/adf";
@@ -45,26 +46,49 @@ import { inverseKind, type Relation } from "@/shared/relations";
 import { uploadNow } from "./jira-media";
 import { get, set, timed, ME, boardOf } from "./store";
 
+/** The status a new issue gets from the view's scope: Active creates in the first open status outside the backlog. */
+function scopeStatus() {
+  const prefs = viewSettings(get().board, get()),
+    board = get().boards.find((b) => b.id === get().board);
+  return prefs.scope === "active"
+    ? board?.columns
+        .find((c) => !/backlog/i.test(c.name) && c.statuses.some((s) => s.category !== "done"))
+        ?.statuses.find((s) => s.category !== "done")?.id
+    : undefined;
+}
 /** Opens the create composer; false when local storage refused it. */
 export function beginCreate(draft: IssueDraft = {}): boolean {
   if (!get().canEdit) {
     set({ perf: "Retry local storage before creating an issue" });
     return false;
   }
-  const prefs = viewSettings(get().board, get()),
-    board = get().boards.find((b) => b.id === get().board);
-  const status =
-    prefs.scope === "active"
-      ? board?.columns
-          .find((c) => !/backlog/i.test(c.name) && c.statuses.some((s) => s.category !== "done"))
-          ?.statuses.find((s) => s.category !== "done")?.id
-      : undefined;
+  const status = scopeStatus();
   ui.send({
     type: "overlay.open",
     overlay: "create",
     draft: { ...(status ? { status } : {}), ...(get().mine ? { assignee: ME } : {}), ...draft },
   });
   return true;
+}
+
+/**
+ * Create from the list on screen (C, V, New issue, a group's "+"): the new issue also takes its properties from the view's
+ * filters (Linear's create defaults, see create-defaults.ts), so it lands in the view. `draft` (a group's values) wins over them.
+ * An issue page or the inbox shows no view, so there the composer starts as `beginCreate` leaves it.
+ */
+export function beginCreateInView(draft: IssueDraft = {}): boolean {
+  const s = get(),
+    page = s.panel && !!s.selected && (s.view === "page" || !!s.document),
+    board = s.boards.find((b) => b.id === s.board);
+  if (page || s.inbox || !board) return beginCreate(draft);
+  const saved = s.editorDraft ? undefined : s.savedViews.find((v) => v.id === s.activeViewId)?.filters;
+  const defaults = createDefaults(saved, viewSettings(s.board, s).filters, {
+    board,
+    people: assignableUsers(ME, s.options.users, s.issues.values()),
+    me: ME,
+    defaultStatus: scopeStatus() ?? board.columns[0]?.statuses[0]?.id,
+  });
+  return beginCreate({ ...defaults, ...draft });
 }
 
 const now = () => new Date().toISOString();

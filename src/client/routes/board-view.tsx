@@ -29,7 +29,7 @@ import { PropertyPicker, type IssueField } from "@/client/features/issue/persona
 import { CommentBadge, CreatorBadge, LinkBadges, PullRequestBadge } from "@/client/features/issue/card-badges";
 import { DueIcon, Icon, LabelDot, PriorityIcon, StatusIcon, TypeDot } from "@/client/components/icons";
 import { ME, get, set, timed, useStore, statusOf } from "@/client/state/store";
-import { actions, beginCreate } from "@/client/state/issue-actions";
+import { actions, beginCreateInView } from "@/client/state/issue-actions";
 import { loadFull } from "@/client/state/server-data";
 import { navigate, preloadOnHover, ui } from "@/client/features/navigation/app-navigation";
 import { followPeek, togglePeek } from "@/client/features/views/view-peek-state";
@@ -134,7 +134,7 @@ export const BoardView = memo(function BoardView({
   const reveal = (id: string) => showGroup(board.id, id);
   const collapse = (id: string) => toggleCollapsed(board.id, [id]);
   const createIn = (bucket: Bucket, row?: Bucket) =>
-    beginCreate({
+    beginCreateInView({
       ...draftForGroup(d.columns, bucket.id, board, universe, prefs.scope),
       ...(row ? draftForGroup(d.rows, row.id, board, universe, prefs.scope) : {}),
     });

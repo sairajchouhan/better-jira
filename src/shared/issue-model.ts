@@ -171,6 +171,9 @@ export type IssueDraft = Partial<
   submission?: string;
   /** "Create issue from selection" (BJ-69): the editor waiting to swap its selected text for a reference to the new issue. */
   fromSelection?: string;
+  /** People the view's assignee filter names when it names several: the assignee picker lists them under Suggested
+   *  (Linear's `filterOverrides.assignee.secondary`). Never saved to the issue. */
+  suggestedAssignees?: User[];
 };
 export type JiraOptions = {
   priorities: { id: string; name: string }[];
