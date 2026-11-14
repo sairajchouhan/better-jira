@@ -1,17 +1,17 @@
 import { IssueHoverCard } from "@/client/features/issue/issue-hover-card";
 import { ActivityEntry, ActivityPropertyRow, LinkedTarget } from "@/client/features/issue/activity-entry";
 import { fullTime } from "@/client/features/issue/issue-dates";
-import { type Issue, type User } from "@/shared/issue-model";
+import { type Issue } from "@/shared/issue-model";
 import { useLocation } from "@tanstack/react-router";
 import { pageURL } from "@/client/features/navigation/app-navigation";
 import { activityTime as ago } from "@/client/features/issue/issue-dates";
 import { DescriptionHistoryProvider } from "@/client/features/issue/description-history";
+import { jiraUser, useIssueCreation } from "@/client/features/issue/use-issue-creation";
 import { AutoResizingTextArea } from "@/client/components/field";
 import { DocumentLoadingState } from "@/client/components/empty-state";
 import { showNotification } from "@/client/state/app-notifications";
 /* oxlint-disable react/no-unstable-nested-components -- Comment heads and avatars are render callbacks supplied to the activity threads. */
 import { FavoriteButton } from "@/client/features/navigation/favorite-button";
-import { jiraAvatar } from "@/shared/avatar-url";
 import {
   lazy,
   memo,
@@ -71,10 +71,6 @@ const ImageViewer = lazy(() =>
 );
 
 const related = (target: Issue) => ({ board: target.board, selected: target.key, panel: true, view: get().view });
-
-
-const author = (a: any): User | null =>
-  a && { id: a.accountId, name: a.displayName, avatar: jiraAvatar(a.avatarUrls) };
 
 // --- issue view: a full page, a side panel, or the inbox's pane; the route picks the frame ---
 
@@ -884,23 +880,21 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
     [issue, activity, comments],
   );
   // Linear's Activity starts with "created"; it opens the first run, so a long history folds after it.
-  // BJ-14: the issue's creator (not its reporter) and the mirrored created time.
-  const creator = f ? (issue.creator ?? author(f.creator ?? f.reporter)) : null;
-  const created = issue.created ?? f?.created;
-  const items: ActivityItem[] = f
+  const creation = useIssueCreation(issue, f);
+  const items: ActivityItem[] = creation
     ? [
         {
-          at: created,
+          at: creation.at,
           anchor: "issue-created",
           summary: [],
           node: (
             <ActivityEntry
               key="issue-created"
               id="issue-created"
-              icon={<Avatar user={creator} size={14} />}
-              time={<Timestamp date={created} id="issue-created" />}
+              icon={<Avatar user={creation.actor} size={14} />}
+              time={<Timestamp date={creation.at} id="issue-created" />}
             >
-              <span className="font-medium">{creator?.name}</span> created
+              <span className="font-medium">{creation.actor?.name}</span> created
             </ActivityEntry>
           ),
         },
@@ -967,14 +961,14 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
       <DescriptionHistoryProvider
         issueKey={issue.key}
         events={activity}
-        created={{ at: created, actor: creator }}
+        created={creation}
         revisions={issue.descriptionHistory}
       >
         <ol className="space-y-3">
           <CommentThreads
             issue={issue}
             comments={(f.comment?.comments ?? []).filter((c: any) => !imageComments.has(c.id))}
-            avatar={(c) => <Avatar user={author(c.author)} size={18} />}
+            avatar={(c) => <Avatar user={jiraUser(c.author)} size={18} />}
             me={<Avatar user={ME} size={18} />}
             timestamp={timestamp}
             events={items}
