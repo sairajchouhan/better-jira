@@ -1,6 +1,6 @@
 import { type Board, type Issue, type IssueDraft, type JiraOptions, type User } from "@/shared/issue-model";
 import { EmptyState } from "@/client/components/empty-state";
-import { resourceURL } from "@/shared/issue-resource";
+import { typedResourceURL } from "@/shared/issue-resource";
 import { alreadyLinked } from "@/shared/relations";
 import { useStoredState, writeStored } from "@/client/state/stored-state";
 import { adfToText } from "@/client/features/editor/adf";
@@ -305,7 +305,8 @@ export function CreateIssue() {
     requestAnimationFrame(() => (linkReturn.current?.isConnected ? linkReturn.current : titleRef.current)?.focus());
   };
   const addLink = () => {
-    const url = linkInput !== null && resourceURL(linkInput);
+    // A bare domain becomes https, as the issue's Add link does (Linear accepts `example.com/page`).
+    const url = linkInput !== null && typedResourceURL(linkInput);
     if (!url) return;
     setDraft((d) => ({ ...d, resources: [...(d.resources ?? []), { id: crypto.randomUUID(), kind: "link", title: url, url, updated: new Date().toISOString() }] }));
     closeLink();
@@ -574,7 +575,7 @@ export function CreateIssue() {
             addLink();
           }}
           placeholder="https://"
-        /><Button type="button" variant="secondary" size="medium" disabled={!resourceURL(linkInput)} onClick={addLink}>Add link</Button><Button type="button" variant="borderless" size="medium" onClick={closeLink}>Cancel link</Button></div>}
+        /><Button type="button" variant="secondary" size="medium" disabled={!typedResourceURL(linkInput)} onClick={addLink}>Add link</Button><Button type="button" variant="borderless" size="medium" onClick={closeLink}>Cancel link</Button></div>}
         {draft.resources?.map(resource => <div key={resource.id} className="mt-2 flex items-center gap-2"><Text variant="mini">{resource.title}</Text><IconButton type="button" label={`Remove link ${resource.title}`} onClick={() => setDraft(d => ({ ...d, resources: d.resources?.filter(r => r.id !== resource.id) }))}><Icon name="close" /></IconButton></div>)}
         <Attachments.List />
         </div>
@@ -589,8 +590,10 @@ export function CreateIssue() {
             <Switch size="small" checked={more} onChange={(e) => setMore(e.target.checked)} />
             Create more
           </Text>
+          {/* A plain button: the composer has no form to submit, so the click itself creates the issue. */}
           <Button
-            type="submit"
+            type="button"
+            onClick={submit}
             disabled={!title.trim() || filesBusy || !!noParentType}
             variant="primary"
             size="medium"

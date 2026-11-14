@@ -18,6 +18,8 @@ test("R3-create-D1/D3/D6: the composer is not a form (Enter in a side field or a
   }
   expect(html).toContain("Issue title");
   expect(html).not.toContain("<form");
+  // With no form, a submit button would do nothing: Create issue must create from its own click.
+  expect(html).not.toContain('type="submit"');
   expect(html).not.toContain("2030-11-15");
   expect(html).toContain('maxLength="255"');
 });
