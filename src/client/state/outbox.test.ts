@@ -69,6 +69,7 @@ function harness({
     {
       pending: (count) => log.push(`pending ${count}`),
       status: (text) => log.push(`status ${text}`),
+      unreachable: (key) => log.push(`unreachable ${key}`),
       retrying: (key, text, shown) => log.push(`retrying ${key} ${text}${shown ? " (shown)" : ""}`),
       uploadsOnly: (key) => log.push(`uploadsOnly ${key}`),
       answered: (answer) => answers.push(answer),
@@ -191,11 +192,33 @@ test("an unreachable server gets the same write again every 5 s until it answers
     [5_000, [{ op: "fields", fields: { summary: "Renamed" } }], undefined],
     [10_000, [{ op: "fields", fields: { summary: "Renamed" } }], undefined],
   ]);
-  expect(h.log.filter((l) => l.startsWith("status"))).toEqual([
-    "status Can't reach the better-jira server. Retrying the Jira write…",
-    "status Can't reach the better-jira server. Retrying the Jira write…",
+  // R3-chrome-D1: it shows as the write's error while it retries (not in the speed readout), and clears once the server answers.
+  expect(h.log.filter((l) => l.startsWith("status") || l.startsWith("unreachable"))).toEqual([
+    "unreachable UN-1",
+    "unreachable UN-1",
+    "unreachable null",
   ]);
   expect(h.answers.map((a) => a.key)).toEqual(["UN-1"]);
+});
+
+test("R3-chrome-D2: back online, a write waiting on an unreachable server goes at once, not at its next 5 s try", async () => {
+  let down = true;
+  const h = harness({
+    reply: () => {
+      if (down) throw new TypeError("fetch failed");
+      return {};
+    },
+  });
+  h.send(edit(issue("UN-2"), { summary: "Renamed" }));
+  await h.advance(1_200);
+  down = false;
+  h.outbox.retryNow();
+  await h.advance(0);
+  expect(h.sent.map((s) => s.at)).toEqual([0, 1_200]);
+  expect(h.answers.map((a) => a.key)).toEqual(["UN-2"]);
+  // Nothing else is left waiting to send it again.
+  await h.advance(10_000);
+  expect(h.sent).toHaveLength(2);
 });
 
 test("one change: creates go first and deletes last, and edits don't re-send what Jira does for a deleted issue itself", async () => {

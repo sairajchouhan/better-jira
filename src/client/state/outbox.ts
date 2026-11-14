@@ -80,6 +80,8 @@ export type OutboxEvents = {
   pending(count: number): void;
   /** A status line for the footer. */
   status(text: string): void;
+  /** The better-jira server can't be reached while sending `key`'s write (it goes again until it can); null once it answers. */
+  unreachable(key: string | null): void;
   /** Jira couldn't settle `key`'s write; it goes again later. `shown`: it has failed often enough to show as an error. */
   retrying(key: string, text: string, shown: boolean): void;
   /** A job of only attachment changes left nothing to send: its files were uploaded before they were placed. */
@@ -233,14 +235,23 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
     }
   }
 
-  /** An unreachable server means nothing reached Jira: the same ops go again until it answers. */
-  async function reach(post: (ops: Op[]) => Promise<Response>, ops: Op[]) {
-    for (;;)
+  /** Ends the wait before resending to a server that couldn't be reached (the browser is back online). */
+  let reconnect: (() => void) | undefined;
+  /** An unreachable server means nothing reached Jira: the same ops go again until it answers, every 5 s or as soon as
+   *  `retryNow` says the connection is back. */
+  async function reach(key: string, post: (ops: Op[]) => Promise<Response>, ops: Op[]) {
+    for (let failed = false; ; failed = true)
       try {
-        return await post(ops);
+        const response = await post(ops);
+        if (failed) events.unreachable(null);
+        return response;
       } catch {
-        events.status("Can't reach the better-jira server. Retrying the Jira write…");
-        await sleep(UNREACHABLE_WAIT);
+        events.unreachable(key);
+        await new Promise<void>((resolve) => {
+          const timer = clock.setTimeout(resolve, UNREACHABLE_WAIT);
+          reconnect = () => (clock.clearTimeout(timer), resolve());
+        });
+        reconnect = undefined;
       }
   }
   let flushing = false,
@@ -347,7 +358,7 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
           continue;
         }
         if (ops) {
-          const response = await reach(post, ops);
+          const response = await reach(job.key, post, ops);
           // 503: Jira didn't answer, or can't tell yet whether an earlier send went through. The same job (same client ids)
           // goes again later, with backoff, behind other issues' writes; it is never dropped (sync review 2-2, 3-1, 3-2).
           if (response.status === 503) {
@@ -423,6 +434,8 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
   }
 
   return {
+    /** The connection is back: a write waiting to resend to an unreachable server goes now. */
+    retryNow: () => reconnect?.(),
     /**
      * Queues each change's ops (see jira-ops' opsFor). Doesn't send: call `flush`. Returns the keys of changes that
      * queued no write and have none waiting, so no answer will ever settle them.

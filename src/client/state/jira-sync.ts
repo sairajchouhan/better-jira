@@ -67,6 +67,7 @@ async function jiraLinks(key: string) {
   } catch {}
 }
 
+export const UNREACHABLE = "Can't reach the better-jira server. Retrying…";
 // --- Jira writes: each edit's before/after becomes ops, which the outbox sends one job at a time (see outbox.ts) ---
 const writes = createOutbox(
   {
@@ -108,6 +109,11 @@ const writes = createOutbox(
   {
     pending: (count) => set({ pendingWrites: count }),
     status: (perf) => set({ perf }),
+    // The save status carries it in the error colour while the write retries, and drops it once the server answers (R3-chrome-D1).
+    unreachable: (key) => {
+      if (key) set({ writeError: { key, text: UNREACHABLE, retrying: true } });
+      else if (get().writeError?.text === UNREACHABLE) set({ writeError: null });
+    },
     retrying: (key, text, shown) =>
       set({
         perf: text,
@@ -134,6 +140,8 @@ const writes = createOutbox(
     },
   },
 );
+// A queued write waiting on an unreachable server goes as soon as the browser is back online, not at its next 5 s try (R3-chrome-D2).
+if (typeof addEventListener === "function") addEventListener("online", () => writes.retryNow());
 /** The key Jira gave an issue created here; views and closures holding the app key reach the issue through it. */
 export const currentKey = (key: string) => writes.currentKey(key);
 /** The first key an issue had in this session, so a view stays mounted when Jira assigns the real key. */
