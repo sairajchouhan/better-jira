@@ -40,3 +40,12 @@ test("each command is filed under Linear's group for it", () => {
   expect(paletteGroupOf({ id: "active", group: "Navigation" })).toBe("Navigation");
   expect(paletteGroupOf({ id: "back", group: "General" })).toBe("Navigation");
 });
+
+test("R3-palette-shortcuts-D4: ⌘K lists Favorite view once, in the open view's group, not again under Views", async () => {
+  const { LISTED_BY_VIEW_GROUP } = await import("./palette-groups");
+  const { shortcuts } = await import("./shortcuts");
+  expect([...LISTED_BY_VIEW_GROUP]).toEqual(["view-favorite"]);
+  // The registry entry keeps its ⌥F and still files under Views wherever it isn't skipped.
+  const favorite = shortcuts.find((s) => s.id === "view-favorite")!;
+  expect([favorite.hotkey, paletteGroupOf(favorite)]).toEqual(["Alt+F", "Views"]);
+});

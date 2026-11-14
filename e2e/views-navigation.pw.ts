@@ -24,6 +24,8 @@ test("custom identity, sidebar, favorite, details, palette and tab identity", as
     await page.waitFor(`document.querySelector('[aria-label="View details"]').textContent.includes('Personal triage')`);
     await page.key('k','meta');
     await page.waitFor(`document.body.textContent.includes('View · Directory custom')`);
+    // R3-palette-shortcuts-D4: one favorite row, the view group's, as Linear's JD; none under Views.
+    expect(await page.eval(`[...document.querySelectorAll('[cmdk-item]')].map(n=>n.textContent).filter(t=>/favorite/i.test(t)&&/view/i.test(t)).length`)).toBe(1);
     await page.key('Escape');
     await page.click('[aria-label=Breadcrumb] a[aria-label="Browser audit"]');
     await page.click('text=Named tab');

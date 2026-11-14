@@ -37,6 +37,10 @@ const BY_REGISTRY_GROUP: Record<string, PaletteGroup> = {
   Views: "Views",
   Inbox: "Notifications",
 };
+/** Registry commands the open view's own group (JD) already lists under Linear's name, so the app's groups skip them: Linear has
+ *  one Favorite view / Unfavorite view row, in JD (`Qz` in startup-root.CnUSfl4j.js), not a second one under Views
+ *  (R3-palette-shortcuts-D4). Its ⌥F still runs from the registry. */
+export const LISTED_BY_VIEW_GROUP: ReadonlySet<string> = new Set(["view-favorite"]);
 export function paletteGroupOf(entry: { id: string; group: string }): PaletteGroup {
   return BY_ID[entry.id] ?? BY_REGISTRY_GROUP[entry.group] ?? "Navigation";
 }

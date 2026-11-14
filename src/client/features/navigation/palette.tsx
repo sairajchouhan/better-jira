@@ -45,6 +45,7 @@ import { hotkeyOf, runShortcut, shortcutApplies, shortcuts } from "./shortcuts";
 import { type Keys } from "@/client/components/keycap";
 import {
   groupPriority,
+  LISTED_BY_VIEW_GROUP,
   orderGroups,
   paletteGroupOf,
   TARGET_PRIORITY,
@@ -544,7 +545,13 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
   const byGroup = new Map<PaletteGroup, Cmd[]>();
   const file = (group: PaletteGroup, cmd: Cmd) => byGroup.set(group, [...(byGroup.get(group) ?? []), cmd]);
   for (const [i, s] of shortcuts.entries())
-    if (!s.issue && applies(s) && s.id !== "commands" && shortcuts.findIndex((other) => other.name === s.name) === i)
+    if (
+      !s.issue &&
+      applies(s) &&
+      s.id !== "commands" &&
+      !(activeView && LISTED_BY_VIEW_GROUP.has(s.id)) &&
+      shortcuts.findIndex((other) => other.name === s.name) === i
+    )
       file(paletteGroupOf(s), command(s));
   for (const b of boards)
     if (b.id !== boardId)
