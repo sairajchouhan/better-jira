@@ -1,4 +1,5 @@
-import { createContext, use, useEffect, useState, type KeyboardEvent, type ReactNode, type Ref } from "react";
+import { createContext, use, useEffect, useState, type ComponentProps, type KeyboardEvent, type ReactNode, type Ref } from "react";
+import { Button, SearchField } from "react-aria-components";
 import { Debouncer } from "@tanstack/pacer";
 import { TextInput } from "./field";
 import { Icon } from "./icons";
@@ -117,8 +118,16 @@ function FindFieldRoot({
   };
   return (
     <FindContext value={{ text, close }}>
-      {/* Leaving, it gives up its id and ref at once, so the next field (and a lookup by id, or ⌘F) never finds two. */}
-      <div
+      {/* React Aria's SearchField is the container. Leaving, the field gives up its id and ref at once, so the next field (and a
+          lookup by id, or ⌘F) never finds two. */}
+      <SearchField
+        id={leaving ? undefined : id}
+        aria-label={placeholder}
+        value={text}
+        onChange={(term) => {
+          setText(term);
+          send.maybeExecute(term);
+        }}
         className={`ui-find ${className}`}
         data-leaving={leaving ? "" : undefined}
         inert={!!leaving}
@@ -129,18 +138,11 @@ function FindFieldRoot({
         <form className="relative flex items-center" onSubmit={(event) => event.preventDefault()}>
           <TextInput
             ref={leaving ? undefined : ref}
-            id={leaving ? undefined : id}
-            type="search"
-            aria-label={placeholder}
             placeholder={placeholder}
-            value={text}
             spellCheck={false}
             autoComplete="off"
             enterKeyHint="search"
-            onChange={(event) => {
-              setText(event.target.value);
-              send.maybeExecute(event.target.value);
-            }}
+            // After SearchField's own keys (Escape clears a term, Enter submits): ours close, select and leave.
             onKeyDown={onKeyDown}
             onBlur={(event) => {
               if (!event.currentTarget.value) close();
@@ -152,24 +154,24 @@ function FindFieldRoot({
           </span>
           {children}
         </form>
-      </div>
+      </SearchField>
     </FindContext>
   );
 }
 
+/** React Aria's SearchField clear button (out of the tab order, focus kept in the field); pressed, it closes the field. */
 function TrailingButton({ label, title }: { label: string; title: string }) {
   const { close } = use(FindContext)!;
   return (
-    <button
-      type="button"
-      tabIndex={-1}
+    <Button
       aria-label={label}
-      title={title}
-      onClick={close}
+      onPress={close}
+      // `title` feeds TitleTooltips; React Aria's Button passes no title through, so the element takes it here.
+      render={(props) => <button {...(props as ComponentProps<"button">)} title={title} />}
       className="-ml-[25px] inline-flex cursor-pointer p-[5px] text-fg-3 hover:text-fg-2"
     >
       <Icon name="x" size={12} />
-    </button>
+    </Button>
   );
 }
 

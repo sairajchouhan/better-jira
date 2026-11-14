@@ -13,7 +13,7 @@ test("the autosize textarea mirrors its value into the hidden copy", () => {
   expect(html).toContain("one\n​</div>");
 });
 
-test("a Field labels and describes its control", () => {
+test("a Field (React Aria's TextField) labels and describes its control", () => {
   const html = renderToStaticMarkup(
     <Field>
       <Field.Label>Name</Field.Label>
@@ -21,17 +21,16 @@ test("a Field labels and describes its control", () => {
       <Field.Description>Shown to everyone</Field.Description>
     </Field>,
   );
-  const id = /<label for="([^"]+)"/.exec(html)?.[1];
-  expect(id).toBeTruthy();
-  expect(html).toContain(`<input data-size="normal" class="ui-input " data-1p-ignore="true" data-form-type="other" data-lpignore="true" id="${id}" aria-describedby="${id}-description"`);
-  expect(html).toContain(`<p id="${id}-description">`);
-});
-
-test("a Field without a rendered description never emits a dangling description id", () => {
-  for (const description of [null, false, undefined]) {
-    const html = renderToStaticMarkup(<Field><Field.Label>Name</Field.Label><TextInput />{description}</Field>);
-    expect(html).not.toContain("aria-describedby");
-  }
+  const [, labelId, inputId] = /<label [^>]*id="([^"]+)" for="([^"]+)"/.exec(html) ?? [];
+  const input = /<input [^>]*>/.exec(html)?.[0] ?? "";
+  expect(input).toContain(`id="${inputId}"`);
+  expect(input).toContain(`aria-labelledby="${labelId}"`);
+  expect(input).toContain('class="ui-input "');
+  expect(input).toContain('data-1p-ignore="true"');
+  const descriptionId = /<p [^>]*id="([^"]+)"[^>]*>Shown to everyone/.exec(html)?.[1];
+  expect(descriptionId).toBeTruthy();
+  // React Aria names every candidate slot while server rendering and keeps only the rendered ones once mounted (useSlotId).
+  expect(/aria-describedby="([^"]+)"/.exec(input)?.[1]?.split(" ")).toContain(descriptionId!);
 });
 
 test("autosizing mirrors caller typography and size onto the measurement copy", () => {

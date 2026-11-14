@@ -1,4 +1,15 @@
-import { Children, isValidElement, createContext, use, useId, useMemo, useRef, type ComponentProps, type ReactNode } from "react";
+import { useRef, type CSSProperties, type Ref } from "react";
+import {
+  Input,
+  Label,
+  Text,
+  TextArea,
+  TextField,
+  type InputProps,
+  type TextAreaProps,
+  type TextFieldProps,
+  type TextProps,
+} from "react-aria-components";
 import "./control-tokens.css";
 import "./field.css";
 
@@ -23,63 +34,47 @@ type Size = keyof typeof FIELD.HEIGHT;
  */
 export const NO_AUTOFILL = { "data-1p-ignore": true, "data-form-type": "other", "data-lpignore": "true" } as const;
 
-const FieldContext = createContext<{ id: string; descriptionId?: string } | null>(null);
-
-function FieldDescription(props: Omit<ComponentProps<"p">, "id">) {
-  return <p id={use(FieldContext)?.descriptionId} {...props} />;
-}
-
-function hasDescription(children: ReactNode): boolean {
-  return Children.toArray(children).some(child => isValidElement<{ children?: ReactNode }>(child) &&
-    (child.type === FieldDescription || hasDescription(child.props.children)));
-}
-
-/** Ties a label and description to the one control inside it. Layout is the caller's. */
-function FieldRoot({ children, ...props }: ComponentProps<"div">) {
-  const id = useId(),
-    described = hasDescription(children),
-    value = useMemo(() => ({ id, descriptionId: described ? `${id}-description` : undefined }), [id, described]);
-  return (
-    <FieldContext value={value}>
-      <div {...props}>{children}</div>
-    </FieldContext>
-  );
-}
-
-/** The control's id and description, from the surrounding Field (an explicit `id` wins). */
-function useField(id: string | undefined) {
-  const field = use(FieldContext);
-  return { id: id ?? field?.id, "aria-describedby": field?.descriptionId };
+/**
+ * React Aria's TextField: ties its Label and Description to the one Input or TextArea inside it. Layout is the caller's. Its
+ * checks stay the browser's (`required`, `min` on the input), so the browser's own message shows: React Aria's native mode would
+ * swallow it for a FieldError we don't draw.
+ */
+function FieldRoot(props: Omit<TextFieldProps, "validationBehavior">) {
+  return <TextField validationBehavior="aria" {...props} />;
 }
 
 export const Field = Object.assign(FieldRoot, {
-  Label: (props: Omit<ComponentProps<"label">, "htmlFor">) => <label htmlFor={use(FieldContext)?.id} {...props} />,
-  Description: FieldDescription,
+  Label,
+  Description: (props: Omit<TextProps, "slot">) => <Text slot="description" elementType="p" {...props} />,
 });
 
-export function TextInput({ size = "normal", id, className = "", ...props }: { size?: Size } & Omit<ComponentProps<"input">, "size">) {
-  return <input data-size={size} className={`ui-input ${className}`} {...NO_AUTOFILL} {...useField(id)} {...props} />;
+/** React Aria's Input in Linear's look; inside a Field it is that Field's control. */
+export function TextInput({ size = "normal", className = "", ...props }: { size?: Size; className?: string; ref?: Ref<HTMLInputElement> } & Omit<InputProps, "size" | "className">) {
+  return <Input data-size={size} className={`ui-input ${className}`} {...NO_AUTOFILL} {...props} />;
 }
 
 /** The hidden copy's text: a trailing zero-width space keeps a final empty line counted in its height. */
 export const sizerText = (value: string) => `${value}​`;
 
-/** Grows with its text from 3 to 30 lines, then scrolls. Controlled or uncontrolled, like a textarea. */
+/** React Aria's TextArea, growing with its text from 3 to 30 lines, then scrolling. Controlled or uncontrolled, like a textarea;
+ *  inside a Field it is that Field's control. */
 export function AutoResizingTextArea({
   size = "normal",
   appearance = "input",
-  id,
   className = "",
   style,
   value,
   defaultValue,
   onInput,
   ...props
-}: { size?: Size; appearance?: "input" | "heading" } & ComponentProps<"textarea">) {
+}: { size?: Size; appearance?: "input" | "heading"; className?: string; style?: CSSProperties; ref?: Ref<HTMLTextAreaElement> } & Omit<
+  TextAreaProps,
+  "className" | "style"
+>) {
   const sizer = useRef<HTMLDivElement>(null);
   return (
     <div className="ui-autosize" data-appearance={appearance}>
-      <textarea
+      <TextArea
         {...NO_AUTOFILL}
         data-size={size}
         className={`ui-input ${className}`}
@@ -91,7 +86,6 @@ export function AutoResizingTextArea({
           if (value === undefined && sizer.current) sizer.current.textContent = sizerText(event.currentTarget.value);
           onInput?.(event);
         }}
-        {...useField(id)}
         {...props}
       />
       <div ref={sizer} aria-hidden data-size={size} className={`ui-input ui-autosize-sizer ${className}`} style={style}>
