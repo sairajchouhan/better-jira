@@ -69,7 +69,9 @@ test("sub-issue rows: shortcuts act on the row, collapse persists, the composer 
       await p.eval(
         `[document.querySelector('[aria-label^="Sub-issue priority"]').textContent,document.querySelector('[aria-label="Create sub-issue"] .rich-editor-actions button').textContent]`,
       ),
-    ).toEqual(["Priority", "Cancel"]);
+    // The defaults start at the parent's priority (TEST-2 is Low), as Linear's Issue.create with a parent does
+    // (`priority = priority || parent.priority`, R3-create-D10), not at the High picked for the last one.
+    ).toEqual(["Low", "Cancel"]);
     await p.click('[aria-label="Create sub-issue"] .rich-editor-actions button');
   });
 

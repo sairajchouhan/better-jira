@@ -147,6 +147,8 @@ test("removing a create attachment from the keyboard returns focus to the attach
 
 test("R3-create-D3/D8/D9: composer keys stay in the composer and focus stays in the dialog", async ({ open }) => {
   const page = await open("?issue=TEST-2&view=page");
+  // The issue page's own title is also "Issue title"; these steps mean the composer's.
+  const title = `document.querySelector('[role=dialog][aria-label="Create issue"] [aria-label="Issue title"]')`;
   await page.waitFor(`!!document.getElementById('comment')`);
   await test.step("D8: Remove relation keeps focus in the composer", async () => {
     await page.click("#issue-options");
@@ -159,7 +161,7 @@ test("R3-create-D3/D8/D9: composer keys stay in the composer and focus stays in 
     expect(await page.eval(`!!document.activeElement?.closest('[role=dialog][aria-label="Create issue"]')`)).toBe(true);
   });
   await test.step("D9 + D3: Ctrl+L opens Add link; Enter adds it, returns focus and creates nothing", async () => {
-    await page.page.locator('[aria-label="Issue title"]').focus();
+    await page.page.locator('[role=dialog][aria-label="Create issue"] [aria-label="Issue title"]').focus();
     await page.type("Keys stay here");
     await page.key("l", "ctrl");
     await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="New issue link URL"`);

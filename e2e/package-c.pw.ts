@@ -114,7 +114,8 @@ test("BJ-59: compose sub-issues before creating their parent", async ({ open }) 
   await page.click('[role=dialog][aria-label="Create issue"] [aria-label="More actions"]');
   await page.click('[cmdk-item][data-value="Add sub-issue"]');
   await page.page.getByRole("textbox", { name: "Pending sub-issue 1" }).fill("Pending child");
-  await page.eval(`(() => { const submit = document.querySelector('[role=dialog][aria-label="Create issue"] button[type=submit]'); submit.click(); submit.click(); })()`);
+  // The composer is no longer a form (R3-create-D1/D3), so Create issue is found by its name, not as a submit button.
+  await page.eval(`(() => { const submit = [...document.querySelectorAll('[role=dialog][aria-label="Create issue"] button')].find(b => b.textContent === "Create issue"); submit.click(); submit.click(); })()`);
   await page.waitFor(`!document.querySelector('[aria-label="Issue title"]')`);
   expect(await page.eval(`[...document.querySelectorAll('[data-key]')].some(n => n.textContent.includes('Pending child'))`)).toBe(true);
   expect(await page.eval(`[...document.querySelectorAll('[data-key]')].filter(n => n.textContent.includes('Pending family') || n.textContent.includes('Pending child')).length`)).toBe(2);
@@ -125,10 +126,13 @@ test("BJ-59: compose sub-issues before creating their parent", async ({ open }) 
 test("BJ-50: manual sibling order survives a reload", async ({ open }) => {
   const setup = `const read=fetch;window.fetch=async(...args)=>{const r=await read(...args);if(new URL(String(args[0]),location.href).pathname!=="/api/issues")return r;const issues=await r.json();for(const key of ["TEST-3","TEST-4"])issues.find(i=>i.key===key).parent="TEST-2";return Response.json(issues)}`;
   const page = await open("?issue=TEST-2&view=page", { setup });
-  await page.page.getByRole("button", { name: "Move TEST-3 down" }).focus();
-  await page.key("Enter");
+  // Linear has no ↑/↓ row buttons: ⌥↓ moves the hovered sub-issue one place down (Move… › Move down, R3-relations-D4).
+  await page.waitFor(`!!document.querySelector('[data-sub-issue="TEST-3"]')`);
+  await page.eval("document.activeElement?.blur()");
+  await page.hover('[data-sub-issue="TEST-3"]');
+  await page.key("ArrowDown", "alt");
   const order = `[...document.querySelectorAll('[data-sub-issue]')].map(n=>n.dataset.subIssue)`;
-  expect(await page.eval(order)).toEqual(["TEST-4", "TEST-3"]);
+  await page.waitFor(`${order}.join()==="TEST-4,TEST-3"`);
   await page.reload();
   await page.waitFor(`document.querySelectorAll('[data-sub-issue]').length===2`);
   expect(await page.eval(order)).toEqual(["TEST-4", "TEST-3"]);

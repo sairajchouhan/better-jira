@@ -298,6 +298,8 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
       "Make a copy…",
       "Favorite",
       "Remind me",
+      // Linear's Move… (startup-root `Lvr`, subActions `Ivr`) for a manually ordered list, just above Delete (R3-relations-D4).
+      "Move…",
       "Delete",
     ]);
     // Linear's Status ring and Priority bars, not a check mark and a list.
@@ -532,7 +534,8 @@ test("the inline sub-issue composer: shortcuts, Escape, drafts and descriptions"
       await page.eval(
         `[...document.querySelectorAll('[aria-label^="Change priority for"]')].map(e=>e.title)`,
       ),
-    ).toEqual(["No priority", "No priority"]);
+      // New sub-issues take the parent's priority (TEST-2 is Low), as Linear's Issue.create does (R3-create-D10).
+    ).toEqual(["Low", "Low"]);
   });
   await test.step("editing the description leaves the inline title clickable and saves both values", async () => {
     await page.waitFor(`!!document.querySelector('[data-create-child]')`);
@@ -637,7 +640,8 @@ test("the inline sub-issue composer: shortcuts, Escape, drafts and descriptions"
       await page.eval(
         `document.querySelector('[aria-label^="Sub-issue priority."]').getAttribute('aria-label')`,
       ),
-    ).toContain("No priority");
+      // A discarded draft starts again from the defaults: the parent's priority, Low (R3-create-D10).
+    ).toContain("Low is selected");
     expect(
       await page.eval(
         `Object.keys(localStorage).some(k=>k.startsWith('better-jira:sub-issue-draft:'))`,
