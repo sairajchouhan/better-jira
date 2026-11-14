@@ -9,7 +9,22 @@ export const canWrite = (site: string) =>
 const isRead = (method: string, path: string) =>
   method === "GET" || (method === "POST" && path === "/rest/api/3/changelog/bulkfetch");
 
-/** Jira REST call. Waits and retries on 429 (rate limit), throws on any other non-2xx. */
+/** How long one Jira request (answer and body) may take before it is given up, in ms; an upload gets longer. */
+export const jiraTimeouts = { request: 30_000, upload: 120_000 };
+
+/** Jira didn't answer in time. Not a refusal: a write that timed out may still have reached Jira. */
+export class JiraTimeout extends Error {
+  constructor(
+    readonly method: string,
+    readonly path: string,
+    readonly ms: number,
+  ) {
+    super(`Jira ${method} ${path} didn't answer within ${ms / 1000}s.`);
+  }
+}
+
+/** Jira REST call. Waits and retries on 429 (rate limit), throws on any other non-2xx, and gives up a request that stalls
+ *  past its timeout with a `JiraTimeout` (each attempt gets its own; a caller's `signal` still aborts it). */
 export async function jira<T = any>(path: string, init: RequestInit = {}): Promise<T> {
   const method = (init.method ?? "GET").toUpperCase();
   const { site, email, token } = serverAuth();
@@ -18,23 +33,31 @@ export async function jira<T = any>(path: string, init: RequestInit = {}): Promi
   if (!path.startsWith("/") || path.startsWith("//"))
     throw new Error("Jira paths must be relative to the configured site.");
   const form = init.body instanceof FormData;
+  const ms = form ? jiraTimeouts.upload : jiraTimeouts.request;
   for (let attempt = 0; ; attempt++) {
-    const res = await fetch(site + path, {
-      ...init,
-      headers: {
-        Authorization: "Basic " + btoa(`${email}:${token}`),
-        Accept: "application/json",
-        ...(form ? { "X-Atlassian-Token": "no-check" } : { "Content-Type": "application/json" }),
-        ...init.headers,
-      },
-    });
-    if (res.status === 429 && attempt < 5) {
-      await Bun.sleep(Number(res.headers.get("Retry-After") ?? 2 ** attempt) * 1000);
-      continue;
+    const timeout = AbortSignal.timeout(ms);
+    try {
+      const res = await fetch(site + path, {
+        ...init,
+        signal: init.signal ? AbortSignal.any([init.signal, timeout]) : timeout,
+        headers: {
+          Authorization: "Basic " + btoa(`${email}:${token}`),
+          Accept: "application/json",
+          ...(form ? { "X-Atlassian-Token": "no-check" } : { "Content-Type": "application/json" }),
+          ...init.headers,
+        },
+      });
+      if (res.status === 429 && attempt < 5) {
+        await Bun.sleep(Number(res.headers.get("Retry-After") ?? 2 ** attempt) * 1000);
+        continue;
+      }
+      if (!res.ok) throw new JiraError(method, path, res.status, await res.text());
+      const text = res.status === 204 ? "" : await res.text();
+      return (text ? JSON.parse(text) : undefined) as T;
+    } catch (e) {
+      if (timeout.aborted && !init.signal?.aborted) throw new JiraTimeout(method, path, ms);
+      throw e;
     }
-    if (!res.ok) throw new JiraError(method, path, res.status, await res.text());
-    const text = res.status === 204 ? "" : await res.text();
-    return (text ? JSON.parse(text) : undefined) as T;
   }
 }
 

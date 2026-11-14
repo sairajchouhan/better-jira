@@ -7,7 +7,7 @@ import { serverConfiguration } from "./server-config";
 import { fetchPreview } from "./link-preview";
 import { remoteImage } from "./remote-image";
 import { applyOps, uploadAttachment } from "./jira-writes";
-import { jira, JiraError, canWrite } from "./jira";
+import { jira, JiraError, JiraTimeout, canWrite } from "./jira";
 import * as inbox from "./notifications";
 
 const json = (body: string) =>
@@ -312,7 +312,14 @@ const server = serve({
           });
         } catch (e) {
           return Response.json(
-            { error: e instanceof JiraError ? e.reason : "Could not upload attachment." },
+            {
+              error:
+                e instanceof JiraError
+                  ? e.reason
+                  : e instanceof JiraTimeout
+                    ? "Jira didn't answer in time. Upload the file again."
+                    : "Could not upload attachment.",
+            },
             { status: 422 },
           );
         }

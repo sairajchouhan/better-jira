@@ -55,3 +55,59 @@ test("R2-comments-D4: Jira's bare refusal codes read as a sentence, once", () =>
     "The text is longer than Jira allows (32,767 characters). Shorten it and send again.",
   );
 });
+
+test("G14: a stalled Jira request gives up with a JiraTimeout; a 429 still waits and retries", async () => {
+  const originalFetch = globalThis.fetch;
+  const saved = { url: process.env.JIRA_URL, email: process.env.JIRA_EMAIL, token: process.env.JIRA_TOKEN };
+  const { jira, jiraTimeouts, JiraTimeout } = await import("./jira");
+  const before = { ...jiraTimeouts };
+  let calls = 0;
+  try {
+    process.env.JIRA_URL = "https://cloudsairaj.atlassian.net";
+    process.env.JIRA_EMAIL = "test@example.invalid";
+    process.env.JIRA_TOKEN = "test-only";
+    jiraTimeouts.request = 20;
+    // Never answers; only the request's signal ends it.
+    globalThis.fetch = Object.assign(
+      (_url: string, init: RequestInit = {}) =>
+        new Promise<Response>((_resolve, reject) => {
+          calls++;
+          init.signal?.addEventListener("abort", () => reject(init.signal!.reason));
+        }),
+      originalFetch,
+    );
+    const stalled = jira("/rest/api/3/issue/SAM1-1").catch((e) => e);
+    const outcome = await Promise.race([stalled, Bun.sleep(1000).then(() => "hung")]);
+    expect(outcome).toBeInstanceOf(JiraTimeout);
+    expect(String((outcome as Error).message)).toContain("didn't answer within");
+
+    // A caller's own abort is not reported as a timeout.
+    jiraTimeouts.request = 1000;
+    const own = new AbortController();
+    const aborted = jira("/rest/api/3/issue/SAM1-1", { signal: own.signal }).catch((e) => e);
+    own.abort();
+    expect(await aborted).not.toBeInstanceOf(JiraTimeout);
+
+    // Retry-After is still honoured: each attempt gets its own timeout.
+    jiraTimeouts.request = 50;
+    calls = 0;
+    globalThis.fetch = Object.assign(async () => {
+      calls++;
+      return calls === 1
+        ? new Response("", { status: 429, headers: { "Retry-After": "0" } })
+        : Response.json({ key: "SAM1-1" });
+    }, originalFetch);
+    expect(await jira("/rest/api/3/issue/SAM1-1")).toEqual({ key: "SAM1-1" });
+    expect(calls).toBe(2);
+  } finally {
+    Object.assign(jiraTimeouts, before);
+    globalThis.fetch = originalFetch;
+    for (const [name, value] of [
+      ["JIRA_URL", saved.url],
+      ["JIRA_EMAIL", saved.email],
+      ["JIRA_TOKEN", saved.token],
+    ] as const)
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+  }
+});
