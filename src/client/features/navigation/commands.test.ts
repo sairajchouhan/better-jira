@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { Glob } from "bun";
+import { focusNode } from "./commands";
 
 const source = async (pattern: string) => {
   const files: Record<string, string> = {};
@@ -82,4 +83,21 @@ test("an issue intent lapses once its issue is left, so it never reaches another
   forgetIssueIntents(null);
   expect(kept("issue-options-start")).toBe("due");
   forgetIssueIntents(null);
+});
+
+test("focusNode takes a command only when focus lands in the element (R3 G10)", () => {
+  const doc = { activeElement: null as object | null };
+  const node = (takes: boolean) => {
+    const el = {
+      ownerDocument: doc,
+      focus: () => {
+        if (takes) doc.activeElement = el;
+      },
+      contains: (other: object) => other === el,
+    };
+    return el as unknown as HTMLElement;
+  };
+  expect(focusNode(undefined)).toBeUndefined();
+  expect(focusNode(node(false))).toBeUndefined(); // hidden or disabled: focus didn't stick
+  expect(focusNode(node(true))).toBe(true);
 });
