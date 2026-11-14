@@ -7,12 +7,13 @@ import { addLocalFiles, restoreLocalFiles } from "@/client/state/local-database"
 import { discardLateMedia, documentHasMedia, lateMediaDiscarded, normalizeDocument, type AdfDocument } from "@/shared/document";
 import { rankBetween } from "@/shared/view-model";
 import { childrenByParent } from "./sub-issue-model";
-import { emptySubIssueDraft, readSubIssueDraft, saveSubIssueDraft, subIssueDefaults, subIssueDraftKey, type SubIssueDraft } from "./sub-issue-draft";
+import { emptySubIssueDraft, nextSubIssueProperties, readSubIssueDraft, saveSubIssueDraft, subIssueDefaults, subIssueDraftKey, type SubIssueDraft } from "./sub-issue-draft";
 
 /** Owns draft persistence, file restoration, late uploads, and submission for one keyed issue. */
 export function useSubIssueComposer(issue: Issue, board: Board, namespace: string, setCollapsed: (value: boolean) => void) {
   const [creating, setCreating] = useState(false), [confirming, setConfirming] = useState(false);
-  const initial = (): IssueDraft => subIssueDefaults(issue, board);
+  const initial = (): IssueDraft =>
+    subIssueDefaults(issue, board, childrenByParent(get().issues).get(issue.key) ?? []);
   const draftKey = subIssueDraftKey(namespace, issue.key);
   const [value, setValue] = useState(() => readSubIssueDraft(draftKey, initial())),
     pending = useRef(value),
@@ -141,6 +142,8 @@ export function useSubIssueComposer(issue: Issue, board: Board, namespace: strin
   // The editor hands over its document: a send deferred for an upload has media this render's closure has not seen (Opus review 4).
   const submit = (doc?: AdfDocument) => {
     const { title, description, files, properties: draft } = pending.current;
+    const fromDefaults = shifted.current;
+    shifted.current = false;
     if (!title.trim() || files.some((file) => file.missing)) return;
     const lastRank = [...(childrenByParent(get().issues).get(issue.key) ?? [])]
       .map((i) => i.rank ?? "")
@@ -157,24 +160,28 @@ export function useSubIssueComposer(issue: Issue, board: Board, namespace: strin
       true,
     );
     if (!key) return;
-    // Linear starts the next sub-issue from the defaults, not the last one's properties.
     update({
       title: "",
       description: normalizeDocument(""),
       files: [],
-      properties: initial(),
+      properties: nextSubIssueProperties(draft, initial(), fromDefaults),
     });
     setEditor((n) => n + 1);
     requestAnimationFrame(() => titleInput.current?.focus());
   };
   const submitFromButton = () =>
     form.current?.querySelector<HTMLButtonElement>(".rich-editor-submit")?.click();
+  // ⌘⇧↵ starts the next draft from the defaults; ⌘↵ from the sub-issue it creates.
+  const shifted = useRef(false);
   useHotkey("Mod+Enter", submitFromButton, {
     target: titleInput,
     capture: true,
     ignoreInputs: false,
   });
-  useHotkey("Mod+Shift+Enter", submitFromButton, {
+  useHotkey("Mod+Shift+Enter", () => {
+    shifted.current = true;
+    submitFromButton();
+  }, {
     target: form,
     capture: true,
     ignoreInputs: false,

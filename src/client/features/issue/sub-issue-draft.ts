@@ -16,12 +16,19 @@ export type SubIssueDraft = {
 /**
  * A new sub-issue's properties. Linear's `Issue.create` with a parent sets `priority = priority || parent.priority`
  * (startup-entry `w2.create`, `ye.priority=s||f.priority`), so the inline composer starts at the parent's priority
- * (R3-create-D10); the project is the parent's (`createSubIssue`: `project:n.project?.value`).
+ * (R3-create-D10); the project is the parent's (`createSubIssue`: `project:n.project?.value`). The assignee is the
+ * parent's only when that is you, or when every existing sub-issue (`children`) has it (`f.assignee===e?ye.assignee=e:
+ * f.children.length>0&&f.children.elements.every(e=>e.assignee===f.assignee)`); else none.
  */
-export const subIssueDefaults = (parent: Issue, board: Board): IssueDraft => ({
+export const subIssueDefaults = (parent: Issue, board: Board, children: readonly Issue[] = []): IssueDraft => ({
   parent: parent.key,
   project: parent.project,
-  assignee: ME,
+  assignee:
+    parent.assignee &&
+    ((!!ME.id && parent.assignee.id === ME.id) ||
+      (children.length > 0 && children.every((child) => child.assignee?.id === parent.assignee!.id)))
+      ? parent.assignee
+      : null,
   priority: parent.priority,
   status:
     board.columns
@@ -29,6 +36,21 @@ export const subIssueDefaults = (parent: Issue, board: Board): IssueDraft => ({
       ?.statuses.find((s) => s.category === "new")?.id ?? board.columns[0]?.statuses[0]?.id,
   labels: [],
 });
+/**
+ * The next draft's properties after a create: ⌘↵ starts from the one just created (its status, priority, assignee and
+ * labels), ⌘⇧↵ from the defaults. Linear's sub-issue composer: `n.shiftKey||…?l(Cm(t.team,h,t)):l(Cm(t.team,h,t,r))`, and
+ * `createSubIssue` with a previous issue takes `assignee`, `labels`, `priority` and `state` from it.
+ */
+export const nextSubIssueProperties = (created: IssueDraft, defaults: IssueDraft, fromDefaults: boolean): IssueDraft =>
+  fromDefaults
+    ? defaults
+    : {
+        ...defaults,
+        status: created.status,
+        priority: created.priority,
+        assignee: created.assignee,
+        labels: created.labels,
+      };
 export const emptySubIssueDraft = (properties: IssueDraft): SubIssueDraft => ({
   title: "",
   description: normalizeDocument(""),

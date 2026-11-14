@@ -555,6 +555,24 @@ test("the inline sub-issue composer: shortcuts, Escape, drafts and descriptions"
       `document.getElementById('description')?.textContent.includes('Keep this rich child description')`,
     );
   });
+  await test.step("⌘↵ starts the next sub-issue from the one just created; ⌘⇧↵ from the defaults (R3 G13, Linear's sub-issue composer)", async () => {
+    const priority = `document.querySelector('[aria-label^="Sub-issue priority."]').getAttribute('aria-label')`;
+    await page.waitFor(`!!document.querySelector('[data-create-child]')`);
+    await page.click("[data-create-child]");
+    await page.type("Carried child");
+    await page.click('[aria-label^="Sub-issue priority."]');
+    await page.click('[cmdk-item][data-value="High"]');
+    await page.click('[aria-label="Sub-issue title"]');
+    await page.key("Enter", "meta");
+    await page.waitFor(`document.querySelector('[data-sub-issues]').textContent.includes('Carried child')`);
+    expect(await page.eval(priority)).toBe("Sub-issue priority. High is selected");
+    await page.type("Fresh child");
+    await page.key("Enter", "meta", "shift");
+    await page.waitFor(`document.querySelector('[data-sub-issues]').textContent.includes('Fresh child')`);
+    // TEST-2 is Low: the defaults take the parent's priority.
+    expect(await page.eval(priority)).toBe("Sub-issue priority. Low is selected");
+    await page.click(`[aria-label="Create sub-issue"] .rich-editor-actions button`);
+  });
   await test.step("Escape follows Linear: field, then composer, then a discard confirmation; the draft survives navigation and reload until Discard", async () => {
     await page.goto("?issue=TEST-2&view=page");
     await page.waitFor(`!!document.querySelector('[data-create-child]')`);
