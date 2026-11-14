@@ -2,6 +2,7 @@ import { type Board, type Issue, type IssueDraft } from "@/shared/issue-model";
 import { ME } from "@/client/state/store";
 import { documentHasMedia, normalizeDocument, type AdfDocument } from "@/shared/document";
 import { adfToText } from "@/client/features/editor/adf";
+import { statusType } from "@/shared/inbox-model";
 
 
 /** Where one issue's inline sub-issue draft is kept across reloads. */
@@ -18,7 +19,8 @@ export type SubIssueDraft = {
  * (startup-entry `w2.create`, `ye.priority=s||f.priority`), so the inline composer starts at the parent's priority
  * (R3-create-D10); the project is the parent's (`createSubIssue`: `project:n.project?.value`). The assignee is the
  * parent's only when that is you, or when every existing sub-issue (`children`) has it (`f.assignee===e?ye.assignee=e:
- * f.children.length>0&&f.children.elements.every(e=>e.assignee===f.assignee)`); else none.
+ * f.children.length>0&&f.children.elements.every(e=>e.assignee===f.assignee)`); else none. The status follows the
+ * parent's state type (see `subIssueStatus`).
  */
 export const subIssueDefaults = (parent: Issue, board: Board, children: readonly Issue[] = []): IssueDraft => ({
   parent: parent.key,
@@ -30,12 +32,36 @@ export const subIssueDefaults = (parent: Issue, board: Board, children: readonly
       ? parent.assignee
       : null,
   priority: parent.priority,
-  status:
-    board.columns
-      .find((c) => !/backlog/i.test(c.name) && c.statuses.some((s) => s.category === "new"))
-      ?.statuses.find((s) => s.category === "new")?.id ?? board.columns[0]?.statuses[0]?.id,
+  status: subIssueStatus(parent, board),
   labels: [],
 });
+/**
+ * A new sub-issue's status from its parent's state type, as Linear's `w2.create` with a parent: started, unstarted or
+ * completed → the team's default unstarted state (`defaultActiveState`); triage → the triage state, else backlog;
+ * backlog, canceled or duplicate → the default backlog state (`switch(f.state.type){case jo.started:case jo.unstarted:case
+ * jo.completed:ye.state=ye.team.defaultActiveState;…}`). A status in a Backlog column is a backlog state, as the Backlog tab
+ * reads it; a type the board has none of falls back to its first unstarted status.
+ */
+export function subIssueStatus(parent: Pick<Issue, "status">, board: Board): string | undefined {
+  const typed = board.columns.flatMap((column) =>
+    column.statuses.map((status) => ({
+      id: status.id,
+      type: /backlog/i.test(column.name) ? "Backlog" : statusType(status),
+    })),
+  );
+  const first = (type: string) => typed.find((status) => status.type === type)?.id;
+  const active = first("Unstarted") ?? board.columns[0]?.statuses[0]?.id;
+  switch (typed.find((status) => status.id === parent.status)?.type) {
+    case "Triage":
+      return first("Triage") ?? first("Backlog") ?? active;
+    case "Backlog":
+    case "Canceled":
+    case "Duplicate":
+      return first("Backlog") ?? active;
+    default:
+      return active;
+  }
+}
 /**
  * The next draft's properties after a create: ⌘↵ starts from the one just created (its status, priority, assignee and
  * labels), ⌘⇧↵ from the defaults. Linear's sub-issue composer: `n.shiftKey||…?l(Cm(t.team,h,t)):l(Cm(t.team,h,t,r))`, and

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { type Board, type Issue } from "@/shared/issue-model";
-import { nextSubIssueProperties, subIssueDefaults } from "./sub-issue-draft";
+import { nextSubIssueProperties, subIssueDefaults, subIssueStatus } from "./sub-issue-draft";
 import { ME } from "@/client/state/store";
 
 test("R3-create-D10: a new inline sub-issue starts at its parent's priority, as Linear's Issue.create does", () => {
@@ -40,4 +40,27 @@ test("R3 G13: ⌘↵ starts the next sub-issue from the one just created, ⌘⇧
     labels: ["ui"],
   });
   expect(nextSubIssueProperties(created, defaults, true)).toEqual(defaults);
+});
+
+test("R3 G14: a new sub-issue's status follows the parent's state type, as Linear's w2.create", () => {
+  const board: Board = {
+    id: 1,
+    name: "B",
+    columns: [
+      { name: "Backlog", statuses: [{ id: "backlog", name: "Backlog", category: "new" }] },
+      { name: "Todo", statuses: [{ id: "todo", name: "To Do", category: "new" }] },
+      { name: "Doing", statuses: [{ id: "doing", name: "In Progress", category: "indeterminate" }] },
+      { name: "Done", statuses: [{ id: "done", name: "Done", category: "done" }, { id: "wont", name: "Won't Do", category: "done" }] },
+    ],
+  };
+  const under = (status: string) => subIssueStatus({ status }, board);
+  // started, unstarted, completed → the default unstarted state
+  expect(["todo", "doing", "done"].map(under)).toEqual(["todo", "todo", "todo"]);
+  // backlog, canceled → the default backlog state
+  expect(under("backlog")).toBe("backlog");
+  expect(under("wont")).toBe("backlog");
+  // no backlog state on the board: the unstarted default
+  const noBacklog = { ...board, columns: board.columns.slice(1) };
+  expect(subIssueStatus({ status: "wont" }, noBacklog)).toBe("todo");
+  expect(subIssueDefaults({ key: "P-1", board: 1, status: "backlog" } as Issue, board).status).toBe("backlog");
 });
