@@ -12,8 +12,11 @@ import { FindField } from "@/client/components/find-field";
 import { Tabs } from "@/client/components/tabs";
 import { Text } from "@/client/components/text";
 import { Icon, StatusIcon, TypeDot, type IconName } from "@/client/components/icons";
-import { FILTER_FIELDS, describe, groupSummary, rowLabel, feedCategory, hasFilters, missingIssueNote, shortAgo, snoozeChoices, snoozeTime, type FilterField, type InboxItem, type InboxView } from "@/shared/inbox-model";
+import { FILTER_FIELDS, describe, groupSummary, rowLabel, feedCategory, hasFilters, missingIssueNote, shortAgo, type FilterField, type InboxItem, type InboxView, snoozeMarks, type SnoozeMarks } from "@/shared/inbox-model";
 import { CommentCard, InboxGroupUpdates } from "@/client/features/inbox/inbox-group";
+import { TIME_PLACEHOLDER, TimeOptionRows } from "@/client/features/time-options/time-option-rows";
+import { snoozedFor } from "@/shared/time-options";
+import { SnoozedLine, UnsnoozedMark } from "@/client/features/inbox/snooze-marks";
 import { fullTime } from "@/client/features/issue/issue-dates";
 import { copyIssue, type CopyKind } from "@/client/features/issue/issue-copy";
 import { Menu } from "@/client/components/menu";
@@ -28,7 +31,7 @@ import { SidebarToggle } from "@/client/features/navigation/app-chrome";
 import { useSearch } from "@tanstack/react-router";
 import { toggleFavorite } from "@/client/features/navigation/favorites";
 
-import { usePush, changeView, toggleFilter, clearFilters, selectRow, toggleRead, markAllRead, deleteRow, deleteAll, openSnooze, snoozeRow, showTab, inbox, statusOf, ROW_PARAM, useFeed, useSelected, useView, useShownView, useFind, openFind, setFind, closeFind, useLocal, useUnreadCount, orderOf, facets, itemsOf, clearUnseen, useConfirmation } from "@/client/features/inbox/inbox";
+import { usePush, changeView, toggleFilter, clearFilters, selectRow, toggleRead, markAllRead, deleteRow, deleteAll, openSnooze, snoozeMenu, snoozeRow, unsnoozeRow, showTab, inbox, statusOf, ROW_PARAM, useFeed, useSelected, useView, useShownView, useFind, openFind, setFind, closeFind, useLocal, useUnreadCount, orderOf, facets, itemsOf, clearUnseen, useConfirmation } from "@/client/features/inbox/inbox";
 import { InboxIssuePane } from "./issue-view";
 import { firstKey } from "@/client/state/jira-sync";
 import { SelectRow, Toggle, ViewOptions } from "@/client/components/display-options";
@@ -84,13 +87,15 @@ export function Row({
   item,
   selected,
   now,
+  snoozedUntil,
+  unsnoozedAt,
   onMenu,
 }: {
   item: InboxItem;
   selected: boolean;
   now: number;
   onMenu: (item: InboxItem, point: { x: number; y: number }) => void;
-}) {
+} & SnoozeMarks) {
   const issue = useStore((s) => s.issues.get(item.key));
   const status = issue && statusOf(issue.key);
   const ink = item.unread ? "title" : "muted";
@@ -127,7 +132,7 @@ export function Row({
         e.preventDefault();
         onMenu(item, { x: e.clientX, y: e.clientY });
       }}
-      className={`mx-2 flex h-[55px] gap-3 rounded-lg px-2 ${selected ? "bg-sel" : "hover:bg-(--row-hover)"}`}
+      className={`mx-2 flex gap-3 rounded-lg px-2 ${snoozedUntil ? "h-[77px]" : "h-[55px]"} ${selected ? "bg-sel" : "hover:bg-(--row-hover)"}`}
     >
       <Actor item={item} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-2.5">
@@ -172,14 +177,66 @@ export function Row({
               +{item.count - 1}
             </Text>
           )}
-          <Text variant="mini" color="muted" className="ml-auto shrink-0">
-            <time dateTime={item.time} title={fullTime(item.time)}>
-              {shortAgo(item.time, now)}
-            </time>
-          </Text>
+          <span className="ml-auto flex shrink-0 items-center gap-1.5">
+            {unsnoozedAt && <UnsnoozedMark at={unsnoozedAt} now={now} />}
+            <Text variant="mini" color="muted">
+              <time dateTime={item.time} title={fullTime(item.time)}>
+                {shortAgo(item.time, now)}
+              </time>
+            </Text>
+          </span>
         </span>
+        {snoozedUntil && <SnoozedLine until={snoozedUntil} now={now} />}
       </span>
     </a>
+  );
+}
+
+const UNSNOOZE = "Unsnooze notification";
+/** Linear's snooze sub-actions (`pEn.subActions`): on a snoozed row, "Unsnooze notification" leads with its "Snoozed for 2d" and a
+ *  divider; then the time rows every time menu shares. One component for the H menu and the row menu's Snooze…. */
+function SnoozeRows({
+  item,
+  query,
+  close,
+  onCustom,
+}: {
+  item: InboxItem | undefined;
+  query: string;
+  close: () => void;
+  onCustom: () => void;
+}) {
+  const until = useLocal()[item?.head ?? ""]?.snoozed,
+    now = useStore((s) => s.clock),
+    // A search keeps Unsnooze only while it names it, as Linear's menu scores it (its typed times skip scoring).
+    named = !query || UNSNOOZE.toLowerCase().includes(query.trim().toLowerCase());
+  return (
+    <>
+      {item && until && until > now && named && (
+        <>
+          <Menu.Item
+            value={UNSNOOZE}
+            icon={<Icon name="clock" />}
+            hint={snoozedFor(until, now)}
+            onSelect={() => {
+              close();
+              unsnoozeRow(item);
+            }}
+          >
+            {UNSNOOZE}
+          </Menu.Item>
+          <Menu.Divider />
+        </>
+      )}
+      <TimeOptionRows
+        query={query}
+        onPick={(at) => {
+          close();
+          snoozeRow(Date.parse(at), item);
+        }}
+        onCustom={onCustom}
+      />
+    </>
   );
 }
 
@@ -190,7 +247,7 @@ const COPY: [CopyKind, string][] = [
   ["title as link", "copy-link"],
 ];
 /** Linear's row menu: read state, delete, snooze, favorite and copy. Favorite needs the issue in the mirror. */
-function rowEntries(item: InboxItem): ActionEntry[] {
+function rowEntries(item: InboxItem, close: () => void): ActionEntry[] {
   const mirrored = get().issues.has(item.key),
     favorite = get().favorites.includes(item.key);
   return [
@@ -207,17 +264,23 @@ function rowEntries(item: InboxItem): ActionEntry[] {
       run: () => deleteRow(item),
     },
     {
-      name: "Snooze",
+      // Linear's contextual name (`pEn.name`: "Snooze…"), its search placeholder, and its typed times.
+      name: "Snooze…",
       icon: "clock",
       shortcut: hotkeyOf("inbox-snooze"),
-      children: [
-        ...snoozeChoices().map((c) => ({
-          name: c.label,
-          hint: snoozeTime(c.until),
-          run: () => snoozeRow(c.until, item),
-        })),
-        { name: "Custom…", run: () => openSnooze(item, true) },
-      ],
+      placeholder: TIME_PLACEHOLDER,
+      hoistFrom: Infinity,
+      rows: (query) => (
+        <SnoozeRows
+          item={item}
+          query={query}
+          close={close}
+          onCustom={() => {
+            close();
+            openSnooze({ item, step: "custom" });
+          }}
+        />
+      ),
     },
     ...(mirrored
       ? [
@@ -296,8 +359,12 @@ function filterEntries(base: InboxItem[], v: InboxView): ActionEntry[] {
   });
 }
 
+/** The H menu (and the pane's snooze button): Linear's snooze action on the row. A key names its search "Snooze notification
+ *  until…" (`keyboardInvoked`); otherwise it reads Linear's "Try: 4 pm, 2 days, in 5 weeks…". */
 function SnoozeMenu({ close }: { close: () => void }) {
-  const [custom, setCustom] = useState(inbox.startCustom());
+  const [{ item, step, invoked }] = useState(snoozeMenu),
+    [custom, setCustom] = useState(step === "custom"),
+    [query, setQuery] = useState("");
   return (
     // This command surface also hosts a searchable menu; Dialog would replace its command focus behavior.
     <MenuSurface
@@ -314,32 +381,21 @@ function SnoozeMenu({ close }: { close: () => void }) {
           onBack={() => setCustom(false)}
           onPick={(at) => {
             close();
-            snoozeRow(Date.parse(at));
+            snoozeRow(Date.parse(at), item);
           }}
         />
       ) : (
         // Linear's snooze options are an action menu (IB): the first choice is highlighted, arrows move, typing filters.
-        <Menu>
-          <Menu.Input autoFocus placeholder="Snooze until…" />
+        <Menu shouldFilter={false}>
+          <Menu.Input
+            autoFocus
+            aria-label="Snooze time"
+            placeholder={invoked === "keyboard" ? "Snooze notification until…" : TIME_PLACEHOLDER}
+            value={query}
+            onValueChange={setQuery}
+          />
           <Menu.List>
-            <Menu.Empty>No match</Menu.Empty>
-            {snoozeChoices().map((c) => (
-              <Menu.Item
-                key={c.label}
-                value={c.label}
-                data-snooze={c.label}
-                hint={snoozeTime(c.until)}
-                onSelect={() => {
-                  close();
-                  snoozeRow(c.until);
-                }}
-              >
-                {c.label}
-              </Menu.Item>
-            ))}
-            <Menu.Item value="Custom…" onSelect={() => setCustom(true)}>
-              Custom…
-            </Menu.Item>
+            <SnoozeRows item={item} query={query} close={close} onCustom={() => setCustom(true)} />
           </Menu.List>
         </Menu>
       )}
@@ -594,6 +650,7 @@ export function InboxList() {
   const { data: all } = useFeed("all");
   const selected = useSelected();
   const now = useStore((s) => s.clock);
+  const own = useLocal();
   const items = itemsOf(data);
   // Filters and grouping read mirrored issues: a store change re-renders the list only when its rows change.
   const { base, groups, rows } = useInboxOrder();
@@ -753,6 +810,7 @@ export function InboxList() {
               item={item}
               selected={item.id === selected}
               now={now}
+              {...snoozeMarks(item, own[item.head], now)}
               onMenu={(item, point) => setMenu({ item, point })}
             />
           )),
@@ -821,7 +879,7 @@ export function InboxList() {
         <ActionMenu
           label="Notification options"
           point={menu.point}
-          entries={rowEntries(menu.item)}
+          entries={rowEntries(menu.item, () => setMenu(null))}
           close={() => setMenu(null)}
         />
       )}

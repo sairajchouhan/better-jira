@@ -22,8 +22,6 @@ import {
   missingIssueNote,
   rowLabel,
   shortAgo,
-  snoozeChoices,
-  snoozeTime,
   unreadCount,
   visibleItems,
   type InboxItem,
@@ -223,10 +221,6 @@ test("a description mention reads as Linear's (Jira says 'on a task'); a missing
   ).toBe("Ana mentioned you in a comment: hi");
   expect(missingIssueNote("KAN-9", new Set(["KAN"]))).toContain("may have been deleted");
   expect(missingIssueNote("OUT-9", new Set(["KAN"]))).toContain("outside your mirrored boards");
-});
-
-test("snooze times read like Linear's: weekday, day month, time", () => {
-  expect(snoozeTime(new Date(2026, 10, 8, 19, 13).getTime())).toMatch(/^Sun, 8 Nov, 7:13\sPM$/);
 });
 
 test("unreadCount counts Jira's unread rows beyond the loaded pages, less local state", () => {
@@ -519,28 +513,6 @@ test("focusGroups follows Linear's Focus grouping", () => {
   ]);
   // No unread rows: one flat, unlabeled list.
   expect(labels([row("a", "updated", false)])).toEqual([":a"]);
-});
-
-test("snoozeChoices: Linear's presets, in time order, at 9:00", () => {
-  const labels = (now: Date) =>
-    snoozeChoices(now).map((c) => `${c.label} ${new Date(c.until).toString().slice(0, 21)}`);
-  // Sunday 15:30: this evening is still ahead; next week is Monday.
-  expect(labels(new Date(2026, 10, 8, 15, 30))).toEqual([
-    "An hour from now Sun Nov 08 2026 16:30",
-    "This evening Sun Nov 08 2026 18:00",
-    "In 3 hours Sun Nov 08 2026 18:30",
-    "Tomorrow Mon Nov 09 2026 09:00",
-    "Next week Mon Nov 09 2026 09:00",
-    "A month from now Tue Dec 08 2026 09:00",
-  ]);
-  // Monday 17:30: the evening is under an hour away, so it is not offered; next week is the Monday after.
-  expect(labels(new Date(2026, 10, 9, 17, 30)).map((l) => l.split(" 2026")[0])).toEqual([
-    "An hour from now Mon Nov 09",
-    "In 3 hours Mon Nov 09",
-    "Tomorrow Tue Nov 10",
-    "Next week Mon Nov 16",
-    "A month from now Wed Dec 09",
-  ]);
 });
 
 group("⌘F find (Linear's Notification.matchInlineFind)", () => {

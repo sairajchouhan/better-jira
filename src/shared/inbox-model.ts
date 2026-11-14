@@ -352,13 +352,6 @@ export function shortAgo(iso: string, now = Date.now()): string {
   return "now";
 }
 
-/** Linear's snooze times: "Sun, 8 Nov, 7:13 PM". */
-export function snoozeTime(until: number): string {
-  const d = new Date(until),
-    f = (o: Intl.DateTimeFormatOptions) => d.toLocaleString("en", o);
-  return `${f({ weekday: "short" })}, ${d.getDate()} ${f({ month: "short" })}, ${f({ hour: "numeric", minute: "2-digit" })}`;
-}
-
 /** The fallback pane's note. An issue the mirror lacks in a project it mirrors was deleted (or moved); otherwise it lives outside the boards. */
 export const missingIssueNote = (key: string, mirroredProjects: Set<string>) =>
   mirroredProjects.has(key.split("-")[0]!)
@@ -385,7 +378,24 @@ export function unreadCount(
 }
 
 /** What the inbox keeps locally per head notification: Jira has no delete or snooze, and read-only sites keep read state here too. */
-export type Local = { read?: boolean; deleted?: boolean; snoozed?: number };
+export type Local = {
+  read?: boolean;
+  deleted?: boolean;
+  /** Snoozed until this time (Linear's `snoozedUntilAt`). */
+  snoozed?: number;
+  /** When the snooze ran out and the row came back (Linear's `unsnoozedAt`): an unread row marks it with a clock. */
+  unsnoozed?: number;
+};
+
+/** The snooze marks a row shows. `snoozedUntil`: while it is snoozed, Linear's third line (`showsSnoozeRow`: `!!snoozedUntilAt`).
+ *  `unsnoozedAt`: on an unread row back from snooze, Linear's clock (`unsnoozedAt && !readAt`). */
+export type SnoozeMarks = { snoozedUntil?: number; unsnoozedAt?: number };
+export function snoozeMarks(row: Pick<InboxItem, "unread">, own: Local | undefined, now: number): SnoozeMarks {
+  return {
+    snoozedUntil: own?.snoozed && own.snoozed > now ? own.snoozed : undefined,
+    unsnoozedAt: row.unread ? own?.unsnoozed : undefined,
+  };
+}
 
 /** What Linear's inbox filter can ask of a row, from the notification and, when the issue is mirrored, the issue. */
 export type Facets = {
@@ -663,27 +673,6 @@ export const sameInboxOrder = (a: InboxOrder, b: InboxOrder) =>
   sameRows(a.base, b.base) &&
   a.groups.length === b.groups.length &&
   a.groups.every((g, i) => g.label === b.groups[i]!.label && sameRows(g.rows, b.groups[i]!.rows));
-
-/** Linear's snooze presets (generateDefaultTimeOptions, 2026-11-08): this evening only while it is an hour or more away; then "Custom…". */
-export function snoozeChoices(now = new Date()): { label: string; until: number }[] {
-  const day = (days: number, hour: number, months = 0) => {
-    const d = new Date(now);
-    d.setMonth(d.getMonth() + months, d.getDate() + days);
-    d.setHours(hour, 0, 0, 0);
-    return d.getTime();
-  };
-  const hour = now.getTime() + 3_600_000,
-    evening = day(0, 18),
-    monday = day(7 - ((now.getDay() + 6) % 7), 9);
-  return [
-    { label: "An hour from now", until: hour },
-    { label: "In 3 hours", until: now.getTime() + 3 * 3_600_000 },
-    ...(evening >= hour ? [{ label: "This evening", until: evening }] : []),
-    { label: "Tomorrow", until: day(1, 9) },
-    { label: "Next week", until: monday },
-    { label: "A month from now", until: day(0, 9, 1) },
-  ].sort((a, b) => a.until - b.until);
-}
 
 /** Whether any inbox property filter has selected values. */
 export const hasFilters = (view: InboxView) =>

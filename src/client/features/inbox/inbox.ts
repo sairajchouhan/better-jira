@@ -108,6 +108,10 @@ export const inbox = createInboxStore({
     );
   },
   shown: () => get().inbox,
+  fullPage: () => {
+    const s = get();
+    return s.inbox && s.panel && !!s.selected && s.view === "page";
+  },
   clearSelection: () => {
     keepRowInUrl(null);
     navigate({ selected: null, panel: false, inbox: true });
@@ -145,13 +149,15 @@ export const {
   deleteRow,
   deleteAll,
   openSnooze,
+  snoozeMenu,
   snoozeRow,
+  unsnoozeRow,
   hasSelectedRow,
   showTab,
   priorityInbox,
 } = inbox;
 export const { itemsOf, facets, orderOf, clearUnseen, openFind, setFind, closeFind } = inbox;
-const { subscribe, localState, viewState, feed, dropLocal, markRead } = inbox;
+const { subscribe, localState, viewState, feed, markRead, wakeSnoozed } = inbox;
 export const usePush = () => useSyncExternalStore(subscribe, inbox.pushState);
 
 // --- Opening an issue outside the inbox reads its notifications (Linear's MarkNotificationAsRead `z`, `j` and `M`) ---
@@ -207,21 +213,12 @@ export function useUnreadCount() {
     now,
   };
 }
-/** The sidebar badge. It is always mounted, so it also brings back expired snoozes: unread, as Linear does, and in Jira too. */
+/** The sidebar badge. It is always mounted, so it also brings back expired snoozes (`wakeSnoozed`). */
 export function useInboxBadge() {
   const { count, data, own, now } = useUnreadCount();
   // Mounted once the account is known, so the stored writes a reload cut off are this account's.
   useEffect(() => inbox.resumeWrites(), []);
-  useEffect(() => {
-    const due = itemsOf(data).filter(
-      (i) => (own[i.head]?.snoozed ?? Infinity) <= now,
-    );
-    if (!due.length) return;
-    dropLocal(
-      due.map((i) => i.head),
-      "snoozed",
-    );
-    void markRead(due, false);
-  }, [data, own, now]);
+  // oxlint-disable-next-line react/exhaustive-effect-dependencies -- A snooze stored into the past (another tab, a reload) wakes at once.
+  useEffect(() => wakeSnoozed(itemsOf(data), now), [data, own, now]);
   return count;
 }

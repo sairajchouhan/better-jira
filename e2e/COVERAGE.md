@@ -295,6 +295,7 @@ Full flow titles:
 - "reading the inbox: Linear's rows, the bell, tabs, filters, and the keys that select, read and open"
 - "triaging rows: unread-only, toast undo, other tabs, rows outside the mirror, snoozes, fast U and per-tab undo"
 - "a long inbox: older pages on scroll, undo by Z and toast, the row menu, ⌥U and Delete all past page 1"
+- "snooze like Linear: typed times, Show snoozed keeps the row with its snoozed line, Unsnooze, and the full-page toast" (new, not migrated)
 
 Dropped: none. Where steps chain, the row counts start from the state the step before left:
 

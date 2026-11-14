@@ -31,6 +31,8 @@ const rowMenu = (n: number) =>
   `(()=>{const n=document.querySelector('[data-inbox-row*="issue/${n}"]'),r=n.getBoundingClientRect();n.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:r.x+40,clientY:r.y+20}))})()`;
 const LOCAL =
   "better-jira:inbox-local:v1:https://example.atlassian.net/audit-me";
+const VIEW = "better-jira:inbox-view:v1:https://example.atlassian.net/audit-me";
+const SNOOZE = `[role=dialog][aria-label="Snooze notification until…"]`;
 const jiraUnread = async (n: number) =>
   (
     (await (await fetch(`${fixture.url}api/inbox`)).json()).items as {
@@ -212,17 +214,19 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
     await p.waitFor(`${current}.includes("TEST-1")`);
     await p.key("j");
     await p.key("h");
-    const snooze = `document.querySelector('[data-snooze][data-selected=true]')?.dataset.snooze`;
+    const snooze = `document.querySelector('${SNOOZE} [cmdk-item][data-selected=true]')?.dataset.value`;
     await p.waitFor(`${snooze} === "An hour from now"`);
+    // Opened by its key, Linear's snooze menu names its search "Snooze notification until…" (keyboardInvoked).
+    expect(await p.eval(`document.activeElement.placeholder`)).toBe("Snooze notification until…");
     await p.key("ArrowDown");
     // The second choice is "In 3 hours", or "This evening" from 15:00 (Linear's order by time), in the browser's time zone.
     await p.waitFor(
-      `${snooze} === document.querySelectorAll('[data-snooze]')[1]?.dataset.snooze`,
+      `${snooze} === document.querySelectorAll('${SNOOZE} [cmdk-item]')[1]?.dataset.value`,
     );
     await p.key("Enter");
-    await p.waitFor(
-      `${rows}.length === 5 && ${toastText}.includes("Notification snoozed")`,
-    );
+    // The split view moves on without a toast (Linear's mEn toasts only from the full page).
+    await p.waitFor(`${rows}.length === 5`);
+    expect(await p.eval(`${toastText}.includes("Notification snoozed")`)).toBe(false);
     await p.key("z");
     await p.waitFor(`${rows}.length === 6`);
     await p.click(`[aria-label="Notification actions"]`);
@@ -242,10 +246,10 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
     await p.key("Escape");
     await p.key("Escape");
     await p.waitFor(`!document.querySelector('[role=dialog]')`);
-    // The row menu shows Snooze's H.
+    // The row menu shows Snooze…'s H (Linear's contextual name, pEn.name).
     await p.eval(rowMenu(3));
     await p.waitFor(
-      `document.querySelector('[aria-label="Notification options"] [cmdk-item][data-value="Snooze"]')?.textContent.endsWith("H")`,
+      `document.querySelector('[aria-label="Notification options"] [cmdk-item][data-value="Snooze…"]')?.textContent.endsWith("H")`,
     );
     await p.key("Escape");
     await p.waitFor(`!document.querySelector('[role=dialog]')`);
@@ -292,6 +296,10 @@ test("triaging rows: unread-only, toast undo, other tabs, rows outside the mirro
       `${rows}.length === 7 && ${rowText}.some(l=>l.startsWith("Unread TEST-4"))`,
     );
     await p.waitFor(`${badge} === "6"`);
+    // Linear's clock on an unread row back from snooze, "Unsnoozed {time}" as its tooltip.
+    await p.waitFor(
+      `document.querySelector('[data-inbox-row*="issue/4"] [data-inbox-unsnoozed]')?.getAttribute('title') === "Unsnoozed now"`,
+    );
     await p.reload();
     await p.waitFor(`${rowText}.some(l=>l.startsWith("Unread TEST-4"))`);
   });
@@ -459,10 +467,8 @@ test("a long inbox: older pages on scroll, undo by Z and toast, the row menu, �
     await p.waitFor(`${rows}.length === 47 && ${current}.includes("TEST-2")`);
     // H snoozes for an hour; Z unsnoozes.
     await p.key("h");
-    await p.click(`[data-snooze="An hour from now"]`);
-    await p.waitFor(
-      `${rows}.length === 46 && document.querySelector('[data-toast]')?.textContent.includes("Notification snoozed")`,
-    );
+    await p.click(`${SNOOZE} [cmdk-item][data-value="An hour from now"]`);
+    await p.waitFor(`${rows}.length === 46`);
     await p.key("z");
     await p.waitFor(`${rows}.length === 47`);
     // U marks unread in Jira; Z marks it read again.
@@ -740,5 +746,67 @@ test("B1 B6 B10: a row reads after 300 ms selected, opening an issue reads its n
     await p.waitFor(
       `__notes[0].closed && !document.querySelector('[data-inbox-row]') && document.querySelector('.issue-detail')?.innerText.includes('TEST-6')`,
     );
+  });
+});
+
+test("snooze like Linear: typed times, Show snoozed keeps the row with its snoozed line, Unsnooze, and the full-page toast", async ({
+  open,
+}) => {
+  // Show snoozed on, as Linear's display option stores it.
+  const setup = `if(!sessionStorage.seeded){sessionStorage.seeded=1;localStorage.setItem(${JSON.stringify(VIEW)},JSON.stringify({showSnoozed:true}))}`;
+  const p = await fresh(open, {}, "?inbox=1", { setup });
+  await p.waitFor(`${rows}.length === 7`);
+  await p.key("j");
+  await p.waitFor(`${current} !== ""`);
+  const first = await p.eval<string>(current);
+  const line = `(document.querySelector('[data-inbox-row][aria-current] [data-inbox-snoozed]')?.textContent ?? '')`;
+  await test.step("pEn / _F: a typed time ('2 days') is a row named as Linear names it", async () => {
+    await p.key("h");
+    await p.type("2 days");
+    await p.waitFor(`document.querySelector('${SNOOZE} [cmdk-item]')?.textContent.startsWith("In 2 days")`);
+    await p.key("Enter");
+    await p.waitFor(`!document.querySelector('${SNOOZE}')`);
+  });
+  await test.step("BEn: with Show snoozed on the row stays selected, with its 'Snoozed for' line, and no toast", async () => {
+    await p.waitFor(`/^Snoozed for \\dd$/.test(${line})`);
+    expect(await p.eval(`${rows}.length`)).toBe(7);
+    expect(await p.eval(current)).toBe(first);
+    expect(await p.eval(`${toastText}.includes("Notification snoozed")`)).toBe(false);
+    // The exact time is the line's tooltip.
+    expect(await p.eval(`!!document.querySelector('[data-inbox-row][aria-current] [data-inbox-snoozed] [title]')`)).toBe(true);
+  });
+  await test.step("pEn: Unsnooze leads a snoozed row's menu with 'Snoozed for' and a divider; Z snoozes it again", async () => {
+    await p.key("h");
+    await p.waitFor(
+      `document.querySelector('${SNOOZE} [cmdk-item]')?.dataset.value === "Unsnooze notification"`,
+    );
+    expect(await p.eval(`document.querySelector('${SNOOZE} [cmdk-item]').textContent.includes("Snoozed for")`)).toBe(true);
+    expect(await p.eval(`!!document.querySelector('${SNOOZE} [cmdk-item] + [cmdk-separator]')`)).toBe(true);
+    await p.key("Enter");
+    await p.waitFor(`${line} === ""`);
+    await p.key("z");
+    await p.waitFor(`${line}.startsWith("Snoozed for")`);
+  });
+  await test.step("The row menu's Snooze… reads typed times under Linear's placeholder, with its keywords", async () => {
+    await p.eval(rowMenu(3));
+    await p.click(`[aria-label="Notification options"] [cmdk-item][data-value="Snooze…"]`);
+    await p.waitFor(`document.activeElement?.placeholder === "Try: 4 pm, 2 days, in 5 weeks…"`);
+    await p.type("1h");
+    await p.waitFor(`!!document.querySelector('[role=dialog] [cmdk-item][data-value="An hour from now"]')`);
+    await p.key("Escape");
+    await p.key("Escape");
+    await p.waitFor(`!document.querySelector('[role=dialog]')`);
+  });
+  await test.step("mEn / HEn: from the full page, a snooze toasts and goes back to the inbox's root", async () => {
+    // Show snoozed off again, so the snoozed row leaves the list.
+    await p.click(`[aria-label="Display options"]`);
+    await p.eval(toggle("Show snoozed"));
+    await p.key("Escape");
+    await p.click(`[data-inbox-row*="issue/1"]`);
+    await p.key("Enter");
+    await p.key("h");
+    await p.click(`${SNOOZE} [cmdk-item][data-value="An hour from now"]`);
+    await p.waitFor(`${toastText}.includes("Notification snoozed")`);
+    await p.waitFor(`${current} === ""`);
   });
 });

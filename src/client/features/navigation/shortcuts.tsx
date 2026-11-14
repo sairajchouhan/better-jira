@@ -391,7 +391,7 @@ export const shortcuts: Shortcut[] = [
         "Shift+Backspace",
         () => deleteAll("read"),
       ],
-      ["inbox-snooze", "Snooze notification…", "H", () => hasSelectedRow() && openSnooze()],
+      ["inbox-snooze", "Snooze notification…", "H", () => hasSelectedRow() && openSnooze({ invoked: "keyboard" })],
     ] as const
   ).map(([id, name, hotkey, run]): Shortcut => ({
     id,

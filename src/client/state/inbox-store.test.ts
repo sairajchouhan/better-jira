@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
 import { QueryClient } from "@tanstack/query-core";
+import type { ReactElement } from "react";
+import { toasts } from "@/client/components/toast-queue";
+import { INBOX_NOTIFICATION_ID } from "./app-notifications";
 import { createInboxStore, deleteQuestion, READ_DELAY, type InboxPorts, type Feed, type DeleteConfirmation } from "./inbox-store";
 import { unreadCount } from "@/shared/inbox-model";
 import { DEFAULT_VIEW, type InboxItem } from "@/shared/inbox-model";
@@ -40,7 +43,7 @@ function setup(writable = true, send: InboxPorts["send"] = async () => null) {
   const state = { issues: new Map(), clock: Date.now() };
   // A manual clock for the delayed read: `flush` runs what is due, `timers` shows what waits.
   const timers: { fn: () => void; ms: number }[] = [];
-  const view = { inbox: true };
+  const view = { inbox: true, page: false };
   const ports: InboxPorts = {
     queryClient,
     get: () => state,
@@ -63,6 +66,7 @@ function setup(writable = true, send: InboxPorts["send"] = async () => null) {
     },
     confirm: async () => true,
     shown: () => view.inbox,
+    fullPage: () => view.page,
     later: (fn, ms) => {
       const timer = { fn, ms };
       timers.push(timer);
@@ -227,7 +231,13 @@ test("keyboard movement follows filtered display order and keeps the newly read 
   expect(a.store.selected()).toBe("1");
 });
 
-test("snooze removal advances selection and undo restores prior local state and selection", () => {
+const inboxToast = () => {
+  const toast = toasts.all().find((t) => t.id === INBOX_NOTIFICATION_ID);
+  return toast && (toast.content as ReactElement<{ notice: { text: string } }>).props.notice.text;
+};
+
+test("BEn: in the split view a snooze selects the next row without a toast; Z restores the snooze and the selection", () => {
+  toasts.dismiss(INBOX_NOTIFICATION_ID);
   const a = setup(false);
   a.store.selectRow(a.items[0]);
   a.flush();
@@ -238,9 +248,78 @@ test("snooze removal advances selection and undo restores prior local state and 
     read: true,
     snoozed: until,
   });
-  a.store.undoInboxToast();
+  expect(inboxToast()).toBeUndefined();
+  a.store.undoInbox();
   expect(a.store.selected()).toBe("1");
   expect(a.store.localState()["head-1"]).toEqual({ read: true });
+});
+
+test("BEn: with Show snoozed on, the snoozed row stays selected", () => {
+  toasts.dismiss(INBOX_NOTIFICATION_ID);
+  const a = setup(false);
+  a.store.changeView({ showSnoozed: true });
+  a.store.selectRow(a.items[0]);
+  a.store.snoozeRow(Date.now() + 3_600_000);
+  expect(a.store.selected()).toBe("1");
+  expect(a.opened).toEqual(["1"]);
+  expect(inboxToast()).toBeUndefined();
+});
+
+test("mEn: only the full-page view toasts 'Notification snoozed', and it goes back to the inbox's root", () => {
+  toasts.dismiss(INBOX_NOTIFICATION_ID);
+  const a = setup(false);
+  a.store.selectRow(a.items[0], "page");
+  a.view.page = true;
+  a.store.snoozeRow(Date.now() + 3_600_000);
+  expect(inboxToast()).toBe("Notification snoozed");
+  expect(a.store.selected()).toBeNull();
+  expect(a.opened.at(-1)).toBe("clear");
+  a.view.page = false;
+  a.store.undoInboxToast();
+  expect(a.store.selected()).toBe("1");
+  expect(a.store.localState()["head-1"]?.snoozed).toBeUndefined();
+  toasts.dismiss(INBOX_NOTIFICATION_ID);
+});
+
+test("pEn: Unsnooze clears the snooze of the menu's row, and Z puts it back", () => {
+  const a = setup(false);
+  const until = Date.now() + 3_600_000;
+  a.store.snoozeRow(until, a.items[1]);
+  a.store.openSnooze({ item: a.items[1] });
+  expect(a.store.snoozeMenu().item?.id).toBe("2");
+  a.store.unsnoozeRow();
+  expect(a.store.localState()["head-2"]).toBeUndefined();
+  a.store.undoInbox();
+  expect(a.store.localState()["head-2"]).toEqual({ snoozed: until });
+  // A row that isn't snoozed has nothing to unsnooze, and no undo step.
+  a.store.unsnoozeRow(a.items[0]);
+  a.store.undoInbox();
+  expect(a.store.localState()["head-2"]).toBeUndefined();
+});
+
+test("the snooze menu knows how it was opened: by key, on a right-clicked row, at Custom…", () => {
+  const a = setup(false);
+  a.store.selectRow(a.items[2]);
+  a.store.openSnooze({ invoked: "keyboard" });
+  expect(a.store.snoozeMenu()).toEqual({ invoked: "keyboard", item: a.items[2] });
+  a.store.openSnooze({ item: a.items[0], step: "custom" });
+  expect(a.store.snoozeMenu()).toEqual({ item: a.items[0], step: "custom" });
+  // The snooze applies to that row, and the next menu starts afresh.
+  a.store.snoozeRow(Date.now() + 60_000);
+  expect(a.store.localState()["head-1"]?.snoozed).toBeGreaterThan(Date.now());
+  expect(a.store.snoozeMenu()).toEqual({ item: a.items[2] });
+});
+
+test("unsnoozedAt: a snooze that ran out brings the row back unread and remembers when", async () => {
+  const a = setup(false);
+  const until = Date.now() - 1000;
+  a.store.snoozeRow(until, a.items[0]);
+  a.store.snoozeRow(Date.now() + 60_000, a.items[1]);
+  a.store.wakeSnoozed(a.items, Date.now());
+  await Promise.resolve();
+  expect(a.store.localState()["head-1"]).toEqual({ read: false, unsnoozed: until });
+  expect(a.store.localState()["head-2"]?.snoozed).toBeGreaterThan(Date.now());
+  expect(a.store.localState()["head-2"]?.unsnoozed).toBeUndefined();
 });
 
 test("stale feed consumers share one observer and remounting a pane does not refetch loaded pages", async () => {

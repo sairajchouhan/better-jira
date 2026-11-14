@@ -49,6 +49,8 @@ export type InboxPorts = {
   confirm: (question: DeleteConfirmation) => Promise<boolean>;
   /** Whether the inbox is the screen: a row's delayed read lands only while its notification still shows. */
   shown: () => boolean;
+  /** Whether the open notification fills the page rather than the inbox's split view (Linear's `redirectToInboxRoot`). */
+  fullPage: () => boolean;
   /** Runs `fn` after `ms`; returns its cancel. */
   later?: (fn: () => void, ms: number) => () => void;
 };
@@ -480,13 +482,17 @@ export function createInboxStore(ports: InboxPorts) {
       }
     return markRead(rows, true, label, undefined, { except });
   }
-  /** Removes rows here, selects the next one as Linear does, and offers Linear's undo toast. Returns what the undo restores, so more rows can join it. */
+  /** Applies `patch` to rows here and remembers its undo. When the rows leave the list (`advance`), the next one is selected as
+   *  Linear does; a `toast` offers Linear's undo. Returns what the undo restores, so more rows can join it. */
   function hide(
     items: InboxItem[],
     patch: Local,
     label: string,
-    toast: string,
-    activate: (item: InboxItem) => void = selectRow,
+    {
+      toast,
+      activate = selectRow,
+      advance = true,
+    }: { toast?: string; activate?: (item: InboxItem) => void; advance?: boolean },
   ) {
     if (!items.length) return;
     const before = new Map(items.map((i) => [i.head, localState()[i.head]])),
@@ -501,31 +507,31 @@ export function createInboxStore(ports: InboxPorts) {
       items.map((i) => i.head),
       patch,
     );
-    if (selectedId && gone.has(selectedId)) {
+    if (advance && selectedId && gone.has(selectedId)) {
       if (next) activate(next);
-      else {
-        cancelRead();
-        selectedId = null;
-        emit();
-        ports.clearSelection();
-      }
+      else leaveRow();
     }
-    toastUndo = remember(label, () => {
+    const entry = remember(label, () => {
       putLocal([...before.keys()], (_, head) => before.get(head));
-      if (was && gone.has(was.id)) showRow(was);
+      if (was && gone.has(was.id) && selectedId !== was.id) showRow(was);
     });
-    showNotification({ text: toast, undo: undoInboxToast }, INBOX_NOTIFICATION_ID);
+    if (toast) {
+      toastUndo = entry;
+      showNotification({ text: toast, undo: undoInboxToast }, INBOX_NOTIFICATION_ID);
+    }
     return before;
+  }
+  /** Nothing selected: the inbox's root, with no notification open. */
+  function leaveRow() {
+    cancelRead();
+    selectedId = null;
+    emit();
+    ports.clearSelection();
   }
   /** Linear's E and ⌫. Jira notifications cannot be deleted, so this hides the row in this browser until the issue has new activity. */
   function deleteRow(item = selectedRow()) {
     if (item)
-      hide(
-        [item],
-        { deleted: true },
-        "delete notification",
-        "Notification deleted",
-      );
+      hide([item], { deleted: true }, "delete notification", { toast: "Notification deleted" });
   }
   const closed = (item: InboxItem) =>
     ["Completed", "Canceled", "Duplicate"].includes(facets(item).statusType);
@@ -552,13 +558,7 @@ export function createInboxStore(ports: InboxPorts) {
     const items = shownRows().filter(matches),
       toast =
         items.length === 1 ? "Notification deleted" : "Notifications deleted";
-    const before = hide(
-      items,
-      { deleted: true },
-      "delete notifications",
-      toast,
-      showRow,
-    );
+    const before = hide(items, { deleted: true }, "delete notifications", { toast, activate: showRow });
     const observer = feed(feedCategory(v));
     let result = observer.getCurrentResult();
     // ponytail: 20 pages (about 1,000 notifications) at most; anything older still shows.
@@ -574,36 +574,54 @@ export function createInboxStore(ports: InboxPorts) {
     ).filter(matches);
     if (!rest.length) return;
     if (!before)
-      return void hide(
-        rest,
-        { deleted: true },
-        "delete notifications",
-        toast,
-        showRow,
-      );
+      return void hide(rest, { deleted: true }, "delete notifications", { toast, activate: showRow });
     for (const r of rest) before.set(r.head, localState()[r.head]);
     setLocal(
       rest.map((r) => r.head),
       { deleted: true },
     );
   }
-  /** The row a snooze applies to: the right-clicked one, else the selected one. */
-  let snoozeTarget: InboxItem | undefined,
-    snoozeCustom = false;
-  function openSnooze(item?: InboxItem, custom = false) {
-    snoozeTarget = item;
-    snoozeCustom = custom;
+  /** The snooze menu's row (the right-clicked one, else the selected one), the step it opens on, and whether a key opened it
+   *  (Linear's `keyboardInvoked`, which names its search "Snooze notification until…"). */
+  let snoozing: { item?: InboxItem; step?: "custom"; invoked?: "keyboard" } = {};
+  function openSnooze(options: typeof snoozing = {}) {
+    snoozing = options;
     ui.send({ type: "overlay.open", overlay: "snooze" });
   }
-  function snoozeRow(until: number, item = snoozeTarget ?? selectedRow()) {
-    snoozeTarget = undefined;
-    if (item)
-      hide(
-        [item],
-        { snoozed: until },
-        "snooze notification",
-        "Notification snoozed",
-      );
+  const snoozeMenu = () => ({ ...snoozing, item: snoozing.item ?? selectedRow() });
+  /** Linear's snooze (`mEn`): the next row is selected only while snoozed rows are hidden (`BEn`); with Show snoozed on, the row
+   *  stays selected and shows its "Snoozed for" line. Only the full-page view toasts "Notification snoozed", and it goes back to
+   *  the inbox's root (`redirectToInboxRoot`, `HEn`). */
+  function snoozeRow(until: number, item = snoozing.item ?? selectedRow()) {
+    snoozing = {};
+    if (!item) return;
+    const page = ports.fullPage();
+    hide([item], { snoozed: until }, "snooze notification", {
+      advance: !shownView().showSnoozed && !page,
+      toast: page ? "Notification snoozed" : undefined,
+    });
+    if (page) leaveRow();
+  }
+  /** Linear's Unsnooze notification (`pEn`'s first sub-action on a snoozed row): the snooze goes, with Z to put it back. */
+  function unsnoozeRow(item = snoozing.item ?? selectedRow()) {
+    snoozing = {};
+    const before = item && localState()[item.head];
+    if (!item || !before?.snoozed) return;
+    dropLocal([item.head], "snoozed");
+    remember("unsnooze notification", () => putLocal([item.head], () => before));
+  }
+  /** Rows whose snooze ran out come back unread, in Jira too, as Linear's do, and remember when (`unsnoozedAt`). */
+  function wakeSnoozed(items: InboxItem[], now: number) {
+    const due = items.filter((i) => (localState()[i.head]?.snoozed ?? Infinity) <= now);
+    if (!due.length) return;
+    putLocal(
+      due.map((i) => i.head),
+      (old) => {
+        const { snoozed, ...rest } = old ?? {};
+        return { ...rest, unsnoozed: snoozed };
+      },
+    );
+    void markRead(due, false);
   }
   const hasSelectedRow = () => !!selectedRow();
   /** Linear's ⌥1 and ⌥2: the priority inbox's tabs. */
@@ -668,13 +686,15 @@ export function createInboxStore(ports: InboxPorts) {
     deleteRow,
     deleteAll,
     openSnooze,
+    snoozeMenu,
     snoozeRow,
+    unsnoozeRow,
+    wakeSnoozed,
     hasSelectedRow,
     showTab,
     priorityInbox,
     undoInbox,
     undoInboxToast,
     clearUnseen,
-    startCustom: () => snoozeCustom,
   };
 }
