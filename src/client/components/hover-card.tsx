@@ -25,18 +25,21 @@ const PLACEMENTS = {
 /**
  * Linear's interactive tooltip (`$` with `interactive`, startup-root `Rwe`): opens 550ms after the pointer settles on the trigger,
  * stays open while the pointer crosses to it, closes when a press on the trigger opens that trigger's own menu. One surface for the
- * issue, user, link and pull request cards. `label` names it for tests and screen readers.
+ * issue, user, link and pull request cards. `label` names it for tests and screen readers. `display="inline"` is Linear's
+ * `style: { display: "inline" }` on a trigger inside a run of text (an Activity row's issue, `Ao`), so it wraps with the words.
  */
 export function HoverCard({
   content,
   placement = "top-start",
   label,
+  display = "inline-flex",
   children,
 }: {
   /** The card body, mounted only while the card is open. */
   content: ReactNode;
   placement?: keyof typeof PLACEMENTS;
   label?: string;
+  display?: "inline-flex" | "inline";
   children: ReactNode;
 }) {
   const [side, fallbacks] = PLACEMENTS[placement];
@@ -70,7 +73,7 @@ export function HoverCard({
     <>
       <span
         ref={setReference}
-        className="inline-flex min-w-0 max-w-full"
+        className={display === "inline" ? "inline" : "inline-flex min-w-0 max-w-full"}
         {...getReferenceProps({
           onPointerDown: () => {
             setPressed(true);

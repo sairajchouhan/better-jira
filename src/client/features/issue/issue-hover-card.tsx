@@ -15,15 +15,22 @@ export function IssueHoverCard({
   relation,
   issue,
   placement = "top",
+  display,
   children,
 }: {
   relation: Relation;
   issue?: Issue;
-  placement?: "top" | "left";
+  placement?: "top" | "top-start" | "left";
+  display?: "inline-flex" | "inline";
   children: ReactNode;
 }) {
   return (
-    <HoverCard placement={placement} label={relation.key} content={<IssueCard relation={relation} issue={issue} />}>
+    <HoverCard
+      placement={placement}
+      display={display}
+      label={relation.key}
+      content={<IssueCard relation={relation} issue={issue} />}
+    >
       {children}
     </HoverCard>
   );

@@ -66,18 +66,30 @@ const RELATION_REMOVED: Record<string, string> = {
   duplicated: "unmarked this issue as duplicated by",
 };
 
+/** Linear's relation target in an Activity row (`Ao`): the key, which never breaks, a no-break space, and the title cut to 36
+ *  characters, inside an inline hover card that opens `top-start`, so the target flows on from the verb and the time stays at
+ *  the end of the row's last line. */
+const RELATION_TITLE = 36;
 function RelationTarget({ relation }: { relation: Relation }) {
   const target = get().issues.get(relation.key);
-  return <IssueHoverCard relation={relation} issue={target} placement="left">{target ? (
-    <AppLink to={related(target)} className="hover:text-fg">
-      <b className="font-medium">{relation.key}</b> {target.summary}
-    </AppLink>
-  ) : (
+  const title = target?.summary ?? relation.issue?.summary;
+  const words = (
     <>
-      <b className="font-medium">{relation.key}</b>
-      {relation.issue && ` ${relation.issue.summary}`}
+      <b className="whitespace-nowrap font-medium">{relation.key}</b>
+      {title && `\u00A0${truncate(title, RELATION_TITLE)}`}
     </>
-  )}</IssueHoverCard>;
+  );
+  return (
+    <IssueHoverCard relation={relation} issue={target} placement="top-start" display="inline">
+      {target ? (
+        <AppLink to={related(target)} className="hover:text-fg">
+          {words}
+        </AppLink>
+      ) : (
+        words
+      )}
+    </IssueHoverCard>
+  );
 }
 
 /** Linear's link entry (`ds`): the link's source icon, then its title, which opens the link. One control for a link

@@ -336,3 +336,10 @@ test("R3 G19: an opened row's detail sits in its own box after the row, as Linea
       '<div class="activity-event-detail"><ol aria-label="Grouped changes"></ol></div></li>',
   );
 });
+
+test("R3 G21 #36: a relation row's target flows inline in the row's words, key unbroken and title cut to 36, as Linear's `Ao`", () => {
+  const relation = { kind: "related", key: "XYZ-12", issue: { summary: "A made-up related issue whose title runs well past the cut", status: { name: "Doing", category: "indeterminate" } } };
+  const html = renderToStaticMarkup(<>{describeActivity(event("relation", null, relation), issue)}</>);
+  // The hover card's trigger is inline, not an unbreakable inline-flex box that starts its own line.
+  expect(html).toMatch(/^added related issue <span class="inline"[^>]*><b class="whitespace-nowrap font-medium">XYZ-12<\/b> A made-up related issue whose title…<\/span>$/);
+});
