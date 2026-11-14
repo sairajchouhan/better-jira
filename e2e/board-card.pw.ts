@@ -10,6 +10,8 @@ const setup = `(()=>{localStorage.setItem(${JSON.stringify(PREFS_KEY)},${JSON.st
  return real(input,init);};})()`;
 
 const card = (key: string) => `document.querySelector('[data-key="${key}"]')`;
+/** The card's surface inside its grid row: what draws the look, the selection and the keyboard ring. */
+const surface = (key: string) => `document.querySelector('[data-key="${key}"] > [role=gridcell] > div')`;
 const rect = (selector: string) =>
   `(()=>{const r=(${selector}).getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom}})()`;
 const writesFor = async (key: string) => (await fixture.log()).writes.filter((w: { key: string }) => w.key === key).length;
@@ -138,11 +140,11 @@ test("card and badge hover, and the keyboard ring drawn inside the card on all f
     await page.hover("header");
     await page.eval(`${card("TEST-2")}.focus({focusVisible:true})`);
     const style = await page.eval<string[]>(
-      `(()=>{const s=getComputedStyle(${card("TEST-2")});return [s.outlineStyle,s.outlineWidth,s.outlineOffset,s.outlineColor,s.backgroundColor]})()`,
+      `(()=>{const s=getComputedStyle(${surface("TEST-2")});return [s.outlineStyle,s.outlineWidth,s.outlineOffset,s.outlineColor,s.backgroundColor]})()`,
     );
     expect(style).toEqual(["solid", "1px", "-1px", "lch(47.918 59.303 288.421)", "lch(9.232 0.85 272)"]);
     // Pixels: the middle of each edge, half a pixel inside the card, is the accent, so nothing clips the ring.
-    const r = await page.eval<DOMRect>(rect(card("TEST-2")));
+    const r = await page.eval<DOMRect>(rect(surface("TEST-2")));
     const shot = (await page.page.screenshot({ clip: { x: r.left, y: r.top, width: r.right - r.left, height: r.bottom - r.top } })).toString("base64");
     const edges = await page.eval<[number, number, number][]>(`(async()=>{const img=await createImageBitmap(await (await fetch("data:image/png;base64,${shot}")).blob());
       const c=new OffscreenCanvas(img.width,img.height),x=c.getContext("2d");x.drawImage(img,0,0);const w=img.width,h=img.height,d=devicePixelRatio;
@@ -154,7 +156,7 @@ test("card and badge hover, and the keyboard ring drawn inside the card on all f
     await page.eval(`document.activeElement.blur()`);
     await page.key("j");
     await page.waitFor(`!!document.querySelector('[data-key][data-selected]')`);
-    const sel = `document.querySelector('[data-key][data-selected]')`;
+    const sel = `document.querySelector('[data-key][data-selected] > [role=gridcell] > div')`;
     expect(await page.eval(`(()=>{const s=getComputedStyle(${sel});return [s.outlineStyle,s.outlineWidth,s.outlineOffset]})()`)).toEqual(["solid", "1px", "-1px"]);
   });
 });
@@ -166,7 +168,7 @@ test("a list row's keyboard ring sits inside the row, so the next row cannot cov
   await page.waitFor(`!!${card("TEST-2")}`);
   await page.eval(`${card("TEST-2")}.focus({focusVisible:true})`);
   expect(
-    await page.eval(`(()=>{const s=getComputedStyle(${card("TEST-2")});return [s.outlineStyle,s.outlineWidth,s.outlineOffset,s.boxShadow]})()`),
+    await page.eval(`(()=>{const s=getComputedStyle(${surface("TEST-2")});return [s.outlineStyle,s.outlineWidth,s.outlineOffset,s.boxShadow]})()`),
   ).toEqual(["solid", "1px", "-1px", "none"]);
 });
 

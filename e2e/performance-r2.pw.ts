@@ -80,7 +80,7 @@ for (const layout of ["list", "board"] as const) {
       }
       // Native scroll containers remain in place, including the board's outer swimlane scroller. Measured cards can
       // outgrow their estimate and move the end, so scroll again until the windows have caught up.
-      const windowed = root.locator('[data-virtual-key]:not([style*="absolute"]) [data-key]');
+      const windowed = root.locator('[data-key]:not([style*="absolute"])');
       await expect.poll(async () => {
         await root.evaluate(element => {
           for (const target of [element, ...element.querySelectorAll<HTMLElement>("*")]) {

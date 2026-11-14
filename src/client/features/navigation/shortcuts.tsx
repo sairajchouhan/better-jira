@@ -81,11 +81,11 @@ const selected = (s = get()) => {
  *  (shared/epics.ts titleParentOf, BJ-289). */
 const titleParentIn = (s: State, issue: Issue | undefined) => issue && titleParentOf(issue, (key) => s.issues.get(key))?.key;
 /** Linear: an issue shortcut acts on the row under the pointer or keyboard focus, as its row menu's hints promise: a sub-issue row
- *  (its section answers the command), else a board card or list row (IssueTarget's `data-key`, ISSUE-10). */
+ *  (its section answers the command), else a board card or list row (its React Aria row's `data-key`, ISSUE-10). */
 const hoveredRow = () => {
   const key =
     command("hovered-sub-issue") ??
-    globalThis.document?.querySelector<HTMLElement>("[data-key][role=button]:hover")?.dataset.key;
+    globalThis.document?.querySelector<HTMLElement>("[data-key][role=row]:hover")?.dataset.key;
   return key ? get().issues.get(key) : undefined;
 };
 const lastViewed = (s: State) =>

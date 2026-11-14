@@ -10,7 +10,7 @@ test("board menus: status, create, due date, palette toggle and selection look",
   const page = await open();
   await test.step("ISSUE-10: S, A, P and L act on the hovered card, with nothing selected or another card selected", async () => {
     const hovered = await page.eval<string>(
-      `[...document.querySelectorAll("[data-key][role=button]")].filter(n=>n.getClientRects().length)[2].dataset.key`,
+      `[...document.querySelectorAll("[data-key][role=row]")].filter(n=>n.getClientRects().length)[2].dataset.key`,
     );
     await page.hover(`[data-key="${hovered}"]`);
     for (const [key, label] of [
@@ -110,7 +110,7 @@ test("board menus: status, create, due date, palette toggle and selection look",
     await sleep(150);
     const look = (key: string) =>
       page.eval<string>(
-        `(()=>{const s=getComputedStyle(document.querySelector('[data-key="${key}"]'));return s.backgroundColor+"|"+s.boxShadow+"|"+s.outlineStyle})()`,
+        `(()=>{const s=getComputedStyle(document.querySelector('[data-key="${key}"] > [role=gridcell] > div'));return s.backgroundColor+"|"+s.boxShadow+"|"+s.outlineStyle})()`,
       );
     expect(await look(selected)).not.toBe(await look(other));
   });

@@ -30,7 +30,6 @@ const SKIPPED_BEFORE_BJ_233 = [
   "Thread",
   "ToolbarDropdown",
   "VideoPlayer",
-  "VirtualItems",
 ];
 
 async function skippedComponents() {

@@ -1,0 +1,48 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+/*
+ * VirtualGridList's drag and drop, in Linear's board values (IssueList.CUOYX8Am.js, `Ll`, `Rl`, `Ul`, `pd`, `xl`):
+ * - the row being dragged leaves its column: its place closes (Linear shifts the rows after it up by its height);
+ * - the drop target opens a gap the dragged row's height (`--drag-gap`), growing over 200ms with Linear's
+ *   cubic-bezier(0.25, 0.46, 0.45, 0.94) after 50ms (`transform 200ms yl 50ms`), and draws Linear's placeholder in it:
+ *   bgBorder, radius 8, 10px in from either side, its bottom 14px above the next card (`top: -4px`, `translateY(-100% - 10px)`)
+ *   and its height the card's less 20px, fading in over 400ms after 150ms and out over 100ms (`dropIndicatorTransition`).
+ */
+@layer components {
+  /* The row is only the focus and drag target; its card draws the keyboard ring (`in-data-focus-visible:`). */
+  .ui-virtual-row {
+    outline: none;
+  }
+  .ui-virtual-row[data-dragging] {
+    display: none;
+  }
+  .ui-drop-gap {
+    position: relative;
+    height: 0;
+    transition: height 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94) 50ms;
+  }
+  .ui-drop-gap[data-drop-target] {
+    height: var(--drag-gap, 0px);
+  }
+  .ui-drop-gap::before,
+  .ui-virtual-grid[data-drop-target]::before {
+    content: "";
+    position: absolute;
+    inset: 6px 10px 14px;
+    border-radius: 8px;
+    background: var(--bg-border);
+    opacity: 0;
+    transition: opacity 100ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+  .ui-drop-gap[data-drop-target]::before,
+  .ui-virtual-grid[data-drop-target]::before {
+    opacity: 1;
+    transition: opacity 400ms cubic-bezier(0.25, 0.46, 0.45, 0.94) 150ms;
+  }
+  /* A list with no row to land by (empty, or holding only the dragged one) is the target itself and takes the gap. */
+  .ui-virtual-grid[data-drop-target] {
+    position: relative;
+    min-height: var(--drag-gap, 0px);
+  }
+}
