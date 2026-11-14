@@ -1,5 +1,13 @@
 import { expect, test } from "bun:test";
-import { breadcrumbKeywords, breadcrumbScore, fuzzyScore, menuFilter, MIN_APPLICABILITY } from "./fuzzy-score";
+import {
+  actionScore,
+  breadcrumbKeywords,
+  breadcrumbScore,
+  fuzzyScore,
+  menuFilter,
+  MIN_APPLICABILITY,
+} from "./fuzzy-score";
+import { COMMAND_KEYWORDS, VIEW_COMMAND_KEYWORDS } from "@/client/features/navigation/command-keywords";
 
 test("BJ-180: Linear's search score ranks exact, then prefix, then word-start, then mid-word matches", () => {
   expect(fuzzyScore("tada", "tada")).toBe(1);
@@ -57,4 +65,38 @@ test("assignee search: a team member outranks an equal match outside the team; a
   expect(score("Jo Lee", "jo lee") - score("Jo Leeds", "jo lee")).toBeGreaterThan(9);
   // The row is searched by the name alone, never by the account id in its value.
   expect(menuFilter("Alex 5b10ac", "5b10", personKeywords("Alex"))).toBe(0);
+});
+
+test("B2: ⌘K finds a command by Linear's keywords as well as its name", () => {
+  const found = (name: string, id: string, query: string) => actionScore({ name, keywords: COMMAND_KEYWORDS[id] }, query);
+  // Each query misses the name alone and finds the command through its keywords.
+  for (const [name, id, query] of [
+    ["Undo", "undo", "revert"],
+    ["Toggle left sidebar", "sidebar", "hide sidebar"],
+    ["Open document", "open-document", "goto"],
+    ["Open user", "open-user", "goto"],
+    ["Copy issue id", "copy-id", "identifier"],
+  ] as const) {
+    expect(actionScore({ name }, query)).toBeLessThan(MIN_APPLICABILITY);
+    expect(found(name, id, query)).toBeGreaterThanOrEqual(MIN_APPLICABILITY);
+  }
+  expect(actionScore({ name: "Delete view", keywords: VIEW_COMMAND_KEYWORDS["Delete view"] }, "remove")).toBeGreaterThanOrEqual(MIN_APPLICABILITY);
+  // A keyword hit counts ×0.85, so the command named by the query still ranks first.
+  expect(found("Undo", "undo", "redo")).toBeLessThan(actionScore({ name: "Redo" }, "redo"));
+});
+
+test("B2: Linear's score corrections: exact names and exact keywords score 1, a hoisted row loses 0.15, weak 3+ character hits", () => {
+  // An exact name ignores case, punctuation and the ellipsis.
+  expect(actionScore({ name: "Create view…" }, "create view")).toBe(1);
+  expect(actionScore({ name: "Undo" }, " UNDO ")).toBe(1);
+  // "me" is only an exact keyword on your own assignee row.
+  expect(actionScore({ name: "Ada Lovelace", exact: ["me"], parents: ["Assign to"] }, "me")).toBeCloseTo(0.85);
+  expect(actionScore({ name: "Ada Lovelace", parents: ["Assign to"] }, "me")).toBeLessThan(MIN_APPLICABILITY);
+  expect(actionScore({ name: "High", parents: ["Change priority to"] }, "high")).toBeCloseTo(0.85);
+  // A hoisted value is found by its parent's label too ("status" lists every status).
+  expect(actionScore({ name: "Done", parents: ["Change status"] }, "status")).toBeGreaterThanOrEqual(MIN_APPLICABILITY);
+  // Below 0.24, 3+ characters the name contains score 0.34, ones only the parents contain 0.29; 2 characters never.
+  expect(actionScore({ name: "Blocking issue", parents: ["Remove"] }, "ckin")).toBeCloseTo(MIN_APPLICABILITY + 0.1);
+  expect(actionScore({ name: "Blocking issue", parents: ["Remove"] }, "emov")).toBeCloseTo(MIN_APPLICABILITY + 0.05);
+  expect(actionScore({ name: "Blocking issue", parents: ["Remove"] }, "zq")).toBeLessThan(MIN_APPLICABILITY);
 });

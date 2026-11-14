@@ -24,7 +24,8 @@ import { MenuSurface } from "@/client/components/menu-surface";
 import { Menu } from "@/client/components/menu";
 import { COMMAND_MENU_WIDTH, CommandMenuTitle } from "@/client/components/command-menu";
 import { Avatar } from "@/client/components/avatar";
-import { matchRank } from "@/shared/search-rank";
+import { actionScore, MIN_APPLICABILITY, type ScoredAction } from "@/client/lib/fuzzy-score";
+import { COMMAND_KEYWORDS, VIEW_COMMAND_KEYWORDS } from "./command-keywords";
 import {
   matchDocuments,
   matchesSearchFilters,
@@ -53,8 +54,9 @@ import {
   type PaletteGroup,
 } from "./palette-groups";
 
-/** `keys`: the hotkey that does the same thing, drawn after the name. `id` keys the row when names repeat (its value keeps the name). */
-type Cmd = { id?: string; name: string; keys?: Keys; icon?: ReactNode; disabled?: boolean; run: () => void };
+/** `keys`: the hotkey that does the same thing, drawn after the name. `id` keys the row when names repeat (its value keeps the name).
+ *  It is scored as Linear scores an action (`actionScore`): by its name, `keywords` and, for a hoisted value, its `parents`. */
+type Cmd = ScoredAction & { id?: string; keys?: Keys; icon?: ReactNode; disabled?: boolean; run: () => void };
 
 /** One command row (Linear's command-menu Item, Fgn): icon, name, shortcut; ⌘K's commands and every nested page's choices. */
 function CommandRow({ cmd: c }: { cmd: Cmd }) {
@@ -136,12 +138,15 @@ const commandIcon = (id: string, group?: PaletteGroup) => {
   const name = COMMAND_ICONS[id] ?? (group && GROUP_ICONS[group]);
   return name ? <Icon name={name} size={16} /> : undefined;
 };
-/** Best match first, so Enter runs the row whose name was typed; every row while the query is empty. */
-const ranked = (cmds: Cmd[], q: string) =>
-  cmds
-    .map((c) => [q.trim() ? matchRank(c.name, q) : 0, c] as const)
-    .filter(([r]) => r >= 0)
-    .sort(([a], [b]) => a - b);
+/** Linear's root search: the rows scoring at least 0.24 (DEFAULT_MIN_APPLICABILITY_SCORE), best first, so Enter runs the best one;
+ *  ties keep their order. Every row while the query is empty. */
+const ranked = (cmds: Cmd[], q: string): (readonly [number, Cmd])[] =>
+  q.trim()
+    ? cmds
+        .map((c) => [actionScore(c, q), c] as const)
+        .filter(([score]) => score >= MIN_APPLICABILITY)
+        .sort(([a], [b]) => b - a)
+    : cmds.map((c) => [0, c] as const);
 
 /** Linear's nested "Open …" command pages (`nameAsParent`, `searchShortcut.keyword` in startup-root.CnUSfl4j.js): their
  *  chord opens the palette on the page, with the parent's name as the input's chip; ⌫ in the empty input leaves it. */
@@ -519,17 +524,18 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
   const [deletingView, setDeletingView] = useState(false);
   const [savingTo, setSavingTo] = useState(false);
   const viewAction = (run: () => void) => () => { ui.send({ type: "overlay.close" }); run(); };
-  const viewCommands: Cmd[] = activeView ? [
+  const viewCommands: Cmd[] = (activeView ? [
     { name: "Edit view…", run: viewAction(() => openViewEditor(editViewDraft(activeView.id))) },
     { name: "Save to…", run: () => { setSavingTo(true); setQ(""); } },
     { name: favorites.includes(`view:${activeView.id}`) ? "Unfavorite view" : "Favorite view", keys: hotkeyOf("view-favorite"), run: viewAction(() => toggleFavorite(`view:${activeView.id}`)) },
     { name: "Make a copy as new view…", run: viewAction(() => openViewEditor(duplicateViewDraft(activeView.id))) },
     { name: "Delete view", run: () => setDeletingView(true) },
-  ] : [];
+  ] : []).map((c) => ({ ...c, keywords: VIEW_COMMAND_KEYWORDS[c.name] }));
   const results = useMemo(() => (q.trim() ? matchIssues(issues, q) : []), [q, issues]);
 
   const command = (entry: (typeof shortcuts)[number]): Cmd => ({
     name: entry.label?.() ?? entry.name,
+    keywords: COMMAND_KEYWORDS[entry.id],
     keys: hotkeyOf(entry.id),
     icon: commandIcon(entry.id, entry.issue ? undefined : paletteGroupOf(entry)),
     run: () => {
@@ -563,7 +569,7 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
           navigate({ board: b.id, selected: null, panel: false });
         },
       });
-  file("Views", { name: "Create view…", icon: commandIcon("view-create"), run: viewAction(() => openViewEditor(createViewDraft("custom"))) });
+  file("Views", { name: "Create view…", keywords: VIEW_COMMAND_KEYWORDS["Create view…"], icon: commandIcon("view-create"), run: viewAction(() => openViewEditor(createViewDraft("custom"))) });
   const at = { inbox: inInbox, view: !!activeView };
   // Save to… mirrors the filter row's Save menu, so it is offered even before any temporary filter exists.
   const mergeable = !!activeView && !!filterCount(overlay) && canMergeOverlay(activeView.filters, overlay);
@@ -577,7 +583,8 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
     ...[...byGroup].map(([group, cmds]) => ({ key: group, heading: group, priority: groupPriority(group, at), rows: ranked(cmds, q) })),
   ];
   const groups = orderGroups(
-    listed.filter((g) => g.rows.length).map((g) => ({ ...g, rank: g.rows[0]![0] })),
+    // The group of the best-scoring row first (orderGroups ranks lower first).
+    listed.filter((g) => g.rows.length).map((g) => ({ ...g, rank: -g.rows[0]![0] })),
     !!q.trim(),
   );
 

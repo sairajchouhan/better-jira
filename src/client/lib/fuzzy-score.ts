@@ -246,3 +246,64 @@ export function personScore(names: string[], search: string, person: { me?: bool
     return score + ME_BOOST;
   return names.some((n) => wholeName(words, n)) ? score + NAME_BOOST : score;
 }
+
+/** One command as Linear's root search scores it (`$8.scoreAction` in startup-entry.Dt5YDWdY.js). */
+export type ScoredAction = {
+  /** The row's name; a trailing "…" is ignored (`getActionName` with hideEllipsis). */
+  name: string;
+  /** Linear's `keywords`: other words the command is found by, matched through the secondary string. */
+  keywords?: string | readonly string[];
+  /** Linear's `keywordsExactMatch`: a query equal to one of these scores 1 ("me" on your own assignee row). */
+  exact?: readonly string[];
+  /** The labels of the parents a hoisted row was lifted from ("Change status"); a hoisted row loses 0.15. */
+  parents?: readonly string[];
+  /** Linear's `scoreOverride`, run on the corrected score. */
+  override?: (score: number, search: string) => number;
+};
+const PUNCTUATION = /[`~!@#$%^&*()_|+\-=?;:'",.<>{}[\]\\/]/g;
+/** `getStrippedString`: the text, then the text with its punctuation as spaces when that differs. */
+const stripped = (s: string) => {
+  const t = s.replace(PUNCTUATION, " ");
+  return t === s ? s : `${s} ${t}`;
+};
+/** `getPunctuationInsensitiveVariants`. */
+const variants = (s: string) => {
+  const t = s.trim().toLowerCase(),
+    squash = (x: string) => x.trim().replace(/\s+/g, " ");
+  return [t, squash(t.replace(/[\p{P}\p{S}]/gu, "")), squash(t.replace(/[\p{P}\p{S}]/gu, " "))].filter(Boolean);
+};
+/** `getSearchScoreStrings`: the name (mainString), and the parents, name, keywords and the name without spaces (secondaryString). */
+export function actionStrings({ name, keywords, parents = [] }: ScoredAction) {
+  const plain = name.replaceAll("…", ""),
+    main = stripped(stripped(plain)),
+    words = typeof keywords === "string" ? keywords : (keywords ?? []).join(" "),
+    joined = plain.split(" ").filter(Boolean).join("");
+  const secondary = [
+    ...parents.map((p) => stripped(p).toLowerCase()),
+    main,
+    words,
+    plain.includes(" ") && joined !== plain ? stripped(joined) : "",
+  ];
+  return { name: plain.toLowerCase(), main: main.toLowerCase(), secondary: secondary.filter(Boolean).join(" ").toLowerCase() };
+}
+/**
+ * Linear's command score: the better of the name (mainString) and the parents, name and keywords (secondaryString) ×0.85; then
+ * `applyScoreCorrections`: 1 for an exact name or exact keyword, −0.15 for a hoisted row, and below 0.24 on a query of 3+
+ * characters 0.34 when the name contains it, else 0.29 when the secondary string does; then the action's `scoreOverride`.
+ * Linear's uFuzzy fallback for typos below 0.24 is left out, as in breadcrumbScore.
+ */
+export function actionScore(action: ScoredAction, search: string): number {
+  const q = search.trim().toLowerCase(),
+    strings = actionStrings(action);
+  if (!q) return 1;
+  let score = Math.max(fuzzyScore(strings.main, q), fuzzyScore(strings.secondary, q) * SECONDARY);
+  const nameVariants = new Set(variants(strings.name));
+  if (variants(q).some((v) => nameVariants.has(v)) || action.exact?.some((k) => k.toLowerCase() === q)) score = 1;
+  if (action.parents?.length) score -= HOISTED;
+  if (score < MIN_APPLICABILITY && q.length > 2) {
+    if (strings.main.includes(q)) score = MIN_APPLICABILITY + 0.1;
+    else if (strings.secondary.includes(q)) score = MIN_APPLICABILITY + 0.05;
+  }
+  if (action.override) score = action.override(score, search.trim());
+  return Number(score.toFixed(6));
+}
