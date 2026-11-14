@@ -144,3 +144,36 @@ test("removing a create attachment from the keyboard returns focus to the attach
     `document.activeElement?.getAttribute("aria-label")==="Attach images, files, or videos"`,
   );
 });
+
+test("R3-create-D3/D8/D9: composer keys stay in the composer and focus stays in the dialog", async ({ open }) => {
+  const page = await open("?issue=TEST-2&view=page");
+  await page.waitFor(`!!document.getElementById('comment')`);
+  await test.step("D8: Remove relation keeps focus in the composer", async () => {
+    await page.click("#issue-options");
+    await page.type("blocked issue");
+    await page.click('[cmdk-item][data-value="Create related › Blocked issue…"]');
+    await page.waitFor(`document.activeElement===${title}`);
+    await page.click("[data-pending-relation]");
+    await page.click('[aria-label="Remove relation"]');
+    await page.waitFor(`!document.querySelector("[data-pending-relation]")`);
+    expect(await page.eval(`!!document.activeElement?.closest('[role=dialog][aria-label="Create issue"]')`)).toBe(true);
+  });
+  await test.step("D9 + D3: Ctrl+L opens Add link; Enter adds it, returns focus and creates nothing", async () => {
+    await page.page.locator('[aria-label="Issue title"]').focus();
+    await page.type("Keys stay here");
+    await page.key("l", "ctrl");
+    await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="New issue link URL"`);
+    await page.type("example.com/r3-d9");
+    await page.key("Enter");
+    await page.waitFor(`document.activeElement===${title}`);
+    expect(await page.eval(`!!document.querySelector('[role=dialog][aria-label="Create issue"]')`)).toBe(true);
+  });
+  await test.step("D9 + D3: Cmd+Shift+O adds a focused sub-issue row; Enter in it creates nothing", async () => {
+    await page.key("o", "meta", "shift");
+    await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Pending sub-issue 1"`);
+    await page.type("Child");
+    await page.key("Enter");
+    await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Pending sub-issue 2"`);
+    expect(await page.eval(`!!document.querySelector('[role=dialog][aria-label="Create issue"]')`)).toBe(true);
+  });
+});

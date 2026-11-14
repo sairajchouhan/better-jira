@@ -71,3 +71,6 @@ test("BJ-216: an open action menu keeps every global key, as Linear's isActionMe
   expect(hotkeyEnabled(entry("commands"), s, issue, true)).toBe(true);
   expect(hotkeyEnabled(entry("shortcuts"), s, issue, true)).toBe(true);
 });
+test("R3-create-D11: ⌘K names the full-screen create as Linear's CREATE_FULL_VIEW_ISSUE does", () => {
+  expect(shortcuts.find((s) => s.id === "new-full")?.name).toBe("Create issue in fullscreen…");
+});
