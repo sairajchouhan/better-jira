@@ -14,7 +14,7 @@ import { currentKey } from "@/client/state/jira-sync";
 import { createViewDraft, editViewDraft, updateSavedView, viewError } from "@/client/features/views/saved-views";
 import { emptyOverlay, viewForRoute, type SavedView, type ViewDraft } from "@/shared/saved-view-model";
 import { defaultPreferences, type FilterGroup } from "@/shared/view-model";
-import { savedBoard, savedOpenIn, savedSidebarHidden } from "@/client/state/browser-preferences";
+import { onSidebarHiddenChange, savedBoard, savedOpenIn, savedSidebarHidden } from "@/client/state/browser-preferences";
 import { loadFull } from "@/client/state/server-data";
 import { createAppRouter, locationOf, preloadIssueScreens, routeURL } from "@/client/routes/tree";
 
@@ -36,6 +36,11 @@ ui.subscribe(({ context }) => {
   if (moved.length) go({ type: "moved", screen: Object.fromEntries(moved.map((key) => [key, patch[key]])) });
   for (const key of moved) delete patch[key];
   commit(patch);
+});
+
+// Hiding or showing the sidebar in one tab does the same in the others (R3-chrome-D6).
+onSidebarHiddenChange((hidden) => {
+  if (hidden !== ui.getSnapshot().context.sidebarHidden) ui.send({ type: "sidebar.toggle" });
 });
 
 const scopeOf = (board: number) => (get().preferences[board] ?? defaultPreferences()).scope;

@@ -58,6 +58,13 @@ export function savedSidebarHidden() {
     return false;
   }
 }
+/** Calls `fn` with the hidden state another tab gave the sidebar. */
+export function onSidebarHiddenChange(fn: (hidden: boolean) => void) {
+  if (typeof addEventListener === "function")
+    addEventListener("storage", (event: StorageEvent) => {
+      if (event.key === SIDEBAR) fn(event.newValue === "hidden");
+    });
+}
 /** Each board's view preferences. */
 export const savedViewPreferences = (): Record<number, Preferences> =>
   readJson(VIEWS, {}, (saved) =>
