@@ -460,7 +460,8 @@ export function matchesRule(
           : NaN
         : r.field === "estimate"
           ? (i.estimate ?? NaN)
-          : (i.prCount ?? NaN);
+          : // Jira leaves the Development field off an issue with no pull requests: that is 0, as "is empty" already reads it.
+            (i.prCount ?? 0);
     const wanted = Number(values[0]);
     if (!Number.isFinite(actualNumber) || !Number.isFinite(wanted) || wanted < 0) return false;
     return r.op === "gt"

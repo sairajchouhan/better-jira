@@ -263,9 +263,13 @@ describe("view selection", () => {
     expect(matchesRule(item, rule("milestone", ["release"]), all, "me", now)).toBe(true);
     expect(matchesRule(item, rule("statusAge", ["6.5"], "gt"), all, "me", now)).toBe(true);
     expect(matchesRule(item, rule("pullRequests", ["0"]), all, "me", now)).toBe(true);
+    // R3-views-filters-D-3: an issue without Jira's Development field has no pull requests, so it counts as 0.
     expect(
       matchesRule({ ...item, prCount: undefined }, rule("pullRequests", ["0"]), all, "me", now),
-    ).toBe(false);
+    ).toBe(true);
+    expect(
+      matchesRule({ ...item, prCount: undefined }, rule("pullRequests", ["1"], "lt"), all, "me", now),
+    ).toBe(true);
   });
   test("persists enriched properties and formats status duration without negative ages", () => {
     const p = defaultPreferences();
