@@ -3,7 +3,7 @@
  * to the head and five more, then five at a time. Shown in Linear's look for a folded run of activity (`ActivityHistoryCollapse`): one muted line with the
  * expand chevrons, unfolding into activity-style rows (avatar, sentence, time) with each comment under its row.
  */
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
 import { InfiniteQueryObserver, type InfiniteData } from "@tanstack/query-core";
 import { queryClient } from "@/client/state/server-data";
 import { Avatar } from "@/client/components/avatar";
@@ -77,22 +77,32 @@ export function InboxGroupNote({ note, mirrored }: { note: InboxNote; mirrored: 
         <span className="text-fg-2">{describe({ ...note, preview: "" })}</span>
       </ActivityEntry>
       {note.preview && (
-        <blockquote className="ml-[30px] rounded-lg border border-line px-3 py-2">
-          <Text as="p" variant="small" color="base" wrap="pretty" lines={3}>
-            {note.preview}
-          </Text>
-          {href && (
-            <a
-              href={href}
-              {...(href.startsWith("#") ? {} : { target: "_blank", rel: "noreferrer" })}
-              className="mt-1 inline-block text-[12px] text-fg-3 hover:text-fg-2"
-            >
-              View comment
-            </a>
-          )}
-        </blockquote>
+        <CommentCard href={href} className="ml-[30px]">
+          {note.preview}
+        </CommentCard>
       )}
     </li>
+  );
+}
+
+/** A notification's comment in a card, three lines at most as Linear's comment card (`truncate: 3`, `wrap: "pretty"`, small
+ *  labelBase), with "View comment" when the comment has a link. One card for a grouped notification and the pane's head comment. */
+export function CommentCard({ href, className = "", children }: { href?: string; className?: string; children: ReactNode }) {
+  return (
+    <blockquote data-comment-card className={`rounded-lg border border-line px-3 py-2 ${className}`}>
+      <Text as="div" variant="small" color="base" wrap="pretty" lines={3}>
+        {children}
+      </Text>
+      {href && (
+        <a
+          href={href}
+          {...(href.startsWith("#") ? {} : { target: "_blank", rel: "noreferrer" })}
+          className="mt-1 inline-block text-[12px] text-fg-3 hover:text-fg-2"
+        >
+          View comment
+        </a>
+      )}
+    </blockquote>
   );
 }
 

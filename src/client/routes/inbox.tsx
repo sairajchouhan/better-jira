@@ -12,7 +12,7 @@ import { Tabs } from "@/client/components/tabs";
 import { Text } from "@/client/components/text";
 import { Icon, StatusIcon, TypeDot, type IconName } from "@/client/components/icons";
 import { FILTER_FIELDS, describe, groupSummary, rowLabel, feedCategory, hasFilters, missingIssueNote, shortAgo, snoozeChoices, snoozeTime, type FilterField, type InboxItem, type InboxView } from "@/shared/inbox-model";
-import { InboxGroupUpdates } from "@/client/features/inbox/inbox-group";
+import { CommentCard, InboxGroupUpdates } from "@/client/features/inbox/inbox-group";
 import { fullTime } from "@/client/features/issue/issue-dates";
 import { Adf } from "@/client/features/editor/adf";
 import { copyIssue, type CopyKind } from "@/client/features/issue/issue-copy";
@@ -807,34 +807,7 @@ export function InboxPane() {
             Open in Jira <Icon name="external" />
           </ButtonLink>
         </div>
-        <div className="mx-auto w-full max-w-[680px] p-8">
-          <Text as="h1" variant="title2">
-            {row.title}
-          </Text>
-          <Text as="p" variant="small" color="muted" className="mt-1">
-            {[row.issueType, row.key, row.status, row.category === "watching" ? "Watching" : "Direct"].filter(Boolean).join(" · ")}
-          </Text>
-          <Text as="p" variant="small" color="base" className="mt-3">
-            {describe({ ...row, preview: "" })}{" "}
-            <time dateTime={row.time} title={fullTime(row.time)} className="text-fg-3">
-              {shortAgo(row.time)}
-            </time>
-          </Text>
-          {(row.doc !== undefined || row.preview) && (
-            <blockquote className="mt-3 rounded-lg border border-line px-3 py-2 text-[13px] text-fg-2">
-              <Adf node={row.doc ?? row.preview} />
-            </blockquote>
-          )}
-          <div className="mt-4">
-            <InboxGroupUpdates key={row.id} row={row} mirrored={false} />
-          </div>
-          <Text as="p" variant="mini" color="muted" className="mt-4">
-            {missingIssueNote(
-              row.key,
-              new Set([...get().issues.keys()].map((k) => k.split("-")[0]!)),
-            )}
-          </Text>
-        </div>
+        <InboxNotification row={row} />
       </div>
     );
   return (
@@ -861,5 +834,40 @@ export function InboxPane() {
         </svg>
       }
     />
+  );
+}
+
+/** A notification whose issue is not in the mirror, in the pane: its issue, Jira's sentence, the comment (three lines, as the
+ *  grouped cards), the group's earlier updates and why the issue isn't here. */
+export function InboxNotification({ row }: { row: InboxItem }) {
+  return (
+    <div className="mx-auto w-full max-w-[680px] p-8">
+      <Text as="h1" variant="title2">
+        {row.title}
+      </Text>
+      <Text as="p" variant="small" color="muted" className="mt-1">
+        {[row.issueType, row.key, row.status, row.category === "watching" ? "Watching" : "Direct"].filter(Boolean).join(" · ")}
+      </Text>
+      <Text as="p" variant="small" color="base" className="mt-3">
+        {describe({ ...row, preview: "" })}{" "}
+        <time dateTime={row.time} title={fullTime(row.time)} className="text-fg-3">
+          {shortAgo(row.time)}
+        </time>
+      </Text>
+      {(row.doc !== undefined || row.preview) && (
+        <CommentCard href={row.link || undefined} className="mt-3">
+          <Adf node={row.doc ?? row.preview} />
+        </CommentCard>
+      )}
+      <div className="mt-4">
+        <InboxGroupUpdates key={row.id} row={row} mirrored={false} />
+      </div>
+      <Text as="p" variant="mini" color="muted" className="mt-4">
+        {missingIssueNote(
+          row.key,
+          new Set([...get().issues.keys()].map((k) => k.split("-")[0]!)),
+        )}
+      </Text>
+    </div>
   );
 }
