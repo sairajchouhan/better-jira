@@ -257,11 +257,13 @@ test("an epic parent shows only as Project: no parent line, sub-issues, Parent f
     expect(await p.eval(`new URLSearchParams(location.search).get('issue')`)).toBe("TEST-2");
   });
 
-  await test.step("the epic's detail lists no sub-issues and offers none; ⌘⇧P opens nothing", async () => {
+  await test.step("the epic's detail lists its issues as Jira's epic page does (BJ-280), has no parent line; ⌘⇧P opens nothing", async () => {
     await p.goto("?issue=TEST-7&view=page");
-    await p.waitFor(`!!document.getElementById('comment')`);
-    expect(await p.eval(`document.querySelectorAll('[data-sub-issue]').length`)).toBe(0);
-    expect(await p.eval(`!!document.querySelector('[data-create-child]')`)).toBe(false);
+    await p.waitFor(`document.querySelectorAll('[data-sub-issues="TEST-7"] [data-sub-issue]').length===2`);
+    expect(
+      await p.eval<string[]>(`[...document.querySelectorAll('[data-sub-issue]')].map(n=>n.dataset.subIssue).sort()`),
+    ).toEqual(["TEST-2", "TEST-3"]);
+    expect(await p.eval(`!!document.querySelector('[data-parent-link]')`)).toBe(false);
     await p.eval("document.activeElement?.blur()");
     await p.key("p", "meta", "shift");
     await sleep(150); // no relations picker opens
@@ -278,6 +280,102 @@ test("an epic parent shows only as Project: no parent line, sub-issues, Parent f
   await test.step("no Parent surface wrote a parent", async () => {
     const { writes } = await fixture.log();
     expect(writes.some((w: any) => w.ops.some((o: any) => o.op === "fields" && "parent" in o.fields))).toBe(false);
+  });
+});
+
+/**
+ * BJ-280, the user's deviation from Linear (.raj/done.md): an epic's page lists its issues in its Sub-issues section, as Jira's
+ * epic page lists its child work items, with the section's own rows, progress, menus and shortcuts. Adding there puts the new
+ * issue in the epic as the Epic picker does; on the child the epic still shows once, as its Epic. Fixture as above.
+ */
+test("BJ-280: an epic's Sub-issues section lists, adds and removes its issues; a child names the epic only as Epic", async ({ open }) => {
+  await fixture.reset({ writable: true, epics: true, subtask: true, createSuccess: true });
+  const p = await open("?issue=TEST-5&view=page");
+  const SECTION = '[data-sub-issues="TEST-7"]';
+  const rows = () =>
+    p.eval<string[]>(`[...document.querySelectorAll('${SECTION} [data-sub-issue]')].map(n=>n.dataset.subIssue+":"+n.dataset.depth)`);
+  const created = (summary: string) =>
+    expect
+      .poll(async () =>
+        (await fixture.log()).writes.some((w) =>
+          w.ops.some((o: any) => o.op === "create" && o.fields.parent === "TEST-7" && o.fields.summary?.includes(summary)),
+        ),
+      )
+      .toBe(true);
+
+  await test.step("TEST-5 joins the epic with ⇧P; its Subtask TEST-6 comes along nested under it, never flat on the epic", async () => {
+    await p.waitFor(`document.getElementById('prop-project')?.tagName==='BUTTON'`);
+    await p.eval("document.activeElement?.blur()");
+    await p.key("p", "shift");
+    await p.waitFor(`!!document.querySelector('${PICKER} [cmdk-item]')`);
+    await p.type("Fixture");
+    await p.key("Enter");
+    await wrote(p, "TEST-5", "TEST-7");
+    await p.goto("?issue=TEST-7&view=page");
+    await p.waitFor(`document.querySelectorAll('${SECTION} [data-sub-issue]').length===4`);
+    expect((await rows()).sort()).toEqual(["TEST-2:0", "TEST-3:0", "TEST-5:0", "TEST-6:1"]);
+    // The section's progress counts the epic's own issues; TEST-5's row shows its Subtask's progress, as any parent's row does.
+    expect(await p.eval(`document.querySelector('${SECTION} [data-sub-progress]').textContent`)).toMatch(/\/3$/);
+    expect(await p.eval(`document.querySelector('[data-sub-issue="TEST-5"] [data-row-progress]')?.textContent`)).toBe("0/1");
+  });
+
+  await test.step("a child names the epic once, as Epic: no Sub-issue of line, and its Subtask's parent line is still TEST-5", async () => {
+    await p.goto("?issue=TEST-2&view=page");
+    await p.waitFor(`document.getElementById('prop-project')?.textContent.includes("Fixture epic")`);
+    expect(await p.eval(`!!document.querySelector('[data-parent-link]')`)).toBe(false);
+    await p.goto("?issue=TEST-6&view=page");
+    await p.waitFor(`document.querySelector('[data-parent-link]')?.textContent.includes("TEST-5")`);
+  });
+
+  await test.step("the inline add row creates the issue in the epic, writing the epic as the Epic picker does", async () => {
+    await p.goto("?issue=TEST-7&view=page");
+    await p.waitFor(`!!document.querySelector('${SECTION} [data-create-child]')`);
+    await p.click(`${SECTION} [data-create-child]`);
+    await p.waitFor(`document.activeElement?.getAttribute('aria-label')==='Sub-issue title'`);
+    await p.type("[QA] inline epic child");
+    await p.key("Enter", "meta");
+    await created("inline epic child");
+    await p.waitFor(`document.querySelector('${SECTION}').textContent.includes('inline epic child')`);
+    await p.key("Escape");
+  });
+
+  await test.step("New sub-issue from comment… opens the composer in the epic: Epic pill set, no Sub-issue of header", async () => {
+    await p.waitFor(`!!document.getElementById('comment')`);
+    await p.click("#comment");
+    await p.type("Epic comment to copy");
+    await p.key("Enter", "meta");
+    await p.waitFor(`document.querySelector('[data-comment]')?.textContent.includes("Epic comment to copy")`);
+    await p.hover("[data-comment]");
+    await p.click('[aria-label="Comment options"]');
+    await p.click("text=New sub-issue from comment…");
+    await p.waitFor(`!!document.querySelector('${COMPOSER} [aria-label="Epic: Fixture epic"]')`);
+    expect(await p.eval(`document.querySelector('${COMPOSER}').textContent.includes("Sub-issue of TEST-7")`)).toBe(false);
+    await p.eval(`document.querySelector('${COMPOSER} [aria-label="Issue title"]').focus()`);
+    await p.type("[QA] epic child from comment");
+    await p.key("Enter", "meta");
+    await created("epic child from comment");
+  });
+
+  await test.step("⌘⇧O on the epic opens the section's add row, as on any parent", async () => {
+    await p.goto("?issue=TEST-7&view=page");
+    await p.waitFor(`!!document.getElementById('summary')`);
+    await p.eval("document.activeElement?.blur()");
+    await p.key("o", "meta", "shift");
+    await p.waitFor(`document.activeElement?.getAttribute('aria-label')==='Sub-issue title'`);
+    await p.key("Escape");
+    await p.key("Escape");
+  });
+
+  await test.step("a row's Epic › No epic takes the issue out of the epic and off the section", async () => {
+    await p.waitFor(`!!document.querySelector('[data-sub-issue="TEST-3"]')`);
+    const r = await p.rect('[data-sub-issue="TEST-3"]');
+    await p.page.mouse.click(r.x + 3, r.y + r.height / 2, { button: "right" });
+    const menu = '[role="dialog"][aria-label="Sub-issue actions"]';
+    await p.hover(`${menu} [cmdk-item][data-value="Epic"]`);
+    await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Epic"] [cmdk-item]')`);
+    await p.click('[role="dialog"][aria-label="Epic"] [cmdk-item][data-value="No epic"]');
+    await wrote(p, "TEST-3", null);
+    await p.waitFor(`!document.querySelector('[data-sub-issue="TEST-3"]')`);
   });
 });
 
