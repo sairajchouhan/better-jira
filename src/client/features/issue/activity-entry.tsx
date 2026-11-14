@@ -333,7 +333,13 @@ export function describeActivity(event: PropertyActivity, issue: Issue, then = f
 /** The issue's key before or after a project move, which Jira logs as its own Key change: people search by old keys. */
 const IssueKey = ({ value }: { value: unknown }) => {
   const key = (value as NamedValue | null)?.key;
-  return key ? <> ({key})</> : null;
+  // Never broken at its hyphen, as Linear's identifiers (`whiteSpace: "nowrap"` on the key in `Ao` and `No`).
+  return key ? (
+    <>
+      {" "}
+      <span className="whitespace-nowrap">({key})</span>
+    </>
+  ) : null;
 };
 
 /** A status change's resolution, from the same Jira entry: "Ready to deploy" and "Done" are different ends (Linear has none). */

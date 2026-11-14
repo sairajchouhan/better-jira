@@ -343,3 +343,14 @@ test("R3 G21 #36: a relation row's target flows inline in the row's words, key u
   // The hover card's trigger is inline, not an unbreakable inline-flex box that starts its own line.
   expect(html).toMatch(/^added related issue <span class="inline"[^>]*><b class="whitespace-nowrap font-medium">XYZ-12<\/b> A made-up related issue whose title…<\/span>$/);
 });
+
+test("R3 G21 #39: a project move's issue keys never break at their hyphen", () => {
+  const html = renderToStaticMarkup(
+    <>{describeActivity(event("project", { id: "1", name: "Alpha", key: "ALP-7" }, { id: "2", name: "Beta", key: "BET-9" }), issue)}</>,
+  );
+  expect(html).toContain('<span class="whitespace-nowrap">(ALP-7)</span>');
+  expect(html).toContain('<span class="whitespace-nowrap">(BET-9)</span>');
+  expect(words(event("project", { id: "1", name: "Alpha", key: "ALP-7" }, { id: "2", name: "Beta", key: "BET-9" }))).toBe(
+    "changed project from Alpha (ALP-7) to Beta (BET-9)",
+  );
+});
