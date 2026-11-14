@@ -568,3 +568,29 @@ test("R3-relations-D1: Change to… undone and redone while the issue's write wa
     ],
   ]);
 });
+
+test("R3-relations-D2: the page a reload replaced still holds its lock at the claim; once it lets go, its saved link is sent", async () => {
+  const replaced = gate();
+  let live = new Set(["this-tab", "replaced-page"]);
+  const handed: Set<string>[] = [];
+  const h = harness({
+    tabs: {
+      exclusive: async (fn) => fn(live),
+      closed: async (tab) => (tab === "replaced-page" ? replaced.held : undefined),
+      claim: async (open) => ({
+        claimed: open.has("replaced-page") ? new Set<string>() : new Set(["RP-1"]),
+        changes: [],
+      }),
+    },
+  });
+  h.outbox.own("RP-1", "replaced-page", false);
+  await h.outbox.claimClosed(async (claimed) => {
+    handed.push(claimed);
+    for (const key of claimed) h.outbox.release(key);
+  });
+  expect(handed).toEqual([new Set()]);
+  live = new Set(["this-tab"]);
+  replaced.open();
+  await h.advance(0);
+  expect(handed).toEqual([new Set(), new Set(["RP-1"])]);
+});

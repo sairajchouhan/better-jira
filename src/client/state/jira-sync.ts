@@ -99,6 +99,7 @@ const writes = createOutbox(
                   ),
                 );
               }),
+            closed: (tab: string) => navigator.locks.request(TAB_LOCK + tab, () => {}),
           }
         : {}),
       claim: (live, only) => claimChanges(tabId, live, only),

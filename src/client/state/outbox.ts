@@ -66,6 +66,8 @@ export type OutboxPorts = {
     save(): Promise<void>;
     /** Runs `fn` holding the browser-wide outbox lock, with the ids of the tabs still open. Absent without Web Locks. */
     exclusive?: (fn: (live: Set<string>) => Promise<void>) => Promise<void>;
+    /** Resolves once `tab` has closed (its tab lock is free). Absent without Web Locks. */
+    closed?: (tab: string) => Promise<unknown>;
     /** Takes the saved changes of closed tabs (`only` these keys) for this tab; returns the keys taken and the saved changes. */
     claim(
       live: Set<string>,
@@ -117,6 +119,8 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
   const owners = new Map<string, string>();
   /** Issues another open tab made and is still creating in Jira, with that tab's id: edits here wait for the Jira key it gets. */
   const othersCreating = new Map<string, string>();
+  /** Tabs whose close this tab waits for, to send what they leave. */
+  const watched = new Set<string>();
   const currentKey = (key: string) => jiraKeys.get(key) ?? key;
   const drop = (key: string) => {
     for (let i = outbox.length - 1; i >= 0; i--) if (outbox[i]!.key === key) outbox.splice(i, 1);
@@ -403,6 +407,21 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
     void run();
   }
 
+  async function claimClosed(fn: (claimed: Set<string>, changes: LocalChange[]) => Promise<void>): Promise<void> {
+    await tabs.exclusive!(async (live) => {
+      const { claimed, changes } = await tabs.claim(live);
+      await fn(claimed, changes);
+    });
+    // A tab that still looks open may be the page a reload replaced, letting go of its lock a moment after this page
+    // claimed: once it closes, what it saved is this tab's to send, not left until the next load (R3-relations-D2).
+    if (tabs.closed)
+      for (const tab of new Set(owners.values()))
+        if (tab !== tabs.id && !watched.has(tab)) {
+          watched.add(tab);
+          void tabs.closed(tab).then(() => claimClosed(fn));
+        }
+  }
+
   return {
     /**
      * Queues each change's ops (see jira-ops' opsFor). Doesn't send: call `flush`. Returns the keys of changes that
@@ -534,12 +553,7 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
       if (!othersOnly) owners.clear();
     },
     /** Under the outbox lock, takes the saved changes of tabs that have closed and hands them to `fn`. */
-    async claimClosed(fn: (claimed: Set<string>, changes: LocalChange[]) => Promise<void>) {
-      await tabs.exclusive!(async (live) => {
-        const { claimed, changes } = await tabs.claim(live);
-        await fn(claimed, changes);
-      });
-    },
+    claimClosed,
   };
 }
 export type Outbox = ReturnType<typeof createOutbox>;
