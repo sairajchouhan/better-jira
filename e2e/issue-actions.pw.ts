@@ -296,7 +296,7 @@ test("BJ-13: Jira's whole history joins Activity after the details paint, in Lin
   });
   const page = await open("?issue=TEST-2&view=page");
   // The words after the icon (an actor avatar falls back to an initial).
-  const rows = `[...document.querySelectorAll('[data-activity]')].map(n=>n.children[1].textContent.replace(/\\s+/g,' ').replace(/ ·$/,'').trim())`;
+  const rows = `[...document.querySelectorAll('[data-activity]')].map(n=>n.querySelector('.activity-event-words').textContent.replace(/\\s+/g,' ').trim())`;
   // The details paint while the history is still on its way.
   await page.waitFor(`!!document.getElementById('comment')&&!!document.getElementById('issue-created')`);
   expect(await page.eval(rows)).toEqual([]);
@@ -314,6 +314,36 @@ test("BJ-13: Jira's whole history joins Activity after the details paint, in Lin
   expect(
     await page.eval(`[...document.querySelectorAll('[data-activity] a[href*="#activity-"]')].every(a=>/\\d{2}:\\d{2}:\\d{2}$/.test(a.getAttribute('aria-label')))`),
   ).toBe(true);
+});
+
+test("prod parity #36: a long activity row wraps beside its icon, with its time inline at the end", async ({ open }) => {
+  const ada = { id: "ada", name: "Ada Example" };
+  const note = "a made-up release note long enough to need a second line in the activity column of the issue page view";
+  await fixture.reset({
+    history: {
+      "TEST-2": [
+        {
+          id: "1",
+          at: new Date(Date.now() - 86_400_000).toISOString(),
+          actor: ada,
+          items: [{ field: "Release notes", fieldId: "customfield_9", from: null, fromText: null, to: null, toText: note }],
+        },
+      ],
+    },
+  });
+  const page = await open("?issue=TEST-2&view=page");
+  const row = `document.querySelector('[data-activity]')`;
+  await page.waitFor(`!!${row}`, 5000);
+  const [lines, wordsLeft, iconRight, timeLeft, timeTop, lastLineTop, textLeft] = await page.eval<
+    [number, number, number, number, number, number, number]
+  >(
+    `(()=>{const r=${row},range=document.createRange();range.selectNodeContents(r.querySelector('.activity-event-words'));const rects=[...range.getClientRects()].filter(b=>b.width>0),time=r.querySelector('a[href*="#activity-"]').getBoundingClientRect();return [new Set(rects.map(b=>Math.round(b.top))).size,Math.min(...rects.map(b=>b.left)),r.querySelector('.activity-event-icon').getBoundingClientRect().right,time.left,Math.round(time.top),Math.round(Math.max(...rects.map(b=>b.top))),r.querySelector('.activity-event-text').getBoundingClientRect().left]})()`,
+  );
+  expect(lines).toBeGreaterThan(1);
+  // Every line starts right of the icon, and the time follows the last words on their line.
+  expect(wordsLeft).toBeGreaterThan(iconRight);
+  expect(Math.abs(timeTop - lastLineTop)).toBeLessThanOrEqual(2);
+  expect(timeLeft).toBeGreaterThan(textLeft + 1);
 });
 
 test("BJ-13: a long history folds its middle into Linear's \"Show N events\" row, which unfolds it", async ({ open }) => {
@@ -393,7 +423,7 @@ test("F2: every Jira change stays reachable: adjacent changes group in Linear's 
     },
   });
   const page = await open("?issue=TEST-4&view=page");
-  const rows = `[...document.querySelectorAll('[data-activity]')].map(n=>[n.children[1].textContent.replace(/\\s+/g,' ').replace(/ ·$/,'').trim(),n.querySelector('a[href*="#activity-"] time')?.getAttribute('datetime')])`;
+  const rows = `[...document.querySelectorAll('[data-activity]')].map(n=>[n.querySelector('.activity-event-words').textContent.replace(/\\s+/g,' ').trim(),n.querySelector('a[href*="#activity-"] time')?.getAttribute('datetime')])`;
   await page.waitFor(`${rows}.length===4`, 5000);
   expect(await page.eval(rows)).toEqual([
     ["Ada Example moved from Todo to Doing", at(0)],

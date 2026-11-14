@@ -7,7 +7,7 @@ import { IssueHoverCard } from "./issue-hover-card";
  */
 import { absoluteDate, fullTime, activityTime } from "./issue-dates";
 import { DescriptionHistoryLink } from "./description-history";
-import { useState, type ReactNode } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
 import type { RunPlace, TimelineEvent } from "@/client/features/comments/comment-threads";
 import { collapseLabel, partition, type SummaryItem } from "./activity-collapse";
 import { statusById, statuses } from "@/shared/board-catalog";
@@ -699,17 +699,67 @@ export function ActivityRowWords({ row, issue }: { row: ActivityRow; issue: Issu
   );
 }
 
+/**
+ * Linear's `ActivityHistoryEntry`: the icon in its own box, then the words, " · " and the time as one run of text, so a long
+ * row wraps beside the icon, never under it, and the time ends the last line (non-breaking spaces and Linear's `nowrap` date
+ * keep "· time" together). `detail` sits under the row, as Linear's expanded changes do.
+ */
+export function ActivityEntry({
+  icon,
+  time,
+  detail,
+  children,
+  ...props
+}: { icon: ReactNode; time: ReactNode; detail?: ReactNode; children: ReactNode } & Omit<ComponentProps<"li">, "className">) {
+  return (
+    <li {...props} className="activity-event">
+      <span className="activity-event-icon">{icon}</span>
+      <span className="activity-event-text">
+        <span className="activity-event-words">{children}</span>
+        {"\u00a0·\u00a0"}
+        <span className="whitespace-nowrap">{time}</span>
+      </span>
+      {detail}
+    </li>
+  );
+}
+
 /** Linear B/V: a grouped row toggles its indented changes, each with its own absolute time. */
 export function ActivityPropertyRow({ row, issue, children }: { row: ActivityRow; issue: Issue; children: ReactNode }) {
   const changes = [...row.events, ...row.chain];
   const [open, setOpen] = useState(() => changes.some((e) => location.hash === `#activity-${e.id}`));
   const grouped = row.chain.length > 0;
   const text = <ActivityRowWords row={row} issue={issue} />;
-  return <li id={`activity-${row.id}`} data-activity={row.field} className="activity-event">
-    <span className="grid size-[14px] place-items-center"><ActivityIcon row={row} issue={issue} /></span>
-    <span>{grouped ? <button type="button" className="text-left hover:text-fg-2" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{text}</button> : text}{" "}·</span>{" "}{children}
-    {grouped && open ? <ol className="col-start-2 col-end-[-1] border-l border-border pl-6" aria-label="Grouped changes">{changes.map((change) => <li key={change.id} id={`activity-change-${change.id}`} className="py-2"><span className="font-medium">{change.actor.name}</span>{" "}{describeActivity(change, issue)} · <time dateTime={change.at} title={activityTime(change.at)}>{fullTime(change.at)}</time></li>)}</ol> : null}
-  </li>;
+  return (
+    <ActivityEntry
+      id={`activity-${row.id}`}
+      data-activity={row.field}
+      icon={<ActivityIcon row={row} issue={issue} />}
+      time={children}
+      detail={
+        grouped && open ? (
+          <ol className="basis-full border-l border-border pl-6" aria-label="Grouped changes">
+            {changes.map((change) => (
+              <li key={change.id} id={`activity-change-${change.id}`} className="py-2">
+                <span className="font-medium">{change.actor.name}</span> {describeActivity(change, issue)} ·{" "}
+                <time dateTime={change.at} title={activityTime(change.at)}>
+                  {fullTime(change.at)}
+                </time>
+              </li>
+            ))}
+          </ol>
+        ) : null
+      }
+    >
+      {grouped ? (
+        <button type="button" className="text-left hover:text-fg-2" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+          {text}
+        </button>
+      ) : (
+        text
+      )}
+    </ActivityEntry>
+  );
 }
 
 /** Linear L spells counts through twenty in grouped-history descriptions. */

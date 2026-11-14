@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Issue } from "@/shared/issue-model";
-import { ActivityIcon, ActivityRowWords, describeActivity, priorityRank, titleChangeLabel } from "./activity-entry";
+import { ActivityEntry, ActivityIcon, ActivityRowWords, describeActivity, priorityRank, titleChangeLabel } from "./activity-entry";
 import { DescriptionHistoryProvider } from "./description-history";
 import { activityRows, type ActivityField, type PropertyActivity } from "./issue-activity";
 
@@ -290,3 +290,16 @@ test("3.7: a link row reads Linear's \"linked [source icon] title\" with the Res
   expect(renderToStaticMarkup(<ActivityIcon row={row!} issue={linked} />)).not.toContain("<svg");
 });
 
+
+test("prod parity #36: an activity row keeps its icon in its own box and its time in the words' run, so a long row wraps beside the icon", () => {
+  const html = renderToStaticMarkup(
+    <ActivityEntry id="activity-1" data-activity="status" icon={<svg />} time={<time>2h ago</time>}>
+      <span>Ada Example</span> moved from To Do to In Progress
+    </ActivityEntry>,
+  );
+  expect(html).toBe(
+    '<li id="activity-1" data-activity="status" class="activity-event"><span class="activity-event-icon"><svg></svg></span>' +
+      '<span class="activity-event-text"><span class="activity-event-words"><span>Ada Example</span> moved from To Do to In Progress</span>' +
+      ' · <span class="whitespace-nowrap"><time>2h ago</time></span></span></li>',
+  );
+});

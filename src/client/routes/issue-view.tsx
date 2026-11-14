@@ -1,5 +1,5 @@
 import { IssueHoverCard } from "@/client/features/issue/issue-hover-card";
-import { ActivityPropertyRow, LinkedTarget } from "@/client/features/issue/activity-entry";
+import { ActivityEntry, ActivityPropertyRow, LinkedTarget } from "@/client/features/issue/activity-entry";
 import { fullTime } from "@/client/features/issue/issue-dates";
 import { type Issue, type User } from "@/shared/issue-model";
 import { useLocation } from "@tanstack/react-router";
@@ -797,14 +797,14 @@ function ActivityEventItem({
   }
   const { resource } = event;
   return (
-    <li id={`activity-${resource.id}`} data-activity="link" className="activity-event">
-      <Avatar user={ME} size={14} />
-      <span>
-        <span className="font-medium">{ME.name}</span> linked <LinkedTarget title={linkTitle(resource)} url={resource.url} />{" "}
-        ·
-      </span>{" "}
-      <Timestamp date={resource.created} id={`activity-${resource.id}`} />
-    </li>
+    <ActivityEntry
+      id={`activity-${resource.id}`}
+      data-activity="link"
+      icon={<Avatar user={ME} size={14} />}
+      time={<Timestamp date={resource.created} id={`activity-${resource.id}`} />}
+    >
+      <span className="font-medium">{ME.name}</span> linked <LinkedTarget title={linkTitle(resource)} url={resource.url} />
+    </ActivityEntry>
   );
 }
 
@@ -894,13 +894,14 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
           anchor: "issue-created",
           summary: [],
           node: (
-            <li key="issue-created" id="issue-created" className="activity-event">
-              <Avatar user={creator} size={14} />
-              <span>
-                <span className="font-medium">{creator?.name}</span> created ·
-              </span>{" "}
-              <Timestamp date={created} id="issue-created" />
-            </li>
+            <ActivityEntry
+              key="issue-created"
+              id="issue-created"
+              icon={<Avatar user={creator} size={14} />}
+              time={<Timestamp date={created} id="issue-created" />}
+            >
+              <span className="font-medium">{creator?.name}</span> created
+            </ActivityEntry>
           ),
         },
         ...events.map((event) => ({

@@ -2093,6 +2093,19 @@ li[data-done="true"] > .todo-content {
 .activity-event > :first-child {
   margin-right: 5px;
 }
+/* Linear's ActivityHistoryEntry: the icon keeps its own box and the words and time share one run that takes the rest of the
+   line, so a long row wraps beside the icon with the time at its end. The row still wraps for a detail under it. */
+.activity-event-icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+}
+.activity-event-text {
+  flex: 1 1 0%;
+  min-width: 0;
+}
 .activity-event:has(+ .activity-event) {
   margin-bottom: 4px;
 }
