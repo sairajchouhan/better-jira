@@ -174,6 +174,17 @@ export function subIssueRows(
   };
 }
 
+/**
+ * `entries` with Move… where Linear's issue menu lists it (startup-root `aAr`: Ko(Copy…), Convert to…, Make a copy…, Move…
+ * (`Lvr`), Open in, Ko(Favorite)): inside the Copy group right after Make a copy…, with no divider of its own; just above the
+ * last entry when the menu has no Make a copy….
+ */
+export function withMoveEntry<T extends { name: string }>(entries: readonly T[], move: T): T[] {
+  const copy = entries.findIndex((entry) => entry.name === "Make a copy…");
+  const at = copy < 0 ? Math.max(0, entries.length - 1) : copy + 1;
+  return [...entries.slice(0, at), move, ...entries.slice(at)];
+}
+
 /** Linear's Move… sub-actions for a sub-issue under manual ordering (startup-root `Ivr`), or a drop at `to` in the others. */
 export type SubIssueMove = "top" | "up" | "down" | "bottom" | { to: number };
 /** The siblings' order with `key` moved (Linear's Move to top / up / down / to bottom, or a drag), or null when it stays put

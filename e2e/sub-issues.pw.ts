@@ -296,10 +296,11 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
       "Remove",
       "Copy",
       "Make a copy…",
+      // Linear's Move… (startup-root `Lvr`, subActions `Ivr`) for a manually ordered list (R3-relations-D4): in the Copy group
+      // right after Make a copy…, no divider of its own (issue menu `aAr`: Ko(Copy…), Convert to…, Make a copy…, Lvr, Open in).
+      "Move…",
       "Favorite",
       "Remind me",
-      // Linear's Move… (startup-root `Lvr`, subActions `Ivr`) for a manually ordered list, just above Delete (R3-relations-D4).
-      "Move…",
       "Delete",
     ]);
     // Linear's Status ring and Priority bars, not a check mark and a list.

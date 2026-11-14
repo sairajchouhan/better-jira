@@ -55,6 +55,7 @@ import {
   subIssueRows,
   type SubIssueDisplay,
   type SubIssueMove,
+  withMoveEntry,
 } from "./sub-issue-model";
 
 const COMPLETED = [
@@ -255,7 +256,6 @@ export function SubIssues({ issue }: { issue: Issue }) {
       name: "Move…",
       icon: "move",
       search: "hidden",
-      divider: true,
       children: [
         ...(at > 0 ? [step("Move to top", "top", "arrow-up"), step("Move up", "up", "arrow-up")] : []),
         ...(at < siblings.length - 1
@@ -308,9 +308,8 @@ export function SubIssues({ issue }: { issue: Issue }) {
         if (kind !== "history") setRowDialog({ kind, key: child.key });
       },
     });
-    // Move… sits just above Delete, the menu's last entry.
     const move = moveEntry(child);
-    return move ? [...entries.slice(0, -1), move, ...entries.slice(-1)] : entries;
+    return move ? withMoveEntry(entries, move) : entries;
   };
   return (
     <section

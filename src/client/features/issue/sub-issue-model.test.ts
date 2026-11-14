@@ -7,6 +7,7 @@ import {
   SUB_ISSUE_ORDERINGS,
   SUB_ISSUE_PROPERTIES,
   movedOrder,
+  withMoveEntry,
   subIssueRows,
 } from "./sub-issue-model";
 const issue = (key: string, parent?: string, status = "todo", rank = ""): Issue => ({
@@ -154,4 +155,11 @@ test("R3-relations-D4: Linear's Move… sub-actions and a drop reorder one paren
   // Already there: nothing to save.
   expect(movedOrder(order, "A", "up")).toBeNull();
   expect(movedOrder(order, "D", "bottom")).toBeNull();
+});
+
+test("Move… sits in the Copy group right after Make a copy…, as Linear's issue menu (startup-root aAr) lists Lvr", () => {
+  const names = (list: { name: string }[]) => list.map((entry) => entry.name);
+  const menu = ["Status", "Copy", "Make a copy…", "Favorite", "Remind me", "Delete"].map((name) => ({ name }));
+  expect(names(withMoveEntry(menu, { name: "Move…" }))).toEqual(["Status", "Copy", "Make a copy…", "Move…", "Favorite", "Remind me", "Delete"]);
+  expect(names(withMoveEntry([{ name: "Status" }, { name: "Delete" }], { name: "Move…" }))).toEqual(["Status", "Move…", "Delete"]);
 });
