@@ -23,7 +23,8 @@ for (const scheme of ["dark", "light"] as const) {
       rowPadding: "0px 18px 0px 14px",
       font: "13px",
       weight: "450", // the label's text variant `small` (sx-1nzvdvg)
-      family: '"Inter Variable", ui-sans-serif, system-ui, sans-serif',
+      family:
+        '"Inter Variable", "SF Pro Display", -apple-system, "system-ui", "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", "Linear Thai", sans-serif',
       gap: "8px",
       highlightRadius: "8px",
       highlightLeft: "6px",

@@ -126,3 +126,52 @@ test("BJ-176: menus, the table handle, the toolbar and collapsible sections take
     expect(offset).toBe(-5);
   });
 });
+
+// Linear's typography (style-kMXsq6uH.css `@layer base`, `@layer reset`; DGe.container in startup-root): its own
+// Inter 4.1 files, self-hosted, preloaded; Inter for keycaps; the monospace stack for code only.
+test("the app renders Linear's font: self-hosted Inter Variable, its stack, features and code font", async ({ open }) => {
+  const page = await open("?issue=TEST-1&view=page");
+  await page.waitFor(`!!document.querySelector('#description pre code')`);
+  await page.eval(`document.fonts.ready.then(()=>true)`);
+  const font = await page.eval<Record<string, unknown>>(
+    `(()=>{const b=getComputedStyle(document.body),files=performance.getEntriesByType('resource').map(r=>r.name).filter(n=>/\\.woff2?\\b/.test(n));return {
+      upright:document.fonts.check('13px "Inter Variable"'),italic:[...document.fonts].some(f=>f.family.replace(/"/g,'')==='Inter Variable'&&f.style==='italic'),
+      loaded:[...document.fonts].some(f=>f.family.replace(/"/g,'')==='Inter Variable'&&f.style==='normal'&&f.status==='loaded'&&f.unicodeRange.startsWith('U+0-2B1B')),
+      family:b.fontFamily,rendering:b.textRendering,smoothing:b.webkitFontSmoothing,
+      preload:!!document.querySelector('link[rel=preload][as=font][type="font/woff2"][crossorigin][href*="InterVariable-"]'),
+      selfHosted:files.length>0&&files.every(n=>new URL(n).origin===location.origin),
+    }})()`,
+  );
+  expect(font).toEqual({
+    upright: true,
+    italic: true,
+    loaded: true,
+    family:
+      '"Inter Variable", "SF Pro Display", -apple-system, "system-ui", "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", "Linear Thai", sans-serif',
+    rendering: "optimizelegibility",
+    smoothing: "antialiased",
+    preload: true,
+    selfHosted: true,
+  });
+  // The editor keeps Inter's contextual alternates on (DGe.container font-feature-settings:"calt").
+  expect(await styleOf(page, "#description > p", ["fontFeatureSettings", "fontVariantLigatures"])).toEqual(['"calt"', "normal"]);
+  // Code blocks use Linear's code-block stack at 12px on 20px lines (read live); both stacks add ui-monospace where
+  // Berkeley Mono can't ship. The block itself and inline code use --font-monospace.
+  const block =
+    '"Berkeley Mono", "Fira Code", "Jetbrains Mono", ui-monospace, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans CJK KR", "Kohinoor Devanagari", "Nirmala UI", "Noto Sans Devanagari", monospace';
+  const mono = '"Berkeley Mono", ui-monospace, "SFMono Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace';
+  expect(await styleOf(page, "#description pre code", ["fontFamily", "fontSize", "lineHeight", "fontFeatureSettings"])).toEqual([
+    block,
+    "12px",
+    "20px",
+    "normal",
+  ]);
+  expect(await styleOf(page, "#description pre .cb-gutter", ["fontFamily"])).toEqual([block]);
+  expect(await styleOf(page, "#description pre", ["fontFamily"])).toEqual([mono]);
+  // A keycap is Inter with "cv08","zero", as Linear's reset leaves kbd on the surrounding font.
+  expect(
+    await page.eval(
+      `(()=>{const k=document.createElement('kbd');k.className='ui-keycap';k.textContent='0';document.body.append(k);const s=getComputedStyle(k),r=[s.fontFamily.split(',')[0],s.fontFeatureSettings];k.remove();return r})()`,
+    ),
+  ).toEqual(['"Inter Variable"', '"cv08", "zero"']);
+});

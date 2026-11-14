@@ -1,12 +1,44 @@
 @import "tailwindcss";
 
+/* Linear's typography, from its bundle (style-*.css, `@layer base`): the same Inter 4.1 files it serves from
+   static.linear.app/fonts (byte-identical, rsms/inter v4.1 web/, SIL OFL 1.1: assets/fonts/Inter-LICENSE.txt), one
+   file per style with its unicode-range (U+2B1C, the white square, falls to the emoji font), font-display swap.
+   index.html preloads the upright file as Linear does. Berkeley Mono (Linear's code font) is a paid licence we can't
+   ship: --font-monospace keeps Linear's stack, so a machine with it installed renders it, and adds ui-monospace
+   (SF Mono on macOS) as the nearest system face before Linear's own fallbacks. */
+@font-face {
+  font-family: "Inter Variable";
+  font-weight: 100 900;
+  font-display: swap;
+  font-style: normal;
+  src: url("./assets/fonts/InterVariable.woff2") format("woff2");
+  unicode-range: U+0-2B1B, U+2B1D-10FFFF;
+}
+@font-face {
+  font-family: "Inter Variable";
+  font-weight: 100 900;
+  font-display: swap;
+  font-style: italic;
+  src: url("./assets/fonts/InterVariable-Italic.woff2") format("woff2");
+  unicode-range: U+0-2B1B, U+2B1D-10FFFF;
+}
+@font-face {
+  font-family: "Linear Thai";
+  font-weight: 450;
+  font-display: swap;
+  font-style: normal;
+  src: local(Thonburi), local(Thonburi-Regular), local(Sukhumvit Set), local(Tahoma), local(Garuda), local(Noto Sans Thai);
+  unicode-range: U+E00-E7F;
+}
+
 /* Linear's own theme output, read from linear.app on 2026-11-06 (see .raj/linear.md, "Colors").
    Linear generates these in JS (generateTheme in startup-root.*.js) from a preset:
    dark  base lch(5.52 0.4 272), accent lch(47.92 59.30 288.42), contrast 27
    light base lch(97.94 0.5 282), accent lch(53 52.26 286.91), contrast 30
    Each token notes the Linear name it copies. */
 @theme inline {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-regular);
+  --font-mono: var(--font-monospace);
   --color-fg: var(--fg);
   --color-fg-2: var(--fg-2);
   --color-fg-3: var(--fg-3);
@@ -203,6 +235,44 @@
   }
 }
 
+/* Linear's font stacks, type scale and weights (style-kMXsq6uH.css `:root`). */
+:root {
+  --font-regular:
+    "Inter Variable", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell,
+    "Open Sans", "Helvetica Neue", "Linear Thai", sans-serif;
+  --font-monospace: "Berkeley Mono", ui-monospace, "SFMono Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  --font-emoji:
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Segoe UI", "Twemoji Mozilla", "Noto Color Emoji",
+    "Android Emoji";
+  /* Linear's code-block stack (KZr in startup-root, set on `.editor pre` by its code-block-theme style), with
+     ui-monospace added before the CJK and Devanagari fallbacks, as in --font-monospace. */
+  --code-block-font-family:
+    "Berkeley Mono", "Fira Code", "Jetbrains Mono", ui-monospace, "Apple SD Gothic Neo", "Malgun Gothic",
+    "Noto Sans CJK KR", "Kohinoor Devanagari", "Nirmala UI", "Noto Sans Devanagari", monospace;
+  /* Linear's type scale and weights (d4 text variants: micro 11 … title1 36; title2/title3 add −.01rem tracking). */
+  --font-size-micro: 0.6875rem;
+  --font-size-mini: 0.75rem;
+  --font-size-small: 0.8125rem;
+  --font-size-regular: 0.9375rem;
+  --font-size-large: 1.125rem;
+  --font-size-title3: 1.25rem;
+  --font-size-title2: 1.5rem;
+  --font-size-title1: 2.25rem;
+  --font-weight-light: 300;
+  --font-weight-normal: 450;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+}
+/* On a 1x screen Linear rounds micro text up to an even pixel count. */
+@supports (font-size: round(up, 1rem, 1px)) {
+  @media not all and (-webkit-min-device-pixel-ratio: 2), not all and (min-resolution: 192dpi) {
+    :root {
+      --font-size-micro: round(up, 0.6875rem, 2px);
+    }
+  }
+}
+
 @layer base {
   /* No macOS rubber-band bounce at the top/bottom; the horizontal axis stays default so a two-finger swipe still goes back/forward. */
   html,
@@ -211,7 +281,20 @@
   }
   body {
     @apply bg-app text-[13px] text-fg antialiased;
+    font-family: var(--font-regular);
+    text-rendering: optimizeLegibility;
+    -webkit-text-size-adjust: 100%;
     cursor: default;
+  }
+  /* Linear's reset gives kbd and samp the surrounding font (Inter, with its features); only pre and code turn
+     monospace (`@layer base` pre,code{font-family:var(--font-monospace);font-feature-settings:normal}, which
+     Tailwind's preflight now does through --font-mono). The preflight's mono kbd put a keycap's "cv08","zero" on SF
+     Mono instead of Inter. */
+  kbd,
+  samp {
+    font-family: inherit;
+    font-feature-settings: inherit;
+    font-variation-settings: inherit;
   }
   a {
     cursor: inherit;
@@ -491,10 +574,6 @@
   --editor-code-bg: lch(20% 50 286.91 / 0.05); /* --editor-inline-code-background: [20, 50, controlPrimary hue, .05] */
   --editor-callout-bg-mix: 5%; /* --editor-callout-bg-mix */
   --editor-callout-border-mix: 28%; /* --editor-callout-border-mix */
-  /* --font-monospace and --font-emoji */
-  --editor-mono: "Berkeley Mono", "SFMono Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
-  --editor-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Segoe UI", "Twemoji Mozilla",
-    "Noto Color Emoji", "Android Emoji";
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -515,6 +594,14 @@
 .rich-doc {
   font-size: 15px;
   line-height: 1.6;
+}
+/* Linear's editor container (DGe.container) sets font-feature-settings:"calt" and ships no prosemirror.css ligature
+   rule, so Inter's contextual alternates stay on. prosemirror-view's `.ProseMirror{font-variant-ligatures:none;
+   font-feature-settings:"liga" 0}` turned them off; the stand-in reads the same, so the swap still moves nothing. */
+.rich-doc,
+.ProseMirror.rich-doc {
+  font-variant-ligatures: normal;
+  font-feature-settings: "calt";
 }
 .rich-editor[data-expanded] .rich-content {
   min-height: 300px;
@@ -744,7 +831,7 @@
   background: var(--app);
   border: var(--thin-pixel) solid var(--bg-border);
   border-radius: 6px;
-  font-family: var(--editor-mono);
+  font-family: var(--font-monospace);
   text-align: left;
   white-space: pre;
   word-spacing: normal;
@@ -762,23 +849,23 @@
   word-wrap: break-word;
   white-space: pre-wrap;
   white-space: break-spaces;
-  font-variant-ligatures: none;
-  font-feature-settings: "liga" 0;
 }
 .rich-stand-in pre {
   white-space: pre;
 }
+/* Linear's code-block-theme style sets the code's size from the code theme: 12px on 20px lines, read live
+   (--code-block-font-size/-line-height; editorFontSize ||12, editorLineHeight ||20). */
 .rich-doc pre code {
   padding: 12px 16px;
   overflow-x: auto;
-  font-family: var(--editor-mono);
-  font-size: 0.875em;
-  line-height: 1.4em;
+  font-family: var(--code-block-font-family);
+  font-size: 12px;
+  line-height: 20px;
 }
 /* .editor code.inline{font-family:mono;background:inline-code-background;box-shadow:0 0 0 hairline
    inline-code-border-color inset;border-radius:.2em;padding:0 .25em;font-size:.9375em;line-height:1.3} */
 .rich-doc :not(pre) > code {
-  font-family: var(--editor-mono);
+  font-family: var(--font-monospace);
   box-decoration-break: clone;
   background-color: var(--editor-code-bg);
   box-shadow: 0 0 0 var(--thin-pixel) var(--border-solid-thin) inset;
@@ -919,7 +1006,7 @@
 }
 /* .editor .emoji:not(.custom-emoji){font-family:var(--font-emoji);font-style:normal} */
 .rich-doc .rich-emoji {
-  font-family: var(--editor-emoji);
+  font-family: var(--font-emoji);
   font-style: normal;
 }
 /* --editor-image-max-height: 600px; R img{object-fit:contain} */
@@ -2614,8 +2701,8 @@ li[data-done="true"] > .todo-content {
 }
 /* `.editor pre`: the padding lives on the gutter and the code, so the gutter can sit in its own column. */
 pre.code-block {
-  --code-block-font-size: 0.875em;
-  --code-block-line-height: 1.4em;
+  --code-block-font-size: 12px;
+  --code-block-line-height: 20px;
   --code-block-padding: 12px;
   --code-block-side-padding: 16px;
   display: grid;
@@ -2632,7 +2719,7 @@ pre.code-block {
 }
 pre.code-block > code,
 pre.code-block > .cb-gutter {
-  font-family: monospace;
+  font-family: var(--code-block-font-family); /* .editor pre code, .cb-gutter{font-family:var(--code-block-font-family)} */
   font-size: inherit;
   line-height: var(--code-block-line-height);
   padding-top: var(--code-block-padding);

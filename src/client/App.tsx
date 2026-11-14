@@ -1,4 +1,3 @@
-import "@fontsource-variable/inter/opsz.css";
 import "./index.css";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { RouterProvider } from "@tanstack/react-router";
