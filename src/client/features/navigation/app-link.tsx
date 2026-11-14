@@ -1,6 +1,7 @@
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { createLink } from "@tanstack/react-router";
-import { linkTo, navigate, openSavedView, withFavorite } from "./app-navigation";
+import { RouterProvider } from "react-aria-components";
+import { linkTo, navigate, openSavedView, router, withFavorite } from "./app-navigation";
 import { locationOf } from "@/client/routes/tree";
 import type { SavedView } from "@/shared/saved-view-model";
 import type { Destination } from "./navigation";
@@ -11,6 +12,24 @@ import type { Destination } from "./navigation";
  */
 export function AppLink({ to, onClick, ...props }: { to: Destination } & ComponentProps<"a">) {
   return <NavigationLink routeLocation={linkTo(to)} go={() => navigate(to)} onClick={onClick} {...props} />;
+}
+
+declare module "react-aria-components" {
+  interface RouterConfig {
+    /** A React Aria link's destination in the app, beside its `href` (`linkHref(to)`). */
+    routerOptions: Destination;
+  }
+}
+
+/**
+ * React Aria's links route through the app: a plain click on one with a `routerOptions` destination goes there as the app's own
+ * steps do (AppLink's `navigate`), any other same-origin link through the router. ⌘-click, a target or a download stay the
+ * browser's. Their `href` is already the router's (`linkHref`), so no `useHref` is needed.
+ */
+export function AppRouterProvider({ children }: { children: ReactNode }) {
+  return (
+    <RouterProvider navigate={(href, to) => (to ? navigate(to) : void router.navigate({ href }))}>{children}</RouterProvider>
+  );
 }
 
 /** A link opening a saved view; `favorite` when it is the view's Favorites row. */

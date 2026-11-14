@@ -5,7 +5,7 @@
  * Title`, and a document `Space › KEY › Title`. No Issues crumb: it led to the same board as the space (the user's choice over
  * Linear, .raj/done.md 2026-11-14).
  */
-import { useMemo, type ReactNode, type Ref } from "react";
+import { useMemo, type ComponentProps, type ReactNode, type Ref } from "react";
 import { Breadcrumb, Breadcrumbs, Link } from "react-aria-components";
 import { type Board, type Issue } from "@/shared/issue-model";
 import { peopleOf } from "@/shared/people";
@@ -21,8 +21,7 @@ import { useActiveView, useSavedViews } from "@/client/features/views/saved-view
 import { ViewContextMenu } from "@/client/features/views/view-editor";
 import { SavedViewIcon } from "@/client/features/views/views-navigation";
 import type { SavedView } from "@/shared/saved-view-model";
-import { AppLink } from "./app-link";
-import { linkHref, ui } from "./app-navigation";
+import { linkHref, preloadOnHover, ui } from "./app-navigation";
 import type { Destination } from "./navigation";
 import { hotkeyOf, runShortcut } from "./shortcuts";
 import { boardCopyURL } from "./sidebar-menus";
@@ -104,19 +103,26 @@ function Crumb({ id, className = "", children }: { id: string; className?: strin
     </Breadcrumb>
   );
 }
-/** A crumb's link into the app: React Aria's Link (current-page state from its Breadcrumb) drawn as the app's own link, so a click
- *  goes there as the app's steps do and ⌘-click opens a tab. A current crumb that still links passes `isDisabled={false}`. */
+/** A crumb's link into the app: React Aria's Link (current-page state from its Breadcrumb), routed by AppRouterProvider, so a
+ *  click goes there as the app's steps do and ⌘-click opens a tab. Resting on it loads where it goes, as the router's own links
+ *  do (`defaultPreload: "intent"`), and Space follows it as AppLink does. A current crumb that still links passes
+ *  `isDisabled={false}`. */
 function CrumbLink({ to, title, children, ...props }: { to: Destination; children: ReactNode; className: string; isDisabled?: boolean; title?: string; "aria-label"?: string; onPress?: () => void }) {
   return (
     <Link
       {...props}
       href={linkHref(to)}
-      // React Aria's Link passes no `title`; the anchor takes it, so the app's tooltip shows (Linear's crumb tooltips).
-      render={(dom) => {
-        if (!("href" in dom)) return <span {...dom} title={title} />;
-        const { href: _href, ...anchor } = dom;
-        return <AppLink to={to} {...anchor} title={title} />;
+      routerOptions={to}
+      onHoverStart={() => preloadOnHover(to)}
+      onHoverEnd={() => preloadOnHover(null)}
+      onKeyDown={(event) => {
+        if (event.key === " " && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+          event.preventDefault();
+          (event.target as HTMLElement).click();
+        } else event.continuePropagation();
       }}
+      // React Aria's Link passes no `title`; the anchor takes it, so the app's tooltip shows (Linear's crumb tooltips).
+      render={title ? (dom) => <a {...(dom as ComponentProps<"a">)} title={title} /> : undefined}
     >
       {children}
     </Link>

@@ -2,6 +2,7 @@ import "./index.css";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { RouterProvider } from "@tanstack/react-router";
 import { router } from "@/client/features/navigation/app-navigation";
+import { AppRouterProvider } from "@/client/features/navigation/app-link";
 import { ReminderPicker, ReminderDelivery } from "@/client/features/reminders/reminders";
 import { InboxPushDelivery } from "@/client/features/inbox/desktop-notifications";
 import { useStore } from "@/client/state/store";
@@ -70,7 +71,11 @@ export function App() {
     ) : (
       <AppLoading className="h-screen" />
     );
-  return <RouterProvider router={router} InnerWrap={Shell} />;
+  return (
+    <AppRouterProvider>
+      <RouterProvider router={router} InnerWrap={Shell} />
+    </AppRouterProvider>
+  );
 }
 
 /** The frame every route renders inside: sidebar, the board header, the boards kept mounted, overlays.
