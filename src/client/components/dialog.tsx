@@ -26,6 +26,7 @@ type Placement = {
 function DialogRoot({
   label,
   close,
+  dismiss,
   width = DIALOG.WIDTH,
   placement,
   children,
@@ -33,12 +34,14 @@ function DialogRoot({
   /** The dialog's accessible name; usually its title text. */
   label: string;
   close: () => void;
+  /** A press on the backdrop; `close` unless given (MenuSurface `dismiss`). */
+  dismiss?: () => void;
   width?: number;
   children: ReactNode;
 }) {
   const context = useMemo(() => ({ close }), [close]);
   return (
-    <MenuSurface label={label} close={close} width={width} placement={placement} variant="dialog">
+    <MenuSurface label={label} close={close} dismiss={dismiss} width={width} placement={placement} variant="dialog">
       <DialogContext value={context}>{children}</DialogContext>
     </MenuSurface>
   );

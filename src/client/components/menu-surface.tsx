@@ -299,10 +299,14 @@ export function MenuSurface({
   point,
   placement = "top",
   variant = "menu",
+  dismiss = close,
 }: {
   label: string;
   children: ReactNode;
   close: () => void;
+  /** What a press on the backdrop does; `close` (as Escape) unless the owner says otherwise. Linear's fast-create modal
+   *  minimizes there instead (`handleMinimize`, LinearLayout `Qr`), keeping its draft without asking. */
+  dismiss?: () => void;
   anchorId?: string;
   anchor?: HTMLElement | null;
   width?: number;
@@ -413,7 +417,7 @@ export function MenuSurface({
       // Linear's side panel dims with its `g_` backdrop: bgModalOverlay at opacity .95.
       className={`fixed inset-0 z-50 ${anchored || command ? "" : panel ? "bg-[color-mix(in_srgb,var(--modal-overlay)_95%,transparent)]" : "bg-[var(--modal-overlay)]"}`}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) outside(e, close);
+        if (e.target === e.currentTarget) outside(e, dismiss);
       }}
     >
       <div

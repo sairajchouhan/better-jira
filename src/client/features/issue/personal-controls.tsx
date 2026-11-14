@@ -21,9 +21,10 @@ import { createSubIssue, issueMenuEntries, type IssueMenuDialog } from "./issue-
 import { SubIssues, statusOf } from "./sub-issues";
 import { attachmentSplit } from "./issue-attachments";
 import { SUMMARY_MAX, switchBoard } from "./composer-draft";
+import { draftEligible, readLocalDraft, resumeDraft, useComposerLocalDraft } from "./composer-local-draft";
 import { shortDate } from "@/client/lib/due-date";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { createContext, use, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { createContext, use, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ComposerEditor } from "@/client/features/editor/rich-editor-loader";
 import { COMPOSER_TITLE, focusEditorAt, titleKeyDown } from "@/client/features/editor/title-flow";
 import { MediaView } from "@/client/features/media/media-loader";
@@ -82,8 +83,7 @@ import { PropertyPill } from "@/client/components/pill-select";
 import { ActionMenu, joinGroups, type ActionEntry } from "@/client/components/action-menu";
 import { kept, post, run as runCommand, useCommand } from "@/client/features/navigation/commands";
 
-/** Linear keeps an unsent title and description when the composer closes; the next C brings them back. */
-const unsent = { title: "", description: normalizeDocument("") };
+const NO_FILES: NonNullable<Issue["attachments"]> = [];
 type SavedComposerDraft = { id: string; title: string; fields: IssueDraft };
 const parseComposerDrafts = (raw: unknown): SavedComposerDraft[] => Array.isArray(raw) ? raw.filter(d => d && typeof d.id === "string" && typeof d.title === "string" && d.fields && typeof d.fields === "object") : [];
 /** Linear's composer relation chip ("1 blocked", startup-root `yZn`/`hZn`): it opens "Open blocked issues", the pending
@@ -161,31 +161,23 @@ export function CreateIssue() {
   const currentBoard = useStore(s => s.board);
   const all = useStore((s) => s.issues);
   const initial = useStore((s) => s.draft);
-  const [draft, setDraft] = useState<IssueDraft>(initial);
+  const account = useStore(s => s.namespace);
+  // The draft this browser kept (a reload, a closed tab, a minimized composer) comes back unless the opener brought its own.
+  const [start] = useState(() => resumeDraft(initial, readLocalDraft(account), boards.map((b) => b.id)));
+  const [draft, setDraft] = useState<IssueDraft>(start.fields);
   const board = boards.find(b => b.id === (draft.board ?? currentBoard))!;
-  const [title, setTitle] = useState(initial.title ?? unsent.title);
-  const [description, setDescription] = useState(() =>
-    normalizeDocument(initial.descriptionDoc ?? unsent.description),
-  );
-  useEffect(() => {
-    // A copy isn't a draft of your own: cancelling it leaves the next composer as it was.
-    if (initial.copy) return;
-    unsent.title = title;
-    unsent.description = description;
-  }, [title, description, initial.copy]);
+  const [title, setTitle] = useState(start.title);
+  const [description, setDescription] = useState(start.description);
   const [draftIndex, setDraftIndex] = useState(0);
-  const [labels, setLabels] = useState(initial.labels?.join(", ") ?? "");
-  const [more, setMore] = useState(false);
+  const [labels, setLabels] = useState(start.labels.join(", "));
+  const [more, setMore] = useState(start.more);
   const [expanded, setExpanded] = useState(false);
   useCommand("create-expanded", () => {
     setExpanded(true);
     return true;
   });
-  const [attachments, setAttachments] = useState<Issue["attachments"]>(
-    initial.attachments ?? [],
-  );
+  const [attachments, setAttachments] = useState<Issue["attachments"]>(start.attachments);
   const [filesBusy, setFilesBusy] = useState(false);
-  const account = useStore(s => s.namespace);
   const [saved, setSaved] = useStoredState<SavedComposerDraft[]>(`better-jira:composer-drafts:v1:${account}`, parseComposerDrafts, [], "Could not save drafts locally");
   const [savedId, setSavedId] = useState<string | null>(null);
   const [draftsOpen, setDraftsOpen] = useState(false);
@@ -234,16 +226,30 @@ export function CreateIssue() {
     draft.type && types.includes(draft.type)
       ? draft.type
       : (types[0] ?? "Task");
+  const labelList = useMemo(() => labels.split(",").map((l) => l.trim()).filter(Boolean), [labels]);
+  // What the draft holds: the board and type as shown, so it comes back on the same board with the same type.
+  const fields = useMemo(() => ({ ...draft, board: board.id, type }), [draft, board.id, type]);
+  // A copy isn't a draft of your own: it keeps nothing, and cancelling it leaves the kept draft as it was.
+  const localDraft = useComposerLocalDraft(account, !initial.copy, {
+    fields,
+    title,
+    description,
+    labels: labelList,
+    attachments: attachments ?? NO_FILES,
+    more,
+  });
   const closeNow = () => ui.send({ type: "overlay.close" });
   const hasContent = !!title.trim() || !!adfToText(description).trim() || !!attachments?.length || documentHasMedia(description) || !!draft.resources?.length || !!draft.subIssues?.some(t => t.trim());
   const close = () => hasContent && !initial.copy ? setConfirmClose(true) : closeNow();
+  // Linear's backdrop press minimizes (`handleMinimize` → `setLocalDraft`): a draft worth keeping closes without asking and
+  // comes back with the next C; anything else closes as Escape does.
+  const minimize = () => (!initial.copy && draftEligible(title, description) ? closeNow() : close());
   const saveDraft = () => {
     const id = savedId ?? crypto.randomUUID();
-    const next = [...saved.filter(d => d.id !== id), { id, title, fields: { ...draft, board: board.id, type, title, descriptionDoc: description, attachments, labels: labels.split(",").map(l => l.trim()).filter(Boolean) } }];
+    const next = [...saved.filter(d => d.id !== id), { id, title, fields: { ...fields, title, descriptionDoc: description, attachments, labels: labelList } }];
     if (!writeStored(`better-jira:composer-drafts:v1:${account}`, next, "Could not save drafts locally")) return;
     setSaved(next);
-    unsent.title = "";
-    unsent.description = normalizeDocument("");
+    localDraft.clear();
     closeNow();
   };
   // One id per draft, read from this render: a second submit before React re-renders (a double click) makes no second issue.
@@ -276,8 +282,7 @@ export function CreateIssue() {
       if (fromSelection) runCommand("issue-from-selection", { id: fromSelection, key });
       if (savedId) setSaved(saved.filter(d => d.id !== savedId));
       setSavedId(null);
-      unsent.title = "";
-      unsent.description = normalizeDocument("");
+      localDraft.clear();
     }
     if (key && more) {
       setTitle("");
@@ -333,16 +338,19 @@ export function CreateIssue() {
     confirmLabel="Save"
     tone="primary"
     confirmDisabled={filesBusy}
-    reject={{ label: "Discard", onReject: () => { if (savedId) setSaved(saved.filter(d => d.id !== savedId)); unsent.title = ""; unsent.description = normalizeDocument(""); closeNow(); } }}
+    reject={{ label: "Discard", onReject: () => { if (savedId) setSaved(saved.filter(d => d.id !== savedId)); localDraft.clear(); closeNow(); } }}
     onConfirm={saveDraft}
     close={() => setConfirmClose(false)}
   />;
   const statusId = draft.status ?? board.columns[0]?.statuses[0]?.id ?? "";
   const status = statuses(board).find((s) => s.id === statusId);
-  const labelList = labels
-    .split(",")
-    .map((l) => l.trim())
-    .filter(Boolean);
+  // A sub-issue composer, opened as one or resumed from one; an epic picked as the draft's Epic is not a parent issue here.
+  const openedParent = start.fields.parent,
+    openedParentIssue = openedParent ? all.get(openedParent) : undefined;
+  const subIssueOf =
+    openedParent && (openedParent === initial.parent || (openedParentIssue && !isEpic(openedParentIssue)))
+      ? openedParent
+      : undefined;
   // The composer's project is its epic, the new issue's Jira parent; a sub-issue's follows its parent (shared/epics.ts).
   const draftEpic = parentIssue && isEpic(parentIssue) ? parentIssue : undefined;
   const epicPill = !epicLocked({ type }) && (!draft.parent || draftEpic);
@@ -360,6 +368,7 @@ export function CreateIssue() {
     <Dialog
       label="Create issue"
       close={close}
+      dismiss={minimize}
       width={expanded ? Math.max(640, window.innerWidth - 48) : 640}
     >
       <Attachments attachments={attachments} listed={listed} onChange={setAttachments} onBusy={setFilesBusy}>
@@ -377,7 +386,7 @@ export function CreateIssue() {
             />
             <Icon name="chevron" size={10} />
             <Text variant="mini" color="inherit" className="text-fg">
-              {initial.parent ? `Sub-issue of ${initial.parent}` : "New issue"}
+              {subIssueOf ? `Sub-issue of ${subIssueOf}` : "New issue"}
             </Text>
           </Text>
           {/* `Hr.rightHandContainer`: 12px clear of the breadcrumb, 6px between controls. */}
