@@ -83,6 +83,28 @@ function SectionHeading({ label, expanded, onToggle, addLabel, onAdd }: {
   );
 }
 
+const closePeek = () => set({ sidebarPeek: false });
+/** The peeking sidebar's frame: floating over the page from just below the header, so the header's Menu toggle stays reachable. */
+export const SIDEBAR_PEEK = "fixed top-[41.5px] bottom-0 left-0 z-50 bg-panel shadow-lg";
+/**
+ * Linear's floating-sidebar backdrop (startup-root): the pointer entering, moving over or pressing the page closes the peek,
+ * except over the header's leading 128px, where the Menu toggle sits (zone `top:48px; left:8px`, plus an `::after` band over
+ * the header from `left:120px`). Leaving the panel alone doesn't close it.
+ */
+export function PeekCloseZone() {
+  return (
+    <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-40">
+      <div
+        data-sidebar-peek-close
+        onMouseEnter={closePeek}
+        onMouseMove={closePeek}
+        onMouseDown={closePeek}
+        className="pointer-events-auto absolute top-12 right-0 bottom-0 left-2 after:absolute after:-top-12 after:right-0 after:left-[120px] after:h-12 after:content-['']"
+      />
+    </div>
+  );
+}
+
 export function Sidebar({ boards }: { boards: Board[] }) {
   const views = useSavedViews();
   const hidden = useStore((s) => s.sidebarHidden);
@@ -105,6 +127,7 @@ export function Sidebar({ boards }: { boards: Board[] }) {
     });
   return (
     <>
+      {peek && <PeekCloseZone />}
       {open && (
         <button
           aria-label="Close menu"
@@ -116,11 +139,11 @@ export function Sidebar({ boards }: { boards: Board[] }) {
       <nav
         aria-label="Main navigation"
         // Below 768px the sidebar opens over the page from the Menu button or [, and closes after a pick.
-        // A hidden sidebar peeked from the header's Menu button floats over the page until the pointer leaves it (Linear `r5`).
+        // A hidden sidebar peeked from the header's Menu button floats over the page below the header, so the toggle stays
+        // reachable (Linear's floating panel `top`: r1 + mainPageMargin - 10 = 44 - hairline + 8 - 10).
         onClick={(e) => open && (e.target as Element).closest("button, a") && close()}
-        onMouseLeave={peek ? () => set({ sidebarPeek: false }) : undefined}
         data-sidebar-peek={peek || undefined}
-        className={`flex w-[244px] shrink-0 flex-col gap-px overflow-y-auto p-2 font-medium ${peek ? "fixed inset-y-0 left-0 z-50 bg-panel shadow-lg" : open ? "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:bg-panel max-md:shadow-lg" : "max-md:hidden"}`}
+        className={`flex w-[244px] shrink-0 flex-col gap-px overflow-y-auto p-2 font-medium ${peek ? SIDEBAR_PEEK : open ? "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:bg-panel max-md:shadow-lg" : "max-md:hidden"}`}
       >
         <div className="mb-1 flex h-11 items-center gap-2 px-2 text-fg">
           <NotchMark />

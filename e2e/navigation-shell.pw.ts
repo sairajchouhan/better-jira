@@ -138,7 +138,10 @@ test("navigation shell: sidebar, My issues URL, palettes and shortcut search", a
     expect(await p.eval(`document.querySelector('button[aria-label="Menu"]')?.getAttribute('data-title') ?? document.querySelector('button[aria-label="Menu"]')?.title`)).toContain("Expand navigation sidebar");
     await p.hover('button[aria-label="Menu"]');
     await p.waitFor(`${navShown} && !!document.querySelector('nav[data-sidebar-peek]')`);
-    await p.hover("footer"); // the pointer leaves the peek
+    // Linear's peek floats below the header: the toggle it came from stays on top and reachable.
+    expect(await p.eval(`(()=>{const b=document.querySelector('button[aria-label="Menu"]').getBoundingClientRect();return !!document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)?.closest('button[aria-label="Menu"]')})()`)).toBe(true);
+    // The pointer on the page closes it (Linear's floating backdrop covers the page, so this is a raw move, not a hover).
+    await p.cmd("Input.dispatchMouseEvent", { type: "mouseMoved", x: 720, y: 450 });
     await p.waitFor(`!${navShown}`);
     await p.click('button[aria-label="Menu"]');
     await p.waitFor(`${navShown} && !document.querySelector('nav[data-sidebar-peek]')`);
