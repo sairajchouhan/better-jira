@@ -47,6 +47,7 @@ export type Overlay =
   | "inbox-actions"
   | "inbox-filter"
   | "inbox-display"
+  | "inbox-push"
   | "snooze";
 export type View = "side" | "page";
 export type { SavedView } from "@/shared/saved-view-model";

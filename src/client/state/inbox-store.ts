@@ -7,6 +7,7 @@ import {
   type InfiniteData,
   type QueryClient,
 } from "@tanstack/query-core";
+import { DEFAULT_PUSH, type PushSettings } from "@/shared/inbox-push";
 import {
   DEFAULT_VIEW,
   facetsOf,
@@ -85,7 +86,9 @@ export function createInboxStore(ports: InboxPorts) {
 
   // --- local state: per head notification, plus the view's display options ---
 
-  let local: Record<string, Local> | undefined, view: InboxView | undefined;
+  let local: Record<string, Local> | undefined,
+    view: InboxView | undefined,
+    push: PushSettings | undefined;
   let selectedId: string | null = null;
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach((l) => l());
@@ -95,9 +98,17 @@ export function createInboxStore(ports: InboxPorts) {
   );
   const localState = () => (local ??= read<Record<string, Local>>("local", {}));
   const viewState = () => (view ??= read("view", DEFAULT_VIEW));
+  /** Desktop notifications' settings (Linear's Push notifications › Desktop), kept per account in this browser. */
+  const pushState = () => (push ??= read("push", DEFAULT_PUSH));
+  function changePush(patch: Partial<PushSettings>) {
+    push = { ...pushState(), ...patch };
+    save("push", push);
+    emit();
+  }
   function storageChanged(name: string) {
     if (name === "local") local = undefined;
     else if (name === "view") view = undefined;
+    else if (name === "push") push = undefined;
     else return;
     emit();
   }
@@ -624,6 +635,8 @@ export function createInboxStore(ports: InboxPorts) {
     subscribe,
     localState,
     viewState,
+    pushState,
+    changePush,
     cancelRead: () => cancelRead(),
     shownView,
     findState,

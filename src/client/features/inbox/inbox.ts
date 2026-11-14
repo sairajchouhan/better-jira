@@ -128,7 +128,7 @@ export const inbox = createInboxStore({
 });
 globalThis.addEventListener?.("storage", (event) => {
   const key = (event as StorageEvent).key;
-  for (const name of ["local", "view"])
+  for (const name of ["local", "view", "push"])
     if (key === storageKey(name)) inbox.storageChanged(name);
 });
 export const {
@@ -152,6 +152,7 @@ export const {
 } = inbox;
 export const { itemsOf, facets, orderOf, clearUnseen, openFind, setFind, closeFind } = inbox;
 const { subscribe, localState, viewState, feed, dropLocal, markRead } = inbox;
+export const usePush = () => useSyncExternalStore(subscribe, inbox.pushState);
 
 // --- Opening an issue outside the inbox reads its notifications (Linear's MarkNotificationAsRead `z`, `j` and `M`) ---
 

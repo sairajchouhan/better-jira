@@ -4,6 +4,7 @@ import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { RouterProvider } from "@tanstack/react-router";
 import { router } from "@/client/features/navigation/app-navigation";
 import { ReminderPicker, ReminderDelivery } from "@/client/features/reminders/reminders";
+import { InboxPushDelivery } from "@/client/features/inbox/desktop-notifications";
 import { useStore } from "@/client/state/store";
 import { load } from "@/client/state/app-load";
 import {
@@ -117,6 +118,7 @@ function Shell({ children }: { children: ReactNode }) {
         </main>
       </div>
       <ReminderDelivery />
+      <InboxPushDelivery />
       <StorageNotice />
       <StatusBar />
       <ToastViewport />

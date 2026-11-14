@@ -28,10 +28,12 @@ import { SidebarToggle } from "@/client/features/navigation/app-chrome";
 import { useSearch } from "@tanstack/react-router";
 import { toggleFavorite } from "@/client/features/navigation/favorites";
 
-import { changeView, toggleFilter, clearFilters, selectRow, toggleRead, markAllRead, deleteRow, deleteAll, openSnooze, snoozeRow, showTab, inbox, statusOf, ROW_PARAM, useFeed, useSelected, useView, useShownView, useFind, openFind, setFind, closeFind, useLocal, useUnreadCount, orderOf, facets, itemsOf, clearUnseen, useConfirmation } from "@/client/features/inbox/inbox";
+import { usePush, changeView, toggleFilter, clearFilters, selectRow, toggleRead, markAllRead, deleteRow, deleteAll, openSnooze, snoozeRow, showTab, inbox, statusOf, ROW_PARAM, useFeed, useSelected, useView, useShownView, useFind, openFind, setFind, closeFind, useLocal, useUnreadCount, orderOf, facets, itemsOf, clearUnseen, useConfirmation } from "@/client/features/inbox/inbox";
 import { InboxIssuePane } from "./issue-view";
 import { firstKey } from "@/client/state/jira-sync";
 import { SelectRow, Toggle, ViewOptions } from "@/client/components/display-options";
+import { PUSH_CATEGORIES, pushCategoryOn } from "@/shared/inbox-push";
+import { disableDesktopNotifications, enableDesktopNotifications, pushPermission } from "@/client/features/inbox/desktop-notifications";
 
 const copyRow = (item: InboxItem, kind: CopyKind) =>
   copyIssue(kind, { key: item.key, summary: item.title } as Issue, item.url);
@@ -398,6 +400,51 @@ function InboxDisplayOptions({ close }: { close: () => void }) {
   );
 }
 
+/**
+ * Linear's Settings › Notifications › Push notifications › Desktop (`Q3`: the channel's "Enable desktop notifications", "Only
+ * deliver priority notifications" while the priority inbox is on, then its General notifications), in the same view-options
+ * panel as Display options. Only the categories Jira's bell can fill are listed. Turning it on asks the browser.
+ */
+function DesktopNotificationOptions({ close }: { close: () => void }) {
+  const push = usePush();
+  const priority = useView().priorityInbox;
+  const [trigger] = useState(() => ({ current: document.getElementById("inbox-actions") }));
+  const enabled = push.enabled && pushPermission() === "granted";
+  return (
+    <ViewOptions.Popover label="Desktop notifications" trigger={trigger} placement="bottom-left" close={close}>
+      <ViewOptions.Content>
+        <Toggle
+          label="Enable desktop notifications"
+          value={enabled}
+          onChange={() => void (enabled ? disableDesktopNotifications() : enableDesktopNotifications())}
+        />
+        {priority && (
+          <Toggle
+            label="Only deliver priority notifications"
+            value={push.onlyPriority}
+            onChange={() => inbox.changePush({ onlyPriority: !push.onlyPriority })}
+          />
+        )}
+      </ViewOptions.Content>
+      <ViewOptions.Content>
+        <ViewOptions.SectionLabel>General notifications</ViewOptions.SectionLabel>
+        {PUSH_CATEGORIES.map(([category, label]) => (
+          <Toggle
+            key={category}
+            label={label}
+            value={pushCategoryOn(push, category)}
+            onChange={() =>
+              inbox.changePush({
+                categories: { ...push.categories, [category]: !pushCategoryOn(push, category) },
+              })
+            }
+          />
+        ))}
+      </ViewOptions.Content>
+    </ViewOptions.Popover>
+  );
+}
+
 /** Linear's confirmation (`gi`) for Delete all, Delete all read and Delete all completed, in place of the browser's
  *  `confirm()` (R3-inbox-D6). */
 function DeleteAllConfirm() {
@@ -445,6 +492,10 @@ function Menus({ base }: { base: InboxItem[] }) {
             run: () => deleteAll("read"),
           },
           { name: "Delete all completed", run: () => deleteAll("completed") },
+          {
+            name: "Desktop notifications",
+            run: () => ui.send({ type: "overlay.open", overlay: "inbox-push" }),
+          },
           // Jira's own notification settings: better-jira has none of its own.
           {
             name: "Go to settings",
@@ -462,6 +513,7 @@ function Menus({ base }: { base: InboxItem[] }) {
   if (overlay === "inbox-filter")
     return <FilterMenu entries={filterEntries(base, v)} close={close} />;
   if (overlay === "inbox-display") return <InboxDisplayOptions close={close} />;
+  if (overlay === "inbox-push") return <DesktopNotificationOptions close={close} />;
   if (overlay === "snooze") return <SnoozeMenu close={close} />;
   return null;
 }
