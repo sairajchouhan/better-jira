@@ -16,7 +16,13 @@ import { DueRows, IssueLabelRows } from "./property-menu";
 import type { ActionEntry } from "@/client/components/action-menu";
 import { Icon, PriorityIcon, StatusIcon, type IconName } from "@/client/components/icons";
 import { Avatar } from "@/client/components/avatar";
-import { assignableUsers, knownLabels, priorityChoices, statuses } from "@/shared/board-catalog";
+import {
+  assignableUsers,
+  clearPriorityRow,
+  knownLabels,
+  priorityChoices,
+  statuses,
+} from "@/shared/board-catalog";
 export type IssueMenuDialog =
   | "status"
   | "priority"
@@ -94,11 +100,15 @@ export function issueMenuEntries(
     priority: property("Priority", "priority", "priority", {
       placeholder: issue.priority ? "Change priority to…" : "Set priority to…",
       nameAsParent: issue.priority ? "Change priority to" : "Set priority to",
-      children: ["", ...priorityChoices(get().options, boardIssues, get().writable)].map((p, i) => ({
+      children: [
+        ...(clearPriorityRow(get().writable) ? [""] : []),
+        ...priorityChoices(get().options, boardIssues, get().writable),
+      ].map((p, i, rows) => ({
         name: p || "No priority",
         image: createElement(PriorityIcon, { name: p || undefined }),
         selected: p === (issue.priority ?? ""),
-        number: i,
+        // Linear numbers No priority 0, so the named rows keep 1… when Jira can't clear the priority.
+        number: rows[0] ? i + 1 : i,
         run: choose(() => actions.patch(issue.key, { priority: p || undefined })),
       })),
     }),

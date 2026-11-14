@@ -153,3 +153,20 @@ describe("Move (R3-board-D1, D2)", () => {
     ]);
   });
 });
+
+test("R3-issue-fields-D1: a writable site's Priority submenu has no No priority row, as Jira can't clear it", () => {
+  const names = () =>
+    find(issueMenuEntries(issue, { openDialog: () => {}, close: () => {}, presentation: "row" }), [
+      "Priority",
+    ]).children!.map((row) => [row.name, row.number]);
+  const { writable, options } = get();
+  try {
+    set({ writable: true, options: { ...options, priorities: [{ id: "2", name: "High" }] } });
+    expect(names()).not.toContainEqual(["No priority", 0]);
+    expect(names()[0]?.[1]).toBe(1);
+    set({ writable: false });
+    expect(names()[0]).toEqual(["No priority", 0]);
+  } finally {
+    set({ writable, options });
+  }
+});

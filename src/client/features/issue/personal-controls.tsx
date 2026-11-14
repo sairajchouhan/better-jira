@@ -60,7 +60,7 @@ import {
   type Field,
   type Grouping,
 } from "@/shared/view-model";
-import { statuses, projectChoices } from "@/shared/board-catalog";
+import { clearPriorityRow, statuses, projectChoices } from "@/shared/board-catalog";
 import {
   setDisplay,
   setOnlyRule,
@@ -720,11 +720,13 @@ function IssueAssigneeMenu({ issue, anchor, close }: IssueMenuProps) {
 
 function IssuePriorityMenu({ issue, anchor, close }: IssueMenuProps) {
   const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
+  const writable = useStore((s) => s.writable);
   const props = { board, anchor, close };
   const patch = (value: Partial<Issue>) => actions.patch(issue.key, value);
   return (
     <PriorityMenu
       {...props}
+      empty={clearPriorityRow(writable)}
       value={issue.priority ?? ""}
       onChange={(priority) => patch({ priority: priority || undefined })}
     />

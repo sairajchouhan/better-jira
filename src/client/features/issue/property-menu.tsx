@@ -217,13 +217,13 @@ export function PriorityMenu({
   value,
   onChange,
   close,
-  empty = "No priority",
+  empty,
 }: FieldMenuProps<string> & {
-  /** The unset row's text: Linear's "No priority" (BJ-72; Jira gets `priority: null`), a draft's "Default priority". */
-  empty?: string;
+  /** The unset row's text, or no unset row: a draft's "Default priority", a saved issue's `clearPriorityRow`. */
+  empty: string | undefined;
 }) {
   const { options, issues, writable } = useCatalog(board);
-  const choices = ["", ...priorityChoices(options, issues, writable)];
+  const choices = [...(empty ? [""] : []), ...priorityChoices(options, issues, writable)];
   return (
     <PropertyMenu
       label="Set priority"
@@ -236,10 +236,11 @@ export function PriorityMenu({
       {choices.map((p, i) => (
         <PickerRow
           key={p}
-          value={p || empty}
+          value={p || (empty ?? "")}
           icon={<PriorityIcon name={p || undefined} />}
           current={p === value}
-          number={i}
+          // Linear's priority numbers: 0 is No priority, so the named rows keep 1… without the unset row.
+          number={empty ? i : i + 1}
           onSelect={() => {
             onChange(p);
             close();

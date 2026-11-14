@@ -81,14 +81,18 @@ test("R2 issue fields on a writable site: remote links, watching, palette comman
     await p.key("i");
     await p.waitFor(`${ops}.some(o=>o.op==='fields'&&o.fields.assignee===null)`);
   });
-  await test.step("BJ-72: No priority clears the priority on a writable site", async () => {
+  await test.step("R3-issue-fields-D1: a writable site offers no No priority, which Jira refuses", async () => {
     const p = await open("?issue=TEST-2&view=page", {
       setup: writable({ priority: "High" }),
     });
     await p.waitFor(ready);
     await p.key("p");
-    await p.click('[role="dialog"][aria-label="Set priority"] [cmdk-item][data-value="No priority"]');
-    await p.waitFor(`${ops}.some(o=>o.op==='fields'&&o.fields.priority===null)`);
+    await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Set priority"] [cmdk-item]')`);
+    expect(
+      await p.eval(
+        `!!document.querySelector('[role="dialog"][aria-label="Set priority"] [cmdk-item][data-value="No priority"]')`,
+      ),
+    ).toBe(false);
   });
 });
 

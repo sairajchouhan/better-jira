@@ -66,6 +66,10 @@ export function priorityChoices(
     ]),
   ].sort((a, b) => priorityRank(a) - priorityRank(b));
 }
+/** Linear's "No priority" row, offered only where the app can honour it. Jira refuses `priority: null` on a saved issue
+ *  ("Specify the Priority (id or name) in the string format") although its editmeta calls the field optional, so a
+ *  writable site's issues have no unset row; a read-only site keeps edits local and can clear it (R3-issue-fields-D1). */
+export const clearPriorityRow = (writable: boolean) => (writable ? undefined : "No priority");
 export function projectChoices(issues: Iterable<Issue>) {
   return [
     ...new Map(
