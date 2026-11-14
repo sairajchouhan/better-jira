@@ -3,7 +3,7 @@ import { ME, get, set, statusOf } from "@/client/state/store";
 import { issueURL } from "./issue-urls";
 import { loadFull } from "@/client/state/server-data";
 import { isLocalIssue } from "@/client/state/local-edits";
-import { showNotification } from "@/client/state/app-notifications";
+import { showNotification, type Notification } from "@/client/state/app-notifications";
 import type { AdfNode } from "@/client/features/editor/rich-document";
 
 const escape = (text: string) => text.replace(/[\\`*_[\]<>]/g, "\\$&");
@@ -160,7 +160,8 @@ export function issueCopy(
     case "URL":
       return url;
     case "title":
-      return issue.summary;
+      // Linear `sM` with getModelIdentifier: "KEY: title" (⌥ copies the title without the ID).
+      return `${issue.key}: ${issue.summary}`;
     case "title as link":
       return `[${escape(title)}](${destination(url)})`;
     case "git branch name": {
@@ -178,8 +179,32 @@ export function issueCopy(
     }
   }
 }
-/** Copies one projection of the issue and says so in the status bar. "everything as Markdown" loads the comments
- *  first. `url` is the issue's link unless the caller has a better one (an inbox notification's). */
+/** Linear's info toast per copy action (startup-root bundle): `zmt` Copy ID, `sM` title, `uM` title as link, `lM`
+ *  Markdown with `getModelTitle: identifier`, and the branch action (`QFn`) titled with the branch name. */
+export function copyToast(kind: CopyKind, issue: Pick<Issue, "key">, copied: string): Notification {
+  switch (kind) {
+    case "ID":
+    case "title":
+      return { text: `"${copied}" copied to clipboard` };
+    case "URL":
+      return { text: "Copied issue link to clipboard", icon: "copy" };
+    case "title as link":
+      return { text: "Issue title copied to clipboard" };
+    case "issue as Markdown":
+      return { text: `Issue "${issue.key}" description copied to clipboard` };
+    case "everything as Markdown":
+      return { text: `Issue "${issue.key}" content copied to clipboard` };
+    case "git branch name":
+      return {
+        text: copied,
+        detail: "Branch name copied to clipboard. Paste it into your favorite git client.",
+      };
+  }
+}
+/** Linear's Copy page URL (⌘⇧C) toast. */
+export const PAGE_URL_COPIED: Notification = { text: "Current URL copied to clipboard" };
+/** Copies one projection of the issue and confirms it with Linear's toast. "everything as Markdown" loads the
+ *  comments first. `url` is the issue's link unless the caller has a better one (an inbox notification's). */
 export async function copyIssue(kind: CopyKind, issue: Issue, url = issueURL(issue)) {
   if (kind === "URL") return copyIssueLink(url);
   try {
@@ -188,10 +213,9 @@ export async function copyIssue(kind: CopyKind, issue: Issue, url = issueURL(iss
       if (!get().full.has(issue.key)) throw new Error("Issue details unavailable");
     }
     const status = statusOf(issue)?.name ?? issue.status;
-    await navigator.clipboard.writeText(
-      issueCopy(kind, issue, get().full.get(issue.key), url, status, ME.name),
-    );
-    set({ perf: `Copied ${kind}` });
+    const text = issueCopy(kind, issue, get().full.get(issue.key), url, status, ME.name);
+    await navigator.clipboard.writeText(text);
+    showNotification(copyToast(kind, issue, text));
   } catch {
     set({ perf: "Could not access the clipboard" });
   }
@@ -202,7 +226,7 @@ export async function copyIssueLink(url: string) {
   try {
     await navigator.clipboard.writeText(url);
     // Linear's Copy URL action: an info toast with the copy icon (`Copied ${model} link to clipboard`).
-    showNotification({ text: "Copied issue link to clipboard", icon: "copy" });
+    showNotification(copyToast("URL", { key: "" }, url));
   } catch {
     set({ perf: "Could not access the clipboard" });
   }

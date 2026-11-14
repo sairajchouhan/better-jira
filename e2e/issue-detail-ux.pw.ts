@@ -47,7 +47,7 @@ test("sub-issue rows: shortcuts act on the row, collapse persists, the composer 
     );
     await p.type("copy id");
     await p.click('[cmdk-item][data-value="Copy › Copy ID"]');
-    await p.waitFor(`/Copied ID|Could not access the clipboard/.test(document.body.textContent)`);
+    await p.waitFor(`/"TEST-3" copied to clipboard|Could not access the clipboard/.test(document.body.textContent)`);
   });
 
   await test.step("R1-D68: Linear's sub-issue composer has named chips and Cancel, and the next draft starts from the defaults", async () => {
