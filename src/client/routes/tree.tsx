@@ -126,6 +126,21 @@ const boardRoute = createRoute({
     if (!preload) context.show({ to: "board", board, scope: params.scope, ...listSearch(search) }, location);
   },
 });
+/** A board without its tab (`/board/<board>`): its Issues tab, as Linear sends a team URL to the team's default view. */
+const boardHomeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/board/$board",
+  beforeLoad: ({ params, context, location }) => {
+    const board = Number(params.board);
+    if (!context.hasBoard(board)) throw notFound();
+    throw redirect({
+      to: "/board/$board/$scope",
+      params: { board: params.board, scope: context.scope(board) },
+      search: location.search as never,
+      replace: true,
+    });
+  },
+});
 /** The board address before boards were named in it (`/team/<board>/<scope>`, copied from Linear's team URL): same place, new path. */
 const teamRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -246,6 +261,7 @@ const documentRoute = createRoute({
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   boardRoute,
+  boardHomeRoute,
   teamRoute,
   viewRoute,
   newViewRoute,

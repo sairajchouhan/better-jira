@@ -48,6 +48,9 @@ test("D7: old addresses redirect to the paths that replaced them, replacing the 
     ["/team/1/active?issue=A-1", "/board/1/active?issue=A-1"],
     ["/view/v1?board=1", "/view/triage-v1"],
     ["/view/v1/edit?board=1", "/view/triage-v1/edit"],
+    // R3-views-filters-D-4: a board without its tab opens its Issues tab.
+    ["/board/1", "/board/1/all"],
+    ["/board/2?issue=B-1", "/board/2/active?issue=B-1"],
   ];
   for (const [from, to] of cases) {
     const { at, router } = await open(from);
@@ -71,7 +74,7 @@ test("each path shows its place; unknown issues, boards, tabs and views are not 
   expect((await open("/my-issues/created")).shown).toEqual({ to: "person", person: null, tab: "created" });
   expect((await open("/profiles/alex")).shown).toEqual({ to: "person", person: "alex", tab: "assigned" });
   expect((await open("/inbox?notification=n1")).shown).toEqual({ to: "inbox" });
-  for (const href of ["/issue/GONE-1", "/board/1/all?issue=GONE-1", "/board/9/all", "/board/1/someday", "/my-issues/assigned", "/my-issues/nope", "/view/nothing"]) {
+  for (const href of ["/issue/GONE-1", "/board/1/all?issue=GONE-1", "/board/9/all", "/board/9", "/board/1/someday", "/my-issues/assigned", "/my-issues/nope", "/view/nothing"]) {
     const { notFound, shown } = await open(href);
     expect([href, notFound, shown]).toEqual([href, true, undefined]);
   }
