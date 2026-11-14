@@ -8,7 +8,7 @@ import editorMediaFixture from "./editor-media-fixture.html";
 import tailwind from "bun-plugin-tailwind";
 import { attachmentGateway } from "../src/shared/attachment-media";
 import { previewFrom } from "../src/server/link-preview";
-import { mapFeed } from "../src/shared/inbox-model";
+import { mapFeed, mapNote } from "../src/shared/inbox-model";
 import { boardFromInput } from "../src/server/config";
 import { avatarProxy, memoryAvatarCache } from "../src/shared/avatar-proxy";
 
@@ -379,19 +379,32 @@ const notification = (
     },
   },
 });
+/** A comment notification: Jira's link (content and entity) points at the comment. */
+const onComment = (node: ReturnType<typeof notification>, id: string) => {
+  const link = `${node.headNotification.content.url}?focusedCommentId=${id}#comment-${id}`;
+  return {
+    ...node,
+    headNotification: {
+      ...node.headNotification,
+      content: { ...node.headNotification.content, url: link, entity: { ...node.headNotification.content.entity, url: link } },
+    },
+  };
+};
+/** A Jira group: `older` are the group's earlier notifications (newest first), which `notificationGroup` lists after the head. */
+const grouped = (head: ReturnType<typeof notification>, ...older: ReturnType<typeof notification>[]) => ({
+  ...head,
+  groupSize: older.length + 1,
+  additionalActors: older.map((o) => o.headNotification.content.actor),
+  children: [head, ...older].map((n) => n.headNotification) as unknown[],
+});
 /** `extra` appends that many older notifications on issues outside the mirror, so the list pages; read unless `extraUnread`. */
 const freshInbox = (extra = 0, extraUnread = false) => ({
   unseen: 4,
   nodes: [
-    notification(
-      2,
-      "TEST-2",
-      "Browser fixture 2",
-      "updated",
-      "Alex assigned a task to you",
-      "direct",
-      false,
-      5,
+    // Jira's newest is an update; the row leads with the assignment under it (Linear's prioritize).
+    grouped(
+      notification(2, "TEST-2", "Browser fixture 2", "updated", "Sam updated a task", "direct", false, 5),
+      notification(2, "TEST-2", "Browser fixture 2", "updated", "Alex assigned a task to you", "direct", false, 10),
     ),
     notification(
       1,
@@ -414,16 +427,20 @@ const freshInbox = (extra = 0, extraUnread = false) => ({
       false,
       120,
     ),
-    notification(
-      4,
-      "TEST-4",
-      "Browser fixture 4",
-      "updated",
-      "Sam commented on a task",
-      "watching",
-      true,
-      60 * 26,
-      "Looks good to me",
+    // Jira links a comment notification to its comment (`focusedCommentId`, `#comment-`): the reply in the threaded fixture.
+    onComment(
+      notification(
+        4,
+        "TEST-4",
+        "Browser fixture 4",
+        "updated",
+        "Sam commented on a task",
+        "watching",
+        true,
+        60 * 26,
+        "Looks good to me",
+      ),
+      "10101",
     ),
     notification(
       5,
@@ -445,15 +462,10 @@ const freshInbox = (extra = 0, extraUnread = false) => ({
       false,
       60 * 24 * 9,
     ),
-    notification(
-      9,
-      "OUT-9",
-      "Outside the mirror",
-      "updated",
-      "Sam updated a task",
-      "watching",
-      false,
-      60 * 24 * 400,
+    grouped(
+      notification(9, "OUT-9", "Outside the mirror", "updated", "Sam updated a task", "watching", false, 60 * 24 * 400),
+      notification(9, "OUT-9", "Outside the mirror", "updated", "Kim commented on a task", "watching", false, 60 * 24 * 401, "Earlier comment"),
+      notification(9, "OUT-9", "Outside the mirror", "updated", "Lee changed a task from To Do to Doing", "watching", false, 60 * 24 * 402),
     ),
     ...Array.from({ length: extra }, (_, i) =>
       notification(
@@ -492,7 +504,10 @@ async function inboxRoute(req: Request, url: URL) {
       nodes = inbox.nodes.filter((n) => !category || n.headNotification.category === category);
     body = {
       unseen: inbox.unseen,
-      items: mapFeed(nodes.slice(start, start + INBOX_PAGE)),
+      items: mapFeed(
+        nodes.slice(start, start + INBOX_PAGE),
+        Object.fromEntries(nodes.map((n) => [n.groupId, (n as { children?: unknown[] }).children ?? []])),
+      ),
       more: start + INBOX_PAGE < nodes.length,
       cursor: String(start + INBOX_PAGE),
       ...(start || category ? {} : { unread: unreadGroups() }),
@@ -850,6 +865,13 @@ async function handle(req: Request) {
   if (path === "/__fixture" && req.method === "GET")
     return Response.json({ requests, rich, writes });
   if (path === "/api/inbox") return inboxRoute(req, url);
+  if (path === "/api/inbox/group") {
+    const node = inbox.nodes.find((n) => n.groupId === url.searchParams.get("id")),
+      notes = ((node && "children" in node ? node.children : node ? [node.headNotification] : []) as unknown[]).flatMap((n) => mapNote(n) ?? []),
+      start = Number(url.searchParams.get("after") || 0);
+    requests.push({ method: req.method, path: url.pathname + url.search, status: 200 });
+    return Response.json({ notes: notes.slice(start, start + 5), more: start + 5 < notes.length, cursor: String(start + 5) });
+  }
   let status = 200,
     body: unknown;
   const ops = path.match(/^\/api\/issues\/([^/]+)\/ops$/);

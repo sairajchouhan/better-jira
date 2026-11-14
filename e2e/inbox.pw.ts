@@ -70,15 +70,17 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
       "TEST-6",
       "OUT-9",
     ]);
-    expect(labels[0]).toContain(
-      "Unread TEST-2 Browser fixture 2 Alex assigned the issue to you",
+    // TEST-2 is a group: Jira's newest is "Sam updated a task", and the assignment under it leads (Linear's prioritize).
+    expect(labels[0]).toBe(
+      "Unread TEST-2 Browser fixture 2 · Task Alex assigned the task to you · +1 update from Sam",
     );
-    expect(labels[1]).toContain("Alex mentioned you: Can you check this?");
-    expect(labels[2]).toContain("Marked as completed by Sam");
+    expect(labels[1]).toContain("Alex mentioned you in a comment: Can you check this?");
+    expect(labels[2]).toContain("Marked as completed by Sam: Doing → Done");
     expect(labels[3]).toStartWith("Read TEST-4");
     expect(labels[3]).toContain("Sam commented: Looks good to me");
     expect(labels[4]).toContain("Alex reacted to your comment");
-    expect(labels[5]).toContain("Sam created a new issue");
+    expect(labels[5]).toContain("Sam created a new task");
+    expect(labels[6]).toContain("+2 updates from Kim and others");
     expect(
       await p.eval(`${rows}.map(r=>r.innerText.split('\\n').at(-1))`),
     ).toEqual(["5m", "30m", "2h", "1d", "3d", "1w", "1y"]);
@@ -558,5 +560,39 @@ test("BJ-192 8.8 8.9: filter values: fewer than ten inline with no zero counts; 
     expect(
       await p.eval(`[...document.querySelectorAll('[cmdk-input]')].map(i=>i.placeholder).includes('From')`),
     ).toBe(true);
+  });
+});
+
+test("prod parity: a group's earlier notifications unfold in the pane, and a comment notification opens at its comment", async ({ open }) => {
+  const p = await fresh(open, { writable: true, threadedComments: true });
+  await p.waitFor(`${rows}.length === 7`);
+  await test.step("#14/#16: the row marks the issue type and how many updates Jira folded in", async () => {
+    expect(await p.eval(`document.querySelector('[data-inbox-row*="issue/9"] [data-inbox-more]')?.textContent`)).toBe("+2");
+    expect(await p.eval(`document.querySelector('[data-inbox-row*="issue/9"] [data-inbox-more]')?.title`)).toBe(
+      "+2 updates from Kim and others",
+    );
+  });
+  await test.step("#15: outside the mirror, the pane lists the group's notifications with the comment", async () => {
+    await p.click(`[data-inbox-row*="issue/9"]`);
+    await p.waitFor(`document.body.innerText.includes("+2 updates from Kim and others")`);
+    await p.click(`button[aria-label="Show grouped notifications"]`);
+    await p.waitFor(`document.querySelectorAll('[data-inbox-note]').length === 3`);
+    const text = await p.eval<string>(`document.querySelector('[aria-label="Notifications on this issue"]').innerText`);
+    expect(text).toContain("Kim commented");
+    expect(text).toContain("Earlier comment");
+    expect(text).toContain("Status updated by Lee: To Do → Doing");
+  });
+  await test.step("#15: above an open issue, the same list", async () => {
+    await p.click(`[data-inbox-row*="issue/2"]`);
+    await p.waitFor(`document.body.innerText.includes("+1 update from Sam")`);
+    await p.click(`button[aria-label="Show grouped notifications"]`);
+    await p.waitFor(`document.querySelectorAll('[data-inbox-note]').length === 2`);
+  });
+  await test.step("#9/#13: a comment notification opens the issue at the comment Jira links to", async () => {
+    await p.click(`[data-inbox-row*="issue/4"]`);
+    await p.waitFor(`location.hash === "#comment-10101" && !!document.querySelector('[data-comment="10101"]')`);
+    expect(await p.eval(`document.querySelector('[data-inbox-row*="issue/4"]').getAttribute("href")`)).toContain(
+      "focusedCommentId=10101",
+    );
   });
 });
