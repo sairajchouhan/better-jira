@@ -707,8 +707,10 @@ export function ActivityRowWords({ row, issue }: { row: ActivityRow; issue: Issu
  * Linear's `ActivityHistoryEntry`: the icon in its own box, then the words, " · " and the time as one run of text, so a long
  * row wraps beside the icon, never under it, and the time ends the last line (non-breaking spaces and Linear's `nowrap` date
  * keep "· time" together). A row without a time (Linear's folded "Show N events" row, which its PR timeline renders through the
- * same entry, `eo` in PullRequestTitleInput, with no timestamp) is the icon and its words alone. `detail` sits under the row,
- * as Linear's expanded changes do. A row outside a list (the inbox's folded-group line) renders as a `div`.
+ * same entry, `eo` in PullRequestTitleInput, with no timestamp) is the icon and its words alone. A row outside a list (the
+ * inbox's folded-group line) renders as a `div`. With a `detail`, Linear wraps the row and puts the detail in its own box after
+ * it, indented `16 + gap` (ActivityHistoryEntry.CmktKg6k.js: `m ? <div>{row}<div style={{paddingLeft: 16 + gap}}>{m}</div></div>
+ * : row`), so the row keeps its own line and minimum height.
  */
 export function ActivityEntry({
   as: Row = "li",
@@ -724,8 +726,8 @@ export function ActivityEntry({
   detail?: ReactNode;
   children: ReactNode;
 } & Omit<HTMLAttributes<HTMLElement>, "className">) {
-  return (
-    <Row {...props} className="activity-event">
+  const line = (
+    <>
       <span className="activity-event-icon">{icon}</span>
       <span className="activity-event-text">
         <span className="activity-event-words">{children}</span>
@@ -736,7 +738,18 @@ export function ActivityEntry({
           </>
         )}
       </span>
-      {detail}
+    </>
+  );
+  if (!detail)
+    return (
+      <Row {...props} className="activity-event">
+        {line}
+      </Row>
+    );
+  return (
+    <Row {...props} className="activity-event-entry">
+      <div className="activity-event">{line}</div>
+      <div className="activity-event-detail">{detail}</div>
     </Row>
   );
 }
@@ -755,7 +768,7 @@ export function ActivityPropertyRow({ row, issue, children }: { row: ActivityRow
       time={children}
       detail={
         grouped && open ? (
-          <ol className="basis-full border-l border-border pl-6" aria-label="Grouped changes">
+          <ol className="border-l border-border pl-6" aria-label="Grouped changes">
             {changes.map((change) => (
               <li key={change.id} id={`activity-change-${change.id}`} className="py-2">
                 <span className="font-medium">{change.actor.name}</span> {describeActivity(change, issue)} ·{" "}

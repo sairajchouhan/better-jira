@@ -454,6 +454,12 @@ test("BJ-196: repeated title edits expand and collapse with their individual val
   await page.click(group);
   await page.waitFor(`document.querySelector('[aria-label="Grouped changes"]')?.textContent.includes('First title')`);
   expect(await page.eval(`document.querySelector('[aria-label="Grouped changes"]')?.textContent`)).toContain("Second title");
+  // R3 G19: as Linear's ActivityHistoryEntry, the opened changes sit after the row, indented past its icon, so the row keeps its line.
+  expect(
+    await page.eval(
+      `(()=>{const r=document.querySelector('[data-activity="title"]'),line=r.querySelector('.activity-event');return [Math.round(line.getBoundingClientRect().height*10)/10>=24.8,r.querySelector('[aria-label="Grouped changes"]').getBoundingClientRect().left>line.querySelector('.activity-event-icon').getBoundingClientRect().right]})()`,
+    ),
+  ).toEqual([true, true]);
   await page.key("Enter");
   await page.waitFor(`!document.querySelector('[aria-label="Grouped changes"]')`);
 });

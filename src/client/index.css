@@ -2094,7 +2094,7 @@ li[data-done="true"] > .todo-content {
   margin-right: 5px;
 }
 /* Linear's ActivityHistoryEntry: the icon keeps its own box and the words and time share one run that takes the rest of the
-   line, so a long row wraps beside the icon with the time at its end. The row still wraps for a detail under it. */
+   line, so a long row wraps beside the icon with the time at its end. A detail sits in its own box after the row. */
 .activity-event-icon {
   display: grid;
   flex-shrink: 0;
@@ -2106,8 +2106,15 @@ li[data-done="true"] > .todo-content {
   flex: 1 1 0%;
   min-width: 0;
 }
-.activity-event:has(+ .activity-event) {
+.activity-event-entry:has(+ :is(.activity-event, .activity-event-entry)),
+.activity-event:has(+ :is(.activity-event, .activity-event-entry)) {
   margin-bottom: 4px;
+}
+/* Linear's ActivityHistoryEntry detail box (`sx-euugli`, `paddingLeft: 16 + gap` from the icon's left edge): our row's 11px
+   inset, then 16, then its 11px icon gap (6px gap + 5px icon margin). */
+.activity-event-detail {
+  min-width: 0;
+  padding-left: 38px;
 }
 .issue-activity > div:first-child > button {
   font-size: 12px;

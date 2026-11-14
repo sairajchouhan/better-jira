@@ -322,3 +322,17 @@ test("R3 G18: the folded \"Show N events\" row keeps its chevron in the icon box
     if (!had) Reflect.deleteProperty(globalThis, "location");
   }
 });
+
+test("R3 G19: an opened row's detail sits in its own box after the row, as Linear's ActivityHistoryEntry, so the row keeps its line", () => {
+  const html = renderToStaticMarkup(
+    <ActivityEntry id="activity-1" data-activity="status" icon={<svg />} time={<time>2h ago</time>} detail={<ol aria-label="Grouped changes" />}>
+      Ada Example changed status
+    </ActivityEntry>,
+  );
+  expect(html).toBe(
+    '<li id="activity-1" data-activity="status" class="activity-event-entry"><div class="activity-event">' +
+      '<span class="activity-event-icon"><svg></svg></span><span class="activity-event-text"><span class="activity-event-words">' +
+      'Ada Example changed status</span>\u00a0·\u00a0<span class="whitespace-nowrap"><time>2h ago</time></span></span></div>' +
+      '<div class="activity-event-detail"><ol aria-label="Grouped changes"></ol></div></li>',
+  );
+});
