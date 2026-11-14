@@ -448,6 +448,8 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
         if (waiting) {
           waiting.ops = mergeOps(waiting.ops, ops);
           if (hold) waiting.hold = hold;
+          // An edit and its undo cancelled out: nothing is left to send, and the change comes back to settle.
+          if (!waiting.ops.length) outbox.splice(outbox.indexOf(waiting), 1);
         } else {
           const job = { key, board, ops, ...(hold ? { hold } : {}) };
           // A create queued late (taken over from a closed tab) goes before the queued jobs naming it, so they get its Jira key (BJ-19).

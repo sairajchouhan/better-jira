@@ -547,3 +547,24 @@ test("BJ-22: a takeover saves this tab's edits first, then builds the create fro
     fields: { summary: "Closed tab's title", priority: "High" },
   });
 });
+
+test("R3-relations-D1: Change to… undone and redone while the issue's write waits sends no link twice", async () => {
+  const first = gate();
+  const h = harness({ reply: async () => (h.sent.length === 1 ? (await first.held, {}) : {}) });
+  const duplicate = issue("RL-1", { relations: [{ key: "RL-2", kind: "duplicate" }] }),
+    related = issue("RL-1", { relations: [{ key: "RL-2", kind: "related" }] });
+  h.send([duplicate.key, { issue: duplicate }, { issue: related }]);
+  await h.advance(0);
+  // ⌘Z, then ⌘⇧Z, while Change to… is still with Jira: undo's links and redo's cancel out, nothing is left to send.
+  h.send([duplicate.key, { issue: related }, { issue: duplicate }]);
+  h.send([duplicate.key, { issue: duplicate }, { issue: related }]);
+  expect(h.outbox.pending()).toBe(1);
+  first.open();
+  await h.advance(0);
+  expect(h.sent.map((s) => s.ops)).toEqual([
+    [
+      { op: "link", target: "RL-2", kind: "related" },
+      { op: "link", target: "RL-2", kind: "duplicate", remove: true },
+    ],
+  ]);
+});

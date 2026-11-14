@@ -320,6 +320,18 @@ export function mergeOps(first: Op[], second: Op[]): Op[] {
         continue;
       }
     }
+    // A link and its undo cancel out too: a job's links run at once on the server, so a remove sent beside the add it
+    // undoes reads the links before that add lands and leaves both in Jira (R3-relations-D1, Change to… + undo + redo).
+    if (op.op === "link") {
+      const inverse = out.findIndex(
+        (o) =>
+          o.op === "link" && o.target === op.target && o.kind === op.kind && !o.remove !== !op.remove,
+      );
+      if (inverse >= 0) {
+        out.splice(inverse, 1);
+        continue;
+      }
+    }
     const index =
       op.op === "watcher"
         ? out.findIndex((o) => o.op === "watcher" && o.id === op.id)
