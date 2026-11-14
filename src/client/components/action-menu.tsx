@@ -109,7 +109,7 @@ export function ActionMenu({
   placeholder?: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
-  useOpenActionMenu();
+  useOpenActionMenu(close);
   return (
     <MenuSurface
       label={label}
