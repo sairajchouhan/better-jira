@@ -17,6 +17,8 @@ import { createSubIssue, issueMenuEntries, type IssueMenuDialog } from "./issue-
 /* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { SubIssues, statusOf } from "./sub-issues";
 import { attachmentSplit } from "./issue-attachments";
+import { SUMMARY_MAX, switchBoard } from "./composer-draft";
+import { shortDate } from "@/client/lib/due-date";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { createContext, use, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Adf } from "@/client/features/editor/adf";
@@ -120,8 +122,13 @@ function PendingRelation({ related, remove }: { related: NonNullable<IssueDraft[
                       label="Remove relation"
                       onClick={(e) => {
                         e.stopPropagation();
+                        // The chip goes with the relation, so focus moves on to the next chip, as removing a relation
+                        // pill does on the issue, instead of falling back out of the dialog to what opened it (R3-create-D8).
+                        let next = anchor.nextElementSibling;
+                        while (next && !(next instanceof HTMLButtonElement)) next = next.nextElementSibling;
                         setAnchor(null);
                         remove();
+                        requestAnimationFrame(() => (next as HTMLElement | null)?.focus());
                       }}
                     >
                       <Icon name="close" size={12} />
@@ -181,7 +188,11 @@ export function CreateIssue() {
   const [confirmClose, setConfirmClose] = useState(false);
 
   const titleRef = useRef<HTMLInputElement>(null);
-  const formRef = useRef<HTMLFormElement>(null);
+  // Not a <form>: Linear's composer submits only from ⌘↵ and Create issue. A form made Enter in any side field (a link,
+  // a pending sub-issue) submit the issue, and nested the custom due date's form, whose Save reloaded the page (R3-create-D1, D3).
+  const composerRef = useRef<HTMLDivElement>(null);
+  // Where focus goes back to when the link field closes (Linear's Add link… dialog returns it to what opened it).
+  const linkReturn = useRef<HTMLElement | null>(null);
   const issues = [...all.values()].filter((i) => i.board === board.id);
   const projects = projectChoices(issues);
   const options = useStore((s) => s.options),
@@ -273,10 +284,33 @@ export function CreateIssue() {
     }
   };
   useHotkey("Mod+Enter", () => submit(), {
-    target: formRef,
+    target: composerRef,
     capture: true,
     ignoreInputs: false,
   });
+  // Linear's composer actions run with focus in a field (`runWithInputFocus`): ⌃L Add link… (`cK`), ⌘⇧O Add sub-issue (`hJn`).
+  const subIssuesAllowed = canHaveChildren(get(), { type, project });
+  const [focusSub, setFocusSub] = useState(-1);
+  const addSubIssue = () => {
+    setFocusSub(draft.subIssues?.length ?? 0);
+    setDraft((d) => ({ ...d, subIssues: [...(d.subIssues ?? []), ""] }));
+  };
+  const openLink = () => {
+    linkReturn.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setLinkInput("");
+  };
+  const closeLink = () => {
+    setLinkInput(null);
+    requestAnimationFrame(() => (linkReturn.current?.isConnected ? linkReturn.current : titleRef.current)?.focus());
+  };
+  const addLink = () => {
+    const url = linkInput !== null && resourceURL(linkInput);
+    if (!url) return;
+    setDraft((d) => ({ ...d, resources: [...(d.resources ?? []), { id: crypto.randomUUID(), kind: "link", title: url, url, updated: new Date().toISOString() }] }));
+    closeLink();
+  };
+  useHotkey("Control+L", openLink, { target: composerRef, capture: true, ignoreInputs: false });
+  useHotkey("Mod+Shift+O", () => subIssuesAllowed && addSubIssue(), { target: composerRef, capture: true, ignoreInputs: false });
   if (draftsOpen) return <Dialog label="Saved drafts" close={() => setDraftsOpen(false)}>
     <Dialog.Header><Dialog.Title>Saved drafts</Dialog.Title><Dialog.Close /></Dialog.Header>
     <Dialog.Body>
@@ -306,26 +340,22 @@ export function CreateIssue() {
   const projectValue = draft.project === null && !writable ? null : project;
   // Linear's "…" after the chips (More actions): what the modal can add besides properties.
   const extraActions: ActionEntry[] = [
-    ...(canHaveChildren(get(), { type, project })
-      ? [{ name: "Add sub-issue", icon: "plus" as const, run: () => setDraft((d) => ({ ...d, subIssues: [...(d.subIssues ?? []), ""] })) }]
+    ...(subIssuesAllowed
+      ? [{ name: "Add sub-issue", icon: "plus" as const, shortcut: "Mod+Shift+O", run: addSubIssue }]
       : []),
-    { name: "Add link…", icon: "link", run: () => setLinkInput("") },
+    { name: "Add link…", icon: "link", shortcut: "Control+L", run: openLink },
   ];
+  // Linear's composer shows copied media in the description; the list holds only files the description doesn't show,
+  // as the issue's attachment list does (attachmentSplit), so a copied comment image isn't drawn twice (R3-comments-D6).
+  const listed = attachmentSplit({ attachments }, { description }).visible;
   return (
     <Dialog
       label="Create issue"
       close={close}
       width={expanded ? Math.max(640, window.innerWidth - 48) : 640}
     >
-      <Attachments attachments={attachments} onChange={setAttachments} onBusy={setFilesBusy}>
-      <form
-        ref={formRef}
-        className="create-issue"
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
-      >
+      <Attachments attachments={attachments} listed={listed} onChange={setAttachments} onBusy={setFilesBusy}>
+      <div ref={composerRef} className="create-issue">
         {/* Linear's fast-create header (`Rr`, a `b8` row): 12px all round, the controls 12px clear of the breadcrumb. */}
         <div className="create-issue-header">
           <Text variant="mini" color="muted" wrap="truncate" className="flex flex-1 items-center gap-1.5">
@@ -335,7 +365,7 @@ export function CreateIssue() {
               value={board.name}
               icon={<Icon name="board" size={14} />}
               menu={ComposerBoardMenu}
-              menuProps={{ boards, value: board.id, onChange: (board: number) => setDraft({ board }) }}
+              menuProps={{ boards, value: board.id, onChange: (to: number) => setDraft((d) => switchBoard(d, board.id, to)) }}
             />
             <Icon name="chevron" size={10} />
             <Text variant="mini" color="inherit" className="text-fg">
@@ -370,6 +400,7 @@ export function CreateIssue() {
           autoFocus
           aria-label="Issue title"
           className="create-issue-title"
+          maxLength={SUMMARY_MAX}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => {
@@ -494,8 +525,8 @@ export function CreateIssue() {
           />
           <PropertyPill
             label="Due date"
-            current={draft.due ?? "No due date"}
-            value={draft.due ?? undefined}
+            current={draft.due ? shortDate(draft.due, undefined, true) : "No due date"}
+            value={draft.due ? shortDate(draft.due, undefined, true) : undefined}
             icon={<Icon name="calendar" size={14} />}
             menu={DueMenu}
             menuProps={{
@@ -513,8 +544,36 @@ export function CreateIssue() {
             {noParentType}
           </p>
         )}
-        {draft.subIssues?.map((summary, index) => <div key={index} className="mt-2 flex items-center gap-2"><TextInput aria-label={`Pending sub-issue ${index + 1}`} value={summary} onChange={e => setDraft(d => ({ ...d, subIssues: d.subIssues?.map((title, i) => i === index ? e.target.value : title) }))} placeholder="Sub-issue title" /><IconButton type="button" label={`Remove pending sub-issue ${index + 1}`} onClick={() => setDraft(d => ({ ...d, subIssues: d.subIssues?.filter((_, i) => i !== index) }))}><Icon name="close" /></IconButton></div>)}
-        {linkInput !== null && <div className="mt-2 flex items-center gap-2"><TextInput autoFocus aria-label="New issue link URL" value={linkInput} onChange={e => setLinkInput(e.target.value)} placeholder="https://" /><Button type="button" variant="secondary" size="medium" disabled={!resourceURL(linkInput)} onClick={() => { const url = resourceURL(linkInput); if (!url) return; setDraft(d => ({ ...d, resources: [...(d.resources ?? []), { id: crypto.randomUUID(), kind: "link", title: url, url, updated: new Date().toISOString() }] })); setLinkInput(null); }}>Add link</Button><Button type="button" variant="borderless" size="medium" onClick={() => setLinkInput(null)}>Cancel link</Button></div>}
+        {draft.subIssues?.map((summary, index) => <div key={index} className="mt-2 flex items-center gap-2"><TextInput
+          // A row added from More actions or ⌘⇧O takes focus, as Linear's new sub-issue editor does.
+          autoFocus={index === focusSub}
+          maxLength={SUMMARY_MAX}
+          aria-label={`Pending sub-issue ${index + 1}`}
+          value={summary}
+          onChange={e => setDraft(d => ({ ...d, subIssues: d.subIssues?.map((title, i) => i === index ? e.target.value : title) }))}
+          // Enter moves on to the next row, or starts one after a titled last row; it never submits the issue (R3-create-D3).
+          onKeyDown={e => {
+            if (e.key !== "Enter" || e.metaKey || e.ctrlKey || e.nativeEvent.isComposing) return;
+            e.preventDefault();
+            const next = composerRef.current?.querySelector<HTMLInputElement>(`[aria-label="Pending sub-issue ${index + 2}"]`);
+            if (next) next.focus();
+            else if (summary.trim()) addSubIssue();
+          }}
+          placeholder="Sub-issue title"
+        /><IconButton type="button" label={`Remove pending sub-issue ${index + 1}`} onClick={() => setDraft(d => ({ ...d, subIssues: d.subIssues?.filter((_, i) => i !== index) }))}><Icon name="close" /></IconButton></div>)}
+        {linkInput !== null && <div className="mt-2 flex items-center gap-2"><TextInput
+          autoFocus
+          aria-label="New issue link URL"
+          value={linkInput}
+          onChange={e => setLinkInput(e.target.value)}
+          // Enter adds the link, as the Add link button (Linear's Add link… dialog confirms on Enter); never the issue (R3-create-D3).
+          onKeyDown={e => {
+            if (e.key !== "Enter" || e.metaKey || e.ctrlKey || e.nativeEvent.isComposing) return;
+            e.preventDefault();
+            addLink();
+          }}
+          placeholder="https://"
+        /><Button type="button" variant="secondary" size="medium" disabled={!resourceURL(linkInput)} onClick={addLink}>Add link</Button><Button type="button" variant="borderless" size="medium" onClick={closeLink}>Cancel link</Button></div>}
         {draft.resources?.map(resource => <div key={resource.id} className="mt-2 flex items-center gap-2"><Text variant="mini">{resource.title}</Text><IconButton type="button" label={`Remove link ${resource.title}`} onClick={() => setDraft(d => ({ ...d, resources: d.resources?.filter(r => r.id !== resource.id) }))}><Icon name="close" /></IconButton></div>)}
         <Attachments.List />
         </div>
@@ -539,7 +598,7 @@ export function CreateIssue() {
           </Button>
           </div>
         </div>
-      </form>
+      </div>
       </Attachments>
     </Dialog>
   );
@@ -983,6 +1042,7 @@ export function IssueOptions({ issue }: { issue: Issue }) {
 
 const AttachmentsContext = createContext<{
   attachments: NonNullable<Issue["attachments"]>;
+  listed: NonNullable<Issue["attachments"]>;
   onChange: (files: NonNullable<Issue["attachments"]>) => void;
   pick: () => void;
   busy: boolean;
@@ -999,11 +1059,14 @@ const useAttachments = () => {
  *  places `Attachments.Button` (Linear's paperclip) and `Attachments.List` where its layout wants them. */
 function AttachmentsRoot({
   attachments = [],
+  listed,
   onChange,
   onBusy,
   children,
 }: {
   attachments: Issue["attachments"];
+  /** The files the list shows, when the owner draws some of them elsewhere (copied media in the description). */
+  listed?: NonNullable<Issue["attachments"]>;
   onChange: (files: NonNullable<Issue["attachments"]>) => void;
   onBusy?: (busy: boolean) => void;
   children: ReactNode;
@@ -1013,7 +1076,7 @@ function AttachmentsRoot({
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   return (
-    <AttachmentsContext value={{ attachments, onChange, busy, error, attach, pick: () => file.current?.click() }}>
+    <AttachmentsContext value={{ attachments, listed: listed ?? attachments, onChange, busy, error, attach, pick: () => file.current?.click() }}>
       {/* Native file selection is outside the text-field primitive family. */}
       <input
         ref={file}
@@ -1064,7 +1127,9 @@ function AttachButton() {
   );
 }
 function AttachmentsBody() {
-  const { attachments, onChange, error, attach } = useAttachments();
+  const { attachments, listed, onChange, error, attach } = useAttachments();
+  // Removing from the shown list keeps the files drawn elsewhere.
+  const hidden = attachments.filter((a) => !listed.includes(a));
   return (
     <Text as="div" variant="mini" color="inherit">
       {error && (
@@ -1072,7 +1137,7 @@ function AttachmentsBody() {
           {error}
         </p>
       )}
-      <AttachmentList attachments={attachments} onChange={onChange} attachButton={attach} />
+      <AttachmentList attachments={listed} onChange={(files) => onChange([...hidden, ...files])} attachButton={attach} />
     </Text>
   );
 }

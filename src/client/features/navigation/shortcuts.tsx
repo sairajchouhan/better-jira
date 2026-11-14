@@ -482,7 +482,7 @@ export const shortcuts: Shortcut[] = [
   },
   {
     id: "new-full",
-    name: "New issue in full screen view",
+    name: "Create issue in fullscreen…",
     group: "Issues",
     hotkey: "V",
     run: () => {

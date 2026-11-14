@@ -8,6 +8,9 @@
 import { StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { App } from "./App";
+import { ignoreBenignErrors } from "./lib/benign-errors";
+
+ignoreBenignErrors(window);
 
 const elem = document.getElementById("root")!;
 const app = (
