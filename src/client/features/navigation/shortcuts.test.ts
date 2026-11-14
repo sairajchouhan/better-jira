@@ -74,3 +74,22 @@ test("BJ-216: an open action menu keeps every global key, as Linear's isActionMe
 test("R3-create-D11: ⌘K names the full-screen create as Linear's CREATE_FULL_VIEW_ISSUE does", () => {
   expect(shortcuts.find((s) => s.id === "new-full")?.name).toBe("Create issue in fullscreen…");
 });
+
+test("R3-issue-fields-D5: Space peeks the card under the pointer, the one S/A/P/L act on, not the selection", async () => {
+  const { get, set } = await import("@/client/state/store");
+  const { handle } = await import("./commands");
+  const { navigate, ui } = await import("./app-navigation");
+  const { runShortcut } = await import("./shortcuts");
+  const card = (key: string) => ({ key, board: 1, summary: key, status: "todo", assignee: null, labels: [], updated: "", resolved: null, comments: 0 });
+  set({ issues: new Map(["PK-1", "PK-2"].map((key) => [key, card(key)])) });
+  ui.send({ type: "overlay.close" });
+  navigate({ selected: "PK-1", panel: false, document: null, inbox: false, mine: false });
+  const stop = handle("hovered-sub-issue", () => "PK-2");
+  try {
+    runShortcut("peek");
+  } finally {
+    stop();
+  }
+  expect([get().selected, get().panel, get().view]).toEqual(["PK-2", true, "side"]);
+});
+

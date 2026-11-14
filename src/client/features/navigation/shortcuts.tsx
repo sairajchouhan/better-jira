@@ -742,7 +742,8 @@ export const shortcuts: Shortcut[] = [
     group: "List / Board",
     hotkey: "Space",
     issue: true,
-    run: () => navigate({ panel: true, view: "side" }),
+    // The card under the pointer, as S/A/P/L act on (`target()`); Linear's list focus follows the pointer.
+    run: issueAction((issue) => navigate({ selected: issue.key, panel: true, view: "side" })),
   },
   {
     id: "open",
