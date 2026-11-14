@@ -8,7 +8,7 @@ import editorMediaFixture from "./editor-media-fixture.html";
 import tailwind from "bun-plugin-tailwind";
 import { attachmentGateway } from "../src/shared/attachment-media";
 import { previewFrom } from "../src/server/link-preview";
-import { mapFeed, mapNote } from "../src/shared/inbox-model";
+import { GROUP_FIRST, GROUP_PAGE, groupPage, mapFeed } from "../src/shared/inbox-model";
 import { markGroup } from "./fixture-inbox";
 import { boardFromInput } from "../src/server/config";
 import { avatarProxy, memoryAvatarCache } from "../src/shared/avatar-proxy";
@@ -495,6 +495,12 @@ const unreadGroups = () =>
   inbox.nodes
     .filter((n) => n.readStates.includes("unread"))
     .map((n) => ({ id: n.groupId, head: n.headNotification.notificationId }));
+/** A group's page from `start` (the cursor is the next offset): `GROUP_FIRST` first, then `GROUP_PAGE` at a time, as the server. */
+function fixtureGroupPage(raw: unknown[], start: number) {
+  const size = start ? GROUP_PAGE : GROUP_FIRST,
+    end = start + size;
+  return groupPage(raw.slice(start, end), { hasNextPage: end < raw.length, endCursor: String(end) }, size);
+}
 async function inboxRoute(req: Request, url: URL) {
   let status = 200,
     body: unknown = { ok: true };
@@ -503,12 +509,19 @@ async function inboxRoute(req: Request, url: URL) {
     const category = url.searchParams.get("category"),
       start = Number(url.searchParams.get("after") || 0),
       nodes = inbox.nodes.filter((n) => !category || n.headNotification.category === category);
+    const children = (n: (typeof nodes)[number]) => (n as { children?: unknown[] }).children ?? [];
     body = {
       unseen: inbox.unseen,
+      // Like the server, each group's first page comes with its row, so expanding the group needs no request.
       items: mapFeed(
         nodes.slice(start, start + INBOX_PAGE),
-        Object.fromEntries(nodes.map((n) => [n.groupId, (n as { children?: unknown[] }).children ?? []])),
-      ),
+        Object.fromEntries(nodes.map((n) => [n.groupId, children(n)])),
+      ).map((item) => {
+        const node = nodes.find((n) => n.groupId === item.id)!;
+        return children(node).length
+          ? { ...item, group: fixtureGroupPage(children(node), 0) }
+          : item;
+      }),
       more: start + INBOX_PAGE < nodes.length,
       cursor: String(start + INBOX_PAGE),
       ...(start || category ? {} : { unread: unreadGroups() }),
@@ -863,11 +876,14 @@ async function handle(req: Request) {
     return Response.json({ requests, rich, writes });
   if (path === "/api/inbox") return inboxRoute(req, url);
   if (path === "/api/inbox/group") {
-    const node = inbox.nodes.find((n) => n.groupId === url.searchParams.get("id")),
-      notes = ((node && "children" in node ? node.children : node ? [node.headNotification] : []) as unknown[]).flatMap((n) => mapNote(n) ?? []),
-      start = Number(url.searchParams.get("after") || 0);
+    const node = inbox.nodes.find((n) => n.groupId === url.searchParams.get("id"));
     requests.push({ method: req.method, path: url.pathname + url.search, status: 200 });
-    return Response.json({ notes: notes.slice(start, start + 5), more: start + 5 < notes.length, cursor: String(start + 5) });
+    return Response.json(
+      fixtureGroupPage(
+        (node && "children" in node ? node.children : node ? [node.headNotification] : []) as unknown[],
+        Number(url.searchParams.get("after") || 0),
+      ),
+    );
   }
   let status = 200,
     body: unknown;

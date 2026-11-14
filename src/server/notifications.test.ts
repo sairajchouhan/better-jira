@@ -50,7 +50,7 @@ test("R2-inbox-D4: the poll sees a new notification even when another tab's seen
   }
 });
 
-test("prod parity #14/#15: the feed reads every group's notifications in one request, and a group pages five at a time", async () => {
+test("prod parity #14/#15, R3 G20: the feed reads every group's first page in one request and sends it with the row; later pages are five at a time", async () => {
   const originalFetch = globalThis.fetch;
   const saved = { url: process.env.JIRA_URL, email: process.env.JIRA_EMAIL, token: process.env.JIRA_TOKEN };
   const now = Date.now();
@@ -93,7 +93,14 @@ test("prod parity #14/#15: the feed reads every group's notifications in one req
         });
       if (body.operationName === "InboxGroups")
         return Response.json({
-          data: { notifications: { g0: { nodes: [note("h1", "Kai updated a task", 5), note("a1", "Hana mentioned you in a comment", 30)] } } },
+          data: {
+            notifications: {
+              g0: {
+                pageInfo: { hasNextPage: true, endCursor: "c2" },
+                nodes: [note("h1", "Kai updated a task", 5), note("a1", "Hana mentioned you in a comment", 30)],
+              },
+            },
+          },
         });
       if (body.operationName === "InboxGroup")
         return Response.json({
@@ -118,10 +125,18 @@ test("prod parity #14/#15: the feed reads every group's notifications in one req
     // The read group lets a recent mention lead (Linear's prioritize); the summary keeps Jira's additionalActors (R3 G15).
     expect(page.items[0]).toMatchObject({ kind: "mentioned", head: "h1", others: [{ name: "Hana" }] });
     expect(page.items[1]).toMatchObject({ kind: "updated", count: 1 });
-    const first = await group("ari:cloud:jira:c:issue/1");
-    expect(first.notes.map((n) => n.id)).toEqual(["n1", "n2", "n3", "n4", "n5"]);
-    expect(first).toMatchObject({ more: true, cursor: "c5" });
-    expect(bodies.at(-1)!.variables).toMatchObject({ group: "ari:cloud:jira:c:issue/1", first: 5, after: null });
+    // R3 G20: the page the row was ranked from comes with it, so expanding the group needs no request. Two of ten: the last page.
+    expect(groups[0]!.query).toContain("first: 10");
+    expect(page.items[0]!.group).toEqual({ notes: expect.any(Array), more: false, cursor: "c2" });
+    expect(page.items[0]!.group!.notes.map((n) => n.id)).toEqual(["h1", "a1"]);
+    expect(page.items[1]!.group).toBeUndefined();
+    // Read on its own (a refetch), the first page is as long as the feed's; later ones are five, as Jira's bell.
+    await group("ari:cloud:jira:c:issue/1");
+    expect(bodies.at(-1)!.variables).toMatchObject({ group: "ari:cloud:jira:c:issue/1", first: 10, after: null });
+    const next = await group("ari:cloud:jira:c:issue/1", "c10");
+    expect(next.notes.map((n) => n.id)).toEqual(["n1", "n2", "n3", "n4", "n5"]);
+    expect(next).toMatchObject({ more: true, cursor: "c5" });
+    expect(bodies.at(-1)!.variables).toMatchObject({ group: "ari:cloud:jira:c:issue/1", first: 5, after: "c10" });
   } finally {
     globalThis.fetch = originalFetch;
     for (const [name, value] of [

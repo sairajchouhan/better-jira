@@ -50,9 +50,39 @@ export type InboxItem = Omit<InboxNote, "id"> & {
   count: number;
   /** Who sent the group's other notifications, newest first: Jira's "+3 updates from Priya and others". */
   others: InboxActor[];
+  /** The group's first page, as the feed already read it to rank the row: expanding the group shows it without a request. */
+  group?: InboxGroupPage;
 };
 /** One page of a row's notifications (`/api/inbox/group`); `cursor` asks for the next one. */
 export type InboxGroupPage = { notes: InboxNote[]; more: boolean; cursor?: string };
+/** How many of a group's notifications its first page holds: the feed reads these to rank the row (Linear's prioritize looks
+ *  at the recent ones), and the same page seeds the expanded group. */
+export const GROUP_FIRST = 10;
+/** Each later page, five at a time as Jira's bell expands a group. */
+export const GROUP_PAGE = 5;
+/** What an expanded group shows before "Show more": the head and five more, as Jira's bell (prod parity #15). */
+export const GROUP_SHOWN = 1 + GROUP_PAGE;
+
+/** One page of Jira's `notificationGroup`, `first` long: a short page, or one without a cursor, is the last. The cards show
+ *  the comment's text (`preview`), so its ADF stays out of the page. */
+export function groupPage(
+  nodes: unknown,
+  pageInfo: { hasNextPage?: unknown; endCursor?: unknown } | null | undefined,
+  first: number,
+): InboxGroupPage {
+  const notes = (Array.isArray(nodes) ? nodes : []).flatMap((n) => {
+    const note = mapNote(n);
+    if (!note) return [];
+    const { doc: _, ...rest } = note;
+    return [rest];
+  });
+  // Jira reports a next page after the last one too; an empty or short page ends it.
+  return {
+    notes,
+    more: !!pageInfo?.hasNextPage && !!pageInfo.endCursor && notes.length === first,
+    ...(pageInfo?.endCursor ? { cursor: String(pageInfo.endCursor) } : {}),
+  };
+}
 /** One page of Jira's feed; `cursor` asks for the next one. Jira can return a short or empty page before the end. */
 export type InboxFeed = {
   unseen: number;

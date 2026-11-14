@@ -582,6 +582,8 @@ test("prod parity: a group's earlier notifications unfold in the pane, and a com
     expect(text).toContain("Kim commented");
     expect(text).toContain("Earlier comment");
     expect(text).toContain("Status updated by Lee: To Do → Doing");
+    // R3 G20: the feed sent the group's first page with the row, so it opened without a request of its own.
+    expect((await fixture.log()).requests.some((r) => r.path.startsWith("/api/inbox/group"))).toBe(false);
   });
   await test.step("#15: above an open issue, the same list", async () => {
     await p.click(`[data-inbox-row*="issue/2"]`);

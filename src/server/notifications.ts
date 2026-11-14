@@ -4,7 +4,7 @@
  * The gateway needs `collabContextRoutingAri` (the site's ARI) to find the feed; without it every feed reads empty.
  */
 import { canWrite } from "./jira";
-import { mapFeed, mapNote, type InboxFeed, type InboxGroupPage } from "@/shared/inbox-model";
+import { GROUP_FIRST, GROUP_PAGE, groupPage, mapFeed, type InboxFeed, type InboxGroupPage } from "@/shared/inbox-model";
 import { serverAuth } from "./server-config";
 
 const PAGE = 50;
@@ -74,16 +74,15 @@ const FEED = `query InboxFeed($ari: String, $first: Int, $after: String, $catego
     }
   }
 }`;
-/** How many of a group's notifications the row reads to pick its main one (Linear's prioritize looks at the recent ones). */
-const RANKED = 10;
-/** The notifications of every group with more than one, in one request (aliases, like `mark`), so each row can lead with
- *  Linear's main notification. A failure only costs that ranking: the rows fall back to Jira's newest. */
-async function groupNotes(groups: string[]): Promise<Record<string, unknown[]>> {
+/** The first page of every group with more than one notification, in one request (aliases, like `mark`): each row leads
+ *  with Linear's main notification, and expanding the group shows the same page at once. A failure only costs that: the rows
+ *  fall back to Jira's newest, and the group reads its page when it is expanded. */
+async function groupNotes(groups: string[]): Promise<Record<string, { nodes: unknown[]; pageInfo?: any }>> {
   if (!groups.length) return {};
   const fields = groups
     .map(
       (_, i) =>
-        `g${i}: notificationGroup(groupId: $g${i}, first: ${RANKED}, collabContextRoutingAri: $ari, filter: { productFilter: "jira" }) { nodes { ${NOTE} } }`,
+        `g${i}: notificationGroup(groupId: $g${i}, first: ${GROUP_FIRST}, collabContextRoutingAri: $ari, filter: { productFilter: "jira" }) { pageInfo { hasNextPage endCursor } nodes { ${NOTE} } }`,
     )
     .join("\n");
   const vars = groups.map((_, i) => `$g${i}: String!`).join(", ");
@@ -93,7 +92,12 @@ async function groupNotes(groups: string[]): Promise<Record<string, unknown[]>> 
       `query InboxGroups($ari: String, ${vars}) { notifications { ${fields} } }`,
       Object.fromEntries(groups.map((g, i) => [`g${i}`, g])),
     );
-    return Object.fromEntries(groups.map((g, i) => [g, data?.[`g${i}`]?.nodes ?? []]));
+    return Object.fromEntries(
+      groups.flatMap((g, i) => {
+        const group = data?.[`g${i}`];
+        return group ? [[g, { nodes: group.nodes ?? [], pageInfo: group.pageInfo }]] : [];
+      }),
+    );
   } catch (error) {
     console.error("[inbox] group notifications", String(error).slice(0, 200));
     return {};
@@ -108,18 +112,12 @@ const GROUP = `query InboxGroup($ari: String, $group: String!, $first: Int, $aft
     }
   }
 }`;
-/** A row's notifications, five at a time as Jira's bell expands a group, newest first. */
+/** A row's notifications, newest first: the feed's first page (`GROUP_FIRST`), then five at a time as Jira's bell expands
+ *  a group. */
 export async function group(groupId: string, after?: string): Promise<InboxGroupPage> {
-  const data = await gateway("InboxGroup", GROUP, { group: groupId, first: 5, after: after ?? null });
-  const nodes: unknown[] = data.notificationGroup?.nodes ?? [],
-    page = data.notificationGroup?.pageInfo,
-    notes = nodes.flatMap((n) => mapNote(n) ?? []);
-  // Jira reports a next page after the last one too; an empty or short page ends it.
-  return {
-    notes,
-    more: !!page?.hasNextPage && !!page.endCursor && notes.length === 5,
-    ...(page?.endCursor ? { cursor: String(page.endCursor) } : {}),
-  };
+  const first = after ? GROUP_PAGE : GROUP_FIRST;
+  const data = await gateway("InboxGroup", GROUP, { group: groupId, first, after: after ?? null });
+  return groupPage(data.notificationGroup?.nodes, data.notificationGroup?.pageInfo, first);
 }
 /** Jira's bell tabs: Direct (assigned, mentioned, your issues) and Watching; no category is both. `after` is the previous page's cursor. */
 export async function feed(category?: "direct" | "watching", after?: string): Promise<InboxFeed> {
@@ -133,9 +131,13 @@ export async function feed(category?: "direct" | "watching", after?: string): Pr
   const children = await groupNotes(
     nodes.filter((n) => n?.groupId && Number(n.groupSize) > 1).map((n) => String(n.groupId)),
   );
+  const items = mapFeed(nodes, Object.fromEntries(Object.entries(children).map(([id, c]) => [id, c.nodes])));
   return {
     unseen: Number(data.unseenNotificationCount) || 0,
-    items: mapFeed(nodes, children),
+    items: items.map((item) => {
+      const c = children[item.id];
+      return c ? { ...item, group: groupPage(c.nodes, c.pageInfo, GROUP_FIRST) } : item;
+    }),
     more: !!page?.hasNextPage && !!page.endCursor,
     ...(page?.endCursor ? { cursor: String(page.endCursor) } : {}),
   };
