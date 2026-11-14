@@ -115,13 +115,15 @@ test("create composer: a draft written, closed, reopened, given properties and c
       ),
     ).toHaveLength(1);
   });
-  await test.step("B13: the Display menu uses pill menus instead of native selects", async () => {
+  await test.step("B13: the Display menu uses pill menus instead of native selects; typing jumps to an option (React Aria's typeahead)", async () => {
     await page.click('[aria-label="Display options"]');
     await page.waitFor(`!!document.querySelector('[aria-label^="Ordering: "]')`);
-    expect(await page.eval(`document.querySelectorAll(".view-popup select").length`)).toBe(0);
+    expect(await page.eval(`document.querySelectorAll(".view-popup select:not([data-testid=hidden-select-container] select)").length`)).toBe(0);
     await page.click('[aria-label="Ordering: Manual"]');
-    await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Ordering…"`);
+    // The list opens on the chosen option; typing moves to the first option starting with it, Enter chooses.
+    await page.waitFor(`document.activeElement?.getAttribute("role")==="option"&&document.activeElement.textContent==="Manual"`);
     await page.type("title");
+    await page.waitFor(`document.activeElement?.textContent==="Title"`);
     await page.key("Enter");
     await page.waitFor(`!!document.querySelector('[aria-label="Ordering: Title"]')`);
     expect(

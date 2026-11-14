@@ -32,3 +32,15 @@ test("the trigger shows and names the chosen option, else the placeholder", () =
   );
   expect(empty).toContain('<span class="ui-select-value" data-placeholder="">None</span>');
 });
+
+test("React Aria's trigger keeps the accessible name 'Grouping: Status' and opens a listbox", () => {
+  const html = renderToStaticMarkup(
+    <Select label="Grouping" value="status" onValueChange={() => {}}>
+      <Select.Option value="status">Status</Select.Option>
+    </Select>,
+  );
+  const labelledBy = html.match(/<button[^>]*aria-labelledby="([^"]+)"/)?.[1];
+  expect(labelledBy).toBeDefined();
+  expect(html).toContain(`<span hidden="" id="${labelledBy}">Grouping: Status</span>`);
+  expect(html).toContain('aria-haspopup="listbox"');
+});

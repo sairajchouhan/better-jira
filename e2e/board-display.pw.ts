@@ -102,9 +102,9 @@ test("display preferences: card dates, filter chips, empty views and pill menus"
     await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Add filter"`);
     await page.click('[aria-label="Display options"]');
     await page.click('[aria-label="Grouping: Priority"]');
-    await page.waitFor(`!!document.querySelector("[cmdk-item][data-selected=true]")`);
+    await page.waitFor(`!!document.querySelector("[role=option][aria-selected=true]")`);
     expect(
-      await page.eval(`document.querySelector("[cmdk-item][data-selected=true]").textContent`),
+      await page.eval(`document.querySelector("[role=option][aria-selected=true]").textContent`),
     ).toBe("Priority");
     await page.key("Escape");
   });
@@ -351,10 +351,10 @@ for (const scheme of ["dark", "light"] as const) {
     });
     await test.step("a select's list: gy, one elevation up, 24px rows, end-aligned 5px below; Escape closes only the list", async () => {
       await page.click(`${DISPLAY} .ui-vo-select`);
-      await page.waitFor(`!!document.querySelector('[data-surface=select] [cmdk-item][data-selected=true]')`);
+      await page.waitFor(`!!document.querySelector('[data-surface=select] [role=option][data-focused]')`);
       expect(
         await page.eval(
-          `(()=>{const s=document.querySelector('[data-surface=select]'),row=s.querySelector('[cmdk-item][data-selected=true]'),t=document.querySelector('${DISPLAY} .ui-vo-select').getBoundingClientRect(),b=s.getBoundingClientRect();return {bg:getComputedStyle(s).backgroundColor,ring:getComputedStyle(s).boxShadow.split(/,(?![^(]*\\))/)[0],height:row.getBoundingClientRect().height,font:getComputedStyle(row).fontSize,padding:getComputedStyle(row).padding,highlight:getComputedStyle(row,'::before').backgroundColor,inset:getComputedStyle(row,'::before').left,check:getComputedStyle(s.querySelector('.menu-checkmark')).color,right:Math.round(t.right-b.right),top:Math.round(b.top-t.bottom)}})()`,
+          `(()=>{const s=document.querySelector('[data-surface=select]'),row=s.querySelector('[role=option][data-focused]'),t=document.querySelector('${DISPLAY} .ui-vo-select').getBoundingClientRect(),b=s.getBoundingClientRect();return {bg:getComputedStyle(s).backgroundColor,ring:getComputedStyle(s).boxShadow.split(/,(?![^(]*\\))/)[0],height:row.getBoundingClientRect().height,font:getComputedStyle(row).fontSize,padding:getComputedStyle(row).padding,highlight:getComputedStyle(row,'::before').backgroundColor,inset:getComputedStyle(row,'::before').left,check:getComputedStyle(s.querySelector('.menu-checkmark')).color,right:Math.round(t.right-b.right),top:Math.round(b.top-t.bottom)}})()`,
         ),
       ).toEqual({ bg: L.list.bg, ring: L.list.ring, height: 24, font: "12px", padding: "0px 35px 0px 12px", highlight: L.list.highlight, inset: "4px", check: L.list.check, right: 0, top: 5 });
       await page.key("Escape");
@@ -445,10 +445,10 @@ test("popup elevation: a Select lists one level up, a menu or submenu over anoth
     await page.eval(`machines.ui.send({type:"toolbar.open",toolbar:"advanced"})`);
     await page.waitFor(`!!document.querySelector('[aria-label="Advanced filter"] .ui-select[data-size=medium]')`);
     await page.click('[aria-label="Advanced filter"] .ui-select[data-size=medium]');
-    await page.waitFor(`!!document.querySelector('[data-surface=select] [cmdk-item]')`);
+    await page.waitFor(`!!document.querySelector('[data-surface=select] [role=option]')`);
     expect(
       await page.eval(
-        `(()=>{const s=document.querySelector('[data-surface=select]'),row=s.querySelector('[cmdk-item]:not([data-selected=true])');return [s.dataset.elevation,getComputedStyle(s).backgroundColor,getComputedStyle(row).color,row.getBoundingClientRect().height,getComputedStyle(row).fontSize]})()`,
+        `(()=>{const s=document.querySelector('[data-surface=select]'),row=s.querySelector('[role=option]:not([data-focused])');return [s.dataset.elevation,getComputedStyle(s).backgroundColor,getComputedStyle(row).color,row.getBoundingClientRect().height,getComputedStyle(row).fontSize]})()`,
       ),
     ).toEqual(["2", DARK.list.bg, "lch(91.554 1.65 272)", 30, "12px"]);
     await page.key("Escape");

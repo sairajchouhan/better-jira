@@ -312,7 +312,6 @@ export function MenuSurface({
   align,
   command = false,
   point,
-  variant = "menu",
   dismiss = close,
 }: {
   label: string;
@@ -332,11 +331,9 @@ export function MenuSurface({
   point?: { x: number; y: number };
   align?: "end";
   command?: boolean;
-  /** `select`: a list ringed with bgBorderSolidThin instead of the menu border (select.css). */
-  variant?: "menu" | "select";
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const elevation = useElevation(variant === "select" ? "raised" : "surface");
+  const elevation = useElevation("surface");
   const { keys, opener } = usePopupFocus(ref, close, MENU_FOCUS);
   // The previously focused element is only a useful anchor when it is a real control, not <body> after keyboard navigation.
   const [fallback] = useState(
@@ -425,7 +422,7 @@ export function MenuSurface({
         aria-modal="true"
         aria-label={label}
         {...elevation.props}
-        data-surface={variant}
+        data-surface="menu"
         className={`${MENU_POPUP} overflow-y-auto ${fit ? "w-max min-w-[175px] scroll-py-6 max-w-[min(500px,calc(100vw-24px))]" : command ? "flex flex-col overflow-hidden" : "p-3"}`}
         onKeyDown={(e) => {
           if (!((e.metaKey || e.ctrlKey) && ["k", "/"].includes(e.key.toLowerCase())))

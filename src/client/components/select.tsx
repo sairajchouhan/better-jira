@@ -1,13 +1,15 @@
-import { Children, createContext, isValidElement, use, useMemo, useState, type ReactNode } from "react";
-import { Menu } from "./menu";
-import { MenuSurface } from "./menu-surface";
+import { Children, isValidElement, useId, type ReactNode } from "react";
+import { Button, ListBox, ListBoxItem, Popover, Select as AriaSelect } from "react-aria-components";
+import { Icon } from "./icons";
+import { MENU_POPUP, useElevation } from "./menu-surface";
 import "./control-tokens.css";
 import "./select.css";
 
 /**
- * Linear's Select `Xke` (exported as `my`/`hAe`, startup-root.CnUSfl4j.js): a trigger showing the chosen option (`Zke`,
- * styles `_y`, sizes `lAe`, caret `py`) over a list of `Option`s. The list is the app's shared menu, filtered by typing
- * as Linear's action menus are, where Linear's base-ui list jumps to a typed prefix instead.
+ * Linear's Select `Xke` (exported as `my`/`hAe`, startup-root.CnUSfl4j.js), on Base UI's Select: a trigger showing the
+ * chosen option (`Zke`, styles `_y`, sizes `lAe`, caret `py`) over a listbox of `Option`s (`gy`'s popup `eAe`, rows `$ke`).
+ * Ours is React Aria's Select + Button + Popover + ListBox, the same contract: the list opens on the chosen option, arrows
+ * move, typing jumps to the first option starting with what was typed, Enter or a press chooses, Escape closes.
  */
 export const SELECT = {
   /** `lAe` triggers; `ROW_HEIGHT`/`ROW_FONT_SIZE` are its list's rows (`fAe`, by the same size), select.css. */
@@ -22,13 +24,15 @@ export const SELECT = {
   CARET_RIGHT: 10,
   CARET_RIGHT_TIGHT: 6,
   LIST_MAX_HEIGHT: 300,
+  /** Base UI's popper `sideOffset` as `Xke` passes it whenever a `side` is given (every caller passes `bottom`). */
+  OFFSET: 5,
+  /** The room kept from the window's edges, as MenuSurface keeps. */
+  EDGE: 12,
 } as const;
 
 export type SelectSize = keyof typeof SELECT.SIZES;
 
 type OptionProps = { value: string; icon?: ReactNode; children: string };
-
-const SelectContext = createContext<{ value: string; choose: (value: string) => void } | null>(null);
 
 /** `rAe`: every Option under `children`, through Fragments, by value. */
 export function optionsByValue(children: ReactNode, found = new Map<string, OptionProps>()) {
@@ -42,13 +46,26 @@ export function optionsByValue(children: ReactNode, found = new Map<string, Opti
   return found;
 }
 
-/** `$ke`: a row with the chosen one checked. */
+/** `$ke`: a row, its icon, its name, and the chosen one's check (`Hve`) 8px from the right. Typeahead matches the name. */
 function Option({ value, icon, children }: OptionProps) {
-  const select = use(SelectContext);
   return (
-    <Menu.Item value={`${children} ${value}`} icon={icon} checked={select?.value === value} onSelect={() => select?.choose(value)}>
-      {children}
-    </Menu.Item>
+    <ListBoxItem id={value} textValue={children} className="ui-select-option">
+      {({ isSelected }) => (
+        <span className="menu-label">
+          {icon && (
+            <span aria-hidden className="menu-icon">
+              {icon}
+            </span>
+          )}
+          <span className="menu-name">{children}</span>
+          {isSelected && (
+            <span aria-hidden className="menu-checkmark">
+              <Icon name="check" size={16} />
+            </span>
+          )}
+        </span>
+      )}
+    </ListBoxItem>
   );
 }
 
@@ -73,33 +90,28 @@ function SelectRoot({
   /** Which trigger edge the list lines up with, 5px below it (base-ui `align`; ViewOptions' `Rxr` passes `end`). */
   align?: "start" | "end";
   className?: string;
-  /** `Select.Option`s, optionally inside Menu.Group / Menu.Divider. */
+  /** `Select.Option`s, through Fragments. */
   children: ReactNode;
 }) {
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const nameId = useId();
+  const elevation = useElevation("raised");
   const chosen = optionsByValue(children).get(value);
-  const context = useMemo(
-    () => ({
-      value,
-      choose: (next: string) => {
-        setAnchor(null);
-        if (next !== value) onValueChange(next);
-      },
-    }),
-    [value, onValueChange],
-  );
+  const name = `${label}: ${chosen?.children ?? placeholder ?? value}`;
   return (
-    <>
-      <button
-        type="button"
-        aria-label={`${label}: ${chosen?.children ?? placeholder ?? value}`}
-        aria-haspopup="dialog"
-        aria-expanded={!!anchor}
-        disabled={disabled}
-        data-size={size}
-        className={`ui-select ${className}`}
-        onClick={(e) => setAnchor(anchor ? null : e.currentTarget)}
-      >
+    <AriaSelect
+      aria-label={label}
+      value={chosen ? value : null}
+      onChange={(next) => {
+        if (next != null && next !== value) onValueChange(String(next));
+      }}
+      isDisabled={disabled}
+      className="contents"
+    >
+      {/* The trigger reads "Grouping: Status", not React Aria's value-then-label. */}
+      <span hidden id={nameId}>
+        {name}
+      </span>
+      <Button aria-label={name} aria-labelledby={nameId} data-size={size} className={`ui-select ${className}`}>
         {chosen?.icon && (
           <span aria-hidden className="ui-select-icon">
             {chosen.icon}
@@ -112,29 +124,21 @@ function SelectRoot({
         <svg aria-hidden className="ui-select-caret" viewBox="0 0 9 5" width="9" height="5">
           <path d="M1.915.557a.667.667 0 0 0-.943.943l2.862 2.862a.942.942 0 0 0 1.333 0L8.028 1.5a.667.667 0 0 0-.943-.943L4.5 3.14 1.915.557Z" />
         </svg>
-      </button>
-      {anchor && (
-        <MenuSurface
-          label={label}
-          anchor={anchor}
-          fit
-          variant="select"
-          align={align === "end" ? "end" : undefined}
-          close={() => setAnchor(null)}
-        >
-          <SelectContext value={context}>
-            {/* Opens on the chosen option, like Linear. */}
-            <Menu defaultValue={chosen ? `${chosen.children} ${value}` : undefined} data-size={size} width="auto" className="ui-select-list">
-              <Menu.Input autoFocus hideWhenEmpty aria-label={`${label}…`} />
-              <Menu.List maxHeight={`${SELECT.LIST_MAX_HEIGHT}px`}>
-                <Menu.Empty>No matches</Menu.Empty>
-                {children}
-              </Menu.List>
-            </Menu>
-          </SelectContext>
-        </MenuSurface>
-      )}
-    </>
+      </Button>
+      {/* `eAe`: one elevation above the surface it opened from, ringed (select.css). */}
+      <Popover
+        placement={align === "end" ? "bottom end" : "bottom start"}
+        offset={SELECT.OFFSET}
+        containerPadding={SELECT.EDGE}
+        {...elevation.props}
+        data-surface="select"
+        className={`${MENU_POPUP} z-50 flex w-max min-w-[175px] max-w-[min(500px,calc(100vw-24px))] flex-col overflow-hidden outline-none`}
+      >
+        <ListBox shouldFocusWrap data-size={size} className="ui-select-list" style={{ maxHeight: SELECT.LIST_MAX_HEIGHT }}>
+          {children}
+        </ListBox>
+      </Popover>
+    </AriaSelect>
   );
 }
 
