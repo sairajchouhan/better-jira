@@ -1,5 +1,6 @@
 import { beforeEach, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { renderWithFakeDocument } from "@/client/test/fake-document";
 import { normalizeDocument } from "@/shared/document";
 import {
   SAVE_WAIT,
@@ -117,14 +118,7 @@ test("C5 composer: opening it after a reload shows the kept title and properties
     boards: [{ id: 1, name: "B", columns: [{ name: "Todo", statuses: [{ id: "todo", name: "Todo", category: "new" }, { id: "doing", name: "Doing", category: "indeterminate" }] }] }],
   } as never);
   writeLocalDraft("render", draft({ fields: { board: 1, status: "doing", priority: "High", due: "2030-01-02" } }));
-  const render = () => {
-    Object.assign(globalThis, { document: { activeElement: null, getElementById: () => null, addEventListener() {}, removeEventListener() {} } });
-    try {
-      return renderToStaticMarkup(<CreateIssue />);
-    } finally {
-      delete (globalThis as { document?: unknown }).document;
-    }
-  };
+  const render = () => renderWithFakeDocument(() => renderToStaticMarkup(<CreateIssue />));
   ui.send({ type: "overlay.open", overlay: "create", draft: { board: 1, status: "todo" } });
   const html = render();
   expect(html).toContain('value="Fix the login"');

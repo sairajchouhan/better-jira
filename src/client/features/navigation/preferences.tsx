@@ -24,15 +24,15 @@ function PreferenceSwitch({
   onChange: () => void;
 }) {
   return (
-    <label className="flex cursor-default items-center justify-between gap-4 py-2">
+    <Switch aria-label={name} isSelected={checked} onChange={onChange} className="flex cursor-default items-center justify-between gap-4 py-2">
       <span className="flex min-w-0 flex-col gap-0.5">
         <Text variant="smallPlus">{name}</Text>
         <Text variant="mini" color="muted">
           {description}
         </Text>
       </span>
-      <Switch aria-label={name} checked={checked} onChange={onChange} />
-    </label>
+      <Switch.Indicator />
+    </Switch>
   );
 }
 

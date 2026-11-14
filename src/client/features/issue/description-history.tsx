@@ -158,12 +158,12 @@ function DescriptionHistoryDialog({
         <div className="description-history-content">
           <div className="description-history-toolbar">
             {version.previous !== undefined && (
-              <label className="description-history-switch">
-                <Switch size="small" checked={highlight} onChange={(e) => setHighlight(e.currentTarget.checked)} />
+              <Switch size="small" isSelected={highlight} onChange={setHighlight} className="description-history-switch">
+                <Switch.Indicator />
                 <Text variant="mini" color="muted">
                   Highlight changes
                 </Text>
-              </label>
+              </Switch>
             )}
             <Button
               variant="primary"

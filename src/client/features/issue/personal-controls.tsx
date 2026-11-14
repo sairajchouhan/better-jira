@@ -601,10 +601,12 @@ export function CreateIssue() {
             <Attachments.Button />
           </span>
           <div className="flex items-center gap-3">
-          <Text as="label" variant="mini" color="inherit" className="flex items-center gap-1.5" title="Create more issues">
-            <Switch size="small" checked={more} onChange={(e) => setMore(e.target.checked)} />
-            Create more
-          </Text>
+          <Switch size="small" isSelected={more} onChange={setMore} className="flex items-center gap-1.5" title="Create more issues">
+            <Switch.Indicator />
+            <Text variant="mini" color="inherit">
+              Create more
+            </Text>
+          </Switch>
           {/* A plain button: the composer has no form to submit, so the click itself creates the issue. */}
           <Button
             type="button"

@@ -315,12 +315,21 @@ for (const scheme of ["dark", "light"] as const) {
       expect(await page.eval(paint(`${DISPLAY} .ui-vo-select`))).toEqual(L.select.hover);
     });
     await test.step("switches: gw's track mixed in linear sRGB over the elevated bgBase", async () => {
+      // React Aria's Switch: the pill is .ui-switch-indicator inside the <label> that carries data-selected.
       const track = (state: string) =>
-        page.eval(`getComputedStyle(document.querySelector('${DISPLAY} [role=switch]${state}')).backgroundColor`);
-      expect(await track(":checked")).toBe(L.switch.on);
-      expect(await track(":not(:checked)")).toBe(L.switch.off);
-      await hover(`${DISPLAY} [role=switch]:not(:checked)`);
-      expect(await track(":not(:checked)")).toBe(L.switch.hover);
+        page.eval(`getComputedStyle(document.querySelector('${DISPLAY} .ui-switch${state} .ui-switch-indicator')).backgroundColor`);
+      expect(await track("[data-selected]")).toBe(L.switch.on);
+      expect(await track(":not([data-selected])")).toBe(L.switch.off);
+      await hover(`${DISPLAY} .ui-switch:not([data-selected]) .ui-switch-indicator`);
+      expect(await track(":not([data-selected])")).toBe(L.switch.hover);
+      // `gw`'s onKeyDown: Enter toggles as Space does.
+      const off = `document.querySelector('${DISPLAY} .ui-switch:not([data-selected]) [role=switch]')`;
+      const name = await page.eval<string>(`${off}.getAttribute('aria-label')`);
+      await page.eval(`${off}.focus()`);
+      await page.key("Enter");
+      expect(await page.eval(`document.querySelector('${DISPLAY} [role=switch][aria-label="${name}"]').checked`)).toBe(true);
+      await page.key("Enter");
+      expect(await page.eval(`document.querySelector('${DISPLAY} [role=switch][aria-label="${name}"]').checked`)).toBe(false);
     });
     await test.step("property chips: Nxr tab/small, controlSecondarySelected when on, tertiary hover when off; a click keeps the popover", async () => {
       const on = `${DISPLAY} .ui-vo-chip[aria-pressed=true]`,

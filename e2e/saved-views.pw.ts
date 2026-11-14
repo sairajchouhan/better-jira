@@ -87,7 +87,7 @@ test("a saved view keeps its hidden columns, and Show empty columns keeps an emp
 
     await test.step("Show empty columns shows the empty column; hiding it keeps it hidden even so", async () => {
       await page.click('[aria-label="Display options"]');
-      await page.click('[role="switch"][aria-label="Show empty columns"]');
+      await page.click('label:has(> * > [role="switch"][aria-label="Show empty columns"]) .ui-switch-indicator');
       await page.key("Escape");
       await page.waitFor(column(empty!));
       expect(await page.eval(hiddenNames)).toEqual(["Todo"]);

@@ -224,10 +224,10 @@ export function SelectRow({
 /** A Row of a label and a small Switch; the whole row toggles it. */
 export function Toggle({ label, value, onChange }: { label: string; value: boolean; onChange: () => void }) {
   return (
-    <label className="ui-vo-row">
+    <Switch size="small" aria-label={label} isSelected={value} onChange={onChange} className="ui-vo-row">
       <Label>{label}</Label>
-      <Switch size="small" aria-label={label} checked={value} onChange={onChange} />
-    </label>
+      <Switch.Indicator />
+    </Switch>
   );
 }
 

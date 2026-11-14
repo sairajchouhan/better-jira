@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { renderWithFakeDocument } from "@/client/test/fake-document";
 
 test("R3-create-D1/D3/D6: the composer is not a form (Enter in a side field or a nested date form can't submit or reload) and the due chip reads like the app", async () => {
   const { set } = await import("@/client/state/store");
@@ -9,13 +10,7 @@ test("R3-create-D1/D3/D6: the composer is not a form (Enter in a side field or a
     boards: [{ id: 1, name: "B", columns: [{ name: "Todo", statuses: [{ id: "todo", name: "Todo", category: "new" }] }] }],
   } as never);
   ui.send({ type: "overlay.open", overlay: "create", draft: { board: 1, due: "2030-11-15" } });
-  Object.assign(globalThis, { document: { activeElement: null, getElementById: () => null, addEventListener() {}, removeEventListener() {} } });
-  let html: string;
-  try {
-    html = renderToStaticMarkup(<CreateIssue />);
-  } finally {
-    delete (globalThis as { document?: unknown }).document;
-  }
+  const html = renderWithFakeDocument(() => renderToStaticMarkup(<CreateIssue />));
   expect(html).toContain("Issue title");
   expect(html).not.toContain("<form");
   // With no form, a submit button would do nothing: Create issue must create from its own click.
@@ -45,13 +40,7 @@ test("R3-comments-D6: a file the composer's description already shows is not lis
       },
     },
   });
-  Object.assign(globalThis, { document: { activeElement: null, getElementById: () => null, addEventListener() {}, removeEventListener() {} } });
-  let html: string;
-  try {
-    html = renderToStaticMarkup(<CreateIssue />);
-  } finally {
-    delete (globalThis as { document?: unknown }).document;
-  }
+  const html = renderWithFakeDocument(() => renderToStaticMarkup(<CreateIssue />));
   expect(html).toContain("loose-file.png");
   expect(html).not.toContain("copied-shot.png");
 });

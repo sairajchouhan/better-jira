@@ -1,4 +1,5 @@
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
+import { Switch as AriaSwitch, type SwitchProps } from "react-aria-components";
 import "./control-tokens.css";
 import "./switch.css";
 
@@ -16,29 +17,43 @@ export const SWITCH = {
 } as const;
 
 /**
- * Checked state and changes are the input's own (`checked`, `onChange`); name it with `aria-label` or a wrapping
- * <label>. Enter toggles it as Space does (`gw`'s onKeyDown).
+ * React Aria's Switch: a <label> around a visually hidden native checkbox (`role="switch"`) and its children, so the whole row
+ * (text and pill) toggles and hovers it. Place the pill with `Switch.Indicator`; name the switch by its text or `aria-label`.
+ * `isSelected` and `onChange(selected)` are React Aria's. Enter toggles it as Space does (`gw`'s onKeyDown); every other key goes
+ * on to the page.
  */
-export function Switch({
+function SwitchRoot({
   size = "normal",
   className = "",
+  title,
   onKeyDown,
+  children,
   ...props
-}: { size?: keyof typeof SWITCH.SIZES } & Omit<ComponentProps<"input">, "type" | "role" | "size">) {
+}: { size?: keyof typeof SWITCH.SIZES; className?: string; title?: string; children: ReactNode } & Omit<
+  SwitchProps,
+  "className" | "children"
+>) {
   return (
-    <input
-      type="checkbox"
-      role="switch"
+    <AriaSwitch
       data-size={size}
       className={`ui-switch ${className}`}
-      onKeyDown={(e) => {
-        onKeyDown?.(e);
-        if (e.key === "Enter" && !e.defaultPrevented) {
-          e.preventDefault();
-          e.currentTarget.click();
-        }
+      // `title` feeds TitleTooltips; React Aria's Switch passes no title through, so the label takes it here.
+      render={title ? (label) => <label {...(label as ComponentProps<"label">)} title={title} /> : undefined}
+      onKeyDown={(event) => {
+        onKeyDown?.(event);
+        if (event.key === "Enter" && !event.isDefaultPrevented()) {
+          event.preventDefault();
+          (event.target as HTMLInputElement).click();
+        } else event.continuePropagation();
       }}
       {...props}
-    />
+    >
+      {children}
+    </AriaSwitch>
   );
 }
+
+export const Switch = Object.assign(SwitchRoot, {
+  /** The drawn pill and knob. */
+  Indicator: () => <span aria-hidden className="ui-switch-indicator" />,
+});

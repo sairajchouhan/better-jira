@@ -221,10 +221,10 @@ export function CodeBlockControls({
                 ["lineNumbers", "Show line numbers"],
               ] as const
             ).map(([option, label]) => (
-              <label key={option}>
+              <Switch key={option} size="small" isSelected={view[option]} onChange={(on) => codeDisplay.set({ [option]: on })}>
                 {label}
-                <Switch size="small" checked={view[option]} onChange={(e) => codeDisplay.set({ [option]: e.target.checked })} />
-              </label>
+                <Switch.Indicator />
+              </Switch>
             ))}
           </div>
         </Popover>
