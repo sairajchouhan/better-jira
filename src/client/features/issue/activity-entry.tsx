@@ -5,7 +5,8 @@ import { IssueHoverCard } from "./issue-hover-card";
  * `ic` (due date), `Us` (parent), `Ws` (team), `Js` (cycle), `Qs` (project), `ec` (milestone) and `Hs` (relations).
  * Jira-only kinds (resolution, component, files, custom fields) read plainly in the same pattern: "changed Fix version from A to B".
  */
-import { fullTime, activityTime } from "./issue-dates";
+import { absoluteDate, fullTime, activityTime } from "./issue-dates";
+import { DescriptionHistoryLink } from "./description-history";
 import { useState, type ReactNode } from "react";
 import type { RunPlace, TimelineEvent } from "@/client/features/comments/comment-threads";
 import { collapseLabel, partition, type SummaryItem } from "./activity-collapse";
@@ -28,9 +29,11 @@ const name = (value: unknown) =>
   value && typeof value === "object" && "name" in value ? String((value as { name: unknown }).name) : String(value);
 const idOf = (value: unknown) =>
   value && typeof value === "object" && "id" in value ? (value as { id: unknown }).id : value;
-/** Linear's `formatAbsoluteDate`: "Nov 7". */
-const day = (value: unknown) =>
-  new Date(`${value}T00:00`).toLocaleDateString("en", { month: "short", day: "numeric" });
+/** Linear's `formatAbsoluteDate`: "Nov 7", "Nov 7, 2025" in another year. */
+const day = (value: unknown) => absoluteDate(String(value));
+/** lodash `truncate(text, { length, omission: "…" })`, as Linear's TitleChangeTooltipContent cuts the new title: the omission
+ *  counts toward the length. */
+export const truncate = (text: string, length: number) => (text.length > length ? `${text.slice(0, length - 1)}…` : text);
 const B = ({ children, title }: { children: ReactNode; title?: string }) => (
   <b className="font-medium" title={title} data-tip={title ? "above" : undefined}>
     {children}
@@ -138,10 +141,10 @@ export function describeActivity(event: PropertyActivity, issue: Issue, then = f
         </>
       );
     }
-    case "status":
-      return then || before === null
-        ? `moved to ${status(after)}`
-        : `moved from ${status(before)} to ${status(after)}`;
+    case "status": {
+      const words = then || before === null ? `moved to ${status(after)}` : `moved from ${status(before)} to ${status(after)}`;
+      return <>{words}<Resolution value={after} /></>;
+    }
     case "labels":
       return <LabelChange before={before as string[] | null} after={after as string[] | null} />;
     case "priority": {
@@ -153,9 +156,14 @@ export function describeActivity(event: PropertyActivity, issue: Issue, then = f
       return `${from < to ? "lowered" : "raised"} priority from ${before} to ${after}`;
     }
     case "assignee": {
-      if (after === null) return "removed assignee";
-      if (idOf(after) === actor.id) return "self-assigned the issue";
-      return then || before === null ? `assigned to ${name(after)}` : `re-assigned to ${name(after)}`;
+      // Linear's `Os` drops who had it ("re-assigned to X", "removed assignee"); Jira shows it, so it is named the way Linear
+      // names the old value elsewhere: "from X" (priority, team), "removed … X" (parent, team), "Previously:" (title).
+      if (after === null)
+        return before === null ? "removed assignee" : <>removed assignee <B>{name(before)}</B></>;
+      if (idOf(after) === actor.id)
+        return before === null || then ? "self-assigned the issue" : <>self-assigned the issue (previously <B>{name(before)}</B>)</>;
+      if (then || before === null) return <>assigned to <B>{name(after)}</B></>;
+      return <>re-assigned from <B>{name(before)}</B> to <B>{name(after)}</B></>;
     }
     case "due":
       if (after === null) return "removed due date";
@@ -181,10 +189,10 @@ export function describeActivity(event: PropertyActivity, issue: Issue, then = f
       );
     case "title": {
       const title = String(after ?? "");
-      // TitleChangeTooltipContent: the new title, cut at 70 characters, with the old one on hover.
+      // TitleChangeTooltipContent: the new title, cut by lodash `truncate` at 70 with "…", the old one on hover.
       return (
         <>
-          changed title to <B title={`Previously: ${before ?? ""}`}>{title.length > 70 ? `${title.slice(0, 70)}…` : title}</B>
+          changed title to <B title={`Previously: ${before ?? ""}`}>{truncate(title, 70)}</B>
         </>
       );
     }
@@ -216,7 +224,9 @@ export function describeActivity(event: PropertyActivity, issue: Issue, then = f
         </>
       ) : (
         <>
-          changed project from <B title={(before as NamedValue)?.key}>{name(before)}</B> to <B title={(after as NamedValue)?.key}>{name(after)}</B>
+          changed project from <B title={(before as NamedValue)?.key}>{name(before)}</B>
+          <IssueKey value={before} /> to <B title={(after as NamedValue)?.key}>{name(after)}</B>
+          <IssueKey value={after} />
         </>
       );
     case "cycle": {
@@ -251,13 +261,14 @@ export function describeActivity(event: PropertyActivity, issue: Issue, then = f
         </>
       );
     case "milestone":
+      // The app's Milestone is Jira's Fix version; the name says so on hover for a Jira reader.
       return after === null ? (
         <>
-          removed from milestone <B>{name(before)}</B>
+          removed from milestone <B title="Jira Fix version">{name(before)}</B>
         </>
       ) : (
         <>
-          added to milestone <B>{name(after)}</B>
+          added to milestone <B title="Jira Fix version">{name(after)}</B>
         </>
       );
     case "weblink":
@@ -288,7 +299,7 @@ export function describeActivity(event: PropertyActivity, issue: Issue, then = f
         </>
       );
     case "description":
-      return "updated the description";
+      return <DescriptionHistoryLink versionId={event.id}>updated the description</DescriptionHistoryLink>;
     case "flag":
       return after === null ? "removed the flag" : "flagged the issue";
     case "type":
@@ -298,13 +309,47 @@ export function describeActivity(event: PropertyActivity, issue: Issue, then = f
     case "field": {
       const value = (after ?? before) as FieldValue;
       if (value.name === "environment" && !(before as FieldValue | null)?.value && !(after as FieldValue | null)?.value) return "updated the environment";
-      return plain(
-        value.name,
-        (before as FieldValue | null)?.value ?? null,
-        (after as FieldValue | null)?.value ?? null,
-      );
+      const show = (side: unknown) => {
+        const text = (side as FieldValue | null)?.value;
+        return text === undefined ? null : <FieldText text={text} />;
+      };
+      return plain(value.name, show(before), show(after));
     }
   }
+}
+
+/** The issue's key before or after a project move, which Jira logs as its own Key change: people search by old keys. */
+const IssueKey = ({ value }: { value: unknown }) => {
+  const key = (value as NamedValue | null)?.key;
+  return key ? <> ({key})</> : null;
+};
+
+/** A status change's resolution, from the same Jira entry: "Ready to deploy" and "Done" are different ends (Linear has none). */
+const Resolution = ({ value }: { value: unknown }) => {
+  const resolution = (value as { resolution?: string } | null)?.resolution;
+  return resolution ? (
+    <>
+      {" "}
+      and set resolution to <B>{resolution}</B>
+    </>
+  ) : null;
+};
+
+/** Jira field values that are links (an app writes `<a href="url">text</a>` or wiki `[text|url]`) open as links. */
+const HTML_LINK = /^<a\s[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>$/is,
+  WIKI_LINK = /^\[([^|\]]+)\|([^\]]+)\]$/;
+function FieldText({ text }: { text: string }) {
+  const decoded = text.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&").trim();
+  const html = decoded.match(HTML_LINK),
+    wiki = decoded.match(WIKI_LINK);
+  const [url, title] = html ? [html[1]!, html[2]!.replace(/<[^>]+>/g, "")] : wiki ? [wiki[2]!, wiki[1]!] : [];
+  if (url && URL.canParse(url) && /^https?:/.test(url))
+    return (
+      <a href={url} target="_blank" rel="noreferrer" className="hover:text-fg">
+        {title || url}
+      </a>
+    );
+  return text;
 }
 
 /** One label behind its 4px dot (Linear's label chip in history). */
@@ -359,22 +404,25 @@ function LabelChange({ before, after }: { before: string[] | null; after: string
   );
 }
 
-/** Linear's grouped label row (`yc`): what the run added, removed, added and then removed, or removed and then added. */
-function GroupedLabels({ changes }: { changes: PropertyActivity[] }) {
-  const first = (side: "added" | "removed") => {
-    const seen = new Map<string, number>();
-    for (const change of changes)
-      for (const label of labelDelta(change.before, change.after)[side])
-        if (!seen.has(label)) seen.set(label, Date.parse(change.at));
-    return seen;
-  };
-  const added = first("added"),
-    removed = first("removed");
-  const both = [...added.keys()].filter((label) => removed.has(label));
-  const addedOnly = [...added.keys()].filter((label) => !removed.has(label)),
-    removedOnly = [...removed.keys()].filter((label) => !added.has(label)),
-    addedThenRemoved = both.filter((label) => added.get(label)! <= removed.get(label)!),
-    removedThenAdded = both.filter((label) => added.get(label)! > removed.get(label)!);
+/** Linear's grouped label row (`yc`): what the run added, removed, added and then removed, or removed and then added.
+ *  Linear sorts a label it both added and removed by which came first, so a label removed, added and removed again read
+ *  "removed and then added" while it ended off. Here each label is placed by where it started and ended, so the summary
+ *  is always the run's net result: on at the end reads "added", off "removed", and only a label back where it started
+ *  reads "added and then removed" (it was off) or "removed and then added" (it was on). */
+export function GroupedLabels({ changes }: { changes: PropertyActivity[] }) {
+  const runs = new Map<string, { first: "added" | "removed"; last: "added" | "removed" }>();
+  for (const change of changes) {
+    const delta = labelDelta(change.before, change.after);
+    for (const side of ["added", "removed"] as const)
+      for (const label of delta[side]) runs.set(label, { first: runs.get(label)?.first ?? side, last: side });
+  }
+  const labels = (test: (run: { first: string; last: string }) => boolean) =>
+    [...runs].filter(([, run]) => test(run)).map(([label]) => label);
+  const addedOnly = labels((run) => run.first === "added" && run.last === "added"),
+    removedOnly = labels((run) => run.first === "removed" && run.last === "removed"),
+    addedThenRemoved = labels((run) => run.first === "added" && run.last === "removed"),
+    removedThenAdded = labels((run) => run.first === "removed" && run.last === "added");
+  const both = [...addedThenRemoved, ...removedThenAdded];
   const tight = addedOnly.length > 0 && removedOnly.length > 0 && both.length > 0;
   const parts = [
     addedOnly.length > 0 && (
@@ -417,19 +465,22 @@ function GroupedLabels({ changes }: { changes: PropertyActivity[] }) {
 
 /** Linear's grouped status row (`so`): two moves read "moved to A, then to B"; a run back to where it started, "moved to
  *  A, then back to B"; a longer one names its ends, "moved (back) from A to B", by the board's column order (`oo`). */
-function groupedStatus(changes: PropertyActivity[], issue: Issue): string {
+function groupedStatus(changes: PropertyActivity[], issue: Issue): ReactNode {
   const board = boardOf(issue.key),
     first = changes[0]!,
     last = changes.at(-1)!;
   const label = (value: unknown) => statusById(board, idOf(value))?.name ?? (value === null ? "" : name(value));
-  if (first.before === null || last.after === null) return `moved from ${label(first.before)} to ${label(last.after)}`;
+  const end = <Resolution value={last.after} />;
+  if (first.before === null || last.after === null) return <>moved from {label(first.before)} to {label(last.after)}{end}</>;
   const index = (value: unknown) => statuses(board).findIndex((s) => s.id === idOf(value));
   const from = index(first.before),
     to = index(last.after);
   if (idOf(first.before) === idOf(last.after) || (from >= 0 && from === to))
-    return `moved to ${label(changes.at(-2)!.after)}, then back to ${label(last.after)}`;
-  if (changes.length === 2) return `moved to ${label(first.after)}, then to ${label(last.after)}`;
-  return `${from >= 0 && to >= 0 && from > to ? "moved back" : "moved"} from ${label(first.before)} to ${label(last.after)}`;
+    return <>moved to {label(changes.at(-2)!.after)}, then back to {label(last.after)}{end}</>;
+  // Linear's `so` reads "moved to A, then to B", which hides where the run started; Jira shows every from → to, so the
+  // start is named too.
+  if (changes.length === 2) return <>moved from {label(first.before)} to {label(first.after)}, then to {label(last.after)}{end}</>;
+  return <>{from >= 0 && to >= 0 && from > to ? "moved back" : "moved"} from {label(first.before)} to {label(last.after)}{end}</>;
 }
 
 /** Linear's grouped priority row (`pc`). */

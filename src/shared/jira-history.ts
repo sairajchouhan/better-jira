@@ -2,7 +2,8 @@
 export type HistoryActor = { id: string; name: string; avatar?: string; /** An app (automation, an integration, an agent), not a person. */ app?: boolean };
 /** One changed field. `from`/`to` are Jira's raw values (ids, keys, dates); the `…Text` sides its display text (Jira's
  *  fromString/toString, renamed so an absent one never reads as `Object.prototype.toString`).
- *  Jira leaves a side null when there was no value; document fields (description, comments) carry "" instead of their text. */
+ *  Jira leaves a side null when there was no value; document fields (environment, comments) carry "" instead of their text,
+ *  and the description carries its whole text (for its history). */
 export type HistoryItem = {
   field: string;
   fieldId?: string;

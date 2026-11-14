@@ -56,3 +56,14 @@ export const fullTime = (iso: string) => {
   const d = new Date(iso);
   return `${d.toLocaleDateString("en-US", { weekday: "short" })} ${d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })}`;
 };
+
+/** Linear's `formatAbsoluteDate` (startup-root): "MMM d", with ", yyyy" when the date is not in this year. A date-only value
+ *  ("2026-11-07") is that local day. */
+export function absoluteDate(value: string | Date, now = new Date()): string {
+  const date = typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00`) : new Date(value);
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
+  });
+}

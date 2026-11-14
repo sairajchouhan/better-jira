@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Issue } from "@/shared/issue-model";
 import { ActivityIcon, ActivityRowWords, describeActivity, priorityRank, titleChangeLabel } from "./activity-entry";
+import { DescriptionHistoryProvider } from "./description-history";
 import { activityRows, type ActivityField, type PropertyActivity } from "./issue-activity";
 
 // Made-up shapes only (BJ-40): each Jira change kind sampled read-only from real tickets, worded as Linear's history chunk words it.
@@ -31,12 +32,19 @@ test("BJ-40: Linear's wording for the kinds Linear has (status, priority, assign
   expect(words(event("priority", "Highest", "Lowest"))).toBe("lowered priority from Highest to Lowest");
   expect(words(event("priority", "High", null))).toBe("removed priority");
   expect(words(event("assignee", null, { id: "u2", name: "Grace Example" }))).toBe("assigned to Grace Example");
-  expect(words(event("assignee", { id: "u2", name: "Grace" }, { id: "u3", name: "Lin" }))).toBe("re-assigned to Lin");
+  // Prod parity #3: Jira shows who had it; Linear's `Os` doesn't, so it is named in Linear's "from X" / "removed … X" pattern.
+  expect(words(event("assignee", { id: "u2", name: "Grace" }, { id: "u3", name: "Lin" }))).toBe("re-assigned from Grace to Lin");
   expect(words(event("assignee", null, { id: "ada", name: "Ada Example" }))).toBe("self-assigned the issue");
-  expect(words(event("assignee", { id: "u2", name: "Grace" }, null))).toBe("removed assignee");
-  expect(words(event("due", null, "2026-11-07"))).toBe("set the due date to Nov 7");
-  expect(words(event("due", "2026-11-07", "2026-11-09"))).toBe("changed the due date from Nov 7 to Nov 9");
-  expect(words(event("due", "2026-11-07", null))).toBe("removed due date");
+  expect(words(event("assignee", { id: "u2", name: "Grace" }, { id: "ada", name: "Ada Example" }))).toBe(
+    "self-assigned the issue (previously Grace)",
+  );
+  expect(words(event("assignee", { id: "u2", name: "Grace" }, null))).toBe("removed assignee Grace");
+  const year = new Date().getFullYear();
+  expect(words(event("due", null, `${year}-11-07`))).toBe("set the due date to Nov 7");
+  expect(words(event("due", `${year}-11-07`, `${year}-11-09`))).toBe("changed the due date from Nov 7 to Nov 9");
+  expect(words(event("due", `${year}-11-07`, null))).toBe("removed due date");
+  // Linear's formatAbsoluteDate adds the year outside this one.
+  expect(words(event("due", null, "2019-11-07"))).toBe("set the due date to Nov 7, 2019");
   expect(words(event("parent", null, "ABC-9"))).toBe("set parent to ABC-9");
   expect(words(event("parent", "ABC-8", "ABC-9"))).toBe("changed parent issue from ABC-8 to ABC-9");
   expect(words(event("parent", "ABC-8", null))).toBe("removed parent ABC-8");
@@ -44,7 +52,9 @@ test("BJ-40: Linear's wording for the kinds Linear has (status, priority, assign
   expect(renderToStaticMarkup(<>{describeActivity(event("title", "Old", "x".repeat(80)), issue)}</>)).toContain(
     `title="Previously: Old"`,
   );
-  expect(words(event("title", "Old", "x".repeat(80)))).toBe(`changed title to ${"x".repeat(70)}…`);
+  // lodash truncate({ length: 70, omission: "…" }): 69 characters and the omission.
+  expect(words(event("title", "Old", "x".repeat(80)))).toBe(`changed title to ${"x".repeat(69)}…`);
+  expect(words(event("title", "Old", "x".repeat(70)))).toBe(`changed title to ${"x".repeat(70)}`);
   expect(words(event("estimate", null, 2))).toBe("estimated complexity as 2");
   expect(words(event("estimate", 2, 5))).toBe("increased estimate from 2 to 5");
   expect(words(event("estimate", 5, 2))).toBe("lowered estimate from 5 to 2");
@@ -87,6 +97,10 @@ test("BJ-40: Jira-only kinds read plainly in the same pattern", () => {
   expect(words(event("resolution", "Done", null))).toBe("removed resolution");
   expect(words(event("type", "Task", "Bug"))).toBe("changed issue type from Task to Bug");
   expect(words(event("milestone", null, { id: "7", name: "Release 1" }))).toBe("added to milestone Release 1");
+  // Prod parity #13: the Linear term stays, and says it is Jira's Fix version on hover.
+  expect(renderToStaticMarkup(<>{describeActivity(event("milestone", null, { id: "7", name: "Release 1" }), issue)}</>)).toContain(
+    'title="Jira Fix version"',
+  );
   expect(words(event("milestone", { id: "7", name: "Release 1" }, null))).toBe("removed from milestone Release 1");
   expect(words(event("component", null, { id: "5", name: "Editor" }))).toBe("added component Editor");
   expect(words(event("attachment", null, { id: "9", name: "clip.mp4" }))).toBe("attached clip.mp4");
@@ -127,9 +141,43 @@ test("BJ-13: one record's changes split like Linear's: small kinds two to a row,
 });
 
 test("BJ-196: project names expose the old and new issue keys", () => {
-  const markup = renderToStaticMarkup(<>{describeActivity(event("project", { id: "1", name: "Old", key: "OLD-1" }, { id: "2", name: "New", key: "NEW-1" }), issue)}</>);
+  const move = event("project", { id: "1", name: "Old", key: "OLD-1" }, { id: "2", name: "New", key: "NEW-1" });
+  const markup = renderToStaticMarkup(<>{describeActivity(move, issue)}</>);
   expect(markup).toContain('title="OLD-1"');
   expect(markup).toContain('title="NEW-1"');
+  // Prod parity #10: Jira lists the Key change as its own row; people search by old keys, so they are in the text.
+  expect(words(move)).toBe("changed project from Old (OLD-1) to New (NEW-1)");
+});
+
+test("prod parity #12: a status change names the resolution its transition set", () => {
+  const move = event("status", { id: "qa", name: "QA" }, { id: "rtd", name: "Ready to Deploy", resolution: "Ready to deploy" });
+  expect(words(move)).toBe("moved from QA to Ready to Deploy and set resolution to Ready to deploy");
+  expect(group(event("status", state("To Do"), state("Doing")), event("status", state("Doing"), { ...state("Done"), resolution: "Wont do" }, ada, time(5)))).toBe(
+    "Ada Example moved from To Do to Doing, then to Done and set resolution to Wont do",
+  );
+});
+
+test("prod parity #20: a field value an app wrote as a link opens as a link", () => {
+  const html = renderToStaticMarkup(
+    <>{describeActivity(event("field", null, { name: "Associations", value: '&lt;a href="https://example.com/case/1"&gt;CASE-1&lt;/a&gt;' }), issue)}</>,
+  );
+  expect(html).toContain('href="https://example.com/case/1"');
+  expect(html).toContain(">CASE-1</a>");
+  const wiki = renderToStaticMarkup(<>{describeActivity(event("field", null, { name: "Associations", value: "[CASE-2|https://example.com/case/2]" }), issue)}</>);
+  expect(wiki).toContain('href="https://example.com/case/2"');
+  // A script URL is never a link.
+  expect(renderToStaticMarkup(<>{describeActivity(event("field", null, { name: "X", value: "[a|javascript:alert(1)]" }), issue)}</>)).not.toContain("href");
+});
+
+test("prod parity #8: an \"updated the description\" row opens the description history at its version", () => {
+  const edit = event("description", "Steps: a", "Steps: a, b");
+  const plain = renderToStaticMarkup(<>{describeActivity(edit, issue)}</>);
+  expect(plain).toBe("updated the description");
+  const linked = renderToStaticMarkup(
+    <DescriptionHistoryProvider events={[edit]}>{describeActivity(edit, issue)}</DescriptionHistoryProvider>,
+  );
+  expect(linked).toContain('title="Show description history"');
+  expect(linked).toContain("<button");
 });
 
 test("BJ-196: title group counts use Linear's words through twenty", () => {
@@ -152,8 +200,9 @@ const time = (minutes: number) => new Date(Date.parse("2026-03-01T09:00:00Z") + 
 const state = (id: string) => ({ id, name: id });
 
 test("F2: Linear's grouped status wording (`so`): two moves, a round trip, and a longer run by its ends", () => {
+  // Prod parity #2: Linear's "moved to A, then to B" hides where the run started; Jira shows it, so the start is named.
   expect(group(event("status", state("To Do"), state("Selected")), event("status", state("Selected"), state("Doing"), ada, time(5)))).toBe(
-    "Ada Example moved to Selected, then to Doing",
+    "Ada Example moved from To Do to Selected, then to Doing",
   );
   expect(
     group(
@@ -195,6 +244,18 @@ test("F2: Linear's grouped label wording (`yc`): added, removed, and added and t
     "Ada Example removed and then added old",
   );
   expect(group(event("labels", [], ["a"]), event("labels", ["a", "b"], ["a"], ada, time(3)))).toBe("Ada Example added a and removed b");
+  // Prod parity #6: a label removed, added and removed again ends off, so the summary says removed (Linear's `yc` said
+  // "removed and then added", by which came first); added, removed and added again ends on.
+  expect(
+    group(
+      event("labels", ["agent-working"], []),
+      event("labels", [], ["agent-working"], ada, time(1)),
+      event("labels", ["agent-working"], [], ada, time(2)),
+    ),
+  ).toBe("Ada Example removed agent-working");
+  expect(
+    group(event("labels", [], ["flag"]), event("labels", ["flag"], [], ada, time(1)), event("labels", [], ["flag"], ada, time(2))),
+  ).toBe("Ada Example added flag");
 });
 
 test("F2: a title group names every actor (`R`)", () => {

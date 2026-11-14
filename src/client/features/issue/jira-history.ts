@@ -6,6 +6,7 @@
  * shown once: Jira's echo of it replaces the local event.
  */
 import type { HistoryEntry, HistoryItem } from "@/shared/jira-history";
+import { absoluteDate } from "./issue-dates";
 import {
   changed,
   historyEvents,
@@ -70,8 +71,13 @@ export function mapItem(item: HistoryItem, entry: readonly HistoryItem[]): Mappe
   const id = fieldId ?? field;
   if (SKIPPED.has(field)) return null;
   switch (id) {
-    case "status":
-      return { field: "status", before: named(from, fromText), after: named(to, toText) };
+    case "status": {
+      // A resolution set by the same transition rides on the status change ("… and set resolution to Done"): Linear has no
+      // resolution, but Jira's "Ready to deploy" and "Done" are different ends. One cleared by a reopen is implied by it.
+      const resolution = entry.find((other) => (other.fieldId ?? other.field) === "resolution")?.toText;
+      const after = named(to, toText);
+      return { field: "status", before: named(from, fromText), after: after && resolution ? { ...after, resolution } : after };
+    }
     case "assignee":
       return { field: "assignee", before: named(from, fromText), after: named(to, toText) };
     case "priority":
@@ -98,7 +104,7 @@ export function mapItem(item: HistoryItem, entry: readonly HistoryItem[]): Mappe
       return { field: "field", before: value(fromText ?? from), after: value(toText ?? to) };
     }
     case "resolution":
-      // A resolution set by the transition it came with is that status change; Linear has no resolution.
+      // A resolution that came with a transition is shown on that status change.
       return entry.some((other) => (other.fieldId ?? other.field) === "status")
         ? null
         : { field: "resolution", before: nonEmpty(fromText), after: nonEmpty(toText) };
@@ -141,9 +147,21 @@ export function mapItem(item: HistoryItem, entry: readonly HistoryItem[]): Mappe
     case "Flagged":
       return { field: "flag", before: nonEmpty(fromText), after: nonEmpty(toText) };
   }
-  const value = (text: string | null): FieldValue | null =>
-    text === null ? null : { name: field, value: text };
-  return { field: "field", before: value(fromText), after: value(toText) };
+  // A date field's display text is Jira's server format ("15/Oct/26"); its raw value is ISO, read as Linear's dates read.
+  const value = (text: string | null, raw: string | null): FieldValue | null =>
+    text === null ? null : { name: field, value: isoDate(raw) ?? text };
+  return { field: "field", before: value(fromText, from), after: value(toText, to) };
+}
+
+/** A raw ISO date ("2026-10-15") or date-time from a date field, as "Oct 15" (Linear's `formatAbsoluteDate`, with the year when
+ *  it isn't this one) and a 24-hour time for a date-time. */
+export function isoDate(raw: string | null): string | null {
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return absoluteDate(raw);
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw) || Number.isNaN(Date.parse(raw.replace(/([+-]\d{2})(\d{2})$/, "$1:$2"))))
+    return null;
+  const date = new Date(raw.replace(/([+-]\d{2})(\d{2})$/, "$1:$2"));
+  return `${absoluteDate(date)} ${date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}`;
 }
 
 const UNKNOWN = { id: "unknown", name: "Someone" };

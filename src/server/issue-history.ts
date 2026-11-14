@@ -3,22 +3,28 @@ import { jiraAvatar } from "@/shared/avatar-url";
 import type { HistoryEntry, HistoryItem } from "@/shared/jira-history";
 
 /** Bump when the stored shape changes, so old rows are read again. */
-export const HISTORY_CACHE_VERSION = "2";
+export const HISTORY_CACHE_VERSION = "3";
 /** Jira's page cap for the changelog endpoint. */
 const PAGE = 100;
 /** Text fields whose values are whole documents: the Activity says they changed, never what to (Linear shows one line). */
-const DOCUMENT_FIELDS = new Set(["description", "environment", "comment", "Comment"]);
+const DOCUMENT_FIELDS = new Set(["environment", "comment", "Comment"]);
+/** The description keeps both texts: its row opens Linear's description history (`Xz` "Show description history"), which
+ *  diffs each version against the one before. Jira's changelog holds the whole wiki-markup text on both sides. */
+const VERSIONED_FIELDS = new Set(["description"]);
 /** Longer display values are cut: a line in the Activity, not a diff. */
 export const MAX_VALUE = 200;
+/** A description longer than this is cut: the history dialog shows a version, not an archive. */
+export const MAX_DOCUMENT = 50_000;
 
-const cut = (value: unknown): string | null => {
+const cut = (value: unknown, max = MAX_VALUE): string | null => {
   if (value === undefined || value === null) return null;
   const text = String(value);
-  return text.length > MAX_VALUE ? `${text.slice(0, MAX_VALUE - 1)}…` : text;
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 };
 
-/** A display value; a document's is only whether it was there. */
-const text = (value: unknown, document: boolean) => (document ? (value ? "" : null) : cut(value));
+/** A display value: a document's is only whether it was there; a versioned field's is its whole text. */
+const text = (value: unknown, kind: "document" | "versioned" | "value") =>
+  kind === "document" ? (value ? "" : null) : cut(value, kind === "versioned" ? MAX_DOCUMENT : MAX_VALUE);
 
 /** Jira's changelog entries, slimmed for the client: actor, time and each item's raw and display values, long text cut. */
 export function slimHistory(values: readonly any[]): HistoryEntry[] {
@@ -34,16 +40,17 @@ export function slimHistory(values: readonly any[]): HistoryEntry[] {
         }
       : null,
     items: (entry.items ?? []).map((item: any): HistoryItem => {
-      const document = DOCUMENT_FIELDS.has(item.fieldId ?? item.field);
+      const id = item.fieldId ?? item.field;
+      const kind = DOCUMENT_FIELDS.has(id) ? "document" : VERSIONED_FIELDS.has(id) ? "versioned" : "value";
       return {
         field: item.field,
         ...(item.fieldId ? { fieldId: item.fieldId } : {}),
         ...(item.fieldtype === "custom" ? { custom: true } : {}),
         from: cut(item.from),
-        fromText: text(item.fromString, document),
+        fromText: text(item.fromString, kind),
         to: cut(item.to),
         // Jira's toString read as an own key: a missing one is Object.prototype's function, not a value.
-        toText: text(Object.hasOwn(item, "toString") ? item.toString : null, document),
+        toText: text(Object.hasOwn(item, "toString") ? item.toString : null, kind),
       };
     }),
   }));

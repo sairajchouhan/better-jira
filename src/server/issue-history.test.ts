@@ -9,10 +9,11 @@ const entry = (id: number, items: any[], author: any = { accountId: "u1", displa
   items,
 });
 
-test("BJ-13: the changelog is slimmed: document text dropped, long values cut, apps marked", () => {
+test("BJ-13: the changelog is slimmed: document text dropped (the description's kept for its history), long values cut, apps marked", () => {
   const [a, b] = slimHistory([
     entry(1, [
       { field: "description", fieldtype: "jira", fieldId: "description", fromString: "old body", toString: "new body" },
+      { field: "environment", fieldtype: "jira", fieldId: "environment", fromString: "old env", toString: "new env" },
       { field: "summary", fieldtype: "jira", fieldId: "summary", fromString: "x".repeat(500), toString: "Short" },
     ]),
     entry(2, [{ field: "Team", fieldtype: "custom", fieldId: "customfield_1", to: "team-1", toString: "Builders" }], {
@@ -22,9 +23,11 @@ test("BJ-13: the changelog is slimmed: document text dropped, long values cut, a
     }),
   ]);
   expect(a!.at).toBe("2026-01-02T11:04:05.000Z");
-  expect(a!.items[0]).toMatchObject({ field: "description", fromText: "", toText: "" });
-  expect(a!.items[1]!.fromText).toHaveLength(MAX_VALUE);
-  expect(a!.items[1]!.toText).toBe("Short");
+  // Linear's description history diffs each version against the one before, so both texts stay.
+  expect(a!.items[0]).toMatchObject({ field: "description", fromText: "old body", toText: "new body" });
+  expect(a!.items[1]).toMatchObject({ field: "environment", fromText: "", toText: "" });
+  expect(a!.items[2]!.fromText).toHaveLength(MAX_VALUE);
+  expect(a!.items[2]!.toText).toBe("Short");
   expect(a!.actor?.app).toBeUndefined();
   expect(b!.actor).toMatchObject({ id: "bot", app: true });
   expect(b!.items[0]).toMatchObject({ custom: true, from: null, to: "team-1" });

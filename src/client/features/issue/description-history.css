@@ -1,0 +1,105 @@
+/* Linear's description history dialog (startup-root `sJt`, styles `Gz`) and its diff marks (`.editor-extension-diff
+   .inline-change-addition` / `.inline-change-deletion`). Colours are Linear's mixes (`Em.mixCss(a, b, t)` = a·(1−t) + b·t):
+   addition background controlPrimary into bgBase at .7, addition text controlPrimary into labelBase at .8, deletion
+   background labelFaint into bgBase at .85 light / .95 dark, deletion text and strike labelFaint. */
+.description-history {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  border-top: 0.5px solid var(--bg-border);
+  height: min(70vh, 640px);
+  --description-deletion-mix: 15%;
+}
+@media (prefers-color-scheme: dark) {
+  .description-history {
+    --description-deletion-mix: 5%;
+  }
+}
+.description-history-content {
+  overflow: auto;
+  padding: 16px 20px 24px;
+}
+.description-history-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+.description-history-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--fg-2);
+}
+.description-change-addition,
+.description-change-deletion {
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  border-radius: 3px;
+  padding: 1px 2px;
+  text-decoration: none;
+}
+.description-change-addition {
+  background-color: color-mix(in oklab, var(--accent) 30%, var(--card));
+  color: color-mix(in oklab, var(--accent) 20%, var(--fg));
+}
+.description-change-deletion {
+  background-color: color-mix(in oklab, var(--fg-4) var(--description-deletion-mix), var(--card));
+  background-image: linear-gradient(var(--fg-4), var(--fg-4));
+  background-position: 0 55%;
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
+  color: var(--fg-4);
+}
+.description-history-versions {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow: auto;
+  padding: 16px 12px;
+  border-left: 0.5px solid var(--bg-border);
+}
+.description-history-bucket {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.description-history-bucket-label {
+  padding: 0 8px;
+}
+.description-history-version {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  text-align: left;
+  font-size: 12px;
+  color: var(--fg-3);
+}
+.description-history-version:hover {
+  background: var(--row-hover);
+}
+.description-history-version[aria-current="true"] {
+  background: var(--sel);
+  color: var(--fg-2);
+}
+.description-history-version-time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-2);
+  font-weight: 500;
+}
+.description-history-version-actor {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.description-history-current {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 450;
+  color: var(--fg-3);
+}

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { HistoryEntry, HistoryItem } from "@/shared/jira-history";
 import { activityRows, recordActivity, type PropertyActivity } from "./issue-activity";
-import { historyChanges, linkRelation, mapItem, mergeHistory } from "./jira-history";
+import { historyChanges, isoDate, linkRelation, mapItem, mergeHistory } from "./jira-history";
 
 // Made-up fixtures with the shapes Jira's changelog uses (sampled read-only from real tickets, BJ-40).
 const ada = { id: "ada", name: "Ada Example" },
@@ -127,6 +127,34 @@ test("BJ-40: a resolution set by its transition is that status change; one set a
   expect(mapItem(resolution, [resolution])).toMatchObject({ field: "resolution", after: "Done" });
 });
 
+test("prod parity #12: the resolution a transition set rides on its status change, so Ready to deploy and Done stay apart", () => {
+  const resolution = item("resolution", { to: "7", toText: "Ready to deploy" }, "resolution"),
+    move = status("QA", "Ready to Deploy");
+  expect(mapItem(move, [move, resolution])).toMatchObject({
+    field: "status",
+    after: { id: "ready to deploy", name: "Ready to Deploy", resolution: "Ready to deploy" },
+  });
+  // A reopen clears the resolution; the status change says that already.
+  const reopen = status("Done", "In Progress"),
+    cleared = item("resolution", { from: "1", fromText: "Done" }, "resolution");
+  expect(mapItem(reopen, [reopen, cleared])!.after).toEqual({ id: "in progress", name: "In Progress" });
+});
+
+test("prod parity #19: a custom date field reads as a date, not Jira's server format", () => {
+  const year = new Date().getFullYear();
+  const date = item("Last update", { from: `${year}-10-15`, fromText: "15/Oct/26", to: `${year}-10-16`, toText: "16/Oct/26" });
+  expect(mapItem(date, [date])).toMatchObject({
+    field: "field",
+    before: { name: "Last update", value: "Oct 15" },
+    after: { name: "Last update", value: "Oct 16" },
+  });
+  expect(isoDate("2019-03-04")).toBe("Mar 4, 2019");
+  expect(isoDate("2019-03-04T09:30:00.000+0000")).toMatch(/^Mar 4, 2019 \d{2}:30$/);
+  // Not a date: Jira's text stays.
+  const text = item("Customers", { from: null, fromText: null, to: "10001", toText: "Example Co" });
+  expect(mapItem(text, [text])).toMatchObject({ after: { value: "Example Co" } });
+});
+
 test("BJ-40: Jira link phrases become Linear relation kinds", () => {
   expect(linkRelation("This work item is blocked by ABC-9", "ABC-9")).toEqual({ key: "ABC-9", kind: "blocked" });
   expect(linkRelation("This issue relates to ABC-9", "ABC-9")).toEqual({ key: "ABC-9", kind: "related" });
@@ -205,10 +233,12 @@ test("F2: DRFT-784's burst of attachments keeps each file at its own upload time
   expect(rows.map((r) => r.at)).toEqual([at(), ...files.map((f) => f.at)]);
 });
 
-test("F2: a description edit is listed though the server drops its text", () => {
+test("F2: a description edit is listed, carrying both texts for its history", () => {
   const events = mergeHistory([], [entry([item("description", { fromText: "", toText: "" }, "description")])]);
   expect(fields(events)).toEqual([["description", "", ""]]);
   expect(activityRows(events)).toHaveLength(1);
+  const edited = mergeHistory([], [entry([item("description", { fromText: "Steps: a", toText: "Steps: a, b" }, "description")])]);
+  expect(fields(edited)).toEqual([["description", "Steps: a", "Steps: a, b"]]);
 });
 
 test("BJ-13: an edit made here appears once: Jira's echo replaces it, an unsent one stays", () => {

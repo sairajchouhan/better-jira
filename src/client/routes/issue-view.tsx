@@ -5,6 +5,7 @@ import { type Issue, type User } from "@/shared/issue-model";
 import { useLocation } from "@tanstack/react-router";
 import { pageURL } from "@/client/features/navigation/app-navigation";
 import { activityTime as ago } from "@/client/features/issue/issue-dates";
+import { DescriptionHistoryProvider } from "@/client/features/issue/description-history";
 import { AutoResizingTextArea } from "@/client/components/field";
 import { DocumentLoadingState } from "@/client/components/empty-state";
 import { showNotification } from "@/client/state/app-notifications";
@@ -860,15 +861,16 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
   // Jira's whole history arrives after the details (BJ-13); until then the Activity shows this app's own edits.
   const history = useIssueHistory(issue.key, f?.updated);
   const comments: any[] | undefined = f?.comment?.comments;
+  const activity = useMemo(() => mergeHistory(issue.activity ?? [], history), [issue.activity, history]);
   const events = useMemo(
     () =>
       activityEvents(
-        { ...issue, activity: mergeHistory(issue.activity ?? [], history) },
+        { ...issue, activity },
         // Linear groups only adjacent history entries, so a comment thread between two changes keeps them apart.
         (comments ?? []).flatMap((comment) => (comment.parentId ? [] : [comment.created])),
         ME,
       ),
-    [issue, history, comments],
+    [issue, activity, comments],
   );
   // Linear's Activity starts with "created"; it opens the first run, so a long history folds after it.
   // BJ-14: the issue's creator (not its reporter) and the mirrored created time.
@@ -950,17 +952,19 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
           )}
         </button>
       </div>
-      <ol className="space-y-3">
-        <CommentThreads
-          issue={issue}
-          comments={(f.comment?.comments ?? []).filter((c: any) => !imageComments.has(c.id))}
-          avatar={(c) => <Avatar user={author(c.author)} size={18} />}
-          me={<Avatar user={ME} size={18} />}
-          timestamp={timestamp}
-          events={items}
-          run={(run, place) => <ActivityRun key={run[0]!.anchor} events={run} place={place} />}
-        />
-      </ol>
+      <DescriptionHistoryProvider events={activity} created={{ at: created, actor: creator }}>
+        <ol className="space-y-3">
+          <CommentThreads
+            issue={issue}
+            comments={(f.comment?.comments ?? []).filter((c: any) => !imageComments.has(c.id))}
+            avatar={(c) => <Avatar user={author(c.author)} size={18} />}
+            me={<Avatar user={ME} size={18} />}
+            timestamp={timestamp}
+            events={items}
+            run={(run, place) => <ActivityRun key={run[0]!.anchor} events={run} place={place} />}
+          />
+        </ol>
+      </DescriptionHistoryProvider>
       <div ref={commentRef} className="mt-[14px]">
         {/* A new key clears the box after sending; autoFocus keeps the caret in it. */}
         <CommentComposer
