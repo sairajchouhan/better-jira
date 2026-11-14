@@ -215,7 +215,7 @@ test("image cropping: keyboard and pointer geometry, unreadable sources, local p
     await page.click('[aria-label="Submit image comment"]');
     await page.waitFor(`${thread}.textContent.includes('First image review')`);
     expect(
-      await page.eval(`!!document.querySelector('[data-key="TEST-2"] [aria-label="1 comments"]')`),
+      await page.eval(`!!document.querySelector('[data-key="TEST-2"] [aria-label="1 comment"]')`),
     ).toBe(true);
     await page.waitFor(saved);
     await page.reload();
@@ -224,7 +224,7 @@ test("image cropping: keyboard and pointer geometry, unreadable sources, local p
     await page.click('#description [aria-label="Add image comment"]');
     expect(await page.eval(`${thread}.textContent`)).toContain("First image review");
     expect(
-      await page.eval(`!!document.querySelector('[data-key="TEST-2"] [aria-label="1 comments"]')`),
+      await page.eval(`!!document.querySelector('[data-key="TEST-2"] [aria-label="1 comment"]')`),
     ).toBe(true);
     await page.key("Escape");
     await page.waitFor(`!document.querySelector('.image-comment-thread')`);
@@ -266,7 +266,7 @@ test("image cropping: keyboard and pointer geometry, unreadable sources, local p
     await page.click('[aria-label="Leave a comment…"]');
     await page.type("Normal comment after deleting image review");
     await page.key("Enter", "meta");
-    await page.waitFor(`!!document.querySelector('[data-key="TEST-2"] [aria-label="1 comments"]')`);
+    await page.waitFor(`!!document.querySelector('[data-key="TEST-2"] [aria-label="1 comment"]')`);
     expect((await fixture.log()).requests.some((r) => r.method !== "GET")).toBe(false);
   });
   await test.step("cropped downloads contain PNG bytes and a PNG filename even for a JPEG-named source", async () => {

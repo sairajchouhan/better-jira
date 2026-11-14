@@ -269,7 +269,7 @@ test("the link, pull request, comment and creator badges behave like Linear's", 
     expect(await page.eval(`${hover}.textContent`)).toContain("Created the issue");
   });
   await test.step("comments: the click is Linear's Comment on issue — the issue opens with its comment box focused", async () => {
-    await page.click(`[data-key="TEST-2"] [aria-label="1 comments"]`);
+    await page.click(`[data-key="TEST-2"] [aria-label="1 comment"]`);
     await page.waitFor(`${shownIssue}==="TEST-2"`);
     await page.waitFor(`!!document.activeElement?.closest("#comment")`);
   });

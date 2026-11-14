@@ -93,7 +93,7 @@ test("a comment becomes an issue and a sub-issue, then its thread is deleted lik
     await page.goto("?board=1");
     await page.waitFor(`!!document.querySelector('[data-key="TEST-2"]')`);
     expect(
-      await page.eval(`!!document.querySelector('[data-key="TEST-2"] [aria-label$=" comments"]')`),
+      await page.eval(`!!document.querySelector('[data-key="TEST-2"] :is([aria-label$=" comment"],[aria-label$=" comments"])')`),
     ).toBe(false);
   });
 });

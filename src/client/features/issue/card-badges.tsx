@@ -279,8 +279,7 @@ export function CommentBadge({ issue }: { issue: Issue }) {
   const label = `${count} ${count === 1 ? "comment" : "comments"}`;
   return (
     <Badge.Button
-      // The name the board specs (and screen readers) have always read: "<n> comments".
-      aria-label={`${count} comments`}
+      aria-label={label}
       title={label}
       onClick={() => {
         navigate({ selected: issue.key, panel: true });

@@ -19,7 +19,7 @@ const composerMedia = `document.querySelectorAll('#comment [contenteditable=fals
 const saved = `document.querySelector('[aria-label="Local save status"]')?.textContent==="Saved locally"`;
 /** The comment count on TEST-2's row, which every page keeps in the DOM. */
 const commentsOnTest2 = (n: number) =>
-  `document.querySelector('[data-key="TEST-2"] [aria-label$=" comments"]')?.getAttribute('aria-label')==="${n} comments"&&${saved}`;
+  `document.querySelector('[data-key="TEST-2"] :is([aria-label$=" comment"],[aria-label$=" comments"])')?.getAttribute('aria-label')==="${n} comment${n === 1 ? "" : "s"}"&&${saved}`;
 const threadsWith = (p: Page, text: string) =>
   p.eval<number>(
     `[...document.querySelectorAll('[data-thread]')].filter(n=>n.textContent.includes(${JSON.stringify(text)})).length`,
