@@ -715,7 +715,8 @@ test("R3-palette-shortcuts-D7: a write Jira has answers within the settle wait, 
     let written: Awaited<ReturnType<typeof applyOps>> | undefined;
     const write = applyOps("K-7", [{ op: "fields", fields: { priority: "High" } }], 1).then((w) => (written = w));
     // Jira's own calls take their (fake) turns until the write reads Jira's copy.
-    for (let i = 0; !read && i < 1000; i++) {
+    for (let i = 0; i < 1000; i++) {
+      if (read) break;
       jest.advanceTimersByTime(5);
       await Promise.resolve();
     }
