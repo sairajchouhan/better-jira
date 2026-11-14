@@ -282,21 +282,24 @@ const server = serve({
             client = form.get("client");
           if (!(file instanceof File))
             return Response.json({ error: "Choose a file." }, { status: 400 });
-          const { id, found } = await uploadAttachment(
+          const made = await uploadAttachment(
             req.params.key,
             file,
             typeof client === "string" && client ? client : undefined,
           );
-          const mediaId = await mirror.media.identify(id);
-          const issue = await jira(
-            `/rest/api/3/issue/${encodeURIComponent(req.params.key)}?fields=attachment`,
-          );
-          const attachment = issue.fields.attachment?.find((a: any) => String(a.id) === id) ?? {
-            id,
-            filename: file.name,
-            mimeType: file.type,
-            size: file.size,
-          };
+          const [mediaId, issue] = await Promise.all([
+            mirror.media.identify(made.id),
+            made.attachment && made.issueId
+              ? undefined
+              : jira(`/rest/api/3/issue/${encodeURIComponent(req.params.key)}?fields=attachment`),
+          ]);
+          const attachment = made.attachment ??
+            issue?.fields.attachment?.find((a: any) => String(a.id) === made.id) ?? {
+              id: made.id,
+              filename: file.name,
+              mimeType: file.type,
+              size: file.size,
+            };
           return Response.json({
             attachment: {
               id: String(attachment.id),
@@ -306,9 +309,9 @@ const server = serve({
               url: `/api/issues/${encodeURIComponent(req.params.key)}/attachments/${attachment.id}`,
               mediaId,
               // Matched after a lost answer, not answered by Jira: never deleted as an orphan.
-              ...(found ? { found: true } : {}),
+              ...(made.found ? { found: true } : {}),
             },
-            collection: `jira-${issue.id}`,
+            collection: `jira-${made.issueId ?? issue.id}`,
           });
         } catch (e) {
           return Response.json(

@@ -311,7 +311,7 @@ test("sync review 2-1: a lost upload is matched only to a new file no other uplo
   lose = true;
   await uploadAttachment("K-2", file, "f20").catch(() => {});
   lose = false;
-  expect(await uploadAttachment("K-2", file, "f21")).toEqual({ id: "902", found: false });
+  expect(await uploadAttachment("K-2", file, "f21")).toMatchObject({ id: "902", found: false });
   // f21 was sent while f20's was in flight, so Jira may list its file first.
   attachments.find((a) => a.id === "902").created = "2026-11-10T10:30:00.000Z";
   attachments.find((a) => a.id === "901").created = "2026-11-10T10:31:00.000Z";
@@ -319,6 +319,29 @@ test("sync review 2-1: a lost upload is matched only to a new file no other uplo
   expect(await uploadAttachment("K-2", file, "f20")).toEqual({ id: "901", found: true });
   expect(ledger.made("upload:f20")).toMatchObject({ key: "901", found: true });
   expect(attachments.map((a) => a.id)).toEqual(["800", "901", "902"]);
+});
+
+test("an upload answers with Jira's attachment and the issue's id from the read before the send: no read after it (BJ-233)", async () => {
+  const { uploadAttachment } = await import("./jira-writes");
+  answer = (path) => {
+    if (path === "/rest/api/3/issue/K-3/attachments")
+      return [{ id: 950, filename: "c.txt", mimeType: "text/plain", size: 4 }];
+    if (path === "/rest/api/3/issue/K-3?fields=attachment") return { id: "10042", fields: { attachment: [] } };
+    return {};
+  };
+  calls.length = 0;
+  expect(await uploadAttachment("K-3", new File(["abcd"], "c.txt"), "f30")).toEqual({
+    id: "950",
+    found: false,
+    attachment: { id: 950, filename: "c.txt", mimeType: "text/plain", size: 4 },
+    issueId: "10042",
+  });
+  expect(calls).toEqual(["GET /rest/api/3/issue/K-3?fields=attachment", "POST /rest/api/3/issue/K-3/attachments"]);
+  // A replay of an upload Jira already has names neither: the route reads the issue for them.
+  calls.length = 0;
+  answer = (path) =>
+    path === "/rest/api/3/issue/K-3?fields=attachment" ? { id: "10042", fields: { attachment: [{ id: 950 }] } } : {};
+  expect(await uploadAttachment("K-3", new File(["abcd"], "c.txt"), "f30")).toEqual({ id: "950", found: false });
 });
 
 test("sync review 2-2: an issue search can't find yet doesn't authorize a second create until the intent is old", async () => {

@@ -195,9 +195,19 @@ export function once(
  * the send: a lost answer is matched to a file this account attached since, of the same name and size, that no other
  * upload owns. Such a match is marked `found`: it may be the user's own file, so cleanup never deletes it.
  */
-export async function uploadAttachment(key: string, file: File, client?: string) {
-  const attachments = async () =>
-    ((await jira(`${at(key)}?fields=attachment`)).fields.attachment ?? []) as any[];
+export async function uploadAttachment(
+  key: string,
+  file: File,
+  client?: string,
+): Promise<{ id: string; found: boolean; attachment?: JiraAttachment; issueId?: string }> {
+  // Jira's answer to the send names the attachment, and the issue read before it gives the issue's id, so the tab's
+  // answer needs no read after the send (BJ-233). A replay has neither and reads the issue then.
+  let issueId: string | undefined, sent: JiraAttachment | undefined;
+  const attachments = async () => {
+    const issue = await jira(`${at(key)}?fields=attachment`);
+    issueId = issue.id && String(issue.id);
+    return (issue.fields.attachment ?? []) as any[];
+  };
   const ledgerClient = client && `upload:${client}`;
   const made = await once(
     ledgerClient,
@@ -206,6 +216,7 @@ export async function uploadAttachment(key: string, file: File, client?: string)
       const body = new FormData();
       body.append("file", file, file.name);
       const [attachment] = await jira(`${at(key)}/attachments`, { method: "POST", body });
+      sent = attachment;
       return String(attachment.id);
     },
     async ({ data: before }) => {
@@ -226,8 +237,12 @@ export async function uploadAttachment(key: string, file: File, client?: string)
     },
     async () => (await attachments()).map((a) => String(a.id)),
   );
-  return { id: made.id, found: made.found };
+  return made.replay || !sent
+    ? { id: made.id, found: made.found }
+    : { id: made.id, found: made.found, attachment: sent, issueId };
 }
+/** An attachment as Jira names it. */
+export type JiraAttachment = { id: string | number; filename: string; mimeType: string; size: number };
 /** Every comment on the issue, page by page. */
 async function allComments(key: string) {
   const comments: any[] = [];
