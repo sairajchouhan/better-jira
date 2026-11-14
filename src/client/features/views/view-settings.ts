@@ -15,6 +15,7 @@ import { saveDefaults } from "@/client/state/browser-preferences";
 import {
   defaultDisplay,
   defaultPreferences,
+  collapseAllFrom,
   resetDisplayPreferences,
   storedGroupOrder,
   updateFilter,
@@ -116,6 +117,9 @@ export const toggleCollapsed = (board: number, groups: string[]) =>
       ? ids.filter((id) => !groups.includes(id))
       : [...new Set([...ids, ...groups])],
   );
+/** Every group in `groups` takes the opposite of `ref`'s state (Linear's toggle-all, `collapseAllFrom`). */
+export const toggleAllCollapsed = (board: number, groups: string[], ref: string) =>
+  grouped(board, "collapsed", (ids) => collapseAllFrom(ids, groups, ref));
 /** "Save as default": the board's display becomes its default in this browser. Not while a view is open. */
 export async function saveDefault(board: number) {
   if (get().activeViewId) return;

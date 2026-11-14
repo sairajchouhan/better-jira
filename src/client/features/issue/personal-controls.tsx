@@ -922,15 +922,16 @@ export function groupMenuEntries({
   hide: () => void;
   completed: boolean;
   display: Display;
-  /** List groups only: the group's own toggle and the toggle for every group. */
-  collapse?: { collapsed: boolean; allCollapsed: boolean; toggle: () => void; toggleAll: () => void };
+  /** List groups only: the group's own toggle, and the toggle that gives every group the opposite of this one's state. */
+  collapse?: { collapsed: boolean; toggle: () => void; toggleAll: () => void };
 }): ActionEntry[] {
   const selectable = issues.length > 0 && !collapse?.collapsed;
   return joinGroups(
     collapse
       ? [
           { name: collapse.collapsed ? "Expand" : "Collapse", run: collapse.toggle },
-          { name: collapse.allCollapsed ? "Expand all" : "Collapse all", run: collapse.toggleAll },
+          // Linear's `$t` (ListCell): "Expand all" while this group is collapsed, whatever the other groups are.
+          { name: collapse.collapsed ? "Expand all" : "Collapse all", run: collapse.toggleAll },
         ]
       : [],
     [

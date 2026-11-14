@@ -310,6 +310,15 @@ export const defaultPreferences = (): Preferences => ({
   order: {},
 });
 
+/** Linear's toggle-all (Collapse all / Expand all, ⌥-click on a group's chevron, ⌥T: `toggleCollapsedItemKey(key, true)`, the
+ *  TOGGLE_ITEMS `toggleAllGroups` case of startup-root `Bit`): every group takes the opposite of `ref`'s current state, whatever
+ *  state the other groups are in. Returns the grouping's new collapsed ids. */
+export function collapseAllFrom(collapsed: readonly string[], groups: readonly string[], ref: string): string[] {
+  return collapsed.includes(ref)
+    ? collapsed.filter((id) => !groups.includes(id))
+    : [...new Set([...collapsed, ...groups])];
+}
+
 /** Stored hidden or collapsed groups: unknown groupings and non-string ids drop; anything else reads as none. */
 export const parseGroupIds = (saved: unknown): GroupIds =>
   saved && typeof saved === "object" && !Array.isArray(saved)

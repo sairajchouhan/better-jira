@@ -24,6 +24,7 @@ import { buckets, rankBetween } from "@/shared/view-model";
 import {
   clearFilters,
   setDisplay,
+  toggleAllCollapsed,
   toggleCollapsed,
   updateRule,
   viewSettings,
@@ -220,10 +221,10 @@ function collapse(all = false) {
       board,
       [...s.issues.values()],
     );
-  const ids = all
-    ? groups.map((g) => g.id)
-    : groups.filter((g) => g.issues.some((i) => i.key === s.selected)).map((g) => g.id);
-  toggleCollapsed(s.board, ids);
+  const own = groups.filter((g) => g.issues.some((i) => i.key === s.selected)).map((g) => g.id);
+  // ⌥T: every group takes the opposite of the selected issue's group (Linear's `toggleAllGroupsAction`, from the active item).
+  if (all && own[0]) return toggleAllCollapsed(s.board, groups.map((g) => g.id), own[0]);
+  toggleCollapsed(s.board, all ? groups.map((g) => g.id) : own);
 }
 
 /** Live Linear Chrome reference, 6 Nov 2026. Only existing personal workflows are included. */

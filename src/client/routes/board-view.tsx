@@ -9,9 +9,11 @@ import {
   clearFilters,
   hideGroup,
   showGroup,
+  toggleAllCollapsed,
   toggleCollapsed,
   useEffectiveSettings,
 } from "@/client/features/views/view-settings";
+import { collapseClick, collapseTip } from "@/client/features/views/group-collapse";
 import { ViewDetails, ResultsFeedback } from "@/client/features/views/views-navigation";
 import { useRegisterViewGroups } from "@/client/features/views/view-groups";
 import { GroupIcon } from "@/client/features/views/group-icon";
@@ -168,9 +170,8 @@ export const BoardView = memo(function BoardView({
                   bucket={c}
                   display={d}
                   collapsed={collapsed.includes(c.id)}
-                  allCollapsed={show.every((g) => collapsed.includes(g.id))}
                   toggle={() => collapse(c.id)}
-                  toggleAll={() => toggleCollapsed(board.id, show.map((g) => g.id))}
+                  toggleAll={() => toggleAllCollapsed(board.id, show.map((g) => g.id), c.id)}
                   hide={() => hide(c.id)}
                   create={() => createIn(c)}
                 />
@@ -430,13 +431,13 @@ function HiddenGroup({
 }
 
 /** A list group's header; right-click opens Linear's list group menu (useListContextualActions `h`). Linear's list header has no ⋯.
+ *  ⌥-click toggles every group from this one's state; the chevron's tooltip says so (CollapseListGroupButton `x`, `S`).
  *  It is `listHeaderHeight` (36px, startup-root `CM`) tall and sticks to the top of the list while its rows scroll under it
  *  (IssueList list `stickyHeaderLevels: +!!grouping`); the section bounds it, so the next group's header takes its place. */
 function GroupHeading({
   bucket,
   display,
   collapsed,
-  allCollapsed,
   toggle,
   toggleAll,
   hide,
@@ -445,8 +446,8 @@ function GroupHeading({
   bucket: Bucket;
   display: Display;
   collapsed: boolean;
-  allCollapsed: boolean;
   toggle: () => void;
+  /** Every group takes the opposite of this one's state (Collapse all, ⌥-click). */
   toggleAll: () => void;
   hide: () => void;
   create: () => void;
@@ -458,7 +459,7 @@ function GroupHeading({
       hide,
       completed: bucket.status?.category === "done",
       display,
-      collapse: { collapsed, allCollapsed, toggle, toggleAll },
+      collapse: { collapsed, toggle, toggleAll },
     });
   return (
     <ContextMenu label={`Group ${bucket.name}`} entries={entries}>
@@ -466,10 +467,13 @@ function GroupHeading({
         <button
           aria-label={`${collapsed ? "Expand" : "Collapse"} ${bucket.name}`}
           aria-expanded={!collapsed}
-          onClick={toggle}
+          onClick={(e) => collapseClick(e, toggle, toggleAll)}
           className="flex flex-1 items-center gap-2 text-left"
         >
-          <Icon name={collapsed ? "chevron" : "down"} />
+          {/* Linear's tooltip sits on the chevron only (CollapseListGroupButton `v`). */}
+          <span title={collapseTip(collapsed)} className="flex">
+            <Icon name={collapsed ? "chevron" : "down"} />
+          </span>
           {bucket.status && <StatusIcon status={bucket.status} />}
           <span>{bucket.name}</span>
           <span className="text-fg-3">{bucket.issues.length}</span>

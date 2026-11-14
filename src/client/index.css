@@ -1522,6 +1522,17 @@ li[data-done="true"] > .todo-content {
   line-height: 18px;
   pointer-events: none;
 }
+/* Linear's multi-line tooltip (CollapseListGroupButton `x`: a column, gap 6), each line a shortcut then its text (`N_`, shortcutPosition "start"). */
+.app-tooltip.app-tooltip-lines {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.app-tooltip-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
 .video-tooltip {
   position: absolute;
   z-index: 5;

@@ -1,6 +1,7 @@
 import { type Board, type Issue } from "@/shared/issue-model";
 import { describe, expect, test } from "bun:test";
 import {
+  collapseAllFrom,
   ORDERINGS,
   PROPERTIES,
   pickLabels,
@@ -638,4 +639,14 @@ test("board Display options use Linear's link wording; pickLabels reads the shar
     ["due", "Due date"],
   ]);
   expect(() => pickLabels(PROPERTIES, ["nope" as never])).toThrow();
+});
+
+test("toggle-all gives every group the opposite of the clicked group's state (Linear's `Bit` toggleAllGroups)", () => {
+  const groups = ["todo", "doing", "done"];
+  // The clicked group is open while another is collapsed: every group collapses.
+  expect(collapseAllFrom(["done"], groups, "todo").sort()).toEqual(["doing", "done", "todo"]);
+  // The clicked group is collapsed while the others are open: every group opens.
+  expect(collapseAllFrom(["todo"], groups, "todo")).toEqual([]);
+  // Collapsed groups of other groupings' ids outside `groups` are kept.
+  expect(collapseAllFrom(["gone", "todo"], groups, "todo")).toEqual(["gone"]);
 });
