@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
-import { FindField } from "./find-field";
+import { EXIT_FALLBACK_MS, FindField, nextPresence } from "./find-field";
 
 const render = (props: { className?: string; inputClassName?: string } = {}) =>
   renderToStaticMarkup(
@@ -61,4 +61,45 @@ test("find-field.css carries Adi's default geometry and Idi's container", () => 
   // The keyboard ring sits on the border, inside the box (oy.inputOutlineOffset), so it never draws a second, outer ring.
   const field = readFileSync(new URL("./field.css", import.meta.url), "utf8");
   expect(field.slice(field.indexOf(".ui-input {"), field.indexOf("}", field.indexOf(".ui-input {")))).toContain("outline-offset: -1px;");
+});
+
+test("FindField.Presence keeps a closed field while it leaves, and brings a reopened one back as a new field", () => {
+  const shown = { open: true, present: true, generation: 0 };
+  // Closing keeps it present (leaving); FindField.Presence drops it when its exit ends.
+  const leaving = nextPresence(shown, false);
+  expect(leaving).toEqual({ open: false, present: true, generation: 0 });
+  // Reopened mid-exit (or after), it is a new field: a fresh term and Debouncer from its owner.
+  expect(nextPresence(leaving, true)).toEqual({ open: true, present: true, generation: 1 });
+  expect(nextPresence({ open: false, present: false, generation: 1 }, true)).toEqual({ open: true, present: true, generation: 2 });
+  expect(nextPresence(shown, true)).toBe(shown);
+  const field = (open: boolean) =>
+    renderToStaticMarkup(
+      <FindField.Presence open={open}>
+        <FindField id="find-in-view" placeholder="Find in view…" onValueChange={() => {}} onClose={() => {}} />
+      </FindField.Presence>,
+    );
+  expect(field(true)).toContain('id="find-in-view"');
+  expect(field(true)).not.toContain("data-leaving");
+  expect(field(false)).toBe("");
+});
+
+test("closing, the field fades 8px up over 150ms easeOut (Linear's rh exit), and not at all under reduced motion", () => {
+  const css = readFileSync(new URL("./find-field.css", import.meta.url), "utf8");
+  const at = css.indexOf(".ui-find[data-leaving] {");
+  expect(at).toBeGreaterThan(-1);
+  expect(css.slice(at, css.indexOf("}", at))).toContain("animation: ui-find-out 0.15s ease-out forwards;");
+  expect(css).toMatch(/@keyframes ui-find-out \{\s*to \{\s*opacity: 0;\s*transform: translateY\(-8px\);/);
+  expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.ui-find,\s*\.ui-find\[data-leaving\] \{\s*animation: none;/);
+  expect(EXIT_FALLBACK_MS).toBeGreaterThan(150);
+});
+
+test("the board's find floats in its header like the inbox's (ContentViewHeaderInlineSearch), and the header's buttons fade under it", () => {
+  const chrome = readFileSync(new URL("../features/navigation/app-chrome.tsx", import.meta.url), "utf8");
+  const header = chrome.slice(chrome.indexOf("export function BoardHeader"), chrome.indexOf("// --- board ---"));
+  const row = header.slice(header.indexOf("<PageHeader"), header.indexOf("</PageHeader>"));
+  expect(row).toContain('<PageHeader className="relative justify-between">');
+  expect(row).toMatch(/<FindField\.Presence open=\{finding\}>\s*<FindField\s+id="find-in-view"/);
+  expect(row).toContain('className="absolute top-1.5 right-2 z-10 w-[160px]"');
+  expect(row).toMatch(/inert=\{finding\}[\s\S]*pointer-events-none opacity-0[\s\S]*New issue/);
+  expect(header.slice(header.indexOf("</PageHeader>"))).not.toContain("<FindField");
 });

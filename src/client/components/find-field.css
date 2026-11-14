@@ -11,6 +11,11 @@
     overflow: hidden;
     animation: ui-find-in 0.15s ease-out;
   }
+  /* FindField.Presence: closing, it leaves the way it came (`rh` exit {opacity: 0, y: -8}, 150ms easeOut), then unmounts. */
+  .ui-find[data-leaving] {
+    animation: ui-find-out 0.15s ease-out forwards;
+    pointer-events: none;
+  }
   /* Adi's search input at its default appearance (`R7.input` + `jdi.default`): 28px, 32px in for the glyph, 25px kept
      for the trailing button, a medium weight and a labelMuted placeholder, over the surface it floats on
      (inputBackground is the theme's bgBase). */
@@ -37,8 +42,16 @@
   }
 }
 
+@keyframes ui-find-out {
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .ui-find {
+  .ui-find,
+  .ui-find[data-leaving] {
     animation: none;
   }
 }

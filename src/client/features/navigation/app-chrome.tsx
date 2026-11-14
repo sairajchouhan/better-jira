@@ -490,7 +490,7 @@ export function BoardHeader() {
   const personTab = useStore((s) => s.personTab);
   return (
     <header className="shrink-0">
-      <PageHeader className="justify-between">
+      <PageHeader className="relative justify-between">
         <div className="flex min-w-0 items-center pr-1 text-[13px] font-medium text-fg-2">
           <BoardBreadcrumbs board={board!} />
           {/* Linear: star, then ⋯ — 28px round buttons, 14px glyphs, 4px apart; hover fills --crumb-hover and whitens the glyph. */}
@@ -503,12 +503,36 @@ export function BoardHeader() {
             </ViewMenu>
           )}
         </div>
-        <IconButton label="Search issues" variant="muted" size="small" onClick={() => runShortcut("search")} className="ml-auto md:hidden">
-          <Icon name="search" />
-        </IconButton>
-        <Button variant="muted" size="medium" icon={<Icon name="plus" />} onClick={() => beginCreateInView()}>
-          New issue
-        </Button>
+        {/* Linear's header topRight (`Wdi`): while the find field floats over it, inert and faded out (opacity .15s ease). */}
+        <div
+          inert={finding}
+          className={`flex shrink-0 items-center transition-opacity duration-150 ease-[ease] motion-reduce:transition-none ${finding ? "pointer-events-none opacity-0" : ""}`}
+        >
+          <IconButton label="Search issues" variant="muted" size="small" onClick={() => runShortcut("search")} className="md:hidden">
+            <Icon name="search" />
+          </IconButton>
+          <Button variant="muted" size="medium" icon={<Icon name="plus" />} onClick={() => beginCreateInView()}>
+            New issue
+          </Button>
+        </div>
+        {/* Linear's ContentViewHeaderInlineSearch: in the header's top row, absolute, 6px down, 8px in from the right (r2r's
+            minPaddingRight), 160px at most and over the buttons (z-index 10); it fades in and out (FindField.Presence). */}
+        <FindField.Presence open={finding}>
+          <FindField
+            id="find-in-view"
+            ref={findRef}
+            placeholder="Find in view…"
+            defaultValue={query}
+            onValueChange={(term) => ui.send({ type: "query.set", query: term })}
+            onClose={() => {
+              set({ findInView: false });
+              ui.send({ type: "query.set", query: "" });
+            }}
+            className="absolute top-1.5 right-2 z-10 w-[160px]"
+          >
+            <FindField.Clear />
+          </FindField>
+        </FindField.Presence>
       </PageHeader>
       {/* Linear: custom views (and their editor) show only the breadcrumb, no team tabs. The editor floats this row's
           controls into its card, so a custom draft collapses the row. */}
@@ -548,22 +572,6 @@ export function BoardHeader() {
           <Icon name="side" />
         </IconButton>
       </div>
-      {finding && (
-        <FindField
-          id="find-in-view"
-          ref={findRef}
-          placeholder="Find in view…"
-          defaultValue={query}
-          onValueChange={(term) => ui.send({ type: "query.set", query: term })}
-          onClose={() => {
-            set({ findInView: false });
-            ui.send({ type: "query.set", query: "" });
-          }}
-          className="mx-3 mb-2"
-        >
-          <FindField.Clear />
-        </FindField>
-      )}
       <ViewEditorPage />
       {board && <ViewFilterBar board={board} />}
     </header>

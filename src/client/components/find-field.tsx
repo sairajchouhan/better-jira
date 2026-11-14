@@ -18,6 +18,47 @@ import "./find-field.css";
  */
 const FindContext = createContext<{ text: string; close: () => void } | null>(null);
 
+/** Set by FindField.Presence while the field it holds is leaving: `done` unmounts it. */
+const LeavingContext = createContext<{ done: () => void } | null>(null);
+
+/** Linear's exit lasts 150ms (`rh` exit, `transition: {duration: .15}`); a little past it, the field goes whether or not its
+ *  animation reported its end (a background tab, or no animation at all under reduced motion). */
+export const EXIT_FALLBACK_MS = 200;
+
+/**
+ * Whether FindField.Presence renders its field, and whether that field is leaving, from the `open` it was given and what it was
+ * before. A field that opens again while leaving comes back as a new one (`generation`), with a fresh term from its owner.
+ */
+export type Presence = { open: boolean; present: boolean; generation: number };
+export function nextPresence(state: Presence, open: boolean): Presence {
+  if (open === state.open) return state;
+  return open ? { open, present: true, generation: state.generation + 1 } : { ...state, open };
+}
+
+/**
+ * Linear's AnimatePresence around the find field (`rh`, `initial: false`): an open field shows at once, and a closed one stays
+ * while it fades 8px up over 150ms, easeOut, inert, before it unmounts. Under reduced motion it goes at once.
+ *
+ *   <FindField.Presence open={finding}>
+ *     <FindField … />
+ *   </FindField.Presence>
+ */
+function Presence({ open, children }: { open: boolean; children: ReactNode }) {
+  const [state, setState] = useState<Presence>({ open, present: open, generation: 0 });
+  const next = nextPresence(state, open);
+  if (next !== state) setState(next);
+  // One value for the whole exit, so the field's fallback timer starts once, however often its owner renders meanwhile.
+  const [leaving] = useState(() => ({
+    done: () => setState((current) => (current.open ? current : { ...current, present: false })),
+  }));
+  if (!next.present) return null;
+  return (
+    <LeavingContext key={next.generation} value={next.open ? null : leaving}>
+      {children}
+    </LeavingContext>
+  );
+}
+
 function FindFieldRoot({
   ref,
   id,
@@ -46,8 +87,17 @@ function FindFieldRoot({
 }) {
   const [text, setText] = useState(defaultValue);
   const [send] = useState(() => new Debouncer(onValueChange, { wait: 150 }));
+  const leaving = use(LeavingContext);
   useEffect(() => () => send.cancel(), [send]);
+  useEffect(() => {
+    if (!leaving) return;
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return leaving.done();
+    const timer = setTimeout(leaving.done, EXIT_FALLBACK_MS);
+    return () => clearTimeout(timer);
+  }, [leaving]);
   const close = () => {
+    // Already closed: a leaving field's blur (it turns inert) closes nothing again.
+    if (leaving) return;
     send.cancel();
     onClose();
   };
@@ -67,11 +117,19 @@ function FindFieldRoot({
   };
   return (
     <FindContext value={{ text, close }}>
-      <div className={`ui-find ${className}`}>
+      {/* Leaving, it gives up its id and ref at once, so the next field (and a lookup by id, or ⌘F) never finds two. */}
+      <div
+        className={`ui-find ${className}`}
+        data-leaving={leaving ? "" : undefined}
+        inert={!!leaving}
+        onAnimationEnd={(event) => {
+          if (leaving && event.animationName === "ui-find-out") leaving.done();
+        }}
+      >
         <form className="relative flex items-center" onSubmit={(event) => event.preventDefault()}>
           <TextInput
-            ref={ref}
-            id={id}
+            ref={leaving ? undefined : ref}
+            id={leaving ? undefined : id}
             type="search"
             aria-label={placeholder}
             placeholder={placeholder}
@@ -116,6 +174,7 @@ function TrailingButton({ label, title }: { label: string; title: string }) {
 }
 
 export const FindField = Object.assign(FindFieldRoot, {
+  Presence,
   /** Linear's `showCloseButton`: always there, and it closes the field (Escape). */
   Close: () => <TrailingButton label="Close" title={shortcutTitle("Close", "Escape")} />,
   /** Linear's Clear: there while the field holds text, and it closes the field as Close does (`onClear`). */

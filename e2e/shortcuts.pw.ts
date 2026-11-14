@@ -196,9 +196,23 @@ test("undo, find in view and issue keys, end to end", async ({ open }) => {
     await p.goto("");
     await p.key("f", "meta");
     await p.waitFor(`document.activeElement?.id==='find-in-view'`);
+    // BJ-296: Linear's ContentViewHeaderInlineSearch in the header's top row: 6px down, 8px in from its right (r2r's
+    // minPaddingRight), 160 × 28, over the header's buttons, which turn inert and fade out (Wdi, opacity .15s ease).
+    const place = await p.eval<number[]>(
+      `(() => { const f = document.getElementById('find-in-view').closest('.ui-find').getBoundingClientRect(),
+        h = document.getElementById('find-in-view').closest('[data-page-header]').getBoundingClientRect();
+        return [f.top - h.top, h.right - f.right, f.width, f.height]; })()`,
+    );
+    expect(place).toEqual([6, 8, 160, 28]);
+    await p.waitFor(
+      `(b => b.closest('[inert]') && getComputedStyle(b.closest('[inert]')).opacity === '0')([...document.querySelectorAll('[data-page-header] button')].find(b => b.textContent.includes('New issue')))`,
+    );
     await p.type("Rich browser");
     await p.waitFor(`document.querySelectorAll('[data-key]').length===1`);
     await p.key("Escape");
+    // It leaves the way it came (150ms) and the buttons come back.
+    await p.waitFor(`!document.querySelector('[data-page-header] .ui-find')`);
+    await p.waitFor(`!document.querySelector('[data-page-header] [inert]')`);
     await p.key("j");
     await p.key("Enter");
     await p.waitFor(`!!document.getElementById('summary')`);

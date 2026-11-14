@@ -871,7 +871,9 @@ export function InboxList() {
         >
           <Icon name="display" />
         </IconButton>
-        {findShown && !v.priorityInbox && <InboxFind ref={findRef} place="header" />}
+        <FindField.Presence open={findShown && !v.priorityInbox}>
+          <InboxFind ref={findRef} place="header" />
+        </FindField.Presence>
       </header>
       <InboxFilterBar v={v} base={base} />
       <div
