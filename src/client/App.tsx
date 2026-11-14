@@ -14,7 +14,7 @@ import {
   Relations,
   Subscribers,
 } from "@/client/features/issue/personal-controls";
-import { Tooltips } from "@/client/components/tooltip";
+import { TitleTooltips } from "@/client/components/tooltip";
 import { ToastViewport } from "@/client/components/toast";
 import { AppLoading, EmptyState } from "@/client/components/empty-state";
 import { Button } from "@/client/components/button";
@@ -95,7 +95,7 @@ function Shell({ children }: { children: ReactNode }) {
       <RouteTitle />
       <div className="flex min-h-0 flex-1">
         <Sidebar boards={boards} />
-        <Tooltips />
+        <TitleTooltips />
         <main
           tabIndex={-1}
           className="relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border-[0.5px] border-frame bg-panel shadow-(--frame-shadow)"

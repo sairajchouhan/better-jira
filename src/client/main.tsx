@@ -8,6 +8,7 @@
 import { StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { App } from "./App";
+import { Tooltip } from "./components/tooltip";
 import { ignoreBenignErrors } from "./lib/benign-errors";
 import { handOverBootShell } from "./boot-shell";
 
@@ -18,7 +19,10 @@ const elem = document.getElementById("root")!;
 handOverBootShell(elem);
 const app = (
   <StrictMode>
-    <App />
+    {/* The page's one tooltip state: every title tooltip, hover card and edge tooltip below shares it. */}
+    <Tooltip.Provider>
+      <App />
+    </Tooltip.Provider>
   </StrictMode>
 );
 

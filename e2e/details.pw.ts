@@ -414,7 +414,7 @@ test("BJ-253: the issue sidebar opens with Linear's Diffs section: its pull requ
     expect(await page.eval(`${card}.textContent`)).toContain("app#41");
   });
 
-  await test.step("moving to the next row swaps the card: only the hovered row's card is ever open (React Aria's one-open rule)", async () => {
+  await test.step("moving to the next row swaps the card: only the hovered row's card is ever open (the tooltip core's one-open rule)", async () => {
     const cards = `[...document.querySelectorAll('[data-hover-card="Pull request"]')].map(c=>c.textContent.includes("app#42")?"#42":"#41")`;
     const next = await page.rect('[data-pull-request-row="#42"] a');
     // Straight down from #41's card to #42, the path that left both cards stacked (DRFT-929).

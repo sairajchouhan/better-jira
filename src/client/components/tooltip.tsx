@@ -1,6 +1,29 @@
-import { useContext, useEffect, useEffectEvent, useLayoutEffect, useState, type RefObject } from "react";
-import { Tooltip, TooltipContext, TooltipTrigger, TooltipTriggerStateContext } from "react-aria-components";
+import {
+  createContext,
+  use,
+  useEffect,
+  useEffectEvent,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+  type RefObject,
+} from "react";
+import { Tooltip as AriaTooltip, TooltipTriggerStateContext } from "react-aria-components";
 import { Keycap } from "./keycap";
+import {
+  choosePlacement,
+  closeOnEscape,
+  createTooltipStore,
+  TOOLTIP,
+  TOOLTIP_TIMING,
+  tooltipFallbacks,
+  type Placement,
+  type Timing,
+  type TooltipStore,
+} from "./tooltip-rules";
 
 /** A title's "(keys)" display text as Linear's caps: one per modifier glyph or "+"-joined part ("⌘⇧S" → ⌘ ⇧ S, "Ctrl+K" → Ctrl K),
  *  sequence words ("then", "/") dropped. */
@@ -22,43 +45,201 @@ export function parseTip(raw: string): TipLine[] {
   });
 }
 
-/**
- * Linear's tooltip timing and geometry (startup-root `Rwe` and its constants), mapped onto React Aria's `delay`, `closeDelay`,
- * `offset` and `containerPadding`. React Aria's own rules supply the rest: one tooltip or hover card open at a time, the warm
- * window in which the next one opens at once, Escape, scroll, focus and touch.
- */
-export const TOOLTIP = {
-  /** `Rwe`: `w = transitionDelay ?? (interactive ? 550 : 450)`, a plain tooltip's rest before it opens. */
-  delay: 450,
-  /** A plain tooltip hides as the pointer leaves (`Rwe`'s mouse-out `be()` hides at once). */
-  closeDelay: 0,
-  /** `Nwe = i_.defaultOffset * 2`: 8px between the control and a plain tooltip. */
-  offset: 8,
-  /** `Fwe = 12`: the shift and size padding that keeps every tooltip and card inside the window. */
-  containerPadding: 12,
-} as const;
+// ─── The core: one store for the page, one Root per tooltip, React Aria's Tooltip for the surface ───────────────────────────────
 
-/** React Aria's state and trigger ref inside a `TooltipTrigger`, for a trigger this app renders itself (a hover card's span, a
- *  `title`d element): it calls `open`/`close` as React Aria's own trigger does, and React Aria's timers, warm-up and one-open rule
- *  decide what shows. React Aria's Escape listener and close-on-scroll read the same ref. */
-export function useTooltipTrigger() {
-  const state = useContext(TooltipTriggerStateContext);
-  const context = useContext(TooltipContext) as { triggerRef: RefObject<HTMLElement | null>; id?: string } | null;
-  if (!state || !context) throw new Error("useTooltipTrigger needs a TooltipTrigger");
-  return { state, triggerRef: context.triggerRef, id: context.id };
+/** The page's one tooltip store. Outside a Provider (server rendering, tests) every tooltip shares this one. */
+const StoreContext = createContext<TooltipStore>(createTooltipStore());
+
+/**
+ * The page's tooltip state, lifted above every trigger: the one-open store, and the Escape rule on the window (one press hides the
+ * open tooltip and goes on to the page; `closeOnEscape`). Every tooltip, hover card and edge tooltip reads it.
+ */
+function TooltipProvider({ children }: { children: ReactNode }) {
+  const [store] = useState(() => createTooltipStore());
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => void closeOnEscape(event, store);
+    addEventListener("keydown", key, true);
+    return () => removeEventListener("keydown", key, true);
+  }, [store]);
+  return <StoreContext value={store}>{children}</StoreContext>;
 }
+
+type RootValue = {
+  id: string;
+  isOpen: boolean;
+  /** The element the surface is placed against: the trigger, or an anchor inside it. */
+  triggerRef: RefObject<HTMLElement | null>;
+  /** The open surface (a card's whole box), for the pointer-out rule and the safe area. */
+  surfaceRef: RefObject<HTMLDivElement | null>;
+  /** The trigger's reports to the store. */
+  actions: { enter: () => void; move: () => void; leave: () => void; focus: () => void; close: () => void };
+};
+const RootContext = createContext<RootValue | null>(null);
+
+/** One tooltip's state and trigger, for its trigger and surface parts. */
+export function useTooltip() {
+  const root = use(RootContext);
+  if (!root) throw new Error("useTooltip needs a Tooltip.Root");
+  return root;
+}
+
+/**
+ * One tooltip: an id in the store, its timing, and its trigger ref. It hands React Aria's `Tooltip` a trigger state that is the
+ * store's, so React Aria places, portals and names the surface while the store alone opens and closes it. React Aria's own calls
+ * map back: its close on scroll (`close(true)`) hides; its hover start and end over the surface do nothing, since cards keep
+ * Linear's pointer-out rule (`keepsCardOpen`).
+ */
+function TooltipRoot({ timing, children }: { timing: Timing; children: ReactNode }) {
+  const store = use(StoreContext);
+  const id = useId();
+  const triggerRef = useRef<HTMLElement | null>(null);
+  const surfaceRef = useRef<HTMLDivElement | null>(null);
+  const isOpen = useSyncExternalStore(store.subscribe, () => store.isOpen(id), () => false);
+  const actions: RootValue["actions"] = {
+    enter: () => store.enter(id, timing),
+    move: () => store.move(id),
+    leave: () => store.leave(id),
+    focus: () => store.focus(id),
+    close: () => store.close(id),
+  };
+  useEffect(() => () => store.close(id), [store, id]);
+  const ariaState = { isOpen, open: () => {}, close: (immediate?: boolean) => immediate && store.close(id) };
+  return (
+    <RootContext value={{ id, isOpen, triggerRef, surfaceRef, actions }}>
+      <TooltipTriggerStateContext value={ariaState as never}>{children}</TooltipTriggerStateContext>
+    </RootContext>
+  );
+}
+
+/**
+ * The surface: React Aria's `Tooltip` against the Root's trigger, `offset` off it on the main axis and `Fwe` (12px) inside the
+ * window. Where it opens is Linear's: `placement` when it fits, else the first of `fallbacks` that does (`Bwe` through Floating
+ * UI's flip; `choosePlacement`), measured as it opens. While open its trigger is described by it.
+ */
+function TooltipSurface({
+  placement,
+  fallbacks = tooltipFallbacks(placement),
+  offset = TOOLTIP.offset,
+  className,
+  label,
+  children,
+}: {
+  placement: Placement;
+  fallbacks?: readonly Placement[];
+  offset?: number;
+  className: string;
+  label?: string;
+  children: ReactNode;
+}) {
+  const { id, isOpen, triggerRef, surfaceRef: surface } = useTooltip();
+  const [chosen, setChosen] = useState(placement);
+  const choose = useEffectEvent(() => {
+    const trigger = triggerRef.current,
+      box = surface.current?.getBoundingClientRect();
+    if (!trigger || !box) return;
+    setChosen(
+      choosePlacement({
+        placements: [placement, ...fallbacks],
+        reference: trigger.getBoundingClientRect(),
+        floating: { width: box.width, height: box.height },
+        viewport: { width: innerWidth, height: innerHeight },
+        offset,
+      }),
+    );
+  });
+  useLayoutEffect(() => {
+    if (isOpen) choose();
+  }, [isOpen]);
+  useLayoutEffect(() => {
+    const trigger = triggerRef.current;
+    if (!isOpen || !trigger) return;
+    const before = trigger.getAttribute("aria-describedby");
+    trigger.setAttribute("aria-describedby", before ? `${before} ${id}` : id);
+    return () => {
+      if (before) trigger.setAttribute("aria-describedby", before);
+      else trigger.removeAttribute("aria-describedby");
+    };
+  }, [isOpen, id, triggerRef]);
+  return (
+    <AriaTooltip
+      ref={surface}
+      // React Aria passes `id` through to the element (filterDOMProps); its props type leaves it out.
+      {...({ id } as object)}
+      triggerRef={triggerRef}
+      placement={chosen.replace("-", " ") as never}
+      shouldFlip={false}
+      offset={offset}
+      containerPadding={TOOLTIP.containerPadding}
+      aria-label={label}
+      className={className}
+    >
+      {children}
+    </AriaTooltip>
+  );
+}
+
+/** A title's lines as Linear draws them: one row, or a column of rows (`app-tooltip-lines`), each its text and caps. */
+function TooltipLines({ lines }: { lines: TipLine[] }) {
+  return lines.length === 1 ? (
+    <TipRow line={lines[0]!} />
+  ) : (
+    lines.map((line, index) => (
+      <span key={index} className="app-tooltip-line">
+        <TipRow line={line} />
+      </span>
+    ))
+  );
+}
+
+/** A line's text and caps. Linear's tooltip shortcut (Aze) is b4 at size small: its caps sit in D4's container, 3px apart. The title
+ *  already spells the caps in display order, so they are drawn as given rather than re-derived from a chord. */
+function TipRow({ line }: { line: TipLine }) {
+  const caps = line.keys.length > 0 && (
+    <span className="ui-shortcut">
+      {line.keys.map((key, index) => (
+        <Keycap key={index} size="small">
+          {key}
+        </Keycap>
+      ))}
+    </span>
+  );
+  return line.keysFirst ? (
+    <>
+      {caps}
+      {line.text}
+    </>
+  ) : (
+    <>
+      {line.text}
+      {caps}
+    </>
+  );
+}
+
+/**
+ * The core's parts. Every tooltip in the app is one of three variants built from them: `TitleTooltips` (every `title`, below),
+ * `HoverCard` (the interactive form, hover-card.tsx) and the resize handle's edge tooltip (resize-handle.tsx).
+ */
+export const Tooltip = {
+  Provider: TooltipProvider,
+  Root: TooltipRoot,
+  Surface: TooltipSurface,
+  Lines: TooltipLines,
+};
+
+// ─── Variant: the plain tooltip of every `title` ────────────────────────────────────────────────────────────────────────────────
 
 type Target = { element: HTMLElement; title: string; above: boolean; focus: boolean; serial: number };
 
 /** Where a parked `title` stays parked but shows no tooltip: inside a hover card or on its trigger, where the card is the one
- *  surface that opens (React Aria keeps one open at a time, so a title there would close the card). */
+ *  surface that opens (one open at a time, so a title there would close the card). */
 const QUIET = "[data-hover-card-trigger],[data-hover-card]";
 
 /** Linear's tooltip for every `title`: after a 450ms rest a menu-surface label sits 8px under the control (above for
- *  `data-tip="above"`, like Linear's timestamps, or when there is no room), with a trailing "(keys)" shown as key caps. One listener
- *  finds the titled element under the pointer (or keyboard focus); React Aria's `TooltipTrigger` and `Tooltip` time, place and
- *  dismiss it. The native title is parked in data-title while it is the target, so the browser's own tip never doubles it. */
-export function Tooltips() {
+ *  `data-tip="above"`, like Linear's timestamps), with a trailing "(keys)" shown as key caps. One listener finds the titled element
+ *  under the pointer (or keyboard focus) and mounts a Root for it. The native title is parked in data-title while it is the target,
+ *  so the browser's own tip never doubles it. */
+export function TitleTooltips() {
   const [target, setTarget] = useState<Target | null>(null);
   useEffect(() => followTitles(setTarget), []);
   return target ? <TitleTooltip key={target.serial} target={target} /> : null;
@@ -98,7 +279,7 @@ function followTitles(setTarget: (target: Target | null) => void) {
       setTarget({ element: next, title, above: next.dataset.tip === "above", focus, serial: ++serial });
   };
   const over = (event: PointerEvent) => {
-    // React Aria's useHover: a touch never hovers.
+    // A touch never hovers.
     if (event.pointerType === "touch") return;
     const next = (event.target as Element | null)?.closest?.<HTMLElement>("[title],[data-title]") ?? null;
     if (next === current || (pressed && next === pressed)) return;
@@ -110,11 +291,11 @@ function followTitles(setTarget: (target: Target | null) => void) {
     pressed = current;
     restore();
   };
-  // React Aria's trigger closes on any key but Escape, which its own listener handles (and keeps from the page).
+  // Any other key hides a title's tooltip; Escape is the Provider's (it hides whatever is open and lets the key through).
   const key = (event: KeyboardEvent) => {
     if (event.key !== "Escape") down();
   };
-  // React Aria's trigger opens on keyboard focus only (`isFocusVisible`), at once, and closes on blur.
+  // Keyboard focus opens at once and blur closes (React Aria's trigger rule, kept).
   const focusIn = (event: FocusEvent) => {
     const next = event.target as HTMLElement;
     if (next !== current && next.title && next.matches?.(":focus-visible")) show(next, true);
@@ -137,77 +318,35 @@ function followTitles(setTarget: (target: Target | null) => void) {
   };
 }
 
-/** One titled element's tooltip: a React Aria trigger mounted while the element is the target, so its timers start on mount
- *  and its unmount closes it (starting React Aria's cool-down, in which the next title opens at once). */
+/** One titled element's tooltip: a Root mounted while the element is the target (its unmount hides it and starts the warm window,
+ *  in which the next title opens at once). */
 function TitleTooltip({ target }: { target: Target }) {
   const lines = parseTip(target.title);
   return (
-    <TooltipTrigger delay={TOOLTIP.delay} closeDelay={TOOLTIP.closeDelay}>
+    <Tooltip.Root timing={TOOLTIP_TIMING.plain}>
       <TitleTrigger target={target} />
-      <Tooltip
+      <Tooltip.Surface
         placement={target.above ? "top" : "bottom"}
-        offset={TOOLTIP.offset}
-        containerPadding={TOOLTIP.containerPadding}
         className={`app-tooltip${lines.length > 1 ? " app-tooltip-lines" : ""}`}
       >
-        {lines.length === 1 ? (
-          <TipRow line={lines[0]!} />
-        ) : (
-          lines.map((line, index) => (
-            <span key={index} className="app-tooltip-line">
-              <TipRow line={line} />
-            </span>
-          ))
-        )}
-      </Tooltip>
-    </TooltipTrigger>
+        <Tooltip.Lines lines={lines} />
+      </Tooltip.Surface>
+    </Tooltip.Root>
   );
 }
 
-/** Points React Aria's trigger ref at the titled element and opens it as React Aria's trigger would: a hover waits out the delay
- *  (or opens at once while warm), keyboard focus opens at once. While open, the element is described by the tooltip. */
+/** Points the Root at the titled element and reports it: a hover enters (each move over it restarts the rest), keyboard focus opens
+ *  at once. The follower unmounts the Root when the pointer leaves, presses or types. */
 function TitleTrigger({ target: { element, focus } }: { target: Target }) {
-  const { state, triggerRef, id } = useTooltipTrigger();
-  const open = useEffectEvent(() => state.open(focus));
-  const close = useEffectEvent(() => state.close(true));
+  const { triggerRef, actions } = useTooltip();
+  const start = useEffectEvent(() => (focus ? actions.focus() : actions.enter()));
+  const move = useEffectEvent(() => actions.move());
   useLayoutEffect(() => {
     triggerRef.current = element;
-    open();
-    return () => close();
+    start();
+    const onMove = () => move();
+    element.addEventListener("pointermove", onMove);
+    return () => element.removeEventListener("pointermove", onMove);
   }, [element, triggerRef]);
-  useLayoutEffect(() => {
-    if (!state.isOpen || !id) return;
-    const before = element.getAttribute("aria-describedby");
-    element.setAttribute("aria-describedby", before ? `${before} ${id}` : id);
-    return () => {
-      if (before) element.setAttribute("aria-describedby", before);
-      else element.removeAttribute("aria-describedby");
-    };
-  }, [element, id, state.isOpen]);
   return null;
-}
-
-/** A line's text and caps. Linear's tooltip shortcut (Aze) is b4 at size small: its caps sit in D4's container, 3px apart. The title
- *  already spells the caps in display order, so they are drawn as given rather than re-derived from a chord. */
-function TipRow({ line }: { line: TipLine }) {
-  const caps = line.keys.length > 0 && (
-    <span className="ui-shortcut">
-      {line.keys.map((key, index) => (
-        <Keycap key={index} size="small">
-          {key}
-        </Keycap>
-      ))}
-    </span>
-  );
-  return line.keysFirst ? (
-    <>
-      {caps}
-      {line.text}
-    </>
-  ) : (
-    <>
-      {line.text}
-      {caps}
-    </>
-  );
 }

@@ -332,6 +332,15 @@ test("BJ-258: Escape in the side panel's title keeps the edit and the panel; a s
   });
 });
 
+test("BJ-283: one Escape closes an open tooltip and the side panel under it, as Linear's does", async ({ open }) => {
+  const p = await open("?issue=TEST-2&view=side");
+  await p.waitFor(`!!document.getElementById('prop-status')`);
+  await p.hover("#prop-status");
+  await p.waitFor(`!!document.querySelector('[role=tooltip].app-tooltip')`, 2000);
+  await p.key("Escape");
+  await p.waitFor(`!document.querySelector('.app-tooltip')&&!new URLSearchParams(location.search).has('issue')`);
+});
+
 test("R1-D4, R1-D64: with Jira writes, delete asks in the app, names the row, and counts the subtasks Jira deletes too", async ({
   open,
 }) => {

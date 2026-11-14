@@ -1532,13 +1532,17 @@ li[data-done="true"] > .todo-content {
   gap: 4px;
 }
 /* Linear's interactive tooltip wrapper (`Vwe` → `Gwe`): a transparent `Pwe` (4px) pad before and after the card on its main
-   axis, so the pointer crosses from the trigger into the card without leaving both. React Aria names the side it opened on. */
-.hover-card[data-placement="top"],
-.hover-card[data-placement="bottom"] {
+   axis, so the pointer crosses from the trigger into the card without leaving both. React Aria names the side it opened on.
+   The zone is the card's whole box and holds its safe area (`Jwe`). */
+.hover-card-zone {
+  position: relative;
+}
+.hover-card[data-placement="top"] > .hover-card-zone,
+.hover-card[data-placement="bottom"] > .hover-card-zone {
   padding-block: 4px;
 }
-.hover-card[data-placement="left"],
-.hover-card[data-placement="right"] {
+.hover-card[data-placement="left"] > .hover-card-zone,
+.hover-card[data-placement="right"] > .hover-card-zone {
   padding-inline: 4px;
 }
 .video-tooltip {
