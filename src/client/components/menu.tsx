@@ -11,7 +11,6 @@ import {
   type Middleware,
 } from "@floating-ui/react";
 import { Throttler } from "@tanstack/pacer";
-import { useHotkey } from "@tanstack/react-hotkeys";
 import { Command } from "cmdk";
 import {
   createContext,
@@ -290,10 +289,10 @@ type MenuLevel = {
     /** A submenu opened: its row takes the highlight. */
     opened: (value: string) => void;
   };
-  meta: { root: RefObject<HTMLDivElement | null> };
+  meta: { root: () => HTMLDivElement | null };
 };
 type Point = { x: number; y: number };
-type SubmenuHandle = {
+export type SubmenuHandle = {
   open: boolean;
   close: () => void;
   preview: () => void;
@@ -301,6 +300,11 @@ type SubmenuHandle = {
   hover: (at: Point) => void;
 };
 const MenuLevelContext = createContext<MenuLevel | null>(null);
+
+/** A submenu row opened: it takes the level's highlight, unless it holds it already. `level` is the level as last rendered. */
+export function openedIn(level: { highlight: (value: string) => void; highlighted: string }, key: string) {
+  if (key !== level.highlighted) level.highlight(key);
+}
 
 /**
  * What a pointer move onto row `next` does, given the row the pointer was last on (`under`) and the highlighted row: a move
@@ -374,6 +378,15 @@ function MenuRoot({
     for (const [key, submenu] of submenus.current) if (key !== next) submenu.close();
     if (previews.current) submenus.current.get(next)?.preview();
   };
+  // The level's actions run from its rows' handlers, after this render has committed, so they read its highlight through a ref.
+  const latest = useRef({ highlight, highlighted });
+  useLayoutEffect(() => {
+    latest.current = { highlight, highlighted };
+  });
+  // One value for the menu's life: a highlight change re-renders this menu, never every submenu row through the context
+  // (Linear's i3e memoises it the same way).
+  // Its actions only read refs, so the React Compiler keeps one value for the menu's life (no useState initializer: one reading refs
+  // runs during render and makes the compiler skip the menu, BJ-233).
   const level: MenuLevel = {
     actions: {
       register: (key, submenu) => {
@@ -382,11 +395,9 @@ function MenuRoot({
           if (submenus.current.get(key) === submenu) submenus.current.delete(key);
         };
       },
-      opened: (key) => {
-        if (key !== highlighted) highlight(key);
-      },
+      opened: (key) => openedIn(latest.current, key),
     },
-    meta: { root },
+    meta: { root: () => root.current },
   };
   const rows = () =>
     [...(root.current?.querySelectorAll<HTMLElement>(ROWS) ?? [])].filter(
@@ -830,6 +841,14 @@ function SafeTriangle({
   return <div ref={ref} aria-hidden data-safe-triangle style={{ display: "none" }} />;
 }
 
+/** A plain ← or Backspace: the keys that step back out of a submenu. */
+export const backKey = (event: { key: string; altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) =>
+  (event.key === "ArrowLeft" || event.key === "Backspace") &&
+  !event.altKey &&
+  !event.ctrlKey &&
+  !event.metaKey &&
+  !event.shiftKey;
+
 /**
  * A row that opens a nested menu (Linear's Item `SubMenu`): the pointer highlighting it opens it, ArrowRight, Enter or Space opens and
  * focuses it, a keyboard highlight that rests on the row for 300ms previews it without moving focus (Linear's _6e). The pointer
@@ -914,7 +933,7 @@ function MenuSubmenu({
       keep,
     ],
   });
-  const parentInput = () => level?.meta.root.current?.querySelector<HTMLInputElement>("input");
+  const parentInput = () => level?.meta.root()?.querySelector<HTMLInputElement>("input");
   /** Linear's yieldFocus: focus goes back to the parent menu, so its Escape and keys work, and the submenu stays open. */
   const yieldFocus = () => {
     if (refs.floating.current?.contains(document.activeElement)) parentInput()?.focus();
@@ -954,27 +973,6 @@ function MenuSubmenu({
     }),
   );
   useEffect(() => () => clearTimeout(previewTimer.current), []);
-  // ← at the start of the search, or Backspace on an empty one (not a held key that just emptied it), steps back one level.
-  useHotkey(
-    "ArrowLeft",
-    (event) => {
-      const input = event.target instanceof HTMLInputElement ? event.target : null;
-      if (input?.value && input.selectionStart !== 0) return;
-      event.preventDefault();
-      back();
-    },
-    { target: refs.floating, capture: true, ignoreInputs: false, preventDefault: false },
-  );
-  useHotkey(
-    "Backspace",
-    (event) => {
-      const input = event.target instanceof HTMLInputElement ? event.target : null;
-      if (!input || input.value || event.repeat) return;
-      event.preventDefault();
-      back();
-    },
-    { target: refs.floating, capture: true, ignoreInputs: false, preventDefault: false },
-  );
   useEffect(() => {
     if (open && isPositioned && focusOnOpen.current) {
       focusInside();
@@ -1041,6 +1039,19 @@ function MenuSubmenu({
             // cmdk moves focus to a menu's search when it first highlights a row; a preview hands it straight back.
             onFocus={() => {
               if (previewing.current) parentInput()?.focus();
+            }}
+            // ← at the start of the search, or Backspace on an empty one (not a held key that just emptied it), steps back one level.
+            // On the open popup itself, not a hotkey per row: every submenu row registering two bindings, re-synced on each of its
+            // renders, cost every hover. Held before the search sees them, as the bindings were (captured, never passed on).
+            onKeyDownCapture={(event: KeyboardEvent) => {
+              const target = event.target as Element;
+              if (!event.currentTarget.contains(target) || !backKey(event)) return;
+              event.stopPropagation();
+              const input = target instanceof HTMLInputElement ? target : null;
+              if (event.key === "ArrowLeft" ? input?.value && input.selectionStart !== 0 : !input || input.value || event.repeat)
+                return;
+              event.preventDefault();
+              back();
             }}
             // Escape closes every level (Linear's closeParent); Tab moves this menu's highlight and reaches the popup's focus trap.
             onKeyDown={(event: KeyboardEvent) => {

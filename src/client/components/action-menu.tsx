@@ -1,5 +1,5 @@
 import { FloatingTree } from "@floating-ui/react";
-import { use, useRef, useState, type ComponentProps, type ReactNode, type RefObject } from "react";
+import { memo, use, useRef, useState, type ComponentProps, type ReactNode, type RefObject } from "react";
 import { menuFilter } from "@/client/lib/fuzzy-score";
 import { Icon, type IconName } from "./icons";
 import type { Keys } from "./keycap";
@@ -211,7 +211,7 @@ function Level({
           ? rows(q)
           : choices.map((entry) => [
               !q && entry.divider && <Menu.Divider key={`-${entry.name}`} />,
-              <Row key={entry.name} entry={entry} container={container} open={open} setOpen={setOpen} />,
+              <Row key={entry.name} entry={entry} container={container} open={open === entry.name} setOpen={setOpen} />,
             ])}
         {hidden.length > 0 && !reveal && (
           <NoMatchesFooter
@@ -225,7 +225,7 @@ function Level({
         {hidden.length > 0 && reveal && !q && [
           <Menu.Divider key="-no-matches" />,
           ...hidden.map((entry) => (
-            <Row key={entry.name} entry={entry} container={container} open={open} setOpen={setOpen} />
+            <Row key={entry.name} entry={entry} container={container} open={open === entry.name} setOpen={setOpen} />
           )),
         ]}
       </Menu.List>
@@ -233,7 +233,8 @@ function Level({
   );
 }
 
-function Row({
+/** Memoised and told only whether it is the open one, so a submenu opening or closing re-renders its own row, not every row. */
+export const Row = memo(function Row({
   entry,
   container,
   open,
@@ -241,7 +242,7 @@ function Row({
 }: {
   entry: ActionEntry;
   container: Container;
-  open: string | null;
+  open: boolean;
   setOpen: (update: (current: string | null) => string | null) => void;
 }) {
   const surface = use(MenuSurfaceContext);
@@ -255,7 +256,7 @@ function Row({
         icon={icon}
         shortcut={entry.shortcut}
         hint={hint}
-        open={open === entry.name}
+        open={open}
         onOpenChange={(next) => setOpen((cur) => (next ? entry.name : cur === entry.name ? null : cur))}
         container={container}
       >
@@ -301,7 +302,7 @@ function Row({
       <ActionLabel name={entry.name} />
     </Menu.Item>
   );
-}
+});
 
 /**
  * Linear's multi-select row (B4e with onCheckboxClick): a leading checkbox whose click toggles and keeps the menu open (preventClose),

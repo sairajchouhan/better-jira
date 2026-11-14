@@ -1,6 +1,6 @@
 import { type Board } from "@/shared/issue-model";
 import { FloatingTree } from "@floating-ui/react";
-import { Fragment, useState, type ReactNode, type RefObject } from "react";
+import { memo, useState, type Dispatch, type ReactNode, type RefObject, type SetStateAction } from "react";
 import { FilterIcon } from "./filter-icons";
 import { Icon, type IconName } from "@/client/components/icons";
 import { Menu } from "@/client/components/menu";
@@ -195,57 +195,17 @@ function FilterLevel({
       <Menu.List key={q ? "search" : "all"}>
         <Menu.Empty>No matching options</Menu.Empty>
         {shown.map((entry) => (
-          <Fragment key={(entry.path?.join() ?? "") + entry.name}>
-            {entry.divider && <Menu.Divider />}
-            {entry.group === "advanced" || entry.reason ? (
-              <Menu.Item
-                value={entry.name}
-                icon={<EntryIcon entry={entry} />}
-                aria-disabled={entry.reason ? true : undefined}
-                onSelect={() => {
-                  setOpen(null);
-                  if (entry.reason) setInfo(entry.reason);
-                  else onAdvanced();
-                }}
-              >
-                {entry.name}
-              </Menu.Item>
-            ) : (
-              <Menu.Submenu
-                value={entry.name}
-                label={<EntryLabel entry={entry} />}
-                icon={<EntryIcon entry={entry} />}
-                side={side}
-                popupLabel={`${entry.name} filter`}
-                container={container}
-                open={open === entry.name}
-                onOpenChange={(next) =>
-                  setOpen((current) =>
-                    next ? entry.name : current === entry.name ? null : current,
-                  )
-                }
-              >
-                {entry.group ? (
-                  <FilterLevel
-                    board={board}
-                    container={container}
-                    entries={entry.group === "dates" ? DATE_ENTRIES : PROJECT}
-                    name={entry.name}
-                    side={side}
-                    onAdvanced={onAdvanced}
-                  />
-                ) : (
-                  <PropertyFilter
-                    field={entry.field!}
-                    name={entry.name}
-                    board={board}
-                    autoFocus={false}
-                    onBack={() => setOpen(null)}
-                  />
-                )}
-              </Menu.Submenu>
-            )}
-          </Fragment>
+          <FilterEntry
+            key={(entry.path?.join() ?? "") + entry.name}
+            entry={entry}
+            open={open === entry.name}
+            setOpen={setOpen}
+            board={board}
+            container={container}
+            side={side}
+            onAdvanced={onAdvanced}
+            onInfo={setInfo}
+          />
         ))}
         {hoist &&
           SEARCHED.map(([field, path]) => (
@@ -268,6 +228,82 @@ function FilterLevel({
     </Menu>
   );
 }
+
+/**
+ * One category row. Memoised and told only whether it is the open one, so moving the highlight or the open submenu re-renders the
+ * two rows that changed, not all of them (each Menu.Submenu runs floating-ui when it renders).
+ */
+export const FilterEntry = memo(function FilterEntry({
+  entry,
+  open,
+  setOpen,
+  board,
+  container,
+  side,
+  onAdvanced,
+  onInfo,
+}: {
+  entry: Entry;
+  open: boolean;
+  setOpen: Dispatch<SetStateAction<string | null>>;
+  board: Board;
+  container: Container;
+  side: "left" | "right";
+  onAdvanced: () => void;
+  onInfo: (reason: string) => void;
+}) {
+  return (
+    <>
+      {entry.divider && <Menu.Divider />}
+      {entry.group === "advanced" || entry.reason ? (
+        <Menu.Item
+          value={entry.name}
+          icon={<EntryIcon entry={entry} />}
+          aria-disabled={entry.reason ? true : undefined}
+          onSelect={() => {
+            setOpen(null);
+            if (entry.reason) onInfo(entry.reason);
+            else onAdvanced();
+          }}
+        >
+          {entry.name}
+        </Menu.Item>
+      ) : (
+        <Menu.Submenu
+          value={entry.name}
+          label={<EntryLabel entry={entry} />}
+          icon={<EntryIcon entry={entry} />}
+          side={side}
+          popupLabel={`${entry.name} filter`}
+          container={container}
+          open={open}
+          onOpenChange={(next) =>
+            setOpen((current) => (next ? entry.name : current === entry.name ? null : current))
+          }
+        >
+          {entry.group ? (
+            <FilterLevel
+              board={board}
+              container={container}
+              entries={entry.group === "dates" ? DATE_ENTRIES : PROJECT}
+              name={entry.name}
+              side={side}
+              onAdvanced={onAdvanced}
+            />
+          ) : (
+            <PropertyFilter
+              field={entry.field!}
+              name={entry.name}
+              board={board}
+              autoFocus={false}
+              onBack={() => setOpen(null)}
+            />
+          )}
+        </Menu.Submenu>
+      )}
+    </>
+  );
+});
 
 /** A date field's presets as "Dates › Due date › Overdue" rows in the root search; picking one applies it and closes, as in its submenu. */
 function SearchedPresets({ field, path, board }: { field: Field; path: string[]; board: Board }) {
