@@ -3,13 +3,18 @@ import { Debouncer } from "@tanstack/pacer";
 import { TextInput } from "./field";
 import { Icon } from "./icons";
 import { shortcutTitle } from "./keycap";
+import "./find-field.css";
 
 /**
  * Linear's find field ("Find in view…", "Find in inbox…"): its inline find (`Idi`) over its search input (`Adi`), startup-root.
- * A search glyph 8px in, the term sent 150ms after typing stops (`debounceMs: 150`), and the keys of `Fdi.handleKeyDown`:
+ * A 16px search glyph 8px in, the term sent 150ms after typing stops (`debounceMs: 150`), and the keys of `Fdi.handleKeyDown`:
  * ⌘F selects the term, ↑ and ↓ leave the field for the list, Escape closes it, and every other key stays in the field (⌘K
  * still opens the command menu). Leaving the field empty closes it too. Closing is the owner's: it clears the term and
  * unmounts the field. The field is uncontrolled after it mounts, as Linear's (`initialValue`).
+ *
+ * Two boxes, as Linear's: `className` places the container (Idi's `sx`: a header's absolute corner, a tab row's free
+ * space), and `inputClassName` restyles the input (Idi's `inputSx`). The search form inside the container stays
+ * `relative`, so a placement never has to fight it. Adi's default geometry is in find-field.css.
  */
 const FindContext = createContext<{ text: string; close: () => void } | null>(null);
 
@@ -20,7 +25,6 @@ function FindFieldRoot({
   defaultValue = "",
   onValueChange,
   onClose,
-  size = "normal",
   className = "",
   inputClassName = "",
   children,
@@ -33,8 +37,9 @@ function FindFieldRoot({
   /** Taken once, when the field mounts, as `defaultValue` is: pass a stable handler. */
   onValueChange: (term: string) => void;
   onClose: () => void;
-  size?: "medium" | "normal";
+  /** The container's placement and width (Idi's `sx`). */
   className?: string;
+  /** Overrides on the input (Idi's `inputSx`). */
   inputClassName?: string;
   /** The trailing button: `FindField.Close` or `FindField.Clear`. */
   children?: ReactNode;
@@ -62,33 +67,34 @@ function FindFieldRoot({
   };
   return (
     <FindContext value={{ text, close }}>
-      <form className={`relative flex items-center ${className}`} onSubmit={(event) => event.preventDefault()}>
-        <TextInput
-          ref={ref}
-          id={id}
-          type="search"
-          size={size}
-          aria-label={placeholder}
-          placeholder={placeholder}
-          value={text}
-          spellCheck={false}
-          autoComplete="off"
-          enterKeyHint="search"
-          onChange={(event) => {
-            setText(event.target.value);
-            send.maybeExecute(event.target.value);
-          }}
-          onKeyDown={onKeyDown}
-          onBlur={(event) => {
-            if (!event.currentTarget.value) close();
-          }}
-          className={`pr-[25px] pl-8 font-medium [&::-webkit-search-cancel-button]:hidden ${inputClassName}`}
-        />
-        <span aria-hidden className="pointer-events-none absolute top-1/2 left-2 grid -translate-y-1/2 text-fg-3">
-          <Icon name="search" />
-        </span>
-        {children}
-      </form>
+      <div className={`ui-find ${className}`}>
+        <form className="relative flex items-center" onSubmit={(event) => event.preventDefault()}>
+          <TextInput
+            ref={ref}
+            id={id}
+            type="search"
+            aria-label={placeholder}
+            placeholder={placeholder}
+            value={text}
+            spellCheck={false}
+            autoComplete="off"
+            enterKeyHint="search"
+            onChange={(event) => {
+              setText(event.target.value);
+              send.maybeExecute(event.target.value);
+            }}
+            onKeyDown={onKeyDown}
+            onBlur={(event) => {
+              if (!event.currentTarget.value) close();
+            }}
+            className={inputClassName}
+          />
+          <span aria-hidden className="pointer-events-none absolute top-1/2 left-2 grid -translate-y-1/2 text-fg-3">
+            <Icon name="search" size={16} />
+          </span>
+          {children}
+        </form>
+      </div>
     </FindContext>
   );
 }

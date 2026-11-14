@@ -156,8 +156,8 @@ export function createInboxStore(ports: InboxPorts) {
   };
   const clearFilters = () => changeView({ filters: {} });
 
-  // --- find: Linear's ⌘F field over the list (startup-root `Idi`, the inbox's "Find in inbox…"). Not stored: the field opens
-  // empty each time the inbox does, as Linear's resets on a fresh visit. ---
+  // --- find: Linear's ⌘F field over the list (startup-root `Idi`: "Find in view…", "Find in inbox…" in the priority inbox).
+  // Not stored: the field opens empty each time the inbox does, as Linear's resets on a fresh visit. ---
 
   /** `open`: the field shows; it also shows while it holds a term. */
   let find = { open: false, term: "" };

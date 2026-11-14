@@ -612,22 +612,23 @@ function FilterChips({ v }: { v: InboxView }) {
   );
 }
 
-/** Linear's "Find in inbox…" (Inbox `qt`). In the priority inbox it takes the tabs' place, 32px with a Close button, and the
- *  find looks through both tabs; otherwise it floats over the header's right end (ContentViewHeaderInlineSearch: top 6px,
- *  right 4px, 160px at most, over the buttons) with a Clear button while it holds text. */
+/** Linear's inbox find (Inbox `qt`). In the priority inbox it takes the tabs' place as "Find in inbox…" with a Close button,
+ *  and the find looks through both tabs: the container grows into the row (`Jt.facetRowSearch`: flex-grow 1, no max-width)
+ *  and the input is 32px, 6px round, on bgBorderThin with a labelFaint placeholder (`Jt.searchInput`). Otherwise it is
+ *  ContentViewHeaderInlineSearch with no placeholder of its own, so "Find in view…": 160px at most, floating over the
+ *  header's right end (top 6px, right 4px, z-index 10, over the buttons), with a Clear button while it holds text. */
 function InboxFind({ ref, place }: { ref: Ref<HTMLInputElement>; place: "tabs" | "header" }) {
   const term = useFind().term;
   const tabs = place === "tabs";
   return (
     <FindField
       ref={ref}
-      placeholder="Find in inbox…"
+      placeholder={tabs ? "Find in inbox…" : "Find in view…"}
       defaultValue={term}
       onValueChange={setFind}
       onClose={closeFind}
-      size={tabs ? "normal" : "medium"}
-      className={tabs ? "ml-1 min-w-0 flex-1" : "absolute top-1.5 right-1 z-10 w-[160px] max-w-[50vw]"}
-      inputClassName={tabs ? "rounded-[6px] bg-panel" : "bg-panel"}
+      className={tabs ? "ml-1 min-w-0 max-w-none flex-1" : "absolute top-1.5 right-1 z-10 w-[160px]"}
+      inputClassName={tabs ? "h-8 rounded-[6px] border-(--bg-border) placeholder:text-fg-4" : undefined}
     >
       {tabs ? <FindField.Close /> : <FindField.Clear />}
     </FindField>
@@ -750,7 +751,8 @@ export function InboxList() {
             </Tabs.List>
           </Tabs>
         ) : null}
-        <span className="flex-1" />
+        {/* Linear's tab slot grows (Odi `L7.tabs`): the priority find fills the row up to the buttons on its own. */}
+        {!(v.priorityInbox && findShown) && <span className="flex-1" />}
         <IconButton
           label={v.unreadOnly ? "Show read" : "Show unreads only"}
           aria-pressed={v.unreadOnly}

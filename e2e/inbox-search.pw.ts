@@ -1,10 +1,14 @@
 import { expect, fixture, test } from "./app";
 
-/** ⌘F in the Inbox: Linear's "Find in inbox…" (startup-root `Idi`, Inbox `qt`, `Notification.matchInlineFind`). */
+/** ⌘F in the Inbox: Linear's inbox find (startup-root `Idi`, Inbox `qt`, `Notification.matchInlineFind`). "Find in view…"
+ *  floating over the header's right end (ContentViewHeaderInlineSearch), "Find in inbox…" in the priority inbox's tab row. */
 const rows = `[...document.querySelectorAll('[data-inbox-row]')]`;
 const rowKeys = `${rows}.map(r=>r.getAttribute('aria-label').split(" ")[1]).join()`;
 const current = `(document.querySelector('[data-inbox-row][aria-current]')?.getAttribute('aria-label') ?? '')`;
-const field = `document.querySelector('input[placeholder="Find in inbox…"]')`;
+const field = `document.querySelector('section[aria-label="Inbox"] input[type="search"]')`;
+type Rect = [x: number, y: number, width: number, height: number];
+const box = (el: string) => `(r => [r.x, r.y, r.width, r.height])(${el}.getBoundingClientRect())`;
+const header = `document.querySelector('section[aria-label="Inbox"] > header')`;
 const toggle = (label: string) =>
   `[...document.querySelectorAll('label')].find(l=>l.textContent.trim().startsWith(${JSON.stringify(label)})).querySelector('input').click()`;
 
@@ -16,7 +20,7 @@ test("⌘F finds in the inbox: key, title, actor and comment text; arrows, ⌘F,
   await test.step("⌘F opens the field focused; the term narrows the rows on the comment text, every word", async () => {
     await p.key("f", "meta");
     await p.waitFor(`document.activeElement === ${field}`);
-    expect(await p.eval(`${field}.getAttribute('aria-label')`)).toBe("Find in inbox…");
+    expect(await p.eval(`${field}.getAttribute('aria-label')`)).toBe("Find in view…");
     await p.type("looks GOOD");
     await p.waitFor(`${rowKeys} === "TEST-4"`);
     await p.key("a", "meta");
@@ -25,6 +29,24 @@ test("⌘F finds in the inbox: key, title, actor and comment text; arrows, ⌘F,
     await p.key("a", "meta");
     await p.type("check this");
     await p.waitFor(`${rowKeys} === "TEST-1"`);
+  });
+
+  await test.step("the field floats over the header's right end at Linear's size, and its focus ring sits on its border", async () => {
+    // ContentViewHeaderInlineSearch: absolute, top 6px, right 4px, 160px, z-index 10, over the buttons; Adi default: 28px.
+    const [hx, hy, hw, hh] = await p.eval<Rect>(box(header));
+    const [fx, fy, fw, fh] = await p.eval<Rect>(box(field));
+    expect(hh).toBe(44);
+    expect(fh).toBe(28);
+    expect(fw).toBe(160);
+    expect(fy - hy).toBe(6);
+    expect(hx + hw - (fx + fw)).toBeCloseTo(4, 0);
+    const [bx] = await p.eval<Rect>(box(`document.querySelector('[aria-label="Display options"]')`));
+    expect(bx).toBeGreaterThan(fx); // the buttons stay where they were, under the field
+    const style = await p.eval<string[]>(
+      `(s => [s.fontSize, s.fontWeight, s.outlineStyle, s.outlineWidth, s.outlineOffset])(getComputedStyle(${field}))`,
+    );
+    expect(style).toEqual(["13px", "500", "solid", "1px", "-1px"]);
+    expect(await p.eval(`getComputedStyle(${field}, '::placeholder').fontSize`)).toBe("13px");
   });
 
   await test.step("↓ leaves the field for the list, j selects among the found rows, ⌘F comes back with the term selected", async () => {
@@ -65,6 +87,12 @@ test("⌘F finds in the inbox: key, title, actor and comment text; arrows, ⌘F,
     await p.key("Escape");
     await p.key("f", "meta");
     await p.waitFor(`document.activeElement === ${field} && !document.querySelector('[role=tab]')`);
+    // Jt.searchInput / facetRowSearch: "Find in inbox…", 32px, filling the row up to the buttons.
+    expect(await p.eval(`${field}.placeholder`)).toBe("Find in inbox…");
+    const [fx, , fw, fh] = await p.eval<Rect>(box(field));
+    const [ux] = await p.eval<Rect>(box(`document.querySelector('[aria-label="Show unreads only"]')`));
+    expect(fh).toBe(32);
+    expect(ux - (fx + fw)).toBeLessThanOrEqual(8);
     await p.type("looks good");
     // TEST-4 is on the Other tab; Linear's find looks through both.
     await p.waitFor(`${rowKeys} === "TEST-4"`);
