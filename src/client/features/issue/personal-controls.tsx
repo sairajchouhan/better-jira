@@ -75,7 +75,7 @@ import { CommandTarget } from "@/client/components/command-menu";
 import { IssueResources, ResourceForm } from "./issue-resources";
 import { ReactionPicker, ReactionPill } from "@/client/features/comments/reactions";
 import { PropertyPill } from "@/client/components/pill-select";
-import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
+import { ActionMenu, joinGroups, type ActionEntry } from "@/client/components/action-menu";
 import { kept, post, run as runCommand, useCommand } from "@/client/features/navigation/commands";
 
 /** Linear keeps an unsent title and description when the composer closes; the next C brings them back. */
@@ -889,47 +889,58 @@ export function BoardDetails({
   );
 }
 
-export function GroupMenu({
-  name,
-  hide,
+/**
+ * A board column's or list group's menu, one builder for the header's ⋯ and its right-click.
+ * Board column (Linear's IssueList `qu`, whose `actions` and `contextualActions` are one list): Select all in column (when it has
+ * issues), Hide column, ┄ Order completed by recency (completed groups, `vo`).
+ * List group (useListContextualActions `h`): Collapse/Expand, Collapse all/Expand all (ListCell `toggleAllGroupsAction`),
+ * ┄ Select all in group, Hide group, ┄ Order completed by recency. Select all is left out while the group is collapsed.
+ */
+export function groupMenuEntries({
+  unit,
   issues,
+  hide,
   completed,
   display,
+  collapse,
 }: {
-  name: string;
-  hide: () => void;
+  unit: "column" | "group";
   issues: Issue[];
+  hide: () => void;
   completed: boolean;
   display: Display;
-}) {
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const entries: ActionEntry[] = [
-    ...(issues.length
+  /** List groups only: the group's own toggle and the toggle for every group. */
+  collapse?: { collapsed: boolean; allCollapsed: boolean; toggle: () => void; toggleAll: () => void };
+}): ActionEntry[] {
+  const selectable = issues.length > 0 && !collapse?.collapsed;
+  return joinGroups(
+    collapse
       ? [
-          {
-            name: "Select all in column",
-            run: () =>
-              set({
-                columnSelection: new Set(issues.map((issue) => issue.key)),
-              }),
-          },
+          { name: collapse.collapsed ? "Expand" : "Collapse", run: collapse.toggle },
+          { name: collapse.allCollapsed ? "Expand all" : "Collapse all", run: collapse.toggleAll },
         ]
-      : []),
-    { name: "Hide column", run: hide },
-    ...(completed
+      : [],
+    [
+      ...(selectable
+        ? [{ name: `Select all in ${unit}`, run: () => set({ columnSelection: new Set(issues.map((issue) => issue.key)) }) }]
+        : []),
+      { name: `Hide ${unit}`, run: hide },
+    ],
+    completed
       ? [
           {
             name: "Order completed by recency",
             selected: display.completedRecency,
-            divider: true,
-            run: () =>
-              setDisplay(get().board, {
-                completedRecency: !display.completedRecency,
-              }),
+            run: () => setDisplay(get().board, { completedRecency: !display.completedRecency }),
           },
         ]
-      : []),
-  ];
+      : [],
+  );
+}
+
+/** A column header's ⋯; `entries` is read when it opens, as the header's right-click reads it. */
+export function GroupMenu({ name, entries }: { name: string; entries: () => ActionEntry[] }) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   return (
     <div className="ml-auto">
       <IconButton
@@ -948,7 +959,7 @@ export function GroupMenu({
         <ActionMenu
           label={`Column ${name}`}
           anchor={anchor}
-          entries={entries}
+          entries={entries()}
           close={() => setAnchor(null)}
         />
       )}

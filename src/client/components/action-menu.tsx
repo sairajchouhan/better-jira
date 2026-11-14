@@ -82,6 +82,13 @@ export function searchActions(entries: ActionEntry[], query: string): ActionEntr
     .map((r) => r.entry);
 }
 
+/** Linear's `Yn.joinActionGroupsWithDividers`: each non-empty group after the first starts with a divider. */
+export function joinGroups(...groups: ActionEntry[][]): ActionEntry[] {
+  return groups
+    .filter((group) => group.length)
+    .flatMap((group, g) => group.map((entry, i) => (i === 0 ? { ...entry, divider: g > 0 } : entry)));
+}
+
 /** Linear opens an action menu 4px under its trigger, left-aligned (Issue options) or, with `align="end"`, right-aligned (row, resource
  *  and comment ⋯); a right-click opens it at `point`. Opened by a key it highlights its first row; by the pointer, none. While it is
  *  open no global shortcut runs, even with focus outside it (Linear's isActionMenuOpen): its rows' hints are not live keys. */

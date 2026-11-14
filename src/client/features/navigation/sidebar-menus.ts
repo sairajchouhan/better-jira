@@ -8,7 +8,7 @@
  */
 import type { Board } from "@/shared/issue-model";
 import { defaultPreferences } from "@/shared/view-model";
-import type { ActionEntry } from "@/client/components/action-menu";
+import { joinGroups, type ActionEntry } from "@/client/components/action-menu";
 import { get, set } from "@/client/state/store";
 import { showNotification } from "@/client/state/app-notifications";
 import { removeBoard } from "@/client/state/server-data";
@@ -41,13 +41,6 @@ export const parseSidebarPrefs = (raw: unknown): SidebarPrefs => {
     myIssues: visibility("myIssues", r.myIssues),
   };
 };
-
-/** Linear's `Yn.joinActionGroupsWithDividers`: each non-empty group after the first starts with a divider. */
-export function joinGroups(...groups: ActionEntry[][]): ActionEntry[] {
-  return groups
-    .filter((group) => group.length)
-    .flatMap((group, g) => group.map((entry, i) => (i === 0 ? { ...entry, divider: g > 0 } : entry)));
-}
 
 const copy = (url: string, toast: string) =>
   void navigator.clipboard.writeText(url).then(

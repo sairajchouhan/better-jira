@@ -49,7 +49,8 @@ import {
   type Display,
   type Property,
 } from "@/shared/view-model";
-import { BoardDetails, GroupMenu } from "@/client/features/issue/personal-controls";
+import { BoardDetails, GroupMenu, groupMenuEntries } from "@/client/features/issue/personal-controls";
+import { ContextMenu } from "@/client/components/action-menu";
 import { Avatar } from "@/client/components/avatar";
 import { shortDate } from "@/client/lib/due-date";
 import { Button, IconButton } from "@/client/components/button";
@@ -162,8 +163,12 @@ export const BoardView = memo(function BoardView({
               <section key={c.id} className="mb-2">
                 <GroupHeading
                   bucket={c}
+                  display={d}
                   collapsed={collapsed.includes(c.id)}
+                  allCollapsed={show.every((g) => collapsed.includes(g.id))}
                   toggle={() => collapse(c.id)}
+                  toggleAll={() => toggleCollapsed(board.id, show.map((g) => g.id))}
+                  hide={() => hide(c.id)}
                   create={() => createIn(c)}
                 />
                 {!collapsed.includes(c.id) &&
@@ -419,34 +424,54 @@ function HiddenGroup({
   );
 }
 
+/** A list group's header; right-click opens Linear's list group menu (useListContextualActions `h`). Linear's list header has no ⋯. */
 function GroupHeading({
   bucket,
+  display,
   collapsed,
+  allCollapsed,
   toggle,
+  toggleAll,
+  hide,
   create,
 }: {
   bucket: Bucket;
+  display: Display;
   collapsed: boolean;
+  allCollapsed: boolean;
   toggle: () => void;
+  toggleAll: () => void;
+  hide: () => void;
   create: () => void;
 }) {
+  const entries = () =>
+    groupMenuEntries({
+      unit: "group",
+      issues: bucket.issues,
+      hide,
+      completed: bucket.status?.category === "done",
+      display,
+      collapse: { collapsed, allCollapsed, toggle, toggleAll },
+    });
   return (
-    <div className="flex h-10 items-center gap-2 border-y border-line bg-col px-5 text-[12px] font-medium text-fg-2">
-      <button
-        aria-label={`${collapsed ? "Expand" : "Collapse"} ${bucket.name}`}
-        aria-expanded={!collapsed}
-        onClick={toggle}
-        className="flex flex-1 items-center gap-2 text-left"
-      >
-        <Icon name={collapsed ? "chevron" : "down"} />
-        {bucket.status && <StatusIcon status={bucket.status} />}
-        <span>{bucket.name}</span>
-        <span className="text-fg-3">{bucket.issues.length}</span>
-      </button>
-      <IconButton label={`New issue in ${bucket.name}`} variant="muted" size="small" onClick={create}>
-        <Icon name="plus" />
-      </IconButton>
-    </div>
+    <ContextMenu label={`Group ${bucket.name}`} entries={entries}>
+      <div className="flex h-10 items-center gap-2 border-y border-line bg-col px-5 text-[12px] font-medium text-fg-2">
+        <button
+          aria-label={`${collapsed ? "Expand" : "Collapse"} ${bucket.name}`}
+          aria-expanded={!collapsed}
+          onClick={toggle}
+          className="flex flex-1 items-center gap-2 text-left"
+        >
+          <Icon name={collapsed ? "chevron" : "down"} />
+          {bucket.status && <StatusIcon status={bucket.status} />}
+          <span>{bucket.name}</span>
+          <span className="text-fg-3">{bucket.issues.length}</span>
+        </button>
+        <IconButton label={`New issue in ${bucket.name}`} variant="muted" size="small" onClick={create}>
+          <Icon name="plus" />
+        </IconButton>
+      </div>
+    </ContextMenu>
   );
 }
 
@@ -470,6 +495,7 @@ function IssueList({
   </VirtualItems>;
 }
 
+/** A board column's header: its ⋯ and a right-click on it open the same menu (Linear's `qu`, its info area wrapped by `Gd`). */
 function ColumnHeading({
   bucket,
   count,
@@ -483,27 +509,25 @@ function ColumnHeading({
   hide: () => void;
   create: () => void;
 }) {
+  const entries = () =>
+    groupMenuEntries({ unit: "column", issues: bucket.issues, hide, completed: bucket.status?.category === "done", display });
   return (
-    <h2 className="board-column-heading flex h-[46px] shrink-0 items-center gap-2 pr-2 pl-3.5 text-[13px]">
-      <GroupIcon bucket={bucket} by={display.columns} />
-      {/* .raj/linear.md "Columns": the name 13px/500 fg-2, the count 13px/450 fg-3. */}
-      <Text variant="smallPlus" color="base" wrap="truncate" className="ml-0.5">
-        {bucket.name}
-      </Text>
-      <Text variant="small" color="muted">
-        {count}
-      </Text>
-      <GroupMenu
-        name={bucket.name}
-        hide={hide}
-        issues={bucket.issues}
-        completed={bucket.status?.category === "done"}
-        display={display}
-      />
-      <IconButton label={`New issue in ${bucket.name}`} variant="muted" size="small" onClick={create} className="-ml-1.5">
-        <Icon name="plus" />
-      </IconButton>
-    </h2>
+    <ContextMenu label={`Column ${bucket.name}`} entries={entries}>
+      <h2 className="board-column-heading flex h-[46px] shrink-0 items-center gap-2 pr-2 pl-3.5 text-[13px]">
+        <GroupIcon bucket={bucket} by={display.columns} />
+        {/* .raj/linear.md "Columns": the name 13px/500 fg-2, the count 13px/450 fg-3. */}
+        <Text variant="smallPlus" color="base" wrap="truncate" className="ml-0.5">
+          {bucket.name}
+        </Text>
+        <Text variant="small" color="muted">
+          {count}
+        </Text>
+        <GroupMenu name={bucket.name} entries={entries} />
+        <IconButton label={`New issue in ${bucket.name}`} variant="muted" size="small" onClick={create} className="-ml-1.5">
+          <Icon name="plus" />
+        </IconButton>
+      </h2>
+    </ContextMenu>
   );
 }
 

@@ -1,3 +1,4 @@
+import { joinGroups } from "@/client/components/action-menu";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { commit, get } from "@/client/state/store";
 import { latestNotification } from "@/client/state/app-notifications";
@@ -8,7 +9,6 @@ import {
   SIDEBAR_PREFS,
   boardEntries,
   favoriteEntries,
-  joinGroups,
   moreEntries,
   parseSidebarPrefs,
   sidebarItemEntries,
@@ -25,8 +25,11 @@ const written: string[] = [],
 const saved = {
   clipboard: Object.getOwnPropertyDescriptor(globalThis.navigator, "clipboard"),
   location: "location" in globalThis,
-  open: (globalThis as { open?: unknown }).open,
+  window: "window" in globalThis,
 };
+// Another file (store.test.ts) may already have installed a read-only `window`; stub `open` on whichever window is there.
+const win = () => (globalThis as unknown as { window: { open?: unknown } }).window;
+let savedOpen: unknown;
 beforeEach(() => {
   written.length = opened.length = 0;
   Object.defineProperty(globalThis.navigator, "clipboard", {
@@ -34,14 +37,18 @@ beforeEach(() => {
     value: { writeText: async (text: string) => void written.push(text) },
   });
   if (!saved.location) Object.assign(globalThis, { location: new URL("http://app.test/") });
-  Object.assign(globalThis, { window: globalThis, open: (url: string) => void opened.push(url) });
+  if (!saved.window) Object.defineProperty(globalThis, "window", { configurable: true, value: globalThis });
+  savedOpen = win().open;
+  win().open = (url: string) => void opened.push(url);
   commit({ favorites: [], site: "https://jira.test" });
 });
 afterEach(() => {
   if (saved.clipboard) Object.defineProperty(globalThis.navigator, "clipboard", saved.clipboard);
   else delete (globalThis.navigator as { clipboard?: unknown }).clipboard;
   if (!saved.location) delete (globalThis as { location?: unknown }).location;
-  Object.assign(globalThis, { open: saved.open });
+  // A later file's module code reads `window` as "in a browser" and then `location`, so neither may outlive this file's tests.
+  win().open = savedOpen;
+  if (!saved.window) delete (globalThis as { window?: unknown }).window;
   toasts.dismissAll();
 });
 
