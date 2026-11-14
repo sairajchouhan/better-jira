@@ -124,7 +124,7 @@ function SelectRoot({
         >
           <SelectContext value={context}>
             {/* Opens on the chosen option, like Linear. */}
-            <Menu defaultValue={chosen ? `${chosen.children} ${value}` : undefined} data-size={size} className="ui-select-list">
+            <Menu defaultValue={chosen ? `${chosen.children} ${value}` : undefined} data-size={size} width="auto" className="ui-select-list">
               <Menu.Input autoFocus hideWhenEmpty aria-label={`${label}…`} />
               <Menu.List maxHeight={`${SELECT.LIST_MAX_HEIGHT}px`}>
                 <Menu.Empty>No matches</Menu.Empty>

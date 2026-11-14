@@ -7,7 +7,7 @@ import { Menu } from "@/client/components/menu";
 import { usePristine } from "@/client/components/menu-pristine";
 import { menuFilter } from "@/client/lib/fuzzy-score";
 import { ui } from "@/client/features/navigation/app-navigation";
-import { datePresets, FieldValues, freezeWidth, Path, PresetRow, PropertyFilter, useFieldFilter } from "./property-filter";
+import { datePresets, FieldValues, Path, PresetRow, PropertyFilter, useFieldFilter } from "./property-filter";
 
 import { type Field } from "@/shared/view-model";
 
@@ -174,7 +174,6 @@ function FilterLevel({
   const shown = q && !name ? [...entries, ...NESTED] : entries;
   return (
     <Menu
-      ref={name ? freezeWidth : undefined}
       filter={menuFilter}
       className={`filter-menu ${name ? "filter-sub" : ""} max-h-[calc(100vh-140px)]`}
       {...start.props}

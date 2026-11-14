@@ -455,6 +455,11 @@ body.loaded #loading {
   overflow-y: auto;
   padding: 6px 0;
 }
+/* k3e: a measured menu's list adds nothing to its width (Linear's list is `width: var(--row-width)` around absolutely placed
+   rows); useRowWidth (menu.tsx) gives the menu its width from the rows on screen instead, so the widest row far down never sets it. */
+.menu[data-width="rows"] > .menu-list {
+  contain: inline-size;
+}
 /* eT.getListPadding: the top padding only applies when the first row is an action, not a header or divider. */
 .menu-list:has(> [cmdk-list-sizer] > :first-child > [cmdk-group-heading]),
 .menu-list:has(> [cmdk-list-sizer] > :first-child:is(.menu-group-header, .menu-text-divider, .menu-divider)) {

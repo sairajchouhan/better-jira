@@ -115,7 +115,7 @@ function PendingRelation({ related, remove }: { related: NonNullable<IssueDraft[
       </Button>
       {anchor && (
         <Modal label={title} anchor={anchor} close={() => setAnchor(null)} fit>
-          <Menu style={{ width: 347 }}>
+          <Menu width={347}>
             <Menu.List>
               <Menu.Group heading={heading}>
                 <Menu.Item
@@ -1460,6 +1460,7 @@ export function Relations({ issue }: { issue: Issue }) {
     <Modal label="Issue relations" close={close} command width={peek ? 720 + 415 : 720}>
       <Menu
         shouldFilter={false}
+        width="auto"
         value={selected}
         onValueChange={setSelected}
         data-kind={kind}

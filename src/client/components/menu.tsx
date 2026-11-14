@@ -62,6 +62,126 @@ export const MENU = {
   LABEL_GAP: 8,
 } as const;
 
+/**
+ * How wide a menu is (Linear's `k3e`, which `IB` calls with `fixedWidth`, `customMinWidth` and `customMaxWidth`): its widest
+ * rendered row (`Math.ceil(Math.max(rect.width, scrollWidth))` of each `[data-list-row]`), at most `Vw.ITEM_MAX_WIDTH` for the whole
+ * row, at least its minimum, and only ever growing while it is open: nothing (undefined) when no row is wider than `current`.
+ */
+export function grownWidth(widths: number[], current: number | undefined, min: number): number | undefined {
+  if (!widths.length) return undefined;
+  const widest = widths.reduce((max, width) => Math.max(max, Math.ceil(width)), 0);
+  if (widest <= (current ?? 0)) return undefined;
+  return Math.min(Math.max(min, MENU.ITEM_MAX_WIDTH), Math.max(widest, current ?? min));
+}
+
+/** Linear's list `overscanCount`: rows rendered past each end of the visible ones. */
+export const OVERSCAN = 10;
+
+/**
+ * The rows Linear's virtualized list (react-window, `overscanCount: 10`) renders, and so the only ones `k3e` measures: those crossing
+ * the visible band `clip` and `overscan` more either side, as [start, end) indexes into `rows` (in list order). With none on screen,
+ * the first ones, as a list scrolled to its top renders.
+ */
+export function renderedRows(
+  rows: readonly { top: number; bottom: number }[],
+  clip: { top: number; bottom: number },
+  overscan = OVERSCAN,
+): [number, number] {
+  let first = -1,
+    last = -1;
+  rows.forEach((row, index) => {
+    if (row.bottom <= clip.top || row.top >= clip.bottom) return;
+    if (first < 0) first = index;
+    last = index;
+  });
+  if (first < 0) return [0, Math.min(rows.length, overscan + 1)];
+  return [Math.max(0, first - overscan), Math.min(rows.length, last + 1 + overscan)];
+}
+
+// What k3e measures: Linear's `[data-list-row]`, which its search row, action rows and empty state carry.
+const LIST_ROWS = ".menu-input, .menu-item, .menu-empty, [data-list-row]";
+
+/** The band of the window `node` shows: the window, cut by every ancestor that clips its overflow up to the first fixed one (a
+ *  submenu is fixed beside the menu it is portalled into, so that menu's scroll box doesn't clip it). */
+function visibleBand(node: Element) {
+  let top = 0,
+    bottom = innerHeight;
+  for (let element: Element | null = node; element; element = element.parentElement) {
+    const style = getComputedStyle(element);
+    if (style.overflowY !== "visible") {
+      const box = element.getBoundingClientRect();
+      top = Math.max(top, box.top);
+      bottom = Math.min(bottom, box.bottom);
+    }
+    if (style.position === "fixed") break;
+  }
+  return { top, bottom };
+}
+
+/**
+ * One `k3e` measure of the menu `node`: the rows Linear's list would render, each at its own content width (`min-content`, k3e's
+ * `--item-min-width`), grow its min-width (`floor` is its CSS minimum, raised to Vw.ITEM_MIN_WIDTH_WITH_DESCRIPTION by a description
+ * row: k3e's `customMinWidth`). Returns the new width, or undefined when it stays.
+ */
+function fitRows(node: HTMLElement, current: number | undefined, floor: number) {
+  const rows = [...node.querySelectorAll<HTMLElement>(LIST_ROWS)].filter(
+    (row) => row.closest("[cmdk-root]") === node && row.getClientRects().length,
+  );
+  const [start, end] = renderedRows(
+    rows.map((row) => row.getBoundingClientRect()),
+    visibleBand(node.querySelector("[cmdk-list]") ?? node),
+  );
+  const shown = rows.slice(start, end);
+  const widths = shown.map((row) => row.style.width);
+  for (const row of shown) row.style.width = "min-content";
+  const natural = shown.map((row) => Math.max(row.getBoundingClientRect().width, row.scrollWidth));
+  shown.forEach((row, i) => (row.style.width = widths[i]!));
+  const min = node.querySelector(".menu-description") ? Math.max(floor, MENU.ITEM_MIN_WIDTH_WITH_DESCRIPTION) : floor;
+  const next = grownWidth(natural, current, min);
+  if (next !== undefined) node.style.minWidth = `${next}px`;
+  return next;
+}
+
+/**
+ * Sizes a menu as `k3e` does, by writing its root's min-width (no re-render): as it mounts, as its rows change (a search, rows
+ * arriving: at once and once more within 150ms, Linear's throttle), and as it scrolls or the window resizes. The list adds nothing
+ * to the menu's width itself (`contain: inline-size`, index.css), so a long list's widest row far down never sets it.
+ */
+function useRowWidth(root: RefObject<HTMLDivElement | null>, measured: boolean) {
+  useLayoutEffect(() => {
+    const node = root.current;
+    if (!node || !measured) return;
+    const floor = parseFloat(getComputedStyle(node).minWidth) || 0;
+    let current: number | undefined;
+    const measure = () => {
+      current = fitRows(node, current, floor) ?? current;
+    };
+    measure();
+    const changed = new Throttler(measure, { wait: 150, leading: true, trailing: true });
+    const rows = new MutationObserver(() => changed.maybeExecute());
+    rows.observe(node, { childList: true, subtree: true, characterData: true });
+    let frame = 0;
+    const moved = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Node && !target.contains(node) && !node.contains(target)) return;
+      if (!frame)
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          measure();
+        });
+    };
+    addEventListener("scroll", moved, { capture: true, passive: true });
+    addEventListener("resize", moved);
+    return () => {
+      rows.disconnect();
+      changed.cancel();
+      cancelAnimationFrame(frame);
+      removeEventListener("scroll", moved, { capture: true });
+      removeEventListener("resize", moved);
+    };
+  }, [root, measured]);
+}
+
 // cmdk's own row query: every enabled row, in order.
 const ROWS = '[cmdk-item]:not([aria-disabled="true"])';
 // Linear's J4e moves the highlight on these, and only these let a highlighted submenu row open its preview (canOpenSubmenuOnFocus).
@@ -121,9 +241,15 @@ export function vanishedHighlight(highlighted: string, shown: string | null, val
  *   and keeps the menu open, or picks any other row.
  * - Enter on a checkbox row picks it and closes the menu; Shift+Enter toggles it and keeps the menu open.
  * - With the search empty, a digit picks the row whose `data-number` it is.
+ *
+ * Its width is `width`: by default measured from its rows as Linear's `k3e` does (useRowWidth); a number is Linear's `fixedWidth`
+ * (a property picker's 206px); "auto" leaves it to the box around it and its rows' content, for the menus that aren't Linear's `IB`
+ * (the command menu's 720px, a Select's list).
  */
 function MenuRoot({
   className = "",
+  width,
+  style,
   ref,
   value,
   defaultValue,
@@ -134,8 +260,9 @@ function MenuRoot({
   onChange,
   children,
   ...props
-}: ComponentProps<typeof Command>) {
+}: ComponentProps<typeof Command> & { width?: number | "auto" }) {
   const root = useRef<HTMLDivElement>(null);
+  useRowWidth(root, width === undefined);
   const surface = use(MenuSurfaceContext);
   const [own, setOwn] = useState(defaultValue ?? "");
   const highlighted = value ?? own;
@@ -316,6 +443,8 @@ function MenuRoot({
           if (typeof ref === "function") ref(node);
           else if (ref) ref.current = node;
         }}
+        data-width={width === undefined ? "rows" : undefined}
+        style={typeof width === "number" ? { ...style, width } : style}
         className={`menu ${className}`}
       >
         {children}

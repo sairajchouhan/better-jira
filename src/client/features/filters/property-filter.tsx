@@ -157,10 +157,6 @@ export const plural = (noun: string) =>
 const noMatches = (name: string) => `No matching ${plural(name.toLowerCase())}`;
 /** Relations are single-select in Linear (aria-multiselectable=false): picking one replaces the filter and closes the menu. */
 const isSingle = (field: Field) => field === "relations";
-/** Linear keeps a filter submenu at its opening width while you type in it: the first layout's width becomes its minimum. */
-export const freezeWidth = (node: HTMLElement | null) => {
-  if (node && !node.style.minWidth) node.style.minWidth = `${node.getBoundingClientRect().width}px`;
-};
 
 /**
  * The board's issues under every filter except this field's own, its rule, its choices and the edits Linear's menu makes.
@@ -552,7 +548,7 @@ export function PropertyFilter({
   if (dated) {
     const presets = datePresets(field, search);
     return (
-      <Menu ref={freezeWidth} shouldFilter={false} className="filter-menu filter-sub">
+      <Menu shouldFilter={false} className="filter-menu filter-sub">
         {searchRow(field === "due" ? "Try: 1 week ago, 1 week from now…" : "Filter…", name)}
         <Menu.List maxHeight="360px">
           {!presets.length && <Menu.Empty always>{noMatches(name)}</Menu.Empty>}
@@ -595,7 +591,7 @@ export function PropertyFilter({
   }
   return (
     <div className={inline ? "" : "filter-menu filter-sub"}>
-      <Menu ref={freezeWidth} filter={menuFilter}>
+      <Menu filter={menuFilter}>
         {searchRow()}
         <Menu.List maxHeight={inline ? "300px" : "360px"}>
           <Menu.Empty>{noMatches(name)}</Menu.Empty>

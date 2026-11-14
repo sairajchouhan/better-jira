@@ -68,7 +68,7 @@ export function PropertyMenu({
     <Menu
       defaultValue={current}
       filter={menuFilter}
-      style={target ? undefined : { width: 206 }}
+      width={target ? "auto" : 206}
       onKeyDown={onKeyDown}
     >
       <Menu.Input

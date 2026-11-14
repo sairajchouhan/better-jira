@@ -48,7 +48,7 @@ export function ReminderMenu({
   // subActionPlaceholder); a document's menu stays beside its anchor.
   const target = useCommandTarget();
   const menu = (
-    <Menu shouldFilter={false} style={target ? undefined : { width: 320 }}>
+    <Menu shouldFilter={false} width={target ? "auto" : 320}>
       <Menu.Input
         autoFocus
         aria-label="Reminder time"

@@ -1,4 +1,4 @@
-import { expect, test, sleep, type App } from "./app";
+import { expect, fixture, test, sleep, type App } from "./app";
 
 /** Regressions for action menus (action-menu.tsx and Issue options): one test per audit finding, each fails with its fix removed. */
 
@@ -72,6 +72,41 @@ test("ISSUE-1 / ISSUE-13: Issue options › Labels is the L picker's checkbox ro
   expect(await page.eval(`document.querySelector('${LABELS} [cmdk-item][data-value="Create fresh one"]').textContent`)).toBe(
     'Create new label: "fresh-one"',
   );
+});
+
+test("k3e: Issue options › Labels is as wide as the labels on screen, 400px at most for the whole row, and never shrinks", async ({
+  open,
+}) => {
+  // A board with hundreds of short labels and one very long one at the very end, far below the window (made-up names).
+  const long = `zz-${"very-long-made-up-label-".repeat(8)}end`;
+  const labels = [...Array.from({ length: 300 }, (_, i) => `label-${String(i).padStart(3, "0")}`), long];
+  await fixture.reset({ catalog: { priorities: [], labels, users: [] } });
+  const page = await open("", { setup: writable, height: 800 });
+  const LABELS = dialog("Labels");
+  const width = (selector: string) => page.eval<number>(`document.querySelector('${selector}').getBoundingClientRect().width`);
+  await rightClick(page);
+  await page.hover(`${MENU} [cmdk-item][data-value="Labels"]`);
+  await page.waitFor(exists(`${LABELS} [data-label="${long}"]`));
+  await sleep(200); // past k3e's 150ms trailing measure
+  // Every label is listed, but only the rows on screen (and ten past them) size the menu: the long label far down doesn't.
+  const opened = await width(LABELS);
+  expect(opened).toBeGreaterThanOrEqual(175);
+  expect(opened).toBeLessThan(260);
+  // A search that lists the long label grows the menu to Vw.ITEM_MAX_WIDTH for the whole row, the label truncated inside it.
+  await page.page.focus(`${LABELS} input:not(.menu-checkbox)`);
+  await page.type("zz-very");
+  await page.waitFor(`document.querySelectorAll('${LABELS} [data-label]').length === 1`);
+  await sleep(200);
+  expect(await width(LABELS)).toBeCloseTo(400, 0);
+  expect(await width(`${LABELS} [data-label="${long}"]`)).toBeLessThanOrEqual(400);
+  expect(
+    await page.eval(`(()=>{const n=document.querySelector('${LABELS} [data-label="${long}"] .menu-name');return n.scrollWidth>n.clientWidth})()`),
+  ).toBe(true);
+  // Clearing the search brings the short labels back; the menu keeps its width while open.
+  await page.page.fill(`${LABELS} input:not(.menu-checkbox)`, "");
+  await page.waitFor(`document.querySelectorAll('${LABELS} [data-label]').length > 100`);
+  await sleep(200);
+  expect(await width(LABELS)).toBeCloseTo(400, 0);
 });
 
 test("CORE-7: the inbox filter's values are checkbox rows that keep the menu open", async ({ open }) => {

@@ -201,7 +201,8 @@ export function CaretMenu({
       }}
       {...elevation.props}
       className={`${MENU_POPUP} fixed z-50`}
-      style={{ ...style, width }}
+      style={style}
+      width={width}
       onMouseDown={(event) => event.preventDefault()}
     >
       <Menu.List>

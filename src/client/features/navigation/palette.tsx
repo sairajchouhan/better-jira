@@ -343,6 +343,7 @@ function PaletteFrame({
         {title && <CommandMenuTitle issue={title} />}
         <Menu
           shouldFilter={false}
+          width="auto"
           // The highlighted issue (arrow keys or pointer) loads before it is picked.
           onValueChange={(value) => {
             const issue = get().issues.get(value);

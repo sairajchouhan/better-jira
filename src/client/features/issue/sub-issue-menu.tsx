@@ -36,7 +36,7 @@ export function ChildrenMenu({ parent, current, anchor, close }: { parent: Issue
           close={() => close()}
           fit
         >
-          <Menu style={{ width: 347 }}>
+          <Menu width={347}>
             <Menu.Input
               hideWhenEmpty
               autoFocus
