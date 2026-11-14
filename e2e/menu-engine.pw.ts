@@ -372,3 +372,135 @@ test("ISSUE-18: after a status change moves the card, focus returns to its new n
   expect(await page.eval(`window.__old.isConnected`)).toBe(false);
   await page.waitFor(`window.__ops.some(w=>w.key==="TEST-2"&&w.ops.some(o=>o.op==="status"))`);
 });
+
+test("MENU-KEYS-1: → on a highlighted submenu row moves focus in on the first press, its first row highlighted", async ({ open }) => {
+  const page = await open();
+  await openFilter(page);
+  await page.key("ArrowDown");
+  await page.key("ArrowRight");
+  // One press: the submenu takes focus as soon as it is placed (it can't while still hidden).
+  await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Filter Status"`, 1000);
+  const SUB = dialog("Status filter");
+  await page.waitFor(`!!document.querySelector('${SUB} [role^=menuitem][data-focused]')`);
+  expect(await selected(page, SUB)).toBe(await page.eval<string>(`document.querySelector('${SUB} [role^=menuitem]').dataset.value`));
+  await page.key("Escape");
+});
+
+test("MENU-KEYS-2: a preview keeps the highlight in its parent; ← in the parent closes it", async ({ open }) => {
+  const page = await open();
+  await openFilter(page);
+  await page.key("ArrowDown");
+  await page.waitFor(exists(dialog("Status filter")), 2000);
+  expect(await page.active()).toBe("Add Filter…");
+  expect(await selected(page, `.menu:has(${ROOT})`)).toBe("Status");
+  // The submenu focus hasn't entered shows no highlight of its own (Linear's submenu has none until requestFocus).
+  expect(await page.eval(exists(`${dialog("Status filter")} [role^=menuitem][data-focused]`))).toBe(false);
+  await page.key("ArrowLeft");
+  await page.waitFor(gone(dialog("Status filter")));
+  expect(await page.active()).toBe("Add Filter…");
+  expect(await selected(page, `.menu:has(${ROOT})`)).toBe("Status");
+  await page.key("Escape");
+});
+
+test("MENU-KEYS-3: Escape in a root menu's search with text closes the menu, not just the search", async ({ open }) => {
+  const page = await open();
+  await openFilter(page);
+  await page.type("st");
+  await page.key("Escape");
+  await page.waitFor(gone(ROOT));
+  expect(await page.active()).toBe("Add filter");
+});
+
+test("MENU-KEYS-4: Shift+↓ with text in the search selects it and leaves the highlight", async ({ open }) => {
+  const page = await open();
+  await openFilter(page);
+  await page.type("sta");
+  const before = await selected(page);
+  for (let i = 0; i < 3; i++) await page.key("ArrowLeft");
+  expect(await selected(page)).toBe(before);
+  await page.key("ArrowDown", "Shift");
+  expect(await selected(page)).toBe(before);
+  expect(await page.eval(`[document.activeElement.selectionStart, document.activeElement.selectionEnd]`)).toEqual([0, 3]);
+  await page.key("Escape");
+});
+
+test("MENU-KEYS-5: ⌘Enter on a checkbox row toggles it and keeps the menu open, like Shift+Enter", async ({ open }) => {
+  const page = await open();
+  await openFilter(page);
+  await page.key("ArrowDown");
+  await page.key("ArrowRight");
+  const SUB = dialog("Status filter");
+  await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Filter Status"`);
+  await page.key("Enter", "Meta");
+  await page.waitFor(`document.querySelector('${SUB} [role^=menuitem][data-focused]')?.getAttribute("aria-checked")==="true"`);
+  expect(await page.eval(exists(SUB))).toBe(true);
+  await page.key("Escape");
+});
+
+test("MENU-KEYS-6: Space with nothing highlighted does nothing; a held → doesn't open a submenu", async ({ open }) => {
+  const page = await open();
+  await rightClick(page, '[data-key="TEST-2"]');
+  // A pointer-opened menu has no highlight yet.
+  expect(await selected(page, ISSUE_MENU)).toBe("");
+  await page.key(" ");
+  expect(await selected(page, ISSUE_MENU)).toBe("");
+  expect(await page.eval(exists(ISSUE_MENU))).toBe(true);
+  await page.key("ArrowDown");
+  expect(await selected(page, ISSUE_MENU)).toBe("Status");
+  // Held → (Playwright's `down` on a key already down sends a repeat): pressed first on the last row, which has no submenu, then
+  // still held as ↓ wraps the highlight onto Status. The repeat doesn't open it.
+  await page.key("ArrowUp");
+  expect(await selected(page, ISSUE_MENU)).toBe("Delete");
+  await page.page.keyboard.down("ArrowRight");
+  await page.page.keyboard.press("ArrowDown");
+  expect(await selected(page, ISSUE_MENU)).toBe("Status");
+  await page.page.keyboard.down("ArrowRight");
+  await page.page.keyboard.up("ArrowRight");
+  await sleep(100);
+  expect(await page.active()).toBe("Find issue options");
+  await page.key("Escape");
+});
+
+test("MENU-KEYS-7: a pointer that stops inside the safe triangle over another row opens that row once the triangle expires", async ({
+  open,
+}) => {
+  const page = await open();
+  await openFilter(page);
+  await page.hover('[role^=menuitem][data-value="Status"]');
+  await page.waitFor(exists(dialog("Status filter")));
+  const row = await page.rect(`.menu:has(${ROOT}) [role^=menuitem][data-value="Assignee"]`);
+  const sub = await page.rect(dialog("Status filter"));
+  // Toward the submenu, onto the next row down: the triangle follows the pointer, so the row under it gets no events of its own.
+  const x = sub.x < row.x ? row.x + 12 : row.x + row.width - 12;
+  await page.page.mouse.move(x, row.y + row.height / 2, { steps: 4 });
+  // Linear's JCe: 150ms after the last sample off Status, the triangle goes and the row under the pointer takes it.
+  await page.waitFor(exists(dialog("Assignee filter")), 1000);
+  expect(await selected(page, `.menu:has(${ROOT})`)).toBe("Assignee");
+  await page.key("Escape");
+});
+
+test("MENU-KEYS-8: typing in Issue options › Labels changes the create row's value without unmounting the app", async ({ open }) => {
+  const page = await open();
+  await rightClick(page, '[data-key="TEST-2"]');
+  await page.hover(`${ISSUE_MENU} [role^=menuitem][data-value="Labels"]`);
+  await page.waitFor(exists(dialog("Labels")));
+  await page.hover(`${dialog("Labels")} [role^=menuitem]`);
+  await page.waitFor(`!!document.activeElement?.closest('${dialog("Labels")}')`);
+  // Each character renames the create row ("Create z", "Create zz", …): React Aria throws on a mounted row's id changing.
+  await page.type("zz-new");
+  await page.waitFor(exists(`${dialog("Labels")} [role^=menuitem][data-value="Create zz-new"]`));
+  expect(await page.eval(exists("[data-key]"))).toBe(true);
+  await page.key("Escape");
+});
+
+test("MENU-KEYS-9: the view icon picker opens on its search, not the custom colour well, so the arrows move in its grid", async ({
+  open,
+}) => {
+  const page = await open();
+  await page.page.getByRole("button", { name: "Add new view", exact: true }).click();
+  await page.page.getByRole("button", { name: "Choose view icon and color" }).click();
+  await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Search icons"`);
+  await page.key("ArrowDown");
+  await page.waitFor(exists("[role=listbox] [role=option][data-focused]"));
+  await page.key("Escape");
+});
