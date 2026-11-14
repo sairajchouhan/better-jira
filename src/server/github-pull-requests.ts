@@ -47,8 +47,9 @@ export type GitHubNode = {
 // oxlint-disable-next-line no-underscore-dangle -- GitHub's GraphQL type name
 const isBot = (review: Review) => review.author?.__typename === "Bot" || !!review.author?.login?.endsWith("[bot]");
 /** Linear's `statusBasedOnReviews` (`uU`/`dU`) for a pull request GitHub reports: merged, closed, draft, else by its people's latest
- *  reviews. A change request or any submitted review (approved, changes requested, commented) is in review; approved only when
- *  GitHub's own review decision says so (Linear's `trustHumanApprovals` is off for display). */
+ *  reviews (bots' don't count). A change request wins and is in review; an approval is approved; any other submitted review
+ *  (commented) is in review. GitHub's `reviewDecision`, when the query asks for it, decides approval instead: the search leaves it
+ *  out, as it makes each page several times slower. */
 export function gitHubStatus(node: GitHubNode): Pick<PullRequest, "status" | "changesRequested"> {
   if (node.merged || node.state === "MERGED") return { status: "merged" };
   if (node.state === "CLOSED") return { status: "declined" };
@@ -56,7 +57,8 @@ export function gitHubStatus(node: GitHubNode): Pick<PullRequest, "status" | "ch
   const reviews = (node.latestReviews?.nodes ?? []).filter((r): r is Review => !!r && !isBot(r));
   const changes = node.reviewDecision === "CHANGES_REQUESTED" || reviews.some((r) => r.state === "CHANGES_REQUESTED");
   if (changes) return { status: "inReview", changesRequested: true };
-  if (node.reviewDecision === "APPROVED") return { status: "approved" };
+  const approved = node.reviewDecision === undefined ? reviews.some((r) => r.state === "APPROVED") : node.reviewDecision === "APPROVED";
+  if (approved) return { status: "approved" };
   if (reviews.some((r) => r.state === "APPROVED" || r.state === "COMMENTED")) return { status: "inReview" };
   return { status: "open" };
 }
@@ -133,7 +135,7 @@ type Fetch = (url: string, init: RequestInit) => Promise<Response>;
 /** GitHub's GraphQL API, read-only (queries only), within its rate limit: `X-RateLimit-Remaining` at or under the reserve, a
  *  secondary limit (403/429 with `Retry-After`) or a RATE_LIMITED answer pauses every request until GitHub's reset. A rejected token
  *  is read again on the next request. */
-export function gitHubClient(token: () => Promise<string | undefined>, fetcher: Fetch = fetch, now = Date.now) {
+export function gitHubClient(token: () => Promise<string | undefined>, fetcher: Fetch = fetch, now = Date.now, retryMs = 2000) {
   let pausedUntil = 0,
     held: string | undefined,
     requests = 0;
@@ -146,12 +148,17 @@ export function gitHubClient(token: () => Promise<string | undefined>, fetcher: 
     if (now() < pausedUntil) throw new GitHubPaused(pausedUntil);
     held ??= await token();
     if (!held) throw new Error("No GitHub token: log in with `gh auth login`, or set GITHUB_TOKEN.");
-    const res = await fetcher("https://api.github.com/graphql", {
-      method: "POST",
-      headers: { Authorization: `bearer ${held}`, "Content-Type": "application/json", "User-Agent": "better-jira" },
-      body: JSON.stringify({ query, variables }),
-    });
-    requests++;
+    const send = () => {
+      requests++;
+      return fetcher("https://api.github.com/graphql", {
+        method: "POST",
+        headers: { Authorization: `bearer ${held}`, "Content-Type": "application/json", "User-Agent": "better-jira" },
+        body: JSON.stringify({ query, variables }),
+      });
+    };
+    let res = await send();
+    // GitHub's GraphQL answers 502 now and then on a heavy search: once more, after a moment.
+    if (res.status >= 500) res = await Bun.sleep(retryMs).then(send);
     if (res.status === 401) {
       held = undefined;
       throw new Error("GitHub rejected the token (401).");
@@ -163,7 +170,8 @@ export function gitHubClient(token: () => Promise<string | undefined>, fetcher: 
     const remaining = res.headers.get("x-ratelimit-remaining");
     if (remaining !== null && Number(remaining) <= RESERVE) pausedUntil = resetOf(res);
     if (!res.ok) throw new Error(`GitHub answered ${res.status}.`);
-    const body = (await res.json()) as { data?: T; errors?: { type?: string; message?: string }[] };
+    const body = (await res.json().catch(() => null)) as { data?: T; errors?: { type?: string; message?: string }[] } | null;
+    if (!body) throw new Error("GitHub answered no data.");
     if (body.errors?.some((e) => e.type === "RATE_LIMITED")) {
       pausedUntil = resetOf(res);
       throw new GitHubPaused(pausedUntil);
@@ -178,11 +186,11 @@ export type GitHubClient = ReturnType<typeof gitHubClient>;
 // ——— The source ———
 
 const SEARCH = `query($q: String!, $after: String) {
-  search(query: $q, type: ISSUE, first: 100, after: $after) {
+  search(query: $q, type: ISSUE, first: 50, after: $after) {
     issueCount
     pageInfo { hasNextPage endCursor }
     nodes { ... on PullRequest {
-      url number title body headRefName baseRefName state isDraft merged updatedAt reviewDecision
+      url number title body headRefName baseRefName state isDraft merged updatedAt
       repository { name } author { login }
       latestReviews(first: 20) { nodes { state author { login __typename } } }
     } }
@@ -192,7 +200,7 @@ const MINE = `query { search(query: "is:pr author:@me sort:updated-desc", type: 
   nodes { ... on PullRequest { repository { owner { login __typename } } } }
 } }`;
 type SearchPage = { search: { issueCount: number; pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: GitHubNode[] } };
-/** GitHub's search answers at most this many results per query; past it, the next query starts below the oldest one read. */
+/** GitHub's search answers at most this many results per query; past it, the next query starts at the newest one read. */
 const SEARCH_CAP = 1000;
 /** Each poll re-reads this much before the last one began: GitHub's search index lags its pull requests a little. */
 const OVERLAP_MS = 5 * 60_000;
@@ -276,29 +284,34 @@ export function gitHubPullRequests(db: Database, options: GitHubOptions) {
         setMeta("scope", scope);
       }
       const since = Number(getMeta("since") ?? 0);
-      const from = iso(since ? since - OVERLAP_MS : started - options.backfillDays * DAY_MS);
-      let until: string | undefined, after: string | undefined, read = 0;
-      for (;;) {
-        const range = until ? `updated:${from}..${until}` : `updated:>=${from}`;
-        const { search } = await options.client.graphql<SearchPage>(SEARCH, {
-          q: `is:pr ${scope} ${range} sort:updated-desc`,
-          after: after ?? null,
-        });
-        for (const node of search.nodes) for (const key of take(node)) changed.add(key);
-        read += search.nodes.length;
-        if (search.pageInfo.hasNextPage && search.pageInfo.endCursor) {
-          after = search.pageInfo.endCursor;
-          continue;
-        }
-        // Past the search's cap: the next query reads below the oldest pull request this one reached.
-        const oldest = search.nodes.at(-1)?.updatedAt;
-        if (read < SEARCH_CAP || search.issueCount <= read || !oldest || oldest === until) break;
-        until = oldest;
-        after = undefined;
+      let from = since ? since - OVERLAP_MS : started - options.backfillDays * DAY_MS,
+        after: string | undefined,
         read = 0;
+      try {
+        // Oldest first, so each page moves the mark on: a poll cut off (by GitHub's limit, or an error) resumes where it stopped.
+        for (;;) {
+          const { search } = await options.client.graphql<SearchPage>(SEARCH, {
+            q: `is:pr ${scope} updated:>=${iso(from)} sort:updated-asc`,
+            after: after ?? null,
+          });
+          for (const node of search.nodes) for (const key of take(node)) changed.add(key);
+          read += search.nodes.length;
+          const last = Date.parse(search.nodes.at(-1)?.updatedAt ?? "");
+          if (last) setMeta("since", String(Math.max(last, since)));
+          if (search.pageInfo.hasNextPage && search.pageInfo.endCursor) {
+            after = search.pageInfo.endCursor;
+            continue;
+          }
+          // Past the search's cap: the next query starts at the newest pull request this one reached.
+          if (read < SEARCH_CAP || search.issueCount <= read || !last || last <= from) break;
+          from = last;
+          after = undefined;
+          read = 0;
+        }
+        setMeta("since", String(started));
+      } finally {
+        if (changed.size) index = undefined;
       }
-      setMeta("since", String(started));
-      if (changed.size) index = undefined;
       return [...changed];
     },
   };

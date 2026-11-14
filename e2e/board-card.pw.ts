@@ -414,3 +414,26 @@ test("board colours: the Add new issue pill, the column backdrop and the header 
     await page.waitFor(`getComputedStyle(${tab("All issues")}).backgroundColor==="lch(16.706 0.979 272)"`);
   });
 });
+
+/** TEST-3: one pull request GitHub links by its branch (Jira links none), with a reviewer's change request. */
+const githubPrSetup = `(()=>{localStorage.setItem(${JSON.stringify(PREFS_KEY)},${JSON.stringify(
+  JSON.stringify({ 1: { display: { layout: "board", properties: BADGE_PROPS } } }),
+)});const real=fetch;window.fetch=async(input,init)=>{const path=new URL(String(input),location.href).pathname;
+ if(path==='/api/issues/TEST-3/pull-requests')return Response.json([{url:'https://github.com/example/app/pull/21',title:'Queue the save',number:'#21',status:'inReview',changesRequested:true,repo:'app',author:'ana-dev',branch:'fix/TEST-3-queue',target:'main',tool:'GitHub',updated:'2026-11-10T10:00:00Z'}]);
+ if(path==='/api/issues'){const issues=await (await real(input,init)).json();return Response.json(issues.map(i=>i.key==='TEST-3'?{...i,prCount:1,prStatus:'inReview'}:i));}
+ return real(input,init);};})()`;
+
+test("a pull request GitHub links shows on the card like Jira's: in review is Linear's green open icon; hover says changes requested", async ({ open }) => {
+  await fixture.reset();
+  const page = await open("", { setup: githubPrSetup });
+  const badge = `${card("TEST-3")}.querySelector('[aria-label="Pull requests on TEST-3"]')`;
+  await page.waitFor(`${badge}?.textContent==="#21"`);
+  const icon = `${badge}.querySelector('[data-pr-status]')`;
+  expect(await page.eval(`[${icon}.dataset.prStatus,getComputedStyle(${icon}).fill]`)).toEqual(["inReview", "lch(60 64.37 141.95)"]);
+  const chip = await page.eval<DOMRect>(rect(badge));
+  await page.page.mouse.move(1, 1);
+  await page.page.mouse.move((chip.left + chip.right) / 2, (chip.top + chip.bottom) / 2);
+  const hover = `document.querySelector('[data-hover-card="Pull requests"]')`;
+  await page.waitFor(`${hover}?.textContent.includes("Queue the save")`);
+  expect(await page.eval(`${hover}.textContent`)).toContain("app#21 · Changes requested · ana-dev");
+});

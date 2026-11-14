@@ -44,7 +44,6 @@ const node = (over: Partial<GitHubNode> = {}): GitHubNode => ({
   isDraft: false,
   merged: false,
   updatedAt: "2026-11-10T10:00:00Z",
-  reviewDecision: null,
   repository: { name: "widgets" },
   author: { login: "ana-dev" },
   latestReviews: { nodes: [] },
@@ -58,7 +57,9 @@ test("a pull request's state follows Linear's statusBasedOnReviews", () => {
   expect(gitHubStatus(node({ isDraft: true, latestReviews: { nodes: [review("COMMENTED")] } }))).toEqual({ status: "draft" });
   expect(gitHubStatus(node())).toEqual({ status: "open" });
   expect(gitHubStatus(node({ latestReviews: { nodes: [review("COMMENTED")] } }))).toEqual({ status: "inReview" });
-  expect(gitHubStatus(node({ latestReviews: { nodes: [review("APPROVED")] } }))).toEqual({ status: "inReview" });
+  // Without GitHub's review decision a person's approval is approved; with it, the decision says.
+  expect(gitHubStatus(node({ latestReviews: { nodes: [review("APPROVED")] } }))).toEqual({ status: "approved" });
+  expect(gitHubStatus(node({ reviewDecision: "REVIEW_REQUIRED", latestReviews: { nodes: [review("APPROVED")] } }))).toEqual({ status: "inReview" });
   expect(gitHubStatus(node({ reviewDecision: "APPROVED", latestReviews: { nodes: [review("APPROVED")] } }))).toEqual({ status: "approved" });
   expect(gitHubStatus(node({ reviewDecision: "APPROVED", latestReviews: { nodes: [review("APPROVED"), review("CHANGES_REQUESTED", "cy-dev")] } }))).toEqual({
     status: "inReview",
@@ -175,7 +176,7 @@ test("the first poll reads the backfill window, later ones only what changed sin
   const gh = fakeGitHub(() => ({ nodes }));
   const prs = gitHubPullRequests(db, { client: gh.client, sources: ["org:acme-org"], backfillDays: 30, now: () => now });
   expect(await prs.refresh()).toEqual(["ACME-1"]);
-  expect(gh.queries[0]!.q).toBe("is:pr org:acme-org updated:>=2026-10-15T12:00:00Z sort:updated-desc");
+  expect(gh.queries[0]!.q).toBe("is:pr org:acme-org updated:>=2026-10-15T12:00:00Z sort:updated-asc");
   expect(gh.queries[0]!.query.trimStart().startsWith("query")).toBe(true);
   expect(prs.forKey("ACME-1").map((pr) => [pr.number, pr.status])).toEqual([["#7", "open"]]);
   expect(prs.forKey("ACME-2")).toEqual([]);
@@ -183,7 +184,7 @@ test("the first poll reads the backfill window, later ones only what changed sin
   // Nothing new: no key changes. The next poll starts five minutes before the last one began.
   now += 30_000;
   expect(await prs.refresh()).toEqual([]);
-  expect(gh.queries[1]!.q).toBe("is:pr org:acme-org updated:>=2026-11-14T11:55:00Z sort:updated-desc");
+  expect(gh.queries[1]!.q).toBe("is:pr org:acme-org updated:>=2026-11-14T11:55:00Z sort:updated-asc");
 
   // Reviewed, then retitled to another issue: both issues' lists change.
   nodes = [node({ latestReviews: { nodes: [review("COMMENTED")] } })];
@@ -199,25 +200,52 @@ test("the first poll reads the backfill window, later ones only what changed sin
   expect(again.forKey("ACME-2")).toHaveLength(1);
 });
 
-test("a window past the search's 1,000-result cap is read in slices below the oldest pull request reached", async () => {
+test("a window past the search's 1,000-result cap is read in slices from the newest pull request reached", async () => {
   const db = new Database(":memory:");
-  const at = (i: number) => new Date(NOW - i * 60_000).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const at = (i: number) => new Date(NOW - (1500 - i) * 60_000).toISOString().replace(/\.\d{3}Z$/, "Z");
+  // Oldest first, as `sort:updated-asc` answers.
   const all = Array.from({ length: 1500 }, (_, i) =>
     node({ url: `https://github.com/acme-org/widgets/pull/${i + 1}`, number: i + 1, title: `Change ACME-${i + 1}`, headRefName: "x", updatedAt: at(i) }),
   );
   const gh = fakeGitHub((q, after) => {
-    const until = q.match(/updated:\S+\.\.(\S+)/)?.[1];
-    const matching = all.filter((n) => !until || n.updatedAt! <= until);
+    const from = q.match(/updated:>=(\S+)/)![1]!;
+    const matching = all.filter((n) => n.updatedAt! >= from);
     const capped = matching.slice(0, 1000);
     const start = after ? Number(after) : 0;
-    const next = start + 100 < capped.length ? String(start + 100) : undefined;
-    return { nodes: capped.slice(start, start + 100), next, count: matching.length };
+    const next = start + 50 < capped.length ? String(start + 50) : undefined;
+    return { nodes: capped.slice(start, start + 50), next, count: matching.length };
   });
   const prs = gitHubPullRequests(db, { client: gh.client, sources: ["org:acme-org"], backfillDays: 30, now: () => NOW });
   expect(await prs.refresh()).toHaveLength(1500);
-  expect(gh.queries).toHaveLength(16);
-  expect(gh.queries[10]!.q).toBe(`is:pr org:acme-org updated:2026-10-15T12:00:00Z..${at(999)} sort:updated-desc`);
+  // 20 pages to the cap, then 11 more from the 1,000th pull request (which is read twice).
+  expect(gh.queries).toHaveLength(31);
+  expect(gh.queries[20]!.q).toBe(`is:pr org:acme-org updated:>=${at(999)} sort:updated-asc`);
   expect(prs.forKey("ACME-1500")).toHaveLength(1);
+});
+
+test("a poll cut off midway resumes from the last page it read, not from the start of the window", async () => {
+  const db = new Database(":memory:");
+  const pages = [
+    { nodes: [node({ updatedAt: "2026-11-01T00:00:00Z" })], next: "p2" },
+    { nodes: [node({ url: "https://github.com/acme-org/widgets/pull/9", title: "ACME-9", updatedAt: "2026-11-02T00:00:00Z" })] },
+  ];
+  let fail = true;
+  const client = {
+    graphql: async <T,>(_query: string, variables: Record<string, unknown>): Promise<T> => {
+      if (variables.after === "p2" && fail) throw new Error("GitHub answered 502.");
+      const page = variables.after === "p2" ? pages[1]! : pages[0]!;
+      queries.push(String(variables.q));
+      return { search: { issueCount: 2, pageInfo: { hasNextPage: !!page.next, endCursor: page.next ?? null }, nodes: page.nodes } } as T;
+    },
+  };
+  const queries: string[] = [];
+  const prs = gitHubPullRequests(db, { client, sources: ["org:acme-org"], backfillDays: 30, now: () => NOW });
+  await expect(prs.refresh()).rejects.toThrow("502");
+  // What the first page read stands.
+  expect(prs.forKey("ACME-1")).toHaveLength(1);
+  fail = false;
+  await prs.refresh();
+  expect(queries.at(-1)).toBe("is:pr org:acme-org updated:>=2026-10-31T23:55:00Z sort:updated-asc");
 });
 
 test("the default sources come from the user's own pull requests, and other sources drop what the old ones linked", async () => {
@@ -236,7 +264,7 @@ test("the default sources come from the user's own pull requests, and other sour
   expect(queries[1]).toStartWith("is:pr org:acme-org ");
   const other = gitHubPullRequests(db, { client, sources: ["repo:acme-org/gears"], backfillDays: 30, now: () => NOW });
   expect(await other.refresh()).toEqual(["ACME-1"]);
-  expect(queries[2]).toBe("is:pr repo:acme-org/gears updated:>=2026-10-15T12:00:00Z sort:updated-desc");
+  expect(queries[2]).toBe("is:pr repo:acme-org/gears updated:>=2026-10-15T12:00:00Z sort:updated-asc");
 });
 
 test("regression: an issue Jira links no pull request to shows the one GitHub links by its branch name", async () => {
@@ -246,4 +274,11 @@ test("regression: an issue Jira links no pull request to shows the one GitHub li
   await prs.refresh();
   const issue: { key: string; prCount?: number; prStatus?: PullRequest["status"] } = { key: "ACME-9", prCount: 0 };
   expect(withGitHubPullRequests(issue, prs.forKey(issue.key))).toEqual({ key: "ACME-9", prCount: 1, prStatus: "open" });
+});
+
+test("the client asks once more when GitHub answers 502", async () => {
+  const replies = [answer(502, {}), answer(200, {})];
+  const client = gitHubClient(async () => "test-token", async () => replies.shift()!, Date.now, 0);
+  expect(await client.graphql("query { ok }", {})).toEqual({ ok: true });
+  expect(client.requests()).toBe(2);
 });
