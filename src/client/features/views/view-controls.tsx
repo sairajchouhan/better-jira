@@ -16,7 +16,7 @@ import {
   type RefObject,
 } from "react";
 import { MenuSurface, POPOVER_SURFACE, Popover } from "@/client/components/menu-surface";
-import { dateValueLabel, filterChoices, plural, PropertyFilter, useFilterCatalog } from "@/client/features/filters/property-filter";
+import { dateValueLabel, plural, PropertyFilter, useChoiceLabels, useChoicesAmong } from "@/client/features/filters/property-filter";
 import { Menu } from "@/client/components/menu";
 import { FilterBar, FilterBlock, type OpenedBy, valueIcons } from "@/client/components/filter-block";
 import { FilterOperatorMenu } from "@/client/features/filters/filter-operator-menu";
@@ -411,12 +411,7 @@ function RuleChip({
   onEdit: (segment: "operator" | "value", anchor: HTMLElement, openedBy: OpenedBy) => void;
   remove: () => void;
 }) {
-  const issues = useStore((s) => (c.values.length ? s.issues : null));
-  const catalog = useFilterCatalog();
-  const all = useMemo(
-    () => (issues ? filterChoices(c.field, board, [...issues.values()], undefined, catalog) : []),
-    [issues, c.field, board, catalog],
-  );
+  const all = useChoiceLabels(c.field, board);
   const name = FIELDS.find(([f]) => f === c.field)?.[1] ?? c.field;
   const picked = c.values.map((value) => ({ value, choice: all.find((v) => v.value === value) }));
   const labelOf = ({ value, choice }: (typeof picked)[number]) =>
@@ -797,8 +792,7 @@ function RuleEditor({
   issues: Issue[];
   patch: (p: Partial<Rule> | null) => void;
 }) {
-  const catalog = useFilterCatalog();
-  const choices = useMemo(() => filterChoices(r.field, board, issues, undefined, catalog), [r.field, board, issues, catalog]);
+  const choices = useChoicesAmong(r.field, board, issues);
   const free =
     isDate(r.field) || isNumeric(r.field) || r.field === "content" || r.field === "links";
   return (

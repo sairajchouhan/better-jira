@@ -1,5 +1,8 @@
 import { type Issue, type Board, type User } from "@/shared/issue-model";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useMemo, useRef, useState, type ReactNode } from "react";
+import { useStableCallback } from "@/client/lib/stable-callback";
+import { sharedMemo } from "@/client/lib/shared-memo";
+import { useBoardIssues } from "@/client/state/board-issues";
 import { Avatar } from "@/client/components/avatar";
 import { statuses } from "@/shared/board-catalog";
 import { epicOf, isEpic, lookupIn, parentOf } from "@/shared/epics";
@@ -20,12 +23,14 @@ import {
   isDate,
   isNumeric,
   matchesRule,
+  valueCounts,
   newId,
   operatorsFor,
   parentName,
   priorityRank,
   selectIssues,
   type Field,
+  type Preferences,
   type Rule,
 } from "@/shared/view-model";
 
@@ -61,13 +66,16 @@ const person = (user: User) => <Avatar user={user} size={16} />;
 /** Values a field offers beyond those its issues hold: Jira's priorities and labels, as Linear lists every priority and label
  *  rather than only those in use. */
 export type FilterCatalog = { priorities?: string[]; labels?: string[] };
+// Results shared by every picker, filter menu and chip, cached on the store's objects they come from (sharedMemo).
+const shared = sharedMemo();
 /** The catalog of the Jira site the board is on. */
 export function useFilterCatalog(): FilterCatalog {
   const options = useStore((s) => s.options);
-  return useMemo(
-    () => ({ priorities: options.priorities.map((p) => p.name), labels: options.labels }),
-    [options],
-  );
+  // One object per catalog, not per component, so the choices cache (useFieldChoices) hits across every picker.
+  return shared(options, "catalog", [], () => ({
+    priorities: options.priorities.map((p) => p.name),
+    labels: options.labels,
+  }));
 }
 
 const BY_RANK: Field[] = ["priority", "projectPriority"];
@@ -128,7 +136,8 @@ export function filterChoices(
     if (field === "type" && i.type) add(i.type, i.type, <TypeDot type={i.type} />);
     // Parent issues only: an epic is a Project option, never a Parent one (parentOf).
     const parent = field === "parent" ? parentOf(i, lookup) : undefined;
-    if (parent) add(parent, parentName(parent, issues), <FilterIcon name="Parent issues" />);
+    // Named from the lookup, not a scan of every issue per parented issue.
+    if (parent) add(parent, parentName(parent, lookup), <FilterIcon name="Parent issues" />);
     if (field === "milestone")
       for (const version of i.milestones ?? []) add(version.id, version.name);
     if (field === "watchers")
@@ -142,8 +151,10 @@ export function filterChoices(
       : a.label.localeCompare(b.label);
   if (field !== "status" && field !== "projectStatus")
     out.sort((a, b) => special(a) - special(b) || (special(a) < 2 ? 0 : order(a, b)));
-  // Counted against the board's issues, so an epic the other filters hide still names its issues' project.
-  for (const o of out) o.count = countWhere(matching, { field, op: "is", values: [o.value] }, issues);
+  // Counted against the board's issues, so an epic the other filters hide still names its issues' project; in one pass for
+  // every value (valueCounts).
+  const count = valueCounts(matching, field, issues, ME.id);
+  for (const o of out) o.count = count(o.value);
   return out;
 }
 /** How many of `issues` match `rule`; `universe` is where an issue's epic and sub-issues are looked up. */
@@ -159,35 +170,68 @@ const noMatches = (name: string) => `No matching ${plural(name.toLowerCase())}`;
 /** Relations are single-select in Linear (aria-multiselectable=false): picking one replaces the filter and closes the menu. */
 const isSingle = (field: Field) => field === "relations";
 
+/** The settings without rule `ruleId`; a rule that isn't in the view yet (a new pick) leaves them as they are. */
+export function withoutRule(prefs: Preferences, ruleId: string): Preferences {
+  const children = prefs.filters.children.filter((c) => c.id !== ruleId);
+  return children.length === prefs.filters.children.length ? prefs : { ...prefs, filters: { ...prefs.filters, children } };
+}
+/** What settings select, as a cache key: settings that say the same thing share one result, whichever object holds them, so
+ *  toggling a field's own values (new settings, the same issues once its rule is left out) keeps its list, counts and rows. */
+export const settingsKey = (prefs: Preferences) => JSON.stringify(prefs);
+
 /**
- * The board's issues under every filter except this field's own, its rule, its choices and the edits Linear's menu makes.
+ * The board's issues under every filter except rule `ruleId`. Computed once for the board's view settings, however many submenus,
+ * value lists and root-search rows ask for it, and kept while the issues, settings, search and "mine" stay the same.
+ */
+function useFilteredIssues(board: Board, ruleId: string) {
+  const issuesMap = useStore((s) => s.issues);
+  const prefs = useViewSettings(board.id);
+  const mine = useStore((s) => s.mine);
+  const query = useStore((s) => s.query);
+  const base = withoutRule(prefs, ruleId);
+  return shared(issuesMap, `issues:${board.id}:${mine}:${query}:${settingsKey(base)}`, [board], () =>
+    selectIssues([...issuesMap.values()], board, base, mine, query, ME.id),
+  );
+}
+
+/** A field's choices with their counts among `issues` (useFieldFilter's), computed once per field for those issues. Values with
+ *  no result among them stay available (counted 0) when another AND condition narrows this field. */
+export function useFieldChoices(field: Field, board: Board, issues: Issue[]) {
+  // The board's own issues: the universe its filters look epics and sub-issues up in.
+  const universe = useBoardIssues(board.id);
+  const catalog = useFilterCatalog();
+  return shared(issues, `choices:${field}`, [board, universe, catalog], () =>
+    filterChoices(field, board, universe, issues, catalog),
+  );
+}
+
+/** A field's choices counted among `issues` alone (the Advanced filter's rows), shared by every row on the same field. */
+export function useChoicesAmong(field: Field, board: Board, issues: Issue[]) {
+  const catalog = useFilterCatalog();
+  return shared(issues, `among:${field}`, [board, catalog], () => filterChoices(field, board, issues, issues, catalog));
+}
+
+/** A filter chip's value names: every issue's choices for its field, shared by every chip and recomputed only when the issues
+ *  change, not on each chip's render. */
+export function useChoiceLabels(field: Field, board: Board) {
+  const issuesMap = useStore((s) => s.issues);
+  const catalog = useFilterCatalog();
+  return shared(issuesMap, `labels:${field}`, [board, catalog], () =>
+    filterChoices(field, board, [...issuesMap.values()], undefined, catalog),
+  );
+}
+
+/**
+ * The board's issues under every filter except this field's own, its rule and the edits Linear's menu makes.
  * `editingId` edits a chip's rule: unchecking its last value keeps the empty rule, and the chip removes it when its menu closes.
  */
 export function useFieldFilter(field: Field, board: Board, editingId?: string) {
   const [newRuleId] = useState(newId);
   const ruleId = editingId ?? newRuleId;
-  const issuesMap = useStore((s) => s.issues);
   const prefs = useViewSettings(board.id);
-  const mine = useStore((s) => s.mine);
-  const query = useStore((s) => s.query);
-  const issues = useMemo(() => {
-    const base = {
-      ...prefs,
-      filters: {
-        ...prefs.filters,
-        children: prefs.filters.children.filter((c) => c.id !== ruleId),
-      },
-    };
-    return selectIssues([...issuesMap.values()], board, base, mine, query, ME.id);
-  }, [issuesMap, board, mine, query, prefs, ruleId]);
+  const issues = useFilteredIssues(board, ruleId);
   const rule = prefs.filters.children.find(
     (c): c is Rule => !("children" in c) && c.id === ruleId,
-  );
-  const catalog = useFilterCatalog();
-  // Keep zero-result values available when another AND condition narrows this field.
-  const choices = useMemo(
-    () => filterChoices(field, board, [...issuesMap.values()].filter(i => i.board === board.id), issues, catalog),
-    [field, board, issuesMap, issues, catalog],
   );
   function apply(values: string[], operator = rule?.op ?? "is") {
     setRule(board.id, { id: ruleId, field, op: operator, values });
@@ -209,7 +253,7 @@ export function useFieldFilter(field: Field, board: Board, editingId?: string) {
     else timed("filter", () => apply(next, valueOp()));
     return false;
   };
-  return { issues, rule, choices, apply, select };
+  return { issues, rule, apply, select };
 }
 
 /** "Status › Todo", "Dates › Due date › Overdue": a searched row's dimmed path before its name (Linear's M4e breadcrumbs). */
@@ -234,7 +278,7 @@ export function Path({ path, children }: { path: string[]; children: ReactNode }
  * `selection` is the field's: "multiple" draws the checkbox, "single" a trailing checkmark and no aria-checked. A root-search row
  * (`path`, "Status › Todo") draws neither, as Linear's hoisted rows don't. `onSelect(only)` is true for Alt-click.
  */
-export function ValueRow({
+export const ValueRow = memo(function ValueRow({
   choice,
   checked,
   onSelect,
@@ -243,7 +287,8 @@ export function ValueRow({
 }: {
   choice: Choice;
   checked: boolean;
-  onSelect: (only: boolean) => void;
+  /** Stable for the list's life (useStableCallback), so toggling one value re-renders that row alone. */
+  onSelect: (value: string, only: boolean) => void;
   selection: "multiple" | "single";
   path?: string[];
 }) {
@@ -263,14 +308,14 @@ export function ValueRow({
         alt.current = event.altKey;
       }}
       onSelect={() => {
-        onSelect(alt.current);
+        onSelect(choice.value, alt.current);
         alt.current = false;
       }}
     >
       {path ? <Path path={path}>{choice.label}</Path> : choice.label}
     </Menu.Item>
   );
-}
+});
 
 /** A field's values as rows; the one list behind the Add-filter submenu, the chip's value menu and the root search. */
 export function FieldValues({
@@ -286,7 +331,8 @@ export function FieldValues({
   path?: string[];
   onDone: () => void;
 }) {
-  const { rule, choices, select } = useFieldFilter(field, board, ruleId);
+  const { issues, rule, select } = useFieldFilter(field, board, ruleId);
+  const choices = useFieldChoices(field, board, issues);
   // Linear lists the values already picked first, in the order the menu opened with, so rows don't jump while you toggle.
   const [picked] = useState(() => new Set(rule?.values));
   const ordered = useMemo(
@@ -298,6 +344,10 @@ export function FieldValues({
   const { matched, unmatched } = path
     ? { matched: ordered, unmatched: [] }
     : splitByMatches(ordered, (c) => c.count, (c) => !!rule?.values.includes(c.value));
+  const pick = useStableCallback((value: string, only: boolean) => {
+    // A root-search row is a plain action, as Linear's hoisted rows are: it applies its value and closes the menu.
+    if (select(value, only) || path) onDone();
+  });
   const row = (c: Choice) => (
     <ValueRow
       key={c.value}
@@ -305,10 +355,7 @@ export function FieldValues({
       path={path}
       selection={isSingle(field) ? "single" : "multiple"}
       checked={rule?.values.includes(c.value) ?? false}
-      onSelect={(only) => {
-        // A root-search row is a plain action, as Linear's hoisted rows are: it applies its value and closes the menu.
-        if (select(c.value, only) || path) onDone();
-      }}
+      onSelect={pick}
     />
   );
   return (
@@ -341,8 +388,13 @@ export function PresetRow({
   path?: string[];
   onSelect: () => void;
 }) {
+  // Once per preset for these issues, not on every render of every date list and root search.
   const count =
-    p.value || p.op === "empty" ? countWhere(issues, { field, op: p.op, values: p.value ? [p.value] : [] }) : 0;
+    p.value || p.op === "empty"
+      ? shared(issues, `preset:${field}:${p.op}:${p.value}`, [], () =>
+          countWhere(issues, { field, op: p.op, values: p.value ? [p.value] : [] }),
+        )
+      : 0;
   return (
     <Menu.Item
       value={[...(path ?? []), p.label].join(" ")}

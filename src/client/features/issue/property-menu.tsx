@@ -1,5 +1,7 @@
 import { type Board, type Issue, type User } from "@/shared/issue-model";
-import { lazy, Suspense, use, useEffect, useState } from "react";
+import { lazy, memo, Suspense, use, useEffect, useState } from "react";
+import { useStableCallback } from "@/client/lib/stable-callback";
+import { useBoardIssues } from "@/client/state/board-issues";
 import { Avatar } from "@/client/components/avatar";
 import { Icon, PriorityIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
 import {
@@ -142,14 +144,11 @@ export type FieldMenuProps<T> = {
   close: () => void;
 };
 function useCatalog(board: Board | undefined) {
-  const all = useStore((s) => s.issues);
+  // The board's issues, shared and kept until they change: not filtered again on every keystroke in a picker's search.
+  const issues = useBoardIssues(board?.id);
   const options = useStore((s) => s.options);
   const writable = useStore((s) => s.writable);
-  return {
-    issues: [...all.values()].filter((i) => i.board === board?.id),
-    options,
-    writable,
-  };
+  return { issues, options, writable };
 }
 export function StatusMenu({ anchor, board, value, onChange, close }: FieldMenuProps<string>) {
   return (
@@ -468,6 +467,31 @@ export function MilestoneMenu({
     </PropertyMenu>
   );
 }
+/** One label's checkbox row. Memoised with a stable `onToggle`, so typing in the search or toggling one label re-renders the rows
+ *  that changed, not a workspace's thousand labels. */
+export const LabelRow = memo(function LabelRow({
+  name,
+  checked,
+  onToggle,
+}: {
+  name: string;
+  checked: boolean;
+  onToggle: (name: string) => void;
+}) {
+  return (
+    <CheckRow
+      value={name}
+      data-label={name}
+      checked={checked}
+      checkboxLabel={`${checked ? "Remove" : "Add"} label ${name}`}
+      onToggle={() => onToggle(name)}
+      icon={<span className="size-[9px] rounded-full" style={{ background: hue(name) }} />}
+    >
+      {name}
+    </CheckRow>
+  );
+});
+
 /**
  * The label checkbox rows (Linear's labels action, multiSelectSubActions): the labels on the issue first, as the menu opened, or with
  * none "Frequently used"; then "Workspace labels", then "Create new label" for a new name. One component for the L picker and Issue options › Labels.
@@ -482,21 +506,10 @@ export function LabelRows({
   const surface = use(MenuSurfaceContext);
   // Sections are fixed as the menu opens, so a row never jumps while you toggle it.
   const [order] = useState(() => labelSections(issues, options.labels, value));
-  const toggle = (name: string) =>
-    onChange(value.includes(name) ? value.filter((l) => l !== name) : [...value, name]);
-  const row = (name: string) => (
-    <CheckRow
-      key={name}
-      value={name}
-      data-label={name}
-      checked={value.includes(name)}
-      checkboxLabel={`${value.includes(name) ? "Remove" : "Add"} label ${name}`}
-      onToggle={() => toggle(name)}
-      icon={<span className="size-[9px] rounded-full" style={{ background: hue(name) }} />}
-    >
-      {name}
-    </CheckRow>
+  const toggle = useStableCallback((name: string) =>
+    onChange(value.includes(name) ? value.filter((l) => l !== name) : [...value, name]),
   );
+  const row = (name: string) => <LabelRow key={name} name={name} checked={value.includes(name)} onToggle={toggle} />;
   // Jira labels can't contain spaces: a new label joins its words with hyphens (R2-issue-fields-D5).
   const created = query.trim().replace(/\s+/g, "-");
   const all = [...order.selected, ...order.frequent, ...order.rest];
