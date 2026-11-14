@@ -7,7 +7,6 @@ import { useActiveView, useSavedViews, createViewDraft } from "@/client/features
 import { useViewSettings } from "@/client/features/views/view-settings";
 import { openViewEditor, ViewMenu, ViewContextMenu, ViewEditorPage } from "@/client/features/views/view-editor";
 import { ViewFavorites, SavedViewIcon } from "@/client/features/views/views-navigation";
-import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { isMyIssues } from "./navigation";
 import { PERSON_TABS, peopleOf } from "@/shared/people";
@@ -29,7 +28,7 @@ import { hotkeyOf, runShortcut } from "./shortcuts";
 import { Button, IconButton } from "@/client/components/button";
 import { Shortcut } from "@/client/components/keycap";
 import { Text } from "@/client/components/text";
-import { TextInput } from "@/client/components/field";
+import { FindField } from "@/client/components/find-field";
 import { ConfirmDialog, Dialog } from "@/client/components/dialog";
 import { useCommand, focusNode } from "./commands";
 import { useInboxBadge } from "@/client/features/inbox/inbox";
@@ -611,15 +610,6 @@ export function BoardHeader() {
   const finding = useStore((s) => s.findInView);
   const findRef = useRef<HTMLInputElement>(null);
   useCommand("focus-find", () => focusNode(findRef.current));
-  useHotkey(
-    "Escape",
-    () => {
-      set({ findInView: false });
-      ui.send({ type: "query.set", query: "" });
-      findRef.current?.blur();
-    },
-    { target: findRef, ignoreInputs: false },
-  );
   const favoriteId = activeView?.kind === "custom" ? `view:${activeView.id}` : `board:${board!.id}`;
   const personal = useStore(isMyIssues);
   const personTab = useStore((s) => s.personTab);
@@ -684,16 +674,20 @@ export function BoardHeader() {
         </IconButton>
       </div>
       {finding && (
-        <TextInput
+        <FindField
           id="find-in-view"
           ref={findRef}
-          aria-label="Find in view"
-          autoFocus
-          value={query}
-          onChange={(e) => ui.send({ type: "query.set", query: e.target.value })}
           placeholder="Find in view…"
+          defaultValue={query}
+          onValueChange={(term) => ui.send({ type: "query.set", query: term })}
+          onClose={() => {
+            set({ findInView: false });
+            ui.send({ type: "query.set", query: "" });
+          }}
           className="mx-3 mb-2"
-        />
+        >
+          <FindField.Clear />
+        </FindField>
       )}
       <ViewEditorPage />
       {board && <FilterChips board={board} />}
