@@ -131,8 +131,10 @@ test("_3e: Issue options › Labels on a 1044-label board stays 16px inside the 
   const LABELS = dialog("Labels");
   await rightClick(page);
   await page.hover(`${MENU} [role^=menuitem][data-value="Labels"]`);
-  await page.waitFor(exists(`${LABELS} [data-label="${long}"]`));
+  await page.waitFor(exists(`${LABELS} [role^=menuitem]`));
   await sleep(200);
+  // Virtualized as Linear's react-window list: the last label isn't rendered until it is scrolled to.
+  expect(await page.eval(exists(`${LABELS} [data-label="${long}"]`))).toBe(false);
   const opened = await heightOf(page, LABELS);
   // Linear's _3e: the window less Vw.VIEWPORT_PADDING (16) each end at most, and S3e keeps it 10px inside the window.
   expect(opened.popup.height).toBeLessThanOrEqual(969 - 32 + 1);
@@ -154,6 +156,42 @@ test("_3e: Issue options › Labels on a 1044-label board stays 16px inside the 
   expect(scrolled.input.top).toBeCloseTo(opened.input.top, 0);
   expect(await page.eval(`(()=>{const r=document.querySelector('${LABELS} [data-label="${long}"]').getBoundingClientRect(),l=document.querySelector('${LABELS} .menu-list').getBoundingClientRect();return r.top>=l.top&&r.bottom<=l.bottom})()`)).toBe(true);
   expect(await page.eval<number>(`document.querySelector('${LABELS}').getBoundingClientRect().width`)).toBeCloseTo(400, 0);
+  await page.key("Escape");
+});
+
+test("react-window: the 1044-label submenu renders its rows in view and 10 of overscan; opening it and hovering down are timed", async ({
+  open,
+}) => {
+  const labels = Array.from({ length: 1044 }, (_, i) => `label-${String(i).padStart(4, "0")}`);
+  await fixture.reset({ catalog: { priorities: [], labels, users: [] } });
+  const page = await open("", { setup: writable, width: 1440, height: 969 });
+  const LABELS = dialog("Labels");
+  const ROWS = `${LABELS} [role^=menuitem]`;
+  await rightClick(page);
+  const row = await page.rect(`${MENU} [role^=menuitem][data-value="Labels"]`);
+  // From the pointer reaching the row to the submenu's rows painted (the frame after they mount).
+  await page.eval(`(()=>{window.__open=new Promise(done=>{const at=performance.now();const tick=()=>document.querySelector('${ROWS}')?requestAnimationFrame(()=>done(performance.now()-at)):requestAnimationFrame(tick);tick()})})()`);
+  await page.page.mouse.move(row.x + 20, row.y + row.height / 2);
+  const openMs = await page.eval<number>(`window.__open`);
+  const rendered = await page.eval<number>(`document.querySelectorAll('${ROWS}').length`);
+  // 969px leaves room for about 28 rows; with 10 of overscan below that is under 60 rows, never 1044.
+  expect(rendered).toBeLessThan(60);
+  // Hovering down 20 rows: each one's highlight follows within a frame of the pointer reaching it.
+  const first = await page.rect(`${ROWS}`);
+  const steps: number[] = [];
+  for (let i = 0; i < 20; i++) {
+    const y = first.y + first.height / 2 + i * first.height;
+    await page.eval(`(()=>{window.__step=new Promise(done=>{const at=performance.now();const want=${JSON.stringify(labels[i])};const tick=()=>document.querySelector('${LABELS} [data-focused]')?.dataset.value===want?done(performance.now()-at):requestAnimationFrame(tick);tick()})})()`);
+    await page.page.mouse.move(first.x + 40, y);
+    steps.push(await page.eval<number>(`window.__step`));
+  }
+  const median = steps.toSorted((a, b) => a - b)[10]!;
+  test.info().annotations.push(
+    { type: "timing", description: `Labels submenu open: ${openMs.toFixed(1)}ms, ${rendered} rows rendered` },
+    { type: "timing", description: `hover step median ${median.toFixed(1)}ms, max ${Math.max(...steps).toFixed(1)}ms` },
+  );
+  expect(openMs).toBeLessThan(250);
+  expect(median).toBeLessThan(50);
   await page.key("Escape");
 });
 
