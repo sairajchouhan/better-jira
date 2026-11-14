@@ -45,7 +45,7 @@ import { flushLocalChanges } from "@/client/state/local-database";
 import { navigate, ui } from "@/client/features/navigation/app-navigation";
 import { interruptedUploads } from "@/client/state/jira-media";
 import { listPosition, navigationIssues, visibleOrder } from "@/shared/view-model";
-import { epicLocked, epicName, epicOf } from "@/shared/epics";
+import { epicChanges, epicLocked, epicName, epicOf } from "@/shared/epics";
 import { PersonalIssueDetails } from "@/client/features/issue/personal-controls";
 import { SubIssueOf } from "@/client/features/issue/sub-issues";
 import { Avatar } from "@/client/components/avatar";
@@ -890,7 +890,11 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
   // Jira's whole history arrives after the details (BJ-13); until then the Activity shows this app's own edits.
   const history = useIssueHistory(issue.key, f?.updated);
   const comments: any[] | undefined = f?.comment?.comments;
-  const activity = useMemo(() => mergeHistory(issue.activity ?? [], history), [issue.activity, history]);
+  // An epic set through Jira's parent link reads as Linear's project change, worded with Epic (BJ-262).
+  const activity = useMemo(
+    () => epicChanges(mergeHistory(issue.activity ?? [], history), issue, (key) => get().issues.get(key)),
+    [issue, history],
+  );
   const events = useMemo(
     () =>
       activityEvents(

@@ -19,6 +19,7 @@ export const historyFields = [
   "estimate",
   "cycle",
   "project",
+  "epic",
   "milestone",
   "team",
   "component",

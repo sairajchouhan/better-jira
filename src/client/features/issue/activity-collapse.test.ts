@@ -54,4 +54,6 @@ test("BJ-13: the folded row names what changed, most important first, as Linear 
     collapseLabel(9, summaryItems(events(["cycle", "milestone", "title", "due", "estimate", "assignee", "status"]))),
   ).toBe("Show 9 events: changed assignee, status, title, due date, and estimate…");
   expect(collapseLabel(3, [])).toBe("Show 3 events");
+  // BJ-262: an epic change is Linear's project change, high weight, worded Epic.
+  expect(collapseLabel(2, summaryItems(events(["title", "epic"])))).toBe("Show 2 events: changed epic and title…");
 });

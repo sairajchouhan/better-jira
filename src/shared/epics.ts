@@ -1,4 +1,4 @@
-import type { Board, Issue } from "./issue-model";
+import type { Board, Issue, PropertyActivity } from "./issue-model";
 import { statusById } from "./board-catalog";
 
 /**
@@ -133,4 +133,25 @@ export function epicChoices(
   return current && !epics.some((e) => e.key === current)
     ? [{ key: current, name: current, done: false }, ...epics]
     : epics;
+}
+
+/**
+ * Jira logs an issue's epic as its parent ("Parent", "IssueParentAssociation", legacy "Epic Link"), and this app's own epic edits
+ * patch `parent` too. Linear keeps the project apart from the parent (`Qs` "added to project", not `Us` "set parent to"), so
+ * Activity reads a parent change as an epic change when it is one: a key the mirror holds says so by its level; else a standard
+ * issue's Jira parent is always an epic, and a sub-task's (or an epic's initiative) never is. The array is kept when none is.
+ */
+export function epicChanges(
+  events: readonly PropertyActivity[],
+  issue: Leveled,
+  lookup: IssueLookup,
+): readonly PropertyActivity[] {
+  const isEpicChange = (event: PropertyActivity) => {
+    if (event.field !== "parent") return false;
+    const held = [event.before, event.after].flatMap((key) => (typeof key === "string" && lookup(key)) || []);
+    return held.length ? held.some(isEpic) : hierarchyLevel(issue) === 0;
+  };
+  return events.some(isEpicChange)
+    ? events.map((event) => (isEpicChange(event) ? { ...event, field: "epic" as const } : event))
+    : events;
 }

@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { Issue } from "@/shared/issue-model";
 import { ActivityEntry, ActivityIcon, ActivityRowWords, ActivityRun, describeActivity, priorityRank, titleChangeLabel, type ActivityItem } from "./activity-entry";
 import { DescriptionHistoryProvider } from "./description-history";
+import { set } from "@/client/state/store";
 import { activityRows, type ActivityField, type PropertyActivity } from "./issue-activity";
 
 // Made-up shapes only (BJ-40): each Jira change kind sampled read-only from real tickets, worded as Linear's history chunk words it.
@@ -59,6 +60,7 @@ test("BJ-40: Linear's wording for the kinds Linear has (status, priority, assign
   expect(words(event("estimate", 2, 5))).toBe("increased estimate from 2 to 5");
   expect(words(event("estimate", 5, 2))).toBe("lowered estimate from 5 to 2");
   expect(words(event("estimate", 2, null))).toBe("removed estimate");
+  // A Jira project move keeps Jira's word: it is the Jira project, not the epic.
   expect(words(event("project", { id: "1", name: "Old" }, { id: "2", name: "New" }))).toBe(
     "changed project from Old to New",
   );
@@ -353,4 +355,18 @@ test("R3 G21 #39: a project move's issue keys never break at their hyphen", () =
   expect(words(event("project", { id: "1", name: "Alpha", key: "ALP-7" }, { id: "2", name: "Beta", key: "BET-9" }))).toBe(
     "changed project from Alpha (ALP-7) to Beta (BET-9)",
   );
+});
+
+test("BJ-262: an epic change reads as Linear's project change (`Qs`) with Epic: added to, removed from, changed epic from", () => {
+  const epic = (key: string, summary: string) => ({ key, summary, board: 1, status: "todo", type: "Epic", labels: [] }) as unknown as Issue;
+  set({ issues: new Map([["ABC-7", epic("ABC-7", "Checkout revamp")], ["ABC-8", epic("ABC-8", "Payments epic")]]) });
+  expect(words(event("epic", null, "ABC-7"))).toBe("added to epic Checkout revamp");
+  expect(words(event("epic", "ABC-7", null))).toBe("removed from epic Checkout revamp");
+  expect(words(event("epic", "ABC-7", "ABC-8"))).toBe("changed epic from Checkout revamp to Payments epic");
+  // Linear's appendWord: the word is left out when the name already says it.
+  expect(words(event("epic", null, "ABC-8"))).toBe("added to Payments epic");
+  // An epic the mirror doesn't hold is named by its key; the key is on hover either way.
+  expect(words(event("epic", null, "ZZ-1"))).toBe("added to epic ZZ-1");
+  expect(renderToStaticMarkup(<>{describeActivity(event("epic", null, "ABC-7"), issue)}</>)).toContain(`title="ABC-7"`);
+  set({ issues: new Map() });
 });

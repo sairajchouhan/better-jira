@@ -2,7 +2,8 @@ import { IssueHoverCard } from "./issue-hover-card";
 /**
  * One property row's words and icon, in Linear's wording (its issue-history chunk `IssueCommentsAndHistory`, read 2026-11-12):
  * the entry builders `ws` (status), `Es` (priority), `Os` (assignee), `ks` (title), `As`/`js` (labels), `tc` (estimate),
- * `ic` (due date), `Us` (parent), `Ws` (team), `Js` (cycle), `Qs` (project), `ec` (milestone) and `Hs` (relations).
+ * `ic` (due date), `Us` (parent), `Ws` (team), `Js` (cycle), `Qs` (project, the issue's epic here), `ec` (milestone) and
+ * `Hs` (relations). A Jira project move keeps Jira's word ("changed project from …"): it is the Jira project, not the epic.
  * Jira-only kinds (resolution, component, files, custom fields) read plainly in the same pattern: "changed Fix version from A to B".
  */
 import { absoluteDate, fullTime, activityTime } from "./issue-dates";
@@ -18,6 +19,7 @@ import { AppLink } from "@/client/features/navigation/app-link";
 import { LinkIcon } from "@/client/components/link-icon";
 import { faviconSrc } from "@/shared/smart-link";
 import { linkTitle } from "@/shared/issue-resource";
+import { epicName } from "@/shared/epics";
 import { boardOf, get } from "@/client/state/store";
 import type { Issue, User } from "@/shared/issue-model";
 import { LINEAR_RELATIONS, jiraLinkType } from "@/shared/relations";
@@ -37,6 +39,19 @@ const B = ({ children, title }: { children: ReactNode; title?: string }) => (
     {children}
   </b>
 );
+
+/** An epic in an Activity row, as Linear's project there (`G`): its name (its key on hover), after the word "epic" when
+ *  `word` is asked and the name doesn't already say it (`appendWord`, matched without case). */
+function EpicTarget({ value, word = false }: { value: unknown; word?: boolean }) {
+  const key = String(value),
+    title = epicName(key, (k) => get().issues.get(k));
+  return (
+    <>
+      {word && !title.toLowerCase().includes("epic") && "epic "}
+      <B title={key}>{title}</B>
+    </>
+  );
+}
 
 /** Linear's priority order (`et`): 1 urgent … 4 low, 0 none. Jira's names collapse onto it like `PriorityIcon`. */
 export const priorityRank = (priority: unknown) => {
@@ -221,6 +236,23 @@ export function describeActivity(event: PropertyActivity, issue: Issue, then = f
         </>
       );
     }
+    case "epic":
+      // Linear's `Qs`: "removed from project X", "added to project X", "changed project from X to Y".
+      if (after === null)
+        return (
+          <>
+            removed from <EpicTarget value={before} word />
+          </>
+        );
+      return before === null ? (
+        <>
+          added to <EpicTarget value={after} word />
+        </>
+      ) : (
+        <>
+          changed epic from <EpicTarget value={before} /> to <EpicTarget value={after} />
+        </>
+      );
     case "project":
       if (after === null)
         return (
@@ -600,6 +632,7 @@ const FIELD_ICONS: Partial<Record<PropertyActivity["field"], IconName>> = {
   due: "calendar",
   title: "pencil",
   description: "file",
+  epic: "layers",
   project: "layers",
   milestone: "calendar",
   cycle: "clock",

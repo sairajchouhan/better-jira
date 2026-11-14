@@ -1,6 +1,6 @@
-import { type Board, type Issue } from "@/shared/issue-model";
+import { type Board, type Issue, type PropertyActivity } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
-import { canNest, epicChoices, epicLocked, epicOf, epicPatch, hierarchyLevel, lookupIn, parentOf } from "./epics";
+import { canNest, epicChanges, epicChoices, epicLocked, epicOf, epicPatch, hierarchyLevel, lookupIn, parentOf } from "./epics";
 import { buckets, defaultPreferences, draftForGroup, listRows, matchesRule, selectIssues, type Rule } from "./view-model";
 import { opsFor } from "./jira-ops";
 
@@ -204,6 +204,31 @@ test("nested lists nest sub-issues under their parent issue, never an epic's iss
   expect(rows).toContainEqual(["E-10", 0]);
   expect(rows).toContainEqual(["E-11", 1]);
   expect(rows).toContainEqual(["E-2", 0]);
+});
+
+test("BJ-262: a parent change that sets the epic is an epic change in Activity; a sub-task's parent stays a parent", () => {
+  const change = (before: string | null, after: string | null): PropertyActivity => ({
+    id: "1",
+    field: "parent",
+    before,
+    after,
+    actor: { id: "a", name: "A" },
+    at: "2026-11-01T00:00:00Z",
+  });
+  const fields = (events: readonly PropertyActivity[]) => events.map((e) => e.field);
+  // The mirror holds the epic: its level says so.
+  expect(fields(epicChanges([change(null, "E-2")], inBilling, lookup))).toEqual(["epic"]);
+  expect(fields(epicChanges([change("E-2", "E-3")], inBilling, lookup))).toEqual(["epic"]);
+  expect(fields(epicChanges([change("E-2", null)], inBilling, lookup))).toEqual(["epic"]);
+  // An epic the mirror doesn't hold: a standard issue's Jira parent is always an epic.
+  expect(fields(epicChanges([change(null, "OTHER-1")], loose, lookup))).toEqual(["epic"]);
+  // A sub-task's parent is its parent issue, and so is a held standard parent; an epic's parent is its initiative.
+  expect(fields(epicChanges([change(null, "OTHER-1")], subTask, lookup))).toEqual(["parent"]);
+  expect(fields(epicChanges([change(null, "E-10")], subTask, lookup))).toEqual(["parent"]);
+  expect(fields(epicChanges([change(null, "E-1")], billing, lookup))).toEqual(["parent"]);
+  // Nothing to relabel keeps the array, so memoised Activity rows stay put.
+  const none = [change(null, "E-10")];
+  expect(epicChanges(none, subTask, lookup)).toBe(none);
 });
 
 test("BJ-262: the epic's read-only reasons say epic, never project", () => {

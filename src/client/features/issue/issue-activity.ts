@@ -16,6 +16,7 @@ const FIELD_ORDER: readonly ActivityField[] = [
   "assignee",
   "priority",
   "estimate",
+  "epic",
   "project",
   "labels",
   "milestone",
@@ -33,7 +34,7 @@ const FIELD_ORDER: readonly ActivityField[] = [
   "field",
 ];
 /** The kinds Linear lists together on one row (`ss`): "set priority to Urgent and removed label test", two to a row. */
-const SMALL_FIELDS: ReadonlySet<ActivityField> = new Set(["assignee", "project", "priority", "estimate", "labels"]);
+const SMALL_FIELDS: ReadonlySet<ActivityField> = new Set(["assignee", "epic", "project", "priority", "estimate", "labels"]);
 const order = (field: ActivityField) => FIELD_ORDER.indexOf(field);
 /** Linear's grouped entries (`Xc`): adjacent entries of these kinds become one row that expands to each, at the latest
  *  one's time (`Yc` moves the group's date to each joining entry). Status, priority and labels join one actor's entries

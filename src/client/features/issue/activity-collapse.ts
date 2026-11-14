@@ -47,6 +47,8 @@ export type SummaryItem = { action?: "changed" | "added"; value: string; weight:
 const ITEMS: Record<ActivityField, SummaryItem> = {
   status: { action: "changed", value: "status", weight: 1 },
   assignee: { action: "changed", value: "assignee", weight: 1 },
+  // Linear's `project-change` (`ll`): the issue's epic here (shared/epics.ts epicChanges).
+  epic: { action: "changed", value: "epic", weight: 1 },
   project: { action: "changed", value: "project", weight: 1 },
   priority: { action: "changed", value: "priority", weight: 1 },
   estimate: { action: "changed", value: "estimate", weight: 2 },

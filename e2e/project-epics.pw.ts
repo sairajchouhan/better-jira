@@ -280,3 +280,39 @@ test("an epic parent shows only as Project: no parent line, sub-issues, Parent f
     expect(writes.some((w: any) => w.ops.some((o: any) => o.op === "fields" && "parent" in o.fields))).toBe(false);
   });
 });
+
+test("BJ-262: Jira's epic changes read as Linear's project changes, worded Epic; a sub-task's parent stays a parent", async ({ open }) => {
+  // Made-up history in the server's slim shape: TEST-2 (a Task) joined, moved between and left epics through Jira's Parent and
+  // legacy Epic Link fields. Both epics are named "… epic", so Linear's appendWord leaves the word out (`G`).
+  const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+  const ada = { id: "ada", name: "Ada Example" };
+  const item = (field: string, sides: object, fieldId?: string) => ({
+    field,
+    ...(fieldId ? { fieldId } : {}),
+    from: null,
+    fromText: null,
+    to: null,
+    toText: null,
+    ...sides,
+  });
+  await fixture.reset({
+    writable: true,
+    epics: true,
+    history: {
+      "TEST-2": [
+        { id: "1", at: daysAgo(4), actor: ada, items: [item("Parent", { to: "8", toText: "TEST-8" }, "parent")] },
+        { id: "2", at: daysAgo(3), actor: ada, items: [item("Epic Link", { from: "8", fromText: "TEST-8", to: "7", toText: "TEST-7" })] },
+        { id: "3", at: daysAgo(2), actor: ada, items: [item("Parent", { from: "7", fromText: "TEST-7" }, "parent")] },
+      ],
+    },
+  });
+  const p = await open("?issue=TEST-2&view=page");
+  const rows = `[...document.querySelectorAll('[data-activity]')].map(n=>n.querySelector('.activity-event-words').textContent.replace(/\\s+/g,' ').trim())`;
+  await p.waitFor(`${rows}.some(r=>r.includes("removed from epic"))`, 5000);
+  const epicRows = (await p.eval<string[]>(rows)).filter((r) => /epic|parent/.test(r));
+  expect(epicRows).toEqual([
+    "Ada Example added to Shipped epic",
+    "Ada Example changed epic from Shipped epic to Fixture epic",
+    "Ada Example removed from Fixture epic",
+  ]);
+});
