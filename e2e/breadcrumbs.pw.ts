@@ -1,4 +1,4 @@
-import { expect, test, shownIssue } from "./app";
+import { expect, fixture, test, shownIssue } from "./app";
 
 for (const parent of ["Browser audit", "Issues"]) {
   test(`issue breadcrumb ${parent} returns to All issues on the current board`, async ({
@@ -61,8 +61,12 @@ test("breadcrumbs: board crumb by keyboard, exiting panels and search, and the i
     expect(await page.eval(`document.querySelectorAll('[data-key]').length`)).toBe(6);
   });
   await test.step("the issue crumb shows the key then the title on one line, and the position dims its total, like Linear", async () => {
-    const page = await open("?issue=TEST-2&view=page");
+    // Opened from the list, so the page counts that list (a direct link counts nothing, as Linear's empty breadcrumb stack).
+    const page = await open();
+    await page.click('[data-key="TEST-2"]');
     await page.waitFor(`!!document.getElementById('summary')`);
+    await page.click('[title="Open as full page"]');
+    await page.waitFor(`!!document.querySelector('[aria-label="Breadcrumb"] [data-crumb-issue]')`);
     const crumb = `document.querySelector('[aria-label="Breadcrumb"] [data-crumb-issue]')`;
     expect(
       await page.eval(
@@ -87,5 +91,72 @@ test("breadcrumbs: board crumb by keyboard, exiting panels and search, and the i
     expect(width).toBeGreaterThanOrEqual(scroll);
     expect(width).toBeGreaterThan(30);
     expect(right).toBeLessThanOrEqual(star);
+  });
+});
+
+/**
+ * Linear's issue breadcrumb (startup-root `Hpi`): the epic in the project slot, then the issues the page was opened through, then
+ * the issue; the counter steps what it was opened from. Fixture with `epics` and `subtask`: TEST-7 "Fixture epic" lists TEST-2 and
+ * TEST-3; TEST-6 is TEST-5's Subtask, and TEST-5 is in no epic.
+ */
+test("issue breadcrumb follows how the page was reached: a link, an epic's Sub-issues, a parent's sub-issues, a reload", async ({ open }) => {
+  await fixture.reset({ epics: true, subtask: true });
+  const crumbs = `[...document.querySelectorAll('nav[aria-label="Breadcrumb"] li')].map(li=>li.querySelector('[data-crumb-issue] .ui-entity-id')?.textContent??li.querySelector('a,span')?.getAttribute('aria-label')??li.textContent.replace('›','').trim())`;
+  const position = `document.querySelector('[aria-label="Issue position"]')?.textContent ?? null`;
+  const page = await open("?issue=TEST-2&view=page");
+
+  await test.step("a direct link shows the epic then the issue, and no counter", async () => {
+    await page.waitFor(`!!document.querySelector('[aria-label="Breadcrumb"] [data-crumb-issue]')`);
+    expect(await page.eval(crumbs)).toEqual(["Fixture epic", "TEST-2"]);
+    expect(await page.eval(`!!document.querySelector('nav[aria-label="Breadcrumb"] li:first-child svg')`)).toBe(true);
+    expect(await page.eval(position)).toBeNull();
+  });
+
+  await test.step("the epic crumb opens the epic; a row of its Sub-issues opens with the counter through the epic's issues", async () => {
+    await page.click('nav[aria-label="Breadcrumb"] a[aria-label="Fixture epic"]');
+    await page.waitFor(`location.pathname==='/issue/TEST-7'`);
+    await page.waitFor(`!!document.querySelector('[data-sub-issues="TEST-7"] [data-sub-issue="TEST-3"] a')`);
+    await page.click('[data-sub-issues="TEST-7"] [data-sub-issue="TEST-3"] a');
+    await page.waitFor(`location.pathname==='/issue/TEST-3'`);
+    expect(await page.eval(crumbs)).toEqual(["Fixture epic", "TEST-3"]);
+    expect(await page.eval(position)).toMatch(/^\d \/ 2$/);
+    // ↓/↑ step the epic's issues and keep the breadcrumb.
+    const at = await page.eval<string>(position);
+    await page.key(at.startsWith("1") ? "j" : "k");
+    await page.waitFor(`location.pathname==='/issue/TEST-2'`);
+    expect(await page.eval(crumbs)).toEqual(["Fixture epic", "TEST-2"]);
+    expect(await page.eval(position)).toMatch(/^\d \/ 2$/);
+  });
+
+  await test.step("a reload falls back to the direct link's breadcrumb", async () => {
+    await page.reload();
+    await page.waitFor(`!!document.querySelector('[aria-label="Breadcrumb"] [data-crumb-issue]')`);
+    expect(await page.eval(crumbs)).toEqual(["Fixture epic", "TEST-2"]);
+    expect(await page.eval(position)).toBeNull();
+  });
+
+  await test.step("from a parent's sub-issues: the parent by key, its title as the tooltip; it links back, and Back restores the trail", async () => {
+    await page.goto("?issue=TEST-5&view=page");
+    await page.waitFor(`!!document.querySelector('[data-sub-issues="TEST-5"] [data-sub-issue="TEST-6"] a')`);
+    await page.click('[data-sub-issues="TEST-5"] [data-sub-issue="TEST-6"] a');
+    await page.waitFor(`location.pathname==='/issue/TEST-6'`);
+    // TEST-5 is in no epic, so no epic crumb; one sub-issue, so no counter (Linear shows none for a list of one).
+    const parent = 'nav[aria-label="Breadcrumb"] a[href="/issue/TEST-5"]';
+    await page.waitFor(`!!document.querySelector('${parent}')`);
+    expect(await page.eval(`document.querySelectorAll('nav[aria-label="Breadcrumb"] li').length`)).toBe(2);
+    expect(await page.eval(`document.querySelector('${parent}').textContent`)).toBe("TEST-5");
+    expect(await page.eval(`document.querySelector('${parent}').title`)).toMatch(/\S/);
+    expect(await page.eval(`document.querySelector('${parent}').getAttribute('aria-current')`)).toBeNull();
+    // Right-click: the parent's copy rows.
+    await page.page.locator(parent).click({ button: "right" });
+    await page.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Issue options"] [cmdk-item]')`);
+    expect(await page.eval(`document.querySelector('[role="dialog"][aria-label="Issue options"] [cmdk-item]').textContent`)).toContain("Copy ID");
+    await page.key("Escape");
+    await page.click(parent);
+    await page.waitFor(`location.pathname==='/issue/TEST-5'`);
+    expect(await page.eval(`document.querySelectorAll('nav[aria-label="Breadcrumb"] li').length`)).toBe(1);
+    await page.eval("history.back()");
+    await page.waitFor(`location.pathname==='/issue/TEST-6'`);
+    await page.waitFor(`!!document.querySelector('${parent}')`);
   });
 });
