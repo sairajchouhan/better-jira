@@ -110,7 +110,8 @@ test("BJ-40: each sampled Jira change kind maps to its Linear field", () => {
   expect(one(item("description", { fromText: "", toText: "" }, "description"))).toMatchObject({
     field: "description",
   });
-  expect(one(item("Comment", { fromText: "" }, "comment"))).toMatchObject({ field: "comment", after: null });
+  // Linear's history has no comment deletions (R3-comments-D4).
+  expect(one(item("Comment", { fromText: "" }, "comment"))).toBeNull();
   expect(one(item("Release notes", { toText: "Shipped" }, "customfield_9"))).toMatchObject({
     field: "field",
     after: { name: "Release notes", value: "Shipped" },

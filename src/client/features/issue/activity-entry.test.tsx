@@ -92,7 +92,6 @@ test("BJ-40: Jira-only kinds read plainly in the same pattern", () => {
   expect(words(event("attachment", null, { id: "9", name: "clip.mp4" }))).toBe("attached clip.mp4");
   expect(words(event("attachment", { id: "9", name: "clip.mp4" }, null))).toBe("removed attachment clip.mp4");
   expect(words(event("weblink", null, { id: "4", name: "Wiki Page" }))).toBe("linked Wiki Page");
-  expect(words(event("comment", { id: "1", name: "" }, null))).toBe("deleted a comment");
   expect(words(event("description", "", ""))).toBe("updated the description");
   expect(words(event("flag", null, "Impediment"))).toBe("flagged the issue");
   expect(words(event("field", null, { name: "Release notes", value: "Shipped" }))).toBe(

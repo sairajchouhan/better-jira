@@ -30,7 +30,6 @@ const FIELD_ORDER: readonly ActivityField[] = [
   "resolution",
   "flag",
   "description",
-  "comment",
   "field",
 ];
 /** The kinds Linear lists together on one row (`ss`): "set priority to Urgent and removed label test", two to a row. */

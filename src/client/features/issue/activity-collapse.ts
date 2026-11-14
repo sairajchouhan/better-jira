@@ -66,7 +66,6 @@ const ITEMS: Record<ActivityField, SummaryItem> = {
   attachment: { action: "changed", value: "attachments", weight: 2 },
   component: { action: "changed", value: "components", weight: 3 },
   flag: { action: "changed", value: "flag", weight: 3 },
-  comment: { value: "deleted comments", weight: 3 },
   field: { action: "changed", value: "fields", weight: 3 },
 };
 export const summaryItems = (events: readonly PropertyActivity[]): SummaryItem[] =>

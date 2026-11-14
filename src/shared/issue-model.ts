@@ -26,7 +26,6 @@ export const historyFields = [
   "flag",
   "attachment",
   "weblink",
-  "comment",
   "field",
 ] as const;
 export type ActivityField =

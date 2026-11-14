@@ -110,10 +110,8 @@ export function mapItem(item: HistoryItem, entry: readonly HistoryItem[]): Mappe
       return { field: "component", before: named(from, fromText), after: named(to, toText), delta: true };
     case "comment":
     case "Comment":
-      // Jira logs a deleted comment with its old text; the server keeps only that it existed.
-      return fromText !== null && toText === null
-        ? { field: "comment", before: { id: from ?? "", name: "" }, after: null, delta: true }
-        : null;
+      // Jira logs a deleted comment; Linear's history has no comment deletions, so neither does Activity (R3-comments-D4).
+      return null;
   }
   switch (field) {
     case "IssueParentAssociation":

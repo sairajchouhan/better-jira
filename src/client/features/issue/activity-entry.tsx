@@ -287,8 +287,6 @@ export function describeActivity(event: PropertyActivity, issue: Issue, then = f
           added component <B>{name(after)}</B>
         </>
       );
-    case "comment":
-      return "deleted a comment";
     case "description":
       return "updated the description";
     case "flag":
@@ -540,7 +538,6 @@ const FIELD_ICONS: Partial<Record<PropertyActivity["field"], IconName>> = {
   cycle: "clock",
   parent: "branch",
   attachment: "paperclip",
-  comment: "comment",
   flag: "flag",
   estimate: "priority",
 };
