@@ -13,7 +13,7 @@ import {
   type RefObject,
 } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { menuRoom } from "./menu";
+import { anchoredPlacement, menuRoom } from "./menu-geometry";
 
 /** What a popup offers the menus inside it: closing it (every level at once), as a menu's Enter or a submenu's Escape does. */
 export const MenuSurfaceContext = createContext<{ close: () => void } | null>(null);
@@ -367,12 +367,6 @@ export function MenuSurface({
         };
       }
       if (anchored && r?.width && innerWidth >= 600) {
-        const below = innerHeight - r.bottom - 12,
-          above = r.top - 12;
-        // From the window alone, never the menu's height: the menu cuts its list to this (useListHeight), and a cap taken from a cut
-        // menu would never let it grow back as the window grows.
-        const maxHeight = Math.max(100, Math.max(below, above)),
-          shown = Math.min(h, maxHeight);
         if (side === "left" && r.left - w - gap >= 12)
           return {
             position: "fixed",
@@ -381,19 +375,20 @@ export function MenuSurface({
             top: Math.max(12, Math.min(innerHeight - h - 12, r.top - 5.5)),
             maxHeight: innerHeight - 24,
           };
+        // Linear's _3e room on the preferred side (below), the whole window only when that side has under 30% of it; the menu
+        // cuts its list to the room (useListHeight), and sits below, else above, else as low as fits.
+        const below = rounding === "pixel" ? Math.round(r.bottom) : r.bottom;
+        const { top, maxHeight } = anchoredPlacement({
+          trigger: { top: r.top, bottom: below, width: r.width },
+          height: h,
+          windowHeight: innerHeight,
+          gap,
+        });
         return {
           position: "fixed",
           width: fit ? undefined : w,
           left: Math.max(12, Math.min(align === "end" ? r.right - w : r.left, innerWidth - w - 12)),
-          top: Math.max(
-            12,
-            Math.min(
-              innerHeight - shown - 12,
-              below >= h || below >= above
-                ? (rounding === "pixel" ? Math.round(r.bottom) : r.bottom) + gap
-                : r.top - h - gap,
-            ),
-          ),
+          top,
           maxHeight,
         };
       }

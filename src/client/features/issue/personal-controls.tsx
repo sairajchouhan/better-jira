@@ -44,6 +44,7 @@ import {
 } from "@/shared/issue-properties";
 import { Avatar } from "@/client/components/avatar";
 import { Menu } from "@/client/components/menu";
+import { LIMIT_HEIGHT } from "@/client/components/menu-geometry";
 import {
   StatusMenu,
   AssigneeMenu,
@@ -1252,7 +1253,7 @@ export function Subscribers({ issue }: { issue: Issue }) {
           aria-label="Change subscribers"
           placeholder="Change subscribers…"
         />
-        <Menu.List maxHeight="40vh">
+        <Menu.List maxHeight={LIMIT_HEIGHT}>
           <Menu.Empty>No people found</Menu.Empty>
           {people.map((user) => (
             <Menu.Item

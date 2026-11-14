@@ -27,6 +27,7 @@ if (typeof window !== "undefined")
   (window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 200)))(() => void loadDueParser());
 import type { ReactNode } from "react";
 import { Menu } from "@/client/components/menu";
+import { LIMIT_HEIGHT } from "@/client/components/menu-geometry";
 import { MenuSurface, MenuSurfaceContext } from "@/client/components/menu-surface";
 import { CheckRow } from "@/client/components/action-menu";
 import { actions } from "@/client/state/issue-actions";
@@ -79,7 +80,7 @@ export function PropertyMenu({
         value={query}
         onValueChange={onQuery}
       />
-      <Menu.List maxHeight="min(400px,calc(100vh - 80px))">
+      <Menu.List maxHeight={LIMIT_HEIGHT}>
         <Menu.Empty>No results</Menu.Empty>
         {children}
       </Menu.List>

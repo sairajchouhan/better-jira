@@ -6,6 +6,7 @@ import { epicOf, isEpic, lookupIn, parentOf } from "@/shared/epics";
 import { FilterIcon } from "./filter-icons";
 import { hue, PriorityIcon, StatusIcon, TypeDot } from "@/client/components/icons";
 import { Menu } from "@/client/components/menu";
+import { LIMIT_HEIGHT } from "@/client/components/menu-geometry";
 import { NoMatchesFooter, splitByMatches } from "@/client/components/no-matches";
 import { breadcrumbKeywords, menuFilter } from "@/client/lib/fuzzy-score";
 import { Select } from "@/client/components/select";
@@ -550,7 +551,7 @@ export function PropertyFilter({
     return (
       <Menu shouldFilter={false} className="filter-menu filter-sub">
         {searchRow(field === "due" ? "Try: 1 week ago, 1 week from now…" : "Filter…", name)}
-        <Menu.List maxHeight="360px">
+        <Menu.List maxHeight={LIMIT_HEIGHT}>
           {!presets.length && <Menu.Empty always>{noMatches(name)}</Menu.Empty>}
           {presets.map((p) => (
             <PresetRow
@@ -593,7 +594,7 @@ export function PropertyFilter({
     <div className={inline ? "" : "filter-menu filter-sub"}>
       <Menu filter={menuFilter}>
         {searchRow()}
-        <Menu.List maxHeight={inline ? "300px" : "360px"}>
+        <Menu.List maxHeight={inline ? "300px" : LIMIT_HEIGHT}>
           <Menu.Empty>{noMatches(name)}</Menu.Empty>
           <FieldValues field={field} board={board} ruleId={ruleId} onDone={done} />
         </Menu.List>

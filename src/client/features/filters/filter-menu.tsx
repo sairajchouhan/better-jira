@@ -175,7 +175,8 @@ function FilterLevel({
   return (
     <Menu
       filter={menuFilter}
-      className={`filter-menu ${name ? "filter-sub" : ""} max-h-[calc(100vh-140px)]`}
+      // A submenu's room is its row's (Menu.Submenu); the root's toolbar popover has no room of its own, so it keeps this cap.
+      className={name ? "filter-menu filter-sub" : "filter-menu max-h-[calc(100vh-140px)]"}
       {...start.props}
     >
       <Menu.Input
