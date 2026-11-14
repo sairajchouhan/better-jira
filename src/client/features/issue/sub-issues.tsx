@@ -15,6 +15,7 @@ import { useStoredState } from "@/client/state/stored-state";
 import { FieldMenuButton } from "@/client/components/pill-select";
 import { DisplayProperties, SelectRow, Toggle, ViewOptions } from "@/client/components/display-options";
 import {
+  DueIcon,
   RelationIcon,
   Icon,
   PriorityIcon,
@@ -777,11 +778,7 @@ function SubIssueRow({
           {child.milestones?.map((m) => m.name).join(", ")}
         </span>
       )}
-      {display.properties.includes("due") && child.due && (
-        <time dateTime={child.due} className="text-fg-3">
-          {shortDate(child.due, undefined, true)}
-        </time>
-      )}
+      {display.properties.includes("due") && child.due && <SubIssueDue issue={child} />}
       {/* Linear's sub-issue rows are its list rows: the same pull request (`mhn`, layout list) and link (`mt`) badges, in its order. */}
       {display.properties.includes("pullRequests") && !!child.prCount && <PullRequestBadge issue={child} layout="list" />}
       {display.properties.includes("links") && <LinkBadges issue={child} />}
@@ -844,4 +841,14 @@ function ChildrenMenu({ parent, current, anchor, close }: { parent: Issue; curre
             </Menu.List>
           </Menu>
         </MenuSurface>);
+}
+
+/** A sub-issue row's due date: Linear's list rows lead it with the due icon, orange within a week and red on the day and after. */
+export function SubIssueDue({ issue }: { issue: Pick<Issue, "due" | "resolved"> }) {
+  return (
+    <span className="flex shrink-0 items-center gap-1 text-fg-3">
+      <DueIcon due={issue.due!} resolved={issue.resolved} />
+      <time dateTime={issue.due!}>{shortDate(issue.due!, undefined, true)}</time>
+    </span>
+  );
 }
