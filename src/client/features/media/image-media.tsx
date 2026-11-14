@@ -1,4 +1,5 @@
 import { IconButton } from "@/client/components/button";
+import { Toolbar } from "@/client/components/toolbar";
 import { notifyMedia } from "./media-toast";
 /* oxlint-disable react/immutability -- Session callbacks and mutable imperative models are intentionally owned outside React state. */
 /* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
@@ -153,7 +154,7 @@ export function ImageMedia({
         }
         onError={onError}
       />
-      <div role="toolbar" aria-label="Image actions" className="image-actions">
+      <Toolbar label="Image actions" className="image-actions">
         <IconButton
           label="Copy image"
           disabled={!editable}
@@ -201,7 +202,7 @@ export function ImageMedia({
             <Icon name="comment" />
           </IconButton>
         )}
-      </div>
+      </Toolbar>
       {thread && issueKey && (
         <ImageThread
           draft={threadDraft}

@@ -69,6 +69,20 @@ test("issue page layout: narrow pills, copy toolbar, compact comment drafts and 
         .catch(() => {});
     }
   });
+  await test.step("the copy toolbar is one Tab stop whose arrows wrap and take Home and End (Linear's Mx)", async () => {
+    const focused = `document.activeElement?.getAttribute("aria-label")`;
+    await page.page.focus('[aria-label="Copy issue URL"]');
+    await page.key("ArrowLeft");
+    expect(await page.eval(focused)).toBe("Copy git branch name");
+    await page.key("ArrowRight");
+    expect(await page.eval(focused)).toBe("Copy issue URL");
+    await page.key("End");
+    expect(await page.eval(focused)).toBe("Copy git branch name");
+    await page.key("Home");
+    expect(await page.eval(focused)).toBe("Copy issue URL");
+    await page.key("Tab");
+    expect(await page.eval(`!!document.activeElement?.closest('[role="toolbar"]')`)).toBe(false);
+  });
   await test.step("compact comment drafts survive Escape, issue navigation and reload, then clear after sending", async () => {
     await page.waitFor(`!!document.getElementById('comment')`);
     expect((await page.rect(".rich-editor:has(#comment)")).height).toBeLessThanOrEqual(100);

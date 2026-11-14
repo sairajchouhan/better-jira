@@ -4,6 +4,7 @@ import { useHotkeys, useHotkey } from "@tanstack/react-hotkeys";
 import { adfToText } from "./adf";
 import { discardLateMedia, documentHasMedia, lateMediaDiscarded } from "@/shared/document";
 import { Button } from "@/client/components/button";
+import { Toolbar } from "@/client/components/toolbar";
 import { EditorActions, EditorArea, EditorFrame, presentations } from "./editor-frame";
 import { Icon } from "@/client/components/icons";
 import { Text } from "@/client/components/text";
@@ -704,10 +705,9 @@ export function RichEditor(props: EditorEngineProps) {
     },
   });
   const formatting = (!presentation.selectionToolbar || selecting) && (
-    <div
+    <Toolbar
       ref={toolbar}
-      role="toolbar"
-      aria-label={`${subject === "comment" ? "Comment" : "Description"} formatting`}
+      label={`${subject === "comment" ? "Comment" : "Description"} formatting`}
       style={floating}
       className={`z-10 items-center gap-0.5 rounded-lg border border-line-2 bg-card p-1 shadow-[var(--menu-shadow)] ${selecting ? "fixed flex flex-nowrap overflow-x-auto" : "absolute right-0 bottom-full mb-1 hidden max-w-full flex-nowrap overflow-x-auto group-focus-within/editor:flex"}`}
       onMouseDown={(e) => {
@@ -814,7 +814,7 @@ export function RichEditor(props: EditorEngineProps) {
           Create issue
         </ToolbarButton>
       )}
-    </div>
+    </Toolbar>
   );
   const preloadPeople = () =>
     void searchPeople("", props.mentionIssue ?? props.issueKey).catch(() => {});

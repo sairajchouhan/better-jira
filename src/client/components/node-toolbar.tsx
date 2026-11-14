@@ -1,5 +1,6 @@
-import type { ComponentProps, KeyboardEvent, ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { ButtonLink, IconButton } from "./button";
+import { InlineToolbar } from "./toolbar";
 import "./control-tokens.css";
 import "./node-toolbar.css";
 
@@ -7,7 +8,8 @@ import "./node-toolbar.css";
  * Linear's editor node toolbar (startup-root.CnUSfl4j.js): the `Px` pill (role toolbar, horizontal) of `Nx` items that a
  * rich-text node (a file, an image, a code block) shows at its edge. `reveal="hover"` is `Lze`'s reveal: hidden until
  * the pointer rests on the node that carries `data-node-toolbar-host` (100ms delay, 40ms fade), at once while focus is
- * inside it, always on a touch-only screen. Spans throughout, so the toolbar is valid inside a paragraph (an inline node).
+ * inside it, always on a touch-only screen. Spans throughout (`InlineToolbar`), so the toolbar is valid inside a paragraph
+ * (an inline node); its keys are the shared toolbar's (`Mx.handleToolbarKeyDown`, toolbar.tsx).
  */
 export function NodeToolbar({
   label,
@@ -19,29 +21,10 @@ export function NodeToolbar({
   children: ReactNode;
 }) {
   return (
-    <span
-      role="toolbar"
-      aria-label={label}
-      aria-orientation="horizontal"
-      data-reveal={reveal}
-      className="ui-node-toolbar"
-      onKeyDown={moveFocus}
-    >
+    <InlineToolbar label={label} data-reveal={reveal} className="ui-node-toolbar">
       {children}
-    </span>
+    </InlineToolbar>
   );
-}
-
-/** `Mx.handleToolbarKeyDown`: the arrow keys, Home and End walk the toolbar's items. */
-function moveFocus(event: KeyboardEvent<HTMLElement>) {
-  const step = { ArrowRight: 1, ArrowLeft: -1, Home: -Infinity, End: Infinity }[event.key];
-  if (step === undefined) return;
-  const items = [...event.currentTarget.querySelectorAll<HTMLElement>(".ui-button:not(:disabled)")];
-  if (!items.length) return;
-  event.preventDefault();
-  const at = items.indexOf(document.activeElement as HTMLElement);
-  const next = Number.isFinite(step) ? (at + step + items.length) % items.length : step < 0 ? 0 : items.length - 1;
-  items[next]!.focus();
 }
 
 /** Keeps the editor's selection and focus when an item is pressed, as `Fze`'s onMouseDown does. */

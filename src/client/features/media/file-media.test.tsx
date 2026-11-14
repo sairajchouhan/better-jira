@@ -15,7 +15,10 @@ test("BJ-228: a file in rich text is Linear's file block in the elevated theme, 
 });
 
 test("BJ-228: its File actions are Linear's plain file toolbar, Copy link then Download, revealed on hover", () => {
-  expect(html).toContain('role="toolbar" aria-label="File actions" aria-orientation="horizontal" data-reveal="hover"');
+  // React Aria's Toolbar, drawn as a span: attribute order is React Aria's, so each is checked on the tag.
+  const toolbar = /<span [^>]*role="toolbar"[^>]*>/.exec(html)?.[0] ?? "";
+  for (const attribute of ['aria-label="File actions"', 'aria-orientation="horizontal"', 'data-reveal="hover"', 'class="ui-node-toolbar"'])
+    expect(toolbar).toContain(attribute);
   const labels = [...html.matchAll(/aria-label="([^"]+)"/g)].map((m) => m[1]);
   expect(labels).toEqual(["File actions", "Copy link", "Download"]);
   expect(html).toMatch(/<a [^>]*data-appearance="node-toolbar"[^>]*aria-label="Download"[^>]*href="\/api\/issues\/TEST-1\/attachments\/103\?download=1" download="notes.txt"/);
