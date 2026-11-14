@@ -353,7 +353,7 @@ export function RelationIcon({ kind }: { kind: string }) {
 
 /** Linear's pull request status icons (startup-root.CnUSfl4j.js: open/in review/approved `jg`, draft `bE`, merged `xE`, closed `SE`;
  *  chosen by `Zpt`), 16-unit filled paths. Jira's DECLINED is Linear's closed. */
-const PULL_REQUEST_PATHS: Record<PullRequest["status"], string[]> = {
+const PULL_REQUEST_SHAPES = {
   open: [
     "M12.5 10C13.8807 10 15 11.1193 15 12.5C15 13.8807 13.8807 15 12.5 15C11.1193 15 10 13.8807 10 12.5C10 11.1193 11.1193 10 12.5 10ZM12.5 11.5C11.9477 11.5 11.5 11.9477 11.5 12.5C11.5 13.0523 11.9477 13.5 12.5 13.5C13.0523 13.5 13.5 13.0523 13.5 12.5C13.5 11.9477 13.0523 11.5 12.5 11.5Z",
     "M3.5 4.5C3.91414 4.50009 4.25 4.83584 4.25 5.25V14.249C4.24982 14.663 3.91403 14.9989 3.5 14.999C3.0859 14.999 2.75018 14.6631 2.75 14.249V5.25C2.75 4.83579 3.08579 4.5 3.5 4.5Z",
@@ -378,9 +378,17 @@ const PULL_REQUEST_PATHS: Record<PullRequest["status"], string[]> = {
     "M4.71967 1.21967C5.01256 0.926777 5.48732 0.926777 5.78022 1.21967C6.07294 1.51258 6.07305 1.98738 5.78022 2.28022L4.56049 3.49994L5.78022 4.71967C6.07288 5.01258 6.07303 5.4874 5.78022 5.78022C5.4874 6.07303 5.01258 6.07288 4.71967 5.78022L3.49994 4.56049L2.28022 5.78022C1.98738 6.073 1.51256 6.07292 1.21967 5.78022C0.926796 5.48734 0.926834 5.01257 1.21967 4.71967L2.4394 3.49994L1.21967 2.28022C0.926777 1.98732 0.926777 1.51256 1.21967 1.21967C1.51256 0.926777 1.98732 0.926777 2.28022 1.21967L3.49994 2.4394L4.71967 1.21967Z",
   ],
 };
-/** Linear's `bj.statusColor`: open greenBase, draft labelMuted, merged purpleBase, closed redBase. */
+/** In review and approved share the open icon (`Zpt`: open, inReview and approved draw `jg`). */
+const PULL_REQUEST_PATHS: Record<PullRequest["status"], string[]> = {
+  ...PULL_REQUEST_SHAPES,
+  inReview: PULL_REQUEST_SHAPES.open,
+  approved: PULL_REQUEST_SHAPES.open,
+};
+/** Linear's `bj.statusColor`: open, in review and approved greenBase, draft labelMuted, merged purpleBase, closed redBase. */
 const PULL_REQUEST_COLOR: Record<PullRequest["status"], string> = {
   open: "var(--green-base)",
+  inReview: "var(--green-base)",
+  approved: "var(--green-base)",
   draft: "var(--fg-3)",
   merged: "var(--purple-base)",
   declined: "var(--red-base)",

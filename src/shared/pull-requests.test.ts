@@ -1,11 +1,13 @@
 import { expect, test } from "bun:test";
 import {
   leadingStatus,
+  mergePullRequests,
   pullRequestBadgeText,
   pullRequestList,
   pullRequestProviders,
   pullRequestStatus,
   pullRequestTool,
+  withGitHubPullRequests,
   withLinkedPullRequests,
   type PullRequest,
 } from "./pull-requests";
@@ -85,4 +87,50 @@ test("Jira's development index decides whether an issue has pull requests; its s
   expect(withLinkedPullRequests(none, false)).toBe(none);
   // The index not read yet: the field's answer.
   expect(withLinkedPullRequests(none, undefined)).toBe(none);
+});
+
+const pr = (n: number, status: PullRequest["status"], updated = "2026-11-01T00:00:00Z", extra: Partial<PullRequest> = {}): PullRequest => ({
+  url: `https://github.com/acme-org/widgets/pull/${n}`,
+  title: `Change ${n}`,
+  number: `#${n}`,
+  status,
+  updated,
+  ...extra,
+});
+
+test("Jira's and GitHub's pull requests merge into one row per URL, GitHub's row winning, in Linear's order", () => {
+  const merged = mergePullRequests(
+    [pr(1, "open", "2026-11-01T00:00:00Z", { tool: "GitHub", repo: "acme-org/widgets" }), pr(2, "merged", "2026-11-05T00:00:00Z")],
+    [pr(1, "approved", "2026-11-02T00:00:00Z"), pr(3, "inReview", "2026-11-03T00:00:00Z"), pr(4, "inReview", "2026-11-04T00:00:00Z")],
+  );
+  // Linear's `qg`: open, in review, approved, draft, merged, closed; then the newest first.
+  expect(merged.map((p) => [p.number, p.status])).toEqual([
+    ["#4", "inReview"],
+    ["#3", "inReview"],
+    ["#1", "approved"],
+    ["#2", "merged"],
+  ]);
+});
+
+test("the in-review and approved states lead after open, and read as Linear labels them", () => {
+  expect(leadingStatus([{ status: "merged" }, { status: "approved" }, { status: "inReview" }, { status: "draft" }])).toBe("inReview");
+  expect(pullRequestStatus(pr(1, "inReview"))).toBe("In review");
+  expect(pullRequestStatus(pr(1, "approved"))).toBe("Approved");
+  expect(pullRequestStatus(pr(1, "inReview", undefined, { changesRequested: true }))).toBe("Changes requested");
+  expect(pullRequestStatus(pr(1, "merged", undefined, { changesRequested: true }))).toBe("Merged");
+});
+
+test("GitHub's pull requests add to an issue's count and state; one both sources link counts once", () => {
+  const github = [pr(1, "inReview"), pr(2, "merged")];
+  const issue = (v: { key: string; prCount?: number; prStatus?: PullRequest["status"] }) => v;
+  expect(withGitHubPullRequests(issue({ key: "ACME-1" }), [])).toEqual({ key: "ACME-1" });
+  expect(withGitHubPullRequests(issue({ key: "ACME-1", prCount: 0 }), github)).toEqual({ key: "ACME-1", prCount: 2, prStatus: "inReview" });
+  // Jira's panel not read yet: the sources add up.
+  expect(withGitHubPullRequests(issue({ key: "ACME-1", prCount: 1, prStatus: "draft" }), github)).toEqual({ key: "ACME-1", prCount: 3, prStatus: "inReview" });
+  // Read: Jira lists #1 too, so it counts once.
+  expect(withGitHubPullRequests(issue({ key: "ACME-1", prCount: 1, prStatus: "open" }), github, [github[0]!.url])).toEqual({
+    key: "ACME-1",
+    prCount: 2,
+    prStatus: "open",
+  });
 });
