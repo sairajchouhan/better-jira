@@ -299,8 +299,9 @@ test("BJ-13: Jira's whole history joins Activity after the details paint, in Lin
   expect(await page.eval(rows)).toEqual([]);
   await page.waitFor(`${rows}.length===5`, 5000);
   expect(await page.eval(rows)).toEqual([
-    // A resolution set by its transition is that status change; Jira's rank is noise Linear never shows.
-    "Ada Example moved from Todo to Doing",
+    // The resolution its transition set rides on that status row, as prod Jira keeps it (activity parity #12; Linear has no
+    // resolution); Jira's rank is noise Linear never shows.
+    "Ada Example moved from Todo to Doing and set resolution to Done",
     "Automation for Jira added issue to Sprint 10",
     "Ada Example added to milestone Release 1",
     "Ada Example marked this issue as blocking TEST-1 Rich browser fixture",
