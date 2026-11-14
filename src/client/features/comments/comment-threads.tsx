@@ -376,6 +376,7 @@ function Thread({
         key={comment.id}
         id={`comment-${comment.id}`}
         data-comment={comment.id}
+        data-comment-parent={comment.parentId}
         className={`comment-message ${comment.parentId ? "comment-reply" : ""}`}
         onContextMenu={(event) => {
           if (editing === comment.id) return;

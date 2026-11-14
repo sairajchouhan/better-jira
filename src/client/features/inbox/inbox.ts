@@ -1,11 +1,13 @@
 /** The Inbox's state and actions: what shortcuts, the sidebar badge and the inbox screen share. The screen itself
  *  (routes/inbox.tsx) loads with its route. Read state goes to Jira; delete and snooze stay in this browser. */
 import { useCallback, useEffect, useSyncExternalStore } from "react";
-import { commentAnchor, unreadCount } from "@/shared/inbox-model";
+import { commentAnchor, unreadCount, type InboxItem } from "@/shared/inbox-model";
+import { clearedComments, visitClears } from "@/shared/inbox-visit";
 import { statusOf as issueStatusOf, get, set, useStore } from "@/client/state/store";
 import { queryClient } from "@/client/state/server-data";
 import { navigate, router, showAnchor, ui } from "@/client/features/navigation/app-navigation";
-import { createInboxStore, type Category, type DeleteConfirmation } from "@/client/state/inbox-store";
+import { createInboxStore, type Category, type DeleteConfirmation, type Feed } from "@/client/state/inbox-store";
+import type { InfiniteData } from "@tanstack/query-core";
 import { readStored, writeStored } from "@/client/state/stored-state";
 
 const storageKey = (name: string) =>
@@ -151,6 +153,34 @@ export const {
 export const { itemsOf, facets, orderOf, clearUnseen, openFind, setFind, closeFind } = inbox;
 const { subscribe, localState, viewState, feed, dropLocal, markRead } = inbox;
 
+// --- Opening an issue outside the inbox reads its notifications (Linear's MarkNotificationAsRead `z`, `j` and `M`) ---
+
+/** Per issue key, the comments seen in it this session: Jira reads a whole group, so the row waits until each of its
+ *  comment notifications' comments has been seen. */
+const seenComments = new Map<string, Set<string>>();
+/** The issue's rows in every feed loaded so far (both tabs of the priority inbox too). */
+function rowsOf(key: string) {
+  const rows = new Map<string, InboxItem>();
+  for (const category of ["all", "direct", "watching"] as const)
+    for (const row of itemsOf(queryClient.getQueryData<InfiniteData<Feed, string>>(["inbox", category])))
+      if (row.key === key && !rows.has(row.id)) rows.set(row.id, row);
+  return [...rows.values()];
+}
+/** The issue showed in a focused window, outside the inbox: its rows with nothing left unread (`visitClears`) are read in
+ *  Jira, by the same path as U. Not undoable, as Linear's isn't. */
+export function visitIssue(key: string) {
+  const own = localState(),
+    seen = seenComments.get(key) ?? new Set<string>(),
+    rows = rowsOf(key).filter((row) => visitClears(row, own[row.head], seen));
+  if (rows.length) void markRead(rows, true);
+}
+/** A comment of the issue was seen (`createSeenTracker`). */
+export function commentSeen(key: string, comment: { id: string; parentId?: string }) {
+  let seen = seenComments.get(key);
+  if (!seen) seenComments.set(key, (seen = new Set()));
+  for (const id of clearedComments(comment)) seen.add(id);
+  visitIssue(key);
+}
 export const useLocal = () => useSyncExternalStore(subscribe, localState);
 export const useView = () => useSyncExternalStore(subscribe, viewState);
 /** The view the list applies: the stored view plus the ⌘F find term. */

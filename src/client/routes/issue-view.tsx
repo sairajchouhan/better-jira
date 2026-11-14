@@ -54,6 +54,7 @@ import { hotkeyOf, runShortcut } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
 import { post, useCommand, focusNode } from "@/client/features/navigation/commands";
 import { InboxIssueActions, InboxIssueGroup } from "./inbox";
+import { useCommentsSeen, useIssueVisit } from "@/client/features/inbox/issue-visit";
 import { SplitPanel } from "@/client/features/issue/split-panel";
 import { descriptionNotice, descriptionSession, type DescriptionPorts } from "@/client/features/issue/description-session";
 import { shortDate } from "@/client/lib/due-date";
@@ -206,8 +207,12 @@ const COPY_ACTIONS = [
 function IssueBody({ issue, lead }: { issue: Issue; lead?: ReactNode }) {
   const f = useStore((s) => s.full.get(issue.key))?.fields;
   const propertiesHidden = useStore((s) => s.issuePropertiesHidden);
+  // Reading the issue reads its notifications, as Linear's issue view does (B6); the inbox's pane reads by its own rule.
+  const body = useRef<HTMLDivElement>(null);
+  useIssueVisit(issue.key, issue.comments);
+  useCommentsSeen(issue.key, body);
   return (
-    <div className="issue-detail-body" data-scroll-restoration-id="issue-body">
+    <div ref={body} className="issue-detail-body" data-scroll-restoration-id="issue-body">
       <div role="toolbar" aria-label="Copy issue" className="issue-copy-toolbar">
         {COPY_ACTIONS.map(([action, label, icon]) => (
           <IconButton
