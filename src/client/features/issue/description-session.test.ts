@@ -115,6 +115,24 @@ test("typing saves 600ms after it stops, each keystroke restarting the wait", as
   expect(h.storage.has(DRAFT)).toBe(false);
 });
 
+test("a file landing in the description saves at once, as Linear syncs each change; typing around it still waits (BJ-233)", () => {
+  const h = harness({ stored: doc("jira", "m-1") });
+  // Typing beside a file that was already there waits for the pause.
+  h.session.edit(doc("jira!", "m-1"));
+  expect(h.writes).toEqual([]);
+  // A pasted file replaces it: saved without the wait.
+  h.session.edit(doc("jira!", "m-2"));
+  expect(h.writes).toEqual([["BJ-1", doc("jira!", "m-2")]]);
+  h.session.edit(doc("jira!!", "m-2"));
+  h.advance(500);
+  expect(h.writes.length).toBe(1);
+  h.advance(100);
+  expect(h.writes.at(-1)).toEqual(["BJ-1", doc("jira!!", "m-2")]);
+  // Deleting a file is typing: it waits.
+  h.session.edit(doc("jira!!"));
+  expect(h.writes.length).toBe(2);
+});
+
 test("flush saves at once, and a draft typed again before the write finished stays", async () => {
   const h = harness();
   h.session.edit(doc("a"));

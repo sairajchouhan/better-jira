@@ -37,6 +37,14 @@ export type DescriptionPorts = {
 };
 
 const textOf = (doc: string) => adfToText(JSON.parse(doc || "null"));
+/** The ids of the files a document shows. */
+function mediaIds(node: unknown, ids = new Set<string>()) {
+  if (!node || typeof node !== "object") return ids;
+  const { type, attrs, content } = node as { type?: string; attrs?: { id?: unknown }; content?: unknown };
+  if ((type === "media" || type === "mediaInline") && typeof attrs?.id === "string") ids.add(attrs.id);
+  if (Array.isArray(content)) for (const child of content) mediaIds(child, ids);
+  return ids;
+}
 const stringify = (doc: unknown) => JSON.stringify(normalizeDocument(doc as AdfDocument));
 
 /**
@@ -57,6 +65,8 @@ export function descriptionSession(
     conflict = false,
     resolving = false,
     snapshot: DescriptionSnapshot = { revision: 0, draft: undefined, conflict: false };
+  // The files the editor's document showed after its last change, read from `shown` at the first change.
+  let media: Set<string> | undefined;
   const listeners = new Set<() => void>();
   const publish = (patch: Partial<DescriptionSnapshot> = {}) => {
     snapshot = { ...snapshot, conflict, ...patch };
@@ -65,6 +75,7 @@ export function descriptionSession(
   const remount = () => publish({ revision: snapshot.revision + 1, draft: typed ?? undefined });
   const show = (doc: string) => {
     shown = doc;
+    media = undefined;
     remount();
   };
   // The editor mounted with the store's first text when the issue loaded, so that is what it shows.
@@ -114,10 +125,17 @@ export function descriptionSession(
     /** Whether saves wait for the person to pick a version. */
     held,
 
-    /** The editor's document changed. */
+    /**
+     * The editor's document changed. A file it didn't show before (a paste, drop or upload that just landed in Jira)
+     * saves at once rather than after the typing pause: Linear's description is a Yjs document that syncs each change
+     * as it happens (BJ-233).
+     */
     edit(doc: AdfDocument) {
       typed = doc;
+      const before = media ?? mediaIds(JSON.parse(shown || "null"));
+      media = mediaIds(doc);
       autosave.send({ type: "change", doc });
+      if ([...media].some((id) => !before.has(id))) autosave.send({ type: "flush" });
     },
     /** Saves pending typing now (blur, unmount). */
     flush() {
@@ -170,6 +188,7 @@ export function descriptionSession(
     /** Jira's copy was restored over this issue: the editor takes it, unsaved typing included. */
     restored() {
       shown = "";
+      media = undefined;
       typed = null;
       conflict = false;
       publish();
