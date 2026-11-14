@@ -106,8 +106,9 @@ test("hierarchy pickers offer only what Jira accepts: a parent one level up in t
   expect(needsParent(local, kan("Subtask"))).toBe(false);
 });
 
-test("BJ-247: an epic has no sub-issues, though Jira takes its project's issues under it", () => {
+test("BJ-280: an epic's section adds its issues, as Jira's epic page does; an initiative's adds none", () => {
   const levels = [
+    { name: "Initiative", hierarchyLevel: 2 },
     { name: "Epic", hierarchyLevel: 1 },
     { name: "Task", hierarchyLevel: 0 },
     { name: "Subtask", hierarchyLevel: -1 },
@@ -115,10 +116,14 @@ test("BJ-247: an epic has no sub-issues, though Jira takes its project's issues 
   const jira = { writable: true, options: { types: { KAN: levels } } };
   const local = { ...jira, writable: false };
   const kan = (type: string) => ({ type, project: { key: "KAN" } });
-  // Jira still takes children under an epic (its project's issues: the composer creates them), but none is a sub-issue.
+  // Jira takes the epic's issues under it, and its Sub-issues section lists and adds them (BJ-280).
   expect(canHaveChildren(jira, kan("Epic"))).toBe(true);
-  expect(canHaveSubIssues(jira, kan("Epic"))).toBe(false);
-  expect(canHaveSubIssues(local, kan("Epic"))).toBe(false);
+  expect(canHaveSubIssues(jira, kan("Epic"))).toBe(true);
+  expect(canHaveSubIssues(local, kan("Epic"))).toBe(true);
+  // An initiative's children are epics, never sub-issues.
+  expect(canHaveChildren(jira, kan("Initiative"))).toBe(true);
+  expect(canHaveSubIssues(jira, kan("Initiative"))).toBe(false);
+  expect(canHaveSubIssues(local, kan("Initiative"))).toBe(false);
   expect(canHaveSubIssues(jira, kan("Task"))).toBe(true);
   expect(canHaveSubIssues(jira, kan("Subtask"))).toBe(false);
 });

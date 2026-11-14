@@ -1,4 +1,5 @@
 import { type Board, type Issue, type IssueDraft } from "@/shared/issue-model";
+import { subIssueParent } from "@/shared/epics";
 import { ME } from "@/client/state/store";
 import { documentHasMedia, normalizeDocument, type AdfDocument } from "@/shared/document";
 import { adfToText } from "@/client/features/editor/adf";
@@ -31,7 +32,7 @@ export const subIssueDefaults = (
   children: readonly Issue[] = [],
   automations: AutoAssignPreferences = savedAutomations(),
 ): IssueDraft => ({
-  parent: parent.key,
+  ...subIssueParent(parent),
   project: parent.project,
   assignee:
     parent.assignee &&

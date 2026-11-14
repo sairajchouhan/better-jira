@@ -1,4 +1,5 @@
 import { canHaveSubIssues } from "@/shared/issue-properties";
+import { subIssueParent } from "@/shared/epics";
 import { type Issue } from "@/shared/issue-model";
 import { pageURL } from "@/client/features/navigation/app-navigation";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
@@ -361,7 +362,7 @@ function Thread({
         beginCreate({
           descriptionDoc: copied.body,
           attachments: copied.attachments,
-          ...(parent ? { parent: issue.key, project: issue.project } : {}),
+          ...(parent ? { ...subIssueParent(issue), project: issue.project } : {}),
         });
     } catch (error) {
       setCopyError(error instanceof Error ? error.message : "Could not prepare the comment");
@@ -648,7 +649,7 @@ function Thread({
               divider: true,
               run: () => void createFromComment(comment),
             },
-            // An epic is a project: its new issues join it with Project, never as sub-issues.
+            // On an epic, the sub-issue joins the epic as its Epic (subIssueParent, BJ-280); an initiative offers none.
             ...(canHaveSubIssues(get(), issue)
               ? [
                   {

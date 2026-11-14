@@ -12,7 +12,7 @@ import { canMergeOverlay } from "@/shared/saved-view-model";
 import { boardView, filterCount, groupStep, visibleOrder } from "@/shared/view-model";
 import { forgetIssueIntents, post, run as command } from "./commands";
 import { canHaveSubIssues } from "@/shared/issue-properties";
-import { epicLocked, epicOf, nestable, parentOf } from "@/shared/epics";
+import { epicLocked, epicOf, listsSubIssues, nestable, parentOf, subIssueParent } from "@/shared/epics";
 import { childrenByParent } from "@/client/features/issue/sub-issue-model";
 import { getHotkeyManager, type Hotkey, type HotkeyChord } from "@tanstack/react-hotkeys";
 import { boardOf, get, isWatching, ME, set, useStore, type Overlay } from "@/client/state/store";
@@ -680,13 +680,14 @@ export const shortcuts: Shortcut[] = [
     run: issueAction((i) => {
       if (!canHaveSubIssues(get(), i)) {
         set({
-          perf: nestable(i)
+          perf: listsSubIssues(i)
             ? `Jira has no issue type below ${i.type}, so ${i.key} can't have sub-issues`
-            : `${i.key} is an epic: its issues join it with Epic, not as sub-issues`,
+            : `${i.key} sits above epics: its epics join it in Jira, not as sub-issues`,
         });
         return;
       }
-      if (!command("create-sub-issue", i.key)) beginCreate({ parent: i.key, project: i.project });
+      // Under an epic, the new issue goes into it as the Epic picker puts it there (subIssueParent).
+      if (!command("create-sub-issue", i.key)) beginCreate({ ...subIssueParent(i), project: i.project });
     }),
   },
   {

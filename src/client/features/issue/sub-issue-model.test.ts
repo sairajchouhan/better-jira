@@ -165,16 +165,23 @@ test("Move… sits in the Copy group right after Make a copy…, as Linear's iss
   expect(names(withMoveEntry([{ name: "Status" }, { name: "Delete" }], { name: "Move…" }))).toEqual(["Status", "Move…", "Delete"]);
 });
 
-test("BJ-247: an epic's issues are its project's, never its sub-issues; a parent issue's children are", () => {
-  const epic = { ...issue("EPIC"), type: "Epic" };
+test("BJ-280: an epic's section lists its issues as Jira's epic page does, each sub-task nested under its own parent", () => {
+  const initiative = { ...issue("INIT"), type: "Initiative" };
+  const epic = { ...issue("EPIC", "INIT"), type: "Epic" };
   const task = { ...issue("TASK", "EPIC"), type: "Task" };
+  const done = { ...issue("DONE", "EPIC", "done"), type: "Bug" };
   const sub = { ...issue("SUB", "TASK"), type: "Sub-task" };
   // A Jira parent the mirror doesn't hold, sent as an epic (level 1).
   const outside = { ...issue("OUT", "EPIC-9"), parentLevel: 1 };
-  const byKey = new Map([epic, task, sub, outside].map((i) => [i.key, i]));
-  expect(childrenByParent(byKey).get("EPIC")).toBeUndefined();
-  expect(childrenByParent(byKey).get("EPIC-9")).toBeUndefined();
+  const byKey = new Map([initiative, epic, task, done, sub, outside].map((i) => [i.key, i]));
+  expect(childrenByParent(byKey).get("EPIC")?.map((i) => i.key)).toEqual(["TASK", "DONE"]);
+  expect(childrenByParent(byKey).get("EPIC-9")?.map((i) => i.key)).toEqual(["OUT"]);
   expect(childrenByParent(byKey).get("TASK")?.map((i) => i.key)).toEqual(["SUB"]);
-  expect(subIssueRows("EPIC", byKey, defaultSubIssueDisplay(), status).total).toBe(0);
+  // An initiative sits above epics: its epics aren't sub-issues.
+  expect(childrenByParent(byKey).get("INIT")).toBeUndefined();
+  const model = subIssueRows("EPIC", byKey, defaultSubIssueDisplay(), status);
+  expect(model.rows.map((r) => [r.issue.key, r.depth])).toEqual([["DONE", 0], ["TASK", 0], ["SUB", 1]]);
+  // The progress counts the epic's own issues, as any parent's counts its children.
+  expect([model.completed, model.total]).toEqual([1, 3]);
   expect(subIssueRows("TASK", byKey, defaultSubIssueDisplay(), status).rows.map((r) => r.issue.key)).toEqual(["SUB"]);
 });

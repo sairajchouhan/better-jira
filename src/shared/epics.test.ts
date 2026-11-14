@@ -1,6 +1,19 @@
 import { type Board, type Issue, type PropertyActivity } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
-import { canNest, epicChanges, epicChoices, epicLocked, epicOf, epicPatch, hierarchyLevel, lookupIn, parentOf } from "./epics";
+import {
+  canNest,
+  epicChanges,
+  epicChoices,
+  epicLocked,
+  epicOf,
+  epicPatch,
+  hierarchyLevel,
+  listedUnder,
+  listsSubIssues,
+  lookupIn,
+  parentOf,
+  subIssueParent,
+} from "./epics";
 import { buckets, defaultPreferences, draftForGroup, listRows, matchesRule, selectIssues, type Rule } from "./view-model";
 import { opsFor } from "./jira-ops";
 
@@ -204,6 +217,34 @@ test("nested lists nest sub-issues under their parent issue, never an epic's iss
   expect(rows).toContainEqual(["E-10", 0]);
   expect(rows).toContainEqual(["E-11", 1]);
   expect(rows).toContainEqual(["E-2", 0]);
+});
+
+// BJ-280: the user's deviation from Linear (.raj/done.md): an epic's page lists its issues in its Sub-issues section, as Jira's
+// epic page lists its child work items. On the child the epic stays its Epic only (parentOf above), never its Parent.
+test("BJ-280: an epic's Sub-issues section lists its issues; a sub-task stays under its parent; an initiative lists none", () => {
+  // The epic's own issue, in its space or another Jira project.
+  expect(listedUnder(inBilling, lookup)).toBe("E-2");
+  expect(listedUnder(issue("X-1", { parent: "E-2", project: { key: "X", name: "Other" } }), lookup)).toBe("E-2");
+  // A sub-task nests under its own parent, never flat on the epic.
+  expect(listedUnder(subTask, lookup)).toBe("E-10");
+  expect(listedUnder(childTask, lookupIn(local))).toBe("E-30");
+  // An epic under an initiative isn't listed: initiatives sit above epics.
+  expect(listedUnder(billing, lookup)).toBeUndefined();
+  expect(listedUnder(loose, lookup)).toBeUndefined();
+  // A parent the mirror doesn't hold counts by the level Jira sent: an epic lists, an initiative doesn't.
+  expect(listedUnder(issue("E-20", { parent: "E-99", parentLevel: 1 }), lookup)).toBe("E-99");
+  expect(listedUnder(issue("E-23", { type: "Epic", parent: "E-96", parentLevel: 2 }), lookup)).toBeUndefined();
+  // Still never a Parent: the duplicate BJ-247 fixed stays fixed.
+  expect(parentOf(inBilling, lookup)).toBeUndefined();
+  expect([initiative, billing, inBilling, subTask].map(listsSubIssues)).toEqual([false, true, true, true]);
+});
+
+test("BJ-280: adding from an epic's section puts the new issue in the epic as the Epic picker does", () => {
+  expect(subIssueParent(billing)).toEqual(epicPatch("E-2"));
+  expect(epicOf({ ...issue("NEW"), ...subIssueParent(billing) }, lookup)).toBe("E-2");
+  expect(parentOf({ ...issue("NEW"), ...subIssueParent(billing) }, lookup)).toBeUndefined();
+  // Under a parent issue it is that issue's sub-issue.
+  expect(subIssueParent(inBilling)).toEqual({ parent: "E-10" });
 });
 
 test("BJ-262: a parent change that sets the epic is an epic change in Activity; a sub-task's parent stays a parent", () => {

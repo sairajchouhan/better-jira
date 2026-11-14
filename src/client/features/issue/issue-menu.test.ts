@@ -271,13 +271,13 @@ describe("BJ-247: an epic parent is the issue's Project, never its Parent", () =
     expect(names(menu("E-3"), "Remove")).toContain(`Parent issue E-2 ${task.summary}`);
   });
 
-  test("an epic has no Parent of…, Sub-issue of…, Parent issue… or Sub-issue… entries", () => {
+  test("an epic has no Parent of…, Sub-issue of… or Parent issue…; its Sub-issue… creates an issue in it (BJ-280)", () => {
     setup();
     const entries = menu("E-1");
     expect(names(entries, "Mark as")).not.toContain("Parent of…");
     expect(names(entries, "Mark as")).not.toContain("Sub-issue of…");
     expect(names(entries, "Create related")).not.toContain("Parent issue…");
-    expect(names(entries, "Create related")).not.toContain("Sub-issue…");
+    expect(names(entries, "Create related")).toContain("Sub-issue…");
     expect(names(menu("E-2"), "Mark as")).toContain("Sub-issue of…");
   });
 
@@ -293,7 +293,7 @@ describe("BJ-247: an epic parent is the issue's Project, never its Parent", () =
     expect(get().issues.get("E-3")?.parent).toBeUndefined();
   });
 
-  test("⌘K and keys: Open parent issue and Open sub-issue follow parent issues only; an epic has no Set parent issue", async () => {
+  test("⌘K and keys: Open parent issue follows parent issues only, Open sub-issue an epic's issues too; an epic has no Set parent issue", async () => {
     const { canRunShortcut } = await import("@/client/features/navigation/shortcuts");
     setup();
     ui.send({ type: "overlay.close" });
@@ -301,7 +301,8 @@ describe("BJ-247: an epic parent is the issue's Project, never its Parent", () =
       navigate({ board: 1, selected: key, panel: true, document: null, inbox: false, mine: false });
       return ["parent-open", "sub-issues-of-parent", "child-open", "parent-set"].filter(canRunShortcut);
     };
-    expect(on("E-1")).toEqual([]);
+    // BJ-280: the epic's Sub-issues section lists E-2, so Open sub-issue reaches it.
+    expect(on("E-1")).toEqual(["child-open"]);
     expect(on("E-2")).toEqual(["child-open", "parent-set"]);
     expect(on("E-3")).toEqual(["parent-open", "sub-issues-of-parent", "parent-set"]);
   });

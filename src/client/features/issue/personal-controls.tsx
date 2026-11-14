@@ -344,11 +344,12 @@ export function CreateIssue() {
   />;
   const statusId = draft.status ?? board.columns[0]?.statuses[0]?.id ?? "";
   const status = statuses(board).find((s) => s.id === statusId);
-  // A sub-issue composer, opened as one or resumed from one; an epic picked as the draft's Epic is not a parent issue here.
+  // A sub-issue composer, opened as one or resumed from one. An epic is never a parent issue here, picked as the draft's Epic or
+  // opened from the epic's Sub-issues section (BJ-280): it shows once, as the Epic pill.
   const openedParent = start.fields.parent,
     openedParentIssue = openedParent ? all.get(openedParent) : undefined;
   const subIssueOf =
-    openedParent && (openedParent === initial.parent || (openedParentIssue && !isEpic(openedParentIssue)))
+    openedParent && !(openedParentIssue && isEpic(openedParentIssue)) && (openedParent === initial.parent || openedParentIssue)
       ? openedParent
       : undefined;
   // The composer's project is its epic, the new issue's Jira parent; a sub-issue's follows its parent (shared/epics.ts).

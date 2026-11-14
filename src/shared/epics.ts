@@ -46,11 +46,30 @@ export function parentOf(issue: Parented, lookup: IssueLookup): string | undefin
   return level !== undefined && level >= 1 ? undefined : issue.parent;
 }
 
-/** Whether an issue takes part in parent issues and sub-issues at all: an epic is a project and an initiative sits above
- *  projects, so neither has a parent issue nor sub-issues (Linear's projects and initiatives aren't issues). */
+/** Whether an issue takes part in parent issues at all: an epic is a project and an initiative sits above projects, so neither
+ *  has a parent issue nor is one (Linear's projects and initiatives aren't issues). An epic still lists its issues in its
+ *  Sub-issues section (`listsSubIssues`). */
 export const nestable = (issue: Leveled) => hierarchyLevel(issue) < 1;
 /** Whether `parent` may be `child`'s parent issue: both are nestable. */
 export const canNest = (parent: Leveled, child: Leveled) => nestable(parent) && nestable(child);
+
+/**
+ * The issue whose Sub-issues section lists this one: its parent issue (`parentOf`), or its epic when its Jira parent is one, as
+ * Jira's epic page lists its child work items (BJ-280, the user's deviation from Linear's project page, .raj/done.md). Only the
+ * section and its counts read this (sub-issue lists, progress, the peek, Open sub-issue): on the child the epic stays its Epic,
+ * never its Parent. An initiative lists nothing. A sub-task stays under its own parent, nested below the epic's issue.
+ */
+export function listedUnder(issue: Parented, lookup: IssueLookup): string | undefined {
+  const level = parentLevel(issue, lookup);
+  return level !== undefined && level > 1 ? undefined : issue.parent;
+}
+/** Whether an issue has a Sub-issues section of its own: a parent issue, and an epic, whose section lists its issues
+ *  (`listedUnder`). An initiative sits above epics and lists none. */
+export const listsSubIssues = (issue: Leveled) => hierarchyLevel(issue) <= 1;
+/** The draft a new issue from `parent`'s Sub-issues section starts with: under a parent issue, its parent; under an epic, the
+ *  epic, written as the Epic picker writes it (`epicPatch`), so it shows as the new issue's Epic, never as its parent. */
+export const subIssueParent = (parent: Leveled & Pick<Issue, "key">): Pick<Issue, "parent"> =>
+  isEpic(parent) ? epicPatch(parent.key) : { parent: parent.key };
 
 /**
  * The epic an issue is in, as its project: its parent when that is an epic; for a sub-issue (a sub-task, or a parent issue the

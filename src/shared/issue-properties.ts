@@ -1,6 +1,6 @@
 import { jiraPullRequestStatus, type PullRequest } from "./pull-requests";
 import { matchRank as textRank } from "./search-rank";
-import { nestable } from "./epics";
+import { listsSubIssues } from "./epics";
 export type History = {
   created: string | number;
   items: { fieldId?: string; field?: string; from?: string | null; to?: string | null }[];
@@ -138,10 +138,10 @@ export function childTypes(s: Hierarchy, parent: Typed) {
 }
 /** Whether Jira has a type one level below `issue`, so it can be any issue's Jira parent (an epic's are its project's issues). */
 export const canHaveChildren = (s: Hierarchy, issue: Typed) => childTypes(s, issue)?.length !== 0;
-/** Whether `issue` can have sub-issues: Jira takes children under it, and it isn't an epic or above, whose children are its
- *  project's issues, never sub-issues (shared/epics.ts nestable). */
+/** Whether `issue`'s Sub-issues section can add to it: Jira takes children under it, and it isn't above an epic. An epic's
+ *  section lists and adds its issues, as Jira's epic page does (shared/epics.ts listsSubIssues, BJ-280). */
 export const canHaveSubIssues = (s: Hierarchy, issue: Typed) =>
-  nestable({ type: issue.type, level: levelOf(s, issue) }) && canHaveChildren(s, issue);
+  listsSubIssues({ type: issue.type, level: levelOf(s, issue) }) && canHaveChildren(s, issue);
 /** Jira can't create a Subtask without a parent or take its parent away. */
 export const needsParent = (s: Hierarchy, issue: Typed) => (levelOf(s, issue) ?? 0) < 0;
 

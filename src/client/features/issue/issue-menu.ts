@@ -287,8 +287,8 @@ export function issueMenuEntries(
       name: "Mark as",
       icon: "flag",
       children: [
-        // An epic is a project: it has no parent issue and no sub-issues.
-        ...(canHaveSubIssues(get(), issue) ? [{ name: "Parent of…", run: () => mark("child") }] : []),
+        // An epic is a project: its issues join it with Epic, so it is never a parent issue, nor has one.
+        ...(nests && canHaveSubIssues(get(), issue) ? [{ name: "Parent of…", run: () => mark("child") }] : []),
         ...(nests
           ? [
               {
