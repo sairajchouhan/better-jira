@@ -263,6 +263,14 @@ test("R3 G23: the feed and its group pages carry a comment's text, not its ADF, 
   expect(groupPage([live.headNotification], {}, GROUP_FIRST).notes[0]).not.toHaveProperty("doc");
 });
 
+test("R3 G23: a row's accessible name cuts a long comment to 100 characters, as Linear cuts a comment in a line", () => {
+  const long = "A made-up comment that goes on and on. ".repeat(30).trim();
+  const label = rowLabel(item({ kind: "comment", message: "Ana commented on a task", preview: long }));
+  expect(label).toContain(`Ana commented: ${long.slice(0, 99)}…`);
+  expect(label.length).toBeLessThan(160);
+  expect(rowLabel(item({ kind: "comment", message: "Ana commented on a task", preview: "Short" }))).toEndWith("Ana commented: Short");
+});
+
 test("a Jira system notification's row label leaves no gap for its missing key (R3-inbox-D7)", () => {
   const system = item({ key: "", title: "View work", kind: "updated", message: "You have 1 item due today" });
   expect(rowLabel(system)).not.toContain("  ");

@@ -1,5 +1,5 @@
 /** Jira's in-app notifications as Linear Inbox rows. Pure: the server maps the GraphQL feed, the client words and filters it. */
-import { priorityRank } from "./view-model";
+import { priorityRank, truncate } from "./view-model";
 
 export type InboxKind =
   | "assigned"
@@ -312,15 +312,20 @@ export function describe(note: Pick<InboxNote, "actor" | "kind" | "message" | "p
   }
 }
 
+/** How much of a comment a row's name reads: Linear cuts a comment to 100 characters with "…" where it names one in a line
+ *  (`truncateLength:100` for a comment link's title; the row itself shows `Comment.notificationText`, its first blocks, on
+ *  one truncated line). */
+export const ROW_PREVIEW = 100;
 /** A row's accessible name; a Jira system notification has no key, so no gap is left for one (R3-inbox-D7). `status` is the
- *  one the row's icon shows (the mirrored issue's current status), so a screen reader hears what the eye sees. */
+ *  one the row's icon shows (the mirrored issue's current status), so a screen reader hears what the eye sees. The comment is
+ *  cut to `ROW_PREVIEW` characters, so a long one doesn't make the row's name a thousand characters long. */
 export const rowLabel = (item: InboxItem, status = item.status) =>
   [
     item.unread ? "Unread" : "Read",
     item.key,
     item.title,
     (item.issueType || status) && `· ${[item.issueType, status].filter(Boolean).join(", ")}`,
-    describe(item),
+    describe({ ...item, preview: truncate(item.preview, ROW_PREVIEW) }),
     groupSummary(item) && `· ${groupSummary(item)}`,
   ]
     .filter(Boolean)

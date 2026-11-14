@@ -1050,3 +1050,7 @@ export function displayHiddenCount(all: Issue[], board: Board, prefs: Preference
   const shown = new Set(boardColumns(visible, board, prefs, all).filter(c => !hidden.includes(c.id)).flatMap(c => c.issues.map(i => i.key)));
   return eligible.filter(i => !shown.has(i.key)).length;
 }
+
+/** lodash `truncate(text, { length, omission: "…" })`, as Linear cuts a title or a comment: the omission counts toward the
+ *  length. */
+export const truncate = (text: string, length: number) => (text.length > length ? `${text.slice(0, length - 1)}…` : text);

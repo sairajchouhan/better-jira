@@ -11,6 +11,7 @@ import { useState, type HTMLAttributes, type ReactNode } from "react";
 import type { RunPlace, TimelineEvent } from "@/client/features/comments/comment-threads";
 import { collapseLabel, partition, type SummaryItem } from "./activity-collapse";
 import { statusById, statuses } from "@/shared/board-catalog";
+import { truncate } from "@/shared/view-model";
 import { Avatar } from "@/client/components/avatar";
 import { Icon, type IconName, PriorityIcon, RelationIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
 import { AppLink } from "@/client/features/navigation/app-link";
@@ -31,9 +32,6 @@ const idOf = (value: unknown) =>
   value && typeof value === "object" && "id" in value ? (value as { id: unknown }).id : value;
 /** Linear's `formatAbsoluteDate`: "Nov 7", "Nov 7, 2025" in another year. */
 const day = (value: unknown) => absoluteDate(String(value));
-/** lodash `truncate(text, { length, omission: "…" })`, as Linear's TitleChangeTooltipContent cuts the new title: the omission
- *  counts toward the length. */
-export const truncate = (text: string, length: number) => (text.length > length ? `${text.slice(0, length - 1)}…` : text);
 const B = ({ children, title }: { children: ReactNode; title?: string }) => (
   <b className="font-medium" title={title} data-tip={title ? "above" : undefined}>
     {children}
