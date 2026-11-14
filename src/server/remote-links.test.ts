@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { remoteLinkData } from "./issue-projection";
-import { recentlyTouched, storeRemoteLinks } from "./remote-links";
+import { missingLinkTitles, recentlyTouched, storeRemoteLinks } from "./remote-links";
 
 function cache() {
   const db = new Database(":memory:", { strict: true });
@@ -38,4 +38,16 @@ test("R2-D1: issues enriched right after an update are read again until 15 min h
   row(db, "JUST", "2026-11-08T20:29:30.000+0000", now - 10_000); // enriched under a minute ago
   expect(recentlyTouched(db, now)).toEqual(["NEW"]);
   expect(recentlyTouched(db, Date.parse("2026-11-08T20:40:00Z"))).toEqual(["NEW", "JUST"]);
+});
+
+test("rows cached with links but before link titles are read again at once (R3 G10)", () => {
+  const db = cache();
+  const set = (key: string, data: object) => {
+    row(db, key, "2026-11-01T10:00:00.000+0000", Date.parse("2026-11-08T20:00:00Z"));
+    db.query("UPDATE issue_properties SET data = ? WHERE key = ?").run(JSON.stringify(data), key);
+  };
+  set("OLD", { remoteLinks: ["https://a.test"] });
+  set("NONE", { remoteLinks: [] });
+  set("NEW", { remoteLinks: ["https://a.test"], linkTitles: {} });
+  expect(missingLinkTitles(db)).toEqual(["OLD"]);
 });

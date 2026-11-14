@@ -33,3 +33,14 @@ export const recentlyTouched = (db: Database, now = Date.now()): string[] =>
     .all(now - 60_000)
     .filter((r) => r.synced - Date.parse(r.updated) < 15 * 60_000)
     .map((r) => r.key);
+
+/** Rows cached before the property cache kept web-link titles (R3-board-D3) have links but no `linkTitles`: they are due
+ * at once, so a title set in Jira reaches the card without opening the issue or waiting for the 6 h sweep. */
+export const missingLinkTitles = (db: Database): string[] =>
+  db
+    .query<{ key: string }, []>(
+      `SELECT key FROM issue_properties
+    WHERE json_array_length(data,'$.remoteLinks') > 0 AND json_type(data,'$.linkTitles') IS NULL`,
+    )
+    .all()
+    .map((r) => r.key);

@@ -5,7 +5,7 @@ import { boardFromInput, withoutAddedBoard } from "./config";
 import { detailCache } from "./detail-cache";
 import { historyCache, readHistory } from "./issue-history";
 import { readPullRequests } from "./pull-requests";
-import { recentlyTouched, storeRemoteLinks } from "./remote-links";
+import { missingLinkTitles, recentlyTouched, storeRemoteLinks } from "./remote-links";
 import { attachmentGateway, jiraAttachmentReader } from "@/shared/attachment-media";
 import { saveAddedBoard, serverAuth } from "./server-config";
 import { threadParent } from "@/shared/jira-ops";
@@ -560,7 +560,7 @@ async function enrichProjects() {
 /** Extra reads never sit on the board's request path. Cache them across process restarts. */
 async function enrichProperties() {
   if (enriching) return;
-  const recent = recentlyTouched(db);
+  const recent = [...recentlyTouched(db), ...missingLinkTitles(db)];
   const rows = db
     .query<{ key: string; full: string; slim: string }, [number, number, string]>(
       `SELECT i.key,i.full,i.slim FROM issues i LEFT JOIN issue_properties p ON p.key=i.key
