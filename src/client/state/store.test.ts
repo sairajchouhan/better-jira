@@ -11,6 +11,7 @@ Object.defineProperty(globalThis, "localStorage", {
   value: {
     getItem: (key: string) => storage.get(key) ?? null,
     setItem: (key: string, value: string) => storage.set(key, value),
+    removeItem: (key: string) => storage.delete(key),
   },
 });
 Object.defineProperty(globalThis, "requestAnimationFrame", {
@@ -2394,4 +2395,26 @@ test("hiding, collapsing or ordering groups inside a saved view saves it to that
     navigate({ board: 1 });
     set({ savedViews: [] });
   }
+});
+
+test("R3-create-D7: an open issue deleted in Jira says so, and its sub-issue draft goes with it", async () => {
+  const { get, set } = await import("./store");
+  const { adoptJira } = await import("./local-edits");
+  const { navigate } = await import("@/client/features/navigation/app-navigation");
+  const { subIssueDraftKey } = await import("@/client/features/issue/sub-issue-draft");
+  const board: Board = { id: 1, name: "B", columns: [{ name: "Todo", statuses: [{ id: "todo", name: "Todo", category: "new" }] }] };
+  const issue = { key: "GONE-1", board: 1, summary: "Gone", status: "todo", assignee: null, labels: [], comments: 0, updated: "", resolved: null };
+  set({ boards: [board], issues: new Map([[issue.key, issue]]), full: new Map(), writable: true, namespace: "ns" });
+  navigate({ board: 1, selected: issue.key, panel: true, view: "page" });
+  const draft = subIssueDraftKey("ns", issue.key);
+  localStorage.setItem(draft, JSON.stringify({ title: "Child" }));
+  toasts.dismiss(NOTIFICATION_ID);
+  // A write's answer finds the issue gone from Jira.
+  adoptJira(issue.key, { issue: null }, false);
+  expect(get().issues.has(issue.key)).toBe(false);
+  expect(get().selected).toBeNull();
+  expect(latestNotification()?.text).toBe("GONE-1 was deleted in Jira");
+  expect(localStorage.getItem(draft)).toBeNull();
+  toasts.dismiss(NOTIFICATION_ID);
+  set({ writable: false, namespace: "" });
 });

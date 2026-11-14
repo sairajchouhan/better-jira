@@ -4,6 +4,9 @@ import { documentHasMedia, normalizeDocument, type AdfDocument } from "@/shared/
 import { adfToText } from "@/client/features/editor/adf";
 
 
+/** Where one issue's inline sub-issue draft is kept across reloads. */
+export const subIssueDraftKey = (namespace: string, parent: string) => `better-jira:sub-issue-draft:v1:${namespace}:${parent}`;
+
 export type SubIssueDraft = {
   title: string;
   description: AdfDocument;

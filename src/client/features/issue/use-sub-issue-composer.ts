@@ -7,13 +7,13 @@ import { addLocalFiles, restoreLocalFiles } from "@/client/state/local-database"
 import { discardLateMedia, documentHasMedia, lateMediaDiscarded, normalizeDocument, type AdfDocument } from "@/shared/document";
 import { rankBetween } from "@/shared/view-model";
 import { childrenByParent } from "./sub-issue-model";
-import { emptySubIssueDraft, readSubIssueDraft, saveSubIssueDraft, subIssueDefaults, type SubIssueDraft } from "./sub-issue-draft";
+import { emptySubIssueDraft, readSubIssueDraft, saveSubIssueDraft, subIssueDefaults, subIssueDraftKey, type SubIssueDraft } from "./sub-issue-draft";
 
 /** Owns draft persistence, file restoration, late uploads, and submission for one keyed issue. */
 export function useSubIssueComposer(issue: Issue, board: Board, namespace: string, setCollapsed: (value: boolean) => void) {
   const [creating, setCreating] = useState(false), [confirming, setConfirming] = useState(false);
   const initial = (): IssueDraft => subIssueDefaults(issue, board);
-  const draftKey = `better-jira:sub-issue-draft:v1:${namespace}:${issue.key}`;
+  const draftKey = subIssueDraftKey(namespace, issue.key);
   const [value, setValue] = useState(() => readSubIssueDraft(draftKey, initial())),
     pending = useRef(value),
     [editor, setEditor] = useState(0);

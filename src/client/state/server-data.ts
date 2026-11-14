@@ -8,7 +8,7 @@ import { QueryClient, QueryObserver } from "@tanstack/query-core";
 import { defaultPreferences, parsePreferences } from "@/shared/view-model";
 import { mergeFull, mergeProperties, needsFull } from "./local-edits";
 import { navigate } from "@/client/features/navigation/app-navigation";
-import { showNotification } from "./app-notifications";
+import { issuesDeletedInJira } from "./deleted-issues";
 import { get, set, subscribe } from "./store";
 
 /** Server data goes through TanStack Query: it dedupes loads in flight, schedules the poll and refetches on focus. Invalidate a key to refetch it. */
@@ -114,15 +114,7 @@ async function fetchProperties(): Promise<{ pending: number }> {
   if (!res.ok) throw new Error("Properties unavailable");
   const data = await res.json();
   const { issues, deleted, stale } = mergeProperties(data.entries);
-  const { selected } = get();
-  if (selected && deleted.includes(selected)) {
-    const key = selected;
-    navigate({ selected: null, panel: false });
-    showNotification({
-      text: `${key} was deleted in Jira`,
-      detail: "It is no longer on your boards.",
-    });
-  }
+  issuesDeletedInJira(deleted);
   set({ propertySync: data.progress, ...(issues ? { issues } : {}) });
   for (const key of stale)
     // The focused description takes Jira's newer text too: it asks before replacing what is being typed.

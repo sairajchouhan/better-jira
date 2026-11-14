@@ -15,10 +15,10 @@ import { aliasAttachments, uploadedAttachments } from "./jira-media";
 import { JIRA_ISSUE_FIELDS, namesKey, renameIds } from "@/shared/jira-ops";
 import type { LocalChange, Snapshot } from "./local-data";
 import type { WriteResult } from "./outbox";
-import { navigate } from "@/client/features/navigation/app-navigation";
 import { get, ME, set } from "./store";
 import { creatingIssue, hasPendingWrite, holdsCommentDelete, holdsCommentDeletes, touch, writeTab } from "./jira-sync";
 import { queueSave } from "./local-database";
+import { issuesDeletedInJira } from "./deleted-issues";
 
 const now = () => new Date().toISOString();
 /** Issue fields (`Issue`) and record fields (`Full.fields`) edited here and not yet Jira's, per issue. */
@@ -317,7 +317,7 @@ export function adoptJira(
       const issues = new Map(state.issues);
       issues.delete(key);
       set({ issues });
-      if (get().selected === key) navigate({ selected: null, panel: false });
+      issuesDeletedInJira([key]);
     }
     return;
   }
