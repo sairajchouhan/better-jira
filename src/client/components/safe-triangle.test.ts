@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { safeTriangle } from "./safe-triangle";
+import { safeTriangle, TRIANGLE_EXPIRY, triangleStays } from "./safe-triangle";
 
 // The submenu sits right of the parent menu: x 200..400, y 100..300.
 const box = { left: 200, right: 400, top: 100, bottom: 300, width: 200, height: 200 };
@@ -70,4 +70,23 @@ test("a press where the pointer rests lands on what is under it: the box stops 1
     const toward = [x + Math.sign(300 - x), y + Math.sign(200 - y)] as const;
     expect([x, y, covers(style, toward[0] + Math.sign(300 - x), toward[1] + Math.sign(200 - y))]).toEqual([x, y, true]);
   }
+});
+
+test("the triangle lasts 150ms after the pointer stops off its row, as Linear's JCe (qCe samples every 50ms)", () => {
+  expect(TRIANGLE_EXPIRY).toBe(150);
+});
+
+test("the triangle stays while the pointer is on the submenu's own row, and only then shows again once expired", () => {
+  const row = { left: 0, right: 200, top: 40, bottom: 68 };
+  expect(triangleStays(row, 100, 50)).toBe(true);
+  expect(triangleStays(row, 200, 68)).toBe(true);
+  expect(triangleStays(row, 100, 80)).toBe(false);
+  expect(triangleStays(row, 220, 50)).toBe(false);
+  expect(triangleStays(undefined, 100, 50)).toBe(false);
+});
+
+test("an expired triangle hands the pointer's resting point to the menu, so the row under it opens (the mouseenter Linear's row gets)", async () => {
+  const source = await Bun.file(new URL("./menu.tsx", import.meta.url)).text();
+  expect(source).toMatch(/expired\.current = true;\s+node\.style\.cssText = "display:none";\s+resting\.current\(point\);\s+\}, TRIANGLE_EXPIRY\)/);
+  expect(source).toMatch(/rest: \(\{ x, y \}\) => \{\s+const target = document\.elementFromPoint\(x, y\);/);
 });

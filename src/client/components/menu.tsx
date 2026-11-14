@@ -47,7 +47,7 @@ import { openedByPointer } from "./menu-pristine";
 import { Shortcut, type Keys } from "./keycap";
 import { NO_AUTOFILL } from "@/client/components/field";
 import { menuFilter } from "@/client/lib/fuzzy-score";
-import { safeTriangle } from "./safe-triangle";
+import { safeTriangle, TRIANGLE_EXPIRY, triangleStays } from "./safe-triangle";
 
 // The geometry lives on its own so menu-surface.tsx can share it without importing this module back.
 export { MENU, menuRoom };
@@ -407,6 +407,8 @@ type Level = {
     open: (key: string, how: Opened["how"], at?: Point) => void;
     /** The pointer over `target` at `at`: highlights the row it is on and opens that row's submenu (Linear's row mouseenter). */
     point: (target: Element, at: Point, touch: boolean) => void;
+    /** The pointer resting at a point once the open submenu's safe triangle has expired: the row there takes it. */
+    rest: (at: Point) => void;
     close: () => void;
     /** Closes every level: the surface. */
     closeAll: () => void;
@@ -684,6 +686,10 @@ function MenuRoot({
         if (step === "stay") return;
         if (step === "highlight") level.actions.highlight(next);
         if (!touch && isSubmenuRow(state, next)) level.actions.open(next, "pointer", at);
+      },
+      rest: ({ x, y }) => {
+        const target = document.elementFromPoint(x, y);
+        if (target && root.current?.contains(target)) level.actions.point(target, { x, y }, false);
       },
     },
   };
@@ -1245,38 +1251,71 @@ function drawTriangle(node: HTMLElement, popup: HTMLElement | null, { x, y }: Po
  * submenu crosses other rows without opening theirs. It follows the pointer by writing its style, never by re-rendering.
  * `placed` is null until the submenu has its place and then changes whenever it moves: the triangle is drawn against the box the
  * submenu has, never the unplaced one, which would leave it over the wrong parent rows while the pointer rests.
+ * TRIANGLE_EXPIRY after the last sample with the pointer off the submenu's own row (`row`), it hides until the pointer is back on
+ * that row, and the row then under the pointer takes it (`rest`), as Linear's row takes the mouseenter the triangle's unmounting
+ * brings: highlighted, its own submenu opening.
  * React Aria's own submenu guard (useSafelyMouseToSubmenu) turns the parent's pointer events off by its own estimate instead; the
  * menu list keeps them on (index.css) so this one decides.
  */
-function SafeTriangle({ popup, from, placed }: { popup: RefObject<HTMLElement | null>; from?: Point; placed: string | null }) {
+function SafeTriangle({
+  popup,
+  row,
+  from,
+  placed,
+  rest,
+}: {
+  popup: RefObject<HTMLElement | null>;
+  row: RefObject<HTMLElement | null> | undefined;
+  from?: Point;
+  placed: string | null;
+  rest: (point: Point) => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
-  // The point the triangle was last sampled at, and whether the submenu has its place to draw against.
+  // The point the triangle was last sampled at, whether the submenu has its place to draw against, and whether it has expired.
   const at = useRef<Point | null>(null),
-    ready = useRef(false);
+    ready = useRef(false),
+    expired = useRef(false),
+    expiry = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // The latest `rest`, read when the triangle expires.
+  const resting = useRef(rest);
+  useInsertionEffect(() => {
+    resting.current = rest;
+  });
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
-    const throttle = new Throttler(
-      (point: Point) => {
-        at.current = point;
-        if (ready.current) drawTriangle(node, popup.current, point);
-      },
-      { wait: 50, leading: true, trailing: true },
-    );
+    const stays = (point: Point) => triangleStays(row?.current?.getBoundingClientRect(), point.x, point.y);
+    const sample = (point: Point) => {
+      at.current = point;
+      if (expired.current) {
+        if (!stays(point)) return;
+        expired.current = false;
+      }
+      if (ready.current) drawTriangle(node, popup.current, point);
+      clearTimeout(expiry.current);
+      expiry.current = setTimeout(() => {
+        if (stays(point)) return;
+        expired.current = true;
+        node.style.cssText = "display:none";
+        resting.current(point);
+      }, TRIANGLE_EXPIRY);
+    };
+    const throttle = new Throttler(sample, { wait: 50, leading: true, trailing: true });
     const move = (event: globalThis.PointerEvent) => throttle.maybeExecute({ x: event.clientX, y: event.clientY });
     addEventListener("pointermove", move, { passive: true });
     return () => {
       removeEventListener("pointermove", move);
       throttle.cancel();
+      clearTimeout(expiry.current);
     };
-  }, [popup]);
+  }, [popup, row]);
   // Once the submenu is placed, and again whenever it moves, the triangle is redrawn from the last sample: at first, where the
   // pointer opened the submenu, so the first move toward it is already covered.
   useEffect(() => {
     ready.current = placed !== null;
     const node = ref.current,
       point = at.current ?? from;
-    if (node && ready.current && point) drawTriangle(node, popup.current, point);
+    if (node && ready.current && point && !expired.current) drawTriangle(node, popup.current, point);
   }, [placed, popup, from]);
   return <div ref={ref} aria-hidden data-safe-triangle style={{ display: "none" }} />;
 }
@@ -1408,7 +1447,13 @@ function OpenSubmenu({
           if (!event.buttons) yieldFocus();
         }}
       >
-        <SafeTriangle popup={popup} from={opened.at} placed={place ? `${place.left},${place.top}` : null} />
+        <SafeTriangle
+          popup={popup}
+          row={row}
+          from={opened.at}
+          placed={place ? `${place.left},${place.top}` : null}
+          rest={level.actions.rest}
+        />
         <SubmenuContext value={{ back }}>{children}</SubmenuContext>
       </div>
     </AriaPopover>

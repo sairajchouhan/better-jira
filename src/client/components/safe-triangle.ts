@@ -62,3 +62,14 @@ export function safeTriangle(box: Box, x: number, y: number): Record<string, str
           : polygon([near, end], [far, end]);
   return style;
 }
+
+/** Linear's JCe: the triangle hides this long after the pointer's last sample, unless the pointer rests on the submenu's own row. */
+export const TRIANGLE_EXPIRY = 150;
+
+/**
+ * Whether the triangle stays once the pointer has rested TRIANGLE_EXPIRY at (x, y) (JCe's `YCe(triggerSelector, sample)`): only
+ * while it rests on the submenu's row. Elsewhere it hides, so the row under the pointer is under the pointer again (and takes it,
+ * as Linear's row does on the mouseenter its unmounting brings). Hidden, it comes back only once the pointer is on the row again.
+ */
+export const triangleStays = (row: Pick<DOMRect, "left" | "right" | "top" | "bottom"> | undefined, x: number, y: number) =>
+  !!row && x >= row.left && x <= row.right && y >= row.top && y <= row.bottom;
