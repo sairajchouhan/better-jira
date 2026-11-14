@@ -1,18 +1,16 @@
-import { type Board, type Issue } from "@/shared/issue-model";
-import { AppLink } from "./app-link";
+import { type Board } from "@/shared/issue-model";
+import { BoardBreadcrumbs } from "./breadcrumbs";
 import { SidebarLink, SidebarViewLink, sidebarRowClass } from "./sidebar-link";
 import { FavoriteButton } from "./favorite-button";
 import { useActiveView, useSavedViews, createViewDraft } from "@/client/features/views/saved-views";
 import { useViewSettings } from "@/client/features/views/view-settings";
 import { openViewEditor, ViewMenu, ViewContextMenu, ViewEditorPage } from "@/client/features/views/view-editor";
 import { ViewFavorites, SavedViewIcon } from "@/client/features/views/views-navigation";
-import { useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { isMyIssues } from "./navigation";
-import { PERSON_TABS, peopleOf } from "@/shared/people";
-import { Icon, TypeDot } from "@/client/components/icons";
+import { PERSON_TABS } from "@/shared/people";
+import { Icon } from "@/client/components/icons";
 import { set, timed, useStore } from "@/client/state/store";
-import { issueURL } from "@/client/features/issue/issue-urls";
-import { issueBreadcrumbEntries } from "@/client/features/issue/issue-menu";
 import { actions, beginCreateInView } from "@/client/state/issue-actions";
 import { retryLocalStorage } from "@/client/state/app-load";
 import { dismissWriteError } from "@/client/state/jira-sync";
@@ -23,7 +21,6 @@ import { ActionMenu, ContextMenu } from "@/client/components/action-menu";
 import {
   SIDEBAR_PREFS,
   VISIBILITY,
-  boardCopyURL,
   boardEntries,
   moreEntries,
   parseSidebarPrefs,
@@ -42,7 +39,6 @@ import { useCommand, focusNode } from "./commands";
 import { markAllRead, useInboxBadge } from "@/client/features/inbox/inbox";
 import { SectionDisclosure } from "@/client/components/section-disclosure";
 import { SelectRow } from "@/client/components/display-options";
-import { EntityIdentifier } from "@/client/components/entity-identifier";
 import { useStoredState } from "@/client/state/stored-state";
 
 /** Linear's sidebar preferences (BJ-76): collapsed sections, and when Inbox and My issues show (Customize sidebar). */
@@ -474,112 +470,6 @@ function ViewTab({ on, onClick, children }: { on: boolean; onClick: () => void; 
     <Button variant="tab" size="medium" aria-pressed={on} data-active={on || undefined} onClick={onClick}>
       {children}
     </Button>
-  );
-}
-
-const wide = () => matchMedia("(min-width: 768px)").matches;
-/**
- * Linear's header sidebar toggle (`r5`, startup-root): "Menu" opens the sidebar over the page below 768px. On a wider
- * window it shows only while the sidebar is collapsed: a click expands it (tooltip "Expand navigation sidebar" with [,
- * Linear's `kM`) and the pointer on it peeks the sidebar over the page (`onMouseEnter: u.open()`).
- */
-export function SidebarToggle() {
-  const hidden = useStore((s) => s.sidebarHidden);
-  return (
-    <IconButton
-      label="Menu"
-      tooltip={hidden ? "Expand navigation sidebar" : undefined}
-      shortcut={hidden ? hotkeyOf("sidebar") : undefined}
-      variant="muted"
-      size="small"
-      onClick={() => runShortcut("sidebar")}
-      onMouseEnter={hidden ? () => wide() && set({ sidebarPeek: true }) : undefined}
-      className={`mr-1 ${hidden ? "" : "md:hidden"}`}
-    >
-      <Icon name="side" />
-    </IconButton>
-  );
-}
-// Linear's breadcrumb (linear.app/…/view/…, 2026-11-11 computed styles): 24px links padded 0 5px 0 4px with matching
-// negative margins, 16px icon + 6px, 13px/500 text at line-height normal, "›" with 8px sides lifted 2px; hover bg
-// --crumb-hover and primary text, only colour animates (0.15s).
-const CRUMB_LAST =
-  "-ml-1 flex h-6 min-w-0 items-center rounded-lg pr-[5px] pl-1 transition-[color] duration-150 ease-[ease] hover:bg-(--crumb-hover) hover:text-fg focus-visible:outline-2 focus-visible:outline-accent";
-const CRUMB = `-mr-[5px] ${CRUMB_LAST}`; // the current (last) crumb keeps its right padding, like Linear's current item
-const CRUMB_ICON = "mr-1.5 grid w-4 shrink-0 place-items-center";
-function CrumbSep({ className = "" }: { className?: string }) {
-  return <span aria-hidden="true" className={`mx-2 -mt-0.5 shrink-0 text-fg-3 ${className}`}>›</span>;
-}
-export function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue }) {
-  const mine = useStore((s) => s.mine);
-  const person = useStore((s) => s.person);
-  const issues = useStore((s) => s.issues);
-  // Open user's page names its person, as Linear's profile does; mine is My issues.
-  const personal = useMemo(
-    () => (person ? (peopleOf(issues.values()).find((u) => u.id === person)?.name ?? person) : "My issues"),
-    [person, issues],
-  );
-  const activeView = useActiveView();
-  const draft = useStore((s) => s.editorDraft);
-  const saved = useSavedViews().find(v => v.id === draft?.id);
-  const current = draft && saved ? { ...saved, ...draft, id: saved.id } : activeView;
-  const custom = !issue && current?.kind === "custom" ? current : null;
-  const allIssues = { board: board.id, scope: "all", selected: null, panel: false } as const;
-  const clearBoardTools = () => { ui.send({ type: "query.set", query: "" }); set({ details: false, findInView: false }); };
-  return (
-    <nav
-      aria-label="Breadcrumb"
-      className="flex min-w-0 items-center text-[13px] leading-[normal] font-medium text-fg-2"
-    >
-      <SidebarToggle />
-      {!mine || activeView ? <>{/* Linear's team crumb (`Api` → `vBn`): right-click for Copy URL. */}
-      <ContextMenu label="Space options" entries={() => [boardCopyURL(board, hotkeyOf("copy-url"))]}>
-        <AppLink to={allIssues} aria-label={board.name} title={board.name} onClick={clearBoardTools} className={CRUMB}>
-          <span aria-hidden="true" className={CRUMB_ICON}>
-            <span className="grid size-4 place-items-center rounded-[4px] bg-accent text-[9px] font-semibold text-white">{board.name[0]}</span>
-          </span>
-          <span className="truncate">{board.name}</span>
-        </AppLink>
-      </ContextMenu>
-      <CrumbSep className={issue ? "max-sm:hidden" : ""} /></> : null}
-      {custom ? (
-        <>
-          {/* Linear: the current view is plain text (right-click for its menu), not a link. */}
-          <ViewContextMenu view={custom}>
-            <span aria-current="page" className="flex h-6 min-w-0 items-center">
-              <span className={CRUMB_ICON}><SavedViewIcon view={custom} /></span>
-              <h2 className="truncate font-medium">{custom.name}</h2>
-            </span>
-          </ViewContextMenu>
-        </>
-      ) : (
-        <AppLink
-          to={allIssues}
-          aria-label={!activeView && mine ? personal : "Issues"}
-          aria-current={issue ? undefined : "page"}
-          onClick={clearBoardTools}
-          className={`${CRUMB} shrink-0 ${issue ? "max-sm:hidden" : ""}`}
-        >
-          {!activeView && mine ? personal : "Issues"}
-        </AppLink>
-      )}
-      {issue && (
-        <>
-          <CrumbSep />
-          {/* The key never truncates (Opus review 4: at 390px it vanished): the title truncates, and below 640px the Issues crumb gives way. */}
-          {/* Linear's current issue crumb (`Api`): right-click for its copy rows and Rename…. */}
-          <ContextMenu label="Issue options" entries={() => issueBreadcrumbEntries(issue)}>
-            <a aria-current="page" className={CRUMB_LAST} href={issueURL(issue)} target="_blank" rel="noreferrer">
-              <span className={CRUMB_ICON}><TypeDot type={issue.type} /></span>
-              <span data-crumb-issue className="flex min-w-0">
-                <EntityIdentifier className="mr-[5.6px] shrink-0">{issue.key}</EntityIdentifier>
-                <span className="truncate">{issue.summary}</span>
-              </span>
-            </a>
-          </ContextMenu>
-        </>
-      )}
-    </nav>
   );
 }
 

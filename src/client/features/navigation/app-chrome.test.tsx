@@ -1,7 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { commit, get } from "@/client/state/store";
-import { PeekCloseZone, SIDEBAR_PEEK, SidebarToggle } from "./app-chrome";
+import { PeekCloseZone, SIDEBAR_PEEK } from "./app-chrome";
+import { SidebarToggle } from "./breadcrumbs";
 
 afterEach(() => commit({ sidebarHidden: false, sidebarPeek: false }));
 

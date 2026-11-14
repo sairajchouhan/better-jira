@@ -34,7 +34,7 @@ import { useIssueHistory } from "@/client/features/issue/use-issue-history";
 import { normalizeDocument } from "@/shared/document";
 import { imageCommentIds } from "@/client/features/media/media-edits";
 import { DueIcon, Icon, PriorityIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
-import { ME, boardOf, get, useStore, isWatching, statusOf } from "@/client/state/store";
+import { ME, get, useStore, isWatching, statusOf } from "@/client/state/store";
 import { issueURL, jiraIssueURL } from "@/client/features/issue/issue-urls";
 import { LINEAR_RELATIONS, relationSections } from "@/shared/relations";
 import { AppLink } from "@/client/features/navigation/app-link";
@@ -65,7 +65,8 @@ import { useCommentsSeen, useIssueVisit } from "@/client/features/inbox/issue-vi
 import { SplitPanel } from "@/client/features/issue/split-panel";
 import { descriptionNotice, descriptionSession, type DescriptionPorts } from "@/client/features/issue/description-session";
 import { shortDate } from "@/client/lib/due-date";
-import { BoardBreadcrumbs } from "@/client/features/navigation/app-chrome";
+import { IssueBreadcrumbs, useIssueCrumbs } from "@/client/features/navigation/breadcrumbs";
+import { stepIssues } from "@/client/features/navigation/issue-trail";
 import { Button, IconButton } from "@/client/components/button";
 import { ContextMenu, type ActionEntry } from "@/client/components/action-menu";
 import { copyIssue, copyIssueLink } from "@/client/features/issue/issue-copy";
@@ -114,7 +115,7 @@ export const IssuePage = memo(function IssuePage({
   return (
     <div className="issue-detail flex min-w-0 flex-1 flex-col" data-mode="page">
       <IssueHeader issue={issue} switchTo="side" actions={actions} navigation={navigation}>
-        <BoardBreadcrumbs board={boardOf(issue.key)!} issue={issue} />
+        <IssueBreadcrumbs issue={issue} />
       </IssueHeader>
       <IssueBody issue={issue} />
     </div>
@@ -257,11 +258,13 @@ function IssueBody({ issue, lead }: { issue: Issue; lead?: ReactNode }) {
   );
 }
 
-/** Linear shows position, then next and previous, within the current visible view, and nothing when the issue isn't in it or
- *  it holds only this issue (see `listPosition`). */
+/** Linear shows position, then next and previous, within what the issue was opened from (`jf`): the visible view beside it or under
+ *  its page, or the Sub-issues section its page was opened from; nothing when the issue isn't in it, it holds only this issue (see
+ *  `listPosition`), or the page was reached directly (issue-trail.ts `stepIssues`). */
 function Stepper({ issueKey }: { issueKey: string }) {
   const order = useStore((s) => visibleOrder(s, ME.id));
-  const position = useMemo(() => listPosition(navigationIssues(order), issueKey), [order, issueKey]);
+  const crumbs = useIssueCrumbs(useStore((s) => s.issues.get(issueKey)));
+  const position = useMemo(() => listPosition(stepIssues(crumbs, navigationIssues(order)), issueKey), [crumbs, order, issueKey]);
   if (!position) return null;
   const { index, total } = position;
   return (

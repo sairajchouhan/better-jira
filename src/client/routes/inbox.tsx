@@ -27,7 +27,7 @@ import { focusNode, useCommand } from "@/client/features/navigation/commands";
 import { shortcutTitle } from "@/client/components/keycap";
 import { get, isWatching, useStore } from "@/client/state/store";
 import { preloadOnHover, ui } from "@/client/features/navigation/app-navigation";
-import { SidebarToggle } from "@/client/features/navigation/app-chrome";
+import { SidebarToggle } from "@/client/features/navigation/breadcrumbs";
 import { useSearch } from "@tanstack/react-router";
 import { toggleFavorite } from "@/client/features/navigation/favorites";
 
