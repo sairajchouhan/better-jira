@@ -36,3 +36,25 @@ test("5.10: a hoisted row scores by its breadcrumb as Linear's secondaryString, 
   expect(breadcrumbScore(["Blocking issue"], "Remove Blocking issue", "emov")).toBeCloseTo(MIN_APPLICABILITY + 0.05);
   expect(breadcrumbScore(["Blocking issue"], "Remove Blocking issue", "zq")).toBe(0);
 });
+
+import { personKeywords } from "./fuzzy-score";
+
+test("assignee search (Linear's mH): \"me\" lifts the current user above everyone, though their name doesn't match it", () => {
+  const score = (name: string, query: string, person: { me?: boolean; team?: boolean } = {}) =>
+    menuFilter(`${name} id-${name}`, query, personKeywords(name, person));
+  const you = score("Sairaj Chouhan", "me", { me: true });
+  expect(you).toBeGreaterThan(score("Meera Shah", "me", { team: true }));
+  expect(you).toBeGreaterThan(score("Me", "me"));
+  // Someone else's row doesn't answer to "me" unless their name does.
+  expect(score("Sairaj Chouhan", "me")).toBe(0);
+  // A word of your own name lifts you too.
+  expect(score("Sam Ray", "sa", { me: true })).toBeGreaterThan(score("Sana Ali", "sa", { team: true }));
+});
+
+test("assignee search: a team member outranks an equal match outside the team; a whole name gets its +10", () => {
+  const score = (name: string, query: string, team = false) => menuFilter(name, query, personKeywords(name, { team }));
+  expect(score("Alex", "al", true)).toBeGreaterThan(score("Alex", "al"));
+  expect(score("Jo Lee", "jo lee") - score("Jo Leeds", "jo lee")).toBeGreaterThan(9);
+  // The row is searched by the name alone, never by the account id in its value.
+  expect(menuFilter("Alex 5b10ac", "5b10", personKeywords("Alex"))).toBe(0);
+});

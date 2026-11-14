@@ -20,14 +20,13 @@ test("statuses come in column order and resolve by id", () => {
   expect(statusById(undefined, "3")).toBeUndefined();
 });
 
-test("Create and Assign offer the same people: you, Jira's users and every assignee, by name", () => {
+test("everyone assignable: you, Jira's users and every assignee, by name", () => {
   const me = { id: "me", name: "Zed" };
   const jira = [{ id: "j", name: "Jo" }, me];
   const issues = [
     issue("A-1", { id: "b", name: "Bea" }),
     issue("B-1", { id: "o", name: "Al" }, [], 2),
   ];
-  // Both pickers call useAssignableUsers, which is this rule over the whole mirror.
   expect(assignableUsers(me, jira, issues).map((u) => u.id)).toEqual(["me", "o", "b", "j"]);
 });
 
@@ -116,4 +115,50 @@ test("people includes Jira users, creators, watchers and extras once, with curre
   expect(
     knownPeople(me, [{ id: "j", name: "Jira" }], issues, [watcher, { id: "x", name: "Extra" }]),
   ).toEqual([me, author, { id: "x", name: "Extra" }, { id: "j", name: "Jira" }, watcher]);
+});
+
+import { assigneeGroups, listsOtherPeople } from "./board-catalog";
+
+const ids = (users: (User | null)[]) => users.map((u) => u?.id ?? null);
+const me = { id: "me", name: "Zed" },
+  bea = { id: "b", name: "Bea" },
+  al = { id: "a", name: "Al" },
+  jo = { id: "j", name: "Jo" },
+  cy = { id: "c", name: "Cy" };
+// Bea and Al work on board 1; Cy only on board 2; Jo is only in Jira's assignable list.
+const mirror = [issue("A-1", bea), issue("A-2", al), issue("A-3", me), issue("B-1", cy, [], 2)];
+
+test("assignee picker (Linear's Qun): No assignee, me, the current assignee, then the team; other people apart", () => {
+  const g = assigneeGroups({ me, current: bea, jiraUsers: [jo, me], issues: mirror, board: 1 });
+  expect(ids(g.assigned)).toEqual([null, "me", "b"]);
+  // The current assignee is listed once, at the top, not again under Team members.
+  expect(ids(g.team)).toEqual(["a"]);
+  expect(g.teamHeading).toBe("Team members");
+  expect(ids(g.others)).toEqual(["c", "j"]);
+});
+
+test("assignee picker: you are never listed twice, and an unassigned issue has no current row", () => {
+  expect(ids(assigneeGroups({ me, current: me, jiraUsers: [], issues: mirror, board: 1 }).assigned)).toEqual([null, "me"]);
+  expect(ids(assigneeGroups({ me, current: null, jiraUsers: [], issues: mirror, board: 1 }).assigned)).toEqual([null, "me"]);
+});
+
+test("assignee picker: Suggested people come after the assigned ones and leave the team list", () => {
+  const g = assigneeGroups({ me, current: null, suggested: [al, cy, me], jiraUsers: [jo], issues: mirror, board: 1 });
+  expect(ids(g.suggested)).toEqual(["a", "c"]);
+  expect(ids(g.team)).toEqual(["b"]);
+  expect(ids(g.others)).toEqual(["j"]);
+});
+
+test("assignee picker without a board lists everyone as Members", () => {
+  const g = assigneeGroups({ me, current: null, jiraUsers: [jo], issues: mirror, board: undefined });
+  expect(ids(g.team)).toEqual(["a", "b", "c", "j"]);
+  expect(g.teamHeading).toBe("Members");
+  expect(g.others).toEqual([]);
+});
+
+test("people outside the team are listed only from the second typed character", () => {
+  expect(listsOtherPeople("")).toBe(false);
+  expect(listsOtherPeople("j")).toBe(false);
+  expect(listsOtherPeople(" j ")).toBe(false);
+  expect(listsOtherPeople("jo")).toBe(true);
 });

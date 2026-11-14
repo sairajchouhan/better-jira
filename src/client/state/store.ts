@@ -1,5 +1,5 @@
 import type { User, Issue, Board, Full, IssueDraft, JiraOptions } from "@/shared/issue-model";
-import { assignableUsers, knownPeople, statusById } from "@/shared/board-catalog";
+import { knownPeople, statusById } from "@/shared/board-catalog";
 import { useMemo, useSyncExternalStore } from "react";
 import { defaultPreferences, type Display, type Preferences } from "@/shared/view-model";
 import { type UiContext } from "./machines";
@@ -256,13 +256,6 @@ export const useStore = <T>(sel: (s: State) => T) => {
   // The same snapshot for a static render, so a component reading the store renders in a unit test too.
   return useSyncExternalStore(subscribe, read, read);
 };
-/** The assignee choices every picker offers, Assign and Create alike. */
-export function useAssignableUsers(): User[] {
-  const issues = useStore((s) => s.issues);
-  const jiraUsers = useStore((s) => s.options.users);
-  return useMemo(() => assignableUsers(ME, jiraUsers, issues.values()), [issues, jiraUsers]);
-}
-
 /** All known people; unlike assignable users this includes creators and watchers. */
 export function usePeople(extra?: readonly User[]): User[] {
   const issues = useStore((s) => s.issues);

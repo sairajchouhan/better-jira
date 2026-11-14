@@ -3,13 +3,16 @@ import { lazy, Suspense, use, useEffect, useState } from "react";
 import { Avatar } from "@/client/components/avatar";
 import { Icon, PriorityIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
 import {
+  assigneeGroups,
+  listsOtherPeople,
   labelSections,
   priorityChoices,
   projectChoices,
   milestoneChoices,
   statuses,
 } from "@/shared/board-catalog";
-import { useStore, useAssignableUsers } from "@/client/state/store";
+import { useStore, ME } from "@/client/state/store";
+import { menuFilter, personKeywords } from "@/client/lib/fuzzy-score";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { Button } from "@/client/components/button";
 import { LoadingState } from "@/client/components/empty-state";
@@ -44,6 +47,7 @@ export function PropertyMenu({
   onQuery,
   side,
   onKeyDown,
+  filter,
   children,
 }: {
   label: string;
@@ -57,12 +61,15 @@ export function PropertyMenu({
   onQuery?: (value: string) => void;
   side?: "left";
   onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
+  /** The rows' search score; cmdk's own by default. */
+  filter?: typeof menuFilter;
   children: ReactNode;
 }) {
   const target = useCommandTarget();
   const menu = (
     <Menu
       defaultValue={current}
+      filter={filter}
       style={target ? undefined : { width: 206 }}
       onKeyDown={onKeyDown}
     >
@@ -175,9 +182,84 @@ export function StatusMenu({ anchor, board, value, onChange, close }: FieldMenuP
     </PropertyMenu>
   );
 }
-export function AssigneeMenu({ anchor, value, onChange, close }: FieldMenuProps<User | null>) {
-  const users = useAssignableUsers();
-  const key = (u: User) => `${u.name} ${u.id}`;
+/**
+ * The assignee rows (Linear's `Qun`), built by `assigneeGroups`: No assignee (0) and you (1), the current assignee, then
+ * "Suggested", "Team members" and, once the search has two characters, "Users from other teams". Rows rank by Linear's people
+ * score (personKeywords), so "me" lifts you to the top. One component for the A picker and Issue options › Assignee.
+ */
+export function AssigneeRows({
+  board,
+  value,
+  suggested,
+  query,
+  onPick,
+}: {
+  board: number | undefined;
+  value: User | null;
+  suggested?: readonly User[];
+  query: string;
+  onPick: (user: User | null) => void;
+}) {
+  const issues = useStore((s) => s.issues);
+  const jiraUsers = useStore((s) => s.options.users);
+  // Groups are fixed as the menu opens, so picking the current assignee never moves a row under the pointer.
+  const [groups] = useState(() =>
+    assigneeGroups({ me: ME, current: value, suggested, jiraUsers, issues: issues.values(), board }),
+  );
+  const row = (user: User | null, team = false) => (
+    <PickerRow
+      key={user?.id ?? "none"}
+      value={user ? assigneeValue(user) : "No assignee"}
+      keywords={user ? personKeywords(user.name, { me: user.id === ME.id, team }) : undefined}
+      icon={<Avatar user={user} size={16} />}
+      current={(value?.id ?? null) === (user?.id ?? null)}
+      // Linear binds only 0 (No assignee) and 1 (you).
+      number={!user ? 0 : user.id === ME.id ? 1 : undefined}
+      onSelect={() => onPick(user)}
+    >
+      {user ? user.name : "No assignee"}
+    </PickerRow>
+  );
+  return (
+    <>
+      <Menu.Group>{groups.assigned.map((u) => row(u))}</Menu.Group>
+      {groups.suggested.length > 0 && <Menu.Group heading="Suggested">{groups.suggested.map((u) => row(u))}</Menu.Group>}
+      {groups.team.length > 0 && (
+        <Menu.Group heading={groups.teamHeading}>{groups.team.map((u) => row(u, board !== undefined))}</Menu.Group>
+      )}
+      {listsOtherPeople(query) && groups.others.length > 0 && (
+        <Menu.Group heading="Users from other teams">{groups.others.map((u) => row(u))}</Menu.Group>
+      )}
+    </>
+  );
+}
+/** A person row's cmdk value: unique by account id, while the row is searched by its name alone (personKeywords). */
+export const assigneeValue = (u: User) => `${u.name} ${u.id}`;
+/** Issue options › Assignee: AssigneeRows on the issue's live assignee. */
+export function IssueAssigneeRows({ issue, query }: { issue: string; query: string }) {
+  const current = useStore((s) => s.issues.get(issue));
+  const surface = use(MenuSurfaceContext);
+  return (
+    <AssigneeRows
+      board={current?.board}
+      value={current?.assignee ?? null}
+      query={query}
+      onPick={(user) => {
+        actions.assign(issue, user);
+        surface?.close();
+      }}
+    />
+  );
+}
+export function AssigneeMenu({
+  anchor,
+  board,
+  value,
+  onChange,
+  close,
+  suggested,
+}: FieldMenuProps<User | null> & { suggested?: readonly User[] }) {
+  const [query, setQuery] = useState("");
   return (
     <PropertyMenu
       label="Assign issue"
@@ -185,35 +267,21 @@ export function AssigneeMenu({ anchor, value, onChange, close }: FieldMenuProps<
       hotkey="A"
       anchor={anchor}
       close={close}
-      current={value ? key(value) : "No assignee"}
+      current={value ? assigneeValue(value) : "No assignee"}
+      query={query}
+      onQuery={setQuery}
+      filter={menuFilter}
     >
-      <PickerRow
-        value="No assignee"
-        icon={<Avatar user={null} size={16} />}
-        current={!value}
-        number={0}
-        onSelect={() => {
-          onChange(null);
+      <AssigneeRows
+        board={board?.id}
+        value={value}
+        suggested={suggested}
+        query={query}
+        onPick={(user) => {
+          onChange(user);
           close();
         }}
-      >
-        No assignee
-      </PickerRow>
-      {users.map((u, i) => (
-        <PickerRow
-          key={u.id}
-          value={key(u)}
-          icon={<Avatar user={u} size={16} />}
-          current={value?.id === u.id}
-          number={i < 9 ? i + 1 : undefined}
-          onSelect={() => {
-            onChange(u);
-            close();
-          }}
-        >
-          {u.name}
-        </PickerRow>
-      ))}
+      />
     </PropertyMenu>
   );
 }

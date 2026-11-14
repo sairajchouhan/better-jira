@@ -9,7 +9,8 @@ export const statuses = (board: Board | undefined) =>
 export const statusById = (board: Board | undefined, id: unknown) =>
   statuses(board).find((s) => s.id === id);
 
-/** The assignee choices every picker offers, Assign and Create alike: you first, then Jira's assignable users and anyone assigned an issue in the mirror, by name. */
+/** Everyone an issue can be assigned to: you first, then Jira's assignable users and anyone assigned an issue in the mirror, by name.
+ *  The pickers group them with `assigneeGroups`. */
 export function assignableUsers(me: User, jiraUsers: User[], issues: Iterable<Issue>): User[] {
   const m = new Map<string, User>([[me.id, me]]);
   for (const u of jiraUsers) if (!m.has(u.id)) m.set(u.id, u);
@@ -18,6 +19,63 @@ export function assignableUsers(me: User, jiraUsers: User[], issues: Iterable<Is
     a.id === me.id ? -1 : b.id === me.id ? 1 : a.name.localeCompare(b.name),
   );
 }
+
+/**
+ * The assignee picker's groups, in Linear's order (`Qun` in startup-root.CnUSfl4j.js): "Assigned users" (No assignee, you, then
+ * the current assignee, drawn without a heading), "Suggested", "Team members", then "Users from other teams", which the picker
+ * lists only once the search has two or more characters (`searchInputLength>1`, see `listsOtherPeople`).
+ *
+ * Linear's team members are the people in the issue's team. A Jira board has no member list, and Jira's assignable users are
+ * everyone the permission scheme allows across the mirrored projects (on a company site, the whole company: Linear's other
+ * teams). The people who are assigned the board's issues are the ones who work on it, so they are the team. With no board
+ * (Linear's issue without a default team) everyone is listed, as "Members".
+ */
+export type AssigneeGroups = {
+  /** No assignee (null), you, then the current assignee when it isn't you. */
+  assigned: (User | null)[];
+  suggested: User[];
+  team: User[];
+  teamHeading: "Team members" | "Members";
+  others: User[];
+};
+export function assigneeGroups({
+  me,
+  current,
+  suggested = [],
+  jiraUsers,
+  issues,
+  board,
+}: {
+  me: User;
+  current: User | null;
+  /** People to offer under Suggested, such as those the view's assignee filter names. */
+  suggested?: readonly User[];
+  jiraUsers: readonly User[];
+  issues: Iterable<Issue>;
+  board: number | undefined;
+}): AssigneeGroups {
+  const listed = new Set([me.id]);
+  const take = (users: Iterable<User>) => {
+    const out: User[] = [];
+    for (const u of users)
+      if (!listed.has(u.id)) {
+        listed.add(u.id);
+        out.push(u);
+      }
+    return out;
+  };
+  const byName = (users: User[]) => users.sort((a, b) => a.name.localeCompare(b.name));
+  const assigned = [null, me, ...take(current ? [current] : [])];
+  const picked = take(suggested);
+  const all = Array.from(issues);
+  const team = byName(take(all.flatMap((i) => (i.assignee && (board === undefined || i.board === board) ? [i.assignee] : []))));
+  const others = byName(take([...jiraUsers, ...all.flatMap((i) => (i.assignee ? [i.assignee] : []))]));
+  return board === undefined
+    ? { assigned, suggested: picked, team: byName([...team, ...others]), teamHeading: "Members", others: [] }
+    : { assigned, suggested: picked, team, teamHeading: "Team members", others };
+}
+/** Linear lists people outside the team only once the search has more than one character. */
+export const listsOtherPeople = (query: string) => query.trim().length > 1;
 
 /** Labels on these issues, then Jira's other labels, each once. */
 export const knownLabels = (issues: Issue[], jiraLabels: string[]) => [

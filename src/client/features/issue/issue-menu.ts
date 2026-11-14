@@ -13,12 +13,13 @@ import { copyIssue, copyKinds, copyIcons, copyShortcuts } from "./issue-copy";
 import { reminderSubmenu } from "@/client/features/reminders/reminders";
 import { post } from "@/client/features/navigation/commands";
 import { RELATION_ISSUE, jiraLinkType, relationName } from "@/shared/relations";
-import { DueRows, IssueLabelRows } from "./property-menu";
+import { DueRows, IssueAssigneeRows, IssueLabelRows } from "./property-menu";
 import type { ActionEntry } from "@/client/components/action-menu";
 import { Icon, PriorityIcon, StatusIcon, type IconName } from "@/client/components/icons";
 import { Avatar } from "@/client/components/avatar";
+import { personKeywords } from "@/client/lib/fuzzy-score";
 import {
-  assignableUsers,
+  assigneeGroups,
   clearPriorityRow,
   knownLabels,
   priorityChoices,
@@ -38,6 +39,19 @@ export type IssueMenuDialog =
   | "pull-request"
   | "history"
   | "rename";
+/** Every assignee choice in the picker's order, people outside the team included: the root search hoists them only from three
+ *  characters, past the two that list them in the picker. */
+function assigneeChoices(issue: Issue) {
+  const g = assigneeGroups({
+    me: ME,
+    current: issue.assignee,
+    jiraUsers: get().options.users,
+    issues: get().issues.values(),
+    board: issue.board,
+  });
+  const team = new Set(g.team.map((u) => u.id));
+  return [...g.assigned, ...g.suggested, ...g.team, ...g.others].map((user) => ({ user, team: !!user && team.has(user.id) }));
+}
 /** A menu's "create sub-issue" acts on the menu's issue, never the selection: closing the menu clears its target. */
 export const createSubIssue = (issue: Issue) =>
   requestAnimationFrame(() => runShortcut("sub-issue", issue.key));
@@ -113,20 +127,19 @@ export function issueMenuEntries(
         run: choose(() => actions.patch(issue.key, { priority: p || undefined })),
       })),
     }),
+    // The submenu is the A picker's rows (AssigneeRows) on the issue's live assignee; these children, from the same groups,
+    // are the root search's "Assignee › x".
     assignee: property("Assignee", "user", "assign", {
       placeholder: "Assign to…",
       hoistFrom: 3,
-      children: [
-        { name: "No assignee", user: null },
-        ...assignableUsers(ME, get().options.users, get().issues.values()).map((u) => ({ name: u.name, user: u })),
-      ]
-        .map(({ name, user }) => ({
-          name,
-          image: createElement(Avatar, { user, size: 16 }),
-          selected: (issue.assignee?.id ?? null) === (user?.id ?? null),
-          run: choose(() => actions.assign(issue.key, user)),
-        }))
-        .map(numbered(0)),
+      rows: (query) => createElement(IssueAssigneeRows, { issue: issue.key, query }),
+      children: assigneeChoices(issue).map(({ user, team }) => ({
+        name: user?.name ?? "No assignee",
+        image: createElement(Avatar, { user, size: 16 }),
+        selected: (issue.assignee?.id ?? null) === (user?.id ?? null),
+        keywords: user ? personKeywords(user.name, { me: user.id === ME.id, team }) : undefined,
+        run: choose(() => actions.assign(issue.key, user)),
+      })),
     }),
     // The submenu is the L picker's checkbox rows on the issue's live labels; these children are the root search's "Add label › x".
     labels: property("Labels", "label", "labels", {

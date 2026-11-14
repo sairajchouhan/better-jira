@@ -1,4 +1,4 @@
-import { expect, test, type App } from "./app";
+import { expect, fixture, test, type App } from "./app";
 
 /** A writable site faked in the page: ops land in `window.__ops`, clipboard writes in `window.__copied`. */
 const setup = `(()=>{const real=fetch;window.__ops=[];
@@ -137,4 +137,61 @@ test("list row menu: Copy › Copy ID copies that row's key", async ({ open }) =
   await page.key("Enter");
   await page.waitFor(`window.__copied==='TEST-3'`);
   await expect(page.page.locator(MENU)).toHaveCount(0);
+});
+
+test("B8: the A picker and Assignee › list No assignee, you, the current assignee, then the team; others from 2 characters", async ({
+  open,
+}) => {
+  // Morgan is assignable in Jira but has no issue on the board: a user from another team. Alex works on the board (TEST-2).
+  await fixture.reset({ catalog: { priorities: [], labels: [], users: ["Morgan Example"] } });
+  const page = await open("", { setup });
+  const rows = (menu: string) =>
+    `[...document.querySelectorAll('${menu} [cmdk-item]')].map(n=>n.dataset.value)`;
+  const headings = (menu: string) =>
+    `[...document.querySelectorAll('${menu} [cmdk-group-heading]')].map(n=>n.textContent)`;
+  const SUBMENU = '[role="dialog"][aria-label="Assignee"]';
+
+  await test.step("Assignee › on an assigned card: the current assignee comes after you, with no team heading left", async () => {
+    await rightClick(page, '[data-key="TEST-2"]');
+    await page.hover(`${MENU} [cmdk-item][data-value="Assignee"]`);
+    await page.waitFor(`!!document.querySelector('${SUBMENU} [cmdk-item]')`);
+    expect(await page.eval(rows(SUBMENU))).toEqual(["No assignee", "Audit user audit-me", "Alex alex"]);
+    expect(await page.eval(headings(SUBMENU))).toEqual([]);
+    await page.key("Escape");
+    await expect(page.page.locator(MENU)).toHaveCount(0);
+  });
+
+  await test.step("Assignee › on an unassigned card: Alex under Team members; Morgan only from the second character", async () => {
+    await rightClick(page, '[data-key="TEST-1"]');
+    await page.hover(`${MENU} [cmdk-item][data-value="Assignee"]`);
+    await page.waitFor(`!!document.querySelector('${SUBMENU} [cmdk-item]')`);
+    expect(await page.eval(rows(SUBMENU))).toEqual(["No assignee", "Audit user audit-me", "Alex alex"]);
+    expect(await page.eval(headings(SUBMENU))).toEqual(["Team members"]);
+    await page.click(`${SUBMENU} input`);
+    await page.type("m");
+    expect(await page.eval(rows(SUBMENU))).not.toContain("Morgan Example catalog-0");
+    await page.type("o");
+    await page.waitFor(`${rows(SUBMENU)}.includes("Morgan Example catalog-0")`);
+    expect(await page.eval(headings(SUBMENU))).toContain("Users from other teams");
+    await page.key("Escape");
+    await expect(page.page.locator(MENU)).toHaveCount(0);
+  });
+
+  const PICKER = '[role="dialog"][aria-label="Assign issue"]';
+  await test.step("A on the same card: the same rows; 0 and 1 are the only number keys", async () => {
+    await page.hover('[data-key="TEST-1"]');
+    await page.key("a");
+    await page.waitFor(`!!document.querySelector('${PICKER} [cmdk-item]')`);
+    expect(await page.eval(rows(PICKER))).toEqual(["No assignee", "Audit user audit-me", "Alex alex"]);
+    expect(
+      await page.eval(`[...document.querySelectorAll('${PICKER} [cmdk-item]')].map(n=>n.dataset.number??null)`),
+    ).toEqual(["0", "1", null]);
+  });
+
+  await test.step("typing \"me\" lifts you to the top", async () => {
+    await page.type("me");
+    await page.waitFor(`${rows(PICKER)}[0]==="Audit user audit-me"`);
+    await page.key("Enter");
+    await page.waitFor(`window.__ops.some(o=>o.key==="TEST-1")`);
+  });
 });

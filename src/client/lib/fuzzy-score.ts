@@ -174,6 +174,12 @@ export const deprioritize = (score: number, by = 1) => score * 0.99 ** by;
  * ("Status To Do 3") while the row matches on its label ("To Do") alone.
  */
 export const menuFilter = (value: string, search: string, keywords?: string[]) => {
+  if (keywords?.some((k) => k.startsWith(PERSON)))
+    return personScore(
+      keywords.filter((k) => !k.startsWith(PERSON)),
+      search,
+      { me: keywords.includes(`${PERSON}me`), team: keywords.includes(`${PERSON}team`) },
+    );
   const crumbs = keywords?.find((k) => k.startsWith(CRUMBS));
   if (crumbs) return breadcrumbScore(keywords!.filter((k) => k !== crumbs), crumbs.slice(CRUMBS.length), search);
   return fuzzyScore(keywords?.length ? keywords : value, search);
@@ -202,3 +208,41 @@ export function breadcrumbScore(labels: string[], breadcrumb: string, search: st
 }
 /** A hoisted row's cmdk `keywords`: its label, and its breadcrumb (`path` then the label) marked for menuFilter's breadcrumbScore. */
 export const breadcrumbKeywords = (label: string, path: string[]) => [label, CRUMBS + [...path, label].join(" ")];
+
+const PERSON = "\u0001",
+  // Linear's `E6t` and `D6t`: what the current user gets for "me" or a word of their name, and anyone for their whole name.
+  ME_BOOST = 20,
+  NAME_BOOST = 10,
+  // `mH` boosts: team members by 5 (project members, a parked decision here, by 10).
+  TEAM_PRIORITY = 5;
+/** A person row's cmdk `keywords` (Linear's user action `IP` with the assignee picker's `scoreOverride: mH`): their name, and
+ *  markers for menuFilter's personScore: the current user, and a member of the board's team. */
+export const personKeywords = (name: string, person: { me?: boolean; team?: boolean } = {}) => [
+  name,
+  PERSON,
+  ...(person.me ? [`${PERSON}me`] : []),
+  ...(person.team ? [`${PERSON}team`] : []),
+];
+/** `j6t`: the name's words appear in the query, together and in order. */
+function wholeName(words: string[], name: string) {
+  const parts = formatted(name).split(/\s+/).filter(Boolean);
+  if (!parts.length) return false;
+  for (let i = 0; i + parts.length <= words.length; i++) if (parts.every((p, j) => words[i + j] === p)) return true;
+  return false;
+}
+/**
+ * Linear's people score (`mH`, `O6t`, `A6t`, `k6t` in startup-root.CnUSfl4j.js): the name's score, raised for a team member
+ * (`Pn.prioritize` by 5). Once a row matches, the current user gains 20 when the query has the word "me" or a word that
+ * matches their name, and anyone gains 10 when the query holds their whole name. The current user also matches "me" exactly
+ * (`keywordsExactMatch: ["me"]`), so "me" lifts you to the top of the assignee picker.
+ */
+export function personScore(names: string[], search: string, person: { me?: boolean; team?: boolean }): number {
+  const query = search.trim(),
+    words = formatted(query).split(/\s+/).filter(Boolean);
+  let score = Math.max(fuzzyScore(names, query), person.me && query.toLowerCase() === "me" ? 1 : 0);
+  if (person.team) score = prioritize(score, TEAM_PRIORITY);
+  if (!query || score < MIN_APPLICABILITY) return score;
+  if (person.me && (words.includes("me") || words.some((w) => fuzzyScore(names, w) >= MIN_APPLICABILITY)))
+    return score + ME_BOOST;
+  return names.some((n) => wholeName(words, n)) ? score + NAME_BOOST : score;
+}
