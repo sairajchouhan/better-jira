@@ -15,6 +15,7 @@
   --border-solid-alpha-thin: lch(0 0 0 / 0.15); /* bgBorderSolidAlphaThin = re(bgBorderSolidThin): (97.94 - 84.44) / 97.94 * 1.09 */
   --modal-overlay: lch(0 0 0 / 0.25); /* bgModalOverlay: .25 light, .4 dark (times the contrast factor, 1 here) */
   --red-base: lch(58% 73 29); /* redBase */
+  --orange-base: lch(66% 80 48); /* orangeBase: [66, 80, 48] on both bases */
   --green-base: lch(68% 64.37 141.95); /* greenBase: [68, 64.37, 141.95] on a light base, l 60 on a dark one */
   --purple-base: lch(48% 59.31 288.43); /* purpleBase: [48, 59.31, 288.43] on both bases */
   --red-base-hover: lch(53% 73 29); /* redBaseHover */

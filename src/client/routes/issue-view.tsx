@@ -34,7 +34,7 @@ import { mergeHistory } from "@/client/features/issue/jira-history";
 import { useIssueHistory } from "@/client/features/issue/use-issue-history";
 import { normalizeDocument } from "@/shared/document";
 import { imageCommentIds } from "@/client/features/media/media-edits";
-import { Icon, PriorityIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
+import { DueIcon, Icon, PriorityIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
 import { ME, boardOf, get, useStore, isWatching, statusOf } from "@/client/state/store";
 import { issueURL, jiraIssueURL } from "@/client/features/issue/issue-urls";
 import { LINEAR_RELATIONS, relationSections } from "@/shared/relations";
@@ -503,7 +503,7 @@ function Properties({ issue }: { issue: Issue }) {
             id="prop-due"
             overlay="due"
             tip="Change due date"
-            icon={<Icon name="calendar" />}
+            icon={<DueIcon due={issue.due} resolved={issue.resolved} />}
           >
             {shortDate(issue.due, undefined, true)}
           </PropertyPill>

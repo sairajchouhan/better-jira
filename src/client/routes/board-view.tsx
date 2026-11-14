@@ -27,7 +27,7 @@ import {
 import { Badge, IconMenuButton } from "@/client/components/badge";
 import { PropertyPicker, type IssueField } from "@/client/features/issue/personal-controls";
 import { CommentBadge, CreatorBadge, LinkBadges, PullRequestBadge } from "@/client/features/issue/card-badges";
-import { Icon, LabelDot, PriorityIcon, StatusIcon, TypeDot } from "@/client/components/icons";
+import { DueIcon, Icon, LabelDot, PriorityIcon, StatusIcon, TypeDot } from "@/client/components/icons";
 import { ME, get, set, timed, useStore, statusOf } from "@/client/state/store";
 import { actions, beginCreate } from "@/client/state/issue-actions";
 import { loadFull } from "@/client/state/server-data";
@@ -743,7 +743,7 @@ function IssueProperties({ issue, display: d, labels }: { issue: Issue; display:
       {show("due") && issue.due && (
         <FieldBadge issue={issue} field="due" label="Due date" title={`Due ${fullTime(`${issue.due}T00:00:00`)}`}>
           <Badge.Icon>
-            <Icon name="calendar" />
+            <DueIcon due={issue.due} resolved={issue.resolved} />
           </Badge.Icon>
           <Badge.Text>{shortDate(issue.due, undefined, true)}</Badge.Text>
         </FieldBadge>

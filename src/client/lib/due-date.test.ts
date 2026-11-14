@@ -47,3 +47,20 @@ test("R2-issue-fields-D7: due date properties read Yesterday, Today and Tomorrow
   expect(shortDate("2026-11-10", now, true)).toBe("Nov 10");
   expect(shortDate("2026-11-09", now)).toBe("Nov 9");
 });
+
+test("R3-issue-fields-D6: the due icon is Linear's orange within a week and red on the day and after", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { createElement } = await import("react");
+  const { DueIcon } = await import("@/client/components/icons");
+  const { dueQualifier } = await import("./due-date");
+  const now = new Date(2026, 10, 14, 15, 0);
+  const icon = (due: string, resolved?: string) => renderToStaticMarkup(createElement(DueIcon, { due, resolved, now }));
+  expect(icon("2026-11-15")).toContain('data-due="dueSoon" class="inline-flex" style="color:var(--orange-base)"');
+  expect(icon("2026-11-21")).toContain("var(--orange-base)");
+  expect(icon("2026-11-14")).toContain('data-due="dueToday" class="inline-flex" style="color:var(--red-base)"');
+  expect(icon("2026-11-13")).toContain('data-due="overdue" class="inline-flex" style="color:var(--red-base)"');
+  expect(icon("2026-11-22")).toContain('data-due="due" class="inline-flex">');
+  // A done issue: red only when it was resolved after its due day.
+  expect(dueQualifier("2026-11-10", now, "2026-11-10T18:00:00.000+0530")).toBe("none");
+  expect(dueQualifier("2026-11-10", now, "2026-11-12T10:00:00.000")).toBe("overdue");
+});

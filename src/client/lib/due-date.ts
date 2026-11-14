@@ -40,3 +40,18 @@ export function shortDate(value: string, now = new Date(), relative = false): st
   }
   return (date.getFullYear() === now.getFullYear() ? SHORT : SHORT_YEAR).format(date);
 }
+
+export type DueQualifier = "none" | "due" | "dueSoon" | "dueToday" | "overdue";
+const midnight = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+/** Linear's `qualifierForDueDate` (startup-entry bundle): days from today (or from the day a done issue was resolved)
+ *  to the due date. A done issue is overdue only when it was resolved after its due day; an open one is due soon within
+ *  a week, due today on the day and overdue after it. */
+export function dueQualifier(due: string | null | undefined, now = new Date(), resolved?: string | null): DueQualifier {
+  if (!due) return "none";
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(due) ? `${due}T00:00:00` : due);
+  if (Number.isNaN(date.getTime())) return "none";
+  const done = resolved ? new Date(resolved) : undefined;
+  const days = Math.round((midnight(date) - midnight(done ?? now)) / 86_400_000);
+  if (done) return days >= 0 ? "none" : "overdue";
+  return days > 7 ? "due" : days > 0 ? "dueSoon" : days === 0 ? "dueToday" : "overdue";
+}
