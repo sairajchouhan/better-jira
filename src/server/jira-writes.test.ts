@@ -253,6 +253,28 @@ test("sync review 5: a replayed create sends the fields edited since its first s
   expect(calls).toContain("POST /rest/api/3/issue/K-15/watchers");
 });
 
+test("a cleared priority never reaches Jira for a saved issue, which refuses it (R3 G10)", async () => {
+  answer = jiraAnswers;
+  calls.length = 0;
+  const result = await applyOps("K-60", [{ op: "fields", fields: { priority: null } }]);
+  expect(result.error).toContain("priority");
+  expect(calls.filter((c) => c.startsWith("PUT"))).toEqual([]);
+  // A replayed create whose priority was cleared since keeps Jira's, and still sends the other edits.
+  ledger.intend("K-NEW6@t", { summary: "S", priority: { name: "High" }, project: { key: "K" }, issuetype: { name: "Task" } });
+  ledger.remember("K-NEW6@t", "K-16");
+  const bodies: Record<string, unknown> = {};
+  answer = (path, init) => {
+    if (init?.method === "PUT") bodies[path] = JSON.parse(String(init.body));
+    if (path.startsWith("/rest/api/3/issue/K-16?fields="))
+      return { fields: { summary: "S", priority: { name: "High" } } };
+    return jiraAnswers(path, init);
+  };
+  await applyOps("K-NEW6", [
+    { op: "create", fields: { summary: "Edited", project: "K", priority: null }, client: "K-NEW6@t" },
+  ]);
+  expect(bodies["/rest/api/3/issue/K-16"]).toEqual({ fields: { summary: "Edited" } });
+});
+
 const doc = (text: string) => ({
   type: "doc" as const,
   version: 1 as const,

@@ -29,6 +29,7 @@ function fieldPayload(fields: Fields) {
 }
 
 export class UserError extends Error {}
+const PRIORITY_REQUIRED = "Jira keeps a priority on every saved issue. Pick one instead of clearing it.";
 
 let linkTypes: Promise<{ name: string; inward: string; outward: string }[]> | undefined;
 /** Jira's link type for an app relation kind; a type missing from the cached list is looked up once more. */
@@ -308,7 +309,9 @@ async function catchUp(key: string, fields: Record<string, unknown>, sent: any) 
   const update = Object.fromEntries(
     edited
       .filter((field) => sameValue(field, current[field], sent[field]))
-      .map((field) => [field, fields[field] ?? (Array.isArray(sent[field]) ? [] : null)]),
+      .map((field) => [field, fields[field] ?? (Array.isArray(sent[field]) ? [] : null)])
+      // Jira refuses a cleared priority on a saved issue, and would refuse the other edits with it.
+      .filter(([field, value]) => !(field === "priority" && value === null)),
   );
   if (Object.keys(update).length)
     await jira(at(key), { method: "PUT", body: JSON.stringify({ fields: update }) });
@@ -323,6 +326,8 @@ async function run(ctx: Context, op: Op) {
     case "fields": {
       if (op.fields.project !== undefined)
         throw new UserError("Jira's API cannot move an issue to another project.");
+      // Jira refuses to clear a saved issue's priority; refuse here, before any write, whatever the client sent (R3 G10).
+      if (op.fields.priority === null) throw new UserError(PRIORITY_REQUIRED);
       const { labelEdits, descriptionBase, ...rest } = op.fields,
         fields = fieldPayload(rest);
       // Jira has no conditional update, so compare first: an edit made from an older text must not overwrite someone else's newer one.
