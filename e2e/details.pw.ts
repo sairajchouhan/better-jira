@@ -414,6 +414,23 @@ test("BJ-253: the issue sidebar opens with Linear's Diffs section: its pull requ
     expect(await page.eval(`${card}.textContent`)).toContain("app#41");
   });
 
+  await test.step("moving to the next row swaps the card: only the hovered row's card is ever open (React Aria's one-open rule)", async () => {
+    const cards = `[...document.querySelectorAll('[data-hover-card="Pull request"]')].map(c=>c.textContent.includes("app#42")?"#42":"#41")`;
+    const next = await page.rect('[data-pull-request-row="#42"] a');
+    // Straight down from #41's card to #42, the path that left both cards stacked (DRFT-929).
+    await page.page.mouse.move(next.x + next.width / 2, next.y + next.height / 2, { steps: 6 });
+    await page.waitFor(`${cards}.join()==="#42"`, 450);
+    for (let i = 0; i < 5; i++) {
+      expect(await page.eval<string[]>(cards)).toEqual(["#42"]);
+      await page.page.waitForTimeout(60);
+    }
+    // A title's tooltip takes over from the card, never beside it.
+    await page.hover('[title="Copy git branch name (⇧ ⌘ .)"]');
+    await page.waitFor(`!!document.querySelector('.app-tooltip')`, 2000);
+    expect(await page.eval(`document.querySelectorAll('[data-hover-card],.app-tooltip').length`)).toBe(1);
+    await page.page.mouse.move(1, 1);
+  });
+
   await test.step("right-click opens Linear's pull request menu; Open in GitHub opens it", async () => {
     const r = await page.rect('[data-pull-request-row="#42"] a');
     await page.page.mouse.click(r.x + 10, r.y + r.height / 2, { button: "right" });

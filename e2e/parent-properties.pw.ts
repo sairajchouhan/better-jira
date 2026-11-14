@@ -161,14 +161,17 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
     expect(await page.eval(`document.getElementById('prop-status').title`)).toBe(
       "Change status (S)",
     );
-    // At the window's edge it stays 8px inside, and a multi-key hint gets one key cap per key.
-    await page.hover('[title="Copy git branch name (⇧ ⌘ .)"]');
+    // At the window's edge it stays 12px inside (Linear's `Fwe`, React Aria's containerPadding), a multi-key hint gets one key cap
+    // per key, and moving from one titled control to the next leaves only the new tooltip.
+    await page.hover("#prop-status");
     await page.waitFor(`!!document.querySelector('.app-tooltip')`, 2000);
+    await page.hover('[title="Copy git branch name (⇧ ⌘ .)"]');
+    await page.waitFor(`document.querySelector('.app-tooltip')?.querySelectorAll('kbd').length===3`, 2000);
     expect(
       await page.eval(
-        `(()=>{const t=document.querySelector('.app-tooltip');return [innerWidth-Math.round(t.getBoundingClientRect().right),[...t.querySelectorAll('kbd')].map(k=>k.textContent)]})()`,
+        `(()=>{const t=document.querySelector('.app-tooltip');return [innerWidth-Math.round(t.getBoundingClientRect().right),[...t.querySelectorAll('kbd')].map(k=>k.textContent),document.querySelectorAll('[role=tooltip]').length]})()`,
       ),
-    ).toEqual([8, ["⇧", "⌘", "."]]);
+    ).toEqual([12, ["⇧", "⌘", "."], 1]);
     // An icon button keeps its own accessible name while its title is parked, and gets its own markup back after.
     await page.hover('[title="Close (Esc)"]');
     await page.waitFor(`!!document.querySelector('.app-tooltip')`, 2000);
