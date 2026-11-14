@@ -10,7 +10,7 @@ test("document reminder presets are available while the lazy date parser is bloc
   await page.waitFor("!!document.getElementById('resource-document')");
   await page.eval("document.activeElement?.blur()");
   // The custom step must also remain independent of a parser that never loads.
-  await page.page.route("**/*reminder-date*.js", (route) => route.abort());
+  await page.page.route("**/*typed-time*.js", (route) => route.abort());
   await page.key("h", "shift");
   const menu = page.page.getByRole("dialog", { name: "Remind me", exact: true });
   await expect(menu.getByRole("option", { name: "An hour from now" })).toBeVisible();
