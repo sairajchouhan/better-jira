@@ -1,4 +1,5 @@
 import { EntityIdentifier } from "@/client/components/entity-identifier";
+import { COMPOSER_TITLE, focusEditorAt, titleKeyDown } from "@/client/features/editor/title-flow";
 import { type Issue } from "@/shared/issue-model";
 import { Text } from "@/client/components/text";
 import { SubIssueProgressButton } from "@/client/components/sub-issue-progress-button";
@@ -434,6 +435,9 @@ export function SubIssues({ issue }: { issue: Issue }) {
               placeholder="Issue title"
               value={title}
               onChange={(e) => update({ title: e.target.value })}
+              onKeyDown={titleKeyDown(COMPOSER_TITLE, (at) =>
+                focusEditorAt(document.getElementById(`sub-issue-description-${issue.key}`), at),
+              )}
               className="min-w-0 flex-1"
             />
           </div>
@@ -446,6 +450,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
             initial={description}
             label="Sub-issue description"
             placeholder="Add description…"
+            previousInput={{ element: () => titleInput.current, arrows: COMPOSER_TITLE.arrows }}
             attachments={files}
             onFiles={addFiles}
             onChange={(description) => update({ description })}

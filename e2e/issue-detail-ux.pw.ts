@@ -208,8 +208,9 @@ test("editing an issue's fields: pickers close and apply, Jira renames wait for 
     await p.click("#summary");
     await p.key("a", "meta");
     await p.key("Backspace");
+    // Enter now hands the caret to the description (C14); leaving the empty title still brings it back.
     await p.key("Enter");
-    expect(await p.eval(`document.getElementById('summary').value`)).toBe("Renamed in Jira");
+    await p.waitFor(`document.getElementById('summary').value==='Renamed in Jira'`);
   });
 
   await test.step("R1-D46: Tab leaves the composer description for the property pills", async () => {
@@ -226,6 +227,75 @@ test("editing an issue's fields: pickers close and apply, Jira renames wait for 
         `[!!document.activeElement.closest('.rich-editor'),!!document.activeElement.closest('[aria-label="Create issue"]')]`,
       ),
     ).toEqual([false, true]);
+  });
+});
+
+test("C14: Enter in the title moves the caret into the description, as Linear's title does", async ({ open }) => {
+  const p = await open("?issue=TEST-2&view=page");
+  await p.waitFor(`!!document.querySelector('#description h2')`);
+  const title = `document.getElementById('summary').value`;
+  const caretAt = (pos: "end" | number) =>
+    p.eval(`const t=document.getElementById('summary');t.focus();const at=${pos === "end" ? "t.value.length" : pos};t.setSelectionRange(at,at)`);
+  /** [focused id, the first block's tag, its text, the caret's offset, whether the caret is in that first block]. */
+  const first = `(()=>{const d=document.getElementById('description'),b=d.firstElementChild,s=getSelection();return [document.activeElement?.id,b.tagName,b.textContent,s.anchorOffset,b.contains(s.anchorNode)]})()`;
+  const before = await p.eval<string>(title);
+
+  await test.step("Enter at the end of the title opens an empty line at the top of the description (aJn focusNewLineAtStart)", async () => {
+    await caretAt("end");
+    await p.key("Enter");
+    await p.waitFor(`document.activeElement?.id==='description'`);
+    expect(await p.eval(first)).toEqual(["description", "P", "", 0, true]);
+    await p.type("Steps");
+    expect(await p.eval(`[...document.getElementById('description').children].slice(0,2).map(n=>n.tagName+':'+n.textContent.slice(0,5))`)).toEqual(["P:Steps", expect.stringMatching(/^H2:/)]);
+    expect(await p.eval(title)).toBe(before);
+  });
+
+  await test.step("Enter mid-title puts the caret at the start of the description and never splits the title (aJn focusAtStart)", async () => {
+    await caretAt(3);
+    await p.key("Enter");
+    await p.waitFor(`document.activeElement?.id==='description'`);
+    expect(await p.eval(first)).toEqual(["description", "P", "Steps", 0, true]);
+    expect(await p.eval(title)).toBe(before);
+  });
+
+  await test.step("an opened line left empty is gone once the description is left", async () => {
+    await caretAt("end");
+    await p.key("Enter");
+    await p.waitFor(`document.activeElement?.id==='description'`);
+    expect(await p.eval(`document.getElementById('description').firstElementChild.textContent`)).toBe("");
+    await caretAt("end");
+    await p.waitFor(`document.getElementById('description').firstElementChild.textContent==='Steps'`);
+  });
+
+  await test.step("↓ at the title's end goes to the start of the description, ↑ there comes back to the title's end (iJn)", async () => {
+    await caretAt("end");
+    await p.key("ArrowDown");
+    await p.waitFor(`document.activeElement?.id==='description'`);
+    expect(await p.eval(first)).toEqual(["description", "P", "Steps", 0, true]);
+    await p.key("ArrowUp");
+    await p.waitFor(`document.activeElement?.id==='summary'`);
+    expect(await p.eval(`(t=>[t.selectionStart,t.selectionEnd,t.value.length])(document.getElementById('summary'))`)).toEqual(
+      Array(3).fill(before.length),
+    );
+  });
+
+  await test.step("⇧↵ adds no newline to the title and stays in it", async () => {
+    await caretAt("end");
+    await p.key("Enter", "shift");
+    expect(await p.eval(`[document.activeElement?.id,${title}]`)).toEqual(["summary", before]);
+  });
+
+  await test.step("the create composer's title: Enter always goes to the start of the description, ↑ comes back", async () => {
+    await p.eval("document.activeElement?.blur()");
+    await p.key("c");
+    await p.waitFor(`document.activeElement?.getAttribute('aria-label')==='Issue title'&&!!document.getElementById('create-description')`);
+    await p.type("Composer title");
+    await p.key("Enter");
+    await p.waitFor(`document.activeElement?.id==='create-description'`);
+    expect(await p.eval(`document.getElementById('create-description').children.length`)).toBe(1);
+    await p.key("ArrowUp");
+    await p.waitFor(`document.activeElement?.getAttribute('aria-label')==='Issue title'`);
+    expect(await p.eval(`(t=>t.selectionStart===t.value.length)(document.activeElement)`)).toBe(true);
   });
 });
 

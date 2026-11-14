@@ -50,6 +50,7 @@ import { PersonalIssueDetails } from "@/client/features/issue/personal-controls"
 import { SubIssueOf } from "@/client/features/issue/sub-issues";
 import { Avatar } from "@/client/components/avatar";
 import { DocumentBodyEditor, CommentComposer } from "@/client/features/editor/rich-editor-loader";
+import { focusEditorAt, titleKeyDown, type TitleFlow } from "@/client/features/editor/title-flow";
 import { hotkeyOf, runShortcut } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
 import { post, useCommand, focusNode } from "@/client/features/navigation/commands";
@@ -278,6 +279,15 @@ function Stepper({ issueKey }: { issueKey: string }) {
   );
 }
 
+/** The issue view's title and description (Linear's `Oh`): Enter at the title's end opens a new line at the top of the
+ *  description. The parent line between them keeps ← and → in the text (`Th` `l = !!t.parent…`). */
+const issueTitleFlow = (issue: Issue): TitleFlow => ({
+  enter: "new-line-at-end",
+  arrows: issue.parent ? "up-down" : "all",
+});
+/** The issue body holding a title or description, so the peek and the page each find their own pair. */
+const issueBodyOf = (node: Element | null | undefined) => node?.closest(".issue-detail-body");
+
 /** A Jira-side rename shows at once unless the title is being edited; leaving it saves only typed text. */
 function Title({ issue }: { issue: Issue }) {
   const ref = useRef<HTMLTextAreaElement>(null),
@@ -311,14 +321,17 @@ function Title({ issue }: { issue: Issue }) {
         setDraft(null);
       }}
       onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          e.currentTarget.blur();
-        }
         if (e.key === "Escape") {
           e.currentTarget.value = start.current;
           e.currentTarget.blur();
+          return;
         }
+        // Leaving the title saves it (onBlur), as Linear's title saves on blur.
+        titleKeyDown(issueTitleFlow(issue), (at) => {
+          // While the editor loads, its stand-in has no id: focus it once it arrives, as ⌃⇧I does.
+          if (!focusEditorAt(issueBodyOf(ref.current)?.querySelector<HTMLElement>("#description"), at))
+            post("edit-description", issue.key);
+        })(e);
       }}
       className="rounded-md"
     />
@@ -733,6 +746,10 @@ function Description({ issue }: { issue: Issue }) {
           issueKey={issue.key}
           attachments={issue.attachments}
           placeholder="Add description…"
+          previousInput={{
+            element: () => issueBodyOf(section.current)?.querySelector<HTMLElement>("#summary") ?? null,
+            arrows: issueTitleFlow(issue).arrows,
+          }}
           onChange={session.edit}
           onBlur={session.flush}
         />

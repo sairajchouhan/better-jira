@@ -40,10 +40,13 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentPr
 import {
   EditorState,
   NodeSelection,
+  Plugin,
   Selection,
   type Command,
   type Transaction,
 } from "prosemirror-state";
+import { dropOpenedLine, leavesForTitle, placeCaret } from "./editor-title-flow";
+import { FOCUS_AT_EVENT, focusTitleAtEnd, type FocusAt, type PreviousInput } from "./title-flow";
 import { mediaNodeView, type MediaNodeView } from "./media-node-view";
 import { expandNodeView } from "./expand-node-view";
 import { codeBlockNodeView } from "./code-block-view";
@@ -113,6 +116,8 @@ export type RichEditorProps = {
     merge: (current: unknown) => AdfDocument,
   ) => void;
   /** Tab outside a list, table or code block moves focus on (Linear's create composer) instead of staying in the editor. */ tabLeaves?: boolean;
+  /** The title above this description (Linear's `previousInputRef`): ↑ at the very start goes back to its end. */
+  previousInput?: PreviousInput;
 };
 
 /** The menus that open at the caret, each with its Esc. */
@@ -204,7 +209,9 @@ export function RichEditor(props: EditorEngineProps) {
     staged = useRef<Attachment[]>([]);
   const upload = useRef<ReturnType<typeof mediaUploads> | null>(null),
     toolbar = useRef<HTMLDivElement>(null),
-    mentionKeys = useRef<((event: KeyboardEvent) => boolean) | null>(null);
+    mentionKeys = useRef<((event: KeyboardEvent) => boolean) | null>(null),
+    // The empty line Enter in the title opened at the start, until the editor is left.
+    openedLine = useRef(false);
   const mediaContext = () => ({
     issueKey: latest.current.issueKey,
     attachments: [
@@ -270,6 +277,19 @@ export function RichEditor(props: EditorEngineProps) {
             keys: (_view, event) => mentionKeys.current?.(event) ?? false,
             upload: () => (latest.current.onFiles ? uploads.enqueue : null),
             site: () => get().site,
+          }),
+          // After the caret menus, so ↑ in an open menu stays the menu's.
+          new Plugin({
+            props: {
+              handleKeyDown: (editor, event) => {
+                const previous = latest.current.previousInput;
+                return (
+                  !!previous &&
+                  leavesForTitle(editor.state, event.key, previous.arrows) &&
+                  focusTitleAtEnd(previous.element())
+                );
+              },
+            },
           }),
           mediaCaretPlugin(),
           uploads.plugin,
@@ -377,6 +397,11 @@ export function RichEditor(props: EditorEngineProps) {
       },
       handleDOMEvents: {
         blur: (editor) => {
+          if (openedLine.current) {
+            openedLine.current = false;
+            const drop = dropOpenedLine(editor.state);
+            if (drop) editor.dispatch(drop);
+          }
           latest.current.onBlur?.(fromEditorDocument(editor.state.doc));
           refresh((n) => n + 1);
           return false;
@@ -405,6 +430,14 @@ export function RichEditor(props: EditorEngineProps) {
     }
     if (props.early?.submit) save();
     const input = (event: Event) => uploads.enqueue((event as CustomEvent<File[]>).detail);
+    // The title above handing over the caret (title-flow.ts).
+    const focusAt = (event: Event) => {
+      event.preventDefault();
+      const before = editor.state.doc;
+      editor.dispatch(placeCaret(editor.state, (event as CustomEvent<FocusAt>).detail));
+      openedLine.current = editor.state.doc !== before;
+      editor.focus();
+    };
     const late = (event: Event) => {
       const merged = mergeLateMedia(
           fromEditorDocument(editor.state.doc),
@@ -416,6 +449,7 @@ export function RichEditor(props: EditorEngineProps) {
     };
     editor.dom.addEventListener("attach-files", input);
     editor.dom.addEventListener("late-media", late);
+    editor.dom.addEventListener(FOCUS_AT_EVENT, focusAt);
     // A file still saving when the editor unmounts (paste, then Back) is placed in the detached editor. Its old copy of the content is never saved wholesale:
     // only the new media goes to the editor now showing this content (reopened and maybe edited), or to onLateMedia. Unscoped editors keep reporting through onBlur.
     return () => {
@@ -426,6 +460,7 @@ export function RichEditor(props: EditorEngineProps) {
       editor.dom.remove();
       editor.dom.removeEventListener("attach-files", input);
       editor.dom.removeEventListener("late-media", late);
+      editor.dom.removeEventListener(FOCUS_AT_EVENT, focusAt);
       const left = editor.state.doc;
       void uploads.idle().then(() => {
         if (!editor.state.doc.eq(left) && !lateMediaDiscarded(latest.current.scope, mountedAt)) {

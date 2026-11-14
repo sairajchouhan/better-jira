@@ -25,6 +25,7 @@ import { shortDate } from "@/client/lib/due-date";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { createContext, use, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ComposerEditor } from "@/client/features/editor/rich-editor-loader";
+import { COMPOSER_TITLE, focusEditorAt, titleKeyDown } from "@/client/features/editor/title-flow";
 import { MediaView } from "@/client/features/media/media-loader";
 import { normalizeDocument, documentHasMedia } from "@/shared/document";
 import { Icon, PriorityIcon, RelationIcon, StatusIcon, TypeDot } from "@/client/components/icons";
@@ -409,23 +410,16 @@ export function CreateIssue() {
           maxLength={SUMMARY_MAX}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (
-              e.key === "Enter" &&
-              !e.metaKey &&
-              !e.ctrlKey &&
-              !e.nativeEvent.isComposing
-            ) {
-              e.preventDefault();
-              document.getElementById("create-description")?.focus();
-            }
-          }}
+          onKeyDown={titleKeyDown(COMPOSER_TITLE, (at) =>
+            focusEditorAt(document.getElementById("create-description"), at),
+          )}
           placeholder="Issue title"
         />
         <ComposerEditor
           key={draftIndex}
           id="create-description"
           placeholder="Add description…"
+          previousInput={{ element: () => titleRef.current, arrows: COMPOSER_TITLE.arrows }}
           initial={description}
           onChange={setDescription}
           attachments={attachments}

@@ -15,6 +15,7 @@ import { AutoResizingTextArea, NO_AUTOFILL } from "@/client/components/field";
 import { Tabs } from "@/client/components/tabs";
 import { Text } from "@/client/components/text";
 import { DocumentBodyEditor } from "@/client/features/editor/rich-editor-loader";
+import { COMPOSER_TITLE, focusEditorAt, titleKeyDown } from "@/client/features/editor/title-flow";
 import { Adf } from "@/client/features/editor/adf";
 import { statusById } from "@/shared/board-catalog";
 import { adfToMarkdown } from "@/client/features/issue/issue-copy";
@@ -251,14 +252,12 @@ function DocumentTitle() {
         placeholder="New document"
         value={draft.title}
         onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-            event.preventDefault();
-            document.getElementById("resource-document")?.focus();
-          }
           if (event.key === "Escape") {
             event.stopPropagation();
             event.currentTarget.blur();
+            return;
           }
+          titleKeyDown(COMPOSER_TITLE, (at) => focusEditorAt(document.getElementById("resource-document"), at))(event);
         }}
         onChange={(event) => update({ title: event.target.value.replace(/[\r\n]+/g, " ") })}
         onBlur={endSession}
@@ -282,6 +281,10 @@ function DocumentBody() {
       initial={draft.body}
       label="Document content"
       placeholder="Write something…"
+      previousInput={{
+        element: () => document.querySelector<HTMLElement>('[aria-label="Document title"]'),
+        arrows: COMPOSER_TITLE.arrows,
+      }}
       issueKey={issue.key}
       attachments={issue.attachments}
       onFiles={(files) => addIssueFiles(issue.key, files)}
