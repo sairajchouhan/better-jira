@@ -9,6 +9,7 @@ import {
   JIRA_LIMIT,
   markdownHTML,
   normalizeGoogleDocs,
+  pasteRows,
   pasteShortcut,
   tsvRows,
   tsvTable,
@@ -32,6 +33,28 @@ test("BJ-177 row 78: tab-separated rows become a table, its first row the header
   const [header, row] = doc.content![0]!.content!;
   expect(header!.content!.map((c) => c.type)).toEqual(["tableHeader", "tableHeader"]);
   expect(row!.content![1]!.content!.map((c) => c.content?.[0]?.text)).toEqual(["two", "lines"]);
+});
+
+test("QA-3 description D1: tab-separated rows pasted in a table cell fill the cells from the caret, never split the table", () => {
+  const cell = (text: string, type = n.tableCell!) => type.create(null, p(text ? s.text(text) : null));
+  const table = n.table!.create(null, [
+    n.tableRow!.create(null, ["H1", "H2", "H3"].map((t) => cell(t, n.tableHeader!))),
+    n.tableRow!.create(null, ["a1", "a2", "a3"].map((t) => cell(t))),
+  ]);
+  const doc = n.doc!.create(null, [table]);
+  let at = -1;
+  doc.descendants((node, pos) => (node.isText && node.text === "a1" ? ((at = pos), false) : at < 0));
+  let state = EditorState.create({ doc, selection: TextSelection.create(doc, at) });
+  pasteRows({ state, dispatch: (tr) => (state = state.apply(tr)) }, [["x", "y"], ["z", "w"]], {} as ClipboardEvent);
+  const out = fromEditorDocument(state.doc);
+  expect(out.content!.map((b) => b.type)).toEqual(["table"]);
+  const rows = out.content![0]!.content!.map((row) => row.content!.map((c) => c.content?.[0]?.content?.[0]?.text ?? ""));
+  expect(rows).toEqual([["H1", "H2", "H3"], ["x", "y", "a3"], ["z", "w", ""]]);
+  expect(out.content![0]!.content![1]!.content!.map((c) => c.type)).toEqual(["tableCell", "tableCell", "tableCell"]);
+  // Outside a table the rows still become a new table with a header row.
+  let plain = EditorState.create({ doc: n.doc!.create(null, [p()]) });
+  pasteRows({ state: plain, dispatch: (tr) => (plain = plain.apply(tr)) }, [["x", "y"], ["z", "w"]], {} as ClipboardEvent);
+  expect(fromEditorDocument(plain.doc).content!.find((b) => b.type === "table")!.content![0]!.content![0]!.type).toBe("tableHeader");
 });
 
 test("BJ-177 row 80: more than 100 lines or 4096 bytes is a large paste", () => {

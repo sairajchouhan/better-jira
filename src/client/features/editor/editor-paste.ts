@@ -11,6 +11,7 @@ import {
 } from "prosemirror-model";
 import { Plugin, PluginKey, TextSelection, type Command, type EditorState } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
+import { handlePaste as pasteCells, isInTable } from "prosemirror-tables";
 import { embedLabel, isEmbeddable } from "./embed";
 import {
   embedCardNode,
@@ -74,15 +75,15 @@ export function tsvRows(input: string): string[][] | null {
   return used.size >= 2 ? rows : null;
 }
 
-/** Linear's `RXe`: the first row is the header; a cell's lines are its paragraphs. */
-export function tsvTable(rows: string[][]): EditorNode {
+/** Linear's `RXe`: the first row is the header (unless `header` is false); a cell's lines are its paragraphs. */
+export function tsvTable(rows: string[][], header = true): EditorNode {
   return nodes.table!.create(
     null,
     rows.map((cells, r) =>
       nodes.tableRow!.create(
         null,
         cells.map((text) =>
-          (r ? nodes.tableCell! : nodes.tableHeader!).create(
+          (r || !header ? nodes.tableCell! : nodes.tableHeader!).create(
             null,
             text.split("\n").map((line) => nodes.paragraph!.create(null, line ? richSchema.text(line) : null)),
           ),
@@ -90,6 +91,15 @@ export function tsvTable(rows: string[][]): EditorNode {
       ),
     ),
   );
+}
+
+/** Pastes tab-separated rows. Linear's `tsvTablePaste` hands its table to the editor's own paste (`pasteHTML`), so in a
+ * table prosemirror-tables fills the cells from the caret, adding rows and columns as needed, instead of splitting the
+ * table. There every pasted row is a body row: a header row would land mid-table. */
+export function pasteRows(view: Pick<EditorView, "state" | "dispatch">, rows: string[][], event: ClipboardEvent) {
+  const inTable = isInTable(view.state),
+    slice = new Slice(Fragment.from(tsvTable(rows, !inTable)), 0, 0);
+  if (!(inTable && pasteCells(view as EditorView, event, slice))) view.dispatch(view.state.tr.replaceSelection(slice));
 }
 
 /** Linear's `largeClipboardTextUpload` defaults: more than 100 lines or more than 4096 bytes becomes a file. */
@@ -426,7 +436,7 @@ export function pastePlugin(options: {
         }
         const rows = !/<(td|th|pre|code)\b/i.test(html) ? tsvRows(text) : null;
         if (rows) {
-          pasted(view, view.state.tr.replaceSelection(new Slice(Fragment.from(tsvTable(rows)), 0, 0)));
+          pasteRows({ state: view.state, dispatch: (tr) => pasted(view, tr) }, rows, event);
           return true;
         }
         if (!html && text) {
