@@ -36,6 +36,7 @@ import { Shortcut as KeyboardShortcut, type Keys } from "@/client/components/key
 import { Text } from "@/client/components/text";
 import { shortcutMatches, shortcutSections } from "./shortcut-panel";
 import { goToPullRequests } from "@/client/features/issue/card-badges";
+import { followPeek, isPeekOpen, togglePeek } from "@/client/features/views/view-peek-state";
 import {
   clearFilters as clearInboxFilters,
   deleteAll,
@@ -127,7 +128,9 @@ function move(direction: number, horizontal = false) {
       if (next) break;
     }
   } else next = cols[col]?.[row + direction];
-  if (next) navigate({ selected: next.key });
+  if (!next) return;
+  navigate({ selected: next.key });
+  followPeek(next.key);
 }
 /** The status Move left/right takes the issue to on a status-grouped board: the first status of the nearest group the board
  *  shows (Linear's `Pvr`/`Fvr`, board layout only: `kvr`). */
@@ -753,11 +756,11 @@ export const shortcuts: Shortcut[] = [
     name: "Peek into item",
     group: "List / Board",
     hotkey: "Space",
-    issue: true,
-    // A focused list row, as Linear's list keys: nothing to peek on a full-page issue (R3-palette-shortcuts-D1).
-    when: boardVisible,
-    // The card under the pointer, as S/A/P/L act on (`target()`); Linear's list focus follows the pointer.
-    run: issueAction((issue) => navigate({ selected: issue.key, panel: true, view: "side" })),
+    // Linear's view peek (view-peek-state.ts) over the list or board, not beside an open issue (R3-palette-shortcuts-D1). It peeks
+    // the card under the pointer, as S/A/P/L act on (`target()`), since Linear's list focus follows the pointer; an open peek
+    // closes on the next press wherever the pointer is.
+    when: (s, issue) => listVisible(s) && !s.panel && (!!issue || isPeekOpen()),
+    run: () => togglePeek(target()?.key),
   },
   {
     id: "open",

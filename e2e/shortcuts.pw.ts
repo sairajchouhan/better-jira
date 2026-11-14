@@ -107,10 +107,13 @@ test("a selected card: issue commands, copy chords, layout and focus scopes", as
     await p.key("Escape");
     await p.eval("document.activeElement?.blur()");
     await p.key("j");
+    // B9: Space is Linear's view peek on the focused card: no navigation, and Escape closes the peek before the selection.
+    await p.page.mouse.move(1, 1);
     await p.key(" ");
-    await p.waitFor(`!!document.querySelector('#summary')`);
-    expect(await p.eval(`${shownView}`)).toBe("side");
+    await p.waitFor(`!!document.querySelector('[data-view-peek]')`);
+    expect(await p.eval(`${shownView}`)).toBe(null);
     await p.key("Escape");
+    await p.waitFor(`!document.querySelector('[data-view-peek]')`);
     await p.eval("document.activeElement?.blur()");
     await p.key("Enter");
     await p.waitFor(`${shownView}==='page'`);
@@ -263,5 +266,72 @@ test("the description editor's keys: formatting, Escape and Mod+Enter", async ({
     await p.type("Keyboard-only comment");
     await p.key("Enter", "meta");
     await p.waitFor(`document.querySelector('ol')?.textContent.includes('Keyboard-only comment')`);
+  });
+});
+
+/** Linear's view peek (useIsKeyPressedRef.BJlOaMrk.js `K`/`q`/`Y`; content startup-root `jwn`, 415px): Space over a card. */
+test("B9: Space opens Linear's view peek over the board, which follows focus and closes on a second press, a held release or Escape", async ({ open }) => {
+  const p = await open();
+  const peek = `document.querySelector('[data-view-peek]')`;
+  const peeked = `${peek}?.getAttribute('aria-label')`;
+  await p.waitFor(`!!document.querySelector('[data-key="TEST-1"]')`);
+  await test.step("a tap over a card opens the peek on it, 88px from the top and 24px from the right; the issue doesn't open", async () => {
+    await p.hover('[data-key="TEST-1"]');
+    await p.key(" ");
+    await p.waitFor(`${peeked}==="Peek TEST-1"`);
+    await sleep(300); // past its 200ms entrance and the 250ms hold threshold
+    expect(await p.eval(`${peek}!=null`)).toBe(true);
+    expect(await p.eval(`${shownView}`)).toBe(null);
+    const box = await p.eval<{ top: number; right: number; width: number; position: string; z: string; radius: string; events: string }>(
+      `(()=>{const r=${peek}.getBoundingClientRect(),c=${peek}.firstElementChild,cs=getComputedStyle(${peek});return {top:Math.round(r.top),right:Math.round(innerWidth-r.right),width:Math.round(c.getBoundingClientRect().width),position:cs.position,z:cs.zIndex,radius:cs.borderTopLeftRadius,events:getComputedStyle(c).pointerEvents}})()`,
+    );
+    expect(box).toEqual({ top: 88, right: 24, width: 415, position: "fixed", z: "650", radius: "12px", events: "none" });
+    expect(await p.eval(`${peek}.textContent.includes("TEST-1")`)).toBe(true);
+  });
+  await test.step("leaving the card keeps the peek; moving over another card shows that one", async () => {
+    await p.page.mouse.move(5, 300);
+    await sleep(100);
+    expect(await p.eval(peeked)).toBe("Peek TEST-1");
+    await p.hover('[data-key="TEST-2"]');
+    await p.waitFor(`${peeked}==="Peek TEST-2"`);
+  });
+  await test.step("j/k move focus and the peek follows", async () => {
+    await p.page.mouse.move(5, 300);
+    await p.key("j");
+    await p.key("j");
+    await p.waitFor(`!!machines.ui.getSnapshot().context.selected&&${peeked}==="Peek "+machines.ui.getSnapshot().context.selected`);
+    expect(await p.eval(`${shownView}`)).toBe(null);
+  });
+  await test.step("the next press closes it, wherever the pointer is", async () => {
+    await p.key(" ");
+    await p.waitFor(`!${peek}`);
+  });
+  await test.step("a press held past 250ms closes the peek on release", async () => {
+    await p.hover('[data-key="TEST-1"]');
+    await p.page.keyboard.down(" ");
+    await p.waitFor(`!!${peek}`);
+    await sleep(400);
+    await p.page.keyboard.up(" ");
+    await p.waitFor(`!${peek}`);
+  });
+  await test.step("Escape closes it and leaves the selection; ⌘K closes it too", async () => {
+    const selected = await p.eval(`machines.ui.getSnapshot().context.selected`);
+    await p.key(" ");
+    await p.waitFor(`!!${peek}`);
+    await p.key("Escape");
+    await p.waitFor(`!${peek}`);
+    expect(await p.eval(`machines.ui.getSnapshot().context.selected`)).toBe(selected);
+    await p.key(" ");
+    await p.waitFor(`!!${peek}`);
+    await p.key("k", "meta");
+    await p.waitFor(`!${peek}&&!!document.querySelector('[cmdk-input]')`);
+    await p.key("Escape");
+  });
+  await test.step("clicking a card opens it and closes the peek", async () => {
+    await p.hover('[data-key="TEST-1"]');
+    await p.key(" ");
+    await p.waitFor(`!!${peek}`);
+    await p.click('[data-key="TEST-2"]');
+    await p.waitFor(`!${peek}&&${shownView}==="side"`);
   });
 });

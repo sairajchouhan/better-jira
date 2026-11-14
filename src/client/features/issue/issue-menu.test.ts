@@ -188,7 +188,8 @@ describe("Move (R3-board-D1, D2)", () => {
       expect([get().issues.get("M-1")!.status, get().issues.get("M-1")!.rank]).toEqual(["todo", "a"]);
       // ⌘K lists only what applies, so none of the board's moves show either.
       const listed = shortcuts.filter((e) => listOnly.includes(e.id) && shortcutApplies(e)).map((e) => e.id);
-      expect(listed).toEqual(at.inbox ? ["peek", "open"] : []);
+      // B9: Peek into item is the view peek over the issue list or board, so the Inbox (its own split list) has none.
+      expect(listed).toEqual(at.inbox ? ["open"] : []);
     }
   });
 });

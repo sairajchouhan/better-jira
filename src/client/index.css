@@ -2485,6 +2485,10 @@ li[data-done="true"] > .todo-content {
 .side-panel {
   animation: side-panel-in 200ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
+/* Linear's view peek enters the same way: opacity 0 and 20px to the right (useIsKeyPressedRef `K`'s transition). */
+.view-peek {
+  animation: side-panel-in 200ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
 @keyframes side-panel-in {
   from {
     opacity: 0;
@@ -2492,7 +2496,8 @@ li[data-done="true"] > .todo-content {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .side-panel {
+  .side-panel,
+  .view-peek {
     animation: none;
   }
 }

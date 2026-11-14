@@ -22,6 +22,7 @@ import { ShortcutHelp, useLinearHotkeys } from "@/client/features/navigation/sho
 import { useRecordVisits } from "@/client/features/navigation/recents";
 import { RouteTitle } from "@/client/features/navigation/route-title-updater";
 import { BoardView } from "@/client/routes/board-view";
+import { ViewPeek } from "@/client/features/views/view-peek";
 import {
   Sidebar,
   DeleteConfirm,
@@ -119,6 +120,7 @@ function Shell({ children }: { children: ReactNode }) {
       <StorageNotice />
       <StatusBar />
       <ToastViewport />
+      <ViewPeek />
       <Suspense>
         <Devtools position="bottom-right" />
       </Suspense>

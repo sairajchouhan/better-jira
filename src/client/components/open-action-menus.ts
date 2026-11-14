@@ -8,9 +8,17 @@ const open: (() => void)[] = [];
 
 export const actionMenuOpen = () => open.length > 0;
 
+const openers = new Set<() => void>();
+/** Calls `listener` whenever an action menu opens: Linear's view peek closes on the action manager's `onOpen`. */
+export function onActionMenuOpen(listener: () => void) {
+  openers.add(listener);
+  return () => void openers.delete(listener);
+}
+
 /** Counts `close` as an open action menu until the returned function runs. */
 export function registerActionMenu(close: () => void) {
   open.push(close);
+  for (const listener of openers) listener();
   return () => {
     const at = open.lastIndexOf(close);
     if (at >= 0) open.splice(at, 1);

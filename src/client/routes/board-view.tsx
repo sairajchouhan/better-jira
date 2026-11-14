@@ -32,6 +32,7 @@ import { ME, get, set, timed, useStore, statusOf } from "@/client/state/store";
 import { actions, beginCreate } from "@/client/state/issue-actions";
 import { loadFull } from "@/client/state/server-data";
 import { navigate, preloadOnHover, ui } from "@/client/features/navigation/app-navigation";
+import { followPeek, togglePeek } from "@/client/features/views/view-peek-state";
 import {
   myIssuesBoard,
   boardColumns,
@@ -652,16 +653,22 @@ function IssueTarget({
       draggable
       onDragStart={(e) => e.dataTransfer.setData("text/plain", issue.key)}
       onPointerEnter={() => preloadOnHover({ selected: issue.key, panel: true })}
+      // Linear's focus follows the pointer as it moves (`onMouseMove`, not a card sliding under a still pointer), and an open
+      // peek shows the focused item.
+      onPointerMove={() => followPeek(issue.key)}
+      // Leaving a card never closes the peek: Linear skips its mouse-leave deactivate while a peek is mounted.
       onPointerLeave={() => preloadOnHover(null)}
       onKeyDown={(e) => {
-        if (own(e) && (e.key === "Enter" || e.key === " ")) {
+        if (!own(e) || e.repeat) return;
+        if (e.key === "Enter") {
           e.preventDefault();
           e.stopPropagation();
-          navigate({
-            selected: issue.key,
-            panel: true,
-            view: e.key === "Enter" ? "page" : "side",
-          });
+          navigate({ selected: issue.key, panel: true, view: "page" });
+        } else if (e.key === " ") {
+          // Space on a focused card is Peek into item on it, as the global Space is on the hovered one.
+          e.preventDefault();
+          e.stopPropagation();
+          togglePeek(issue.key);
         }
       }}
       onClick={(e) =>

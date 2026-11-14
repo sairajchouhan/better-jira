@@ -75,7 +75,7 @@ test("R3-create-D11: ⌘K names the full-screen create as Linear's CREATE_FULL_V
   expect(shortcuts.find((s) => s.id === "new-full")?.name).toBe("Create issue in fullscreen…");
 });
 
-test("R3-issue-fields-D5: Space peeks the card under the pointer, the one S/A/P/L act on, not the selection", async () => {
+test("R3-issue-fields-D5, B9: Space peeks the card under the pointer, the one S/A/P/L act on, without opening or selecting it", async () => {
   const { get, set } = await import("@/client/state/store");
   const { handle } = await import("./commands");
   const { navigate, ui } = await import("./app-navigation");
@@ -84,13 +84,21 @@ test("R3-issue-fields-D5: Space peeks the card under the pointer, the one S/A/P/
   set({ issues: new Map(["PK-1", "PK-2"].map((key) => [key, card(key)])) });
   ui.send({ type: "overlay.close" });
   navigate({ selected: "PK-1", panel: false, document: null, inbox: false, mine: false });
+  const { closePeek, isPeekOpen } = await import("@/client/features/views/view-peek-state");
+  const peeked = await import("@/client/features/views/view-peek-state");
   const stop = handle("hovered-sub-issue", () => "PK-2");
   try {
     runShortcut("peek");
+    // Linear's view peek floats over the view: no navigation, no side panel, the selection stays.
+    expect([get().selected, get().panel, isPeekOpen()]).toEqual(["PK-1", false, true]);
+    expect(peeked.peekKeyOf()).toBe("PK-2");
+    // The next press closes it.
+    runShortcut("peek");
+    expect(isPeekOpen()).toBe(false);
   } finally {
     stop();
+    closePeek();
   }
-  expect([get().selected, get().panel, get().view]).toEqual(["PK-2", true, "side"]);
 });
 
 
