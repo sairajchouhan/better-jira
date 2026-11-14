@@ -19,6 +19,7 @@ const all = [
   issue("Z-2", { parent: "Z-1", rank: "a" }),
   issue("Z-3", { type: "Sub-task", parent: "Z-2", rank: "a" }),
   issue("Z-4", { type: "Sub-task", parent: "Z-2", rank: "b" }),
+  issue("Z-5", { parent: "Z-3", rank: "a" }),
 ];
 const open = (key: string, trail: ReturnType<typeof get>["trail"]) => {
   commit({ issues: new Map(all.map((i) => [i.key, i])), boards: [board], board: 7, selected: key, panel: true, view: "page", trail });
@@ -32,14 +33,20 @@ const open = (key: string, trail: ReturnType<typeof get>["trail"]) => {
 const crumbs = (html: string) =>
   [...html.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/g)].map(([, li]) => li!.replace(/<span aria-hidden="true"[^>]*>›<\/span>/g, "").replace(/<[^>]+>/g, "").trim());
 
+/** The `<a>` tag that links to `key`'s page. */
+const linkTo = (html: string, key: string) => html.match(new RegExp(`<a[^>]*href="/issue/${key}"[^>]*>`))?.[0] ?? "";
+
 test("an issue page's breadcrumb is React Aria's list, the epic in Linear's project slot, the parent by key, the issue current", () => {
   const html = open("Z-3", { path: ["Z-1", "Z-2"] });
   expect(html).toContain('<nav aria-label="Breadcrumb"');
   expect(html).toMatch(/<ol[^>]*>/);
-  expect(crumbs(html)).toEqual(["Sync engine", "Z-2", "Z-3Z-3 title"]);
-  // Ancestors are links into the app, with their names as tooltips; only the issue is the current page, and it opens in Jira.
-  expect(html).toMatch(/<a[^>]*aria-label="Sync engine"[^>]*href="\/issue\/Z-1"|<a[^>]*href="\/issue\/Z-1"[^>]*aria-label="Sync engine"/);
-  expect(html).toMatch(/<a[^>]*title="Z-2 title"/);
+  expect(crumbs(html)).toEqual(["Z-1", "Z-2", "Z-3Z-3 title"]);
+  // Ancestors are links into the app, by key with their titles as tooltips; only the issue is the current page, and it opens in Jira.
+  expect(linkTo(html, "Z-1")).toContain('title="Sync engine"');
+  expect(linkTo(html, "Z-2")).toContain('title="Z-2 title"');
+  // The epic is a parent's crumb with the epic's icon before the key; the parent has no icon.
+  expect(html).toMatch(/href="\/issue\/Z-1"[^>]*>(?:(?!<\/a>)[\s\S])*<svg(?:(?!<\/a>)[\s\S])*<span class="ui-entity-id ">Z-1<\/span><\/a>/);
+  expect(html).toMatch(/href="\/issue\/Z-2"[^>]*><span class="ui-entity-id ">Z-2<\/span><\/a>/);
   expect(html.match(/aria-current="page"/g)).toHaveLength(1);
   expect(html).toMatch(/<a[^>]*aria-current="page"[^>]*target="_blank"|<a[^>]*target="_blank"[^>]*aria-current="page"/);
   expect(html).toContain("data-crumb-issue");
@@ -48,9 +55,16 @@ test("an issue page's breadcrumb is React Aria's list, the epic in Linear's proj
 });
 
 test("reached directly, the page shows the epic then the issue; over a list, the list's crumbs", () => {
-  expect(crumbs(open("Z-3", null))).toEqual(["Sync engine", "Z-3Z-3 title"]);
+  expect(crumbs(open("Z-3", null))).toEqual(["Z-1", "Z-3Z-3 title"]);
   // The space crumb reads its initial (its icon), then its name.
   expect(crumbs(open("Z-2", "list"))).toEqual(["SSpace", "Issues", "Z-2Z-2 title"]);
+});
+
+test("on a long trail the epic is its icon alone, named and titled as before", () => {
+  const html = open("Z-5", { path: ["Z-2", "Z-3"] });
+  expect(crumbs(html)).toEqual(["", "Z-2", "Z-3", "Z-5Z-5 title"]);
+  expect(linkTo(html, "Z-1")).toContain('aria-label="Z-1"');
+  expect(linkTo(html, "Z-1")).toContain('title="Sync engine"');
 });
 
 test("a board's breadcrumb: the space, then Issues as the current page that still links (it clears the board's search)", () => {

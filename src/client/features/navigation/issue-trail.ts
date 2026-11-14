@@ -40,20 +40,22 @@ export function nextTrail(prev: PageScreen, next: Omit<PageScreen, "trail">, ste
   return { path: [...kept, step.parent] };
 }
 
-/** The epic in Linear's project slot: its key and name, and the issue when the mirror holds it (then the crumb opens it). */
-export type EpicCrumb = { key: string; name: string; issue?: Issue };
-/** A parent issue's crumb (Linear's `Upi`: its identifier, no icon, its title as the tooltip) and the trail its page opens with. */
-export type ParentCrumb = { issue: Issue; trail: Trail | null };
+/**
+ * An ancestor's crumb, a parent issue's or the epic's (Linear's `Upi`: its identifier, its title as the tooltip): the key and title,
+ * the issue when the mirror holds it (then the crumb opens it; a parent's always is), and the trail its page opens with. The epic
+ * shows its key too, not its name as Linear's project does (the user's choice, .raj/done.md), and opens afresh.
+ */
+export type AncestorCrumb = { key: string; title: string; issue?: Issue; trail: Trail | null };
 export type IssueCrumbs =
   /** Over the list it opened from: the list's own crumbs, and its counter. */
   | { form: "list" }
   /** Linear's `Hpi`: the epic, the parents it was opened through, then the issue. `siblings` are what the counter and ↑/↓ step
    *  through: the last parent's sub-issues, or none when the page was reached directly. `compactEpic` shows the epic as its icon
    *  alone, as `Hpi` does once the stack holds more than two issues (`iconOnly: r.length > 2`). */
-  | { form: "hierarchy"; epic?: EpicCrumb; parents: readonly ParentCrumb[]; siblings?: readonly Issue[]; compactEpic: boolean };
+  | { form: "hierarchy"; epic?: AncestorCrumb; parents: readonly AncestorCrumb[]; siblings?: readonly Issue[]; compactEpic: boolean };
 
-const epicCrumb = (key: string | undefined, lookup: IssueLookup): EpicCrumb | undefined =>
-  key ? { key, name: epicName(key, lookup), issue: lookup(key) } : undefined;
+const epicCrumb = (key: string | undefined, lookup: IssueLookup): AncestorCrumb | undefined =>
+  key ? { key, title: epicName(key, lookup), issue: lookup(key), trail: null } : undefined;
 
 /** Whether `path` still leads to `key` through Sub-issues sections: each issue listed under the one before it (`listedUnder`). */
 function leadsTo(path: readonly string[], key: string, lookup: IssueLookup): boolean {
@@ -66,7 +68,7 @@ function leadsTo(path: readonly string[], key: string, lookup: IssueLookup): boo
 }
 
 /** Linear's `Dpi` for the parents: all of them up to two, else the first and the last. */
-const shownParents = (parents: ParentCrumb[]) => (parents.length <= 2 ? parents : [parents[0]!, parents.at(-1)!]);
+const shownParents = (parents: AncestorCrumb[]) => (parents.length <= 2 ? parents : [parents[0]!, parents.at(-1)!]);
 
 /**
  * The open issue page's breadcrumb from its trail. Over a list: the list's crumbs. From Sub-issues sections: the epic of the first
@@ -87,9 +89,9 @@ export function issueCrumbs(
     const top = isEpic(lookup(first)!);
     const keys = top ? rest : trail.path;
     // A parent's crumb opens its page with the trail that led to it, as Linear's crumb links restore their own entry's stack.
-    const parents = keys.map((key): ParentCrumb => {
-      const before = trail.path.slice(0, trail.path.indexOf(key));
-      return { issue: lookup(key)!, trail: before.length ? { path: before } : null };
+    const parents = keys.map((key): AncestorCrumb => {
+      const before = trail.path.slice(0, trail.path.indexOf(key)), parent = lookup(key)!;
+      return { key, title: parent.summary, issue: parent, trail: before.length ? { path: before } : null };
     });
     return {
       form: "hierarchy",

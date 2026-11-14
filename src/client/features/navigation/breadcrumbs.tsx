@@ -1,7 +1,7 @@
 /**
  * The header breadcrumb, on React Aria's Breadcrumbs (an `ol` of `li`, the last one current): a board or view's
  * `Space › Issues|View`, and an issue page's crumbs from how it was reached (issue-trail.ts `issueCrumbs`): over a list, the
- * list's crumbs then the issue; otherwise Linear's issue form (startup-root `Hpi`), `Epic › Parent… › KEY Title`.
+ * list's crumbs then the issue; otherwise Linear's issue form (startup-root `Hpi`), `EPIC-KEY › Parent… › KEY Title`.
  */
 import { useMemo, type ReactNode } from "react";
 import { Breadcrumb, Breadcrumbs, Link } from "react-aria-components";
@@ -23,7 +23,7 @@ import { linkHref, ui } from "./app-navigation";
 import type { Destination } from "./navigation";
 import { hotkeyOf, runShortcut } from "./shortcuts";
 import { boardCopyURL } from "./sidebar-menus";
-import { issueCrumbs, pageIssue, type EpicCrumb, type IssueCrumbs, type ParentCrumb } from "./issue-trail";
+import { issueCrumbs, pageIssue, type AncestorCrumb as AncestorCrumbModel, type IssueCrumbs } from "./issue-trail";
 
 // Linear's breadcrumb (linear.app/…/view/…, 2026-11-11 computed styles): 24px links padded 0 5px 0 4px with matching
 // negative margins, 16px icon + 6px, 13px/500 text at line-height normal, "›" with 8px sides lifted 2px; hover bg
@@ -146,42 +146,51 @@ function ViewCrumb({ view }: { view: SavedView }) {
     </Crumb>
   );
 }
-/** Linear's project crumb in `Hpi` (icon `DD`, name `X7`, the icon alone once the trail is long): our epic, opening its page afresh;
- *  right-click for its copy rows. Text alone when the epic isn't in the mirror. */
-function EpicCrumbItem({ epic, compact }: { epic: EpicCrumb; compact: boolean }) {
-  const icon = <span aria-hidden="true" className={compact ? "grid w-4 place-items-center" : CRUMB_ICON}><Icon name="layers" /></span>;
-  const content = (
-    <>
-      {icon}
-      {!compact && <span className="truncate">{epic.name}</span>}
-    </>
-  );
+/**
+ * An ancestor's crumb in the trail, Linear's issue crumb (`n9` → `Upi`): the key, the title as its tooltip; it opens that issue's
+ * page with the trail that led to it, and right-click gives its copy rows. Text alone when the mirror doesn't hold the issue (an
+ * epic outside it). The variants below say what it draws.
+ */
+function AncestorCrumb({ id, crumb, className = "", label, children }: { id: string; crumb: AncestorCrumbModel; className?: string; label?: string; children: ReactNode }) {
+  const { issue } = crumb;
   return (
-    <Crumb id="epic" className={compact ? "shrink-0" : ""}>
-      {epic.issue ? (
-        <ContextMenu label="Issue options" entries={() => copyEntries(epic.issue!)}>
-          <CrumbLink to={{ board: epic.issue.board, selected: epic.key, panel: true, view: "page", trail: null }} aria-label={epic.name} title={epic.name} className={CRUMB}>
-            {content}
+    <Crumb id={id} className={`shrink-0 ${className}`}>
+      {issue ? (
+        <ContextMenu label="Issue options" entries={() => copyEntries(issue)}>
+          <CrumbLink to={{ board: issue.board, selected: crumb.key, panel: true, view: "page", trail: crumb.trail }} aria-label={label} title={crumb.title} className={CRUMB}>
+            {children}
           </CrumbLink>
         </ContextMenu>
       ) : (
-        <span aria-label={epic.name} title={epic.name} className="flex h-6 min-w-0 items-center">{content}</span>
+        <span aria-label={label} title={crumb.title} className="flex h-6 min-w-0 items-center">{children}</span>
       )}
     </Crumb>
   );
 }
-/** Linear's issue crumb in the trail (`n9` → `Upi`): the identifier alone, the title as its tooltip; it opens that issue's page with
- *  the trail that led to it. Right-click for its copy rows. Below 640px only the last parent shows, as Linear's `Dpi` on a tablet. */
-function ParentCrumbItem({ parent, last }: { parent: ParentCrumb; last: boolean }) {
-  const { issue } = parent;
+/** A parent issue: its identifier alone. Below 640px only the last parent shows, as Linear's `Dpi` on a tablet. */
+function ParentCrumbItem({ parent, last }: { parent: AncestorCrumbModel; last: boolean }) {
   return (
-    <Crumb id={`parent-${issue.key}`} className={`shrink-0 ${last ? "" : "max-sm:hidden"}`}>
-      <ContextMenu label="Issue options" entries={() => copyEntries(issue)}>
-        <CrumbLink to={{ board: issue.board, selected: issue.key, panel: true, view: "page", trail: parent.trail }} title={issue.summary} className={CRUMB}>
-          <EntityIdentifier>{issue.key}</EntityIdentifier>
-        </CrumbLink>
-      </ContextMenu>
-    </Crumb>
+    <AncestorCrumb id={`parent-${parent.key}`} crumb={parent} className={last ? "" : "max-sm:hidden"}>
+      <EntityIdentifier>{parent.key}</EntityIdentifier>
+    </AncestorCrumb>
+  );
+}
+/** The epic, in Linear's project slot: the layers icon (Linear's project icon `DD`), then its key like a parent's, not its name
+ *  (the user's choice over Linear, .raj/done.md). */
+function EpicCrumbItem({ epic }: { epic: AncestorCrumbModel }) {
+  return (
+    <AncestorCrumb id="epic" crumb={epic}>
+      <span aria-hidden="true" className={CRUMB_ICON}><Icon name="layers" /></span>
+      <EntityIdentifier>{epic.key}</EntityIdentifier>
+    </AncestorCrumb>
+  );
+}
+/** The epic once the trail is long: its icon alone (`Hpi`'s `iconOnly: r.length > 2`), named by its key. */
+function EpicIconCrumbItem({ epic }: { epic: AncestorCrumbModel }) {
+  return (
+    <AncestorCrumb id="epic" crumb={epic} label={epic.key}>
+      <span aria-hidden="true" className="grid w-4 place-items-center"><Icon name="layers" /></span>
+    </AncestorCrumb>
   );
 }
 /** The open issue: its type, key and title, linking to Jira. The key never truncates (Opus review 4: at 390px it vanished): the
@@ -246,13 +255,13 @@ export function useIssueCrumbs(issue: Issue | undefined): IssueCrumbs | null {
   );
 }
 
-/** An issue page's breadcrumb: over a list, `Space › Issues|View › KEY Title`; else `Epic › Parent… › KEY Title`. */
+/** An issue page's breadcrumb: over a list, `Space › Issues|View › KEY Title`; else `EPIC-KEY › Parent… › KEY Title`. */
 export function IssueBreadcrumbs({ issue }: { issue: Issue }) {
   const crumbs = useIssueCrumbs(issue) ?? { form: "list" };
   return crumbs.form === "list" ? <ListIssueBreadcrumbs issue={issue} /> : (
     <CrumbBar>
-      {crumbs.epic && <EpicCrumbItem epic={crumbs.epic} compact={crumbs.compactEpic} />}
-      {crumbs.parents.map((parent, i) => <ParentCrumbItem key={parent.issue.key} parent={parent} last={i === crumbs.parents.length - 1} />)}
+      {crumbs.epic && (crumbs.compactEpic ? <EpicIconCrumbItem epic={crumbs.epic} /> : <EpicCrumbItem epic={crumbs.epic} />)}
+      {crumbs.parents.map((parent, i) => <ParentCrumbItem key={parent.key} parent={parent} last={i === crumbs.parents.length - 1} />)}
       <IssueCrumb issue={issue} />
     </CrumbBar>
   );

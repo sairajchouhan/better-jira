@@ -95,7 +95,7 @@ test("breadcrumbs: board crumb by keyboard, exiting panels and search, and the i
 });
 
 /**
- * Linear's issue breadcrumb (startup-root `Hpi`): the epic in the project slot, then the issues the page was opened through, then
+ * Linear's issue breadcrumb (startup-root `Hpi`): the epic in the project slot (by key, the user's choice over Linear's name), then the issues the page was opened through, then
  * the issue; the counter steps what it was opened from. Fixture with `epics` and `subtask`: TEST-7 "Fixture epic" lists TEST-2 and
  * TEST-3; TEST-6 is TEST-5's Subtask, and TEST-5 is in no epic.
  */
@@ -105,33 +105,36 @@ test("issue breadcrumb follows how the page was reached: a link, an epic's Sub-i
   const position = `document.querySelector('[aria-label="Issue position"]')?.textContent ?? null`;
   const page = await open("?issue=TEST-2&view=page");
 
-  await test.step("a direct link shows the epic then the issue, and no counter", async () => {
+  const epic = 'nav[aria-label="Breadcrumb"] a[href="/issue/TEST-7"]';
+  await test.step("a direct link shows the epic by key (its icon, its title as the tooltip) then the issue, and no counter", async () => {
     await page.waitFor(`!!document.querySelector('[aria-label="Breadcrumb"] [data-crumb-issue]')`);
-    expect(await page.eval(crumbs)).toEqual(["Fixture epic", "TEST-2"]);
+    expect(await page.eval(crumbs)).toEqual(["TEST-7", "TEST-2"]);
     expect(await page.eval(`!!document.querySelector('nav[aria-label="Breadcrumb"] li:first-child svg')`)).toBe(true);
+    expect(await page.eval(`document.querySelector('${epic}').textContent`)).toBe("TEST-7");
+    expect(await page.eval(`document.querySelector('${epic}').title`)).toBe("Fixture epic");
     expect(await page.eval(position)).toBeNull();
   });
 
   await test.step("the epic crumb opens the epic; a row of its Sub-issues opens with the counter through the epic's issues", async () => {
-    await page.click('nav[aria-label="Breadcrumb"] a[aria-label="Fixture epic"]');
+    await page.click(epic);
     await page.waitFor(`location.pathname==='/issue/TEST-7'`);
     await page.waitFor(`!!document.querySelector('[data-sub-issues="TEST-7"] [data-sub-issue="TEST-3"] a')`);
     await page.click('[data-sub-issues="TEST-7"] [data-sub-issue="TEST-3"] a');
     await page.waitFor(`location.pathname==='/issue/TEST-3'`);
-    expect(await page.eval(crumbs)).toEqual(["Fixture epic", "TEST-3"]);
+    expect(await page.eval(crumbs)).toEqual(["TEST-7", "TEST-3"]);
     expect(await page.eval(position)).toMatch(/^\d \/ 2$/);
     // ↓/↑ step the epic's issues and keep the breadcrumb.
     const at = await page.eval<string>(position);
     await page.key(at.startsWith("1") ? "j" : "k");
     await page.waitFor(`location.pathname==='/issue/TEST-2'`);
-    expect(await page.eval(crumbs)).toEqual(["Fixture epic", "TEST-2"]);
+    expect(await page.eval(crumbs)).toEqual(["TEST-7", "TEST-2"]);
     expect(await page.eval(position)).toMatch(/^\d \/ 2$/);
   });
 
   await test.step("a reload falls back to the direct link's breadcrumb", async () => {
     await page.reload();
     await page.waitFor(`!!document.querySelector('[aria-label="Breadcrumb"] [data-crumb-issue]')`);
-    expect(await page.eval(crumbs)).toEqual(["Fixture epic", "TEST-2"]);
+    expect(await page.eval(crumbs)).toEqual(["TEST-7", "TEST-2"]);
     expect(await page.eval(position)).toBeNull();
   });
 

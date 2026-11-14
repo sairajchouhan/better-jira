@@ -39,11 +39,11 @@ const all = [
 ];
 const issues = new Map(all.map((i) => [i.key, i]));
 const crumbs = (key: string, trail: Trail | null) => issueCrumbs(issues.get(key)!, trail, issues, boards);
-/** The chain as text: `Epic › KEY › KEY`, the epic by name (`[icon]` when compact). */
+/** The chain as text: `EPIC › KEY › KEY`, the epic by key like the parents (`[icon]` when compact). */
 const chain = (c: IssueCrumbs) =>
   c.form === "list"
     ? "list"
-    : [c.epic && (c.compactEpic ? `[${c.epic.name}]` : c.epic.name), ...c.parents.map((p) => p.issue.key)].filter(Boolean).join(" › ");
+    : [c.epic && (c.compactEpic ? `[${c.epic.key}]` : c.epic.key), ...c.parents.map((p) => p.key)].filter(Boolean).join(" › ");
 /** The counter `n / total`, or none. */
 const counter = (key: string, c: IssueCrumbs | null, list: Issue[] = []) => {
   const p = listPosition(stepIssues(c, list), key);
@@ -51,10 +51,11 @@ const counter = (key: string, c: IssueCrumbs | null, list: Issue[] = []) => {
 };
 
 test("form 1: a direct link or reload shows the issue's own epic and no counter (Linear's empty stack)", () => {
-  expect(chain(crumbs("Q-3", null))).toBe("Sync engine");
-  expect(crumbs("Q-3", null)).toMatchObject({ epic: { key: "Q-1", issue: { key: "Q-1" } }, parents: [] });
+  expect(chain(crumbs("Q-3", null))).toBe("Q-1");
+  // The epic crumb is an ancestor crumb: its key, its title for the tooltip, opening its page afresh.
+  expect(crumbs("Q-3", null)).toMatchObject({ epic: { key: "Q-1", title: "Sync engine", issue: { key: "Q-1" }, trail: null }, parents: [] });
   // A sub-task's epic is its parent's (Jira's rule, epicOf), and still no parent crumb.
-  expect(chain(crumbs("Q-6", null))).toBe("Sync engine");
+  expect(chain(crumbs("Q-6", null))).toBe("Q-1");
   // No epic: only the issue; the epic itself has no crumb above it.
   expect(chain(crumbs("Q-8", null))).toBe("");
   expect(chain(crumbs("Q-1", null))).toBe("");
@@ -63,19 +64,19 @@ test("form 1: a direct link or reload shows the issue's own epic and no counter 
 
 test("form 2: opened from the epic's Sub-issues list, `Epic › KEY` and the counter steps the epic's issues", () => {
   const c = crumbs("Q-3", { path: ["Q-1"] });
-  expect(chain(c)).toBe("Sync engine");
+  expect(chain(c)).toBe("Q-1");
   expect(c.form === "hierarchy" && c.siblings?.map((i) => i.key)).toEqual(["Q-2", "Q-3", "Q-4"]);
   expect(counter("Q-3", c)).toBe("2 / 3");
 });
 
 test("form 3: opened from a task's sub-issues, `Epic › Task › Sub-task` and the counter steps the task's sub-issues", () => {
   const fromTask = crumbs("Q-6", { path: ["Q-2"] });
-  expect(chain(fromTask)).toBe("Sync engine › Q-2");
-  expect(fromTask.form === "hierarchy" && fromTask.parents[0]!.trail).toBeNull();
+  expect(chain(fromTask)).toBe("Q-1 › Q-2");
+  expect(fromTask.form === "hierarchy" && fromTask.parents[0]).toMatchObject({ key: "Q-2", title: "Q-2 title", trail: null });
   expect(counter("Q-6", fromTask)).toBe("2 / 3");
   // Through the epic first: the task crumb reopens the task with the trail that led to it.
   const throughEpic = crumbs("Q-7", { path: ["Q-1", "Q-2"] });
-  expect(chain(throughEpic)).toBe("Sync engine › Q-2");
+  expect(chain(throughEpic)).toBe("Q-1 › Q-2");
   expect(throughEpic.form === "hierarchy" && throughEpic.parents[0]!.trail).toEqual({ path: ["Q-1"] });
   expect(counter("Q-7", throughEpic)).toBe("3 / 3");
   // A task in no epic shows no epic crumb.
@@ -95,7 +96,7 @@ test("a trail that no longer leads to the issue falls back to form 1", () => {
   // Q-6 isn't under Q-3; a cycle; a parent the mirror lost.
   for (const path of [["Q-3"], ["Q-2", "Q-2"], ["Q-99"]]) {
     const c = crumbs("Q-6", { path });
-    expect(chain(c)).toBe("Sync engine");
+    expect(chain(c)).toBe("Q-1");
     expect(counter("Q-6", c)).toBeNull();
   }
 });
@@ -107,7 +108,7 @@ test("a long trail shows the epic as its icon and only the first and last parent
     ["Q-12", issue("Q-12", { parent: "Q-11" })],
   ]);
   const c = issueCrumbs(deep.get("Q-12")!, { path: ["Q-2", "Q-5", "Q-11"] }, deep, boards);
-  expect(chain(c)).toBe("[Sync engine] › Q-2 › Q-11");
+  expect(chain(c)).toBe("[Q-1] › Q-2 › Q-11");
 });
 
 const screen = (selected: string | null, trail: Trail | null = null, view = "page") => ({
