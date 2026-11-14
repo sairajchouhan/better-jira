@@ -15,7 +15,7 @@ test("BJ-75: favorites reorder by drag and leave from their context menu", async
   await p.eval(
     `(()=>{const n=document.querySelector('[data-favorite="TEST-2"]'),r=n.getBoundingClientRect();n.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:r.x+20,clientY:r.y+10}))})()`,
   );
-  await p.click('[role="dialog"][aria-label="Favorite options"] [cmdk-item][data-value="Remove from favorites"]');
+  await p.click('[role="dialog"][aria-label="Favorite options"] [cmdk-item][data-value="Remove favorite"]');
   await p.waitFor(`${order}.join()==="board:1,TEST-1"`);
   await p.reload();
   expect(await p.waitFor(`${order}.length===2&&${order}`)).toEqual(["board:1", "TEST-1"]);
