@@ -749,8 +749,11 @@ function MenuRoot({
         return;
       }
       case "Escape":
-        // Past Autocomplete (which would clear the search) to the surface, which closes every level.
-        event.preventDefault();
+        // Closes every level (Linear's closeParent), here: React Aria's search input stops the key before it can bubble to the
+        // surface's own Escape (and Autocomplete would only clear the search).
+        handled();
+        surface?.close();
+        return;
     }
   };
   const pointerMove = (event: PointerEvent<HTMLDivElement>) => {
