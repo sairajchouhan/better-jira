@@ -417,6 +417,10 @@ export function RichEditor(props: EditorEngineProps) {
     // only the new media goes to the editor now showing this content (reopened and maybe edited), or to onLateMedia. Unscoped editors keep reporting through onBlur.
     return () => {
       detached = true;
+      // Off the page at once; it keeps working detached until its uploads settle. A remount or StrictMode's replay builds
+      // the next view in this host now, and a lookup by id (focus-comment's #comment) must find only that one: focusing
+      // the retiring copy dropped focus to the body when it went (R3-comments-D3).
+      editor.dom.remove();
       editor.dom.removeEventListener("attach-files", input);
       editor.dom.removeEventListener("late-media", late);
       const left = editor.state.doc;

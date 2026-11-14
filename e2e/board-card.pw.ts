@@ -272,6 +272,9 @@ test("the link, pull request, comment and creator badges behave like Linear's", 
     await page.click(`[data-key="TEST-2"] [aria-label="1 comment"]`);
     await page.waitFor(`${shownIssue}==="TEST-2"`);
     await page.waitFor(`!!document.activeElement?.closest("#comment")`);
+    // Focus stays there: it never lands on a retiring editor's copy that then goes (R3-comments-D3).
+    await page.page.waitForTimeout(300);
+    expect(await page.eval(`[document.querySelectorAll("#comment").length, !!document.activeElement?.closest("#comment")]`)).toEqual([1, true]);
   });
 });
 
