@@ -23,7 +23,6 @@ const SKIPPED_BEFORE_BJ_233 = [
   "IssueResources",
   "MentionMenu",
   "PropertyFilter",
-  "ReactionPicker",
   "Relations",
   "RichEditor",
   "SubIssues",

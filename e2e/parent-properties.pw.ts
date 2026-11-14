@@ -243,7 +243,7 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
     // Linear's picker: 274×322, right edge on the button's, 3.6px under it; a 37px header ruled lch(17.04), a 262×28 input, 28px headings and nine 28px cells a row.
     expect(
       await page.eval(
-        `(()=>{${r}const d=document.querySelector('[role=dialog][aria-label="Choose reaction"]'),b=r(d),a=r(document.querySelector('[aria-label="Add reaction"]')),i=d.querySelector('input'),cells=[...d.querySelectorAll('button[aria-label^="React "]')];return [b.slice(2),Math.round((b[0]+b[2]-a[0]-a[2])*10)/10,Math.round((b[1]-a[1]-a[3])*10)/10,r(i.parentElement)[3],getComputedStyle(i.parentElement).borderBottom,r(i).slice(2),getComputedStyle(i).borderRadius,i.placeholder,[...d.querySelectorAll('.text-\\\\[12px\\\\]')].slice(0,2).map(n=>[n.textContent,r(n)[3]]),cells.slice(0,18).map(c=>c.textContent).join(''),r(cells[0]).slice(2),r(cells[1])[0]-r(cells[0])[0],r(cells[9])[0]-r(cells[0])[0],r(cells[9])[1]-r(cells[0])[1],cells[0].getAttribute('aria-label')]})()`,
+        `(()=>{${r}const d=document.querySelector('[role=dialog][aria-label="Choose reaction"]'),b=r(d),a=r(document.querySelector('[aria-label="Add reaction"]')),i=d.querySelector('input'),cells=[...d.querySelectorAll('[role=option][aria-label^="React "]')];return [b.slice(2),Math.round((b[0]+b[2]-a[0]-a[2])*10)/10,Math.round((b[1]-a[1]-a[3])*10)/10,r(i.parentElement)[3],getComputedStyle(i.parentElement).borderBottom,r(i).slice(2),getComputedStyle(i).borderRadius,i.placeholder,[...d.querySelectorAll('.text-\\\\[12px\\\\]')].slice(0,2).map(n=>[n.textContent,r(n)[3]]),cells.slice(0,18).map(c=>c.textContent).join(''),r(cells[0]).slice(2),r(cells[1])[0]-r(cells[0])[0],r(cells[9])[0]-r(cells[0])[0],r(cells[9])[1]-r(cells[0])[1],cells[0].getAttribute('aria-label')]})()`,
       ),
     ).toEqual([
       [274, 322],
@@ -265,15 +265,15 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
       28,
       "React 👍 +1",
     ]);
-    // Arrows move a highlight tinted with the emoji's own colour; focus stays in the search; Enter picks it.
+    // Arrows move a highlight tinted with the emoji's own colour; focus stays in the search, which names the highlighted cell; Enter picks it.
     await page.key("ArrowDown");
     await page.key("ArrowRight");
     await page.key("ArrowDown");
     expect(
       await page.eval(
-        `[[...document.querySelectorAll('[data-active]')].map(n=>[n.textContent,/^rgba\\(\\d+, \\d+, \\d+, 0\\.17\\d\\)$/.test(getComputedStyle(n).backgroundColor)&&new Set(getComputedStyle(n).backgroundColor.match(/\\d+/g).slice(0,3)).size>1]),document.activeElement.getAttribute('aria-label')]`,
+        `[[...document.querySelectorAll('[role=option][data-focused]')].map(n=>[n.textContent,/^rgba\\(\\d+, \\d+, \\d+, 0\\.17\\d\\)$/.test(getComputedStyle(n).backgroundColor)&&new Set(getComputedStyle(n).backgroundColor.match(/\\d+/g).slice(0,3)).size>1]),document.activeElement.getAttribute('aria-label'),document.activeElement.getAttribute('aria-activedescendant')===document.querySelector('[role=option][data-focused]')?.id]`,
       ),
-    ).toEqual([[["😀", true]], "Search emoji"]);
+    ).toEqual([[["😀", true]], "Search emoji", true]);
     // Enter picks the highlighted cell (👌 after Up); the pick then leads "Frequently used".
     await page.key("ArrowUp");
     await page.key("Enter");
@@ -286,7 +286,7 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
     await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='Search emoji'`);
     expect(
       await page.eval(
-        `[...document.querySelectorAll('[aria-label="Choose reaction"] button[aria-label^="React "]')].slice(0,3).map(c=>c.textContent).join('')`,
+        `[...document.querySelectorAll('[aria-label="Choose reaction"] [role=option][aria-label^="React "]')].slice(0,3).map(c=>c.textContent).join('')`,
       ),
     ).toBe("👌👍🙏");
     await page.key("ArrowRight");
