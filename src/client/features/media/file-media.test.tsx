@@ -27,3 +27,14 @@ test("BJ-228: a local file before its issue exists can't copy a link, and says w
   expect(local).toContain('title="Create the issue before copying its file link"');
   expect(local).toMatch(/aria-label="Copy link"[^>]*disabled=""/);
 });
+
+test("a dimensionless media node waits as a file block of the same frame, so the file lands without moving the text below", async () => {
+  const { FileBlockLoading } = await import("./file-block");
+  const loading = renderToStaticMarkup(<FileBlockLoading />);
+  const frame = (markup: string) => [...markup.matchAll(/class="([^"]*)"/g)].map((m) => m[1]).filter((c) => c!.includes("file-media"));
+  expect(frame(loading)).toEqual(frame(html));
+  expect(loading).toMatch(/^<span class="file-media" data-elevation="dialog" role="status" aria-busy="true">/);
+  expect(loading).toContain(">Loading attachment…</span>");
+  // Its detail line holds a line's height, as the file's size does.
+  expect(loading).toContain("> </span>");
+});

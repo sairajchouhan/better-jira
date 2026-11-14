@@ -1,5 +1,6 @@
 import { LoadingState } from "@/client/components/empty-state";
 import { Text } from "@/client/components/text";
+import { FileBlockLoading } from "./file-block";
 import { lazy, Suspense, useState } from "react";
 import type { AdfNode } from "@/shared/document";
 import type { Attachment } from "@/shared/attachment-media";
@@ -53,9 +54,7 @@ function LoadingMedia({ node, embedded }: MediaProps) {
           Loading attachment…
         </Text>
       ) : (
-        <LoadingState style={!size ? { minHeight: 60 } : undefined}>
-          Loading attachment…
-        </LoadingState>
+        size ? <LoadingState>Loading attachment…</LoadingState> : <FileBlockLoading />
       )}
     </Wrapper>
   );

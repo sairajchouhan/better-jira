@@ -74,14 +74,16 @@ test("Jira media: nothing fetched for the board, exact attachments and byte rang
     const toolbar = `${block}.querySelector('[role="toolbar"][aria-label="File actions"]')`;
     await page.waitFor(`!!${block}?.querySelector('.file-media-size')`);
     const look = await page.eval<any>(
-      `(()=>{const b=${block},s=getComputedStyle(b),r=b.getBoundingClientRect();return {height:r.height,width:r.width,column:b.closest('#description > *').getBoundingClientRect().width,radius:s.borderTopLeftRadius,border:s.borderTopWidth+' '+s.borderTopStyle,name:b.querySelector('.file-media-name').textContent,size:b.querySelector('.file-media-size').textContent,elevation:b.dataset.elevation}})()`,
+      `(()=>{const b=${block},s=getComputedStyle(b),r=b.getBoundingClientRect();return {height:r.height,width:r.width,column:b.closest('#description > *').getBoundingClientRect().width,radius:s.borderTopLeftRadius,border:s.borderTopWidth+' '+s.borderTopStyle,thin:parseFloat(s.getPropertyValue('--thin-pixel')),name:b.querySelector('.file-media-name').textContent,size:b.querySelector('.file-media-size').textContent,elevation:b.dataset.elevation}})()`,
     );
-    // Live Linear (RAJ-46): full editor width, 51px tall, radius 6, 0.5px solid border, the name over its size.
+    // Live Linear (RAJ-46, DPR 2): full editor width, 51px tall, radius 6, 0.5px solid border, the name over its size. At
+    // the suite's DPR 1 Chromium draws each 0.5px border 1px wide, so the block is 1px taller: 52, ±1.
     expect(look.width).toBeCloseTo(look.column, 0);
-    expect(look.height).toBeGreaterThanOrEqual(50);
-    expect(look.height).toBeLessThanOrEqual(52);
+    expect(look.height).toBeGreaterThanOrEqual(51);
+    expect(look.height).toBeLessThanOrEqual(53);
     expect(look.radius).toBe("6px");
-    expect(look.border).toBe("0.5px solid");
+    expect(look.thin).toBe(0.5);
+    expect(look.border).toBe("1px solid");
     expect(look.name).toBe("media-file.txt");
     expect(look.size).toMatch(/^[\d,.]+ (B|KB)$/);
     expect(look.elevation).toBe("dialog");

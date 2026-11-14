@@ -1,6 +1,7 @@
 import { Button, ButtonLink } from "@/client/components/button";
 import { EmptyState, LoadingState } from "@/client/components/empty-state";
 import { Text } from "@/client/components/text";
+import { FileBlockLoading } from "./file-block";
 import { useEffect, useMemo, useState } from "react";
 import type { MediaProps } from "./media-loader";
 import type { Attachment } from "@/shared/attachment-media";
@@ -201,9 +202,7 @@ function LoadedMedia({
             Loading attachment…
           </Text>
         ) : (
-          <LoadingState style={!size ? { minHeight: 60 } : undefined}>
-            Loading attachment…
-          </LoadingState>
+          size ? <LoadingState>Loading attachment…</LoadingState> : <FileBlockLoading />
         )
       ) : inline ? (
         // Linear has no inline file: a Jira inline attachment is the same file block, on its own line in the paragraph.

@@ -1,9 +1,9 @@
-import { Text } from "@/client/components/text";
 import { NodeToolbar } from "@/client/components/node-toolbar";
 import { Icon } from "@/client/components/icons";
 import { showNotification } from "@/client/state/app-notifications";
 import type { Attachment } from "@/shared/attachment-media";
 import { attachmentLink, downloadURL, formatFileSize } from "./media-layout";
+import { FileBlock } from "./file-block";
 
 /** `ne` (copyLink) of Linear's file node: copy the file's URL, then its info toast; a refused clipboard says so. */
 async function copyFileLink(file: Attachment) {
@@ -34,9 +34,7 @@ export function FileMedia({
   onSelect?: () => void;
 }) {
   return (
-    <span
-      className="file-media"
-      data-elevation="dialog"
+    <FileBlock
       data-attachment-id={file.id}
       data-node-toolbar-host
       onMouseDown={
@@ -47,37 +45,25 @@ export function FileMedia({
           onSelect();
         })
       }
+      name={file.name}
+      title={file.name}
+      detail={formatFileSize(file.size)}
     >
-      <span className="file-media-row">
-        <span className="file-media-main">
-          <span className="file-media-icon">
-            <Icon name="file-filled" size={16} />
-          </span>
-          <span className="file-media-text">
-            <Text variant="regular" wrap="truncate" title={file.name} className="file-media-name">
-              {file.name}
-            </Text>
-            <Text variant="micro" color="muted" className="file-media-size">
-              {formatFileSize(file.size)}
-            </Text>
-          </span>
-        </span>
-        <NodeToolbar label="File actions" reveal="hover">
-          <NodeToolbar.Button
-            label="Copy link"
-            icon={<Icon name="link-filled" />}
-            disabled={!issueKey && file.url.startsWith("blob:")}
-            disabledReason="Create the issue before copying its file link"
-            onClick={() => void copyFileLink(file)}
-          />
-          <NodeToolbar.Link
-            label="Download"
-            icon={<Icon name="download-filled" />}
-            href={downloadURL(file.url)}
-            download={file.name}
-          />
-        </NodeToolbar>
-      </span>
-    </span>
+      <NodeToolbar label="File actions" reveal="hover">
+        <NodeToolbar.Button
+          label="Copy link"
+          icon={<Icon name="link-filled" />}
+          disabled={!issueKey && file.url.startsWith("blob:")}
+          disabledReason="Create the issue before copying its file link"
+          onClick={() => void copyFileLink(file)}
+        />
+        <NodeToolbar.Link
+          label="Download"
+          icon={<Icon name="download-filled" />}
+          href={downloadURL(file.url)}
+          download={file.name}
+        />
+      </NodeToolbar>
+    </FileBlock>
   );
 }
