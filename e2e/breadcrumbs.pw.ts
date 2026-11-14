@@ -108,10 +108,11 @@ test("issue breadcrumb follows how the page was reached: a link, an epic's Sub-i
   const page = await open("?issue=TEST-2&view=page");
 
   const epic = 'nav[aria-label="Breadcrumb"] a[href="/issue/TEST-7"]';
-  await test.step("a direct link shows the space, the epic by key (its icon, its title as the tooltip) then the issue, and no counter", async () => {
+  await test.step("a direct link shows the space, the epic by key (its Epic type icon, its title as the tooltip) then the issue, and no counter", async () => {
     await page.waitFor(`!!document.querySelector('[aria-label="Breadcrumb"] [data-crumb-issue]')`);
     expect(await page.eval(crumbs)).toEqual(["Browser audit", "TEST-7", "TEST-2"]);
-    expect(await page.eval(`!!document.querySelector('nav[aria-label="Breadcrumb"] li:nth-child(2) svg')`)).toBe(true);
+    expect(await page.eval(`document.querySelector('${epic} span[aria-hidden] > span')?.title`)).toBe("Epic");
+    expect(await page.eval(`!!document.querySelector('nav[aria-label="Breadcrumb"] ol svg')`)).toBe(false);
     expect(await page.eval(`document.querySelector('${epic}').textContent`)).toBe("TEST-7");
     expect(await page.eval(`document.querySelector('${epic}').title`)).toBe("Fixture epic");
     expect(await page.eval(position)).toBeNull();

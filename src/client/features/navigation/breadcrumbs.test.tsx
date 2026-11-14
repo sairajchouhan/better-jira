@@ -38,6 +38,10 @@ const crumbs = (html: string) =>
 
 /** The `<a>` tag that links to `key`'s page. */
 const linkTo = (html: string, key: string) => html.match(new RegExp(`<a[^>]*href="/issue/${key}"[^>]*>`))?.[0] ?? "";
+/** What the link to `key`'s page draws, up to its closing tag. */
+const linkBody = (html: string, key: string) => html.match(new RegExp(`<a[^>]*href="/issue/${key}"[^>]*>([\\s\\S]*?)</a>`))?.[1] ?? "";
+/** The issue type a crumb's icon shows: the TypeDot (titled with its type) in the crumb's hidden icon slot. */
+const crumbType = (body: string) => body.match(/^<span aria-hidden="true"[^>]*><span title="([^"]+)"[^>]*style="background:[^"]+"/)?.[1];
 
 const render = (node: React.ReactNode) => renderToStaticMarkup(<RouterContextProvider router={router}>{node}</RouterContextProvider>);
 const showBoard = (patch: Parameters<typeof commit>[0] = {}) => {
@@ -49,7 +53,7 @@ const triage = (): SavedView => {
   return { id: "v1", board: 7, kind: "custom", name: "Triage", description: "", icon: "filter", color: "gray", filters: p.filters, display: p.display, scope: p.scope, hidden: {}, collapsed: {}, order: {}, mine: false, createdAt: "", updatedAt: "" };
 };
 
-test("an issue page's breadcrumb is React Aria's list: the space, the epic in Linear's project slot, the parent by key, the issue current", () => {
+test("an issue page's breadcrumb is React Aria's list: the space, the epic in Linear's project slot, the parent, the issue current, each with its type icon", () => {
   const html = open("Z-3", { path: ["Z-1", "Z-2"] });
   expect(html).toContain('<nav aria-label="Breadcrumb"');
   expect(html).toMatch(/<ol[^>]*>/);
@@ -59,9 +63,13 @@ test("an issue page's breadcrumb is React Aria's list: the space, the epic in Li
   expect(html).toMatch(/<a(?=[^>]*title="Space")(?=[^>]*href="\/board\/7\/all")[^>]*>/);
   expect(linkTo(html, "Z-1")).toContain('title="Sync engine"');
   expect(linkTo(html, "Z-2")).toContain('title="Z-2 title"');
-  // The epic is a parent's crumb with the epic's icon before the key; the parent has no icon.
-  expect(html).toMatch(/href="\/issue\/Z-1"[^>]*>(?:(?!<\/a>)[\s\S])*<svg(?:(?!<\/a>)[\s\S])*<span class="ui-entity-id ">Z-1<\/span><\/a>/);
-  expect(html).toMatch(/href="\/issue\/Z-2"[^>]*><span class="ui-entity-id ">Z-2<\/span><\/a>/);
+  // Every issue crumb is its type icon, then its key: the epic the Epic icon, the parent the Task icon; no layers icon (no svg).
+  expect(crumbType(linkBody(html, "Z-1"))).toBe("Epic");
+  expect(linkBody(html, "Z-1")).toMatch(/<\/span><span class="ui-entity-id ">Z-1<\/span>$/);
+  expect(crumbType(linkBody(html, "Z-2"))).toBe("Task");
+  expect(linkBody(html, "Z-2")).toMatch(/<\/span><span class="ui-entity-id ">Z-2<\/span>$/);
+  expect(crumbType(html.match(/<a[^>]*target="_blank"[^>]*>([\s\S]*?)<\/a>/)![1]!)).toBe("Sub-task");
+  expect(html.match(/<ol[\s\S]*<\/ol>/)![0]).not.toContain("<svg");
   expect(html.match(/aria-current="page"/g)).toHaveLength(1);
   expect(html).toMatch(/<a[^>]*aria-current="page"[^>]*target="_blank"|<a[^>]*target="_blank"[^>]*aria-current="page"/);
   expect(html).toContain("data-crumb-issue");
@@ -100,6 +108,29 @@ test("on a long trail the epic is its icon alone, named and titled as before", (
   expect(crumbs(html)).toEqual(["SSpace", "", "Z-2", "Z-3", "Z-5Z-5 title"]);
   expect(linkTo(html, "Z-1")).toContain('aria-label="Z-1"');
   expect(linkTo(html, "Z-1")).toContain('title="Sync engine"');
+  // Its icon is the Epic type icon alone, and the parents keep theirs.
+  expect(crumbType(linkBody(html, "Z-1"))).toBe("Epic");
+  expect(linkBody(html, "Z-1")).not.toContain("ui-entity-id");
+  expect(linkBody(html, "Z-1")).not.toContain("<svg");
+  expect(crumbType(linkBody(html, "Z-2"))).toBe("Task");
+  expect(crumbType(linkBody(html, "Z-3"))).toBe("Sub-task");
+});
+
+test("an epic the mirror doesn't hold is plain text, its key with no icon, on a short trail and a long one", () => {
+  const orphan = (patch: Partial<Issue>) => issue("Z-8", { parent: "Z-9", parentLevel: 1, ...patch });
+  const span = (html: string) => html.match(/<span aria-label="Z-9"[^>]*>[\s\S]*?<\/span><\/span>|<span title="Z-9"[^>]*>([\s\S]*?)<\/span><\/li>/)?.[0] ?? "";
+  commit({ issues: new Map([...all, orphan({})].map((i) => [i.key, i])) });
+  const short = open("Z-8", null, { issues: new Map([...all, orphan({})].map((i) => [i.key, i])) });
+  expect(crumbs(short)).toEqual(["SSpace", "Z-9", "Z-8Z-8 title"]);
+  expect(short).not.toContain('href="/issue/Z-9"');
+  expect(span(short)).toContain(">Z-9<");
+  expect(span(short)).not.toMatch(/title="Epic"|<svg/);
+  // A long trail through it: the epic stays its key, since there is no type to show.
+  const chain = [orphan({}), issue("Z-10", { parent: "Z-8" }), issue("Z-11", { type: "Sub-task", parent: "Z-10" })];
+  const long = open("Z-11", { path: ["Z-8", "Z-10"] }, { issues: new Map([...all, ...chain].map((i) => [i.key, i])) });
+  expect(crumbs(long)).toEqual(["SSpace", "Z-9", "Z-8", "Z-10", "Z-11Z-11 title"]);
+  expect(span(long)).toContain(">Z-9<");
+  expect(span(long)).not.toMatch(/title="Epic"|<svg/);
 });
 
 test("a board's breadcrumb is the space alone, the current page that still links (it clears the board's search)", () => {

@@ -35,6 +35,11 @@ const CRUMB_LAST =
   "-ml-1 flex h-6 min-w-0 items-center rounded-lg pr-[5px] pl-1 transition-[color] duration-150 ease-[ease] hover:bg-(--crumb-hover) hover:text-fg focus-visible:outline-2 focus-visible:outline-accent";
 const CRUMB = `-mr-[5px] ${CRUMB_LAST}`; // the current (last) crumb keeps its right padding, like Linear's current item
 const CRUMB_ICON = "mr-1.5 grid w-4 shrink-0 place-items-center";
+/** An issue crumb's icon: the issue's own type, the TypeDot its rows show (the user's choice: every issue crumb, the epic and parents
+ *  too, wears its type, .raj/done.md). Icon-only crumbs drop the gap before the text. */
+function CrumbTypeIcon({ type, className = CRUMB_ICON }: { type?: string; className?: string }) {
+  return <span aria-hidden="true" className={className}><TypeDot type={type} /></span>;
+}
 function CrumbSep() {
   return <span aria-hidden="true" className="mx-2 -mt-0.5 shrink-0 text-fg-3">›</span>;
 }
@@ -185,29 +190,32 @@ function AncestorCrumb({ id, crumb, className = "", label, children }: { id: str
     </Crumb>
   );
 }
-/** A parent issue: its identifier alone. Below 640px only the last parent shows, as Linear's `Dpi` on a tablet. */
+/** A parent issue: its type icon and identifier, like every issue crumb. Below 640px only the last parent shows, as Linear's `Dpi`
+ *  on a tablet. */
 function ParentCrumbItem({ parent, last }: { parent: AncestorCrumbModel; last: boolean }) {
   return (
     <AncestorCrumb id={`parent-${parent.key}`} crumb={parent} className={last ? "" : "max-sm:hidden"}>
+      {parent.issue && <CrumbTypeIcon type={parent.issue.type} />}
       <EntityIdentifier>{parent.key}</EntityIdentifier>
     </AncestorCrumb>
   );
 }
-/** The epic, in Linear's project slot: the layers icon (Linear's project icon `DD`), then its key like a parent's, not its name
- *  (the user's choice over Linear, .raj/done.md). */
+/** The epic, in Linear's project slot: its type icon and key like a parent's, not Linear's project icon and name (the user's
+ *  choices over Linear, .raj/done.md). An epic the mirror doesn't hold is its key alone. */
 function EpicCrumbItem({ epic }: { epic: AncestorCrumbModel }) {
   return (
     <AncestorCrumb id="epic" crumb={epic}>
-      <span aria-hidden="true" className={CRUMB_ICON}><Icon name="layers" /></span>
+      {epic.issue && <CrumbTypeIcon type={epic.issue.type} />}
       <EntityIdentifier>{epic.key}</EntityIdentifier>
     </AncestorCrumb>
   );
 }
-/** The epic once the trail is long: its icon alone (`Hpi`'s `iconOnly: r.length > 2`), named by its key. */
+/** The epic once the trail is long: its type icon alone (`Hpi`'s `iconOnly: r.length > 2`), named by its key. Not held, it has no
+ *  type to show, so its key stands in. */
 function EpicIconCrumbItem({ epic }: { epic: AncestorCrumbModel }) {
   return (
     <AncestorCrumb id="epic" crumb={epic} label={epic.key}>
-      <span aria-hidden="true" className="grid w-4 place-items-center"><Icon name="layers" /></span>
+      {epic.issue ? <CrumbTypeIcon type={epic.issue.type} className="grid w-4 place-items-center" /> : <EntityIdentifier>{epic.key}</EntityIdentifier>}
     </AncestorCrumb>
   );
 }
@@ -218,7 +226,7 @@ function IssueCrumb({ issue }: { issue: Issue }) {
     <Crumb id="issue">
       <ContextMenu label="Issue options" entries={() => issueBreadcrumbEntries(issue)}>
         <Link isDisabled={false} className={CRUMB_LAST} href={issueURL(issue)} target="_blank" rel="noreferrer">
-          <span className={CRUMB_ICON}><TypeDot type={issue.type} /></span>
+          <CrumbTypeIcon type={issue.type} />
           <span data-crumb-issue className="flex min-w-0">
             <EntityIdentifier className="mr-[5.6px] shrink-0">{issue.key}</EntityIdentifier>
             <span className="truncate">{issue.summary}</span>
