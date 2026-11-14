@@ -265,6 +265,13 @@ export function operatorLabel(field: Field, op: Operator, count: number) {
           : plain;
   return op === "is" && many ? "is any of" : plain;
 }
+/** A value filter's two operators everywhere but issue views (inbox, search): Linear's `equalValue` compare options
+ *  (FilterBlockHelper `J`): "is", "is any of" for several values, and "is not". */
+export type EqualOperator = "is" | "isNot";
+export const equalOperators = (count: number): [EqualOperator, string][] => [
+  ["is", count > 1 ? "is any of" : "is"],
+  ["isNot", "is not"],
+];
 /** Display settings equal, ignoring the order properties were toggled in. */
 export const sameDisplay = (a: Display, b: Display) =>
   JSON.stringify({ ...a, properties: [...a.properties].sort() }) ===

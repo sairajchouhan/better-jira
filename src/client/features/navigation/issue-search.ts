@@ -3,7 +3,7 @@ import { type Issue } from "@/shared/issue-model";
 import { matchRank } from "@/shared/search-rank";
 import type { IssueResource } from "@/shared/issue-resource";
 
-import { valuesFor } from "@/shared/view-model";
+import { valuesFor, type EqualOperator } from "@/shared/view-model";
 
 /** The issue key a query names, hyphen optional ("sam11", "sam 11", "SAM-11" → "SAM-11"), as Linear's
  *  `identifierMatch({ matchWithoutHyphen, exact })`; letters only, so "sam11" is never SAM1-1 (a key with digits still matches typed in full). */
@@ -87,12 +87,22 @@ export const SEARCH_FILTER_FIELDS = [
   ["labels", "Labels"],
   ["board", "Space"],
 ] as const;
-export type SearchFilter = { field: (typeof SEARCH_FILTER_FIELDS)[number][0]; values: string[] };
-/** Each filter keeps issues with any of its values; filters on different properties all apply. */
+/** A pick in a filter's value menu: toggles `value`, keeping the filter's place and operator; its last value drops the filter. */
+export function toggleSearchValue(filters: SearchFilter[], field: SearchFilter["field"], value: string): SearchFilter[] {
+  const own = filters.find((f) => f.field === field);
+  if (!own) return [...filters, { field, values: [value] }];
+  const values = own.values.includes(value) ? own.values.filter((v) => v !== value) : [...own.values, value];
+  return values.length
+    ? filters.map((f) => (f === own ? { ...own, values } : f))
+    : filters.filter((f) => f !== own);
+}
+/** `op` "isNot" keeps the issues with none of the values; "is" (or none, as before it existed) those with any. */
+export type SearchFilter = { field: (typeof SEARCH_FILTER_FIELDS)[number][0]; values: string[]; op?: EqualOperator };
+/** Each filter keeps issues with any of its values, or with none when negated; filters on different properties all apply. */
 export function matchesSearchFilters(i: Issue, filters: SearchFilter[], statusName: (i: Issue) => string | undefined) {
-  return filters.every(({ field, values }) => {
+  return filters.every(({ field, values, op }) => {
     const actual =
       field === "board" ? [String(i.board)] : field === "status" ? [statusName(i) ?? ""] : valuesFor(i, field, []);
-    return actual.some((v) => values.includes(v));
+    return actual.some((v) => values.includes(v)) !== (op === "isNot");
   });
 }

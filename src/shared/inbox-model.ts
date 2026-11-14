@@ -1,5 +1,5 @@
 /** Jira's in-app notifications as Linear Inbox rows. Pure: the server maps the GraphQL feed, the client words and filters it. */
-import { priorityRank, truncate } from "./view-model";
+import { priorityRank, truncate, type EqualOperator } from "./view-model";
 
 export type InboxKind =
   | "assigned"
@@ -468,6 +468,8 @@ export type InboxView = {
   grouping: "none" | "focus";
   /** Each field matches any of its values; fields combine with AND, as in Linear. */
   filters: Partial<Record<FilterField, string[]>>;
+  /** The fields whose filter is "is not": a row matches none of their values. Absent in views stored before it. */
+  negated?: FilterField[];
 };
 export const DEFAULT_VIEW: InboxView = {
   priorityInbox: false,
@@ -541,7 +543,7 @@ export function visibleItems(
     if (!row) return [];
     if (filters.length) {
       const f = facets(row);
-      if (!filters.every(([field, values]) => values.includes(f[field]))) return [];
+      if (!filters.every(([field, values]) => values.includes(f[field]) !== !!view.negated?.includes(field))) return [];
     }
     return [row];
   });
@@ -677,3 +679,23 @@ export const sameInboxOrder = (a: InboxOrder, b: InboxOrder) =>
 /** Whether any inbox property filter has selected values. */
 export const hasFilters = (view: InboxView) =>
   Object.values(view.filters).some((values) => values?.length);
+/** A field's filter operator: "is" unless it is negated. */
+export const filterOperator = (view: Pick<InboxView, "negated">, field: FilterField): EqualOperator =>
+  view.negated?.includes(field) ? "isNot" : "is";
+/** The view change that sets `field`'s operator. */
+export const withOperator = (
+  view: Pick<InboxView, "negated">,
+  field: FilterField,
+  op: EqualOperator,
+): Pick<InboxView, "negated"> => {
+  const rest = (view.negated ?? []).filter((f) => f !== field);
+  return { negated: op === "isNot" ? [...rest, field] : rest };
+};
+/** The view change that drops `field`'s filter, its operator with it, so a later pick starts again at "is". */
+export const withoutFilter = (
+  view: Pick<InboxView, "filters" | "negated">,
+  field: FilterField,
+): Pick<InboxView, "filters" | "negated"> => ({
+  filters: { ...view.filters, [field]: [] },
+  ...withOperator(view, field, "is"),
+});

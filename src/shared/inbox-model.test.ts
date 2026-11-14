@@ -3,6 +3,9 @@ import {
   DEFAULT_VIEW,
   facetsOf,
   feedCategory,
+  filterOperator,
+  withOperator,
+  withoutFilter,
   findInRow,
   findWords,
   focusGroups,
@@ -26,6 +29,7 @@ import {
   visibleItems,
   type InboxItem,
 } from "./inbox-model";
+import { equalOperators } from "./view-model";
 
 // Trimmed from a live cloudsairaj `notificationFeed` node (2026-11-08).
 const URL =
@@ -429,6 +433,27 @@ test("filters match any value per field and every field; priority ordering puts 
   expect(ids({ filters: { priority: ["No priority"] } })).toEqual(["b"]);
   expect(ids({ filters: { type: [] } })).toEqual(["b", "a", "c"]);
   expect(ids({ ordering: "priority" })).toEqual(["c", "a", "b"]);
+  // Linear's "is not" (equalValue `not`): a negated field keeps the rows with none of its values; another field still ANDs.
+  expect(ids({ filters: { type: ["Mentions"] }, negated: ["type"] })).toEqual(["b", "c"]);
+  expect(ids({ filters: { type: ["Mentions"], project: ["Kanban"] }, negated: ["type"] })).toEqual(["c"]);
+  // A negated field without values filters nothing.
+  expect(ids({ filters: { type: [] }, negated: ["type"] })).toEqual(["b", "a", "c"]);
+});
+
+test("a block's operator segment switches is / is not; × drops the field and its operator, so the next pick is 'is' again", () => {
+  const view = { ...DEFAULT_VIEW, filters: { from: ["Bo"], type: ["Mentions"] } };
+  expect(filterOperator(view, "from")).toBe("is");
+  const not = { ...view, ...withOperator(view, "from", "isNot") };
+  expect(not.negated).toEqual(["from"]);
+  expect(filterOperator(not, "from")).toBe("isNot");
+  expect(filterOperator(not, "type")).toBe("is");
+  expect(withOperator(not, "from", "is").negated).toEqual([]);
+  expect(withOperator(not, "from", "isNot").negated).toEqual(["from"]);
+  const removed = { ...not, ...withoutFilter(not, "from") };
+  expect(removed.filters).toEqual({ from: [], type: ["Mentions"] });
+  expect(filterOperator(removed, "from")).toBe("is");
+  expect(equalOperators(1)).toEqual([["is", "is"], ["isNot", "is not"]]);
+  expect(equalOperators(2)[0]).toEqual(["is", "is any of"]);
 });
 
 test("R2-inbox-D5: a row whose issue isn't mirrored takes its project's name from the key prefix", () => {

@@ -24,6 +24,7 @@ import {
   type InboxView,
   type Local,
   type ShownView,
+  withoutFilter,
 } from "@/shared/inbox-model";
 
 export type Feed = InboxFeed & { writable: boolean };
@@ -145,16 +146,10 @@ export function createInboxStore(ports: InboxPorts) {
   }
   const toggleFilter = (field: FilterField, value: string) => {
     const values = viewState().filters[field] ?? [];
-    changeView({
-      filters: {
-        ...viewState().filters,
-        [field]: values.includes(value)
-          ? values.filter((v) => v !== value)
-          : [...values, value],
-      },
-    });
+    const next = values.includes(value) ? values.filter((v) => v !== value) : [...values, value];
+    changeView(next.length ? { filters: { ...viewState().filters, [field]: next } } : withoutFilter(viewState(), field));
   };
-  const clearFilters = () => changeView({ filters: {} });
+  const clearFilters = () => changeView({ filters: {}, negated: [] });
 
   // --- find: Linear's ⌘F field over the list (startup-root `Idi`: "Find in view…", "Find in inbox…" in the priority inbox).
   // Not stored: the field opens empty each time the inbox does, as Linear's resets on a fresh visit. ---

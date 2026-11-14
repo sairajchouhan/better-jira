@@ -1,6 +1,6 @@
 import { type Issue } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
-import { matchDocuments, matchesSearchFilters, matchIssues, shorthandKey } from "./issue-search";
+import { matchDocuments, matchesSearchFilters, matchIssues, shorthandKey, toggleSearchValue, type SearchFilter } from "./issue-search";
 import { plainDocument } from "@/shared/document";
 
 
@@ -81,4 +81,21 @@ test("BJ-62: Search filters keep issues with any picked value of each property, 
   expect(matchesSearchFilters(issue, [{ field: "status", values: ["In Progress"] }, { field: "board", values: ["2"] }], status)).toBe(true);
   expect(matchesSearchFilters(issue, [{ field: "priority", values: ["High"] }, { field: "board", values: ["1"] }], status)).toBe(false);
   expect(matchesSearchFilters({ ...issue, priority: undefined }, [{ field: "priority", values: ["High"] }], status)).toBe(false);
+  // "is not" keeps the issues with none of the values.
+  expect(matchesSearchFilters(issue, [{ field: "labels", values: ["perf"], op: "isNot" }], status)).toBe(false);
+  expect(matchesSearchFilters(issue, [{ field: "labels", values: ["docs"], op: "isNot" }], status)).toBe(true);
+  expect(matchesSearchFilters({ ...issue, priority: undefined }, [{ field: "priority", values: ["High"], op: "isNot" }], status)).toBe(true);
+});
+
+test("a value pick keeps its block's place and operator; its last value drops the block", () => {
+  const filters: SearchFilter[] = [
+    { field: "priority", values: ["High"], op: "isNot" },
+    { field: "labels", values: ["ui"] },
+  ];
+  expect(toggleSearchValue(filters, "priority", "Low")).toEqual([
+    { field: "priority", values: ["High", "Low"], op: "isNot" },
+    { field: "labels", values: ["ui"] },
+  ]);
+  expect(toggleSearchValue(filters, "priority", "High")).toEqual([{ field: "labels", values: ["ui"] }]);
+  expect(toggleSearchValue(filters, "board", "2")).toEqual([...filters, { field: "board", values: ["2"] }]);
 });
