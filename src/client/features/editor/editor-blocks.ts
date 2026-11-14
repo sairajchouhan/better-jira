@@ -42,6 +42,16 @@ export const toggleCallout =
     return true;
   };
 
+/** Linear's callout Backspace (`h0e`): at the start of its first block, the callout unwraps, keeping its blocks. */
+export const calloutBackspace: Command = (state, dispatch) => {
+  const { empty, $from } = state.selection;
+  if (!empty || $from.parentOffset !== 0 || $from.depth < 2) return false;
+  const depth = $from.depth - 1;
+  if ($from.node(depth).type !== panel || $from.index(depth) !== 0) return false;
+  dispatch?.(state.tr.replaceWith($from.before(depth), $from.after(depth), $from.node(depth).content).scrollIntoView());
+  return true;
+};
+
 /** GitHub's `> [!NOTE]` (and TIP, IMPORTANT, WARNING, CAUTION): the quote becomes that callout; on a bare line, the line does. */
 export const calloutRule = new InputRule(/^\[!(note|tip|important|warning|caution)\]$/i, (state, match, start, end) => {
   const panelType = CALLOUT_PANELS[match[1]!.toLowerCase() as keyof typeof CALLOUT_PANELS];

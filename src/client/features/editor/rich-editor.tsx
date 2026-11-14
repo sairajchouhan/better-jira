@@ -26,7 +26,7 @@ import { linkPlugin, linkSelected } from "./editor-links";
 import { LinkPopover } from "./link-popover";
 import { activeSlash, dismissSlash, matchingSlashCommands, slashPlugin } from "./slash-commands";
 import { setList, taskBackspace, taskEnter, taskIds, taskItemView, toggleTask } from "./editor-checklist";
-import { blockRules, dividerKey, headingBackspace, insertDivider, lineBreak, slashTipPlugin } from "./editor-blocks";
+import { blockRules, calloutBackspace, dividerKey, headingBackspace, insertDivider, lineBreak, slashTipPlugin } from "./editor-blocks";
 import { EditorIcon, type EditorGlyph } from "./editor-icons";
 import { ActionMenu } from "@/client/components/action-menu";
 import { activeLinkPaste, dismissLinkPaste, linkPasteActions, pastePlugin } from "./editor-paste";
@@ -296,7 +296,7 @@ export function RichEditor(props: EditorEngineProps) {
             "Shift-Enter": lineBreak,
             // With no Save here (the description), ⌘↵ reaches the editor: it ticks a checklist item.
             "Mod-Enter": toggleTask,
-            Backspace: chainCommands(taskBackspace, headingBackspace),
+            Backspace: chainCommands(taskBackspace, headingBackspace, calloutBackspace),
             ArrowDown: chainCommands(codeDown, dividerKey(false)),
             Tab: (...args) => (latest.current.tabLeaves ? tabInside(...args) : tab(...args)),
             "Shift-Tab": (...args) =>

@@ -187,7 +187,8 @@ export const richSchema = new Schema({
     panel: {
       ...block("div", PANEL),
       attrs: { ...attrs, panelType: { default: "info" } },
-      isolating: true,
+      // Linear's callout is defining, not isolating: Enter on an empty last line leaves it, as from a quote.
+      defining: true,
       parseDOM: [
         { tag: "div[data-panel-type]", getAttrs: (dom) => {
           const type = dom.getAttribute("data-panel-type") ?? "";

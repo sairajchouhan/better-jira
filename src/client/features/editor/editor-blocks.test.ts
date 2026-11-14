@@ -3,8 +3,10 @@ import type { Node as EditorNode } from "prosemirror-model";
 import { EditorState, TextSelection, type Command } from "prosemirror-state";
 import { withTaskToggled } from "./adf";
 import { markdownRules } from "./editor-commands";
+import { baseKeymap } from "prosemirror-commands";
 import {
   blockRules,
+  calloutBackspace,
   dividerKey,
   headingBackspace,
   insertDivider,
@@ -249,3 +251,19 @@ test("§4: ⌫ at a heading's start makes it text; ⇧↵ breaks the line; two s
   expect(sunk.doc.textContent).toBe("one");
 });
 
+test("QA-3 description: Enter on an empty last line leaves a callout, and Backspace at its start unwraps it, as in Linear", () => {
+  const callout = (...blocks: EditorNode[]) => n.panel!.create({ panelType: "info" }, blocks);
+  const before = state([callout(p("note"), p())], "note");
+  const atEmpty = before.apply(before.tr.setSelection(TextSelection.create(before.doc, before.doc.child(0).nodeSize - 2)));
+  const left = run(baseKeymap.Enter!, atEmpty).after;
+  expect(adf(left)).toEqual([
+    { type: "panel", attrs: { panelType: "info" }, content: [{ type: "paragraph", content: [{ type: "text", text: "note" }] }] },
+    { type: "paragraph" },
+  ]);
+  expect(left.selection.$from.depth).toBe(1);
+  const unwrapped = run(calloutBackspace, state([callout(p("one"), p("two"))], "one", false));
+  expect(unwrapped.ran).toBe(true);
+  expect(adf(unwrapped.after).map((b) => b.type)).toEqual(["paragraph", "paragraph"]);
+  // Anywhere else Backspace is the editor's own.
+  expect(run(calloutBackspace, state([callout(p("one"), p("two"))], "two", false)).ran).toBe(false);
+});
