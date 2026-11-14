@@ -4,14 +4,12 @@ import {
   flip,
   FloatingNode,
   offset,
-  safePolygon,
   shift,
   useFloating,
   useFloatingNodeId,
-  useHover,
-  useInteractions,
   type Middleware,
 } from "@floating-ui/react";
+import { Throttler } from "@tanstack/pacer";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { Command } from "cmdk";
 import {
@@ -32,6 +30,7 @@ import { Icon } from "./icons";
 import { MenuSurfaceContext } from "./menu-surface";
 import { Shortcut, type Keys } from "./keycap";
 import { NO_AUTOFILL } from "@/client/components/field";
+import { safeTriangle } from "./safe-triangle";
 
 /**
  * Linear's one menu primitive, `IB = Object.assign(B3e, {List, Item, GroupHeader, Divider, TextDivider, Input})` in
@@ -78,14 +77,21 @@ type MenuLevel = {
   };
   meta: { root: RefObject<HTMLDivElement | null> };
 };
-type SubmenuHandle = { open: boolean; close: () => void; preview: () => void };
+type Point = { x: number; y: number };
+type SubmenuHandle = {
+  open: boolean;
+  close: () => void;
+  preview: () => void;
+  /** The pointer highlighted the row at `at`: open the submenu without moving focus (Linear's openSubMenuOnFocus). */
+  hover: (at: Point) => void;
+};
 const MenuLevelContext = createContext<MenuLevel | null>(null);
 
 /**
  * The cmdk root, owning the highlight so every menu shares Linear's J4e rules:
- * - A highlight change closes any other open submenu. A highlight moved by a navigation key previews a submenu row after 300ms.
- * - While a submenu the pointer opened is open, rows the pointer crosses on its way there keep their hands off the highlight, so
- *   the safe polygon keeps it open (Linear blocks them with its JCe triangle).
+ * - A highlight change closes any other open submenu. A highlight moved by a navigation key previews a submenu row after 300ms;
+ *   one moved by the pointer opens it at once. Rows the pointer crosses on its way into an open submenu are covered by the
+ *   submenu's safe triangle, so they never see it (Linear's JCe).
  * - Tab and Shift+Tab step like ↓ and ↑; PageDown and PageUp move a page and stop at the ends.
  * - → opens the highlighted submenu row when the caret is at the end of the search.
  * - Space, with the search empty (or mid-search right after ↑/↓ on a checkbox row), opens a submenu row, toggles a checkbox row
@@ -110,11 +116,8 @@ function MenuRoot({
   const [own, setOwn] = useState(defaultValue ?? "");
   const highlighted = value ?? own;
   const submenus = useRef(new Map<string, SubmenuHandle>());
-  // Whether the pointer moved last; the submenu the pointer opened (it owns the highlight until it closes); whether the last key moved
-  // the highlight; whether it was ↑/↓; whether to scroll the highlight into view.
-  const pointer = useRef(false),
-    pinned = useRef<string | null>(null),
-    previews = useRef(false),
+  // Whether the last key moved the highlight; whether it was ↑/↓; whether to scroll the highlight into view.
+  const previews = useRef(false),
     arrowed = useRef(false),
     scrolls = useRef(false);
   const highlight = (next: string) => {
@@ -132,7 +135,6 @@ function MenuRoot({
         };
       },
       opened: (key) => {
-        pinned.current = pointer.current ? key : null;
         if (key !== highlighted) highlight(key);
       },
     },
@@ -179,15 +181,14 @@ function MenuRoot({
         }}
         onPointerMove={(event) => {
           onPointerMove?.(event);
-          pointer.current = true;
           previews.current = false;
           const row = (event.target as Element).closest<HTMLElement>("[cmdk-item]");
           if (!row || row.closest("[cmdk-root]") !== root.current || row.getAttribute("aria-disabled") === "true")
             return;
           const next = row.getAttribute("data-value") ?? "";
-          if (next === highlighted || (pinned.current && submenus.current.get(pinned.current)?.open))
-            return;
+          if (next === highlighted) return;
           highlight(next);
+          if (event.pointerType !== "touch") submenus.current.get(next)?.hover({ x: event.clientX, y: event.clientY });
         }}
         onChange={(event) => {
           onChange?.(event);
@@ -206,7 +207,6 @@ function MenuRoot({
             row = pristine ? undefined : rows().find((item) => item.getAttribute("aria-selected") === "true"),
             plain = !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey,
             afterArrow = arrowed.current;
-          pointer.current = false;
           previews.current =
             NAVIGATION.has(event.key) || (event.ctrlKey && ["n", "j", "p", "k"].includes(event.key));
           if (event.key !== " ") arrowed.current = event.key === "ArrowDown" || event.key === "ArrowUp";
@@ -498,9 +498,43 @@ const stay = (settled: RefObject<{ row: number; y: number } | null>): Middleware
 });
 
 /**
- * A row that opens a nested menu (Linear's Item `SubMenu`): hover intent with a safe pointer path, ArrowRight, Enter or Space opens and
- * focuses it, a keyboard highlight that rests on the row for 300ms previews it without moving focus (Linear's _6e). ArrowLeft and
- * Backspace on an empty search return to this menu; Escape closes the whole menu, as Linear's does. It opens beside the row on `side`,
+ * Linear's JCe: an invisible box over the parent menu, from the pointer (sampled every 50ms, as Linear's throttled qCe) to the
+ * submenu, clipped to the triangle between them (safeTriangle). Rows under it get no pointer events, so a diagonal move into the
+ * submenu crosses other rows without opening theirs. It follows the pointer by writing its style, never by re-rendering.
+ */
+function SafeTriangle({ popup, from }: { popup: RefObject<HTMLElement | null>; from: RefObject<Point | null> }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const paint = ({ x, y }: Point) => {
+      const box = popup.current?.getBoundingClientRect(),
+        style = box && safeTriangle(box, x, y);
+      node.style.cssText = style
+        ? Object.entries(style)
+            .map(([key, value]) => `${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}:${value}`)
+            .join(";")
+        : "display:none";
+    };
+    // Where the pointer was when it opened the submenu, so the first move toward it is already covered.
+    if (from.current) paint(from.current);
+    const throttle = new Throttler(paint, { wait: 50, leading: true, trailing: true });
+    const move = (event: PointerEvent) => throttle.maybeExecute({ x: event.clientX, y: event.clientY });
+    addEventListener("pointermove", move, { passive: true });
+    return () => {
+      removeEventListener("pointermove", move);
+      throttle.cancel();
+    };
+  }, [popup, from]);
+  return <div ref={ref} aria-hidden data-safe-triangle style={{ display: "none" }} />;
+}
+
+/**
+ * A row that opens a nested menu (Linear's Item `SubMenu`): the pointer highlighting it opens it, ArrowRight, Enter or Space opens and
+ * focuses it, a keyboard highlight that rests on the row for 300ms previews it without moving focus (Linear's _6e). The pointer
+ * entering the submenu focuses it; leaving it hands focus back to this menu and leaves it open (Linear's requestFocus and
+ * yieldFocus), until this menu's highlight moves to another row. ArrowLeft and Backspace on an empty search return to this menu;
+ * Escape closes the whole menu, as Linear's does. It opens beside the row on `side`,
  * overlapping its menu by 2px, with its first row level with this one, and only swaps sides when it doesn't fit. The nested menu is
  * portalled into `container` so it stays inside the parent popup's focus scope.
  */
@@ -534,6 +568,8 @@ function MenuSubmenu({
     // A keyboard preview keeps focus in the parent menu until → or the pointer moves in.
     previewing = useRef(false),
     previewTimer = useRef<ReturnType<typeof setTimeout>>(undefined),
+    // Where the pointer opened the submenu from, the safe triangle's first corner.
+    hoveredAt = useRef<Point | null>(null),
     // Where the open submenu first settled, keyed by its row's top (see `stay`).
     settled = useRef<{ row: number; y: number } | null>(null);
   const setOpen = (next: boolean) => {
@@ -542,7 +578,7 @@ function MenuSubmenu({
     if (next) level?.actions.opened(value);
     onOpenChange(next);
   };
-  const { refs, floatingStyles, context, isPositioned } = useFloating({
+  const { refs, floatingStyles, isPositioned } = useFloating({
     nodeId,
     open,
     onOpenChange: (next) => {
@@ -573,14 +609,11 @@ function MenuSubmenu({
   useEffect(() => {
     if (!open) settled.current = null;
   }, [open]);
-  const hover = useHover(context, {
-    mouseOnly: true,
-    // Rows crossed in under 75ms on the way to an open submenu don't open theirs (Linear blocks them with its safe triangle).
-    delay: { open: 75, close: 120 },
-    handleClose: safePolygon({ buffer: 2 }),
-  });
-  const { getReferenceProps, getFloatingProps } = useInteractions([hover]);
   const parentInput = () => level?.meta.root.current?.querySelector<HTMLInputElement>("input");
+  /** Linear's yieldFocus: focus goes back to the parent menu, so its Escape and keys work, and the submenu stays open. */
+  const yieldFocus = () => {
+    if (refs.floating.current?.contains(document.activeElement)) parentInput()?.focus();
+  };
   const focusInside = () => {
     previewing.current = false;
     const node = refs.floating.current;
@@ -596,6 +629,13 @@ function MenuSubmenu({
       close: () => {
         clearTimeout(previewTimer.current);
         if (open) onOpenChange(false);
+      },
+      hover: (at) => {
+        if (open) return;
+        hoveredAt.current = at;
+        focusOnOpen.current = false;
+        previewing.current = false;
+        setOpen(true);
       },
       preview: () => {
         clearTimeout(previewTimer.current);
@@ -641,10 +681,15 @@ function MenuSubmenu({
     if (!open) return;
     const node = refs.floating.current;
     return () => {
-      if (node?.contains(document.activeElement)) parentInput()?.focus();
+      // By the time this runs the submenu's node is gone, and the focus it held has fallen to <body>.
+      const active = document.activeElement;
+      if (!active || active === document.body || node?.contains(active)) parentInput()?.focus();
     };
     // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Cleanup resolves the parent menu's input when the submenu closes.
   }, [open, refs.floating]);
+  useEffect(() => {
+    if (!open) hoveredAt.current = null;
+  }, [open]);
   return (
     <FloatingNode id={nodeId}>
       <Command.Item
@@ -656,7 +701,6 @@ function MenuSubmenu({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? id : undefined}
-        {...getReferenceProps()}
         onSelect={() => {
           focusOnOpen.current = true;
           if (open) focusInside();
@@ -677,25 +721,32 @@ function MenuSubmenu({
             style={{ ...floatingStyles, visibility: isPositioned ? "visible" : "hidden" }}
             role="dialog"
             aria-label={popupLabel}
-            {...getFloatingProps({
-              onPointerEnter: () => {
-                if (!refs.floating.current?.contains(document.activeElement)) focusInside();
-              },
-              // cmdk moves focus to a menu's search when it first highlights a row; a preview hands it straight back.
-              onFocus: () => {
-                if (previewing.current) parentInput()?.focus();
-              },
-              // Escape closes every level (Linear's closeParent); Tab moves this menu's highlight and reaches the popup's focus trap.
-              onKeyDown: (event: KeyboardEvent) => {
-                if (event.key === "Tab") return;
-                event.stopPropagation();
-                if (event.key === "Escape" && surface) {
-                  event.preventDefault();
-                  surface.close();
-                }
-              },
-            })}
+            // The pointer over the submenu's rows takes focus in; over its safe triangle it is on its way out, so it yields. Events
+            // from a nested submenu (portalled beside this one, a React child) are that one's to handle.
+            onPointerMove={(event) => {
+              const target = event.target as Element;
+              if (!event.currentTarget.contains(target) || event.buttons) return;
+              if (target.hasAttribute("data-safe-triangle")) yieldFocus();
+              else if (!event.currentTarget.contains(document.activeElement)) focusInside();
+            }}
+            onPointerLeave={(event) => {
+              if (!event.buttons) yieldFocus();
+            }}
+            // cmdk moves focus to a menu's search when it first highlights a row; a preview hands it straight back.
+            onFocus={() => {
+              if (previewing.current) parentInput()?.focus();
+            }}
+            // Escape closes every level (Linear's closeParent); Tab moves this menu's highlight and reaches the popup's focus trap.
+            onKeyDown={(event: KeyboardEvent) => {
+              if (event.key === "Tab") return;
+              event.stopPropagation();
+              if (event.key === "Escape" && surface) {
+                event.preventDefault();
+                surface.close();
+              }
+            }}
           >
+            <SafeTriangle popup={refs.floating} from={hoveredAt} />
             {children}
           </div>,
           container.current,

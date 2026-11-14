@@ -68,6 +68,40 @@ test("FILTER-1 / CORE-14: a fast move into a submenu across other rows keeps it 
   });
 });
 
+test("R3-relations-D3: a slow diagonal move into a submenu keeps it open and Status highlighted", async ({ open }) => {
+  const page = await open();
+  await openFilter(page);
+  await page.hover('[cmdk-item][data-value="Status"]');
+  await page.waitFor(exists(dialog("Status filter")));
+  const start = await centre(page, '[cmdk-item][data-value="Status"]');
+  const target = await centre(page, `${dialog("Status filter")} [cmdk-item]:last-of-type`);
+  // A person's diagonal: small steps with pauses longer than the 50ms the triangle follows the pointer at.
+  for (let i = 1; i <= 12; i++) {
+    await page.page.mouse.move(start.x + ((target.x - start.x) * i) / 12, start.y + ((target.y - start.y) * i) / 12);
+    await sleep(60);
+  }
+  await sleep(200);
+  expect(await page.eval(exists(dialog("Status filter")))).toBe(true);
+  expect(await selected(page, `[cmdk-root]:has(${ROOT})`)).toBe("Status");
+  await page.key("Escape");
+});
+
+test("R3-views-filters-D-1: leaving a submenu keeps it open, hands focus back to the parent, and Escape still closes", async ({ open }) => {
+  const page = await open();
+  await openFilter(page);
+  await page.hover('[cmdk-item][data-value="Status"]');
+  await page.waitFor(exists(dialog("Status filter")));
+  const inside = await centre(page, `${dialog("Status filter")} [cmdk-item]:first-of-type`);
+  await page.page.mouse.move(inside.x, inside.y, { steps: 4 });
+  // Off both menus, to the far corner of the page.
+  await page.page.mouse.move(5, 5, { steps: 8 });
+  await sleep(200);
+  expect(await page.eval(exists(dialog("Status filter")))).toBe(true);
+  expect(await page.eval<string>(`document.activeElement?.tagName ?? ""`)).not.toBe("BODY");
+  await page.key("Escape");
+  await page.waitFor(gone(ROOT));
+});
+
 test("FILTER-4 / CORE-4: a press outside a toolbar popup closes it and does nothing else", async ({ open }) => {
   const page = await open();
   await openFilter(page);
