@@ -5,13 +5,15 @@ import { useState } from "react";
 import { Icon, type IconName } from "@/client/components/icons";
 import { Avatar } from "@/client/components/avatar";
 import { ME, useStore } from "@/client/state/store";
-import { moveFavorite, toggleFavorite } from "@/client/features/navigation/favorites";
+import { moveFavorite } from "@/client/features/navigation/favorites";
+import { boardURL, favoriteEntries } from "@/client/features/navigation/sidebar-menus";
+import { placeURL } from "@/client/features/navigation/app-navigation";
 import { ContextMenu } from "@/client/components/action-menu";
 import { SectionDisclosure } from "@/client/components/section-disclosure";
 import { findIssueDocument } from "@/shared/issue-resource";
 import { useSavedViews, type SavedView } from "./saved-views";
 import { FavoriteButton } from "@/client/features/navigation/favorite-button";
-import { ViewMenu, ViewContextMenu } from "@/client/features/views/view-editor";
+import { ViewMenu } from "@/client/features/views/view-editor";
 import { Button, IconButton } from "@/client/components/button";
 import { Tabs } from "@/client/components/tabs";
 import { Text } from "@/client/components/text";
@@ -46,8 +48,9 @@ export function ViewFavorites({ expanded, onToggle }: { expanded: boolean; onTog
     const link = view
       ? <SidebarViewLink row={row} view={view} {...props}>{content}</SidebarViewLink>
       : <SidebarLink row={row} to={document ? { board: document.issue.board, selected: document.issue.key, panel: true, document: document.resource.id } : issue ? { board: issue.board, selected: issue.key, panel: true } : { board: board!.id, panel: false, selected: null }} {...props}>{content}</SidebarLink>;
-    // A view's own menu has Unfavorite; the other rows get Remove from favorites (BJ-75).
-    return [view ? <ViewContextMenu key={id} view={view}>{link}</ViewContextMenu> : <ContextMenu key={id} label="Favorite options" entries={() => [{ name: "Remove from favorites", icon: "starred", run: () => toggleFavorite(id) }]}>{link}</ContextMenu>];
+    // Linear's favorite row (`d5n`) has one menu for every kind of favorite: Copy URL, Open in new tab, ┄ Remove favorite.
+    const url = () => board ? boardURL(board) : placeURL(view ? { to: "view", id: view.id } : document ? { to: "issue", key: document.issue.key, document: document.resource.id } : { to: "issue", key: issue!.key });
+    return [<ContextMenu key={id} label="Favorite options" entries={() => favoriteEntries(id, url)}>{link}</ContextMenu>];
   });
   return rows.length ? <div className="mt-5"><div className="mb-1"><SectionDisclosure label="Favorites" expanded={expanded} onToggle={onToggle} /></div>{expanded && rows}</div> : null;
 }

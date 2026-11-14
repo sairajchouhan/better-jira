@@ -6,7 +6,7 @@ import { get, set } from "@/client/state/store";
 import { navigate, ui } from "@/client/features/navigation/app-navigation";
 import { handle } from "@/client/features/navigation/commands";
 
-import { issueMenuEntries } from "./issue-menu";
+import { issueBreadcrumbEntries, issueMenuEntries } from "./issue-menu";
 
 const issue: Issue = {
   key: "TEST-2",
@@ -31,6 +31,15 @@ test("a copy entry never closes again after the copy finishes", async () => {
   find(entries, ["Copy", "Copy ID"]).run!();
   await Bun.sleep(0);
   expect(closes).toBe(0);
+});
+
+test("the issue breadcrumb's right-click menu is Linear's Api: the Copy submenu's rows, then ┄ Rename… ⇧R", () => {
+  const crumb = issueBreadcrumbEntries(issue);
+  const copy = find(issueMenuEntries(issue, { openDialog: () => {}, close: () => {} }), ["Copy"]).children!;
+  expect(crumb.slice(0, -1).map((e) => [e.name, e.shortcut])).toEqual(copy.map((e) => [e.name, e.shortcut]));
+  expect(crumb.slice(0, -1).some((e) => e.divider)).toBe(false);
+  const rename = crumb.at(-1)!;
+  expect([rename.name, rename.shortcut, rename.divider]).toEqual(["Rename…", "Shift+R", true]);
 });
 
 test("Create related › Sub-issue… runs on the menu's issue, not the selection", async () => {

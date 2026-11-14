@@ -303,13 +303,7 @@ export function issueMenuEntries(
       name: "Copy",
       icon: "clipboard",
       divider: true,
-      children: copyKinds.map((kind) => ({
-        name: `Copy ${kind}`,
-        icon: copyIcons[kind],
-        shortcut: hotkeyOf(copyShortcuts[kind] ?? ""),
-        // ActionMenu already closed; closing again after the await would close whatever menu opened meanwhile.
-        run: () => void copyIssue(kind, issue),
-      })),
+      children: copyEntries(issue),
     },
     {
       name: "Make a copy…",
@@ -397,6 +391,27 @@ export function issueMenuEntries(
       : [due, ...properties, ...actionsAfter, remove];
   return presentation === "row" && moves.length ? withMoveEntry(entries, moveMenu(moves)) : entries;
 }
+/** Linear's copy actions (`TX`), one row per kind: the issue menu's Copy submenu and the breadcrumb menu list the same rows. */
+export const copyEntries = (issue: Issue): ActionEntry[] =>
+  copyKinds.map((kind) => ({
+    name: `Copy ${kind}`,
+    icon: copyIcons[kind],
+    shortcut: hotkeyOf(copyShortcuts[kind] ?? ""),
+    // ActionMenu already closed; closing again after the await would close whatever menu opened meanwhile.
+    run: () => void copyIssue(kind, issue),
+  }));
+/** The issue breadcrumb's right-click menu (Linear's `Api` for an issue: `[...TX, Ko(sfn)]`): the copy rows, then ┄ Rename… ⇧R,
+ *  which focuses the page's title. */
+export const issueBreadcrumbEntries = (issue: Issue): ActionEntry[] => [
+  ...copyEntries(issue),
+  {
+    name: "Rename…",
+    icon: "pencil",
+    shortcut: hotkeyOf("rename"),
+    divider: true,
+    run: () => runShortcut("rename", issue.key),
+  },
+];
 /** Linear's Move… (`Lvr`): found by its sub-actions, not its own name; where it sits is `withMoveEntry`'s. */
 export const moveMenu = (children: ActionEntry[]): ActionEntry => ({
   name: "Move…",

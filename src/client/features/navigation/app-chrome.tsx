@@ -1,7 +1,6 @@
 import { type Board, type Issue } from "@/shared/issue-model";
 import { AppLink } from "./app-link";
 import { SidebarLink, SidebarViewLink, sidebarRowClass } from "./sidebar-link";
-import { defaultPreferences } from "@/shared/view-model";
 import { FavoriteButton } from "./favorite-button";
 import { useActiveView, useSavedViews, createViewDraft } from "@/client/features/views/saved-views";
 import { useViewSettings } from "@/client/features/views/view-settings";
@@ -11,18 +10,27 @@ import { useMemo, useRef, useState, type MouseEvent, type ReactNode } from "reac
 import { isMyIssues } from "./navigation";
 import { PERSON_TABS, peopleOf } from "@/shared/people";
 import { Icon, TypeDot } from "@/client/components/icons";
-import { get, set, timed, useStore } from "@/client/state/store";
+import { set, timed, useStore } from "@/client/state/store";
 import { issueURL } from "@/client/features/issue/issue-urls";
+import { issueBreadcrumbEntries } from "@/client/features/issue/issue-menu";
 import { actions, beginCreate } from "@/client/state/issue-actions";
 import { retryLocalStorage } from "@/client/state/app-load";
-import { removeBoard } from "@/client/state/server-data";
 import { dismissWriteError } from "@/client/state/jira-sync";
 import { dismissRecoveryNotice, downloadLocalBackup } from "@/client/state/local-database";
 import { undoEdit, redoEdit } from "@/client/state/undo-history";
-import { placeURL, navigate, ui, openSavedView } from "./app-navigation";
-import { toggleFavorite } from "./favorites";
-import { ActionMenu, ContextMenu, type ActionEntry } from "@/client/components/action-menu";
-import { showNotification } from "@/client/state/app-notifications";
+import { navigate, ui, openSavedView } from "./app-navigation";
+import { ActionMenu, ContextMenu } from "@/client/components/action-menu";
+import {
+  SIDEBAR_PREFS,
+  VISIBILITY,
+  boardCopyURL,
+  boardEntries,
+  moreEntries,
+  parseSidebarPrefs,
+  sidebarItemEntries,
+  visibilityOptions,
+  type SidebarPrefs,
+} from "./sidebar-menus";
 import { BoardControls, FilterChips } from "@/client/features/views/view-controls";
 import { hotkeyOf, runShortcut } from "./shortcuts";
 import { Button, IconButton } from "@/client/components/button";
@@ -31,30 +39,13 @@ import { Text } from "@/client/components/text";
 import { FindField } from "@/client/components/find-field";
 import { ConfirmDialog, Dialog } from "@/client/components/dialog";
 import { useCommand, focusNode } from "./commands";
-import { useInboxBadge } from "@/client/features/inbox/inbox";
+import { markAllRead, useInboxBadge } from "@/client/features/inbox/inbox";
 import { SectionDisclosure } from "@/client/components/section-disclosure";
 import { SelectRow } from "@/client/components/display-options";
 import { useStoredState } from "@/client/state/stored-state";
 
 /** Linear's sidebar preferences (BJ-76): collapsed sections, and when Inbox and My issues show (Customize sidebar). */
-const VISIBILITY = {
-  Always: "Always show",
-  WithNotifications: "Show when badged",
-  MoreMenu: "Don't show",
-} as const;
-type Visibility = keyof typeof VISIBILITY;
-type SidebarPrefs = { collapsed: string[]; inbox: Visibility; myIssues: Visibility };
-const SIDEBAR_PREFS: SidebarPrefs = { collapsed: [], inbox: "Always", myIssues: "Always" };
-const visibility = (v: unknown): Visibility =>
-  typeof v === "string" && v in VISIBILITY ? (v as Visibility) : "Always";
-const parseSidebarPrefs = (raw: unknown): SidebarPrefs => {
-  const r = (raw ?? {}) as Partial<Record<keyof SidebarPrefs, unknown>>;
-  return {
-    collapsed: Array.isArray(r.collapsed) ? r.collapsed.filter((c) => typeof c === "string") : [],
-    inbox: visibility(r.inbox),
-    myIssues: visibility(r.myIssues) === "WithNotifications" ? "Always" : visibility(r.myIssues),
-  };
-};
+const SIDEBAR_KEY = "better-jira:sidebar:v1";
 
 // --- chrome ---
 
@@ -111,7 +102,7 @@ export function Sidebar({ boards }: { boards: Board[] }) {
   const peek = useStore((s) => s.sidebarPeek) && hidden;
   const inbox = useStore((s) => s.inbox);
   const badge = useInboxBadge();
-  const [prefs, setPrefs] = useStoredState("better-jira:sidebar:v1", parseSidebarPrefs, SIDEBAR_PREFS);
+  const [prefs, setPrefs] = useStoredState(SIDEBAR_KEY, parseSidebarPrefs, SIDEBAR_PREFS);
   const customizing = useStore((s) => s.overlay === "customize-sidebar");
   const dialog = customizing && <CustomizeSidebar prefs={prefs} setPrefs={setPrefs} />;
   if (hidden && !open && !peek) return dialog || null;
@@ -149,14 +140,19 @@ export function Sidebar({ boards }: { boards: Board[] }) {
           better-jira
         </div>
         {(prefs.inbox === "Always" || inbox || (prefs.inbox === "WithNotifications" && badge > 0)) && (
-          <SidebarLink row={{ place: { to: "inbox" } }} to={{ inbox: true, selected: null, panel: false }}>
-            <Icon name="inbox" /> Inbox
-            {badge > 0 && (
-              <Text data-inbox-badge variant="mini" color="base" className="ml-auto">
-                {badge}
-              </Text>
-            )}
-          </SidebarLink>
+          <ContextMenu
+            label="Inbox options"
+            entries={() => sidebarItemEntries("inbox", { prefs, setPrefs, unread: badge, markAllRead: () => void markAllRead() })}
+          >
+            <SidebarLink row={{ place: { to: "inbox" } }} to={{ inbox: true, selected: null, panel: false }}>
+              <Icon name="inbox" /> Inbox
+              {badge > 0 && (
+                <Text data-inbox-badge variant="mini" color="base" className="ml-auto">
+                  {badge}
+                </Text>
+              )}
+            </SidebarLink>
+          </ContextMenu>
         )}
         <SideItem onClick={() => runShortcut("search")}>
           <Icon name="search" /> Search <Shortcut className="ml-auto" keys={hotkeyOf("search")} size="small" />
@@ -166,9 +162,11 @@ export function Sidebar({ boards }: { boards: Board[] }) {
         </SideItem>
         {/* Like Linear, My issues is a sidebar view rather than a tab beside Active/Backlog/All. */}
         {prefs.myIssues === "Always" && (
-          <SidebarLink row={{ place: { to: "my-issues" } }} to={{ mine: true, selected: null, panel: false }}>
-            <Icon name="user" /> My issues <Shortcut className="ml-auto" keys={hotkeyOf("mine")} size="small" />
-          </SidebarLink>
+          <ContextMenu label="My issues options" entries={() => sidebarItemEntries("myIssues", { prefs, setPrefs })}>
+            <SidebarLink row={{ place: { to: "my-issues" } }} to={{ mine: true, selected: null, panel: false }}>
+              <Icon name="user" /> My issues <Shortcut className="ml-auto" keys={hotkeyOf("mine")} size="small" />
+            </SidebarLink>
+          </ContextMenu>
         )}
         <SidebarMore prefs={prefs} />
 
@@ -189,7 +187,7 @@ export function Sidebar({ boards }: { boards: Board[] }) {
             </SidebarLink>
           );
           return (
-            <ContextMenu key={b.id} label="Board options" entries={() => boardEntries(b)}>
+            <ContextMenu key={b.id} label="Board options" entries={() => boardEntries(b, hotkeyOf("copy-url"))}>
               {item}
             </ContextMenu>
           );
@@ -229,18 +227,15 @@ export function Sidebar({ boards }: { boards: Board[] }) {
 const openMyIssues = () => timed("open my issues", () => navigate({ mine: true, selected: null, panel: false }));
 
 /** Linear's sidebar "More" (`Jp.more_workspace`): shown while an item is set to "Don't show", it lists those items so they
- *  stay one click away. */
+ *  stay one click away, then ┄ Customize sidebar (`yPn`, chrome-53). */
 function SidebarMore({ prefs }: { prefs: SidebarPrefs }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const entries: ActionEntry[] = [
-    ...(prefs.inbox === "MoreMenu"
-      ? [{ name: "Inbox", icon: "inbox", shortcut: hotkeyOf("inbox"), run: () => runShortcut("inbox") } as const]
-      : []),
-    ...(prefs.myIssues === "MoreMenu"
-      ? [{ name: "My issues", icon: "user", shortcut: hotkeyOf("mine"), run: openMyIssues } as const]
-      : []),
-  ];
-  if (!entries.length) return null;
+  if (prefs.inbox !== "MoreMenu" && prefs.myIssues !== "MoreMenu") return null;
+  const entries = moreEntries(
+    prefs,
+    { inbox: () => runShortcut("inbox"), myIssues: openMyIssues },
+    { inbox: hotkeyOf("inbox"), myIssues: hotkeyOf("mine") },
+  );
   return (
     <>
       {/* Below 768px a pick closes the sidebar; this one opens a menu inside it, so it keeps the sidebar open. */}
@@ -261,7 +256,7 @@ function CustomizeSidebar({
   setPrefs: (prefs: SidebarPrefs) => void;
 }) {
   const close = () => ui.send({ type: "overlay.close" });
-  const options = Object.entries(VISIBILITY);
+  const options = (item: "inbox" | "myIssues") => visibilityOptions(item).map((v) => [v, VISIBILITY[v]] as const);
   return (
     <Dialog label="Customize sidebar" close={close} width={440}>
       {/* Linear's `rX`: the Modal header and content at 24px, sections 24px apart. */}
@@ -276,56 +271,18 @@ function CustomizeSidebar({
         <SelectRow
           label="Inbox"
           value={prefs.inbox}
-          options={options}
-          onChange={(inbox) => setPrefs({ ...prefs, inbox: visibility(inbox) })}
+          options={options("inbox")}
+          onChange={(inbox) => setPrefs(parseSidebarPrefs({ ...prefs, inbox }))}
         />
         <SelectRow
           label="My issues"
           value={prefs.myIssues}
-          options={options.filter(([v]) => v !== "WithNotifications")}
-          onChange={(myIssues) => setPrefs({ ...prefs, myIssues: visibility(myIssues) })}
+          options={options("myIssues")}
+          onChange={(myIssues) => setPrefs(parseSidebarPrefs({ ...prefs, myIssues }))}
         />
       </Dialog.Body>
     </Dialog>
   );
-}
-
-/** Every sidebar board's right-click menu, as Linear's team menu (CORE-15): Favorite, Copy link (Linear's sidebar item
- *  `iX`: "Copy link", toast "Link copied to clipboard"), Open in new tab, and Remove
- *  only for a board added in the app (BJ-24), which setup's boards can't. */
-export function boardEntries(board: Board): ActionEntry[] {
-  const id = `board:${board.id}`,
-    favorite = get().favorites.includes(id),
-    url = () =>
-      placeURL({ to: "board", board: board.id, scope: (get().preferences[board.id] ?? defaultPreferences()).scope });
-  return [
-    { name: favorite ? "Unfavorite" : "Favorite", icon: favorite ? "starred" : "star", run: () => toggleFavorite(id) },
-    {
-      name: "Copy link",
-      icon: "link",
-      divider: true,
-      run: () =>
-        void navigator.clipboard.writeText(url()).then(
-          () => showNotification({ text: "Link copied to clipboard" }),
-          (e) => showNotification({ text: String(e) }),
-        ),
-    },
-    { name: "Open in new tab", icon: "external", run: () => window.open(url(), "_blank", "noopener") },
-    ...(board.removable
-      ? [
-          {
-            name: "Remove from sidebar",
-            icon: "close",
-            divider: true,
-            run: () =>
-              void removeBoard(board.id).then(
-                () => showNotification({ text: `Removed ${board.name}`, detail: "Add it again from Add board." }),
-                (error: Error) => set({ perf: error.message }),
-              ),
-          } satisfies ActionEntry,
-        ]
-      : []),
-  ];
 }
 
 /** Linear's 28px bottom bar under the sidebar and panel; ours carries the perf readout and the local-only note. */
@@ -553,12 +510,15 @@ export function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue
       className="flex min-w-0 items-center text-[13px] leading-[normal] font-medium text-fg-2"
     >
       <SidebarToggle />
-      {!mine || activeView ? <><AppLink to={allIssues} aria-label={board.name} title={board.name} onClick={clearBoardTools} className={CRUMB}>
-        <span aria-hidden="true" className={CRUMB_ICON}>
-          <span className="grid size-4 place-items-center rounded-[4px] bg-accent text-[9px] font-semibold text-white">{board.name[0]}</span>
-        </span>
-        <span className="truncate">{board.name}</span>
-      </AppLink>
+      {!mine || activeView ? <>{/* Linear's team crumb (`Api` → `vBn`): right-click for Copy URL. */}
+      <ContextMenu label="Board options" entries={() => [boardCopyURL(board, hotkeyOf("copy-url"))]}>
+        <AppLink to={allIssues} aria-label={board.name} title={board.name} onClick={clearBoardTools} className={CRUMB}>
+          <span aria-hidden="true" className={CRUMB_ICON}>
+            <span className="grid size-4 place-items-center rounded-[4px] bg-accent text-[9px] font-semibold text-white">{board.name[0]}</span>
+          </span>
+          <span className="truncate">{board.name}</span>
+        </AppLink>
+      </ContextMenu>
       <CrumbSep className={issue ? "max-sm:hidden" : ""} /></> : null}
       {custom ? (
         <>
@@ -585,13 +545,16 @@ export function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue
         <>
           <CrumbSep />
           {/* The key never truncates (Opus review 4: at 390px it vanished): the title truncates, and below 640px the Issues crumb gives way. */}
-          <a aria-current="page" className={CRUMB_LAST} href={issueURL(issue)} target="_blank" rel="noreferrer">
-            <span className={CRUMB_ICON}><TypeDot type={issue.type} /></span>
-            <span data-crumb-issue className="flex min-w-0">
-              <span className="mr-[5.6px] shrink-0 tracking-[-0.24px]">{issue.key}</span>
-              <span className="truncate">{issue.summary}</span>
-            </span>
-          </a>
+          {/* Linear's current issue crumb (`Api`): right-click for its copy rows and Rename…. */}
+          <ContextMenu label="Issue options" entries={() => issueBreadcrumbEntries(issue)}>
+            <a aria-current="page" className={CRUMB_LAST} href={issueURL(issue)} target="_blank" rel="noreferrer">
+              <span className={CRUMB_ICON}><TypeDot type={issue.type} /></span>
+              <span data-crumb-issue className="flex min-w-0">
+                <span className="mr-[5.6px] shrink-0 tracking-[-0.24px]">{issue.key}</span>
+                <span className="truncate">{issue.summary}</span>
+              </span>
+            </a>
+          </ContextMenu>
         </>
       )}
     </nav>
