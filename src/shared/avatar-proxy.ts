@@ -2,13 +2,8 @@
  * and site-hosted avatars need a Jira login. So the browser loads every avatar through this same-origin proxy. */
 import { avatar48 } from "./avatar-url";
 
-const SVG = /\.svg(?:[?#]|$)/i;
 export const avatarSrc = (url?: string) =>
-  // The proxy refuses SVG (it could carry script on this origin); an <img> runs none, so an SVG (Jira's own logo on system
-  // notifications) loads directly instead of failing with a 404 (R3-inbox-D7).
-  url && /^https?:\/\//.test(url) && !SVG.test(url)
-    ? `/api/avatar?url=${encodeURIComponent(avatar48(url)!)}`
-    : url;
+  url && /^https?:\/\//.test(url) ? `/api/avatar?url=${encodeURIComponent(avatar48(url)!)}` : url;
 
 export type AvatarCache = {
   get(url: string): { type: string; body: Uint8Array; at: number } | undefined;
@@ -47,9 +42,16 @@ export function avatarProxy({
   const allowed = (url: URL) =>
     url.origin === origin ||
     (url.protocol === "https:" && AVATAR_HOSTS.some((host) => host.test(url.hostname)));
+  // SVG avatars (Jira's logo, site-hosted project and default avatars) are served too: an <img> runs no script, and this
+  // CSP sandboxes the SVG if someone opens the URL as a page on this origin, so its script can't run there either.
   const image = (type: string, body: Uint8Array) =>
     new Response(body as Uint8Array<ArrayBuffer>, {
-      headers: { "Content-Type": type, "Cache-Control": "private, max-age=2592000" },
+      headers: {
+        "Content-Type": type,
+        "Cache-Control": "private, max-age=2592000",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+        "X-Content-Type-Options": "nosniff",
+      },
     });
   const missing = () =>
     new Response(null, { status: 404, headers: { "Cache-Control": "private, max-age=300" } });
@@ -76,7 +78,7 @@ export function avatarProxy({
       }
       if (res.status === 429 || res.status >= 500) throw new Error(`avatar host ${res.status}`); // passing; retry later
       const type = res.headers.get("Content-Type")?.split(";")[0]?.trim() ?? "";
-      if (!res.ok || !type.startsWith("image/") || type.includes("svg")) return; // SVG can carry script
+      if (!res.ok || !type.startsWith("image/")) return;
       if (Number(res.headers.get("Content-Length") ?? 0) > MAX_BYTES) return;
       const body = new Uint8Array(await res.arrayBuffer());
       return body.byteLength > MAX_BYTES ? undefined : { type, body };

@@ -28,10 +28,25 @@ test("avatarSrc routes absolute URLs through the proxy only", () => {
   expect(avatarSrc(undefined)).toBeUndefined();
 });
 
-test("an SVG avatar (Jira's logo on system notifications) loads directly: the proxy refuses SVG (R3-inbox-D7)", () => {
-  const logo = "https://jira-frontend-bifrost.prod-east.frontend.public.atl-paas.net/assets/jira-logo-blue.fef30c77.svg";
-  expect(avatarSrc(logo)).toBe(logo);
-  expect(avatarSrc(`${logo}?v=2`)).toBe(`${logo}?v=2`);
+test("serves SVG avatars, sandboxed so the SVG can't run script if opened as a page (R3 G10)", async () => {
+  // Jira's site-hosted avatars are SVG with no .svg in the URL and need the login, so they can't load directly.
+  const start = `${SITE}/rest/api/3/universal_avatar/view/type/project/avatar/10404?size=medium`;
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg"/>';
+  const logo = "https://jira-frontend-bifrost.prod-east.frontend.public.atl-paas.net/assets/jira-logo-blue.svg";
+  const { fetcher, calls } = fake({
+    [start]: () => image("image/svg+xml", svg),
+    [logo]: () => image("image/svg+xml; charset=utf-8", svg),
+  });
+  const proxy = avatarProxy({ site: SITE, auth, cache: memoryAvatarCache(), fetcher });
+  for (const url of [start, logo]) {
+    expect(avatarSrc(url)).toStartWith("/api/avatar?url=");
+    const res = await proxy(ask(url));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("image/svg+xml");
+    expect(res.headers.get("Content-Security-Policy")).toContain("sandbox");
+    expect(await res.text()).toBe(svg);
+  }
+  expect(calls[0]!.auth).toBeTruthy();
 });
 
 test("rejects bad URLs and hosts outside the site and avatar CDNs", async () => {
@@ -72,14 +87,13 @@ test("stops at a redirect to a disallowed host", async () => {
   expect(calls).toHaveLength(1);
 });
 
-test("refuses non-images, SVG and oversized bodies", async () => {
+test("refuses non-images and oversized bodies", async () => {
   const { fetcher } = fake({
     "https://i0.wp.com/html": () => image("text/html"),
-    "https://i0.wp.com/svg": () => image("image/svg+xml"),
     "https://i0.wp.com/big": () => image("image/png", new Uint8Array(600 * 1024)),
   });
   const proxy = avatarProxy({ site: SITE, cache: memoryAvatarCache(), fetcher });
-  for (const path of ["html", "svg", "big"])
+  for (const path of ["html", "big"])
     expect((await proxy(ask(`https://i0.wp.com/${path}`))).status).toBe(404);
 });
 
