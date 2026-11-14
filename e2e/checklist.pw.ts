@@ -1,4 +1,4 @@
-import { expect, test, sleep, type App as Page } from "./app";
+import { expect, fixture, test, sleep, type App as Page } from "./app";
 // Phase 3 checklist items that no other browser test exercised.
 const summary = `(document.getElementById('summary').value??document.getElementById('summary').textContent)`;
 const fromBoard = async (page: Page, key: string) => {
@@ -114,6 +114,8 @@ const milestone = `const read=fetch;window.fetch=async(...args)=>{const response
 test("an issue's favourite, assignee, project and milestone change and survive a reload", async ({
   open,
 }) => {
+  // The project is the issue's epic (shared/epics.ts): the fixture's TEST-7 "Fixture epic".
+  await fixture.reset({ epics: true });
   const page = await open("?issue=TEST-1&view=page", { setup: milestone });
   await test.step("favorite turns off from the star, and both states survive a reload", async () => {
     await page.waitFor(`!!document.querySelector('[aria-label="Add issue to favorites"]')`);
@@ -147,10 +149,11 @@ test("an issue's favourite, assignee, project and milestone change and survive a
     await page.waitFor(
       `document.getElementById('prop-assignee').textContent.includes('Unassigned')`,
     );
+    await pick("prop-project", "Change project", "Fixture epic TEST-7");
+    await page.waitFor(`document.getElementById('prop-project')?.textContent.includes('Fixture epic')`);
     await pick("prop-project", "Change project", "No project");
-    await page.waitFor(`!document.getElementById('prop-project')?.textContent.includes('Audit')`);
-    await pick("prop-project", "Change project", "Audit");
-    await page.waitFor(`document.getElementById('prop-project')?.textContent.includes('Audit')`);
+    await page.waitFor(`!document.getElementById('prop-project')?.textContent.includes('Fixture epic')`);
+    await pick("prop-project", "Change project", "Fixture epic TEST-7");
     await page.key("M", "shift");
     await page.waitFor(
       `!!document.querySelector('[role=dialog][aria-label="Set milestone"] [cmdk-item][data-value="Beta"]')`,
@@ -159,7 +162,7 @@ test("an issue's favourite, assignee, project and milestone change and survive a
     await page.waitFor(`document.getElementById('prop-milestone')?.textContent.includes('Beta')`);
     await page.reload();
     await page.waitFor(
-      `document.getElementById('prop-milestone')?.textContent.includes('Beta')&&document.getElementById('prop-assignee').textContent.includes('Unassigned')&&document.getElementById('prop-project').textContent.includes('Audit')`,
+      `document.getElementById('prop-milestone')?.textContent.includes('Beta')&&document.getElementById('prop-assignee').textContent.includes('Unassigned')&&document.getElementById('prop-project').textContent.includes('Fixture epic')`,
     );
   });
 });

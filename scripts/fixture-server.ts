@@ -196,6 +196,8 @@ let clientFailures = 0,
   mediaVariant = "",
   writable = false,
   subtask = false,
+  /** Linear's Project is a Jira epic: TEST-7 and TEST-8 (done) are Epics, and TEST-2 and TEST-3 sit in TEST-7. */
+  epics = false,
   /** Speed checks: this many extra issues on each of two boards, like a real team board. */
   bulk = 0,
   /** Board 2 was added from the app. */
@@ -230,6 +232,8 @@ const requests: { method: string; path: string; status: number }[] = [];
 /** Writable mode: ops the app sent, and the types they changed (reset with the fixture). */
 const writes: { key: string; ops: any[] }[] = [],
   types = new Map<string, string>(),
+  /** Parents the app set, null for one it removed, as Jira's edit applies them. */
+  parents = new Map<string, string | null>(),
   createdIssues = new Map<string, any>(),
   descriptions = new Map<string, any>(),
   /** Links the app removed, from either end (see `pair`). */
@@ -253,6 +257,11 @@ const issueTypes = [
   { name: "Story", hierarchyLevel: 0 },
 ];
 const statuses = ["backlog", "todo", "doing", "review", "done"];
+/** Made-up epics in the shape work Jira sends: hierarchy level 1, in the board's Jira project. */
+const epicIssues = [
+  { key: "TEST-7", summary: "Fixture epic", status: "todo", priority: "High", labels: ["roadmap"] },
+  { key: "TEST-8", summary: "Shipped epic", status: "done", priority: "Low", labels: [] },
+].map((epic, i) => ({ ...issues[1]!, ...epic, type: "Epic", level: 1, assignee: null, rank: `0|i0100${i}:` }));
 const bulkIssues = () =>
   [1, 2].flatMap((boardId) =>
     Array.from({ length: bulk }, (_, i) => ({
@@ -276,7 +285,8 @@ const listed = () =>
     ...createdIssues.values(),
     ...bulkIssues(),
     ...(added ? [{ ...issues[1]!, key: "ADD-1", board: 2, summary: "Added board issue" }] : []),
-  ].map((issue) => ({
+    ...(epics ? epicIssues : []),
+  ].map((issue: any) => ({
     ...issue,
     ...(distinctCreator && issue.key === "TEST-6" ? { creator: alex } : {}),
     ...(subtask && issue.key === "TEST-6" ? { type: "Subtask", parent: "TEST-5" } : {}),
@@ -287,6 +297,10 @@ const listed = () =>
       ? { relations: [{ key: "TEST-1", kind: "inward:Cloners", label: "is cloned by" }] }
       : {}),
     ...(types.has(issue.key) ? { type: types.get(issue.key) } : {}),
+    ...(epics && (issue.key === "TEST-2" || issue.key === "TEST-3") ? { parent: "TEST-7", parentLevel: 1 } : {}),
+    ...(parents.has(issue.key)
+      ? { parent: parents.get(issue.key) ?? undefined, parentLevel: parents.get(issue.key) ? 1 : undefined }
+      : {}),
     comments: threadedComments ? thread.length : mediaInComment || (smartLinks && issue.key === "TEST-2") ? 1 : 0, // the mirror list counts the same Jira comments the detail returns
   }));
 /** Stands in for the server's applyOps: type changes follow live Jira, which refuses Subtask ↔ standard types. */
@@ -322,6 +336,8 @@ function applyOps(key: string, ops: any[]) {
       { status: 422 },
     );
   if (type) types.set(key, type);
+  for (const op of ops)
+    if (op.op === "fields" && "parent" in op.fields && !createdIssues.has(key)) parents.set(key, op.fields.parent);
   for (const op of ops)
     if (op.op === "link" && op.remove) unlinked.add(pair(key, op.target));
   return Response.json({
@@ -869,6 +885,7 @@ async function handle(req: Request) {
     mediaVariant = settings.mediaVariant ?? "";
     writable = settings.writable ?? false;
     subtask = settings.subtask ?? false;
+    epics = settings.epics ?? false;
     crossLinks = settings.crossLinks ?? false;
     createSuccess = settings.createSuccess ?? false;
     createdIssues.clear();
@@ -890,6 +907,7 @@ async function handle(req: Request) {
     requests.length = 0;
     writes.length = 0;
     types.clear();
+    parents.clear();
     unlinked.clear();
     return Response.json({ ok: true });
   }

@@ -1,6 +1,6 @@
 import { expect, test, sleep, type App as Page, fixture } from "./app";
 
-/** Writable fixture: TEST-6 is a Subtask of TEST-5, the rest are Tasks in project TEST ("Audit"). */
+/** Writable fixture: TEST-6 is a Subtask of TEST-5, the rest are Tasks in project TEST ("Audit"), and there are no epics. */
 const items = (p: Page, dialog: string) =>
   p.eval<string[]>(
     `[...document.querySelectorAll('[role="dialog"][aria-label="${dialog}"] [cmdk-item]')].map(n=>n.getAttribute('data-value'))`,
@@ -22,6 +22,13 @@ test("Jira's hierarchy rules: a Subtask's options, a Task's parents, project and
     expect(await p.eval(`!!document.querySelector('[data-create-child]')`)).toBe(false);
     await optionsAre(p, "sub-issue", ["Mark as › Sub-issue of…"]);
     await optionsAre(p, "remove", []);
+    // A sub-issue is in its parent's project (shared/epics.ts epicLocked): ⇧P opens nothing and the pill only names it.
+    await p.eval("document.activeElement?.blur()");
+    await p.key("p", "shift");
+    await sleep(150); // no project menu opens
+    expect(await p.eval(`!!document.querySelector('[role="dialog"][aria-label="Change project"]')`)).toBe(false);
+    expect(await p.eval(`document.getElementById('prop-project')?.tagName`)).toBe("SPAN");
+    expect(await p.eval(`document.getElementById('prop-project')?.textContent`)).toBe("No project");
     await p.eval("document.activeElement?.blur()");
     await p.key("o", "meta", "shift");
     await sleep(150); // no composer opens
@@ -29,7 +36,7 @@ test("Jira's hierarchy rules: a Subtask's options, a Task's parents, project and
       await p.eval(`!!document.querySelector('[role="dialog"][aria-label="Create issue"]')`),
     ).toBe(false);
   });
-  await test.step("R1-D33, R1-D34, R2-issue-fields-D8: Set parent lists only Jira-valid parents and the project is read-only on a Jira issue", async () => {
+  await test.step("R1-D33, R1-D34, R2-issue-fields-D8: Set parent lists only Jira-valid parents; a Task's project is its epic, never its Jira project", async () => {
     await p.goto("?issue=TEST-2&view=page");
     await p.waitFor(`!!document.getElementById('comment')`);
     // Every other issue is a Task or a Subtask: none can be a Task's parent.
@@ -39,15 +46,19 @@ test("Jira's hierarchy rules: a Subtask's options, a Task's parents, project and
     expect(await items(p, "Issue relations")).toEqual([]);
     await p.key("Escape");
     await p.eval("document.activeElement?.blur()");
+    // Linear's Project is the Jira epic: with no epics on the board ⇧P offers only No project, and "Audit" (the Jira
+    // project, Linear's team) is never a choice.
     await p.key("p", "shift");
-    await sleep(150); // no project menu opens
+    await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Change project"] [cmdk-item]')`);
     expect(
-      await p.eval(`!!document.querySelector('[role="dialog"][aria-label="Change project"]')`),
-    ).toBe(false);
-    expect(await p.eval(`document.getElementById('prop-project')?.tagName`)).toBe("SPAN");
-    expect(await p.eval(`document.getElementById('prop-project')?.textContent`)).toBe("Audit");
+      await p.eval<string[]>(
+        `[...document.querySelectorAll('[role="dialog"][aria-label="Change project"] [cmdk-item]')].map(n=>n.querySelector(".menu-name")?.textContent)`,
+      ),
+    ).toEqual(["No project"]);
+    await p.key("Escape");
+    expect(await p.eval(`document.getElementById('prop-project')?.tagName`)).toBe("BUTTON");
   });
-  await test.step("R1-D34, R1-D36, R1-D74: the composer offers Subtask only under a parent, and never No project", async () => {
+  await test.step("R1-D34, R1-D36, R1-D74: the composer offers Subtask only under a parent, and its project is an epic", async () => {
     const pill = async (label: string) => {
       const dialog = label === "Issue type" ? "Change issue type" : "Change project";
       await p.click(`[role="dialog"][aria-label="Create issue"] button[title="${label}"]`);
@@ -64,13 +75,17 @@ test("Jira's hierarchy rules: a Subtask's options, a Task's parents, project and
     await p.key("c");
     await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Create issue"]')`);
     expect(await pill("Issue type")).not.toContain("Subtask");
-    expect(await pill("Project")).toEqual(["Audit"]);
+    expect(await pill("Project")).toEqual(["No project"]);
     await p.click('[role="dialog"][aria-label="Create issue"] [aria-label="Close"]');
     // The composer for a Task's sub-issue offers only the type Jira will create it as.
     await p.eval("document.querySelector('[data-sub-issues] [data-create-child]')?.remove()");
     await p.key("o", "meta", "shift");
     await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Create issue"]')`);
     expect(await pill("Issue type")).toEqual(["Subtask"]);
+    // A sub-issue is in its parent's project: the composer has no Project pill for it.
+    expect(
+      await p.eval(`!!document.querySelector('[role="dialog"][aria-label="Create issue"] button[title="Project"]')`),
+    ).toBe(false);
   });
 });
 
