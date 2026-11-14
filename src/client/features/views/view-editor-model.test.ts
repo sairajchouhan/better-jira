@@ -53,3 +53,18 @@ test("BJ-151: CSV timestamps use UTC while due dates remain calendar dates", () 
   expect(csv.match(/2026-11-08T00:00:00.000Z/g)).toHaveLength(4);
   expect(csv).toContain('"2026-11-09"');
 });
+
+test("BJ-247: CSV Project is the issue's epic and Parent issue its parent issue, never that epic", () => {
+  const epic = issue({ key: "RAJ-9", type: "Epic", summary: "Billing" });
+  const task = issue({ key: "RAJ-10", parent: "RAJ-9", project: { key: "RAJ", name: "Jira project" } });
+  const sub = issue({ key: "RAJ-11", type: "Sub-task", parent: "RAJ-10" });
+  const rows = issuesCSV([task, sub], board, (key) => [epic, task, sub].find((i) => i.key === key))
+    .split("\r\n")
+    .map((row) => row.split('","'));
+  const [head] = rows;
+  const column = (name: string) => head!.findIndex((cell) => cell.replaceAll('"', "") === name);
+  expect(rows[1]![column("Project")]).toBe("Billing");
+  expect(rows[1]![column("Parent issue")]!.replaceAll('"', "")).toBe("");
+  expect(rows[2]![column("Project")]).toBe("Billing");
+  expect(rows[2]![column("Parent issue")]!.replaceAll('"', "")).toBe("RAJ-10");
+});

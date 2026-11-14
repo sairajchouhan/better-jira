@@ -33,6 +33,7 @@ import { Switch } from "@/client/components/switch";
 import "./create-issue.css";
 import {
   canHaveChildren,
+  canHaveSubIssues,
   canParent,
   childTypes,
   matchRank,
@@ -64,7 +65,7 @@ import {
   type Grouping,
 } from "@/shared/view-model";
 import { clearPriorityRow, statuses, projectChoices } from "@/shared/board-catalog";
-import { epicLocked, epicOf, epicPatch, isEpic } from "@/shared/epics";
+import { canNest, epicLocked, epicOf, epicPatch, isEpic, parentOf } from "@/shared/epics";
 import {
   setDisplay,
   setOnlyRule,
@@ -249,7 +250,7 @@ export function CreateIssue() {
   // oxlint-disable-next-line react-hooks/exhaustive-deps -- Memo invalidation follows draft identity or relation inputs; render-local helpers would invalidate every render.
   const submission = useMemo(() => crypto.randomUUID(), [draftIndex]);
   const submit = () => {
-    if (!title.trim() || filesBusy || noParentType || (draft.subIssues?.some(t => t.trim()) && !canHaveChildren(get(), { type, project }))) return;
+    if (!title.trim() || filesBusy || noParentType || (draft.subIssues?.some(t => t.trim()) && !canHaveSubIssues(get(), { type, project }))) return;
     const { fromSelection, suggestedAssignees: _suggested, suggestedEpics: _epics, ...fields } = draft;
     const key = actions.create(
       title,
@@ -293,7 +294,7 @@ export function CreateIssue() {
     ignoreInputs: false,
   });
   // Linear's composer actions run with focus in a field (`runWithInputFocus`): ⌃L Add link… (`cK`), ⌘⇧O Add sub-issue (`hJn`).
-  const subIssuesAllowed = canHaveChildren(get(), { type, project });
+  const subIssuesAllowed = canHaveSubIssues(get(), { type, project });
   const [focusSub, setFocusSub] = useState(-1);
   const addSubIssue = () => {
     setFocusSub(draft.subIssues?.length ?? 0);
@@ -783,7 +784,7 @@ function IssueProjectMenu({ issue, anchor, close }: IssueMenuProps) {
       value={epic ?? null}
       onChange={(next) => {
         // Defence in depth: the triggers hide for an epic or a sub-issue, and Jira would refuse the parent anyway.
-        if (!epicLocked(issue) && next !== (epic ?? null)) actions.patch(issue.key, epicPatch(next));
+        if (!epicLocked(issue, (key) => get().issues.get(key)) && next !== (epic ?? null)) actions.patch(issue.key, epicPatch(next));
       }}
     />
   );
@@ -1322,19 +1323,21 @@ export function Relations({ issue }: { issue: Issue }) {
   // ponytail: "Recent" is most recently updated; Linear uses recently viewed.
   const disabled = alreadyLinked(issue.relations, kind);
   const linked = new Set<string>();
+  const lookup = (key: string) => all.get(key);
   if (kind === "parent" || kind === "child")
     for (const i of all.values())
-      if (i.parent === issue.key || i.key === issue.parent) linked.add(i.key);
+      if (parentOf(i, lookup) === issue.key || i.key === parentOf(issue, lookup)) linked.add(i.key);
   // Jira takes a parent only one hierarchy level up in the same project; best match first, so Enter never picks a partial match over an exact one.
+  // Parent and sub-issue are parent issues only: an epic is a project, set with Project, so it is never offered here (canNest).
   const fits = (i: Issue) =>
     i.key !== issue.key &&
     !linked.has(i.key) &&
     (!!query || !disabled.has(i.key)) &&
     matchRank(query, i) >= 0 &&
     (kind === "parent"
-      ? canParent(get(), i, issue)
+      ? canNest(i, issue) && canParent(get(), i, issue)
       : kind === "child"
-        ? canParent(get(), issue, i)
+        ? canNest(issue, i) && canParent(get(), issue, i)
         : true);
   const ranked = (list: Issue[]) =>
     list
@@ -1374,6 +1377,7 @@ export function Relations({ issue }: { issue: Issue }) {
         seen.add(ancestor.key);
         ancestor = ancestor.parent ? all.get(ancestor.parent) : undefined;
       }
+      if (!canNest(target, issue)) return;
       actions.patch(issue.key, { parent: target.key });
     } else if (kind === "child") {
       for (
@@ -1385,6 +1389,7 @@ export function Relations({ issue }: { issue: Issue }) {
           set({ perf: "A parent cannot be its own descendant" });
           return;
         }
+      if (!canNest(issue, target)) return;
       actions.patch(target.key, { parent: issue.key });
     } else actions.relate(issue.key, target.key, kind);
     close();
@@ -1398,7 +1403,7 @@ export function Relations({ issue }: { issue: Issue }) {
             project: issue.project,
           });
         }
-      : kind === "child" && !query && canHaveChildren(get(), issue)
+      : kind === "child" && !query && canHaveSubIssues(get(), issue)
         ? () => {
             close();
             createSubIssue(issue);

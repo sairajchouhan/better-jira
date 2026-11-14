@@ -32,8 +32,8 @@ import { adfToText } from "@/client/features/editor/adf";
 import { type Grouping } from "@/shared/view-model";
 import { documentHasMedia, normalizeDocument, textToAdf, type AdfDocument } from "@/shared/document";
 import { reminderTime } from "@/client/features/reminders/reminder-display";
-import { typeChoices, childTypes, canHaveChildren } from "@/shared/issue-properties";
-import { epicLocked, epicOf, epicPatch } from "@/shared/epics";
+import { typeChoices, childTypes, canHaveSubIssues } from "@/shared/issue-properties";
+import { canNest, epicLocked, epicOf, epicPatch, parentOf } from "@/shared/epics";
 import { replyParent, visibleCommentTotal } from "@/client/features/comments/comment-thread";
 
 import {
@@ -419,7 +419,7 @@ export const actions = {
     const lookup = (k: string) => get().issues.get(k);
     if (
       groups.some(({ by, id }) => by === "project" && id !== (epicOf(issue, lookup) ?? "$none")) &&
-      epicLocked(issue)
+      epicLocked(issue, lookup)
     )
       return;
     // One drag, including its column and row changes, is one undoable edit.
@@ -450,7 +450,12 @@ export const actions = {
           actions.patch(key, {
             labels: id === "$none" ? [] : [...new Set([...current.labels, id])],
           });
-        else if (by === "parent") {
+        // Parent groups are parent issues (parentOf): "No parent" never takes an issue's epic away, and no epic becomes one.
+        else if (
+          by === "parent" &&
+          id !== (parentOf(current, lookup) ?? "$none") &&
+          (id === "$none" || canNest(lookup(id) ?? {}, current))
+        ) {
           let ancestor = id;
           const seen = new Set([key]);
           let cycle = false;
@@ -671,7 +676,7 @@ export const actions = {
     if (made) return made;
     const board = get().boards.find((b) => b.id === (draft.board ?? get().board));
     const status = statusById(board, draft.status) ?? statuses(board)[0];
-    if (!board || !status || !summary.trim() || (draft.subIssues?.some(title => title.trim()) && !canHaveChildren(get(), draft))) return;
+    if (!board || !status || !summary.trim() || (draft.subIssues?.some(title => title.trim()) && !canHaveSubIssues(get(), draft))) return;
     const prefix =
       [...get().issues.values()].find((i) => i.board === board.id)?.key.split("-")[0] ?? "LOCAL";
     const key = `${prefix}-NEW${nextSeq()}`;

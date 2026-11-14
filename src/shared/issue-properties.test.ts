@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   canHaveChildren,
+  canHaveSubIssues,
   canParent,
   childTypes,
   matchRank,
@@ -103,6 +104,23 @@ test("hierarchy pickers offer only what Jira accepts: a parent one level up in t
   expect(canParent(local, kan("Story"), kan("Task"))).toBe(true);
   expect(canHaveChildren(local, kan("Subtask"))).toBe(true);
   expect(needsParent(local, kan("Subtask"))).toBe(false);
+});
+
+test("BJ-247: an epic has no sub-issues, though Jira takes its project's issues under it", () => {
+  const levels = [
+    { name: "Epic", hierarchyLevel: 1 },
+    { name: "Task", hierarchyLevel: 0 },
+    { name: "Subtask", hierarchyLevel: -1 },
+  ];
+  const jira = { writable: true, options: { types: { KAN: levels } } };
+  const local = { ...jira, writable: false };
+  const kan = (type: string) => ({ type, project: { key: "KAN" } });
+  // Jira still takes children under an epic (its project's issues: the composer creates them), but none is a sub-issue.
+  expect(canHaveChildren(jira, kan("Epic"))).toBe(true);
+  expect(canHaveSubIssues(jira, kan("Epic"))).toBe(false);
+  expect(canHaveSubIssues(local, kan("Epic"))).toBe(false);
+  expect(canHaveSubIssues(jira, kan("Task"))).toBe(true);
+  expect(canHaveSubIssues(jira, kan("Subtask"))).toBe(false);
 });
 
 test("search ranks an exact match above a partial one", () => {

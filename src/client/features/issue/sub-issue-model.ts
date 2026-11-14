@@ -1,5 +1,5 @@
 import { type Issue } from "@/shared/issue-model";
-
+import { parentOf } from "@/shared/epics";
 import {
   ORDERINGS,
   PROPERTIES,
@@ -49,16 +49,19 @@ export type SubIssueRow = { issue: Issue; depth: number; contextOnly: boolean };
 type Status = (issue: Issue) => { category: string; order: number };
 export type ChildrenIndex = ReadonlyMap<string, readonly Issue[]>;
 const indexes = new WeakMap<ReadonlyMap<string, Issue>, ChildrenIndex>();
-/** One index per immutable issues snapshot; shared by every parent and progress renderer. */
+/** One index per immutable issues snapshot; shared by every parent and progress renderer. Sub-issues are a parent issue's
+ *  children only (shared/epics.ts parentOf): an epic's issues are its project's, never its sub-issues, as in Linear. */
 export function childrenByParent(issues: ReadonlyMap<string, Issue>): ChildrenIndex {
   const cached = indexes.get(issues);
   if (cached) return cached;
   const children = new Map<string, Issue[]>();
+  const lookup = (key: string) => issues.get(key);
   for (const issue of issues.values()) {
-    if (!issue.parent) continue;
-    const siblings = children.get(issue.parent) ?? [];
+    const parent = parentOf(issue, lookup);
+    if (!parent) continue;
+    const siblings = children.get(parent) ?? [];
     siblings.push(issue);
-    children.set(issue.parent, siblings);
+    children.set(parent, siblings);
   }
   indexes.set(issues, children);
   return children;

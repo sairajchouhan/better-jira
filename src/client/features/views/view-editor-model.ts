@@ -2,6 +2,7 @@ import { type Board, type Issue } from "@/shared/issue-model";
 
 import type { FilterGroup } from "@/shared/view-model";
 import { statusById, statuses } from "@/shared/board-catalog";
+import { epicName, epicOf, lookupIn, parentOf, type IssueLookup } from "@/shared/epics";
 export function viewPlaceholder(filters: FilterGroup, board?: Board): string {
   const values: string[] = [];
   const visit = (g: FilterGroup) => {
@@ -20,8 +21,9 @@ export function viewPlaceholder(filters: FilterGroup, board?: Board): string {
   visit(filters);
   return values.length ? values.join(", ") : "All issues";
 }
-/** Linear's export columns, in its order, for the fields a Jira issue has. Status and priority are names, like Linear. */
-export function issuesCSV(issues: Issue[], board: Board): string {
+/** Linear's export columns, in its order, for the fields a Jira issue has. Status and priority are names, like Linear. Project is
+ *  the issue's epic and Parent issue its parent issue, never that epic (shared/epics.ts); `lookup` finds them beyond `issues`. */
+export function issuesCSV(issues: Issue[], board: Board, lookup: IssueLookup = lookupIn(issues)): string {
   const names = new Map(
     statuses(board).map((s) => [s.id, s.name]),
   );
@@ -43,7 +45,7 @@ export function issuesCSV(issues: Issue[], board: Board): string {
       names.get(i.status) ?? i.status,
       i.estimate?.toString() ?? "",
       i.priority ?? "No priority",
-      i.project?.name ?? "",
+      ((epic) => (epic ? epicName(epic, lookup) : ""))(epicOf(i, lookup)),
       i.creator?.name ?? "",
       i.assignee?.name ?? "",
       i.labels.join(", "),
@@ -52,7 +54,7 @@ export function issuesCSV(issues: Issue[], board: Board): string {
       timestamp(i.started),
       timestamp(i.resolved),
       i.due ?? "",
-      i.parent ?? "",
+      parentOf(i, lookup) ?? "",
     ]),
   ]
     .map((row) => row.map(cell).join(","))

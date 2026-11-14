@@ -49,7 +49,8 @@ import { shortDate } from "@/client/lib/due-date";
 import { fullTime } from "./issue-dates";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
-import { canHaveChildren } from "@/shared/issue-properties";
+import { canHaveSubIssues } from "@/shared/issue-properties";
+import { parentOf } from "@/shared/epics";
 import {
   childrenByParent,
   defaultSubIssueDisplay,
@@ -125,7 +126,9 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
     setMenu(progress.current);
     return true;
   });
-  const parent = issue.parent ? all.get(issue.parent) : undefined;
+  // An epic parent is the issue's project, shown in the Project pill, never here (shared/epics.ts parentOf).
+  const parentKey = parentOf(issue, (key) => all.get(key));
+  const parent = parentKey ? all.get(parentKey) : undefined;
   if (!parent) return null;
   const status = (i: Issue) => statusOf(boards, i),
     model = subIssueRows(parent.key, all, defaultSubIssueDisplay(), status);
@@ -389,7 +392,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
             }
           />
         ))}
-      {!model.total && !creating && canHaveChildren(get(), issue) && (
+      {!model.total && !creating && canHaveSubIssues(get(), issue) && (
         <Button
           data-create-child
           aria-label="Add sub-issues"

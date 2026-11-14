@@ -326,7 +326,8 @@ describe("view selection", () => {
       ["projectPriority", "is", "Urgent", "High"],
       ["projectLabels", "is", "roadmap", "ui"],
       ["type", "is", "Bug", "Task"],
-      ["parent", "is", "A-0", "A-99"],
+      // A-0 is an epic: it is A-5's project, so A-5 has no parent issue (shared/epics.ts parentOf).
+      ["parent", "is", "$none", "A-0"],
       ["milestone", "is", "m1", "other"],
       ["watchers", "is", "$me", "other"],
       ["projectLead", "is", "$me", "other"],

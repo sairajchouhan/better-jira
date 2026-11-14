@@ -9,6 +9,7 @@ import {
   movedOrder,
   withMoveEntry,
   subIssueRows,
+  childrenByParent,
 } from "./sub-issue-model";
 const issue = (key: string, parent?: string, status = "todo", rank = ""): Issue => ({
   key,
@@ -162,4 +163,18 @@ test("Move… sits in the Copy group right after Make a copy…, as Linear's iss
   const menu = ["Status", "Copy", "Make a copy…", "Favorite", "Remind me", "Delete"].map((name) => ({ name }));
   expect(names(withMoveEntry(menu, { name: "Move…" }))).toEqual(["Status", "Copy", "Make a copy…", "Move…", "Favorite", "Remind me", "Delete"]);
   expect(names(withMoveEntry([{ name: "Status" }, { name: "Delete" }], { name: "Move…" }))).toEqual(["Status", "Move…", "Delete"]);
+});
+
+test("BJ-247: an epic's issues are its project's, never its sub-issues; a parent issue's children are", () => {
+  const epic = { ...issue("EPIC"), type: "Epic" };
+  const task = { ...issue("TASK", "EPIC"), type: "Task" };
+  const sub = { ...issue("SUB", "TASK"), type: "Sub-task" };
+  // A Jira parent the mirror doesn't hold, sent as an epic (level 1).
+  const outside = { ...issue("OUT", "EPIC-9"), parentLevel: 1 };
+  const byKey = new Map([epic, task, sub, outside].map((i) => [i.key, i]));
+  expect(childrenByParent(byKey).get("EPIC")).toBeUndefined();
+  expect(childrenByParent(byKey).get("EPIC-9")).toBeUndefined();
+  expect(childrenByParent(byKey).get("TASK")?.map((i) => i.key)).toEqual(["SUB"]);
+  expect(subIssueRows("EPIC", byKey, defaultSubIssueDisplay(), status).total).toBe(0);
+  expect(subIssueRows("TASK", byKey, defaultSubIssueDisplay(), status).rows.map((r) => r.issue.key)).toEqual(["SUB"]);
 });

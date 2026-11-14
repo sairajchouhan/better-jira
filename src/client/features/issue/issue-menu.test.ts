@@ -231,3 +231,69 @@ test("A3: the property values ⌘K hoists carry Linear's command-menu breadcrumb
   expect(users.find((u) => u.name === ME.name)?.exact).toEqual(["me"]);
   expect(users.filter((u) => u.exact).length).toBe(1);
 });
+
+describe("BJ-247: an epic parent is the issue's Project, never its Parent", () => {
+  const board: Board = {
+    id: 1,
+    name: "Board",
+    columns: [{ name: "Todo", statuses: [{ id: "todo", name: "Todo", category: "new" }] }],
+  };
+  const epic: Issue = { ...issue, key: "E-1", type: "Epic", summary: "Billing" };
+  const task: Issue = { ...issue, key: "E-2", type: "Task", parent: "E-1" };
+  const other: Issue = { ...issue, key: "E-4", type: "Task" };
+  const sub: Issue = { ...issue, key: "E-3", type: "Sub-task", parent: "E-2" };
+  const setup = () =>
+    set({ writable: false, boards: [board], issues: new Map([epic, task, sub, other].map((i) => [i.key, i])) });
+  const menu = (key: string) => issueMenuEntries(get().issues.get(key)!, { openDialog: () => {}, close: () => {} });
+  const names = (entries: ActionEntry[], name: string) => entries.find((e) => e.name === name)?.children?.map((e) => e.name) ?? [];
+
+  test("Remove never lists the epic as a parent issue; a sub-issue's parent issue it does", () => {
+    setup();
+    expect(names(menu("E-2"), "Remove").some((n) => n.includes("E-1"))).toBe(false);
+    expect(names(menu("E-3"), "Remove")).toContain(`Parent issue E-2 ${task.summary}`);
+  });
+
+  test("an epic has no Parent of…, Sub-issue of…, Parent issue… or Sub-issue… entries", () => {
+    setup();
+    const entries = menu("E-1");
+    expect(names(entries, "Mark as")).not.toContain("Parent of…");
+    expect(names(entries, "Mark as")).not.toContain("Sub-issue of…");
+    expect(names(entries, "Create related")).not.toContain("Parent issue…");
+    expect(names(entries, "Create related")).not.toContain("Sub-issue…");
+    expect(names(menu("E-2"), "Mark as")).toContain("Sub-issue of…");
+  });
+
+  test("dropping an issue in an epic on No parent keeps its epic; an epic never drops into a parent group", async () => {
+    const { actions } = await import("@/client/state/issue-actions");
+    setup();
+    actions.drop("E-2", 1, [{ by: "parent", id: "$none" }]);
+    expect(get().issues.get("E-2")?.parent).toBe("E-1");
+    actions.drop("E-1", 1, [{ by: "parent", id: "E-4" }]);
+    expect(get().issues.get("E-1")?.parent).toBeUndefined();
+    // A sub-issue does leave its parent issue.
+    actions.drop("E-3", 1, [{ by: "parent", id: "$none" }]);
+    expect(get().issues.get("E-3")?.parent).toBeUndefined();
+  });
+
+  test("⌘K and keys: Open parent issue and Open sub-issue follow parent issues only; an epic has no Set parent issue", async () => {
+    const { canRunShortcut } = await import("@/client/features/navigation/shortcuts");
+    setup();
+    ui.send({ type: "overlay.close" });
+    const on = (key: string) => {
+      navigate({ board: 1, selected: key, panel: true, document: null, inbox: false, mine: false });
+      return ["parent-open", "sub-issues-of-parent", "child-open", "parent-set"].filter(canRunShortcut);
+    };
+    expect(on("E-1")).toEqual([]);
+    expect(on("E-2")).toEqual(["child-open", "parent-set"]);
+    expect(on("E-3")).toEqual(["parent-open", "sub-issues-of-parent", "parent-set"]);
+  });
+
+  test("a sub-issue can't be moved to a project group: that would take its parent issue away", async () => {
+    const { actions } = await import("@/client/state/issue-actions");
+    const child: Issue = { ...issue, key: "E-5", type: "Task", parent: "E-4" };
+    setup();
+    set({ issues: new Map([...get().issues, [child.key, child]]) });
+    actions.drop("E-5", 1, [{ by: "project", id: "E-1" }]);
+    expect(get().issues.get("E-5")?.parent).toBe("E-4");
+  });
+});

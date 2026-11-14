@@ -1,3 +1,4 @@
+import { canHaveSubIssues } from "@/shared/issue-properties";
 import { type Issue } from "@/shared/issue-model";
 import { pageURL } from "@/client/features/navigation/app-navigation";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
@@ -647,11 +648,16 @@ function Thread({
               divider: true,
               run: () => void createFromComment(comment),
             },
-            {
-              name: "New sub-issue from comment…",
-              icon: "plus",
-              run: () => void createFromComment(comment, true),
-            },
+            // An epic is a project: its new issues join it with Project, never as sub-issues.
+            ...(canHaveSubIssues(get(), issue)
+              ? [
+                  {
+                    name: "New sub-issue from comment…",
+                    icon: "plus" as const,
+                    run: () => void createFromComment(comment, true),
+                  },
+                ]
+              : []),
             ...(mine
               ? [
                   {

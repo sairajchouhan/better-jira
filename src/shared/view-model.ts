@@ -2,7 +2,7 @@ import { type Board, type Issue, type IssueDraft } from "@/shared/issue-model";
 
 import { personIssues, type PersonTab } from "./people";
 import { statusById } from "./board-catalog";
-import { epicName, epicOf, lookupIn, type IssueLookup } from "./epics";
+import { epicName, epicOf, hierarchyLevel, lookupIn, parentOf, type IssueLookup } from "./epics";
 
 export type Grouping =
   | "none"
@@ -414,12 +414,15 @@ export function valuesFor(i: Issue, field: Field, issues: Issue[]): string[] {
       return i.type ? [i.type] : [];
     case "priority":
       return i.priority ? [i.priority] : [];
-    case "parent":
-      return i.parent ? [i.parent] : [];
+    case "parent": {
+      const parent = parentOf(i, lookupIn(issues));
+      return parent ? [parent] : [];
+    }
     case "relations":
+      // Parent and sub-issue mean parent issues only: an epic's issues are its project's (shared/epics.ts parentOf).
       return [
-        ...(i.parent ? ["child"] : []),
-        ...(issues.some((x) => x.parent === i.key) ? ["parent"] : []),
+        ...(parentOf(i, lookupIn(issues)) ? ["child"] : []),
+        ...(hierarchyLevel(i) < 1 && issues.some((x) => x.parent === i.key) ? ["parent"] : []),
         ...(i.relations?.length ? ["related"] : []),
         ...(i.relations ?? []).map((r) => r.kind),
       ];
@@ -599,8 +602,10 @@ function groupValues(
       return [{ id: i.priority ?? "$none", name: i.priority ?? "No priority" }];
     case "type":
       return [{ id: i.type ?? "$none", name: i.type ?? "No type" }];
-    case "parent":
-      return [{ id: i.parent ?? "$none", name: i.parent ?? "No parent" }];
+    case "parent": {
+      const parent = parentOf(i, lookup);
+      return [{ id: parent ?? "$none", name: parent ?? "No parent" }];
+    }
     case "label":
       return i.labels.length
         ? i.labels.map((l) => ({ id: l, name: l }))
@@ -721,10 +726,12 @@ export function selectIssues(
 ): Issue[] {
   const d = prefs.display;
   const q = query.trim().toLowerCase();
+  // "Show sub-issues" hides parent issues' children only; an issue in an epic is in a project, not a sub-issue.
+  const lookup = lookupIn(all);
   const items = all.filter(
     (i) =>
       (acrossBoards || i.board === board.id) &&
-      (d.subIssues || !i.parent) &&
+      (d.subIssues || !parentOf(i, lookup)) &&
       (statusById(board, i.status)?.category !== "done" || d.completedIssues === "all" ||
         (d.completedIssues !== "none" && Date.parse(i.resolved ?? i.statusSince ?? "") >=
           now - ({ day: 1, week: 7, month: 30 }[d.completedIssues] ?? 0) * 86400000)) &&
@@ -1046,13 +1053,22 @@ export function listRows(
   mode: Display["nested"],
 ): { issue: Issue; depth: number }[] {
   if (mode === "none") return items.map((issue) => ({ issue, depth: 0 }));
+  // Nesting follows parent issues only: an epic's issues are its project's, so they never nest under it (parentOf).
+  const lookup = lookupIn(universe);
+  const parents = new Map<Issue, string | undefined>();
+  const parentIn = (issue: Issue) => {
+    if (!parents.has(issue)) parents.set(issue, parentOf(issue, lookup));
+    return parents.get(issue);
+  };
   const children = new Map<string, Issue[]>();
-  for (const issue of mode === "all" ? universe : items)
-    if (issue.parent) {
-      const group = children.get(issue.parent) ?? [];
+  for (const issue of mode === "all" ? universe : items) {
+    const parent = parentIn(issue);
+    if (parent) {
+      const group = children.get(parent) ?? [];
       group.push(issue);
-      children.set(issue.parent, group);
+      children.set(parent, group);
     }
+  }
   const keys = new Set(items.map((i) => i.key));
   const seen = new Set<string>();
   const rows: { issue: Issue; depth: number }[] = [];
@@ -1062,7 +1078,7 @@ export function listRows(
     rows.push({ issue, depth: Math.min(depth, 8) });
     for (const child of children.get(issue.key) ?? []) visit(child, depth + 1);
   };
-  items.filter((i) => !i.parent || !keys.has(i.parent)).forEach((i) => visit(i, 0));
+  items.filter((i) => !parentIn(i) || !keys.has(parentIn(i)!)).forEach((i) => visit(i, 0));
   items.forEach((i) => visit(i, 0)); // malformed parent cycles remain visible once
   return rows;
 }

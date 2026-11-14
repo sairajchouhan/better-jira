@@ -165,7 +165,7 @@ function exportView(view: SavedView) {
     ME.id,
   );
   const url = URL.createObjectURL(
-    new Blob([issuesCSV(issues, board)], { type: "text/csv;charset=utf-8" }),
+    new Blob([issuesCSV(issues, board, (key) => s.issues.get(key))], { type: "text/csv;charset=utf-8" }),
   );
   const a = document.createElement("a");
   a.href = url;

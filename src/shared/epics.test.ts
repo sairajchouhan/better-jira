@@ -1,7 +1,7 @@
 import { type Board, type Issue } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
-import { epicChoices, epicLocked, epicOf, epicPatch, hierarchyLevel, lookupIn } from "./epics";
-import { buckets, draftForGroup, matchesRule, type Rule } from "./view-model";
+import { canNest, epicChoices, epicLocked, epicOf, epicPatch, hierarchyLevel, lookupIn, parentOf } from "./epics";
+import { buckets, defaultPreferences, draftForGroup, listRows, matchesRule, selectIssues, type Rule } from "./view-model";
 import { opsFor } from "./jira-ops";
 
 const board: Board = {
@@ -135,4 +135,73 @@ test("grouping by project: one group per epic, named by its title, the epic with
   ]);
   // A lane's issues don't hold their epic: the board's issues name it.
   expect(buckets([subTask], "project", board, [subTask], [], lookup).map((b) => b.name)).toEqual(["Billing"]);
+});
+
+// BJ-247: an epic parent is the issue's Project, never its Parent; Parent is a parent issue only, as in Linear, where `issue.parent`
+// and `issue.project` are separate fields and Set parent issue (`hFn`, `mFn`) never touches the project.
+test("Parent is a parent issue only: an epic or initiative parent is never one", () => {
+  expect(parentOf(inBilling, lookup)).toBeUndefined();
+  expect(parentOf(subTask, lookup)).toBe("E-10");
+  // An epic's own parent is its initiative, which sits above projects.
+  expect(parentOf(billing, lookup)).toBeUndefined();
+  expect(parentOf(loose, lookup)).toBeUndefined();
+  // A parent the mirror doesn't hold counts by the level Jira sent with it; with none, it stays a parent.
+  expect(parentOf(issue("E-20", { parent: "E-99", parentLevel: 1 }), lookup)).toBeUndefined();
+  expect(parentOf(issue("E-21", { type: "Sub-task", parent: "E-98", parentLevel: 0 }), lookup)).toBe("E-98");
+  expect(parentOf(issue("E-22", { parent: "E-97" }), lookup)).toBe("E-97");
+});
+
+test("only issues below epics nest: no epic or initiative is a parent issue or a sub-issue", () => {
+  expect(canNest(inBilling, subTask)).toBe(true);
+  expect(canNest(loose, inBilling)).toBe(true);
+  expect(canNest(billing, inBilling)).toBe(false);
+  expect(canNest(initiative, billing)).toBe(false);
+  expect(canNest(loose, billing)).toBe(false);
+});
+
+// Local mode (no Jira levels) lets a Task have a Task parent; one parent field holds either the epic or that parent issue.
+const parentTask = issue("E-30", { parent: "E-2" });
+const childTask = issue("E-31", { parent: "E-30" });
+const local = [...all, parentTask, childTask];
+test("a sub-issue is in its parent's project, so setting its project would take its parent issue away", () => {
+  const find = lookupIn(local);
+  expect(epicOf(childTask, find)).toBe("E-2");
+  expect(epicLocked(childTask, find)).toContain("parent");
+  // Its parent issue is a standard issue in an epic, which still picks its project.
+  expect(epicLocked(parentTask, find)).toBeUndefined();
+  expect(epicLocked(inBilling, lookup)).toBeUndefined();
+});
+
+test("the Parent filter and Relations never take an epic for a parent", () => {
+  const matching = (r: Rule) => all.filter((i) => matchesRule(i, r, all, "me")).map((i) => i.key);
+  const parentRule = (values: string[]): Rule => ({ id: "p", field: "parent", op: "is", values });
+  const relations = (values: string[]): Rule => ({ id: "r", field: "relations", op: "is", values });
+  expect(matching(parentRule(["E-2"]))).toEqual([]);
+  expect(matching(parentRule(["E-10"]))).toEqual(["E-11"]);
+  expect(matching(parentRule(["$none"]))).toEqual(["E-1", "E-2", "E-3", "E-10", "E-12"]);
+  // Linear's Relations › Sub-issues and Parent issues: the epic and the initiative are neither.
+  expect(matching(relations(["child"]))).toEqual(["E-11"]);
+  expect(matching(relations(["parent"]))).toEqual(["E-10"]);
+});
+
+test("grouping by parent: an issue in an epic is in No parent, never in a group named by its epic", () => {
+  expect(buckets(all, "parent", board).map((b) => [b.id, b.issues.map((i) => i.key)])).toEqual([
+    ["E-10", ["E-11"]],
+    ["$none", ["E-1", "E-2", "E-3", "E-10", "E-12"]],
+  ]);
+});
+
+test("Show sub-issues off hides sub-issues only, never an epic's issues", () => {
+  const prefs = defaultPreferences();
+  prefs.display.subIssues = false;
+  prefs.display.completedIssues = "all";
+  prefs.scope = "all";
+  expect(selectIssues(all, board, prefs, false, "", "me").map((i) => i.key).sort()).toEqual(["E-1", "E-10", "E-12", "E-2", "E-3"]);
+});
+
+test("nested lists nest sub-issues under their parent issue, never an epic's issues under the epic", () => {
+  const rows = listRows(all, all, "all").map((r) => [r.issue.key, r.depth]);
+  expect(rows).toContainEqual(["E-10", 0]);
+  expect(rows).toContainEqual(["E-11", 1]);
+  expect(rows).toContainEqual(["E-2", 0]);
 });

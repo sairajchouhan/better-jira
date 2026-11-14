@@ -486,7 +486,7 @@ const Placeholder = ({ wide, short }: { wide: string; short: string }) => (
 function ProjectProperty({ issue }: { issue: Issue }) {
   const epic = useStore((s) => epicOf(issue, (key) => s.issues.get(key)));
   const name = useStore((s) => (epic ? epicName(epic, (key) => s.issues.get(key)) : undefined));
-  const locked = epicLocked(issue);
+  const locked = useStore((s) => epicLocked(issue, (key) => s.issues.get(key)));
   return locked ? (
     <PropertyPill id="prop-project" title={locked} icon={<Icon name="layers" />}>
       {name ?? "No project"}

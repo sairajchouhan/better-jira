@@ -721,6 +721,8 @@ function FieldBadge({ issue, field, label, title, className, children }: FieldCo
 function ProjectBadge({ issue }: { issue: Issue }) {
   const epic = useStore((s) => epicOf(issue, (key) => s.issues.get(key)));
   const name = useStore((s) => (epic ? epicName(epic, (key) => s.issues.get(key)) : undefined));
+  // An epic or a sub-issue can't pick its project (epicLocked), so its badge only names it, as the detail pill does.
+  const locked = useStore((s) => epicLocked(issue, (key) => s.issues.get(key)));
   if (!name) return null;
   const content = (
     <>
@@ -730,8 +732,6 @@ function ProjectBadge({ issue }: { issue: Issue }) {
       <Badge.Text>{name}</Badge.Text>
     </>
   );
-  // An epic or a sub-issue can't pick its project (epicLocked), so its badge only names it, as the detail pill does.
-  const locked = epicLocked(issue);
   return locked ? (
     <Badge data-project-badge title={`${name}: ${locked}`}>{content}</Badge>
   ) : (

@@ -5,8 +5,8 @@ import { actions, beginCreate } from "@/client/state/issue-actions";
 import { isLocalIssue, hasLocalJiraChanges } from "@/client/state/local-edits";
 import { ui } from "@/client/features/navigation/app-navigation";
 import { toggleFavorite } from "@/client/features/navigation/favorites";
-import { canHaveChildren, needsParent } from "@/shared/issue-properties";
-import { epicChoices, epicLocked, epicOf, epicPatch } from "@/shared/epics";
+import { canHaveSubIssues, needsParent } from "@/shared/issue-properties";
+import { epicChoices, epicLocked, epicOf, epicPatch, nestable, parentOf } from "@/shared/epics";
 import { createIssueDocument } from "./issue-resources";
 import { withMoveEntry } from "./sub-issue-model";
 import { MOVES, moveAvailability, runShortcut, hotkeyOf } from "@/client/features/navigation/shortcuts";
@@ -77,8 +77,9 @@ export function issuePropertyEntries(issue: Issue, { close, menu }: { close: () 
   const command = menu === "command";
   const board = boardOf(issue.key),
     boardIssues = [...get().issues.values()].filter((i) => i.board === issue.board);
-  const epic = epicOf(issue, (key) => get().issues.get(key)),
-    projectLocked = epicLocked(issue);
+  const lookup = (key: string) => get().issues.get(key);
+  const epic = epicOf(issue, lookup),
+    projectLocked = epicLocked(issue, lookup);
   const choose = (write: () => void) => () => {
     write();
     close();
@@ -180,7 +181,11 @@ export function issueMenuEntries(
     presentation?: "detail" | "row" | "sub-issue";
   },
 ): ActionEntry[] {
-  const parent = issue.parent ? get().issues.get(issue.parent) : undefined;
+  // The parent issue only: an epic parent is the issue's project, removed from Project, never from Remove › Parent (parentOf).
+  const lookup = (key: string) => get().issues.get(key);
+  const parentKey = parentOf(issue, lookup),
+    parent = parentKey ? lookup(parentKey) : undefined,
+    nests = nestable(issue);
   const favorite = get().favorites.includes(issue.key);
   const open = (overlay: "due" | "reminder") => openDialog(overlay);
   const related = (kind: NonNullable<IssueDraft["related"]>["kind"]) => {
@@ -255,7 +260,7 @@ export function issueMenuEntries(
       divider: true,
       children: [
         { name: "Issue…", run: () => related("related") },
-        ...(canHaveChildren(get(), issue)
+        ...(canHaveSubIssues(get(), issue)
           ? [
               {
                 name: "Sub-issue…",
@@ -267,7 +272,7 @@ export function issueMenuEntries(
               },
             ]
           : []),
-        { name: "Parent issue…", run: () => related("parent") },
+        ...(nests ? [{ name: "Parent issue…", run: () => related("parent") }] : []),
         { name: "Blocked issue…", run: () => related("blocked") },
         { name: "Blocking issue…", run: () => related("blocking") },
       ],
@@ -276,12 +281,17 @@ export function issueMenuEntries(
       name: "Mark as",
       icon: "flag",
       children: [
-        { name: "Parent of…", run: () => mark("child") },
-        {
-          name: "Sub-issue of…",
-          shortcut: hotkeyOf("parent-set"),
-          run: () => mark("parent"),
-        },
+        // An epic is a project: it has no parent issue and no sub-issues.
+        ...(canHaveSubIssues(get(), issue) ? [{ name: "Parent of…", run: () => mark("child") }] : []),
+        ...(nests
+          ? [
+              {
+                name: "Sub-issue of…",
+                shortcut: hotkeyOf("parent-set"),
+                run: () => mark("parent"),
+              },
+            ]
+          : []),
         {
           name: "Related to…",
           shortcut: hotkeyOf("related"),

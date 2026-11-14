@@ -10,8 +10,9 @@ import { activeView, saveOverlayToView } from "@/client/features/views/saved-vie
 import { canMergeOverlay } from "@/shared/saved-view-model";
 import { boardView, filterCount, groupStep, visibleOrder } from "@/shared/view-model";
 import { forgetIssueIntents, post, run as command } from "./commands";
-import { canHaveChildren } from "@/shared/issue-properties";
-import { epicLocked, epicOf } from "@/shared/epics";
+import { canHaveSubIssues } from "@/shared/issue-properties";
+import { epicLocked, epicOf, nestable, parentOf } from "@/shared/epics";
+import { childrenByParent } from "@/client/features/issue/sub-issue-model";
 import { getHotkeyManager, type Hotkey, type HotkeyChord } from "@tanstack/react-hotkeys";
 import { boardOf, get, isWatching, ME, set, useStore, type Overlay } from "@/client/state/store";
 import { actions, beginCreate, beginCreateInView } from "@/client/state/issue-actions";
@@ -73,6 +74,8 @@ const selected = (s = get()) => {
   const key = acting ?? (s.overlay && s.target) ?? (!s.document && s.selected);
   return key ? s.issues.get(key) : undefined;
 };
+/** The issue's parent issue, never its epic (shared/epics.ts parentOf). */
+const parentIn = (s: State, issue: Issue | undefined) => issue && parentOf(issue, (key) => s.issues.get(key));
 /** Linear: an issue shortcut acts on the row under the pointer or keyboard focus, as its row menu's hints promise: a sub-issue row
  *  (its section answers the command), else a board card or list row (IssueTarget's `data-key`, ISSUE-10). */
 const hoveredRow = () => {
@@ -545,7 +548,7 @@ export const shortcuts: Shortcut[] = [
     // project…" once the issue is in one. The Jira project itself never changes.
     ...(id === "project"
       ? {
-          when: (_: State, issue?: Issue) => !!issue && !epicLocked(issue),
+          when: (s: State, issue?: Issue) => !!issue && !epicLocked(issue, (key) => s.issues.get(key)),
           label: () => {
             const issue = target();
             return issue && epicOf(issue, (key) => get().issues.get(key)) ? "Move to project" : "Add to project";
@@ -665,8 +668,12 @@ export const shortcuts: Shortcut[] = [
     hotkey: "Mod+Shift+O",
     issue: true,
     run: issueAction((i) => {
-      if (!canHaveChildren(get(), i)) {
-        set({ perf: `Jira has no issue type below ${i.type}, so ${i.key} can't have sub-issues` });
+      if (!canHaveSubIssues(get(), i)) {
+        set({
+          perf: nestable(i)
+            ? `Jira has no issue type below ${i.type}, so ${i.key} can't have sub-issues`
+            : `${i.key} is a project: its issues join it with Project, not as sub-issues`,
+        });
         return;
       }
       if (!command("create-sub-issue", i.key)) beginCreate({ parent: i.key, project: i.project });
@@ -678,6 +685,9 @@ export const shortcuts: Shortcut[] = [
     group: "Issues",
     hotkey: "Mod+Shift+P",
     issue: true,
+    // An epic is a project and an initiative sits above them: neither has a parent issue. Any other issue opens the picker, as
+    // Linear's `hFn` applies to every issue; it lists only parents Jira takes.
+    when: (_, i) => !i || nestable(i),
     run: () => relation("parent"),
   },
   {
@@ -686,9 +696,9 @@ export const shortcuts: Shortcut[] = [
     group: "Issues",
     hotkey: "Mod+Shift+ArrowUp",
     issue: true,
-    when: (s) => !!s.issues.get(selected(s)?.parent ?? ""),
+    when: (s) => !!s.issues.get(parentIn(s, selected(s)) ?? ""),
     run: issueAction((i) => {
-      const parent = get().issues.get(i.parent ?? "");
+      const parent = get().issues.get(parentIn(get(), i) ?? "");
       if (parent) navigate({ board: parent.board, selected: parent.key, panel: true });
     }),
   },
@@ -698,7 +708,7 @@ export const shortcuts: Shortcut[] = [
     group: "Issues",
     hotkey: "Mod+Shift+ArrowRight",
     issue: true,
-    when: (s) => !!s.issues.get(selected(s)?.parent ?? ""),
+    when: (s) => !!s.issues.get(parentIn(s, selected(s)) ?? ""),
     // The parent's sub-issue menu lives in the open issue.
     run: () => {
       navigate({ panel: true });
@@ -713,10 +723,10 @@ export const shortcuts: Shortcut[] = [
     issue: true,
     when: (s) => {
       const key = selected(s)?.key;
-      return !!key && [...s.issues.values()].some((c) => c.parent === key);
+      return !!key && !!childrenByParent(s.issues).get(key)?.length;
     },
     run: issueAction((i) => {
-      const child = [...get().issues.values()].find((c) => c.parent === i.key);
+      const child = childrenByParent(get().issues).get(i.key)?.[0];
       if (child) navigate({ board: child.board, selected: child.key, panel: true });
     }),
   },

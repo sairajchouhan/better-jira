@@ -26,22 +26,47 @@ export function lookupIn(issues: readonly Issue[]): IssueLookup {
   return (key) => index.get(key);
 }
 
+/** The hierarchy level of an issue's Jira parent: the mirror's copy, else the level Jira sent with it; undefined when unknown. */
+type Parented = Pick<Issue, "parent" | "parentLevel">;
+function parentLevel(issue: Parented, lookup: IssueLookup): number | undefined {
+  if (!issue.parent) return undefined;
+  const parent = lookup(issue.parent);
+  return parent ? hierarchyLevel(parent) : issue.parentLevel;
+}
+
 /**
- * The epic an issue is in, as its project: its parent when that is an epic; for a sub-task, its parent's epic. An epic is its
- * own project, so it lists with its issues as a Linear project page lists the project with them, and it is never in "No project".
- * Initiatives sit above epics and are in none. A parent the mirror doesn't hold is judged by the level Jira gave with it.
+ * The issue's parent issue, as Linear means it (`issue.parent`, the "Sub-issue of" line, Set parent issue…): its Jira parent unless
+ * that is an epic or above. An epic parent is the issue's project (`epicOf`) and an initiative is above projects, so neither is ever
+ * its Parent: Linear keeps `parent` and `project` apart, and its Set parent (`hFn`, `mFn`) never touches the project. A parent the
+ * mirror doesn't hold, with no level from Jira, stays a parent. Every Parent surface (sub-issue lists, the parent line, Parent
+ * filter, grouping and nesting, ⌘K) reads this, never `issue.parent`.
  */
-export function epicOf(issue: Issue, lookup: IssueLookup): string | undefined {
+export function parentOf(issue: Parented, lookup: IssueLookup): string | undefined {
+  const level = parentLevel(issue, lookup);
+  return level !== undefined && level >= 1 ? undefined : issue.parent;
+}
+
+/** Whether an issue takes part in parent issues and sub-issues at all: an epic is a project and an initiative sits above
+ *  projects, so neither has a parent issue nor sub-issues (Linear's projects and initiatives aren't issues). */
+export const nestable = (issue: Leveled) => hierarchyLevel(issue) < 1;
+/** Whether `parent` may be `child`'s parent issue: both are nestable. */
+export const canNest = (parent: Leveled, child: Leveled) => nestable(parent) && nestable(child);
+
+/**
+ * The epic an issue is in, as its project: its parent when that is an epic; for a sub-issue (a sub-task, or a parent issue the
+ * mirror holds), its parent's epic. An epic is its own project, so it lists with its issues as a Linear project page lists the
+ * project with them, and it is never in "No project". Initiatives sit above epics and are in none. A parent the mirror doesn't hold
+ * is judged by the level Jira gave with it.
+ */
+export function epicOf(issue: Issue, lookup: IssueLookup, depth = 0): string | undefined {
   const level = hierarchyLevel(issue);
   if (level === 1) return issue.key;
-  if (level > 1 || !issue.parent) return undefined;
+  if (level > 1 || !issue.parent || depth > 8) return undefined; // a malformed parent cycle has no epic
+  const above = parentLevel(issue, lookup);
+  if (above === 1) return issue.parent;
   const parent = lookup(issue.parent);
-  const parentLevel = parent ? hierarchyLevel(parent) : issue.parentLevel;
-  if (parentLevel === 1) return issue.parent;
-  if (level < 0 && parentLevel === 0 && parent?.parent) {
-    const grand = lookup(parent.parent);
-    if ((grand ? hierarchyLevel(grand) : parent.parentLevel) === 1) return parent.parent;
-  }
+  // Jira gives a sub-task its parent's epic; a parent issue's epic comes the same way.
+  if (parent && hierarchyLevel(parent) < 1) return epicOf(parent, lookup, depth + 1);
   return undefined;
 }
 
@@ -50,15 +75,16 @@ export const epicName = (key: string, lookup: IssueLookup) => lookup(key)?.summa
 
 /**
  * Why this issue's project can't be set, or undefined when it can: only a standard issue goes into an epic, the one parent Jira
- * gives it. A sub-task follows its parent, and an epic is a project itself (Linear's `zBn` `disabledReason`).
+ * gives it. A sub-issue follows its parent (writing the epic would take its parent issue away), and an epic is a project itself
+ * (Linear's `zBn` `disabledReason`). Pass `lookup` for an existing issue, so a parent issue counts as well as a sub-task type.
  */
-export function epicLocked(issue: Leveled): string | undefined {
+export function epicLocked(issue: Leveled & Parented, lookup?: IssueLookup): string | undefined {
   const level = hierarchyLevel(issue);
   return level === 1
     ? "An epic is a project; Jira can't put it in another epic."
     : level > 1
       ? "Initiatives sit above projects."
-      : level < 0
+      : level < 0 || (lookup && parentOf(issue, lookup))
         ? "A sub-issue is in its parent's project."
         : undefined;
 }

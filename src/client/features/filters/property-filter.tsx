@@ -2,7 +2,7 @@ import { type Issue, type Board, type User } from "@/shared/issue-model";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Avatar } from "@/client/components/avatar";
 import { statuses } from "@/shared/board-catalog";
-import { epicOf, isEpic, lookupIn } from "@/shared/epics";
+import { epicOf, isEpic, lookupIn, parentOf } from "@/shared/epics";
 import { FilterIcon } from "./filter-icons";
 import { hue, PriorityIcon, StatusIcon, TypeDot } from "@/client/components/icons";
 import { Menu } from "@/client/components/menu";
@@ -125,8 +125,9 @@ export function filterChoices(
     const epic = field === "project" ? epicOf(i, lookup) : undefined;
     if (epic && !opts.has(epic)) add(epic, epic, <FilterIcon name="Project" />);
     if (field === "type" && i.type) add(i.type, i.type, <TypeDot type={i.type} />);
-    if (field === "parent" && i.parent)
-      add(i.parent, parentName(i.parent, issues), <FilterIcon name="Parent issues" />);
+    // Parent issues only: an epic is a Project option, never a Parent one (parentOf).
+    const parent = field === "parent" ? parentOf(i, lookup) : undefined;
+    if (parent) add(parent, parentName(parent, issues), <FilterIcon name="Parent issues" />);
     if (field === "milestone")
       for (const version of i.milestones ?? []) add(version.id, version.name);
     if (field === "watchers")
