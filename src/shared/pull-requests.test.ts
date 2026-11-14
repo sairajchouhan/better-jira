@@ -2,14 +2,15 @@ import { expect, test } from "bun:test";
 import {
   issuePullRequestOrder,
   leadingStatus,
-  pullRequestCardStatus,
   pullRequestSections,
   reviewDecision,
   mergePullRequests,
   pullRequestBadgeText,
   pullRequestList,
   pullRequestProviders,
-  pullRequestStatus,
+  pullRequestDescription,
+  pullRequestIdentifier,
+  pullRequestStatusText,
   pullRequestTool,
   withGitHubPullRequests,
   withLinkedPullRequests,
@@ -53,7 +54,10 @@ test("pull requests from every provider's detail: one per URL, newest first, wit
     branch: "ana/change",
     updated: "2026-03-01T00:00:00Z",
   });
-  expect(list.map(pullRequestStatus)).toEqual(["Open", "Closed", "Merged"]);
+  // Jira's detail has no merge or close time: a merged or declined pull request's last update stands in for it.
+  expect(list.map((p) => p.closedAt)).toEqual([undefined, "2026-02-01T00:00:00Z", "2026-01-01T00:00:00Z"]);
+  const now = Date.parse("2026-03-01T00:00:00Z");
+  expect(list.map((p) => pullRequestStatusText(p, now))).toEqual(["Open", "Closed 4w ago", "Merged 8w ago"]);
 });
 
 test("Linear's PR badge: one PR shows its number, several \"N PRs\" with the icon of the first status in Linear's order", () => {
@@ -118,10 +122,10 @@ test("Jira's and GitHub's pull requests merge into one row per URL, GitHub's row
 
 test("the in-review and approved states lead after open, and read as Linear labels them", () => {
   expect(leadingStatus([{ status: "merged" }, { status: "approved" }, { status: "inReview" }, { status: "draft" }])).toBe("inReview");
-  expect(pullRequestStatus(pr(1, "inReview"))).toBe("In review");
-  expect(pullRequestStatus(pr(1, "approved"))).toBe("Approved");
-  expect(pullRequestStatus(pr(1, "inReview", undefined, { changesRequested: true }))).toBe("Changes requested");
-  expect(pullRequestStatus(pr(1, "merged", undefined, { changesRequested: true }))).toBe("Merged");
+  expect(pullRequestStatusText(pr(1, "inReview"))).toBe("In review");
+  expect(pullRequestStatusText(pr(1, "approved"))).toBe("Approved");
+  expect(pullRequestStatusText(pr(1, "inReview", undefined, { changesRequested: true }))).toBe("Changes requested");
+  expect(pullRequestStatusText(pr(1, "merged", undefined, { changesRequested: true }))).toBe("Merged");
 });
 
 test("GitHub's pull requests add to an issue's count and state; one both sources link counts once", () => {
@@ -189,7 +193,9 @@ test("an open pull request's row names its review: changes requested over approv
 });
 
 test("the pull request card's status line leaves reviews out: in review and approved are Open", () => {
-  expect((["open", "inReview", "approved", "draft", "merged", "declined"] as const).map((s) => pullRequestCardStatus(row(1, s)))).toEqual([
+  const card = (pr: PullRequest) => pullRequestStatusText(pr, Date.now(), { reviews: false });
+  expect(card({ ...row(1, "inReview"), changesRequested: true })).toBe("Open");
+  expect((["open", "inReview", "approved", "draft", "merged", "declined"] as const).map((s) => card(row(1, s)))).toEqual([
     "Open",
     "Open",
     "Open",
@@ -197,4 +203,28 @@ test("the pull request card's status line leaves reviews out: in review and appr
     "Merged",
     "Closed",
   ]);
+});
+
+test("a merged or closed pull request says how long ago, as Linear's statusForPopoversAndActions; open and draft ones don't", () => {
+  const now = Date.parse("2026-11-14T12:00:00Z");
+  const done = (status: PullRequest["status"], closedAt: string) => ({ ...row(1, status), closedAt });
+  expect(pullRequestStatusText(done("merged", "2026-11-11T12:00:00Z"), now)).toBe("Merged 3d ago");
+  expect(pullRequestStatusText(done("declined", "2026-11-14T11:15:00Z"), now)).toBe("Closed 45min ago");
+  // The card's line (no reviews) says it too.
+  expect(pullRequestStatusText(done("merged", "2026-11-14T09:00:00Z"), now, { reviews: false })).toBe("Merged 3h ago");
+  // Without a time: the status alone.
+  expect(pullRequestStatusText(row(1, "merged"), now)).toBe("Merged");
+  // Only merged and closed ones carry it.
+  expect(pullRequestStatusText(done("open", "2026-11-11T12:00:00Z"), now)).toBe("Open");
+  expect(pullRequestStatusText(done("draft", "2026-11-11T12:00:00Z"), now)).toBe("Draft");
+});
+
+test("a row of several names its pull request as Linear's description: owner/repo#N · status", () => {
+  const now = Date.parse("2026-11-14T12:00:00Z");
+  expect(pullRequestIdentifier({ owner: "acme", repo: "app", number: "#4" })).toBe("acme/app#4");
+  expect(pullRequestIdentifier({ repo: "acme/app", number: "#4" })).toBe("acme/app#4");
+  expect(pullRequestDescription({ ...row(4, "inReview"), owner: "acme", repo: "app", changesRequested: true }, now)).toBe(
+    "acme/app#4 · Changes requested",
+  );
+  expect(pullRequestDescription({ ...row(4, "merged"), repo: "app", closedAt: "2026-11-13T12:00:00Z" }, now)).toBe("app#4 · Merged 1d ago");
 });

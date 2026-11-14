@@ -241,6 +241,8 @@ test("the link, pull request, comment and creator badges behave like Linear's", 
     // Read on hover: the badge icon becomes the first status in Linear's order among them (open before merged).
     await page.waitFor(`${prs}.querySelector('[data-pr-status]').dataset.prStatus==="open"`);
     await page.waitFor(`${hover}.textContent.includes("Fix the fixture sync")&&${hover}.textContent.includes("Add the fixture board")`);
+    // Several: Linear's rows (`Whn`), each "repo#N · status" under its title; not the one pull request's card.
+    expect(await page.eval(`[${hover}.querySelectorAll("[data-pull-request]").length,${hover}.querySelectorAll("[data-pull-request-card]").length]`)).toEqual([2, 0]);
     await page.click(`[data-key="TEST-1"] [aria-label="Pull requests on TEST-1"]`);
     const menu = `document.querySelector('[role="dialog"][aria-label="Go to linked pull requests…"]')`;
     await page.waitFor(`${menu}?.querySelectorAll("[cmdk-item]").length===2`);
@@ -251,6 +253,13 @@ test("the link, pull request, comment and creator badges behave like Linear's", 
     await page.click(`[role="dialog"][aria-label="Go to linked pull requests…"] [cmdk-item]:nth-child(1)`);
     await expect.poll(() => opened(page)).toContain("https://github.com/example/app/pull/12");
     expect(await page.eval(shownIssue)).toBe(null);
+  });
+  await test.step("one pull request: hover is Linear's pull request card (Vhn → PK), not a row", async () => {
+    const hover = await hoverCard(badge("TEST-2", "Pull requests on TEST-2"), "Pull requests");
+    await page.waitFor(`!!${hover}.querySelector('[data-pull-request-card="#7"]')`);
+    expect(await page.eval(`${hover}.querySelectorAll("[data-pull-request]").length`)).toBe(0);
+    await page.page.mouse.move(1, 1);
+    await page.waitFor(`!document.querySelector('[data-hover-card="Pull requests"]')`);
   });
   await test.step("one pull request: the click opens it straight away; so does ⇧→ on the hovered card", async () => {
     await page.eval("window.__opened=[]");
@@ -423,7 +432,7 @@ const githubPrSetup = `(()=>{localStorage.setItem(${JSON.stringify(PREFS_KEY)},$
  if(path==='/api/issues'){const issues=await (await real(input,init)).json();return Response.json(issues.map(i=>i.key==='TEST-3'?{...i,prCount:1,prStatus:'inReview'}:i));}
  return real(input,init);};})()`;
 
-test("a pull request GitHub links shows on the card like Jira's: in review is Linear's green open icon; hover says changes requested", async ({ open }) => {
+test("a pull request GitHub links shows on the card like Jira's: in review is Linear's green open icon; hover's card marks changes requested", async ({ open }) => {
   await fixture.reset();
   const page = await open("", { setup: githubPrSetup });
   const badge = `${card("TEST-3")}.querySelector('[aria-label="Pull requests on TEST-3"]')`;
@@ -435,5 +444,28 @@ test("a pull request GitHub links shows on the card like Jira's: in review is Li
   await page.page.mouse.move((chip.left + chip.right) / 2, (chip.top + chip.bottom) / 2);
   const hover = `document.querySelector('[data-hover-card="Pull requests"]')`;
   await page.waitFor(`${hover}?.textContent.includes("Queue the save")`);
-  expect(await page.eval(`${hover}.textContent`)).toContain("app#21 · Changes requested · ana-dev");
+  // One pull request: Linear's card (`PK`): the repository and number, "Open" without reviews, the change request as its mark.
+  const prCard = `${hover}.querySelector('[data-pull-request-card="#21"]')`;
+  expect(
+    await page.eval(`[${prCard}.textContent.includes("app#21"),${prCard}.textContent.includes("Open"),!!${prCard}.querySelector('[aria-label="Changes requested"]')]`),
+  ).toEqual([true, true, true]);
+});
+
+/** TEST-3: one merged pull request GitHub reports, merged three days before the page's clock. */
+const mergedPrSetup = githubPrSetup.replace(
+  "status:'inReview',changesRequested:true,",
+  "status:'merged',closedAt:new Date(Date.now()-3*86400000).toISOString(),",
+).replace("prStatus:'inReview'", "prStatus:'merged'");
+
+test("a merged pull request's hover card says how long ago it merged, as Linear's status line does", async ({ open }) => {
+  await fixture.reset();
+  const page = await open("", { setup: mergedPrSetup });
+  const badge = `${card("TEST-3")}.querySelector('[aria-label="Pull requests on TEST-3"]')`;
+  await page.waitFor(`${badge}?.textContent==="#21"`);
+  const chip = await page.eval<DOMRect>(rect(badge));
+  await page.page.mouse.move(1, 1);
+  await page.page.mouse.move((chip.left + chip.right) / 2, (chip.top + chip.bottom) / 2);
+  const hover = `document.querySelector('[data-hover-card="Pull requests"] [data-pull-request-card="#21"]')`;
+  await page.waitFor(`!!${hover}`);
+  expect(await page.eval(`${hover}.textContent`)).toContain("Merged 3d ago");
 });

@@ -44,7 +44,7 @@ const node = (over: Partial<GitHubNode> = {}): GitHubNode => ({
   isDraft: false,
   merged: false,
   updatedAt: "2026-11-10T10:00:00Z",
-  repository: { name: "widgets" },
+  repository: { name: "widgets", owner: { login: "acme-org" } },
   author: { login: "ana-dev" },
   latestReviews: { nodes: [] },
   ...over,
@@ -78,12 +78,22 @@ test("a GitHub pull request reads as ours: number, repository, author, branches,
     number: "#7",
     status: "open",
     repo: "widgets",
+    owner: "acme-org",
     author: "ana-dev",
     branch: "feat/ACME-1-tidy",
     target: "main",
     tool: "GitHub",
     updated: "2026-11-10T10:00:00Z",
   });
+});
+
+test("a merged or closed GitHub pull request keeps when: Linear's mergedAt for merged, closedAt for closed", () => {
+  const closedAt = "2026-11-12T08:00:00Z";
+  expect(gitHubPullRequest(node({ state: "MERGED", merged: true, mergedAt: "2026-11-11T09:00:00Z", closedAt })).closedAt).toBe(
+    "2026-11-11T09:00:00Z",
+  );
+  expect(gitHubPullRequest(node({ state: "CLOSED", mergedAt: null, closedAt })).closedAt).toBe(closedAt);
+  expect(gitHubPullRequest(node({ mergedAt: null, closedAt: null })).closedAt).toBeUndefined();
 });
 
 test("sources: organisations, repositories and qualifiers from GITHUB_PR_SOURCES; off turns it off; unset is the default", () => {

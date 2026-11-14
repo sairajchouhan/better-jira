@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { queryClient } from "@/client/state/server-data";
 import type { Issue } from "@/shared/issue-model";
 import type { PullRequest } from "@/shared/pull-requests";
-import { PullRequestCard } from "./card-badges";
+import { PullRequestCard, PullRequestsCardContent } from "./card-badges";
 import { IssueDiffs, IssuePullRequestRow, PullRequestList } from "./issue-pull-requests";
 
 const issue: Issue = {
@@ -70,4 +70,40 @@ test("the row's card is Linear's pull request card: title, repository and number
   expect(html).toContain(">app#21<");
   expect(html).toContain(">Open</span>");
   expect(html).toContain('aria-label="Changes requested"');
+});
+
+test("the card's status line says how long ago a merged pull request merged", () => {
+  const closedAt = new Date(Date.now() - 3 * 24 * 3600_000).toISOString();
+  const html = renderToStaticMarkup(<PullRequestCard pr={pr(22, "merged", { closedAt })} />);
+  expect(html).toContain(">Merged 3d ago</span>");
+});
+
+const cards = (html: string) => [...html.matchAll(/data-pull-request-card="([^"]+)"/g)].map((m) => m[1]);
+const rows = (html: string) => [...html.matchAll(/data-pull-request="([^"]+)"/g)].map((m) => m[1]);
+
+test("the badge's hover for one pull request is Linear's pull request card (Vhn → PK), the same one the sidebar row shows", () => {
+  const html = renderToStaticMarkup(<PullRequestsCardContent prs={[pr(7, "inReview", { changesRequested: true, author: "ana-dev" })]} />);
+  expect(cards(html)).toEqual(["#7"]);
+  expect(rows(html)).toEqual([]);
+  expect(html).toContain(">Open</span>");
+  expect(html).toContain('aria-label="Changes requested"');
+});
+
+test("the badge's hover for several is Linear's rows (Whn): identifier · status under the title, three, then Show N more", () => {
+  const prs = [
+    pr(1, "inReview", { owner: "acme", changesRequested: true, author: "ana-dev" }),
+    pr(2, "merged", { closedAt: new Date(Date.now() - 2 * 3600_000).toISOString() }),
+    pr(3, "open"),
+    pr(4, "open"),
+    pr(5, "open"),
+  ];
+  const html = renderToStaticMarkup(<PullRequestsCardContent prs={prs} />);
+  expect(cards(html)).toEqual([]);
+  expect(rows(html)).toEqual(["#1", "#2", "#3"]);
+  expect(html).toContain("Show 2 more");
+  // The author is the row's trailing avatar, not part of the line.
+  expect(html).toContain(">acme/app#1 · Changes requested</span>");
+  expect(html).toContain(">app#2 · Merged 2h ago</span>");
+  // The icon's native tooltip is the status.
+  expect(html).toContain('title="Changes requested"');
 });

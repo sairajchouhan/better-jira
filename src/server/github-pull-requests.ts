@@ -37,8 +37,10 @@ export type GitHubNode = {
   isDraft?: boolean;
   merged?: boolean;
   updatedAt?: string;
+  mergedAt?: string | null;
+  closedAt?: string | null;
   reviewDecision?: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null;
-  repository?: { name?: string } | null;
+  repository?: { name?: string; owner?: { login?: string } | null } | null;
   author?: { login?: string } | null;
   latestReviews?: { nodes?: (Review | null)[] } | null;
 };
@@ -70,11 +72,14 @@ export function gitHubPullRequest(node: GitHubNode): PullRequest {
     number: node.number ? `#${node.number}` : "",
     ...gitHubStatus(node),
     ...(node.repository?.name ? { repo: node.repository.name } : {}),
+    ...(node.repository?.owner?.login ? { owner: node.repository.owner.login } : {}),
     ...(node.author?.login ? { author: node.author.login } : {}),
     ...(node.headRefName ? { branch: node.headRefName } : {}),
     ...(node.baseRefName ? { target: node.baseRefName } : {}),
     tool: "GitHub",
     ...(node.updatedAt ? { updated: node.updatedAt } : {}),
+    // Linear's `mergedAt` for a merged pull request, `closedAt` for a closed one: "Merged 3d ago".
+    ...((node.mergedAt ?? node.closedAt) ? { closedAt: (node.mergedAt ?? node.closedAt)! } : {}),
   };
 }
 
@@ -190,8 +195,8 @@ const SEARCH = `query($q: String!, $after: String) {
     issueCount
     pageInfo { hasNextPage endCursor }
     nodes { ... on PullRequest {
-      url number title body headRefName baseRefName state isDraft merged updatedAt
-      repository { name } author { login }
+      url number title body headRefName baseRefName state isDraft merged updatedAt mergedAt closedAt
+      repository { name owner { login } } author { login }
       latestReviews(first: 20) { nodes { state author { login __typename } } }
     } }
   }

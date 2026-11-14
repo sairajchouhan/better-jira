@@ -1,3 +1,5 @@
+import { shortDuration } from "./duration";
+
 /** A pull request linked to the issue: by Jira's development panel (`/rest/dev-status/latest/issue/detail`, dataType pullrequest),
  *  or read straight from GitHub (`src/server/github-pull-requests.ts`). */
 export type PullRequest = {
@@ -11,6 +13,9 @@ export type PullRequest = {
   /** A reviewer asked for changes: Linear's row says "Changes requested" (`statusForPopoversAndActions`) over "In review". */
   changesRequested?: boolean;
   repo?: string;
+  /** The repository's owner when the source names it apart from `repo` (GitHub's `repository.owner`; Jira's `repositoryName` is
+   *  already "owner/repo"): Linear's `repoOwner`, in the row's `fullIdentifier`. */
+  owner?: string;
   author?: string;
   /** The source branch Jira lists (`source.branch`) and the one it merges into (`destination.branch`). */
   branch?: string;
@@ -18,6 +23,8 @@ export type PullRequest = {
   /** The review tool's name, as Linear's `externalReviewToolLabel` ("GitHub"): "Open in GitHub", "Copy GitHub URL". */
   tool?: string;
   updated?: string;
+  /** When it merged or closed: Linear's `mergedAt` / `closedAt`, the time in "Merged 3d ago". */
+  closedAt?: string;
 };
 
 /** Jira's development providers (the summary's `byInstanceType` keys, e.g. "GitHub", "githube", "bitbucket") by the name their
@@ -72,17 +79,36 @@ export function pullRequestList(details: any[], providers: string[] = []): PullR
           ...(pr.destination?.branch ? { target: pr.destination.branch } : {}),
           ...(tool ? { tool } : {}),
           ...(pr.lastUpdate ? { updated: pr.lastUpdate } : {}),
+          // Jira's detail has no merge or close time; a merged or declined pull request's last update stands in for it.
+          ...(pr.lastUpdate && /^(MERGED|DECLINED)$/i.test(String(pr.status)) ? { closedAt: pr.lastUpdate } : {}),
         });
       }
   return [...byUrl.values()].sort((a, b) => Date.parse(b.updated ?? "") - Date.parse(a.updated ?? "") || 0);
 }
 
-/** Linear's PR status label (`bj.statusLabel`), with its open pull request's review answer (`statusForPopoversAndActions`): "Changes
- *  requested" when a reviewer asked for changes. */
-export const pullRequestStatus = (pr: PullRequest) =>
-  pr.changesRequested && (pr.status === "open" || pr.status === "inReview" || pr.status === "approved")
-    ? "Changes requested"
-    : { open: "Open", inReview: "In review", approved: "Approved", merged: "Merged", declined: "Closed", draft: "Draft" }[pr.status];
+/** Linear's PR status text (`AP.statusForPopoversAndActions`, through `qhn`): an open pull request (not a draft) says its review
+ *  answer, "Changes requested" over "Approved" over its status ("Open", "In review"), or only "Open" without `reviews` (the card,
+ *  `showReviewStatus: false`); a draft "Draft"; a merged or closed one "Merged" / "Closed", with how long ago when known
+ *  ("Merged 3d ago", `Uf(now, mergedAt, { singlePart: true })`). */
+export function pullRequestStatusText(pr: PullRequest, now = Date.now(), { reviews = true }: { reviews?: boolean } = {}): string {
+  if (pr.status === "draft") return "Draft";
+  if (pr.status === "merged" || pr.status === "declined") {
+    const text = pr.status === "merged" ? "Merged" : "Closed";
+    const at = Date.parse(pr.closedAt ?? "");
+    return Number.isNaN(at) ? text : `${text} ${shortDuration(now - at)} ago`;
+  }
+  if (!reviews) return "Open";
+  if (pr.changesRequested) return "Changes requested";
+  return { open: "Open", inReview: "In review", approved: "Approved" }[pr.status];
+}
+
+/** Linear's `fullIdentifier`: owner, repository and number ("acme/app#12"). */
+export const pullRequestIdentifier = (pr: Pick<PullRequest, "owner" | "repo" | "number">) =>
+  `${pr.owner ? `${pr.owner}/` : ""}${pr.repo ?? ""}${pr.number}`;
+
+/** Linear's PR row line under the title (`AP.description`): the identifier and the status, " · " between. */
+export const pullRequestDescription = (pr: PullRequest, now = Date.now()) =>
+  [pullRequestIdentifier(pr), pullRequestStatusText(pr, now)].filter(Boolean).join(" · ");
 
 /** Linear's PR list order (`qg(prs, "desc")`): by status in `LEADING` order, then the newest first. */
 export const sortPullRequests = (prs: PullRequest[]) =>
@@ -171,8 +197,3 @@ export function reviewDecision(pr: PullRequest): ReviewDecision | undefined {
   if (pr.status === "approved") return { label: "Approved", status: "approved" };
   return undefined;
 }
-
-/** Linear's pull request card status line (`statusForPopoversAndActions` with `showReviewStatus: false`): an open pull request is
- *  "Open" whatever its reviews say; a draft "Draft"; else merged or closed. */
-export const pullRequestCardStatus = (pr: PullRequest) =>
-  ({ open: "Open", inReview: "Open", approved: "Open", draft: "Draft", merged: "Merged", declined: "Closed" })[pr.status];

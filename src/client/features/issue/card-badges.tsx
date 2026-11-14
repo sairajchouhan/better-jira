@@ -10,7 +10,7 @@ import { LinkIcon } from "@/client/components/link-icon";
 import { ActionMenu, ContextMenu, type ActionEntry } from "@/client/components/action-menu";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { showNotification } from "@/client/state/app-notifications";
-import { set } from "@/client/state/store";
+import { set, useStore } from "@/client/state/store";
 import { navigate } from "@/client/features/navigation/app-navigation";
 import { post, run, useCommand } from "@/client/features/navigation/commands";
 import { commentCount } from "@/client/features/media/media-edits";
@@ -20,8 +20,8 @@ import type { Issue, User } from "@/shared/issue-model";
 import {
   leadingStatus,
   pullRequestBadgeText,
-  pullRequestCardStatus,
-  pullRequestStatus,
+  pullRequestDescription,
+  pullRequestStatusText,
   reviewDecision,
   type PullRequest,
 } from "@/shared/pull-requests";
@@ -136,26 +136,51 @@ export function usePullRequests(issue: PullRequestIssue, read = true) {
 
 const PullRequestIcon = ({ pr }: { pr: PullRequest }) => <PullRequestStatusIcon status={pr.status} />;
 
-/** Linear's PR row (`Whn`): status icon, title (opens it), and a muted line of repository, number, status and author. */
+/** Linear's trailing author (`Khn`): the pull request's creator as a small avatar, at the end of its card's title and its row. */
+const PullRequestAuthor = ({ pr }: { pr: PullRequest }) =>
+  pr.author ? (
+    <span className="flex shrink-0 items-center">
+      <Avatar user={{ id: pr.author, name: pr.author }} size={16} title={null} />
+    </span>
+  ) : null;
+
+/** The time a pull request's "Merged 3d ago" counts to: read at render, and the app's minute clock renders it again, as Linear's
+ *  status (`qhn`) re-reads it on its own clock (`ms(3e4)`). */
+function usePullRequestNow() {
+  const clock = useStore((s) => s.clock);
+  // oxlint-disable-next-line react/purity -- read at render; `clock` re-renders it each minute.
+  return Math.max(clock, Date.now());
+}
+
+/** Linear's PR row (`Whn`), one per pull request in the card of several: the status icon (its status as the native tooltip), the
+ *  title over a muted line of the identifier and status (`pullRequestDescription`), the author at the end. It opens the pull
+ *  request. */
 function PullRequestRow({ pr }: { pr: PullRequest }) {
+  const now = usePullRequestNow();
   return (
-    <a href={pr.url} target="_blank" rel="noreferrer" className="flex min-w-0 items-center gap-2" data-pull-request={pr.number}>
-      <PullRequestIcon pr={pr} />
-      <span className="flex min-w-0 flex-col gap-0.5">
-        <span className="truncate text-[13px] font-medium text-fg">{pr.title}</span>
-        <span className="truncate text-[12px] text-fg-3">
-          {[`${pr.repo ?? ""}${pr.number}`, pullRequestStatus(pr), pr.author].filter(Boolean).join(" · ")}
-        </span>
+    <a href={pr.url} target="_blank" rel="noreferrer" className="flex w-full min-w-0 items-center gap-2" data-pull-request={pr.number}>
+      <span className="flex items-center" title={pullRequestStatusText(pr, now)}>
+        <PullRequestIcon pr={pr} />
       </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <Text variant="smallPlus" color="base" wrap="truncate">
+          {pr.title}
+        </Text>
+        <Text variant="mini" color="muted" wrap="truncate">
+          {pullRequestDescription(pr, now)}
+        </Text>
+      </span>
+      <PullRequestAuthor pr={pr} />
     </a>
   );
 }
 
 /** Linear's pull request card (`PK` → `Hhn`): the status icon beside the title (three lines at most, it opens the pull request) over
- *  the repository and number, the author at the end; under them the status without reviews (`pullRequestCardStatus`) and, when a
- *  reviewer answered, the review's mark. */
+ *  the repository and number, the author at the end; under them the status without reviews ("Merged 3d ago" once merged or
+ *  closed) and, when a reviewer answered, the review's mark. */
 export function PullRequestCard({ pr }: { pr: PullRequest }) {
   const review = reviewDecision(pr);
+  const now = usePullRequestNow();
   return (
     <div className="flex max-w-[320px] min-w-0 flex-col gap-2 py-1" data-pull-request-card={pr.number}>
       <a href={pr.url} target="_blank" rel="noreferrer" className="flex min-w-0 items-start gap-2 rounded-[4px]">
@@ -171,15 +196,11 @@ export function PullRequestCard({ pr }: { pr: PullRequest }) {
             </Text>
           )}
         </span>
-        {pr.author && (
-          <span className="flex shrink-0 items-center">
-            <Avatar user={{ id: pr.author, name: pr.author }} size={16} title={null} />
-          </span>
-        )}
+        <PullRequestAuthor pr={pr} />
       </a>
       <div className="flex items-end gap-2">
         <Text variant="small" color="muted" wrap="nowrap" className="flex-1">
-          {pullRequestCardStatus(pr)}
+          {pullRequestStatusText(pr, now, { reviews: false })}
         </Text>
         {review && <ReviewStatusIcon status={review.status} label={review.label} size="small" />}
       </div>
@@ -187,13 +208,20 @@ export function PullRequestCard({ pr }: { pr: PullRequest }) {
   );
 }
 
-/** Linear's PR card (`Vhn`): the one pull request, or up to three with "Show N more". */
+/** Linear's badge card (`Vhn`): one pull request is its card (`PK`), as the issue sidebar's row shows it; several are rows (`Whn`),
+ *  three and "Show N more". */
+export function PullRequestsCardContent({ prs }: { prs: PullRequest[] }) {
+  if (prs.length === 1) return <PullRequestCard pr={prs[0]!} />;
+  return <MoreList items={prs} max={3}>{(shown) => shown.map((pr) => <PullRequestRow key={pr.url} pr={pr} />)}</MoreList>;
+}
+
+/** The badge's hover: the issue's pull requests as Linear's `Vhn` shows them, once read. */
 function PullRequestsCard({ issue }: { issue: Issue }) {
   const { data, isError } = usePullRequests(issue);
   if (isError) return <span className="text-fg-3">Could not read the pull requests.</span>;
   if (!data) return <span className="text-fg-3">Loading pull requests…</span>;
   if (!data.length) return <span className="text-fg-3">No linked pull requests.</span>;
-  return <MoreList items={data} max={3}>{(shown) => shown.map((pr) => <PullRequestRow key={pr.url} pr={pr} />)}</MoreList>;
+  return <PullRequestsCardContent prs={data} />;
 }
 
 const pullRequestEntries = (prs: PullRequest[]): ActionEntry[] =>
