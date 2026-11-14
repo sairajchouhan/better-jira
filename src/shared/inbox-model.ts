@@ -469,14 +469,47 @@ export const DEFAULT_VIEW: InboxView = {
   grouping: "none",
   filters: {},
 };
-/** The Jira feed the view reads: one category in the priority inbox, else both. */
-export const feedCategory = (view: InboxView) => (view.priorityInbox ? view.tab : "all");
+/** The view as the list applies it: the stored view, plus the ⌘F find term, which is never stored with it. */
+export type ShownView = InboxView & { find?: string };
+/** lodash `deburr`'s letters that NFKD leaves whole. */
+const DEBURR: Record<string, string> = { æ: "ae", ð: "d", ø: "o", þ: "th", ß: "ss", đ: "d", ħ: "h", ı: "i", ĳ: "ij", ł: "l", ŀ: "l", œ: "oe", ſ: "s" };
+/** Linear's find folding (`UO`, startup-entry: lodash `deburr` of the NFKD form), lowercased first as `xmi.setFindTerm` does. */
+export const foldFind = (text: string) =>
+  text
+    .toLocaleLowerCase()
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[æðøþßđħıĳłŀœſ]/g, (c) => DEBURR[c]!);
+/** The words a find term asks for (`Notification.matchInlineFind`: the term split on spaces, every word somewhere in the text). */
+export const findWords = (term = "") => foldFind(term).split(" ").filter(Boolean);
+/** What a notification's find reads: Linear's `Notification.matchInlineFind` (startup-entry) takes its short label, the issue's
+ *  identifier and title, the comment's text and the actor's name ("Linear" when there is none). Here the label is the row's
+ *  sentence and Jira's own, the comment text is Jira's, and a system notification is Jira's. */
+const findText = (item: Pick<InboxItem, "key" | "title">, note: Pick<InboxNote, "actor" | "kind" | "message" | "preview" | "status">) =>
+  foldFind([describe(note), note.message, item.key, item.title, note.preview, note.actor?.name || "Jira"].join(" "));
+const found = (text: string, words: string[]) => words.every((w) => text.includes(w));
+/** A row as Linear's find shows it (useInboxNotificationsProvider `et`: a stack stays when any of its notifications matches, and
+ *  leads with the main one of those that do), or null. Only the notifications the feed loaded can match: the row's own, and its
+ *  group's first page. The group's count and its updates stay Jira's, so the open issue still lists every update. */
+export function findInRow(item: InboxItem, words: string[], now = Date.now()): InboxItem | null {
+  if (!words.length || found(findText(item, item), words)) return item;
+  const matching = (item.group?.notes ?? []).filter((n) => found(findText(item, n), words));
+  const [main] = prioritize(matching, now);
+  if (!main) return null;
+  const { id: _, status: __, unread: ___, ...shown } = main;
+  return { ...item, ...shown };
+}
+/** Whether the view finds: a term with any word in it. */
+export const finding = (view: ShownView) => findWords(view.find).length > 0;
+/** The Jira feed the view reads: one category in the priority inbox, else both. Find looks through both tabs, as Linear's
+ *  provider does (`dt`: `n.inline?.lastSearchTerm?.trim() ? "unfiltered" : t`). */
+export const feedCategory = (view: ShownView) => (view.priorityInbox && !finding(view) ? view.tab : "all");
 
-/** Applies local state, then the view's filters and ordering. `keep` (the selected row) stays in unread-only after it is read. */
+/** Applies local state, then the view's find, filters and ordering. `keep` (the selected row) stays in unread-only after it is read. */
 export function visibleItems(
   items: InboxItem[],
   local: Record<string, Local>,
-  view: InboxView,
+  view: ShownView,
   now = Date.now(),
   keep?: string | null,
   facets: (item: InboxItem) => Facets = (item) => facetsOf(item),
@@ -485,13 +518,17 @@ export function visibleItems(
     FilterField,
     string[],
   ][];
+  const words = findWords(view.find),
+    tab = feedCategory(view);
   const rows = items.flatMap((item) => {
     const own = local[item.head];
     if (own?.deleted) return [];
     if (own?.snoozed && own.snoozed > now && !view.showSnoozed) return [];
-    const row = own?.read === undefined ? item : { ...item, unread: !own.read };
-    if (view.priorityInbox && row.category !== view.tab) return [];
-    if (view.unreadOnly && !row.unread && row.id !== keep) return [];
+    const read = own?.read === undefined ? item : { ...item, unread: !own.read };
+    if (tab !== "all" && read.category !== tab) return [];
+    if (view.unreadOnly && !read.unread && read.id !== keep) return [];
+    const row = findInRow(read, words, now);
+    if (!row) return [];
     if (filters.length) {
       const f = facets(row);
       if (!filters.every(([field, values]) => values.includes(f[field]))) return [];
@@ -602,16 +639,19 @@ export function focusGroups(
 }
 
 export type InboxOrder = { base: InboxItem[]; groups: InboxGroup[]; rows: InboxItem[] };
-/** The list as shown: `rows` in on-screen order (the keys' order too), in their `groups`; `base` is the rows before filters, for the filter menu's counts. */
+/** The list as shown: `rows` in on-screen order (the keys' order too), in their `groups`; `base` is the rows before filters and
+ *  find, for the filter menu's counts and the count the filters hide. */
 export function inboxOrder(
   items: InboxItem[],
   local: Record<string, Local>,
-  view: InboxView,
+  view: ShownView,
   now: number,
   keep: string | null,
   facets: (item: InboxItem) => Facets,
 ): InboxOrder {
-  const base = visibleItems(items, local, { ...view, filters: {} }, now, keep, facets),
+  // Linear's `prefilteredItems`: the rows in the find's scope, before the filters and the find narrow them.
+  const scope = { ...view, filters: {}, find: undefined, priorityInbox: feedCategory(view) !== "all" },
+    base = visibleItems(items, local, scope, now, keep, facets),
     shown = visibleItems(items, local, view, now, keep, facets),
     groups = view.grouping === "focus" ? focusGroups(shown, facets) : [{ label: "", rows: shown }];
   return { base, groups, rows: groups.flatMap((g) => g.rows) };

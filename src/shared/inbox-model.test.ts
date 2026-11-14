@@ -2,7 +2,11 @@ import { describe as group, expect, test } from "bun:test";
 import {
   DEFAULT_VIEW,
   facetsOf,
+  feedCategory,
+  findInRow,
+  findWords,
   focusGroups,
+  inboxOrder,
   statusType,
   adfText,
   commentAnchor,
@@ -537,4 +541,73 @@ test("snoozeChoices: Linear's presets, in time order, at 9:00", () => {
     "Next week Mon Nov 16",
     "A month from now Wed Dec 09",
   ]);
+});
+
+group("⌘F find (Linear's Notification.matchInlineFind)", () => {
+  const now = Date.parse("2026-11-08T12:00:00Z");
+  const ids = (rows: InboxItem[]) => rows.map((r) => r.id);
+  const a = item({ id: "a", head: "ha", key: "KAN-1", title: "Login page broken", actor: { name: "Ana Ruiz" } }),
+    b = item({
+      id: "b",
+      head: "hb",
+      key: "SAM-22",
+      title: "Billing export",
+      kind: "comment",
+      message: "Bo commented on a task",
+      preview: "Café menu needs a review",
+      actor: { name: "Bo" },
+      time: "2026-11-08T09:00:00Z",
+      category: "watching",
+    }),
+    c = item({ id: "c", head: "hc", key: "KAN-3", title: "Release notes", actor: null, message: "Your export is ready", unread: false, time: "2026-11-08T08:00:00Z" });
+  const find = (term: string, view = {}) => ids(visibleItems([a, b, c], {}, { ...DEFAULT_VIEW, ...view, find: term }, now));
+
+  test("a term is lowercased, folds accents as lodash deburr does, and splits on spaces", () => {
+    expect(findWords("  Café  MENU ")).toEqual(["cafe", "menu"]);
+    expect(findWords("Straße Øre")).toEqual(["strasse", "ore"]);
+    expect(findWords("   ")).toEqual([]);
+  });
+
+  test("matches the issue key, title, actor, notification text and comment text, every word somewhere", () => {
+    expect(find("kan-1")).toEqual(["a"]);
+    expect(find("billing")).toEqual(["b"]);
+    expect(find("ana")).toEqual(["a"]);
+    expect(find("commented")).toEqual(["b"]);
+    expect(find("cafe menu")).toEqual(["b"]);
+    expect(find("menu login")).toEqual([]);
+    // A notification with no actor is Jira's, as Linear's is "Linear".
+    expect(find("jira")).toEqual(["c"]);
+    expect(find("")).toEqual(["a", "b", "c"]);
+  });
+
+  test("find looks through both priority tabs, reads the whole feed, and keeps the unread filter", () => {
+    expect(find("billing", { priorityInbox: true, tab: "direct" })).toEqual(["b"]);
+    expect(feedCategory({ ...DEFAULT_VIEW, priorityInbox: true, tab: "direct", find: "x" })).toBe("all");
+    expect(feedCategory({ ...DEFAULT_VIEW, priorityInbox: true, tab: "direct", find: " " })).toBe("direct");
+    expect(find("export", { unreadOnly: true })).toEqual(["b"]);
+    expect(find("export")).toEqual(["b", "c"]);
+  });
+
+  test("a row whose own notification misses but a loaded group notification matches leads with that one", () => {
+    const mention = { id: "n2", actor: { name: "Kim" }, kind: "mentioned" as const, message: "Kim mentioned you in a comment", preview: "see the dashboard", time: "2026-11-08T07:00:00Z", status: "", link: "https://x/browse/KAN-1?focusedCommentId=7", commentId: "7", unread: true };
+    const head = { id: "n1", actor: { name: "Ana Ruiz" }, kind: "updated" as const, message: "Ana updated a task", preview: "", time: "2026-11-08T10:00:00Z", status: "", link: "", commentId: "", unread: true };
+    const row = item({ ...a, count: 2, group: { notes: [head, mention], more: false } });
+    const shown = findInRow(row, findWords("dashboard"), now)!;
+    expect(shown.id).toBe("a");
+    expect(shown.head).toBe("ha");
+    expect(describe(shown)).toBe("Kim mentioned you in a comment: see the dashboard");
+    expect(shown.commentId).toBe("7");
+    expect(shown.count).toBe(2);
+    expect(findInRow(row, findWords("login"), now)).toBe(row);
+    expect(findInRow(row, findWords("nothing here"), now)).toBeNull();
+  });
+
+  test("the base the filters count from leaves out the find, so the hidden count includes what it hides", () => {
+    const facets = (i: InboxItem) => facetsOf(i);
+    const order = inboxOrder([a, b, c], {}, { ...DEFAULT_VIEW, priorityInbox: true, tab: "direct", find: "billing" }, now, null, facets);
+    expect(ids(order.rows)).toEqual(["b"]);
+    expect(ids(order.base)).toEqual(["a", "b", "c"]);
+    const tabbed = inboxOrder([a, b, c], {}, { ...DEFAULT_VIEW, priorityInbox: true, tab: "direct" }, now, null, facets);
+    expect(ids(tabbed.base)).toEqual(["a", "c"]);
+  });
 });

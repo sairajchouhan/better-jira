@@ -11,6 +11,7 @@ import {
   DEFAULT_VIEW,
   facetsOf,
   feedCategory,
+  finding,
   inboxOrder,
   hasFilters,
   sameInboxOrder,
@@ -21,6 +22,7 @@ import {
   type InboxOrder,
   type InboxView,
   type Local,
+  type ShownView,
 } from "@/shared/inbox-model";
 
 export type Feed = InboxFeed & { writable: boolean };
@@ -129,6 +131,30 @@ export function createInboxStore(ports: InboxPorts) {
     });
   };
   const clearFilters = () => changeView({ filters: {} });
+
+  // --- find: Linear's ⌘F field over the list (startup-root `Idi`, the inbox's "Find in inbox…"). Not stored: the field opens
+  // empty each time the inbox does, as Linear's resets on a fresh visit. ---
+
+  /** `open`: the field shows; it also shows while it holds a term. */
+  let find = { open: false, term: "" };
+  const findState = () => find;
+  function putFind(next: typeof find) {
+    if (next.open === find.open && next.term === find.term) return;
+    find = next;
+    emit();
+  }
+  const openFind = () => putFind({ ...find, open: true });
+  const setFind = (term: string) => putFind({ open: true, term });
+  /** Escape, the close button, or leaving the field empty: the term goes and the field hides. */
+  const closeFind = () => putFind({ open: false, term: "" });
+  let shown: { view: InboxView; term: string; value: ShownView } | undefined;
+  /** The view the list applies: the stored one plus the find term; the same object while neither changes. */
+  function shownView() {
+    const v = viewState();
+    if (shown?.view !== v || shown.term !== find.term)
+      shown = { view: v, term: find.term, value: find.term ? { ...v, find: find.term } : v };
+    return shown.value;
+  }
   // --- data: TanStack Query, a page per Jira cursor; the server's SSE "inbox" message invalidates ["inbox"] ---
 
   const options = (category: Category) => ({
@@ -247,7 +273,7 @@ export function createInboxStore(ports: InboxPorts) {
   }
   /** The rows on screen, in order: what the inbox's keys and actions act on. */
   function shownRows() {
-    const v = viewState();
+    const v = shownView();
     return orderOf(
       queryClient.getQueryData<InfiniteData<Feed, string>>([
         "inbox",
@@ -391,10 +417,10 @@ export function createInboxStore(ports: InboxPorts) {
    *  over the listed rows, R3-inbox-D3).
    *  Every unread row Jira listed is marked here at once, so the badge needn't wait for the refetch (R3-inbox-D5). */
   function markAllRead() {
-    const v = viewState(),
+    const v = shownView(),
       rows: InboxRow[] = shownRows().filter((r) => r.unread);
     const label = "mark notifications as read";
-    if (v.priorityInbox || hasFilters(v)) return markRead(rows, true, label);
+    if (v.priorityInbox || hasFilters(v) || finding(v)) return markRead(rows, true, label);
     const own = localState(),
       now = get().clock;
     // Deleted rows are gone from Linear's list, so its ⌥U never reaches them: they stay unread in Jira too (R3 G10).
@@ -462,7 +488,7 @@ export function createInboxStore(ports: InboxPorts) {
    *  done or canceled issues that aren't snoozed (Linear's `eEn`, R3-inbox-D4). A bulk delete is not a visit: when it removes
    *  the selected row, the next one is selected without being marked read (R3-inbox-D1). */
   async function deleteAll(which: "all" | "read" | "completed") {
-    const v = viewState(),
+    const v = shownView(),
       now = get().clock;
     const snoozed = (r: InboxItem) => (localState()[r.head]?.snoozed ?? 0) > now;
     const matches = (r: InboxItem) =>
@@ -473,7 +499,8 @@ export function createInboxStore(ports: InboxPorts) {
           : true;
     if (
       !shownRows().length ||
-      !(await ports.confirm(deleteQuestion(which, v)))
+      // While find looks through both tabs, the question names the whole inbox.
+      !(await ports.confirm(deleteQuestion(which, { ...v, priorityInbox: feedCategory(v) !== "all" })))
     )
       return;
     const items = shownRows().filter(matches),
@@ -562,6 +589,11 @@ export function createInboxStore(ports: InboxPorts) {
     subscribe,
     localState,
     viewState,
+    shownView,
+    findState,
+    openFind,
+    setFind,
+    closeFind,
     selected: () => selectedId,
     resumeWrites,
     restoreSelection: (id: string) => {

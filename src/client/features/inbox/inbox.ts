@@ -147,10 +147,13 @@ export const {
   showTab,
   priorityInbox,
 } = inbox;
-export const { itemsOf, facets, orderOf, clearUnseen } = inbox;
+export const { itemsOf, facets, orderOf, clearUnseen, openFind, setFind, closeFind } = inbox;
 const { subscribe, localState, viewState, feed, dropLocal, markRead } = inbox;
 export const useLocal = () => useSyncExternalStore(subscribe, localState);
 export const useView = () => useSyncExternalStore(subscribe, viewState);
+/** The view the list applies: the stored view plus the ⌘F find term. */
+export const useShownView = () => useSyncExternalStore(subscribe, inbox.shownView);
+export const useFind = () => useSyncExternalStore(subscribe, inbox.findState);
 export const useSelected = () => useSyncExternalStore(subscribe, inbox.selected);
 export function useFeed(category: Category) {
   const observer = feed(category);
