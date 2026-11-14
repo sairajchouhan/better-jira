@@ -5,6 +5,8 @@ import { boardFromInput, withoutAddedBoard } from "./config";
 import { detailCache } from "./detail-cache";
 import { historyCache, readHistory } from "./issue-history";
 import { linkedPullRequests, readPullRequests } from "./pull-requests";
+import { gitHubClient, gitHubConfiguration, gitHubPullRequests, gitHubToken, GitHubPaused } from "./github-pull-requests";
+import { mergePullRequests, withGitHubPullRequests } from "@/shared/pull-requests";
 import { missingLinkTitles, recentlyTouched, storeRemoteLinks } from "./remote-links";
 import { attachmentGateway, jiraAttachmentReader } from "@/shared/attachment-media";
 import { saveAddedBoard, serverAuth } from "./server-config";
@@ -45,6 +47,7 @@ const ACTIVE_POLL_MS = 5_000; // a tab is open and visible
 const IDLE_POLL_MS = 60_000; // no tab open: keep the mirror warm
 const OPEN_ISSUE_POLL_MS = 3_000;
 const PROBE_MS = 30_000; // the deleted-issue count check
+const GITHUB_POLL_MS = 30_000; // GitHub's pull requests: one search per poll once the backfill is read
 const FULL_SYNC_EVERY_MS = 6 * 3600_000; // full sync also sweeps out issues that left a board
 const PAGE = 100;
 const PARALLEL = 4;
@@ -100,8 +103,21 @@ const setMeta = (k: string, v: string) =>
   db.query("INSERT OR REPLACE INTO meta VALUES (?, ?)").run(k, v);
 /** Which issues have pull requests, by Jira's development index; the Development field each issue carries lags it. */
 const linkedPrs = linkedPullRequests({ get: getMeta, set: setMeta });
-/** An issue as the board and search read it: the projection, with the development index's say on its pull requests. */
-const slimOf = (raw: any, board: number) => linkedPrs.apply(projection.slim(raw, board), board);
+/** The pull requests GitHub links to Jira keys (branch, title or body), for organisations Jira's GitHub app doesn't cover. */
+const github = gitHubPullRequests(db, {
+  client: gitHubClient(() => gitHubToken()),
+  ...gitHubConfiguration(),
+});
+/** The pull request URLs Jira's development panel lists, per issue, read where GitHub links the same issue, so a pull request both
+ *  link counts once. */
+const jiraPrUrls = new Map<string, string[]>();
+/** An issue's pull requests by Jira alone: its Development field, with the development index's say on whether it has any. */
+const jiraSlimOf = (raw: any, board: number) => linkedPrs.apply(projection.slim(raw, board), board);
+/** An issue as the board and search read it: Jira's pull requests, with GitHub's added. */
+const slimOf = (raw: any, board: number) => {
+  const slim = jiraSlimOf(raw, board);
+  return withGitHubPullRequests(slim, github.forKey(slim.key), jiraPrUrls.get(slim.key));
+};
 const source = JSON.stringify({ site: configuration.site, email: configuration.email });
 if (getMeta("source") && getMeta("source") !== source)
   throw new Error(
@@ -200,6 +216,31 @@ async function incrementalSync(board: number): Promise<string[]> {
   return keys;
 }
 
+/** Re-projects the stored issues' pull request count and state (all of `board`'s, or only `keys`). Returns whether any changed. */
+function reprojectPullRequests(rows: { key: string; board: number; slim: string; full: string }[]) {
+  const update = db.query("UPDATE issues SET slim = ? WHERE key = ?");
+  let changed = false;
+  db.transaction(() => {
+    for (const row of rows) {
+      // From the stored Jira record, so an issue the index links again gets the field's own count and state back.
+      const slim = JSON.parse(row.slim),
+        next = slimOf(JSON.parse(row.full), row.board);
+      if (next.prCount === slim.prCount && next.prStatus === slim.prStatus) continue;
+      update.run(JSON.stringify({ ...slim, prCount: next.prCount, prStatus: next.prStatus }), row.key);
+      changed = true;
+    }
+  })();
+  return changed;
+}
+const rowsOf = (keys: string[]) =>
+  keys.length
+    ? db
+        .query<{ key: string; board: number; slim: string; full: string }, string[]>(
+          `SELECT key, board, slim, full FROM issues WHERE key IN (${keys.map(() => "?").join(",")})`,
+        )
+        .all(...keys)
+    : [];
+
 const prsProbed = new Map<number, number>();
 /** Re-reads which of the board's issues Jira's development index links pull requests to, on the probe's cadence, and re-projects
  *  the issues whose answer changed. Linking a pull request leaves an issue's `updated` alone, so the sync never re-reads it, and
@@ -209,22 +250,47 @@ async function syncLinkedPullRequests(board: number) {
   prsProbed.set(board, Date.now());
   const keys = await linkedPrs.refresh(jira, board);
   const rows = db
-    .query<{ key: string; slim: string; full: string }, [number]>("SELECT key, slim, full FROM issues WHERE board = ?")
+    .query<{ key: string; board: number; slim: string; full: string }, [number]>("SELECT key, board, slim, full FROM issues WHERE board = ?")
     .all(board)
     .filter((row) => !keys || keys.includes(row.key));
-  const update = db.query("UPDATE issues SET slim = ? WHERE key = ?");
-  let changed = false;
-  db.transaction(() => {
-    for (const row of rows) {
-      // From the stored Jira record, so an issue the index links again gets the field's own count and state back.
-      const slim = JSON.parse(row.slim),
-        next = slimOf(JSON.parse(row.full), board);
-      if (next.prCount === slim.prCount && next.prStatus === slim.prStatus) continue;
-      update.run(JSON.stringify({ ...slim, prCount: next.prCount, prStatus: next.prStatus }), row.key);
-      changed = true;
-    }
-  })();
-  return changed;
+  return reprojectPullRequests(rows);
+}
+
+/** Jira panels read per GitHub poll for issues both sources link. */
+const OVERLAP_READS = 5;
+/** Reads Jira's pull request URLs for issues GitHub links that Jira links too, a few per poll, so their count is the union. */
+async function readOverlaps() {
+  const keys = rowsOf(github.keys().filter((key) => !jiraPrUrls.has(key)))
+    .filter((row) => jiraSlimOf(JSON.parse(row.full), row.board).prCount)
+    .slice(0, OVERLAP_READS);
+  for (const row of keys) jiraPrUrls.set(row.key, (await readPullRequests(jira, row.key)).map((pr) => pr.url));
+  return reprojectPullRequests(keys);
+}
+
+let githubPolled = 0,
+  githubBusy = false,
+  /** The last poll's error, logged once until the source reads again (no token, or GitHub's rate limit spent). */
+  githubError = "";
+/** Reads GitHub's changed pull requests every `GITHUB_POLL_MS`, beside the board loop and never holding it up (the first poll reads
+ *  the backfill window), then re-projects the issues whose pull requests changed and tells open tabs. */
+function syncGitHub() {
+  if (githubBusy || Date.now() - githubPolled < GITHUB_POLL_MS) return;
+  githubBusy = true;
+  githubPolled = Date.now();
+  void github
+    .refresh()
+    .then(async (keys) => {
+      githubError = "";
+      if (keys.length) console.log(`[github] pull requests changed on ${keys.length} keys`);
+      const changed = reprojectPullRequests(rowsOf(keys));
+      if ((await readOverlaps()) || changed) notify();
+    })
+    .catch((e) => {
+      const message = e instanceof GitHubPaused ? "paused" : String(e?.message ?? e).slice(0, 200);
+      if (message !== githubError) console.error("[github]", e instanceof GitHubPaused ? e.message : message);
+      githubError = message;
+    })
+    .finally(() => (githubBusy = false));
 }
 
 const probed = new Map<number, number>();
@@ -271,6 +337,7 @@ async function loop() {
       }),
     );
     if (changed.includes(true)) notify();
+    syncGitHub();
     if (live.clients.size)
       void unseenChanged().then(
         (moved) => moved && notify("inbox"),
@@ -464,8 +531,20 @@ export const history = historyCache(
       )
       .get(key)?.updated,
 );
-/** The issue's pull requests from Jira's development panel, read when a card's pull request badge asks. */
-export const pullRequests = (key: string) => readPullRequests(jira, key);
+/** The issue's pull requests from Jira's development panel and from GitHub, one per URL, read when a card's pull request badge
+ *  asks. Jira's list also settles the issue's count where both link the same pull request. When Jira can't answer, GitHub's stand. */
+export async function pullRequests(key: string) {
+  const fromGitHub = github.forKey(key);
+  const fromJira = await readPullRequests(jira, key).catch((error) => {
+    if (!fromGitHub.length) throw error;
+    return undefined;
+  });
+  if (fromJira && fromGitHub.length) {
+    jiraPrUrls.set(key, fromJira.map((pr) => pr.url));
+    if (reprojectPullRequests(rowsOf([key]))) notify();
+  }
+  return mergePullRequests(fromJira ?? [], fromGitHub);
+}
 /** Re-read one issue from Jira after a write, so reads and the next client poll see Jira's truth. Null when it no longer exists. */
 export async function refresh(
   key: string,

@@ -96,27 +96,31 @@ export function LinkBadges({ issue }: { issue: Issue }) {
 
 // ——— Pull requests (Linear `mhn`, action "Go to linked pull request…" `xpn`, card `Vhn`) ———
 
-type PullRequestKey = readonly ["pull-requests", string];
-const pullRequestQuery = (key: string, enabled = true) => ({
-  queryKey: ["pull-requests", key] as PullRequestKey,
+type PullRequestIssue = Pick<Issue, "key" | "prCount" | "prStatus">;
+type PullRequestKey = readonly ["pull-requests", string, number, string];
+/** The issue's count and state are part of the key: when the mirror reports a pull request opened, reviewed or merged (from Jira or
+ *  GitHub), the badge, card and menu read the list again instead of showing the old one for five minutes. */
+const pullRequestQuery = (issue: PullRequestIssue, enabled = true) => ({
+  queryKey: ["pull-requests", issue.key, issue.prCount ?? 0, issue.prStatus ?? ""] as PullRequestKey,
   queryFn: async (): Promise<PullRequest[]> => {
-    const response = await fetch(`/api/issues/${encodeURIComponent(key)}/pull-requests`);
-    if (!response.ok) throw new Error("Could not read the pull requests from Jira.");
+    const response = await fetch(`/api/issues/${encodeURIComponent(issue.key)}/pull-requests`);
+    if (!response.ok) throw new Error("Could not read the pull requests.");
     return response.json();
   },
   enabled,
   staleTime: 5 * 60_000,
   retry: false,
 });
-/** The issue's pull requests from Jira's development panel: one read per issue every five minutes, shared by its badge, card and
- *  menu. */
-export const fetchPullRequests = (key: string) => queryClient.fetchQuery(pullRequestQuery(key));
+/** The issue's pull requests from Jira's development panel and GitHub: one read per issue every five minutes, or when its count or
+ *  state changes, shared by its badge, card and menu. */
+export const fetchPullRequests = (issue: PullRequestIssue) => queryClient.fetchQuery(pullRequestQuery(issue));
 /** `read`: whether mounting reads them (a single PR's badge needs its number); otherwise this only shows what a hover or click read. */
-function usePullRequests(key: string, read = true) {
+function usePullRequests(issue: PullRequestIssue, read = true) {
+  const { key, prCount, prStatus } = issue;
   const [observer] = useState(
-    () => new QueryObserver<PullRequest[], Error, PullRequest[], PullRequest[], PullRequestKey>(queryClient, pullRequestQuery(key, read)),
+    () => new QueryObserver<PullRequest[], Error, PullRequest[], PullRequest[], PullRequestKey>(queryClient, pullRequestQuery(issue, read)),
   );
-  useEffect(() => observer.setOptions(pullRequestQuery(key, read)), [observer, key, read]);
+  useEffect(() => observer.setOptions(pullRequestQuery({ key, prCount, prStatus }, read)), [observer, key, prCount, prStatus, read]);
   const result = () => observer.getCurrentResult();
   return useSyncExternalStore((changed) => observer.subscribe(changed), result, result);
 }
@@ -140,10 +144,10 @@ function PullRequestRow({ pr }: { pr: PullRequest }) {
 
 /** Linear's PR card (`Vhn`): the one pull request, or up to three with "Show N more". */
 function PullRequestsCard({ issue }: { issue: Issue }) {
-  const { data, isError } = usePullRequests(issue.key);
-  if (isError) return <span className="text-fg-3">Could not read the pull requests from Jira.</span>;
+  const { data, isError } = usePullRequests(issue);
+  if (isError) return <span className="text-fg-3">Could not read the pull requests.</span>;
   if (!data) return <span className="text-fg-3">Loading pull requests…</span>;
-  if (!data.length) return <span className="text-fg-3">Jira lists no pull requests.</span>;
+  if (!data.length) return <span className="text-fg-3">No linked pull requests.</span>;
   return <MoreList items={data} max={3}>{(shown) => shown.map((pr) => <PullRequestRow key={pr.url} pr={pr} />)}</MoreList>;
 }
 
@@ -205,9 +209,9 @@ export function pullRequestActions(pr: PullRequest): ActionEntry[] {
  *  of the card's issue menu (`wO` with `lhn`); several leave the right-click to the card. */
 export function PullRequestBadge({ issue, layout }: { issue: Issue; layout: "board" | "list" }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const { data } = usePullRequests(issue.key, issue.prCount === 1);
+  const { data } = usePullRequests(issue, issue.prCount === 1);
   const go = async (target: HTMLElement) => {
-    const prs = await fetchPullRequests(issue.key).catch(() => []);
+    const prs = await fetchPullRequests(issue).catch(() => []);
     if (prs.length === 1) openExternal(prs[0]!.url);
     else setAnchor(target);
   };
@@ -227,7 +231,7 @@ export function PullRequestBadge({ issue, layout }: { issue: Issue; layout: "boa
         aria-label={`Pull requests on ${issue.key}`}
         aria-haspopup="dialog"
         aria-expanded={!!anchor}
-        onPointerEnter={() => void queryClient.prefetchQuery(pullRequestQuery(issue.key))}
+        onPointerEnter={() => void queryClient.prefetchQuery(pullRequestQuery(issue))}
         onClick={(e) => (anchor ? setAnchor(null) : void go(e.currentTarget))}
       >
         <Badge.Icon>
@@ -242,7 +246,7 @@ export function PullRequestBadge({ issue, layout }: { issue: Issue; layout: "boa
       {count === 1 ? (
         <ContextMenu
           label="Pull request options"
-          entries={() => (data?.[0] ? pullRequestActions(data[0]) : [{ name: data ? "Jira lists no pull requests" : "Loading pull requests…" }])}
+          entries={() => (data?.[0] ? pullRequestActions(data[0]) : [{ name: data ? "No linked pull requests" : "Loading pull requests…" }])}
         >
           {badge}
         </ContextMenu>
@@ -254,7 +258,7 @@ export function PullRequestBadge({ issue, layout }: { issue: Issue; layout: "boa
           anchor={anchor}
           align={layout === "list" ? "end" : undefined}
           label={goToPullRequestsLabel(count)}
-          entries={data?.length ? pullRequestEntries(data) : [{ name: data ? "Jira lists no pull requests" : "Loading pull requests…" }]}
+          entries={data?.length ? pullRequestEntries(data) : [{ name: data ? "No linked pull requests" : "Loading pull requests…" }]}
           close={() => setAnchor(null)}
         />
       )}
@@ -265,7 +269,7 @@ export function PullRequestBadge({ issue, layout }: { issue: Issue; layout: "boa
 /** ⇧→ on a card or row: the card's pull request badge opens it when shown; otherwise the one pull request, or the newest. */
 export async function goToPullRequests(issue: Issue) {
   if (run("open-pull-requests", issue.key)) return;
-  const prs = await fetchPullRequests(issue.key).catch(() => []);
+  const prs = await fetchPullRequests(issue).catch(() => []);
   if (prs[0]) openExternal(prs[0].url);
 }
 

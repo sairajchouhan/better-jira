@@ -24,6 +24,14 @@ bun run setup --check
 
 This verifies configuration, credentials, and board access without changing files. Restart the server after changing setup.
 
+### Pull requests from GitHub
+
+Cards and rows show the pull requests Jira's development panel links, plus those GitHub links straight to an issue key: a key in the pull request's branch name, title, or body (`feat/ABC-12-tidy`, `Tidy the cache (ABC-12)`). This covers organisations Jira's GitHub app isn't connected to. The server only reads from GitHub. It never comments, reviews, or edits.
+
+- **Token:** the GitHub CLI's own login (`gh auth token`, its active account), read at runtime and kept in memory. Set `GITHUB_TOKEN` to use another token instead. Neither is logged or saved.
+- **Sources:** `GITHUB_PR_SOURCES` lists organisations (`acme`) and repositories (`acme/app`), comma separated. When it is unset, the server reads the owners of your own recent pull requests. `GITHUB_PR_SOURCES=off` turns GitHub off.
+- **Window:** the first read covers pull requests updated in the last `GITHUB_PR_DAYS` days (30 by default). After that, one search every 30 seconds reads what changed since the last one. The server keeps the list in its cache and stops at GitHub's rate limit until it resets.
+
 ## Local edits and rich descriptions
 
 The browser saves issue edits, locally created or deleted issues, comments, attachment contents, description revisions, and the last 100 undo/redo entries in IndexedDB. The footer shows Saving, Saved locally, or Not saved. Wait for Saved locally before closing the tab. View preferences, filters, favorites, and named views use browser storage too. Data is separate for each Jira site and account.
