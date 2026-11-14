@@ -138,3 +138,51 @@ test("Project is the issue's epic: filter, card badge, grouping, ⇧P, right-cli
     expect(JSON.stringify(writes)).not.toContain('"project"');
   });
 });
+
+/** The board's Project filter, set before the app loads (once, so a reload keeps what the test changed). */
+const projectFilter = (...values: string[]) => {
+  const prefs = { 1: { filters: { id: "root", join: "and", children: [{ id: "p", field: "project", op: "is", values }] } } };
+  return `if(!sessionStorage.seeded){sessionStorage.seeded=1;localStorage.setItem(${JSON.stringify(PREFS_KEY)},${JSON.stringify(JSON.stringify(prefs))});}`;
+};
+const COMPOSER = '[role="dialog"][aria-label="Create issue"]';
+
+test("C on a view filtered by one project creates the issue in that epic (Linear's GZt)", async ({ open }) => {
+  await fixture.reset({ writable: true, epics: true, createSuccess: true });
+  const p = await open("", { setup: projectFilter("TEST-7") });
+  await p.waitFor(`${cards}===3`);
+  await p.eval("document.activeElement?.blur()");
+  await p.key("c");
+  await p.waitFor(`!!document.querySelector('${COMPOSER} [aria-label="Project: Fixture epic"]')`);
+  await p.eval(`document.querySelector('${COMPOSER} [aria-label="Issue title"]').focus()`);
+  await p.type("[QA] filtered by project");
+  await p.key("Enter", "meta");
+  await expect
+    .poll(async () =>
+      (await fixture.log()).writes.some((w) =>
+        w.ops.some((o: any) => o.op === "create" && o.fields.parent === "TEST-7"),
+      ),
+    )
+    .toBe(true);
+});
+
+test("a project filter naming two epics sets none and lists both first in the composer's picker, done or not", async ({ open }) => {
+  await fixture.reset({ writable: true, epics: true });
+  const p = await open("", { setup: projectFilter("TEST-8", "TEST-7") });
+  await p.waitFor(`${cards}===4`);
+  await p.eval("document.activeElement?.blur()");
+  await p.key("c");
+  await p.waitFor(`!!document.querySelector('${COMPOSER} [aria-label="Project: No project"]')`);
+  await p.click(`${COMPOSER} [aria-label="Project: No project"]`);
+  await p.waitFor(`!!document.querySelector('${PICKER} [cmdk-item]')`);
+  // Shipped epic is done, so it shows only because the filter names it; the filter's order holds.
+  expect(await names(p, PICKER)).toEqual(["No project", "Shipped epic", "Fixture epic"]);
+});
+
+test("\"No project\" filter: the composer starts with no project", async ({ open }) => {
+  await fixture.reset({ writable: true, epics: true });
+  const p = await open("", { setup: projectFilter("$none") });
+  await p.waitFor(`${cards}===4`);
+  await p.eval("document.activeElement?.blur()");
+  await p.key("c");
+  await p.waitFor(`!!document.querySelector('${COMPOSER} [aria-label="Project: No project"]')`);
+});
