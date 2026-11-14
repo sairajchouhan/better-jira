@@ -90,13 +90,23 @@ function IssueCreatedContent({ notice, id }: ContentProps) {
 }
 const CONTENTS = [NotificationContent, IssueCreatedContent];
 
+/**
+ * The issue of the newest toast that named one, kept after the toast is gone: Linear's ToastPresenter holds the last
+ * toast link in state, set only when the newest toast has a link, for Open link from last toast (`applicable(){return
+ * e!==void 0}`).
+ */
+let lastLink: string | undefined;
+export const lastToastLink = () => lastLink;
+
 /** Queue-owned lifetime keeps the existing 5s confirmations independent of presenter mounting. */
 export function showNotification(notice: Notification, id = nextConfirmation()) {
+  if (notice.key) lastLink = notice.key;
   return toasts.show(<NotificationContent notice={notice} id={id} />, { id, duration: Infinity, expiresIn: 5000 });
 }
 /** "Issue created" for a new issue, a confirmation like the others so Open link from last toast finds it. */
 export function showIssueCreated(key: string) {
   const id = nextConfirmation();
+  lastLink = key;
   return toasts.show(<IssueCreatedContent notice={{ text: "Issue created", key }} id={id} />, {
     id,
     duration: Infinity,
@@ -115,7 +125,7 @@ function confirmationsNewestFirst() {
 }
 /** Whether a confirmation is queued (reminders wait for it). */
 export const hasConfirmation = () => toasts.all().some((toast) => toast.id.startsWith(CONFIRMATION));
-/** The newest confirmation still queued (Linear's Open link from last toast reads the last toast). */
+/** The newest confirmation still queued. */
 export function latestNotification(): Notification | undefined {
   return confirmationsNewestFirst()[0]?.content.props.notice;
 }
@@ -127,6 +137,7 @@ export function dismissNotificationsWithout(exists: (key: string) => boolean) {
 
 /** Rekey the queued content without restarting its lifetime. */
 export function rekeyNotification(from: string, to: string) {
+  if (lastLink === from) lastLink = to;
   for (const { id, content } of confirmationsNewestFirst()) {
     const notice = content.props.notice;
     if (notice.key !== from) continue;

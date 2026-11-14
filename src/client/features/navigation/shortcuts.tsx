@@ -1,5 +1,5 @@
 import { type Issue } from "@/shared/issue-model";
-import { latestNotification, showNotification } from "@/client/state/app-notifications";
+import { lastToastLink, showNotification } from "@/client/state/app-notifications";
 import { toasts } from "@/client/components/toast-queue";
 import { recentIssues } from "./recents";
 import { isMyIssues } from "./navigation";
@@ -485,10 +485,10 @@ export const shortcuts: Shortcut[] = [
     name: "Open link from last toast",
     group: "Navigation",
     hotkey: "Mod+Alt+O",
-    when: () => !!latestNotification()?.key,
+    when: () => !!lastToastLink(),
     run: () => {
       // Like the toast's View issue: a key Jira has since replaced still finds the issue.
-      const issue = get().issues.get(currentKey(latestNotification()?.key ?? ""));
+      const issue = get().issues.get(currentKey(lastToastLink() ?? ""));
       if (issue) navigate({ board: issue.board, selected: issue.key, panel: true });
     },
   },

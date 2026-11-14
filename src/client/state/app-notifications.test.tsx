@@ -1,6 +1,6 @@
 import { afterEach, expect, jest, test } from "bun:test";
 import { type ReactElement, type ReactNode, Children, isValidElement } from "react";
-import { showNotification, latestNotification, rekeyNotification, hasConfirmation } from "./app-notifications";
+import { showNotification, latestNotification, lastToastLink, rekeyNotification, hasConfirmation } from "./app-notifications";
 import { toasts, createToastQueue } from "@/client/components/toast-queue";
 import { Toast } from "@/client/components/toast";
 
@@ -130,4 +130,16 @@ test("#13: a notification with an icon draws it before its text, and every confi
   const html = renderToStaticMarkup(<ToastViewport queue={toasts} />);
   expect(html).toMatch(/ui-toast-icon[^]*<svg[^]*Copied issue link to clipboard/);
   expect(html).toContain('aria-label="Dismiss"');
+});
+
+test("R3 G13: Open link from last toast keeps the last toast's issue after the toast is gone, as Linear's ToastPresenter does", () => {
+  jest.useFakeTimers();
+  showNotification({ text: "Created A-NEW9", key: "A-NEW9" });
+  // A newer toast with no issue doesn't take the link away.
+  showNotification({ text: "Copied" });
+  jest.advanceTimersByTime(5000);
+  expect(toasts.all()).toHaveLength(0);
+  expect(lastToastLink()).toBe("A-NEW9");
+  rekeyNotification("A-NEW9", "A-41");
+  expect(lastToastLink()).toBe("A-41");
 });
