@@ -1,6 +1,7 @@
 import { type Board, type Issue, type IssueDraft, type JiraOptions, type User } from "@/shared/issue-model";
 import { EmptyState } from "@/client/components/empty-state";
 import { resourceURL } from "@/shared/issue-resource";
+import { alreadyLinked } from "@/shared/relations";
 import { useStoredState, writeStored } from "@/client/state/stored-state";
 import { adfToText } from "@/client/features/editor/adf";
 import { showNotification } from "@/client/state/app-notifications";
@@ -1338,10 +1339,8 @@ const MARK: Record<
     enter: "Add as sub-issue",
   },
 };
-const INVERSE: Record<string, string> = {
-  blocked: "blocking",
-  blocking: "blocked",
-};
+/** Linear's mark-as pickers list 3 recent issues (startup-root sX = 3, and 3 for duplicate). */
+const MARK_RECENT = new Set(["related", "blocked", "blocking", "duplicate"]);
 export function Relations({ issue }: { issue: Issue }) {
   const all = useStore((s) => s.issues),
     boards = useStore((s) => s.boards);
@@ -1351,16 +1350,11 @@ export function Relations({ issue }: { issue: Issue }) {
   const kind = useStore((s) => s.relation);
   const close = () => ui.send({ type: "overlay.close" });
   const mark = MARK[kind] ?? MARK.related!;
-  // Linear leaves out issues the new link would repeat or contradict; "Related issues" offers this issue's related ones first.
+  // Linear's mark-as pickers (startup-root mI): an issue the link would repeat stays out of the 3 recent ones, and a search
+  // lists it disabled with the reason (R3-relations-D6). "Related issues" offers this issue's related ones first.
   // ponytail: "Recent" is most recently updated; Linear uses recently viewed.
-  const linked = new Set(
-    (issue.relations ?? [])
-      .filter(
-        (r) =>
-          kind === "related" || r.kind === kind || r.kind === INVERSE[kind],
-      )
-      .map((r) => r.key),
-  );
+  const disabled = alreadyLinked(issue.relations, kind);
+  const linked = new Set<string>();
   if (kind === "parent" || kind === "child")
     for (const i of all.values())
       if (i.parent === issue.key || i.key === issue.parent) linked.add(i.key);
@@ -1368,6 +1362,7 @@ export function Relations({ issue }: { issue: Issue }) {
   const fits = (i: Issue) =>
     i.key !== issue.key &&
     !linked.has(i.key) &&
+    (!!query || !disabled.has(i.key)) &&
     matchRank(query, i) >= 0 &&
     (kind === "parent"
       ? canParent(get(), i, issue)
@@ -1391,7 +1386,7 @@ export function Relations({ issue }: { issue: Issue }) {
     () =>
       ranked(
         [...all.values()].filter((i) => fits(i) && !relatedIssues.includes(i)),
-      ).slice(0, query ? 40 : 8),
+      ).slice(0, query ? 40 : MARK_RECENT.has(kind) ? 3 : 8),
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- Memo invalidation follows draft identity or relation inputs; render-local helpers would invalidate every render.
     [all, query, kind, issue],
   );
@@ -1463,6 +1458,8 @@ export function Relations({ issue }: { issue: Issue }) {
       value={group === "related" ? `related:${i.key}` : i.key}
       onSelect={() => add(i)}
       icon={<StatusIcon status={statusOf(boards, i)} />}
+      disabled={disabled.has(i.key)}
+      hint={disabled.get(i.key)}
     >
       <span className="mr-2 text-[var(--menu-fg-3)]">{i.key}</span>
       <span className="truncate text-[var(--menu-fg)]">{i.summary}</span>

@@ -108,3 +108,18 @@ export function relationSections(relations: readonly Relation[]) {
       });
   return sections.filter((s) => s.rows.length);
 }
+
+/** Linear's mark-as pickers (startup-root `gJ` + `disableWithReason`): the issues a new `kind` link would repeat, any
+ *  direction of the same link type, with the reason each is disabled. Other kinds disable nothing (R3-relations-D6). */
+const ALREADY: Record<string, [kinds: string[], reason: string]> = {
+  blocked: [["blocked", "blocking"], "Already blocked by this issue"],
+  blocking: [["blocked", "blocking"], "Already blocking this issue"],
+  duplicate: [["duplicate", "duplicated"], "Already duplicated"],
+  related: [["related"], "Already referenced"],
+};
+export function alreadyLinked(relations: readonly Relation[] | undefined, kind: string): Map<string, string> {
+  const rule = ALREADY[kind];
+  if (!rule) return new Map();
+  const [kinds, reason] = rule;
+  return new Map((relations ?? []).filter((r) => kinds.includes(r.kind)).map((r) => [r.key, reason]));
+}

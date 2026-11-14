@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { inverseKind, linkRelation, relationName, relationSections } from "./relations";
+import { alreadyLinked, inverseKind, linkRelation, relationName, relationSections } from "./relations";
 
 /** Jira's link types as a work site lists them (`/rest/api/3/issueLinkType`), names and phrases only. */
 const types = {
@@ -103,4 +103,17 @@ test("BJ-15: sections follow Linear's order, then each Jira kind under its phras
     ["Clones", ["A-5"]],
   ]);
   expect(relationSections([])).toEqual([]);
+});
+
+test("R3-relations-D6: Linear disables an issue already linked by the same link type, either way, with its reason", () => {
+  const relations = [
+    { key: "K-2", kind: "blocking" },
+    { key: "K-3", kind: "related" },
+    { key: "K-4", kind: "duplicated" },
+  ];
+  expect([...alreadyLinked(relations, "blocked")]).toEqual([["K-2", "Already blocked by this issue"]]);
+  expect([...alreadyLinked(relations, "blocking")]).toEqual([["K-2", "Already blocking this issue"]]);
+  expect([...alreadyLinked(relations, "related")]).toEqual([["K-3", "Already referenced"]]);
+  expect([...alreadyLinked(relations, "duplicate")]).toEqual([["K-4", "Already duplicated"]]);
+  expect(alreadyLinked(relations, "parent").size).toBe(0);
 });
