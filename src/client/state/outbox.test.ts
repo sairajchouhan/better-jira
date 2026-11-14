@@ -617,3 +617,41 @@ test("R3-relations-D2: the page a reload replaced still holds its lock at the cl
   await h.advance(0);
   expect(handed).toEqual([new Set(), new Set(["RP-1"])]);
 });
+
+test("R3-palette-shortcuts-D7: a write Jira has but whose copy was slow to read counts as saved, and the copy is read again apart from the queue", async () => {
+  const reread = gate();
+  const h = harness({
+    reply: async (_key, body) => {
+      if (body.ops.length) return { unsettled: ["D7-1"] };
+      await reread.held;
+      return { issue: issue("D7-1", { priority: "High" }) };
+    },
+  });
+  h.send(edit(issue("D7-1"), { priority: "High" }));
+  await h.advance(0);
+  // The write is answered: nothing is pending while Jira's copy is read again.
+  expect(h.outbox.pending()).toBe(0);
+  expect(h.sent.map((s) => s.ops.length)).toEqual([1, 0]);
+  expect(h.answers.map((a) => a.ops.length)).toEqual([1]);
+  reread.open();
+  await h.advance(0);
+  expect(h.answers.map((a) => [a.ops.length, a.result.issue?.priority])).toEqual([
+    [1, undefined],
+    [0, "High"],
+  ]);
+  // A copy read before a later write's answer never settles over it.
+  const late = gate();
+  const g = harness({
+    reply: async (_key, body) => {
+      if (!body.ops.length) return await late.held, { issue: issue("D7-2") };
+      return g.sent.length === 1 ? { unsettled: ["D7-2"] } : { issue: issue("D7-2", { priority: "Highest" }) };
+    },
+  });
+  g.send(edit(issue("D7-2"), { priority: "High" }));
+  await g.advance(0);
+  g.send(edit(issue("D7-2", { priority: "High" }), { priority: "Highest" }));
+  await g.advance(0);
+  late.open();
+  await g.advance(0);
+  expect(g.answers.map((a) => a.ops.length)).toEqual([1, 1]);
+});

@@ -1,4 +1,4 @@
-import { expect, mock, setSystemTime, test } from "bun:test";
+import { expect, jest, mock, setSystemTime, test } from "bun:test";
 
 // Jira's remote links for the issue, and the calls the write made.
 let links: any[] = [];
@@ -13,6 +13,8 @@ const turn = async <T>(value: () => T) => {
   inFlight--;
   return value();
 };
+// Jira's copy of the issue, read after the write.
+let refreshing = (..._args: unknown[]): Promise<any> => turn(() => undefined);
 import { Database } from "bun:sqlite";
 import { writeLedger } from "./write-ledger";
 const ledger = writeLedger(new Database(":memory:"));
@@ -25,10 +27,10 @@ mock.module("./jira", () => ({
 }));
 mock.module("./mirror", () => ({
   ESTIMATES: [],
-  refresh: () => turn(() => undefined),
+  refresh: (...args: unknown[]) => refreshing(...args),
   ledger,
 }));
-const { applyOps } = await import("./jira-writes");
+const { applyOps, SETTLE_WAIT } = await import("./jira-writes");
 import { DESCRIPTION_CONFLICT, type Op } from "@/shared/jira-ops";
 
 test("R1-D1: a web link Jira already has, added in Jira's UI under another globalId, is not posted again", async () => {
@@ -702,4 +704,32 @@ test("#2: a description with an issue chip saves whichever build made its base; 
   // Someone else's edit still conflicts.
   expect((await edit("see K-2")).error).toContain(DESCRIPTION_CONFLICT);
   expect(puts).toBe(3);
+});
+
+test("R3-palette-shortcuts-D7: a write Jira has answers within the settle wait, naming the issue its slow copy read leaves unsettled", async () => {
+  answer = () => ({});
+  let read!: (copy: any) => void;
+  refreshing = () => new Promise((resolve) => (read = resolve));
+  jest.useFakeTimers();
+  try {
+    let written: Awaited<ReturnType<typeof applyOps>> | undefined;
+    const write = applyOps("K-7", [{ op: "fields", fields: { priority: "High" } }], 1).then((w) => (written = w));
+    // Jira's own calls take their (fake) turns until the write reads Jira's copy.
+    for (let i = 0; !read && i < 1000; i++) {
+      jest.advanceTimersByTime(5);
+      await Promise.resolve();
+    }
+    jest.advanceTimersByTime(SETTLE_WAIT);
+    await write;
+    expect(written).toEqual({ key: "K-7", created: {}, others: [], unsettled: ["K-7"] });
+    // The read the tab sends again (no ops) waits for Jira's copy.
+    const reread = applyOps("K-7", [], 1).then((w) => (written = w));
+    jest.advanceTimersByTime(SETTLE_WAIT * 2);
+    read({ issue: { key: "K-7" }, full: null });
+    await reread;
+    expect(written!.issue).toEqual({ key: "K-7" });
+  } finally {
+    jest.useRealTimers();
+    refreshing = () => turn(() => undefined);
+  }
 });

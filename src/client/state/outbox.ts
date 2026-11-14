@@ -36,6 +36,8 @@ export type WriteResult = {
   others?: Issue[];
   issue?: Issue | null;
   full?: Full | null;
+  /** Issues whose fresh copy the server didn't wait for: Jira has the write, and the outbox reads them again. */
+  unsettled?: string[];
 };
 /** A write Jira answered. `created`: app ids (the issue's key, new comment ids) → Jira's; `refused`: a create Jira refused;
  *  `describes`: the write carried a description. */
@@ -254,6 +256,23 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
         reconnect = undefined;
       }
   }
+  /** Answers per issue, so a slow read of Jira's copy never settles over a later write's answer. */
+  const answers = new Map<string, number>();
+  /**
+   * Jira has the write, but its copy was slow to read: the write counts as saved, and Jira's copy is read again apart from
+   * the queue, so the edit still settles to it (R3-palette-shortcuts-D7). An empty write only reads (the server waits for it).
+   */
+  async function reread(key: string, board: number | undefined) {
+    const seen = answers.get(key);
+    try {
+      const response = await ports.post(key, { ops: [], ...(board === undefined ? {} : { board }) });
+      const result: WriteResult = await response.json();
+      if (!response.ok || result.error || result.issue === undefined || answers.get(key) !== seen) return;
+      events.answered({ key, ops: [], result, created: new Map(), refused: false, describes: false });
+    } catch {
+      // Unreachable: the edit stays shown as made until the issue's next write settles it.
+    }
+  }
   let flushing = false,
     wake: (() => void) | undefined;
   /** Sends queued jobs one at a time until none is left. */
@@ -399,6 +418,7 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
                 const { description: _d, descriptionBase: _b, ...fields } = op.fields;
                 return Object.keys(fields).length ? [{ op: "fields", fields }] : [];
               });
+        answers.set(currentKey(job.key), (answers.get(currentKey(job.key)) ?? 0) + 1);
         events.answered({
           key: job.key,
           ops: job.ops,
@@ -407,6 +427,8 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
           refused,
           describes,
         });
+        for (const key of result!.unsettled ?? [])
+          void reread(key, key === currentKey(job.key) ? job.board : undefined);
       }
     } finally {
       flushing = false;

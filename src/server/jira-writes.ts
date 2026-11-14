@@ -593,10 +593,14 @@ async function run(ctx: Context, op: Op) {
  * Applies a client's ops in order, then returns Jira's fresh copy of the issue (and of linked issues) either way.
  * `settle: false` skips re-reading the issue itself, for a client that has a later write for it queued (R2-create-D2).
  */
-/** What a write did; `retry`: send the same ops again later (an earlier send's outcome can't be told yet). */
+/** How long a write's answer waits for Jira's fresh copy once Jira has the write. */
+export const SETTLE_WAIT = 2000;
+/** What a write did; `retry`: send the same ops again later (an earlier send's outcome can't be told yet); `unsettled`: the
+ *  issues whose fresh copy wasn't read in time, for the tab to read again. */
 export type Written = {
   error?: string;
   retry?: boolean;
+  unsettled?: string[];
   key: string;
   created: Record<string, string>;
   others: any[];
@@ -646,10 +650,25 @@ export async function applyOps(
     error = e instanceof JiraError ? e.reason : (e as UserError).message;
   }
   error ??= ctx.warning;
-  const [fresh, ...touched] = await Promise.all([
+  const reads = Promise.all([
     settle ? refresh(ctx.key, board).catch(() => undefined) : undefined,
     ...[...ctx.touched].map((other) => refresh(other).catch(() => undefined)),
   ]);
+  // Jira has the write: a slow read of its copy (a rate limit, a slow Jira) doesn't keep the tab saying "Sending". The read
+  // goes on and lands in the mirror; the tab reads the copy again apart from its queue (R3-palette-shortcuts-D7). A refused
+  // write, or a bare read (no ops), waits for the copy it rolls back to.
+  const settled =
+    ops.length && !error
+      ? await Promise.race([reads, new Promise<undefined>((r) => setTimeout(r, SETTLE_WAIT))])
+      : await reads;
+  if (!settled)
+    return {
+      key: ctx.key,
+      created: ctx.created,
+      others: [],
+      unsettled: [...(settle ? [ctx.key] : []), ...ctx.touched],
+    };
+  const [fresh, ...touched] = settled;
   const others = touched.flatMap((r) => (r ? [r.issue] : []));
   return {
     error,
