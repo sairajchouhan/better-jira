@@ -15,7 +15,7 @@ export type ActionEntry = {
   run?: () => void;
   children?: ActionEntry[];
   /** Draws the submenu's rows from its search instead of `children` (Linear's recalculateOnInput: a typed date, label checkboxes
-   *  with "Create new label"); `children`, when given too, then only feed the root search. cmdk filters what it draws. */
+   *  with "Create new label"); `children`, when given too, then only feed the root search. Menu ranks what it draws. */
   rows?: (query: string) => ReactNode;
   /** The submenu's search placeholder (Linear's subActionPlaceholder); "Filter…" by default. */
   placeholder?: string;

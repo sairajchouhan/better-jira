@@ -326,7 +326,7 @@ function PaletteFrame({
   placeholder?: string;
   /** Runs on Backspace in an empty input. */
   onBackspace?: () => void;
-  /** Controls under the results, outside cmdk so their own menus keep their keys. */
+  /** Controls under the results, outside the menu so their own menus keep their keys. */
   footer?: ReactNode;
   children: ReactNode;
 }) {
@@ -334,7 +334,7 @@ function PaletteFrame({
     <MenuSurface label={label} close={close} command width={COMMAND_MENU_WIDTH}>
       <div
         className="command-menu palette"
-        // Before cmdk runs the pick: whether it opens a new tab.
+        // Before the menu runs the pick: whether it opens a new tab.
         onKeyDownCapture={(e) => {
           if (e.key === "Enter") holdNewTab(e);
         }}

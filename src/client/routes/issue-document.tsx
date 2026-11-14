@@ -729,7 +729,7 @@ function DocumentIcon({ resource, issue }: { resource: IssueResource; issue: Iss
               <Tabs.Tab value="emojis">Emojis</Tabs.Tab>
             </Tabs.List>
           </Tabs>
-          {/* A menu's search row (borderless, underlined), not a form field; Menu.Input needs a cmdk Menu around it. */}
+          {/* A menu's search row (borderless, underlined), not a form field; Menu.Input needs a Menu around it. */}
           <input
             {...NO_AUTOFILL}
             autoFocus

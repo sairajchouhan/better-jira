@@ -16,7 +16,6 @@
     "lint:fix": "oxlint --fix"
   },
   "dependencies": {
-    "@floating-ui/react": "^0.27.20",
     "@internationalized/date": "3.12.4",
     "@tanstack/pacer": "0.23.1",
     "@tanstack/query-core": "5.107.1",
@@ -24,7 +23,6 @@
     "@tanstack/react-router": "1.170.46",
     "bun-plugin-tailwind": "^0.1.2",
     "chrono-node": "^2.10.3",
-    "cmdk": "^1.1.1",
     "lowlight": "^3.3.0",
     "marked": "^18.2.0",
     "prosemirror-commands": "^1.7.2",

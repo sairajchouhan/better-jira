@@ -169,7 +169,7 @@ export function fuzzyScore(text: string | string[], query = ""): number {
 export const prioritize = (score: number, by = 1) => score * 1.01 ** by;
 export const deprioritize = (score: number, by = 1) => score * 0.99 ** by;
 /**
- * cmdk's `filter` with Linear's score: pass it to every searchable menu (`<Menu filter={menuFilter}>`) so all menus rank alike, as
+ * The menu's `filter` with Linear's score: pass it to every searchable menu (`<Menu filter={menuFilter}>`) so all menus rank alike, as
  * Linear scores every action menu's rows with one `Yn.scoreAction` (startup-entry.Dt5YDWdY.js). A row's `keywords`, when given,
  * are what it is searched by instead of its value, so a value can stay a unique id ("Status To Do 3") while the row matches on its
  * label ("To Do") alone: the first is its name, the rest Linear's `keywords` (`rowKeywords` adds a status's workflow place and a
@@ -220,7 +220,7 @@ export type RowSearch = {
    *  label, `sortPriority: -1/0`). */
   pin?: "first" | "last";
 };
-/** A row's cmdk `keywords` after its name, for menuFilter: its Linear keywords, workflow place and pin. One encoding for every
+/** A row's menu `keywords` after its name, for menuFilter: its Linear keywords, workflow place and pin. One encoding for every
  *  picker row (PickerRow) and action-menu value (ActionEntry.keywords), so S, P, L, due and their right-click submenus score alike. */
 export const rowKeywords = ({ keywords, order, pin }: RowSearch): string[] => [
   ...(keywords ? [keywords] : []),
@@ -259,7 +259,7 @@ export function breadcrumbScore(labels: string[], breadcrumb: string, search: st
   }
   return Math.max(score, 0);
 }
-/** A hoisted row's cmdk `keywords`: its label, and its breadcrumb (`path` then the label) marked for menuFilter's breadcrumbScore. */
+/** A hoisted row's menu `keywords`: its label, and its breadcrumb (`path` then the label) marked for menuFilter's breadcrumbScore. */
 export const breadcrumbKeywords = (label: string, path: string[]) => [label, CRUMBS + [...path, label].join(" ")];
 
 const PERSON = "\u0001",
@@ -268,7 +268,7 @@ const PERSON = "\u0001",
   NAME_BOOST = 10,
   // `mH` boosts: team members by 5 (project members, a parked decision here, by 10).
   TEAM_PRIORITY = 5;
-/** A person row's cmdk `keywords` (Linear's user action `IP` with the assignee picker's `scoreOverride: mH`): their name, and
+/** A person row's menu `keywords` (Linear's user action `IP` with the assignee picker's `scoreOverride: mH`): their name, and
  *  markers for menuFilter's personScore: the current user, and a member of the board's team. */
 export const personKeywords = (name: string, person: { me?: boolean; team?: boolean } = {}) => [
   name,

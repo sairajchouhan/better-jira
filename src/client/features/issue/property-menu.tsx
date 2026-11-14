@@ -229,7 +229,7 @@ export function AssigneeRows({
     </>
   );
 }
-/** A person row's cmdk value: unique by account id, while the row is searched by its name alone (personKeywords). */
+/** A person row's menu value: unique by account id, while the row is searched by its name alone (personKeywords). */
 export const assigneeValue = (u: User) => `${u.name} ${u.id}`;
 /** Issue options › Assignee: AssigneeRows on the issue's live assignee. */
 export function IssueAssigneeRows({ issue, query }: { issue: string; query: string }) {
@@ -354,7 +354,7 @@ export function TypeMenu({
     </PropertyMenu>
   );
 }
-/** A project row's cmdk value: its name, then its key, so a search finds an epic by either. */
+/** A project row's menu value: its name, then its key, so a search finds an epic by either. */
 const epicValue = (epic: { key: string; name: string }) => `${epic.name} ${epic.key}`;
 /**
  * Linear's project picker (`zBn`, ⇧P): "No project" (number 0, `YBn`), then the epics `epicChoices` lists; Linear's project is a

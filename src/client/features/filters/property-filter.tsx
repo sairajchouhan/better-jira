@@ -292,7 +292,7 @@ export const ValueRow = memo(function ValueRow({
   selection: "multiple" | "single";
   path?: string[];
 }) {
-  // cmdk selects on its own click handler, which carries no modifiers; the press before it does.
+  // React Aria's onAction carries no modifiers; the press before it does.
   const alt = useRef(false);
   const multiple = selection === "multiple";
   return (
