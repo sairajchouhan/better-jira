@@ -173,3 +173,19 @@ export function subIssueRows(
     hiddenCompleted,
   };
 }
+
+/** Linear's Move… sub-actions for a sub-issue under manual ordering (startup-root `Ivr`), or a drop at `to` in the others. */
+export type SubIssueMove = "top" | "up" | "down" | "bottom" | { to: number };
+/** The siblings' order with `key` moved (Linear's Move to top / up / down / to bottom, or a drag), or null when it stays put
+ *  (R3-relations-D4). */
+export function movedOrder(siblings: readonly string[], key: string, move: SubIssueMove): string[] | null {
+  const from = siblings.indexOf(key);
+  if (from < 0) return null;
+  const rest = siblings.filter((k) => k !== key);
+  const to =
+    move === "top" ? 0 : move === "bottom" ? rest.length : move === "up" ? from - 1 : move === "down" ? from + 1 : move.to;
+  const at = Math.max(0, Math.min(rest.length, to));
+  if (at === from) return null;
+  rest.splice(at, 0, key);
+  return rest;
+}

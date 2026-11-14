@@ -148,6 +148,12 @@ function canReorder(issue: Issue, direction: number, s = get()) {
   return !!list && list.length > 1 && list.at(direction < 0 ? 0 : -1)!.key !== issue.key;
 }
 function reorder(direction: number, edge = false) {
+  // The sub-issue row under the pointer moves within its parent's manual order (Linear's Move…, R3-relations-D4).
+  const child = command("hovered-sub-issue");
+  if (child) {
+    command("reorder-sub-issue", { key: child, move: edge ? (direction < 0 ? "top" : "bottom") : direction < 0 ? "up" : "down" });
+    return;
+  }
   const issue = selected();
   if (!issue) return;
   const list = order().find((c) => c.some((i) => i.key === issue.key));
@@ -807,8 +813,10 @@ export const shortcuts: Shortcut[] = [
     hotkey,
     group: "List / Board",
     issue: true,
-    // Moves act on the selection (or a menu's issue), never the card that slides under the pointer as the board re-lays out.
-    when: (s: State) => {
+    // Board moves act on the selection (or a menu's issue), never the card that slides under the pointer as the board
+    // re-lays out; a hovered sub-issue row reorders within its parent (R3-relations-D4).
+    when: (s: State, issue: Issue | undefined) => {
+      if (issue && issue.key === command("hovered-sub-issue")) return true;
       const move = moveAvailability(id, selected(s), s);
       return !!move && !move.disabledReason;
     },

@@ -51,8 +51,10 @@ import {
   defaultSubIssueDisplay,
   SUB_ISSUE_ORDERINGS as orderings,
   SUB_ISSUE_PROPERTIES as properties,
+  movedOrder,
   subIssueRows,
   type SubIssueDisplay,
+  type SubIssueMove,
 } from "./sub-issue-model";
 
 const COMPLETED = [
@@ -218,6 +220,50 @@ export function SubIssues({ issue }: { issue: Issue }) {
     // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
     [issue.key, all, boards, display, reveal, manualOrder],
   );
+  const manual = display.ordering === "manual";
+  /** The visible siblings under `child`'s parent, in the order shown. */
+  const siblingsOf = (child: Issue) =>
+    model.rows.filter((row) => row.issue.parent === child.parent).map((row) => row.issue.key);
+  // Linear's Move… for a manually ordered sub-issue list (startup-root Ivr); the order stays local (BJ-50).
+  const moveChild = (key: string, move: SubIssueMove) => {
+    const child = get().issues.get(key);
+    if (!manual || !child) return false;
+    const siblings = siblingsOf(child),
+      next = movedOrder(siblings, key, move);
+    if (next) setManualOrder([...manualOrder.filter((k) => !siblings.includes(k)), ...next]);
+    return true;
+  };
+  // ⌥↑ / ⌥↓ / ⌥⇧↑ / ⌥⇧↓ on the hovered row (R3-relations-D4).
+  useCommand("reorder-sub-issue", ({ key, move }) =>
+    model.rows.some((row) => row.issue.key === key) && moveChild(key, move) ? true : undefined,
+  );
+  const moveEntry = (child: Issue): ActionEntry | undefined => {
+    const siblings = siblingsOf(child),
+      at = siblings.indexOf(child.key);
+    if (!manual || siblings.length < 2) return;
+    const step = (name: string, move: Exclude<SubIssueMove, { to: number }>, icon: "arrow-up" | "arrow-down"): ActionEntry => ({
+      name,
+      icon,
+      shortcut: hotkeyOf(`reorder-${move}`),
+      run: () => {
+        setRowMenu(null);
+        moveChild(child.key, move);
+      },
+    });
+    // Linear's applicability: up moves exist below the top, down moves above the bottom.
+    return {
+      name: "Move…",
+      icon: "move",
+      search: "hidden",
+      divider: true,
+      children: [
+        ...(at > 0 ? [step("Move to top", "top", "arrow-up"), step("Move up", "up", "arrow-up")] : []),
+        ...(at < siblings.length - 1
+          ? [step("Move down", "down", "arrow-down"), step("Move to bottom", "bottom", "arrow-down")]
+          : []),
+      ],
+    };
+  };
   const change = (patch: Partial<SubIssueDisplay>) => {
     if (
       (patch.completed !== undefined &&
@@ -244,8 +290,8 @@ export function SubIssues({ issue }: { issue: Issue }) {
         "[data-sub-issue]:hover, [data-sub-issue]:focus-within",
       )?.dataset.subIssue,
   );
-  const rowEntries = (child: Issue, _anchor: HTMLElement): ActionEntry[] =>
-    issueMenuEntries(child, {
+  const rowEntries = (child: Issue, _anchor: HTMLElement): ActionEntry[] => {
+    const entries = issueMenuEntries(child, {
       presentation: "sub-issue",
       close: () => setRowMenu(null),
       openDialog: (kind) => {
@@ -262,6 +308,10 @@ export function SubIssues({ issue }: { issue: Issue }) {
         if (kind !== "history") setRowDialog({ kind, key: child.key });
       },
     });
+    // Move… sits just above Delete, the menu's last entry.
+    const move = moveEntry(child);
+    return move ? [...entries.slice(0, -1), move, ...entries.slice(-1)] : entries;
+  };
   return (
     <section
       ref={section}
@@ -325,13 +375,16 @@ export function SubIssues({ issue }: { issue: Issue }) {
             display={display}
             boards={boards}
             progress={progress.get(child.key)}
-            move={display.ordering === "manual" ? (direction) => {
-              const siblings = model.rows.filter(row => row.issue.parent === child.parent).map(row => row.issue.key);
-              const from = siblings.indexOf(child.key), to = from + direction;
-              if (to < 0 || to >= siblings.length) return;
-              [siblings[from], siblings[to]] = [siblings[to]!, siblings[from]!];
-              setManualOrder([...manualOrder.filter(key => !siblings.includes(key)), ...siblings]);
-            } : undefined}
+            onDrop={
+              manual
+                ? (dragged, after) => {
+                    const source = get().issues.get(dragged);
+                    if (!source || source.parent !== child.parent || dragged === child.key) return;
+                    const rest = siblingsOf(child).filter((k) => k !== dragged);
+                    moveChild(dragged, { to: rest.indexOf(child.key) + (after ? 1 : 0) });
+                  }
+                : undefined
+            }
             active={rowMenu?.key === child.key}
             openMenu={(anchor, point) =>
               setRowMenu({ anchor, key: child.key, point })
@@ -557,6 +610,7 @@ function RenameIssue({ issue, close }: { issue: Issue; close: () => void }) {
     </Dialog>
   );
 }
+const SUB_ISSUE_DRAG = "application/x-better-jira-sub-issue";
 const continues = (rows: { depth: number }[], index: number, level: number) => {
   for (const row of rows.slice(index + 1))
     if (row.depth <= level) return row.depth === level;
@@ -565,7 +619,7 @@ const continues = (rows: { depth: number }[], index: number, level: number) => {
 
 function SubIssueRow({
   child,
-  move,
+  onDrop,
   depth,
   contextOnly,
   index,
@@ -577,7 +631,8 @@ function SubIssueRow({
   openMenu,
 }: {
   child: Issue;
-  move?: (direction: -1 | 1) => void;
+  /** Manual ordering: a sub-issue dragged onto this row lands before it, or `after` it. */
+  onDrop?: (dragged: string, after: boolean) => void;
   depth: number;
   contextOnly: boolean;
   index: number;
@@ -611,6 +666,22 @@ function SubIssueRow({
       data-context-only={contextOnly || undefined}
       className={`group relative -ml-1.5 flex min-h-9 items-center gap-px rounded-lg pr-1 hover:bg-(--row-hover) ${active ? "bg-(--row-hover)" : ""}`}
       style={{ paddingLeft: 31 + depth * 24 }}
+      // Linear drags a manually ordered sub-issue to its new place (R3-relations-D4).
+      draggable={!!onDrop}
+      onDragStart={onDrop && ((event) => {
+        event.dataTransfer.setData(SUB_ISSUE_DRAG, child.key);
+        event.dataTransfer.effectAllowed = "move";
+      })}
+      onDragOver={onDrop && ((event) => {
+        if (event.dataTransfer.types.includes(SUB_ISSUE_DRAG)) event.preventDefault();
+      })}
+      onDrop={onDrop && ((event) => {
+        const dragged = event.dataTransfer.getData(SUB_ISSUE_DRAG);
+        if (!dragged) return;
+        event.preventDefault();
+        const box = event.currentTarget.getBoundingClientRect();
+        onDrop(dragged, event.clientY > box.top + box.height / 2);
+      })}
       onContextMenu={(event) => {
         event.preventDefault();
         openMenu(event.currentTarget, {
@@ -659,7 +730,6 @@ function SubIssueRow({
           </Fragment>
         );
       })}
-      {move && <span className="absolute left-0 inset-y-0 flex flex-col opacity-0 group-hover:opacity-100 focus-within:opacity-100"><IconButton label={`Move ${child.key} up`} onClick={() => move(-1)} size="small" className="h-[18px] w-[18px]">↑</IconButton><IconButton label={`Move ${child.key} down`} onClick={() => move(1)} size="small" className="h-[18px] w-[18px]">↓</IconButton></span>}
       {display.properties.includes("status") &&
         control("status", status(child).name, <StatusIcon status={status(child)} />)}
       {display.properties.includes("priority") &&

@@ -6,6 +6,7 @@ import {
   defaultSubIssueDisplay,
   SUB_ISSUE_ORDERINGS,
   SUB_ISSUE_PROPERTIES,
+  movedOrder,
   subIssueRows,
 } from "./sub-issue-model";
 const issue = (key: string, parent?: string, status = "todo", rank = ""): Issue => ({
@@ -140,4 +141,17 @@ test("sub-issue menus use Linear's labels from the board's shared tables (BJ-215
   expect(label(SUB_ISSUE_PROPERTIES, "links")).toBe("Links");
   for (const [id, text] of SUB_ISSUE_ORDERINGS) expect(label(ORDERINGS, id)).toBe(text);
   for (const [id, text] of SUB_ISSUE_PROPERTIES) expect(label(PROPERTIES, id)).toBe(text);
+});
+
+test("R3-relations-D4: Linear's Move… sub-actions and a drop reorder one parent's sub-issues", () => {
+  const order = ["A", "B", "C", "D"];
+  expect(movedOrder(order, "C", "up")).toEqual(["A", "C", "B", "D"]);
+  expect(movedOrder(order, "B", "down")).toEqual(["A", "C", "B", "D"]);
+  expect(movedOrder(order, "C", "top")).toEqual(["C", "A", "B", "D"]);
+  expect(movedOrder(order, "B", "bottom")).toEqual(["A", "C", "D", "B"]);
+  // Dropped before D (index 2 among the others).
+  expect(movedOrder(order, "A", { to: 2 })).toEqual(["B", "C", "A", "D"]);
+  // Already there: nothing to save.
+  expect(movedOrder(order, "A", "up")).toBeNull();
+  expect(movedOrder(order, "D", "bottom")).toBeNull();
 });

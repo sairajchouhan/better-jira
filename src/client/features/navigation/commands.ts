@@ -23,6 +23,8 @@ export type Commands = {
   "create-sub-issue": { arg: string; result: true };
   /** The sub-issue row under the pointer or keyboard focus; issue shortcuts act on it. */
   "hovered-sub-issue": { arg: void; result: string };
+  /** Move this sub-issue within its parent's manual order (Linear's Move…); untaken when its list isn't ordered manually. */
+  "reorder-sub-issue": { arg: { key: string; move: "top" | "up" | "down" | "bottom" }; result: true };
   "document-action": { arg: DocumentAction; result: true };
   /** The view Issue options, or the due or reminder menu, opens in. Kept until a menu that shows it mounts. */
   "issue-options-start": { arg: IssueOptionsStart; result: true };
