@@ -760,7 +760,13 @@ function MenuRoot({
     input.current = "pointer";
     const row = target.closest<HTMLElement>('[role^="menuitem"]');
     const { state } = shared.current;
-    if (!row || row.closest(".menu") !== root.current || row.hasAttribute("data-disabled") || !row.dataset.key) {
+    if (
+      !row ||
+      row.closest(".menu") !== root.current ||
+      row.hasAttribute("data-disabled") ||
+      row.getAttribute("aria-disabled") === "true" ||
+      !row.dataset.key
+    ) {
       under.current = null;
       return;
     }
@@ -1064,23 +1070,29 @@ function MenuItem({
   ...props
 }: MenuItemProps) {
   const checks = checkbox ?? ariaChecked;
+  // `aria-disabled` reads as disabled and the keys pass it over (rowKeys), but a press still runs it: the filter
+  // menu's Linear-only fields say why they are unavailable. `disabled` is React Aria's: no press at all.
+  const muted = ariaDisabled === true || ariaDisabled === "true";
   return (
     <AriaMenuItem
       id={value}
       textValue={value}
-      // Kept on React Aria's node for the ranking (menuFilter's keywords); not a DOM attribute.
-      {...({ keywords } as object)}
-      isDisabled={disabled || ariaDisabled === true || ariaDisabled === "true"}
+      // Kept on React Aria's node for the ranking (menuFilter's keywords) and the keys (rowKeys); not DOM attributes.
+      {...({ keywords, muted } as object)}
+      isDisabled={disabled}
       onAction={onSelect}
+      // The row's `data-value`, which the e2e specs and the row's own lookups read.
+      data-value={value}
       {...props}
       render={
-        checks !== undefined || title
+        checks !== undefined || title || muted
           ? (dom) => (
               <div
                 {...(dom as ComponentProps<"div">)}
                 title={title}
                 role={checks !== undefined ? "menuitemcheckbox" : (dom as ComponentProps<"div">).role}
                 aria-checked={checks}
+                aria-disabled={muted || undefined}
               />
             )
           : undefined
@@ -1367,7 +1379,7 @@ function MenuSubmenu({
   return (
     // React Aria keys a SubmenuTrigger's node by its `id`, which its types leave out.
     <SubmenuTrigger delay={NO_HOVER_OPEN} {...({ id: SUBMENU + value, keywords } as object)}>
-      <AriaMenuItem id={value} textValue={value} {...({ keywords } as object)} className="menu-item">
+      <AriaMenuItem id={value} textValue={value} {...({ keywords } as object)} data-value={value} className="menu-item">
         <ItemContent {...slots} submenu>
           {label}
         </ItemContent>

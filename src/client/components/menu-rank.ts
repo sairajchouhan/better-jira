@@ -1,6 +1,6 @@
 /**
- * How a menu orders its rows while it is searched, on React Aria's collection. cmdk sorted every menu's rows by score as the search
- * changed, and Linear's B3e lists its search results best first; React Aria's Menu only filters (Autocomplete's `filter` keeps the
+ * How a menu orders its rows while it is searched, on React Aria's collection. Linear's B3e lists its search results best
+ * first as the search changes; React Aria's Menu only filters (Autocomplete's `filter` keeps the
  * order), so the rows a filter keeps are re-linked here in score order before the list lays them out.
  */
 import type { Key } from "react-aria-components";
@@ -40,10 +40,9 @@ export const EMPTY_STATE = "data-empty-state";
 const byScore = (a: Shown, b: Shown) => b.score - a.score;
 
 /**
- * The top-level rows of `collection` as the menu shows them. With `scoreOf` (a search) rows are sorted best first as cmdk's sort
- * did: the menu's other children (headers, captions) keep their place at the top, then its loose rows by score, then its groups by
- * their best row, each group's rows by score; dividers go, as cmdk hid them while filtering. The empty state shows only when no
- * row is listed. Array sort is stable, so equal scores keep the menu's order.
+ * The top-level rows of `collection` as the menu shows them. With `scoreOf` (a search) rows are sorted best first: the
+ * menu's other children (headers, captions) keep their place at the top, then its loose rows by score, then its groups by
+ * their best row, each group's rows by score; dividers go while filtering. The empty state shows only when no row is listed. Array sort is stable, so equal scores keep the menu's order.
  */
 export function arrange(collection: RankCollection, scoreOf?: (node: RankNode) => number): Shown[] {
   const top = [...collection];
@@ -96,14 +95,14 @@ export function relink<C extends RankCollection>(collection: C, shown: Shown[]):
   return next;
 }
 
-/** The keys the highlight moves through, in the order shown: each action row, a submenu's by its action row; disabled rows are
- *  passed over, as cmdk's and Linear's keyboard pass them. */
+/** The keys the highlight moves through, in the order shown: each action row, a submenu's by its action row; disabled rows (and
+ *  Menu.Item's `aria-disabled` ones, `muted`) are passed over, as Linear's keyboard passes them. */
 export function rowKeys(collection: RankCollection): Key[] {
   const keys: Key[] = [];
   const visit = (nodes: Iterable<RankNode>) => {
     for (const node of nodes) {
       if (node.type === "item") {
-        if (!node.props.isDisabled) keys.push(node.key);
+        if (!node.props.isDisabled && !node.props.muted) keys.push(node.key);
       } else if (node.type === "submenutrigger" && node.firstChildKey != null) keys.push(node.firstChildKey);
       else if (node.type === "section") visit(collection.getChildren(node.key));
     }

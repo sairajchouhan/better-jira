@@ -125,8 +125,9 @@ describe("relink and rowKeys", () => {
     expect(ranked.getItem("a")!.index).toBe(2);
   });
 
-  test("disabled rows are passed over", () => {
+  test("disabled rows are passed over, and aria-disabled ones, which a press still runs", () => {
     expect(rowKeys(build([{ key: "a" }, { key: "off", props: { isDisabled: true } }, { key: "b" }]))).toEqual(["a", "b"]);
+    expect(rowKeys(build([{ key: "a" }, { key: "why", props: { muted: true } }]))).toEqual(["a"]);
   });
 });
 
