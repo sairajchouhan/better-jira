@@ -87,12 +87,13 @@ export function Sidebar({ boards }: { boards: Board[] }) {
   const views = useSavedViews();
   const hidden = useStore((s) => s.sidebarHidden);
   const open = useStore((s) => s.sidebarOpen);
+  const peek = useStore((s) => s.sidebarPeek) && hidden;
   const inbox = useStore((s) => s.inbox);
   const badge = useInboxBadge();
   const [prefs, setPrefs] = useStoredState("better-jira:sidebar:v1", parseSidebarPrefs, SIDEBAR_PREFS);
   const customizing = useStore((s) => s.overlay === "customize-sidebar");
   const dialog = customizing && <CustomizeSidebar prefs={prefs} setPrefs={setPrefs} />;
-  if (hidden && !open) return dialog || null;
+  if (hidden && !open && !peek) return dialog || null;
   const close = () => set({ sidebarOpen: false });
   const expanded = (section: string) => !prefs.collapsed.includes(section);
   const toggle = (section: string) =>
@@ -115,8 +116,11 @@ export function Sidebar({ boards }: { boards: Board[] }) {
       <nav
         aria-label="Main navigation"
         // Below 768px the sidebar opens over the page from the Menu button or [, and closes after a pick.
+        // A hidden sidebar peeked from the header's Menu button floats over the page until the pointer leaves it (Linear `r5`).
         onClick={(e) => open && (e.target as Element).closest("button, a") && close()}
-        className={`flex w-[244px] shrink-0 flex-col gap-px overflow-y-auto p-2 font-medium ${open ? "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:bg-panel max-md:shadow-lg" : "max-md:hidden"}`}
+        onMouseLeave={peek ? () => set({ sidebarPeek: false }) : undefined}
+        data-sidebar-peek={peek || undefined}
+        className={`flex w-[244px] shrink-0 flex-col gap-px overflow-y-auto p-2 font-medium ${peek ? "fixed inset-y-0 left-0 z-50 bg-panel shadow-lg" : open ? "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:bg-panel max-md:shadow-lg" : "max-md:hidden"}`}
       >
         <div className="mb-1 flex h-11 items-center gap-2 px-2 text-fg">
           <NotchMark />
@@ -264,7 +268,8 @@ function CustomizeSidebar({
   );
 }
 
-/** Every sidebar board's right-click menu, as Linear's team menu (CORE-15): Favorite, Copy URL, Open in new tab, and Remove
+/** Every sidebar board's right-click menu, as Linear's team menu (CORE-15): Favorite, Copy link (Linear's sidebar item
+ *  `iX`: "Copy link", toast "Link copied to clipboard"), Open in new tab, and Remove
  *  only for a board added in the app (BJ-24), which setup's boards can't. */
 export function boardEntries(board: Board): ActionEntry[] {
   const id = `board:${board.id}`,
@@ -274,12 +279,12 @@ export function boardEntries(board: Board): ActionEntry[] {
   return [
     { name: favorite ? "Unfavorite" : "Favorite", icon: favorite ? "starred" : "star", run: () => toggleFavorite(id) },
     {
-      name: "Copy URL",
+      name: "Copy link",
       icon: "link",
       divider: true,
       run: () =>
         void navigator.clipboard.writeText(url()).then(
-          () => showNotification({ text: "Copied" }),
+          () => showNotification({ text: "Link copied to clipboard" }),
           (e) => showNotification({ text: String(e) }),
         ),
     },
@@ -471,10 +476,25 @@ function ViewTab({ on, onClick, children }: { on: boolean; onClick: () => void; 
   );
 }
 
-/** Linear's Menu button: below 768px it opens the hidden sidebar. */
-function MenuButton() {
+const wide = () => matchMedia("(min-width: 768px)").matches;
+/**
+ * Linear's header sidebar toggle (`r5`, startup-root): "Menu" opens the sidebar over the page below 768px. On a wider
+ * window it shows only while the sidebar is collapsed: a click expands it (tooltip "Expand navigation sidebar" with [,
+ * Linear's `kM`) and the pointer on it peeks the sidebar over the page (`onMouseEnter: u.open()`).
+ */
+export function SidebarToggle() {
+  const hidden = useStore((s) => s.sidebarHidden);
   return (
-    <IconButton label="Menu" variant="muted" size="small" onClick={() => set({ sidebarOpen: true })} className="mr-1 md:hidden">
+    <IconButton
+      label="Menu"
+      tooltip={hidden ? "Expand navigation sidebar" : undefined}
+      shortcut={hidden ? hotkeyOf("sidebar") : undefined}
+      variant="muted"
+      size="small"
+      onClick={() => runShortcut("sidebar")}
+      onMouseEnter={hidden ? () => wide() && set({ sidebarPeek: true }) : undefined}
+      className={`mr-1 ${hidden ? "" : "md:hidden"}`}
+    >
       <Icon name="side" />
     </IconButton>
   );
@@ -510,7 +530,7 @@ export function BoardBreadcrumbs({ board, issue }: { board: Board; issue?: Issue
       aria-label="Breadcrumb"
       className="flex min-w-0 items-center text-[13px] leading-[normal] font-medium text-fg-2"
     >
-      <MenuButton />
+      <SidebarToggle />
       {!mine || activeView ? <><AppLink to={allIssues} aria-label={board.name} title={board.name} onClick={clearBoardTools} className={CRUMB}>
         <span aria-hidden="true" className={CRUMB_ICON}>
           <span className="grid size-4 place-items-center rounded-[4px] bg-accent text-[9px] font-semibold text-white">{board.name[0]}</span>

@@ -304,10 +304,12 @@ export const shortcuts: Shortcut[] = [
     group: "Navigation",
     hotkey: "[",
     // Below 768px the sidebar opens over the page instead (Linear's Menu button).
-    run: () =>
-      matchMedia("(max-width: 767.98px)").matches
-        ? set({ sidebarOpen: !get().sidebarOpen })
-        : ui.send({ type: "sidebar.toggle" }),
+    run: () => {
+      // A peek ends with the toggle, so hiding the sidebar again doesn't bring it back floating.
+      set({ sidebarPeek: false });
+      if (matchMedia("(max-width: 767.98px)").matches) set({ sidebarOpen: !get().sidebarOpen });
+      else ui.send({ type: "sidebar.toggle" });
+    },
   },
   {
     id: "details",

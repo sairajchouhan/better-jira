@@ -20,6 +20,7 @@ import { hotkeyOf, runShortcut } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
 import { get, isWatching, useStore } from "@/client/state/store";
 import { preloadOnHover, ui } from "@/client/features/navigation/app-navigation";
+import { SidebarToggle } from "@/client/features/navigation/app-chrome";
 import { useSearch } from "@tanstack/react-router";
 import { toggleFavorite } from "@/client/features/navigation/favorites";
 
@@ -556,6 +557,7 @@ export function InboxList() {
       className="flex w-[416px] shrink-0 flex-col border-r-[0.5px] border-frame max-md:w-full"
     >
       <header className="flex h-11 shrink-0 items-center gap-1 border-b-[0.5px] border-frame px-2">
+        <SidebarToggle />
         <Text as="h2" variant="smallPlus" color="base" className="px-2.5">
           Inbox
         </Text>

@@ -93,6 +93,8 @@ export type State = {
   sidebarHidden: boolean;
   /** Below 768px the sidebar is hidden; Menu or [ opens it over the page. */
   sidebarOpen: boolean;
+  /** A wider window's hidden sidebar shows over the page while the pointer is on the header's Menu button or on it. */
+  sidebarPeek: boolean;
   /** Where a right-click on a card or list row opened Issue options; null opens it under its button. */
   issueOptionsPoint: { x: number; y: number } | null;
   relation: string;
@@ -161,6 +163,7 @@ let state: State = {
   findInView: false,
   sidebarHidden: savedSidebarHidden(),
   sidebarOpen: false,
+  sidebarPeek: false,
   issueOptionsPoint: null,
   relation: "related",
   target: null,

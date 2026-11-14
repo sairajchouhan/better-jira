@@ -68,11 +68,11 @@ test("Add board: a board from another site is refused; a board link mirrors and 
     const options = `[...document.querySelectorAll('[role="dialog"][aria-label="Board options"] [cmdk-item]')].map(n=>n.dataset.value)`;
     await rightClick("Browser audit");
     await p.waitFor(`${options}.length > 0`);
-    expect(await p.eval(options)).toEqual(["Favorite", "Copy URL", "Open in new tab"]);
+    expect(await p.eval(options)).toEqual(["Favorite", "Copy link", "Open in new tab"]);
     await p.key("Escape");
     await p.waitFor(`!document.querySelector('[role="dialog"][aria-label="Board options"]')`);
     await rightClick("Second board");
-    await p.waitFor(`${options}.join() === "Favorite,Copy URL,Open in new tab,Remove from sidebar"`);
+    await p.waitFor(`${options}.join() === "Favorite,Copy link,Open in new tab,Remove from sidebar"`);
     await p.click('[role="dialog"][aria-label="Board options"] [cmdk-item][data-value="Remove from sidebar"]');
     await p.waitFor(`!${sidebarRow("Second board")}`);
     await p.waitFor(`location.pathname.startsWith('/board/1/')`);

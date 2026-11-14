@@ -131,4 +131,17 @@ test("navigation shell: sidebar, My issues URL, palettes and shortcut search", a
     await p.key("Escape");
     await p.waitFor(`!${navShown}`);
   });
+  await test.step("R3-chrome-D3: a wide window's hidden sidebar comes back from the header's Menu button: hover peeks, click expands (Linear r5)", async () => {
+    const p = await open("");
+    await p.key("[");
+    await p.waitFor(`!${navShown}`);
+    expect(await p.eval(`document.querySelector('button[aria-label="Menu"]')?.getAttribute('data-title') ?? document.querySelector('button[aria-label="Menu"]')?.title`)).toContain("Expand navigation sidebar");
+    await p.hover('button[aria-label="Menu"]');
+    await p.waitFor(`${navShown} && !!document.querySelector('nav[data-sidebar-peek]')`);
+    await p.hover("footer"); // the pointer leaves the peek
+    await p.waitFor(`!${navShown}`);
+    await p.click('button[aria-label="Menu"]');
+    await p.waitFor(`${navShown} && !document.querySelector('nav[data-sidebar-peek]')`);
+    expect(await p.eval(`getComputedStyle(document.querySelector('button[aria-label="Menu"]')).display`)).toBe("none");
+  });
 });
