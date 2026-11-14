@@ -3,7 +3,7 @@ import { expect, test, PREFS_KEY, fixture, type App as Page } from "./app";
 
 const seed = (prefs: object, extra = "") =>
   `if(!sessionStorage.seeded){sessionStorage.seeded=1;localStorage.setItem(${JSON.stringify(PREFS_KEY)},${JSON.stringify(JSON.stringify(prefs))});${extra}}`;
-const chips = `[...document.querySelectorAll(".view-filter-chip")].map(b=>b.textContent)`;
+const chips = `[...document.querySelectorAll(".ui-filter-block")].map(b=>b.textContent)`;
 const cards = `document.querySelectorAll("[data-key]").length`;
 /** Reloads the page with these view preferences. A view that shows no cards (`empty`) is waited for by its filter bar,
  *  since `reload` waits for a card. */
@@ -122,7 +122,7 @@ test("display preferences: card dates, filter chips, empty views and pill menus"
       ],
     };
     await show(page, { 1: { filters } }, true);
-    await page.waitFor(`document.querySelectorAll(".view-filter-chip").length===5`);
+    await page.waitFor(`document.querySelectorAll(".ui-filter-block").length===5`);
     expect(await page.eval(chips)).toEqual([
       "Due datein the last3 days",
       "Time in current statusless than1 day",

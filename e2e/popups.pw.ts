@@ -9,7 +9,7 @@ const filters = {
 };
 const seeded = `if(!sessionStorage.seeded){sessionStorage.seeded=1;localStorage.setItem(${JSON.stringify(PREFS_KEY)},${JSON.stringify(JSON.stringify({ 1: { filters } }))})}`;
 const TOOLBAR = "body > div.fixed.z-40";
-const FILTER = 'header [aria-label="Add another filter"]:not(.view-filter-add)';
+const FILTER = 'header [aria-label="Add another filter"]:not(.ui-filter-add)';
 const dialog = (label: string) => `[role=dialog][aria-label="${label}"]`;
 
 type Box = { left: number; top: number; right: number; bottom: number; width: number; height: number };
@@ -38,7 +38,7 @@ async function trapsTab(page: App, selector: string) {
 
 test("toolbar popups: Filter, Display and the chip row + open at Linear's offsets and own focus", async ({ open }) => {
   const page = await open("", { setup: seeded });
-  await page.waitFor(`!!document.querySelector('.view-filter-chip')`);
+  await page.waitFor(`!!document.querySelector('.ui-filter-block')`);
 
   await test.step("Filter: bottom-right, 6px under the trigger, right edges flush; focus in, Tab trapped, Esc returns", async () => {
     await page.click(FILTER);
@@ -112,14 +112,14 @@ test("toolbar popups: Filter, Display and the chip row + open at Linear's offset
   });
 
   await test.step("chip row +: bottom-left, rounded 4px under it; Esc returns to the +", async () => {
-    await page.click(".view-filter-add");
+    await page.click(".ui-filter-add");
     await page.waitFor(`document.activeElement?.placeholder==="Add Filter…"`);
-    const [trigger, popup] = [await rect(page, ".view-filter-add"), await rect(page, TOOLBAR)];
+    const [trigger, popup] = [await rect(page, ".ui-filter-add"), await rect(page, TOOLBAR)];
     expect(popup.top).toBe(Math.round(trigger.bottom + 4));
     expect(popup.left).toBe(Math.round(trigger.left));
     await page.key("Escape");
     await page.waitFor(`!document.querySelector(${JSON.stringify(TOOLBAR)})`);
-    expect(await page.eval(`document.activeElement.classList.contains("view-filter-add")`)).toBe(true);
+    expect(await page.eval(`document.activeElement.classList.contains("ui-filter-add")`)).toBe(true);
   });
 
   await test.step("Save filters (MenuSurface, align end): 5px under Save, right edges flush", async () => {

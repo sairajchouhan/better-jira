@@ -133,7 +133,7 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
     await p.click(item("Notification type", "Mentions"));
     await p.waitFor(`${rowKeys} === "TEST-1"`);
     await p.waitFor(
-      `document.querySelector('[data-inbox-chip="type"]')?.textContent === "Notification type isMentions"`,
+      `document.querySelector('[data-inbox-chip="type"]')?.textContent === "Notification typeisMentions"`,
     );
     await p.click(`[aria-label="Add filter"]`);
     await p.click(`[cmdk-item][data-value="Notification type"]`);
@@ -148,7 +148,9 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
     await p.waitFor(`${rowKeys} === "TEST-4"`);
     await p.click(`[aria-label="Remove Notification type filter"]`);
     await p.waitFor(`${rowKeys} === "TEST-4"`);
-    await p.click(`text=Clear`);
+    // Linear's inbox panel has no Clear (ContentViewSubheader `S` passes no side); a block's × removes it.
+    expect(await p.eval(`!!document.querySelector('[aria-label="Active filters"] .ui-filter-actions')`)).toBe(false);
+    await p.click(`[aria-label="Remove Issue priority filter"]`);
     await p.waitFor(
       `${rows}.length === 7 && !document.querySelector('[data-inbox-chip]')`,
     );
@@ -174,7 +176,7 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
     await p.waitFor(`${rowKeys} === "OUT-9"`);
     await p.reload();
     await p.waitFor(`${rowKeys} === "OUT-9"`);
-    await p.click(`text=Clear`);
+    await p.click(`[data-inbox-chip] [aria-label$=" filter"]`);
     await p.waitFor(
       `${rows}.length === 7 && !document.querySelector('[data-inbox-chip]')`,
     );
@@ -570,6 +572,50 @@ test("BJ-192 8.8 8.9: filter values: fewer than ten inline with no zero counts; 
     expect(
       await p.eval(`[...document.querySelectorAll('[cmdk-input]')].map(i=>i.placeholder).includes('From')`),
     ).toBe(true);
+  });
+});
+
+test("one filter component: the inbox's applied filter is the views' FilterBlock, its operator, value and + live", async ({ open }) => {
+  await fixture.reset({});
+  const p = await open("?inbox=1");
+  await p.waitFor(`${rows}.length === 7`);
+  const chip = `document.querySelector('[data-inbox-chip="type"]')`;
+  await p.key("f");
+  await p.click(`[cmdk-item][data-value="Notification type"]`);
+  await p.click(item("Notification type", "Mentions"));
+  await p.waitFor(`${rowKeys} === "TEST-1"`);
+  await test.step("Linear's segmented block (field | operator | value | ×) in Linear's panel card, as on a board", async () => {
+    expect(
+      await p.eval(`(c=>[c.className,getComputedStyle(c).height,getComputedStyle(c).borderRadius,[...c.children].map(n=>n.tagName).join()])(${chip})`),
+    ).toEqual(["ui-filter-block", "24px", "8px", "SPAN,BUTTON,BUTTON,BUTTON"]);
+    expect(
+      await p.eval(`(s=>[s.padding,s.borderRadius])(getComputedStyle(document.querySelector('[aria-label="Active filters"]')))`),
+    ).toEqual(["10px", "8px"]);
+    expect(await p.eval(`!!document.querySelector('[aria-label="Active filters"] .ui-filter-actions')`)).toBe(false);
+  });
+  await test.step("the operator segment switches to Linear's 'is not'", async () => {
+    await p.click(`[aria-label="Notification type operator"]`);
+    await p.click(`[role=dialog][aria-label="Notification type operator"] [cmdk-item][data-value="isNot"]`);
+    await p.waitFor(`${rows}.length === 6 && !${rowKeys}.split(",").includes("TEST-1")`);
+    await p.waitFor(`${chip}?.textContent === "Notification typeis notMentions"`);
+  });
+  await test.step("the value segment opens the field's values; a second pick counts them", async () => {
+    await p.click(`[aria-label="Notification type value"]`);
+    await p.waitFor(`document.activeElement?.placeholder === "Notification type"`);
+    await p.click(item("Notification type", "Comments and replies"));
+    await p.waitFor(`${chip}?.textContent === "Notification typeis not2 notification types"`);
+    await p.waitFor(`${rows}.length === 5`);
+  });
+  await test.step("+ opens the filter menu under it; × removes the block and its operator", async () => {
+    await p.click(`[aria-label="Active filters"] .ui-filter-add`);
+    await p.waitFor(`document.activeElement?.placeholder === "Add Filter…"`);
+    await p.key("Escape");
+    await p.click(`[aria-label="Remove Notification type filter"]`);
+    await p.waitFor(`${rows}.length === 7 && !${chip}`);
+    await p.key("f");
+    await p.click(`[cmdk-item][data-value="Notification type"]`);
+    await p.click(item("Notification type", "Mentions"));
+    await p.waitFor(`${rowKeys} === "TEST-1" && ${chip}?.textContent === "Notification typeisMentions"`);
   });
 });
 

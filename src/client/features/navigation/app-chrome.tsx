@@ -28,7 +28,7 @@ import {
   visibilityOptions,
   type SidebarPrefs,
 } from "./sidebar-menus";
-import { BoardControls, FilterChips } from "@/client/features/views/view-controls";
+import { BoardControls, ViewFilterBar } from "@/client/features/views/view-controls";
 import { hotkeyOf, runShortcut } from "./shortcuts";
 import { Button, IconButton } from "@/client/components/button";
 import { Shortcut } from "@/client/components/keycap";
@@ -565,7 +565,7 @@ export function BoardHeader() {
         </FindField>
       )}
       <ViewEditorPage />
-      {board && <FilterChips board={board} />}
+      {board && <ViewFilterBar board={board} />}
     </header>
   );
 }

@@ -84,16 +84,16 @@ header:has(.view-editor) .view-editor {
 }
 /* Edit mode: the base-filter row is the editor card's last section, with no Clear/Save of its own (Linear's
    editor Cancel/Save are the only save controls). */
-header:has(.view-editor) .view-filter-actions {
+header:has(.view-editor) .ui-filter-actions {
   display: none;
 }
-header:has(.view-editor):has(.view-filter-row) .view-editor {
+header:has(.view-editor):has(.ui-filter-bar) .view-editor {
   margin-bottom: 0;
   padding-bottom: 12px;
   border-bottom: 0;
   border-radius: 10px 10px 0 0;
 }
-header:has(.view-editor) .view-filter-row {
+header:has(.view-editor) .ui-filter-bar {
   min-height: 40px;
   margin: 0 8px 8px;
   padding: 8px 96px 8px 16px;
@@ -102,8 +102,8 @@ header:has(.view-editor) .view-filter-row {
   background: var(--card);
   box-shadow: none;
 }
-header:has(.view-editor):has(.view-filter-row) > div:nth-child(2) > .ml-auto,
-header:has(.view-editor):has(.view-filter-row) > div:nth-child(2) > button:last-child {
+header:has(.view-editor):has(.ui-filter-bar) > div:nth-child(2) > .ml-auto,
+header:has(.view-editor):has(.ui-filter-bar) > div:nth-child(2) > button:last-child {
   bottom: 14px;
 }
 

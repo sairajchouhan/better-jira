@@ -12,7 +12,7 @@ test("segmented chips edit operators and values independently, Save offers creat
     setup: `if(!sessionStorage.seeded){sessionStorage.seeded=1;localStorage.setItem(${JSON.stringify(PREFS_KEY)},${JSON.stringify(JSON.stringify({ 1: { filters } }))})}`,
   });
   try {
-    await page.waitFor(`!!document.querySelector('.view-filter-chip')`);
+    await page.waitFor(`!!document.querySelector('.ui-filter-block')`);
     expect(
       await page.eval(
         `document.querySelector('[aria-label="Add another filter"]').textContent.trim()`,
@@ -20,7 +20,7 @@ test("segmented chips edit operators and values independently, Save offers creat
     ).toBe("");
     expect(
       await page.eval(
-        `getComputedStyle(document.querySelector('.view-filter-chip')).height`,
+        `getComputedStyle(document.querySelector('.ui-filter-block')).height`,
       ),
     ).toBe("24px");
     // Linear's AddFilterButton: the menu opens bottom-left under the +, 4px below it, even when the toolbar Filter menu is open.
@@ -29,17 +29,17 @@ test("segmented chips edit operators and values independently, Save offers creat
       const r = await page.rect(selector);
       await page.clickAt(r.x + r.width / 2, r.y + r.height / 2);
     };
-    for (const first of [null, '[aria-label="Add filter"],[title="Filter (F)"],header [aria-label="Add another filter"]:not(.view-filter-add)']) {
+    for (const first of [null, '[aria-label="Add filter"],[title="Filter (F)"],header [aria-label="Add another filter"]:not(.ui-filter-add)']) {
       if (first) {
         await page.click(first);
-        await press(".view-filter-add");
+        await press(".ui-filter-add");
         await page.waitFor(`!document.querySelector('body > div.fixed.z-40')`);
       }
-      await page.click(".view-filter-add");
+      await page.click(".ui-filter-add");
       await page.waitFor(`!!document.querySelector('input[placeholder^="Add Filter"],input[placeholder^="Filter"]')`);
-      await page.waitFor(`(()=>{const a=document.querySelector('.view-filter-add').getBoundingClientRect();const m=document.querySelector('body > div.fixed.z-40');return m&&m.style.left===Math.round(a.left)+'px'&&m.style.top===Math.round(a.bottom+4)+'px'})()`);
-      expect(await page.eval(`document.querySelector('.view-filter-add').getAttribute('aria-expanded')`)).toBe("true");
-      await press(".view-filter-add");
+      await page.waitFor(`(()=>{const a=document.querySelector('.ui-filter-add').getBoundingClientRect();const m=document.querySelector('body > div.fixed.z-40');return m&&m.style.left===Math.round(a.left)+'px'&&m.style.top===Math.round(a.bottom+4)+'px'})()`);
+      expect(await page.eval(`document.querySelector('.ui-filter-add').getAttribute('aria-expanded')`)).toBe("true");
+      await press(".ui-filter-add");
       await page.waitFor(`!document.querySelector('body > div.fixed.z-40')`);
     }
     await page.click('[aria-label="priority operator"]');
@@ -65,7 +65,7 @@ test("segmented chips edit operators and values independently, Save offers creat
     ).not.toContain("Save to this view");
     await page.key("Escape");
     await page.click("text=Clear");
-    await page.waitFor(`!document.querySelector('.view-filter-row')`);
+    await page.waitFor(`!document.querySelector('.ui-filter-bar')`);
   } finally {
     await page.close();
   }
@@ -92,20 +92,20 @@ test("active views hide base chips, keep base on Clear, scope Display, and handl
     await page.eval(`document.body.dispatchEvent(new KeyboardEvent('keydown',{key:'ƒ',code:'KeyF',altKey:true,bubbles:true}))`);
     await page.waitFor(`!${favorite}.includes('view:')`);
     await page.goto(`${path}?filter=${encoded}`);
-    await page.waitFor(`!!document.querySelector('.view-filter-chip')`);
+    await page.waitFor(`!!document.querySelector('.ui-filter-block')`);
     await page.click('[aria-label="Display options"]');
     expect(await page.eval(`document.querySelector('[aria-label="Display options"][role=dialog]').textContent`)).not.toContain("Save my default");
     await page.key("Escape");
     await page.eval(`document.body.dispatchEvent(new KeyboardEvent('keydown',{key:'ß',code:'KeyS',altKey:true,bubbles:true}))`);
-    await page.waitFor(`!document.querySelector('.view-filter-chip')`);
+    await page.waitFor(`!document.querySelector('.ui-filter-block')`);
     const views = await page.eval<any[]>(`fetch('/api/views').then(r=>r.json())`);
     expect(views.find(v => path.endsWith(v.id)).filters.children.length).toBe(1);
     await page.reload();
-    expect(await page.eval(`!!document.querySelector('.view-filter-chip')`)).toBe(false);
+    expect(await page.eval(`!!document.querySelector('.ui-filter-block')`)).toBe(false);
     await page.goto(`${path}?filter=${encoded}`);
-    await page.waitFor(`!!document.querySelector('.view-filter-chip')`);
+    await page.waitFor(`!!document.querySelector('.ui-filter-block')`);
     await page.click("text=Clear");
-    await page.waitFor(`!document.querySelector('.view-filter-chip')`);
+    await page.waitFor(`!document.querySelector('.ui-filter-block')`);
     const after = await page.eval<any[]>(`fetch('/api/views').then(r=>r.json())`);
     expect(after.find(v => path.endsWith(v.id)).filters.children.length).toBe(1);
   } finally { await page.close(); }

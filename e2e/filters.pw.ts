@@ -88,7 +88,7 @@ test("Add filter by mouse: search, hover submenus, multi-select and chips", asyn
     await page.waitFor(`${cards}===5`);
     expect(
       await page.eval(
-        `document.querySelector(".view-filter-chip")?.textContent==="Labelsdo not includeui"`,
+        `document.querySelector(".ui-filter-block")?.textContent==="Labelsdo not includeui"`,
       ),
     ).toBe(true);
   });
@@ -116,9 +116,9 @@ test("Add filter by keyboard: arrows into submenus and back, Esc out", async ({ 
     await page.key("ArrowRight");
     await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Filter Status"`);
     await page.key("Enter");
-    await page.waitFor(`!${root}&&!!document.querySelector(".view-filter-chip")`);
+    await page.waitFor(`!${root}&&!!document.querySelector(".ui-filter-block")`);
     await page.click("text=Clear");
-    await page.waitFor(`!document.querySelector(".view-filter-row")`);
+    await page.waitFor(`!document.querySelector(".ui-filter-bar")`);
   });
   await test.step("filter keyboard navigation keeps the root and returns with ArrowLeft", async () => {
     await page.key("f");
@@ -246,7 +246,7 @@ const seeded = (children: object[]) => {
 const items = (scope: string) =>
   `[...document.querySelectorAll('${scope} [cmdk-item]')].map(r=>r.textContent)`;
 const chipText = (field: string) =>
-  `document.querySelector('[aria-label="Remove ${field} filter"]').closest(".view-filter-chip").textContent`;
+  `document.querySelector('[aria-label="Remove ${field} filter"]').closest(".ui-filter-block").textContent`;
 
 test("Add filter root search ranks every row and opens like Linear's", async ({ open }) => {
   const page = await open();
@@ -407,9 +407,9 @@ test("Filter chips: the value menu is the submenu's list, operators read like Li
   await test.step("FILTER-9 and FILTER-8: F opens the chip row's +, whose submenus open to its right", async () => {
     await page.eval("document.activeElement?.blur()");
     await page.key("f");
-    await page.waitFor(`document.querySelector('.view-filter-add')?.getAttribute("aria-expanded")==="true"`);
+    await page.waitFor(`document.querySelector('.ui-filter-add')?.getAttribute("aria-expanded")==="true"`);
     expect(
-      await page.eval(`[...document.querySelectorAll('[aria-label="Add another filter"][aria-expanded=true]')].map(b=>b.classList.contains("view-filter-add"))`),
+      await page.eval(`[...document.querySelectorAll('[aria-label="Add another filter"][aria-expanded=true]')].map(b=>b.classList.contains("ui-filter-add"))`),
     ).toEqual([true]);
     await page.hover("text=Status");
     await page.waitFor(`!!document.querySelector('[aria-label="Filter Status"]')`);

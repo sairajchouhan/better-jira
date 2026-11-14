@@ -229,12 +229,13 @@ test("BJ-62: Search's Filter bar narrows results by priority and the chip remove
   await p.waitFor(`[...document.querySelectorAll('[role=dialog][aria-label="Filter"] [cmdk-item]')].some(n=>n.textContent.trim()==='Urgent')`);
   await p.eval(clickItem('[role=dialog][aria-label="Filter"]', "Urgent"));
   await p.waitFor(`!${dialog("Filter")}&&!!${dialog("Search issues")}`);
-  await p.waitFor(`${dialog("Search issues")}.textContent.includes('Priority is')`);
+  // The search's filters are the board's FilterBlock: Priority | is | Urgent | ×.
+  await p.waitFor(`${dialog("Search issues")}.querySelector('[aria-label="Search filters"] .ui-filter-block')?.textContent==="PriorityisUrgent"`);
   const keys = `[...${dialog("Search issues")}.querySelectorAll('[cmdk-item]')].map(n=>n.textContent).join('|')`;
   await p.waitFor(`${keys}.includes('TEST-4')`);
   expect(await p.eval<string>(keys)).not.toContain("TEST-1");
   await p.click('[aria-label="Remove Priority filter"]');
-  await p.waitFor(`!${dialog("Search issues")}.textContent.includes('Priority is')`);
+  await p.waitFor(`!${dialog("Search issues")}.querySelector('.ui-filter-block')`);
 });
 
 test("A3, B2, B5: ⌘K lists the issue's values, finds commands by Linear's keywords, and copies the issue as a prompt", async ({ open }) => {

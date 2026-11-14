@@ -113,15 +113,15 @@ test("Linear parity: hidden counts, merge conflicts, editor chrome, draft tab, p
     await page.page.goto(`${origin}/view/${saved.id}?board=1&filter=${filter}`);
     await page.waitFor(`/\\d+ issues? hidden by filters/.test(document.querySelector('[role=status]')?.textContent ?? '')`);
     // BJ-146: the chip row is Linear's filter card: 10px padding, 8px radius, bgSecondary-ish card fill, 24px chips.
-    expect(await page.eval(`(s=>[s.padding,s.borderRadius,s.boxShadow])(getComputedStyle(document.querySelector('.view-filter-row')))`)).toEqual(["10px", "8px", "none"]);
-    expect(await page.eval(`getComputedStyle(document.querySelector('.view-filter-chip')).height`)).toBe("24px");
+    expect(await page.eval(`(s=>[s.padding,s.borderRadius,s.boxShadow])(getComputedStyle(document.querySelector('.ui-filter-bar')))`)).toEqual(["10px", "8px", "none"]);
+    expect(await page.eval(`getComputedStyle(document.querySelector('.ui-filter-block')).height`)).toBe("24px");
     await page.click('.view-filter-save');
     await page.waitFor(`!!document.querySelector('[aria-label="Save filters"] [aria-disabled=true]')`);
     expect(await page.eval(`document.querySelector('[aria-label="Save filters"] [aria-disabled=true]').textContent`)).toContain("Cannot merge these filters into the view");
     await page.key("Escape");
     await page.eval(`document.body.dispatchEvent(new KeyboardEvent('keydown',{key:'ß',code:'KeyS',altKey:true,bubbles:true}))`);
     await page.page.waitForTimeout(300);
-    expect(await page.eval(`!!document.querySelector('.view-filter-chip')`)).toBe(true);
+    expect(await page.eval(`!!document.querySelector('.ui-filter-block')`)).toBe(true);
     expect((await page.eval<any[]>(`fetch('/api/views').then(r=>r.json())`)).find(v => v.id === saved.id).filters.children[0].values).toEqual(["High"]);
     await page.key("k", "meta");
     await page.click('[cmdk-item][data-value="cmd:Save to…"]');
@@ -130,15 +130,15 @@ test("Linear parity: hidden counts, merge conflicts, editor chrome, draft tab, p
     await page.key("Escape");
     // Without an overlay ⌘K still lists Save to….
     await page.page.goto(`${origin}/view/${saved.id}?board=1`);
-    await page.waitFor(`!!document.querySelector('[role=status]') && !document.querySelector('.view-filter-chip')`);
+    await page.waitFor(`!!document.querySelector('[role=status]') && !document.querySelector('.ui-filter-block')`);
     await page.key("k", "meta");
     await page.waitFor(`!!document.querySelector('[cmdk-item][data-value="cmd:Save to…"]')`);
     await page.key("Escape");
     // Edit mode: base chips are the definition, not a temporary overlay.
     await page.page.goto(`${origin}/view/${saved.id}/edit`);
-    await page.waitFor(`!!document.querySelector('.view-filter-chip')`);
-    expect(await page.eval(`document.querySelector('.view-filter-row').getAttribute('aria-label')`)).toBe("View filters");
-    expect(await page.eval(`!!document.querySelector('.view-filter-row .view-filter-actions')`)).toBe(false);
+    await page.waitFor(`!!document.querySelector('.ui-filter-block')`);
+    expect(await page.eval(`document.querySelector('.ui-filter-bar').getAttribute('aria-label')`)).toBe("View filters");
+    expect(await page.eval(`!!document.querySelector('.ui-filter-bar .ui-filter-actions')`)).toBe(false);
     // BJ-141: the custom-view editor shows no team tabs either.
     expect(await page.eval(`[...document.querySelectorAll('header button')].some(b=>['Active','Backlog','All issues','Add new view'].includes(b.textContent.trim()))`)).toBe(false);
     await page.click("text=Cancel");
@@ -201,8 +201,8 @@ test("BJ-149: reopening Add filter creates a separate AND condition", async ({ o
       await page.click(`[aria-label="Priority filter"] [cmdk-item][data-value="${priority} ${priority}"]`);
       await page.key("Escape");
     }
-    expect(await page.eval(`document.querySelectorAll('.view-filter-chip').length`)).toBe(2);
-    expect(await page.eval(`[...document.querySelectorAll('.view-filter-chip')].map(c=>c.textContent).join('|')`)).toContain("High");
+    expect(await page.eval(`document.querySelectorAll('.ui-filter-block').length`)).toBe(2);
+    expect(await page.eval(`[...document.querySelectorAll('.ui-filter-block')].map(c=>c.textContent).join('|')`)).toContain("High");
     expect(await page.eval(`document.querySelectorAll('[data-key]').length`)).toBe(0);
   } finally { await page.close(); }
 });

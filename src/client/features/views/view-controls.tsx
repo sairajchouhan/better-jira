@@ -1,6 +1,5 @@
 import { type Issue, type Board } from "@/shared/issue-model";
 import { showNotification } from "@/client/state/app-notifications";
-import "./view-toolbar.css";
 import { useActiveView, useOverlayFilters, saveOverlayToView } from "./saved-views";
 import { clearFilters, resetDisplay, setDisplay, updateRule, useViewSettings } from "./view-settings";
 import { canMergeOverlay } from "@/shared/saved-view-model";
@@ -19,8 +18,8 @@ import {
 import { MenuSurface, POPOVER_SURFACE, Popover } from "@/client/components/menu-surface";
 import { dateValueLabel, filterChoices, plural, PropertyFilter, useFilterCatalog } from "@/client/features/filters/property-filter";
 import { Menu } from "@/client/components/menu";
-import { usePristine } from "@/client/components/menu-pristine";
-import { menuFilter } from "@/client/lib/fuzzy-score";
+import { FilterBar, FilterBlock, type OpenedBy } from "@/client/components/filter-block";
+import { FilterOperatorMenu } from "@/client/features/filters/filter-operator-menu";
 import { Select } from "@/client/components/select";
 import { DisplayProperties, SelectRow, Toggle, ViewOptions } from "@/client/components/display-options";
 import { GroupOrdering } from "./group-ordering";
@@ -393,18 +392,8 @@ function DisplayOptions({
   );
 }
 
-/** Linear's chip: Backspace or Delete on a focused chip removes its filter. */
-const removeOnKey = (remove: () => void) => (e: React.KeyboardEvent) => {
-  if (e.key === "Backspace" || e.key === "Delete") {
-    e.preventDefault();
-    remove();
-  }
-};
-
 /**
- * One rule's chip: field, operator and values. Only a chip with values subscribes to the issues, for their labels.
- * Linear's view filter is the segmented FilterBlock (FilterBlockHelper), not the single-pill FilterChip (`man`), so it
- * keeps its own markup in view-toolbar.css.
+ * One rule's FilterBlock: field, operator and values. Only a block with values subscribes to the issues, for their labels.
  */
 function RuleChip({
   rule: c,
@@ -416,7 +405,7 @@ function RuleChip({
   rule: Rule;
   board: Board;
   open: "operator" | "value" | null;
-  onEdit: (segment: "operator" | "value", anchor: HTMLElement, openedBy: "pointer" | "keyboard") => void;
+  onEdit: (segment: "operator" | "value", anchor: HTMLElement, openedBy: OpenedBy) => void;
   remove: () => void;
 }) {
   const issues = useStore((s) => (c.values.length ? s.issues : null));
@@ -434,77 +423,32 @@ function RuleChip({
         ? dateValueLabel(c.field, value, shortDate)
         : (choice?.label ?? value);
   return (
-    <div className="view-filter-chip" onKeyDown={removeOnKey(remove)}>
-      <span className="view-filter-segment">
-        <span>{name}</span>
-      </span>
-      <button
-        className="view-filter-segment view-filter-operator"
-        aria-label={`${c.field} operator`}
-        aria-expanded={open === "operator"}
-        onClick={(e) => onEdit("operator", e.currentTarget, e.detail > 0 ? "pointer" : "keyboard")}
+    <FilterBlock onRemove={remove}>
+      <FilterBlock.Field>{name}</FilterBlock.Field>
+      <FilterBlock.Operator
+        label={`${c.field} operator`}
+        expanded={open === "operator"}
+        onOpen={(anchor, by) => onEdit("operator", anchor, by)}
       >
-        <span>
-          {c.op === "within" ? "in the last" : c.op === "next" ? "in the next" : operatorLabel(c.field, c.op, c.values.length)}
-        </span>
-      </button>
+        {c.op === "within" ? "in the last" : c.op === "next" ? "in the next" : operatorLabel(c.field, c.op, c.values.length)}
+      </FilterBlock.Operator>
       {!["empty", "notEmpty"].includes(c.op) && (
-        <button
-          className="view-filter-segment"
-          aria-label={`${c.field} value`}
-          aria-expanded={open === "value"}
+        <FilterBlock.Value
+          label={`${c.field} value`}
+          expanded={open === "value"}
           title={picked.length > 1 ? picked.map(labelOf).join(", ") : undefined}
-          onClick={(e) => onEdit("value", e.currentTarget, e.detail > 0 ? "pointer" : "keyboard")}
+          icons={picked.map((p) => p.choice?.icon)}
+          onOpen={(anchor, by) => onEdit("value", anchor, by)}
         >
-          {picked.some((p) => p.choice?.icon) && (
-            <span className="view-filter-icons">
-              {picked.slice(0, 3).map((p) => p.choice?.icon && <span key={p.value}>{p.choice.icon}</span>)}
-            </span>
-          )}
-          <span>{picked.length > 1 ? `${picked.length} ${plural(name.toLowerCase())}` : picked[0] ? labelOf(picked[0]) : ""}</span>
-        </button>
+          {picked.length > 1 ? `${picked.length} ${plural(name.toLowerCase())}` : picked[0] ? labelOf(picked[0]) : ""}
+        </FilterBlock.Value>
       )}
-      <button className="view-filter-segment view-filter-remove" aria-label={`Remove ${c.field} filter`} onClick={remove}>
-        <Icon name="x" size={12} />
-      </button>
-    </div>
+      <FilterBlock.Remove label={`Remove ${c.field} filter`} />
+    </FilterBlock>
   );
 }
 
-/** A chip's operator menu: Linear's type-to-filter search hidden until typing, titled by the current operator; pristine from a click. */
-function ChipOperators({
-  rule,
-  openedBy,
-  pick,
-}: {
-  rule: Rule;
-  openedBy: "pointer" | "keyboard";
-  pick: (op: Rule["op"]) => void;
-}) {
-  const start = usePristine(openedBy === "pointer");
-  const ops = operatorsFor(rule.field, rule.values.length);
-  return (
-    <Menu filter={menuFilter} defaultValue={rule.op} {...start.props}>
-      <Menu.Input
-        hideWhenEmpty
-        autoFocus
-        aria-label={`Filter ${rule.field} operators`}
-        placeholder={operatorLabel(rule.field, rule.op, rule.values.length)}
-        onValueChange={start.wake}
-      />
-      <Menu.List>
-        <Menu.Empty>No matching operators</Menu.Empty>
-        {ops.map(([op, label]) => (
-          <Menu.Item key={op} value={op} keywords={[label]} checked={rule.op === op} onSelect={() => pick(op)}>
-            {label}
-          </Menu.Item>
-        ))}
-      </Menu.List>
-    </Menu>
-  );
-}
-
-export function FilterChips({ board }: { board: Board }) {
+export function ViewFilterBar({ board }: { board: Board }) {
   const { filters } = useViewSettings(board.id);
   // Inside the view editor these chips are the definition being edited; the editor owns Cancel/Save.
   const editing = useStore((s) => !!s.editorDraft);
@@ -512,7 +456,7 @@ export function FilterChips({ board }: { board: Board }) {
     rule: Rule;
     segment: "operator" | "value";
     anchor: HTMLElement;
-    openedBy: "pointer" | "keyboard";
+    openedBy: OpenedBy;
   } | null>(null);
   const rule = filters.children.find(
     (c): c is Rule => !("children" in c) && c.id === edit?.rule.id,
@@ -533,7 +477,7 @@ export function FilterChips({ board }: { board: Board }) {
     !!rule &&
     (isDate(rule.field) || isNumeric(rule.field) || ["content", "links"].includes(rule.field));
   return (
-    <div className="view-filter-row" aria-label={editing ? "View filters" : "Temporary filters"}>
+    <FilterBar label={editing ? "View filters" : "Temporary filters"}>
       {edit && rule && (
         <MenuSurface
           label={`${FIELDS.find(([f]) => f === rule.field)?.[1]} ${edit.segment}`}
@@ -544,8 +488,10 @@ export function FilterChips({ board }: { board: Board }) {
           close={close}
         >
           {edit.segment === "operator" ? (
-            <ChipOperators
-              rule={rule}
+            <FilterOperatorMenu
+              name={rule.field}
+              current={rule.op}
+              operators={operatorsFor(rule.field, rule.values.length)}
               openedBy={edit.openedBy}
               pick={(op) => {
                 patch(rule, { op, values: ["empty", "notEmpty"].includes(op) ? [] : rule.values });
@@ -567,7 +513,7 @@ export function FilterChips({ board }: { board: Board }) {
           )}
         </MenuSurface>
       )}
-      <div className="view-filter-chips">
+      <FilterBar.Blocks>
       {filters.join === "or" && chips.length > 1 && (
         <Button variant="muted" size="small" onClick={() => ui.send({ type: "toolbar.open", toolbar: "advanced" })}>
           Any of
@@ -577,14 +523,12 @@ export function FilterChips({ board }: { board: Board }) {
         const remove = () => updateRule(board.id, c.id, null);
         if ("children" in c)
           return (
-            <div key={c.id} className="view-filter-chip" onKeyDown={removeOnKey(remove)}>
-              <button className="view-filter-segment" onClick={() => ui.send({ type: "toolbar.open", toolbar: "advanced" })}>
-                <span>{`${c.join.toUpperCase()} group · ${filterCount(c)} rule${filterCount(c) === 1 ? "" : "s"}`}</span>
-              </button>
-              <button className="view-filter-segment view-filter-remove" aria-label="Remove filter group" onClick={remove}>
-                <Icon name="x" size={12} />
-              </button>
-            </div>
+            <FilterBlock key={c.id} onRemove={remove}>
+              <FilterBlock.Value onOpen={openAdvanced}>
+                {`${c.join.toUpperCase()} group · ${filterCount(c)} rule${filterCount(c) === 1 ? "" : "s"}`}
+              </FilterBlock.Value>
+              <FilterBlock.Remove label="Remove filter group" />
+            </FilterBlock>
           );
         return (
           <RuleChip
@@ -604,13 +548,13 @@ export function FilterChips({ board }: { board: Board }) {
         label="Add another filter"
         variant="borderless"
         size="small"
-        className="view-filter-add"
+        className="ui-filter-add"
       >
         <Icon name="plus" />
       </AddFilterButton>
-      </div>
+      </FilterBar.Blocks>
       {!editing && <FilterSaveActions board={board} />}
-    </div>
+    </FilterBar>
   );
 }
 
@@ -634,7 +578,7 @@ function FilterSaveActions({ board }: { board: Board }) {
   };
   return (
     <>
-      <div className="view-filter-actions">
+      <FilterBar.Actions>
         <Button variant="borderless" size="small" onClick={() => clearFilters(board.id)}>
           Clear
         </Button>
@@ -648,7 +592,7 @@ function FilterSaveActions({ board }: { board: Board }) {
         >
           Save
         </Button>
-      </div>
+      </FilterBar.Actions>
       {saveAnchor && (
         <MenuSurface
           label="Save filters"

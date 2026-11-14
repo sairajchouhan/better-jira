@@ -2,7 +2,7 @@
 import { expect, test, sleep, PREFS_KEY } from "./app";
 
 const root = `document.querySelector('[aria-label="Add Filter…"]')`;
-const chips = `[...document.querySelectorAll(".view-filter-chip")].map(b=>b.textContent)`;
+const chips = `[...document.querySelectorAll(".ui-filter-block")].map(b=>b.textContent)`;
 const stored = `JSON.parse(localStorage.getItem(${JSON.stringify(PREFS_KEY)})??"{}")[1]`;
 
 test("filter menu: the first F after load opens it without a loading step, and the Overdue preset saves a relative filter", async ({

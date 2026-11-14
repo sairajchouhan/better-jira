@@ -329,7 +329,7 @@ test("FILTER-10: Enter on a chip value picks it and closes; Shift+Enter keeps th
   await page.key("ArrowRight");
   await page.waitFor(`document.activeElement?.getAttribute("aria-label")==="Filter Priority"`);
   await page.key("Enter");
-  await page.waitFor(`${gone(ROOT)}&&!!document.querySelector(".view-filter-chip")`);
+  await page.waitFor(`${gone(ROOT)}&&!!document.querySelector(".ui-filter-block")`);
   await page.click('[aria-label="priority value"]');
   const VALUES = '[role=dialog][aria-label="Priority value"]';
   await page.waitFor(exists(VALUES));

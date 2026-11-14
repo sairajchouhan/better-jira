@@ -104,8 +104,8 @@ test("draft filters, display and icon stay detached through reload and cancel", 
     );
     await app.hover("text=Due date");
     await app.click("text=Overdue");
-    await expect(p.locator(".view-filter-row")).toBeVisible();
-    await expect(p.locator(".view-filter-actions")).toBeHidden(); // editor Cancel/Save are the only save controls
+    await expect(p.locator(".ui-filter-bar")).toBeVisible();
+    await expect(p.locator(".ui-filter-actions")).toBeHidden(); // editor Cancel/Save are the only save controls
     await p
       .getByRole("button", { name: "Display options", exact: true })
       .click();

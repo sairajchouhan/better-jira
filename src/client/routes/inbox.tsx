@@ -7,12 +7,15 @@ import { Button, ButtonLink, IconButton } from "@/client/components/button";
 import { CountBadge } from "@/client/components/count-badge";
 import { EmptyState, LoadingState } from "@/client/components/empty-state";
 import { FutureTimeStep } from "@/client/features/reminders/future-time-step";
-import { FilterChip } from "@/client/components/filter-chip";
+import { FilterBar, FilterBlock, openedBy, type OpenedBy } from "@/client/components/filter-block";
+import { FilterOperatorMenu } from "@/client/features/filters/filter-operator-menu";
+import { plural } from "@/client/features/filters/property-filter";
+import { equalOperators } from "@/shared/view-model";
 import { FindField } from "@/client/components/find-field";
 import { Tabs } from "@/client/components/tabs";
 import { Text } from "@/client/components/text";
 import { Icon, StatusIcon, TypeDot, type IconName } from "@/client/components/icons";
-import { FILTER_FIELDS, describe, groupSummary, rowLabel, feedCategory, hasFilters, missingIssueNote, shortAgo, type FilterField, type InboxItem, type InboxView, snoozeMarks, type SnoozeMarks } from "@/shared/inbox-model";
+import { FILTER_FIELDS, filterOperator, withOperator, withoutFilter, describe, groupSummary, rowLabel, feedCategory, hasFilters, missingIssueNote, shortAgo, type FilterField, type InboxItem, type InboxView, snoozeMarks, type SnoozeMarks } from "@/shared/inbox-model";
 import { CommentCard, InboxGroupUpdates } from "@/client/features/inbox/inbox-group";
 import { TIME_PLACEHOLDER, TimeOptionRows } from "@/client/features/time-options/time-option-rows";
 import { snoozedFor } from "@/shared/time-options";
@@ -574,41 +577,90 @@ function Menus({ base }: { base: InboxItem[] }) {
   return null;
 }
 
-/** Linear's filter chips under the header: "Field is value", "is any of" for several; × removes one, Clear removes all. */
-function FilterChips({ v }: { v: InboxView }) {
+/** Linear's inbox filter panel (ContentViewSubheader `S`, modelType "notification"): the shared FilterBar, its blocks and "+",
+ *  with no side; Linear's inbox has no Clear or Save there. Operator and value segments open their menus, × removes one. */
+function InboxFilterBar({ v, base }: { v: InboxView; base: InboxItem[] }) {
+  const [edit, setEdit] = useState<{
+    field: FilterField;
+    segment: "operator" | "value" | "add";
+    anchor: HTMLElement;
+    openedBy: OpenedBy;
+  } | null>(null);
   const active = FILTER_FIELDS.filter(([field]) => v.filters[field]?.length);
   if (!active.length) return null;
+  const close = () => setEdit(null);
+  const entries = edit && edit.segment !== "operator" ? filterEntries(base, v) : [];
+  const name = (field: FilterField) => FILTER_FIELDS.find(([f]) => f === field)![1];
   return (
-    <div
-      aria-label="Active filters"
-      className="flex shrink-0 flex-wrap items-center gap-1 border-b-[0.5px] border-frame px-3 py-1.5"
-    >
-      {active.map(([field, name]) => {
-        const values = v.filters[field]!;
-        return (
-          <FilterChip key={field} data-inbox-chip={field}>
-            <FilterChip.Label>
-              {name} {values.length > 1 ? "is any of" : "is"}
-            </FilterChip.Label>
-            <FilterChip.Value>{values.join(", ")}</FilterChip.Value>
-            <FilterChip.Remove
-              label={`Remove ${name} filter`}
-              onClick={() =>
-                changeView({ filters: { ...v.filters, [field]: [] } })
-              }
-            />
-          </FilterChip>
-        );
-      })}
-      <Button
-        variant="muted"
-        size="small"
-        onClick={clearFilters}
-        className="ml-auto"
-      >
-        Clear
-      </Button>
-    </div>
+    <FilterBar label="Active filters" className="mt-2">
+      <FilterBar.Blocks>
+        {active.map(([field, fieldName]) => {
+          const values = v.filters[field]!;
+          const open = edit?.field === field ? edit.segment : null;
+          const editing = (segment: "operator" | "value") => (anchor: HTMLElement, openedBy: OpenedBy) =>
+            setEdit({ field, segment, anchor, openedBy });
+          return (
+            <FilterBlock key={field} data-inbox-chip={field} onRemove={() => changeView(withoutFilter(v, field))}>
+              <FilterBlock.Field>{fieldName}</FilterBlock.Field>
+              <FilterBlock.Operator
+                label={`${fieldName} operator`}
+                expanded={open === "operator"}
+                onOpen={editing("operator")}
+              >
+                {equalOperators(values.length).find(([op]) => op === filterOperator(v, field))![1]}
+              </FilterBlock.Operator>
+              <FilterBlock.Value
+                label={`${fieldName} value`}
+                expanded={open === "value"}
+                title={values.length > 1 ? values.join(", ") : undefined}
+                onOpen={editing("value")}
+              >
+                {values.length > 1 ? `${values.length} ${plural(fieldName.toLowerCase())}` : values[0]}
+              </FilterBlock.Value>
+              <FilterBlock.Remove label={`Remove ${fieldName} filter`} />
+            </FilterBlock>
+          );
+        })}
+        <IconButton
+          label="Add another filter"
+          variant="borderless"
+          size="small"
+          className="ui-filter-add"
+          aria-expanded={edit?.segment === "add"}
+          onClick={(event) =>
+            setEdit({ field: active[0]![0], segment: "add", anchor: event.currentTarget, openedBy: openedBy(event) })
+          }
+        >
+          <Icon name="plus" />
+        </IconButton>
+      </FilterBar.Blocks>
+      {edit?.segment === "add" && (
+        <ActionMenu label="Filter" anchor={edit.anchor} placeholder="Add Filter…" entries={entries} close={close} />
+      )}
+      {edit?.segment === "value" && (
+        <ActionMenu
+          label={name(edit.field)}
+          anchor={edit.anchor}
+          placeholder={name(edit.field)}
+          entries={entries.find((e) => e.name === name(edit.field))?.children ?? []}
+          close={close}
+        />
+      )}
+      {edit?.segment === "operator" && (
+        <MenuSurface label={`${name(edit.field)} operator`} anchor={edit.anchor} fit width={248} close={close}>
+          <FilterOperatorMenu
+            name={name(edit.field)}
+            current={filterOperator(v, edit.field)}
+            operators={equalOperators(v.filters[edit.field]?.length ?? 1)}
+            openedBy={edit.openedBy}
+            pick={(op) => {
+              changeView(withOperator(v, edit.field, op));
+              close();
+            }}
+          />
+        </MenuSurface>
+      )}
+    </FilterBar>
   );
 }
 
@@ -785,7 +837,7 @@ export function InboxList() {
         </IconButton>
         {findShown && !v.priorityInbox && <InboxFind ref={findRef} place="header" />}
       </header>
-      <FilterChips v={v} />
+      <InboxFilterBar v={v} base={base} />
       <div
         ref={list}
         role="list"

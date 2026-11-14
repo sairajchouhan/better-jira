@@ -20,7 +20,7 @@ import { currentKey } from "@/client/state/jira-sync";
 import { navigate, openSavedView, preloadOnHover, ui } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
 import { peopleOf } from "@/shared/people";
-import { filterCount, type Display } from "@/shared/view-model";
+import { equalOperators, filterCount, type Display } from "@/shared/view-model";
 import { setDisplay, useViewSettings } from "@/client/features/views/view-settings";
 import {
   GROUPING_ACTION,
@@ -40,6 +40,7 @@ import { COMMAND_KEYWORDS, VIEW_COMMAND_KEYWORDS } from "./command-keywords";
 import {
   matchDocuments,
   matchesSearchFilters,
+  toggleSearchValue,
   matchIssues,
   SEARCH_FILTER_FIELDS,
   SEARCH_ORDERINGS,
@@ -47,7 +48,9 @@ import {
   type SearchFilter,
   type SearchOrdering,
 } from "./issue-search";
-import { FilterChip } from "@/client/components/filter-chip";
+import { FilterBar, FilterBlock, type OpenedBy } from "@/client/components/filter-block";
+import { FilterOperatorMenu } from "@/client/features/filters/filter-operator-menu";
+import { plural } from "@/client/features/filters/property-filter";
 import { FilterIcon } from "@/client/features/filters/filter-icons";
 import { IconButton } from "@/client/components/button";
 import { useStoredState } from "@/client/state/stored-state";
@@ -557,6 +560,12 @@ function SearchFilterBar({
   const issues = useStore((s) => s.issues),
     boards = useStore((s) => s.boards);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [edit, setEdit] = useState<{
+    field: SearchFilter["field"];
+    segment: "operator" | "value";
+    anchor: HTMLElement;
+    openedBy: OpenedBy;
+  } | null>(null);
   const choices = (field: SearchFilter["field"]): [value: string, label: string][] => {
     if (field === "board") return boards.map((b) => [String(b.id), b.name]);
     const names =
@@ -567,13 +576,7 @@ function SearchFilterBar({
   };
   const label = (field: SearchFilter["field"], value: string) =>
     field === "board" ? (boards.find((b) => String(b.id) === value)?.name ?? value) : value;
-  const toggle = (field: SearchFilter["field"], value: string) =>
-    setFilters((current) => {
-      const values = current.find((f) => f.field === field)?.values ?? [],
-        next = values.includes(value) ? values.filter((v) => v !== value) : [...values, value],
-        rest = current.filter((f) => f.field !== field);
-      return next.length ? [...rest, { field, values: next }] : rest;
-    });
+  const toggle = (field: SearchFilter["field"], value: string) => setFilters((current) => toggleSearchValue(current, field, value));
   const entries: ActionEntry[] = SEARCH_FILTER_FIELDS.map(([field, name]) => ({
     name,
     image: <FilterIcon name={name} />,
@@ -583,26 +586,87 @@ function SearchFilterBar({
       run: () => toggle(field, value),
     })),
   }));
+  const filterButton = (
+    <IconButton label="Filter" variant="muted" size="small" aria-expanded={!!anchor} onClick={(e) => setAnchor(e.currentTarget)}>
+      <Icon name="filter" />
+    </IconButton>
+  );
+  const nameOf = (field: SearchFilter["field"]) => SEARCH_FILTER_FIELDS.find(([f]) => f === field)![1];
+  const change = (field: SearchFilter["field"], patch: Partial<SearchFilter>) =>
+    setFilters((current) => current.map((f) => (f.field === field ? { ...f, ...patch } : f)));
+  const editing = edit && filters.find((f) => f.field === edit.field);
   return (
-    <div className="mb-1.5 flex flex-wrap items-center gap-1.5" role="group" aria-label="Search filters">
-      {filters.map(({ field, values }) => {
-        const name = SEARCH_FILTER_FIELDS.find(([f]) => f === field)![1];
-        return (
-          <FilterChip key={field}>
-            <FilterChip.Label>{name} is</FilterChip.Label>
-            <FilterChip.Value>{values.map((v) => label(field, v)).join(", ")}</FilterChip.Value>
-            <FilterChip.Remove
-              label={`Remove ${name} filter`}
-              onClick={() => setFilters((current) => current.filter((f) => f.field !== field))}
-            />
-          </FilterChip>
-        );
-      })}
-      <IconButton label="Filter" variant="muted" size="small" aria-expanded={!!anchor} onClick={(e) => setAnchor(e.currentTarget)}>
-        <Icon name="filter" />
-      </IconButton>
+    <>
+      {filters.length ? (
+        // The board's FilterBar, its blocks and "+" (Linear's searchResult panel); no Clear or Save.
+        <FilterBar label="Search filters" className="mx-0 mb-1.5">
+          <FilterBar.Blocks>
+            {filters.map(({ field, values, op = "is" }) => {
+              const name = nameOf(field);
+              const open = edit?.field === field ? edit.segment : null;
+              const labels = values.map((v) => label(field, v));
+              return (
+                <FilterBlock key={field} onRemove={() => setFilters((current) => current.filter((f) => f.field !== field))}>
+                  <FilterBlock.Field>{name}</FilterBlock.Field>
+                  <FilterBlock.Operator
+                    label={`${name} operator`}
+                    expanded={open === "operator"}
+                    onOpen={(anchor, by) => setEdit({ field, segment: "operator", anchor, openedBy: by })}
+                  >
+                    {equalOperators(values.length).find(([o]) => o === op)![1]}
+                  </FilterBlock.Operator>
+                  <FilterBlock.Value
+                    label={`${name} value`}
+                    expanded={open === "value"}
+                    title={values.length > 1 ? labels.join(", ") : undefined}
+                    onOpen={(anchor, by) => setEdit({ field, segment: "value", anchor, openedBy: by })}
+                  >
+                    {values.length > 1 ? `${values.length} ${plural(name.toLowerCase())}` : labels[0]}
+                  </FilterBlock.Value>
+                  <FilterBlock.Remove label={`Remove ${name} filter`} />
+                </FilterBlock>
+              );
+            })}
+            <IconButton
+              label="Add another filter"
+              variant="borderless"
+              size="small"
+              className="ui-filter-add"
+              aria-expanded={!!anchor}
+              onClick={(e) => setAnchor(e.currentTarget)}
+            >
+              <Icon name="plus" />
+            </IconButton>
+          </FilterBar.Blocks>
+        </FilterBar>
+      ) : (
+        <div className="mb-1.5 flex items-center">{filterButton}</div>
+      )}
       {anchor && <ActionMenu label="Filter" anchor={anchor} entries={entries} close={() => setAnchor(null)} />}
-    </div>
+      {edit?.segment === "value" && editing && (
+        <ActionMenu
+          label={nameOf(edit.field)}
+          anchor={edit.anchor}
+          placeholder={nameOf(edit.field)}
+          entries={entries.find((e) => e.name === nameOf(edit.field))?.children ?? []}
+          close={() => setEdit(null)}
+        />
+      )}
+      {edit?.segment === "operator" && editing && (
+        <MenuSurface label={`${nameOf(edit.field)} operator`} anchor={edit.anchor} fit width={248} close={() => setEdit(null)}>
+          <FilterOperatorMenu
+            name={nameOf(edit.field)}
+            current={editing.op ?? "is"}
+            operators={equalOperators(editing.values.length)}
+            openedBy={edit.openedBy}
+            pick={(op) => {
+              change(edit.field, { op });
+              setEdit(null);
+            }}
+          />
+        </MenuSurface>
+      )}
+    </>
   );
 }
 
