@@ -79,7 +79,7 @@ test("issue details: priority picker, reactions, favourites, navigation and prop
     expect(await page.eval(`[...${props}.querySelectorAll("h3")].map(h=>h.textContent)`)).toEqual([
       "Properties",
       "Labels",
-      "Project",
+      "Epic",
     ]);
     expect(await page.eval(`${props}.querySelectorAll("dt").length`)).toBe(0);
     expect(await page.eval(`/Reporter|Created|Updated/.test(${props}.textContent)`)).toBe(false);

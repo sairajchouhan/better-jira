@@ -46,7 +46,7 @@ test("R3-views-filters-D-7: the Overdue preset's chip names it Overdue, as Linea
   expect(dateValueLabel("due", "2026-11-20", (v) => `on ${v}`)).toBe("on 2026-11-20");
 });
 
-test("Project offers the board's epics with their issue counts, and No project counts the issues with no epic", () => {
+test("Project offers the board's epics with their issue counts, and No epic counts the issues with no epic", () => {
   const at = (key: string, patch: Partial<Issue>): Issue => ({ ...issue(key, "Low"), ...patch });
   const issues = [
     at("A-1", { type: "Epic", summary: "Billing", priority: "High", labels: ["roadmap"] }),
@@ -60,13 +60,13 @@ test("Project offers the board's epics with their issue counts, and No project c
     filterChoices(field, board, issues, matching).map((c) => [c.label, c.count]);
   // The Jira project ("Jira project") is Linear's team, never a Project value.
   expect(rows("project")).toEqual([
-    ["No project", 1],
+    ["No epic", 1],
     ["A-99", 1],
     ["Billing", 3],
   ]);
   // Counts follow the view, while the epic still resolves when the view hides it.
   expect(rows("project", [issues[1]!, issues[3]!])).toEqual([
-    ["No project", 1],
+    ["No epic", 1],
     ["A-99", 0],
     ["Billing", 1],
   ]);

@@ -35,11 +35,11 @@ const NONE: Partial<Record<Field, [string, string]>> = {
   assignee: ["No assignee", "No assignee"],
   creator: ["No creator", "No assignee"],
   watchers: ["No subscribers", "No assignee"],
-  projectLead: ["No project lead", "No assignee"],
+  projectLead: ["No epic lead", "No assignee"],
   milestone: ["No milestone", ""],
   labels: ["No labels", "Labels"],
   priority: ["No priority", "priority"],
-  project: ["No project", "Project"],
+  project: ["No epic", "Epic"],
   parent: ["No parent", "Parent issues"],
 };
 const RELATIONS: [string, string, string][] = [

@@ -150,23 +150,25 @@ export function issuePropertyEntries(issue: Issue, { close, menu }: { close: () 
       }),
     }),
     // Linear's contextual "Project" (`zBn`, `isContextualMenu`): the ⇧P picker's rows, the project being the issue's epic.
-    project: property("Project", "layers", "project", {
-      placeholder: epic ? "Move to project…" : "Add to project…",
-      nameAsParent: epic ? "Move to project" : "Add to project",
+    project: property("Epic", "layers", "project", {
+      placeholder: epic ? "Move to epic…" : "Add to epic…",
+      nameAsParent: epic ? "Move to epic" : "Add to epic",
+      // The word Linear (and Jira people) search by still finds it.
+      keywords: ["project"],
       hoistFrom: 3,
       disabledReason: projectLocked,
       children: projectLocked
         ? undefined
         : [
-            { key: null, name: "No project" },
+            { key: null, name: "No epic" },
             ...epicChoices(boardIssues, board, { project: issue.project?.key, current: epic }),
           ].map(({ key, name }, i) => ({
             name,
-            // The ⇧P picker's: "No project" by `VBn`'s keywords, an epic by its key too.
-            keywords: rowKeywords({ keywords: key ?? "epic delete" }),
+            // The ⇧P picker's: "No epic" by `VBn`'s keywords, an epic by its key too.
+            keywords: rowKeywords({ keywords: key ?? "project delete" }),
             icon: "layers" as const,
             selected: key === (epic ?? null),
-            // Linear's "No project" takes 0 (`YBn` numkeyShortcut); the projects have none.
+            // Linear's "No project" ("No epic" here) takes 0 (`YBn` numkeyShortcut); the projects have none.
             number: i === 0 ? 0 : undefined,
             run: choose(() => actions.patch(issue.key, epicPatch(key))),
           })),

@@ -141,7 +141,7 @@ test("RAJ-52/53: a sub-issue's page lays out properties, reactions, sub-issues, 
     ).toEqual([
       ["Properties", 127.8, 910.1, "13px"],
       ["Labels", 310.8, 910.1, "13px"],
-      ["Project", 397.8, 910.1, "13px"],
+      ["Epic", 397.8, 910.1, "13px"],
     ]);
     const pills = await page.eval<number[][]>(
       `[...document.querySelectorAll('[data-properties] button[id^="prop-"]:not([aria-label="Add label"])')].map(b=>{const r=b.getBoundingClientRect(),t=document.createRange();t.setStartAfter(b.firstChild);t.setEnd(b,b.childNodes.length);return [Math.round(r.x*10)/10,Math.round(r.y),r.height,Math.round(t.getBoundingClientRect().x*10)/10,parseFloat(getComputedStyle(b).borderRadius)>=14?1:0]})`,
@@ -595,7 +595,7 @@ test("RAJ-52: relations: Mark as menus, sidebar pills, Activity rows and Issue o
         `[...document.querySelectorAll('[data-properties] h3')].map(h=>[h.textContent,Math.round(h.getBoundingClientRect().x*10)/10,Math.round(h.getBoundingClientRect().y*10)/10]).slice(2)`,
       ),
     ).toEqual([
-      ["Project", 902.1, 397.8],
+      ["Epic", 902.1, 397.8],
       ["Blocked by", 902.1, 484.8],
       ["Related", 902.1, 571.8],
     ]);

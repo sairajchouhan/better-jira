@@ -38,7 +38,7 @@ export const COMMAND_KEYWORDS: Readonly<Record<string, string>> = {
   new: "new ticket task make",
   due: "deadline due",
   remind: "snooze reminder",
-  project: "epic move add to project",
+  project: "project move add to epic",
   rename: "title",
   delete: "trash archive remove",
   subscribe: "notify notification",

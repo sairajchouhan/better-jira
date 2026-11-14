@@ -486,17 +486,17 @@ function ProjectProperty({ issue }: { issue: Issue }) {
   const locked = useStore((s) => epicLocked(issue, (key) => s.issues.get(key)));
   return locked ? (
     <PropertyPill id="prop-project" title={locked} icon={<Icon name="layers" />}>
-      {name ?? "No project"}
+      {name ?? "No epic"}
     </PropertyPill>
   ) : (
     <PropertyPill
       id="prop-project"
       overlay="project"
-      tip={epic ? "Move to project" : "Add to project"}
+      tip={epic ? "Move to epic" : "Add to epic"}
       state={epic ? "value" : "empty"}
       icon={<Icon name="layers" />}
     >
-      {name ?? <Placeholder wide="Add to project" short="Project" />}
+      {name ?? <Placeholder wide="Add to epic" short="Epic" />}
     </PropertyPill>
   );
 }
@@ -590,7 +590,7 @@ function Properties({ issue }: { issue: Issue }) {
           </PropertyPill>
         )}
       </IssueDetailsSection>
-      <IssueDetailsSection name="Project">
+      <IssueDetailsSection name="Epic">
         <ProjectProperty issue={issue} />
         {issue.milestones?.length ? (
           <PropertyPill id="prop-milestone" overlay="milestone" icon={<Icon name="calendar" />}>

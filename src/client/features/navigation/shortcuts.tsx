@@ -543,8 +543,8 @@ export const shortcuts: Shortcut[] = [
       ["labels", "Change labels", "L", "labels"],
       ["due", "Set due date", "Shift+D", "due"],
       ["remind", "Remind me", "Shift+H", "reminder"],
-      ["project", "Add to project", "Shift+P", "project"],
-      ["milestone", "Add to project milestone", "Shift+M", "milestone"],
+      ["project", "Add to epic", "Shift+P", "project"],
+      ["milestone", "Add to milestone", "Shift+M", "milestone"],
     ] as const
   ).map(([id, name, hotkey, value]) => ({
     id,
@@ -559,7 +559,7 @@ export const shortcuts: Shortcut[] = [
           when: (s: State, issue?: Issue) => !!issue && !epicLocked(issue, (key) => s.issues.get(key)),
           label: () => {
             const issue = target();
-            return issue && epicOf(issue, (key) => get().issues.get(key)) ? "Move to project" : "Add to project";
+            return issue && epicOf(issue, (key) => get().issues.get(key)) ? "Move to epic" : "Add to epic";
           },
         }
       : {}),
@@ -680,7 +680,7 @@ export const shortcuts: Shortcut[] = [
         set({
           perf: nestable(i)
             ? `Jira has no issue type below ${i.type}, so ${i.key} can't have sub-issues`
-            : `${i.key} is a project: its issues join it with Project, not as sub-issues`,
+            : `${i.key} is an epic: its issues join it with Epic, not as sub-issues`,
         });
         return;
       }

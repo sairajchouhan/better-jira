@@ -6,7 +6,7 @@ import { expect, fixture, PREFS_KEY, sleep, test, type App } from "./app";
  * Every issue stays in Jira project TEST ("Audit"), Linear's team, which no Project surface offers.
  */
 const MENU = '[role="dialog"][aria-label="Issue options"]';
-const PICKER = '[role="dialog"][aria-label="Change project"]';
+const PICKER = '[role="dialog"][aria-label="Change epic"]';
 const cards = `document.querySelectorAll('[data-key]').length`;
 const names = (p: App, dialog: string) =>
   p.eval<string[]>(
@@ -30,25 +30,25 @@ test("Project is the issue's epic: filter, card badge, grouping, ⇧P, right-cli
   const p = await open();
   await p.waitFor(`${cards}===8`);
 
-  await test.step("Filter › Project lists No project and the board's epics with their issue counts, never the Jira project", async () => {
+  await test.step("Filter › Project lists No epic and the board's epics with their issue counts, never the Jira project", async () => {
     await p.click('[aria-label="Add filter"]');
-    await p.hover("text=Project");
-    await p.waitFor(`!!document.querySelector('[aria-label="Filter Project"] [cmdk-item]')`);
+    await p.hover("text=Epic");
+    await p.waitFor(`!!document.querySelector('[aria-label="Filter Epic"] [cmdk-item]')`);
     const rows = await p.eval<string[]>(
-      `[...document.querySelectorAll('[aria-label="Filter Project"] [cmdk-item]')].map(n=>n.dataset.value)`,
+      `[...document.querySelectorAll('[aria-label="Filter Epic"] [cmdk-item]')].map(n=>n.dataset.value)`,
     );
-    expect(rows).toEqual(["No project $none", "Fixture epic TEST-7", "Shipped epic TEST-8"]);
+    expect(rows).toEqual(["No epic $none", "Fixture epic TEST-7", "Shipped epic TEST-8"]);
     expect(rows.join()).not.toContain("Audit");
-    expect(await p.eval(`document.querySelector('[aria-label="Filter Project"] [cmdk-item][data-value="Fixture epic TEST-7"]').textContent`)).toContain("3 issues");
-    await p.click('[aria-label="Filter Project"] [cmdk-item][data-value="Fixture epic TEST-7"]');
+    expect(await p.eval(`document.querySelector('[aria-label="Filter Epic"] [cmdk-item][data-value="Fixture epic TEST-7"]').textContent`)).toContain("3 issues");
+    await p.click('[aria-label="Filter Epic"] [cmdk-item][data-value="Fixture epic TEST-7"]');
     // The epic lists with its issues, as a Linear project page does.
     await p.waitFor(`${cards}===3`);
     await p.key("Escape");
     await p.click('[aria-label="Remove project filter"]');
     await p.waitFor(`${cards}===8`);
     await p.click('[aria-label="Add filter"]');
-    await p.hover("text=Project");
-    await p.click('[aria-label="Filter Project"] [cmdk-item][data-value="No project $none"]');
+    await p.hover("text=Epic");
+    await p.click('[aria-label="Filter Epic"] [cmdk-item][data-value="No epic $none"]');
     await p.waitFor(`${cards}===4`);
     await p.key("Escape");
     await p.click('[aria-label="Remove project filter"]');
@@ -57,11 +57,11 @@ test("Project is the issue's epic: filter, card badge, grouping, ⇧P, right-cli
 
   await test.step("Project properties read the epic: Project status Done finds the Shipped epic", async () => {
     await p.click('[aria-label="Add filter"]');
-    await p.hover("text=Project properties");
-    await p.hover("text=Project status");
-    await p.waitFor(`!!document.querySelector('[aria-label="Filter Project status"] [cmdk-item]')`);
+    await p.hover("text=Epic properties");
+    await p.hover("text=Epic status");
+    await p.waitFor(`!!document.querySelector('[aria-label="Filter Epic status"] [cmdk-item]')`);
     expect(
-      await p.eval<string[]>(`[...document.querySelectorAll('[aria-label="Filter Project status"] [cmdk-item]')].map(n=>n.dataset.value)`),
+      await p.eval<string[]>(`[...document.querySelectorAll('[aria-label="Filter Epic status"] [cmdk-item]')].map(n=>n.dataset.value)`),
     ).toEqual(expect.arrayContaining([expect.stringContaining("Todo"), expect.stringContaining("Done")]));
     await p.key("Escape");
   });
@@ -76,39 +76,39 @@ test("Project is the issue's epic: filter, card badge, grouping, ⇧P, right-cli
       p.eval<string[]>(`[...document.querySelectorAll('[data-board-column="${name}"] [data-key]')].map(n=>n.dataset.key).sort()`);
     expect(await column("Fixture epic")).toEqual(["TEST-2", "TEST-3", "TEST-7"]);
     expect(await column("Shipped epic")).toEqual(["TEST-8"]);
-    expect(await column("No project")).toEqual(["TEST-1", "TEST-4", "TEST-5", "TEST-6"]);
+    expect(await column("No epic")).toEqual(["TEST-1", "TEST-4", "TEST-5", "TEST-6"]);
     await prefs(p, {});
   });
 
-  await test.step("right-click › Project: No project and the open epics; picking one writes only the Jira parent", async () => {
+  await test.step("right-click › Project: No epic and the open epics; picking one writes only the Jira parent", async () => {
     await p.waitFor(`${cards}===8`);
     const r = await p.rect('[data-key="TEST-4"]');
     await p.page.mouse.click(r.x + r.width / 2, r.y + r.height / 2, { button: "right" });
-    await p.hover(`${MENU} [cmdk-item][data-value="Project"]`);
-    await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Project"] [cmdk-item]')`);
+    await p.hover(`${MENU} [cmdk-item][data-value="Epic"]`);
+    await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Epic"] [cmdk-item]')`);
     // Linear hides a completed project unless it is current or searched for.
-    expect(await names(p, '[role="dialog"][aria-label="Project"]')).toEqual(["No project", "Fixture epic"]);
-    await p.click('[role="dialog"][aria-label="Project"] [cmdk-item][data-value="Fixture epic"]');
+    expect(await names(p, '[role="dialog"][aria-label="Epic"]')).toEqual(["No epic", "Fixture epic"]);
+    await p.click('[role="dialog"][aria-label="Epic"] [cmdk-item][data-value="Fixture epic"]');
     await wrote(p, "TEST-4", "TEST-7");
   });
 
   await test.step("an epic is a project itself: its right-click Project row is disabled", async () => {
     const r = await p.rect('[data-key="TEST-7"]');
     await p.page.mouse.click(r.x + r.width / 2, r.y + r.height / 2, { button: "right" });
-    await p.waitFor(`!!document.querySelector('${MENU} [cmdk-item][data-value="Project"]')`);
-    expect(await p.eval(`document.querySelector('${MENU} [cmdk-item][data-value="Project"]').getAttribute('aria-disabled')`)).toBe("true");
+    await p.waitFor(`!!document.querySelector('${MENU} [cmdk-item][data-value="Epic"]')`);
+    expect(await p.eval(`document.querySelector('${MENU} [cmdk-item][data-value="Epic"]').getAttribute('aria-disabled')`)).toBe("true");
     await p.key("Escape");
   });
 
-  await test.step("⇧P on a Task: Add to project, a done epic shows once searched, No project takes the epic away", async () => {
+  await test.step("⇧P on a Task: Add to project, a done epic shows once searched, No epic takes the epic away", async () => {
     await p.goto("?issue=TEST-1&view=page");
     await p.waitFor(`!!document.getElementById('comment')`);
     expect(await p.eval(`document.getElementById('prop-project')?.tagName`)).toBe("BUTTON");
     await p.eval("document.activeElement?.blur()");
     await p.key("p", "shift");
     await p.waitFor(`!!document.querySelector('${PICKER} [cmdk-item]')`);
-    expect(await p.eval(`document.querySelector('${PICKER} input')?.placeholder`)).toBe("Add to project…");
-    expect(await names(p, PICKER)).toEqual(["No project", "Fixture epic"]);
+    expect(await p.eval(`document.querySelector('${PICKER} input')?.placeholder`)).toBe("Add to epic…");
+    expect(await names(p, PICKER)).toEqual(["No epic", "Fixture epic"]);
     await p.type("shi");
     await expect.poll(() => names(p, PICKER)).toContain("Shipped epic");
     await p.key("Escape");
@@ -117,7 +117,7 @@ test("Project is the issue's epic: filter, card badge, grouping, ⇧P, right-cli
     await p.eval("document.activeElement?.blur()");
     await p.key("p", "shift");
     await p.waitFor(`!!document.querySelector('${PICKER} [cmdk-item]')`);
-    expect(await p.eval(`document.querySelector('${PICKER} input')?.placeholder`)).toBe("Move to project…");
+    expect(await p.eval(`document.querySelector('${PICKER} input')?.placeholder`)).toBe("Move to epic…");
     await p.key("0");
     await wrote(p, "TEST-2", null);
   });
@@ -152,7 +152,7 @@ test("C on a view filtered by one project creates the issue in that epic (Linear
   await p.waitFor(`${cards}===3`);
   await p.eval("document.activeElement?.blur()");
   await p.key("c");
-  await p.waitFor(`!!document.querySelector('${COMPOSER} [aria-label="Project: Fixture epic"]')`);
+  await p.waitFor(`!!document.querySelector('${COMPOSER} [aria-label="Epic: Fixture epic"]')`);
   await p.eval(`document.querySelector('${COMPOSER} [aria-label="Issue title"]').focus()`);
   await p.type("[QA] filtered by project");
   await p.key("Enter", "meta");
@@ -171,20 +171,20 @@ test("a project filter naming two epics sets none and lists both first in the co
   await p.waitFor(`${cards}===4`);
   await p.eval("document.activeElement?.blur()");
   await p.key("c");
-  await p.waitFor(`!!document.querySelector('${COMPOSER} [aria-label="Project: No project"]')`);
-  await p.click(`${COMPOSER} [aria-label="Project: No project"]`);
+  await p.waitFor(`!!document.querySelector('${COMPOSER} [aria-label="Epic: No epic"]')`);
+  await p.click(`${COMPOSER} [aria-label="Epic: No epic"]`);
   await p.waitFor(`!!document.querySelector('${PICKER} [cmdk-item]')`);
   // Shipped epic is done, so it shows only because the filter names it; the filter's order holds.
-  expect(await names(p, PICKER)).toEqual(["No project", "Shipped epic", "Fixture epic"]);
+  expect(await names(p, PICKER)).toEqual(["No epic", "Shipped epic", "Fixture epic"]);
 });
 
-test("\"No project\" filter: the composer starts with no project", async ({ open }) => {
+test("\"No epic\" filter: the composer starts with no project", async ({ open }) => {
   await fixture.reset({ writable: true, epics: true });
   const p = await open("", { setup: projectFilter("$none") });
   await p.waitFor(`${cards}===4`);
   await p.eval("document.activeElement?.blur()");
   await p.key("c");
-  await p.waitFor(`!!document.querySelector('${COMPOSER} [aria-label="Project: No project"]')`);
+  await p.waitFor(`!!document.querySelector('${COMPOSER} [aria-label="Epic: No epic"]')`);
 });
 
 /**

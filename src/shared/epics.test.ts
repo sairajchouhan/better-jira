@@ -62,7 +62,7 @@ test("an issue's project is its epic: the epic parent, a sub-task's parent's epi
 test("Project filter: an epic matches its issues, No project means no epic, and the Jira project never matches", () => {
   const matching = (r: Rule) => all.filter((i) => matchesRule(i, r, all, "me")).map((i) => i.key);
   expect(matching(rule(["E-2"]))).toEqual(["E-2", "E-10", "E-11"]);
-  // "No project" was always empty when it meant the Jira project; now it is the issues with no epic.
+  // "No epic" was always empty when it meant the Jira project; now it is the issues with no epic.
   expect(matching(rule(["$none"]))).toEqual(["E-1", "E-12"]);
   expect(matching(rule(["E"]))).toEqual([]);
   expect(matching(rule([], "empty"))).toEqual(["E-1", "E-12"]);
@@ -127,11 +127,11 @@ test("only a standard issue picks its project: an epic is one, a sub-issue follo
   expect(epicLocked(initiative)).toContain("Initiatives");
 });
 
-test("grouping by project: one group per epic, named by its title, the epic with its issues, then No project", () => {
+test("grouping by project: one group per epic, named by its title, the epic with its issues, then No epic", () => {
   expect(buckets(all, "project", board).map((b) => [b.name, b.issues.map((i) => i.key)])).toEqual([
     ["Archive", ["E-3"]],
     ["Billing", ["E-2", "E-10", "E-11"]],
-    ["No project", ["E-1", "E-12"]],
+    ["No epic", ["E-1", "E-12"]],
   ]);
   // A lane's issues don't hold their epic: the board's issues name it.
   expect(buckets([subTask], "project", board, [subTask], [], lookup).map((b) => b.name)).toEqual(["Billing"]);
@@ -204,4 +204,10 @@ test("nested lists nest sub-issues under their parent issue, never an epic's iss
   expect(rows).toContainEqual(["E-10", 0]);
   expect(rows).toContainEqual(["E-11", 1]);
   expect(rows).toContainEqual(["E-2", 0]);
+});
+
+test("BJ-262: the epic's read-only reasons say epic, never project", () => {
+  expect(epicLocked(billing)).toBe("An epic can't be added to another epic in Jira.");
+  expect(epicLocked(initiative)).toBe("Initiatives sit above epics.");
+  expect(epicLocked(subTask)).toBe("A sub-issue is in its parent's epic.");
 });

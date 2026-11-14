@@ -76,8 +76,8 @@ test("issue detail layout across widths: measured grid, fixed properties, and pi
       "prop-labels",
     ]);
     await page.click("#prop-project");
-    await page.click("text=No project");
-    expect(await page.eval(`document.getElementById('prop-project').innerText`)).toBe("Project");
+    await page.click("text=No epic");
+    expect(await page.eval(`document.getElementById('prop-project').innerText`)).toBe("Epic");
   });
 });
 

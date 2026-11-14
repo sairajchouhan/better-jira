@@ -378,20 +378,20 @@ export function ProjectMenu({
   const current = choices.find((e) => e.key === value);
   return (
     <PropertyMenu
-      label="Change project"
-      // Linear's `subActionPlaceholder`: "Add to project…" with none yet, else "Move to project…".
-      placeholder={value ? "Move to project…" : "Add to project…"}
+      label="Change epic"
+      // Linear's `subActionPlaceholder` ("Add to project…", else "Move to project…"), worded Epic.
+      placeholder={value ? "Move to epic…" : "Add to epic…"}
       hotkey={hotkeyOf("project")}
       anchor={anchor}
       close={close}
-      current={current ? epicValue(current) : "No project"}
+      current={current ? epicValue(current) : "No epic"}
       query={query}
       onQuery={setQuery}
     >
       <PickerRow
-        value="No project"
+        value="No epic"
         // `YBn` takes `VBn`'s keywords.
-        keywords={["No project", ...rowKeywords({ keywords: "epic delete" })]}
+        keywords={["No epic", ...rowKeywords({ keywords: "project delete" })]}
         current={!value}
         number={0}
         icon={<Icon name="layers" />}
@@ -400,7 +400,7 @@ export function ProjectMenu({
           close();
         }}
       >
-        No project
+        No epic
       </PickerRow>
       {choices.map((epic) => (
         <PickerRow

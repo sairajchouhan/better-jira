@@ -36,7 +36,7 @@ export function issuesCSV(issues: Issue[], board: Board, lookup: IssueLookup = l
     return Number.isNaN(date.getTime()) ? value : date.toISOString();
   };
   return [
-    ["ID", "Team", "Title", "Description", "Status", "Estimate", "Priority", "Project", "Creator", "Assignee", "Labels", "Created", "Updated", "Started", "Completed", "Due Date", "Parent issue"],
+    ["ID", "Team", "Title", "Description", "Status", "Estimate", "Priority", "Epic", "Creator", "Assignee", "Labels", "Created", "Updated", "Started", "Completed", "Due Date", "Parent issue"],
     ...issues.map((i) => [
       i.key,
       board.name,

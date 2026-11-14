@@ -10,7 +10,7 @@ export const PUSH_CATEGORIES = [
   ["commentsAndReplies", "Comments and replies", "Comments, replies, and thread resolutions"],
   ["mentions", "Mentions", "Mentions in comments or content"],
   ["reactions", "Reactions", "Emoji reactions to your content"],
-  ["subscriptions", "Subscriptions", "Issues, projects, initiatives, teams, and views you're subscribed to"],
+  ["subscriptions", "Subscriptions", "Issues, epics, initiatives, teams, and views you're subscribed to"],
 ] as const;
 export type PushCategory = (typeof PUSH_CATEGORIES)[number][0];
 

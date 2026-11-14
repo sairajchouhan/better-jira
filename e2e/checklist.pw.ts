@@ -149,11 +149,11 @@ test("an issue's favourite, assignee, project and milestone change and survive a
     await page.waitFor(
       `document.getElementById('prop-assignee').textContent.includes('Unassigned')`,
     );
-    await pick("prop-project", "Change project", "Fixture epic TEST-7");
+    await pick("prop-project", "Change epic", "Fixture epic TEST-7");
     await page.waitFor(`document.getElementById('prop-project')?.textContent.includes('Fixture epic')`);
-    await pick("prop-project", "Change project", "No project");
+    await pick("prop-project", "Change epic", "No epic");
     await page.waitFor(`!document.getElementById('prop-project')?.textContent.includes('Fixture epic')`);
-    await pick("prop-project", "Change project", "Fixture epic TEST-7");
+    await pick("prop-project", "Change epic", "Fixture epic TEST-7");
     await page.key("M", "shift");
     await page.waitFor(
       `!!document.querySelector('[role=dialog][aria-label="Set milestone"] [cmdk-item][data-value="Beta"]')`,

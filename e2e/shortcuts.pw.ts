@@ -127,7 +127,7 @@ test("a selected card: issue commands, copy chords, layout and focus scopes", as
       ["p", [], "Set priority"],
       ["l", [], "Change labels"],
       ["d", ["shift"], "Due date"],
-      ["p", ["shift"], "Change project"],
+      ["p", ["shift"], "Change epic"],
       ["m", ["shift"], "Set milestone"],
     ] as const) {
       await p.key(key, ...mods);

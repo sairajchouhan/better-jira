@@ -8,6 +8,7 @@ import { childrenByParent } from "./sub-issue-model";
 import { statusOf } from "./sub-issues";
 import { Text } from "@/client/components/text";
 import { statusDuration } from "@/shared/view-model";
+import { epicName, epicOf } from "@/shared/epics";
 
 /** Linear's Quick look (→ in a menu): the highlighted issue's peek body. Where it sits is the caller's. */
 export function IssuePeek({ issue, className = "", ...props }: { issue: Issue } & HTMLAttributes<HTMLElement>) {
@@ -26,7 +27,7 @@ export const PEEK_SUB_ISSUES = 6;
 /**
  * Linear's issue peek (startup-root `jwn`, rendered by the view peek's `Awn` and the menus' Quick look): 415px wide with 16px/24px
  * padding. The identifier, then 16px apart the title, a muted line of status (with time in status), priority, assignee,
- * project and labels, the description, the due date, and the sub-issues.
+ * project (the issue's epic) and labels, the description, the due date, and the sub-issues.
  */
 export function IssuePeekContent({ issue }: { issue: Issue }) {
   const boards = useStore((s) => s.boards);
@@ -34,6 +35,12 @@ export function IssuePeekContent({ issue }: { issue: Issue }) {
   // The mirrored record holds the rich description; the list's issue only its text.
   const description = useStore((s) => s.full.get(issue.key)?.fields?.description) ?? issue.description;
   const clock = useStore((s) => s.clock);
+  // Linear's project slot is the issue's epic (shared/epics.ts), never its Jira project (Linear's team).
+  const epic = useStore((s) => {
+    const lookup = (key: string) => s.issues.get(key),
+      key = epicOf(issue, lookup);
+    return key ? epicName(key, lookup) : undefined;
+  });
   return (
     <div className="w-[415px] max-w-full px-6 py-4">
       <Text variant="smallPlus" color="muted" as="div" className="mb-1.5">
@@ -67,13 +74,13 @@ export function IssuePeekContent({ issue }: { issue: Issue }) {
                 {issue.assignee.name}
               </span>
             )}
-            {issue.project && (
+            {epic && (
               <span className="flex min-w-0 items-center">
                 <span className="mr-2 flex items-center">
                   <Icon name="layers" />
                 </span>
                 <span className="truncate">
-                  {issue.project.name}
+                  {epic}
                   {issue.milestones?.[0] && ` · ${issue.milestones[0].name}`}
                 </span>
               </span>

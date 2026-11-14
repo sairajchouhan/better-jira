@@ -34,8 +34,8 @@ const CATEGORIES: Entry[] = [
   { name: "Labels", field: "labels" },
   { name: "Relations", field: "relations" },
   { name: "Dates", group: "dates" },
-  { name: "Project", field: "project", divider: true },
-  { name: "Project properties", group: "project" },
+  { name: "Epic", field: "project", glyph: "Project", divider: true },
+  { name: "Epic properties", group: "project", glyph: "Project properties" },
   { name: "Subscribers", field: "watchers", divider: true },
   { name: "External source", reason: UNAVAILABLE },
   { name: "Auto-closed", reason: UNAVAILABLE },
@@ -65,16 +65,16 @@ const DATE_ENTRIES: Entry[] = [
 // Linear's Project properties as live RAJ lists them (`gZt`: bXt status, SXt priority, CXt labels, EXt lead, OXt milestone name),
 // read off the issue's epic (shared/epics.ts); the lead is the epic's assignee. Milestone stays the issue's Jira fix version.
 const PROJECT: Entry[] = [
-  { name: "Project status", field: "projectStatus", glyph: "Status" },
-  { name: "Project priority", field: "projectPriority", glyph: "Priority" },
-  { name: "Project labels", field: "projectLabels", glyph: "Labels" },
-  { name: "Project lead", field: "projectLead", glyph: "Assignee" },
+  { name: "Epic status", field: "projectStatus", glyph: "Status" },
+  { name: "Epic priority", field: "projectPriority", glyph: "Priority" },
+  { name: "Epic labels", field: "projectLabels", glyph: "Labels" },
+  { name: "Epic lead", field: "projectLead", glyph: "Assignee" },
   { name: "Milestone name", field: "milestone", glyph: "Project properties" },
 ];
 // Root search also lists nested categories, every field's values and the date presets, as Linear's does.
 const NESTED: Entry[] = [
   ...DATE_ENTRIES.filter((e) => e.field).map((e) => ({ ...e, path: ["Dates"] })),
-  ...PROJECT.map((e) => ({ ...e, path: ["Project properties"] })),
+  ...PROJECT.map((e) => ({ ...e, path: ["Epic properties"] })),
 ];
 const SEARCHED: [Field, string[]][] = [
   ["status", ["Status"]],
@@ -83,12 +83,12 @@ const SEARCHED: [Field, string[]][] = [
   ["priority", ["Priority"]],
   ["labels", ["Labels"]],
   ["relations", ["Relations"]],
-  ["project", ["Project"]],
-  ["projectStatus", ["Project properties", "Project status"]],
-  ["projectPriority", ["Project properties", "Project priority"]],
-  ["projectLabels", ["Project properties", "Project labels"]],
-  ["projectLead", ["Project properties", "Project lead"]],
-  ["milestone", ["Project properties", "Milestone name"]],
+  ["project", ["Epic"]],
+  ["projectStatus", ["Epic properties", "Epic status"]],
+  ["projectPriority", ["Epic properties", "Epic priority"]],
+  ["projectLabels", ["Epic properties", "Epic labels"]],
+  ["projectLead", ["Epic properties", "Epic lead"]],
+  ["milestone", ["Epic properties", "Milestone name"]],
   ["watchers", ["Subscribers"]],
   ["type", ["Issue type"]],
   ["parent", ["Parent issue"]],

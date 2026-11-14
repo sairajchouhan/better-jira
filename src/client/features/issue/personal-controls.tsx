@@ -484,8 +484,8 @@ export function CreateIssue() {
           />
           {epicPill && (
             <PropertyPill
-              label="Project"
-              current={draftEpic?.summary ?? "No project"}
+              label="Epic"
+              current={draftEpic?.summary ?? "No epic"}
               value={draftEpic?.summary}
               icon={<Icon name="layers" size={14} />}
               menu={ProjectMenu}
@@ -839,7 +839,7 @@ export function BoardDetails({
     ["assignee", "Assignees"],
     ["label", "Labels"],
     ["priority", "Priority"],
-    ["project", "Projects"],
+    ["project", "Epics"],
   ];
   return (
     <aside

@@ -81,11 +81,11 @@ export const epicName = (key: string, lookup: IssueLookup) => lookup(key)?.summa
 export function epicLocked(issue: Leveled & Parented, lookup?: IssueLookup): string | undefined {
   const level = hierarchyLevel(issue);
   return level === 1
-    ? "An epic is a project; Jira can't put it in another epic."
+    ? "An epic can't be added to another epic in Jira."
     : level > 1
-      ? "Initiatives sit above projects."
+      ? "Initiatives sit above epics."
       : level < 0 || (lookup && parentOf(issue, lookup))
-        ? "A sub-issue is in its parent's project."
+        ? "A sub-issue is in its parent's epic."
         : undefined;
 }
 

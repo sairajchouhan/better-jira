@@ -118,7 +118,7 @@ export const GROUPINGS: [Grouping, string][] = [
   ["status", "Status"],
   ["category", "Status type"],
   ["assignee", "Assignee"],
-  ["project", "Project"],
+  ["project", "Epic"],
   ["priority", "Priority"],
   ["label", "Label"],
   ["parent", "Parent issue"],
@@ -142,7 +142,7 @@ export const PROPERTIES: [Property, string][] = [
   ["assignee", "Assignee"],
   ["creator", "Creator"],
   ["priority", "Priority"],
-  ["project", "Project"],
+  ["project", "Epic"],
   ["due", "Due date"],
   ["labels", "Labels"],
   ["links", "Links"],
@@ -162,7 +162,7 @@ export const FIELDS: [Field, string][] = [
   ["updated", "Updated date"],
   ["due", "Due date"],
   ["resolved", "Completed date"],
-  ["project", "Project"],
+  ["project", "Epic"],
   ["content", "Content"],
   ["links", "Links"],
   ["type", "Issue type"],
@@ -184,10 +184,10 @@ ORDERINGS.push(["estimate", "Estimate"]);
 FIELDS.push(["estimate", "Estimate"]);
 // Linear's Project properties (`gZt`), read off the issue's epic: its status, priority, labels and assignee as lead.
 FIELDS.push(
-  ["projectStatus", "Project status"],
-  ["projectPriority", "Project priority"],
-  ["projectLabels", "Project labels"],
-  ["projectLead", "Project lead"],
+  ["projectStatus", "Epic status"],
+  ["projectPriority", "Epic priority"],
+  ["projectLabels", "Epic labels"],
+  ["projectLead", "Epic lead"],
 );
 /** One label per id across every menu: pick rows from a shared table (ORDERINGS, PROPERTIES) instead of retyping labels. */
 export function pickLabels<T extends string, K extends T>(
@@ -596,7 +596,7 @@ function groupValues(
       return [{ id: i.assignee?.id ?? "$none", name: i.assignee?.name ?? "No assignee" }];
     case "project": {
       const epic = epicOf(i, lookup);
-      return [epic ? { id: epic, name: epicName(epic, lookup) } : { id: "$none", name: "No project" }];
+      return [epic ? { id: epic, name: epicName(epic, lookup) } : { id: "$none", name: "No epic" }];
     }
     case "priority":
       return [{ id: i.priority ?? "$none", name: i.priority ?? "No priority" }];

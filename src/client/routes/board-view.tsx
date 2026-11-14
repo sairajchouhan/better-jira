@@ -735,7 +735,7 @@ function ProjectBadge({ issue }: { issue: Issue }) {
   return locked ? (
     <Badge data-project-badge title={`${name}: ${locked}`}>{content}</Badge>
   ) : (
-    <FieldBadge issue={issue} field="project" label="Project" title={name}>
+    <FieldBadge issue={issue} field="project" label="Epic" title={name}>
       {content}
     </FieldBadge>
   );

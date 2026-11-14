@@ -26,9 +26,9 @@ test("Jira's hierarchy rules: a Subtask's options, a Task's parents, project and
     await p.eval("document.activeElement?.blur()");
     await p.key("p", "shift");
     await sleep(150); // no project menu opens
-    expect(await p.eval(`!!document.querySelector('[role="dialog"][aria-label="Change project"]')`)).toBe(false);
+    expect(await p.eval(`!!document.querySelector('[role="dialog"][aria-label="Change epic"]')`)).toBe(false);
     expect(await p.eval(`document.getElementById('prop-project')?.tagName`)).toBe("SPAN");
-    expect(await p.eval(`document.getElementById('prop-project')?.textContent`)).toBe("No project");
+    expect(await p.eval(`document.getElementById('prop-project')?.textContent`)).toBe("No epic");
     await p.eval("document.activeElement?.blur()");
     await p.key("o", "meta", "shift");
     await sleep(150); // no composer opens
@@ -49,18 +49,18 @@ test("Jira's hierarchy rules: a Subtask's options, a Task's parents, project and
     // Linear's Project is the Jira epic: with no epics on the board ⇧P offers only No project, and "Audit" (the Jira
     // project, Linear's team) is never a choice.
     await p.key("p", "shift");
-    await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Change project"] [cmdk-item]')`);
+    await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Change epic"] [cmdk-item]')`);
     expect(
       await p.eval<string[]>(
-        `[...document.querySelectorAll('[role="dialog"][aria-label="Change project"] [cmdk-item]')].map(n=>n.querySelector(".menu-name")?.textContent)`,
+        `[...document.querySelectorAll('[role="dialog"][aria-label="Change epic"] [cmdk-item]')].map(n=>n.querySelector(".menu-name")?.textContent)`,
       ),
-    ).toEqual(["No project"]);
+    ).toEqual(["No epic"]);
     await p.key("Escape");
     expect(await p.eval(`document.getElementById('prop-project')?.tagName`)).toBe("BUTTON");
   });
   await test.step("R1-D34, R1-D36, R1-D74: the composer offers Subtask only under a parent, and its project is an epic", async () => {
     const pill = async (label: string) => {
-      const dialog = label === "Issue type" ? "Change issue type" : "Change project";
+      const dialog = label === "Issue type" ? "Change issue type" : "Change epic";
       await p.click(`[role="dialog"][aria-label="Create issue"] button[title="${label}"]`);
       await p.waitFor(
         `!!document.querySelector('[role="dialog"][aria-label="${dialog}"] [cmdk-item]')`,
@@ -75,7 +75,7 @@ test("Jira's hierarchy rules: a Subtask's options, a Task's parents, project and
     await p.key("c");
     await p.waitFor(`!!document.querySelector('[role="dialog"][aria-label="Create issue"]')`);
     expect(await pill("Issue type")).not.toContain("Subtask");
-    expect(await pill("Project")).toEqual(["No project"]);
+    expect(await pill("Epic")).toEqual(["No epic"]);
     await p.click('[role="dialog"][aria-label="Create issue"] [aria-label="Close"]');
     // The composer for a Task's sub-issue offers only the type Jira will create it as.
     await p.eval("document.querySelector('[data-sub-issues] [data-create-child]')?.remove()");
@@ -84,7 +84,7 @@ test("Jira's hierarchy rules: a Subtask's options, a Task's parents, project and
     expect(await pill("Issue type")).toEqual(["Subtask"]);
     // A sub-issue is in its parent's project: the composer has no Project pill for it.
     expect(
-      await p.eval(`!!document.querySelector('[role="dialog"][aria-label="Create issue"] button[title="Project"]')`),
+      await p.eval(`!!document.querySelector('[role="dialog"][aria-label="Create issue"] button[title="Epic"]')`),
     ).toBe(false);
   });
 });

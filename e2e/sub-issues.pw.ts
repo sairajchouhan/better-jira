@@ -289,7 +289,7 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
       "Assignee",
       "Due date",
       "Labels",
-      "Project",
+      "Epic",
       "More properties",
       "Create related",
       "Mark as",
@@ -341,9 +341,9 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
     await menu("TEST-4");
     expect(
       await page.eval(
-        `[document.querySelectorAll('[role="dialog"][aria-label="Sub-issue actions"] [cmdk-separator]').length,...['Status','Project'].map(value=>{const row=document.querySelector('[cmdk-item][data-value="'+value+'"]');return {label:row.querySelector('.menu-name').textContent,shortcut:[...row.querySelectorAll('.ui-shortcut kbd')].map(n=>n.textContent).join(' ')};})]`,
+        `[document.querySelectorAll('[role="dialog"][aria-label="Sub-issue actions"] [cmdk-separator]').length,...['Status','Epic'].map(value=>{const row=document.querySelector('[cmdk-item][data-value="'+value+'"]');return {label:row.querySelector('.menu-name').textContent,shortcut:[...row.querySelectorAll('.ui-shortcut kbd')].map(n=>n.textContent).join(' ')};})]`,
       ),
-    ).toEqual([4, { label: "Status", shortcut: "S" }, { label: "Project", shortcut: "⇧ P" }]);
+    ).toEqual([4, { label: "Status", shortcut: "S" }, { label: "Epic", shortcut: "⇧ P" }]);
     await page.hover('[cmdk-item][data-value="Labels"]');
     const labelRow = page.page.locator(
       '[role="dialog"][aria-label="Labels"] [cmdk-item][data-value="test"]',
@@ -360,18 +360,18 @@ test("sub-issue row menus act on the child, like Linear", async ({ open }) => {
     // Project uses the same controlled menu as the issue properties.
     const project = async (row: string) => {
       await menu("TEST-4");
-      await page.click('[cmdk-item][data-value="Project"]');
+      await page.click('[cmdk-item][data-value="Epic"]');
       await page.click(
-        `[role="dialog"][aria-label="Change project"] [cmdk-item][data-value="${row}"]`,
+        `[role="dialog"][aria-label="Change epic"] [cmdk-item][data-value="${row}"]`,
       );
     };
-    await project("No project");
+    await project("No epic");
     await project("Audit");
     await menu("TEST-4");
-    await page.click('[cmdk-item][data-value="Project"]');
+    await page.click('[cmdk-item][data-value="Epic"]');
     await expect(
       page.page.locator(
-        '[role="dialog"][aria-label="Change project"] [cmdk-item][data-value="Audit"] svg',
+        '[role="dialog"][aria-label="Change epic"] [cmdk-item][data-value="Audit"] svg',
       ),
     ).toHaveCount(2);
     await page.key("Escape");
