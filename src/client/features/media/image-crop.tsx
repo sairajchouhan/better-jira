@@ -3,6 +3,7 @@ import { Button, IconButton } from "@/client/components/button";
 import { useEffect, useRef, useState } from "react";
 import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 import { adjustCrop } from "./media-edits";
+import { decodeImage, forgetImage } from "./image-blob";
 import type { Attachment } from "@/shared/attachment-media";
 import { Icon } from "@/client/components/icons";
 const full: ImageCrop = { x: 0, y: 0, width: 1, height: 1 };
@@ -33,6 +34,11 @@ export function ImageCropEditor({
   useEffect(() => {
     root.current?.querySelector<HTMLElement>('[aria-label^="Crop selection"]')?.focus();
   }, []);
+  // Linear's crop editor reads and decodes the image as it opens (XVe.load), so Save only cuts and encodes.
+  useEffect(() => {
+    decodeImage(file.url).catch(() => {});
+    return () => forgetImage(file.url);
+  }, [file.url]);
   const [error, setError] = useState(""),
     [saving, setSaving] = useState(false);
   const [crop, setCrop] = useState(initial ?? full),

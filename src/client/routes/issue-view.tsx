@@ -13,9 +13,7 @@ import { showNotification } from "@/client/state/app-notifications";
 /* oxlint-disable react/no-unstable-nested-components -- Comment heads and avatars are render callbacks supplied to the activity threads. */
 import { FavoriteButton } from "@/client/features/navigation/favorite-button";
 import {
-  lazy,
   memo,
-  Suspense,
   useEffect,
   useMemo,
   useRef,
@@ -66,9 +64,8 @@ import { copyIssue, copyIssueLink } from "@/client/features/issue/issue-copy";
 import { PropertyTrigger } from "@/client/components/property-trigger";
 import { LabelChip } from "@/client/components/label-chip";
 import { Text } from "@/client/components/text";
-const ImageViewer = lazy(() =>
-  import("@/client/features/media/image-viewer").then((module) => ({ default: module.ImageViewer })),
-);
+// Loaded with the page, as Linear's preview (PBe) is: a lazy viewer suspends, and React's Suspense throttle holds it ~300ms (BJ-233).
+import { ImageViewer } from "@/client/features/media/image-viewer";
 
 const related = (target: Issue) => ({ board: target.board, selected: target.key, panel: true, view: get().view });
 
@@ -916,17 +913,15 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
   return (
     <section className="issue-activity mt-4 border-t border-line pt-[18px]">
       {viewing && (
-        <Suspense fallback={null}>
-          <ImageViewer
-            file={viewing.file}
-            original={viewing.file}
-            external={viewing.external}
-            editable
-            readReason=""
-            issueKey={issue.key}
-            close={() => setViewing(undefined)}
-          />
-        </Suspense>
+        <ImageViewer
+          file={viewing.file}
+          original={viewing.file}
+          external={viewing.external}
+          editable
+          readReason=""
+          issueKey={issue.key}
+          close={() => setViewing(undefined)}
+        />
       )}
       <div className="mb-[14px] flex h-8 items-center gap-3">
         <Text as="h3" variant="regularPlus" className="mr-auto">

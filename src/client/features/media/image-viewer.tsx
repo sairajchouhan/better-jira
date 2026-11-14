@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 import type { Attachment } from "@/shared/attachment-media";
-import { copyMediaImage } from "./image-media";
+import { copyMediaImage } from "./image-blob";
 import { Icon } from "@/client/components/icons";
 import { ImageCropEditor } from "./image-crop";
 

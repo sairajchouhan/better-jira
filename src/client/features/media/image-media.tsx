@@ -1,59 +1,19 @@
-import { type ImageCrop } from "@/shared/issue-model";
 import { IconButton } from "@/client/components/button";
 import { notifyMedia } from "./media-toast";
-import { LoadingState } from "@/client/components/empty-state";
 /* oxlint-disable react/immutability -- Session callbacks and mutable imperative models are intentionally owned outside React state. */
 /* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import type { Attachment } from "@/shared/attachment-media";
 import { Icon } from "@/client/components/icons";
 import { ME, useStore } from "@/client/state/store";
 import { actions, saveCrop } from "@/client/state/issue-actions";
 import { ImageThread, type ImageThreadDraft } from "./image-thread";
+// In the same chunk, as Linear's preview (PBe) is in its startup bundle: a lazy one suspends, and React holds a suspended
+// tree's fallback for its 300ms throttle before the preview can show (BJ-233).
+import { ImageViewer } from "./image-viewer";
+import { copyMediaImage, cropImage, croppedFile, imageBlob } from "./image-blob";
 
-const Viewer = lazy(() =>
-  import("./image-viewer").then((module) => ({ default: module.ImageViewer })),
-);
-export async function imageBlob(url: string, crop?: ImageCrop, signal?: AbortSignal) {
-  const response = await fetch(url, {
-    credentials: url.startsWith("/api/") ? "same-origin" : "omit",
-    referrerPolicy: "no-referrer",
-    signal,
-  });
-  if (!response.ok) throw new Error("Could not read the image");
-  const bitmap = await createImageBitmap(await response.blob());
-  try {
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(bitmap.width * (crop?.width ?? 1)));
-    canvas.height = Math.max(1, Math.round(bitmap.height * (crop?.height ?? 1)));
-    canvas
-      .getContext("2d")!
-      .drawImage(
-        bitmap,
-        (crop?.x ?? 0) * bitmap.width,
-        (crop?.y ?? 0) * bitmap.height,
-        bitmap.width * (crop?.width ?? 1),
-        bitmap.height * (crop?.height ?? 1),
-        0,
-        0,
-        canvas.width,
-        canvas.height,
-      );
-    const blob = await new Promise<Blob>((resolve, reject) =>
-      canvas.toBlob(
-        (blob) => (blob ? resolve(blob) : reject(new Error("Could not copy image"))),
-        "image/png",
-      ),
-    );
-    return blob;
-  } finally {
-    bitmap.close();
-  }
-}
-export async function copyMediaImage(url: string) {
-  await navigator.clipboard.write([new ClipboardItem({ "image/png": await imageBlob(url) })]);
-}
 export function ImageMedia({
   file,
   external,
@@ -81,7 +41,7 @@ export function ImageMedia({
     readProbe.current = controller;
     setReadAccess("checking");
     const timer = setTimeout(() => controller.abort(), 5000);
-    void imageBlob(file.url, undefined, controller.signal)
+    void imageBlob(file.url, controller.signal)
       .then(() => setReadAccess("allowed"))
       .catch(() => {
         if (root.current) setReadAccess("denied");
@@ -105,7 +65,7 @@ export function ImageMedia({
       url: string | undefined;
     setDisplayURL(file.url);
     if (edit?.crop)
-      void imageBlob(file.url, edit.crop)
+      void cropImage(file.url, edit.crop)
         .then((blob) => {
           url = URL.createObjectURL(blob);
           if (live) setDisplayURL(url);
@@ -262,40 +222,30 @@ export function ImageMedia({
         />
       )}
       {open && (
-        <Suspense fallback={<LoadingState>Opening preview…</LoadingState>}>
-          <Viewer
-            issueKey={issueKey}
-            editable={editable}
-            readReason={readReason}
-            file={displayFile}
-            original={file}
-            crop={edit?.crop}
-            startCrop={mode === "crop"}
-            onCrop={
-              issueKey && editable
-                ? async (crop) => {
-                    const blob = await imageBlob(file.url, crop);
-                    await saveCrop(
-                      issueKey,
-                      id,
-                      crop,
-                      new File([blob], `${file.name.replace(/\.[^.]+$/, "")}-cropped.png`, {
-                        type: "image/png",
-                      }),
-                    );
-                  }
-                : undefined
-            }
-            external={external}
-            close={() => {
-              setSelected(true);
-              setOpen(false);
-              requestAnimationFrame(() => {
-                if (!document.querySelector("[cmdk-input]")) trigger.current?.focus();
-              });
-            }}
-          />
-        </Suspense>
+        <ImageViewer
+          issueKey={issueKey}
+          editable={editable}
+          readReason={readReason}
+          file={displayFile}
+          original={file}
+          crop={edit?.crop}
+          startCrop={mode === "crop"}
+          onCrop={
+            issueKey && editable
+              ? async (crop) => {
+                  await saveCrop(issueKey, id, crop, croppedFile(await cropImage(file.url, crop), file.name));
+                }
+              : undefined
+          }
+          external={external}
+          close={() => {
+            setSelected(true);
+            setOpen(false);
+            requestAnimationFrame(() => {
+              if (!document.querySelector("[cmdk-input]")) trigger.current?.focus();
+            });
+          }}
+        />
       )}
     </div>
   );
