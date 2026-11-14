@@ -1,4 +1,4 @@
-import type { ComponentProps } from "react";
+import type { ComponentProps, CSSProperties } from "react";
 import "./control-tokens.css";
 import "./text.css";
 
@@ -23,7 +23,8 @@ export type TextVariant = keyof typeof TEXT;
 
 /**
  * Typography from Linear's table. `color` maps labelTitle/Base/Muted/Faint onto --fg…--fg-4; `wrap="truncate"` is
- * Linear's `truncate` (`pretty` its `wrap: "pretty"`), `numeric="tabular"` its `tabularNums`.
+ * Linear's `truncate` (`pretty` its `wrap: "pretty"`), `numeric="tabular"` its `tabularNums`. `lines` is Linear's numeric
+ * `truncate` (`truncateMultiline(n)`): at most that many lines, the last one ending in an ellipsis.
  */
 export function Text({
   as = "span",
@@ -32,7 +33,9 @@ export function Text({
   align = "left",
   wrap = "wrap",
   numeric = "proportional",
+  lines,
   className = "",
+  style,
   ...props
 }: {
   as?: "span" | "p" | "div" | "h1" | "h2" | "h3" | "label";
@@ -41,6 +44,7 @@ export function Text({
   align?: "left" | "center" | "right";
   wrap?: "wrap" | "nowrap" | "truncate" | "pretty";
   numeric?: "proportional" | "tabular";
+  lines?: number;
 } & ComponentProps<"span">) {
   // One element type for typing; the rendered tag is `as`.
   const Tag = as as "span";
@@ -51,7 +55,9 @@ export function Text({
       data-align={align}
       data-wrap={wrap}
       data-numeric={numeric}
+      data-lines={lines}
       className={`ui-text ${className}`}
+      style={lines ? ({ ...style, "--lines": lines } as CSSProperties) : style}
       {...props}
     />
   );

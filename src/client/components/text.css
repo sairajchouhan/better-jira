@@ -34,5 +34,7 @@
   .ui-text[data-wrap="nowrap"] { white-space: nowrap; }
   .ui-text[data-wrap="truncate"] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ui-text[data-wrap="pretty"] { text-wrap: pretty; }
+  /* truncateMultiline: Linear's -webkit-box clamp, `--lines` lines long. */
+  .ui-text[data-lines] { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--lines); overflow: hidden; overflow-wrap: anywhere; }
   .ui-text[data-numeric="tabular"] { font-variant-numeric: tabular-nums; }
 }
