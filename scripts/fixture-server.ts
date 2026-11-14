@@ -895,6 +895,29 @@ async function handle(req: Request) {
   }
   if (path === "/__fixture" && req.method === "GET")
     return Response.json({ requests, rich, writes });
+  // A new notification lands in Jira's bell as its issue's group head, and the server tells open tabs, as its poll does.
+  if (path === "/__fixture/inbox" && req.method === "POST") {
+    const n: {
+      n: number;
+      key: string;
+      title: string;
+      type?: string;
+      message: string;
+      category?: "direct" | "watching";
+      read?: boolean;
+      /** Who acted, when not the message's first word. */
+      actor?: string;
+      comment?: string;
+      commentId?: string;
+    } = await req.json();
+    let node = notification(n.n, n.key, n.title, n.type ?? "updated", n.message, n.category ?? "direct", n.read ?? false, 0, n.comment);
+    if (n.commentId) node = onComment(node, n.commentId);
+    if (n.actor) node.headNotification.content.actor.displayName = n.actor;
+    inbox.nodes = [node, ...inbox.nodes.filter((g) => g.groupId !== node.groupId)];
+    if (!n.read) inbox.unseen += 1;
+    for (const listener of eventListeners) listener.enqueue(new TextEncoder().encode("data: inbox\n\n"));
+    return Response.json({ ok: true });
+  }
   if (path === "/api/inbox") return inboxRoute(req, url);
   if (path === "/api/inbox/group") {
     const node = inbox.nodes.find((n) => n.groupId === url.searchParams.get("id"));
@@ -1053,6 +1076,8 @@ async function splitFixture(req: Request) {
     ? new Response(file, { headers: { "Content-Type": file.type } })
     : new Response(null, { status: 404 });
 }
+/** Open event streams, told "inbox" when `/__fixture/inbox` adds a notification. */
+const eventListeners = new Set<ReadableStreamDefaultController>();
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: Number(process.env.FIXTURE_PORT ?? 3001),
@@ -1062,10 +1087,16 @@ const server = Bun.serve({
     "/api/views/:id": (req) => views.handle(req, "fixture", req.params.id),
     "/api/events": (req) => {
       server.timeout(req, 0);
+      let listener: ReadableStreamDefaultController;
       return new Response(
         new ReadableStream({
           start(c) {
+            listener = c;
+            eventListeners.add(c);
             c.enqueue(new TextEncoder().encode(": open\n\n"));
+          },
+          cancel() {
+            eventListeners.delete(listener);
           },
         }),
         { headers: { "Content-Type": "text/event-stream" } },
@@ -1075,6 +1106,7 @@ const server = Bun.serve({
     "/__split-media-assets/*": splitFixture,
     "/api/*": handle,
     "/__fixture": handle,
+    "/__fixture/inbox": handle,
     "/api/avatar": avatar,
     "/__avatar/alex.png": () => new Response(fixtureFile("media-image.png")),
     "/__link-icon.svg": () =>

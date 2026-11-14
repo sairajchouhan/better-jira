@@ -621,3 +621,124 @@ test("R3 G22 #29: outside the mirror, the pane's head comment card is three line
   expect(box.full).toBeGreaterThan(box.line * 3 + 1);
 });
 
+/** A notification arriving in Jira's bell; the server tells open tabs to refetch. */
+const arrive = (note: object) =>
+  fetch(`${fixture.url}__fixture/inbox`, { method: "POST", body: JSON.stringify(note) });
+/** Jira has the row read: the write lands after the row shows read here. */
+const jiraRead = (n: number) =>
+  `fetch('/api/inbox').then(r=>r.json()).then(d=>d.items.find(i=>i.id==='ari:cloud:jira:fixture:issue/${n}')?.unread===false)`;
+const jiraReads = async () =>
+  (await fixture.log()).requests.filter((r) => r.path === "/api/inbox" && r.method === "POST").length;
+
+test("B1 B6 B10: a row reads after 300 ms selected, opening an issue reads its notifications, and new ones notify the desktop", async ({
+  open,
+}) => {
+  await test.step("B1: a selected row reads after Linear's 300 ms; rows j passes over quickly stay unread", async () => {
+    const p = await fresh(open, {});
+    await p.waitFor(`${rows}.length === 7`);
+    await p.click(`[data-inbox-row*="issue/2"]`);
+    expect(await p.eval<string>(current)).toStartWith("Unread TEST-2");
+    await p.waitFor(`${current}.startsWith("Read TEST-2")`);
+    // j twice inside 300 ms: TEST-1 is passed over, TEST-3 is where the selection stops.
+    await p.page.keyboard.press("j");
+    await p.page.keyboard.press("j");
+    await p.waitFor(`${current}.startsWith("Read TEST-3")`);
+    expect(await p.eval<string[]>(rowText)).toContainEqual(expect.stringMatching(/^Unread TEST-1/));
+    expect(await jiraUnread(1)).toBe(true);
+    await p.waitFor(jiraRead(3));
+  });
+
+  // Linear reads only in a focused window; a headless page may not report focus.
+  const focused = `document.hasFocus=()=>true;`;
+  await test.step("B6: opening an issue from the board reads its notifications in Jira", async () => {
+    const p = await fresh(open, {}, "/board/1/all", { setup: focused });
+    await p.waitFor(`${badge} === "5"`);
+    await p.click('[data-key="TEST-3"]');
+    await p.waitFor(`${badge} === "4"`);
+    await p.waitFor(jiraRead(3));
+    // A link or the URL does the same: TEST-2's group has two notifications, neither about a comment.
+    await p.goto("/issue/TEST-2");
+    await p.waitFor(`${badge} === "3"`);
+    await p.waitFor(jiraRead(2));
+  });
+
+  await test.step("B6: a comment notification reads once its comment has been on screen for 1 s", async () => {
+    const p = await fresh(open, { threadedComments: true }, "/board/1/all", { setup: focused });
+    await p.waitFor(`${badge} === "5"`);
+    await arrive({ n: 5, key: "TEST-5", title: "Browser fixture 5", message: "Alex commented on a task", comment: "Thread root from Jira", commentId: "10100" });
+    await p.waitFor(`${badge} === "6"`);
+    const before = await jiraReads();
+    await p.click('[data-key="TEST-5"]');
+    await p.waitFor(`!!document.querySelector('[data-comment="10100"]')`);
+    // Opening the issue alone leaves it unread: its only notification is about a comment.
+    await sleep(300);
+    expect(await jiraReads()).toBe(before);
+    await p.eval(`document.querySelector('[data-comment="10100"]').scrollIntoView({block:"center"})`);
+    await p.waitFor(`${badge} === "5"`);
+    await p.waitFor(jiraRead(5));
+  });
+
+  await test.step("B6: the inbox's own pane follows the 300 ms rule, not the issue's", async () => {
+    const p = await fresh(open, {}, "?inbox=1", { setup: focused });
+    await p.waitFor(`${rows}.length === 7`);
+    await p.click(`[data-inbox-row*="issue/6"]`);
+    await p.waitFor(`${current}.startsWith("Read TEST-6")`);
+    await p.key("u");
+    await p.waitFor(`${current}.startsWith("Unread TEST-6")`);
+    // Marking it unread sticks, though its issue stays open beside the list.
+    await sleep(500);
+    expect(await p.eval<string>(current)).toStartWith("Unread TEST-6");
+  });
+
+  await test.step("B10: desktop notifications for new notifications, by category, never your own or read ones; a click opens the issue", async () => {
+    // The browser's Notification API, with permission granted on request; this tab isn't the one being looked at.
+    const setup = `window.__notes=[];window.Notification=class{static permission="default";static requestPermission(){Notification.permission="granted";return Promise.resolve("granted")}constructor(title,o){this.title=title;Object.assign(this,o);window.__notes.push(this)}close(){this.closed=true}};document.hasFocus=()=>false;`;
+    const p = await fresh(open, {}, "?inbox=1", { setup });
+    await p.waitFor(`${rows}.length === 7`);
+    await p.click(`[aria-label="Notification actions"]`);
+    await p.click(`[cmdk-item][data-value="Desktop notifications"]`);
+    await p.waitFor(`!!document.querySelector('[role=dialog][aria-label="Desktop notifications"]')`);
+    await p.eval(toggle("Enable desktop notifications"));
+    await p.waitFor(`Notification.permission === "granted"`);
+    // Linear's desktop defaults: every category on but reactions.
+    expect(
+      await p.eval(
+        `[...document.querySelectorAll('[role=dialog][aria-label="Desktop notifications"] label')].map(l=>l.textContent.trim()+":"+l.querySelector('input').checked)`,
+      ),
+    ).toEqual([
+      "Enable desktop notifications:true",
+      "Assignments:true",
+      "Status changes:true",
+      "Comments and replies:true",
+      "Mentions:true",
+      "Reactions:false",
+      "Subscriptions:true",
+    ]);
+    await p.key("Escape");
+    const top = (key: string) => `(${rows}[0]?.getAttribute('aria-label') ?? '').includes(${JSON.stringify(key)})`;
+
+    await arrive({ n: 6, key: "TEST-6", title: "Browser fixture 6", type: "mentioned", message: "Alex mentioned you in a comment", comment: "Over to you" });
+    await p.waitFor(`window.__notes.length === 1`);
+    expect(await p.eval(`[__notes[0].title, __notes[0].body, __notes[0].tag]`)).toEqual([
+      "TEST-6 Browser fixture 6",
+      expect.stringContaining("Alex"),
+      "ari:cloud:jira:fixture:issue/6",
+    ]);
+
+    // Your own action, a reaction (off by default) and a notification already read stay quiet.
+    await arrive({ n: 3, key: "TEST-3", title: "Browser fixture 3", message: "Audit user updated a task", actor: "Audit user" });
+    await p.waitFor(top("TEST-3"));
+    await arrive({ n: 5, key: "TEST-5", title: "Browser fixture 5", message: "Alex reacted to your comment" });
+    await p.waitFor(top("TEST-5"));
+    await arrive({ n: 4, key: "TEST-4", title: "Browser fixture 4", message: "Sam updated a task", read: true });
+    await p.waitFor(top("TEST-4"));
+    await sleep(200);
+    expect(await p.eval(`window.__notes.length`)).toBe(1);
+
+    // Clicking the notification focuses the tab and opens its issue.
+    await p.eval(`__notes[0].onclick(new Event("click"))`);
+    await p.waitFor(
+      `__notes[0].closed && !document.querySelector('[data-inbox-row]') && document.querySelector('.issue-detail')?.innerText.includes('TEST-6')`,
+    );
+  });
+});
