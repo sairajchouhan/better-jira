@@ -1,7 +1,7 @@
 import { Button, ButtonLink, IconButton } from "@/client/components/button";
-import { Keycap, Shortcut } from "@/client/components/keycap";
+import { shortcutTitle } from "@/client/components/keycap";
 import { notifyMedia } from "./media-toast";
-import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 import { Debouncer } from "@tanstack/pacer";
 import type { Attachment } from "@/shared/attachment-media";
@@ -63,18 +63,6 @@ export function VideoPlayer({
   onSize: (size: { width: number; height: number }) => void;
   onSelect?: () => void;
 }) {
-  const tooltipId = useId();
-  const tip = (id: string, label: string, key?: string) => (
-    <span id={`${tooltipId}-${id}`} role="tooltip" className="video-tooltip">
-      {label}
-      {key &&
-        (key === "< >" ? (
-          <Shortcut keys="<" alternate=">" size="small" />
-        ) : (
-          <Keycap size="small">{key}</Keycap>
-        ))}
-    </span>
-  );
   const root = useRef<HTMLDivElement>(null),
     video = useRef<HTMLVideoElement>(null),
     expand = useRef<HTMLButtonElement>(null),
@@ -525,7 +513,7 @@ export function VideoPlayer({
             </div>
           </div>
         )}
-        {/* The toolbar draws its own `.video-tooltip`s, so its IconButtons take no title (tooltip={false}). */}
+        {/* Linear's player controls each sit in its Tooltip (`$`): the title and the key, as the app's tooltip shows every title. */}
         {!error && (
           <div
             className="video-controls"
@@ -538,8 +526,8 @@ export function VideoPlayer({
             <IconButton
               ref={playButton}
               label={`${playLabel} (keyboard shortcut k)`}
-              tooltip={false}
-              aria-describedby={`${tooltipId}-play`}
+              tooltip={playLabel}
+              shortcut="Space"
               disabled={!!error}
               onClick={play}
             >
@@ -562,17 +550,15 @@ export function VideoPlayer({
               ) : (
                 <Glyph name={playing ? "pause" : "play"} />
               )}
-              {tip("play", playLabel, "Space")}
             </IconButton>
             <div className="video-volume">
               <IconButton
                 label={`${muted ? "Unmute" : "Mute"} (keyboard shortcut m)`}
-                tooltip={false}
-                aria-describedby={`${tooltipId}-mute`}
+                tooltip={muted ? "Unmute" : "Mute"}
+                shortcut="M"
                 onClick={mute}
               >
                 <Glyph name={muted || volume === 0 ? "muted" : "volume"} />
-                {tip("mute", muted ? "Unmute" : "Mute", "M")}
               </IconButton>
               <div className="video-volume-popup">
                 <input
@@ -608,7 +594,7 @@ export function VideoPlayer({
             <div className="video-rate">
               <select
                 aria-label="Change playback rate (keyboard shortcut > or <)"
-                aria-describedby={`${tooltipId}-rate`}
+                title={shortcutTitle("Playback speed", "<", ">")}
                 value={rate}
                 onChange={(event) => changeRate(Number(event.target.value))}
               >
@@ -618,37 +604,32 @@ export function VideoPlayer({
                   </option>
                 ))}
               </select>
-              {tip("rate", "Change playback rate", "< >")}
             </div>
-            {/* Not ButtonLink: it carries the player's own tooltip, like the toolbar's IconButtons with tooltip={false}. */}
             <a
               aria-label="Download"
-              aria-describedby={`${tooltipId}-download`}
+              title="Download"
               href={downloadURL(file.url)}
               download={file.name}
             >
               <Icon name="download" size={16} />
-              {tip("download", "Download")}
             </a>
             <IconButton
               label="Picture-in-Picture (keyboard shortcut p)"
-              tooltip={false}
-              aria-describedby={`${tooltipId}-pip`}
+              tooltip="Picture-in-picture"
+              shortcut="P"
               disabled={!document.pictureInPictureEnabled || !duration}
               onClick={() => void picture()}
             >
               <Glyph name="pip" />
-              {tip("pip", "Picture-in-picture", "P")}
             </IconButton>
             <IconButton
               ref={expand}
               label={`${expanded ? "Exit full window" : "Full window"} (keyboard shortcut f)`}
-              tooltip={false}
-              aria-describedby={`${tooltipId}-expand`}
+              tooltip={expanded ? "Exit full window" : "Full window"}
+              shortcut="F"
               onClick={toggleExpanded}
             >
               <Icon name="expand" size={16} />
-              {tip("expand", expanded ? "Exit full window" : "Full window", "F")}
             </IconButton>
           </div>
         )}

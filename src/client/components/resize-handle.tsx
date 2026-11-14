@@ -6,9 +6,12 @@ import {
   type CSSProperties,
   type MouseEvent,
   type ReactNode,
+  type RefObject,
   type TouchEvent as ReactTouchEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import { Tooltip, useTooltip } from "./tooltip";
+import { TOOLTIP_TIMING } from "./tooltip-rules";
 import "./resize-handle.css";
 
 /** Which way the resized side grows as the pointer moves right: a panel on the right edge grows `left`. */
@@ -147,42 +150,70 @@ function useDragCursor(dragging: boolean) {
   }, [dragging]);
 }
 
-/** Linear's tooltip delay over a resize handle (`B_`'s 450ms hover timer). */
-const TOOLTIP_DELAY = 450;
+/** The edge tooltip's gap: Linear's `V_.tooltip` sits 16px from the handle's near edge on the panel's outer side, and the anchor
+ *  spans the 7px handle, so the surface is 9px off it. */
+const EDGE_TOOLTIP_OFFSET = 16 - 7;
+/** `B_`: the tooltip's top is the pointer's, kept 36px inside the window (`clamp(y - top, 36, innerHeight - 36)`). */
+const EDGE_TOOLTIP_INSET = 36;
 
 /**
  * Linear's vertical resize handle (`B_`): a 7px col-resize strip whose hairline track fades in on hover (.1s delay, .25s)
  * and stays while dragging, with a brighter segment that follows the pointer. During a drag a fixed full-window layer
- * keeps the pointer off iframes and text. After 450ms of hover `tooltip` shows beside the pointer, never while dragging.
- * Place it with `style` (the panel's edge sits 3px into it).
+ * keeps the pointer off iframes and text. Its `tooltip` is the app's one tooltip in its edge form: 450ms after the pointer
+ * enters (`B_`'s one timer), beside the handle at the pointer's height, hidden by a press. Place it with `style` (the
+ * panel's edge sits 3px into it).
  */
 export function ResizeHandle({
   growDirection,
-  dragging,
-  onMouseDown,
-  onTouchStart,
-  onDoubleClick,
   tooltip,
-  style,
-  className = "",
+  ...strip
 }: {
   growDirection: GrowDirection;
   dragging: boolean;
   onMouseDown: (event: MouseEvent) => void;
   onTouchStart: (event: ReactTouchEvent) => void;
   onDoubleClick?: () => void;
-  tooltip?: ReactNode;
+  tooltip: ReactNode;
   style?: CSSProperties;
   className?: string;
 }) {
+  return (
+    <Tooltip.Root timing={TOOLTIP_TIMING.edge}>
+      <HandleStrip {...strip} />
+      <Tooltip.Surface
+        placement={growDirection === "left" ? "left" : "right"}
+        fallbacks={[]}
+        offset={EDGE_TOOLTIP_OFFSET}
+        className="app-tooltip resize-tooltip"
+      >
+        {tooltip}
+      </Tooltip.Surface>
+    </Tooltip.Root>
+  );
+}
+
+/** The strip itself, reporting the pointer to its tooltip. An invisible anchor across the strip sits at the pointer's height
+ *  until the tooltip opens, so it opens there and stays put. */
+function HandleStrip({
+  dragging,
+  onMouseDown,
+  onTouchStart,
+  onDoubleClick,
+  style,
+  className = "",
+}: {
+  dragging: boolean;
+  onMouseDown: (event: MouseEvent) => void;
+  onTouchStart: (event: ReactTouchEvent) => void;
+  onDoubleClick?: () => void;
+  style?: CSSProperties;
+  className?: string;
+}) {
+  const { isOpen, triggerRef, actions } = useTooltip();
   const handle = useRef<HTMLDivElement>(null);
   const track = useRef<HTMLDivElement>(null);
   const indicator = useRef<HTMLDivElement>(null);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const pointerY = useRef(0);
-  const [tipTop, setTipTop] = useState<number>();
   useDragCursor(dragging);
-  useEffect(() => () => clearTimeout(timer.current), []);
 
   // `NTe`: the indicator is centred on the pointer inside the track.
   const follow = (clientY: number) => {
@@ -193,36 +224,37 @@ export function ResizeHandle({
     i.style.transform = `translate3d(0, ${Math.max(0, Math.min(clientY - top, height)) - height / 2}px, 0)`;
   };
   const onMove = (event: MouseEvent) => {
-    pointerY.current = event.clientY;
     follow(event.clientY);
-  };
-  const onEnter = (event: MouseEvent) => {
-    onMove(event);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      const node = handle.current;
-      if (node) setTipTop(Math.max(36, Math.min(pointerY.current - node.getBoundingClientRect().top, innerHeight - 36)));
-    }, TOOLTIP_DELAY);
-  };
-  const onLeave = () => {
-    clearTimeout(timer.current);
-    setTipTop(undefined);
+    const anchor = triggerRef.current,
+      node = handle.current;
+    if (anchor && node && !isOpen) {
+      const top = event.clientY - node.getBoundingClientRect().top;
+      anchor.style.top = `${Math.max(EDGE_TOOLTIP_INSET, Math.min(top, innerHeight - EDGE_TOOLTIP_INSET))}px`;
+    }
+    actions.move();
   };
 
   return (
     <>
-      {dragging ? createPortal(<div className="resize-drag-layer" onMouseMove={onMove} />, document.body) : null}
+      {dragging ? createPortal(<div className="resize-drag-layer" onMouseMove={(event) => follow(event.clientY)} />, document.body) : null}
       <div
         ref={handle}
         className={`resize-handle ${className}`}
         data-dragging={dragging || undefined}
         style={style}
-        onMouseEnter={onEnter}
+        onMouseEnter={(event) => {
+          onMove(event);
+          if (!dragging) actions.enter();
+        }}
         onMouseMove={onMove}
-        onMouseLeave={onLeave}
-        onMouseDown={onMouseDown}
+        onMouseLeave={() => actions.leave()}
+        onMouseDown={(event) => {
+          actions.close();
+          onMouseDown(event);
+        }}
         onDoubleClick={onDoubleClick}
         onTouchStart={(event) => {
+          actions.close();
           indicator.current?.style.removeProperty("transform");
           onTouchStart(event);
         }}
@@ -230,15 +262,7 @@ export function ResizeHandle({
         <div ref={track} className="resize-track" aria-hidden="true">
           <div ref={indicator} className="resize-indicator" />
         </div>
-        {tooltip && tipTop !== undefined && !dragging ? (
-          <div
-            role="tooltip"
-            className={`resize-tooltip app-tooltip ${growDirection === "left" ? "right-4" : "left-4"}`}
-            style={{ top: tipTop }}
-          >
-            {tooltip}
-          </div>
-        ) : null}
+        <span ref={triggerRef as RefObject<HTMLSpanElement | null>} className="resize-tooltip-anchor" aria-hidden="true" />
       </div>
     </>
   );

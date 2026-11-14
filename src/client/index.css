@@ -1545,44 +1545,6 @@ li[data-done="true"] > .todo-content {
 .hover-card[data-placement="right"] > .hover-card-zone {
   padding-inline: 4px;
 }
-.video-tooltip {
-  position: absolute;
-  z-index: 5;
-  top: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: max-content;
-  max-width: calc(100vw - 24px);
-  border: 1px solid rgb(255 255 255 / 0.15);
-  border-radius: 8px;
-  background: #262627;
-  color: #ddd;
-  padding: 4px 8px;
-  font:
-    12px/20px Inter,
-    sans-serif;
-  box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition:
-    opacity 100ms,
-    visibility 100ms;
-}
-.video-controls a:hover > .video-tooltip,
-.video-rate:hover > .video-tooltip {
-  opacity: 1;
-  visibility: visible;
-  transition-delay: 400ms;
-}
-.video-controls a:focus-visible > .video-tooltip,
-.video-rate:has(:focus-visible) > .video-tooltip {
-  opacity: 1;
-  visibility: visible;
-}
 .video-controls input[type="range"] {
   display: block;
   appearance: none;
@@ -2812,15 +2774,6 @@ li[data-done="true"] > .todo-content {
 .comment-thread:focus-within .media-comment-action,
 .media-comment-action[aria-expanded="true"] {
   opacity: 1;
-}
-.video-controls .ui-button:hover .video-tooltip {
-  opacity: 1;
-  visibility: visible;
-  transition-delay: 400ms;
-}
-.video-controls .ui-button:focus-visible .video-tooltip {
-  opacity: 1;
-  visibility: visible;
 }
 /* Jira's embedCard as Linear's embed frame: 100% wide, 400px tall (startup-entry `embed` node). Editor and read-only view. */
 .rich-embed {

@@ -77,6 +77,16 @@ test("side panel resizes from its left edge like Linear's board split panel", as
     await sleep(250);
     expect(await app.eval(`!!document.querySelector('.resize-tooltip')`)).toBe(false);
     await app.waitFor(`document.querySelector('.resize-tooltip')?.textContent==='Drag to resizeClick to collapse'`);
+    // The app's one tooltip in its edge form (Linear's `B_`): left of the handle with its right edge 16px in from the handle's
+    // right, centred on the pointer's height, and the only tooltip open.
+    const r = await app.rect(".resize-handle");
+    const tip = await app.rect(".resize-tooltip");
+    expect(Math.round(r.x + r.width - 16 - (tip.x + tip.width))).toBe(0);
+    expect(Math.abs(tip.y + tip.height / 2 - y)).toBeLessThanOrEqual(1);
+    expect(await app.eval(`document.querySelectorAll('[role=tooltip]').length`)).toBe(1);
+    // Leaving hides it at once.
+    await app.page.mouse.move(x - 200, y);
+    await app.waitFor(`!document.querySelector('.resize-tooltip')`);
   });
 
   await test.step("a double click does nothing; a single click closes the panel", async () => {

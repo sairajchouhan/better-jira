@@ -83,18 +83,21 @@ test("inline video player: Linear keys, volume, tooltips, revealed controls, dow
     expect(await page.eval(`${video}.volume`)).toBe(before);
     expect(await page.eval(`window.rateArrowPrevented`)).toBe(false);
   });
-  await test.step("video shortcut tooltips are styled and name the observed Space binding", async () => {
-    await page.hover(`${root} [aria-label="Play (keyboard shortcut k)"]`);
-    const tooltip = `document.querySelector('${root} [aria-label="Play (keyboard shortcut k)"] [role=tooltip]')`;
-    await page.waitFor(
-      `getComputedStyle(${tooltip}).visibility==='visible'&&getComputedStyle(${tooltip}).opacity==='1'`,
-    );
-    expect(await page.eval(`${tooltip}.textContent`)).toBe("PlaySpace");
+  await test.step("video controls show the app's one tooltip (Linear's `$` title and key), not one of their own", async () => {
+    const play = `${root} [aria-label="Play (keyboard shortcut k)"]`;
+    await page.hover(play);
+    await page.waitFor(`document.querySelector('.app-tooltip')?.textContent==='PlaySpace'`, 2000);
     expect(
       await page.eval(
-        `document.querySelector('${root} [aria-label="Play (keyboard shortcut k)"]').hasAttribute('title')`,
+        `(()=>{const b=document.querySelector('${play}'),t=document.querySelector('.app-tooltip').getBoundingClientRect(),r=b.getBoundingClientRect();return [b.hasAttribute('title'),b.dataset.title,b.querySelectorAll('[role=tooltip]').length,document.querySelectorAll('[role=tooltip]').length,Math.round(t.top-r.bottom)]})()`,
       ),
-    ).toBe(false);
+    ).toEqual([false, "Play (Space)", 0, 1, 8]);
+    // Linear's speed control is "Playback speed" with < and > (OWe).
+    await page.hover(`${root} select`);
+    await page.waitFor(`document.querySelector('.app-tooltip')?.textContent==='Playback speed<>'`, 2000);
+    expect(await page.eval(`document.querySelectorAll('[role=tooltip]').length`)).toBe(1);
+    await page.hover(`${root} [aria-label="Download"]`);
+    await page.waitFor(`document.querySelector('.app-tooltip')?.textContent==='Download'`, 2000);
   });
   await test.step("keyboard focus arriving from outside or returning from full window stays visible while idle", async () => {
     await page.hover("#description video");

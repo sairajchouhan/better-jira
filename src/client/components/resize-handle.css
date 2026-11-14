@@ -76,16 +76,22 @@
     background-color: lch(100% 0 0 / 0.15);
   }
 }
-/* V_.tooltip: beside the pointer, centred on it, 4px radius, 16px off the handle on the panel's outer side. */
+/* V_.tooltip: a column, 4px apart, 4px radius; the app's tooltip surface places it (resize-handle.tsx). Its anchor spans the
+   handle at the pointer's height. */
 .resize-tooltip.app-tooltip {
-  position: absolute;
-  z-index: 60;
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
   border-radius: 4px;
-  transform: translateY(-50%);
   white-space: nowrap;
+}
+.resize-tooltip-anchor {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 0;
+  pointer-events: none;
 }
 /* The drag layer (`x_` portal): over everything, so iframes and hovers never take the pointer mid-drag. */
 .resize-drag-layer {
