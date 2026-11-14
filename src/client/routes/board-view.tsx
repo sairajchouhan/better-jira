@@ -500,7 +500,10 @@ function GroupHeading({
 }
 
 const rowKey = (row: { issue: Issue }) => row.issue.key;
+const rowText = (row: { issue: Issue }) => issueText(row.issue);
 const issueKey = (issue: Issue) => issue.key;
+/** A row's accessible name: the issue's key and summary. */
+const issueText = (issue: Issue) => `${issue.key} ${issue.summary}`;
 
 function IssueList({
   label,
@@ -518,8 +521,8 @@ function IssueList({
   const rows = useMemo(() => listRows(issues, universe, display.subIssues ? display.nested : "none"), [issues, universe, display.subIssues, display.nested]);
   // A group's "Select all" shows on its rows as the selection does.
   const columnSelection = useStore((s) => s.columnSelection);
-  return <VirtualGridList aria-label={label} items={rows} itemKey={rowKey} selected={selected} selectedKeys={columnSelection} estimate={44} onRowKeyDown={issueKeys}>
-    {({ issue, depth }) => <IssueRow issue={issue} selected={selected === issue.key} display={display} depth={depth} />}
+  return <VirtualGridList aria-label={label} items={rows} itemKey={rowKey} itemText={rowText} selected={selected} selectedKeys={columnSelection} estimate={44} onRowKeyDown={issueKeys}>
+    {({ issue, depth }) => <IssueRow issue={issue} display={display} depth={depth} />}
   </VirtualGridList>;
 }
 
@@ -614,6 +617,8 @@ function ColumnView({
           aria-label={label}
           items={issues}
           itemKey={issueKey}
+          itemText={issueText}
+          rowClassName="px-px pb-2"
           selected={selected}
           selectedKeys={columnSelection}
           estimate={124}
@@ -621,7 +626,7 @@ function ColumnView({
           onRowKeyDown={issueKeys}
           className="flex-1"
         >
-          {(issue) => <BoardCard issue={issue} selected={issue.key === selected} display={display} />}
+          {(issue) => <BoardCard issue={issue} display={display} />}
         </VirtualGridList>
         <AddIssueSlot onClick={create} />
       </div>
@@ -651,27 +656,21 @@ function issueKeys(key: string, event: KeyboardEvent) {
   else togglePeek(key);
 }
 
-/** What a row and a card share: the list row (React Aria's, the focus and drag target, named by the issue) around the clickable
- *  surface with selection scrolling, the menu highlight and the pointer behaviour. The row's `data-selected` (the j/k or column
- *  selection), `data-menu` (its right-click menu is open) and `data-focus-visible` style the surface (`in-data-*`). */
+/** What a row and a card share: the clickable surface inside the list's row, with the menu highlight and the pointer behaviour.
+ *  The row (VirtualGridList's, named by the issue) carries `data-selected` (the j/k or column selection) and
+ *  `data-focus-visible`, which style the surface (`in-data-*`); the surface carries `data-menu` while its right-click menu is
+ *  open. The list scrolls the selection into view. */
 function IssueTarget({
   issue,
-  selected,
-  frame,
   className,
   style,
   children,
 }: {
   issue: Issue;
-  selected: boolean;
-  /** The row's own classes, around the surface (a card's 8px gap). */
-  frame?: string;
   className: string;
   style?: CSSProperties;
   children: ReactNode;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => void (selected && ref.current?.scrollIntoView({ block: "nearest" })), [selected]);
   // A right-clicked card is highlighted only while its menu is open, as Linear does; it never becomes the selection.
   const menu = useStore((s) => !!s.overlay && s.target === issue.key);
   // A property control inside (a badge, a status icon, the avatar, a link) and the menu it opens, which renders inside the card,
@@ -679,39 +678,37 @@ function IssueTarget({
   const own = (e: SyntheticEvent) =>
     e.currentTarget.contains(e.target as Node) && !(e.target as Element).closest('button, a, [role="dialog"]');
   return (
-    <VirtualGridList.Item id={issue.key} textValue={`${issue.key} ${issue.summary}`} data-menu={menu} className={frame}>
-      <div
-        ref={ref}
-        onPointerEnter={() => preloadOnHover({ selected: issue.key, panel: true })}
-        // Linear's focus follows the pointer as it moves (`onMouseMove`, not a card sliding under a still pointer), and an open
-        // peek shows the focused item.
-        onPointerMove={() => followPeek(issue.key)}
-        // Leaving a card never closes the peek: Linear skips its mouse-leave deactivate while a peek is mounted.
-        onPointerLeave={() => preloadOnHover(null)}
-        onClick={(e) =>
-          own(e) &&
-          timed(`open ${issue.key}`, () => {
-            set({ columnSelection: new Set() });
-            navigate({ selected: issue.key, panel: true });
-          })
-        }
-        // Linear's row menu: Issue options at the pointer, on this issue, without selecting it.
-        onContextMenu={(e) => {
-          if (!e.currentTarget.contains(e.target as Node)) return;
-          e.preventDefault();
-          ui.send({
-            type: "overlay.open",
-            overlay: "options",
-            target: issue.key,
-            point: { x: e.clientX, y: e.clientY },
-          });
-        }}
-        className={className}
-        style={style}
-      >
-        {children}
-      </div>
-    </VirtualGridList.Item>
+    <div
+      data-menu={menu || undefined}
+      onPointerEnter={() => preloadOnHover({ selected: issue.key, panel: true })}
+      // Linear's focus follows the pointer as it moves (`onMouseMove`, not a card sliding under a still pointer), and an open
+      // peek shows the focused item.
+      onPointerMove={() => followPeek(issue.key)}
+      // Leaving a card never closes the peek: Linear skips its mouse-leave deactivate while a peek is mounted.
+      onPointerLeave={() => preloadOnHover(null)}
+      onClick={(e) =>
+        own(e) &&
+        timed(`open ${issue.key}`, () => {
+          set({ columnSelection: new Set() });
+          navigate({ selected: issue.key, panel: true });
+        })
+      }
+      // Linear's row menu: Issue options at the pointer, on this issue, without selecting it.
+      onContextMenu={(e) => {
+        if (!e.currentTarget.contains(e.target as Node)) return;
+        e.preventDefault();
+        ui.send({
+          type: "overlay.open",
+          overlay: "options",
+          target: issue.key,
+          point: { x: e.clientX, y: e.clientY },
+        });
+      }}
+      className={className}
+      style={style}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -902,12 +899,10 @@ function IssueAssignee({ issue, className }: { issue: Issue; className?: string 
  *  20px per level. Its keyboard ring is drawn inside the row (outline-offset −1px), so the next row cannot cover its bottom edge. */
 const IssueRow = memo(function IssueRow({
   issue,
-  selected,
   display: d,
   depth,
 }: {
   issue: Issue;
-  selected: boolean;
   display: Display;
   depth: number;
 }) {
@@ -915,8 +910,7 @@ const IssueRow = memo(function IssueRow({
   return (
       <IssueTarget
         issue={issue}
-        selected={selected}
-        className="flex h-11 cursor-default items-center gap-3 border-b border-line px-5 -outline-offset-1 hover:bg-(--row-hover) in-data-menu:bg-(--row-hover) in-data-menu:shadow-[inset_2px_0_0_var(--accent)] in-data-selected:bg-(--row-hover) in-data-selected:shadow-[inset_2px_0_0_var(--accent)] in-data-focus-visible:outline-1 in-data-focus-visible:outline-accent in-data-focus-visible:outline-solid"
+        className="flex h-11 cursor-default items-center gap-3 border-b border-line px-5 -outline-offset-1 hover:bg-(--row-hover) data-menu:bg-(--row-hover) data-menu:shadow-[inset_2px_0_0_var(--accent)] in-data-selected:bg-(--row-hover) in-data-selected:shadow-[inset_2px_0_0_var(--accent)] in-data-focus-visible:outline-1 in-data-focus-visible:outline-accent in-data-focus-visible:outline-solid"
         style={depth ? { paddingLeft: 20 + depth * 20 } : undefined}
       >
         {show("priority") && (
@@ -953,13 +947,11 @@ const IssueRow = memo(function IssueRow({
  * keyboard-focused it keeps bgBase and draws a 1px accent outline 1px inside its edge, so no ancestor's overflow can clip it. The
  * wrapper's 0 1px 8px padding is Linear's.
  */
-const BoardCard = memo(function BoardCard({ issue, selected, display }: { issue: Issue; selected: boolean; display: Display }) {
+const BoardCard = memo(function BoardCard({ issue, display }: { issue: Issue; display: Display }) {
   return (
     <IssueTarget
       issue={issue}
-      selected={selected}
-      frame="px-px pb-2"
-      className="relative flex min-h-[42px] cursor-default flex-col rounded-lg bg-card p-2 shadow-(--card-shadow) -outline-offset-1 hover:bg-card-hover has-[[aria-expanded=true]]:bg-card-hover in-data-menu:bg-card-hover in-data-selected:bg-card in-data-selected:outline-1 in-data-selected:outline-accent in-data-selected:outline-solid in-data-focus-visible:outline-1 in-data-focus-visible:outline-accent in-data-focus-visible:outline-solid"
+      className="relative flex min-h-[42px] cursor-default flex-col rounded-lg bg-card p-2 shadow-(--card-shadow) -outline-offset-1 hover:bg-card-hover has-[[aria-expanded=true]]:bg-card-hover data-menu:bg-card-hover in-data-selected:bg-card in-data-selected:outline-1 in-data-selected:outline-accent in-data-selected:outline-solid in-data-focus-visible:outline-1 in-data-focus-visible:outline-accent in-data-focus-visible:outline-solid"
     >
       <CardContent issue={issue} display={display} />
     </IssueTarget>

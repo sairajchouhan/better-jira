@@ -1,6 +1,19 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { VirtualGridList, dragKeys, dropSpotAt, isShortcutKey, landsBefore, windowOf, type ListDrop } from "./virtual-grid-list";
+import {
+  VirtualGridList,
+  chosenKeys,
+  covers,
+  dragKeys,
+  dropSpotAt,
+  flowOf,
+  isShortcutKey,
+  landsBefore,
+  mountedIndices,
+  rangeFor,
+  windowOf,
+  type ListDrop,
+} from "./virtual-grid-list";
 
 // Three 100px cards, 8px apart in their rows' boxes: A 0–100, B 100–200, C 200–300.
 const rows = [
@@ -66,12 +79,8 @@ test("the window holds every item reaching into the viewport and no other", () =
 const items = ["A", "B", "C"];
 const render = (props: { selected: string | null; selectedKeys?: ReadonlySet<string>; drop?: ListDrop }) =>
   renderToStaticMarkup(
-    <VirtualGridList aria-label="Todo" items={items} itemKey={(key) => key} estimate={100} {...props}>
-      {(key) => (
-        <VirtualGridList.Item id={key} textValue={`${key} summary`}>
-          <div>{key}</div>
-        </VirtualGridList.Item>
-      )}
+    <VirtualGridList aria-label="Todo" items={items} itemKey={(key) => key} itemText={(key) => `${key} summary`} estimate={100} {...props}>
+      {(key) => <div>{key}</div>}
     </VirtualGridList>,
   );
 
@@ -104,4 +113,71 @@ test("the keys React Aria's grid would keep (arrows, ⌥ arrows, Home/End, Page 
   expect(key("A", { ctrlKey: true })).toBe(true);
   // Letters (j/k, issue shortcuts), Enter, Space and Escape reach the app untouched by React Aria already.
   for (const k of ["a", "j", "k", "Enter", " ", "Escape", "Tab"]) expect(key(k)).toBe(false);
+});
+
+// Fifty 100px cards: item i spans i*100 to (i+1)*100, 5,000px in all.
+const fifty = Array.from({ length: 51 }, (_, i) => i * 100);
+
+test("a scroll within the mounted range's 400–1200px band keeps the range, so the frame renders nothing (Linear's `wu`)", () => {
+  // Mounted 0–1500px; the viewport 100–600px still has 400px below it and no more than 1200px.
+  expect(rangeFor(fifty, [0, 15], { top: 100, bottom: 600 }, 0)).toEqual([0, 15]);
+  expect(rangeFor(fifty, [0, 15], { top: 300, bottom: 800 }, 100)).toEqual([0, 15]);
+  // Less than 400px left below the viewport: the range moves.
+  expect(rangeFor(fifty, [0, 15], { top: 1000, bottom: 1500 }, 900)).not.toEqual([0, 15]);
+  // More than 1200px mounted past the viewport: the range moves, so it never grows without bound.
+  expect(rangeFor(fifty, [0, 30], { top: 0, bottom: 500 }, 100)).not.toEqual([0, 30]);
+  // At the list's ends there is nothing more to cover.
+  expect(rangeFor(fifty, [41, 50], { top: 4500, bottom: 5000 }, 4400)).toEqual([41, 50]);
+});
+
+test("a new range overscans 400px behind the scroll and, ahead, the viewport or twice the step, at most 1200px", () => {
+  // First measure: 400px either side of a 500px viewport, ahead taking the viewport's height.
+  expect(rangeFor(fifty, null, { top: 0, bottom: 500 }, null)).toEqual(windowOf(fifty, -400, 1000));
+  // Scrolling down: 400px above, 500px below.
+  expect(rangeFor(fifty, null, { top: 2000, bottom: 2500 }, 1900)).toEqual(windowOf(fifty, 1600, 3000));
+  // Scrolling up: the long side is above.
+  expect(rangeFor(fifty, null, { top: 2000, bottom: 2500 }, 2100)).toEqual(windowOf(fifty, 1500, 2900));
+  // A fast fling reaches 1200px ahead and no further.
+  expect(rangeFor(fifty, null, { top: 2000, bottom: 2500 }, 1000)).toEqual(windowOf(fifty, 1600, 3700));
+  // A range from a longer list is clamped to the items there are.
+  expect(rangeFor(fifty, [40, 99], { top: 4500, bottom: 5000 }, 4400)).toEqual([40, 50]);
+});
+
+test("a range that leaves part of the viewport blank must move at once; one that covers it can wait", () => {
+  const ten = fifty.slice(0, 11);
+  expect(covers(ten, [0, 5], { top: 0, bottom: 500 })).toBe(true);
+  expect(covers(ten, [0, 5], { top: 0, bottom: 501 })).toBe(false);
+  expect(covers(ten, [2, 5], { top: 150, bottom: 400 })).toBe(false);
+  expect(covers(ten, null, { top: 0, bottom: 100 })).toBe(false);
+  // Nothing of the list in view (scrolled past, or above it): nothing to show.
+  expect(covers(ten, null, { top: 2000, bottom: 2500 })).toBe(true);
+  expect(covers(ten, [0, 0], { top: -600, bottom: -100 })).toBe(true);
+});
+
+test("mounted rows sit at their offsets in flow: each after the space of the rows above it left out", () => {
+  const offsets = [0, 100, 200, 300, 400, 500];
+  expect(flowOf(offsets, [1, 3])).toEqual({ rows: [{ index: 1, gap: 100 }, { index: 3, gap: 100 }], tail: 100 });
+  expect(flowOf(offsets, [0, 1, 2, 3, 4])).toEqual({ rows: [0, 1, 2, 3, 4].map((index) => ({ index, gap: 0 })), tail: 0 });
+  expect(flowOf(offsets, [])).toEqual({ rows: [], tail: 500 });
+});
+
+test("the selected, focused, dragged and drop-target rows render at their place in the list, outside the window too", () => {
+  expect(mountedIndices(2, 4, [7, 0, 3, -1, 7])).toEqual([0, 2, 3, 7]);
+  expect(mountedIndices(0, 0, [5, 1])).toEqual([1, 5]);
+  expect(mountedIndices(1, 3, [])).toEqual([1, 2]);
+});
+
+test("another list's selected item never changes this list's selected set, so its rows never re-render for it", () => {
+  const index = new Map([["A", 0], ["B", 1]]);
+  expect([...chosenKeys(undefined, "Z", index)]).toEqual([]);
+  expect([...chosenKeys(new Set(["B"]), "Z", index)]).toEqual(["B"]);
+  expect([...chosenKeys(new Set(["B"]), "A", index)].sort()).toEqual(["A", "B"]);
+  expect([...chosenKeys(undefined, null, index)]).toEqual([]);
+});
+
+test("a selected row outside the window renders after a spacer the height of the rows above it", () => {
+  const html = render({ selected: "C" });
+  expect(html).toMatch(/<div aria-hidden="true" role="presentation" class="ui-virtual-spacer" style="height:200px"><\/div><div data-key="C"[^>]*role="row"/);
+  expect(html.match(/role="row"/g)).toHaveLength(1);
+  expect(render({ selected: "A" })).toMatch(/data-key="A"[\s\S]*class="ui-virtual-spacer" style="height:200px"/);
 });

@@ -172,3 +172,64 @@ test("BJ-filter-speed: toggling a label in the Labels filter keeps its list, and
   await expect(sub).toBeHidden();
   await expect(app.page.locator('[aria-label="Add Filter…"]')).toBeFocused();
 });
+
+// React's DevTools hook, installed before the app: it counts React commits, so a scroll that renders shows up.
+const COUNT_COMMITS = `(() => { let n = 0; window.__REACT_DEVTOOLS_GLOBAL_HOOK__ = { isDisabled: false, supportsFiber: true, renderers: new Map(),
+  inject() { return 1; }, onCommitFiberRoot() { window.commits = ++n; }, onCommitFiberUnmount() {}, onPostCommitFiberRoot() {},
+  checkDCE() {}, onScheduleFiberRoot() {} }; })()`;
+
+test("BJ-board-scroll: a 1,100-issue board column scrolls without rendering on most frames, keeping its mounted cards", async ({ open }) => {
+  await fixture.reset({ bulk: 1100, bulkVariety: 60 });
+  const app = await open("", { setup: COUNT_COMMITS });
+  const column = app.page.locator("[data-board-column]").filter({ visible: true }).first();
+  await expect(column.locator("[role=row][data-key]").first()).toBeVisible();
+  const result = await column.locator(".board-column-body").evaluate(async (body) => {
+    const w = window as unknown as { commits?: number };
+    const raf = () => new Promise<number>(requestAnimationFrame);
+    // A card on screen before the scroll; tagged, so a re-mount (a new node) would drop the tag.
+    const kept = body.querySelector<HTMLElement>("[role=row][data-key]")!;
+    kept.dataset.tag = "kept";
+    const longFrames: number[] = [];
+    const observer = new PerformanceObserver((list) => { for (const e of list.getEntries()) longFrames.push(e.duration); });
+    observer.observe({ type: "long-animation-frame" });
+    await raf();
+    const before = w.commits ?? 0;
+    // A slow scroll first: 40px a frame stays within the first window, so the card on screen is still mounted.
+    for (let i = 0; i < 5; i++) { body.scrollTop += 40; await raf(); }
+    const stillMounted = kept.isConnected && kept.dataset.tag === "kept";
+    let rows = 0;
+    for (let i = 0; i < 120; i++) {
+      body.scrollTop += 120;
+      await raf();
+      rows = Math.max(rows, document.querySelectorAll("[role=row][data-key]").length);
+    }
+    await raf();
+    observer.disconnect();
+    return { commits: (w.commits ?? 0) - before, frames: 125, stillMounted, rows, long: longFrames.filter((d) => d > 100).length };
+  });
+  // Before (06e8b45): 2.83 commits a frame and 78–95 of 119 frames over 50ms; after: 0.42–0.49 commits a frame and 5–15.
+  // Each commit is a window move; a frame within the window renders nothing.
+  expect(result.commits / result.frames).toBeLessThan(0.8);
+  expect(result.stillMounted).toBe(true);
+  // The whole board's mounted rows stay a window's worth, every column together.
+  expect(result.rows).toBeLessThan(150);
+  expect(result.long).toBeLessThan(20);
+});
+
+test("BJ-board-scroll: the selection moving between columns re-renders neither column's other cards", async ({ open }) => {
+  await fixture.reset({ bulk: 1100, bulkVariety: 60 });
+  const app = await open("", { setup: COUNT_COMMITS });
+  const columns = app.page.locator("[data-board-column]").filter({ visible: true });
+  await columns.first().locator("[role=row][data-key]").first().click({ position: { x: 10, y: 10 } });
+  await app.key("Escape");
+  const commitsOf = () => app.page.evaluate(() => (window as unknown as { commits?: number }).commits ?? 0);
+  // j/k moves the selection one card: one commit for it, never one per column of rows told about another column's key.
+  const start = await commitsOf();
+  for (let press = 0; press < 10; press++) await app.key("j");
+  await expect(columns.first().locator('[data-selected="true"]')).toBeInViewport();
+  expect((await commitsOf()) - start).toBeLessThan(40);
+  // ← and → cross columns, and the selection is still shown and in view.
+  await app.key("ArrowRight");
+  await expect(columns.nth(1).locator('[data-selected="true"]')).toBeInViewport();
+  expect(await columns.first().locator('[data-selected="true"]').count()).toBe(0);
+});
