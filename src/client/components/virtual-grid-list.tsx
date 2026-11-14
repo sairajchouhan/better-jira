@@ -33,7 +33,7 @@ import "./virtual-grid-list.css";
  * scrolling, menu anchors, focus and an in-flight drag keep their element.
  *
  * Moving between rows is the app's, not React Aria's: its ↑/↓/←/→ (and j/k) shortcuts move the selection, which is Linear's
- * focused item, so the keys React Aria's grid would take for its own focus pass to them (`passToShortcuts`). The selection
+ * focused item, so the keys React Aria's grid would take for its own focus pass to them (`passRowKeysToShortcuts`). The selection
  * shows through React Aria's `data-selected`/`aria-selected` on the row, and a drag of a selected row carries every selected
  * row of its list, as Linear's board does.
  */
@@ -41,7 +41,23 @@ import "./virtual-grid-list.css";
 /** Keys React Aria's grid moves its own focus with (and stops); the app's shortcuts answer them instead. */
 const NAVIGATION = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"]);
 
-/** Hands a key a row received to the document's shortcut listeners, which React Aria's handlers would stop it reaching. */
+/**
+ * For a React Aria grid's `onKeyDownCapture`: a navigation key pressed on a row, or on a control in it, goes to the app's
+ * shortcuts (the document's listeners) instead of React Aria, which would move its own focus and stop the key there. Keys
+ * in a field, menu or dialog inside the row stay theirs.
+ */
+export function passRowKeysToShortcuts(event: KeyboardEvent) {
+  const target = event.target as HTMLElement;
+  if (!target.closest("[role=row]") || target.closest('input, textarea, [contenteditable="true"], [role=dialog], [role=menu], [role=listbox]'))
+    return;
+  if (isShortcutKey(event)) passToShortcuts(event);
+}
+
+/** A key React Aria's grid takes for its own focus or selection: the arrows, Home/End, Page Up/Down and ⌘A/Ctrl+A. */
+export const isShortcutKey = (event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey">) =>
+  NAVIGATION.has(event.key) || ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a");
+
+/** Hands a key to the document's shortcut listeners, which React Aria's handlers would stop it reaching. */
 function passToShortcuts(event: KeyboardEvent) {
   event.stopPropagation();
   const { key, code, altKey, ctrlKey, metaKey, shiftKey, repeat } = event;
@@ -282,10 +298,8 @@ export function VirtualGridList<T>({
       // Capture: React Aria's press handling stops Enter and Space on a row from bubbling.
       onKeyDownCapture={(event) => {
         const row = event.target as HTMLElement;
-        if (row.getAttribute("role") !== "row" || !row.dataset.key) return;
-        onRowKeyDown?.(row.dataset.key, event);
-        if (event.isPropagationStopped()) return;
-        if (NAVIGATION.has(event.key) || ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a")) passToShortcuts(event);
+        if (row.getAttribute("role") === "row" && row.dataset.key) onRowKeyDown?.(row.dataset.key, event);
+        if (!event.isPropagationStopped()) passRowKeysToShortcuts(event);
       }}
     >
       <GridList

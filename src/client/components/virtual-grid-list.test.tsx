@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { VirtualGridList, dragKeys, dropSpotAt, landsBefore, windowOf, type ListDrop } from "./virtual-grid-list";
+import { VirtualGridList, dragKeys, dropSpotAt, isShortcutKey, landsBefore, windowOf, type ListDrop } from "./virtual-grid-list";
 
 // Three 100px cards, 8px apart in their rows' boxes: A 0–100, B 100–200, C 200–300.
 const rows = [
@@ -95,4 +95,13 @@ test("a column selection never pins its rows, and only draggable lists carry the
   const drop: ListDrop = { type: "application/x-test", onDrop: () => {}, renderPreview: () => null };
   const draggable = render({ selected: "A", drop });
   expect(draggable).toMatch(/<button[^>]*class="sr-only"/);
+});
+
+test("the keys React Aria's grid would keep (arrows, ⌥ arrows, Home/End, Page keys, ⌘A) go to the app's shortcuts", () => {
+  const key = (k: string, mods: { metaKey?: boolean; ctrlKey?: boolean } = {}) => isShortcutKey({ key: k, metaKey: false, ctrlKey: false, ...mods });
+  for (const k of ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"]) expect(key(k)).toBe(true);
+  expect(key("a", { metaKey: true })).toBe(true);
+  expect(key("A", { ctrlKey: true })).toBe(true);
+  // Letters (j/k, issue shortcuts), Enter, Space and Escape reach the app untouched by React Aria already.
+  for (const k of ["a", "j", "k", "Enter", " ", "Escape", "Tab"]) expect(key(k)).toBe(false);
 });

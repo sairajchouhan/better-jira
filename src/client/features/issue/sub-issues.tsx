@@ -13,6 +13,8 @@ import { SectionDisclosure } from "@/client/components/section-disclosure";
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
 import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSubIssueComposer } from "./use-sub-issue-composer";
+import { Button as AriaButton, DropIndicator, GridList, GridListItem, useDragAndDrop } from "react-aria-components";
+import { passRowKeysToShortcuts } from "@/client/components/virtual-grid-list";
 import { useStoredState } from "@/client/state/stored-state";
 import { FieldMenuButton } from "@/client/components/pill-select";
 import { DisplayProperties, SelectRow, Toggle, ViewOptions } from "@/client/components/display-options";
@@ -59,6 +61,8 @@ import {
   SUB_ISSUE_ORDERINGS as orderings,
   SUB_ISSUE_PROPERTIES as properties,
   movedOrder,
+  canDropSubIssue,
+  subIssueDropSlot,
   subIssueRows,
   type SubIssueCount,
   type SubIssueDisplay,
@@ -223,6 +227,33 @@ export function SubIssues({ issue }: { issue: Issue }) {
     if (next) setManualOrder([...manualOrder.filter((k) => !siblings.includes(k)), ...next]);
     return true;
   };
+  // Linear drags a manually ordered sub-issue to a new place among its siblings (R3-relations-D4): React Aria's list drag, so
+  // a keyboard or screen-reader user can move one too; a place under another parent refuses the drop.
+  const dragging = useRef<string | null>(null);
+  const { dragAndDropHooks } = useDragAndDrop({
+    isDisabled: !manual,
+    getItems: (keys) => [...keys].map((key) => ({ [SUB_ISSUE_DRAG]: String(key), "text/plain": String(key) })),
+    acceptedDragTypes: [SUB_ISSUE_DRAG],
+    onDragStart: (event) => {
+      dragging.current = String([...event.keys][0]);
+    },
+    onDragEnd: () => {
+      dragging.current = null;
+    },
+    getDropOperation: (target) => {
+      if (target.type !== "item" || !dragging.current) return "cancel";
+      const source = get().issues.get(dragging.current), over = get().issues.get(String(target.key));
+      return canDropSubIssue(source, over, target.dropPosition) ? "move" : "cancel";
+    },
+    onReorder: ({ keys, target }) => {
+      const [dragged] = [...keys].map(String), over = get().issues.get(String(target.key));
+      if (!dragged || !over) return;
+      moveChild(dragged, { to: subIssueDropSlot(siblingsOf(over), dragged, over.key, target.dropPosition === "after") });
+    },
+    renderDropIndicator: (target) => (
+      <DropIndicator target={target} className="h-0 outline-none data-drop-target:shadow-[0_0_0_1px_var(--accent)]" />
+    ),
+  });
   // ⌥↑ / ⌥↓ / ⌥⇧↑ / ⌥⇧↓ on the hovered row (R3-relations-D4).
   useCommand("reorder-sub-issue", ({ key, move }) =>
     model.rows.some((row) => row.issue.key === key) && moveChild(key, move) ? true : undefined,
@@ -298,6 +329,8 @@ export function SubIssues({ issue }: { issue: Issue }) {
   return (
     <section
       ref={section}
+      // ↑/↓ and ⌥ arrows on a row stay the app's (step through issues, reorder), not the list's own focus.
+      onKeyDownCapture={passRowKeysToShortcuts}
       data-sub-issues={issue.key}
       aria-label="Sub-issues"
       className="mt-[14px] text-[13px]"
@@ -348,33 +381,34 @@ export function SubIssues({ issue }: { issue: Issue }) {
           </div>
         )}
         <SectionDisclosure.Panel>
-          {model.rows.map(({ issue: child, depth, contextOnly }, index) => (
-            <SubIssueRow
-              key={child.key}
-              child={child}
-              depth={depth}
-              contextOnly={contextOnly}
-              index={index}
-              rows={model.rows}
-              display={display}
-              boards={boards}
-              progress={subIssueCount(all, boards, child.key, "children")}
-              onDrop={
-                manual
-                  ? (dragged, after) => {
-                      const source = get().issues.get(dragged);
-                      if (!source || source.parent !== child.parent || dragged === child.key) return;
-                      const rest = siblingsOf(child).filter((k) => k !== dragged);
-                      moveChild(dragged, { to: rest.indexOf(child.key) + (after ? 1 : 0) });
-                    }
-                  : undefined
-              }
-              active={rowMenu?.key === child.key}
-              openMenu={(anchor, point) =>
-                setRowMenu({ anchor, key: child.key, point })
-              }
-            />
-          ))}
+          {model.rows.length > 0 && (
+            // Tab still walks each row's controls and link, as before the list was a grid.
+            <GridList
+              aria-label={`Sub-issues of ${issue.key}`}
+              keyboardNavigationBehavior="tab"
+              disallowTypeAhead
+              dragAndDropHooks={manual ? dragAndDropHooks : undefined}
+            >
+              {model.rows.map(({ issue: child, depth, contextOnly }, index) => (
+                <SubIssueRow
+                  key={child.key}
+                  child={child}
+                  depth={depth}
+                  contextOnly={contextOnly}
+                  index={index}
+                  rows={model.rows}
+                  display={display}
+                  boards={boards}
+                  progress={subIssueCount(all, boards, child.key, "children")}
+                  draggable={manual}
+                  active={rowMenu?.key === child.key}
+                  openMenu={(anchor, point) =>
+                    setRowMenu({ anchor, key: child.key, point })
+                  }
+                />
+              ))}
+            </GridList>
+          )}
         </SectionDisclosure.Panel>
       </SectionDisclosure>
       {!model.total && !creating && canHaveSubIssues(get(), issue) && (
@@ -615,7 +649,7 @@ const fromSection = (child: Issue): TrailStep => {
 };
 function SubIssueRow({
   child,
-  onDrop,
+  draggable,
   depth,
   contextOnly,
   index,
@@ -627,8 +661,8 @@ function SubIssueRow({
   openMenu,
 }: {
   child: Issue;
-  /** Manual ordering: a sub-issue dragged onto this row lands before it, or `after` it. */
-  onDrop?: (dragged: string, after: boolean) => void;
+  /** Manual ordering: the row drags to a new place among its siblings. */
+  draggable: boolean;
   depth: number;
   contextOnly: boolean;
   index: number;
@@ -655,29 +689,14 @@ function SubIssueRow({
   );
 
   return (
-    <div
-      key={child.key}
+    <GridListItem
+      id={child.key}
+      textValue={`${child.key} ${child.summary}`}
       data-sub-issue={child.key}
       data-depth={depth}
       data-context-only={contextOnly || undefined}
       className={`group relative -ml-1.5 flex min-h-9 items-center gap-px rounded-lg pr-1 hover:bg-(--row-hover) ${active ? "bg-(--row-hover)" : ""}`}
       style={{ paddingLeft: 31 + depth * 24 }}
-      // Linear drags a manually ordered sub-issue to its new place (R3-relations-D4).
-      draggable={!!onDrop}
-      onDragStart={onDrop && ((event) => {
-        event.dataTransfer.setData(SUB_ISSUE_DRAG, child.key);
-        event.dataTransfer.effectAllowed = "move";
-      })}
-      onDragOver={onDrop && ((event) => {
-        if (event.dataTransfer.types.includes(SUB_ISSUE_DRAG)) event.preventDefault();
-      })}
-      onDrop={onDrop && ((event) => {
-        const dragged = event.dataTransfer.getData(SUB_ISSUE_DRAG);
-        if (!dragged) return;
-        event.preventDefault();
-        const box = event.currentTarget.getBoundingClientRect();
-        onDrop(dragged, event.clientY > box.top + box.height / 2);
-      })}
       onContextMenu={(event) => {
         event.preventDefault();
         openMenu(event.currentTarget, {
@@ -686,6 +705,7 @@ function SubIssueRow({
         });
       }}
     >
+      {draggable && <AriaButton slot="drag" className="sr-only" />}
       {Array.from({ length: depth }, (_, level) => {
         level++;
         const left = level * 24 + 21.5,
@@ -799,7 +819,7 @@ function SubIssueRow({
             </span>
           ),
         )}
-    </div>
+    </GridListItem>
   );
 }
 

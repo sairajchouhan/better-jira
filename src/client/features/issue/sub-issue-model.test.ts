@@ -7,6 +7,8 @@ import {
   SUB_ISSUE_ORDERINGS,
   SUB_ISSUE_PROPERTIES,
   movedOrder,
+  canDropSubIssue,
+  subIssueDropSlot,
   withMoveEntry,
   subIssueRows,
   childrenByParent,
@@ -240,4 +242,24 @@ test("BJ-289: the title line reads Sub-issue of for a parent Task and In epic fo
   expect(childrenVariant({ type: "Story", level: 1 })).toBe("epic");
   expect(childrenVariant({ type: "Task" })).toBe("sub-issue");
   expect(childrenVariant({ type: "Subtask" })).toBe("sub-issue");
+});
+
+test("a dragged sub-issue lands only beside a sibling, never on a row or under another parent (R3-relations-D4)", () => {
+  const a = { key: "A", parent: "P" }, b = { key: "B", parent: "P" }, nested = { key: "C", parent: "A" };
+  expect(canDropSubIssue(a, b, "before")).toBe(true);
+  expect(canDropSubIssue(a, b, "after")).toBe(true);
+  expect(canDropSubIssue(a, b, "on")).toBe(false);
+  expect(canDropSubIssue(a, a, "after")).toBe(false);
+  expect(canDropSubIssue(a, nested, "before")).toBe(false);
+  expect(canDropSubIssue(undefined, b, "before")).toBe(false);
+});
+
+test("a sub-issue dropped before or after a sibling takes that slot among the others", () => {
+  const siblings = ["A", "B", "C", "D"];
+  expect(subIssueDropSlot(siblings, "A", "C", false)).toBe(1);
+  expect(subIssueDropSlot(siblings, "A", "C", true)).toBe(2);
+  expect(movedOrder(siblings, "A", { to: subIssueDropSlot(siblings, "A", "D", true) })).toEqual(["B", "C", "D", "A"]);
+  expect(movedOrder(siblings, "D", { to: subIssueDropSlot(siblings, "D", "A", false) })).toEqual(["D", "A", "B", "C"]);
+  // Back beside its own slot: no change.
+  expect(movedOrder(siblings, "B", { to: subIssueDropSlot(siblings, "B", "C", false) })).toBeNull();
 });

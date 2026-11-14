@@ -293,3 +293,17 @@ export function movedOrder(siblings: readonly string[], key: string, move: SubIs
   rest.splice(at, 0, key);
   return rest;
 }
+
+/** A sub-issue drag lands beside a sibling, before or after it, never on a row or beside a row under another parent. */
+export function canDropSubIssue(
+  source: Pick<Issue, "key" | "parent"> | undefined,
+  over: Pick<Issue, "key" | "parent"> | undefined,
+  position: "before" | "after" | "on",
+) {
+  return !!source && !!over && position !== "on" && source.key !== over.key && source.parent === over.parent;
+}
+
+/** The slot among its siblings a sub-issue dropped before or after `over` takes (`movedOrder`'s `{ to }`). */
+export function subIssueDropSlot(siblings: readonly string[], dragged: string, over: string, after: boolean) {
+  return siblings.filter((key) => key !== dragged).indexOf(over) + (after ? 1 : 0);
+}
