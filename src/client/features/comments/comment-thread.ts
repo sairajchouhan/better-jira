@@ -95,7 +95,9 @@ export function replyParent(
   return root && (root.orphanedFrom ?? root.id);
 }
 
-/** Starts a reply to someone's reply with an @mention of them, as Jira's Reply button does. */
+/** Starts a reply to someone's reply with an @mention of them, as Jira's Reply button does. The mention goes where the
+ *  caret will be: Linear's Reply to comment focuses the reply box at its end (`focusAtEnd`), so with a saved draft the
+ *  mention follows it and what is typed next follows the mention (R3-comments-D5). */
 export function mentionDraft(draft: AdfDocument, author?: IssueComment["author"]): AdfDocument {
   const mentions = (n: AdfNode): boolean =>
     (n.type === "mention" && n.attrs?.id === author?.accountId) || !!n.content?.some(mentions);
@@ -107,12 +109,18 @@ export function mentionDraft(draft: AdfDocument, author?: IssueComment["author"]
       },
       { type: "text", text: " " },
     ],
-    [first, ...rest] = draft.content ?? [];
+    blocks = draft.content ?? [],
+    last = blocks.at(-1);
+  if (last?.type !== "paragraph")
+    return { ...draft, content: [...blocks, { type: "paragraph", content: mention }] };
+  const inline = last.content ?? [],
+    end = inline.at(-1),
+    spaced = !end || (end.type === "text" && /\s$/.test(end.text ?? "")) || end.type === "hardBreak";
   return {
     ...draft,
-    content:
-      first?.type === "paragraph"
-        ? [{ ...first, content: [...mention, ...(first.content ?? [])] }, ...rest]
-        : [{ type: "paragraph", content: mention }, ...(draft.content ?? [])],
+    content: [
+      ...blocks.slice(0, -1),
+      { ...last, content: [...inline, ...(spaced ? [] : [{ type: "text", text: " " }]), ...mention] },
+    ],
   };
 }

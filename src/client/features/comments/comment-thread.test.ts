@@ -88,10 +88,12 @@ test("a reply to a reply starts with one @mention of its author", () => {
     ...body,
     content: [{ type: "paragraph", content: [{ type: "text", text: "draft" }] }],
   };
-  expect(mentionDraft(typed, author).content?.[0]?.content?.map((n) => n.type)).toEqual([
-    "mention",
-    "text",
-    "text",
+  // A saved draft keeps its text first: the caret opens at the end, after the mention (R3-comments-D5).
+  expect(mentionDraft(typed, author).content?.[0]?.content).toEqual([
+    { type: "text", text: "draft" },
+    { type: "text", text: " " },
+    mention,
+    { type: "text", text: " " },
   ]);
   expect(mentionDraft(body, undefined)).toBe(body);
 });
