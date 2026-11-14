@@ -177,6 +177,9 @@ export type IssueDraft = Partial<
   /** People the view's assignee filter names when it names several: the assignee picker lists them under Suggested
    *  (Linear's `filterOverrides.assignee.secondary`). Never saved to the issue. */
   suggestedAssignees?: User[];
+  /** Epics the view's project filter names: the composer's project picker lists them first (Linear's
+   *  `filterOverrides.project.secondary`). Never saved to the issue. */
+  suggestedEpics?: string[];
 };
 export type JiraOptions = {
   priorities: { id: string; name: string }[];

@@ -72,13 +72,24 @@ export type EpicChoice = { key: string; name: string; done: boolean };
  * composer: the board's epics in the issue's Jira project (Jira links a parent only within it), by name, completed ones last
  * (`sortPriority: isDone`). A completed epic shows only when it is the current one or the search is longer than two characters
  * or names it exactly, as Linear hides completed projects; the current epic shows even when the mirror doesn't hold it.
+ * `suggested` (the composer's view filter names them, `filterOverrides.project.secondary`) come first, in the filter's order,
+ * done or not, as `zBn` lists them before the rest.
  */
 export function epicChoices(
   issues: Iterable<Issue>,
   board: Board | undefined,
-  { project, current, query = "" }: { project?: string; current?: string; query?: string } = {},
+  {
+    project,
+    current,
+    query = "",
+    suggested = [],
+  }: { project?: string; current?: string; query?: string; suggested?: readonly string[] } = {},
 ): EpicChoice[] {
   const q = query.trim().toLowerCase();
+  const first = (key: string) => {
+    const at = suggested.indexOf(key);
+    return at < 0 ? Infinity : at;
+  };
   const epics = Array.from(issues)
     .filter((i) => isEpic(i) && (i.key === current || !project || !i.project || i.project.key === project))
     .map((i) => ({
@@ -86,8 +97,13 @@ export function epicChoices(
       name: i.summary,
       done: statusById(board, i.status)?.category === "done",
     }))
-    .filter((e) => !e.done || e.key === current || q.length > 2 || e.name.toLowerCase() === q)
-    .sort((a, b) => Number(a.done) - Number(b.done) || a.name.localeCompare(b.name));
+    .filter((e) => !e.done || e.key === current || suggested.includes(e.key) || q.length > 2 || e.name.toLowerCase() === q)
+    .sort(
+      (a, b) =>
+        (first(a.key) === first(b.key) ? 0 : first(a.key) < first(b.key) ? -1 : 1) ||
+        Number(a.done) - Number(b.done) ||
+        a.name.localeCompare(b.name),
+    );
   return current && !epics.some((e) => e.key === current)
     ? [{ key: current, name: current, done: false }, ...epics]
     : epics;

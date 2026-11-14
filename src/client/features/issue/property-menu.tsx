@@ -363,7 +363,8 @@ export function TypeMenu({
 const epicValue = (epic: { key: string; name: string }) => `${epic.name} ${epic.key}`;
 /**
  * Linear's project picker (`zBn`, ⇧P): "No project" (number 0, `YBn`), then the epics `epicChoices` lists; Linear's project is a
- * Jira epic (shared/epics.ts). `value` is the epic's key; `project` the Jira project the issue is in, whose epics it can join.
+ * Jira epic (shared/epics.ts). `value` is the epic's key; `project` the Jira project the issue is in, whose epics it can join;
+ * `suggested` the epics the view's filter names, listed first.
  */
 export function ProjectMenu({
   anchor,
@@ -372,10 +373,11 @@ export function ProjectMenu({
   onChange,
   close,
   project,
-}: FieldMenuProps<string | null> & { project?: string }) {
+  suggested,
+}: FieldMenuProps<string | null> & { project?: string; suggested?: readonly string[] }) {
   const { issues } = useCatalog(board);
   const [query, setQuery] = useState("");
-  const choices = epicChoices(issues, board, { project, current: value ?? undefined, query });
+  const choices = epicChoices(issues, board, { project, current: value ?? undefined, query, suggested });
   const current = choices.find((e) => e.key === value);
   return (
     <PropertyMenu

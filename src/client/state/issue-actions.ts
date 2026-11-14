@@ -88,8 +88,9 @@ export function beginCreateInView(draft: IssueDraft = {}): boolean {
     people: assignableUsers(ME, s.options.users, s.issues.values()),
     me: ME,
     defaultStatus: scopeStatus() ?? board.columns[0]?.statuses[0]?.id,
-  });
-  return beginCreate({ ...defaults, ...draft });
+    lookup: (key) => s.issues.get(key),
+  }, draft);
+  return beginCreate(defaults);
 }
 
 const now = () => new Date().toISOString();

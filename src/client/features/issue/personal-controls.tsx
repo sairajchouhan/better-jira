@@ -249,7 +249,7 @@ export function CreateIssue() {
   const submission = useMemo(() => crypto.randomUUID(), [draftIndex]);
   const submit = () => {
     if (!title.trim() || filesBusy || noParentType || (draft.subIssues?.some(t => t.trim()) && !canHaveChildren(get(), { type, project }))) return;
-    const { fromSelection, suggestedAssignees: _suggested, ...fields } = draft;
+    const { fromSelection, suggestedAssignees: _suggested, suggestedEpics: _epics, ...fields } = draft;
     const key = actions.create(
       title,
       {
@@ -489,6 +489,7 @@ export function CreateIssue() {
                 board,
                 project: project?.key,
                 value: draftEpic?.key ?? null,
+                suggested: draft.suggestedEpics,
                 onChange: (epic: string | null) => setDraft({ ...draft, ...epicPatch(epic) }),
               }}
             />

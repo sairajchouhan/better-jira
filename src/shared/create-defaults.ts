@@ -1,5 +1,6 @@
 import { type Board, type IssueDraft, type User } from "@/shared/issue-model";
 import { statuses } from "./board-catalog";
+import { epicLocked, epicPatch, isEpic, type IssueLookup } from "./epics";
 import { type Field, type FilterGroup, type Operator, type Rule } from "./view-model";
 
 /**
@@ -12,9 +13,12 @@ import { type Field, type FilterGroup, type Operator, type Rule } from "./view-m
  *   offers them under Suggested in the assignee picker instead (`Qun`'s `filterOverrides.assignee.secondary`);
  * - labels take every label the filter requires, up to six (`YZt`, `SQt`'s `.slice(0,6)`);
  * - status takes one of the statuses the filter allows, even several (`VZt`): the default status when it is one of them, else
- *   the earliest open one in workflow order.
+ *   the earliest open one in workflow order;
+ * - project (here the issue's epic, shared/epics.ts) takes a value only when the filter names exactly one project that exists
+ *   (`GZt`: "No project" and unknown ids drop out), and every project the filter names is listed first in the composer's
+ *   project picker (`zBn`'s `filterOverrides.project.secondary`).
  * Values that only some issues need (one rule of a top-level "any" filter, or "is any of" with two values) are ambiguous, and
- * Linear's `unambiguousOnly` drops them for every property but status. Project and milestone are left out (a parked decision).
+ * Linear's `unambiguousOnly` drops them for every property but status. Milestone is left out (a parked decision).
  */
 export type CreateOverrides = {
   status?: string | undefined;
@@ -23,6 +27,10 @@ export type CreateOverrides = {
   suggested?: User[];
   priority?: string | undefined;
   labels?: string[];
+  /** The epic, when the filter names exactly one. */
+  epic?: string | undefined;
+  /** Every epic the filter names: first in the composer's project picker. */
+  epics?: string[];
 };
 export type CreateContext = {
   board: Board;
@@ -31,6 +39,8 @@ export type CreateContext = {
   me: User;
   /** The status a new issue gets without a status filter (Linear's `team.defaultState`). */
   defaultStatus: string | undefined;
+  /** The mirror's issues by key, to resolve a project filter's epic keys (`GZt`'s `store.findById`). */
+  lookup: IssueLookup;
 };
 
 /** `fQ`'s positive compare options (`ove`: all, any, is, contains). */
@@ -88,21 +98,39 @@ export function filterOverrides(filters: FilterGroup, ctx: CreateContext): Creat
   }
   if (filterValues(filters, "labels", false).length)
     out.labels = [...new Set(filterValues(filters, "labels", true).filter((l) => l !== "$none"))].slice(0, 6);
+  if (filterValues(filters, "project", false).length) {
+    // `GZt`: "No project" ($none) and keys that name no epic the mirror holds drop out before counting.
+    const epics = (values: string[]) => [...new Set(values)].filter((k) => { const e = ctx.lookup(k); return !!e && isEpic(e); });
+    const one = epics(filterValues(filters, "project", true));
+    out.epic = one.length === 1 ? one[0] : undefined;
+    out.epics = epics(filterValues(filters, "project", false));
+  }
   return out;
 }
 
 /**
  * The draft a create from a view starts with: the saved view's filter, then the view's own filter (a plain board's, or the
- * overlay on a saved view) field by field over it. A group's "+" and anything else the caller passes win over both, as Linear's
- * group draft does (`A?.labels ?? j.labels`).
+ * overlay on a saved view) field by field over it. `draft` (a group's "+", anything else the caller passes) wins over both, as
+ * Linear's group draft does (`A?.labels ?? j.labels`, `A?.project ?? j.project?.primary`). The filter's epic goes in through
+ * `epicPatch`, and only when the draft can join an epic at all: a draft that brings its own parent, or a type `epicLocked` keeps
+ * out of epics (an epic, a sub-task, an initiative), takes none.
  */
-export function createDefaults(saved: FilterGroup | undefined, own: FilterGroup, ctx: CreateContext): IssueDraft {
+export function createDefaults(
+  saved: FilterGroup | undefined,
+  own: FilterGroup,
+  ctx: CreateContext,
+  draft: IssueDraft = {},
+): IssueDraft {
   const o = { ...(saved ? filterOverrides(saved, ctx) : {}), ...filterOverrides(own, ctx) };
+  const epic = o.epic && !draft.parent && !epicLocked({ type: draft.type }) ? o.epic : undefined;
   return {
     ...(o.status ? { status: o.status } : {}),
     ...(o.assignee ? { assignee: o.assignee } : {}),
     ...(o.suggested?.length ? { suggestedAssignees: o.suggested } : {}),
     ...(o.priority ? { priority: o.priority } : {}),
     ...(o.labels?.length ? { labels: o.labels } : {}),
+    ...(epic ? epicPatch(epic) : {}),
+    ...(o.epics?.length ? { suggestedEpics: o.epics } : {}),
+    ...draft,
   };
 }

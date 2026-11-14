@@ -100,6 +100,15 @@ test("project picker: the board's epics in the issue's Jira project, completed o
   expect(epicChoices(all, board, { project: "E", current: "E-99" })[0]).toEqual({ key: "E-99", name: "E-99", done: false });
 });
 
+test("project picker: the epics a view's filter names come first, in its order, done or not (zBn's secondary)", () => {
+  const names = (suggested: string[]) => epicChoices(all, board, { project: "E", suggested }).map((e) => e.name);
+  const late = issue("E-4", { type: "Epic", summary: "Zebra" });
+  expect(epicChoices([...all, late], board, { project: "E", suggested: ["E-4"] }).map((e) => e.name)).toEqual(["Zebra", "Billing"]);
+  expect(names(["E-3"])).toEqual(["Archive", "Billing"]);
+  expect(names(["E-3", "E-2"])).toEqual(["Archive", "Billing"]);
+  expect(names(["E-2", "E-3"])).toEqual(["Billing", "Archive"]);
+});
+
 test("setting a project writes only the Jira parent; the Jira project is never sent", () => {
   expect(epicPatch("E-2")).toEqual({ parent: "E-2" });
   expect(epicPatch(null)).toEqual({ parent: undefined });
