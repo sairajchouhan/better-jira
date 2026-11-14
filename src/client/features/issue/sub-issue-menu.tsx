@@ -6,7 +6,7 @@ import { MenuSurface } from "@/client/components/menu-surface";
 import { navigate } from "@/client/features/navigation/app-navigation";
 import { get, useStore } from "@/client/state/store";
 import type { Issue } from "@/shared/issue-model";
-import { defaultSubIssueDisplay, statusOf, subIssueRows } from "./sub-issue-model";
+import { childrenVariant, defaultSubIssueDisplay, PARENT_LINE, statusOf, subIssueRows } from "./sub-issue-model";
 
 /** Opens an issue in the panel, keeping the current view. */
 export const openIssue = (target: Issue) =>
@@ -19,13 +19,14 @@ export const openIssue = (target: Issue) =>
 
 /** Linear's "Open sub-issue…" (`OPEN_SUB_ISSUE`, startup-root `c_r`) as a menu under its trigger: `parent`'s direct sub-issues, in
  *  the Sub-issues section's order, each opening that issue; `current` is checked. The parent line's, a sub-issue row's and a card's
- *  progress pill open it. */
+ *  progress pill open it. An epic's menu is worded as its epic issues, never sub-issues (PARENT_LINE, BJ-289). */
 export function ChildrenMenu({ parent, current, anchor, close }: { parent: Issue; current?: string; anchor: HTMLElement; close: () => void }) {
  const all = useStore(s => s.issues), boards = useStore(s => s.boards);
  const status = (i: Issue) => statusOf(boards, i);
  const siblings = subIssueRows(parent.key, all, defaultSubIssueDisplay(), status).rows.filter(row => row.depth === 0).map(row => row.issue);
+ const label = PARENT_LINE[childrenVariant(parent)].open(parent.key);
  return (        <MenuSurface
-          label={`Open sub-issues of ${parent.key}`}
+          label={label}
           anchor={anchor}
           close={() => close()}
           fit
@@ -34,7 +35,7 @@ export function ChildrenMenu({ parent, current, anchor, close }: { parent: Issue
             <Menu.Input
               hideWhenEmpty
               autoFocus
-              aria-label={`Open sub-issues of ${parent.key}…`}
+              aria-label={`${label}…`}
             />
             <Menu.List>
               <Menu.Group heading="Navigation">

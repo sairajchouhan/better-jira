@@ -76,9 +76,9 @@ const selected = (s = get()) => {
   const key = acting ?? (s.overlay && s.target) ?? (!s.document && s.selected);
   return key ? s.issues.get(key) : undefined;
 };
-/** The issue the "Sub-issue of" line names, and ⌘⇧↑ and ⌘⇧→ open: the parent Task, else the epic (shared/epics.ts titleParentOf,
- *  BJ-289). */
-const titleParentIn = (s: State, issue: Issue | undefined) => issue && titleParentOf(issue, (key) => s.issues.get(key));
+/** The issue the title line names, and ⌘⇧↑ and ⌘⇧→ open: the parent Task ("Sub-issue of"), else the epic ("In epic")
+ *  (shared/epics.ts titleParentOf, BJ-289). */
+const titleParentIn = (s: State, issue: Issue | undefined) => issue && titleParentOf(issue, (key) => s.issues.get(key))?.key;
 /** Linear: an issue shortcut acts on the row under the pointer or keyboard focus, as its row menu's hints promise: a sub-issue row
  *  (its section answers the command), else a board card or list row (IssueTarget's `data-key`, ISSUE-10). */
 const hoveredRow = () => {

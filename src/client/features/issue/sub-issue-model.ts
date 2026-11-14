@@ -1,6 +1,6 @@
 import { type Board, type Issue } from "@/shared/issue-model";
 import { statusById } from "@/shared/board-catalog";
-import { listedUnder } from "@/shared/epics";
+import { isEpic, listedUnder, type TitleLineVariant } from "@/shared/epics";
 import {
   ORDERINGS,
   PROPERTIES,
@@ -9,6 +9,16 @@ import {
   type Ordering,
   type Property,
 } from "@/shared/view-model";
+/** The words of the line under an issue's title, per variant (shared/epics.ts titleParentOf), and of the menu its ring opens.
+ *  A parent Task: Linear's "Sub-issue of" and Open sub-issue…. An epic: "In epic", and Linear's word for a project's issues
+ *  ("Open project issues", startup-root `Xxn`) in Epic words, as an issue in an epic is not a sub-issue (user's call, BJ-289). */
+export const PARENT_LINE = {
+  "sub-issue": { label: "Sub-issue of", open: (key: string) => `Open sub-issues of ${key}` },
+  epic: { label: "In epic", open: (key: string) => `Open epic issues of ${key}` },
+} as const satisfies Record<TitleLineVariant, { label: string; open: (key: string) => string }>;
+/** How an issue's own issues are worded: an epic's are its epic issues, any other parent's its sub-issues. */
+export const childrenVariant = (parent: Pick<Issue, "type" | "level">): TitleLineVariant =>
+  isEpic(parent) ? "epic" : "sub-issue";
 export type SubIssueDisplay = {
   ordering: Exclude<Ordering, "statusAge">;
   completed: "all" | "day" | "week" | "month" | "none";

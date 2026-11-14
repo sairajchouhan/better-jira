@@ -49,9 +49,10 @@ import { fullTime } from "./issue-dates";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
 import { canHaveSubIssues } from "@/shared/issue-properties";
-import { titleParentOf } from "@/shared/epics";
+import { titleParentOf, type TitleLineVariant } from "@/shared/epics";
 import {
   defaultSubIssueDisplay,
+  PARENT_LINE,
   statusOf,
   subIssueCount,
   SUB_ISSUE_ORDERINGS as orderings,
@@ -97,9 +98,19 @@ function parseDisplay(value: unknown): SubIssueDisplay {
 }
 type Boards = ReturnType<typeof get>["boards"];
 
-/** Linear's "Sub-issue of" line under a child's title: the parent link, and a progress pill whose menu lists the parent's sub-issues (⌘⇧→).
- *  An issue in an epic with no parent Task names the epic here (BJ-289, the user's deviation from Linear). */
-export function SubIssueOf({ issue }: { issue: Issue }) {
+/** The line under an issue's title (BJ-289): the issue `titleParentOf` names, in its variant. A parent Task reads Linear's
+ *  "Sub-issue of"; an epic reads "In epic", as an issue in an epic is not a sub-issue (the user's deviation from Linear). */
+export function TitleParentLine({ issue }: { issue: Issue }) {
+  const all = useStore((s) => s.issues);
+  const target = titleParentOf(issue, (key) => all.get(key));
+  const parent = target && all.get(target.key);
+  if (!target || !parent) return null;
+  return <ParentLine variant={target.variant} issue={issue} parent={parent} />;
+}
+
+/** One line for both variants: the variant's label (PARENT_LINE), the parent link, and a progress pill whose menu lists the
+ *  parent's issues (⌘⇧→). Only the words differ. */
+function ParentLine({ variant, issue, parent }: { variant: TitleLineVariant; issue: Issue; parent: Issue }) {
   const all = useStore((s) => s.issues),
     boards = useStore((s) => s.boards),
     [menu, setMenu] = useState<HTMLElement | null>(null),
@@ -109,11 +120,8 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
     setMenu(progress.current);
     return true;
   });
-  // The parent Task, else the epic that lists this issue (BJ-289, shared/epics.ts titleParentOf); never a Parent property.
-  const parentKey = titleParentOf(issue, (key) => all.get(key));
-  const parent = parentKey ? all.get(parentKey) : undefined;
-  if (!parent) return null;
-  const status = (i: Issue) => statusOf(boards, i),
+  const words = PARENT_LINE[variant],
+    open = words.open(parent.key),
     // Every level below, as the parent's Sub-issues section header counts (cached per snapshot, BJ-281).
     count = subIssueCount(all, boards, parent.key, "descendants");
   return (
@@ -123,7 +131,7 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
       variant="small"
       color="inherit"
     >
-      <span className="shrink-0 font-[450] text-fg-3">Sub-issue of</span>
+      <span className="shrink-0 font-[450] text-fg-3">{words.label}</span>
       {/* Text has no anchor variant; preserve link semantics and keyboard navigation. */}
       <AppLink
         data-parent-link
@@ -131,7 +139,7 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
         to={{ board: parent.board, selected: parent.key, panel: true }}
       >
         <span className="grid size-3.5 shrink-0 place-items-center">
-          <StatusIcon status={status(parent)} />
+          <StatusIcon status={statusOf(boards, parent)} />
         </span>
         <EntityIdentifier className="shrink-0 font-[450] text-fg-3">{parent.key}</EntityIdentifier>
         <span className="truncate font-medium text-fg">{parent.summary}</span>
@@ -139,8 +147,8 @@ export function SubIssueOf({ issue }: { issue: Issue }) {
       <SubIssueProgressButton
         ref={progress}
         data-parent-progress
-        title={shortcutTitle(`Open sub-issues of ${parent.key}`, hotkeyOf("sub-issues-of-parent"))}
-        aria-label={`Open sub-issues of ${parent.key}`}
+        title={shortcutTitle(open, hotkeyOf("sub-issues-of-parent"))}
+        aria-label={open}
         onClick={(event) => setMenu(event.currentTarget)}
         variant="header"
         completed={count?.done ?? 0}

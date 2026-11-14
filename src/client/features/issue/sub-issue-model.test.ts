@@ -12,6 +12,8 @@ import {
   childrenByParent,
   statusOf,
   subIssueCount,
+  PARENT_LINE,
+  childrenVariant,
 } from "./sub-issue-model";
 const issue = (key: string, parent?: string, status = "todo", rank = ""): Issue => ({
   key,
@@ -222,4 +224,20 @@ test("BJ-281: the sub-issue badge counts what the Sub-issues section lists: a pa
   // The badge's count and the section's header agree.
   const model = subIssueRows("EPIC", byKey, defaultSubIssueDisplay(), (i) => statusOf(boards, i));
   expect(subIssueCount(byKey, boards, "EPIC", "descendants")).toEqual({ done: model.completed, total: model.total });
+});
+
+// BJ-289 follow-up: an issue in an epic is not a sub-issue (user's call). The title line and its ring menu say "Sub-issue of" and
+// sub-issues for a parent Task only; for an epic they say "In epic" and its epic issues (Linear's "Open project issues", in Epic words).
+test("BJ-289: the title line reads Sub-issue of for a parent Task and In epic for an epic, never Sub-issue of", () => {
+  expect(PARENT_LINE["sub-issue"].label).toBe("Sub-issue of");
+  expect(PARENT_LINE["sub-issue"].open("TEST-2")).toBe("Open sub-issues of TEST-2");
+  expect(PARENT_LINE.epic.label).toBe("In epic");
+  expect(PARENT_LINE.epic.open("TEST-7")).toBe("Open epic issues of TEST-7");
+  const epicWords = [PARENT_LINE.epic.label, PARENT_LINE.epic.open("TEST-7")].join(" | ");
+  expect(epicWords).not.toMatch(/sub-issue/i);
+  // The ring menu words an epic's issues as epic issues wherever it opens (title line, epic card), a Task's as sub-issues.
+  expect(childrenVariant({ type: "Epic" })).toBe("epic");
+  expect(childrenVariant({ type: "Story", level: 1 })).toBe("epic");
+  expect(childrenVariant({ type: "Task" })).toBe("sub-issue");
+  expect(childrenVariant({ type: "Subtask" })).toBe("sub-issue");
 });

@@ -47,7 +47,7 @@ import { interruptedUploads } from "@/client/state/jira-media";
 import { listPosition, navigationIssues, visibleOrder } from "@/shared/view-model";
 import { epicChanges, epicLocked, epicName, epicOf } from "@/shared/epics";
 import { PersonalIssueDetails } from "@/client/features/issue/personal-controls";
-import { SubIssueOf } from "@/client/features/issue/sub-issues";
+import { TitleParentLine } from "@/client/features/issue/sub-issues";
 import { Avatar } from "@/client/components/avatar";
 import { DocumentBodyEditor, CommentComposer } from "@/client/features/editor/rich-editor-loader";
 import {
@@ -240,7 +240,7 @@ function IssueBody({ issue, lead }: { issue: Issue; lead?: ReactNode }) {
       <div className="issue-detail-grid" data-properties-hidden={propertiesHidden || undefined}>
         <div className="issue-detail-title">
           <Title key={issue.key} issue={issue} />
-          <SubIssueOf issue={issue} />
+          <TitleParentLine issue={issue} />
         </div>
         {!propertiesHidden && (
           <div className="issue-detail-properties">

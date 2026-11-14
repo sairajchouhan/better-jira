@@ -303,7 +303,7 @@ describe("BJ-247: an epic parent is the issue's Project, never its Parent", () =
     };
     // BJ-280: the epic's Sub-issues section lists E-2, so Open sub-issue reaches it.
     expect(on("E-1")).toEqual(["child-open"]);
-    // BJ-289: E-2's Sub-issue of line names its epic, so ⌘⇧↑ opens the epic and ⌘⇧→ its sub-issues.
+    // BJ-289: E-2's title line names its epic (In epic), so ⌘⇧↑ opens the epic and ⌘⇧→ its issues.
     expect(on("E-2")).toEqual(["parent-open", "sub-issues-of-parent", "child-open", "parent-set"]);
     expect(on("E-3")).toEqual(["parent-open", "sub-issues-of-parent", "parent-set"]);
     // An issue in no epic and under no Task has nothing to open.

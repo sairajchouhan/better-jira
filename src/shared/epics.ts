@@ -64,15 +64,24 @@ export function listedUnder(issue: Parented, lookup: IssueLookup): string | unde
   return level !== undefined && level > 1 ? undefined : issue.parent;
 }
 /**
- * The issue the "Sub-issue of" line under an issue's title names, that Open parent issue (⌘⇧↑) opens, and whose sub-issues its
- * ring and ⌘⇧→ open: its parent issue (`parentOf`) when it has one, else its epic, so an issue in an epic points back to the epic
- * that lists it (BJ-289, the user's deviation from Linear, .raj/done.md; it completes BJ-280's epic Sub-issues section). That is the issue whose Sub-issues section
- * lists it (`listedUnder`). A sub-task names its parent, never the epic; an epic or an initiative names none. Only the title line,
- * ⌘⇧↑ and ⌘⇧→ read this: the epic stays out of the Parent property, Remove › Parent and every other Parent surface (`parentOf`).
+ * The issue the line under an issue's title names, that Open parent issue (⌘⇧↑) opens, and whose issues its ring and ⌘⇧→ open,
+ * with the line's variant: its parent issue (`parentOf`), "sub-issue" ("Sub-issue of"), when it has one; else its epic, "epic"
+ * ("In epic"), so an issue in an epic points back to the epic that lists it (BJ-289, the user's deviation from Linear,
+ * .raj/done.md; it completes BJ-280's epic Sub-issues section). That is the issue whose Sub-issues section lists it
+ * (`listedUnder`). A sub-task names its parent, never the epic; an epic or an initiative names none. Only the title line, ⌘⇧↑
+ * and ⌘⇧→ read this: the epic stays out of the Parent property, Remove › Parent and every other Parent surface (`parentOf`).
  */
-export function titleParentOf(issue: Leveled & Parented, lookup: IssueLookup): string | undefined {
-  return nestable(issue) ? listedUnder(issue, lookup) : undefined;
+export function titleParentOf(issue: Leveled & Parented, lookup: IssueLookup): TitleParent | undefined {
+  if (!nestable(issue)) return undefined;
+  const parent = parentOf(issue, lookup);
+  if (parent) return { key: parent, variant: "sub-issue" };
+  const epic = listedUnder(issue, lookup);
+  return epic ? { key: epic, variant: "epic" } : undefined;
 }
+/** Which line the title shows: "Sub-issue of" a parent Task, or "In epic" for an issue in an epic (an issue in an epic is not
+ *  a sub-issue, user's call 2026-11-14). The client's PARENT_LINE words each. */
+export type TitleLineVariant = "sub-issue" | "epic";
+export type TitleParent = { key: string; variant: TitleLineVariant };
 /** Whether an issue has a Sub-issues section of its own: a parent issue, and an epic, whose section lists its issues
  *  (`listedUnder`). An initiative sits above epics and lists none. */
 export const listsSubIssues = (issue: Leveled) => hierarchyLevel(issue) <= 1;

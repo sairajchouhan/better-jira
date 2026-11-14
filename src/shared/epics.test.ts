@@ -240,14 +240,17 @@ test("BJ-280: an epic's Sub-issues section lists its issues; a sub-task stays un
   expect([initiative, billing, inBilling, subTask].map(listsSubIssues)).toEqual([false, true, true, true]);
 });
 
-// BJ-289: the user's deviation from Linear (.raj/done.md): the "Sub-issue of" line under the title names the parent Task, else the
-// epic, so an issue in an epic points back to the epic whose Sub-issues section lists it (BJ-280). Parent itself stays epic-free.
-test("BJ-289: the title line names the parent Task first, else the epic; an epic or an orphan names none", () => {
+// BJ-289: the user's deviation from Linear (.raj/done.md): the line under the title names the parent Task ("Sub-issue of"), else
+// the epic ("In epic": an issue in an epic is not a sub-issue), so an issue in an epic points back to the epic whose Sub-issues
+// section lists it (BJ-280). Parent itself stays epic-free.
+test("BJ-289: the title line names the parent Task first as a sub-issue, else the epic as an epic; an epic or an orphan names none", () => {
   // A Subtask names its Task, never the epic above it.
-  expect(titleParentOf(subTask, lookup)).toBe("E-10");
-  // A Task in an epic with no parent Task names the epic.
-  expect(titleParentOf(inBilling, lookup)).toBe("E-2");
-  expect(titleParentOf(issue("E-20", { parent: "E-99", parentLevel: 1 }), lookup)).toBe("E-99");
+  expect(titleParentOf(subTask, lookup)).toEqual({ key: "E-10", variant: "sub-issue" });
+  // A Task in an epic with no parent Task names the epic, in the epic variant.
+  expect(titleParentOf(inBilling, lookup)).toEqual({ key: "E-2", variant: "epic" });
+  expect(titleParentOf(issue("E-20", { parent: "E-99", parentLevel: 1 }), lookup)).toEqual({ key: "E-99", variant: "epic" });
+  // A parent the mirror doesn't hold, with no level from Jira, stays a parent issue.
+  expect(titleParentOf(issue("E-21", { parent: "E-98" }), lookup)).toEqual({ key: "E-98", variant: "sub-issue" });
   // An epic names neither its initiative nor a parent Jira sent without a level; an orphan names nothing.
   expect(titleParentOf(billing, lookup)).toBeUndefined();
   expect(titleParentOf(issue("E-24", { type: "Epic", parent: "E-95" }), lookup)).toBeUndefined();
