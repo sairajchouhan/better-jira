@@ -368,12 +368,12 @@ test("C7: a Jira or app issue link pasted into ⌘K, or a key typed alone, offer
     await p.waitFor(`${first}?.getAttribute('data-value')==='TEST-5'`);
     await p.key("Escape");
   });
-  await test.step("an issue off every board: the server's read of it, opening Jira's page", async () => {
+  await test.step("an issue off every board: the server's read of it, opening at its address here like every issue link (BJ-354)", async () => {
     await paste("https://example.atlassian.net/browse/OPS-7");
     await p.waitFor(`${first}?.getAttribute('data-value')==='jira:OPS-7'`);
     expect(await p.eval<string>(`${first}.textContent`)).toMatch(/OPS-7.*Rotate the staging keys/);
     await p.key("Enter");
-    expect(await opened()).toBe("https://example.atlassian.net/browse/OPS-7");
+    await p.waitFor(`location.pathname==='/issue/OPS-7'`);
   });
   await test.step("a link no issue answers: Linear's No issues found for this link", async () => {
     await paste("https://other.atlassian.net/browse/PX-3");
