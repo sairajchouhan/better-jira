@@ -55,7 +55,7 @@ test("the shell lines up with the app's: sidebar colour, 244px column, <main>'s 
   expect(chrome).toContain("flex w-[244px] shrink-0 flex-col");
   const panel = rule("#loading-panel");
   // <main className="… my-2 mr-2 … rounded-xl border-[0.5px] border-frame bg-panel shadow-(--frame-shadow)"> above the h-7 status bar.
-  const main = app.match(/<main[\s\S]*?className="([^"]*)"/)?.[1] ?? "";
+  const main = app.match(/<main[\s\S]*?className=(?:"([^"]*)"|\{`([^`]*)`\})/)?.slice(1).join("") ?? "";
   for (const token of ["my-2", "mr-2", "rounded-xl", "border-[0.5px]", "border-frame", "bg-panel", "shadow-(--frame-shadow)"])
     expect(main.split(" ")).toContain(token);
   expect(chrome).toContain('<footer className="flex h-7 shrink-0');
@@ -82,7 +82,9 @@ test("a hidden sidebar, read before first paint, leaves no column; so does a win
   expect(run(null)).toBe(false);
   // Storage that throws (blocked site data) paints the default column.
   expect(() => new Function("localStorage", "document", script)({ getItem: () => { throw new Error("blocked"); } }, {})).not.toThrow();
-  expect(css).toMatch(/html\.sidebar-hidden \{\s*--boot-sidebar: 0px;\s*\}/);
+  // Hidden, <main> keeps Linear's 8px mainPageMargin on its left too (BJ-276: `ml-2` when sidebarHidden).
+  expect(css).toMatch(/html\.sidebar-hidden \{\s*--boot-sidebar: 0\.5rem;\s*\}/);
+  expect(app).toContain('${sidebarHidden ? "ml-2" : ""}');
   expect(css).toMatch(/@media \(max-width: 767px\) \{\s*:root \{\s*--boot-sidebar: 0px;/);
 });
 
