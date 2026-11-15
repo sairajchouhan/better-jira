@@ -152,3 +152,24 @@ test("keyboard drag: the arrows reach every drop position in order, and Escape p
   expect(await page.eval(cellKeys("Todo"))).toEqual(["TEST-1", "TEST-2", "TEST-4", "TEST-5", "TEST-6"]);
   await nothingWritten();
 });
+
+test("a mouse drop writes the same ops: a card's top edge, and the blank space below a column's last card", async ({ open }) => {
+  await test.step("onto TEST-3's top edge: before TEST-3", async () => {
+    const page = await board(open, SHOWN);
+    const at = await page.rect('[data-key="TEST-3"]');
+    await page.drag('[data-key="TEST-5"]', at.x + at.width / 2, at.y + 4);
+    expect(await written()).toEqual({ key: "TEST-5", ops: [{ op: "status", status: "doing" }, { op: "rank", before: "TEST-3" }] });
+  });
+  await test.step("below Doing's last card: after TEST-3, not after the board's last card", async () => {
+    const page = await board(open, SHOWN);
+    const at = await page.rect('[data-key="TEST-3"]');
+    await page.drag('[data-key="TEST-2"]', at.x + at.width / 2, at.y + at.height + 60);
+    expect(await written()).toEqual({ key: "TEST-2", ops: [{ op: "status", status: "doing" }, { op: "rank", after: "TEST-3" }] });
+  });
+  await test.step("back onto its own place: nothing", async () => {
+    const page = await board(open, SHOWN);
+    const at = await page.rect('[data-key="TEST-4"]');
+    await page.drag('[data-key="TEST-4"]', at.x + at.width / 2, at.y + 4);
+    await nothingWritten();
+  });
+});
