@@ -259,11 +259,11 @@ function trailAfter(prev: Screen, event: NavigationEvent, next: Screen): Trail |
   }
 }
 /**
- * The trail a history entry's issue page restores: none while the page loads (a reload or a pasted link starts afresh, as Linear's
- * breadcrumb store starts empty: its constructor finds no items for the location and calls `resetItems`), its own on Back and
- * Forward (`handleGoBackAndForward` reads the entry's saved items).
+ * The trail a history entry's issue page restores: none for an entry this page load hasn't shown (`fresh`: a reload or a pasted
+ * link starts afresh, as Linear's breadcrumb store starts empty: its constructor finds no items for the location and calls
+ * `resetItems`), its own on Back and Forward (`handleGoBackAndForward` reads the entry's saved items).
  */
-export const restoredTrail = (state: { trail?: Trail }, loading: boolean): Trail | undefined => (loading ? undefined : state.trail);
+export const restoredTrail = (state: { trail?: Trail }, fresh: boolean): Trail | undefined => (fresh ? undefined : state.trail);
 /** The favorite the next screen comes from: the one a step names, else the one it still keeps (sidebar-active.ts). */
 function favoriteAfter(prev: Screen, event: NavigationEvent, next: Screen): string | null {
   switch (event.type) {

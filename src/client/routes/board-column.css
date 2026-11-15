@@ -7,20 +7,21 @@
  * - the header strip (`Yu.headerColumnBackground`) is bgSub at .4, 46px, 5px top corners;
  * - the body (`lu.columnBackgroundWrapper`, an `::after`) is `linear-gradient(bgSub/.4, bgSub/.1)` that starts 46px up,
  *   at the header's top, so the gradient runs over the whole column and the header covers its first 46px.
- * A column without its own header (swimlane cells) has the gradient from its own top.
+ * A column without its own header (swimlane cells) has the gradient from its own top. The heading is found as a descendant,
+ * not a child: its right-click menu (`ContextMenu`) wraps it in a `display: contents` div.
  */
 @layer components {
   .board-column {
     --board-column-header: 0px;
   }
-  .board-column:has(> .board-column-heading) {
+  .board-column:has(.board-column-heading) {
     --board-column-header: 46px;
   }
-  .board-column > .board-column-heading {
+  .board-column .board-column-heading {
     border-radius: 5px 5px 0 0;
     background: var(--col-top);
   }
-  .board-column:not(:has(> .board-column-heading)) > .board-column-body {
+  .board-column:not(:has(.board-column-heading)) > .board-column-body {
     border-radius: 5px 5px 0 0;
   }
   .board-column-body {

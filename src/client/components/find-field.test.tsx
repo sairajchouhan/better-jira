@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
-import { EXIT_FALLBACK_MS, FindField, nextPresence } from "./find-field";
+import { EXIT_FALLBACK_MS, FindField, findTermSender, nextPresence } from "./find-field";
 
 const render = (props: { className?: string; inputClassName?: string } = {}) =>
   renderToStaticMarkup(
@@ -102,4 +102,23 @@ test("the board's find floats in its header like the inbox's (ContentViewHeaderI
   expect(row).toContain('className="absolute top-1.5 right-2 z-10 w-[160px]"');
   expect(row).toMatch(/inert=\{finding\}[\s\S]*pointer-events-none opacity-0[\s\S]*New issue/);
   expect(header.slice(header.indexOf("</PageHeader>"))).not.toContain("<FindField");
+});
+
+test("a closed find field sends no term still waiting out its debounce, so the term its owner cleared stays cleared", async () => {
+  const sent: string[] = [];
+  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const send = findTermSender((term) => sent.push(term), 20);
+  send.type("no");
+  send.cancel(); // StrictMode's replay of the unmount cleanup: the field still sends what is typed next
+  send.type("no match");
+  await wait(40);
+  expect(sent).toEqual(["no match"]);
+  send.type("no matching issue");
+  send.close(); // the owner leaves the page (a breadcrumb) and clears the term; the field fades out
+  send.type("late");
+  await wait(40);
+  expect(sent).toEqual(["no match"]);
+  // A field its owner closes is leaving, not unmounted, for its 150ms fade: that is when it must stop sending.
+  const source = readFileSync(new URL("./find-field.tsx", import.meta.url), "utf8");
+  expect(source).toMatch(/if \(!leaving\) return;[^}]*send\.close\(\);/);
 });

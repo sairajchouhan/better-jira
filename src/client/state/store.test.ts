@@ -1575,6 +1575,27 @@ test("navigation: back and forward restore each screen without adding entries", 
   `);
 });
 
+test("navigation: Back restores an issue page's trail; a reload of its entry starts afresh, as Linear's breadcrumb store", async () => {
+  const { navigate, get } = await navigationFixture();
+  navigate({ selected: "NAV-1", panel: true });
+  navigate({ view: "page" });
+  navigate({ selected: "NAV-2", trail: { parent: "NAV-1" } });
+  await settle();
+  const { key: _key, __TSR_key: _entry, __TSR_index: _index, ...state } = router.history.location.state;
+  expect([address(), get().trail, state.trail]).toEqual(["/issue/NAV-2", { path: ["NAV-1"] }, { path: ["NAV-1"] }]);
+  navigate({ panel: false });
+  expect(get().trail).toBeNull();
+  await travel(-1);
+  expect([address(), get().trail]).toEqual(["/issue/NAV-2", { path: ["NAV-1"] }]);
+  // A reload: the same address and entry state, in an entry this page load never showed. Load starts navigation before the
+  // router shows its first address, so "load hasn't finished" can't tell a reload from Back.
+  await visit("/?board=1");
+  router.history.push("/issue/NAV-2", state);
+  await settle();
+  expect([address(), get().selected, get().trail]).toEqual(["/issue/NAV-2", "NAV-2", null]);
+  navigate({ view: "side", panel: false });
+});
+
 test("navigation: issues open beside the board or as a page, and the board remembers the choice", async () => {
   const { navigate, ui, trace } = await navigationFixture();
   const steps = [];

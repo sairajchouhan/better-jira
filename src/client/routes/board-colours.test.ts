@@ -79,8 +79,8 @@ test("the column backdrop is the base theme's bgSub at .4 and .1, the page bgBas
 });
 
 test("the column header is a solid bgSub/.4 strip and the body's gradient starts 46px up, at the header's top", () => {
-  expect(column).toMatch(/\.board-column > \.board-column-heading \{[^}]*background: var\(--col-top\)/);
-  expect(column).toMatch(/\.board-column:has\(> \.board-column-heading\) \{\s*--board-column-header: 46px;/);
+  expect(column).toMatch(/\.board-column \.board-column-heading \{[^}]*background: var\(--col-top\)/);
+  expect(column).toMatch(/\.board-column:has\(\.board-column-heading\) \{\s*--board-column-header: 46px;/);
   expect(column).toMatch(
     /\.board-column-body \{\s*background: linear-gradient\(var\(--col-top\), var\(--col-bottom\)\) 0 calc\(-1 \* var\(--board-column-header\)\) \/ 100%\s+calc\(100% \+ var\(--board-column-header\)\) no-repeat;/,
   );
@@ -117,4 +117,12 @@ test("header view tabs are the shared tab Button: controlTertiaryHover under the
   expect(button.slice(active)).toMatch(/^[^}]*background: var\(--tab-on\);\s*color: var\(--fg\);/);
   // Tabs (the roving tablists) hover the same way, never the darker row hover.
   expect(tabs).toMatch(/\.ui-tab:hover \{\s*background: var\(--control-tertiary-hover\);/);
+});
+
+test("the column's header rules reach its heading inside ContextMenu's display: contents wrapper", async () => {
+  // ColumnHeading wraps the h2 in ContextMenu (action-menu.tsx), a `div.contents`: a child combinator never matches it, which
+  // left the header strip unpainted and the body's gradient starting at its own top.
+  const heading = await Bun.file(new URL("./board-view.tsx", import.meta.url)).text();
+  expect(heading).toMatch(/<ContextMenu label=\{`Column \$\{bucket\.name\}`\}[^>]*>\s*<h2 className="board-column-heading/);
+  expect(column).not.toMatch(/>\s*\.board-column-heading/);
 });

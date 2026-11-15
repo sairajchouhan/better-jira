@@ -216,13 +216,18 @@ const issueOf = (l: ParsedLocation) =>
  */
 function show(place: Place, location: ParsedLocation) {
   if (location.href !== router.latestLocation.href) return;
+  // oxlint-disable-next-line no-underscore-dangle -- TanStack History sets only `__TSR_key` on every entry (`key` is pushes only).
+  const entry = location.state.__TSR_key,
+    seen = !!entry && shownEntries.has(entry);
+  if (entry) shownEntries.add(entry);
   if (navigationReady && sameAddress(current().location, location)) return;
   go({
     type: "restore",
     place,
     draft: drafts.read(location.pathname),
     favorite: location.state.favorite,
-    trail: restoredTrail(location.state, !navigationReady),
+    // An entry this page load never showed (a reload, an entry from before it) starts its trail afresh.
+    trail: restoredTrail(location.state, !seen),
   });
   // The address names the screen differently (an issue beside another board's list): show its own address, once.
   const { target, location: shown } = current();
@@ -231,6 +236,10 @@ function show(place: Place, location: ParsedLocation) {
   const hash = issueOf(shown) === issueOf(location) ? location.hash : undefined;
   throw redirect({ ...(target as object), hash, replace: true, state: { ...(target as { state?: object }).state, settled: true } } as never);
 }
+/** The history entries (`__TSR_key`) this page load has shown, Back and Forward's own. A reload's entry isn't one: it was shown
+ *  before the reload, so its trail is dropped, as Linear's breadcrumb store starts empty (`restoredTrail`). Checking that load
+ *  hasn't finished can't say it: load starts navigation before the router shows the first address. */
+const shownEntries = new Set<string>();
 /** Set once load has restored the address; before that nothing is written to history. */
 let navigationReady = false;
 /** Keeps the address in step with the screen from now on. Once, after load (the router then shows the address). */

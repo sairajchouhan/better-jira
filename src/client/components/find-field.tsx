@@ -60,6 +60,25 @@ function Presence({ open, children }: { open: boolean; children: ReactNode }) {
   );
 }
 
+/**
+ * The term a find field sends: 150ms after typing stops (`debounceMs: 150`), and nothing once the field is closed, whoever
+ * closed it. Its owner clears the term as it closes the field, so a send still waiting out the debounce would put the old
+ * term back on the page the owner moved to.
+ */
+export function findTermSender(onValueChange: (term: string) => void, wait = 150) {
+  let open = true;
+  const debouncer = new Debouncer((term: string) => open && onValueChange(term), { wait });
+  return {
+    type: (term: string) => open && debouncer.maybeExecute(term),
+    /** Drops a waiting send only: StrictMode's effect replay (cleanup, then setup) keeps the same field sending. */
+    cancel: () => debouncer.cancel(),
+    close: () => {
+      open = false;
+      debouncer.cancel();
+    },
+  };
+}
+
 function FindFieldRoot({
   ref,
   id,
@@ -87,19 +106,21 @@ function FindFieldRoot({
   children?: ReactNode;
 }) {
   const [text, setText] = useState(defaultValue);
-  const [send] = useState(() => new Debouncer(onValueChange, { wait: 150 }));
+  const [send] = useState(() => findTermSender(onValueChange));
   const leaving = use(LeavingContext);
   useEffect(() => () => send.cancel(), [send]);
   useEffect(() => {
     if (!leaving) return;
+    // Its owner closed it (a breadcrumb, a page change): the term it cleared stays cleared while the field fades out.
+    send.close();
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return leaving.done();
     const timer = setTimeout(leaving.done, EXIT_FALLBACK_MS);
     return () => clearTimeout(timer);
-  }, [leaving]);
+  }, [leaving, send]);
   const close = () => {
     // Already closed: a leaving field's blur (it turns inert) closes nothing again.
     if (leaving) return;
-    send.cancel();
+    send.close();
     onClose();
   };
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -126,7 +147,7 @@ function FindFieldRoot({
         value={text}
         onChange={(term) => {
           setText(term);
-          send.maybeExecute(term);
+          send.type(term);
         }}
         className={`ui-find ${className}`}
         data-leaving={leaving ? "" : undefined}
