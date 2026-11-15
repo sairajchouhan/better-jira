@@ -162,3 +162,10 @@ test("people outside the team are listed only from the second typed character", 
   expect(listsOtherPeople(" j ")).toBe(false);
   expect(listsOtherPeople("jo")).toBe(true);
 });
+
+test("Ship should-fix: a board's projects start with its own, so an empty board has one", () => {
+  const own = { key: "EMP", name: "Empty project" };
+  expect(projectChoices([], { project: own })).toEqual([own]);
+  expect(projectChoices([{ project: { key: "OTH", name: "Other" } } as Issue], { project: own }).map((p) => p.key)).toEqual(["EMP", "OTH"]);
+  expect(projectChoices([], { project: null })).toEqual([]);
+});

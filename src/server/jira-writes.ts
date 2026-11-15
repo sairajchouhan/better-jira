@@ -4,6 +4,7 @@ import { DESCRIPTION_CONFLICT, renameCommentIds, type Op } from "@/shared/jira-o
 import { descriptionBases } from "@/shared/document";
 import { inwardKind, jiraLinkType, LINEAR_TYPES } from "@/shared/relations";
 import { TITLE_MAX, TITLE_TOO_LONG } from "@/shared/issue-title";
+import { defaultIssueType } from "@/shared/issue-properties";
 
 const at = (key: string) => `/rest/api/3/issue/${encodeURIComponent(key)}`;
 
@@ -65,14 +66,16 @@ const linkEnds = (key: string, target: string, kind: string) =>
 
 /** Sub-issues of a standard issue must use the project's subtask type. */
 async function typeFor(project: string, type: string | undefined, parent: string | undefined) {
-  if (!parent) return type ?? "Task";
+  const readMeta = () =>
+    jira<{ issueTypes: any[] }>(`/rest/api/3/issue/createmeta/${encodeURIComponent(project)}/issuetypes`);
+  // No type named: the project's default (Task when it has one), never a type the project lacks.
+  if (!parent) return type ?? defaultIssueType((await readMeta()).issueTypes);
   // Both reads at once: a child create waits one Jira round trip here, not two (R2-create-D2).
-  const meta = jira<{ issueTypes: any[] }>(
-    `/rest/api/3/issue/createmeta/${encodeURIComponent(project)}/issuetypes`,
-  );
+  const meta = readMeta();
   meta.catch(() => {});
   const parentType = (await jira(`${at(parent)}?fields=issuetype`)).fields.issuetype;
-  if (parentType.hierarchyLevel > 0) return type && type !== "Subtask" ? type : "Task";
+  if (parentType.hierarchyLevel > 0)
+    return type && type !== "Subtask" ? type : defaultIssueType((await meta).issueTypes);
   const { issueTypes } = await meta;
   const subtask = issueTypes.find((t) => t.subtask);
   if (!subtask) throw new UserError(`Project ${project} has no sub-task issue type.`);

@@ -2,7 +2,8 @@ import { viewRepository } from "./view-repository";
 import { Database } from "bun:sqlite";
 import { jira, JiraError } from "./jira";
 import { jiraProblem } from "./jira-problem";
-import { boardFromInput, withoutAddedBoard } from "./config";
+import { boardFromInput, boardProject, withoutAddedBoard } from "./config";
+import type { Board } from "@/shared/issue-model";
 import { detailCache } from "./detail-cache";
 import { historyCache, readHistory } from "./issue-history";
 import { linkedPullRequests, readPullRequests } from "./pull-requests";
@@ -175,7 +176,20 @@ async function fullSync(board: number) {
     }),
   );
   const gone = store.sweep(board, t0);
-  // The board config lists status ids only; names and categories come from the status list.
+  await syncConfig(board);
+  boardSync.set(board, { ...boardSync.get(board), progress: undefined });
+  setMeta(`full:${board}`, String(t0));
+  setMeta(`inc:${board}`, String(t0));
+  setMeta(`fields:${board}`, FIELDS);
+  console.log(
+    `[sync] board ${board}: full, ${first.total} issues, ${gone} removed, ${Date.now() - t0}ms`,
+  );
+}
+
+/** The board's name, columns and Jira project, from its configuration. The config lists status ids only; names and categories
+ *  come from the status list. The project is the board's location (null for a board kept in a user's space): what an empty
+ *  board creates in, and whose issue types the options list. */
+async function syncConfig(board: number) {
   const [config, statuses] = await Promise.all([
     jira(`/rest/agile/1.0/board/${board}/configuration`),
     jira<any[]>("/rest/api/3/status"),
@@ -189,14 +203,7 @@ async function fullSync(board: number) {
       (s: any) => byId.get(s.id) ?? { id: s.id, name: s.id, category: "indeterminate" },
     ),
   }));
-  setMeta(`config:${board}`, JSON.stringify({ id: board, name: config.name, columns }));
-  boardSync.set(board, { ...boardSync.get(board), progress: undefined });
-  setMeta(`full:${board}`, String(t0));
-  setMeta(`inc:${board}`, String(t0));
-  setMeta(`fields:${board}`, FIELDS);
-  console.log(
-    `[sync] board ${board}: full, ${first.total} issues, ${gone} removed, ${Date.now() - t0}ms`,
-  );
+  setMeta(`config:${board}`, JSON.stringify({ id: board, name: config.name, columns, project: boardProject(config.location) }));
 }
 
 /** Fetch issues updated since the last sync (with a minute of overlap). Returns the keys that actually changed. */
@@ -297,6 +304,8 @@ async function syncBoard(board: number) {
   const lastFull = Number(getMeta(`full:${board}`) ?? 0);
   if (getMeta(`fields:${board}`) !== FIELDS || Date.now() - lastFull > FULL_SYNC_EVERY_MS)
     return (await fullSync(board), true);
+  // A board mirrored before its project was kept reads its configuration again, once.
+  if (!("project" in (JSON.parse(getMeta(`config:${board}`) ?? "{}") as object))) await syncConfig(board);
   const keys = await incrementalSync(board);
   if (keys.length) console.log(`[sync] board ${board}: ${keys.join(" ")}`);
   if (Date.now() - (probed.get(board) ?? 0) < PROBE_MS) return keys.length > 0;
@@ -794,13 +803,19 @@ let optionCache: { at: number; value: Promise<any> } | undefined;
 export function options() {
   if (optionCache && Date.now() - optionCache.at < 600_000) return optionCache.value;
   const value = (async () => {
-    const projects = db
-      .query<{ key: string }, []>(
-        "SELECT DISTINCT json_extract(slim,'$.project.key') AS key FROM issues",
-      )
-      .all()
-      .map((r) => r.key)
-      .filter(Boolean);
+    // The boards' own projects too, so an empty board's issue types and people are known.
+    const projects = [
+      ...new Set([
+        ...boards().flatMap((b: Board) => (b.project ? [b.project.key] : [])),
+        ...db
+          .query<{ key: string }, []>(
+            "SELECT DISTINCT json_extract(slim,'$.project.key') AS key FROM issues",
+          )
+          .all()
+          .map((r) => r.key)
+          .filter(Boolean),
+      ]),
+    ];
     const [priorities, users, labels, versions, types] = await Promise.all([
       jira<any[]>("/rest/api/3/priority"),
       projects.length

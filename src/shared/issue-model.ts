@@ -130,6 +130,8 @@ export type Board = {
   columns: Column[];
   /** Added in the app, so the sidebar can remove it (BJ-24). */
   removable?: boolean;
+  /** The Jira project the board is located in (its configuration's `location`), so an empty board can still create. */
+  project?: { key: string; name: string } | null;
 };
 /** Raw Jira issue: { key, fields: { description, comment, reporter, created, ... } } */
 export type Full = {

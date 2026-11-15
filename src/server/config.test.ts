@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   boardFromInput,
+  boardProject,
   boardIDs,
   configuration,
   siteURL,
@@ -85,4 +86,11 @@ test("BJ-24: a board added in the app can be removed again; setup's boards stay"
   const removed = withoutAddedBoard(local, site, 7);
   expect(removed.addedBoards).toEqual({ [site]: [12] });
   expect(configuration(env, removed).boards).toEqual([12, 34]);
+});
+
+test("Ship should-fix: a board's project is its configuration's location, in either of Jira's field names; none outside a project", () => {
+  expect(boardProject({ type: "project", key: "EMP", name: "Empty project" })).toEqual({ key: "EMP", name: "Empty project" });
+  expect(boardProject({ type: "project", projectKey: "EMP", projectName: "Empty project" })).toEqual({ key: "EMP", name: "Empty project" });
+  expect(boardProject({ type: "user", name: "Someone" })).toBeNull();
+  expect(boardProject(undefined)).toBeNull();
 });

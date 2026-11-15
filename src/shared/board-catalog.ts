@@ -129,11 +129,15 @@ export function priorityChoices(
  *  ("Specify the Priority (id or name) in the string format") although its editmeta calls the field optional, so a
  *  writable site's issues have no unset row; a read-only site keeps edits local and can clear it (R3-issue-fields-D1). */
 export const clearPriorityRow = (writable: boolean) => (writable ? undefined : "No priority");
-export function projectChoices(issues: Iterable<Issue>) {
+/** The Jira projects a board's new issues can go to: the board's own (its location) first, then those its issues are in, so an
+ *  empty board still has one. */
+export function projectChoices(issues: Iterable<Issue>, board?: Pick<Board, "project">) {
+  const own = board?.project ? [[board.project.key, board.project] as const] : [];
   return [
-    ...new Map(
-      Array.from(issues).flatMap((i) => (i.project ? [[i.project.key, i.project] as const] : [])),
-    ).values(),
+    ...new Map([
+      ...own,
+      ...Array.from(issues).flatMap((i) => (i.project ? [[i.project.key, i.project] as const] : [])),
+    ]).values(),
   ];
 }
 export function milestoneChoices(

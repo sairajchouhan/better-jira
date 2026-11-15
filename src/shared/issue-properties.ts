@@ -142,6 +142,14 @@ export const canHaveChildren = (s: Hierarchy, issue: Typed) => childTypes(s, iss
  *  section lists and adds its issues, as Jira's epic page does (shared/epics.ts listsSubIssues, BJ-280). */
 export const canHaveSubIssues = (s: Hierarchy, issue: Typed) =>
   listsSubIssues({ type: issue.type, level: levelOf(s, issue) }) && canHaveChildren(s, issue);
+/**
+ * The type a new issue gets when none is picked: Task when its Jira project has one, else that project's first standard type
+ * (hierarchy level 0, never an epic or a sub-task). Task while the project's types aren't known (local mode, options loading).
+ */
+export function defaultIssueType(projectTypes: readonly { name: string; hierarchyLevel: number }[] | undefined): string {
+  const standard = projectTypes?.filter((t) => t.hierarchyLevel === 0) ?? [];
+  return (standard.find((t) => t.name === "Task") ?? standard[0])?.name ?? "Task";
+}
 /** Jira can't create a Subtask without a parent or take its parent away. */
 export const needsParent = (s: Hierarchy, issue: Typed) => (levelOf(s, issue) ?? 0) < 0;
 

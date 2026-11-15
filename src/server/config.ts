@@ -127,3 +127,9 @@ export function boardFromInput(input: string, site: string): number {
     throw new Error("That link isn't a Jira board. Open the board in Jira and copy its address.");
   return board;
 }
+
+/** A board configuration's `location` as the board's project (Jira names its fields `key`/`name`, or `projectKey`/`projectName`). */
+export function boardProject(location: any): { key: string; name: string } | null {
+  const key = location?.type === "project" ? (location.key ?? location.projectKey) : undefined;
+  return typeof key === "string" ? { key, name: String(location.name ?? location.projectName ?? key) } : null;
+}

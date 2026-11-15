@@ -2634,3 +2634,25 @@ test("Ship should-fix: with Jira writes, Issue created shows once Jira has creat
     jira.restore();
   }
 });
+
+test("Ship should-fix: an empty board creates in its own Jira project, with that project's default type", async () => {
+  const { get, set } = await import("./store");
+  const { actions } = await import("./issue-actions");
+  const { navigate } = await import("@/client/features/navigation/app-navigation");
+  const board: Board = {
+    id: 94,
+    name: "Empty",
+    columns: [{ name: "Todo", statuses: [{ id: "todo", name: "Todo", category: "new" }] }],
+    project: { key: "EMP", name: "Empty project" },
+  };
+  const options = get().options;
+  set({ boards: [...get().boards, board], options: { ...options, types: { ...options.types, EMP: [{ name: "Story", hierarchyLevel: 0 }, { name: "Epic", hierarchyLevel: 1 }] } } });
+  try {
+    navigate({ board: 94 });
+    const key = actions.create("First on an empty board")!;
+    expect(key).toMatch(/^EMP-NEW\d+$/);
+    expect(get().issues.get(key)).toMatchObject({ project: { key: "EMP", name: "Empty project" }, type: "Story" });
+  } finally {
+    set({ options });
+  }
+});

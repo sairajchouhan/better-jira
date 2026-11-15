@@ -24,7 +24,7 @@ import {
   withJiraLinks,
 } from "./local-edits";
 import { announceCreated, showNotification } from "./app-notifications";
-import { assignableUsers, statusById, statuses } from "@/shared/board-catalog";
+import { assignableUsers, projectChoices, statusById, statuses } from "@/shared/board-catalog";
 import { createDefaults } from "@/shared/create-defaults";
 import { createAssignee, startAssignee } from "@/shared/auto-assign";
 import { savedAutomations } from "./browser-preferences";
@@ -34,7 +34,7 @@ import { adfToText } from "@/client/features/editor/adf";
 import { type Grouping } from "@/shared/view-model";
 import { documentHasMedia, normalizeDocument, textToAdf, type AdfDocument } from "@/shared/document";
 import { reminderTime } from "@/client/features/reminders/reminder-display";
-import { typeChoices, childTypes, canHaveSubIssues } from "@/shared/issue-properties";
+import { typeChoices, childTypes, canHaveSubIssues, defaultIssueType } from "@/shared/issue-properties";
 import { canNest, epicLocked, epicOf, epicPatch, parentOf } from "@/shared/epics";
 import { replyParent, visibleCommentTotal } from "@/client/features/comments/comment-thread";
 
@@ -696,8 +696,10 @@ export const actions = {
     const board = get().boards.find((b) => b.id === (draft.board ?? get().board));
     const status = statusById(board, draft.status) ?? statuses(board)[0];
     if (!board || !status || !summary.trim() || (draft.subIssues?.some(title => title.trim()) && !canHaveSubIssues(get(), draft))) return;
-    const prefix =
-      [...get().issues.values()].find((i) => onBoard(i, board.id))?.key.split("-")[0] ?? "LOCAL";
+    // The board's Jira project (its location, else its issues'): an empty board creates there too.
+    const boardsIssues = [...get().issues.values()].filter((i) => onBoard(i, board.id));
+    const project = draft.project ?? projectChoices(boardsIssues, board)[0];
+    const prefix = boardsIssues[0]?.key.split("-")[0] ?? project?.key ?? "LOCAL";
     const key = `${prefix}-NEW${nextSeq()}`;
     markCreated(key);
     if (draft.submission) submissions.set(draft.submission, key);
@@ -720,7 +722,7 @@ export const actions = {
           key,
           boards: [board.id],
           summary: summary.trim(),
-          type: "Task",
+          type: defaultIssueType(get().options.types?.[project?.key ?? ""]),
           priority: get().writable ? undefined : "Normal",
           assignee: null,
           labels: [],
@@ -734,7 +736,7 @@ export const actions = {
           prCount: 0,
           watchers: [],
           watchersComplete: true,
-          project: [...get().issues.values()].find((i) => onBoard(i, board.id))?.project,
+          project,
           ...fields,
           ...(assignee !== undefined ? { assignee } : {}),
           description: adfToText(document),
@@ -767,7 +769,7 @@ export const actions = {
             ...newSubIssueDraft(issue),
             submission: draft.submission ? `${draft.submission}:child:${index}` : undefined,
             board: board.id,
-            type: childTypes(get(), issue)?.[0] ?? "Task",
+            type: childTypes(get(), issue)?.[0] ?? defaultIssueType(get().options.types?.[project?.key ?? ""]),
           }, true);
         }
         // "Create more" keeps the composer open; otherwise open the issue, or stay on the board with a toast.

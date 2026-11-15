@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   canHaveChildren,
+  defaultIssueType,
   canHaveSubIssues,
   canParent,
   childTypes,
@@ -137,4 +138,12 @@ test("search ranks an exact match above a partial one", () => {
   expect(rank("[QA] relations parent")).toBe(-1);
   expect(matchRank("kan-1", { key: "KAN-1", summary: "x" })).toBe(0);
   expect(matchRank("(", { key: "KAN-1", summary: "a (b)" })).toBe(3); // regex characters are literal
+});
+
+test("Ship should-fix: a new issue's default type is the project's Task, else its first standard type, Task when unknown", () => {
+  const types = (...names: [string, number][]) => names.map(([name, hierarchyLevel]) => ({ name, hierarchyLevel }));
+  expect(defaultIssueType(types(["Epic", 1], ["Bug", 0], ["Task", 0], ["Subtask", -1]))).toBe("Task");
+  expect(defaultIssueType(types(["Epic", 1], ["Story", 0], ["Bug", 0], ["Subtask", -1]))).toBe("Story");
+  expect(defaultIssueType(types(["Epic", 1], ["Subtask", -1]))).toBe("Task");
+  expect(defaultIssueType(undefined)).toBe("Task");
 });

@@ -771,3 +771,20 @@ test("BJ-270: a title past Jira's 255 characters is refused before any write, in
   const fits = await applyOps("K-61", [{ op: "fields", fields: { summary: "x".repeat(255) } }]);
   expect(fits.error).toBeUndefined();
 });
+
+test("Ship should-fix: a create with no type, or under an epic, takes the project's own standard type, never a Task it lacks", async () => {
+  const created: any[] = [];
+  answer = (path, init) => {
+    if (path.includes("/issue/createmeta/STORY/issuetypes"))
+      return { issueTypes: [{ name: "Epic", hierarchyLevel: 1 }, { name: "Story", hierarchyLevel: 0 }, { name: "Sub-task", hierarchyLevel: -1, subtask: true }] };
+    if (path.endsWith("?fields=issuetype")) return { fields: { issuetype: { name: "Epic", hierarchyLevel: 1 } } };
+    if (path === "/rest/api/3/issue" && init?.method === "POST") {
+      created.push(JSON.parse(String(init.body)).fields.issuetype);
+      return { key: `STORY-${created.length}` };
+    }
+    return jiraAnswers(path, init);
+  };
+  await applyOps("STORY-NEW1", [{ op: "create", fields: { summary: "No type", project: "STORY" } }]);
+  await applyOps("STORY-NEW2", [{ op: "create", fields: { summary: "In an epic", project: "STORY", parent: "STORY-9" } }]);
+  expect(created).toEqual([{ name: "Story" }, { name: "Story" }]);
+});

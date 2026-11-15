@@ -40,6 +40,7 @@ import {
   canHaveSubIssues,
   canParent,
   childTypes,
+  defaultIssueType,
   matchRank,
   needsParent,
   typeChoices,
@@ -199,7 +200,7 @@ export function CreateIssue() {
   // Where focus goes back to when the link field closes (Linear's Add link… dialog returns it to what opened it).
   const linkReturn = useRef<HTMLElement | null>(null);
   const issues = boardIssues(all, board.id);
-  const projects = projectChoices(issues);
+  const projects = projectChoices(issues, board);
   // Never a parent Jira would refuse: one from another Jira project goes, or brings the issue to its project (BJ-257).
   const draft = parentInProject(chosen, projects, (key) => all.get(key));
   const options = useStore((s) => s.options),
@@ -225,12 +226,18 @@ export function CreateIssue() {
       : parentIssue && !canHaveChildren(get(), parentIssue)
         ? `Jira has no issue type below ${parentIssue.type}, so ${parentIssue.key} can't have sub-issues.`
         : "";
-  // A sub-issue takes a type one level below its parent; any other new issue can't be a Subtask, which needs a parent.
+  // A sub-issue takes a type one level below its parent; any other new issue can't be a Subtask, which needs a parent. The
+  // project's own types when Jira's list is known, its default first, so a project without Task never gets one.
   const types =
     parentTypes ??
     (parentIssue && childTypes(get(), parentIssue)) ??
     [
-      ...new Set(["Task", ...issues.flatMap((i) => (i.type ? [i.type] : []))]),
+      ...new Set([
+        defaultIssueType(jiraTypes),
+        ...(jiraTypes
+          ? jiraTypes.filter((t) => t.hierarchyLevel >= 0).map((t) => t.name)
+          : issues.flatMap((i) => (i.type ? [i.type] : []))),
+      ]),
     ].filter((type) => draft.parent || !needsParent(get(), { type, project }));
   const type =
     draft.type && types.includes(draft.type)
