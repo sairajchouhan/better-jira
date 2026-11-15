@@ -72,6 +72,9 @@ test("board layout: hidden columns, column titles, drag placement and My issues"
     expect(await page.eval(keysIn("Todo"))).toEqual(["TEST-6", "TEST-1", "TEST-4", "TEST-5"]);
     // BJ-322: React Aria's keyboard drag reaches the same drop. Before the fix, any drop that added a card to a column
     // left the app blank (React error #185), and the arrows that pick a drop target also moved the app's selection.
+    // The row first: a column is one tab stop, so focus landing straight on a handle while focus is visible (after a reload)
+    // is sent to the column's first card (React Aria useGridListItem onFocus), and Enter would open that card.
+    await page.page.locator('[role=row][data-key="TEST-5"]').focus();
     await page.page.locator('button[aria-label^="Drag TEST-5 "]').focus();
     await page.key("Enter");
     await page.key("Tab"); // Doing, the next column
