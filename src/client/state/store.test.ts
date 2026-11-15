@@ -2701,6 +2701,43 @@ test("BJ-348: an inline sub-issue shows the type Jira creates (a standard issue'
   }
 });
 
+test("BJ-352: a refused write whose answer lacks Jira's copy leaves nothing to send again, and rolls back once a copy lands", async () => {
+  const { get, set } = await import("./store");
+  const { actions } = await import("./issue-actions");
+  const { savedChanges, hasLocalJiraChanges } = await import("./local-edits");
+  let readable = false;
+  // The write is refused and the server's read of Jira's copy fails; the tab's read again fails too, until `readable`.
+  const jira = await fakeJiraWrites((key, body) =>
+    body.ops.length
+      ? { error: "Priority is locked.", issue: undefined, unsettled: [key] }
+      : readable
+        ? { issue: writableIssue(key) }
+        : { error: "Jira didn't answer.", issue: undefined },
+  );
+  const owned = (key: string) => savedChanges().filter((c) => c.key === key).flatMap((c) => c.issueFields);
+  try {
+    set({ writable: true, issues: new Map(get().issues).set("RB-7", writableIssue("RB-7")).set("RB-8", writableIssue("RB-8")) });
+    actions.patch("RB-7", { priority: "High" });
+    await jira.settled();
+    await Bun.sleep(20);
+    // Nothing of the refused edit is the tab's to send any more: a reload replays only fields still owned here.
+    expect(owned("RB-7")).not.toContain("priority");
+    expect(hasLocalJiraChanges("RB-7")).toBe(false);
+    expect(get().writeError).toEqual({ key: "RB-7", text: "Priority is locked." });
+    expect(jira.sent.filter((s) => s.key === "RB-7" && s.ops.length)).toHaveLength(1);
+    // With the copy readable, the tab's read again rolls the refused value back, as an answer carrying it would have.
+    readable = true;
+    actions.patch("RB-8", { priority: "High" });
+    await jira.settled();
+    await Bun.sleep(20);
+    expect(get().issues.get("RB-8")?.priority).toBe("Low");
+    expect(owned("RB-8")).not.toContain("priority");
+  } finally {
+    set({ writable: false, writeError: null });
+    jira.restore();
+  }
+});
+
 test("BJ-354: an issue opened by key that no board holds opens here once the mirror keeps it; Jira's 404 is not found, a failed read is an error", async () => {
   const { get } = await import("./store");
   const { openIssueByKey, linkedIssueKey } = await import("@/client/features/navigation/app-navigation");

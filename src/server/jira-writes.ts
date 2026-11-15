@@ -692,11 +692,15 @@ export async function applyOps(
     };
   const [fresh, ...touched] = settled;
   const others = touched.flatMap((r) => (r ? [r.issue] : []));
+  // A copy that couldn't be read is read again by the tab, as a slow one is, refused write or not: a refusal settles the same
+  // way with or without it, and rolls back once it lands (BJ-352).
+  const unread = [...(settle && fresh === undefined ? [ctx.key] : []), ...[...ctx.touched].filter((_, i) => touched[i] === undefined)];
   return {
     error,
     key: ctx.key,
     created: ctx.created,
     others,
     ...(fresh === undefined ? {} : { issue: fresh?.issue ?? null, full: fresh?.full ?? null }),
+    ...(unread.length ? { unsettled: unread } : {}),
   };
 }

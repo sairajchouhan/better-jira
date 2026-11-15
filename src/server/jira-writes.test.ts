@@ -277,6 +277,19 @@ test("a cleared priority never reaches Jira for a saved issue, which refuses it 
   expect(bodies["/rest/api/3/issue/K-16"]).toEqual({ fields: { summary: "Edited" } });
 });
 
+test("BJ-352: a refused write whose read of Jira's copy fails names the issue for the tab to read again, as a slow read does", async () => {
+  answer = jiraAnswers;
+  refreshing = () => turn(() => Promise.reject(new Error("Jira rate limit")));
+  try {
+    const result = await applyOps("K-61", [{ op: "fields", fields: { priority: null } }]);
+    expect(result.error).toContain("priority");
+    expect(result).not.toHaveProperty("issue");
+    expect(result.unsettled).toEqual(["K-61"]);
+  } finally {
+    refreshing = () => turn(() => undefined);
+  }
+});
+
 const doc = (text: string) => ({
   type: "doc" as const,
   version: 1 as const,

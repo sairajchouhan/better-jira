@@ -301,7 +301,33 @@ export function releaseJiraFields(key: string) {
 /** The issue's only write was its uploads, which Jira now has. */
 export const releaseAttachments = (key: string) => void localFields.get(key)?.delete("attachments");
 
-/** Takes Jira's copy of what Jira owns, once no later write for the issue waits. `force` rolls a failed write back. */
+/** Refusals whose answer came without Jira's copy (the server's read of it failed), with Jira's reason: the next copy read
+ *  rolls the issue back as that answer would have (BJ-352). */
+const refusals = new Map<string, string>();
+/**
+ * A refused write settles the same way whether or not its answer carries Jira's copy (BJ-352). Without one, the edit's fields
+ * go back to Jira's ownership now, so nothing is sent again on its own (a reload replays only fields still local); a refused
+ * description stays held beside it, as with a copy (R2-D2); and the copy the outbox reads next (the answer's `unsettled`)
+ * rolls the shown values back. A refused create goes with its issue instead (jira-sync `refused`).
+ */
+function settleRefusal(key: string, error: string, describes: boolean) {
+  if (createdKeys.has(key)) return;
+  refusals.set(key, error);
+  const full = get().full.get(key),
+    mine = full?.fields.description;
+  releaseJiraFields(key);
+  if (full && describes && mine !== undefined && !full.descriptionRejected)
+    set({
+      full: new Map(get().full).set(key, { ...full, descriptionBase: undefined, descriptionRejected: mine, descriptionError: error }),
+    });
+  touch(key);
+  queueSave();
+}
+const sameDocument = (a: unknown, b: unknown) =>
+  JSON.stringify(normalizeDocument(a as never)) === JSON.stringify(normalizeDocument(b as never));
+
+/** Takes Jira's copy of what Jira owns, once no later write for the issue waits. `force` rolls a failed write back; a refused
+ *  write whose answer has no copy settles at once (`settleRefusal`) and rolls back with the next copy. */
 export function adoptJira(
   key: string,
   result: WriteResult,
@@ -309,7 +335,16 @@ export function adoptJira(
   created = new Map<string, string>(),
   describes = false,
 ) {
-  if (result.issue === undefined || (!force && hasPendingWrite(key))) return;
+  if (result.issue === undefined) {
+    if (force && result.error) settleRefusal(key, result.error, describes);
+    return;
+  }
+  const refusal = refusals.get(key);
+  if (refusal !== undefined) {
+    refusals.delete(key);
+    return adoptJira(key, { ...result, error: result.error ?? refusal }, true, created, describes);
+  }
+  if (!force && hasPendingWrite(key)) return;
   touch(key);
   const state = get(),
     issue = state.issues.get(key);
@@ -352,17 +387,16 @@ export function adoptJira(
     const comment = result.full.fields?.comment,
       description = result.full.fields?.description,
       mine = full.fields.description;
-    // Jira refused this description: keep it beside Jira's copy, so it's never silently lost, even unfocused or after a reload (R2-D2, R2-D4).
-    const refused =
-      !!result.error &&
-      describes &&
-      mine !== undefined &&
-      JSON.stringify(normalizeDocument(mine)) !== JSON.stringify(normalizeDocument(description));
+    // Jira refused this description: keep it beside Jira's copy, so it's never silently lost, even unfocused or after a reload
+    // (R2-D2, R2-D4). One held already (a refusal that came without a copy) stays unless Jira's copy turns out to have it.
+    const refused = !!result.error && describes && mine !== undefined && !sameDocument(mine, description);
+    const { descriptionRejected: held, descriptionError: heldError, ...rest } = full;
+    const rejected = refused ? { descriptionRejected: mine, descriptionError: result.error } : held !== undefined && !sameDocument(held, description) ? { descriptionRejected: held, descriptionError: heldError } : {};
     patch.full = new Map(state.full).set(key, {
-      ...full,
+      ...rest,
       fields: { ...full.fields, description, comment },
       descriptionBase: undefined,
-      ...(refused ? { descriptionRejected: mine, descriptionError: result.error } : {}),
+      ...rejected,
     });
     // Bodies and deletions now live in Jira; resolved, subscribed and reactions stay local.
     const states: Record<string, CommentState> = {};
@@ -439,6 +473,7 @@ export function forgetIssue(key: string) {
   createdKeys.delete(key);
   localFields.delete(key);
   fullFields.delete(key);
+  refusals.delete(key);
 }
 
 // --- Saved data ---
@@ -450,6 +485,7 @@ export function resetLocalEdits() {
   localFields.clear();
   fullFields.clear();
   needsFullRefresh.clear();
+  refusals.clear();
 }
 /**
  * Puts saved changes over Jira's copies (`inJira`) into `issues` and `full`. Returns the changes it took. With Jira writes,
