@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { LAST_ROW_SHOWN, limitCap, listHeight, listRoom, MENU, menuRoom } from "./menu";
+import { coversRoom, LAST_ROW_SHOWN, limitCap, listHeight, listRoom, MENU, menuRoom } from "./menu";
 
 // A menu list's rows as it lays them out: 6px of padding (Vw.LIST_PADDING), then 32px rows.
 const rows = (n: number) => Array.from({ length: n }, (_, i) => ({ top: MENU.LIST_PADDING + i * 32, height: 32 }));
@@ -70,4 +70,16 @@ test("BJ-302: limitHeight cuts to 18 rows only once the list overflows its room 
   expect(limitCap(rows(40), 600, 36)).toBe(Math.floor(600 * 0.8) - 36);
   // Fewer rows laid out than 18 (a virtualized list): 18 rows of 32px and the padding.
   expect(limitCap(rows(10), 1200, 36)).toBe(18 * 32 + MENU.LIST_PADDING);
+});
+
+// The 1044-label Labels submenu scrolled to its end holds only the rows around its last ones (and the focused first row, which the
+// Virtualizer keeps rendered): cutting from those shrank its list to 87px. The rows it renders can't place a cut, so it keeps its own.
+test("_3e: a list scrolled past every row its cut is made in keeps the cut it has", () => {
+  const all = rows(1044);
+  const scrolled = [all[0]!, ...all.slice(1000)];
+  expect(coversRoom(scrolled, 900)).toBe(false);
+  expect(listHeight(scrolled, natural(1044), 900)).toBeNaN();
+  expect(coversRoom(all.slice(0, 40), 900)).toBe(true);
+  expect(coversRoom(all.slice(0, 20), 900)).toBe(false);
+  expect(listHeight(all.slice(0, 40), natural(1044), 900)).toBe(888);
 });

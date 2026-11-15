@@ -11,6 +11,7 @@ import {
 import { Popover, PopoverContext } from "react-aria-components";
 import { Tooltip, useTooltip } from "./tooltip";
 import { OverlayBoundary } from "./overlay-boundary";
+import { isFocusReturn } from "./menu-surface";
 import {
   CARD_FALLBACKS,
   choosePlacement,
@@ -137,12 +138,16 @@ const inCard = (card: RefObject<HTMLElement | null>, node: EventTarget | null) =
 const CARD_TABBABLE = 'a[href], button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
 /** The card's trigger: a span around the caller's control. A mouse or pen rest opens the card (each move restarts the delay),
- *  keyboard focus inside opens it at once, a press closes it until the pointer comes back, and leaving closes it unless the pointer
- *  went into the card. Tab while the card is open moves into it (React Aria's `usePreviewTrigger`, whose card sits at the end of the
- *  page); focus handed back as the card closes doesn't open it again. */
+ *  keyboard focus inside opens it at once, a press closes it until the pointer has left the trigger (the store), and leaving
+ *  closes it unless the pointer went into the card. Tab while the card is open moves into it (React Aria's `usePreviewTrigger`,
+ *  whose card sits at the end of the page). Focus handed back, as the card or a menu the trigger opened closes, doesn't open it
+ *  again. Only what happens in the trigger's own DOM counts: a menu it opened is portalled out, and its events still bubble here
+ *  through React (its focus reopened the card). */
 function HoverCardTrigger({ display, children }: { display: "inline-flex" | "inline"; children: ReactNode }) {
   const { isOpen, surfaceRef, triggerRef, actions } = useTooltip();
   const restoring = useRef(false);
+  const own = (event: { currentTarget: Element; target: EventTarget | null }) =>
+    event.target instanceof Node && event.currentTarget.contains(event.target);
   useEffect(() => {
     const trigger = triggerRef.current;
     if (!trigger) return;
@@ -162,21 +167,28 @@ function HoverCardTrigger({ display, children }: { display: "inline-flex" | "inl
       ref={triggerRef as RefObject<HTMLSpanElement | null>}
       className={display === "inline" ? "inline" : "inline-flex min-w-0 max-w-full"}
       data-hover-card-trigger=""
-      onPointerEnter={(event) => event.pointerType !== "touch" && actions.enter()}
-      onPointerMove={(event) => event.pointerType !== "touch" && actions.move()}
+      onPointerEnter={(event) => own(event) && event.pointerType !== "touch" && actions.enter()}
+      onPointerMove={(event) => own(event) && event.pointerType !== "touch" && actions.move()}
       onPointerLeave={(event) => {
+        if (!own(event)) return;
         if (event.pointerType !== "touch" && !keepsCardOpen(inCard(surfaceRef, event.relatedTarget) ? "card" : "elsewhere")) actions.leave();
       }}
-      onPointerDown={() => actions.close()}
-      onFocus={(event) => !restoring.current && event.target.matches(":focus-visible") && actions.focus()}
+      onPointerDown={(event) => own(event) && actions.close()}
+      onFocus={(event) =>
+        own(event) &&
+        !restoring.current &&
+        !isFocusReturn(event.target) &&
+        event.target.matches(":focus-visible") &&
+        actions.focus()
+      }
       onKeyDown={(event) => {
-        if (event.key !== "Tab" || event.shiftKey || !isOpen) return;
+        if (!own(event) || event.key !== "Tab" || event.shiftKey || !isOpen) return;
         const first = [...(surfaceRef.current?.querySelectorAll<HTMLElement>(CARD_TABBABLE) ?? [])].find((node) => node.getClientRects().length);
         if (!first) return;
         event.preventDefault();
         first.focus();
       }}
-      onBlur={(event) => !inCard(surfaceRef, event.relatedTarget) && actions.close()}
+      onBlur={(event) => own(event) && !inCard(surfaceRef, event.relatedTarget) && actions.close()}
     >
       {children}
     </span>
@@ -184,7 +196,8 @@ function HoverCardTrigger({ display, children }: { display: "inline-flex" | "inl
 }
 
 /** Linear's `Vwe` wrapper: the card's whole box with a transparent `Pwe` (4px) pad on its main axis (`Gwe`, index.css), so it meets
- *  its trigger. Leaving it closes the card unless the pointer went back to the trigger, or went nowhere just after a press inside. */
+ *  its trigger. Leaving it closes the card unless the pointer went back to the trigger, or went nowhere just after a press inside.
+ *  Escape from inside it closes only the card. */
 function HoverCardZone({ label, children }: { label?: string; children: ReactNode }) {
   const { surfaceRef, triggerRef, actions } = useTooltip();
   const pressedAt = useRef(-Infinity);
@@ -192,6 +205,9 @@ function HoverCardZone({ label, children }: { label?: string; children: ReactNod
     <div
       className="hover-card-zone"
       onPointerDown={() => (pressedAt.current = Date.now())}
+      // With focus in the card, Escape is the card's: the tooltip rule (capture, on the window) hides it, and the key stops here
+      // instead of going on to the page under it (the issue page's Escape left for the board).
+      onKeyDown={(event) => event.key === "Escape" && event.stopPropagation()}
       onPointerLeave={(event) => {
         const to = event.relatedTarget;
         const where =

@@ -121,6 +121,25 @@ test("Escape hides the open tooltip and lets the key through, so one press also 
   expect(store.openId).toBeUndefined();
 });
 
+// BJ-309: Escape closed the menu a card's badge sat under and hid the card; the menu's underlay going from under the resting pointer
+// entered the badge again, and the card, still warm, reopened at once over the page.
+test("hidden under the pointer by Escape or a press, a card stays hidden through a fresh enter until the pointer has left", () => {
+  for (const hide of ["escape", "press"] as const) {
+    const { store, advance } = setup();
+    store.enter("card", TOOLTIP_TIMING.card);
+    advance(550);
+    if (hide === "escape") store.escape();
+    else store.close("card");
+    store.enter("card", TOOLTIP_TIMING.card);
+    advance(1000);
+    expect([hide, store.openId]).toEqual([hide, undefined]);
+    store.leave("card");
+    store.enter("card", TOOLTIP_TIMING.card);
+    advance(550);
+    expect([hide, store.openId]).toEqual([hide, "card"]);
+  }
+});
+
 test("a card stays open only while the pointer goes into it or back to its trigger (`Rwe`'s mouse-out, `Vwe`)", () => {
   expect(keepsCardOpen("card")).toBe(true);
   expect(keepsCardOpen("trigger")).toBe(true);

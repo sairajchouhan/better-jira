@@ -180,7 +180,18 @@ export const sortRows =
       r.table.forEach((node, _, index) => index < body && head.push(node));
       const tablePos = r.tableStart - 1,
         tr = state.tr.replaceWith(tablePos, tablePos + r.table.nodeSize, r.table.copy(Fragment.from([...head, ...rows.map((row) => row.node)])));
-      dispatch(tr.setSelection(state.selection.map(tr.doc, tr.mapping)).scrollIntoView());
+      // The selection stays in the table: mapped through the replaced table it fell after it, and the table's controls went with
+      // it. A column selection (the column menu's) selects the sorted column again; a caret goes with its row.
+      const sorted = tableAt({ doc: tr.doc } as EditorState, tablePos)!,
+        cell = (rowIndex: number, column: number) =>
+          tr.doc.resolve(sorted.start + sorted.map.positionAt(rowIndex, column, sorted.table));
+      const moved = r.top < body ? r.top : body + rows.findIndex((row) => row.index === r.top);
+      tr.setSelection(
+        state.selection instanceof CellSelection
+          ? CellSelection.colSelection(cell(0, r.left), cell(sorted.map.height - 1, r.left))
+          : TextSelection.near(tr.doc.resolve(cell(moved, r.left).pos + 1)),
+      );
+      dispatch(tr.scrollIntoView());
     }
     return true;
   };

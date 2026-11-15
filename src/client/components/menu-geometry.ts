@@ -101,7 +101,7 @@ const SIDE_EDGE = 12,
  * menu's border box (`edge`) by 2px, with its first row (`first` px into the submenu) level with the row; it swaps to the other side
  * only when its own doesn't fit and that one does (when neither fits, the roomier side), never dropping under its row, and is
  * clamped 12px inside the window across and 10px down (over its menu when neither side fits). Its height is capped to `menuRoom`
- * from its row; `height` is its height under that cap.
+ * from its row; `height` is its height under that cap. `lowest` is the lowest top that keeps it 10px inside the window's bottom.
  */
 export function submenuPlacement({
   row,
@@ -119,31 +119,36 @@ export function submenuPlacement({
   first: number;
   side: "right" | "left";
   view: { width: number; height: number };
-}): { left: number; top: number; maxHeight: number } {
+}): { left: number; top: number; maxHeight: number; lowest: number } {
   const right = edge.right - 2,
     left = edge.left + 2 - width;
   const overflow = (x: number) => Math.max(0, x + width - (view.width - SIDE_EDGE)) + Math.max(0, SIDE_EDGE - x);
   const [preferred, other] = side === "right" ? [right, left] : [left, right];
   const x = !overflow(preferred) || (overflow(other) > 0 && overflow(other) >= overflow(preferred)) ? preferred : other;
   const maxHeight = menuRoom(view.height, row.top),
-    shown = Math.min(height, maxHeight);
+    lowest = view.height - END_EDGE - Math.min(height, maxHeight);
   return {
     left: Math.max(SIDE_EDGE, Math.min(view.width - SIDE_EDGE - width, x)),
-    top: Math.max(END_EDGE, Math.min(view.height - END_EDGE - shown, row.top - first)),
+    top: Math.max(END_EDGE, Math.min(lowest, row.top - first)),
     maxHeight,
+    lowest,
   };
 }
 
 /**
  * Keeps an open submenu where it first settled while its row stays put: typing in its search shrinks its list from the bottom, as
- * in Linear, and re-aligning or un-clamping a shorter list would move the search out from under the pointer. `settled` is this
- * opening's memory (a new popup starts over); returns the top to use and the memory to keep.
+ * in Linear, and re-aligning or un-clamping a shorter list would move the search out from under the pointer. A list that grows past
+ * the window from there (its rows arriving after it opened) still moves up to `lowest`, S3e's clamp, and settles there. `settled`
+ * is this opening's memory (a new popup starts over); returns the top to use and the memory to keep.
  */
 export function settle(
   settled: { row: number; top: number } | null,
   row: number,
   top: number,
+  lowest = Infinity,
 ): { top: number; settled: { row: number; top: number } } {
-  if (settled && settled.row === row) return { top: settled.top, settled };
-  return { top, settled: { row, top } };
+  if (!settled || settled.row !== row) return { top, settled: { row, top } };
+  if (settled.top <= lowest) return { top: settled.top, settled };
+  const kept = { row, top: Math.max(top, lowest) };
+  return { top: kept.top, settled: kept };
 }

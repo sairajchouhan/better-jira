@@ -161,11 +161,13 @@ const timeout: Schedule = (task, ms) => {
  * any other. Each trigger reports the pointer and focus; the store times the rest.
  * - Pointer enter starts the trigger's delay, restarted on each move when its timing says so (`Iwe.schedule`).
  * - Within `warmMs` of the last tooltip hiding (its id still "warm"), the next opens at once (`shouldBeImmediate`).
- * - Leaving, a press (`closeOnPointerDown`), blur, scroll and Escape hide it; it stays hidden until the pointer comes back.
+ * - Leaving, a press (`closeOnPointerDown`), blur, scroll and Escape hide it. Hidden with the pointer still on it, it stays hidden
+ *   until the pointer has left (`Rwe`): an enter that isn't one (the menu's underlay going from under a resting pointer) doesn't
+ *   reopen it.
  * - Keyboard focus opens at once (React Aria's rule; Linear's trigger only marks itself hovered on focus).
  */
 export function createTooltipStore(schedule: Schedule = timeout) {
-  let openId: string | undefined, warmId: string | undefined, hoverId: string | undefined;
+  let openId: string | undefined, warmId: string | undefined, hoverId: string | undefined, shut: string | undefined;
   let pending: { id: string; timing: Timing; cancel: () => void } | undefined;
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach((listener) => listener());
@@ -185,8 +187,11 @@ export function createTooltipStore(schedule: Schedule = timeout) {
     pending = { id, timing, cancel: schedule(() => ((pending = undefined), show(id)), timing.delay) };
   };
   // `Rwe`'s effect when hover ends: hide, then let this tooltip's warm window lapse after `warmMs` unless another took it.
-  const settle = (id: string) => {
-    if (hoverId === id) hoverId = undefined;
+  const settle = (id: string, under = false) => {
+    if (hoverId === id) {
+      hoverId = undefined;
+      if (under) shut = id;
+    }
     if (pending?.id === id) cancelPending();
     if (openId === id) {
       openId = undefined;
@@ -206,7 +211,7 @@ export function createTooltipStore(schedule: Schedule = timeout) {
       return openId;
     },
     enter(id: string, timing: Timing) {
-      if (hoverId === id) return;
+      if (hoverId === id || shut === id) return;
       hoverId = id;
       if (warmId !== undefined && (warmId !== id || openId !== id)) show(id);
       else wait(id, timing);
@@ -215,18 +220,19 @@ export function createTooltipStore(schedule: Schedule = timeout) {
       if (pending?.id === id && pending.timing.restartOnMove) wait(id, pending.timing);
     },
     leave(id: string) {
+      if (shut === id) shut = undefined;
       if (hoverId === id || openId === id || pending?.id === id) settle(id);
     },
     focus(id: string) {
       hoverId = id;
       show(id);
     },
-    /** A press, blur or scroll: hide until the pointer comes back. */
-    close: settle,
-    /** Escape: hide whatever is open. Returns whether something was. */
+    /** A press, blur or scroll: hide until the pointer has left and come back. */
+    close: (id: string) => settle(id, true),
+    /** Escape: hide whatever is open, until the pointer has left it. Returns whether something was. */
     escape() {
       if (openId === undefined) return false;
-      settle(openId);
+      settle(openId, true);
       return true;
     },
   };

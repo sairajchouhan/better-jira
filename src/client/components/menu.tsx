@@ -40,7 +40,7 @@ import {
   type Rect,
 } from "react-aria-components";
 import { Icon } from "./icons";
-import { MenuSurfaceContext, watchPlacement } from "./menu-surface";
+import { MenuSurfaceContext, placedProps, watchPlacement } from "./menu-surface";
 import { LIMIT_HEIGHT, LIMIT_ROWS, LIMIT_ROWS_HEIGHT, MENU, menuRoom, settle, submenuPlacement } from "./menu-geometry";
 import { arrange, EMPTY_STATE, relink, rowKeys, stepIndex, type RankCollection, type RankNode } from "./menu-rank";
 import { openedByPointer } from "./menu-pristine";
@@ -97,6 +97,17 @@ export function renderedRows(
 export class MenuLayout extends ListLayout<unknown> {
   override getVisibleLayoutInfos(rect: Rect) {
     return super.getVisibleLayoutInfos(overscanned(rect));
+  }
+  /** A divider is always DIVIDER_HEIGHT. ListLayout forgets every row's measured size when the list's width changes (k3e widening
+   *  the menu) and estimates the rows not rendered at a row's height again, so a scrolled list's divider above counted 32px, not 12:
+   *  the list grew 20px under a list scrolled to its end, and its last row sat cut off below it. */
+  protected override buildItem(...args: Parameters<ListLayout<unknown>["buildNode"]>) {
+    const built = super.buildItem(...args);
+    if (args[0].type !== "separator") return built;
+    built.layoutInfo.rect.height = MENU.DIVIDER_HEIGHT;
+    built.layoutInfo.estimatedSize = false;
+    built.validRect = built.layoutInfo.rect.intersection(this.requestedRect);
+    return built;
   }
 }
 /** `rect` grown by OVERSCAN rows above and below, never above the list's top. */
@@ -222,11 +233,29 @@ export function listRoom(
  */
 export function listHeight(rows: readonly { top: number; height: number }[], natural: number, room: number): number {
   if (natural <= room) return natural;
+  if (rows.length && !coversRoom(rows, room)) return NaN;
   const cuts = rows.map((row) => Math.ceil(row.top + row.height * LAST_ROW_SHOWN)).sort((a, b) => a - b);
   if (!cuts.length) return room;
   let cut = cuts[0]!;
   for (const at of cuts) if (at <= room) cut = at;
   return cut;
+}
+
+/**
+ * Whether `rows` (as listHeight takes them) are every row from the list's top down past `room`, with no gap between them: the
+ * Virtualizer renders only the rows around what is in view, so a list scrolled far down holds none of the rows a cut is made in
+ * (and the row with focus it keeps rendered wherever it is). Without them, listHeight gives NaN: the cut can't be known, so the
+ * list keeps the one it has.
+ */
+export function coversRoom(rows: readonly { top: number; height: number }[], room: number): boolean {
+  let bottom = rows[0]?.top ?? Infinity;
+  if (bottom > MENU.ITEM_HEIGHT) return false;
+  for (const row of rows) {
+    if (row.top > bottom + 1) return false;
+    bottom = Math.max(bottom, row.top + row.height);
+    if (bottom >= room) return true;
+  }
+  return false;
 }
 
 /**
@@ -260,7 +289,8 @@ function fitHeight(node: HTMLElement) {
       boxes.push(box);
       if (box === popup) break;
     }
-  const scrolled = list.scrollTop;
+  const scrolled = list.scrollTop,
+    kept = list.style.maxHeight;
   // What each box shows around the list, read with the list collapsed so no box's own cap cuts it (and offsetHeight leaves out
   // what overflows it, such as a submenu's safe triangle). Two writes, each followed by its batch of reads.
   list.style.maxHeight = "0px";
@@ -292,7 +322,8 @@ function fitHeight(node: HTMLElement) {
     const limited = list.hasAttribute("data-limit");
     height = listHeight(rows, natural, limited ? Math.min(room, limitCap(rows, innerHeight, caps.at(-1)?.around ?? 0)) : room);
   }
-  if (height < own) list.style.maxHeight = `${height}px`;
+  if (Number.isNaN(height)) list.style.maxHeight = kept;
+  else if (height < own) list.style.maxHeight = `${height}px`;
   list.scrollTop = scrolled;
 }
 
@@ -538,6 +569,29 @@ const isSubmenuRow = (state: TreeState | null, key: string | null) => {
   return parent != null && state?.collection.getItem(parent)?.type === "submenutrigger";
 };
 
+/**
+ * The root menu trigger state React Aria's SubmenuTrigger reads its open state from, less its `close` and `openSubmenu` (the
+ * level's actions, added where the level is: handed to a function, the compiler takes them to read refs during render and skips
+ * compiling the menu). Each level gives its own, holding only its own open submenu at index 0, so a row's level is 0 however deep
+ * it is or when it mounts (a virtualized row scrolled in while a submenu is open would otherwise take level 1).
+ * Its closeSubmenu does nothing: the level closes its submenu itself (a highlight move, ←, Backspace, Escape). React Aria's
+ * SubmenuTrigger also asks to close on any focus landing in the parent list, the virtual focus Autocomplete hands the list as
+ * focus comes back to its search among it: the pointer leaving a submenu (Linear's yieldFocus) closed it.
+ */
+export function levelTrigger(open: Opened | null): Omit<TriggerState, "close" | "openSubmenu"> {
+  return {
+    isOpen: true,
+    setOpen: () => {},
+    open: () => {},
+    toggle: () => {},
+    focusStrategy: null,
+    point: null,
+    setPoint: () => {},
+    expandedKeysStack: { length: 0, 0: open ? SUBMENU + open.key : undefined } as unknown as Key[],
+    closeSubmenu: () => {},
+  };
+}
+
 /** Hands the root node to the caller's `ref` too; a module function, as the React Compiler won't compile a component that
  *  writes to a prop. */
 function forward(ref: Ref<HTMLDivElement> | undefined, node: HTMLDivElement | null) {
@@ -730,24 +784,13 @@ function MenuRoot({
     },
   };
   const open = useSyncExternalStore(level.actions.subscribe, level.actions.opened, level.actions.opened);
-  // React Aria's SubmenuTrigger reads its open state from a root menu trigger state; each level gives its own, holding only its own
-  // open submenu at index 0, so a row's level is 0 however deep it is or when it mounts (a virtualized row scrolled in while a
-  // submenu is open would otherwise take level 1). Closing every level is closing the surface. A new one only as a submenu opens or
-  // closes: every SubmenuTrigger reads it (its row's aria-expanded), as React Aria re-renders each on every highlight move anyway.
+  // A new trigger state only as a submenu opens or closes: every SubmenuTrigger reads it (its row's aria-expanded), as React Aria
+  // re-renders each on every highlight move anyway.
   const trigger: TriggerState = {
-    isOpen: true,
-    setOpen: () => {},
-    open: () => {},
-    toggle: () => {},
-    focusStrategy: null,
-    point: null,
-    setPoint: () => {},
+    ...levelTrigger(open),
+    // Closing every level is closing the surface.
     close: () => level.actions.closeAll(),
-    expandedKeysStack: { length: 0, 0: open ? SUBMENU + open.key : undefined } as unknown as Key[],
     openSubmenu: (key) => level.actions.open(String(key).slice(SUBMENU.length), "focus"),
-    closeSubmenu: (key) => {
-      if (SUBMENU + level.actions.opened()?.key === key) level.actions.close();
-    },
   };
   // Autocomplete moves its input's focus to the search whenever a row takes virtual focus. A submenu the pointer or a preview
   // opened leaves focus in its parent (Linear's yieldFocus), so its rows' virtual focus stays inside it until focus moves in.
@@ -1002,6 +1045,8 @@ function RankedRows({ children }: { children: ReactNode }) {
  * overscan). Keyboard scrolling keeps ITEM_SCROLL_MARGIN of context past the highlight. `maxHeight` is Linear's `maxHeight` prop, a
  * cap of the menu's own (`--list-max`, index.css); the menu cuts it further to its room (useListHeight owns the list's max-height).
  * LIMIT_HEIGHT is Linear's `limitHeight` instead: no cap until the list overflows its room (limitCap).
+ * Its children are React Aria collection nodes only (Menu's rows, groups, dividers, Empty) and components that render them: a plain
+ * element among them (a `<div>` around Menu.Empty) never becomes a node, keeps the collection dirty, and loops until React gives up.
  */
 function MenuList({ maxHeight, children }: { maxHeight?: string; children: ReactNode }) {
   const level = use(ListContext)!;
@@ -1132,6 +1177,21 @@ type MenuItemProps = ItemSlots & {
   children: ReactNode;
 };
 
+/** A row's DOM props: React Aria's, with a checkbox row's role and state, a muted row's aria-disabled and its title laid over them.
+ *  What isn't ours stays React Aria's (a disabled row's aria-disabled). */
+export function rowDom(
+  dom: ComponentProps<"div">,
+  { checks, muted, title }: { checks?: boolean; muted: boolean; title?: string },
+): ComponentProps<"div"> {
+  return {
+    ...dom,
+    title,
+    role: checks !== undefined ? "menuitemcheckbox" : dom.role,
+    "aria-checked": checks ?? dom["aria-checked"],
+    "aria-disabled": muted || dom["aria-disabled"] || undefined,
+  };
+}
+
 /** Linear's Item: a full-width 32px row owning 14/18 padding; its highlight is inset 6px with radius 8 (fT.itemContainer). */
 function MenuItem({
   value,
@@ -1172,15 +1232,7 @@ function MenuItem({
       {...props}
       render={
         checks !== undefined || title || muted
-          ? (dom) => (
-              <div
-                {...(dom as ComponentProps<"div">)}
-                title={title}
-                role={checks !== undefined ? "menuitemcheckbox" : (dom as ComponentProps<"div">).role}
-                aria-checked={checks}
-                aria-disabled={muted || undefined}
-              />
-            )
+          ? (dom) => <div {...rowDom(dom as ComponentProps<"div">, { checks, muted, title })} />
           : undefined
       }
       className="menu-item"
@@ -1253,10 +1305,11 @@ function popupEdge(row: Element) {
   return { left, right };
 }
 
-/** Writes the safe triangle from `point` to `popup`'s box into `node`'s style, or hides it while the pointer is inside the popup. */
-function drawTriangle(node: HTMLElement, popup: HTMLElement | null, { x, y }: Point) {
+/** Writes the safe triangle from `point` to `popup`'s box into `node`'s style, or hides it while the pointer is inside the popup
+ *  or off the parent menu that its `row` is in. */
+function drawTriangle(node: HTMLElement, popup: HTMLElement | null, row: HTMLElement | null | undefined, { x, y }: Point) {
   const box = popup?.getBoundingClientRect(),
-    style = box && safeTriangle(box, x, y);
+    style = box && safeTriangle(box, x, y, { parent: row?.closest(POPUP)?.getBoundingClientRect(), row: row?.getBoundingClientRect() });
   node.style.cssText = style
     ? Object.entries(style)
         .map(([key, value]) => `${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}:${value}`)
@@ -1310,7 +1363,7 @@ function SafeTriangle({
         if (!stays(point)) return;
         expired.current = false;
       }
-      if (ready.current) drawTriangle(node, popup.current, point);
+      if (ready.current) drawTriangle(node, popup.current, row?.current, point);
       clearTimeout(expiry.current);
       expiry.current = setTimeout(() => {
         if (stays(point)) return;
@@ -1334,8 +1387,8 @@ function SafeTriangle({
     ready.current = placed !== null;
     const node = ref.current,
       point = at.current ?? from;
-    if (node && ready.current && point && !expired.current) drawTriangle(node, popup.current, point);
-  }, [placed, popup, from]);
+    if (node && ready.current && point && !expired.current) drawTriangle(node, popup.current, row?.current, point);
+  }, [placed, popup, row, from]);
   return <div ref={ref} aria-hidden data-safe-triangle style={{ display: "none" }} />;
 }
 
@@ -1385,7 +1438,7 @@ function OpenSubmenu({
       const box = anchor.getBoundingClientRect(),
         frame = node.getBoundingClientRect(),
         first = node.querySelector('[role^="menuitem"]');
-      const next = submenuPlacement({
+      const { lowest, ...next } = submenuPlacement({
         row: box,
         edge: popupEdge(anchor),
         width: node.offsetWidth,
@@ -1394,10 +1447,10 @@ function OpenSubmenu({
         side,
         view: { width: innerWidth, height: innerHeight },
       });
-      const kept = settle(settled, box.top, next.top);
+      const kept = settle(settled, box.top, next.top, lowest);
       settled = kept.settled;
       return { ...next, top: kept.top };
-    }, setPlace);
+    }, setPlace, anchor.closest(POPUP));
   }, [row, side]);
   const parentInput = level.actions.input;
   /** Linear's yieldFocus: focus goes back to the parent menu, so its Escape and keys work, and the submenu stays open. */
@@ -1438,16 +1491,7 @@ function OpenSubmenu({
       // A press in another popup of this menu (a Select's list, a nested submenu) isn't outside it.
       shouldCloseOnInteractOutside={(element) => !element.closest("[data-surface], [data-popover], .menu-submenu")}
       className="menu-submenu"
-      style={{
-        position: "fixed",
-        top: place?.top ?? 0,
-        left: place?.left ?? 0,
-        right: "auto",
-        bottom: "auto",
-        maxHeight: place?.maxHeight,
-        zIndex: 60,
-        visibility: place ? "visible" : "hidden",
-      }}
+      {...placedProps(place ?? undefined, 60)}
     >
       <div
         ref={popup}

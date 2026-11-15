@@ -81,10 +81,12 @@ export const SIDE_PANEL_SURFACE =
  * anchor's scroll parents among them) and as the popup itself resizes, and hands each result to `apply`. The first result is applied
  * as it comes (the caller is a layout effect, which React commits before paint); later ones are flushed at once, as a ResizeObserver
  * or a scroll runs before the browser paints and a plain update would land a frame late (the Help menu jumping as it opened). The
- * anchor's own resizes and layout shifts are deliberately not watched, so a menu stays put while the issue it edits changes.
+ * anchor's own resizes and layout shifts are deliberately not watched, so a menu stays put while the issue it edits changes. A
+ * `follow` box's resizes are: a submenu follows its parent menu, which k3e widens toward its far side as rows come into view,
+ * moving the row it opened from (the submenu overlapped the parent by the width it grew).
  * Returns the stop.
  */
-export function watchPlacement<T>(floating: HTMLElement, compute: () => T, apply: (value: T) => void) {
+export function watchPlacement<T>(floating: HTMLElement, compute: () => T, apply: (value: T) => void, follow?: Element | null) {
   let mounted = false;
   const run = () => {
     const next = compute();
@@ -95,6 +97,7 @@ export function watchPlacement<T>(floating: HTMLElement, compute: () => T, apply
   mounted = true;
   const resized = new ResizeObserver(run);
   resized.observe(floating);
+  if (follow) resized.observe(follow);
   const scrolled = (event: Event) => {
     if (event.target instanceof Node && floating.contains(event.target)) return;
     run();
@@ -143,6 +146,26 @@ const FOCUSABLE = [
   .join();
 const returnTargets = new WeakMap<Element, HTMLElement | null>();
 
+/** The element a closing popup is handing focus back to, while it does: a hover card's trigger opens on keyboard focus, never on
+ *  focus given back (an Escape from the menu its badge opened reopened the card over the page). */
+let returning: HTMLElement | null = null;
+export const isFocusReturn = (target: EventTarget | null) => target !== null && target === returning;
+function giveFocus(node: HTMLElement | null | undefined) {
+  if (!node) return;
+  returning = node;
+  try {
+    node.focus();
+  } finally {
+    returning = null;
+  }
+}
+
+/** Whether focus is lost as a popup closes, so handing it back to the opener is ours to do: on the body, nowhere, or still in
+ *  the popup. Anywhere else, the action the popup ran moved it on purpose (Edit into the comment editor, a table command into its
+ *  cell): putting it back on the opener would undo that, and a plain focus() on an editor drops its caret. */
+export const focusLost = (active: object | null, body: object, popup: { contains(node: never): boolean } | null) =>
+  !active || active === body || !!popup?.contains(active as never);
+
 /** One frame of handing focus back, with `active` what holds it now. Lost to the body, it goes to the opener while connected
  *  (`back`) until the opener has `held` it (after that, the body is where the user put it: an outside press on blank page);
  *  with the opener gone, to its re-rendered node (`keyed`), which ends it. Anywhere else but the opener, the user moved on. */
@@ -165,7 +188,8 @@ export function refocusStep<T extends object>(
  *
  * Focus can't land at once: a Dialog's page stays inert until React Aria's modal lets go of it, after this cleanup, so the
  * opener refuses focus (the inbox's "Delete all notifications?" confirm left it on the body); and the opener may re-render away
- * as the menu's action lands (a card moved to another column), now or a few frames on. So for half a second, while focus is
+ * as the menu's action lands (a card moved to another column), now or a few frames on. Focus the action moved is left where it
+ * is (focusLost). So for half a second, while focus is
  * lost to the body and the opener hasn't held it yet, it goes to the opener, or to its new node found by its `data-key` (refocusStep).
  */
 export function useReturnFocus(ref: RefObject<HTMLElement | null>, returnTo?: RefObject<HTMLElement | null>) {
@@ -177,14 +201,16 @@ export function useReturnFocus(ref: RefObject<HTMLElement | null>, returnTo?: Re
   useLayoutEffect(() => {
     const target = returnTo?.current ?? opener;
     // A ref on an ancestor (Dialog's box) is attached after this layout effect: then the box is registered a frame on.
+    let popup: HTMLElement | null = null;
     const register = () => {
-      if (ref.current) returnTargets.set(ref.current, opener?.closest('[role="dialog"]') ? fallback : opener);
+      popup = ref.current;
+      if (popup) returnTargets.set(popup, opener?.closest('[role="dialog"]') ? fallback : opener);
     };
     const frame = ref.current ? (register(), 0) : requestAnimationFrame(register);
     return () => {
       cancelAnimationFrame(frame);
       const back = target?.isConnected ? target : fallback?.isConnected ? fallback : null;
-      back?.focus();
+      if (focusLost(document.activeElement, document.body, popup)) giveFocus(back);
       const key = (target ?? fallback)?.closest<HTMLElement>("[data-key]")?.dataset.key;
       const keyed = () =>
         key
@@ -195,7 +221,7 @@ export function useReturnFocus(ref: RefObject<HTMLElement | null>, returnTo?: Re
       const refocus = () => {
         held ||= !!back && document.activeElement === back;
         const step = refocusStep(document.activeElement, document.body, back?.isConnected ? back : null, held, keyed);
-        step.focus?.focus();
+        giveFocus(step.focus);
         if (!step.done && performance.now() < until) requestAnimationFrame(refocus);
       };
       requestAnimationFrame(refocus);
@@ -245,6 +271,22 @@ export function useInitialFocus(ref: RefObject<HTMLElement | null>, initialFocus
     });
     return () => cancelAnimationFrame(frame);
   }, [ref, initialFocus]);
+}
+
+/**
+ * A popup's close for what runs inside it (MenuSurfaceContext): first, at once, the popup lets go of the page (React Aria's
+ * Popover turns non-modal, so the page stops being inert), then the owner's `close`. A row's action runs right after
+ * (`surface.close(); run()`, as Linear runs its action and closes), and the focus it or the owner's close moves (Edit into the
+ * comment editor, a table command back into its cell) lands on a live page instead of being refused, then kept (focusLost).
+ * Escape, an outside press and a render error close as they are: nothing runs after them.
+ */
+function useRelease(close: () => void) {
+  const [released, setReleased] = useState(false);
+  const release = () => {
+    flushSync(() => setReleased(true));
+    close();
+  };
+  return { released, release };
 }
 
 /**
@@ -313,6 +355,7 @@ export function Popover({
   children: ReactNode;
 }) {
   const { keys } = usePopupFocus(popup, close, POPOVER_FOCUS, trigger);
+  const { released, release } = useRelease(close);
   const [anchor] = useState(() => trigger.current);
   // What a failure names: the trigger's name ("Display options").
   const label = anchor?.getAttribute("aria-label") || anchor?.textContent?.trim() || "Menu";
@@ -329,9 +372,10 @@ export function Popover({
   );
   const elevation = useElevation();
   return (
-    <MenuSurfaceContext value={{ close }}>
+    <MenuSurfaceContext value={{ close: release }}>
       <AriaPopover
         isOpen
+        isNonModal={released}
         onOpenChange={(open) => {
           if (!open) close();
         }}
@@ -339,11 +383,10 @@ export function Popover({
         shouldCloseOnInteractOutside={outsideOf}
         ref={popup}
         data-popover
-        data-placed
+        {...placedProps(style, 40)}
         {...elevation.props}
         // The box focus starts on (POPOVER_FOCUS) shows no ring: Tab moves to the first control, which does.
         className="max-w-[calc(100vw-24px)] outline-none [&_[role=dialog]]:outline-none"
-        style={{ ...placed(style), zIndex: 40 }}
       >
         {/* React Aria's Popover takes no key handlers; its own Escape covers the popover itself while it holds focus. */}
         <div
@@ -380,6 +423,12 @@ export function placed(style: CSSProperties | undefined): CSSProperties {
     box[`--placed-${edge === "maxHeight" ? "max-height" : edge}`] = typeof value === "number" ? `${value}px` : value;
   }
   return box as CSSProperties;
+}
+
+/** What every popup we place spreads on its React Aria Popover: `[data-placed]` and our placement (`placed`) at `zIndex`, so the
+ *  two never drift apart and React Aria's own writes never win (a submenu without them sat where React Aria put it). */
+export function placedProps(style: CSSProperties | undefined, zIndex: number) {
+  return { "data-placed": true, style: { ...placed(style), zIndex } };
 }
 
 /** A modal menu, React Aria's Popover, with measured placement and a centered small-screen fallback (Dialog is the modal box). */
@@ -426,6 +475,7 @@ export function MenuSurface({
   const ref = useRef<HTMLDivElement>(null);
   const elevation = useElevation("surface");
   const { keys, opener } = usePopupFocus(ref, close, MENU_FOCUS);
+  const { released, release } = useRelease(close);
   // The previously focused element is only a useful anchor when it is a real control, not <body> after keyboard navigation.
   const [fallback] = useState(
     () =>
@@ -512,6 +562,7 @@ export function MenuSurface({
         createPortal(<div aria-hidden className="fixed inset-0 z-50 bg-[var(--modal-overlay)]" />, document.body)}
       <AriaPopover
         isOpen
+        isNonModal={released}
         onOpenChange={(open) => {
           if (!open) dismiss();
         }}
@@ -521,9 +572,8 @@ export function MenuSurface({
         aria-label={label}
         {...elevation.props}
         data-surface="menu"
-        data-placed
+        {...placedProps(style, 50)}
         className={`${MENU_POPUP} overflow-y-auto ${fit ? "w-max min-w-[175px] scroll-py-6 max-w-[min(500px,calc(100vw-24px))]" : command ? "flex flex-col overflow-hidden" : "p-3"}`}
-        style={{ ...placed(style), zIndex: 50 }}
       >
         {/* React Aria's Popover takes no key handlers; its own Escape covers the popover itself while it holds focus. */}
         <div
@@ -534,7 +584,7 @@ export function MenuSurface({
             keys(e);
           }}
         >
-          <MenuSurfaceContext value={{ close }}>
+          <MenuSurfaceContext value={{ close: release }}>
             {/* A render error closes this surface only, with a toast (OverlayBoundary); the page under it keeps working. */}
             <OverlayBoundary label={label} close={close}>
               <ElevationScope level={elevation.level}>{children}</ElevationScope>

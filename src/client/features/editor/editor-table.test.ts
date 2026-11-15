@@ -80,6 +80,21 @@ test("sort: body rows by the caret's column, numbers as numbers, ties in place, 
   expect(texts(run(sortRows("ascending"), words).after).flat()).toEqual(["Apple", "banana", "cherry"]);
 });
 
+// BJ-181: the column menu's sort mapped its column selection through the replaced table, out of it, and the table's controls
+// (Table actions among them) went with it.
+test("sort: the selection stays in the table, the sorted column selected again or the caret in its row's cell", () => {
+  const caret = run(sortRows("descending"), state(grid(["Name", "Points"], ["x", "10"], ["y", "9"]), "y")).after;
+  expect(caret.selection.$head.parent.textContent).toBe("y");
+  expect(texts(caret).map((r) => r[0])).toEqual(["Name", "y", "x"]);
+  let column = state(grid(["Name", "Points"], ["x", "10"], ["y", "9"]), "x");
+  column = run(selectLine(0, "column", 1), column).after;
+  const sorted = run(sortRows("ascending"), column).after;
+  expect(sorted.selection).toBeInstanceOf(CellSelection);
+  const cells: string[] = [];
+  (sorted.selection as CellSelection).forEachCell((cell) => cells.push(cell.textContent));
+  expect(cells).toEqual(["Points", "9", "10"]);
+});
+
 test("header: Add header turns the first row into tableHeader cells Jira keeps; a lone row gains a body row", () => {
   const lone = run(toggleHeader, state(grid(null, ["a", "b"]), "a")).after;
   expect(hasHeader(lone.doc.firstChild!)).toBe(true);

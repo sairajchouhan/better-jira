@@ -41,7 +41,7 @@ test("R3-relations-D3: a diagonal path from the pointer toward a lower submenu r
 
 test("the triangle points at whichever side the submenu opens on", () => {
   const left = safeTriangle(box, 440, 200)!;
-  expect(left.right).toBe("-39px"); // 40px to the pointer, less the pointer's own pixel
+  expect(left.right).toBe("-42px"); // 40px to the pointer and APEX (3px) past it, less 1px
   expect(covers(left, 420, 180)).toBe(true);
   expect(covers(left, 440, 260)).toBe(false);
 });
@@ -50,8 +50,8 @@ test("no triangle while the pointer is inside the submenu", () => {
   expect(safeTriangle(box, 300, 200)).toBeUndefined();
 });
 
-test("a press where the pointer rests lands on what is under it: the box stops 1px short of the pointer on every side", () => {
-  // Left, right, above, below, and the four corners of the submenu.
+test("R3-relations-D3: the pointer is inside the triangle redrawn at it, so a stopped pointer stays off the rows beneath", () => {
+  // Left, right, above, below, and the four corners of the submenu: the sample's own point and the pixels around it are covered.
   for (const [x, y] of [
     [160, 120],
     [440, 200],
@@ -63,30 +63,30 @@ test("a press where the pointer rests lands on what is under it: the box stops 1
     [430, 330],
   ] as const) {
     const style = safeTriangle(box, x, y)!;
-    const b = boxOf(style);
-    const inside = x >= b.left && x <= b.left + b.width && y >= b.top && y <= b.top + b.height;
-    expect([x, y, inside]).toEqual([x, y, false]);
-    // One pixel further toward the submenu is covered again.
-    const toward = [x + Math.sign(300 - x), y + Math.sign(200 - y)] as const;
-    expect([x, y, covers(style, toward[0] + Math.sign(300 - x), toward[1] + Math.sign(200 - y))]).toEqual([x, y, true]);
+    expect([x, y, covers(style, x, y)]).toEqual([x, y, true]);
+    expect([x, y, covers(style, x + 0.5 * Math.sign(300 - x), y + 0.5 * Math.sign(200 - y))]).toEqual([x, y, true]);
   }
 });
 
-test("the triangle lasts 150ms after the pointer stops off its row, as Linear's JCe (qCe samples every 50ms)", () => {
-  expect(TRIANGLE_EXPIRY).toBe(150);
+test("a press or hover on the submenu's own row is the row's: there the box stops 1px short of the pointer", () => {
+  const row = { left: 2, right: 202, top: 110, bottom: 140 };
+  const style = safeTriangle(box, 160, 120, { row })!;
+  expect(style.left).toBe("-39px");
+  expect(covers(style, 160, 120)).toBe(false);
+  expect(covers(style, 180, 125)).toBe(true);
+  // Off the row, the pointer is inside it.
+  expect(covers(safeTriangle(box, 160, 150, { row })!, 160, 150)).toBe(true);
 });
 
-test("the triangle stays while the pointer is on the submenu's own row, and only then shows again once expired", () => {
-  const row = { left: 0, right: 200, top: 40, bottom: 68 };
-  expect(triangleStays(row, 100, 50)).toBe(true);
-  expect(triangleStays(row, 200, 68)).toBe(true);
-  expect(triangleStays(row, 100, 80)).toBe(false);
-  expect(triangleStays(row, 220, 50)).toBe(false);
-  expect(triangleStays(undefined, 100, 50)).toBe(false);
-});
-
-test("an expired triangle hands the pointer's resting point to the menu, so the row under it opens (the mouseenter Linear's row gets)", async () => {
-  const source = await Bun.file(new URL("./menu.tsx", import.meta.url)).text();
-  expect(source).toMatch(/expired\.current = true;\s+node\.style\.cssText = "display:none";\s+resting\.current\(point\);\s+\}, TRIANGLE_EXPIRY\)/);
-  expect(source).toMatch(/rest: \(\{ x, y \}\) => \{\s+const target = document\.elementFromPoint\(x, y\);/);
+test("a press where the pointer rests outside both menus lands on what is under it: no triangle off the parent menu", () => {
+  // The parent menu sits left of the submenu, overlapping it by 2px.
+  const parent = { left: 2, right: 202, top: 80, bottom: 400, width: 200, height: 320 };
+  expect(safeTriangle(box, 160, 120, { parent })).toBeDefined();
+  for (const [x, y] of [
+    [1, 120],
+    [160, 60],
+    [160, 420],
+    [450, 20],
+  ] as const)
+    expect([x, y, safeTriangle(box, x, y, { parent })]).toEqual([x, y, undefined]);
 });

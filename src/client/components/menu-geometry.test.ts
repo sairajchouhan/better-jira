@@ -64,7 +64,7 @@ const submenu = (over: Partial<Parameters<typeof submenuPlacement>[0]> = {}) =>
 
 test("a submenu opens on its side, 2px over its menu's border, its first row level with its row (Linear's x3e)", () => {
   // Room below the row is 900 - 200 - 16, over half the window, so that is its cap.
-  expect(submenu()).toEqual({ left: 638, top: 194, maxHeight: 684 });
+  expect(submenu()).toEqual({ left: 638, top: 194, maxHeight: 684, lowest: 590 });
 });
 
 test("a submenu swaps sides only when its own doesn't fit and the other does", () => {
@@ -77,5 +77,5 @@ test("when neither side fits, a submenu keeps its side and is clamped 12px insid
 });
 
 test("a submenu near the bottom is moved up to stay 10px inside the window, its cap the whole window's room", () => {
-  expect(submenu({ row: { top: 800 } })).toEqual({ left: 638, top: 590, maxHeight: 900 - 2 * MENU.VIEWPORT_PADDING });
+  expect(submenu({ row: { top: 800 } })).toEqual({ left: 638, top: 590, maxHeight: 900 - 2 * MENU.VIEWPORT_PADDING, lowest: 590 });
 });
