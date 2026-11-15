@@ -2103,6 +2103,9 @@ li[data-done="true"] > .todo-content {
   grid-template-columns:
     1fr minmax(0, 80ch) minmax(0, clamp(280px, 26.087cqw + 66.087px, 400px))
     1fr;
+  /* The title row is the title's height: properties taller than the content (a short issue, or a description still
+     loading) grow only the content row, so the title never stands taller and nothing under it moves as content arrives. */
+  grid-template-rows: auto 1fr;
   column-gap: clamp(16px, 8.696cqw - 55.304px, 56px);
   align-content: start;
   padding-block: 59.5px 80px;
