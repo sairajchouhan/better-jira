@@ -34,8 +34,11 @@ test("fitting neither side, it sits as low as fits; a trigger without width take
   expect(anchoredPlacement({ trigger: at(100, 130, 0), height: 50, windowHeight: 900, gap: 4 }).maxHeight).toBe(868);
 });
 
-test("Linear's limitHeight cap: 18 rows and the list's top padding, at most 80% of the window less the search", () => {
-  expect(LIMIT_HEIGHT).toBe(`min(${18 * 32 + 6}px, calc(80vh - 36px))`);
+test("Linear's limitHeight is no CSS cap of its own: Menu.List marks the list, and only an overflowing list is cut (limitCap)", async () => {
+  const source = await Bun.file(new URL("./menu.tsx", import.meta.url)).text();
+  expect(source).toContain('data-limit={maxHeight === LIMIT_HEIGHT || undefined}');
+  expect(source).toContain('"--list-max": maxHeight === LIMIT_HEIGHT ? undefined : maxHeight');
+  expect(LIMIT_HEIGHT).not.toContain("px");
 });
 
 test("menu.tsx re-exports the geometry it used to own, and menu-surface.tsx no longer imports menu.tsx", async () => {

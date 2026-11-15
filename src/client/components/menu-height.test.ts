@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { LAST_ROW_SHOWN, listHeight, listRoom, MENU, menuRoom } from "./menu";
+import { LAST_ROW_SHOWN, limitCap, listHeight, listRoom, MENU, menuRoom } from "./menu";
 
 // A menu list's rows as it lays them out: 6px of padding (Vw.LIST_PADDING), then 32px rows.
 const rows = (n: number) => Array.from({ length: n }, (_, i) => ({ top: MENU.LIST_PADDING + i * 32, height: 32 }));
@@ -56,4 +56,18 @@ test("the Labels submenu on a 1044-label board fits 16px inside a 969px window",
     list = listHeight(rows(1044), natural(1044), listRoom(natural(1044), [], { room: menuRoom(969), around }));
   expect(list + around).toBeLessThanOrEqual(969 - 2 * MENU.VIEWPORT_PADDING);
   expect(list).toBeGreaterThan(800);
+});
+
+test("BJ-302: limitHeight cuts to 18 rows only once the list overflows its room (_3e's M: `t<=r` shows it whole)", () => {
+  // 24 rows fit a tall window: all 24 show, as fitHeight only reaches limitCap when natural > room.
+  expect(natural(24)).toBeLessThan(menuRoom(1200) - 36);
+  expect(listHeight(rows(24), natural(24), menuRoom(1200) - 36)).toBe(natural(24));
+  // 40 rows overflow it: cut at the 18th row's end (its padding above included), the last row in view shown at least 55%.
+  const room = Math.min(menuRoom(1200) - 36, limitCap(rows(40), 1200, 36));
+  expect(limitCap(rows(40), 1200, 36)).toBe(MENU.LIST_PADDING + 18 * 32);
+  expect(listHeight(rows(40), natural(40), room)).toBe(Math.ceil(MENU.LIST_PADDING + 17 * 32 + 32 * LAST_ROW_SHOWN));
+  // A short window: 80% of it less what sits around the list wins.
+  expect(limitCap(rows(40), 600, 36)).toBe(Math.floor(600 * 0.8) - 36);
+  // Fewer rows laid out than 18 (a virtualized list): 18 rows of 32px and the padding.
+  expect(limitCap(rows(10), 1200, 36)).toBe(18 * 32 + MENU.LIST_PADDING);
 });

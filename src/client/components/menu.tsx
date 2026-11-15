@@ -41,7 +41,7 @@ import {
 } from "react-aria-components";
 import { Icon } from "./icons";
 import { MenuSurfaceContext, watchPlacement } from "./menu-surface";
-import { MENU, menuRoom, settle, submenuPlacement } from "./menu-geometry";
+import { LIMIT_HEIGHT, LIMIT_ROWS, LIMIT_ROWS_HEIGHT, MENU, menuRoom, settle, submenuPlacement } from "./menu-geometry";
 import { arrange, EMPTY_STATE, relink, rowKeys, stepIndex, type RankCollection, type RankNode } from "./menu-rank";
 import { openedByPointer } from "./menu-pristine";
 import { isMac, Shortcut, type Keys } from "./keycap";
@@ -229,6 +229,16 @@ export function listHeight(rows: readonly { top: number; height: number }[], nat
   return cut;
 }
 
+/**
+ * Linear's `limitHeight` caps for a list that overflows its room (`_3e`'s `M`): the height down to the end of its LIMIT_ROWS-th row
+ * (its padding above included), and 80% of the window less what the menu shows around the list (`Math.floor(v * .8)` caps the
+ * whole menu). `rows` are as listHeight takes them.
+ */
+export function limitCap(rows: readonly { top: number; height: number }[], windowHeight: number, around: number): number {
+  const last = rows.length >= LIMIT_ROWS ? rows[LIMIT_ROWS - 1]! : null;
+  return Math.min(last ? last.top + last.height : LIMIT_ROWS_HEIGHT, Math.floor(windowHeight * 0.8) - around);
+}
+
 // What _3e counts as rows: Linear's action, divider, text divider and group header rows, and the empty state.
 const HEIGHT_ROWS =
   '[role^="menuitem"], .menu-group-header, .menu-divider, .menu-text-divider, .menu-empty, [data-list-row]';
@@ -269,6 +279,7 @@ function fitHeight(node: HTMLElement) {
     caps.length ? { room: menuRoom(innerHeight), around: caps.at(-1)!.around } : undefined,
   );
   let height = natural;
+  // Only a list that overflows its room is cut further to Linear's limitHeight caps.
   if (natural > room) {
     const top = list.getBoundingClientRect().top - list.scrollTop;
     const rows = [...list.querySelectorAll<HTMLElement>(HEIGHT_ROWS)]
@@ -278,7 +289,8 @@ function fitHeight(node: HTMLElement) {
         return { top: box.top - top, height: box.height };
       })
       .sort((a, b) => a.top - b.top);
-    height = listHeight(rows, natural, room);
+    const limited = list.hasAttribute("data-limit");
+    height = listHeight(rows, natural, limited ? Math.min(room, limitCap(rows, innerHeight, caps.at(-1)?.around ?? 0)) : room);
   }
   if (height < own) list.style.maxHeight = `${height}px`;
   list.scrollTop = scrolled;
@@ -975,6 +987,7 @@ function RankedRows({ children }: { children: ReactNode }) {
  * Linear's N6e: the scrolling rows, 6px above and below, virtualized as Linear's react-window list is (MenuLayout, 10 rows of
  * overscan). Keyboard scrolling keeps ITEM_SCROLL_MARGIN of context past the highlight. `maxHeight` is Linear's `maxHeight` prop, a
  * cap of the menu's own (`--list-max`, index.css); the menu cuts it further to its room (useListHeight owns the list's max-height).
+ * LIMIT_HEIGHT is Linear's `limitHeight` instead: no cap until the list overflows its room (limitCap).
  */
 function MenuList({ maxHeight, children }: { maxHeight?: string; children: ReactNode }) {
   const level = use(ListContext)!;
@@ -989,7 +1002,13 @@ function MenuList({ maxHeight, children }: { maxHeight?: string; children: React
           shouldCloseOnSelect={false}
           autoFocus={false}
           className="menu-list"
-          style={{ "--list-max": maxHeight, scrollPaddingBlock: MENU.ITEM_SCROLL_MARGIN } as CSSProperties}
+          data-limit={maxHeight === LIMIT_HEIGHT || undefined}
+          style={
+            {
+              "--list-max": maxHeight === LIMIT_HEIGHT ? undefined : maxHeight,
+              scrollPaddingBlock: MENU.ITEM_SCROLL_MARGIN,
+            } as CSSProperties
+          }
         >
           {children}
         </AriaMenu>

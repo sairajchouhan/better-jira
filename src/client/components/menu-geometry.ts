@@ -47,11 +47,14 @@ export function menuRoom(windowHeight: number, rowTop?: number): number {
 export const LIMIT_ROWS = 18;
 
 /**
- * Linear's `limitHeight` as a list cap (`_3e`'s `M`): the first LIMIT_ROWS rows and the list's top padding, and never more than
- * 80% of the window less the search above the list (`Math.floor(v * .8)` caps the whole menu). The menu still cuts the list
- * where the last row in view shows LAST_ROW_SHOWN of itself (listHeight in menu.tsx).
+ * Linear's `limitHeight` (true) as Menu.List's `maxHeight`: not a cap of its own. Only a list too tall for its room is cut, and
+ * then to no more than its first LIMIT_ROWS rows and 80% of the window (`_3e`'s `M` pushes those caps only after `t<=r` fails;
+ * limitCap in menu.tsx). A list that fits shows every row, however many.
  */
-export const LIMIT_HEIGHT = `min(${LIMIT_ROWS * MENU.ITEM_HEIGHT + MENU.LIST_PADDING}px, calc(80vh - ${MENU.INPUT_HEIGHT}px))`;
+export const LIMIT_HEIGHT = "limit";
+
+/** The 18-row height when fewer than LIMIT_ROWS rows are laid out (a virtualized list's DOM): rows of ITEM_HEIGHT and the top padding. */
+export const LIMIT_ROWS_HEIGHT = LIMIT_ROWS * MENU.ITEM_HEIGHT + MENU.LIST_PADDING;
 
 /** Linear's `D` falls back to the whole window when the preferred side has less than this share of it (`i < v * .3`). */
 export const PREFERRED_SIDE_MIN = 0.3;
