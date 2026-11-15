@@ -87,8 +87,10 @@ export function issueStore(db: Database) {
       })();
     },
     /** On start: boards no longer configured let go of their issues. An issue only they held leaves the mirror; one a configured
-     *  board holds stays on it, and one kept on no board stays kept. Returns the boards let go. */
-    forgetBoards(configured: readonly number[]) {
+     *  board holds stays on it, and one kept on no board stays kept. Returns the boards let go. With no board configured (setup
+     *  not finished, settings unreadable) nothing is let go: that is no reason to empty the cache. */
+    forgetBoards(configured: readonly number[]): number[] {
+      if (!configured.length) return [];
       return db.transaction(() => {
         const kept = inList(configured);
         const gone = db
@@ -133,9 +135,10 @@ export function issueStore(db: Database) {
 export type IssueStore = ReturnType<typeof issueStore>;
 
 /** Of the mirror's meta keys, the sync state of boards no longer `configured` (when each last synced, its columns): forgotten
- *  with their issues, so a board put back later starts with a full sync, not an incremental one over an empty board. */
+ *  with their issues, so a board put back later starts with a full sync, not an incremental one over an empty board. None
+ *  with no board configured, as `forgetBoards`. */
 export const droppedBoardMeta = (keys: readonly string[], configured: readonly number[]) =>
-  keys.filter((k) => {
+  !configured.length ? [] : keys.filter((k) => {
     const board = k.match(/^(?:full|inc|fields|config):(\d+)$/)?.[1];
     return board !== undefined && !configured.includes(Number(board));
   });

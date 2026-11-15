@@ -140,6 +140,10 @@ test("BJ-342: on start a board no longer configured lets go of its issues, but n
   expect(db.query<{ n: number }, []>("SELECT count(*) AS n FROM issue_boards WHERE board = 9").get()!.n).toBe(0);
   // Nothing left to forget the next time.
   expect(store.forgetBoards([1])).toEqual([]);
+  // No board configured (setup unfinished, settings unreadable) empties nothing.
+  expect(store.forgetBoards([])).toEqual([]);
+  expect(listed(store, [1])).toEqual({ "TEAM-1": [1], "OTHER-1": [] });
+  expect(droppedBoardMeta(["full:1", "config:1"], [])).toEqual([]);
   // Its sync state goes too, so putting it back starts a full sync; settings like a board's default view stay.
   expect(droppedBoardMeta(["full:9", "inc:9", "fields:9", "config:9", "full:1", "config:1", "view-default:9", "source"], [1])).toEqual([
     "full:9",
