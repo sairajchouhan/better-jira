@@ -17,12 +17,16 @@
 - The user runs Kanban boards on work Jira (contentstack.atlassian.net): no sprints, story points, components or time logging.
 - Goal: Linear parity and speed on real Jira data, for the user's teammates to use daily on their own accounts and boards.
 - Deliberate differences from Linear are in `.raj/done.md`. Never revert them in parity work.
+- Jira names on Linear's UI: Space = Linear Team, Epic = Linear Project, fix version = Linear Milestone. Settled.
+- Out of scope: bulk actions, sprints/cycles, shared views, triage, templates, recurring issues, real-time collaboration, and anything Jira can't store or run.
+- Notifications and activity must carry everything the production Jira web app shows, drawn in Linear's style.
 
 ## How to build
 - Linear values and behaviour come from Linear's shipped bundle, never from screenshots: `/Users/sairaj.chouhan/cs/better-jira/.raj/linear-bundle/` (minified JS and style-*.css; a file with two hashes was saved in both versions).
 - Apply both React skills on every edit, and say how in the report:
-  - `.claude/skills/vercel-composition-patterns/`
-  - `.claude/skills/vercel-react-best-practices/`
+  - `/Users/sairaj.chouhan/cs/better-jira/.claude/skills/vercel-composition-patterns/`
+  - `/Users/sairaj.chouhan/cs/better-jira/.claude/skills/vercel-react-best-practices/`
+- Mirror Linear's component boundaries: the same control in two places is one component rendered twice. Fix a defect in the shared component so every instance gets it, never in one instance.
 - One component per repeated control. Reuse what exists in `src/` first. Never add a dependency. TanStack: only Query, Pacer, Hotkeys and Router.
 - Every behaviour gets a unit regression test (`bun test`) that fails when it is removed.
 - Writes go to Jira when the checkout's `.better-jira.local.json` says `writes: true` for its site, or `JIRA_WRITES=<site>` names it. A launch that must not write passes `JIRA_WRITES=off`. Never edit `.better-jira.local.json` in the main checkout.
@@ -51,3 +55,12 @@
 - Counts from check, lint and tests.
 - "Inferred, not confirmed": Linear behaviour not read directly in the bundle.
 - "New issues found": one line each.
+
+## Lead only
+- Delegates run on Opus 5.5 high. QA defects fan out to parallel delegates grouped by file area; side quests go to Sol 6.1 high. Never wait on or poll a delegate: end the turn and its completion wakes you.
+- Council: Opus 5.5 and Sol 6.1 only.
+- If Sol stops on a usage limit, finish its work from its worktree.
+- Start a review only after every fix is merged, checked and live on :3000.
+- Build in big chunks, then one check pass.
+- Spot-check delegates' "Inferred, not confirmed" items in the user's own Linear tab. If Linear won't load, tell the user at once with the symptom.
+- Run servers in Rex, never as background shells. After each finished change, restart :3000 with `.raj/restart-3000.sh`. After a merge that adds files, make sure :3002 still returns 200.
