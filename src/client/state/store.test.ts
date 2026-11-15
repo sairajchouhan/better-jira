@@ -2596,3 +2596,41 @@ test("BJ-232: every way of making a sub-issue starts from the parent's sub-issue
   set({ issues: new Map(get().issues).set(parent, { ...get().issues.get(parent)!, status: "bl" }) });
   expect(newSubIssueDraft(get().issues.get(parent)!)).toMatchObject({ parent, status: "bl", priority: "High" });
 });
+
+test("Ship should-fix: with Jira writes, Issue created shows once Jira has created the issue, never beside a refused create", async () => {
+  const { get, set } = await import("./store");
+  const { actions } = await import("./issue-actions");
+  const { navigate, ui } = await import("@/client/features/navigation/app-navigation");
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const jira = await fakeJiraWrites(async (key, body) => {
+    if (body.ops[0]?.fields?.summary === "Refused here") return { error: "Issue type is required.", issue: undefined };
+    await gate;
+    return { key: "MADE-8", created: { [key]: "MADE-8" }, issue: { ...get().issues.get(key)!, key: "MADE-8" } };
+  });
+  try {
+    set({ writable: true });
+    navigate({ board: 1 });
+    const before = latestNotification();
+    actions.create("Confirmed by Jira");
+    await Bun.sleep(5);
+    expect(latestNotification()).toBe(before);
+    release();
+    await jira.settled();
+    expect(latestNotification()).toEqual({ text: "Issue created", key: "MADE-8" });
+    const refused = actions.create("Refused here")!;
+    await jira.settled();
+    expect(latestNotification()?.text).toBe("Jira did not save the change to " + jira.sent.at(-1)!.key);
+    const created = toasts.all().flatMap((t) => {
+      const notice = (t.content as { props?: { notice?: { text: string; key?: string } } }).props?.notice;
+      return notice?.text === "Issue created" ? [notice.key] : [];
+    });
+    expect(created).toContain("MADE-8");
+    expect(created).not.toContain(refused);
+  } finally {
+    // The refused create reopened the composer with what was typed.
+    ui.send({ type: "overlay.close" });
+    set({ writable: false, writeError: null });
+    jira.restore();
+  }
+});

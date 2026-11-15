@@ -115,6 +115,21 @@ export function showIssueCreated(key: string) {
   });
 }
 
+/** New issues whose "Issue created" waits for Jira's answer: on a writable site Jira may still refuse the create. */
+const awaitingJira = new Set<string>();
+/**
+ * Confirms a new issue: at once when nothing goes to Jira, else once Jira has created it (`jiraAnswered`), so a refused create
+ * shows only "Jira did not save the change", never "Issue created" beside it.
+ */
+export function announceCreated(key: string) {
+  if (get().writable) awaitingJira.add(key);
+  else showIssueCreated(key);
+}
+/** Jira answered the create of `from`: `to` is the key it gave, or undefined when it refused or the issue was discarded. */
+export function jiraAnswered(from: string, to?: string) {
+  if (awaitingJira.delete(from) && to) showIssueCreated(to);
+}
+
 /** The queued confirmations, newest first, with their content. */
 function confirmationsNewestFirst() {
   return toasts.all().flatMap((toast) => {

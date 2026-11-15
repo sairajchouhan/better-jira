@@ -21,7 +21,7 @@ import {
   snapshot,
 } from "./local-edits";
 import { rewriteHistory } from "./undo-history";
-import { rekeyNotification, showNotification } from "./app-notifications";
+import { jiraAnswered, rekeyNotification, showNotification } from "./app-notifications";
 import { returnRejectedComment } from "@/client/features/comments/rejected-comment";
 import { navigate } from "@/client/features/navigation/app-navigation";
 import { claimChanges, flushLocalChanges, localDataOpen, queueSave, storedChanges } from "./local-database";
@@ -171,6 +171,7 @@ function answered({ key: sent, ops, result, created, refused, describes }: Answe
   if (created.has(sent)) {
     forgetSelectionCreate(sent);
     rekey(sent, created.get(sent)!);
+    jiraAnswered(sent, created.get(sent));
   }
   // A deleted issue (full null) takes its upload slots with it.
   if (result.full !== undefined && result.key) settleUploads(result.key, result.full);
@@ -237,6 +238,7 @@ function discard(key: string, reopen = true) {
   issues.delete(key);
   full.delete(key);
   forgetIssue(key);
+  jiraAnswered(key);
   touch(key);
   set({ issues, full });
   if (get().selected === key) navigate({ selected: null, panel: false });

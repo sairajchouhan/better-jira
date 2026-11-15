@@ -23,7 +23,7 @@ import {
   patchIssue,
   withJiraLinks,
 } from "./local-edits";
-import { showIssueCreated, showNotification } from "./app-notifications";
+import { announceCreated, showNotification } from "./app-notifications";
 import { assignableUsers, statusById, statuses } from "@/shared/board-catalog";
 import { createDefaults } from "@/shared/create-defaults";
 import { createAssignee, startAssignee } from "@/shared/auto-assign";
@@ -775,8 +775,8 @@ export const actions = {
           navigate(open ? { selected: key, panel: true } : { selected: key });
           ui.send({ type: "overlay.close" });
         }
-        // "Create more" keeps the composer open, so the toast is its only confirmation (Linear).
-        if (more || !open) showIssueCreated(key);
+        // "Create more" keeps the composer open, so the toast is its only confirmation (Linear); with Jira writes it waits for Jira.
+        if (more || !open) announceCreated(key);
       }),
     );
     return key;
