@@ -1,10 +1,16 @@
 import { serverAuth } from "./server-config";
 
-/** The personal test site accepts writes. Any other site stays read-only unless the production server (`bun start`) runs with JIRA_WRITES naming it exactly; a dev server never writes to it. */
+/** Sites a dev server may write to: the maintainer's disposable test site. */
 export const WRITABLE_SITES = new Set(["https://cloudsairaj.atlassian.net"]);
-export const canWrite = (site: string) =>
+/** Whether edits go to Jira: only on the production server (`bun start`, which sets `JIRA_WRITES=configured`: the site
+ *  setup configured, whoever's it is), or with `JIRA_WRITES` naming the site exactly. Unset, `off`, or another site: read-only,
+ *  so a dev server (`bun run dev`) or a bare production build never writes, but to a test site. */
+export const canWrite = (
+  site: string,
+  env: Record<string, string | undefined> = process.env,
+) =>
   WRITABLE_SITES.has(site) ||
-  (process.env.NODE_ENV === "production" && process.env.JIRA_WRITES === site);
+  (env.NODE_ENV === "production" && (env.JIRA_WRITES === "configured" || env.JIRA_WRITES === site));
 /** POST is Jira's documented bulk changelog READ; it changes no issues. */
 const isRead = (method: string, path: string) =>
   method === "GET" || (method === "POST" && path === "/rest/api/3/changelog/bulkfetch");

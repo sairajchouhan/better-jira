@@ -111,3 +111,21 @@ test("G14: a stalled Jira request gives up with a JiraTimeout; a 429 still waits
       else process.env[name] = value;
   }
 });
+
+test("bun start writes to the site setup configured, whoever's it is; unset, off or another site stays read-only; a dev server never writes", async () => {
+  const { canWrite } = await import("./jira");
+  const site = "https://acme-team.atlassian.net";
+  // package.json's start: JIRA_WRITES=${JIRA_WRITES:-configured}.
+  expect(canWrite(site, { NODE_ENV: "production", JIRA_WRITES: "configured" })).toBe(true);
+  expect(canWrite(site, { NODE_ENV: "production", JIRA_WRITES: site })).toBe(true);
+  expect(canWrite(site, { NODE_ENV: "production" })).toBe(false);
+  expect(canWrite(site, { NODE_ENV: "production", JIRA_WRITES: "off" })).toBe(false);
+  expect(canWrite(site, { NODE_ENV: "production", JIRA_WRITES: "https://other.atlassian.net" })).toBe(false);
+  expect(canWrite(site, { JIRA_WRITES: "configured" })).toBe(false);
+});
+
+test("bun start names no site of its own: the write gate is the configured site", async () => {
+  const start: string = (await Bun.file(new URL("../../package.json", import.meta.url)).json()).scripts.start;
+  expect(start).toContain("JIRA_WRITES=${JIRA_WRITES:-configured}");
+  expect(start).not.toMatch(/atlassian\.net/);
+});
