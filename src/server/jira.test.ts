@@ -112,20 +112,23 @@ test("G14: a stalled Jira request gives up with a JiraTimeout; a 429 still waits
   }
 });
 
-test("bun start writes to the site setup configured, whoever's it is; unset, off or another site stays read-only; a dev server never writes", async () => {
+test("edits go to Jira only from bun start, for the site setup saved with writes on; off, another site or a dev server stays read-only", async () => {
   const { canWrite } = await import("./jira");
-  const site = "https://acme-team.atlassian.net";
-  // package.json's start: JIRA_WRITES=${JIRA_WRITES:-configured}.
-  expect(canWrite(site, { NODE_ENV: "production", JIRA_WRITES: "configured" })).toBe(true);
-  expect(canWrite(site, { NODE_ENV: "production", JIRA_WRITES: site })).toBe(true);
-  expect(canWrite(site, { NODE_ENV: "production" })).toBe(false);
-  expect(canWrite(site, { NODE_ENV: "production", JIRA_WRITES: "off" })).toBe(false);
-  expect(canWrite(site, { NODE_ENV: "production", JIRA_WRITES: "https://other.atlassian.net" })).toBe(false);
-  expect(canWrite(site, { JIRA_WRITES: "configured" })).toBe(false);
+  const site = "https://acme-team.atlassian.net",
+    production = { NODE_ENV: "production" },
+    on = { site, writes: true };
+  expect(canWrite(site, on, production)).toBe(true);
+  expect(canWrite(site, { site, writes: false }, production)).toBe(false);
+  // A settings file from before setup saved the switch: off until setup is run again.
+  expect(canWrite(site, { site }, production)).toBe(false);
+  // The switch belongs to the site it was saved with.
+  expect(canWrite(site, { site: "https://other.atlassian.net", writes: true }, production)).toBe(false);
+  expect(canWrite(site, on, { ...production, JIRA_WRITES: "off" })).toBe(false);
+  expect(canWrite(site, {}, { ...production, JIRA_WRITES: site })).toBe(true);
+  expect(canWrite(site, on, {})).toBe(false);
 });
 
-test("bun start names no site of its own: the write gate is the configured site", async () => {
+test("bun start names no site and no write mode of its own: setup's saved switch decides", async () => {
   const start: string = (await Bun.file(new URL("../../package.json", import.meta.url)).json()).scripts.start;
-  expect(start).toContain("JIRA_WRITES=${JIRA_WRITES:-configured}");
-  expect(start).not.toMatch(/atlassian\.net/);
+  expect(start).not.toMatch(/atlassian\.net|JIRA_WRITES/);
 });

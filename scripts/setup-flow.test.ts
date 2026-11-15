@@ -60,10 +60,19 @@ test("a fresh account: site, email, token and boards are asked, checked with rea
   expect(h.log).toContain("Verified board 12: Payments (PAY).");
   expect(h.saved).toEqual({
     credentials: { email: "ada@example.invalid", token: "tok-123" },
-    local: { site: SITE, boards: [12] },
+    local: { site: SITE, boards: [12], writes: true },
   });
+  // Setup states the mode bun start will run in for this site, as the footer does.
+  expect(h.log.join("\n")).toContain('Edits go to Jira: bun start saves your changes to acme-team.atlassian.net as Ada Example, and the footer says "Edits write to Jira".');
   expect(h.log.at(-1)).toContain("Run bun start, then open http://localhost:3000.");
   expect(h.log.join("\n")).not.toMatch(/writes (are|remain) disabled|read-only/i);
+});
+
+test("answering no keeps edits local, saved for this site, and says so", async () => {
+  const h = harness(fakeJira(), [SITE, "ada@example.invalid", "12", "no"]);
+  await run(h);
+  expect(h.saved.local).toEqual({ site: SITE, boards: [12], writes: false });
+  expect(h.log.join("\n")).toContain('Edits stay local: bun start sends nothing to acme-team.atlassian.net, and the footer says "Local only".');
 });
 
 test("setup --check asks nothing, saves nothing and verifies the saved boards", async () => {
@@ -71,7 +80,12 @@ test("setup --check asks nothing, saves nothing and verifies the saved boards", 
   await run(h, true, { JIRA_URL: SITE, JIRA_EMAIL: "ada@example.invalid", JIRA_TOKEN: "t" }, { boards: [12] });
   expect(h.asked).toEqual([]);
   expect(h.saved).toEqual({});
-  expect(h.log.at(-1)).toContain("Setup is valid");
+  expect(h.log.join("\n")).toContain("Setup is valid");
+  // A settings file without setup's write answer: bun start stays local, and --check says so.
+  expect(h.log.at(-1)).toContain("Edits stay local");
+  const on = harness(fakeJira());
+  await run(on, true, { JIRA_URL: SITE, JIRA_EMAIL: "a@example.invalid", JIRA_TOKEN: "t" }, { site: SITE, boards: [12], writes: true });
+  expect(on.log.at(-1)).toContain("Edits go to Jira");
 });
 
 test("setup --check before setup says to run setup, not a config error", async () => {
@@ -88,10 +102,21 @@ const failing = async (route: Route, answers = [SITE, "ada@example.invalid", "12
   return error?.message ?? "";
 };
 
-test("a bad token says so and where to make a new one", async () => {
-  const message = await failing(fakeJira((p) => (p === "/rest/api/3/myself" ? new Response("", { status: 401 }) : undefined!)));
-  expect(message).toContain("rejected your email and API token (401)");
-  expect(message).toContain("id.atlassian.com/manage-profile/security/api-tokens");
+test("a 401 says whether the site or the email and token are wrong, and where to make a new token", async () => {
+  const unauthorized = (serverInfo: Response) =>
+    fakeJira((p) =>
+      p === "/rest/api/3/myself"
+        ? new Response("", { status: 401 })
+        : p === "/rest/api/3/serverInfo"
+          ? serverInfo
+          : undefined!,
+    );
+  const credentials = await failing(unauthorized(Response.json({ baseUrl: SITE })));
+  expect(credentials).toContain("acme-team.atlassian.net is a Jira site, but it rejected your email and API token (401)");
+  expect(credentials).toContain("an API token, not your password");
+  expect(credentials).toContain("id.atlassian.com/manage-profile/security/api-tokens");
+  const wrongSite = await failing(unauthorized(new Response("", { status: 404 })));
+  expect(wrongSite).toContain("doesn't answer as a Jira Cloud site. Check the site address first");
 });
 
 test("a wrong site (404, or a web page instead of the API) says to check the address", async () => {
@@ -130,11 +155,26 @@ test("a board the account can't read names that board", async () => {
 });
 
 test("a bad site or board answer is asked again, saying why", async () => {
-  const h = harness(fakeJira(), ["http://acme.example", SITE, "ada@example.invalid", "twelve", "12"]);
+  const h = harness(fakeJira(), ["http://acme.example", SITE, "ada@example.invalid", "https://other.atlassian.net/jira/boards/3", "12"]);
   await run(h);
   expect(h.log.some((l) => l.includes("https"))).toBe(true);
-  expect(h.log.some((l) => l.includes("positive board IDs"))).toBe(true);
-  expect(h.saved.local).toEqual({ site: SITE, boards: [12] });
+  expect(h.log).toContain("That board is on other.atlassian.net, but better-jira is connected to acme-team.atlassian.net.");
+  expect(h.saved.local).toMatchObject({ site: SITE, boards: [12] });
+});
+
+test("boards are chosen by link as Add board does, and a long list is searched by name", async () => {
+  const many = Array.from({ length: 45 }, (_, i) => ({ id: 100 + i, name: `Team ${i}`, type: "kanban" }));
+  const h = harness(
+    fakeJira((p) =>
+      p.startsWith("/rest/agile/1.0/board?") ? Response.json({ isLast: true, values: [...many, { id: 12, name: "Payments", type: "kanban" }] }) : undefined!,
+    ),
+    [SITE, "ada@example.invalid", "paym", `${SITE}/jira/software/projects/PAY/boards/12, 34`],
+  );
+  await run(h);
+  expect(h.log).toContain("\nYour account can see 46 boards. Type part of your board's name to find it, or paste its link.");
+  expect(h.log.some((l) => l.includes("Team 0"))).toBe(false);
+  expect(h.log.some((l) => l.includes("12") && l.includes("Payments"))).toBe(true);
+  expect(h.saved.local).toMatchObject({ boards: [12, 34] });
 });
 
 test("a project where the account can't edit is named, with what will fail", async () => {

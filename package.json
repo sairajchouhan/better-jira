@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun --hot src/server/index.ts",
-    "start": "bun run build:server && NODE_ENV=production JIRA_WRITES=${JIRA_WRITES:-configured} bun --env-file=.env dist/app/index.js",
+    "start": "bun run build:server && NODE_ENV=production bun --env-file=.env dist/app/index.js",
     "build:server": "bun scripts/build-server.ts",
     "build": "bun run build.ts",
     "typecheck": "bun check",

@@ -13,6 +13,8 @@ export type LocalSettings = {
   port?: number;
   /** Boards added from the app, by site origin: a union over JIRA_BOARDS or `boards`, never shared with another site. */
   addedBoards?: Record<string, number[]>;
+  /** Setup's answer to "send your edits to Jira?", for `site` only: another site never inherits it (jira.ts `canWrite`). */
+  writes?: boolean;
 };
 type Environment = Record<string, string | undefined>;
 

@@ -1,16 +1,20 @@
-import { serverAuth } from "./server-config";
+import { localSettings, serverAuth } from "./server-config";
+import type { LocalSettings } from "./config";
 
 /** Sites a dev server may write to: the maintainer's disposable test site. */
 export const WRITABLE_SITES = new Set(["https://cloudsairaj.atlassian.net"]);
-/** Whether edits go to Jira: only on the production server (`bun start`, which sets `JIRA_WRITES=configured`: the site
- *  setup configured, whoever's it is), or with `JIRA_WRITES` naming the site exactly. Unset, `off`, or another site: read-only,
- *  so a dev server (`bun run dev`) or a bare production build never writes, but to a test site. */
+/** Whether edits go to Jira. The switch is setup's: `writes: true` saved with the site it configured
+ *  (.better-jira.local.json), read only by the production server (`bun start`), so `bun run dev` or a bare build never
+ *  writes but to a test site. Env `JIRA_WRITES=off` turns it off; `JIRA_WRITES=<site>` turns it on for that exact site. */
 export const canWrite = (
   site: string,
+  settings: Pick<LocalSettings, "site" | "writes"> = localSettings,
   env: Record<string, string | undefined> = process.env,
 ) =>
-  WRITABLE_SITES.has(site) ||
-  (env.NODE_ENV === "production" && (env.JIRA_WRITES === "configured" || env.JIRA_WRITES === site));
+  env.JIRA_WRITES !== "off" &&
+  (WRITABLE_SITES.has(site) ||
+    (env.NODE_ENV === "production" &&
+      ((settings.writes === true && settings.site === site) || env.JIRA_WRITES === site)));
 /** POST is Jira's documented bulk changelog READ; it changes no issues. */
 const isRead = (method: string, path: string) =>
   method === "GET" || (method === "POST" && path === "/rest/api/3/changelog/bulkfetch");

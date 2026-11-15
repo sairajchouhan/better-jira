@@ -1,7 +1,7 @@
 // Interleaved, one-server-at-a-time read-only A/B driver. No app source edits.
 const app = "/Users/sairaj.chouhan/.t3/worktrees/better-jira/t3-49468bd9-761e1bc0abda14bc";
 const out = "/Users/sairaj.chouhan/cs/better-jira/.raj/qa/perf";
-const env = { ...process.env, NODE_ENV: "production", JIRA_WRITES: undefined };
+const env = { ...process.env, NODE_ENV: "production", JIRA_WRITES: "off" };
 const resume = Bun.argv.includes("--resume");
 const commands: string[] = resume ? await Bun.file(`${out}/compiler-commands.json`).json() : [];
 for (const cpu of [1, 4])
@@ -17,7 +17,7 @@ for (const cpu of [1, 4])
       if (resume && (await Bun.file(`${prefix}.json`).exists())) continue;
       console.log(`START ${variant} CPU ${cpu}x block ${block}/5`);
       commands.push(
-        `cd ${app} && env -u JIRA_WRITES NODE_ENV=production PORT=${port} ${args.join(" ")}`,
+        `cd ${app} && JIRA_WRITES=off NODE_ENV=production PORT=${port} ${args.join(" ")}`,
       );
       const log = Bun.file(`${prefix}-server.log`).writer();
       const server = Bun.spawn(args, {

@@ -1,6 +1,6 @@
-import { boardIDs, configuration, siteURL, type LocalSettings } from "../src/server/config";
-import { JiraError, JiraTimeout } from "../src/server/jira";
-import { jiraProblem, NotJiraAnswer } from "../src/server/jira-problem";
+import { boardFromInput, boardIDs, configuration, siteURL, type LocalSettings } from "../src/server/config";
+import { canWrite, JiraError, JiraTimeout } from "../src/server/jira";
+import { jiraProblem, NotJiraAnswer, TOKEN_PAGE } from "../src/server/jira-problem";
 
 /** What setup does to the outside world, so a test can run the whole flow with a fake Jira and typed answers. */
 export type SetupIO = {
@@ -23,6 +23,8 @@ const EDIT_PERMISSIONS: Record<string, string> = {
   CREATE_ISSUES: "create issues",
 };
 const READ_TIMEOUT_MS = 20_000;
+/** Up to this many boards are listed at once; more, and setup asks for a name to search. */
+const LIST_LIMIT = 20;
 
 /** A failure setup explains and stops on; its message is the whole explanation. */
 export class SetupError extends Error {}
@@ -56,7 +58,11 @@ export async function runSetup(
   }
   site = siteURL(site);
   const read = reader(site, email, token, io.fetch);
-  const profile = await read<{ displayName?: string; accountId?: string }>("/rest/api/3/myself");
+  const profile = await read<{ displayName?: string; accountId?: string }>("/rest/api/3/myself").catch(
+    async (error: SetupError) => {
+      throw (error.cause as JiraError | undefined)?.status === 401 ? await rejected(site, io.fetch) : error;
+    },
+  );
   if (!profile.accountId)
     throw new SetupError(
       `${new URL(site).host} answered without an account. Check the email and token are for this site.`,
@@ -70,13 +76,7 @@ export async function runSetup(
       throw new SetupError(
         `Your account can't see any boards on ${new URL(site).host}. Ask your project's admin for access to your team's board, then run bun run setup again.`,
       );
-    io.log("\nBoards you can see (id, type, name):");
-    for (const b of listed) io.log(`  ${String(b.id).padStart(6)}  ${(b.type ?? "").padEnd(6)}  ${b.name}`);
-    boards = await answer(
-      io,
-      () => io.ask("Your board IDs, separated by commas", boards.join(",")),
-      (value) => boardIDs(value),
-    );
+    boards = await chooseBoards(io, site, listed, boards);
   }
   if (!boards.length)
     throw new SetupError("No boards are chosen yet. Run bun run setup and enter your board IDs.");
@@ -100,12 +100,84 @@ export async function runSetup(
         );
     }
   }
+  const host = new URL(site).host,
+    name = profile.displayName ?? email;
   if (checking) {
     io.log("Setup is valid: Jira accepts your token and you can read every board.");
+    io.log(writeMode(canWrite(site, local, { ...env, NODE_ENV: "production" }), host, name));
     return;
   }
-  await io.save({ email, token }, { ...local, site, boards });
-  io.log(`\nSetup saved. Run bun start, then open http://localhost:${config.port}.`);
+  const writes = await answer(
+    io,
+    () => io.ask(`Send your edits to Jira? Changes you make in better-jira are saved to ${host} as ${name} (yes/no)`, local.writes === false ? "no" : "yes"),
+    yesNo,
+  );
+  await io.save({ email, token }, { ...local, site, boards, writes });
+  io.log(`\nSetup saved. ${writeMode(canWrite(site, { site, writes }, { ...env, NODE_ENV: "production" }), host, name)}`);
+  io.log(`Run bun start, then open http://localhost:${config.port}.`);
+}
+
+/** The mode \`bun start\` runs in, as setup's last word on it. The footer shows the same mode. */
+const writeMode = (writes: boolean, host: string, name: string) =>
+  writes
+    ? `Edits go to Jira: bun start saves your changes to ${host} as ${name}, and the footer says "Edits write to Jira".`
+    : `Edits stay local: bun start sends nothing to ${host}, and the footer says "Local only". Run bun run setup again to send edits to Jira.`;
+
+const yesNo = (value: string) => {
+  if (/^y(es)?$/i.test(value.trim())) return true;
+  if (/^no?$/i.test(value.trim())) return false;
+  throw new Error("Answer yes or no.");
+};
+
+/** A 401 from Jira: an unauthenticated read of the site's server info tells a wrong site from wrong credentials. */
+async function rejected(site: string, fetch: SetupIO["fetch"]) {
+  const host = new URL(site).host;
+  const isJira = await fetch(`${site}/rest/api/3/serverInfo`, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(READ_TIMEOUT_MS),
+  }).then(
+    async (r) => r.ok && typeof (await r.json())?.baseUrl === "string",
+    () => false,
+  );
+  return new SetupError(
+    isJira
+      ? `${host} is a Jira site, but it rejected your email and API token (401). Use the email you sign in to Jira with, and an API token, not your password. A token may have expired or been revoked: create a new one at ${TOKEN_PAGE}, then run bun run setup again.`
+      : `Jira rejected your email and API token (401), and ${host} doesn't answer as a Jira Cloud site. Check the site address first (https://your-team.atlassian.net), then the email and token.`,
+  );
+}
+
+/** Lists the boards (or, past \`LIST_LIMIT\`, asks for a name to search) and asks for board IDs or links until they parse. */
+async function chooseBoards(
+  io: SetupIO,
+  site: string,
+  listed: { id: number; name: string; type?: string }[],
+  saved: number[],
+): Promise<number[]> {
+  const show = (boards: typeof listed) => {
+    io.log("\nBoards (id, type, name):");
+    for (const b of boards.slice(0, LIST_LIMIT)) io.log(`  ${String(b.id).padStart(6)}  ${(b.type ?? "").padEnd(6)}  ${b.name}`);
+    if (boards.length > LIST_LIMIT) io.log(`  …and ${boards.length - LIST_LIMIT} more. Type part of a name to narrow the list.`);
+  };
+  if (listed.length <= LIST_LIMIT) show(listed);
+  else io.log(`\nYour account can see ${listed.length} boards. Type part of your board's name to find it, or paste its link.`);
+  for (let attempt = 1; ; attempt++) {
+    const value = await io.ask("Board IDs or links, separated by commas, or part of a board name to search", saved.join(","));
+    const parts = value.split(/[,\s]+/).filter(Boolean);
+    const looksLikeBoards = parts.length > 0 && parts.every((p) => /^\d+$/.test(p) || /^https?:/i.test(p));
+    if (looksLikeBoards)
+      try {
+        return boardIDs(parts.map((p) => boardFromInput(p, site)));
+      } catch (error) {
+        if (attempt >= 5) throw new SetupError((error as Error).message);
+        io.log((error as Error).message);
+        continue;
+      }
+    const term = value.trim().toLowerCase();
+    const matches = term ? listed.filter((b) => b.name.toLowerCase().includes(term)) : [];
+    if (attempt >= 5) throw new SetupError("No boards chosen. Run bun run setup again with your board's ID or link.");
+    if (matches.length) show(matches);
+    else io.log(term ? `No board's name contains "${value.trim()}".` : "Enter your board IDs or links.");
+  }
 }
 
 /** Asks until `parse` accepts the answer, saying why it didn't (three tries, then setup stops). */
@@ -151,7 +223,7 @@ function reader(site: string, email: string, token: string, fetch: SetupIO["fetc
         throw new NotJiraAnswer(path);
       }
     } catch (error) {
-      throw new SetupError(jiraProblem(error, site, board));
+      throw new SetupError(jiraProblem(error, site, board), { cause: error });
     }
   };
 }

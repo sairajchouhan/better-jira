@@ -9,7 +9,7 @@ const local: LocalSettings = await Bun.file(settingsPath)
   .catch(() => ({}));
 if (process.argv.includes("--help")) {
   console.log(
-    "bun run setup          Connect better-jira to your Jira Cloud site, account and boards\nbun run setup --check  Check the saved setup against Jira (reads only, changes nothing)\n\nEnvironment: JIRA_URL, JIRA_EMAIL, JIRA_TOKEN, JIRA_BOARDS, JIRA_CACHE, PORT.\nSite and boards go in .better-jira.local.json; the email and token go in .env. Git ignores both.",
+    "bun run setup          Connect better-jira to your Jira Cloud site, account and boards, and choose whether edits go to Jira\nbun run setup --check  Check the saved setup against Jira (reads only, changes nothing)\n\nEnvironment: JIRA_URL, JIRA_EMAIL, JIRA_TOKEN, JIRA_BOARDS, JIRA_CACHE, PORT, and JIRA_WRITES=off to keep bun start local.\nSite, boards and the edits switch go in .better-jira.local.json; the email and token go in .env. Git ignores both.",
   );
   process.exit(0);
 }
