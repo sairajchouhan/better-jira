@@ -802,7 +802,7 @@ test("R1-D71: adding a URL the issue already has reports it instead of adding it
   const { actions } = await import("./issue-actions");
   const issue = {
     key: "D71-1",
-    board: 1,
+    boards: [1],
     summary: "Links",
     status: "todo",
     assignee: null,
@@ -841,7 +841,7 @@ test("R1-D101: deleting an issue sends no link removals for the issues it was li
   try {
     const issue = (key: string, related: string) => ({
       key,
-      board: 1,
+      boards: [1],
       summary: key,
       status: "todo",
       assignee: null,
@@ -981,7 +981,7 @@ async function fakeJiraWrites(
 }
 const writableIssue = (key: string, extra: object = {}) => ({
   key,
-  board: 1,
+  boards: [1],
   summary: key,
   status: "todo",
   priority: "Low",
@@ -1331,7 +1331,7 @@ const navigationFixture = async () => {
   const template = [...store.get().issues.values()][0]!;
   const issues = new Map(store.get().issues);
   for (const [key, board] of [["NAV-1", 1], ["NAV-2", 1], ["NAV-3", 2]] as const)
-    issues.set(key, { ...template, key, board, parent: undefined });
+    issues.set(key, { ...template, key, boards: [board], parent: undefined });
   store.set({
     boards: [{ id: 1, name: "Personal", columns }, { id: 2, name: "Second", columns }],
     issues,
@@ -2321,7 +2321,7 @@ test("#3: a refused description and Keep mine send the description again, never 
     sent: any[][] = [],
     realFetch = globalThis.fetch;
   // Jira's copy: what each write leaves there. The first description save meets someone else's text.
-  let jira = { key, board: 1, summary: key, status: "todo", assignee: null, labels: [] as string[], comments: 0, updated: "", resolved: null },
+  let jira = { key, boards: [1], summary: key, status: "todo", assignee: null, labels: [] as string[], comments: 0, updated: "", resolved: null },
     description = doc("theirs"),
     refuse = true;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -2431,7 +2431,7 @@ test("R3-create-D7: an open issue deleted in Jira says so, and its sub-issue dra
   const { navigate } = await import("@/client/features/navigation/app-navigation");
   const { subIssueDraftKey } = await import("@/client/features/issue/sub-issue-draft");
   const board: Board = { id: 1, name: "B", columns: [{ name: "Todo", statuses: [{ id: "todo", name: "Todo", category: "new" }] }] };
-  const issue = { key: "GONE-1", board: 1, summary: "Gone", status: "todo", assignee: null, labels: [], comments: 0, updated: "", resolved: null };
+  const issue = { key: "GONE-1", boards: [1], summary: "Gone", status: "todo", assignee: null, labels: [], comments: 0, updated: "", resolved: null };
   set({ boards: [board], issues: new Map([[issue.key, issue]]), full: new Map(), writable: true, namespace: "ns" });
   navigate({ board: 1, selected: issue.key, panel: true, view: "page" });
   const draft = subIssueDraftKey("ns", issue.key);

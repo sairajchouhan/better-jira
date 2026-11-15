@@ -171,7 +171,7 @@ test("the sub-issue tree: progress, guide lines and display preferences", async 
     await page.key("Escape");
   });
   await test.step("opening a cross-board child retains page view and uses the child board statuses", async () => {
-    const setup = `const read=fetch;window.fetch=async(...args)=>{const response=await read(...args),path=new URL(String(args[0]),location.href).pathname;if(path==='/api/boards'){const boards=await response.json();boards.push({id:2,name:'Other board',columns:[{name:'Open',statuses:[{id:'other-open',name:'Open',category:'new'}]},{name:'Shipped',statuses:[{id:'other-done',name:'Shipped',category:'done'}]}]});return Response.json(boards);}if(path!=='/api/issues')return response;const issues=await response.json();Object.assign(issues.find(i=>i.key==='TEST-4'),{parent:'TEST-2',board:2,status:'other-done'});return Response.json(issues)}`;
+    const setup = `const read=fetch;window.fetch=async(...args)=>{const response=await read(...args),path=new URL(String(args[0]),location.href).pathname;if(path==='/api/boards'){const boards=await response.json();boards.push({id:2,name:'Other board',columns:[{name:'Open',statuses:[{id:'other-open',name:'Open',category:'new'}]},{name:'Shipped',statuses:[{id:'other-done',name:'Shipped',category:'done'}]}]});return Response.json(boards);}if(path!=='/api/issues')return response;const issues=await response.json();Object.assign(issues.find(i=>i.key==='TEST-4'),{parent:'TEST-2',boards:[2],status:'other-done'});return Response.json(issues)}`;
     const page = await open("?board=1&issue=TEST-2&view=page", { setup });
     await page.waitFor(`!!document.querySelector('[data-sub-issue="TEST-4"]')`);
     await page.click('[aria-label="Change status for TEST-4"]');

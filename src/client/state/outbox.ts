@@ -468,7 +468,8 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
       const jobs = changes
         .map(([key, before, after]) => ({
           key,
-          board: (after.issue ?? before.issue)?.board,
+          // The board a new issue was made on: the server places it there until that board's sync says (issue-store.ts `claim`).
+          board: (after.issue ?? before.issue)?.boards[0],
           ops: opsFor(before, after, issues),
         }))
         .sort((a, b) => order(a.ops) - order(b.ops));

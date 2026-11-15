@@ -27,6 +27,7 @@ import type { Scope } from "@/shared/view-model";
 import { AppLoading, EmptyState, LoadingState } from "@/client/components/empty-state";
 import { Button, ButtonLink } from "@/client/components/button";
 import { useStore } from "@/client/state/store";
+import { boardFor } from "@/shared/board-membership";
 
 declare module "@tanstack/history" {
   interface HistoryState {
@@ -47,7 +48,7 @@ export type RouteContext = {
   show: (place: Place, location: ParsedLocation) => void;
   /** Loads an issue's details and the issue screens' code ahead of opening it; resolves when both are in. */
   preload: (key: string) => Promise<unknown>;
-  issue: (key: string) => { key: string; board: number } | undefined;
+  issue: (key: string) => { key: string; boards: number[] } | undefined;
   /** The key Jira renamed this one to, or the key itself. */
   currentKey: (key: string) => string;
   /** The saved view an address segment names: `<id>`, `<slug>-<id>` or a stale slug. */
@@ -363,7 +364,7 @@ export function legacyPlace(
     issue = key ? context.issue(key) : undefined,
     page = q.view === "page" || !!q.document,
     named = Number(q.board ?? views?.[1]),
-    board = issue?.board ?? (context.hasBoard(named) ? named : context.lastBoard());
+    board = boardFor(issue, context.hasBoard(named) ? named : context.lastBoard());
   const editor = /^\/view\/(?:new|([^/]+)\/edit)$/.exec(pathname),
     view = /^\/view\/([^/]+)$/.exec(pathname)?.[1],
     person = /^\/(?:my-issues|user\/([^/]+))(?:\/([a-z]+))?$/.exec(pathname);

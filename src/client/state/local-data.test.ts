@@ -12,7 +12,7 @@ import {
 
 const issue: Issue = {
   key: "TEST-NEW1",
-  board: 1,
+  boards: [1],
   summary: "Persistent local issue",
   status: "todo",
   assignee: null,
@@ -607,4 +607,18 @@ test("sync review 6: a field this tab stopped overriding (Jira took it) doesn't 
   expect(merged.map((c) => [c.key, c.issueFields, c.issue?.summary])).toEqual([
     ["A-2", ["summary"], "Theirs"],
   ]);
+});
+
+test("changes saved while an issue had one board load with its boards, nothing dropped", () => {
+  const { boards: _boards, ...rest } = issue;
+  const old = { ...rest, board: 1 };
+  const parsed = parseLocalState({
+    ...emptyLocalState(),
+    changes: [{ key: issue.key, issue: old, issueFields: ["board", "summary"], fullFields: [], created: true }],
+    undo: [{ keys: [issue.key], label: "create", before: [{}], after: [{ issue: old, issueFields: ["board"] }] }],
+  });
+  expect(parsed.recovered).toBe(false);
+  expect(parsed.state.changes[0]!.issue).toEqual({ ...rest, boards: [1] });
+  expect(parsed.state.changes[0]!.issueFields).toEqual(["boards", "summary"]);
+  expect(parsed.state.undo[0]!.after[0]!.issue).toEqual({ ...rest, boards: [1] });
 });

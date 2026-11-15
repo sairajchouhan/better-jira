@@ -1,6 +1,6 @@
 import { type Issue, type IssueDraft } from "@/shared/issue-model";
 import { createElement } from "react";
-import { get, boardOf, ME } from "@/client/state/store";
+import { get, boardOf, ME, issueBoardId } from "@/client/state/store";
 import { actions, beginCreate } from "@/client/state/issue-actions";
 import { isLocalIssue, hasLocalJiraChanges } from "@/client/state/local-edits";
 import { ui } from "@/client/features/navigation/app-navigation";
@@ -26,6 +26,7 @@ import {
   priorityChoices,
   statuses,
 } from "@/shared/board-catalog";
+import { boardIssues as boardIssuesOf } from "@/client/state/board-issues";
 export type IssueMenuDialog =
   | "status"
   | "priority"
@@ -48,7 +49,7 @@ function assigneeChoices(issue: Issue) {
     current: issue.assignee,
     jiraUsers: get().options.users,
     issues: get().issues.values(),
-    board: issue.board,
+    board: issueBoardId(issue),
   });
   const team = new Set(g.team.map((u) => u.id));
   return [...g.assigned, ...g.suggested, ...g.team, ...g.others].map((user) => ({ user, team: !!user && team.has(user.id) }));
@@ -76,7 +77,7 @@ const numbered = (from: number) => (entry: ActionEntry, i: number) => ({
 export function issuePropertyEntries(issue: Issue, { close, menu }: { close: () => void; menu: "contextual" | "command" }) {
   const command = menu === "command";
   const board = boardOf(issue.key),
-    boardIssues = [...get().issues.values()].filter((i) => i.board === issue.board);
+    boardIssues = boardIssuesOf(get().issues, issueBoardId(issue));
   const lookup = (key: string) => get().issues.get(key);
   const epic = epicOf(issue, lookup),
     projectLocked = epicLocked(issue, lookup);

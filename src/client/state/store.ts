@@ -1,5 +1,6 @@
 import type { User, Issue, Board, Full, IssueDraft, JiraOptions } from "@/shared/issue-model";
 import { knownPeople, statusById } from "@/shared/board-catalog";
+import { boardFor } from "@/shared/board-membership";
 import { useMemo, useSyncExternalStore } from "react";
 import { defaultPreferences, type Display, type Preferences } from "@/shared/view-model";
 import { type UiContext } from "./machines";
@@ -291,7 +292,17 @@ export function timed(label: string, fn: () => void) {
 
 export const isWatching = (issue: Issue) =>
   issue.watchers ? issue.watchers.some((u) => u.id === ME.id) : !!issue.watching;
-export const boardOf = (key: string) =>
-  state.boards.find((b) => b.id === state.issues.get(key)?.board);
+/** The board an issue opens on and reads its statuses from: the one on screen when it holds the issue, else its first
+ *  (board-membership.ts `boardFor`). Pass the selected state inside a `useStore` selector. */
+export const issueBoardId = (issue: Pick<Issue, "boards"> | undefined, s: Pick<State, "board"> = state) =>
+  boardFor(issue, s.board);
+/** That board's configuration. */
+export const issueBoard = (issue: Pick<Issue, "boards"> | undefined, s: Pick<State, "board" | "boards"> = state) =>
+  s.boards.find((b) => b.id === issueBoardId(issue, s));
+/** `issueBoard` for a mirrored issue. */
+export const boardOf = (key: string) => {
+  const issue = state.issues.get(key);
+  return issue && issueBoard(issue);
+};
 /** The issue's status on its own board. */
 export const statusOf = (i: Issue) => statusById(boardOf(i.key), i.status);

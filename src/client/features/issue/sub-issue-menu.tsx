@@ -4,7 +4,7 @@ import { StatusIcon } from "@/client/components/icons";
 import { Menu } from "@/client/components/menu";
 import { MenuSurface } from "@/client/components/menu-surface";
 import { navigate } from "@/client/features/navigation/app-navigation";
-import { get, useStore } from "@/client/state/store";
+import { get, useStore, issueBoardId } from "@/client/state/store";
 import type { Issue } from "@/shared/issue-model";
 import type { TrailStep } from "@/client/features/navigation/issue-trail";
 import { childrenVariant, directSubIssues, PARENT_LINE, statusOf } from "./sub-issue-model";
@@ -12,7 +12,7 @@ import { childrenVariant, directSubIssues, PARENT_LINE, statusOf } from "./sub-i
 /** Opens an issue in the panel, keeping the current view; `trail` says how its page was reached (navigation.ts). */
 export const openIssue = (target: Issue, trail?: TrailStep) =>
   navigate({
-    board: target.board,
+    board: issueBoardId(target),
     selected: target.key,
     panel: true,
     view: get().view,

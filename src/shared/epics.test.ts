@@ -28,7 +28,7 @@ const board: Board = {
 };
 const issue = (key: string, patch: Partial<Issue> = {}): Issue => ({
   key,
-  board: 1,
+  boards: [1],
   summary: key,
   status: "todo",
   type: "Task",

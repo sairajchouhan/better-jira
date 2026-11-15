@@ -10,7 +10,7 @@ import { issueBreadcrumbEntries, issueMenuEntries, issuePropertyEntries } from "
 
 const issue: Issue = {
   key: "TEST-2",
-  board: 1,
+  boards: [1],
   summary: "Menu issue",
   status: "todo",
   assignee: null,

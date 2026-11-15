@@ -5,7 +5,7 @@ import { ME } from "@/client/state/store";
 
 test("R3-create-D10: a new inline sub-issue starts at its parent's priority, as Linear's Issue.create does", () => {
   const board: Board = { id: 1, name: "B", columns: [{ name: "Todo", statuses: [{ id: "todo", name: "Todo", category: "new" }] }] };
-  const parent = { key: "P-1", board: 1, priority: "High", project: { key: "P", name: "P" } } as Issue;
+  const parent = { key: "P-1", boards: [1], priority: "High", project: { key: "P", name: "P" } } as Issue;
   expect(subIssueDefaults(parent, board)).toMatchObject({ parent: "P-1", priority: "High", project: { key: "P" }, status: "todo" });
   expect(subIssueDefaults({ ...parent, priority: undefined }, board).priority).toBeUndefined();
 });
@@ -14,8 +14,8 @@ test("R3 G13: a new sub-issue takes the parent's assignee only when it is you, o
   const board: Board = { id: 1, name: "B", columns: [{ name: "Todo", statuses: [{ id: "todo", name: "Todo", category: "new" }] }] };
   const ann = { id: "ann", name: "Ann" },
     bob = { id: "bob", name: "Bob" };
-  const parent = { key: "P-1", board: 1, assignee: ann } as Issue;
-  const child = (assignee: typeof ann | null) => ({ key: "P-2", board: 1, parent: "P-1", assignee }) as Issue;
+  const parent = { key: "P-1", boards: [1], assignee: ann } as Issue;
+  const child = (assignee: typeof ann | null) => ({ key: "P-2", boards: [1], parent: "P-1", assignee }) as Issue;
   expect(subIssueDefaults(parent, board).assignee).toBeNull();
   expect(subIssueDefaults(parent, board, [child(ann), child(ann)]).assignee).toEqual(ann);
   expect(subIssueDefaults(parent, board, [child(ann), child(bob)]).assignee).toBeNull();
@@ -62,7 +62,7 @@ test("R3 G14: a new sub-issue's status follows the parent's state type, as Linea
   // no backlog state on the board: the unstarted default
   const noBacklog = { ...board, columns: board.columns.slice(1) };
   expect(subIssueStatus({ status: "wont" }, noBacklog)).toBe("todo");
-  expect(subIssueDefaults({ key: "P-1", board: 1, status: "backlog" } as Issue, board).status).toBe("backlog");
+  expect(subIssueDefaults({ key: "P-1", boards: [1], status: "backlog" } as Issue, board).status).toBe("backlog");
 });
 
 test("C16: with Auto-assign to self on, a sub-issue nothing assigns starts with you; an inherited assignee still wins", () => {
@@ -70,9 +70,9 @@ test("C16: with Auto-assign to self on, a sub-issue nothing assigns starts with 
   const ann = { id: "ann", name: "Ann" },
     on = { autoAssignToSelf: true, assignToSelfWhenStarted: false },
     off = { autoAssignToSelf: false, assignToSelfWhenStarted: false };
-  const parent = { key: "P-1", board: 1, assignee: null } as Issue;
+  const parent = { key: "P-1", boards: [1], assignee: null } as Issue;
   expect(subIssueDefaults(parent, board, [], on).assignee).toBe(ME);
   expect(subIssueDefaults(parent, board, [], off).assignee).toBeNull();
-  const child = { key: "P-2", board: 1, parent: "P-1", assignee: ann } as Issue;
+  const child = { key: "P-2", boards: [1], parent: "P-1", assignee: ann } as Issue;
   expect(subIssueDefaults({ ...parent, assignee: ann }, board, [child], on).assignee).toEqual(ann);
 });

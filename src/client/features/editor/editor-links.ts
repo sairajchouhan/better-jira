@@ -3,7 +3,7 @@ import type { EditorView } from "prosemirror-view";
 import { navigate } from "@/client/features/navigation/app-navigation";
 import { isMac } from "@/client/components/keycap";
 import { richSchema } from "./rich-document";
-import { get } from "@/client/state/store";
+import { get, issueBoardId } from "@/client/state/store";
 
 const link = richSchema.marks.link!;
 
@@ -15,7 +15,7 @@ export function appIssue(href: string) {
 /** Opens a link from a document: an issue this app has opens here, unless `newTab` (Mod or middle click) asks for Jira's page. */
 export function followLink(href: string, newTab = false) {
   const issue = newTab ? undefined : appIssue(href);
-  if (issue) navigate({ board: issue.board, selected: issue.key, panel: true, view: get().view });
+  if (issue) navigate({ board: issueBoardId(issue), selected: issue.key, panel: true, view: get().view });
   else window.open(href, "_blank", "noopener,noreferrer");
 }
 

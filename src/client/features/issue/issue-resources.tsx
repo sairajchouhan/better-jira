@@ -12,7 +12,7 @@ import { LinkIcon } from "@/client/components/link-icon";
 
 import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { normalizeDocument } from "@/shared/document";
-import { get, ME, set, useStore } from "@/client/state/store";
+import { get, ME, set, useStore, issueBoardId } from "@/client/state/store";
 import { actions } from "@/client/state/issue-actions";
 import { flushLocalChanges } from "@/client/state/local-database";
 import { navigate, ui, placeURL } from "@/client/features/navigation/app-navigation";
@@ -218,6 +218,7 @@ export function IssueResources({ issue }: { issue: Issue }) {
     [editing, setEditing] = useState<IssueResource | null>(null),
     [removing, setRemoving] = useState<IssueResource | null>(null);
   const resources = issueResources(issue);
+  const boardId = useStore((s) => issueBoardId(issue, s));
   const remove = (resource: IssueResource) => {
     if (resource.id.startsWith("legacy:"))
       actions.patch(issue.key, {
@@ -351,7 +352,7 @@ export function IssueResources({ issue }: { issue: Issue }) {
               {resource.kind === "document" ? (
                 <AppLink
                   data-resource-id={resource.id}
-                  to={{ board: issue.board, selected: issue.key, document: resource.id, panel: true }}
+                  to={{ board: boardId, selected: issue.key, document: resource.id, panel: true }}
                   className="min-w-0 flex-1 truncate font-medium text-fg"
                 >
                   {resource.title || "New document"}

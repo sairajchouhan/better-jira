@@ -13,7 +13,7 @@ import { Icon, StatusIcon, TypeDot } from "@/client/components/icons";
 import { IconButton } from "@/client/components/button";
 import { ContextMenu } from "@/client/components/action-menu";
 import { EntityIdentifier } from "@/client/components/entity-identifier";
-import { set, useStore } from "@/client/state/store";
+import { set, useStore, issueBoardId, issueBoard } from "@/client/state/store";
 import { statusById } from "@/shared/board-catalog";
 import { issueURL } from "@/client/features/issue/issue-urls";
 import { copyEntries, issueBreadcrumbEntries } from "@/client/features/issue/issue-menu";
@@ -183,11 +183,12 @@ function ViewCrumb({ view }: { view: SavedView }) {
  */
 function AncestorCrumb({ id, crumb, className = "", label, children }: { id: string; crumb: AncestorCrumbModel; className?: string; label?: string; children: ReactNode }) {
   const { issue } = crumb;
+  const board = useStore((s) => issueBoardId(issue, s));
   return (
     <Crumb id={id} className={`shrink-0 ${className}`}>
       {issue ? (
         <ContextMenu label="Issue options" entries={() => copyEntries(issue)}>
-          <CrumbLink to={{ board: issue.board, selected: crumb.key, panel: true, view: "page", trail: crumb.trail }} aria-label={label} title={crumb.title} className={CRUMB}>
+          <CrumbLink to={{ board, selected: crumb.key, panel: true, view: "page", trail: crumb.trail }} aria-label={label} title={crumb.title} className={CRUMB}>
             {children}
           </CrumbLink>
         </ContextMenu>
@@ -246,7 +247,7 @@ function IssueCrumb({ issue }: { issue: Issue }) {
 
 /** A document's issue: its status and key, back to the issue's page; the title is its tooltip. */
 function DocumentIssueCrumb({ issue }: { issue: Issue }) {
-  const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
+  const board = useStore((s) => issueBoard(issue, s));
   const status = statusById(board, issue.status) ?? { name: issue.status, category: "new" as const };
   return (
     <Crumb id="document-issue" className="shrink-0">

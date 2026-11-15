@@ -15,7 +15,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { navigationChoices, type NavigationChoice } from "./quick-navigation";
 import { ActionLabel, ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { Icon, LabelDot, PriorityIcon, StatusIcon, TypeDot, type IconName } from "@/client/components/icons";
-import { get, set, timed, useStore, statusOf, ME } from "@/client/state/store";
+import { get, set, timed, useStore, statusOf, ME, issueBoardId } from "@/client/state/store";
 import { currentKey } from "@/client/state/jira-sync";
 import { navigate, openSavedView, preloadOnHover, ui } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
@@ -252,7 +252,8 @@ function viewChoiceRows(kind: "grouping" | "ordering", display: Display): Cmd[] 
 }
 /** A page's rows, unfiltered. */
 function usePageRows(page: PalettePage): Cmd[] {
-  const display = useViewSettings(useStore((s) => s.board)).display;
+  const board = useStore((s) => s.board);
+  const display = useViewSettings(board).display;
   const boards = useStore((s) => s.boards);
   const savedViews = useStore((s) => s.savedViews);
   const favorites = useStore((s) => s.favorites);
@@ -270,7 +271,7 @@ function usePageRows(page: PalettePage): Cmd[] {
     return [{ name: "Keyboard shortcuts", keys: hotkeyOf("shortcuts"), icon: commandIcon("shortcuts"), run: () => ui.send({ type: "overlay.open", overlay: "shortcuts" }) }];
   if (page === "grouping" || page === "ordering") return viewChoiceRows(page, display);
   const icon = commandIcon(page === "boards" ? "team-open" : page === "views" ? "view-open" : "favorite-open");
-  return navigationChoices(page, { boards, savedViews, favorites, issues }).map((choice) => ({
+  return navigationChoices(page, { board, boards, savedViews, favorites, issues }).map((choice) => ({
     id: choice.id,
     name: choice.name,
     icon,
@@ -349,7 +350,7 @@ function PaletteFrame({
           // The highlighted issue (arrow keys or pointer) loads before it is picked.
           onValueChange={(value) => {
             const issue = get().issues.get(value);
-            preloadOnHover(issue ? { board: issue.board, selected: issue.key, panel: true } : null);
+            preloadOnHover(issue ? { board: issueBoardId(issue), selected: issue.key, panel: true } : null);
           }}
         >
           <Menu.Input
@@ -381,7 +382,7 @@ const openNewTab = (url: string) => (close(), void window.open(url, "_blank", "n
 const openIssue = (i: Issue) =>
   newTab
     ? openNewTab(appURL(i))
-    : timed(`open ${i.key}`, () => (close(), navigate({ board: i.board, selected: i.key, panel: true, trail: null }), ui.send({ type: "query.set", query: "" })));
+    : timed(`open ${i.key}`, () => (close(), navigate({ board: issueBoardId(i), selected: i.key, panel: true, trail: null }), ui.send({ type: "query.set", query: "" })));
 
 /** An issue row: status, key, title and assignee; picking it opens the issue on its board. */
 function IssueRow({ issue: i, onOpen }: { issue: Issue; onOpen?: () => void }) {
@@ -474,7 +475,7 @@ function DocumentRow({ match: { issue, resource }, q }: { match: DocumentMatch; 
       onSelect={() => {
         recordSearch(q);
         close();
-        navigate({ board: issue.board, selected: issue.key, panel: true, document: resource.id });
+        navigate({ board: issueBoardId(issue), selected: issue.key, panel: true, document: resource.id });
       }}
       icon={<Icon name="file" size={16} />}
       hint={issue.key}

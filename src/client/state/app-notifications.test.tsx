@@ -112,7 +112,7 @@ const words = () => shown().split("|").filter(Boolean);
 
 test("#20: Issue created names the issue by Jira's key and title, with View issue and close, and follows a rekey", () => {
   const before = { issues: get().issues, writable: get().writable };
-  const issue = (key: string) => ({ key, board: 1, summary: "Fix the toast", status: "1", labels: [] }) as unknown as Issue;
+  const issue = (key: string) => ({ key, boards: [1], summary: "Fix the toast", status: "1", labels: [] }) as unknown as Issue;
   try {
     // While Jira has not answered, the app key is not shown: just the title.
     markCreated("A-NEW7");

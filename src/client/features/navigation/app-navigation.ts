@@ -9,7 +9,7 @@ import { Debouncer } from "@tanstack/pacer";
 import { createBrowserHistory, createMemoryHistory, redirect, type ParsedLocation } from "@tanstack/react-router";
 import { uiMachine, inspector, type UiContext } from "@/client/state/machines";
 import { MACHINE_FIELDS, placeOf, restoredTrail, transition, type Destination, type NavigationEvent, type Place, type Screen } from "./navigation";
-import { commit, get, set, subscribe, type State } from "@/client/state/store";
+import { commit, get, set, subscribe, type State, issueBoardId } from "@/client/state/store";
 import { currentKey } from "@/client/state/jira-sync";
 import { createViewDraft, editViewDraft, updateSavedView, viewError } from "@/client/features/views/saved-views";
 import { emptyOverlay, viewForRoute, type SavedView, type ViewDraft } from "@/shared/saved-view-model";
@@ -239,7 +239,7 @@ function openIssueLink(event: MouseEvent) {
   const issue = get().issues.get(currentKey(decodeURIComponent(link.href.slice(browse.length).split(/[?#/]/)[0]!)));
   if (!issue) return;
   event.preventDefault();
-  navigate({ board: issue.board, selected: issue.key, panel: true, view: get().view });
+  navigate({ board: issueBoardId(issue), selected: issue.key, panel: true, view: get().view });
 }
 /**
  * A link to a spot on this page (a comment's timestamp) moves the hash through the router, so the entry keeps the

@@ -8,7 +8,7 @@ import { IssueDiffs, IssuePullRequestRow, PullRequestList } from "./issue-pull-r
 
 const issue: Issue = {
   key: "TEST-9",
-  board: 1,
+  boards: [1],
   summary: "Pull requests in the sidebar",
   status: "todo",
   assignee: null,

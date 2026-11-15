@@ -5,7 +5,7 @@ import { HoverCard } from "@/client/components/hover-card";
 import { PriorityIcon, StatusIcon } from "@/client/components/icons";
 import { AppLink } from "@/client/features/navigation/app-link";
 import { jiraIssueURL } from "./issue-urls";
-import { get, statusOf } from "@/client/state/store";
+import { get, statusOf, issueBoardId } from "@/client/state/store";
 import type { Issue } from "@/shared/issue-model";
 import type { Relation } from "@/shared/relations";
 import { epicName, epicOf } from "@/shared/epics";
@@ -57,7 +57,7 @@ function IssueCard({ relation, issue }: { relation: Relation; issue?: Issue }) {
             {issue ? (
               <AppLink
                 to={{
-                  board: issue.board,
+                  board: issueBoardId(issue),
                   selected: issue.key,
                   panel: true,
                   view: get().view,

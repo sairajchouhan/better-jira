@@ -105,7 +105,7 @@ test("BJ-16: smart links render as Linear's mention chip: issue status, key and 
   set({
     site: "https://example.atlassian.net",
     boards: [{ id: 1, name: "Board", columns: [{ name: "Doing", statuses: [{ id: "doing", name: "Doing", category: "indeterminate" }] }] }],
-    issues: new Map([["TEST-2", { key: "TEST-2", board: 1, summary: "Second fixture", status: "doing" } as any]]),
+    issues: new Map([["TEST-2", { key: "TEST-2", boards: [1], summary: "Second fixture", status: "doing" } as any]]),
   } as any);
   const html = renderToStaticMarkup(<Adf node={smartLinksFixture} />);
   const chips = [...html.matchAll(/<a class="mention-chip smart-link" data-smart-link="(\w+)" href="([^"]+)"[^>]*>(.*?)<\/a>/g)].map(

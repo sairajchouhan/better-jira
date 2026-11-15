@@ -2,7 +2,7 @@ import { cloneElement, isValidElement, type ReactElement } from "react";
 import { Toast } from "@/client/components/toast";
 import { toasts } from "@/client/components/toast-queue";
 import { Icon, StatusIcon, type IconName } from "@/client/components/icons";
-import { get, statusOf, useStore } from "./store";
+import { get, statusOf, useStore, issueBoardId } from "./store";
 import { currentKey } from "./jira-sync";
 import { isLocalIssue } from "./local-edits";
 import { navigate } from "@/client/features/navigation/app-navigation";
@@ -26,7 +26,7 @@ function viewIssue(issueKey: string, id: string) {
         toasts.dismiss(id);
         const key = currentKey(issueKey);
         // Linear's toast link opens the issue afresh (`kX`: `state: { resetBreadcrumb: true }`).
-        navigate({ selected: key, panel: true, board: get().issues.get(key)?.board, trail: null });
+        navigate({ selected: key, panel: true, board: issueBoardId(get().issues.get(key)), trail: null });
       }}
     >
       View issue

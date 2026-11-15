@@ -44,7 +44,7 @@ test("the visible order follows a saved view, its temporary filters and the view
   };
   const issue = (key: string, rank: string, patch: Partial<Issue>): Issue => ({
     key,
-    board: 1,
+    boards: [1],
     summary: key,
     status: "todo",
     assignee: null,

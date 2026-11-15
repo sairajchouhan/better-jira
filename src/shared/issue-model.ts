@@ -65,7 +65,9 @@ export type PropertyActivity = {
 export type User = { id: string; name: string; avatar?: string };
 export type Issue = {
   key: string;
-  board: number;
+  /** Every configured board that holds the issue, in the sidebar's order; none for an issue only linked from one. Ask
+   *  `onBoard` / `boardFor` (board-membership.ts), never index it. */
+  boards: number[];
   summary: string;
   status: string;
   type?: string;
@@ -146,7 +148,6 @@ export type Full = {
 export type IssueDraft = Partial<
   Pick<
     Issue,
-    | "board"
     | "status"
     | "assignee"
     | "priority"
@@ -161,6 +162,8 @@ export type IssueDraft = Partial<
     | "resources"
   >
 > & {
+  /** The board the new issue is made on. */
+  board?: number;
   description?: string;
   descriptionDoc?: AdfDocument;
   /** Make a copy: the composer starts with this title and saves with "Save copy". */

@@ -7,7 +7,7 @@ import { createAppRouter, locationOf, routeNotFound, routeURL, type RouteContext
 
 const p = defaultPreferences();
 const triage = { id: "v1", name: "Triage", board: 1, filters: p.filters, display: p.display, scope: p.scope } as SavedView;
-const issues: Record<string, { key: string; board: number }> = { "A-1": { key: "A-1", board: 1 }, "B-1": { key: "B-1", board: 2 } };
+const issues: Record<string, { key: string; boards: number[] }> = { "A-1": { key: "A-1", boards: [1] }, "B-1": { key: "B-1", boards: [2] } };
 
 /** Opens an address on a fresh router; returns where it landed, what it showed, and whether it was not found. */
 async function open(href: string, state?: Record<string, unknown>) {

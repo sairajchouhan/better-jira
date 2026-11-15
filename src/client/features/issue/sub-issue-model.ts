@@ -9,6 +9,7 @@ import {
   type Ordering,
   type Property,
 } from "@/shared/view-model";
+import { onBoard } from "@/shared/board-membership";
 /** The words of the line under an issue's title, per variant (shared/epics.ts titleParentOf), and of the menu its ring opens.
  *  A parent Task: Linear's "Sub-issue of" and Open sub-issue…. An epic: "In epic", and Linear's word for a project's issues
  *  ("Open project issues", startup-root `Xxn`) in Epic words, as an issue in an epic is not a sub-issue (user's call, BJ-289). */
@@ -79,7 +80,7 @@ export function childrenByParent(issues: ReadonlyMap<string, Issue>): ChildrenIn
 }
 /** An issue's status on its own board, as every sub-issue list, count and menu reads it; "new" when the board doesn't know it. */
 export const statusOf = (boards: readonly Board[], child: Issue) => {
-  const board = boards.find((b) => b.id === child.board),
+  const board = boards.find((b) => onBoard(child, b.id)),
     columns = board?.columns ?? [],
     result = statusById(board, child.status);
   return {

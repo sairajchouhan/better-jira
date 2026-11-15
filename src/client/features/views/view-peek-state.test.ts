@@ -63,7 +63,7 @@ test("B9: the peek closes when its item goes, a menu or toolbar opens, an issue 
   expect(peekClosesFor(peek, base, 2)).toBe(true);
 });
 
-const card = (key: string) => ({ key, board: 1, summary: key, status: "todo", assignee: null, labels: [], updated: "", resolved: null, comments: 0 });
+const card = (key: string) => ({ key, boards: [1], summary: key, status: "todo", assignee: null, labels: [], updated: "", resolved: null, comments: 0 });
 function seed() {
   set({ issues: new Map(["PK-1", "PK-2"].map((key) => [key, card(key)])) as never });
   ui.send({ type: "overlay.close" });

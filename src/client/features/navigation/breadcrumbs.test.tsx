@@ -13,7 +13,7 @@ afterEach(() => commit({ issues: before.issues, boards: before.boards, board: be
 
 const board: Board = { id: 7, name: "Space", columns: [{ name: "Todo", statuses: [{ id: "todo", name: "Todo", category: "new" }] }] };
 const issue = (key: string, patch: Partial<Issue> = {}): Issue => ({
-  key, board: 7, summary: `${key} title`, status: "todo", type: "Task", assignee: null, labels: [], comments: 0,
+  key, boards: [7], summary: `${key} title`, status: "todo", type: "Task", assignee: null, labels: [], comments: 0,
   updated: "2026-11-01T10:00:00Z", resolved: null, ...patch,
 });
 const all = [
@@ -92,7 +92,7 @@ test("every issue form leads with the space and never shows an Issues crumb", ()
 });
 
 test("the space is the issue's own board, whichever board was current", () => {
-  const moved = all.map((i) => (i.key === "Z-2" ? { ...i, board: 8 } : i));
+  const moved = all.map((i) => (i.key === "Z-2" ? { ...i, boards: [8] } : i));
   commit({ issues: new Map(moved.map((i) => [i.key, i])) });
   const html = (trail: ReturnType<typeof get>["trail"]) => {
     commit({ boards: [board, other], board: 7, selected: "Z-2", panel: true, view: "page", trail, mine: false, activeViewId: null, editorDraft: null, issues: new Map(moved.map((i) => [i.key, i])) });

@@ -19,7 +19,7 @@ const me: User = { id: "me", name: "Me" },
   priya: User = { id: "priya", name: "Priya" };
 // Made-up epics: E-1 and E-2 (done) are epics, E-3 a task.
 const epic = (key: string, patch: Partial<Issue> = {}) =>
-  ({ key, board: 1, summary: key, status: "todo", type: "Epic", assignee: null, labels: [], ...patch }) as Issue;
+  ({ key, boards: [1], summary: key, status: "todo", type: "Epic", assignee: null, labels: [], ...patch }) as Issue;
 const issues = [epic("E-1"), epic("E-2", { status: "done" }), epic("E-3", { type: "Task" })];
 const ctx = { board, people: [me, alex, priya], me, defaultStatus: "todo", lookup: lookupIn(issues) };
 let n = 0;

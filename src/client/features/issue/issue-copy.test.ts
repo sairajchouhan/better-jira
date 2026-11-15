@@ -6,7 +6,7 @@ import { CODING_TOOLS, promptLink, TRUNCATED } from "./coding-tools";
 test("clipboard projections retain rich formatting, tables and exact IDs/URLs", () => {
   const issue: Issue = {
     key: "TEST-1",
-    board: 1,
+    boards: [1],
     summary: "Fix [menu]",
     status: "todo",
     assignee: null,
@@ -41,7 +41,7 @@ test("clipboard projections retain rich formatting, tables and exact IDs/URLs", 
 test("I18: the git branch name starts with the user's name, like Linear", () => {
   const issue: Issue = {
     key: "DRFT-53",
-    board: 1,
+    boards: [1],
     summary: "Fix the menu!",
     status: "todo",
     assignee: null,
@@ -59,7 +59,7 @@ test("I18: the git branch name starts with the user's name, like Linear", () => 
 test("R3-issue-fields-D3/D4: Copy title carries the ID and every copy action has Linear's toast", () => {
   const issue: Issue = {
     key: "KAN-7",
-    board: 1,
+    boards: [1],
     summary: "Fix the menu",
     status: "todo",
     assignee: null,
@@ -88,7 +88,7 @@ test("R3-issue-fields-D3/D4: Copy title carries the ID and every copy action has
 test("B5: Copy as prompt fills Linear's template with the key, the branch and the issue as Markdown, and toasts Linear's line", () => {
   const issue: Issue = {
     key: "DRFT-7",
-    board: 1,
+    boards: [1],
     summary: "Fix the menu",
     status: "todo",
     assignee: null,

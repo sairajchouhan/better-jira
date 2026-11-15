@@ -47,7 +47,8 @@ import {
 import { recordRelation } from "@/client/features/issue/issue-activity";
 import { inverseKind, type Relation } from "@/shared/relations";
 import { uploadNow } from "./jira-media";
-import { get, set, timed, ME, boardOf } from "./store";
+import { get, set, timed, ME, boardOf, issueBoardId } from "./store";
+import { onBoard } from "@/shared/board-membership";
 
 /** The status a new issue gets from the view's scope: Active creates in the first open status outside the backlog. */
 function scopeStatus() {
@@ -411,7 +412,7 @@ export const actions = {
   drop(key: string, boardId: number, groups: { by: Grouping; id: string }[], rank?: string) {
     const issue = get().issues.get(key),
       board = get().boards.find((b) => b.id === boardId);
-    if (!issue || !board || issue.board !== boardId) return;
+    if (!issue || !board || !onBoard(issue, boardId)) return;
     // Jira only changes a type within its hierarchy level (no Subtask ↔ Task), like the type menu: a drop onto another level is ignored.
     const types = get().options.types?.[issue.project?.key ?? ""];
     if (
@@ -695,7 +696,7 @@ export const actions = {
     const status = statusById(board, draft.status) ?? statuses(board)[0];
     if (!board || !status || !summary.trim() || (draft.subIssues?.some(title => title.trim()) && !canHaveSubIssues(get(), draft))) return;
     const prefix =
-      [...get().issues.values()].find((i) => i.board === board.id)?.key.split("-")[0] ?? "LOCAL";
+      [...get().issues.values()].find((i) => onBoard(i, board.id))?.key.split("-")[0] ?? "LOCAL";
     const key = `${prefix}-NEW${nextSeq()}`;
     markCreated(key);
     if (draft.submission) submissions.set(draft.submission, key);
@@ -706,6 +707,7 @@ export const actions = {
       title: _title,
       copy: _copy,
       submission: _submission,
+      board: _board,
       ...fields
     } = draft;
     const document = normalizeDocument(descriptionDoc ?? draft.description ?? "");
@@ -715,7 +717,7 @@ export const actions = {
       record(key, `create ${key}`, () => {
         const issue: Issue = {
           key,
-          board: board.id,
+          boards: [board.id],
           summary: summary.trim(),
           type: "Task",
           priority: get().writable ? undefined : "Normal",
@@ -731,7 +733,7 @@ export const actions = {
           prCount: 0,
           watchers: [],
           watchersComplete: true,
-          project: [...get().issues.values()].find((i) => i.board === board.id)?.project,
+          project: [...get().issues.values()].find((i) => onBoard(i, board.id))?.project,
           ...fields,
           ...(assignee !== undefined ? { assignee } : {}),
           description: adfToText(document),
@@ -814,7 +816,7 @@ export const actions = {
   duplicate(key: string) {
     const issue = get().issues.get(key);
     if (!issue) return;
-    navigate({ board: issue.board });
+    navigate({ board: issueBoardId(issue) });
     beginCreate({
       title: `${issue.summary} (copy)`,
       copy: true,

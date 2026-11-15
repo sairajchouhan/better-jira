@@ -12,11 +12,11 @@ const view: SavedView = {
   createdAt: "2026-01-01", updatedAt: "2026-01-01",
 };
 const issue: Issue = {
-  key: "T-1", board: 1, summary: "An issue", status: "todo", assignee: null,
+  key: "T-1", boards: [1], summary: "An issue", status: "todo", assignee: null,
   labels: [], comments: 0, updated: "", resolved: null,
   resources: [{ id: "doc", kind: "document", title: "", updated: "" }],
 };
-const state = { boards: [board], savedViews: [view], issues: new Map([[issue.key, issue]]), favorites: [] as string[] };
+const state = { board: 1, boards: [board], savedViews: [view], issues: new Map([[issue.key, issue]]), favorites: [] as string[] };
 
 test("directories retain their order and route independently of the current selection", () => {
   expect(navigationChoices("boards", { ...state, boards: [board, { ...board, id: 2, name: "Two" }] })).toEqual([

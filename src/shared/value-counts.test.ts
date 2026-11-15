@@ -4,7 +4,7 @@ import { matchesRule, parentKeys, parentName, valueCounts, valuesFor, type Field
 
 const issue = (key: string, patch: Partial<Issue> = {}): Issue => ({
   key,
-  board: 1,
+  boards: [1],
   summary: `Summary of ${key}`,
   status: "todo",
   assignee: null,

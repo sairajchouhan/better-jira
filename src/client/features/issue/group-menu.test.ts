@@ -7,7 +7,7 @@ import { groupMenuEntries } from "./personal-controls";
 
 const issue = (key: string): Issue => ({
   key,
-  board: 1,
+  boards: [1],
   summary: key,
   status: "todo",
   assignee: null,

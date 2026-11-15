@@ -11,6 +11,7 @@ import { navigate } from "@/client/features/navigation/app-navigation";
 import { issuesDeletedInJira } from "./deleted-issues";
 import { get, set, subscribe } from "./store";
 import { syncProblem } from "./sync-problem";
+import { rejoinBoards } from "@/shared/board-membership";
 
 /** Server data goes through TanStack Query: it dedupes loads in flight, schedules the poll and refetches on focus. Invalidate a key to refetch it. */
 export const queryClient = new QueryClient({
@@ -74,12 +75,9 @@ async function refreshBoards() {
     json<Issue[]>("/api/issues"),
   ]);
   const known = new Set(get().boards.map((b) => b.id)),
-    issues = new Map(get().issues),
+    removed = new Set([...known].filter((id) => !boards.some((b) => b.id === id))),
+    issues = rejoinBoards(get().issues, remote, known, removed),
     preferences = { ...get().preferences };
-  for (const issue of remote)
-    if (!known.has(issue.board) && !issues.has(issue.key)) issues.set(issue.key, issue);
-  const removed = new Set([...known].filter((id) => !boards.some((b) => b.id === id)));
-  if (removed.size) for (const [key, issue] of issues) if (removed.has(issue.board)) issues.delete(key);
   for (const b of boards)
     preferences[b.id] ??= {
       ...defaultPreferences(),

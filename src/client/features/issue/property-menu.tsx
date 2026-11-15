@@ -12,7 +12,7 @@ import {
   milestoneChoices,
   statuses,
 } from "@/shared/board-catalog";
-import { useStore, ME } from "@/client/state/store";
+import { useStore, ME, issueBoardId, issueBoard } from "@/client/state/store";
 import { personKeywords, rowKeywords } from "@/client/lib/fuzzy-score";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { LoadingState } from "@/client/components/empty-state";
@@ -234,10 +234,11 @@ export const assigneeValue = (u: User) => `${u.name} ${u.id}`;
 /** Issue options › Assignee: AssigneeRows on the issue's live assignee. */
 export function IssueAssigneeRows({ issue, query }: { issue: string; query: string }) {
   const current = useStore((s) => s.issues.get(issue));
+  const board = useStore((s) => current && issueBoardId(current, s));
   const surface = use(MenuSurfaceContext);
   return (
     <AssigneeRows
-      board={current?.board}
+      board={board}
       value={current?.assignee ?? null}
       query={query}
       onPick={(user) => {
@@ -545,7 +546,7 @@ export function LabelRows({
 /** Issue options › Labels: LabelRows on the issue's live labels, so a checkbox reflects each toggle while the menu stays open. */
 export function IssueLabelRows({ issue, query }: { issue: string; query: string }) {
   const labels = useStore((s) => s.issues.get(issue)?.labels) ?? [];
-  const board = useStore((s) => s.boards.find((b) => b.id === s.issues.get(issue)?.board));
+  const board = useStore((s) => issueBoard(s.issues.get(issue), s));
   return (
     <LabelRows
       board={board}

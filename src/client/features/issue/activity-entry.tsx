@@ -20,13 +20,13 @@ import { LinkIcon } from "@/client/components/link-icon";
 import { faviconSrc } from "@/shared/smart-link";
 import { linkTitle } from "@/shared/issue-resource";
 import { epicName } from "@/shared/epics";
-import { boardOf, get } from "@/client/state/store";
+import { boardOf, get, issueBoardId } from "@/client/state/store";
 import type { Issue, User } from "@/shared/issue-model";
 import { LINEAR_RELATIONS, jiraLinkType } from "@/shared/relations";
 import { labelDelta, type ActivityRow, type PropertyActivity, type Relation } from "./issue-activity";
 import type { FieldValue, NamedValue } from "./jira-history";
 
-const related = (target: Issue) => ({ board: target.board, selected: target.key, panel: true, view: get().view });
+const related = (target: Issue) => ({ board: issueBoardId(target), selected: target.key, panel: true, view: get().view });
 
 const name = (value: unknown) =>
   value && typeof value === "object" && "name" in value ? String((value as { name: unknown }).name) : String(value);

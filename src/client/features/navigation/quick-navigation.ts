@@ -3,6 +3,7 @@ import { findIssueDocument } from "@/shared/issue-resource";
 import type { SavedView } from "@/shared/saved-view-model";
 
 import type { Scope } from "@/shared/view-model";
+import { boardFor } from "@/shared/board-membership";
 
 export type NavigationChoice = {
   id: string;
@@ -17,7 +18,7 @@ export type NavigationChoice = {
 /** Resolve stored favorites and directory entries without coupling routing rules to menu rendering. */
 export function navigationChoices(
   kind: "favorites" | "views" | "boards",
-  state: { boards: Board[]; savedViews: SavedView[]; favorites: string[]; issues: Map<string, Issue> },
+  state: { board: number; boards: Board[]; savedViews: SavedView[]; favorites: string[]; issues: Map<string, Issue> },
 ): NavigationChoice[] {
   if (kind === "boards")
     return state.boards.map((board) => ({
@@ -30,7 +31,7 @@ export function navigationChoices(
 }
 function favoriteChoice(
   id: string,
-  state: { boards: Board[]; savedViews: SavedView[]; issues: Map<string, Issue> },
+  state: { board: number; boards: Board[]; savedViews: SavedView[]; issues: Map<string, Issue> },
 ): NavigationChoice[] {
   const savedView = state.savedViews.find((v) => `view:${v.id}` === id);
   if (savedView) return [{ id, name: savedView.name, destination: { view: savedView } }];
@@ -41,7 +42,7 @@ function favoriteChoice(
     return [{
       id, name: document.resource.title || "New document",
       destination: {
-        board: document.issue.board, selected: document.issue.key, panel: true,
+        board: boardFor(document.issue, state.board), selected: document.issue.key, panel: true,
         document: document.resource.id,
       },
     }];
@@ -49,7 +50,7 @@ function favoriteChoice(
     [, boardId, scope] = id.split(":"),
     board = state.boards.find((b) => b.id === Number(boardId));
   if (issue)
-    return [{ id, name: `${id} ${issue.summary}`, destination: { board: issue.board, selected: issue.key, panel: true } }];
+    return [{ id, name: `${id} ${issue.summary}`, destination: { board: boardFor(issue, state.board), selected: issue.key, panel: true } }];
   if (!board) return [];
   return [{
     id, name: `${board.name}${scope ? ` · ${scope}` : ""}`,

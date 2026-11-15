@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { commentAnchor, unreadCount, type InboxItem } from "@/shared/inbox-model";
 import { clearedComments, visitClears } from "@/shared/inbox-visit";
-import { statusOf as issueStatusOf, get, set, useStore } from "@/client/state/store";
+import { statusOf as issueStatusOf, get, set, useStore, issueBoardId } from "@/client/state/store";
 import { queryClient } from "@/client/state/server-data";
 import { navigate, router, showAnchor, ui } from "@/client/features/navigation/app-navigation";
 import { createInboxStore, type Category, type DeleteConfirmation, type Feed } from "@/client/state/inbox-store";
@@ -88,7 +88,7 @@ export const inbox = createInboxStore({
     if (issue) {
       keepRowInUrl(null);
       navigate({
-        board: issue.board,
+        board: issueBoardId(issue),
         selected: issue.key,
         panel: true,
         view: open,

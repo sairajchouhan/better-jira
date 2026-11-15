@@ -5,7 +5,7 @@ import { rewriteDocuments } from "./jira-media";
 
 const issue = {
   key: "KAN-1",
-  board: 1,
+  boards: [1],
   summary: "Test",
   status: "1",
   labels: [],

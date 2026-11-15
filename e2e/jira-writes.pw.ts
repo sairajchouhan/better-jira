@@ -24,7 +24,7 @@ window.fetch=async(input,init)=>{const path=new URL(String(input),location.href)
  if(path==='/api/options')return Response.json({priorities:[],users:[],labels:[],versions:{},types:{TEST:[{name:'Epic',hierarchyLevel:1},{name:'Task',hierarchyLevel:0},{name:'Story',hierarchyLevel:0},{name:'Subtask',hierarchyLevel:-1}]}});
  const m=path.match(/^\\/api\\/issues\\/([^/]+)\\/ops$/);if(!m)return real(input,init);
  const {ops}=JSON.parse(init.body);window.__ops.push(ops);
- if(ops[0]?.op==='create'){const f=ops[0].fields;return Response.json({key:'TEST-90',created:{[m[1]]:'TEST-90'},others:[],issue:{key:'TEST-90',board:1,summary:f.summary,status:f.status,type:f.type,assignee:null,labels:[],comments:0,updated:'2026-11-08T10:00:00Z',resolved:null,project:{key:'TEST',name:'Audit'}}});}
+ if(ops[0]?.op==='create'){const f=ops[0].fields;return Response.json({key:'TEST-90',created:{[m[1]]:'TEST-90'},others:[],issue:{key:'TEST-90',boards:[1],summary:f.summary,status:f.status,type:f.type,assignee:null,labels:[],comments:0,updated:'2026-11-08T10:00:00Z',resolved:null,project:{key:'TEST',name:'Audit'}}});}
  const issue=(await (await real('/api/issues')).json()).find(i=>i.key===m[1]);
  if(ops.some(op=>op.fields?.parent))return Response.json({error:'The issue type selected is invalid. (pid)',key:m[1],created:{},others:[],issue},{status:422});
  return Response.json({key:m[1],created:{},others:[],issue});

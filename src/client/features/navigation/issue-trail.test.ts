@@ -15,7 +15,7 @@ const boards: Board[] = [
 ];
 const issue = (key: string, patch: Partial<Issue> = {}): Issue => ({
   key,
-  board: 1,
+  boards: [1],
   summary: `${key} title`,
   status: "todo",
   type: "Task",
@@ -115,12 +115,12 @@ test("a long trail shows the epic as its icon and only the first and last parent
 test("the space is the issue's own board, not the one it was opened from; the current board only when no loaded board holds it", () => {
   const other: Board = { ...boards[0]!, id: 2, name: "Other" };
   const two = [...boards, other];
-  const elsewhere = issue("R-1", { board: 2 });
+  const elsewhere = issue("R-1", { boards: [2] });
   // Opened while board 1 is current: still board 2's crumb, in every form.
   expect(chain(issueCrumbs(elsewhere, null, issues, two, 1))).toBe("Other");
   expect(chain(issueCrumbs(elsewhere, "list", issues, two, 1))).toBe("list › Other");
   // On no loaded board: the current one; with none either, no space crumb.
-  const orphan = issue("R-2", { board: 99 });
+  const orphan = issue("R-2", { boards: [99] });
   expect(chain(issueCrumbs(orphan, null, issues, two, 2))).toBe("Other");
   expect(chain(issueCrumbs(orphan, null, issues, two))).toBe("");
   expect(spaceOf(orphan, two, 1)).toBe(boards[0]);

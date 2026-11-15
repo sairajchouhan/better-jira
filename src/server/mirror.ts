@@ -21,7 +21,6 @@ import {
   propertyEntries,
   remoteLinkData,
   watcherList,
-  type PropertyRow,
 } from "./issue-projection";
 import { serverConfiguration } from "./server-config";
 import { unseenChanged } from "./notifications";
@@ -29,6 +28,7 @@ import { writeLedger } from "./write-ledger";
 import { avatarProxy, type AvatarCache } from "@/shared/avatar-proxy";
 import { faviconProxy } from "./favicon";
 import { smartLinkCache } from "./smart-link";
+import { issueStore } from "./issue-store";
 
 const configuration = serverConfiguration();
 // `bun --hot` re-runs this module on every edit; the loops and the open tabs live on globalThis so they survive it.
@@ -57,8 +57,11 @@ const db = new Database(configuration.cachePath, { create: true, strict: true })
 // Every open tab re-reads the views when one changes; `notify` is defined below and only runs after a write.
 export const views = viewRepository(db, () => notify("views"));
 db.run("PRAGMA journal_mode = WAL");
-db.run(`CREATE TABLE IF NOT EXISTS issues (
-  key TEXT PRIMARY KEY, board INTEGER NOT NULL, seen INTEGER NOT NULL, slim TEXT NOT NULL, full TEXT NOT NULL)`);
+/** Issues and the boards that hold them (an issue is on every board whose filter holds it). */
+const store = issueStore(db);
+/** Bumped when every board needs a full sync on its next turn: "5" came with per-board membership, whose migration kept only
+ *  the last board's claim to a shared issue. */
+const FIELDS = "5";
 db.run("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)");
 db.run(
   "CREATE TABLE IF NOT EXISTS issue_properties (key TEXT PRIMARY KEY, source_updated TEXT NOT NULL, synced INTEGER NOT NULL, data TEXT NOT NULL)",
@@ -113,10 +116,11 @@ const github = gitHubPullRequests(db, {
  *  link counts once. */
 const jiraPrUrls = new Map<string, string[]>();
 /** An issue's pull requests by Jira alone: its Development field, with the development index's say on whether it has any. */
-const jiraSlimOf = (raw: any, board: number) => linkedPrs.apply(projection.slim(raw, board), board);
-/** An issue as the board and search read it: Jira's pull requests, with GitHub's added. */
-const slimOf = (raw: any, board: number) => {
-  const slim = jiraSlimOf(raw, board);
+const jiraSlimOf = (raw: any, boards: number[]) => linkedPrs.apply(projection.slim(raw), boards);
+/** An issue as the board and search read it: Jira's pull requests, with GitHub's added. `boards` hold it (pull request links
+ *  are read per board). */
+const slimOf = (raw: any, boards: number[]) => {
+  const slim = jiraSlimOf(raw, boards);
   return withGitHubPullRequests(slim, github.forKey(slim.key), jiraPrUrls.get(slim.key));
 };
 const source = JSON.stringify({ site: configuration.site, email: configuration.email });
@@ -125,33 +129,21 @@ if (getMeta("source") && getMeta("source") !== source)
     "This cache belongs to another Jira site or account. Choose a different JIRA_CACHE or rerun setup.",
   );
 setMeta("source", source);
-const upsert = db.query(
-  // A poll page fetched before a write must not replace the newer row the write's refresh saved; `seen` still advances so sweeps keep it.
-  `INSERT INTO issues (key, board, seen, slim, full) VALUES ($key, $board, $seen, $slim, $full)
-   ON CONFLICT(key) DO UPDATE SET board=excluded.board, seen=excluded.seen,
-     slim=CASE WHEN COALESCE(json_extract(excluded.slim,'$.updated'),'')>=COALESCE(json_extract(issues.slim,'$.updated'),'') THEN excluded.slim ELSE issues.slim END,
-     full=CASE WHEN COALESCE(json_extract(excluded.slim,'$.updated'),'')>=COALESCE(json_extract(issues.slim,'$.updated'),'') THEN excluded.full ELSE issues.full END`,
-);
-
-const updatedOf = db.query<{ updated: string }, [string]>(
-  "SELECT json_extract(slim,'$.updated') AS updated FROM issues WHERE key = ?",
-);
-/** Returns the keys Jira changed since the mirror last saw them. */
+/** A board's sync read these issues: they are on `board`, and their content is saved when newer. Returns the keys Jira changed
+ *  since the mirror last saw them, and the keys newly on the board. */
 const save = db.transaction((board: number, issues: any[], seen: number) => {
   const changed: string[] = [];
   for (const i of issues) {
+    const joined = store.see(i.key, board, seen);
     // Jira's search index can lag behind a newer copy saved from an issue read; the upsert keeps the newer one, so that is no change.
-    if ((updatedOf.get(i.key)?.updated ?? "") < i.fields.updated) changed.push(i.key);
-    upsert.run({
-      key: i.key,
-      board,
-      seen,
-      slim: JSON.stringify(slimOf(i, board)),
-      full: JSON.stringify(i),
-    });
+    if (joined || store.updated(i.key) < i.fields.updated) changed.push(i.key);
+    saveContent(i);
   }
   return changed;
 });
+/** Saves an issue Jira returned, for the boards already holding it; never changes which boards those are. */
+const saveContent = (raw: any) =>
+  store.put({ key: raw.key, slim: slimOf(raw, store.boardsOf(raw.key)), full: raw });
 
 const page = (board: number, jql: string, startAt: number) =>
   jira(
@@ -182,7 +174,7 @@ async function fullSync(board: number) {
       }
     }),
   );
-  const gone = db.query("DELETE FROM issues WHERE board = ? AND seen < ?").run(board, t0).changes;
+  const gone = store.sweep(board, t0);
   // The board config lists status ids only; names and categories come from the status list.
   const [config, statuses] = await Promise.all([
     jira(`/rest/agile/1.0/board/${board}/configuration`),
@@ -201,7 +193,7 @@ async function fullSync(board: number) {
   boardSync.set(board, { ...boardSync.get(board), progress: undefined });
   setMeta(`full:${board}`, String(t0));
   setMeta(`inc:${board}`, String(t0));
-  setMeta(`fields:${board}`, "4");
+  setMeta(`fields:${board}`, FIELDS);
   console.log(
     `[sync] board ${board}: full, ${first.total} issues, ${gone} removed, ${Date.now() - t0}ms`,
   );
@@ -223,15 +215,15 @@ async function incrementalSync(board: number): Promise<string[]> {
   return keys;
 }
 
-/** Re-projects the stored issues' pull request count and state (all of `board`'s, or only `keys`). Returns whether any changed. */
-function reprojectPullRequests(rows: { key: string; board: number; slim: string; full: string }[]) {
+/** Re-projects the stored issues' pull request count and state. Returns whether any changed. */
+function reprojectPullRequests(rows: { key: string; slim: string; full: string }[]) {
   const update = db.query("UPDATE issues SET slim = ? WHERE key = ?");
   let changed = false;
   db.transaction(() => {
     for (const row of rows) {
       // From the stored Jira record, so an issue the index links again gets the field's own count and state back.
       const slim = JSON.parse(row.slim),
-        next = slimOf(JSON.parse(row.full), row.board);
+        next = slimOf(JSON.parse(row.full), store.boardsOf(row.key));
       if (next.prCount === slim.prCount && next.prStatus === slim.prStatus) continue;
       update.run(JSON.stringify({ ...slim, prCount: next.prCount, prStatus: next.prStatus }), row.key);
       changed = true;
@@ -242,8 +234,8 @@ function reprojectPullRequests(rows: { key: string; board: number; slim: string;
 const rowsOf = (keys: string[]) =>
   keys.length
     ? db
-        .query<{ key: string; board: number; slim: string; full: string }, string[]>(
-          `SELECT key, board, slim, full FROM issues WHERE key IN (${keys.map(() => "?").join(",")})`,
+        .query<{ key: string; slim: string; full: string }, string[]>(
+          `SELECT key, slim, full FROM issues WHERE key IN (${keys.map(() => "?").join(",")})`,
         )
         .all(...keys)
     : [];
@@ -256,9 +248,8 @@ async function syncLinkedPullRequests(board: number) {
   if (Date.now() - (prsProbed.get(board) ?? 0) < PROBE_MS) return false;
   prsProbed.set(board, Date.now());
   const keys = await linkedPrs.refresh(jira, board);
-  const rows = db
-    .query<{ key: string; board: number; slim: string; full: string }, [number]>("SELECT key, board, slim, full FROM issues WHERE board = ?")
-    .all(board)
+  const rows = store
+    .rowsOn(board)
     .filter((row) => !keys || keys.includes(row.key));
   return reprojectPullRequests(rows);
 }
@@ -268,7 +259,7 @@ const OVERLAP_READS = 5;
 /** Reads Jira's pull request URLs for issues GitHub links that Jira links too, a few per poll, so their count is the union. */
 async function readOverlaps() {
   const keys = rowsOf(github.keys().filter((key) => !jiraPrUrls.has(key)))
-    .filter((row) => jiraSlimOf(JSON.parse(row.full), row.board).prCount)
+    .filter((row) => jiraSlimOf(JSON.parse(row.full), store.boardsOf(row.key)).prCount)
     .slice(0, OVERLAP_READS);
   for (const row of keys) jiraPrUrls.set(row.key, (await readPullRequests(jira, row.key)).map((pr) => pr.url));
   return reprojectPullRequests(keys);
@@ -304,7 +295,7 @@ const probed = new Map<number, number>();
 /** Returns whether the mirror changed. */
 async function syncBoard(board: number) {
   const lastFull = Number(getMeta(`full:${board}`) ?? 0);
-  if (getMeta(`fields:${board}`) !== "4" || Date.now() - lastFull > FULL_SYNC_EVERY_MS)
+  if (getMeta(`fields:${board}`) !== FIELDS || Date.now() - lastFull > FULL_SYNC_EVERY_MS)
     return (await fullSync(board), true);
   const keys = await incrementalSync(board);
   if (keys.length) console.log(`[sync] board ${board}: ${keys.join(" ")}`);
@@ -314,10 +305,7 @@ async function syncBoard(board: number) {
   const { total } = await jira<{ total: number }>(
     `/rest/agile/1.0/board/${board}/issue?maxResults=1&fields=key`,
   );
-  const mirrored = db
-    .query<{ n: number }, [number]>("SELECT count(*) AS n FROM issues WHERE board = ?")
-    .get(board)!.n;
-  if (total < mirrored) return (await fullSync(board), true);
+  if (total < store.count(board)) return (await fullSync(board), true);
   return keys.length > 0;
 }
 
@@ -388,12 +376,9 @@ async function watchOpenIssues() {
     await Bun.sleep(OPEN_ISSUE_POLL_MS);
     let changed = false;
     for (const key of new Set([...live.clients].flatMap((c) => (c.issue ? [c.issue] : [])))) {
-      const row = db
-        .query<{ board: number; updated: string }, [string]>(
-          "SELECT board, json_extract(slim,'$.updated') AS updated FROM issues WHERE key = ?",
-        )
-        .get(key);
-      if (!row) continue;
+      // An issue no board holds isn't kept, so it isn't followed either.
+      const updated = store.updated(key);
+      if (!updated) continue;
       try {
         const [{ fields }, remote] = await Promise.all([
           jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=updated`),
@@ -409,17 +394,13 @@ async function watchOpenIssues() {
           db.query("DELETE FROM issue_details WHERE key = ?").run(key); // the panel's web links too
           changed = true;
         }
-        if (fields.updated === row.updated) continue;
-        save(
-          row.board,
-          [await jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=${projection.fields}`)],
-          Date.now(),
-        );
+        if (fields.updated === updated) continue;
+        saveContent(await jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=${projection.fields}`));
         console.log(`[sync] open issue ${key}`);
         changed = true;
       } catch (error) {
         if ((error as { status?: number }).status === 404) {
-          db.query("DELETE FROM issues WHERE key = ?").run(key);
+          store.remove(key);
           changed = true;
         } else console.error(`[sync] ${key}:`, String(error).slice(0, 200));
       }
@@ -442,13 +423,11 @@ export async function start() {
   if (getMeta("slim-version") !== SLIM_VERSION) {
     db.transaction(() => {
       const rows = db
-        .query<{ key: string; board: number; full: string }, []>(
-          "SELECT key, board, full FROM issues",
-        )
+        .query<{ key: string; full: string }, []>("SELECT key, full FROM issues")
         .all();
       const update = db.query("UPDATE issues SET slim = ? WHERE key = ?");
       for (const row of rows)
-        update.run(JSON.stringify(slimOf(JSON.parse(row.full), row.board)), row.key);
+        update.run(JSON.stringify(slimOf(JSON.parse(row.full), store.boardsOf(row.key))), row.key);
       setMeta("slim-version", SLIM_VERSION);
     })();
   }
@@ -502,14 +481,9 @@ export async function removeBoard(id: number) {
   notify("boards");
 }
 
-/** All issues on both boards, slim. ~3k rows, ~1MB: the UI keeps them all in memory for instant search. */
-export const issues = () =>
-  // Rows of boards dropped from the config stay in the cache; the app only knows configured boards.
-  `[${db
-    .query<{ slim: string }, []>(`SELECT slim FROM issues WHERE board IN (${BOARDS.join(",")})`)
-    .all()
-    .map((r) => r.slim)
-    .join(",")}]`;
+/** Every issue on a configured board, slim, with the boards that hold it. ~3k rows, ~1MB: the UI keeps them all in memory for
+ *  instant search. Rows of boards dropped from the config stay in the cache; the app only knows configured boards. */
+export const issues = () => `[${store.slims(BOARDS).join(",")}]`;
 
 const details = detailCache(db, async (key) => {
   // The Agile endpoint returns legacy strings. API v3 preserves Jira's rich ADF tree.
@@ -581,9 +555,6 @@ export async function refresh(
   key: string,
   board?: number,
 ): Promise<{ issue: any; full: any } | null> {
-  const row = db
-    .query<{ board: number }, [string]>("SELECT board FROM issues WHERE key = ?")
-    .get(key);
   // Watchers are read alongside, so a write settles in two Jira round trips, not four (R2-create-D2).
   const watching = jira(`/rest/api/3/issue/${encodeURIComponent(key)}/watchers`);
   watching.catch(() => {});
@@ -592,16 +563,19 @@ export async function refresh(
     raw = await jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=${projection.fields}`);
   } catch (error) {
     if ((error as { status?: number }).status === 404) {
-      db.query("DELETE FROM issues WHERE key = ?").run(key);
+      store.remove(key);
       return null;
     }
     throw error;
   }
-  const target = board ?? row?.board ?? BOARDS[0]!;
-  save(target, [raw], Date.now());
+  // `board` is the board the tab shows the issue on: it places a new issue made there. An issue no board holds (one linked
+  // from a board issue) is on none: it is answered to the tab but not kept.
+  if (board !== undefined) store.claim(raw.key, board, BOARDS);
+  const held = store.boardsOf(raw.key);
+  if (held.length) saveContent(raw);
   db.query("DELETE FROM issue_details WHERE key = ?").run(raw.key);
   const [full, w] = await Promise.all([details.read(raw.key, true), watching]),
-    issue = slimOf(raw, target);
+    issue = { boards: BOARDS.filter((b) => held.includes(b)), ...slimOf(raw, held) };
   const { watchers, watchersComplete } = watcherList(w);
   const old = db
     .query<{ data: string; source_updated: string }, [string]>(
@@ -791,14 +765,7 @@ async function enrichProperties() {
 }
 
 export const properties = () => ({
-  ...propertyEntries(
-    db
-      .query<PropertyRow, []>(
-        `SELECT i.key,i.slim,p.data,p.source_updated FROM issues i LEFT JOIN issue_properties p ON p.key=i.key WHERE i.board IN (${BOARDS.join(",")})`,
-      )
-      .all(),
-    propertyProgress.pending,
-  ),
+  ...propertyEntries(store.propertyRows(BOARDS), propertyProgress.pending),
   sync: syncHealth(),
 });
 

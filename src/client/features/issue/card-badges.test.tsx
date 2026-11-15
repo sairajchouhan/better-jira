@@ -5,7 +5,7 @@ import { CommentBadge, LinkBadges } from "./card-badges";
 
 const issue: Issue = {
   key: "TEST-7",
-  board: 1,
+  boards: [1],
   summary: "Badges",
   status: "todo",
   assignee: null,

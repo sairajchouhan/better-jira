@@ -17,7 +17,7 @@ import { canHaveSubIssues } from "@/shared/issue-properties";
 import { epicLocked, epicOf, listsSubIssues, nestable, subIssueParent, titleParentOf } from "@/shared/epics";
 import { childrenByParent } from "@/client/features/issue/sub-issue-model";
 import { getHotkeyManager, type Hotkey, type HotkeyChord } from "@tanstack/react-hotkeys";
-import { boardOf, get, isWatching, ME, set, useStore, type Overlay } from "@/client/state/store";
+import { boardOf, get, isWatching, ME, set, useStore, type Overlay, issueBoardId } from "@/client/state/store";
 import { actions, beginCreate, beginCreateInView } from "@/client/state/issue-actions";
 import { currentKey } from "@/client/state/jira-sync";
 import { redoEdit, undoEdit } from "@/client/state/undo-history";
@@ -56,6 +56,7 @@ import {
   toggleRead,
   undoInbox,
 } from "@/client/features/inbox/inbox";
+import { boardIssues } from "@/client/state/board-issues";
 
 type State = ReturnType<typeof get>;
 type Shortcut = {
@@ -182,10 +183,11 @@ function reorder(direction: number, edge = false) {
         : rest.length
       : Math.max(0, Math.min(rest.length, i + direction));
   if (at === i) return;
-  const descending = viewSettings(issue.board).display.descending;
+  const board = issueBoardId(issue);
+  const descending = viewSettings(board).display.descending;
   const a = rest[at - 1]?.rank,
     b = rest[at]?.rank;
-  actions.drop(issue.key, issue.board, [], descending ? rankBetween(b, a) : rankBetween(a, b));
+  actions.drop(issue.key, board, [], descending ? rankBetween(b, a) : rankBetween(a, b));
 }
 const manual = (s = get()) => viewSettings(s.board, s).display.ordering === "manual";
 /** Linear's Move… sub-actions (`Ivr`), in its order. */
@@ -498,7 +500,7 @@ export const shortcuts: Shortcut[] = [
     when: (s) => !!lastViewed(s),
     run: () => {
       const issue = lastViewed(get());
-      if (issue) navigate({ board: issue.board, selected: issue.key, panel: true, trail: null });
+      if (issue) navigate({ board: issueBoardId(issue), selected: issue.key, panel: true, trail: null });
     },
   },
   {
@@ -510,7 +512,7 @@ export const shortcuts: Shortcut[] = [
     run: () => {
       // Like the toast's View issue: a key Jira has since replaced still finds the issue.
       const issue = get().issues.get(currentKey(lastToastLink() ?? ""));
-      if (issue) navigate({ board: issue.board, selected: issue.key, panel: true, trail: null });
+      if (issue) navigate({ board: issueBoardId(issue), selected: issue.key, panel: true, trail: null });
     },
   },
   {
@@ -713,7 +715,7 @@ export const shortcuts: Shortcut[] = [
     when: (s) => !!s.issues.get(titleParentIn(s, selected(s)) ?? ""),
     run: issueAction((i) => {
       const parent = get().issues.get(titleParentIn(get(), i) ?? "");
-      if (parent) navigate({ board: parent.board, selected: parent.key, panel: true });
+      if (parent) navigate({ board: issueBoardId(parent), selected: parent.key, panel: true });
     }),
   },
   {
@@ -741,7 +743,7 @@ export const shortcuts: Shortcut[] = [
     },
     run: issueAction((i) => {
       const child = childrenByParent(get().issues).get(i.key)?.[0];
-      if (child) navigate({ board: child.board, selected: child.key, panel: true });
+      if (child) navigate({ board: issueBoardId(child), selected: child.key, panel: true });
     }),
   },
   ...(

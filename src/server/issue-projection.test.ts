@@ -103,9 +103,8 @@ const story = {
 };
 
 test("projects a full Jira record into the board's slim issue", () => {
-  expect(issueProjection(siteFields).slim(story, 7)).toStrictEqual({
+  expect(issueProjection(siteFields).slim(story)).toStrictEqual({
     key: "CS-142",
-    board: 7,
     summary: "Ship the importer",
     status: "10001",
     type: "Story",
@@ -168,10 +167,9 @@ test("a sparse record: missing optional fields project to the app's empty values
     key: "OPS-7",
     fields: { summary: "Bare", status: { id: "1" }, updated: "2026-11-01T00:00:00.000+0000" },
   };
-  const issue = issueProjection(siteFields).slim(sparse, 3);
+  const issue = issueProjection(siteFields).slim(sparse);
   expect(issue).toStrictEqual({
     key: "OPS-7",
-    board: 3,
     summary: "Bare",
     status: "1",
     type: undefined,
@@ -203,7 +201,7 @@ test("a sparse record: missing optional fields project to the app's empty values
   });
   // Stored and served as JSON: the undefined fields drop out.
   expect(Object.keys(JSON.parse(JSON.stringify(issue)))).toEqual([
-    "key", "board", "summary", "status", "attachments", "comments", "updated", "resolved",
+    "key", "summary", "status", "attachments", "comments", "updated", "resolved",
     "creator", "due", "watching", "project", "description", "links", "relations",
   ]);
 });
@@ -220,7 +218,6 @@ test("creator falls back to the reporter; an unassigned issue keeps Jira's null;
         description: "Legacy string body with https://plain.test/x and https://site.atlassian.net/browse/CS-2",
       },
     },
-    7,
   );
   expect(issue.creator?.name).toBe("Grace Hopper");
   expect(issue.assignee).toBeNull();
@@ -229,7 +226,7 @@ test("creator falls back to the reporter; an unassigned issue keeps Jira's null;
   expect(issueProjection(siteFields).slim({ ...story, fields: { ...story.fields, comment: { total: 2, comments: [
     { body: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Repro on staging" }] }] } },
     { body: "Legacy plain comment" },
-  ] } } }, 7).commentText).toBe("Repro on staging\nLegacy plain comment");
+  ] } } }).commentText).toBe("Repro on staging\nLegacy plain comment");
   // #18: an issue link in the text is a mention, not a resource.
   expect(issue.links).toEqual(["https://plain.test/x"]);
   const mention = issueProjection(siteFields).slim(
@@ -238,7 +235,6 @@ test("creator falls back to the reporter; an unassigned issue keeps Jira's null;
       { type: "text", text: "CS-3", marks: [{ type: "link", attrs: { href: "https://site.atlassian.net/browse/CS-3" } }] },
       { type: "inlineCard", attrs: { url: "https://github.com/o/r/pull/8" } },
     ] }] } } },
-    7,
   );
   expect(mention.links).toEqual(["https://github.com/o/r/pull/8"]);
 });
@@ -254,8 +250,8 @@ test("field discovery: the site's rank and story point IDs, or Jira Cloud's usua
   for (const field of ["summary", "description", "comment", "attachment", "issuelinks", "customfield_10000"])
     expect(fallback.fields.split(",")).toContain(field);
   // A site whose rank lives elsewhere: the projection reads that field, not the fallback.
-  expect(fallback.slim(story, 7).rank).toBeUndefined();
-  expect(discovered.slim(story, 7).rank).toBe("0|i0028f:");
+  expect(fallback.slim(story).rank).toBeUndefined();
+  expect(discovered.slim(story).rank).toBe("0|i0028f:");
 });
 
 test("watchers: complete only when Jira listed everyone it counted", () => {
@@ -271,8 +267,8 @@ test("watchers: complete only when Jira listed everyone it counted", () => {
 
 test("properties: slim row, project lead and the enrichment for the current revision; stale enrichment counts as pending", () => {
   const p = issueProjection(siteFields);
-  const fresh = p.slim(story, 7);
-  const stale = p.slim({ ...story, key: "CS-143" }, 7);
+  const fresh = p.slim(story);
+  const stale = p.slim({ ...story, key: "CS-143" });
   const result = propertyEntries(
     [
       {

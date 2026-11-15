@@ -39,7 +39,7 @@ test("R3 G22 #29: the pane's head comment card holds the comment's plain text, a
 test("R3 G22: a row's accessible name has the status its icon shows (the issue's current one), not the one at notification time", () => {
   set({
     boards: [{ id: 1, name: "Board", columns: [{ name: "QA", statuses: [{ id: "qa", name: "QA", category: "indeterminate" }] }] }],
-    issues: new Map([["OUT-3", { key: "OUT-3", board: 1, summary: "A made-up issue", status: "qa" } as any]]),
+    issues: new Map([["OUT-3", { key: "OUT-3", boards: [1], summary: "A made-up issue", status: "qa" } as any]]),
   } as any);
   const html = renderToStaticMarkup(<Row item={{ ...row, issueType: "Bug", status: "To Do" } as InboxItem} selected={false} now={Date.parse("2026-11-02T10:00:00Z")} onMenu={() => {}} />);
   expect(html).toMatch(/aria-label="[^"]*· Bug, QA /);

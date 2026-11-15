@@ -131,7 +131,7 @@ test("sync D1: a comment whose first send reached Jira is not posted again by a 
     created: "2026-11-10T13:40:06.000Z",
     body: { type: "doc", version: 1, content: [] },
   };
-  const issue = { key: "K-1", board: 1, status: "1", labels: [] } as any;
+  const issue = { key: "K-1", boards: [1], status: "1", labels: [] } as any;
   const ops = () =>
     opsFor(
       { issue, full: { key: "K-1", fields: { comment: { comments: [] } } } },

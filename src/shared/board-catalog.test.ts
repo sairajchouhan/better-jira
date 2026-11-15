@@ -12,7 +12,7 @@ const board: Board = {
   ],
 } as Board;
 const issue = (key: string, assignee: User | null, labels: string[] = [], on = 1): Issue =>
-  ({ key, board: on, summary: key, status: "1", assignee, labels }) as Issue;
+  ({ key, boards: [on], summary: key, status: "1", assignee, labels }) as Issue;
 
 test("statuses come in column order and resolve by id", () => {
   expect(statuses(board).map((s) => s.id)).toEqual(["1", "3"]);

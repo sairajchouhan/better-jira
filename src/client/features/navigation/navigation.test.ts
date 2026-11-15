@@ -53,7 +53,7 @@ const data = (patch: Partial<NavigationData> = {}): NavigationData => ({
   preferences: { 1: prefs("side"), 2: prefs("page") },
   defaults: {},
   boards: [{ id: 1 }, { id: 2 }],
-  issue: (key) => ({ "A-1": { key: "A-1", board: 1 }, "B-1": { key: "B-1", board: 2 } })[key],
+  issue: (key) => ({ "A-1": { key: "A-1", boards: [1] }, "B-1": { key: "B-1", boards: [2] } })[key],
   currentKey: (key) => (key === "OLD-1" ? "A-1" : key),
   draftFor: (id) => ({ ...view(), id, name: id ? "Triage" : "" }),
   ...patch,
@@ -254,7 +254,7 @@ test("a favorite's origin follows the screen as Linear's favoriteId does: kept o
 });
 
 test("an issue page's trail is kept by its steps and its history entry, and a reload starts afresh (Linear's breadcrumb stack)", () => {
-  const d = data({ issue: (key) => ({ "A-1": { key: "A-1", board: 1 }, "A-2": { key: "A-2", board: 1 }, "A-3": { key: "A-3", board: 1 } })[key] });
+  const d = data({ issue: (key) => ({ "A-1": { key: "A-1", boards: [1] }, "A-2": { key: "A-2", boards: [1] }, "A-3": { key: "A-3", boards: [1] } })[key] });
   const epicPage = run([{ type: "go", to: { board: 1, selected: "A-1", panel: true, view: "page" } }], d);
   // Opened from the board, the page is over its list.
   expect(epicPage.screen.trail).toBe("list");
@@ -280,4 +280,17 @@ test("an issue page's trail is kept by its steps and its history entry, and a re
   expect(run([back], d).screen.trail).toEqual({ path: ["A-1", "A-2"] });
   const reload = { type: "restore", place, draft: null, trail: restoredTrail(state, true) } as const;
   expect(run([reload], d).screen.trail).toBeNull();
+});
+
+test("an issue on two boards opens on the board its address names; one only on another board opens there; one on none stays", () => {
+  const d = data({
+    issue: (key) =>
+      ({ "S-1": { key: "S-1", boards: [1, 2] }, "B-1": { key: "B-1", boards: [2] }, "L-1": { key: "L-1", boards: [] } })[key],
+  });
+  const at = (board: number, issue: string) => run([restore({ to: "board", board, scope: "all", issue })], d).screen;
+  expect(at(2, "S-1")).toMatchObject({ board: 2, selected: "S-1", panel: true });
+  expect(at(1, "S-1")).toMatchObject({ board: 1, selected: "S-1" });
+  expect(at(1, "B-1")).toMatchObject({ board: 2, selected: "B-1" });
+  // Linked from a board issue, on no board: it opens over the board the address names.
+  expect(at(2, "L-1")).toMatchObject({ board: 2, selected: "L-1" });
 });

@@ -20,6 +20,7 @@ import { Sortable } from "@/client/components/sortable";
 import { Text } from "@/client/components/text";
 import { CountBadge } from "@/client/components/count-badge";
 import { resultFeedback, viewSummaries } from "./views-navigation-model";
+import { boardFor } from "@/shared/board-membership";
 
 export function SavedViewIcon({ view }: { view: Pick<SavedView, "icon" | "color"> }) {
   return <span aria-hidden="true" className="inline-flex shrink-0" style={{ color: view.color === "gray" ? "var(--view-gray)" : view.color }}>
@@ -28,7 +29,7 @@ export function SavedViewIcon({ view }: { view: Pick<SavedView, "icon" | "color"
 }
 export function ViewFavorites({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
   const favorites = useStore(s => s.favorites), views = useSavedViews();
-  const boards = useStore(s => s.boards), issues = useStore(s => s.issues);
+  const boards = useStore(s => s.boards), issues = useStore(s => s.issues), current = useStore(s => s.board);
   const rows = favorites.flatMap(id => {
     const view = views.find(v => `view:${v.id}` === id);
     const document = id.startsWith("document:") ? findIssueDocument(issues.values(), id.slice(9)) : undefined;
@@ -42,7 +43,7 @@ export function ViewFavorites({ expanded, onToggle }: { expanded: boolean; onTog
     const props = { draggable: false, "data-favorite": id, className: "w-full" };
     const link = view
       ? <SidebarViewLink row={row} view={view} {...props}>{content}</SidebarViewLink>
-      : <SidebarLink row={row} to={document ? { board: document.issue.board, selected: document.issue.key, panel: true, document: document.resource.id } : issue ? { board: issue.board, selected: issue.key, panel: true } : { board: board!.id, panel: false, selected: null }} {...props}>{content}</SidebarLink>;
+      : <SidebarLink row={row} to={document ? { board: boardFor(document.issue, current), selected: document.issue.key, panel: true, document: document.resource.id } : issue ? { board: boardFor(issue, current), selected: issue.key, panel: true } : { board: board!.id, panel: false, selected: null }} {...props}>{content}</SidebarLink>;
     // Linear's favorite row (`d5n`) has one menu for every kind of favorite: Copy URL, Open in new tab, ┄ Remove favorite.
     const url = () => board ? boardURL(board) : placeURL(view ? { to: "view", id: view.id } : document ? { to: "issue", key: document.issue.key, document: document.resource.id } : { to: "issue", key: issue!.key });
     return [{ id, row: <ContextMenu label="Favorite options" entries={() => favoriteEntries(id, url)}>{link}</ContextMenu> }];

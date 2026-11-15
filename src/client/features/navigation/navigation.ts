@@ -9,6 +9,7 @@ import type { View } from "@/client/state/store";
 import type { PersonTab } from "@/shared/people";
 import { keptFavorite } from "./sidebar-active";
 import { nextTrail, type Trail, type TrailStep } from "./issue-trail";
+import { boardFor } from "@/shared/board-membership";
 
 export type Screen = {
   board: number;
@@ -87,7 +88,7 @@ export type NavigationData = {
   defaults: Record<number, Display>;
   boards: { id: number }[];
   /** The mirrored issue a key names, following Jira's renames. */
-  issue: (key: string) => { key: string; board: number } | undefined;
+  issue: (key: string) => { key: string; boards: number[] } | undefined;
   currentKey: (key: string) => string;
   /** A fresh editor draft: editing that view, or a new one. */
   draftFor: (viewId?: string) => ViewDraft;
@@ -302,8 +303,10 @@ function restore(screen: Screen, place: Place, saved: ViewDraft | null, data: Na
     issue = key ? data.issue(key) : undefined;
   const editorDraft = list?.to === "editor" ? (saved ?? data.draftFor(list.id)) : null;
   const active = list?.to === "view" ? data.savedViews.find((v) => v.id === list.id) : undefined;
+  const listed = list?.to === "board" ? list.board : undefined;
+  // An issue on several boards opens on the one the address names, else the one on screen, when it holds the issue.
   const board =
-    editorDraft?.board ?? active?.board ?? issue?.board ?? (list?.to === "board" ? list.board : undefined);
+    editorDraft?.board ?? active?.board ?? (issue && issue.boards.length ? boardFor(issue, listed ?? screen.board) : listed);
   const s: Screen = {
     ...screen,
     editorDraft,

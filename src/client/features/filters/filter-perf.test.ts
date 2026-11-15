@@ -31,7 +31,7 @@ test("filterChoices counts every label in one pass over the issues", () => {
   const issues = Array.from({ length: 200 }, (_, k): Issue => {
     const labels = [`label-${k}`];
     return Object.defineProperty(
-      { key: `A-${k}`, board: 1, summary: "", status: "todo", assignee: null, comments: 0, updated: "", resolved: null } as unknown as Issue,
+      { key: `A-${k}`, boards: [1], summary: "", status: "todo", assignee: null, comments: 0, updated: "", resolved: null } as unknown as Issue,
       "labels",
       { get: () => (reads++, labels), enumerable: true },
     );

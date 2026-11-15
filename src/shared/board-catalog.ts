@@ -1,6 +1,7 @@
 import { type Board, type Issue, type User, type JiraOptions } from "@/shared/issue-model";
 /** What a board offers to pick from: its statuses, the people an issue can be assigned to, and known labels. */
 import { priorityRank } from "./view-model";
+import { onBoard } from "./board-membership";
 
 
 /** The board's statuses in column order. */
@@ -68,7 +69,7 @@ export function assigneeGroups({
   const assigned = [null, me, ...take(current ? [current] : [])];
   const picked = take(suggested);
   const all = Array.from(issues);
-  const team = byName(take(all.flatMap((i) => (i.assignee && (board === undefined || i.board === board) ? [i.assignee] : []))));
+  const team = byName(take(all.flatMap((i) => (i.assignee && (board === undefined || onBoard(i, board)) ? [i.assignee] : []))));
   const others = byName(take([...jiraUsers, ...all.flatMap((i) => (i.assignee ? [i.assignee] : []))]));
   return board === undefined
     ? { assigned, suggested: picked, team: byName([...team, ...others]), teamHeading: "Members", others: [] }

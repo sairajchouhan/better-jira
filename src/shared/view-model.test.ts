@@ -48,7 +48,7 @@ const board: Board = {
 const now = new Date("2026-11-06T12:00:00Z").getTime();
 const issue = (key: string, patch: Partial<Issue> = {}): Issue => ({
   key,
-  board: 1,
+  boards: [1],
   summary: key,
   status: "todo",
   assignee: null,
@@ -88,10 +88,14 @@ describe("view selection", () => {
   test("All issues includes older completions and still respects board, mine, and search", () => {
     const prefs = defaultPreferences();
     expect(
-      selectIssues([...all, issue("B-1", { board: 2 })], board, prefs, false, "", "me", now).map(
+      selectIssues([...all, issue("B-1", { boards: [2] })], board, prefs, false, "", "me", now).map(
         (i) => i.key,
       ),
     ).toEqual(["A-4", "A-2", "A-3", "A-1"]);
+    // An issue another board holds too is on this one as well.
+    expect(
+      selectIssues([...all, issue("S-1", { boards: [2, 1] })], board, prefs, false, "", "me", now).map((i) => i.key),
+    ).toContain("S-1");
     expect(selectIssues(all, board, prefs, true, "A-1", "me", now).map((i) => i.key)).toEqual([
       "A-1",
     ]);

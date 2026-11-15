@@ -54,9 +54,11 @@ export function linkedPullRequests(store: { get: (k: string) => string | undefin
     return keys;
   };
   return {
-    apply: <T extends { key: string; prCount?: number; prStatus?: PullRequest["status"] }>(issue: T, board: number): T => {
-      const keys = linked(board);
-      return withLinkedPullRequests(issue, keys && keys.has(issue.key));
+    /** `boards` hold the issue: it has pull requests when any of their reads links one, and stays as its field says until one
+     *  of them is read. */
+    apply: <T extends { key: string; prCount?: number; prStatus?: PullRequest["status"] }>(issue: T, boards: readonly number[]): T => {
+      const read = boards.flatMap((board) => linked(board) ?? []);
+      return withLinkedPullRequests(issue, read.length ? read.some((keys) => keys.has(issue.key)) : undefined);
     },
     async refresh(jira: Read, board: number): Promise<string[] | null> {
       const before = linked(board);

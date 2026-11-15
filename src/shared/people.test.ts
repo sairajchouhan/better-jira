@@ -5,7 +5,7 @@ import { peopleOf, personIssues } from "./people";
 
 const alex = { id: "alex", name: "Alex" }, me = { id: "me", name: "Me" };
 const issue = (key: string, extra: Partial<Issue> = {}): Issue => ({
-  key, board: 1, summary: key, status: "1", assignee: null, labels: [], comments: 0, updated: "", resolved: null, ...extra,
+  key, boards: [1], summary: key, status: "1", assignee: null, labels: [], comments: 0, updated: "", resolved: null, ...extra,
 });
 const issues = [
   issue("A-1", { assignee: alex }),

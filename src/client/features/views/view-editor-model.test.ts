@@ -9,7 +9,7 @@ const board: Board = {
 } as Board;
 const issue = (patch: Partial<Issue> = {}): Issue => ({
   key: "RAJ-1",
-  board: 1,
+  boards: [1],
   summary: "Title",
   status: "10000",
   assignee: null,

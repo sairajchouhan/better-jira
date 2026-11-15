@@ -5,7 +5,7 @@ import { mergeOps, namesKey, opsFor, renameCommentIds, renameIds, threadParent }
 
 const base: Issue = {
   key: "A-1",
-  board: 1,
+  boards: [1],
   summary: "One",
   status: "1",
   assignee: null,
@@ -100,7 +100,7 @@ test("descriptions come from the full record and ranks name a neighbour", () => 
   const peers = new Map<string, Issue>([
     ["A-2", { ...base, key: "A-2", rank: "a" }],
     ["A-3", { ...base, key: "A-3", rank: "c" }],
-    ["B-1", { ...base, key: "B-1", board: 2, rank: "bb" }],
+    ["B-1", { ...base, key: "B-1", boards: [2], rank: "bb" }],
   ]);
   expect(opsFor({ issue: base }, { issue: { ...base, rank: "d" } }, peers)).toEqual([
     { op: "rank", after: "A-3" },

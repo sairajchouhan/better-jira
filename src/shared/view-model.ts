@@ -3,6 +3,7 @@ import { type Board, type Issue, type IssueDraft } from "@/shared/issue-model";
 import { personIssues, type PersonTab } from "./people";
 import { statusById } from "./board-catalog";
 import { epicName, epicOf, hierarchyLevel, lookupIn, parentOf, type IssueLookup } from "./epics";
+import { onBoard } from "./board-membership";
 
 export type Grouping =
   | "none"
@@ -787,7 +788,7 @@ export function selectIssues(
   const lookup = lookupIn(all);
   const items = all.filter(
     (i) =>
-      (acrossBoards || i.board === board.id) &&
+      (acrossBoards || onBoard(i, board.id)) &&
       (d.subIssues || !parentOf(i, lookup)) &&
       (statusById(board, i.status)?.category !== "done" || d.completedIssues === "all" ||
         (d.completedIssues !== "none" && Date.parse(i.resolved ?? i.statusSince ?? "") >=
@@ -1036,7 +1037,7 @@ export function boardView(state: OrderState, me: string): BoardView | undefined 
   if (lastView?.inputs.every((x, i) => x === inputs[i])) return lastView.view;
   const all = [...state.issues.values()],
     visible = selectIssues(all, board, prefs, who, state.query, me, Date.now(), personal),
-    universe = personal ? all : all.filter((i) => i.board === board.id),
+    universe = personal ? all : all.filter((i) => onBoard(i, board.id)),
     hidden = prefs.hidden[prefs.display.columns] ?? [],
     columns = boardColumns(visible, board, prefs, universe),
     shown = columns.filter((c) => !hidden.includes(c.id)),

@@ -55,7 +55,7 @@ import {
   MilestoneMenu,
   DueMenu,
 } from "./property-menu";
-import { usePeople, get, set, useStore } from "@/client/state/store";
+import { usePeople, get, set, useStore, issueBoardId, issueBoard } from "@/client/state/store";
 import { actions, beginCreate } from "@/client/state/issue-actions";
 import { addBoard } from "@/client/state/server-data";
 import { addLocalFiles } from "@/client/state/local-database";
@@ -84,6 +84,8 @@ import { ReactionPicker, ReactionPill } from "@/client/features/comments/reactio
 import { PropertyPill } from "@/client/components/pill-select";
 import { ActionMenu, joinGroups, type ActionEntry } from "@/client/components/action-menu";
 import { kept, post, run as runCommand, useCommand } from "@/client/features/navigation/commands";
+import { boardIssues } from "@/client/state/board-issues";
+import { sharesBoard } from "@/shared/board-membership";
 
 const NO_FILES: NonNullable<Issue["attachments"]> = [];
 type SavedComposerDraft = { id: string; title: string; fields: IssueDraft };
@@ -143,7 +145,7 @@ function PendingRelation({ related, remove }: { related: NonNullable<IssueDraft[
                   }
                   onSelect={() => {
                     setAnchor(null);
-                    if (issue) navigate({ board: issue.board, selected: issue.key, panel: true, view: get().view });
+                    if (issue) navigate({ board: issueBoardId(issue), selected: issue.key, panel: true, view: get().view });
                   }}
                 >
                   <EntityIdentifier className="mr-2 text-[var(--menu-fg-3)]">{related.key}</EntityIdentifier>
@@ -192,7 +194,7 @@ export function CreateIssue() {
   const composerRef = useRef<HTMLDivElement>(null);
   // Where focus goes back to when the link field closes (Linear's Add link… dialog returns it to what opened it).
   const linkReturn = useRef<HTMLElement | null>(null);
-  const issues = [...all.values()].filter((i) => i.board === board.id);
+  const issues = boardIssues(all, board.id);
   const projects = projectChoices(issues);
   const options = useStore((s) => s.options),
     writable = useStore((s) => s.writable);
@@ -650,7 +652,7 @@ const issueTypes = (issue: Issue, options: JiraOptions, issues: Issue[]) =>
     issue.type,
     options.types?.[issue.project?.key ?? ""],
     issues.flatMap((i) =>
-      i.board === issue.board && i.type && i.project?.key === issue.project?.key
+      sharesBoard(i, issue) && i.type && i.project?.key === issue.project?.key
         ? [i.type]
         : [],
     ),
@@ -716,7 +718,7 @@ export function PropertyPicker({
 }
 
 function IssueStatusMenu({ issue, anchor, close }: IssueMenuProps) {
-  const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
+  const board = useStore((s) => issueBoard(issue, s));
   const props = { board, anchor, close };
   return (
     <StatusMenu
@@ -728,7 +730,7 @@ function IssueStatusMenu({ issue, anchor, close }: IssueMenuProps) {
 }
 
 function IssueAssigneeMenu({ issue, anchor, close }: IssueMenuProps) {
-  const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
+  const board = useStore((s) => issueBoard(issue, s));
   const props = { board, anchor, close };
   return (
     <AssigneeMenu
@@ -740,7 +742,7 @@ function IssueAssigneeMenu({ issue, anchor, close }: IssueMenuProps) {
 }
 
 function IssuePriorityMenu({ issue, anchor, close }: IssueMenuProps) {
-  const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
+  const board = useStore((s) => issueBoard(issue, s));
   const writable = useStore((s) => s.writable);
   const props = { board, anchor, close };
   const patch = (value: Partial<Issue>) => actions.patch(issue.key, value);
@@ -757,7 +759,7 @@ function IssuePriorityMenu({ issue, anchor, close }: IssueMenuProps) {
 function IssueTypeMenu({ issue, anchor, close }: IssueMenuProps) {
   const all = useStore((s) => s.issues);
   const options = useStore((s) => s.options);
-  const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
+  const board = useStore((s) => issueBoard(issue, s));
   const props = { board, anchor, close };
   const patch = (value: Partial<Issue>) => actions.patch(issue.key, value);
   return (
@@ -773,7 +775,7 @@ function IssueTypeMenu({ issue, anchor, close }: IssueMenuProps) {
 }
 
 function IssueLabelsMenu({ issue, anchor, close }: IssueMenuProps) {
-  const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
+  const board = useStore((s) => issueBoard(issue, s));
   const props = { board, anchor, close };
   const patch = (value: Partial<Issue>) => actions.patch(issue.key, value);
   return (
@@ -787,7 +789,7 @@ function IssueLabelsMenu({ issue, anchor, close }: IssueMenuProps) {
 
 /** The issue's project is its epic, set through its Jira parent; its Jira project never changes (shared/epics.ts). */
 function IssueProjectMenu({ issue, anchor, close }: IssueMenuProps) {
-  const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
+  const board = useStore((s) => issueBoard(issue, s));
   const epic = useStore((s) => epicOf(issue, (key) => s.issues.get(key)));
   return (
     <ProjectMenu
@@ -805,7 +807,7 @@ function IssueProjectMenu({ issue, anchor, close }: IssueMenuProps) {
 }
 
 function IssueMilestoneMenu({ issue, anchor, close }: IssueMenuProps) {
-  const board = useStore((s) => s.boards.find((b) => b.id === issue.board));
+  const board = useStore((s) => issueBoard(issue, s));
   const props = { board, anchor, close };
   const patch = (value: Partial<Issue>) => actions.patch(issue.key, value);
   return (

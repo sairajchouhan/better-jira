@@ -7,7 +7,7 @@ import type { LocalChange } from "./local-data";
 
 const issue = (key: string, extra: Partial<Issue> = {}): Issue => ({
   key,
-  board: 1,
+  boards: [1],
   summary: key,
   status: "todo",
   priority: "Low",

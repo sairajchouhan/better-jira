@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { commentAnchor, type InboxItem } from "@/shared/inbox-model";
 import { newPushes, noteIds, pushContent, type Push } from "@/shared/inbox-push";
-import { ME, get } from "@/client/state/store";
+import { ME, get, issueBoardId } from "@/client/state/store";
 import { showNotification } from "@/client/state/app-notifications";
 import { navigate, showAnchor } from "@/client/features/navigation/app-navigation";
 import { inbox, itemsOf, selectRow, useFeed } from "./inbox";
@@ -31,7 +31,7 @@ export const disableDesktopNotifications = () => inbox.changePush({ enabled: fal
 function openPush(item: InboxItem) {
   const issue = get().issues.get(item.key);
   if (!issue) return selectRow(item);
-  navigate({ board: issue.board, selected: issue.key, panel: true, view: get().view });
+  navigate({ board: issueBoardId(issue), selected: issue.key, panel: true, view: get().view });
   const anchor = commentAnchor(item);
   if (anchor) requestAnimationFrame(() => showAnchor(anchor));
 }

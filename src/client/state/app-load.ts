@@ -161,7 +161,8 @@ async function loadApplication() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               ops: [{ op: "attachment.delete", id }],
-              board: get().issues.get(key)?.board,
+              // Only places an issue no board holds yet (issue-store.ts `claim`).
+              board: get().issues.get(key)?.boards[0],
             }),
           });
           const result = await response.json().catch(() => ({ error: "No answer" }));

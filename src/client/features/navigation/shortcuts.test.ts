@@ -80,7 +80,7 @@ test("R3-issue-fields-D5, B9: Space peeks the card under the pointer, the one S/
   const { handle } = await import("./commands");
   const { navigate, ui } = await import("./app-navigation");
   const { runShortcut } = await import("./shortcuts");
-  const card = (key: string) => ({ key, board: 1, summary: key, status: "todo", assignee: null, labels: [], updated: "", resolved: null, comments: 0 });
+  const card = (key: string) => ({ key, boards: [1], summary: key, status: "todo", assignee: null, labels: [], updated: "", resolved: null, comments: 0 });
   set({ issues: new Map(["PK-1", "PK-2"].map((key) => [key, card(key)])) });
   ui.send({ type: "overlay.close" });
   navigate({ selected: "PK-1", panel: false, document: null, inbox: false, mine: false });

@@ -5,6 +5,7 @@ import { resourceURL, validDocumentProperties, validLinkPreview } from "@/shared
 import { localFileBlob } from "@/shared/media-types";
 import { validMediaEdits } from "@/client/features/media/media-edits";
 import { renameIds } from "@/shared/jira-ops";
+import { withMembership } from "@/shared/board-membership";
 
 
 export type Snapshot = {
@@ -54,7 +55,7 @@ const strings = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((v) => typeof v === "string");
 const issueFields = new Set([
   "key",
-  "board",
+  "boards",
   "summary",
   "status",
   "type",
@@ -108,7 +109,8 @@ function document(value: unknown, depth = 0): boolean {
 const isIssue = (v: unknown, key: string): v is Issue =>
   object(v) &&
   v.key === key &&
-  Number.isFinite(v.board) &&
+  Array.isArray(v.boards) &&
+  v.boards.every(Number.isFinite) &&
   typeof v.summary === "string" &&
   typeof v.status === "string" &&
   strings(v.labels) &&
@@ -227,14 +229,32 @@ export const emptyLocalState = (): LocalState => ({
   redo: [],
   keys: {},
 });
-export function parseLocalState(raw: unknown): {
+/** Changes saved before an issue could be on several boards name its one `board`: read them with `boards` (board-membership.ts). */
+function withBoardLists(raw: Record<string, any>): Record<string, any> {
+  const change = (v: unknown) =>
+    !object(v)
+      ? v
+      : {
+          ...v,
+          ...(object(v.issue) ? { issue: withMembership(v.issue) } : {}),
+          ...(strings(v.issueFields) ? { issueFields: v.issueFields.map((f) => (f === "board" ? "boards" : f)) } : {}),
+        };
+  const edit = (v: unknown) =>
+    object(v) && Array.isArray(v.before) && Array.isArray(v.after)
+      ? { ...v, before: v.before.map(change), after: v.after.map(change) }
+      : v;
+  const each = (v: unknown, fn: (item: unknown) => unknown) => (Array.isArray(v) ? v.map(fn) : v);
+  return { ...raw, changes: each(raw.changes, change), undo: each(raw.undo, edit), redo: each(raw.redo, edit) };
+}
+export function parseLocalState(saved: unknown): {
   state: LocalState;
   recovered: boolean;
   readOnly: boolean;
 } {
-  if (raw === undefined) return { state: emptyLocalState(), recovered: false, readOnly: false };
-  if (!object(raw) || raw.version !== 1)
+  if (saved === undefined) return { state: emptyLocalState(), recovered: false, readOnly: false };
+  if (!object(saved) || saved.version !== 1)
     return { state: emptyLocalState(), recovered: true, readOnly: true };
+  const raw = withBoardLists(saved);
   const valid = (v: unknown): v is LocalChange =>
     object(v) &&
     typeof v.key === "string" &&

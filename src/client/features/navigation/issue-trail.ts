@@ -6,6 +6,7 @@
 import type { Board, Issue } from "@/shared/issue-model";
 import { epicName, epicOf, isEpic, listedUnder, type IssueLookup } from "@/shared/epics";
 import { directSubIssues } from "@/client/features/issue/sub-issue-model";
+import { onBoard } from "@/shared/board-membership";
 
 /**
  * The way an issue page was reached, kept in its history entry like Linear's `itemsLookup_`:
@@ -57,9 +58,11 @@ export type IssueCrumbs =
    *  an issue, so it doesn't count (it truncates instead). */
   | { form: "hierarchy"; space?: Board; epic?: AncestorCrumb; parents: readonly AncestorCrumb[]; siblings?: readonly Issue[]; compactEpic: boolean };
 
-/** The space an issue's breadcrumb leads with: the issue's own board, or `current` when no loaded board holds it. */
+/** The space an issue's breadcrumb leads with: `current` when it holds the issue, else the first board that does, else `current`. */
 export const spaceOf = (issue: Issue, boards: readonly Board[], current?: number | null): Board | undefined =>
-  boards.find((b) => b.id === issue.board) ?? boards.find((b) => b.id === current);
+  boards.find((b) => b.id === current && onBoard(issue, b.id)) ??
+  boards.find((b) => onBoard(issue, b.id)) ??
+  boards.find((b) => b.id === current);
 
 const epicCrumb = (key: string | undefined, lookup: IssueLookup): AncestorCrumb | undefined =>
   key ? { key, title: epicName(key, lookup), issue: lookup(key), trail: null } : undefined;

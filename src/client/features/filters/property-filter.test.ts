@@ -6,7 +6,7 @@ import { dateValueLabel, filterChoices } from "./property-filter";
 const board: Board = { id: 1, name: "Board", columns: [] };
 const issue = (key: string, priority: string): Issue => ({
   key,
-  board: 1,
+  boards: [1],
   summary: key,
   status: "todo",
   assignee: null,

@@ -5,7 +5,7 @@ import { plainDocument } from "@/shared/document";
 
 
 const issue = (key: string, summary: string, extra: Partial<Issue> = {}): Issue => ({
-  key, board: 1, summary, status: "1", assignee: null, labels: [], comments: 0,
+  key, boards: [1], summary, status: "1", assignee: null, labels: [], comments: 0,
   updated: "2026-11-01T00:00:00Z", resolved: null, ...extra,
 });
 const map = (...list: Issue[]) => new Map(list.map((i) => [i.key, i]));
@@ -74,7 +74,7 @@ test("BJ-62: @name refines search to that person's issues", () => {
 });
 
 test("BJ-62: Search filters keep issues with any picked value of each property, all properties applying", () => {
-  const issue = { key: "A-1", board: 2, status: "10", priority: "High", labels: ["ui", "perf"] } as Issue;
+  const issue = { key: "A-1", boards: [2], status: "10", priority: "High", labels: ["ui", "perf"] } as Issue;
   const status = () => "In Progress";
   expect(matchesSearchFilters(issue, [], status)).toBe(true);
   expect(matchesSearchFilters(issue, [{ field: "labels", values: ["perf", "docs"] }], status)).toBe(true);

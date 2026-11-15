@@ -4,7 +4,7 @@ import { Icon, StatusIcon } from "@/client/components/icons";
 import { LinkIcon } from "@/client/components/link-icon";
 import { navigate } from "@/client/features/navigation/app-navigation";
 import { useSmartLinkDetails } from "@/client/state/smart-link-details";
-import { get, statusOf, subscribe } from "@/client/state/store";
+import { get, statusOf, subscribe, issueBoardId } from "@/client/state/store";
 import { safeLink } from "@/shared/document";
 import { faviconSrc, smartLink, type SmartLink as Target } from "@/shared/smart-link";
 
@@ -64,7 +64,7 @@ function IssueLink({ link }: { link: Extract<Target, { kind: "issue" }> }) {
           ? (event) => {
               if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
               event.preventDefault();
-              navigate({ board: mirrored.board, selected: mirrored.key, panel: true, view: get().view });
+              navigate({ board: issueBoardId(mirrored), selected: mirrored.key, panel: true, view: get().view });
             }
           : undefined
       }

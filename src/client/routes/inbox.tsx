@@ -28,7 +28,7 @@ import { ConfirmDialog } from "@/client/components/dialog";
 import { hotkeyOf, runShortcut } from "@/client/features/navigation/shortcuts";
 import { focusNode, useCommand } from "@/client/features/navigation/commands";
 import { shortcutTitle } from "@/client/components/keycap";
-import { get, isWatching, useStore } from "@/client/state/store";
+import { get, isWatching, useStore, issueBoardId } from "@/client/state/store";
 import { preloadOnHover, ui } from "@/client/features/navigation/app-navigation";
 import { SidebarToggle } from "@/client/features/navigation/breadcrumbs";
 import { useSearch } from "@tanstack/react-router";
@@ -115,7 +115,7 @@ export function Row({
         e.preventDefault();
         selectRow(item);
       }}
-      onPointerEnter={() => issue && preloadOnHover({ board: issue.board, selected: issue.key, panel: true, inbox: true })}
+      onPointerEnter={() => issue && preloadOnHover({ board: issueBoardId(issue), selected: issue.key, panel: true, inbox: true })}
       onPointerLeave={() => preloadOnHover(null)}
       onKeyDown={(e) => {
         // A clicked row keeps focus, and Enter on a link would click it again: open the full page, as Enter does elsewhere.

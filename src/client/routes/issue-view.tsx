@@ -35,7 +35,7 @@ import { useIssueHistory } from "@/client/features/issue/use-issue-history";
 import { normalizeDocument } from "@/shared/document";
 import { imageCommentIds } from "@/client/features/media/media-edits";
 import { DueIcon, Icon, PriorityIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
-import { ME, get, useStore, isWatching, statusOf } from "@/client/state/store";
+import { ME, get, useStore, isWatching, statusOf, issueBoardId } from "@/client/state/store";
 import { issueURL, jiraIssueURL } from "@/client/features/issue/issue-urls";
 import { LINEAR_RELATIONS, relationSections } from "@/shared/relations";
 import { AppLink } from "@/client/features/navigation/app-link";
@@ -80,7 +80,7 @@ import { IssueDiffs } from "@/client/features/issue/issue-pull-requests";
 // Loaded with the page, as Linear's preview (PBe) is: a lazy viewer suspends, and React's Suspense throttle holds it ~300ms (BJ-233).
 import { ImageViewer } from "@/client/features/media/image-viewer";
 
-const related = (target: Issue) => ({ board: target.board, selected: target.key, panel: true, view: get().view });
+const related = (target: Issue) => ({ board: issueBoardId(target), selected: target.key, panel: true, view: get().view });
 
 // --- issue view: a full page, a side panel, or the inbox's pane; the route picks the frame ---
 

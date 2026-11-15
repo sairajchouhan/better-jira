@@ -358,7 +358,7 @@ test("R3 G21 #39: a project move's issue keys never break at their hyphen", () =
 });
 
 test("BJ-262: an epic change reads as Linear's project change (`Qs`) with Epic: added to, removed from, changed epic from", () => {
-  const epic = (key: string, summary: string) => ({ key, summary, board: 1, status: "todo", type: "Epic", labels: [] }) as unknown as Issue;
+  const epic = (key: string, summary: string) => ({ key, summary, boards: [1], status: "todo", type: "Epic", labels: [] }) as unknown as Issue;
   set({ issues: new Map([["ABC-7", epic("ABC-7", "Checkout revamp")], ["ABC-8", epic("ABC-8", "Payments epic")]]) });
   expect(words(event("epic", null, "ABC-7"))).toBe("added to epic Checkout revamp");
   expect(words(event("epic", "ABC-7", null))).toBe("removed from epic Checkout revamp");

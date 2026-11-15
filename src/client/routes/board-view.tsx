@@ -33,7 +33,7 @@ import { Badge, IconMenuButton } from "@/client/components/badge";
 import { PropertyPicker, type IssueField } from "@/client/features/issue/personal-controls";
 import { CommentBadge, CreatorBadge, LinkBadges, PullRequestBadge, SubIssueBadge } from "@/client/features/issue/card-badges";
 import { DueIcon, Icon, LabelDot, PriorityIcon, StatusIcon, TypeDot } from "@/client/components/icons";
-import { ME, get, set, timed, useStore, statusOf } from "@/client/state/store";
+import { ME, get, set, timed, useStore, statusOf, issueBoardId } from "@/client/state/store";
 import { actions, beginCreateInView } from "@/client/state/issue-actions";
 import { loadFull } from "@/client/state/server-data";
 import { navigate, preloadOnHover, ui } from "@/client/features/navigation/app-navigation";
@@ -65,6 +65,7 @@ import { EntityIdentifier } from "@/client/components/entity-identifier";
 import { dropAll, dropPlan } from "./board-drop";
 import { record } from "@/client/state/undo-history";
 import "./board-column.css";
+import { onBoard } from "@/shared/board-membership";
 // Memoised: an overlay opening (⌘K) re-renders App, and must not re-render every board.
 export const BoardView = memo(function BoardView({
   board,
@@ -105,7 +106,7 @@ export const BoardView = memo(function BoardView({
     () => selectIssues(all, board, prefs, who || mine, query, ME.id, Date.now(), personal),
     [all, board, prefs, who, mine, query, personal],
   );
-  const universe = useMemo(() => personal ? all : all.filter((i) => i.board === board.id), [all, board.id, personal]);
+  const universe = useMemo(() => personal ? all : all.filter((i) => onBoard(i, board.id)), [all, board.id, personal]);
   const columns = useMemo(
     () => boardColumns(visible, board, prefs, universe),
     [visible, board, prefs, universe],
@@ -269,7 +270,7 @@ export const BoardView = memo(function BoardView({
                             const order = { manual: d.ordering === "manual", descending: d.descending };
                             dropAll(
                               dropPlan(layout.cells[ri]![ci]!, keys, before, order, (k) => issues.get(k)),
-                              ({ key, rank }) => actions.drop(key, personal ? (issues.get(key)?.board ?? board.id) : board.id, groups, rank),
+                              ({ key, rank }) => actions.drop(key, personal ? issueBoardId(issues.get(key)) : board.id, groups, rank),
                               record,
                             );
                           }}

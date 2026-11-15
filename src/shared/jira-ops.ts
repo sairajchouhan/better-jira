@@ -2,6 +2,7 @@ import { type Full, type Issue, type CommentState } from "@/shared/issue-model";
 import { descriptionBaseText, textToAdf, type AdfDocument } from "./document";
 import { inwardKind, outwardKind } from "./relations";
 import type { IssueComment } from "@/client/features/comments/comment-thread";
+import { sharesBoard } from "./board-membership";
 
 /** `labels` sets the whole list (create); `labelEdits` adds and removes single labels so others' labels survive. */
 type Fields = {
@@ -271,7 +272,7 @@ export function opsFor(before: Side, after: Side, issues: Map<string, Issue>): O
   if (a.status !== b.status) ops.push({ op: "status", status: b.status });
   if (b.rank !== undefined && a.rank !== b.rank) {
     const peers = [...issues.values()].filter(
-      (i) => i.board === b.board && i.key !== b.key && i.rank !== undefined,
+      (i) => sharesBoard(i, b) && i.key !== b.key && i.rank !== undefined,
     );
     const prev = peers
       .filter((i) => i.rank! < b.rank!)

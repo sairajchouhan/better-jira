@@ -102,7 +102,7 @@ export type SearchFilter = { field: (typeof SEARCH_FILTER_FIELDS)[number][0]; va
 export function matchesSearchFilters(i: Issue, filters: SearchFilter[], statusName: (i: Issue) => string | undefined) {
   return filters.every(({ field, values, op }) => {
     const actual =
-      field === "board" ? [String(i.board)] : field === "status" ? [statusName(i) ?? ""] : valuesFor(i, field, []);
+      field === "board" ? i.boards.map(String) : field === "status" ? [statusName(i) ?? ""] : valuesFor(i, field, []);
     return actual.some((v) => values.includes(v)) !== (op === "isNot");
   });
 }

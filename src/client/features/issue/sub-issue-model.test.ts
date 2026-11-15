@@ -22,7 +22,7 @@ const issue = (key: string, parent?: string, status = "todo", rank = ""): Issue 
   parent,
   status,
   rank,
-  board: 1,
+  boards: [1],
   summary: key,
   labels: [],
   assignee: null,

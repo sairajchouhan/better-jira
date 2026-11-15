@@ -37,7 +37,7 @@ import {
 import { issueMenuEntries, moveMenu } from "./issue-menu";
 import { InlineEditor } from "@/client/features/editor/rich-editor-loader";
 import { useCommand } from "@/client/features/navigation/commands";
-import { get, useStore } from "@/client/state/store";
+import { get, useStore, issueBoardId, issueBoard } from "@/client/state/store";
 import { actions } from "@/client/state/issue-actions";
 import { ui } from "@/client/features/navigation/app-navigation";
 import { AppLink } from "@/client/features/navigation/app-link";
@@ -118,6 +118,7 @@ export function TitleParentLine({ issue }: { issue: Issue }) {
 function ParentLine({ variant, issue, parent }: { variant: TitleLineVariant; issue: Issue; parent: Issue }) {
   const all = useStore((s) => s.issues),
     boards = useStore((s) => s.boards),
+    parentBoard = useStore((s) => issueBoardId(parent, s)),
     [menu, setMenu] = useState<HTMLElement | null>(null),
     progress = useRef<HTMLButtonElement>(null);
   useCommand("open-parent-sub-issues", (key) => {
@@ -142,7 +143,7 @@ function ParentLine({ variant, issue, parent }: { variant: TitleLineVariant; iss
         data-parent-link
         className="issue-parent-link"
         // Linear's "Sub-issue of" link opens the parent afresh (`resetBreadcrumb: true`).
-        to={{ board: parent.board, selected: parent.key, panel: true, trail: null }}
+        to={{ board: parentBoard, selected: parent.key, panel: true, trail: null }}
       >
         <span className="grid size-3.5 shrink-0 place-items-center">
           <StatusIcon status={statusOf(boards, parent)} />
@@ -201,7 +202,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
       point?: { x: number; y: number };
     } | null>(null);
 
-  const board = boards.find((b) => b.id === issue.board)!;
+  const board = useStore((s) => issueBoard(issue, s))!;
   const {
     state: { title, description, files, draft, editor, creating, confirming },
     actions: { update, setProperties, addFiles, onLateMedia, start, discard, cancel, submit, setConfirming },
@@ -761,7 +762,7 @@ function SubIssueRow({
       <AppLink
         className="flex min-w-0 flex-1 items-center gap-2 py-1.5 text-[13px] font-medium text-fg"
         // Opened from this section, the page's breadcrumb runs through the issue the row sits under (navigation/issue-trail.ts).
-        to={{ board: child.board, selected: child.key, panel: true, view: get().view, trail: fromSection(child) }}
+        to={{ board: issueBoardId(child), selected: child.key, panel: true, view: get().view, trail: fromSection(child) }}
       >
         <span className="truncate">{child.summary}</span>
       </AppLink>
