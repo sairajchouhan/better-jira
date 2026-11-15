@@ -21,6 +21,7 @@ import {
   onHighlighter,
   type CodeToken,
 } from "./code-languages";
+import { copyText } from "@/client/lib/clipboard";
 
 /** The display options, a view preference of this browser. Linear keeps line numbers as a user setting (on by default)
  *  and wrapping per block; Jira gives a block no stable id, so wrapping is one preference here too. */
@@ -63,7 +64,7 @@ export function codeBlockAttributes(lines: number, collapsed: boolean, view: Cod
 async function copyCode(text: string) {
   let message = "Code contents copied to clipboard";
   try {
-    await navigator.clipboard.writeText(text);
+    await copyText(text);
   } catch {
     message = "Code contents could not be copied to clipboard";
   }

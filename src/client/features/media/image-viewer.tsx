@@ -10,6 +10,7 @@ import { Icon } from "@/client/components/icons";
 import { ImageCropEditor } from "./image-crop";
 
 import { attachmentLink, downloadURL } from "./media-layout";
+import { copyText } from "@/client/lib/clipboard";
 export function ImageViewer({
   file,
   original,
@@ -184,8 +185,7 @@ export function ImageViewer({
             disabled={!issueKey && original.url.startsWith("blob:")}
             disabledReason="Create the issue before copying its attachment link"
             onClick={() => {
-              void navigator.clipboard
-                .writeText(attachmentLink(original, location.href))
+              void copyText(attachmentLink(original, location.href))
                 .then(() => notifyMedia("Link copied"))
                 .catch(() => notifyMedia("Could not copy the image link"));
             }}

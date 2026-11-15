@@ -58,6 +58,7 @@ import {
   toggleRead,
   undoInbox,
 } from "@/client/features/inbox/inbox";
+import { copyText } from "@/client/lib/clipboard";
 
 type State = ReturnType<typeof get>;
 type Shortcut = {
@@ -831,8 +832,7 @@ export const shortcuts: Shortcut[] = [
     group: "List / Board",
     hotkey: "Mod+Shift+C",
     run: () => {
-      void navigator.clipboard
-        .writeText(pageURL())
+      void copyText(pageURL())
         // Linear's Copy page URL toast (startup-root `Current URL copied to clipboard`).
         .then(() => showNotification(PAGE_URL_COPIED))
         .catch(() => set({ perf: "Could not access the clipboard" }));

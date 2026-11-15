@@ -23,6 +23,7 @@ import {
 import { fromEditorDocument, richSchema } from "./rich-document";
 import { adfToMarkdown } from "@/client/features/issue/issue-copy";
 import { toasts } from "@/client/components/toast-queue";
+import { copyRichText } from "@/client/lib/clipboard";
 
 /*
  * Linear's table editing (startup-root.CnUSfl4j.js: the `table` extension's keys, `fb` table commands, `r8e.setHeader`,
@@ -219,11 +220,7 @@ async function copyContent(view: EditorView, content: Fragment) {
     table = rows ? richSchema.nodes.table!.create(null, content) : content.firstChild!,
     text = adfToMarkdown(fromEditorDocument(richSchema.nodes.doc!.create(null, table))),
     { dom } = view.serializeForClipboard(new Slice(Fragment.from(table), 0, 0));
-  const blob = (type: string, value: string) => new Blob([value], { type });
-  if (typeof ClipboardItem === "undefined") return navigator.clipboard.writeText(text);
-  await navigator.clipboard.write([
-    new ClipboardItem({ "text/plain": blob("text/plain", text), "text/html": blob("text/html", dom.innerHTML) }),
-  ]);
+  await copyRichText(dom.innerHTML, text);
 }
 /** Linear's row and column "Copy": the selected cells. */
 export const copySelection = (view: EditorView) => {

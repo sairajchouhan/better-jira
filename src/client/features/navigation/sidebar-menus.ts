@@ -14,6 +14,7 @@ import { showNotification } from "@/client/state/app-notifications";
 import { removeBoard } from "@/client/state/server-data";
 import { placeURL, ui } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
+import { copyText } from "@/client/lib/clipboard";
 
 /** Linear's sidebar visibility preferences (`$xe`) and their labels (`eSe`). */
 export const VISIBILITY = {
@@ -43,7 +44,7 @@ export const parseSidebarPrefs = (raw: unknown): SidebarPrefs => {
 };
 
 const copy = (url: string, toast: string) =>
-  void navigator.clipboard.writeText(url).then(
+  void copyText(url).then(
     () => showNotification({ text: toast }),
     (e) => showNotification({ text: String(e) }),
   );

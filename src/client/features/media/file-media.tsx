@@ -4,11 +4,12 @@ import { showNotification } from "@/client/state/app-notifications";
 import type { Attachment } from "@/shared/attachment-media";
 import { attachmentLink, downloadURL, formatFileSize } from "./media-layout";
 import { FileBlock } from "./file-block";
+import { copyText } from "@/client/lib/clipboard";
 
 /** `ne` (copyLink) of Linear's file node: copy the file's URL, then its info toast; a refused clipboard says so. */
 async function copyFileLink(file: Attachment) {
   try {
-    await navigator.clipboard.writeText(attachmentLink(file, location.href));
+    await copyText(attachmentLink(file, location.href));
   } catch {
     showNotification({ text: "File URL could not be copied to clipboard", detail: "Please try again" });
     return;

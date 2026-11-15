@@ -1,4 +1,5 @@
 import { type ImageCrop } from "@/shared/issue-model";
+import { copyImageAsync } from "@/client/lib/clipboard";
 
 /** An image's bytes, read the way its URL allows: our own API with the session cookie, anything else anonymously. */
 async function read(url: string, signal?: AbortSignal) {
@@ -24,7 +25,7 @@ export async function imageBlob(url: string, signal?: AbortSignal) {
 }
 
 export async function copyMediaImage(url: string) {
-  await navigator.clipboard.write([new ClipboardItem({ "image/png": imageBlob(url) })]);
+  await copyImageAsync(imageBlob(url));
 }
 
 type Decoded = { bitmap: ImageBitmap; type: string };

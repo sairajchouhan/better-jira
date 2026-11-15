@@ -26,6 +26,7 @@ import { commentDraftKey, onRejectedComment, restoreRejectedDraft } from "./reje
 import { readStored, writeStored } from "@/client/state/stored-state";
 import { trackDraftUploads } from "@/client/features/issue/draft-uploads";
 import { mentionDraft, visibleComments, type IssueComment } from "./comment-thread";
+import { copyText } from "@/client/lib/clipboard";
 
 /**
  * Files a comment draft uploaded leave the issue again once the draft drops them, so a discarded upload is not left
@@ -339,7 +340,7 @@ function Thread({
                 .map((c) => `**${c.author?.displayName ?? "Unknown"}:**\n${adfToMarkdown(c.body)}`)
                 .join("\n\n")
             : adfToMarkdown(comment.body);
-      await navigator.clipboard.writeText(text);
+      await copyText(text);
       set({ perf: kind === "link" ? "Copied comment link" : "Copied comment as Markdown" });
     } catch {
       set({ perf: "Could not copy comment" });

@@ -34,6 +34,7 @@ import { filterValueName, viewPlaceholder, issuesCSV } from "@/client/features/v
 import "./view-editor.css";
 import { NO_AUTOFILL } from "@/client/components/field";
 import { useFilterCatalog } from "@/client/features/filters/property-filter";
+import { copyText } from "@/client/lib/clipboard";
 
 export function openViewEditor(draft: ViewDraft): void {
   beginViewEditor(draft);
@@ -205,8 +206,7 @@ type Action = [label: string, icon: IconName, run: () => void];
 /** Linear's groups: Edit/Duplicate, then Favorite (right-click only; the header has a star) and Copy link, then Delete. CSV export is only offered for custom views. */
 export function viewActions(view: SavedView, favorite: boolean, contextMenu: boolean): Action[][] {
   const link = () =>
-    void navigator.clipboard
-      .writeText(placeURL({ to: "view", id: view.id }))
+    void copyText(placeURL({ to: "view", id: view.id }))
       .then(() => showNotification({ text: "View link copied to clipboard" }))
       .catch((e) => showNotification({ text: String(e) }));
   return [

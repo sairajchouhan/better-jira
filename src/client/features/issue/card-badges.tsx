@@ -28,6 +28,7 @@ import { shortcutTitle } from "@/client/components/keycap";
 import { IssueHoverCard } from "./issue-hover-card";
 import { ChildrenMenu, openSubIssue } from "./sub-issue-menu";
 import { childrenByParent, subIssueCount } from "./sub-issue-model";
+import { copyText as writeText } from "@/client/lib/clipboard";
 
 const openExternal = (url: string) => void window.open(url, "_blank", "noopener,noreferrer");
 
@@ -239,7 +240,7 @@ const goToPullRequestsLabel = (count: number) => `Go to linked pull ${count === 
 /** Copies `text` with Linear's info toast: `title` over the copied text. */
 async function copyText(text: string, title: string, icon?: "copy") {
   try {
-    await navigator.clipboard.writeText(text);
+    await writeText(text);
     showNotification({ text: title, detail: text, icon });
   } catch {
     set({ perf: "Could not access the clipboard" });

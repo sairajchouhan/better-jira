@@ -26,6 +26,7 @@ import {
   type IssueResource,
   type LinkPreview,
 } from "@/shared/issue-resource";
+import { copyText } from "@/client/lib/clipboard";
 
 const previewRequested = new Set<string>();
 const resourceAge = (date: string) => {
@@ -242,7 +243,7 @@ export function IssueResources({ issue }: { issue: Issue }) {
           ? documentURL(issue, resource.id)
           : resourceURL(resource.url ?? "");
       if (!url) throw new Error();
-      await navigator.clipboard.writeText(url);
+      await copyText(url);
       set({ perf: "Copied resource link" });
     } catch {
       set({ perf: "Could not copy resource link" });

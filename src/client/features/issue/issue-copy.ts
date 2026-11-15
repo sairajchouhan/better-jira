@@ -5,6 +5,7 @@ import { loadFull } from "@/client/state/server-data";
 import { isLocalIssue } from "@/client/state/local-edits";
 import { showNotification, type Notification } from "@/client/state/app-notifications";
 import type { AdfNode } from "@/client/features/editor/rich-document";
+import { copyText, copyTextAsync } from "@/client/lib/clipboard";
 
 const escape = (text: string) => text.replace(/[\\`*_[\]<>]/g, "\\$&");
 const destination = (url: string) =>
@@ -222,33 +223,44 @@ export function copyToast(kind: CopyKind, issue: Pick<Issue, "key">, copied: str
 }
 /** Linear's Copy page URL (⌘⇧C) toast. */
 export const PAGE_URL_COPIED: Notification = { text: "Current URL copied to clipboard" };
-/** Copies one projection of the issue and confirms it with Linear's toast. "everything as Markdown" and the prompt load the
- *  comments first. `url` is the issue's link unless the caller has a better one (an inbox notification's). */
+/** Kinds whose text needs the full issue (its comments), loaded first. */
+const needsFull = (kind: CopyKind) => kind === "everything as Markdown" || kind === "as prompt";
+/**
+ * Copies one projection of the issue and confirms it with Linear's toast. `url` is the issue's link unless the caller has a
+ * better one (an inbox notification's). Kinds that load the comments start the write inside the click and fill it in when the load ends (Linear's `copyTextAsync`).
+ */
 export async function copyIssue(kind: CopyKind, issue: Issue, url = issueURL(issue)) {
   if (kind === "URL") return copyIssueLink(url);
   try {
-    const text = await issueText(kind, issue, url);
-    await navigator.clipboard.writeText(text);
+    if (needsFull(kind)) {
+      // Linear toasts once the write settles, whether or not a newer copy superseded it.
+      await copyTextAsync(issueText(kind, issue, url));
+      return showNotification(copyToast(kind, issue, ""));
+    }
+    const text = textOf(kind, issue, url);
+    await copyText(text);
     showNotification(copyToast(kind, issue, text));
   } catch {
     set({ perf: "Could not access the clipboard" });
   }
 }
 
+const textOf = (kind: CopyKind, issue: Issue, url: string) =>
+  issueCopy(kind, issue, get().full.get(issue.key), url, statusOf(issue)?.name ?? issue.status, ME.name);
+
 /** One projection of the issue as copied; the full issue (comments) is loaded first for the kinds that include it. */
 export async function issueText(kind: CopyKind, issue: Issue, url = issueURL(issue)): Promise<string> {
-  if ((kind === "everything as Markdown" || kind === "as prompt") && !get().full.has(issue.key) && !isLocalIssue(issue.key)) {
+  if (needsFull(kind) && !get().full.has(issue.key) && !isLocalIssue(issue.key)) {
     await loadFull(issue.key);
     if (!get().full.has(issue.key)) throw new Error("Issue details unavailable");
   }
-  const status = statusOf(issue)?.name ?? issue.status;
-  return issueCopy(kind, issue, get().full.get(issue.key), url, status, ME.name);
+  return textOf(kind, issue, url);
 }
 
 /** The same URL clipboard feedback for mirrored and cross-project relation rows. */
 export async function copyIssueLink(url: string) {
   try {
-    await navigator.clipboard.writeText(url);
+    await copyText(url);
     // Linear's Copy URL action: an info toast with the copy icon (`Copied ${model} link to clipboard`).
     showNotification(copyToast("URL", { key: "" }, url));
   } catch {

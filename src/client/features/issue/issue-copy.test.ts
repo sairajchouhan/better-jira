@@ -1,6 +1,12 @@
 import { type Issue } from "@/shared/issue-model";
-import { expect, test } from "bun:test";
-import { adfToMarkdown, copyKinds, copyShortcuts, copyToast, fillPrompt, issueCopy, PAGE_URL_COPIED } from "./issue-copy";
+import { afterEach, expect, test } from "bun:test";
+import { adfToMarkdown, copyIssue, copyKinds, copyShortcuts, copyToast, fillPrompt, issueCopy, PAGE_URL_COPIED } from "./issue-copy";
+import { deferred, fakeClipboard } from "@/client/test/fake-clipboard";
+import { toasts } from "@/client/components/toast-queue";
+import { get, set } from "@/client/state/store";
+import type { ReactElement } from "react";
+/** The newest toast's text. */
+const lastToast = () => (toasts.all().at(-1)?.content as ReactElement<{ notice: { text: string } }> | undefined)?.props.notice.text;
 import { CODING_TOOLS, promptLink, TRUNCATED } from "./coding-tools";
 
 test("clipboard projections retain rich formatting, tables and exact IDs/URLs", () => {
@@ -130,4 +136,41 @@ test("B5: a coding tool's deep link carries the prompt, cut to the tool's limit 
   expect(promptLink("short", (p) => p, 2000)).toBe("short");
   expect(byId("cursor").link(long).length).toBeLessThanOrEqual(8000);
   expect(byId("cursor").link("x".repeat(1500))).not.toContain("Truncated");
+});
+
+const copied: Issue = {
+  key: "KAN-7",
+  boards: [1],
+  summary: "Fix [the menu](https://x.test/m) <now>",
+  status: "todo",
+  assignee: null,
+  labels: [],
+  updated: "",
+  resolved: null,
+  comments: 0,
+};
+const KAN_7 = "https://example.test/browse/KAN-7";
+let clip: ReturnType<typeof fakeClipboard> | undefined;
+const realFetch = globalThis.fetch;
+afterEach(() => {
+  clip?.restore();
+  clip = undefined;
+  globalThis.fetch = realFetch;
+});
+
+test("Copy everything as Markdown starts the clipboard write before the issue's comments load", async () => {
+  clip = fakeClipboard();
+  const response = deferred<Response>();
+  globalThis.fetch = (() => response.promise) as unknown as typeof fetch;
+  const issue = { ...copied, key: "KAN-8" }, issues = get().issues;
+  set({ issues: new Map(issues).set(issue.key, issue) });
+  const done = copyIssue("everything as Markdown", issue, KAN_7);
+  expect(clip.calls).toEqual(["write"]);
+  response.resolve(
+    new Response(JSON.stringify({ key: "KAN-8", fields: { description: null, comment: { comments: [] } } })),
+  );
+  await done;
+  expect(clip.writes[0]?.["text/plain"]).toStartWith("# KAN-8 Fix");
+  expect(lastToast()).toBe('Issue "KAN-8" content copied to clipboard');
+  set({ issues });
 });
