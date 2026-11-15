@@ -30,3 +30,28 @@ test("the side panel takes its own surface and width; a confirmation focuses its
   expect(confirm).toContain(`width:min(${DIALOG.CONFIRM_WIDTH}px, 100%)`);
   expect(confirm).toMatch(/<button[^>]*data-autofocus[^>]*>Delete<\/button>|<button[^>]*data-autofocus=""[^>]*>/);
 });
+
+test("Escape closes a dialog even with focus on its box, and its keys stop there but ⌘K and ⌘/ (dialogKey)", async () => {
+  const { dialogKey } = await import("./dialog");
+  const key = (key: string, mods: { metaKey?: boolean } = {}) => {
+    const e = { key, metaKey: false, ctrlKey: false, defaultPrevented: false, stopped: false, ...mods,
+      preventDefault() { e.defaultPrevented = true; }, stopPropagation() { e.stopped = true; } };
+    return e;
+  };
+  let closed = 0;
+  const escape = key("Escape");
+  dialogKey(escape, () => closed++);
+  expect([closed, escape.defaultPrevented, escape.stopped]).toEqual([1, true, true]);
+  const s = key("s");
+  dialogKey(s, () => closed++);
+  expect([closed, s.stopped]).toEqual([1, true]);
+  const palette = key("k", { metaKey: true });
+  dialogKey(palette, () => closed++);
+  expect(palette.stopped).toBe(false);
+  // The box's own keys (React Aria's Dialog focuses itself; a press on its padding does too) get the same handling.
+  const source = await Bun.file(new URL("./dialog.tsx", import.meta.url)).text();
+  expect(source).toMatch(/if \(event\.target === node\) dialogKey\(event/);
+  // The box ref sits on an ancestor of the content, attached after its layout effects: initial focus reads it in the frame.
+  const surface = await Bun.file(new URL("./menu-surface.tsx", import.meta.url)).text();
+  expect(surface).toMatch(/requestAnimationFrame\(\(\) => \{\s*const node = ref\.current;/);
+});

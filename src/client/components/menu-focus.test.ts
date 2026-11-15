@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { enteredHighlight, focusOnOpen, settleHighlight, takesFocus } from "./menu";
-import { initialFocusTarget, MENU_FOCUS, type FocusCandidate, POPOVER_FOCUS, TEXT_INPUT } from "./menu-surface";
+import { initialFocusTarget, MENU_FOCUS, type FocusCandidate, POPOVER_FOCUS, refocusStep, TEXT_INPUT } from "./menu-surface";
 const surfaceSource = await Bun.file(new URL("./menu-surface.tsx", import.meta.url)).text();
 
 const source = await Bun.file(new URL("./menu.tsx", import.meta.url)).text();
@@ -133,4 +133,19 @@ test("once the user moves the highlight after a search, new rows keep it unless 
   ).seen;
   // ↓ to "b", then the rows change: "b" stays.
   expect(settleHighlight(searched, { key: "b", search: "x", value: undefined, order: ["c", "b"] }, first).next).toBeUndefined();
+});
+
+test("focus handed back from the body goes to the opener until it takes it, else its re-rendered node (refocusStep)", () => {
+  const body = { name: "body" }, opener = { name: "opener" }, card = { name: "card" }, other = { name: "other" };
+  // A dialog's page is inert as it closes, so the opener refused focus: the next frame, still on the body, it tries again.
+  expect(refocusStep(body, body, opener, false, () => card)).toEqual({ focus: opener, done: false });
+  expect(refocusStep(null, body, opener, false, () => card)).toEqual({ focus: opener, done: false });
+  // Once the opener held focus, the body is where the user put it (an outside press on blank page): no bounce back.
+  expect(refocusStep(body, body, opener, true, () => card)).toEqual({ done: true });
+  // The opener re-rendered away: its keyed node takes focus, and that ends it.
+  expect(refocusStep(body, body, null, true, () => card)).toEqual({ focus: card, done: true });
+  expect(refocusStep(body, body, null, false, () => undefined)).toEqual({ focus: undefined, done: false });
+  // On the opener, keep watching (it may re-render away a few frames on); anywhere else, the user moved on.
+  expect(refocusStep(opener, body, opener, true, () => card)).toEqual({ done: false });
+  expect(refocusStep(other, body, opener, false, () => card)).toEqual({ done: true });
 });

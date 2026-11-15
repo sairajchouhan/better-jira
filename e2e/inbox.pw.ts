@@ -241,8 +241,14 @@ test("reading the inbox: Linear's rows, the bell, tabs, filters, and the keys th
     await p.waitFor(`${action} === "Mark all as read"`);
     await p.key("ArrowDown");
     await p.waitFor(`${action} === "Delete all"`);
+    // Area B: the confirm a menu row opens takes focus on its confirm button, one Escape closes it changing nothing, and focus
+    // goes back to the menu's trigger (it had stayed on the dialog box, deaf to Escape, and then fell to the body).
+    await p.key("Enter");
+    const confirm = `[role=dialog][aria-label="Delete all notifications?"]`;
+    await p.waitFor(`document.activeElement?.matches('${confirm} button[data-autofocus]')`);
     await p.key("Escape");
-    await p.waitFor(`!document.querySelector('[role=dialog]')`);
+    await p.waitFor(`!document.querySelector('[role=dialog]') && document.activeElement?.id === "inbox-actions"`);
+    expect(await p.eval(`${rows}.length`)).toBe(6);
     // Linear's filter menu opens on its first field.
     await p.key("f");
     await p.key("Enter");

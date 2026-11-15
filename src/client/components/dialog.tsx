@@ -1,6 +1,8 @@
 import {
   createContext,
   use,
+  useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useSyncExternalStore,
@@ -142,23 +144,39 @@ function DialogContent({
 }) {
   useReturnFocus(box);
   useInitialFocus(box, MENU_FOCUS);
+  const closeLatest = useEffectEvent(close);
+  // Focus can rest on the box itself, outside the content's handler: React Aria's Dialog focuses itself, and a press on the
+  // box's padding focuses it (tabindex -1). Its own keys get the same handling; React Aria's Dialog takes no key handler.
+  useEffect(() => {
+    const node = box.current;
+    if (!node) return;
+    const own = (event: globalThis.KeyboardEvent) => {
+      if (event.target === node) dialogKey(event, () => closeLatest());
+    };
+    node.addEventListener("keydown", own);
+    return () => node.removeEventListener("keydown", own);
+  }, [box]);
   return (
-    <div
-      className="contents"
-      onKeyDown={(event) => {
-        const appKey = (event.metaKey || event.ctrlKey) && ["k", "/"].includes(event.key.toLowerCase());
-        if (!appKey && !(event.key === "Tab" && !event.defaultPrevented)) event.stopPropagation();
-        if (event.key === "Escape") {
-          event.preventDefault();
-          close();
-        }
-      }}
-    >
+    <div className="contents" onKeyDown={(event) => dialogKey(event, close)}>
       <DialogScope close={close} level={level}>
         {children}
       </DialogScope>
     </div>
   );
+}
+
+/** A key in a dialog: it stops here (the page's shortcuts don't run under a dialog) except ⌘K and ⌘/, which reach the app, and
+ *  a Tab no menu used, which React Aria's FocusScope handles on the document; Escape closes. */
+export function dialogKey(
+  event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "defaultPrevented" | "preventDefault" | "stopPropagation">,
+  close: () => void,
+) {
+  const appKey = (event.metaKey || event.ctrlKey) && ["k", "/"].includes(event.key.toLowerCase());
+  if (!appKey && !(event.key === "Tab" && !event.defaultPrevented)) event.stopPropagation();
+  if (event.key === "Escape") {
+    event.preventDefault();
+    close();
+  }
 }
 
 /** What the dialog's content reads: its close (as a menu surface's, for menus inside) and its elevation. */

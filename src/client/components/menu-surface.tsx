@@ -142,10 +142,30 @@ const FOCUSABLE = [
   .join();
 const returnTargets = new WeakMap<Element, HTMLElement | null>();
 
+/** One frame of handing focus back, with `active` what holds it now. Lost to the body, it goes to the opener while connected
+ *  (`back`) until the opener has `held` it (after that, the body is where the user put it: an outside press on blank page);
+ *  with the opener gone, to its re-rendered node (`keyed`), which ends it. Anywhere else but the opener, the user moved on. */
+export function refocusStep<T extends object>(
+  active: object | null,
+  body: object,
+  back: T | null,
+  held: boolean,
+  keyed: () => T | undefined,
+): { focus?: T; done: boolean } {
+  if (active && active !== body) return { done: active !== back };
+  if (back) return held ? { done: true } : { focus: back, done: false };
+  const node = keyed();
+  return { focus: node, done: !!node };
+}
+
 /**
  * Where focus goes when a popup closes: `returnTo`, else what had focus when it opened; when that was inside a popup that has
- * since closed (a menu item opening a dialog), what opened that popup. While focus is lost to the body after that (the opener
- * re-rendered away), the opener's new node is found by its `data-key`. Every popup and Dialog share it. Returns the opener.
+ * since closed (a menu item opening a dialog), what opened that popup. Every popup and Dialog share it. Returns the opener.
+ *
+ * Focus can't land at once: a Dialog's page stays inert until React Aria's modal lets go of it, after this cleanup, so the
+ * opener refuses focus (the inbox's "Delete all notifications?" confirm left it on the body); and the opener may re-render away
+ * as the menu's action lands (a card moved to another column), now or a few frames on. So for half a second, while focus is
+ * lost to the body and the opener hasn't held it yet, it goes to the opener, or to its new node found by its `data-key` (refocusStep).
  */
 export function useReturnFocus(ref: RefObject<HTMLElement | null>, returnTo?: RefObject<HTMLElement | null>) {
   const [opener] = useState(() => document.activeElement as HTMLElement | null);
@@ -154,26 +174,28 @@ export function useReturnFocus(ref: RefObject<HTMLElement | null>, returnTo?: Re
     return parent ? (returnTargets.get(parent) ?? null) : null;
   });
   useLayoutEffect(() => {
-    const node = ref.current,
-      target = returnTo?.current ?? opener;
-    if (node) returnTargets.set(node, opener?.closest('[role="dialog"]') ? fallback : opener);
+    const target = returnTo?.current ?? opener;
+    // A ref on an ancestor (Dialog's box) is attached after this layout effect: then the box is registered a frame on.
+    const register = () => {
+      if (ref.current) returnTargets.set(ref.current, opener?.closest('[role="dialog"]') ? fallback : opener);
+    };
+    const frame = ref.current ? (register(), 0) : requestAnimationFrame(register);
     return () => {
+      cancelAnimationFrame(frame);
       const back = target?.isConnected ? target : fallback?.isConnected ? fallback : null;
       back?.focus();
-      // The opener may re-render away as the menu's action lands (a card moved to another column), now or a few frames on:
-      // while focus is lost to the body, give it to the opener's new node, found by its key.
       const key = (target ?? fallback)?.closest<HTMLElement>("[data-key]")?.dataset.key;
-      if (!key) return;
+      const keyed = () =>
+        key
+          ? [...document.querySelectorAll<HTMLElement>(`[data-key="${CSS.escape(key)}"]`)].find((node) => node.getClientRects().length)
+          : undefined;
       const until = performance.now() + 500;
+      let held = !!back && document.activeElement === back;
       const refocus = () => {
-        const active = document.activeElement;
-        if (active === document.body) {
-          const node = [...document.querySelectorAll<HTMLElement>(`[data-key="${CSS.escape(key)}"]`)].find(
-            (node) => node.getClientRects().length,
-          );
-          if (node) return node.focus();
-        } else if (active !== back) return;
-        if (performance.now() < until) requestAnimationFrame(refocus);
+        held ||= !!back && document.activeElement === back;
+        const step = refocusStep(document.activeElement, document.body, back?.isConnected ? back : null, held, keyed);
+        step.focus?.focus();
+        if (!step.done && performance.now() < until) requestAnimationFrame(refocus);
       };
       requestAnimationFrame(refocus);
     };
@@ -205,11 +227,13 @@ export function initialFocusTarget<T extends FocusCandidate>(node: T, initialFoc
 
 /** A frame after opening, focus moves to `initialFocusTarget` unless a child already took it. The popup node itself holding
  *  focus counts as not taken (React Aria's Dialog focuses itself first). A target that can't take focus (a plain `role=dialog`
- *  box) is made focusable from script only, so keys typed next reach the popup's own handlers instead of the page. */
+ *  box) is made focusable from script only, so keys typed next reach the popup's own handlers instead of the page. The node is
+ *  read in the frame, not the effect: a ref on an ancestor (Dialog's box is React Aria's Dialog around the content that calls
+ *  this) is attached after the content's layout effects, so it was still null and a dialog never took its initial focus. */
 export function useInitialFocus(ref: RefObject<HTMLElement | null>, initialFocus: readonly string[]) {
   useLayoutEffect(() => {
-    const node = ref.current;
     const frame = requestAnimationFrame(() => {
+      const node = ref.current;
       if (!node || (node.contains(document.activeElement) && document.activeElement !== node)) return;
       const target = initialFocusTarget(node, initialFocus);
       if (!target) return;
