@@ -84,7 +84,7 @@ export type Keys = string | readonly string[];
 /**
  * The one place a `title` spells a shortcut: "text (keys)" from registry chords. src/client/components/tooltip.tsx draws the brackets
  * back as caps (`tipCaps`), so caps are space-separated, a sequence says "then" and an `alternate` follows "/". ⌘ sits
- * just before the key ("⇧ ⌘ ."), as live Linear tooltips show it (e2e parent-properties); b4's menu caps put it first.
+ * just before the key ("⇧ ⌘ ."), as live Linear tooltips show it; b4's menu caps put it first.
  */
 export function shortcutTitle(text: string, keys?: Keys, alternate?: string, mac = isMac()): string {
   if (!keys?.length) return text;

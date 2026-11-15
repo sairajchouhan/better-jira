@@ -33,5 +33,5 @@
     "builtin": true,
     "browser": true
   },
-  "ignorePatterns": [".raj/**", "dist/**", "e2e/fixtures/**"]
+  "ignorePatterns": [".raj/**", "dist/**"]
 }

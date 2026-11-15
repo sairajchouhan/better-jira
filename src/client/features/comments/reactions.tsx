@@ -233,7 +233,6 @@ export function ReactionPicker({
           >
             {sections.map(([heading, items]) => (
               <ListBoxSection key={heading} id={heading} className="grid grid-cols-[repeat(9,28px)]">
-                {/* parent-properties.pw.ts finds the headings by their text-[12px] class. */}
                 <Header className="col-span-full flex h-7 items-center pr-1.5 pl-1 text-[12px] font-medium text-fg-3">
                   {heading}
                 </Header>

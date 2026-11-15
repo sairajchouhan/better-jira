@@ -14,8 +14,8 @@ import { boardOps } from "./fixture-ops";
 import { boardFromInput } from "../src/server/config";
 import { avatarProxy, memoryAvatarCache } from "../src/shared/avatar-proxy";
 
-/** A file in e2e/fixtures, from the repo root the suite runs in, so the built copy in dist/ finds it too. */
-const fixtureFile = (name: string) => Bun.file(`e2e/fixtures/${name}`);
+/** A file in scripts/fixtures, from the repo root, so the built copy in dist/ finds it too. */
+const fixtureFile = (name: string) => Bun.file(`scripts/fixtures/${name}`);
 const rich = {
   type: "doc",
   version: 1,
@@ -1277,7 +1277,7 @@ const server = Bun.serve({
   },
 });
 console.log(`Disposable browser fixture on ${server.url}`);
-// The e2e launcher holds this pipe open: once it is gone, even killed, the server goes too.
+// A launcher that holds this pipe open: once it is gone, even killed, the server goes too.
 if (process.env.FIXTURE_EXIT_ON_EOF)
   void (async () => {
     for await (const _ of Bun.stdin.stream());

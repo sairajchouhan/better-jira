@@ -6,7 +6,7 @@
 /**
  * Linear's one menu primitive, `IB = Object.assign(B3e, {List, Item, GroupHeader, Divider, TextDivider, Input})` in
  * startup-root.CnUSfl4j.js; every action menu, property picker and filter menu renders through it. Its geometry is `Vw`, copied
- * here. The `.menu*` classes in index.css spell these values out and are the only menu row styles; e2e/menu-geometry.pw.ts pins them.
+ * here. The `.menu*` classes in index.css spell these values out and are the only menu row styles.
  */
 export const MENU = {
   BORDER_RADIUS: 12,

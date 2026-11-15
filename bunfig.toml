@@ -12,4 +12,4 @@ env = "BUN_PUBLIC_*"
 
 [fmt]
 printWidth = 100 # oxfmt's default, which formatted this repo
-ignorePatterns = [".raj/", "dist/", "e2e/fixtures/"]
+ignorePatterns = [".raj/", "dist/"]

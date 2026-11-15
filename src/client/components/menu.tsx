@@ -1167,7 +1167,7 @@ function MenuItem({
       {...({ keywords, muted } as object)}
       isDisabled={disabled}
       onAction={onSelect}
-      // The row's `data-value`, which the e2e specs and the row's own lookups read.
+      // The row's `data-value`, which the row's own lookups read.
       data-value={value}
       {...props}
       render={

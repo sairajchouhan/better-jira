@@ -547,7 +547,7 @@ function Thread({
                 />
               ) : (
                 // The closed composer stands in for the open one, so its attach and send wear the composer's tooltips. Send stays
-                // enabled: with nothing to send yet, it opens the composer (RAJ-52, e2e/threads.pw.ts).
+                // enabled: with nothing to send yet, it opens the composer (RAJ-52).
                 <div className="comment-reply-row">
                   {me}
                   <button

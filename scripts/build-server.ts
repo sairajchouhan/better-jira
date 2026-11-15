@@ -1,5 +1,5 @@
 /** Bundles a server and the HTML it imports, with the React Compiler on: `bun scripts/build-server.ts [entry] [outdir]`.
- *  Defaults to the app server (src/server/index.ts → dist/app); the browser suite builds scripts/fixture-server.ts the same way.
+ *  Defaults to the app server (src/server/index.ts → dist/app); scripts/fixture-server.ts builds the same way.
  *  Run the output from the repo root: Bun.serve resolves the bundled HTML's files from the cwd, so they are named with
  *  `outdir` in their path rather than relative to it. */
 import tailwind from "bun-plugin-tailwind";
