@@ -89,7 +89,7 @@ test("an empty My issues tab and an empty board tab show their empty state, no c
     expect(await page.eval(`!!document.querySelector('aside[aria-label="Hidden columns"]')`)).toBe(false);
     expect(await page.eval(`document.querySelectorAll('[aria-label^="Options for"]').length`)).toBe(0);
     await page.goto("/board/1/backlog");
-    await page.waitFor(`document.body.textContent.includes("Backlog issues")`);
+    await page.waitFor(`document.body.textContent.includes("The backlog is a place for new issues")`);
     expect(await page.eval(`!!document.querySelector('aside[aria-label="Hidden columns"]')`)).toBe(false);
   } finally {
     await page.close();

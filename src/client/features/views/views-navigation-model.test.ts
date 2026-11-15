@@ -20,6 +20,9 @@ test("a page with no issue gets its empty state: a board tab unless filtered, a 
   expect(resultFeedback(0,0,"person",false)).toEqual({kind:"empty"});
   expect(resultFeedback(0,0,"person",true)).toEqual({kind:"empty"});
   expect(resultFeedback(0,2,"person",true)).toEqual({kind:"filtered",text:"No issues matching the filters",hidden:2});
+  // Issues hidden by display options aren't an empty page: the columns and their "hidden by display options" line stay.
+  expect(resultFeedback(0,0,"tab",false,3)).toBeNull();
+  expect(resultFeedback(0,0,"person",false,3)).toBeNull();
 });
 test("details summarize result assignees and labels with counts", () => {
   const issues = [{assignee:{name:"Raj"},labels:["bug","bug"]},{assignee:null,labels:["bug","ui"]}] as Issue[];

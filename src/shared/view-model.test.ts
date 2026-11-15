@@ -585,6 +585,16 @@ test("BJ-61: display hidden counts respect filters and reveal duplicate label gr
   expect(displayHiddenCount(all, board, prefs, false, "", "me", now)).toBe(2);
 });
 
+// A personal tab counts what its display options hide among its own issues (the person's tab filter), not my assigned
+// ones, so an empty Created tab isn't kept from its empty state by my hidden done issues (BJ-336).
+test("display hidden counts on a personal tab take that tab's issues", () => {
+  const all = [issue("done", { status: "done" }), issue("open")];
+  const prefs = defaultPreferences();
+  prefs.display.completedIssues = "none";
+  expect(displayHiddenCount(all, board, prefs, (i) => i.key === "open", "", "me", now)).toBe(0);
+  expect(displayHiddenCount(all, board, prefs, (i) => i.key === "done", "", "me", now)).toBe(1);
+});
+
 describe("group ordering (BJ-205)", () => {
   const g = (...ids: string[]) => ids.map((id) => ({ id }));
   const ids = (groups: { id: string }[]) => groups.map((x) => x.id);

@@ -132,8 +132,12 @@ export const BoardView = memo(function BoardView({
     [all, board, prefs, activeView, overlay, query, mine, who],
   );
   // One answer for what the results say; any zero state (all but a partial result) stands in for the groups.
-  const page: ResultPage = activeView || draft ? "view" : personal ? "person" : "tab";
-  const result = resultFeedback(visible.length, feedback.baseline, page, feedback.temporary);
+  const displayHidden = useMemo(
+    () => displayHiddenCount(all, board, prefs, who || mine, query, ME.id, Date.now(), personal),
+    [all, board, prefs, who, mine, query, personal],
+  );
+  const page: ResultPage = activeView ? "view" : personal ? "person" : "tab";
+  const result = resultFeedback(visible.length, feedback.baseline, page, feedback.temporary, displayHidden);
   const zeroState = !!result && result.kind !== "partial";
   const { hidden, hiddenIds, show } = drawnGroups(layout, zeroState);
   // The prefetch order follows the cards and rows just laid out, so which groups show is decided once.
@@ -168,10 +172,6 @@ export const BoardView = memo(function BoardView({
     set({ findInView: false });
   };
   // One feedback, placed by layout: the zero state above the groups, else the list's last row or the board's footer.
-  const displayHidden = useMemo(
-    () => displayHiddenCount(all, board, prefs, mine, query, ME.id, Date.now(), personal),
-    [all, board, prefs, mine, query, personal],
-  );
   const empty = personal
     ? <PersonEmptyState tab={personTab} person={person} />
     : <ScopeEmptyState scope={prefs.scope} />;

@@ -3,10 +3,12 @@ import { type Issue } from "@/shared/issue-model";
 /** The page an empty result is on: a saved view (or the view editor), a board tab, or a personal page tab. */
 export type ResultPage = "view" | "tab" | "person";
 /**
- * What a view says about its results, `baseline` counting what it shows with no temporary filter (`temporary`).
+ * What a view says about its results, `baseline` counting what it shows with no temporary filter (`temporary`), and
+ * `displayHidden` how many its display options hide.
  * - `empty`: the page holds no issue at all, so it draws its own empty state (Linear's `zeroStateFallback`: a board tab's
  *   ViewEmptyState, My issues' MyIssuesEmptyPage, which MyIssuesViewPage `pe` shows whenever the tab has no issues,
- *   filtered or not).
+ *   filtered or not). Only while display options hide nothing: IssueList `df` draws the placeholder only when no item is
+ *   hidden, so a page whose issues are all hidden by display options keeps its "hidden by display options" line.
  * - `saved`: a saved view whose own definition matches nothing: only "No matching issues" (HiddenIndicator, no fallback).
  * - `filtered`: a filter leaves nothing; `hidden` is how many it hides, 0 when the page was empty before it.
  * - `partial`: some issues show and `hidden` more are filtered out.
@@ -17,12 +19,14 @@ export type ResultFeedback =
   | { kind: "saved"; text: string }
   | { kind: "filtered" | "partial"; text: string; hidden: number };
 
-export function resultFeedback(count: number, baseline: number, page: ResultPage, temporary: boolean): ResultFeedback | null {
+export function resultFeedback(count: number, baseline: number, page: ResultPage, temporary: boolean, displayHidden = 0): ResultFeedback | null {
   if (!count) {
-    if (page === "person" && !baseline) return { kind: "empty" };
+    const empty = !baseline && !displayHidden;
+    if (page === "person" && empty) return { kind: "empty" };
     if (page === "view" && (!temporary || !baseline)) return { kind: "saved", text: "No matching issues" };
     // HiddenIndicator: no filter and nothing hidden shows the page's fallback; a filter with nothing hidden says so.
-    if (!baseline && !temporary) return { kind: "empty" };
+    if (empty && !temporary) return { kind: "empty" };
+    if (!baseline && !temporary) return null;
     return { kind: "filtered", text: "No issues matching the filters", hidden: baseline };
   }
   const hidden = Math.max(0, baseline - count);

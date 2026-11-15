@@ -26,13 +26,13 @@ function CreateIssueButton() {
 }
 
 /**
- * ViewEmptyState: centred in the page, the icon (80px high, 60px on a phone) beside, or under on a short window, a
- * 340px column of the title (regularPlus, labelBase), its paragraphs (small, labelMuted, 1.4 line height, 16px apart) and
+ * ViewEmptyState: centred in the page, the icon (80px high, 60px on a phone) above, or beside on a window at most 500px
+ * high (`column: !(max-height: 500px)`), a 340px column of the title (regularPlus, labelBase), its paragraphs (small, labelMuted, 1.4 line height, 16px apart) and
  * the actions; 24px gaps. Linear's secondary "Documentation" link points at Linear's docs, so it has no counterpart here.
  */
 function ViewEmptyState({ icon, title, paragraphs, children }: { icon: ReactNode; title: string; paragraphs: string[]; children: ReactNode }) {
   return <div role="status" className="absolute inset-0 z-[1] flex items-center justify-center">
-    <div className="flex max-w-[340px] flex-col gap-6 [@media(min-height:501px)]:flex-row">
+    <div className="flex max-w-[340px] flex-col gap-6 [@media(max-height:500px)]:flex-row">
       <div className="flex justify-start [&_svg]:h-[80px] [&_svg]:w-auto max-[640px]:[&_svg]:h-[60px]">{icon}</div>
       <div className="flex min-h-[180px] flex-col gap-6">
         <div className="flex flex-col gap-2">

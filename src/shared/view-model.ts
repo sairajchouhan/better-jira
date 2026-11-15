@@ -1186,7 +1186,7 @@ export function myIssuesBoard(boards: Board[], board: Board): Board {
 }
 
 /** Count unique matching issues suppressed by display settings; filters and scope stay intact. */
-export function displayHiddenCount(all: Issue[], board: Board, prefs: Preferences, mine: boolean, query: string, me: string, now = Date.now(), acrossBoards = false): number {
+export function displayHiddenCount(all: Issue[], board: Board, prefs: Preferences, mine: boolean | ((i: Issue) => boolean), query: string, me: string, now = Date.now(), acrossBoards = false): number {
   const eligible = selectIssues(all, board, { ...prefs, display: { ...prefs.display, subIssues: true, completedIssues: "all" } }, mine, query, me, now, acrossBoards);
   const visible = selectIssues(all, board, prefs, mine, query, me, now, acrossBoards);
   const hidden = prefs.hidden[prefs.display.columns] ?? [];
