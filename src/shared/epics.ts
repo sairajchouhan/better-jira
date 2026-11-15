@@ -2,7 +2,7 @@ import type { Board, Issue, PropertyActivity } from "./issue-model";
 import { statusById } from "./board-catalog";
 
 /**
- * Linear's Project is a Jira epic (decision 2026-11-14, .raj/features/project-menu.md). Linear's `zBn` (startup-root) even
+ * Linear's Project is a Jira epic (decision 2026-11-14). Linear's `zBn` (startup-root) even
  * lists "epic" among the Project action's keywords. An issue is in an epic through Jira's `parent` link (work Jira's legacy
  * Epic Link field carries the same key). The Jira project stays what it is, Linear's team: nothing here ever changes it.
  */

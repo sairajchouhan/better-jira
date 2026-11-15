@@ -31,7 +31,7 @@
   unicode-range: U+E00-E7F;
 }
 
-/* Linear's own theme output, read from linear.app on 2026-11-06 (see .raj/linear.md, "Colors").
+/* Linear's own theme output, read from linear.app on 2026-11-06.
    Linear generates these in JS (generateTheme in startup-root.*.js) from a preset:
    dark  base lch(5.52 0.4 272), accent lch(47.92 59.30 288.42), contrast 27
    light base lch(97.94 0.5 282), accent lch(53 52.26 286.91), contrast 30
@@ -92,19 +92,19 @@
   --line-2: lch(88.49% 0 282); /* --color-border-secondary */
   --line-3: lch(84.44% 0 282); /* --color-border-tertiary */
   --accent: lch(53% 52.26 286.91);
-  /* Board page, read from computed styles on linear.app/…/active (see .raj/linear.md, "Board") */
+  /* Board page, read from computed styles on linear.app/…/active */
   --frame: lch(89.84% 0 282); /* <main> border, header row border */
   --frame-shadow: lch(0 0 0 / 0.02) 0 3px 6px -2px, lch(0 0 0 / 0.04) 0 1px 1px 0;
   --card-shadow:
     lch(0 0 0 / 0.088) 0 0 0 0.5px, lch(0 0 0 / 0.02) 0 3px 6px -2px, lch(0 0 0 / 0.04) 0 1px 1px 0;
   --card-hover: lch(96.5% 0 282); /* card bg when hovered / active */
   --card-fg-3: lch(40% 1 282); /* ID, chip text, footer inside a card */
-  /* The rest of the elevated theme a board column's items paint in (generateTheme's elevatedTheme(), .raj/linear.md
-     "Board colours"): labelBase, bgBorderFaintThin, and bgBase at .5 (the column's "Add new issue" pill, IssueList `sl`). */
+  /* The rest of the elevated theme a board column's items paint in (generateTheme's elevatedTheme()):
+     labelBase, bgBorderFaintThin, and bgBase at .5 (the column's "Add new issue" pill, IssueList `sl`). */
   --card-fg-2: lch(20% 1 282);
   --card-line: lch(91.9% 0 282);
   --card-half: lch(100% 0 282 / 0.5);
-  /* Linear's menu theme (startup-root.CnUSfl4j.js: bgBase l+8, bgFocus, labelBase/Muted/Faint, medium shadow; .raj/qa/filter-parity.md) */
+  /* Linear's menu theme (startup-root.CnUSfl4j.js: bgBase l+8, bgFocus, labelBase/Muted/Faint, medium shadow) */
   --menu: var(--card);
   --menu-line: lch(91.9% 0 282);
   --menu-divider: lch(91.9% 0 282); /* bgBorderFaintThin */
@@ -112,7 +112,7 @@
   --menu-shadow:
     lch(0 0 0 / 0.02) 0 6px 18px, lch(0 0 0 / 0.04) 0 3px 9px, lch(0 0 0 / 0.04) 0 1px 1px;
   --chip-line: lch(86.5% 0 282);
-  /* Linear's board badge (QB) hovered or with its menu open, read live on linear.app 2026-11-13 (.raj/linear.md "Board card"):
+  /* Linear's board badge (QB) hovered or with its menu open, read live on linear.app 2026-11-13:
      elevated bgShade, bgBorderSolidThin and labelTitle; light keeps the resting border. */
   --chip-hover: lch(94.5% 0 282);
   --chip-line-hover: var(--chip-line);
@@ -127,7 +127,7 @@
   --menu-fg-3: lch(40% 1 282); /* labelMuted */
   --menu-placeholder: lch(66% 1 282); /* labelFaint */
   --menu-check: lch(54.1% 0 282); /* the multi-select checkbox border */
-  /* Linear's filter menu shell (measured 2026-11-11, .raj/qa/filter-parity.md); its rows are the shared menu's */
+  /* Linear's filter menu shell (measured 2026-11-11); its rows are the shared menu's */
   --filter-line: lch(91.9% 0 282);
   /* shadowHigh (generateTheme): dialogs and the filter submenu */
   --shadow-high:

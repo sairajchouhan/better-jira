@@ -543,7 +543,7 @@ function ColumnHeading({
     <ContextMenu label={`Column ${bucket.name}`} entries={entries}>
       <h2 className="board-column-heading flex h-[46px] shrink-0 items-center gap-2 pr-2 pl-3.5 text-[13px]">
         <GroupIcon bucket={bucket} by={display.columns} />
-        {/* .raj/linear.md "Columns": the name 13px/500 fg-2, the count 13px/450 fg-3. */}
+        {/* Linear's column heading: the name 13px/500 fg-2, the count 13px/450 fg-3. */}
         <Text variant="smallPlus" color="base" wrap="truncate" className="ml-0.5">
           {bucket.name}
         </Text>

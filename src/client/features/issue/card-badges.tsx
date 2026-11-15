@@ -1,4 +1,4 @@
-/** The board card's and list row's link, pull request, comment and creator badges (Linear's `mt`, `mhn`; .raj/linear.md "Board card"). */
+/** The board card's and list row's link, pull request and sub-issue badges (Linear's `mt`, `mhn`). */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { QueryObserver } from "@tanstack/query-core";
 import { Avatar } from "@/client/components/avatar";

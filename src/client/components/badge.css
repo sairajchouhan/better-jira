@@ -2,7 +2,7 @@
 @layer properties, theme, base, components, utilities;
 
 @layer components {
-  /* Linear's badge `QB` (startup-root.CnUSfl4j.js, styles `eV`, `c1t`, `l1t`/`u1t`, `s1t`, `f1t`; .raj/linear.md "Board card"):
+  /* Linear's badge `QB` (startup-root.CnUSfl4j.js, styles `eV`, `c1t`, `l1t`/`u1t`, `s1t`, `f1t`):
      the one pill for every property on a board card or list row. 24px, radius 48, thinPixel bgBorderSolid border on bgBase,
      8px sides with text and 4.5px around a lone icon, 112px wide at most (224px from a 1400px window). */
   .ui-badge {

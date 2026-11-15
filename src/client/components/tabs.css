@@ -2,7 +2,7 @@
 @layer properties, theme, base, components, utilities;
 
 @layer components {
-  /* Linear's header view tabs (.raj/linear.md "Tabs", computed styles): 28px pills, 0 10px, 12px/500, a 0.5px ring. */
+  /* Linear's header view tabs (computed styles): 28px pills, 0 10px, 12px/500, a 0.5px ring. */
   /* The rings, one definition: a thinPixel ring over shadowLow, the selected tab's ring alone. Declared on the list, so
      inside a popup each reads the surface's elevated colours (control-tokens.css [data-elevation]). Header tabs ring
      both states with bgBorderAlphaThin. */

@@ -2,8 +2,8 @@
 @layer properties, theme, base, components, utilities;
 
 /*
- * A board column's backdrop and its "Add new issue" pill, from Linear's IssueList.CUOYX8Am.js (.raj/linear.md
- * "Board colours"). Linear draws no background on the column itself (`Ku.boardClusterWrapper` is `inherit`):
+ * A board column's backdrop and its "Add new issue" pill, from Linear's IssueList.CUOYX8Am.js.
+ * Linear draws no background on the column itself (`Ku.boardClusterWrapper` is `inherit`):
  * - the header strip (`Yu.headerColumnBackground`) is bgSub at .4, 46px, 5px top corners;
  * - the body (`lu.columnBackgroundWrapper`, an `::after`) is `linear-gradient(bgSub/.4, bgSub/.1)` that starts 46px up,
  *   at the header's top, so the gradient runs over the whole column and the header covers its first 46px.

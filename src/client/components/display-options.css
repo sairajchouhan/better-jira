@@ -2,7 +2,7 @@
 @layer properties, theme, base, components, utilities;
 
 /* Linear's ViewOptions styles (`D4`, CSS module `_1koer_`, startup-root.CnUSfl4j.js), read in the elevated scope of
-   the popover around them. Measured on linear.app 2026-11-13: .raj/qa/display-menu.md. */
+   the popover around them. Measured on linear.app 2026-11-13. */
 @layer components {
   /* Exr: 300 wide inside the popover's border, 8px above the first section. */
   .ui-vo {

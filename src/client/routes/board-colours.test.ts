@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 
 /**
- * The board's surfaces against Linear's generateTheme (startup-root.CnUSfl4j.js) and IssueList.CUOYX8Am.js
- * (.raj/linear.md "Board colours"). The theme maths below is the bundle's, on its presets; the tokens must equal it.
+ * The board's surfaces against Linear's generateTheme (startup-root.CnUSfl4j.js) and IssueList.CUOYX8Am.js.
+ * The theme maths below is the bundle's, on its presets; the tokens must equal it.
  */
 const read = async (path: string) =>
   (await Bun.file(new URL(path, import.meta.url)).text()).replace(/\/\*[\s\S]*?\*\//g, "");

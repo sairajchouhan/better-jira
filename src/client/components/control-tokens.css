@@ -1,6 +1,6 @@
 /*
  * Linear theme colours the shared primitives need and index.css has no token for. Each comes from `generateTheme` in
- * startup-root.CnUSfl4j.js with the presets in .raj/linear.md (light base [97.94, 0.5, 282], dark base [5.52, 0.4, 272]).
+ * startup-root.CnUSfl4j.js with the presets (light base [97.94, 0.5, 282], dark base [5.52, 0.4, 272]).
  * The layer statement repeats Tailwind's order so a primitive's `@layer components` never lands ahead of preflight,
  * whichever stylesheet the bundle loads first; callers' utility classes still win over a primitive's defaults.
  */
@@ -54,7 +54,7 @@
 
 /*
  * Tokens the base theme has and index.css lacks, so a primitive can name them; `[data-elevation]` repoints them.
- * Values: generateTheme's base theme (live linear.app theme objects, .raj/qa/display-menu.md).
+ * Values: generateTheme's base theme (live linear.app theme objects).
  */
 :root {
   --control-secondary-selected: lch(94.854% 0.157 282); /* controlSecondarySelected */
@@ -183,7 +183,7 @@
  * menu theme (l+8, 12.72). The box (`jY.content`, `Tu.bgBorder`) is that theme's bgBase with a thinPixel bgBorderThin
  * border, shadowHigh and radius 12; the overlay is the base theme's bgModalOverlay. menu-surface.tsx stamps it
  * `data-elevation="dialog"`. Light's elevated theme equals its menu theme (both clamp to bgBase 100), so only dark
- * repoints anything. Values: Linear's own generateTheme run on the presets (.raj/linear.md, "Dialogs").
+ * repoints anything. Values: Linear's own generateTheme run on the presets.
  * The editor's file block (`cBe`) wraps itself in the same `w_`, so FileMedia stamps `data-elevation="dialog"` too.
  */
 @media (prefers-color-scheme: dark) {
