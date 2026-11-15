@@ -58,7 +58,6 @@ import {
   toggleRead,
   undoInbox,
 } from "@/client/features/inbox/inbox";
-import { boardIssues } from "@/client/state/board-issues";
 
 type State = ReturnType<typeof get>;
 type Shortcut = {
