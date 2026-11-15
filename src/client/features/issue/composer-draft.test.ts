@@ -27,8 +27,11 @@ const held: Record<string, Issue> = {
 };
 const lookup = (key: string) => held[key];
 
-test("BJ-256: switching board drops the epic, Linear's project, and keeps a parent issue", () => {
+test("BJ-256: switching board drops an epic the new board can't hold (Linear's project outside the new team), keeps one it can, and keeps a parent issue", () => {
+  expect(switchBoard({ board: 1, parent: "P-1", title: "T" }, 1, 2, lookup, [Q])).toEqual({ board: 2, title: "T" });
   expect(switchBoard({ board: 1, parent: "P-1", title: "T" }, 1, 2, lookup)).toEqual({ board: 2, title: "T" });
+  // Two boards on the same Jira project: the epic still fits (Linear's `accessibleTeams.contains(team)`).
+  expect(switchBoard({ board: 1, parent: "P-1", title: "T" }, 1, 2, lookup, [Q, P])).toEqual({ board: 2, parent: "P-1", title: "T" });
   expect(switchBoard({ board: 1, parent: "Q-2" }, 1, 2, lookup)).toEqual({ board: 2, parent: "Q-2" });
 });
 

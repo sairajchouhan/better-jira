@@ -89,7 +89,8 @@ test("BJ-24: a board added in the app can be removed again; setup's boards stay"
 });
 
 test("Ship should-fix: a board's project is its configuration's location, in either of Jira's field names; none outside a project", () => {
-  expect(boardProject({ type: "project", key: "EMP", name: "Empty project" })).toEqual({ key: "EMP", name: "Empty project" });
+  // The shape GET /rest/agile/1.0/board/{id}/configuration returns (read on a real board, 2026-11-15).
+  expect(boardProject({ type: "project", key: "EMP", id: "10001", name: "Empty project" })).toEqual({ key: "EMP", name: "Empty project" });
   expect(boardProject({ type: "project", projectKey: "EMP", projectName: "Empty project" })).toEqual({ key: "EMP", name: "Empty project" });
   expect(boardProject({ type: "user", name: "Someone" })).toBeNull();
   expect(boardProject(undefined)).toBeNull();

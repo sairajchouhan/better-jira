@@ -163,6 +163,13 @@ function PendingRelation({ related, remove }: { related: NonNullable<IssueDraft[
   );
 }
 
+/** The Jira projects board `id` creates in, read when the composer moves to it. */
+const boardProjects = (id: number) =>
+  projectChoices(
+    [...get().issues.values()].filter((i) => i.board === id),
+    get().boards.find((b) => b.id === id),
+  );
+
 export function CreateIssue() {
   const boards = useStore(s => s.boards);
   const currentBoard = useStore(s => s.board);
@@ -401,7 +408,7 @@ export function CreateIssue() {
               value={board.name}
               icon={<Icon name="board" size={14} />}
               menu={ComposerBoardMenu}
-              menuProps={{ boards, value: board.id, onChange: (to: number) => setDraft((d) => switchBoard(d, board.id, to, (key) => get().issues.get(key))) }}
+              menuProps={{ boards, value: board.id, onChange: (to: number) => setDraft((d) => switchBoard(d, board.id, to, (key) => get().issues.get(key), boardProjects(to))) }}
             />
             <Icon name="chevron" size={10} />
             <Text variant="mini" color="inherit" className="text-fg">

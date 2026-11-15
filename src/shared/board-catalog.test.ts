@@ -163,9 +163,12 @@ test("people outside the team are listed only from the second typed character", 
   expect(listsOtherPeople("jo")).toBe(true);
 });
 
-test("Ship should-fix: a board's projects start with its own, so an empty board has one", () => {
-  const own = { key: "EMP", name: "Empty project" };
+test("Ship should-fix: an empty board offers its own project; a board that shows it leads with it; one that doesn't never offers it", () => {
+  const own = { key: "EMP", name: "Empty project" },
+    oth = { project: { key: "OTH", name: "Other" } } as Issue;
   expect(projectChoices([], { project: own })).toEqual([own]);
-  expect(projectChoices([{ project: { key: "OTH", name: "Other" } } as Issue], { project: own }).map((p) => p.key)).toEqual(["EMP", "OTH"]);
+  expect(projectChoices([oth, { project: own } as Issue], { project: own }).map((p) => p.key)).toEqual(["EMP", "OTH"]);
+  // The board's filter doesn't show its location's project: a new issue there would vanish from the board.
+  expect(projectChoices([oth], { project: own }).map((p) => p.key)).toEqual(["OTH"]);
   expect(projectChoices([], { project: null })).toEqual([]);
 });
