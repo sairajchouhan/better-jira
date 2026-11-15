@@ -42,6 +42,8 @@ import { get, useStore, issueBoardId, issueBoard } from "@/client/state/store";
 import { actions } from "@/client/state/issue-actions";
 import { ui } from "@/client/features/navigation/app-navigation";
 import { AppLink, IssueKeyLink } from "@/client/features/navigation/app-link";
+import { openInNewTabOnMiddleClick } from "@/client/features/navigation/middle-click";
+import { appURL } from "./issue-urls";
 import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { Avatar } from "@/client/components/avatar";
 import { statusById } from "@/shared/board-catalog";
@@ -716,6 +718,8 @@ function SubIssueRow({
       data-context-only={contextOnly || undefined}
       className={`group relative -ml-1.5 flex min-h-9 items-center gap-px rounded-lg pr-1 hover:bg-(--row-hover) ${active ? "bg-(--row-hover)" : ""}`}
       style={{ paddingLeft: 31 + depth * 24 }}
+      // Middle-click anywhere on the row opens the sub-issue in a new tab; its title link opens its own address.
+      onAuxClick={openInNewTabOnMiddleClick(() => appURL(child))}
       onContextMenu={(event) => {
         event.preventDefault();
         openMenu(event.currentTarget, {

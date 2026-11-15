@@ -41,6 +41,8 @@ import { loadFull } from "@/client/state/server-data";
 import { navigate, preloadOnHover, ui } from "@/client/features/navigation/app-navigation";
 import { followPeek, togglePeek } from "@/client/features/views/view-peek-state";
 import { movedPointer } from "@/client/components/pointer-intent";
+import { openInNewTabOnMiddleClick } from "@/client/features/navigation/middle-click";
+import { appURL } from "@/client/features/issue/issue-urls";
 import {
   myIssuesBoard,
   boardColumns,
@@ -690,6 +692,8 @@ function IssueTarget({
       onPointerMove={(e) => movedPointer(e) && followPeek(issue.key)}
       // Leaving a card never closes the peek: Linear skips its mouse-leave deactivate while a peek is mounted.
       onPointerLeave={() => preloadOnHover(null)}
+      // Middle-click opens the issue's page in a new tab, as Linear's row links do; ⌘-click stays the list's.
+      onAuxClick={openInNewTabOnMiddleClick(() => appURL(issue))}
       onClick={(e) =>
         own(e) &&
         timed(`open ${issue.key}`, () => {
