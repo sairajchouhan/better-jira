@@ -811,7 +811,8 @@ export function selectIssues(
   const lookup = lookupIn(all);
   const items = all.filter(
     (i) =>
-      (acrossBoards || onBoard(i, board.id)) &&
+      // My issues and a person's page reach across boards, but an issue kept on no board (BJ-341) is in no list: it opens by key.
+      (acrossBoards ? i.boards.length > 0 : onBoard(i, board.id)) &&
       (d.subIssues || !parentOf(i, lookup)) &&
       (statusById(board, i.status)?.category !== "done" || d.completedIssues === "all" ||
         (d.completedIssues !== "none" && Date.parse(i.resolved ?? i.statusSince ?? "") >=

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { commentAnchor, unreadCount, type InboxItem } from "@/shared/inbox-model";
 import { clearedComments, visitClears } from "@/shared/inbox-visit";
 import { statusOf as issueStatusOf, get, set, useStore, issueBoardId } from "@/client/state/store";
-import { queryClient } from "@/client/state/server-data";
+import { keepIssue, queryClient } from "@/client/state/server-data";
 import { navigate, router, showAnchor, ui } from "@/client/features/navigation/app-navigation";
 import { createInboxStore, type Category, type DeleteConfirmation, type Feed } from "@/client/state/inbox-store";
 import type { InfiniteData } from "@tanstack/query-core";
@@ -55,6 +55,38 @@ const subscribeConfirmation = (l: () => void) => (
 export const useConfirmation = () =>
   useSyncExternalStore(subscribeConfirmation, () => confirmation);
 
+/** Opens a row: its issue beside the list, or the notification itself while its issue is not in the mirror. */
+function openInboxRow(item: InboxItem, open: "side" | "page") {
+  const issue = get().issues.get(item.key);
+  if (issue) {
+    keepRowInUrl(null);
+    navigate({
+      board: issueBoardId(issue),
+      selected: issue.key,
+      panel: true,
+      view: open,
+      inbox: true,
+    });
+    // A comment notification opens the issue at its comment, as Jira's link does (`focusedCommentId`).
+    const anchor = commentAnchor(item);
+    if (anchor) requestAnimationFrame(() => showAnchor(anchor));
+  } else {
+    navigate({ selected: null, panel: false, inbox: true });
+    keepRowInUrl(item.id);
+    // An issue on no board opens here once the mirror keeps it (BJ-341); the notification shows meanwhile, and stays when
+    // Jira has no such issue. A row chosen since wins.
+    void keepIssue(item.key).then((issue) => {
+      const search = router.latestLocation.search as Record<string, string | undefined>;
+      if (issue && search[ROW_PARAM] === item.id) openInboxRow(item, open);
+    });
+  }
+  requestAnimationFrame(() =>
+    document
+      .querySelector(`[data-inbox-row="${CSS.escape(item.id)}"]`)
+      ?.scrollIntoView({ block: "nearest" }),
+  );
+}
+
 export const inbox = createInboxStore({
   queryClient,
   get,
@@ -83,30 +115,7 @@ export const inbox = createInboxStore({
       );
     return res.json();
   },
-  openRow: (item, open) => {
-    const issue = get().issues.get(item.key);
-    if (issue) {
-      keepRowInUrl(null);
-      navigate({
-        board: issueBoardId(issue),
-        selected: issue.key,
-        panel: true,
-        view: open,
-        inbox: true,
-      });
-      // A comment notification opens the issue at its comment, as Jira's link does (`focusedCommentId`).
-      const anchor = commentAnchor(item);
-      if (anchor) requestAnimationFrame(() => showAnchor(anchor));
-    } else {
-      navigate({ selected: null, panel: false, inbox: true });
-      keepRowInUrl(item.id);
-    }
-    requestAnimationFrame(() =>
-      document
-        .querySelector(`[data-inbox-row="${CSS.escape(item.id)}"]`)
-        ?.scrollIntoView({ block: "nearest" }),
-    );
-  },
+  openRow: openInboxRow,
   shown: () => get().inbox,
   fullPage: () => {
     const s = get();

@@ -159,6 +159,17 @@ export async function loadFull(key: string, force = false) {
   }
 }
 const fullPath = (key: string) => `/api/issues/${encodeURIComponent(key)}`;
+/** An issue the tab lacks, opened by key (an inbox row): reading it has the mirror keep it on no board (server mirror.ts
+ *  `kept`, as Linear's `hydrateModel` loads a model its sync didn't bring), and the poll then brings it here (BJ-341).
+ *  Undefined when Jira has no such issue or can't be reached. */
+export async function keepIssue(key: string): Promise<Issue | undefined> {
+  if (!get().issues.has(key)) {
+    const response = await fetch(fullPath(key)).catch(() => undefined);
+    if (!response?.ok) return undefined;
+    await poll.refetch();
+  }
+  return get().issues.get(key);
+}
 /** Loads an issue's Jira record and keeps local field edits on top. The first read after a cold load takes the preloaded
  *  record when it is this issue's, and drops it otherwise, so a later read never gets an old answer. */
 async function fetchFull(key: string) {
@@ -169,6 +180,9 @@ async function fetchFull(key: string) {
 /** Linear's PageDataPreloader (`preloadTargetForPath`, `registerPreload`): an issue page opened cold starts that issue's
  *  record alongside the app's own load, instead of after it, so the issue's first read usually finds it arrived. */
 let preloaded: { key: string; record: Promise<Full> } | undefined;
+/** Whether the preloaded read of `key` found the issue: one no board holds is in the mirror once it has (BJ-341). */
+export const preloadFound = (key: string) =>
+  preloaded?.key === key ? preloaded.record.then(() => true, () => false) : Promise.resolve(false);
 export function preloadFull(key: string) {
   const record = json<Full>(fullPath(key));
   record.catch(() => {}); // the issue's own read reports it

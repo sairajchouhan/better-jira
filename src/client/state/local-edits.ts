@@ -167,9 +167,11 @@ export function mergeProperties(entries: Record<string, any>) {
       extra.attachments = aliasAttachments(key, extra.attachments, issue?.attachments);
     else delete extra.attachments;
     if (!issue) {
-      // A new Jira issue; with local-only editing, a missing key may be a local delete.
-      // While a create is in flight its new key may arrive here first; the write's answer adds it with the local fields intact.
-      if (state.writable && !changedKeys.has(key) && extra.key === key && !creatingIssue()) {
+      // A new Jira issue, a board's next page on its first sync (BJ-338), or one kept on no board (BJ-341), in every tab:
+      // local-only editing too. A missing key with a local change is a local delete (undo-history `record` marks it), and
+      // stays deleted. While a create is in flight its new key may arrive here first; the write's answer adds it with the
+      // local fields intact.
+      if (!changedKeys.has(key) && extra.key === key && !creatingIssue()) {
         issues.set(key, extra);
         changed = true;
         lastProperties.set(key, signature);

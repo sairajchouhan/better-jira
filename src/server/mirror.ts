@@ -142,9 +142,32 @@ const save = db.transaction((board: number, issues: any[], seen: number) => {
   }
   return changed;
 });
-/** Saves an issue Jira returned, for the boards already holding it; never changes which boards those are. */
+/** Saves an issue Jira returned, for the boards already holding it; never changes which boards those are. One no board holds
+ *  is kept on none. */
 const saveContent = (raw: any) =>
   store.put({ key: raw.key, slim: slimOf(raw, store.boardsOf(raw.key)), full: raw });
+
+const keeping = new Map<string, Promise<boolean>>();
+/** Whether the mirror has the issue, reading it from Jira the first time something asks for it by key (a link, a parent, the
+ *  inbox, an issue address): an issue no board holds is then kept on none, as Linear's `hydrateModel` loads a model its sync
+ *  didn't bring and keeps it. False when Jira has no such issue, or hides it from this account. */
+function kept(key: string): Promise<boolean> {
+  if (store.updated(key)) return Promise.resolve(true);
+  let read = keeping.get(key);
+  if (!read) {
+    read = jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=${projection.fields}`)
+      .then(
+        (raw) => (saveContent(raw), true),
+        (error) => {
+          if ((error as { status?: number }).status === 404) return false;
+          throw error;
+        },
+      )
+      .finally(() => keeping.delete(key));
+    keeping.set(key, read);
+  }
+  return read;
+}
 
 const page = (board: number, jql: string, startAt: number) =>
   jira(
@@ -385,7 +408,8 @@ async function watchOpenIssues() {
     await Bun.sleep(OPEN_ISSUE_POLL_MS);
     let changed = false;
     for (const key of new Set([...live.clients].flatMap((c) => (c.issue ? [c.issue] : [])))) {
-      // An issue no board holds isn't kept, so it isn't followed either.
+      // Only issues the mirror has: one it lacks is read when something asks for it by key (`kept`), never by this poll, which
+      // would ask Jira for an unsaved draft's key every few seconds.
       const updated = store.updated(key);
       if (!updated) continue;
       try {
@@ -533,9 +557,9 @@ const details = detailCache(db, async (key) => {
   }
   return detail;
 });
-export const issue = details.read;
-/** The issue's whole Jira changelog for its Activity, read apart from the details so it never holds up their first paint. */
-export const history = historyCache(
+/** The issue's details; one the mirror lacks is read and kept first (`kept`). Undefined when Jira has no such issue. */
+export const issue = async (key: string) => ((await kept(key)) ? details.read(key) : undefined);
+const histories = historyCache(
   db,
   (key) => readHistory(jira, key),
   (key) =>
@@ -545,6 +569,8 @@ export const history = historyCache(
       )
       .get(key)?.updated,
 );
+/** The issue's whole Jira changelog for its Activity, read apart from the details so it never holds up their first paint. */
+export const history = async (key: string) => ((await kept(key)) ? histories(key) : undefined);
 /** The issue's pull requests from Jira's development panel and from GitHub, one per URL, read when a card's pull request badge
  *  asks. Jira's list also settles the issue's count where both link the same pull request. When Jira can't answer, GitHub's stand. */
 export async function pullRequests(key: string) {
@@ -577,11 +603,11 @@ export async function refresh(
     }
     throw error;
   }
-  // `board` is the board the tab shows the issue on: it places a new issue made there. An issue no board holds (one linked
-  // from a board issue) is on none: it is answered to the tab but not kept.
+  // `board` is the board a new issue was made on (jira-writes.ts sends it for a create only): it starts there. An issue no
+  // board holds (one linked from a board issue) is kept on none.
   if (board !== undefined) store.claim(raw.key, board, BOARDS);
   const held = store.boardsOf(raw.key);
-  if (held.length) saveContent(raw);
+  saveContent(raw);
   db.query("DELETE FROM issue_details WHERE key = ?").run(raw.key);
   const [full, w] = await Promise.all([details.read(raw.key, true), watching]),
     issue = { boards: BOARDS.filter((b) => held.includes(b)), ...slimOf(raw, held) };

@@ -94,6 +94,9 @@ describe("view selection", () => {
         (i) => i.key,
       ),
     ).toEqual(["A-4", "A-2", "A-3", "A-1"]);
+    // BJ-341: an issue kept on no board (a linked issue opened once) is in no list, not even across boards for My issues.
+    const kept = issue("OTHER-9", { boards: [], assignee: { id: "me", name: "Me" } });
+    expect(selectIssues([...all, kept], board, prefs, true, "", "me", now, true).map((i) => i.key)).toEqual(["A-1"]);
     // An issue another board holds too is on this one as well.
     expect(
       selectIssues([...all, issue("S-1", { boards: [2, 1] })], board, prefs, false, "", "me", now).map((i) => i.key),

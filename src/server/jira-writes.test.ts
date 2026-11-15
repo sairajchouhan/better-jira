@@ -788,3 +788,13 @@ test("Ship should-fix: a create with no type, or under an epic, takes the projec
   await applyOps("STORY-NEW2", [{ op: "create", fields: { summary: "In an epic", project: "STORY", parent: "STORY-9" } }]);
   expect(created).toEqual([{ name: "Story" }, { name: "Story" }]);
 });
+
+test("BJ-341: the board a tab sends places only a new issue; an edit to an issue no board holds leaves it on none", async () => {
+  answer = jiraAnswers;
+  const boards: unknown[] = [];
+  refreshing = (_key, board) => (boards.push(board), turn(() => undefined));
+  await applyOps("OTHER-1", [{ op: "fields", fields: { summary: "Renamed" } }], 3);
+  await applyOps("K-NEW9", [{ op: "create", fields: { summary: "S", project: "K" }, client: "K-NEW9@t" }], 3);
+  expect(boards).toEqual([undefined, 3]);
+  refreshing = () => turn(() => undefined);
+});

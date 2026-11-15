@@ -672,7 +672,8 @@ export async function applyOps(
   }
   error ??= ctx.warning;
   const reads = Promise.all([
-    settle ? refresh(ctx.key, board).catch(() => undefined) : undefined,
+    // The board places only a new issue (issue-store.ts `claim`): an edit to an issue no board holds must not put it on one.
+    settle ? refresh(ctx.key, ops.some((op) => op.op === "create") ? board : undefined).catch(() => undefined) : undefined,
     ...[...ctx.touched].map((other) => refresh(other).catch(() => undefined)),
   ]);
   // Jira has the write: a slow read of its copy (a rate limit, a slow Jira) doesn't keep the tab saying "Sending". The read

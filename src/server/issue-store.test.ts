@@ -109,3 +109,19 @@ test("an issue's JSON carries its boards", () => {
   expect(JSON.parse(withBoards('{"key":"A-1"}', [2, 1]))).toEqual({ boards: [2, 1], key: "A-1" });
   expect(JSON.parse(withBoards("{}", []))).toEqual({ boards: [] });
 });
+
+test("BJ-341: an issue no board holds, once read, is kept on none: listed with no boards, and no board's sweep removes it", () => {
+  const store = issueStore(fresh());
+  sync(store, 1, "TEAM-1", 100);
+  // A linked issue in another project, read when something asked for it by key: content only.
+  store.put({ key: "OTHER-9", slim: { key: "OTHER-9", updated: "u" }, full: raw("OTHER-9") });
+  expect(listed(store, [1])).toEqual({ "TEAM-1": [1], "OTHER-9": [] });
+  expect(store.propertyRows([1]).map((r) => r.key).sort()).toEqual(["OTHER-9", "TEAM-1"]);
+  expect(store.count(1)).toBe(1);
+  // Board 1's full sync finds neither: TEAM-1 just left its last board and goes; OTHER-9 was never the board's.
+  expect(store.sweep(1, 200)).toBe(1);
+  expect(listed(store, [1])).toEqual({ "OTHER-9": [] });
+  // Jira deleting it is what removes it.
+  store.remove("OTHER-9");
+  expect(listed(store, [1])).toEqual({});
+});

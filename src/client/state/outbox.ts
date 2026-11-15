@@ -19,7 +19,8 @@ import type { LocalChange } from "./local-data";
 /** `hold`: a status change waits until then, so rapid changes reach Jira as one transition (R2-issue-fields-D13). */
 type Job = {
   key: string;
-  board: number;
+  /** The board a new issue was made on; none for an issue no board holds. */
+  board?: number;
   ops: Op[];
   started?: boolean;
   cancelled?: boolean;
@@ -142,7 +143,6 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
   }
 
   function holdCommentDeletes(key: string, board: number | undefined, ops: Op[]): Op[] {
-    if (board === undefined) return ops;
     return ops.filter((op) => {
       if (op.op === "comment" && heldDeletes.has(op.ref)) {
         clock.clearTimeout(heldDeletes.get(op.ref));
@@ -490,7 +490,8 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
         }
       for (const job of jobs) job.ops = holdCommentDeletes(job.key, job.board, job.ops);
       for (const { key, board, ops } of jobs) {
-        if (!ops.length || board === undefined) continue;
+        // An issue no board holds (one linked from a board issue) has no board, and its edits still go to Jira (BJ-341).
+        if (!ops.length) continue;
         // Ops naming an issue whose create is still queued must run after that create, so they never fold into an earlier job.
         const text = JSON.stringify(ops),
           afterCreate = outbox.some(

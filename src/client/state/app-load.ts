@@ -11,7 +11,7 @@ import {
   resumeSync,
   unsentWrites,
 } from "./jira-sync";
-import { fetchJson, loadFull, onServerEvent, preloadFull, queryClient, startPoll } from "./server-data";
+import { fetchJson, loadFull, onServerEvent, preloadFound, preloadFull, queryClient, startPoll } from "./server-data";
 import {
   flushLocalChanges,
   localDataBlocked,
@@ -78,11 +78,16 @@ async function loadApplication() {
   const namespace = `${client.site}/${client.user.id}`;
   scopePreferences(namespace);
   // Views load with the issues, so a view route paints as the view, never the plain board first.
-  const [boards, remote, savedViews] = await Promise.all([
+  const [boards, listed, savedViews] = await Promise.all([
     fetchJson<Board[]>("/api/boards"),
     fetchJson<Issue[]>("/api/issues"),
     loadSavedViews(),
   ]);
+  // The address names an issue no board holds: its preloaded read had the mirror keep it, so it is in the list read after.
+  const remote =
+    opened && !listed.some((i) => i.key === opened) && (await preloadFound(opened))
+      ? await fetchJson<Issue[]>("/api/issues")
+      : listed;
   // A board shows once its first sync has read every issue; until then say how far it has got, or why it can't.
   if (!boards.length) {
     const health = await fetchJson<SyncHealth>("/api/sync");

@@ -655,3 +655,10 @@ test("R3-palette-shortcuts-D7: a write Jira has but whose copy was slow to read 
   await g.advance(0);
   expect(g.answers.map((a) => a.ops.length)).toEqual([1, 1]);
 });
+
+test("BJ-341: an edit to an issue no board holds (one linked from a board issue) goes to Jira, without a board to place it", async () => {
+  const h = harness();
+  h.send(edit(issue("OTHER-1", { boards: [] }), { priority: "High" }));
+  await h.advance(0);
+  expect(h.sent).toEqual([{ key: "OTHER-1", at: 0, ops: [{ op: "fields", fields: { priority: "High" } }] }]);
+});

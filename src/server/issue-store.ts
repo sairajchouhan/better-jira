@@ -5,6 +5,10 @@ import type { Database } from "bun:sqlite";
  * squad board over one project share issues), so membership is many-to-many: one row per issue and board, written only when that
  * board's sync reads the issue and swept by that board's full sync. An issue's content is one row however many boards hold it.
  *
+ * An issue no board holds (one linked from a board issue, a parent in another project, one the inbox names) is kept as content
+ * with no membership once something asks for it by key, as Linear hydrates a model its sync didn't bring (`hydrateModel`). It
+ * is listed with `boards: []`, so it opens anywhere but sits on no board, and it leaves when Jira deletes it.
+ *
  * This is the one place membership is decided. Reads send each issue with `boards`: the configured boards that hold it, in the
  * sidebar's order.
  */
@@ -27,18 +31,19 @@ export function issueStore(db: Database) {
   );
   const boardsOf = (key: string) => boardsOfKey.all(key).map((r) => r.board);
   const inList = (boards: readonly number[]) => boards.map((b) => Number(b)).filter(Number.isFinite).join(",") || "NULL";
-  /** Each issue on one of `boards`, with the boards that hold it in `boards`' order. */
+  /** Each issue on one of `boards`, and each kept on no board, with the boards that hold it in `boards`' order. */
   const listed = <Row extends { key: string; slim: string }>(boards: readonly number[], columns: string, join = "") => {
     const order = new Map(boards.map((b, i) => [b, i]));
     return db
-      .query<Row & { held: string }, []>(
+      .query<Row & { held: string | null }, []>(
         `SELECT ${columns}, (SELECT group_concat(m.board) FROM issue_boards m WHERE m.key = i.key AND m.board IN (${inList(boards)})) AS held
-         FROM issues i ${join} WHERE i.key IN (SELECT key FROM issue_boards WHERE board IN (${inList(boards)}))`,
+         FROM issues i ${join}
+         WHERE i.key IN (SELECT key FROM issue_boards WHERE board IN (${inList(boards)}))
+            OR NOT EXISTS (SELECT 1 FROM issue_boards m WHERE m.key = i.key)`,
       )
       .all()
       .map(({ held, ...row }) => {
-        const on = held
-          .split(",")
+        const on = (held ? held.split(",") : [])
           .map(Number)
           .sort((a, b) => order.get(a)! - order.get(b)!);
         return { ...(row as unknown as Row), slim: withBoards(row.slim, on) };
@@ -57,7 +62,8 @@ export function issueStore(db: Database) {
       if (!configured.includes(board) || boardsOf(key).some((b) => configured.includes(b))) return;
       see.run(key, board, Date.now());
     },
-    /** Saves the issue's content when it is new or no older than the saved copy. The caller says which boards hold it first. */
+    /** Saves the issue's content when it is new or no older than the saved copy. A board's sync says first that the board holds
+     *  it (`see`); saved alone, an issue no board holds is kept on none. */
     put(row: { key: string; slim: unknown; full: unknown }) {
       upsert.run({ key: row.key, slim: JSON.stringify(row.slim), full: JSON.stringify(row.full) });
     },
@@ -68,13 +74,16 @@ export function issueStore(db: Database) {
     /** How many issues the mirror has on the board. */
     count: (board: number) =>
       db.query<{ n: number }, [number]>("SELECT count(*) AS n FROM issue_boards WHERE board = ?").get(board)!.n,
-    /** After a full sync of `board` that started at `since`: issues it no longer holds leave it, and an issue no board holds
-     *  any more leaves the mirror. Returns how many left the board. */
+    /** After a full sync of `board` that started at `since`: issues it no longer holds leave it, and one that just left its last
+     *  board leaves the mirror. Issues kept on no board aren't this board's to sweep. Returns how many left the board. */
     sweep(board: number, since: number) {
       return db.transaction(() => {
-        const gone = db.query("DELETE FROM issue_boards WHERE board = ? AND seen < ?").run(board, since).changes;
-        db.run("DELETE FROM issues WHERE key NOT IN (SELECT key FROM issue_boards)");
-        return gone;
+        const gone = db
+          .query<{ key: string }, [number, number]>("DELETE FROM issue_boards WHERE board = ? AND seen < ? RETURNING key")
+          .all(board, since);
+        const orphan = db.query("DELETE FROM issues WHERE key = $key AND NOT EXISTS (SELECT 1 FROM issue_boards WHERE key = $key)");
+        for (const { key } of gone) orphan.run({ key });
+        return gone.length;
       })();
     },
     /** Jira deleted the issue. */
@@ -91,8 +100,8 @@ export function issueStore(db: Database) {
           "SELECT i.key, i.slim, i.full FROM issues i JOIN issue_boards m ON m.key = i.key WHERE m.board = ?",
         )
         .all(board),
-    /** Every issue on the configured `boards`, as JSON with its `boards`. Issues only on other boards (removed from the sidebar)
-     *  and issues on none are left out. */
+    /** Every issue on the configured `boards`, and every issue kept on no board, as JSON with its `boards`. Issues only on other
+     *  boards (removed from the sidebar, until the next start forgets them) are left out. */
     slims: (boards: readonly number[]) => listed<{ key: string; slim: string }>(boards, "i.key, i.slim").map((r) => r.slim),
     /** The same issues with what enrichment stored for them (see `propertyEntries`). */
     propertyRows: (boards: readonly number[]) =>
