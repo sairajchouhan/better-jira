@@ -41,7 +41,7 @@ import { useCommand } from "@/client/features/navigation/commands";
 import { get, useStore, issueBoardId, issueBoard } from "@/client/state/store";
 import { actions } from "@/client/state/issue-actions";
 import { ui } from "@/client/features/navigation/app-navigation";
-import { AppLink } from "@/client/features/navigation/app-link";
+import { AppLink, IssueKeyLink } from "@/client/features/navigation/app-link";
 import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { Avatar } from "@/client/components/avatar";
 import { statusById } from "@/shared/board-catalog";
@@ -106,20 +106,45 @@ type Boards = ReturnType<typeof get>["boards"];
 
 /** The line under an issue's title (BJ-289): the issue `titleParentOf` names, in its variant. A parent Task reads Linear's
  *  "Sub-issue of"; an epic reads "In epic", as an issue in an epic is not a sub-issue (the user's deviation from Linear). */
+/** The parent a board doesn't hold still gets its line, as Linear's sidebar hydrates a parent its sync didn't bring
+ *  (IssueDetailsPaneSidebar `hydrateModel`): its key links in-app, which keeps it first (BJ-354). Its title, status and
+ *  progress show once the mirror holds it. */
 export function TitleParentLine({ issue }: { issue: Issue }) {
   const all = useStore((s) => s.issues);
   const target = titleParentOf(issue, (key) => all.get(key));
-  const parent = target && all.get(target.key);
-  if (!target || !parent) return null;
-  return <ParentLine variant={target.variant} issue={issue} parent={parent} />;
+  if (!target) return null;
+  const parent = all.get(target.key),
+    words = PARENT_LINE[target.variant];
+  return (
+    <Text className="issue-parent-line" as="div" variant="small" color="inherit">
+      <span className="shrink-0 font-[450] text-fg-3">{words.label}</span>
+      {/* Text has no anchor variant; preserve link semantics and keyboard navigation. Linear's "Sub-issue of" link opens the
+          parent afresh (`resetBreadcrumb: true`). */}
+      <IssueKeyLink data-parent-link className="issue-parent-link" issueKey={target.key} trail={null}>
+        {parent ? <ParentLinkBody parent={parent} /> : <EntityIdentifier className="shrink-0 font-[450] text-fg-3">{target.key}</EntityIdentifier>}
+      </IssueKeyLink>
+      {parent && <ParentProgress variant={target.variant} issue={issue} parent={parent} />}
+    </Text>
+  );
 }
 
-/** One line for both variants: the variant's label (PARENT_LINE), the parent link, and a progress pill whose menu lists the
- *  parent's issues (⌘⇧→). Only the words differ. */
-function ParentLine({ variant, issue, parent }: { variant: TitleLineVariant; issue: Issue; parent: Issue }) {
+function ParentLinkBody({ parent }: { parent: Issue }) {
+  const boards = useStore((s) => s.boards);
+  return (
+    <>
+      <span className="grid size-3.5 shrink-0 place-items-center">
+        <StatusIcon status={statusOf(boards, parent)} />
+      </span>
+      <EntityIdentifier className="shrink-0 font-[450] text-fg-3">{parent.key}</EntityIdentifier>
+      <span className="truncate font-medium text-fg">{parent.summary}</span>
+    </>
+  );
+}
+
+/** The line's progress pill, whose menu lists the parent's issues (⌘⇧→). Both variants share it; only the words differ. */
+function ParentProgress({ variant, issue, parent }: { variant: TitleLineVariant; issue: Issue; parent: Issue }) {
   const all = useStore((s) => s.issues),
     boards = useStore((s) => s.boards),
-    parentBoard = useStore((s) => issueBoardId(parent, s)),
     [menu, setMenu] = useState<HTMLElement | null>(null),
     progress = useRef<HTMLButtonElement>(null);
   useCommand("open-parent-sub-issues", (key) => {
@@ -127,31 +152,11 @@ function ParentLine({ variant, issue, parent }: { variant: TitleLineVariant; iss
     setMenu(progress.current);
     return true;
   });
-  const words = PARENT_LINE[variant],
-    open = words.open(parent.key),
+  const open = PARENT_LINE[variant].open(parent.key),
     // Every level below, as the parent's Sub-issues section header counts (cached per snapshot, BJ-281).
     count = subIssueCount(all, boards, parent.key, "descendants");
   return (
-    <Text
-      className="issue-parent-line"
-      as="div"
-      variant="small"
-      color="inherit"
-    >
-      <span className="shrink-0 font-[450] text-fg-3">{words.label}</span>
-      {/* Text has no anchor variant; preserve link semantics and keyboard navigation. */}
-      <AppLink
-        data-parent-link
-        className="issue-parent-link"
-        // Linear's "Sub-issue of" link opens the parent afresh (`resetBreadcrumb: true`).
-        to={{ board: parentBoard, selected: parent.key, panel: true, trail: null }}
-      >
-        <span className="grid size-3.5 shrink-0 place-items-center">
-          <StatusIcon status={statusOf(boards, parent)} />
-        </span>
-        <EntityIdentifier className="shrink-0 font-[450] text-fg-3">{parent.key}</EntityIdentifier>
-        <span className="truncate font-medium text-fg">{parent.summary}</span>
-      </AppLink>
+    <>
       <SubIssueProgressButton
         ref={progress}
         data-parent-progress
@@ -166,7 +171,7 @@ function ParentLine({ variant, issue, parent }: { variant: TitleLineVariant; iss
       {menu && (
         <ChildrenMenu parent={parent} current={issue.key} anchor={menu} close={() => setMenu(null)} />
       )}
-    </Text>
+    </>
   );
 }
 

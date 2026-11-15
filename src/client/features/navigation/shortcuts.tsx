@@ -23,7 +23,7 @@ import { boardOf, get, isWatching, ME, set, useStore, type Overlay, issueBoardId
 import { actions, beginCreate, beginCreateInView } from "@/client/state/issue-actions";
 import { currentKey } from "@/client/state/jira-sync";
 import { redoEdit, undoEdit } from "@/client/state/undo-history";
-import { navigate, ui, pageURL } from "./app-navigation";
+import { navigate, openIssueByKey, ui, pageURL } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
 import { rankBetween } from "@/shared/view-model";
 import {
@@ -717,10 +717,11 @@ export const shortcuts: Shortcut[] = [
     issue: true,
     // Linear's OPEN_PARENT_ISSUE is applicable while the issue has a parent and opens it. Ours opens what the "Sub-issue of" line
     // names: the parent Task, else the epic (titleParentOf, BJ-289); an epic or an issue in neither has none, so it is hidden.
-    when: (s) => !!s.issues.get(titleParentIn(s, selected(s)) ?? ""),
+    // A parent no board holds opens too, kept first (BJ-354), as Linear's hydrates a parent its sync didn't bring.
+    when: (s) => !!titleParentIn(s, selected(s)),
     run: issueAction((i) => {
-      const parent = get().issues.get(titleParentIn(get(), i) ?? "");
-      if (parent) navigate({ board: issueBoardId(parent), selected: parent.key, panel: true });
+      const parent = titleParentIn(get(), i);
+      if (parent) openIssueByKey(parent);
     }),
   },
   {

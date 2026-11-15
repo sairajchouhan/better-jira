@@ -327,6 +327,30 @@ describe("BJ-247: an epic parent is the issue's Project, never its Parent", () =
     expect(up("E-4")).toBeNull();
   });
 
+  test("BJ-354: Open parent issue (⌘⇧↑) opens a parent no board holds here, keeping it first, never only when held", async () => {
+    const { shortcuts } = await import("@/client/features/navigation/shortcuts");
+    const open = shortcuts.find((s) => s.id === "parent-open")!;
+    setup();
+    ui.send({ type: "overlay.close" });
+    const orphan: Issue = { ...issue, key: "E-6", type: "Task", parent: "OFF-1" };
+    set({ issues: new Map([...get().issues, [orphan.key, orphan]]) });
+    navigate({ board: 1, selected: "E-6", panel: true, document: null, inbox: false, mine: false });
+    const asked: string[] = [],
+      realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      asked.push(String(input));
+      return new Response("{}", { status: 404 });
+    }) as typeof fetch;
+    try {
+      expect(open.when!(get(), get().issues.get("E-6"))).toBe(true);
+      open.run();
+      await Bun.sleep(20);
+      expect(asked).toContain("/api/issues/OFF-1");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
   test("a sub-issue can't be moved to a project group: that would take its parent issue away", async () => {
     const { actions } = await import("@/client/state/issue-actions");
     const child: Issue = { ...issue, key: "E-5", type: "Task", parent: "E-4" };

@@ -166,9 +166,10 @@ const fullPath = (key: string) => `/api/issues/${encodeURIComponent(key)}`;
  *  `kept`, as Linear's `hydrateModel` loads a model its sync didn't bring), and the poll then brings it here (BJ-341).
  *  Undefined when Jira has no such issue or hides it from this account: Jira answers both with a 404 ("does not exist or you
  *  do not have permission to see it"), and so does the server. Rejects when it can't be read now (Jira or the server
- *  unreachable), so a passing failure is never told as not found (BJ-355). Asks while one read is out share it. */
+ *  unreachable), so a passing failure is never told as not found (BJ-355). Asks while one read is out share it; the last
+ *  read's outcome is kept (`gcTime`), as `keptOutcome` reads it with no observer. */
 export async function keptIssue(key: string): Promise<Issue | undefined> {
-  if (!get().issues.has(key) && !(await queryClient.fetchQuery({ queryKey: keptKey(key), queryFn: () => readKept(key) })))
+  if (!get().issues.has(key) && !(await queryClient.fetchQuery({ queryKey: keptKey(key), queryFn: () => readKept(key), gcTime: Infinity })))
     return undefined;
   return get().issues.get(key);
 }
