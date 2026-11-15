@@ -67,11 +67,12 @@ This applies to every bug fix, every behaviour question, and whenever the user s
 - Build in big chunks, then one check pass.
 - Run servers in Rex, never as background shells. After each finished change, restart :3000 with `.raj/restart-3000.sh`. After a merge that adds files, make sure :3002 still returns 200.
 
-# Files in .raj (lead only)
+# Files in .raj
 
 - Write a file only when the user asks for it, or when a delegate needs it to start.
-- Delete a brief or report as soon as its work is merged.
-- `.raj` keeps only: next.md, park.md, prompts.md, linear-differences.md, restart-3000.sh, linear-bundle/, features/bundle-audit/ranked.md, qa/ (app.md, stories.md, jira.ts). Add nothing else unless the user asks.
+- Temporary docs (briefs, reports, scratch notes) go in `.raj/tmp/`, for the lead and delegates alike.
+- Delete a temporary doc as soon as its work is merged.
+- `.raj` keeps only: next.md, park.md, prompts.md, linear-differences.md, restart-3000.sh, linear-bundle/, features/bundle-audit/ranked.md, qa/ (app.md, stories.md, jira.ts), tmp/. Add nothing else unless the user asks.
 - next.md: only what the user asks to build, in their words. Never status or logs.
 - park.md: only what the user says to park.
 - ranked.md: open work found by the lead or delegates.
