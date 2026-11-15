@@ -1,3 +1,4 @@
+import { compareText } from "@/shared/compare";
 import { type Issue, type Board, type User } from "@/shared/issue-model";
 import { memo, useMemo, useRef, useState, type ReactNode } from "react";
 import { useStableCallback } from "@/client/lib/stable-callback";
@@ -147,8 +148,8 @@ export function filterChoices(
   const special = (c: Choice) => (c.value === "$none" ? 0 : c.value === "$me" ? 1 : 2);
   const order = (a: Choice, b: Choice) =>
     BY_RANK.includes(field)
-      ? priorityRank(a.label) - priorityRank(b.label) || a.label.localeCompare(b.label)
-      : a.label.localeCompare(b.label);
+      ? priorityRank(a.label) - priorityRank(b.label) || compareText(a.label, b.label)
+      : compareText(a.label, b.label);
   if (field !== "status" && field !== "projectStatus")
     out.sort((a, b) => special(a) - special(b) || (special(a) < 2 ? 0 : order(a, b)));
   // Counted against the board's issues, so an epic the other filters hide still names its issues' project; in one pass for

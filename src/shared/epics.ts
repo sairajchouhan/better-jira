@@ -1,3 +1,4 @@
+import { compareText } from "@/shared/compare";
 import type { Board, Issue, PropertyActivity } from "./issue-model";
 import { statusById } from "./board-catalog";
 
@@ -166,7 +167,7 @@ export function epicChoices(
       (a, b) =>
         (first(a.key) === first(b.key) ? 0 : first(a.key) < first(b.key) ? -1 : 1) ||
         Number(a.done) - Number(b.done) ||
-        a.name.localeCompare(b.name),
+        compareText(a.name, b.name),
     );
   return current && !epics.some((e) => e.key === current)
     ? [{ key: current, name: current, done: false }, ...epics]

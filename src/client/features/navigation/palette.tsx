@@ -1,3 +1,4 @@
+import { compareText } from "@/shared/compare";
 import { EntityIdentifier } from "@/client/components/entity-identifier";
 import { type Issue } from "@/shared/issue-model";
 import {
@@ -562,7 +563,7 @@ function IssueRows({
   if (!recent.length && !searches.length)
     return (
       <IssueResults
-        results={[...issues.values()].sort((a, b) => b.updated.localeCompare(a.updated)).slice(0, 20)}
+        results={[...issues.values()].sort((a, b) => compareText(b.updated, a.updated)).slice(0, 20)}
         q=""
       />
     );

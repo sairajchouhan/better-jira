@@ -3,6 +3,7 @@
  * read-only description: line numbers, highlighting, the hover toolbar (language, display options, copy, delete) and the
  * collapse bar of a long block. The editor and the read-only view render the same controls component.
  */
+import { compareText } from "@/shared/compare";
 import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { Button, IconButton } from "@/client/components/button";
@@ -112,7 +113,7 @@ function languageEntries(language: string | null, pick: (id: string | null) => v
   return [
     { name: "Auto detect", selected: language == null, run: () => pick(null) },
     ...[...CODE_LANGUAGES]
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .sort((a, b) => compareText(a.name, b.name))
       .map((l, i) => ({
         name: l.name,
         keywords: l.aliases,

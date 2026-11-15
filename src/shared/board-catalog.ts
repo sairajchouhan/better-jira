@@ -1,3 +1,4 @@
+import { compareText } from "@/shared/compare";
 import { type Board, type Issue, type User, type JiraOptions } from "@/shared/issue-model";
 /** What a board offers to pick from: its statuses, the people an issue can be assigned to, and known labels. */
 import { priorityRank } from "./view-model";
@@ -17,7 +18,7 @@ export function assignableUsers(me: User, jiraUsers: User[], issues: Iterable<Is
   for (const u of jiraUsers) if (!m.has(u.id)) m.set(u.id, u);
   for (const i of issues) if (i.assignee && !m.has(i.assignee.id)) m.set(i.assignee.id, i.assignee);
   return [...m.values()].sort((a, b) =>
-    a.id === me.id ? -1 : b.id === me.id ? 1 : a.name.localeCompare(b.name),
+    a.id === me.id ? -1 : b.id === me.id ? 1 : compareText(a.name, b.name),
   );
 }
 
@@ -65,7 +66,7 @@ export function assigneeGroups({
       }
     return out;
   };
-  const byName = (users: User[]) => users.sort((a, b) => a.name.localeCompare(b.name));
+  const byName = (users: User[]) => users.sort((a, b) => compareText(a.name, b.name));
   const assigned = [null, me, ...take(current ? [current] : [])];
   const picked = take(suggested);
   const all = Array.from(issues);
@@ -91,7 +92,7 @@ export function frequentLabels(issues: Issue[]): string[] {
   const counts = new Map<string, number>();
   const recent = issues
     .slice()
-    .sort((a, b) => (b.created ?? "").localeCompare(a.created ?? ""))
+    .sort((a, b) => compareText(b.created ?? "", a.created ?? ""))
     .slice(0, 100);
   for (const issue of recent) for (const l of issue.labels) counts.set(l, (counts.get(l) ?? 0) + 1);
   return [...counts].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([l]) => l);
@@ -168,6 +169,6 @@ export function knownPeople(
   ])
     if (user && !people.has(user.id)) people.set(user.id, user);
   return [...people.values()].sort((a, b) =>
-    a.id === me.id ? -1 : b.id === me.id ? 1 : a.name.localeCompare(b.name),
+    a.id === me.id ? -1 : b.id === me.id ? 1 : compareText(a.name, b.name),
   );
 }

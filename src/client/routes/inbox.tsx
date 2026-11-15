@@ -1,3 +1,4 @@
+import { compareText } from "@/shared/compare";
 import { type Issue } from "@/shared/issue-model";
 /** Linear's Inbox over Jira's in-app notifications. Read state goes to Jira; delete and snooze stay in this browser, because Jira's notification API has neither. */
 import { useEffect, useRef, useState, type Ref } from "react";
@@ -377,7 +378,7 @@ function filterEntries(base: InboxItem[], v: InboxView): ActionEntry[] {
     for (const value of universe) if (!counts.has(value)) counts.set(value, 0);
     const order = ORDER[field];
     const values = [...counts.keys()].sort((a, b) =>
-      order ? order.indexOf(a) - order.indexOf(b) : a.localeCompare(b),
+      order ? order.indexOf(a) - order.indexOf(b) : compareText(a, b),
     );
     return {
       name,

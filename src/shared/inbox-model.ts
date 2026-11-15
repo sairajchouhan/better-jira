@@ -1,4 +1,5 @@
 /** Jira's in-app notifications as Linear Inbox rows. Pure: the server maps the GraphQL feed, the client words and filters it. */
+import { compareText } from "@/shared/compare";
 import { priorityRank, truncate, type EqualOperator } from "./view-model";
 
 export type InboxKind =
@@ -170,7 +171,7 @@ export function prioritize<T extends Pick<InboxNote, "id" | "kind" | "time" | "u
   now = Date.now(),
 ): T[] {
   const pool = notes.some((n) => n.unread) ? notes.filter((n) => n.unread) : [...notes];
-  pool.sort((a, b) => b.time.localeCompare(a.time) || a.id.localeCompare(b.id));
+  pool.sort((a, b) => compareText(b.time, a.time) || compareText(a.id, b.id));
   const toFront = (i: number) => i > 0 && pool.unshift(...pool.splice(i, 1));
   toFront(
     pool.findIndex(
@@ -183,7 +184,7 @@ export function prioritize<T extends Pick<InboxNote, "id" | "kind" | "time" | "u
   // Everything else follows newest first, so the list under the row reads like Jira's.
   const rest = notes
     .filter((n) => !pool.includes(n))
-    .sort((a, b) => b.time.localeCompare(a.time));
+    .sort((a, b) => compareText(b.time, a.time));
   return [...pool, ...rest];
 }
 

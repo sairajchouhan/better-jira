@@ -1,3 +1,4 @@
+import { compareText } from "@/shared/compare";
 import { InputRule, inputRules } from "prosemirror-inputrules";
 import { caretTrigger, type CaretTrigger } from "./caret-trigger";
 import { deprioritize, fuzzyScore, prioritize } from "@/client/lib/fuzzy-score";
@@ -95,7 +96,7 @@ export function matchingEmoji(query: string, limit = 12): Emoji[] {
   return candidates(query)
     .map((emoji) => ({ emoji, score: score(emoji, query) }))
     .filter((e) => (query.length < 5 ? e.score > 0.15 : e.score > 0))
-    .sort((a, b) => b.score - a.score || a.emoji.name.localeCompare(b.emoji.name))
+    .sort((a, b) => b.score - a.score || compareText(a.emoji.name, b.emoji.name))
     .slice(0, limit)
     .map((e) => e.emoji);
 }

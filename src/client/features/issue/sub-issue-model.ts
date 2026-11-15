@@ -1,3 +1,4 @@
+import { compareNatural, compareText } from "@/shared/compare";
 import { type Board, type Issue } from "@/shared/issue-model";
 import { statusById } from "@/shared/board-catalog";
 import { isEpic, listedUnder, type TitleLineVariant } from "@/shared/epics";
@@ -152,7 +153,7 @@ export function subIssueRows(
         cmp = (a.rank ?? "") < (b.rank ?? "") ? -1 : (a.rank ?? "") > (b.rank ?? "") ? 1 : 0;
         break;
       case "title":
-        cmp = a.summary.localeCompare(b.summary);
+        cmp = compareText(a.summary, b.summary);
         break;
       case "status":
         cmp = status(a).order - status(b).order;
@@ -161,7 +162,7 @@ export function subIssueRows(
         cmp = priorityRank(a.priority) - priorityRank(b.priority);
         break;
       case "assignee":
-        cmp = (a.assignee?.name ?? "~").localeCompare(b.assignee?.name ?? "~");
+        cmp = compareText(a.assignee?.name ?? "~", b.assignee?.name ?? "~");
         break;
       case "estimate":
         cmp =
@@ -174,19 +175,19 @@ export function subIssueRows(
               : a.estimate - b.estimate;
         break;
       case "updated":
-        cmp = b.updated.localeCompare(a.updated);
+        cmp = compareText(b.updated, a.updated);
         break;
       case "created":
-        cmp = (b.created ?? "").localeCompare(a.created ?? "");
+        cmp = compareText(b.created ?? "", a.created ?? "");
         break;
       case "due":
-        cmp = !a.due ? (b.due ? 1 : 0) : !b.due ? -1 : a.due.localeCompare(b.due);
+        cmp = !a.due ? (b.due ? 1 : 0) : !b.due ? -1 : compareText(a.due, b.due);
         break;
       case "links":
         cmp = (b.links?.length ?? 0) - (a.links?.length ?? 0);
         break;
     }
-    return cmp || a.key.localeCompare(b.key, undefined, { numeric: true });
+    return cmp || compareNatural(a.key, b.key);
   };
   // Sort only reachable branches, and never mutate the shared snapshot index.
   const siblings = (key: string): Issue[] => {

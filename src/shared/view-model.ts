@@ -1,3 +1,4 @@
+import { compareNatural, compareText } from "@/shared/compare";
 import { type Board, type Issue, type IssueDraft } from "@/shared/issue-model";
 
 import { personIssues, type PersonTab } from "./people";
@@ -720,7 +721,7 @@ export function buckets(
   if (by === "priority") result.sort((a, b) => priorityRank(a.name) - priorityRank(b.name));
   else if (by !== "status" && by !== "category")
     result.sort((a, b) =>
-      a.id === "$none" ? 1 : b.id === "$none" ? -1 : a.name.localeCompare(b.name),
+      a.id === "$none" ? 1 : b.id === "$none" ? -1 : compareText(a.name, b.name),
     );
   return orderGroups(result, order);
 }
@@ -836,7 +837,7 @@ export function selectIssues(
         break;
       } // ranks compare by code unit, like Jira's LexoRank
       case "title":
-        cmp = a.summary.localeCompare(b.summary);
+        cmp = compareText(a.summary, b.summary);
         break;
       case "status":
         cmp = colOrder(a) - colOrder(b);
@@ -845,24 +846,24 @@ export function selectIssues(
         cmp = priorityRank(a.priority) - priorityRank(b.priority);
         break;
       case "assignee":
-        cmp = (a.assignee?.name ?? "~").localeCompare(b.assignee?.name ?? "~");
+        cmp = compareText(a.assignee?.name ?? "~", b.assignee?.name ?? "~");
         break;
       case "links":
         cmp = (b.links?.length ?? 0) - (a.links?.length ?? 0);
         break;
       case "due":
-        if (!a.due || !b.due) return a.due ? -1 : b.due ? 1 : a.key.localeCompare(b.key);
-        cmp = a.due.localeCompare(b.due);
+        if (!a.due || !b.due) return a.due ? -1 : b.due ? 1 : compareText(a.key, b.key);
+        cmp = compareText(a.due, b.due);
         break;
       case "updated":
-        cmp = b.updated.localeCompare(a.updated);
+        cmp = compareText(b.updated, a.updated);
         break;
       case "created":
-        cmp = (b.created ?? "").localeCompare(a.created ?? "");
+        cmp = compareText(b.created ?? "", a.created ?? "");
         break;
       case "statusAge":
         if (!a.statusSince || !b.statusSince) return a.statusSince ? -1 : b.statusSince ? 1 : 0;
-        cmp = a.statusSince.localeCompare(b.statusSince);
+        cmp = compareText(a.statusSince, b.statusSince);
         break;
       case "estimate":
         if (a.estimate === undefined || b.estimate === undefined)
@@ -870,7 +871,7 @@ export function selectIssues(
         cmp = a.estimate - b.estimate;
         break;
     }
-    return (d.descending ? -cmp : cmp) || a.key.localeCompare(b.key, undefined, { numeric: true });
+    return (d.descending ? -cmp : cmp) || compareNatural(a.key, b.key);
   });
   if (d.completedRecency) {
     // Done issues keep the slots the ordering gave them, refilled newest-completed first; mixing
@@ -878,7 +879,7 @@ export function selectIssues(
     const slots = items.flatMap((i, n) => (statusById(board, i.status)?.category === "done" ? [n] : []));
     const done = slots
       .map((n) => items[n]!)
-      .sort((a, b) => completed(b).localeCompare(completed(a)));
+      .sort((a, b) => compareText(completed(b), completed(a)));
     slots.forEach((n, k) => (items[n] = done[k]!));
   }
   return items;

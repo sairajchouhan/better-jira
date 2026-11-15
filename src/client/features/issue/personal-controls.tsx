@@ -1,3 +1,4 @@
+import { compareText } from "@/shared/compare";
 import { EntityIdentifier } from "@/client/components/entity-identifier";
 import { type Board, type Issue, type IssueDraft, type JiraOptions, type User } from "@/shared/issue-model";
 import { EmptyState } from "@/client/components/empty-state";
@@ -1381,7 +1382,7 @@ export function Relations({ issue }: { issue: Issue }) {
   const ranked = (list: Issue[]) =>
     list
       .map((i) => [matchRank(query, i), i] as const)
-      .sort(([a, x], [b, y]) => a - b || y.updated.localeCompare(x.updated))
+      .sort(([a, x], [b, y]) => a - b || compareText(y.updated, x.updated))
       .map(([, i]) => i);
   const relatedIssues = ["blocked", "blocking", "duplicate"].includes(kind)
     ? ranked(

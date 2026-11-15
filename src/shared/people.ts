@@ -1,3 +1,4 @@
+import { compareText } from "@/shared/compare";
 import { type Issue, type User } from "@/shared/issue-model";
 
 
@@ -30,7 +31,7 @@ export function peopleOf(issues: Iterable<Issue>): User[] {
   const found = new Map<string, User>();
   for (const i of issues)
     for (const u of [i.assignee, i.creator, ...(i.watchers ?? [])]) if (u?.id && !found.has(u.id)) found.set(u.id, u);
-  return [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
+  return [...found.values()].sort((a, b) => compareText(a.name, b.name));
 }
 /** The name a person goes by in these issues, else their id. */
 export const personName = (issues: Iterable<Issue>, id: string) => peopleOf(issues).find((u) => u.id === id)?.name ?? id;

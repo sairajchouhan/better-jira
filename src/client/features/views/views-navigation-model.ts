@@ -1,3 +1,4 @@
+import { compareText } from "@/shared/compare";
 import { type Issue } from "@/shared/issue-model";
 
 /** The page an empty result is on: a saved view (or the view editor), a board tab, or a personal page tab. */
@@ -39,6 +40,6 @@ export function viewSummaries(issues: Issue[]) {
     assignees.set(name, (assignees.get(name) ?? 0) + 1);
     for (const label of new Set(issue.labels)) labels.set(label, (labels.get(label) ?? 0) + 1);
   }
-  const sort = (map: Map<string, number>) => [...map].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const sort = (map: Map<string, number>) => [...map].sort((a, b) => b[1] - a[1] || compareText(a[0], b[0]));
   return { assignees: sort(assignees), labels: sort(labels) };
 }

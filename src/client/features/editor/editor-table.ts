@@ -1,3 +1,4 @@
+import { compareText } from "@/shared/compare";
 import { Fragment, Slice, type Node as EditorNode } from "prosemirror-model";
 import { TextSelection, type Command, type EditorState, type Transaction } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
@@ -173,7 +174,7 @@ export const sortRows =
     const numbers = rows.every((row) => row.value === "" || !isNaN(numeric(row.value))),
       key = (value: string) => (value === "" ? -Infinity : numeric(value));
     rows.sort((a, b) => {
-      const order = numbers ? key(a.value) - key(b.value) : a.value.toLowerCase().localeCompare(b.value.toLowerCase());
+      const order = numbers ? key(a.value) - key(b.value) : compareText(a.value.toLowerCase(), b.value.toLowerCase());
       return order === 0 ? a.index - b.index : direction === "ascending" ? order : -order;
     });
     if (dispatch) {
