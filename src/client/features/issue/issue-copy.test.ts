@@ -1,7 +1,8 @@
 import { type Issue } from "@/shared/issue-model";
 import { afterEach, expect, test } from "bun:test";
-import { adfToMarkdown, copyIssue, copyKinds, copyShortcuts, copyToast, fillPrompt, issueCopy, PAGE_URL_COPIED } from "./issue-copy";
+import { adfToMarkdown, copyIssue, copyKinds, copyShortcuts, copyToast, fillPrompt, ID_LINK_COPIED, issueCopy, PAGE_URL_COPIED } from "./issue-copy";
 import { deferred, fakeClipboard } from "@/client/test/fake-clipboard";
+import { modifiers } from "@/client/lib/modifier-keys";
 import { toasts } from "@/client/components/toast-queue";
 import { get, set } from "@/client/state/store";
 import type { ReactElement } from "react";
@@ -27,8 +28,9 @@ test("clipboard projections retain rich formatting, tables and exact IDs/URLs", 
   expect(issueCopy("URL", issue, undefined, "https://example.test/browse/TEST-1", "Todo")).toBe(
     "https://example.test/browse/TEST-1",
   );
-  expect(issueCopy("title as link", issue, undefined, "https://example.test/a(b)", "Todo")).toBe(
-    "[TEST-1 Fix \\[menu\\]](https://example.test/a%28b%29)",
+  // Linear's `uM`: "KEY: Title", only brackets escaped, the URL as it is.
+  expect(issueCopy("title as link", issue, undefined, "https://example.test/browse/TEST-1", "Todo")).toBe(
+    "[TEST-1: Fix \\[menu\\]](https://example.test/browse/TEST-1)",
   );
   const paragraph = { type: "paragraph", content: [{ type: "text", text: "A|B" }] };
   const table = {
@@ -155,7 +157,37 @@ const realFetch = globalThis.fetch;
 afterEach(() => {
   clip?.restore();
   clip = undefined;
+  (modifiers as { altKey: boolean }).altKey = false;
   globalThis.fetch = realFetch;
+});
+
+test("Copy title as link puts Linear's HTML anchor and the Markdown link on the clipboard", async () => {
+  clip = fakeClipboard();
+  await copyIssue("title as link", copied, KAN_7);
+  expect(clip.writes).toEqual([
+    {
+      "text/html": `<a href="${KAN_7}">KAN-7: Fix the menu &lt;now&gt;&#8203;</a>`,
+      "text/plain": `[KAN-7: Fix the menu <now>](${KAN_7})`,
+    },
+  ]);
+  expect(lastToast()).toBe("Issue title copied to clipboard");
+});
+
+test("Copy ID copies the key, and with ⌥ held copies it as a link", async () => {
+  clip = fakeClipboard();
+  await copyIssue("ID", copied, KAN_7);
+  expect(clip.writes).toEqual([{ "text/plain": "KAN-7" }]);
+  (modifiers as { altKey: boolean }).altKey = true;
+  await copyIssue("ID", copied, KAN_7);
+  expect(clip.writes[1]).toEqual({ "text/html": `<a href="${KAN_7}">KAN-7&#8203;</a>`, "text/plain": `[KAN-7](${KAN_7})` });
+  expect(lastToast()).toBe(ID_LINK_COPIED.text);
+});
+
+test("⌥ Copy ID copies the plain key where the browser has no ClipboardItem", async () => {
+  clip = fakeClipboard({ rich: false });
+  (modifiers as { altKey: boolean }).altKey = true;
+  await copyIssue("ID", copied, KAN_7);
+  expect(clip.writes).toEqual([{ "text/plain": "KAN-7" }]);
 });
 
 test("Copy everything as Markdown starts the clipboard write before the issue's comments load", async () => {

@@ -13,6 +13,7 @@ import {
   linkedTextsMarkdown,
   stripMarkdownLinks,
 } from "./clipboard";
+import { trackModifiers } from "./modifier-keys";
 import { deferred, fakeClipboard } from "@/client/test/fake-clipboard";
 
 let fake: ReturnType<typeof fakeClipboard> | undefined;
@@ -151,3 +152,16 @@ test("a dragged row carries its link as a URI list, plain text and an anchor, be
   });
 });
 
+test("the modifier tracker follows keys and pointer presses, and forgets them on blur", () => {
+  const target = new EventTarget();
+  const state = trackModifiers(target);
+  const key = (type: string, altKey: boolean) => Object.assign(new Event(type), { altKey, metaKey: false, ctrlKey: false, shiftKey: false });
+  target.dispatchEvent(key("keydown", true));
+  expect(state.altKey).toBe(true);
+  target.dispatchEvent(key("keyup", false));
+  expect(state.altKey).toBe(false);
+  target.dispatchEvent(key("pointerdown", true));
+  expect(state.altKey).toBe(true);
+  target.dispatchEvent(new Event("blur"));
+  expect(state.altKey).toBe(false);
+});
