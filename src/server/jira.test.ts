@@ -1,11 +1,13 @@
 import { expect, test } from "bun:test";
 
-test("Jira writes reach only the personal site; other sites fail before network access but keep reads", async () => {
+test("Jira writes reach only a site setup allowed; others fail before network access but keep reads", async () => {
   const originalFetch = globalThis.fetch;
   const saved = {
     url: process.env.JIRA_URL,
     email: process.env.JIRA_EMAIL,
     token: process.env.JIRA_TOKEN,
+    writes: process.env.JIRA_WRITES,
+    mode: process.env.NODE_ENV,
   };
   const calls: string[] = [];
   try {
@@ -25,15 +27,21 @@ test("Jira writes reach only the personal site; other sites fail before network 
     await jira("/rest/api/3/issue/TEST-1");
     await jira("/rest/api/3/changelog/bulkfetch", { method: "POST" });
     expect(calls).toHaveLength(2);
-    process.env.JIRA_URL = "https://cloudsairaj.atlassian.net";
+    // A test site is no different until the production server is told it may write there.
+    process.env.JIRA_URL = "https://test-site.atlassian.net";
+    await expect(jira("/rest/api/3/issue/SAM1-1", { method: "PUT" })).rejects.toThrow("Jira writes are disabled");
+    process.env.NODE_ENV = "production";
+    process.env.JIRA_WRITES = "https://test-site.atlassian.net";
     await jira("/rest/api/3/issue/SAM1-1", { method: "PUT" });
-    expect(calls.at(-1)).toBe("PUT https://cloudsairaj.atlassian.net/rest/api/3/issue/SAM1-1");
+    expect(calls.at(-1)).toBe("PUT https://test-site.atlassian.net/rest/api/3/issue/SAM1-1");
   } finally {
     globalThis.fetch = originalFetch;
     for (const [name, value] of [
       ["JIRA_URL", saved.url],
       ["JIRA_EMAIL", saved.email],
       ["JIRA_TOKEN", saved.token],
+      ["JIRA_WRITES", saved.writes],
+      ["NODE_ENV", saved.mode],
     ] as const)
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;
@@ -126,6 +134,14 @@ test("edits go to Jira only from bun start, for the site setup saved with writes
   expect(canWrite(site, on, { ...production, JIRA_WRITES: "off" })).toBe(false);
   expect(canWrite(site, {}, { ...production, JIRA_WRITES: site })).toBe(true);
   expect(canWrite(site, on, {})).toBe(false);
+});
+
+test("BJ-337: no Jira site is writable by name in the code: only setup's switch and JIRA_WRITES allow writes", async () => {
+  const source = await Bun.file(new URL("./jira.ts", import.meta.url)).text();
+  expect(source).not.toMatch(/https:\/\/[\w-]+\.atlassian\.net/);
+  const { canWrite } = await import("./jira");
+  // A dev server (no NODE_ENV) writes to no site, whatever it is.
+  expect(canWrite("https://any-test-site.atlassian.net", {}, {})).toBe(false);
 });
 
 test("bun start names no site and no write mode of its own: setup's saved switch decides", async () => {
