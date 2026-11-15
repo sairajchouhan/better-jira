@@ -332,6 +332,33 @@ test("BJ-258: Escape in the side panel's title keeps the edit and the panel; a s
   });
 });
 
+test("BJ-270: every title field stops at Jira's 255 characters and says so in Linear's words; nothing longer is sent", async ({ open }) => {
+  await fixture.reset({ writable: true, createSuccess: true });
+  const p = await open("?issue=TEST-2&view=page");
+  await p.waitFor(`!!document.getElementById('summary')`);
+  const limit = `document.querySelector('[data-title-limit]')?.textContent`;
+  await test.step("the issue's title: typing past the limit is refused and the message shows", async () => {
+    await p.click("#summary");
+    await p.key("a", "meta");
+    await p.type("t".repeat(255));
+    await p.type("u");
+    expect(await p.eval(`document.getElementById('summary').value.length`)).toBe(255);
+    expect(await p.eval(limit)).toBe("Title cannot be longer than 255 characters.");
+    await p.key("Tab");
+  });
+  await test.step("the composer's title stops at the limit too", async () => {
+    await p.key("Escape");
+    await p.key("c");
+    await p.waitFor(`!!document.querySelector('.create-issue-title')`);
+    await p.click(".create-issue-title");
+    await p.type("c".repeat(256));
+    expect(await p.eval(`document.querySelector('.create-issue-title').value.length`)).toBe(255);
+    expect(await p.eval(limit)).toBe("Title cannot be longer than 255 characters.");
+  });
+  const { writes } = await fixture.log();
+  expect(writes.flatMap((w: any) => w.ops).filter((op: any) => (op.fields?.summary ?? "").length > 255)).toEqual([]);
+});
+
 test("BJ-283: one Escape closes an open tooltip and the side panel under it, as Linear's does", async ({ open }) => {
   const p = await open("?issue=TEST-2&view=side");
   await p.waitFor(`!!document.getElementById('prop-status')`);

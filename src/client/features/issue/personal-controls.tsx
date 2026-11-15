@@ -21,7 +21,9 @@ import { createSubIssue, issueMenuEntries, type IssueMenuDialog } from "./issue-
 import { SubIssues } from "./sub-issues";
 import { statusOf } from "./sub-issue-model";
 import { attachmentSplit } from "./issue-attachments";
-import { SUMMARY_MAX, switchBoard } from "./composer-draft";
+import { switchBoard } from "./composer-draft";
+import { TITLE_MAX } from "@/shared/issue-title";
+import { useTitleLimit } from "@/client/features/editor/title-limit";
 import { draftEligible, readLocalDraft, resumeDraft, useComposerLocalDraft } from "./composer-local-draft";
 import { shortDate } from "@/client/lib/due-date";
 import { useHotkey } from "@tanstack/react-hotkeys";
@@ -189,6 +191,7 @@ export function CreateIssue() {
   const [confirmClose, setConfirmClose] = useState(false);
 
   const titleRef = useRef<HTMLInputElement>(null);
+  const titleLimit = useTitleLimit();
   // Not a <form>: Linear's composer submits only from ⌘↵ and Create issue. A form made Enter in any side field (a link,
   // a pending sub-issue) submit the issue, and nested the custom due date's form, whose Save reloaded the page (R3-create-D1, D3).
   const composerRef = useRef<HTMLDivElement>(null);
@@ -421,8 +424,8 @@ export function CreateIssue() {
           ref={titleRef}
           autoFocus
           aria-label="Issue title"
+          {...titleLimit.props}
           className="create-issue-title"
-          maxLength={SUMMARY_MAX}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={titleKeyDown(COMPOSER_TITLE, (at) =>
@@ -430,6 +433,7 @@ export function CreateIssue() {
           )}
           placeholder="Issue title"
         />
+        {titleLimit.message}
         <ComposerEditor
           key={draftIndex}
           id="create-description"
@@ -566,7 +570,7 @@ export function CreateIssue() {
         {draft.subIssues?.map((summary, index) => <div key={index} className="mt-2 flex items-center gap-2"><TextInput
           // A row added from More actions or ⌘⇧O takes focus, as Linear's new sub-issue editor does.
           autoFocus={index === focusSub}
-          maxLength={SUMMARY_MAX}
+          maxLength={TITLE_MAX}
           aria-label={`Pending sub-issue ${index + 1}`}
           value={summary}
           onChange={e => setDraft(d => ({ ...d, subIssues: d.subIssues?.map((title, i) => i === index ? e.target.value : title) }))}

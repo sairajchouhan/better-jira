@@ -3,6 +3,7 @@ import { ESTIMATES, ledger, refresh } from "./mirror";
 import { DESCRIPTION_CONFLICT, renameCommentIds, type Op } from "@/shared/jira-ops";
 import { descriptionBases } from "@/shared/document";
 import { inwardKind, jiraLinkType, LINEAR_TYPES } from "@/shared/relations";
+import { TITLE_MAX, TITLE_TOO_LONG } from "@/shared/issue-title";
 
 const at = (key: string) => `/rest/api/3/issue/${encodeURIComponent(key)}`;
 
@@ -10,6 +11,8 @@ type Fields = Extract<Op, { op: "fields" }>["fields"];
 /** Jira field payload for edited or created fields. */
 function fieldPayload(fields: Fields) {
   const out: Record<string, unknown> = {};
+  // Every title field stops at the limit; a title that got past one anyway is refused here, before Jira sees it (BJ-270).
+  if (fields.summary !== undefined && fields.summary.length > TITLE_MAX) throw new UserError(TITLE_TOO_LONG);
   if (fields.summary !== undefined) out.summary = fields.summary;
   if (fields.description !== undefined) out.description = fields.description;
   if (fields.priority !== undefined)

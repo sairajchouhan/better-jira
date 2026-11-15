@@ -1,5 +1,6 @@
 import { EntityIdentifier } from "@/client/components/entity-identifier";
 import { COMPOSER_TITLE, focusEditorAt, titleKeyDown } from "@/client/features/editor/title-flow";
+import { useTitleLimit } from "@/client/features/editor/title-limit";
 import { type Issue } from "@/shared/issue-model";
 import { Text } from "@/client/components/text";
 import { SubIssueProgressButton } from "@/client/components/sub-issue-progress-button";
@@ -175,6 +176,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
     namespace = useStore((s) => s.namespace),
     writable = useStore((s) => s.writable);
   const noPriority = writable ? "Default priority" : "No priority";
+  const titleLimit = useTitleLimit();
   const storageKey = `better-jira:sub-issues:v1:${namespace}`;
   const [display, setDisplay] = useStoredState(
     storageKey,
@@ -452,6 +454,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
               />
             </FieldMenuButton>
             <TextInput
+              {...titleLimit.props}
               ref={titleInput}
               autoFocus
               aria-label="Sub-issue title"
@@ -464,6 +467,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
               className="min-w-0 flex-1"
             />
           </div>
+          {titleLimit.message}
           <InlineEditor
             key={editor}
             id={`sub-issue-description-${issue.key}`}
@@ -612,6 +616,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
 /** Linear's Rename… from a sub-issue row: the title in a small dialog, Enter saves. */
 function RenameIssue({ issue, close }: { issue: Issue; close: () => void }) {
   const [title, setTitle] = useState(issue.summary);
+  const limit = useTitleLimit();
   return (
     <Dialog label="Rename issue" close={close} width={420}>
       <form
@@ -624,6 +629,7 @@ function RenameIssue({ issue, close }: { issue: Issue; close: () => void }) {
       >
         <Dialog.Body>
           <TextInput
+            {...limit.props}
             autoFocus
             aria-label="Issue title"
             value={title}
@@ -631,6 +637,7 @@ function RenameIssue({ issue, close }: { issue: Issue; close: () => void }) {
             onFocus={(event) => event.currentTarget.select()}
             className="w-full"
           />
+          {limit.message}
         </Dialog.Body>
       </form>
     </Dialog>

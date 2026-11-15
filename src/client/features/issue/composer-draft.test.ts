@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { type IssueDraft } from "@/shared/issue-model";
-import { SUMMARY_MAX, switchBoard } from "./composer-draft";
+import { switchBoard } from "./composer-draft";
 
 test("R3-create-D5: switching board keeps the board-independent properties and drops the board's own", () => {
   const draft: IssueDraft = {
@@ -18,6 +18,3 @@ test("R3-create-D5: switching board keeps the board-independent properties and d
   expect(switchBoard(draft, 1, 1)).toBe(draft);
 });
 
-test("R3-create-D4: titles stop at Jira's summary limit", () => {
-  expect(SUMMARY_MAX).toBe(255);
-});

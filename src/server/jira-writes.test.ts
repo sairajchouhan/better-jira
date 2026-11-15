@@ -757,3 +757,17 @@ test("R3-palette-shortcuts-D7: a write Jira has answers within the settle wait, 
     refreshing = () => turn(() => undefined);
   }
 });
+
+test("BJ-270: a title past Jira's 255 characters is refused before any write, in Linear's wording, for an edit and a create", async () => {
+  answer = jiraAnswers;
+  calls.length = 0;
+  const long = "x".repeat(256);
+  const edit = await applyOps("K-61", [{ op: "fields", fields: { summary: long } }]);
+  expect(edit.error).toBe("Title cannot be longer than 255 characters.");
+  const create = await applyOps("K-NEW61", [{ op: "create", fields: { summary: long, project: "K" } }]);
+  expect(create.error).toBe("Title cannot be longer than 255 characters.");
+  expect(calls.filter((c) => !c.startsWith("GET"))).toEqual([]);
+  // At the limit it goes.
+  const fits = await applyOps("K-61", [{ op: "fields", fields: { summary: "x".repeat(255) } }]);
+  expect(fits.error).toBeUndefined();
+});

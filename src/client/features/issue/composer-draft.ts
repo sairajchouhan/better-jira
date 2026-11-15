@@ -1,9 +1,5 @@
 import { type IssueDraft } from "@/shared/issue-model";
 
-/** Jira's summary limit. Linear's title fields stop at their own `maxTitleLength` (startup-root `zQ` with
- *  `maxLength: Nu.maxTitleLength`); here the limit is Jira's, so a too-long title is never sent to be refused. */
-export const SUMMARY_MAX = 255;
-
 /**
  * The composer's draft on another board. Linear's Set team drops only its TEAM_DEPENDENT_FIELDS (`stateId`, `cycleId`,
  * `assigneeId`, `delegateId`, `projectId`, `projectMilestoneId`; startup-root `resolveFieldConflicts`) and keeps the

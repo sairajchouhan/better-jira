@@ -51,6 +51,7 @@ import { PersonalIssueDetails } from "@/client/features/issue/personal-controls"
 import { TitleParentLine } from "@/client/features/issue/sub-issues";
 import { Avatar } from "@/client/components/avatar";
 import { DocumentBodyEditor, CommentComposer } from "@/client/features/editor/rich-editor-loader";
+import { useTitleLimit } from "@/client/features/editor/title-limit";
 import {
   EMPTY_TITLE_TOAST,
   focusEditorAt,
@@ -308,6 +309,7 @@ function Title({ issue }: { issue: Issue }) {
   const ref = useRef<HTMLTextAreaElement>(null),
     start = useRef("");
   const [draft, setDraft] = useState<string | null>(null);
+  const limit = useTitleLimit();
   useCommand("focus-title", (key) => {
     if (key !== issue.key) return;
     const node = ref.current;
@@ -318,7 +320,9 @@ function Title({ issue }: { issue: Issue }) {
     return true;
   });
   return (
+    <>
     <AutoResizingTextArea
+      {...limit.props}
       appearance="heading"
       ref={ref}
       id="summary"
@@ -346,6 +350,8 @@ function Title({ issue }: { issue: Issue }) {
       }}
       className="rounded-md"
     />
+    {limit.message}
+    </>
   );
 }
 

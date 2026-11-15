@@ -1,4 +1,5 @@
 import { chainCommands, exitCode, lift } from "prosemirror-commands";
+import { fitTitle } from "@/shared/issue-title";
 import {
   InputRule,
   inputRules,
@@ -474,7 +475,7 @@ export const toggleQuote: Command = (state, dispatch) => {
 export function issueFromText(text: string): { title: string; description?: string } {
   const [first = "", ...rest] = text.trim().split(/\n+/),
     description = rest.join("\n\n").trim();
-  return { title: first.trim().slice(0, 255), ...(description ? { description } : {}) };
+  return { title: fitTitle(first.trim()), ...(description ? { description } : {}) };
 }
 
 /** Once that issue exists, the text it was made from becomes a reference to it (Jira's smart link to its /browse/ URL),
