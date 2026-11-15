@@ -12,9 +12,8 @@ import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { showNotification } from "@/client/state/app-notifications";
 import { set, useStore } from "@/client/state/store";
 import { run, useCommand } from "@/client/features/navigation/commands";
-import { fullTime } from "./issue-dates";
 import { queryClient } from "@/client/state/server-data";
-import type { Issue, User } from "@/shared/issue-model";
+import type { Issue } from "@/shared/issue-model";
 import {
   leadingStatus,
   pullRequestBadgeText,
@@ -393,35 +392,5 @@ export function SubIssueBadge({ issue, layout }: { issue: Issue; layout: "board"
       )}
       {anchor && <ChildrenMenu parent={issue} anchor={anchor} close={() => setAnchor(null)} />}
     </>
-  );
-}
-
-// ——— Creator: no Linear card badge; it reuses Linear's nearest behaviour ———
-
-/** Linear's user card (`ift` → `sft`): a large avatar beside the name, with the detail line under it. */
-function UserCard({ user, detail }: { user: User; detail?: string }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-2.5 px-1 py-0.5">
-        <Avatar user={user} size={32} title={null} />
-        <span className="text-[13px] font-medium text-fg">{user.name}</span>
-      </div>
-      {detail && <span className="px-1 text-[12px] text-fg-3">{detail}</span>}
-    </div>
-  );
-}
-
-/** The creator's avatar with Linear's user hover card (the avatar's `enablePopover`, `dj` → `ift`), placed top-start. */
-export function CreatorBadge({ issue }: { issue: Issue }) {
-  if (!issue.creator) return null;
-  return (
-    <HoverCard
-      label="Creator"
-      content={<UserCard user={issue.creator} detail={issue.created ? `Created the issue ${fullTime(issue.created)}` : "Created the issue"} />}
-    >
-      <span className="flex items-center" aria-label={`Created by ${issue.creator.name}`} data-creator={issue.key}>
-        <Avatar user={issue.creator} size={18} title={null} />
-      </span>
-    </HoverCard>
   );
 }

@@ -31,7 +31,6 @@ export type Property =
   | "id"
   | "status"
   | "assignee"
-  | "creator"
   | "priority"
   | "project"
   | "due"
@@ -140,7 +139,6 @@ export const PROPERTIES: [Property, string][] = [
   ["id", "ID"],
   ["status", "Status"],
   ["assignee", "Assignee"],
-  ["creator", "Creator"],
   ["priority", "Priority"],
   ["project", "Epic"],
   ["due", "Due date"],

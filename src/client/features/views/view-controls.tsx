@@ -353,7 +353,7 @@ function DisplayOptions({
           onChange={() => patch({ emptyGroups: !d.emptyGroups })}
         />
         <DisplayProperties
-          properties={PROPERTIES.filter(([p]) => !isBoard || p !== "creator")}
+          properties={PROPERTIES}
           shown={d.properties}
           onChange={(properties) => patch({ properties })}
         />

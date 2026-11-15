@@ -688,9 +688,9 @@ test("toggle-all gives every group the opposite of the clicked group's state (Li
   expect(collapseAllFrom(["gone", "todo"], groups, "todo")).toEqual(["gone"]);
 });
 
-test("cards show no comment count, as Linear's (its card flags `bd` have none): no Comments property, and a saved view drops it", () => {
-  expect(PROPERTIES.some(([id]) => (id as string) === "comments")).toBe(false);
+test("cards show no comment count or creator, as Linear's (its card flags `bd` have neither): no such properties, and a saved view drops them", () => {
+  expect(PROPERTIES.some(([id]) => ["comments", "creator"].includes(id))).toBe(false);
   expect(defaultPreferences().display.properties).not.toContain("comments" as never);
-  const saved = parsePreferences({ display: { properties: ["id", "comments", "labels"] } });
+  const saved = parsePreferences({ display: { properties: ["id", "comments", "creator", "labels"] } });
   expect(saved.display.properties).toEqual(["id", "labels"]);
 });
