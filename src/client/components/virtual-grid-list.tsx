@@ -160,14 +160,21 @@ export function landsBefore(target: DropTarget, keys: readonly string[], dragged
 }
 
 /**
- * The keys a drag of `picked` carries, in list order: with any selected row among them, every selected row of the list,
- * mounted or not (React Aria knows only the mounted ones); else just `picked`.
+ * What a drag of `picked` does, as Linear's IssueList drag (`_l`): with any multi-selected row among them it carries every
+ * selected row of the list, mounted or not (React Aria knows only the mounted ones), in list order; else it carries just
+ * `picked` and clears the selection. The focused row (`selected`) is not part of the selection, as Linear's
+ * `selectedItems` leaves out its focused item.
  */
-export function dragKeys(keys: readonly string[], picked: readonly string[], chosen: ReadonlySet<string>): string[] {
-  if (!picked.some((key) => chosen.has(key))) return [...picked];
+export function dragOf(
+  keys: readonly string[],
+  picked: readonly string[],
+  selection: ReadonlySet<string>,
+): { moving: string[]; clearsSelection: boolean } {
+  if (!picked.some((key) => selection.has(key))) return { moving: [...picked], clearsSelection: selection.size > 0 };
   const set = new Set(picked);
-  return keys.filter((key) => chosen.has(key) || set.has(key));
+  return { moving: keys.filter((key) => selection.has(key) || set.has(key)), clearsSelection: false };
 }
+const NO_KEYS: ReadonlySet<string> = new Set();
 
 /** Drag and drop between every list sharing `type`: rows move by a drop, never onto another row. */
 export type ListDrop = {
@@ -177,6 +184,8 @@ export type ListDrop = {
   onDrop: (keys: string[], before: string | undefined) => void;
   /** The image under the pointer while dragging. */
   renderPreview: (keys: string[]) => ReactNode;
+  /** Empties the list's `selectedKeys`: a drag of a row outside them leaves them, as Linear's drag start does. */
+  clearSelection: () => void;
 };
 
 /** The space to leave above each mounted item (`indices`, ascending) so it sits at its offset, then the space below the last. */
@@ -291,7 +300,8 @@ export function VirtualGridList<T>({
   rowClassName?: string;
   /** The app's selected item (Linear's focused one): kept mounted, scrolled to, and shown selected. */
   selected: string | null;
-  /** More items shown selected (a column's "Select all"); a drag of any of them carries all. */
+  /** More items shown selected (a column's "Select all"); a drag of any of them carries all, a drag of another clears them
+   *  (`drop.clearSelection`). */
   selectedKeys?: ReadonlySet<string>;
   estimate: number;
   drop?: ListDrop;
@@ -428,7 +438,8 @@ export function VirtualGridList<T>({
   };
   const { dragAndDropHooks } = useDragAndDrop<T>({
     isDisabled: !drop,
-    getItems: (picked) => dragKeys(keys, [...picked].map(String), chosen).map((key) => ({ [drop!.type]: key, "text/plain": key })),
+    getItems: (picked) =>
+      dragOf(keys, [...picked].map(String), selectedKeys ?? NO_KEYS).moving.map((key) => ({ [drop!.type]: key, "text/plain": key })),
     renderDragPreview: (dragging) => <>{drop!.renderPreview(dragging.map((item) => item[drop!.type]!))}</>,
     renderDropIndicator: (target) => <DropIndicator target={target} className="ui-drop-gap" />,
     dropTargetDelegate: delegate,
@@ -436,11 +447,15 @@ export function VirtualGridList<T>({
     getDropOperation: (target) => (target.type === "item" && target.dropPosition === "on" ? "cancel" : "move"),
     onDragStart: (event) => {
       // React Aria knows no selection, so it names the picked row alone: the drag carries the app's selection with it.
-      const moving = new Set(dragKeys(keys, [...event.keys].map(String), chosen));
-      const row = list.current?.querySelector(`:scope > [data-key="${CSS.escape([...moving][0]!)}"]`);
+      const plan = dragOf(keys, [...event.keys].map(String), selectedKeys ?? NO_KEYS);
+      const moving = new Set(plan.moving);
+      const row = list.current?.querySelector(`:scope > [data-key="${CSS.escape(plan.moving[0]!)}"]`);
       if (row) document.documentElement.style.setProperty(GAP_VAR, `${row.getBoundingClientRect().height}px`);
       // A frame later, as React Aria marks the rows dragging: Chrome ends a drag whose source changes during dragstart.
-      startFrame.current = requestAnimationFrame(() => setDragged(moving));
+      startFrame.current = requestAnimationFrame(() => {
+        setDragged(moving);
+        if (plan.clearsSelection) drop!.clearSelection();
+      });
     },
     onDragEnd: () => {
       cancelAnimationFrame(startFrame.current);

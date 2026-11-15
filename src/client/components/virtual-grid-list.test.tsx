@@ -4,7 +4,7 @@ import {
   VirtualGridList,
   chosenKeys,
   covers,
-  dragKeys,
+  dragOf,
   dropSpotAt,
   flowOf,
   isShortcutKey,
@@ -63,9 +63,13 @@ test("a drop's place skips the rows being moved", () => {
 
 test("a drag of a selected row carries the whole selection in list order, unmounted rows included", () => {
   const keys = ["A", "B", "C", "D", "E"];
-  expect(dragKeys(keys, ["C"], new Set())).toEqual(["C"]);
-  expect(dragKeys(keys, ["C"], new Set(["A", "E"]))).toEqual(["C"]);
-  expect(dragKeys(keys, ["E", "B"], new Set(["E", "B", "D"]))).toEqual(["B", "D", "E"]);
+  expect(dragOf(keys, ["C"], new Set())).toEqual({ moving: ["C"], clearsSelection: false });
+  expect(dragOf(keys, ["E", "B"], new Set(["E", "B", "D"]))).toEqual({ moving: ["B", "D", "E"], clearsSelection: false });
+});
+
+test("BJ-333: dragging a row outside the selection moves only that row and clears the selection, as Linear's drag start", () => {
+  const keys = ["A", "B", "C", "D", "E"];
+  expect(dragOf(keys, ["C"], new Set(["A", "E"]))).toEqual({ moving: ["C"], clearsSelection: true });
 });
 
 test("the window holds every item reaching into the viewport and no other", () => {
@@ -102,7 +106,7 @@ test("a column selection never pins its rows, and only draggable lists carry the
   const plain = render({ selected: null, selectedKeys: new Set(["C"]) });
   expect(plain).not.toContain('role="row"');
   expect(render({ selected: "A" })).not.toMatch(/<button[^>]*class="sr-only"/);
-  const drop: ListDrop = { type: "application/x-test", onDrop: () => {}, renderPreview: () => null };
+  const drop: ListDrop = { type: "application/x-test", onDrop: () => {}, renderPreview: () => null, clearSelection: () => {} };
   const draggable = render({ selected: "A", drop });
   expect(draggable).toMatch(/<button[^>]*class="sr-only"/);
 });

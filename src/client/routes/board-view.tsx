@@ -556,6 +556,9 @@ function ColumnHeading({
 /** Where every board card can be dragged to: any column or swimlane cell of the board. */
 const ISSUE_DRAG = "application/x-better-jira-issue";
 
+/** Linear's `clearSelection`: the board's multi-selection (a column's "Select all") goes. */
+const clearColumnSelection = () => set({ columnSelection: new Set() });
+
 /** `header={false}` in swimlanes: Linear shows one sticky header row above all lanes. */
 function ColumnView({
   bucket,
@@ -588,6 +591,7 @@ function ColumnView({
     type: ISSUE_DRAG,
     onDrop,
     renderPreview: (keys) => <CardPreview issues={keys.flatMap((key) => get().issues.get(key) ?? [])} display={display} />,
+    clearSelection: clearColumnSelection,
   };
   return (
     <section data-board-column={bucket.name} className="board-column flex w-[340px] shrink-0 flex-col rounded-t-[5px]">

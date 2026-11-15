@@ -86,6 +86,18 @@ test("board layout: hidden columns, column titles, drag placement and My issues"
     expect(await page.eval(keysIn("Todo"))).toEqual(["TEST-6", "TEST-1", "TEST-4"]);
     expect(await page.eval(`document.querySelectorAll("[data-key][data-selected]").length`)).toBe(0);
   });
+  await test.step("BJ-333: dragging a card outside the selection moves only it and clears the selection", async () => {
+    await page.click('[aria-label="Options for Todo"]');
+    await page.click('[role="dialog"][aria-label="Column Todo"] [role^=menuitem]:has-text("Select all in column")');
+    await page.waitFor(`document.querySelectorAll("[data-key][data-selected]").length===3`);
+    const top = await page.rect('[data-key="TEST-6"]');
+    await page.drag('[data-key="TEST-3"]', top.x + top.width / 2, top.y + 4);
+    expect(
+      await page.waitFor<string[]>(`(${keysIn("Todo")}).length===4&&${keysIn("Todo")}`),
+    ).toEqual(["TEST-3", "TEST-6", "TEST-1", "TEST-4"]);
+    expect(await page.eval(keysIn("Doing"))).toEqual(["TEST-5", "TEST-2"]);
+    expect(await page.eval(`document.querySelectorAll("[data-key][data-selected]").length`)).toBe(0);
+  });
   await test.step("R8: at 390px the bottom bar stays on one line", async () => {
     const page = await open("", { width: 390, height: 844 });
     await page.waitFor(
