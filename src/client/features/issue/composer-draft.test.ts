@@ -32,11 +32,12 @@ test("BJ-256: switching board drops the epic, Linear's project, and keeps a pare
   expect(switchBoard({ board: 1, parent: "Q-2" }, 1, 2, lookup)).toEqual({ board: 2, parent: "Q-2" });
 });
 
-test("BJ-257: a parent from another Jira project is never sent; the draft follows it when the board has its project", () => {
-  // The board holds only P: a view's epic in Q is dropped.
-  expect(parentInProject({ parent: "Q-1", title: "T" }, [P], lookup)).toEqual({ title: "T" });
-  // The draft chose P: Q's epic and Q's parent issue go.
-  expect(parentInProject({ parent: "Q-1", project: P }, [P, Q], lookup)).toEqual({ project: P });
+test("BJ-257: the draft follows a parent from another Jira project when the board has it; a foreign parent issue is never sent", () => {
+  // The board holds only P: a parent issue in Q goes; Q's epic stays for Jira to judge (company-managed links across projects).
+  expect(parentInProject({ parent: "Q-2", title: "T" }, [P], lookup)).toEqual({ title: "T" });
+  const epic = { parent: "Q-1", title: "T" };
+  expect(parentInProject(epic, [P], lookup)).toBe(epic);
+  // The draft chose P: Q's parent issue goes.
   expect(parentInProject({ parent: "Q-2", project: P }, [P, Q], lookup)).toEqual({ project: P });
   // No project chosen and the board holds Q too: the issue goes to Q, in its epic.
   expect(parentInProject({ parent: "Q-1" }, [P, Q], lookup)).toEqual({ parent: "Q-1", project: Q });
