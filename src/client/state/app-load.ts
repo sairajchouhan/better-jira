@@ -31,7 +31,8 @@ import {
 } from "@/client/features/views/saved-views";
 import { defaultPreferences, parsePreferences } from "@/shared/view-model";
 import { createActor, fromPromise, waitFor } from "xstate";
-import { appMachine, inspector } from "./machines";
+import { appMachine, inspector, StillSyncing } from "./machines";
+import { syncProgress, type SyncHealth } from "./sync-problem";
 import {
   savedBoard,
   savedDefaults,
@@ -45,7 +46,8 @@ const app = createActor(appMachine.provide({ actors: { load: fromPromise(loadApp
   inspect: inspector("app"),
 }).start();
 app.subscribe(({ context }) => {
-  if (context.error !== get().loadError) commit({ loadError: context.error });
+  if (context.error !== get().loadError || context.waiting !== get().loadWaiting)
+    commit({ loadError: context.error, loadWaiting: context.waiting });
 });
 if (typeof window !== "undefined")
   Object.assign(window, { machines: { ui, app, storage }, queryClient, loadFull });
@@ -80,8 +82,12 @@ async function loadApplication() {
     fetchJson<Issue[]>("/api/issues"),
     loadSavedViews(),
   ]);
-  if (!boards.length)
-    throw new Error("The Jira mirror is still syncing your boards. Retry in a moment.");
+  // A board shows once its first sync has read every issue; until then say how far it has got, or why it can't.
+  if (!boards.length) {
+    const health = await fetchJson<SyncHealth>("/api/sync");
+    if (health.errors.length) throw new Error(health.errors.join(" "));
+    throw new StillSyncing(syncProgress(health));
+  }
   const { local, start: startSaving } = await openLocalData(namespace, {
     snapshot: () => ({ changes: savedChanges(), ...savedHistory(), keys: keyMoves() }),
     moved: learnKeys,

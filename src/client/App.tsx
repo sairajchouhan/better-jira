@@ -17,7 +17,9 @@ import {
 } from "@/client/features/issue/personal-controls";
 import { TitleTooltips } from "@/client/components/tooltip";
 import { ToastViewport } from "@/client/components/toast";
-import { AppLoading, EmptyState } from "@/client/components/empty-state";
+import { AppLoading } from "@/client/components/empty-state";
+import { Text } from "@/client/components/text";
+import { BootScreen } from "@/client/boot-screen";
 import { Button } from "@/client/components/button";
 import { ShortcutHelp, useLinearHotkeys } from "@/client/features/navigation/shortcuts";
 import { useRecordVisits } from "@/client/features/navigation/recents";
@@ -45,36 +47,53 @@ const Devtools =
     : lazy(() => import("@tanstack/react-router-devtools").then((m) => ({ default: m.TanStackRouterDevtools })));
 
 /** Waits for the boards, then for the router to show the address, so the first paint is the address's screen. Until then
- *  the boot shell (index.html #loading) stays over the page; a load error hands over to the error. */
+ *  the boot shell (index.html #loading) stays over the page. A load that can't finish hands over to the boot screen, which
+ *  stays up through its retries (BJ-277): a first sync's progress, or the error with what to do. */
 export function App() {
   const ready = useStore((s) => s.boards.length > 0);
-  const loadError = useStore((s) => s.loadError);
   const [opened, setOpened] = useState(false);
   useEffect(() => void load(), []);
   useEffect(() => {
     if (ready) void router.load().then(() => setOpened(true));
   }, [ready]);
-  if (!ready || !opened)
-    return loadError ? (
-      <EmptyState
-        role="alert"
-        title={loadError}
-        actions={
-          <Button variant="secondary" size="medium" onClick={() => void load()}>
-            Retry now
-          </Button>
-        }
-        className="h-screen"
-      >
-        <p>Retrying automatically…</p>
-      </EmptyState>
-    ) : (
-      <AppLoading className="h-screen" />
-    );
+  if (!ready || !opened) return <Booting />;
   return (
     <AppRouterProvider>
       <RouterProvider router={router} InnerWrap={Shell} />
     </AppRouterProvider>
+  );
+}
+
+/** Before the app: the boot shell while nothing has gone wrong, else the boot screen. */
+function Booting() {
+  const loadError = useStore((s) => s.loadError);
+  const waiting = useStore((s) => s.loadWaiting);
+  const [retrying, setRetrying] = useState(false);
+  if (!loadError) return <AppLoading className="h-screen" />;
+  if (waiting)
+    return (
+      <BootScreen role="status" title="Syncing your Jira boards">
+        <Text color="muted">{loadError}</Text>
+        <Text color="muted">The first sync of a large board takes a minute or two. The app opens when it's done.</Text>
+      </BootScreen>
+    );
+  const retry = () => {
+    setRetrying(true);
+    void load().finally(() => setRetrying(false));
+  };
+  return (
+    <BootScreen
+      role="alert"
+      title="Couldn't load your Jira data"
+      actions={
+        <Button variant="primary" size="medium" disabled={retrying} onClick={retry}>
+          {retrying ? "Trying again…" : "Try again"}
+        </Button>
+      }
+    >
+      <Text color="muted">{loadError}</Text>
+      <Text color="muted">Retrying automatically…</Text>
+    </BootScreen>
   );
 }
 

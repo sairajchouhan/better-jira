@@ -202,28 +202,37 @@ export const uiMachine = setup({
 /** `load` runs the whole mirror load; store.ts provides it. */
 /** Loading retries on its own with backoff (1 s, 2 s, 4 s … up to 30 s), so a server that comes back is picked up without a click (sync D4). */
 export const LOAD_RETRY_MS = (attempt: number) => Math.min(30_000, 1000 * 2 ** attempt);
+/** How often the boot screen re-reads a first sync's progress. */
+export const SYNC_WAIT_MS = 2000;
+/** Thrown by a load that must wait (the first sync is still reading the boards): not an error, re-checked every SYNC_WAIT_MS. */
+export class StillSyncing extends Error {}
 export const appMachine = setup({
   types: {} as {
-    context: { error: string; attempt: number };
+    /** `error`: the last failed load's reason, kept while a retry runs so the boot screen never empties (BJ-277); `waiting`:
+     *  it was a StillSyncing. Both clear once a load succeeds. */
+    context: { error: string; attempt: number; waiting: boolean };
     events: { type: "load" } | { type: "reload" };
   },
   actors: { load: fromPromise<void>(async () => {}) },
-  delays: { retry: ({ context }) => LOAD_RETRY_MS(context.attempt - 1) },
+  delays: {
+    retry: ({ context }) => (context.waiting ? SYNC_WAIT_MS : LOAD_RETRY_MS(context.attempt - 1)),
+  },
 }).createMachine({
   id: "app",
   initial: "idle",
-  context: { error: "", attempt: 0 },
+  context: { error: "", attempt: 0, waiting: false },
   states: {
     idle: { on: { load: "loading" } },
     loading: {
-      entry: assign({ error: "" }),
       invoke: {
         src: "load",
-        onDone: { target: "ready", actions: assign({ attempt: 0 }) },
+        onDone: { target: "ready", actions: assign({ attempt: 0, error: "", waiting: false }) },
         onError: {
           target: "failed",
           actions: assign({
-            attempt: ({ context }) => context.attempt + 1,
+            waiting: ({ event }) => event.error instanceof StillSyncing,
+            attempt: ({ context, event }) =>
+              event.error instanceof StillSyncing ? 0 : context.attempt + 1,
             error: ({ event }) =>
               // fetch's own error: the request never got an answer.
               event.error instanceof TypeError

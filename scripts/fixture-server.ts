@@ -188,6 +188,10 @@ const thread = [
     ),
   },
 ];
+/** `syncErrors`: the mirror's reasons it can't read Jira (the footer's warning); `syncingReads`: how many /api/boards reads
+ *  answer no boards while a first sync runs. */
+let syncErrors: string[] = [],
+  syncingReads = 0;
 let clientFailures = 0,
   detailFailures = 0,
   includeMedia = false,
@@ -890,6 +894,8 @@ async function handle(req: Request) {
     viewDb.run("DELETE FROM view_imports");
     const settings = await req.json();
     clientFailures = settings.clientFailures ?? 0;
+    syncErrors = settings.syncErrors ?? [];
+    syncingReads = settings.syncingReads ?? 0;
     detailFailures = settings.detailFailures ?? 0;
     includeMedia = settings.includeMedia ?? false;
     mediaInComment = settings.mediaInComment ?? false;
@@ -999,9 +1005,16 @@ async function handle(req: Request) {
       status = 503;
       body = { error: "Test unavailable" };
     } else body = { site: "https://example.atlassian.net", user, writable };
-  } else if (path === "/api/boards")
+  } else if (path === "/api/sync")
+    body = {
+      errors: syncErrors,
+      syncing: syncingReads > 0 ? [{ board: board.id, loaded: 300, total: 900 }] : [],
+    };
+  else if (path === "/api/boards")
     body =
-      bulk || added
+      syncingReads-- > 0
+        ? []
+        : bulk || added
         ? [board, { ...board, id: 2, name: "Second board", ...(added ? { removable: true } : {}) }]
         : [board];
   else if (path === "/api/issues") body = listed();
@@ -1022,7 +1035,11 @@ async function handle(req: Request) {
       ...(url.searchParams.get("issue") ? [] : [{ id: "sam", name: "Sam Outsider" }]),
     ].filter((person) => person.name.toLowerCase().includes(query));
   } else if (path === "/api/properties")
-    body = { entries: {}, progress: { total: 0, pending: 0, completed: 0, errors: 0 } };
+    body = {
+      entries: {},
+      progress: { total: 0, pending: 0, completed: 0, errors: 0 },
+      sync: { errors: syncErrors, syncing: [] },
+    };
   else if (path.match(/^\/api\/issues\/[^/]+\/media\/[^/]+$/)) {
     if (mediaDelay) await Bun.sleep(mediaDelay);
     if (mediaFailure) {

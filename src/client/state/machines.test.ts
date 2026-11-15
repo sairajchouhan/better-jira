@@ -86,8 +86,11 @@ test("app: a failed load shows its error and a retry loads again", async () => {
   await waitFor(app, (s) => s.matches("failed"));
   expect(app.getSnapshot().context.error).toBe("Mirror offline");
   app.send({ type: "load" });
-  expect(app.getSnapshot().context.error).toBe("");
+  // BJ-277: a retry keeps the error on screen until a load succeeds; clearing it here showed a blank page.
+  expect(app.getSnapshot().matches("loading")).toBe(true);
+  expect(app.getSnapshot().context.error).toBe("Mirror offline");
   await waitFor(app, (s) => s.matches("ready"));
+  expect(app.getSnapshot().context.error).toBe("");
   app.send({ type: "load" });
   expect(app.getSnapshot().matches("ready")).toBe(true);
 });
@@ -190,4 +193,28 @@ test("relation kind travels with the overlay event and defaults on the next open
   actor.send({ type: "overlay.open", overlay: "relations" });
   expect(actor.getSnapshot().context.relation).toBe("related");
   actor.stop();
+});
+
+test("app: a first sync still reading the boards waits, re-checking every couple of seconds, without counting as a failure", async () => {
+  const { StillSyncing, SYNC_WAIT_MS } = await import("./machines");
+  const clock = new SimulatedClock();
+  let attempts = 0;
+  const app = createActor(
+    appMachine.provide({
+      actors: {
+        load: fromPromise(async () => {
+          if (attempts++ < 2) throw new StillSyncing("Board 12: 100 of 900 issues");
+        }),
+      },
+    }),
+    { clock },
+  ).start();
+  app.send({ type: "load" });
+  await waitFor(app, (s) => s.matches("failed"));
+  expect(app.getSnapshot().context).toMatchObject({ waiting: true, attempt: 0, error: "Board 12: 100 of 900 issues" });
+  clock.increment(SYNC_WAIT_MS);
+  await waitFor(app, (s) => s.matches("failed") && attempts === 2);
+  clock.increment(SYNC_WAIT_MS);
+  await waitFor(app, (s) => s.matches("ready"));
+  expect(app.getSnapshot().context).toMatchObject({ waiting: false, error: "" });
 });

@@ -176,7 +176,7 @@ async function wrap(page: PwPage, base: string, path: string, setup: string, tab
     async goto(p = path) {
       await page.goto(base + p.replace(/^\//, ""));
       await waitFor(
-        `document.readyState==="complete"&&!!document.querySelector("[data-key], [role=alert]")`,
+        `document.readyState==="complete"&&!!document.querySelector("[data-key], [role=alert], [data-boot-screen]")`,
         15000,
       );
     },

@@ -342,8 +342,21 @@ export function StatusBar() {
     writable = useStore((s) => s.writable),
     pending = useStore((s) => s.pendingWrites),
     writeError = useStore((s) => s.writeError);
+  const syncProblem = useStore((s) => s.syncProblem);
   return (
     <footer className="flex h-7 shrink-0 items-center gap-4 px-4 pb-2 text-[11px] whitespace-nowrap">
+      {/* The server or Jira can't be reached: what's on screen may be old (sync-problem.ts). */}
+      {syncProblem && (
+        <span
+          role="alert"
+          aria-label="Jira sync status"
+          title={syncProblem}
+          className="flex min-w-0 shrink items-center gap-1.5 text-red-500"
+        >
+          <span className="size-1.5 shrink-0 rounded-full bg-red-500" />
+          <span className="truncate">{syncProblem}</span>
+        </span>
+      )}
       {writable ? (
         <span
           title="Issue edits are written to Jira."

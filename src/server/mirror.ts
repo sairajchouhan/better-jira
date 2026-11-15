@@ -1,6 +1,7 @@
 import { viewRepository } from "./view-repository";
 import { Database } from "bun:sqlite";
 import { jira, JiraError } from "./jira";
+import { jiraProblem } from "./jira-problem";
 import { boardFromInput, withoutAddedBoard } from "./config";
 import { detailCache } from "./detail-cache";
 import { historyCache, readHistory } from "./issue-history";
@@ -168,12 +169,17 @@ async function fullSync(board: number) {
   const jql = "ORDER BY key ASC"; // stable order so parallel startAt pages don't skip issues
   const first = await page(board, jql, 0);
   save(board, first.issues, t0);
+  const progress = { loaded: first.issues.length, total: first.total };
+  boardSync.set(board, { ...boardSync.get(board), progress });
   const starts: number[] = [];
   for (let s = PAGE; s < first.total; s += PAGE) starts.push(s);
   await Promise.all(
     Array.from({ length: PARALLEL }, async () => {
-      for (let s; (s = starts.shift()) !== undefined;)
-        save(board, (await page(board, jql, s)).issues, t0);
+      for (let s; (s = starts.shift()) !== undefined;) {
+        const { issues } = await page(board, jql, s);
+        save(board, issues, t0);
+        progress.loaded += issues.length;
+      }
     }),
   );
   const gone = db.query("DELETE FROM issues WHERE board = ? AND seen < ?").run(board, t0).changes;
@@ -192,6 +198,7 @@ async function fullSync(board: number) {
     ),
   }));
   setMeta(`config:${board}`, JSON.stringify({ id: board, name: config.name, columns }));
+  boardSync.set(board, { ...boardSync.get(board), progress: undefined });
   setMeta(`full:${board}`, String(t0));
   setMeta(`inc:${board}`, String(t0));
   setMeta(`fields:${board}`, "4");
@@ -314,6 +321,27 @@ async function syncBoard(board: number) {
   return keys.length > 0;
 }
 
+/** Per board: why the last sync failed, in words (jira-problem.ts), and a full sync's progress while it reads. */
+const boardSync = new Map<number, { error?: string; progress?: { loaded: number; total: number } }>();
+/** Records a board's sync outcome; open tabs re-read the health when the error appears, changes or clears. */
+function recordSync(board: number, error?: unknown) {
+  const before = boardSync.get(board)?.error,
+    after = error === undefined ? undefined : jiraProblem(error, configuration.site, board);
+  boardSync.set(board, { ...boardSync.get(board), error: after });
+  if (before !== after) notify();
+}
+/** What the app shows about syncing: why Jira can't be read (one line per distinct reason), and the boards still on their
+ *  first read with how far each has got. */
+export function syncHealth() {
+  const states = BOARDS.map((id) => ({ id, ...boardSync.get(id) }));
+  return {
+    errors: [...new Set(states.flatMap((b) => (b.error ? [b.error] : [])))],
+    syncing: states.flatMap((b) =>
+      b.progress && !getMeta(`config:${b.id}`) ? [{ board: b.id, ...b.progress }] : [],
+    ),
+  };
+}
+
 type Client = { issue?: string; send: (kind?: "changed" | "inbox" | "boards" | "views") => void };
 const live = (g.live ??= { clients: new Set(), wake: () => {} });
 /** An open, visible tab, and the issue it shows. Jira is polled fast while one is connected; the first one syncs at once. Returns the disconnect. */
@@ -331,7 +359,10 @@ async function loop() {
   for (;;) {
     const changed = await Promise.all(
       BOARDS.map(async (b) => {
-        const synced = await syncBoard(b).catch((e) => (console.error(`[sync] board ${b}:`, e.message), false));
+        const synced = await syncBoard(b).then(
+          (changed) => (recordSync(b), changed),
+          (e) => (console.error(`[sync] board ${b}:`, e.message), recordSync(b, e), false),
+        );
         const prs = await syncLinkedPullRequests(b).catch((e) => (console.error(`[prs] board ${b}:`, e.message), false));
         return synced || prs;
       }),
@@ -759,15 +790,17 @@ async function enrichProperties() {
   }
 }
 
-export const properties = () =>
-  propertyEntries(
+export const properties = () => ({
+  ...propertyEntries(
     db
       .query<PropertyRow, []>(
         `SELECT i.key,i.slim,p.data,p.source_updated FROM issues i LEFT JOIN issue_properties p ON p.key=i.key WHERE i.board IN (${BOARDS.join(",")})`,
       )
       .all(),
     propertyProgress.pending,
-  );
+  ),
+  sync: syncHealth(),
+});
 
 /** People to @mention: those Jira lets see the issue (user/viewissue/search), as its own mention picker offers. That search returns no one for an empty
  * query, so a bare "@" lists the issue's assignable people; without an issue (a new one), anyone on the site. Apps and deactivated accounts are left out. */

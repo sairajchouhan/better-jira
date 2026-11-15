@@ -10,6 +10,7 @@ import { mergeFull, mergeProperties, needsFull } from "./local-edits";
 import { navigate } from "@/client/features/navigation/app-navigation";
 import { issuesDeletedInJira } from "./deleted-issues";
 import { get, set, subscribe } from "./store";
+import { syncProblem } from "./sync-problem";
 
 /** Server data goes through TanStack Query: it dedupes loads in flight, schedules the poll and refetches on focus. Invalidate a key to refetch it. */
 export const queryClient = new QueryClient({
@@ -31,7 +32,11 @@ export function startPoll() {
   if (polling) void poll.refetch();
   else {
     queryClient.mount();
-    polling = poll.subscribe(() => {});
+    // A failed poll means the server itself is gone; the next good one clears the warning.
+    polling = poll.subscribe((result) => {
+      const problem = syncProblem(undefined, true);
+      if (result.isError && problem !== get().syncProblem) set({ syncProblem: problem });
+    });
     listen();
     subscribe(listen);
     document.addEventListener("visibilitychange", listen);
@@ -108,9 +113,13 @@ export async function addBoard(input: string): Promise<{ id: number; message: st
 /** A JSON endpoint as a query; `staleTime` lets a recent answer stand in for a new request. */
 export const fetchJson = <T>(path: string, staleTime = 0) =>
   queryClient.fetchQuery<T>({ queryKey: [path], queryFn: () => json<T>(path), staleTime });
+/** A JSON read; a refusal throws the server's own reason (a rejected token, an unreachable Jira), not the path. */
 async function json<T>(path: string): Promise<T> {
   const response = await fetch(path);
-  if (!response.ok) throw new Error(`Could not load ${path}`);
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(typeof body.error === "string" ? body.error : `Could not load ${path}`);
+  }
   return response.json();
 }
 /** One property poll; the poll query schedules the next. */
@@ -118,6 +127,8 @@ async function fetchProperties(): Promise<{ pending: number }> {
   const res = await fetch("/api/properties");
   if (!res.ok) throw new Error("Properties unavailable");
   const data = await res.json();
+  const problem = syncProblem(data.sync, false);
+  if (problem !== get().syncProblem) set({ syncProblem: problem });
   const { issues, deleted, stale } = mergeProperties(data.entries);
   issuesDeletedInJira(deleted);
   set({ propertySync: data.progress, ...(issues ? { issues } : {}) });

@@ -11,6 +11,7 @@ import { remoteImage } from "./remote-image";
 import { applyOps, uploadAttachment } from "./jira-writes";
 import { jira, JiraError, JiraTimeout, canWrite } from "./jira";
 import * as inbox from "./notifications";
+import { jiraProblem } from "./jira-problem";
 
 const json = (body: string) =>
   new Response(body, { headers: { "Content-Type": "application/json" } });
@@ -94,13 +95,14 @@ const server = serve({
           ...(await mirror.clientInfo()),
           writable: canWrite(serverConfiguration().site),
         });
-      } catch {
+      } catch (e) {
         return Response.json(
-          { error: "Could not read your Jira account. Check setup and retry." },
+          { error: jiraProblem(e, serverConfiguration().site) },
           { status: 503 },
         );
       }
     }),
+    "/api/sync": localOnly(() => Response.json(mirror.syncHealth())),
     "/api/inbox": {
       GET: localOnly(async (req) => {
         const params = new URL(req.url).searchParams,

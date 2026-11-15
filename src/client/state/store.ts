@@ -135,6 +135,10 @@ export type State = {
   /** Jira's own choices for property menus, when writes go to Jira. */
   options: JiraOptions;
   loadError: string;
+  /** The load is waiting on the first sync, not failing: the boot screen shows progress, not an error. */
+  loadWaiting: boolean;
+  /** The footer's warning when the server or Jira can't be reached (sync-problem.ts); "" when all is well. */
+  syncProblem: string;
   canEdit: boolean;
   storage: {
     status: "loading" | "saving" | "saved" | "error";
@@ -196,6 +200,8 @@ let state: State = {
   writeError: null,
   options: { priorities: [], users: [], labels: [], versions: {} },
   loadError: "",
+  loadWaiting: false,
+  syncProblem: "",
   canEdit: true,
   storage: { status: "loading" },
 };
@@ -206,7 +212,7 @@ export const get = () => state;
 type UiKey = keyof UiContext;
 /** Data changes. Screen state changes only through `navigate` and the view functions (navigation.ts), or `ui.send` (machines.ts). */
 export function set(
-  patch: Partial<Omit<State, UiKey | keyof Screen | "loadError" | "storage" | "canEdit">>,
+  patch: Partial<Omit<State, UiKey | keyof Screen | "loadError" | "loadWaiting" | "storage" | "canEdit">>,
 ) {
   commit(patch);
 }
