@@ -1,10 +1,9 @@
 import { useMemo } from "react";
-import { jiraAvatar } from "@/shared/avatar-url";
 import type { Issue, User } from "@/shared/issue-model";
+import { jiraUser as accountUser } from "@/shared/person-name";
 
-/** A Jira user record (`creator`, `reporter`, a comment's `author`) as this app's user. */
-export const jiraUser = (a: any): User | null =>
-  a && { id: a.accountId, name: a.displayName, avatar: jiraAvatar(a.avatarUrls) };
+/** A Jira user record (`creator`, `reporter`, a comment's `author`) as this app's user; null for none. */
+export const jiraUser = (a: any): User | null => (a ? accountUser(a) : null);
 
 /**
  * BJ-14: who created the issue (its creator, not its reporter) and when, from the mirrored issue or else Jira's fields. One

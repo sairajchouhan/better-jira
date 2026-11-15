@@ -26,6 +26,7 @@ import type { Destination } from "./navigation";
 import { hotkeyOf, runShortcut } from "./shortcuts";
 import { boardCopyURL } from "./sidebar-menus";
 import { issueCrumbs, pageIssue, spaceOf, type AncestorCrumb as AncestorCrumbModel, type IssueCrumbs } from "./issue-trail";
+import { initialOf } from "@/shared/person-name";
 
 // Linear's breadcrumb (linear.app/…/view/…, 2026-11-11 computed styles): 24px links padded 0 5px 0 4px with matching
 // negative margins, 16px icon + 6px, 13px/500 text at line-height normal, "›" with 8px sides lifted 2px; hover bg
@@ -143,7 +144,7 @@ function SpaceCrumb({ board }: { board: Board }) {
       <ContextMenu label="Space options" entries={() => [boardCopyURL(board, hotkeyOf("copy-url"))]}>
         <CrumbLink to={allIssues(board)} aria-label={board.name} title={board.name} isDisabled={false} onPress={clearBoardTools} className={CRUMB}>
           <span aria-hidden="true" className={CRUMB_ICON}>
-            <span className="grid size-4 place-items-center rounded-[4px] bg-accent text-[9px] font-semibold text-white">{board.name[0]}</span>
+            <span className="grid size-4 place-items-center rounded-[4px] bg-accent text-[9px] font-semibold text-white">{initialOf(board.name)}</span>
           </span>
           <span className="truncate">{board.name}</span>
         </CrumbLink>

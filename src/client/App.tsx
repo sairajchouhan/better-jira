@@ -21,6 +21,7 @@ import { AppLoading } from "@/client/components/empty-state";
 import { Text } from "@/client/components/text";
 import { BootScreen } from "@/client/boot-screen";
 import { Button } from "@/client/components/button";
+import { ErrorBoundary, SurfaceError } from "@/client/components/error-boundary";
 import { ShortcutHelp, useLinearHotkeys } from "@/client/features/navigation/shortcuts";
 import { useRecordVisits } from "@/client/features/navigation/recents";
 import { RouteTitle } from "@/client/features/navigation/route-title-updater";
@@ -54,7 +55,15 @@ export function App() {
   const [opened, setOpened] = useState(false);
   useEffect(() => void load(), []);
   useEffect(() => {
-    if (ready) void router.load().then(() => setOpened(true));
+    // A first route load that fails is rethrown in render, so the app's error boundary shows it, not the splash forever.
+    if (ready)
+      router.load().then(
+        () => setOpened(true),
+        (error: unknown) =>
+          setOpened(() => {
+            throw error;
+          }),
+      );
   }, [ready]);
   if (!ready || !opened) return <Booting />;
   return (
@@ -130,16 +139,24 @@ function Shell({ children }: { children: ReactNode }) {
           <div className="flex min-h-0 flex-1">
             {boards
               .filter((b) => visited.has(b.id))
-              .map((b) => (
-                <BoardView
-                  key={b.id}
-                  board={b}
-                  active={b.id === boardId}
-                  shown={!covered && b.id === boardId}
-                  // Only the active board shows the selection, so J/K re-renders one board, not every visited one.
-                  selected={b.id === boardId ? selected : null}
-                />
-              ))}
+              .map((b) => {
+                const shown = !covered && b.id === boardId;
+                return (
+                  // A board that fails to render shows its error in its own place; a hidden one shows nothing.
+                  <ErrorBoundary
+                    key={b.id}
+                    fallback={shown && <SurfaceError title={`Couldn't show ${b.name || "this board"}`} />}
+                  >
+                    <BoardView
+                      board={b}
+                      active={b.id === boardId}
+                      shown={shown}
+                      // Only the active board shows the selection, so J/K re-renders one board, not every visited one.
+                      selected={b.id === boardId ? selected : null}
+                    />
+                  </ErrorBoundary>
+                );
+              })}
             {children}
           </div>
         </main>

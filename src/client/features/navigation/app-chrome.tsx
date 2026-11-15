@@ -40,6 +40,7 @@ import { markAllRead, useInboxBadge } from "@/client/features/inbox/inbox";
 import { SectionDisclosure } from "@/client/components/section-disclosure";
 import { SelectRow } from "@/client/components/display-options";
 import { useStoredState } from "@/client/state/stored-state";
+import { initialOf } from "@/shared/person-name";
 
 /** Linear's sidebar preferences (BJ-76): collapsed sections, and when Inbox and My issues show (Customize sidebar). */
 const SIDEBAR_KEY = "better-jira:sidebar:v1";
@@ -182,7 +183,7 @@ export function Sidebar({ boards }: { boards: Board[] }) {
             const item = (
               <SidebarLink key={b.id} row={{ place: { to: "board", board: b.id } }} to={{ board: b.id, selected: null, panel: false }}>
                 <span className="grid size-4 shrink-0 place-items-center rounded-[4px] bg-sel text-[9px] font-semibold text-fg-2">
-                  {b.name[0]}
+                  {initialOf(b.name)}
                 </span>
                 <span className="truncate">{b.name}</span>
               </SidebarLink>

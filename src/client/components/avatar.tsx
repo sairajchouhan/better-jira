@@ -1,6 +1,7 @@
 import { type User } from "@/shared/issue-model";
 import { useState } from "react";
 import { avatarSrc } from "@/shared/avatar-proxy";
+import { initialOf } from "@/shared/person-name";
 
 
 /** The person's Jira photo through the same-origin proxy; their initial while it loads or if it fails; a dashed ring for nobody. */
@@ -28,7 +29,7 @@ export function Avatar({ user, size = 20, title }: { user: User | null; size?: n
       className="absolute inset-0 grid place-items-center rounded-full bg-sel text-fg-2"
       style={{ fontSize: Math.max(8, Math.round(size * 0.5)) }}
     >
-      {user.name[0]}
+      {initialOf(user.name)}
     </span>
   );
   return (

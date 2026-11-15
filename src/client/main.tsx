@@ -11,6 +11,7 @@ import { App } from "./App";
 import { Tooltip } from "./components/tooltip";
 import { ignoreBenignErrors } from "./lib/benign-errors";
 import { handOverBootShell } from "./boot-shell";
+import { AppError, ErrorBoundary } from "./components/error-boundary";
 
 ignoreBenignErrors(window);
 
@@ -19,10 +20,13 @@ const elem = document.getElementById("root")!;
 handOverBootShell(elem);
 const app = (
   <StrictMode>
-    {/* The page's one tooltip state: every title tooltip, hover card and edge tooltip below shares it. */}
-    <Tooltip.Provider>
-      <App />
-    </Tooltip.Provider>
+    {/* A render error anywhere, boot included, shows what failed instead of an empty page or a stuck splash. */}
+    <ErrorBoundary fallback={<AppError />}>
+      {/* The page's one tooltip state: every title tooltip, hover card and edge tooltip below shares it. */}
+      <Tooltip.Provider>
+        <App />
+      </Tooltip.Provider>
+    </ErrorBoundary>
   </StrictMode>
 );
 

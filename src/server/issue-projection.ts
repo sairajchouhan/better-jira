@@ -1,17 +1,13 @@
-import { jiraAvatar } from "@/shared/avatar-url";
 import { issueAttachments } from "@/shared/attachment-media";
 import { pullRequestSummary } from "@/shared/issue-properties";
 import { linkRelation } from "@/shared/relations";
 import { smartLink } from "@/shared/smart-link";
+import { jiraUser } from "@/shared/person-name";
 
 /** Pure: raw Jira records in, the app's issue and property shapes out. No I/O. */
 
-/** A Jira account as the app shows it. */
-export const jiraUser = (u: any) => ({
-  id: u.accountId,
-  name: u.displayName,
-  avatar: jiraAvatar(u.avatarUrls),
-});
+/** A Jira account as the app shows it (shared with the client, so a nameless account renders the same everywhere). */
+export { jiraUser };
 
 /** Jira's `/watchers` answer; the list is incomplete when Jira's permissions hide some watchers. */
 export function watcherList(w: { watchers?: any[]; watchCount?: number }) {
