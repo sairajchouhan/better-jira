@@ -60,6 +60,10 @@ export function configuration(env: Environment, local: LocalSettings = {}): Conf
   const auth = jiraAuth(env, local),
     own = !local.site || siteURL(local.site) === auth.site ? local : {};
   const setupBoards = env.JIRA_BOARDS ? boardIDs(env.JIRA_BOARDS) : (own.boards ?? []);
+  if (!setupBoards.length && !local.addedBoards?.[auth.site]?.length)
+    throw new Error(
+      "No Jira boards are chosen yet. Run bun run setup to pick your boards, or set JIRA_BOARDS in .env.",
+    );
   const boards = boardIDs([...setupBoards, ...(local.addedBoards?.[auth.site] ?? [])]),
     port = Number(env.PORT || own.port || 3000);
   if (!Number.isSafeInteger(port) || port < 1 || port > 65535)

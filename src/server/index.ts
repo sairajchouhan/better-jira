@@ -1,3 +1,5 @@
+// First: stops the server with a plain message when setup is missing or broken.
+import "./preflight";
 import { serve, type BunRequest } from "bun";
 import { localMediaRequest } from "@/shared/attachment-media";
 import index from "@/client/index.html";
