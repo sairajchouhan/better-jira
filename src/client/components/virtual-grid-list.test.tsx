@@ -222,3 +222,21 @@ test("the dragged row collapses in place, never hidden: React Aria's arrows read
   expect(rule).toContain("padding: 0 !important");
   expect(rule).not.toMatch(/display:\s*none|visibility:\s*hidden|content-visibility/);
 });
+
+test("the footer (a column's \"+\") sits inside the list right after the last row, as Linear's `rl`, and in an empty list", () => {
+  const footer = <button type="button">Add new issue</button>;
+  const html = renderToStaticMarkup(
+    <VirtualGridList aria-label="Todo" items={items} itemKey={(key) => key} itemText={(key) => `${key} summary`} estimate={100} selected="C" footer={footer}>
+      {(key) => <div>{key}</div>}
+    </VirtualGridList>,
+  );
+  // Inside the grid, so a drop over it still lands after the last row; after the last row, not at the column's foot.
+  expect(html).toMatch(/role="grid"[\s\S]*data-key="C"[\s\S]*class="ui-virtual-footer"[\s\S]*Add new issue<\/button><\/div><\/div><\/div><span data-focus-scope-end/);
+  const empty = renderToStaticMarkup(
+    <VirtualGridList aria-label="Todo" items={[] as string[]} itemKey={(key) => key} itemText={(key) => key} estimate={100} selected={null} footer={footer}>
+      {(key) => <div>{key}</div>}
+    </VirtualGridList>,
+  );
+  expect(empty).toMatch(/role="grid"[\s\S]*Add new issue/);
+  expect(render({ selected: "C" })).not.toContain("ui-virtual-footer");
+});

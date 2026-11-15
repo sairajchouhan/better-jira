@@ -626,17 +626,17 @@ function ColumnView({
           drop={drop}
           onRowKeyDown={issueKeys}
           className="flex-1"
+          footer={<AddIssueSlot onClick={create} />}
         >
           {(issue) => <BoardCard issue={issue} display={display} />}
         </VirtualGridList>
-        <AddIssueSlot onClick={create} />
       </div>
     </section>
   );
 }
 
-/** Linear's column foot (IssueList `rl` around `sl`): a full-width 28px pill holding only a plus, shown while the pointer
- *  is over the column; every column's is "Add new issue" (board-column.css). */
+/** Linear's column foot (IssueList `rl` around `sl`), right after the last card: a full-width 28px pill holding only a plus,
+ *  shown while the pointer is over the column; every column's is "Add new issue" (board-column.css). */
 function AddIssueSlot({ onClick }: { onClick: () => void }) {
   return (
     <div className="board-add-slot">

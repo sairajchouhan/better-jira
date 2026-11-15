@@ -230,7 +230,15 @@ export function chosenKeys(selectedKeys: ReadonlySet<string> | undefined, select
 }
 
 /** What the list's collection renderer needs to window it: keys in order, offsets, the range and the keys always rendered. */
-type Window = { keys: readonly string[]; index: ReadonlyMap<string, number>; offsets: readonly number[]; start: number; end: number; pinned: readonly (string | null)[] };
+type Window = {
+  keys: readonly string[];
+  index: ReadonlyMap<string, number>;
+  offsets: readonly number[];
+  start: number;
+  end: number;
+  pinned: readonly (string | null)[];
+  footer: ReactNode;
+};
 const WindowContext = createContext<Window | null>(null);
 
 type RootProps = ComponentProps<CollectionRenderer["CollectionRoot"]>;
@@ -253,6 +261,11 @@ function WindowRoot({ collection, persistedKeys, renderDropIndicator }: RootProp
         ) : null;
       })}
       {tail > 0 && <Spacer height={tail} />}
+      {w.footer != null && (
+        <div role="row" className="ui-virtual-footer">
+          <div role="gridcell">{w.footer}</div>
+        </div>
+      )}
     </>
   );
 }
@@ -299,6 +312,7 @@ export function VirtualGridList<T>({
   drop,
   onRowKeyDown,
   className,
+  footer,
   children,
 }: {
   "aria-label": string;
@@ -318,6 +332,9 @@ export function VirtualGridList<T>({
   /** A key pressed on a row itself (not on a control inside it), before React Aria's own handling. */
   onRowKeyDown?: (key: string, event: KeyboardEvent) => void;
   className?: string;
+  /** Shown right after the last row (Linear's column "+" `rl`, the last item of its list). It sits inside the list, so a drop
+   *  over it lands after the last row and a gap opening above it pushes it down, as Linear's does. */
+  footer?: ReactNode;
   /** One row's content. The row is the list's: React Aria's, with its state on it (`data-selected`, `data-focus-visible`,
    *  `data-dragging`) for the look inside (`in-data-*`). Keep it stable (no per-render props): every item renders it. */
   children: (item: T) => ReactNode;
@@ -406,8 +423,8 @@ export function VirtualGridList<T>({
   const count = keys.length;
   const end = range ? Math.min(range[1], count) : 0, start = range ? Math.min(range[0], end) : 0;
   const windowed = useMemo<Window>(
-    () => ({ keys, index, offsets, start, end, pinned: [selected, focused, ...dragged] }),
-    [keys, index, offsets, start, end, selected, focused, dragged],
+    () => ({ keys, index, offsets, start, end, pinned: [selected, focused, ...dragged], footer }),
+    [keys, index, offsets, start, end, selected, focused, dragged, footer],
   );
 
   // The selection scrolls into view. One made while its item was outside the window scrolls to the item's estimated place;
