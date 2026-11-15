@@ -21,7 +21,7 @@ import { createSubIssue, issueMenuEntries, type IssueMenuDialog } from "./issue-
 import { SubIssues } from "./sub-issues";
 import { statusOf } from "./sub-issue-model";
 import { attachmentSplit } from "./issue-attachments";
-import { switchBoard } from "./composer-draft";
+import { parentInProject, switchBoard } from "./composer-draft";
 import { TITLE_MAX } from "@/shared/issue-title";
 import { useTitleLimit } from "@/client/features/editor/title-limit";
 import { draftEligible, readLocalDraft, resumeDraft, useComposerLocalDraft } from "./composer-local-draft";
@@ -170,8 +170,8 @@ export function CreateIssue() {
   const account = useStore(s => s.namespace);
   // The draft this browser kept (a reload, a closed tab, a minimized composer) comes back unless the opener brought its own.
   const [start] = useState(() => resumeDraft(initial, readLocalDraft(account), boards.map((b) => b.id)));
-  const [draft, setDraft] = useState<IssueDraft>(start.fields);
-  const board = boards.find(b => b.id === (draft.board ?? currentBoard))!;
+  const [chosen, setDraft] = useState<IssueDraft>(start.fields);
+  const board = boards.find(b => b.id === (chosen.board ?? currentBoard))!;
   const [title, setTitle] = useState(start.title);
   const [description, setDescription] = useState(start.description);
   const [draftIndex, setDraftIndex] = useState(0);
@@ -199,6 +199,8 @@ export function CreateIssue() {
   const linkReturn = useRef<HTMLElement | null>(null);
   const issues = boardIssues(all, board.id);
   const projects = projectChoices(issues);
+  // Never a parent Jira would refuse: one from another Jira project goes, or brings the issue to its project (BJ-257).
+  const draft = parentInProject(chosen, projects, (key) => all.get(key));
   const options = useStore((s) => s.options),
     writable = useStore((s) => s.writable);
   // Create related › Parent issue: only a type one level above the source's in Jira's hierarchy can be its parent (a Task's is an Epic).
@@ -390,7 +392,7 @@ export function CreateIssue() {
               value={board.name}
               icon={<Icon name="board" size={14} />}
               menu={ComposerBoardMenu}
-              menuProps={{ boards, value: board.id, onChange: (to: number) => setDraft((d) => switchBoard(d, board.id, to)) }}
+              menuProps={{ boards, value: board.id, onChange: (to: number) => setDraft((d) => switchBoard(d, board.id, to, (key) => get().issues.get(key))) }}
             />
             <Icon name="chevron" size={10} />
             <Text variant="mini" color="inherit" className="text-fg">
