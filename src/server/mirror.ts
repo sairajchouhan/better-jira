@@ -29,7 +29,7 @@ import { writeLedger } from "./write-ledger";
 import { avatarProxy, type AvatarCache } from "@/shared/avatar-proxy";
 import { faviconProxy } from "./favicon";
 import { smartLinkCache } from "./smart-link";
-import { issueStore } from "./issue-store";
+import { droppedBoardMeta, issueStore } from "./issue-store";
 
 const configuration = serverConfiguration();
 // `bun --hot` re-runs this module on every edit; the loops and the open tabs live on globalThis so they survive it.
@@ -464,11 +464,22 @@ export async function start() {
       setMeta("slim-version", SLIM_VERSION);
     })();
   }
+  forgetDroppedBoards();
   if (!g.syncing) {
     g.syncing = true;
     loop();
     watchOpenIssues();
   }
+}
+
+/** Boards no longer configured (dropped from setup, or removed in the app last run) let go of their issues and memberships,
+ *  keeping any a configured board holds or that is kept on no board, and of their sync state (BJ-342). */
+function forgetDroppedBoards() {
+  const dropped = store.forgetBoards(BOARDS);
+  const keys = db.query<{ k: string }, []>("SELECT k FROM meta").all().map((r) => r.k);
+  const forget = db.query("DELETE FROM meta WHERE k = ?");
+  for (const k of droppedBoardMeta(keys, BOARDS)) forget.run(k);
+  if (dropped.length) console.log(`[sync] forgot boards no longer configured: ${dropped.join(", ")}`);
 }
 
 // --- reads (the UI only ever reads from here) ---
@@ -505,7 +516,8 @@ export async function addBoard(input: string) {
   return { id, message: `Added ${boards().find((b) => b.id === id)?.name ?? `board ${id}`}.` };
 }
 
-/** Removes a board added in the app from this site's sidebar (BJ-24). Setup's boards stay; cached rows stay, unread. */
+/** Removes a board added in the app from this site's sidebar (BJ-24). Setup's boards stay; its cached rows stay, unread, until
+ *  the next start forgets them (`forgetDroppedBoards`). */
 export async function removeBoard(id: number) {
   if (!BOARDS.includes(id) || configuration.setupBoards.includes(id))
     throw new Error("Only a board added in the app can be removed.");
@@ -515,7 +527,7 @@ export async function removeBoard(id: number) {
 }
 
 /** Every issue on a configured board, slim, with the boards that hold it. ~3k rows, ~1MB: the UI keeps them all in memory for
- *  instant search. Rows of boards dropped from the config stay in the cache; the app only knows configured boards. */
+ *  instant search, and every issue kept on no board. The app only knows configured boards. */
 export const issues = () => `[${store.slims(BOARDS).join(",")}]`;
 
 const details = detailCache(db, async (key) => {

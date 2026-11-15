@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
-import { issueStore, migrateIssueStore, withBoards } from "./issue-store";
+import { droppedBoardMeta, issueStore, migrateIssueStore, withBoards } from "./issue-store";
 
 const fresh = () => {
   const db = new Database(":memory:", { strict: true });
@@ -124,4 +124,27 @@ test("BJ-341: an issue no board holds, once read, is kept on none: listed with n
   // Jira deleting it is what removes it.
   store.remove("OTHER-9");
   expect(listed(store, [1])).toEqual({});
+});
+
+test("BJ-342: on start a board no longer configured lets go of its issues, but not of one a configured board holds or one kept on none", () => {
+  const db = fresh();
+  const store = issueStore(db);
+  sync(store, 1, "TEAM-1", 100);
+  sync(store, 9, "TEAM-1", 100); // shared with the dropped board 9
+  sync(store, 9, "GONE-1", 100); // only board 9 held it
+  store.put({ key: "OTHER-1", slim: { key: "OTHER-1", updated: "u" }, full: raw("OTHER-1") }); // kept on no board
+  expect(store.forgetBoards([1])).toEqual([9]);
+  expect(listed(store, [1, 9])).toEqual({ "TEAM-1": [1], "OTHER-1": [] });
+  expect(store.boardsOf("TEAM-1")).toEqual([1]);
+  expect(store.updated("GONE-1")).toBe("");
+  expect(db.query<{ n: number }, []>("SELECT count(*) AS n FROM issue_boards WHERE board = 9").get()!.n).toBe(0);
+  // Nothing left to forget the next time.
+  expect(store.forgetBoards([1])).toEqual([]);
+  // Its sync state goes too, so putting it back starts a full sync; settings like a board's default view stay.
+  expect(droppedBoardMeta(["full:9", "inc:9", "fields:9", "config:9", "full:1", "config:1", "view-default:9", "source"], [1])).toEqual([
+    "full:9",
+    "inc:9",
+    "fields:9",
+    "config:9",
+  ]);
 });

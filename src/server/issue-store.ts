@@ -86,6 +86,24 @@ export function issueStore(db: Database) {
         return gone.length;
       })();
     },
+    /** On start: boards no longer configured let go of their issues. An issue only they held leaves the mirror; one a configured
+     *  board holds stays on it, and one kept on no board stays kept. Returns the boards let go. */
+    forgetBoards(configured: readonly number[]) {
+      return db.transaction(() => {
+        const kept = inList(configured);
+        const gone = db
+          .query<{ board: number }, []>(`SELECT DISTINCT board FROM issue_boards WHERE board NOT IN (${kept})`)
+          .all()
+          .map((r) => r.board);
+        // Issues first: once their memberships go, an issue only a dropped board held looks like one kept on no board.
+        db.run(
+          `DELETE FROM issues WHERE key IN (SELECT key FROM issue_boards)
+             AND key NOT IN (SELECT key FROM issue_boards WHERE board IN (${kept}))`,
+        );
+        db.run(`DELETE FROM issue_boards WHERE board NOT IN (${kept})`);
+        return gone;
+      })();
+    },
     /** Jira deleted the issue. */
     remove(key: string) {
       db.transaction(() => {
@@ -113,6 +131,14 @@ export function issueStore(db: Database) {
   };
 }
 export type IssueStore = ReturnType<typeof issueStore>;
+
+/** Of the mirror's meta keys, the sync state of boards no longer `configured` (when each last synced, its columns): forgotten
+ *  with their issues, so a board put back later starts with a full sync, not an incremental one over an empty board. */
+export const droppedBoardMeta = (keys: readonly string[], configured: readonly number[]) =>
+  keys.filter((k) => {
+    const board = k.match(/^(?:full|inc|fields|config):(\d+)$/)?.[1];
+    return board !== undefined && !configured.includes(Number(board));
+  });
 
 /** The issue's stored JSON with the boards that hold it. */
 export const withBoards = (slim: string, boards: readonly number[]) =>
