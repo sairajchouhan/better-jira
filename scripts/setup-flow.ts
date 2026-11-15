@@ -160,23 +160,25 @@ async function chooseBoards(
   };
   if (listed.length <= LIST_LIMIT) show(listed);
   else io.log(`\nYour account can see ${listed.length} boards. Type part of your board's name to find it, or paste its link.`);
-  for (let attempt = 1; ; attempt++) {
+  // Searches are free; five answers that name no board (a bad link, a search with no match, nothing) end setup.
+  for (let misses = 0; ; ) {
     const value = await io.ask("Board IDs or links, separated by commas, or part of a board name to search", saved.join(","));
     const parts = value.split(/[,\s]+/).filter(Boolean);
     const looksLikeBoards = parts.length > 0 && parts.every((p) => /^\d+$/.test(p) || /^https?:/i.test(p));
+    const term = value.trim().toLowerCase();
+    const matches = !looksLikeBoards && term ? listed.filter((b) => b.name.toLowerCase().includes(term)) : [];
+    let miss = "";
     if (looksLikeBoards)
       try {
         return boardIDs(parts.map((p) => boardFromInput(p, site)));
       } catch (error) {
-        if (attempt >= 5) throw new SetupError((error as Error).message);
-        io.log((error as Error).message);
-        continue;
+        miss = (error as Error).message;
       }
-    const term = value.trim().toLowerCase();
-    const matches = term ? listed.filter((b) => b.name.toLowerCase().includes(term)) : [];
-    if (attempt >= 5) throw new SetupError("No boards chosen. Run bun run setup again with your board's ID or link.");
-    if (matches.length) show(matches);
-    else io.log(term ? `No board's name contains "${value.trim()}".` : "Enter your board IDs or links.");
+    else if (matches.length) show(matches);
+    else miss = term ? `No board's name contains "${value.trim()}".` : "Enter your board IDs or links.";
+    if (!miss) continue;
+    if (++misses >= 5) throw new SetupError(`${miss} Run bun run setup again with your board's ID or link.`);
+    io.log(miss);
   }
 }
 

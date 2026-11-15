@@ -168,7 +168,8 @@ test("boards are chosen by link as Add board does, and a long list is searched b
     fakeJira((p) =>
       p.startsWith("/rest/agile/1.0/board?") ? Response.json({ isLast: true, values: [...many, { id: 12, name: "Payments", type: "kanban" }] }) : undefined!,
     ),
-    [SITE, "ada@example.invalid", "paym", `${SITE}/jira/software/projects/PAY/boards/12, 34`],
+    // More name searches than the five tries a wrong answer gets: searching never runs out.
+    [SITE, "ada@example.invalid", "team 1", "team 2", "team 3", "team 4", "team 5", "paym", `${SITE}/jira/software/projects/PAY/boards/12, 34`],
   );
   await run(h);
   expect(h.log).toContain("\nYour account can see 46 boards. Type part of your board's name to find it, or paste its link.");
