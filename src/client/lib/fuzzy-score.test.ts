@@ -199,3 +199,20 @@ test("C3: the due presets carry Linear's keywords (gfn)", () => {
     ["In one week", "one week"],
   ]);
 });
+
+test("BJ-267: ⌘K's hoisted assignee rows keep Linear's person score (mH): the action score as base, then the me and name boosts", async () => {
+  const { personKeywords, actionScore } = await import("./fuzzy-score");
+  const me = { name: "Alex Doe", parents: ["Assign to"], ...hoistedRow("Alex Doe", personKeywords("Alex Doe", { me: true })) };
+  const other = { name: "Alexis Roe", parents: ["Assign to"], ...hoistedRow("Alexis Roe", personKeywords("Alexis Roe")) };
+  // The person markers are no search words.
+  expect(me.keywords).toEqual(["Alex Doe"]);
+  // A word of the current user's name: E6t's +20, so they lead the hoisted people.
+  expect(actionScore(me, "alex")).toBeGreaterThan(20);
+  // A whole name in the query gets D6t's +10; a part of one doesn't.
+  expect(actionScore(other, "alexis roe")).toBeGreaterThan(10);
+  expect(actionScore(other, "alexis")).toBeLessThan(10);
+  // Never below the row's own action score.
+  expect(actionScore(other, "assign")).toBeGreaterThanOrEqual(
+    actionScore({ name: "Alexis Roe", parents: ["Assign to"], keywords: ["Alexis Roe"] }, "assign"),
+  );
+});

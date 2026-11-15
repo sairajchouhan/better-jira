@@ -183,13 +183,8 @@ export function menuFilter(
   keywords?: string[],
   { parents }: { parents?: string[] } = {},
 ): number {
-  if (keywords?.some((k) => k.startsWith(PERSON)))
-    return applicable(
-      personScore(keywords.filter((k) => !k.startsWith(PERSON)), search, {
-        me: keywords.includes(`${PERSON}me`),
-        team: keywords.includes(`${PERSON}team`),
-      }),
-    );
+  const person = personOf(keywords);
+  if (person) return applicable(personScore(person.names, search, person));
   const crumbs = keywords?.find((k) => k.startsWith(CRUMBS));
   if (crumbs) return breadcrumbScore(keywords!.filter((k) => k !== crumbs), crumbs.slice(CRUMBS.length), search);
   const { aliases, order, pin } = parseRow(keywords);
@@ -276,6 +271,12 @@ export const personKeywords = (name: string, person: { me?: boolean; team?: bool
   ...(person.me ? [`${PERSON}me`] : []),
   ...(person.team ? [`${PERSON}team`] : []),
 ];
+/** What personKeywords marked: the names, and whether the row is the current user and a team member; undefined for no person. */
+function personOf(keywords: readonly string[] = []) {
+  if (!keywords.some((k) => k.startsWith(PERSON))) return undefined;
+  const marked = (flag: string) => keywords.includes(PERSON + flag);
+  return { names: keywords.filter((k) => !k.startsWith(PERSON)), me: marked("me"), team: marked("team") };
+}
 /** `j6t`: the name's words appear in the query, together and in order. */
 function wholeName(words: string[], name: string) {
   const parts = formatted(name).split(/\s+/).filter(Boolean);
@@ -289,10 +290,15 @@ function wholeName(words: string[], name: string) {
  * matches their name, and anyone gains 10 when the query holds their whole name. The current user also matches "me" exactly
  * (`keywordsExactMatch: ["me"]`), so "me" lifts you to the top of the assignee picker.
  */
-export function personScore(names: string[], search: string, person: { me?: boolean; team?: boolean }): number {
+export function personScore(
+  names: string[],
+  search: string,
+  person: { me?: boolean; team?: boolean; base?: number },
+): number {
   const query = search.trim(),
     words = formatted(query).split(/\s+/).filter(Boolean);
-  let score = Math.max(fuzzyScore(names, query), person.me && query.toLowerCase() === "me" ? 1 : 0);
+  // `O6t`'s baseScore: the row's own action score, when it is scored as an action (⌘K's hoisted assignee rows, through `mH`).
+  let score = Math.max(person.base ?? 0, fuzzyScore(names, query), person.me && query.toLowerCase() === "me" ? 1 : 0);
   if (person.team) score = prioritize(score, TEAM_PRIORITY);
   if (!query || score < MIN_APPLICABILITY) return score;
   if (person.me && (words.includes("me") || words.some((w) => fuzzyScore(names, w) >= MIN_APPLICABILITY)))
@@ -445,10 +451,14 @@ export const workflowOrder =
       q = plain(search).toLowerCase();
     return q && q.length < n.length && n.startsWith(q) ? base - index * 0.001 : score;
   };
-/** A value's rowKeywords as the action fields actionScore reads once it is hoisted into a root search (⌘K): its keywords, and a
- *  status's workflow order at the hoisted base (0.84). */
+/** A value's rowKeywords as the action fields actionScore reads once it is hoisted into a root search (⌘K): its keywords, a
+ *  status's workflow order at the hoisted base (0.84), and a person's score (Linear's assignee rows keep `scoreOverride: mH`
+ *  when hoisted: the action's own score, hoisted −0.15 included, is `O6t`'s baseScore, then the me and whole-name boosts). */
 export function hoistedRow(name: string, keywords?: readonly string[]): Pick<ScoredAction, "keywords" | "override"> {
   const { aliases, order } = parseRow(keywords);
+  const person = personOf(aliases);
+  if (person)
+    return { keywords: person.names, override: (score, search) => personScore(person.names, search, { ...person, base: score }) };
   return { keywords: aliases, override: order === undefined ? undefined : workflowOrder(name, order, HOISTED_PREFIX) };
 }
 /** Linear's `limitSubActionsInRootMenu` default (`abt(10)`): at most this many of one parent's values in the root search. */
