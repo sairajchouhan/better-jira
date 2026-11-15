@@ -59,6 +59,7 @@ This applies to every bug fix, every behaviour question, and whenever the user s
 - "New issues found": one line each.
 
 ## Lead only
+- Every bug fix or task the user gives goes to a delegate, never done directly in the main thread. The lead briefs, merges, checks and restarts.
 - Delegates run on Opus 5.5 high. QA defects fan out to parallel delegates grouped by file area; side quests go to Sol 6.1 high. Never wait on or poll a delegate: end the turn and its completion wakes you.
 - Council: Opus 5.5 and Sol 6.1 only.
 - If Sol stops on a usage limit, finish its work from its worktree.
