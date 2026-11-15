@@ -431,6 +431,18 @@ type List = {
 const ListContext = createContext<List | null>(null);
 /** What a submenu gives the menu inside it: stepping back to its parent (← and Backspace). */
 const SubmenuContext = createContext<{ back: () => void } | null>(null);
+/** What a page gives the menu inside it: leaving the page on Backspace in its empty search (Menu.Back). */
+const PageBackContext = createContext<(() => void) | null>(null);
+
+/**
+ * Linear's onEmptySearchBackspace (J4e, passed by the command menu `rMn` as its `O`): the menu inside is a page of another, and
+ * Backspace in its empty search runs `onBack`, with a submenu's guard (not a held key that just emptied it). ⌘K's root drops its
+ * targeted issue this way, and a nested page such as Change status goes back to ⌘K (`closeSubActions`). A submenu inside keeps its
+ * own back.
+ */
+function MenuBack({ onBack, children }: { onBack: () => void; children: ReactNode }) {
+  return <PageBackContext value={onBack}>{children}</PageBackContext>;
+}
 
 /**
  * What a pointer move onto row `next` does, given the row the pointer was last on (`under`) and the highlighted row: a move
@@ -596,6 +608,7 @@ function MenuRoot({
   useListHeight(root, width !== "auto");
   const surface = use(MenuSurfaceContext);
   const submenu = use(SubmenuContext);
+  const pageBack = use(PageBackContext);
   const [ownSearch, setOwnSearch] = useState(defaultSearch);
   const search = searchProp ?? ownSearch;
   const store = useRef<OpenedStore>(null);
@@ -790,6 +803,7 @@ function MenuRoot({
       row: row && { checkbox: row.hasAttribute("aria-checked"), submenu: key !== null && isSubmenuRow(state, key) },
       numbered: !!numbered,
       inSubmenu: !!submenu,
+      onPage: !!pageBack,
       childOpen: !!level.actions.opened(),
       afterArrow,
       hasSurface: !!surface,
@@ -818,7 +832,7 @@ function MenuRoot({
       case "open":
         return level.actions.open(key!, "focus");
       case "back":
-        return submenu?.back();
+        return submenu ? submenu.back() : pageBack?.();
       case "closeChild":
         return level.actions.close();
       case "toggle":
@@ -1515,4 +1529,5 @@ export const Menu = Object.assign(MenuRoot, {
   Divider: MenuDivider,
   TextDivider: MenuTextDivider,
   Empty: MenuEmpty,
+  Back: MenuBack,
 });

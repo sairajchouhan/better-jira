@@ -33,7 +33,9 @@ import {
 } from "@/client/features/views/view-choices";
 import { MenuSurface } from "@/client/components/menu-surface";
 import { Menu } from "@/client/components/menu";
-import { COMMAND_MENU_WIDTH, CommandMenuTitle } from "@/client/components/command-menu";
+import { COMMAND_MENU_WIDTH, CommandMenuPage, CommandMenuTitle, CommandTarget } from "@/client/components/command-menu";
+import { PropertyPicker, type IssueField } from "@/client/features/issue/personal-controls";
+import { ReminderPicker } from "@/client/features/reminders/reminders";
 import { Avatar } from "@/client/components/avatar";
 import { actionScore, hoistedRow, hoistValues, MIN_APPLICABILITY, type ScoredAction } from "@/client/lib/fuzzy-score";
 import { issuePropertyEntries } from "@/client/features/issue/issue-menu";
@@ -81,17 +83,16 @@ type Cmd = ScoredAction & { id?: string; keys?: Keys; icon?: ReactNode; detail?:
 /** One command row (Linear's command-menu Item, Fgn): icon, name, shortcut; ⌘K's commands and every nested page's choices. A value
  *  hoisted from a parent leads with its breadcrumb ("Change status › In Progress", Linear's M4e) and checks the current value. */
 function CommandRow({ cmd: c }: { cmd: Cmd }) {
-  const label = [...(c.parents ?? []), c.name].join(" › ");
   return (
     <Menu.Item
-      value={`cmd:${c.id ? `${c.id} ` : ""}${label}`}
+      value={rowValue(c)}
       disabled={c.disabled}
       onSelect={c.run}
       icon={c.icon}
       checked={c.checked}
       shortcut={c.keys?.length ? c.keys : undefined}
     >
-      <ActionLabel name={label} />
+      <ActionLabel name={rowLabel(c)} />
       {/* Linear's row detail (M4e `L4e`): small, labelFaint, 4px after the name, truncated. */}
       {c.detail && (
         <Text as="span" variant="small" color="faint" wrap="truncate" className="ml-1 grow">
@@ -101,6 +102,9 @@ function CommandRow({ cmd: c }: { cmd: Cmd }) {
     </Menu.Item>
   );
 }
+const rowLabel = (c: Cmd) => [...(c.parents ?? []), c.name].join(" › ");
+/** A command row's menu value: what a page returns the highlight to when Backspace leaves it. */
+const rowValue = (c: Cmd) => `cmd:${c.id ? `${c.id} ` : ""}${rowLabel(c)}`;
 
 /** Each command's icon, as Linear's actions carry one; a group's own image (Help's Book: mO.defaultImage) otherwise. */
 const COMMAND_ICONS: Record<string, IconName> = {
@@ -312,33 +316,9 @@ export function HelpMenu() {
 }
 
 /** The palette both search and ⌘K use: Linear's command menu (WK in startup-root.CnUSfl4j.js; sizes VK, spelled out in index.css
- *  `.command-menu`) through the same `MenuSurface command` frame and `Menu` compound every issue's command menu uses. Centred,
- *  720px, 110px down, with no backdrop and one frame: the targeted issue's chip as its title, the 46px search, then the groups. */
-function PaletteFrame({
-  label,
-  q,
-  setQ,
-  title,
-  chip,
-  placeholder = "Type a command or search…",
-  onBackspace,
-  footer,
-  children,
-}: {
-  label: string;
-  q: string;
-  setQ: (q: string) => void;
-  /** The issue the commands act on, drawn as the menu's title chip. */
-  title?: Issue;
-  /** A nested page's parent name, before the search. */
-  chip?: ReactNode;
-  placeholder?: string;
-  /** Runs on Backspace in an empty input. */
-  onBackspace?: () => void;
-  /** Controls under the results, outside the menu so their own menus keep their keys. */
-  footer?: ReactNode;
-  children: ReactNode;
-}) {
+ *  `.command-menu`) through the same `MenuSurface command` frame every issue's command menu uses. Centred, 720px, 110px down,
+ *  with no backdrop. One frame for the palette's life: a nested page (CommandMenuPage) renders inside it in place of the body. */
+function CommandFrame({ label, children }: { label: string; children: ReactNode }) {
   return (
     <MenuSurface label={label} close={close} command width={COMMAND_MENU_WIDTH}>
       <div
@@ -349,33 +329,76 @@ function PaletteFrame({
         }}
         onClickCapture={holdNewTab}
       >
-        {title && <CommandMenuTitle issue={title} />}
-        <Menu
-          filter="none"
-          search={q}
-          onSearchChange={setQ}
-          width="auto"
-          // The highlighted issue (arrow keys or pointer) loads before it is picked.
-          onValueChange={(value) => {
-            const issue = get().issues.get(value);
-            preloadOnHover(issue ? { board: issueBoardId(issue), selected: issue.key, panel: true } : null);
-          }}
-        >
-          <Menu.Input
-            autoFocus
-            aria-label={label}
-            onKeyDown={(e) => e.key === "Backspace" && !q && onBackspace?.()}
-            placeholder={placeholder}
-            chip={chip}
-          />
-          <Menu.List maxHeight={`${PALETTE_LIST_HEIGHT}px`}>
-            <Menu.Empty>No results</Menu.Empty>
-            {children}
-          </Menu.List>
-        </Menu>
-        {footer && <div className="palette-footer">{footer}</div>}
+        {children}
       </div>
     </MenuSurface>
+  );
+}
+
+type PaletteBodyProps = {
+  label: string;
+  q: string;
+  setQ: (q: string) => void;
+  /** The issue the commands act on, drawn as the menu's title chip. */
+  title?: Issue;
+  /** A nested page's parent name, before the search. */
+  chip?: ReactNode;
+  placeholder?: string;
+  /** Backspace in the empty search (Linear's onEmptySearchBackspace, Menu.Back). */
+  onBackspace?: () => void;
+  /** The row highlighted as the menu mounts: the command a nested page was opened from, when Backspace returns from it. */
+  defaultValue?: string;
+  /** Controls under the results, outside the menu so their own menus keep their keys. */
+  footer?: ReactNode;
+  children: ReactNode;
+};
+
+/** The palette's content: the targeted issue's chip as its title, the 46px search, then the groups. */
+function PaletteBody({
+  label,
+  q,
+  setQ,
+  title,
+  chip,
+  placeholder = "Type a command or search…",
+  onBackspace,
+  defaultValue,
+  footer,
+  children,
+}: PaletteBodyProps) {
+  const body = (
+    <>
+      {title && <CommandMenuTitle issue={title} />}
+      <Menu
+        filter="none"
+        search={q}
+        onSearchChange={setQ}
+        width="auto"
+        defaultValue={defaultValue}
+        // The highlighted issue (arrow keys or pointer) loads before it is picked.
+        onValueChange={(value) => {
+          const issue = get().issues.get(value);
+          preloadOnHover(issue ? { board: issueBoardId(issue), selected: issue.key, panel: true } : null);
+        }}
+      >
+        <Menu.Input autoFocus aria-label={label} placeholder={placeholder} chip={chip} />
+        <Menu.List maxHeight={`${PALETTE_LIST_HEIGHT}px`}>
+          <Menu.Empty>No results</Menu.Empty>
+          {children}
+        </Menu.List>
+      </Menu>
+      {footer && <div className="palette-footer">{footer}</div>}
+    </>
+  );
+  return onBackspace ? <Menu.Back onBack={onBackspace}>{body}</Menu.Back> : body;
+}
+
+/** A palette with one body: search, and ⌘K's "Open …" pages. */
+function PaletteFrame(props: PaletteBodyProps) {
+  return (
+    <CommandFrame label={props.label}>
+      <PaletteBody {...props} />
+    </CommandFrame>
   );
 }
 /** Linear's command-menu list height without a peek (vgn in startup-root.CnUSfl4j.js). */
@@ -762,6 +785,9 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
   const favorites = useStore(s => s.favorites);
   const [deletingView, setDeletingView] = useState(false);
   const [savingTo, setSavingTo] = useState(false);
+  // The targeted issue's field command open as a nested page, and the row Backspace returns the highlight to.
+  const [fieldPage, setFieldPage] = useState<FieldCommand | null>(null);
+  const [returnTo, setReturnTo] = useState<string>();
   const viewAction = (run: () => void) => () => { ui.send({ type: "overlay.close" }); run(); };
   const viewCommands: Cmd[] = (activeView ? [
     { name: "Edit view…", run: viewAction(() => openViewEditor(editViewDraft(activeView.id))) },
@@ -778,17 +804,27 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
     [q, issues, lifted],
   );
 
-  const command = (entry: (typeof shortcuts)[number]): Cmd => ({
-    name: entry.label?.() ?? entry.name,
-    keywords: COMMAND_KEYWORDS[entry.id],
-    keys: hotkeyOf(entry.id),
-    detail: entry.detail?.(),
-    icon: commandIcon(entry.id, entry.issue ? undefined : paletteGroupOf(entry)),
-    run: () => {
-      ui.send({ type: "overlay.close" });
-      runShortcut(entry.id);
-    },
-  });
+  const command = (entry: (typeof shortcuts)[number]): Cmd => {
+    const cmd: Cmd = {
+      name: entry.label?.() ?? entry.name,
+      keywords: COMMAND_KEYWORDS[entry.id],
+      keys: hotkeyOf(entry.id),
+      detail: entry.detail?.(),
+      icon: commandIcon(entry.id, entry.issue ? undefined : paletteGroupOf(entry)),
+      run: () => {
+        ui.send({ type: "overlay.close" });
+        runShortcut(entry.id);
+      },
+    };
+    // A field command on the targeted issue opens its picker as a page of this menu (Linear's openSubActions), not on its own.
+    const field = isFieldCommand(entry.id) && scoped ? entry.id : null;
+    if (field)
+      cmd.run = () => {
+        setReturnTo(rowValue(cmd));
+        setFieldPage(field);
+      };
+    return cmd;
+  };
   // Only commands that would do something now, as Linear lists them.
   const issueCmds: Cmd[] = scoped
     ? shortcuts.filter((s) => s.issue && applies(s)).map(command)
@@ -858,26 +894,66 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
   );
 
   if (deletingView && activeView) return <ViewDeleteDialog view={activeView} close={() => { setDeletingView(false); ui.send({ type: "overlay.close" }); }} />;
+  const label = "Search issues and commands";
   return (
-    <PaletteFrame
-      label="Search issues and commands"
-      q={q}
-      setQ={(next) => {
-        const page = keywordPage(next);
-        if (page) openPage(page);
-        else setQ(next);
-      }}
-      title={scoped}
-      onBackspace={() => (savingTo ? setSavingTo(false) : setScopeKey(null))}
-    >
-      <PastedIssueGroup pasted={pasted} />
-      {groups.map((g) => (
-        <Menu.Group key={g.key} heading={g.heading}>
-          {g.rows.map(([, c]) => <CommandRow key={c.id ?? c.name} cmd={c} />)}
-        </Menu.Group>
-      ))}
-      <IssueResults results={results} q={q} />
-      {q.trim() && <DocumentResults q={q} />}
-    </PaletteFrame>
+    <CommandFrame label={label}>
+      {fieldPage && scoped ? (
+        // Backspace in the page's empty search comes back here with the search, the issue and the highlight as they were
+        // (Linear's closeSubActions restores the stacked searchInput and focusedIndex).
+        <FieldPage command={fieldPage} issue={scoped} back={() => setFieldPage(null)} />
+      ) : (
+        <PaletteBody
+          label={label}
+          q={q}
+          setQ={(next) => {
+            const page = keywordPage(next);
+            if (page) openPage(page);
+            else setQ(next);
+          }}
+          title={scoped}
+          defaultValue={returnTo}
+          onBackspace={() => (savingTo ? setSavingTo(false) : setScopeKey(null))}
+        >
+          <PastedIssueGroup pasted={pasted} />
+          {groups.map((g) => (
+            <Menu.Group key={g.key} heading={g.heading}>
+              {g.rows.map(([, c]) => <CommandRow key={c.id ?? c.name} cmd={c} />)}
+            </Menu.Group>
+          ))}
+          <IssueResults results={results} q={q} />
+          {q.trim() && <DocumentResults q={q} />}
+        </PaletteBody>
+      )}
+    </CommandFrame>
+  );
+}
+
+/** The targeted issue's field commands ⌘K opens as nested pages: each opens the picker its hotkey opens (shortcuts.tsx). */
+const FIELD_PAGES = {
+  assign: "assignee",
+  status: "status",
+  priority: "priority",
+  type: "type",
+  labels: "labels",
+  due: "due",
+  project: "project",
+  milestone: "milestone",
+} as const satisfies Record<string, IssueField>;
+type FieldCommand = keyof typeof FIELD_PAGES | "remind";
+export const isFieldCommand = (id: string): id is FieldCommand => id === "remind" || id in FIELD_PAGES;
+
+/** One field command's page: the field's own picker on the issue, as Linear's command menu on it (CommandTarget), drawn in ⌘K's
+ *  frame (CommandMenuPage). Picking a value writes it and closes ⌘K; Backspace in its empty search runs `back`. */
+function FieldPage({ command, issue, back }: { command: FieldCommand; issue: Issue; back: () => void }) {
+  return (
+    <CommandTarget issue={issue}>
+      <CommandMenuPage back={back}>
+        {command === "remind" ? (
+          <ReminderPicker issue={issue} />
+        ) : (
+          <PropertyPicker issue={issue} field={FIELD_PAGES[command]} />
+        )}
+      </CommandMenuPage>
+    </CommandTarget>
   );
 }

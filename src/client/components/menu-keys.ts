@@ -23,6 +23,10 @@ export type KeyFacts = {
   /** Whether this menu is a submenu, and whether a submenu of its own is open. */
   inSubmenu: boolean;
   childOpen: boolean;
+  /** Whether the menu is a page of another that Backspace in its empty search leaves (Linear's onEmptySearchBackspace on the
+   *  command menu: ⌘K's root drops its issue, a nested page such as Change status goes back to ⌘K). ← doesn't (its
+   *  onLeftArrowAtSearchStart edits a search filter instead). */
+  onPage: boolean;
   /** Whether the last key was ↑ or ↓ (J4e's `O`), and whether the menu sits in a surface that can close. */
   afterArrow: boolean;
   hasSurface: boolean;
@@ -124,7 +128,7 @@ export function menuKey(e: KeyFacts): KeyAction {
     case "Backspace":
       // A submenu steps back on Backspace in its empty search, with any modifier, not on a held key that just emptied it nor
       // one pressed again within 200ms (J4e's onEmptySearchBackspace); the search changing closes any submenu of its own.
-      return e.inSubmenu && e.search && !text && !e.held ? { type: "back" } : { type: "none" };
+      return (e.inSubmenu || e.onPage) && e.search && !text && !e.held ? { type: "back" } : { type: "none" };
     case " ":
       // Mid-search Space types, unless it follows ↑/↓ on a checkbox row (J4e's `x`).
       if (text && !(e.afterArrow && plain && e.row?.checkbox)) return { type: "none" };

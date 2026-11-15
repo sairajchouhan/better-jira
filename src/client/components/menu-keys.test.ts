@@ -18,6 +18,7 @@ const facts = (key: string, more: Partial<KeyFacts> = {}): KeyFacts => ({
   row: ROW,
   numbered: false,
   inSubmenu: false,
+  onPage: false,
   childOpen: false,
   afterArrow: false,
   hasSurface: true,
@@ -96,6 +97,14 @@ test("Backspace in a submenu's empty search steps back; a held one that just emp
   expect(menuKey(facts("Backspace", { inSubmenu: true, held: true }))).toEqual({ type: "none" });
   expect(menuKey(facts("Backspace", { inSubmenu: true, ...typed("s") }))).toEqual({ type: "none" });
   expect(menuKey(facts("Backspace"))).toEqual({ type: "none" });
+});
+
+test("BJ-343: Backspace in a ⌘K page's empty search goes back (onEmptySearchBackspace), guarded as a submenu's; ← doesn't", () => {
+  expect(menuKey(facts("Backspace", { onPage: true }))).toEqual({ type: "back" });
+  expect(menuKey(facts("Backspace", { onPage: true, held: true }))).toEqual({ type: "none" });
+  expect(menuKey(facts("Backspace", { onPage: true, ...typed("s") }))).toEqual({ type: "none" });
+  // Linear's onLeftArrowAtSearchStart on the command menu edits a search filter; it never leaves the page.
+  expect(menuKey(facts("ArrowLeft", { onPage: true }))).toEqual({ type: "caret" });
 });
 
 test("Space picks the highlighted row, types mid-search unless it follows ↑/↓ on a checkbox row, and does nothing with no row", () => {

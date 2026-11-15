@@ -2683,6 +2683,10 @@ li[data-done="true"] > .todo-content {
   font-size: 12px;
   color: var(--menu-fg-3);
 }
+/* A ⌘K page whose picker has handed over to a dialog (Set due date › Custom…) leaves the frame with nothing in it: no empty box. */
+[data-surface]:has(> .contents > .palette:empty) {
+  visibility: hidden;
+}
 /* Search's filter and ordering controls, under the results and outside the menu. */
 .palette-footer {
   flex-shrink: 0;
