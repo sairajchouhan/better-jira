@@ -250,7 +250,31 @@ const writes: { key: string; ops: any[] }[] = [],
   createdIssues = new Map<string, any>(),
   descriptions = new Map<string, any>(),
   /** Links the app removed, from either end (see `pair`). */
-  unlinked = new Set<string>();
+  unlinked = new Set<string>(),
+  /** `jiraEdits`: field edits Jira kept on existing issues, in the mirror's shape, as live Jira answers with them. */
+  edited = new Map<string, Record<string, unknown>>();
+/** `jiraEdits` opts into Jira keeping field edits; `refuse` makes Jira refuse a write: every op of that kind ("fields",
+ *  "comment", "create"...), or a fields op naming that field ("summary", "parent"), answered with `refuseText`. */
+let jiraEdits = false,
+  refuse: string[] = [],
+  refuseText = "Jira refused the change.";
+/** A fields op as the mirror would read it back from Jira. */
+function mirrored(key: string, fields: Record<string, any>) {
+  const before = listed().find((i) => i.key === key) as any,
+    out: Record<string, unknown> = {};
+  if (fields.summary !== undefined) out.summary = fields.summary;
+  if (fields.priority !== undefined) out.priority = fields.priority;
+  if (fields.due !== undefined) out.due = fields.due;
+  if (fields.assignee !== undefined)
+    out.assignee = fields.assignee ? (people.find((p) => p.id === fields.assignee) ?? null) : null;
+  if (fields.labels !== undefined) out.labels = fields.labels;
+  if (fields.labelEdits)
+    out.labels = [
+      ...((before?.labels ?? []) as string[]).filter((l) => !fields.labelEdits.remove.includes(l)),
+      ...fields.labelEdits.add,
+    ];
+  return out;
+}
 /** Jira's development panel pull requests as the server projects them (src/shared/pull-requests.ts), made up. */
 const fixturePullRequests: Record<string, unknown[]> = {
   "TEST-1": [
@@ -326,11 +350,20 @@ const listed = () =>
     ...(parents.has(issue.key)
       ? { parent: parents.get(issue.key) ?? undefined, parentLevel: parents.get(issue.key) ? 1 : undefined }
       : {}),
+    ...edited.get(issue.key),
     comments: threadedComments ? thread.length : mediaInComment || (smartLinks && issue.key === "TEST-2") ? 1 : 0, // the mirror list counts the same Jira comments the detail returns
   }));
 /** Stands in for the server's applyOps: type changes follow live Jira, which refuses Subtask ↔ standard types. */
 function applyOps(key: string, ops: any[]) {
   writes.push({ key, ops });
+  const refused = ops.find(
+    (op) => refuse.includes(op.op) || (op.op === "fields" && Object.keys(op.fields).some((f) => refuse.includes(f))),
+  );
+  if (refused)
+    return Response.json(
+      { key, created: {}, others: [], error: refuseText, issue: listed().find((i) => i.key === key) ?? null, full: full(key) },
+      { status: 422 },
+    );
   const create = ops.find((op) => op.op === "create");
   const created: Record<string, string> = {};
   if (create) {
@@ -343,6 +376,9 @@ function applyOps(key: string, ops: any[]) {
     if (description) descriptions.set(key, description);
   }
   for (const op of ops) {
+    if (jiraEdits && op.op === "fields" && !createdIssues.has(key))
+      edited.set(key, { ...edited.get(key), ...mirrored(key, op.fields) });
+    if (jiraEdits && op.op === "status") edited.set(key, { ...edited.get(key), status: op.status });
     if (op.op === "fields" && createdIssues.has(key))
       createdIssues.set(key, { ...createdIssues.get(key), ...op.fields });
     if (op.op === "fields" && op.fields.description) descriptions.set(key, op.fields.description);
@@ -915,6 +951,10 @@ async function handle(req: Request) {
     epics = settings.epics ?? false;
     crossLinks = settings.crossLinks ?? false;
     createSuccess = settings.createSuccess ?? false;
+    jiraEdits = settings.jiraEdits ?? false;
+    refuse = settings.refuse ?? [];
+    refuseText = settings.refuseText ?? "Jira refused the change.";
+    edited.clear();
     createdIssues.clear();
     descriptions.clear();
     bulk = settings.bulk ?? 0;
@@ -938,6 +978,13 @@ async function handle(req: Request) {
     types.clear();
     parents.clear();
     unlinked.clear();
+    return Response.json({ ok: true });
+  }
+  // Turns Jira's refusals on or off mid-test, keeping everything else the fixture holds.
+  if (path === "/__fixture/refuse" && req.method === "POST") {
+    const settings = await req.json();
+    refuse = settings.refuse ?? [];
+    refuseText = settings.refuseText ?? "Jira refused the change.";
     return Response.json({ ok: true });
   }
   if (path === "/__fixture" && req.method === "GET")
@@ -1167,6 +1214,7 @@ const server = Bun.serve({
     "/api/*": handle,
     "/__fixture": handle,
     "/__fixture/inbox": handle,
+    "/__fixture/refuse": handle,
     "/api/avatar": avatar,
     "/__avatar/alex.png": () => new Response(fixtureFile("media-image.png")),
     "/__link-icon.svg": () =>
