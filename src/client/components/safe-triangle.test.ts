@@ -90,3 +90,16 @@ test("a press where the pointer rests outside both menus lands on what is under 
   ] as const)
     expect([x, y, safeTriangle(box, x, y, { parent })]).toEqual([x, y, undefined]);
 });
+
+test("the triangle lasts 150ms after the pointer stops off its row, as Linear's JCe (qCe samples every 50ms)", () => {
+  expect(TRIANGLE_EXPIRY).toBe(150);
+});
+
+test("the triangle stays while the pointer is on the submenu's own row, and only then shows again once expired", () => {
+  const row = { left: 0, right: 200, top: 40, bottom: 68 };
+  expect(triangleStays(row, 100, 50)).toBe(true);
+  expect(triangleStays(row, 200, 68)).toBe(true);
+  expect(triangleStays(row, 100, 80)).toBe(false);
+  expect(triangleStays(row, 220, 50)).toBe(false);
+  expect(triangleStays(undefined, 100, 50)).toBe(false);
+});
