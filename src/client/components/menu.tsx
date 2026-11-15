@@ -443,15 +443,31 @@ export function vanishedHighlight(highlighted: string, shown: string | null, val
   return values[0] ?? null;
 }
 
-/** What a list last showed: its highlight, its search (null until it has shown a row), its controlled value and its rows. */
-type Seen = { key: string | null; search: string | null; value: string | undefined; order: string[] };
+/**
+ * What a list last showed: its highlight, its search (null until it has shown a row), its controlled value and its rows; and,
+ * while a search's pick still follows the first row, the row it picked (`follow`, null for an empty list; absent once the user
+ * moved the highlight or nothing follows).
+ */
+type Seen = {
+  key: string | null;
+  search: string | null;
+  value: string | undefined;
+  order: string[];
+  follow?: string | null;
+};
 const UNSEEN: Seen = { key: null, search: null, value: undefined, order: [] };
+
+const sameRows = (a: string[], b: string[]) => a.length === b.length && a.every((row, i) => row === b[i]);
 
 /**
  * Where the list's highlight goes this render (`next`, undefined to leave it) and what to remember of it. The menu's start
  * (`initial`) waits for its first rows: React Aria builds a collection on a second pass, so a list mounting inside an opening
  * submenu renders with none at first, and choosing then would open the submenu with nothing highlighted. After that: onto `value`
  * when its owner moves it, onto the first row after a search, onto the first when the highlighted row left the list (B6e).
+ *
+ * The same second pass means a search's first render still shows the rows of the search before it, so the pick follows the
+ * first row as the rows change until the user moves the highlight: typing "next week" in Due date left its one row unhighlighted
+ * (Enter did nothing), and "d" in Issue options left the highlight on the second row.
  */
 export function settleHighlight(
   last: Seen,
@@ -463,11 +479,15 @@ export function settleHighlight(
     return order.length
       ? { next: initial(order), seen: { key, search, value, order } }
       : { next: undefined, seen: { ...last, key } };
+  // React Aria clearing the highlight of a row that left is not the user moving it.
+  const following = last.follow !== undefined && (key === null || key === last.follow);
   let next: string | null | undefined;
+  let follow: string | null | undefined;
   if (value !== undefined && value !== last.value && order.includes(value)) next = value;
-  else if (last.search !== search) next = order[0] ?? null;
+  else if (last.search !== search || (following && !sameRows(last.order, order))) next = follow = order[0] ?? null;
+  else if (following) follow = last.follow;
   else if (key !== null) next = vanishedHighlight(key, last.order.includes(key) ? key : null, order) ?? undefined;
-  return { next, seen: { key, search, value, order } };
+  return { next, seen: { key, search, value, order, ...(follow !== undefined && { follow }) } };
 }
 
 /**

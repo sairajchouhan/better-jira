@@ -91,3 +91,46 @@ test("Display options takes focus on its dialog box, inside the popover's key ha
   // The box gets focus even with no tabindex of its own.
   expect(surfaceSource).toMatch(/target\.focus\(\);\s*if \(document\.activeElement === target\) return;\s*target\.tabIndex = -1;\s*target\.focus\(\);/);
 });
+
+/** Runs the renders a list goes through: each step is what React Aria shows that render; returns the highlight after each. */
+function renders(steps: { search: string; order: string[] }[], start: Parameters<typeof settleHighlight>[0]) {
+  let seen = start;
+  let key = start.key;
+  return steps.map(({ search, order }) => {
+    const settled = settleHighlight(seen, { key, search, value: undefined, order }, first);
+    seen = settled.seen;
+    if (settled.next !== undefined) key = settled.next;
+    return key;
+  });
+}
+
+test("a search's first-row pick waits for its own rows: React Aria shows the last search's rows for one render", () => {
+  // Due date's submenu: "next wee" shows nothing; "next week" renders once with nothing, then with its one row.
+  const empty = { key: null, search: "next wee", value: undefined, order: [] as string[] };
+  expect(renders([{ search: "next week", order: [] }, { search: "next week", order: ["Due next week"] }], empty)).toEqual([
+    null,
+    "Due next week",
+  ]);
+  // Issue options: "d" first renders on the old rows, then on its own, where "Due date" is second.
+  const opened = { key: "Due date", search: "", value: undefined, order: ["Due date", "Issue type"] };
+  expect(
+    renders(
+      [
+        { search: "d", order: ["Due date", "Issue type"] },
+        { search: "d", order: ["Delete", "Due date"] },
+        { search: "d", order: ["Delete", "Due date"] },
+      ],
+      opened,
+    ),
+  ).toEqual(["Due date", "Delete", "Delete"]);
+});
+
+test("once the user moves the highlight after a search, new rows keep it unless its row leaves", () => {
+  const searched = settleHighlight(
+    { key: "a", search: "", value: undefined, order: ["a", "b"] },
+    { key: "a", search: "x", value: undefined, order: ["a", "b"] },
+    first,
+  ).seen;
+  // ↓ to "b", then the rows change: "b" stays.
+  expect(settleHighlight(searched, { key: "b", search: "x", value: undefined, order: ["c", "b"] }, first).next).toBeUndefined();
+});
