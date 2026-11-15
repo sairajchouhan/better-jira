@@ -1,10 +1,10 @@
-# BetterJira
+# better-jira
 
-A personal Jira board with fast local editing and a Linear-inspired interface. Jira is the read source. Issue changes, comments, files, reactions, and subscriptions stay in your browser.
+A fast, Linear-style board for your Jira Cloud Kanban boards. It runs on your own machine with your own Jira account, keeps a local copy of your boards for speed, and sends your edits to Jira.
 
-## Run it
+## Quick start
 
-Install Bun, clone the repository, then run:
+Install [Bun](https://bun.sh), clone this repository, then run `bun install`, `bun run setup` and `bun start`, and open http://localhost:3000. Setup asks for your Jira site (`https://your-team.atlassian.net`), the email you sign in with, an [API token](https://id.atlassian.com/manage-profile/security/api-tokens) and your boards (IDs, board links, or part of a name to search), checks each one against Jira with reads only, and asks whether your edits should go to Jira. The first sync of a large board takes a minute or two; the app opens when it's done.
 
 ```sh
 bun install
@@ -12,82 +12,70 @@ bun run setup
 bun start
 ```
 
-Setup asks for your Jira Cloud site, account email, API token, and board IDs. It checks your account, lists accessible boards, and verifies the selected boards using read requests. Create an API token through your Atlassian account. Use a token with read access to the boards you select. Tokens are entered without terminal echo and stored in the ignored `.env` file with owner-only permissions. Site and board choices go in the ignored `.better-jira.local.json` file.
+The token is typed without echo and saved in `.env` (owner-only permissions). Site, boards and the edits answer go in `.better-jira.local.json`. Git ignores both. `bun run setup --check` checks the saved setup against Jira and changes nothing. Run setup again to change boards or the edits answer, then restart `bun start`. You can also add a board from the sidebar ("Add space").
 
-Open http://localhost:3000. The first mirror sync can take a while on a large board. Retry loading after it finishes. The app listens on the local loopback interface.
+## What goes to Jira
 
-To use environment configuration instead, copy `.env.example` to `.env` and fill in `JIRA_URL`, `JIRA_EMAIL`, `JIRA_TOKEN`, and `JIRA_BOARDS`. Environment values override local settings. Optional `PORT` and `JIRA_CACHE` select the port and SQLite cache. The default cache filename separates sites and account emails. An existing explicit cache cannot be reused for a different source account.
+If you answered yes in setup, `bun start` sends your edits to Jira under your account, and the footer says **Edits write to Jira**:
+
+- title, description, status, priority, assignee, labels, type, due date, epic, fix versions (shown as milestones), estimate
+- new issues, deleted issues, comments (new, edited, deleted), issue links and web links, attachments, card order
+- subscribing to an issue (it makes you a Jira watcher)
+- marking notifications read or unread in the inbox
+
+Edits save as you go: the description saves a moment after you stop typing, everything else at once. Each edit is kept in your browser first, then sent; if Jira refuses one, a toast says "Jira did not save the change".
+
+Your API token needs the same rights in Jira as you: edit, transition, comment and create in your boards' projects. Setup warns about any it is missing. A read-only account can still browse, but its edits fail.
+
+If you answered no, or set `JIRA_WRITES=off`, the footer says **Local only: nothing is sent to Jira**. Edits then stay in that browser, and they are not sent later when edits are turned on. `bun run dev` never writes to Jira.
+
+## What stays in your browser
+
+Reactions, reminders, snoozed or deleted inbox rows, favorites, view settings, recents, drafts, undo history, description history and your manual sub-issue order stay in this browser's storage, per Jira site and account. They don't follow you to another browser or computer. Saved views live in the server's local cache file, per account.
+
+## Not in scope
+
+Sprints, story points, components, time tracking, bulk actions and AI features. Fix versions show as milestones and epics as Epics.
+
+## Update
 
 ```sh
-bun run setup --check
+git pull
+bun install
 ```
 
-This verifies configuration, credentials, and board access without changing files. Restart the server after changing setup.
+Then stop `bun start` (Ctrl+C) and run it again.
 
-### Pull requests from GitHub
+## Back up
 
-Cards, rows and the issue's sidebar (its "Diffs" section, as in Linear) show the pull requests Jira's development panel links, plus those GitHub links straight to an issue key: a key in the pull request's branch name, title, or body (`feat/ABC-12-tidy`, `Tidy the cache (ABC-12)`). This covers organisations Jira's GitHub app isn't connected to. The server only reads from GitHub. It never comments, reviews, or edits.
+Click the download icon in the footer for a backup of everything kept in this browser (local edits, history and files) as JSON. Do this before clearing the site's data or switching browsers; there is no import yet. Your Jira data itself is in Jira.
 
-- **Token:** the GitHub CLI's own login (`gh auth token`, its active account), read at runtime and kept in memory. Set `GITHUB_TOKEN` to use another token instead. Neither is logged or saved.
-- **Sources:** `GITHUB_PR_SOURCES` lists organisations (`acme`) and repositories (`acme/app`), comma separated. When it is unset, the server reads the owners of your own recent pull requests. `GITHUB_PR_SOURCES=off` turns GitHub off.
-- **Window:** the first read covers pull requests updated in the last `GITHUB_PR_DAYS` days (30 by default). After that, one search every 30 seconds reads what changed since the last one. The server keeps the list in its cache and stops at GitHub's rate limit until it resets.
+## Troubleshooting
 
-## Local edits and rich descriptions
+- **The app shows "Couldn't load your Jira data", or the footer shows a red "Not syncing with Jira" line.** The message says what is wrong and what to do. Run `bun run setup --check` for the same checks in the terminal.
+- **"Jira rejected your email and API token (401)".** The token was revoked or expired, or the email isn't the one you sign in with. Create a new token and run `bun run setup`.
+- **"Can't read board N (403)" or "Board N doesn't exist (404)".** Ask the board's admin for access, or pick other boards with `bun run setup`.
+- **"Can't reach the better-jira server".** `bun start` stopped; start it again.
+- **A board looks stale or wrong.** Stop the server and delete its cache file, `cache-<site>-<id>.db`, in this folder; the next start syncs it again. Local edits in the browser are kept.
+- **Port 3000 is taken.** Set `PORT=3001` in `.env`.
 
-The browser saves issue edits, locally created or deleted issues, comments, attachment contents, description revisions, and the last 100 undo/redo entries in IndexedDB. The footer shows Saving, Saved locally, or Not saved. Wait for Saved locally before closing the tab. View preferences, filters, favorites, and named views use browser storage too. Data is separate for each Jira site and account.
+`bun start` listens on your machine only. Don't expose it to a network: it holds your Jira token.
 
-Fresh mirror data still supplies fields you have not edited. Locally edited fields remain local overrides across reloads. The issue options action Restore mirrored Jira version removes an issue's local overrides and is undoable. For a locally deleted issue, use Undo to restore it.
+## GitHub pull requests
 
-Description editing retains Jira's Atlassian Document Format, including marks, lists, tables, and node metadata. Content the editor cannot interpret appears as a preserved token. Editing surrounding text keeps that content intact. Save applies the document; Cancel discards the draft. Rich editor undo is separate from the issue undo history until you save.
+Cards and the issue sidebar show pull requests linked in Jira, plus GitHub pull requests that name the issue key in their branch, title or body. It uses your GitHub CLI login (`gh auth token`) or `GITHUB_TOKEN`, and only reads. `GITHUB_PR_SOURCES` lists organisations or repositories to read (default: those of your own recent pull requests); `GITHUB_PR_SOURCES=off` turns it off.
 
-Due dates accept phrases such as tomorrow, next Monday, 24h, 7 days, and Feb 9, or a calendar date. The preview shows the exact day in your local calendar. Incomplete dates cannot be saved. Reactions support search, skin tones, recent choices, and any pasted single emoji.
+## Keyboard
 
-## Backups and recovery
+Cmd/Ctrl+K opens the command menu, Cmd/Ctrl+/ lists every shortcut, `?` opens Help. Common ones: C new issue, / search, S status, A assignee, P priority, L labels, G then M My issues, Space peek, Enter open.
 
-Use Backup in the footer to download local changes, history, attachment contents, and recovery copies as JSON. Browser data does not sync between profiles or computers. Clearing this site's storage also clears local edits and files. Keep a backup before doing that. Backup export is available; importing a backup is not currently a UI workflow.
-
-If storage fails, keep the tab open. Retry local storage after fixing the problem, or download a backup first. A failed save leaves the edit in memory and shows Not saved. If another tab saves newer data, the older tab refuses to overwrite it. Export that tab's unsaved work before reloading.
-
-Damaged records are isolated while valid records load, and the original record is kept in recovery storage. A database from an unsupported schema version pauses editing so the app cannot overwrite it.
-
-## Scope
-
-Jira issue writes are disabled in the client itself. The only permitted Jira POST is the documented changelog bulk-fetch read. The UI has no bulk actions, AI integration, organization rules, or team-wide defaults. Milestones map to Jira fix versions. Reactions, files, subscriptions, and issue history are personal local data.
-
-Credentials stay on the server. Do not expose this personal server to an untrusted network. The ignored SQLite cache and local backup contain private issue data.
-
-## Keyboard shortcuts
-
-Press **Cmd+/** on macOS or **Ctrl+/** on Windows/Linux for the searchable shortcut reference. **?** opens Help. These are separate actions, matching Linear's live Help menu.
-
-The app uses TanStack Hotkeys for chords, multi-key sequences, platform modifiers, and scoped editor shortcuts. The reference and command/menu badges use the same binding definitions as execution.
-
-| Action                             | Shortcut                     |
-| ---------------------------------- | ---------------------------- |
-| Command menu                       | Cmd/Ctrl+K                   |
-| Search issues                      | / or O then I                |
-| Active, Backlog, All issues        | G then A, G then B, G then E |
-| My issues                          | G then M                     |
-| Create issue                       | C; V for expanded creation   |
-| Status, assignee, priority, labels | S, A, P, L                   |
-| Rename selected issue              | Shift+R                      |
-| Focus description                  | Control+Shift+I              |
-| Set due date                       | Shift+D                      |
-| Focus comment                      | Control+M                    |
-| Peek / open focused issue          | Space / Enter                |
-| Toggle board/list                  | Cmd/Ctrl+B                   |
-
-Letter shortcuts do not run while typing. Issue actions need a selected issue. Editor shortcuts apply only inside the editor, so Cmd/Ctrl+B formats text there and switches layout outside it. Reordering uses Manual ordering. Unsupported Linear features such as AI, bulk actions, cycles, and project management have no advertised bindings.
-
-## Development and verification
+## Development
 
 ```sh
-bun run dev
+bun run dev     # never writes to Jira
 bun test
 bun check
-bun run build
+bunx oxlint
 ```
 
-For disposable browser checks, `bun scripts/fixture-server.ts` serves the same UI at http://localhost:3001 with synthetic issues and no Jira client. Its fixture control route can inject read failures. It never imports Jira credentials or the real mirror. Do not use its synthetic account for normal work.
-
-The rich document adapter follows [Jira ADF structure](https://developer.atlassian.com/cloud/jira/platform/apis/document/structure/). The editor uses [ProseMirror](https://prosemirror.net/docs/), and date parsing uses the English parser from [Chrono](https://github.com/wanasit/chrono).
+`bun scripts/fixture-server.ts` serves the UI with made-up issues and no Jira at all, for trying things safely.
