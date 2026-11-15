@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { enteredHighlight, focusOnOpen, settleHighlight, takesFocus } from "./menu";
-import { MENU_FOCUS, TEXT_INPUT } from "./menu-surface";
+import { initialFocusTarget, MENU_FOCUS, type FocusCandidate, POPOVER_FOCUS, TEXT_INPUT } from "./menu-surface";
+const surfaceSource = await Bun.file(new URL("./menu-surface.tsx", import.meta.url)).text();
 
 const source = await Bun.file(new URL("./menu.tsx", import.meta.url)).text();
 const UNSEEN = { key: null, search: null, value: undefined, order: [] as string[] };
@@ -57,4 +58,36 @@ test("a popup's first focus goes to a field you type in, never a colour well, ra
     expect(TEXT_INPUT).toContain(`:not([type="${type}"])`);
   expect(TEXT_INPUT).not.toContain('[type="text"]');
   expect(MENU_FOCUS[1]!.startsWith(TEXT_INPUT)).toBe(true);
+});
+
+/** A stand-in DOM node: its selectors are the ones it matches, its children are flat. */
+type Fake = FocusCandidate & { name: string };
+const node = (name: string, selectors: string[], tabindex: string | null = null, children: Fake[] = []): Fake => ({
+  name,
+  matches: (s: string) => selectors.includes(s),
+  querySelectorAll: (s: string) => children.filter((c) => c.matches(s)),
+  getAttribute: (a: string) => (a === "tabindex" ? tabindex : null),
+});
+
+test("a menu with no search starts on itself, never on React Aria's hidden Dismiss button (Save menu: ↓ Enter picked nothing)", () => {
+  const BUTTONS = MENU_FOCUS[2]!;
+  const dismiss = node("dismiss", [BUTTONS], "-1");
+  const menu = node("menu", [BUTTONS], "0");
+  const surface = node("surface", [], null, [dismiss, menu, dismiss]);
+  expect(initialFocusTarget(surface, MENU_FOCUS)?.name).toBe("menu");
+  // Nothing but a Dismiss button: no target, so focus stays where React Aria put it.
+  expect(initialFocusTarget(node("surface", [], null, [dismiss]), MENU_FOCUS)).toBeNull();
+});
+
+test("Display options takes focus on its dialog box, inside the popover's key handler, so Escape and Tab reach it", () => {
+  const DIALOG = POPOVER_FOCUS[1]!;
+  const box = node("box", [DIALOG]);
+  const popover = node("popover", ["[data-popover]"], null, [box]);
+  expect(initialFocusTarget(popover, POPOVER_FOCUS)?.name).toBe("box");
+  // A search still comes first; a popover with neither starts on itself.
+  const search = node("search", [TEXT_INPUT]);
+  expect(initialFocusTarget(node("popover", ["[data-popover]"], null, [search, box]), POPOVER_FOCUS)?.name).toBe("search");
+  expect(initialFocusTarget(node("popover", ["[data-popover]"]), POPOVER_FOCUS)?.name).toBe("popover");
+  // The box gets focus even with no tabindex of its own.
+  expect(surfaceSource).toMatch(/target\.focus\(\);\s*if \(document\.activeElement === target\) return;\s*target\.tabIndex = -1;\s*target\.focus\(\);/);
 });

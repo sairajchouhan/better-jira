@@ -181,20 +181,42 @@ export function useReturnFocus(ref: RefObject<HTMLElement | null>, returnTo?: Re
   return opener;
 }
 
-/** A frame after opening, focus moves to the first match of `initialFocus` (selectors in priority order) unless a child already
- *  took it. The popup node itself holding focus counts as not taken (React Aria's Dialog focuses itself first). */
+/** What `initialFocusTarget` reads of a node: the DOM's own, so a test can hand it plain objects. */
+export type FocusCandidate = {
+  matches(selector: string): boolean;
+  querySelectorAll(selector: string): Iterable<FocusCandidate>;
+  getAttribute(name: string): string | null;
+};
+
+/**
+ * Where a popup's first focus goes: the popup itself when it matches a selector, else its first descendant that does, by
+ * `initialFocus`'s priority. A descendant taken out of the tab order (`tabindex="-1"`) is passed over: React Aria's hidden
+ * Dismiss buttons open and close every Popover, and a menu with no search (the filter row's Save menu) otherwise started on
+ * one, so ↓ Enter dismissed it instead of picking.
+ */
+export function initialFocusTarget<T extends FocusCandidate>(node: T, initialFocus: readonly string[]): T | null {
+  for (const selector of initialFocus) {
+    if (node.matches(selector)) return node;
+    for (const child of node.querySelectorAll(selector) as Iterable<T>)
+      if (child.getAttribute("tabindex") !== "-1") return child;
+  }
+  return null;
+}
+
+/** A frame after opening, focus moves to `initialFocusTarget` unless a child already took it. The popup node itself holding
+ *  focus counts as not taken (React Aria's Dialog focuses itself first). A target that can't take focus (a plain `role=dialog`
+ *  box) is made focusable from script only, so keys typed next reach the popup's own handlers instead of the page. */
 export function useInitialFocus(ref: RefObject<HTMLElement | null>, initialFocus: readonly string[]) {
   useLayoutEffect(() => {
     const node = ref.current;
     const frame = requestAnimationFrame(() => {
       if (!node || (node.contains(document.activeElement) && document.activeElement !== node)) return;
-      for (const selector of initialFocus) {
-        const first = node.matches(selector) ? node : node.querySelector<HTMLElement>(selector);
-        if (first) {
-          first.focus();
-          return;
-        }
-      }
+      const target = initialFocusTarget(node, initialFocus);
+      if (!target) return;
+      target.focus();
+      if (document.activeElement === target) return;
+      target.tabIndex = -1;
+      target.focus();
     });
     return () => cancelAnimationFrame(frame);
   }, [ref, initialFocus]);
@@ -223,7 +245,8 @@ function usePopupFocus(
       (n) => n.getClientRects().length,
     );
     if (!nodes.length) e.preventDefault();
-    else if (e.shiftKey && (document.activeElement === nodes[0] || document.activeElement === ref.current)) {
+    // Shift+Tab from the first stop, or from a box that holds focus but is no stop (the popup, Display options' dialog), wraps.
+    else if (e.shiftKey && (document.activeElement === nodes[0] || !nodes.includes(document.activeElement as HTMLElement))) {
       e.preventDefault();
       nodes.at(-1)?.focus();
     } else if (!e.shiftKey && document.activeElement === nodes.at(-1)) {
@@ -241,8 +264,9 @@ export const TEXT_INPUT = `input${["file", "checkbox", "radio", "color", "range"
   .join("")}`;
 // Keep focus a child already took (autoFocus); else prefer a text field over the first button in DOM order. Dialog uses it too.
 export const MENU_FOCUS = ["[data-autofocus]", `${TEXT_INPUT},textarea,[contenteditable="true"]`, 'button,[tabindex="0"]'];
-// A search when there is one; else the popup itself, so no control shows a focus ring until Tab (Linear's focus-trap start).
-const POPOVER_FOCUS = [TEXT_INPUT, "[data-popover]"];
+// A search when there is one; else the popup's own box, so no control shows a focus ring until Tab (Linear's focus-trap start).
+// A box that names itself a dialog (Display options) holds the keys handler, so it comes before the React Aria node around it.
+export const POPOVER_FOCUS = [TEXT_INPUT, '[role="dialog"]', "[data-popover]"];
 
 /**
  * A toolbar menu (Linear's menuPosition) in a fixed popup under its trigger: "bottom-left" 4px under it, flush and rounded;
@@ -289,7 +313,8 @@ export function Popover({
         ref={popup}
         data-popover
         {...elevation.props}
-        className="max-w-[calc(100vw-24px)] outline-none"
+        // The box focus starts on (POPOVER_FOCUS) shows no ring: Tab moves to the first control, which does.
+        className="max-w-[calc(100vw-24px)] outline-none [&_[role=dialog]]:outline-none"
         style={{ ...placed(style), zIndex: 40 }}
       >
         {/* React Aria's Popover takes no key handlers; its own Escape covers the popover itself while it holds focus. */}

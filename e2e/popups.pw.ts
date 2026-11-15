@@ -8,7 +8,7 @@ const filters = {
   children: [{ id: "p", field: "priority", op: "is", values: ["High"] }],
 };
 const seeded = `if(!sessionStorage.seeded){sessionStorage.seeded=1;localStorage.setItem(${JSON.stringify(PREFS_KEY)},${JSON.stringify(JSON.stringify({ 1: { filters } }))})}`;
-const TOOLBAR = "body > div.fixed.z-40";
+const TOOLBAR = "[data-popover]";
 const FILTER = 'header [aria-label="Add another filter"]:not(.ui-filter-add)';
 const dialog = (label: string) => `[role=dialog][aria-label="${label}"]`;
 
@@ -95,8 +95,9 @@ test("toolbar popups: Filter, Display and the chip row + open at Linear's offset
     const [trigger, popup] = [await rect(page, '[aria-label="Display options"]'), await rect(page, TOOLBAR)];
     near(popup.top, trigger.bottom + 6);
     near(popup.right, trigger.right);
-    // CORE-22: with no search, focus lands on the popup itself, so no control is ringed until Tab (Linear's focus-trap start).
-    expect(await page.eval(`document.activeElement===document.querySelector('${TOOLBAR}')`)).toBe(true);
+    // CORE-22: with no search, focus lands on the popup's dialog box, so no control is ringed until Tab (Linear's focus-trap
+    // start) and Escape reaches the popup's own handler (it fell to the body after the React Aria move, so Escape closed nothing).
+    expect(await page.eval(`document.activeElement===document.querySelector('${TOOLBAR} ${dialog("Display options")}')`)).toBe(true);
     await trapsTab(page, TOOLBAR);
     await page.key("Escape");
     await page.waitFor(`!document.querySelector(${JSON.stringify(TOOLBAR)})`);
@@ -139,6 +140,16 @@ test("toolbar popups: Filter, Display and the chip row + open at Linear's offset
     await page.key("Escape");
     await page.waitFor(`!document.querySelector('${dialog("Save filters")}')`);
     expect(await focused(page)).toBe("Save");
+  });
+
+  await test.step("Save filters by keyboard: focus starts on the menu, not React Aria's hidden Dismiss, so Enter creates", async () => {
+    await page.page.keyboard.press("Enter");
+    await page.waitFor(`!!document.querySelector('${dialog("Save filters")}')`);
+    await sleep(50);
+    expect(await page.eval(`document.activeElement?.getAttribute("aria-label")`)).not.toBe("Dismiss");
+    await page.waitFor(`/Create new view/.test(document.querySelector('${dialog("Save filters")} [role^=menuitem][data-focused]')?.textContent??"")`);
+    await page.key("Enter");
+    await page.waitFor(`location.pathname==="/view/new"`);
   });
   await page.close();
 });

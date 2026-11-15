@@ -347,10 +347,13 @@ test("CORE-22: Display options opens with focus on the popup, not a ringed contr
   await page.click('[aria-label="Display options"]');
   await page.waitFor(exists(dialog("Display options")));
   await sleep(50);
-  expect(await page.eval(`document.activeElement?.hasAttribute("data-popover")`)).toBe(true);
+  expect(await page.eval(`document.activeElement?.matches('${dialog("Display options")}')`)).toBe(true);
+  expect(await page.eval(`getComputedStyle(document.activeElement).outlineStyle`)).toBe("none");
   await page.key("Tab");
   expect(await page.eval(`!!document.activeElement?.closest('${dialog("Display options")}')`)).toBe(true);
   await page.key("Escape");
+  await page.waitFor(gone(dialog("Display options")));
+  expect(await page.eval(`document.activeElement?.getAttribute("aria-label")`)).toBe("Display options");
 });
 
 test("ISSUE-18: after a status change moves the card, focus returns to its new node", async ({ open }) => {

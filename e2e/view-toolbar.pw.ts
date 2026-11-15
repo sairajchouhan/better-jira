@@ -33,14 +33,14 @@ test("segmented chips edit operators and values independently, Save offers creat
       if (first) {
         await page.click(first);
         await press(".ui-filter-add");
-        await page.waitFor(`!document.querySelector('body > div.fixed.z-40')`);
+        await page.waitFor(`!document.querySelector('[data-popover]')`);
       }
       await page.click(".ui-filter-add");
       await page.waitFor(`!!document.querySelector('input[placeholder^="Add Filter"],input[placeholder^="Filter"]')`);
-      await page.waitFor(`(()=>{const a=document.querySelector('.ui-filter-add').getBoundingClientRect();const m=document.querySelector('body > div.fixed.z-40');return m&&m.style.left===Math.round(a.left)+'px'&&m.style.top===Math.round(a.bottom+4)+'px'})()`);
+      await page.waitFor(`(()=>{const a=document.querySelector('.ui-filter-add').getBoundingClientRect();const m=document.querySelector('[data-popover]');return m&&m.style.left===Math.round(a.left)+'px'&&m.style.top===Math.round(a.bottom+4)+'px'})()`);
       expect(await page.eval(`document.querySelector('.ui-filter-add').getAttribute('aria-expanded')`)).toBe("true");
       await press(".ui-filter-add");
-      await page.waitFor(`!document.querySelector('body > div.fixed.z-40')`);
+      await page.waitFor(`!document.querySelector('[data-popover]')`);
     }
     await page.click('[aria-label="priority operator"]');
     await page.click('[role^=menuitem][data-value="isNot"]');
