@@ -16,6 +16,7 @@ import { navigationChoices, type NavigationChoice } from "./quick-navigation";
 import { ActionLabel, ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { Icon, LabelDot, PriorityIcon, StatusIcon, TypeDot, type IconName } from "@/client/components/icons";
 import { get, set, timed, useStore, statusOf, ME, issueBoardId } from "@/client/state/store";
+import { Text } from "@/client/components/text";
 import { currentKey } from "@/client/state/jira-sync";
 import { navigate, openSavedView, preloadOnHover, ui } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
@@ -74,7 +75,7 @@ import {
 
 /** `keys`: the hotkey that does the same thing, drawn after the name. `id` keys the row when names repeat (its value keeps the name).
  *  It is scored as Linear scores an action (`actionScore`): by its name, `keywords` and, for a hoisted value, its `parents`. */
-type Cmd = ScoredAction & { id?: string; keys?: Keys; icon?: ReactNode; disabled?: boolean; checked?: boolean; run: () => void };
+type Cmd = ScoredAction & { id?: string; keys?: Keys; icon?: ReactNode; detail?: string; disabled?: boolean; checked?: boolean; run: () => void };
 
 /** One command row (Linear's command-menu Item, Fgn): icon, name, shortcut; ⌘K's commands and every nested page's choices. A value
  *  hoisted from a parent leads with its breadcrumb ("Change status › In Progress", Linear's M4e) and checks the current value. */
@@ -90,6 +91,12 @@ function CommandRow({ cmd: c }: { cmd: Cmd }) {
       shortcut={c.keys?.length ? c.keys : undefined}
     >
       <ActionLabel name={label} />
+      {/* Linear's row detail (M4e `L4e`): small, labelFaint, 4px after the name, truncated. */}
+      {c.detail && (
+        <Text as="span" variant="small" color="faint" wrap="truncate" className="ml-1 grow">
+          {c.detail}
+        </Text>
+      )}
     </Menu.Item>
   );
 }
@@ -769,6 +776,7 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
     name: entry.label?.() ?? entry.name,
     keywords: COMMAND_KEYWORDS[entry.id],
     keys: hotkeyOf(entry.id),
+    detail: entry.detail?.(),
     icon: commandIcon(entry.id, entry.issue ? undefined : paletteGroupOf(entry)),
     run: () => {
       ui.send({ type: "overlay.close" });

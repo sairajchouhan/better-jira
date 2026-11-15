@@ -1,9 +1,9 @@
 import { Debouncer } from "@tanstack/pacer";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { type Issue, type IssueDraft } from "@/shared/issue-model";
 import { documentHasMedia, normalizeDocument, type AdfDocument } from "@/shared/document";
 import { adfToText } from "@/client/features/editor/adf";
-import { readStored, writeStored } from "@/client/state/stored-state";
+import { onStoredChange, readStored, writeStored } from "@/client/state/stored-state";
 import { switchBoard } from "./composer-draft";
 
 /**
@@ -75,11 +75,42 @@ export function readLocalDraft(namespace: string): ComposerLocalDraft | undefine
 /** Writes the draft, or removes it once it no longer holds anything worth keeping (the composer emptied, an issue created). */
 export function writeLocalDraft(namespace: string, draft: ComposerLocalDraft | undefined) {
   const keep = draft && draftEligible(draft.title, draft.description);
-  return writeStored(
+  const written = writeStored(
     localDraftKey(namespace),
     keep ? { ...draft, fields: persistable(draft.fields) } : undefined,
     "Could not keep the issue draft locally",
   );
+  draftChanged.dispatchEvent(new Event("change"));
+  return written;
+}
+
+/** Told of every write in this tab; another tab's write comes as the browser's storage event. */
+const draftChanged = new EventTarget();
+
+/** What New issue says while C would bring a kept draft back. */
+export const RESUME_EDITING = "Resume editing";
+
+/** Whether a draft is kept for the next C: Linear's `fastCreateStates.issue.hasLocalDraft`. */
+export const hasLocalDraft = (namespace: string) => readStored(localDraftKey(namespace), (raw) => raw !== null, false);
+
+/**
+ * `hasLocalDraft`, kept current: what tells the user C resumes a draft rather than starting one. Linear's ⌘K New issue then
+ * reads "Resume editing" (`FAST_CREATE_ISSUE.detail`) and its sidebar create button carries a dot and that name (BJ-273).
+ */
+export function useHasLocalDraft(namespace: string) {
+  const subscribe = useCallback(
+    (changed: () => void) => {
+      draftChanged.addEventListener("change", changed);
+      const offOtherTabs = onStoredChange(localDraftKey(namespace), changed);
+      return () => {
+        draftChanged.removeEventListener("change", changed);
+        offOtherTabs();
+      };
+    },
+    [namespace],
+  );
+  const read = () => hasLocalDraft(namespace);
+  return useSyncExternalStore(subscribe, read, read);
 }
 
 /**

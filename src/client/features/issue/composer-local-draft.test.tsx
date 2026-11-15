@@ -143,3 +143,24 @@ test("BJ-274: the saved draft being finished stays linked through a reload, so c
   writeLocalDraft("a", draft());
   expect(readLocalDraft("a")!.saved).toBeUndefined();
 });
+
+test("BJ-273: while a draft is kept, the sidebar New issue shows Linear's dot and says Resume editing, and ⌘K New issue reads Resume editing", async () => {
+  const { set } = await import("@/client/state/store");
+  const { NewIssueItem } = await import("@/client/features/navigation/app-chrome");
+  const { shortcuts } = await import("@/client/features/navigation/shortcuts");
+  const { hasLocalDraft } = await import("./composer-local-draft");
+  set({ namespace: "render" } as never);
+  const sidebar = () => renderWithFakeDocument(() => renderToStaticMarkup(<NewIssueItem />));
+  const detail = () => shortcuts.find((s) => s.id === "new")!.detail?.();
+  expect(hasLocalDraft("render")).toBe(false);
+  expect(sidebar()).not.toContain("data-draft-dot");
+  expect(detail()).toBeUndefined();
+  writeLocalDraft("render", draft());
+  expect(hasLocalDraft("render")).toBe(true);
+  expect(sidebar()).toContain("data-draft-dot");
+  expect(sidebar()).toContain("Resume editing");
+  expect(detail()).toBe("Resume editing");
+  writeLocalDraft("render", undefined);
+  expect(sidebar()).not.toContain("data-draft-dot");
+  expect(detail()).toBeUndefined();
+});

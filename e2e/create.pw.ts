@@ -291,6 +291,8 @@ test("C5: the composer keeps its whole draft across a reload, a backdrop press m
     await page.clickAt(5, 5);
     await page.waitFor(`!${dialog}`);
     expect(await page.eval(`!!document.querySelector('[role=dialog][aria-label="Save to drafts?"]')`)).toBe(false);
+    // BJ-273: the kept draft shows at once on the sidebar's New issue (Linear's dot and "Resume editing").
+    await page.waitFor(`!!document.querySelector('nav [data-draft-dot]')`);
     await page.key("c");
     expect(await page.waitFor<string>(`${title}?.value`)).toBe("Kept across reload");
   });
@@ -298,6 +300,7 @@ test("C5: the composer keeps its whole draft across a reload, a backdrop press m
     await page.key("Escape");
     await page.page.getByRole("dialog", { name: "Save to drafts?" }).getByRole("button", { name: "Discard" }).click();
     await page.waitFor(`!${dialog}`);
+    await page.waitFor(`!document.querySelector('nav [data-draft-dot]')`);
     await page.reload();
     await page.key("c");
     expect(await page.waitFor<string>(`${title}?.value`)).toBe("");

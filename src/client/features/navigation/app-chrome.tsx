@@ -33,6 +33,7 @@ import { hotkeyOf, runShortcut } from "./shortcuts";
 import { Button, IconButton } from "@/client/components/button";
 import { Shortcut } from "@/client/components/keycap";
 import { Text } from "@/client/components/text";
+import { RESUME_EDITING, useHasLocalDraft } from "@/client/features/issue/composer-local-draft";
 import { FindField } from "@/client/components/find-field";
 import { ConfirmDialog, Dialog } from "@/client/components/dialog";
 import { useCommand, focusNode } from "./commands";
@@ -159,9 +160,7 @@ export function Sidebar({ boards }: { boards: Board[] }) {
         <SideItem onClick={() => runShortcut("search")}>
           <Icon name="search" /> Search <Shortcut className="ml-auto" keys={hotkeyOf("search")} size="small" />
         </SideItem>
-        <SideItem onClick={() => beginCreateInView()}>
-          <Icon name="plus" /> New issue <Shortcut className="ml-auto" keys={hotkeyOf("new")} size="small" />
-        </SideItem>
+        <NewIssueItem />
         {/* Like Linear, My issues is a sidebar view rather than a tab beside Active/Backlog/All. */}
         {prefs.myIssues === "Always" && (
           <ContextMenu label="My issues options" entries={() => sidebarItemEntries("myIssues", { prefs, setPrefs })}>
@@ -466,6 +465,31 @@ const SideItem = ({ onClick, children }: { onClick: (e: MouseEvent<HTMLButtonEle
     {children}
   </button>
 );
+
+/**
+ * The sidebar's New issue. While C would bring a kept draft back, its icon carries Linear's draft dot and it says "Resume
+ * editing", as Linear's sidebar create button (`K$n`: `hasLocalDraft` → aria-label "Resume editing" and the dot; BJ-273).
+ */
+export function NewIssueItem() {
+  const resumes = useHasLocalDraft(useStore((s) => s.namespace));
+  return (
+    <SideItem onClick={() => beginCreateInView()}>
+      <span className="relative inline-flex">
+        <Icon name="plus" />
+        {/* Linear's dot: absolute at -1px/-1px, 8×8, controlPrimary, a 1px bgBase ring, radius 6px, no pointer events. */}
+        {resumes && (
+          <span
+            data-draft-dot
+            className="pointer-events-none absolute -top-px -right-px size-2 rounded-[6px] border border-[var(--app)] bg-[var(--accent)]"
+          />
+        )}
+      </span>
+      New issue
+      {resumes && <span className="sr-only">, {RESUME_EDITING}</span>}
+      <Shortcut className="ml-auto" keys={hotkeyOf("new")} size="small" />
+    </SideItem>
+  );
+}
 
 // Linear's pill button: 28px, 0.5px ring drawn as a shadow, 12px/500.
 const PILL =

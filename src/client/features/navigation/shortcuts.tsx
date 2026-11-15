@@ -1,4 +1,5 @@
 import { newSubIssueDraft } from "@/client/features/issue/sub-issue-draft";
+import { hasLocalDraft, RESUME_EDITING } from "@/client/features/issue/composer-local-draft";
 import { type Issue } from "@/shared/issue-model";
 import { lastToastLink, showNotification } from "@/client/state/app-notifications";
 import { toasts } from "@/client/components/toast-queue";
@@ -73,6 +74,8 @@ type Shortcut = {
   when?: (s: State, issue: Issue | undefined) => boolean;
   /** The ⌘K row's name when it depends on state, e.g. "Unfavorite issue". */
   label?: () => string;
+  /** Faint text after the ⌘K row's name, read as the list renders (Linear's action `detail`). */
+  detail?: () => string | undefined;
 };
 /** The issue a menu item runs a shortcut on (`runShortcut(id, key)`); a right-click menu's issue never becomes the selection. */
 let acting: string | null = null;
@@ -529,6 +532,8 @@ export const shortcuts: Shortcut[] = [
     group: "Issues",
     hotkey: "C",
     run: () => beginCreateInView(),
+    // Linear's FAST_CREATE_ISSUE: `detail: e => { if (e.fastCreateStates.issue.hasLocalDraft) return "Resume editing" }`.
+    detail: () => (hasLocalDraft(get().namespace) ? RESUME_EDITING : undefined),
   },
   {
     id: "new-full",
