@@ -62,7 +62,8 @@ import { Button, IconButton } from "@/client/components/button";
 import { CountBadge } from "@/client/components/count-badge";
 import { Text } from "@/client/components/text";
 import { EntityIdentifier } from "@/client/components/entity-identifier";
-import { dropPlan } from "./board-drop";
+import { dropAll, dropPlan } from "./board-drop";
+import { record } from "@/client/state/undo-history";
 import "./board-column.css";
 // Memoised: an overlay opening (⌘K) re-renders App, and must not re-render every board.
 export const BoardView = memo(function BoardView({
@@ -266,8 +267,11 @@ export const BoardView = memo(function BoardView({
                               ...(d.rows !== "none" ? [{ by: d.rows, id: row.id }] : []),
                             ];
                             const order = { manual: d.ordering === "manual", descending: d.descending };
-                            for (const { key, rank } of dropPlan(layout.cells[ri]![ci]!, keys, before, order, (k) => issues.get(k)))
-                              actions.drop(key, personal ? (issues.get(key)?.board ?? board.id) : board.id, groups, rank);
+                            dropAll(
+                              dropPlan(layout.cells[ri]![ci]!, keys, before, order, (k) => issues.get(k)),
+                              ({ key, rank }) => actions.drop(key, personal ? (issues.get(key)?.board ?? board.id) : board.id, groups, rank),
+                              record,
+                            );
                           }}
                         />
                       ))}

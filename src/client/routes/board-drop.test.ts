@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { type Issue } from "@/shared/issue-model";
 import { opsFor } from "@/shared/jira-ops";
-import { dropPlan } from "./board-drop";
+import { dropAll, dropPlan } from "./board-drop";
 
 const card = (key: string, status: string, rank: string): Issue => ({
   key,
@@ -58,4 +58,18 @@ test("a cross-column drop between two cards writes the new status and a rank aft
   const neighbour = (ops[1] as { after?: string }).after!;
   expect(["A", "B"]).toContain(neighbour);
   expect(ops).toHaveLength(2);
+});
+
+test("cards dropped together are one undoable edit; a single card is its own", () => {
+  const moved: string[] = [];
+  const together: { keys: string[]; label: string }[] = [];
+  const record = (keys: string[], label: string, fn: () => void) => {
+    together.push({ keys, label });
+    fn();
+  };
+  dropAll([{ key: "A" }], (m) => moved.push(m.key), record);
+  expect(together).toEqual([]);
+  dropAll([{ key: "B", rank: "c" }, { key: "D", rank: "e" }], (m) => moved.push(m.key), record);
+  expect(together).toEqual([{ keys: ["B", "D"], label: "move 2 issues" }]);
+  expect(moved).toEqual(["A", "B", "D"]);
 });
