@@ -31,6 +31,7 @@ import { faviconProxy } from "./favicon";
 import { smartLinkCache } from "./smart-link";
 import { droppedBoardMeta, issueStore } from "./issue-store";
 import { readWholeBoard, syncHealthOf } from "./board-sync";
+import { keptIssues } from "./kept-issues";
 
 const configuration = serverConfiguration();
 // `bun --hot` re-runs this module on every edit; the loops and the open tabs live on globalThis so they survive it.
@@ -148,27 +149,12 @@ const save = db.transaction((board: number, issues: any[], seen: number) => {
 const saveContent = (raw: any) =>
   store.put({ key: raw.key, slim: slimOf(raw, store.boardsOf(raw.key)), full: raw });
 
-const keeping = new Map<string, Promise<boolean>>();
-/** Whether the mirror has the issue, reading it from Jira the first time something asks for it by key (a link, a parent, the
- *  inbox, an issue address): an issue no board holds is then kept on none, as Linear's `hydrateModel` loads a model its sync
- *  didn't bring and keeps it. False when Jira has no such issue, or hides it from this account. */
-function kept(key: string): Promise<boolean> {
-  if (store.updated(key)) return Promise.resolve(true);
-  let read = keeping.get(key);
-  if (!read) {
-    read = jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=${projection.fields}`)
-      .then(
-        (raw) => (saveContent(raw), true),
-        (error) => {
-          if ((error as { status?: number }).status === 404) return false;
-          throw error;
-        },
-      )
-      .finally(() => keeping.delete(key));
-    keeping.set(key, read);
-  }
-  return read;
-}
+/** Whether the mirror has the issue, reading it from Jira the first time something asks for it by key (kept-issues.ts). */
+const kept = keptIssues({
+  has: (key) => !!store.updated(key),
+  read: (key) => jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=${projection.fields}`),
+  save: saveContent,
+});
 
 const page = (board: number, jql: string, startAt: number) =>
   jira(
