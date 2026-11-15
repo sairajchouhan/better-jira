@@ -258,6 +258,30 @@ const writes: { key: string; ops: any[] }[] = [],
 let jiraEdits = false,
   refuse: string[] = [],
   refuseText = "Jira refused the change.";
+/** `jiraComments` opts into Jira keeping comments posted, edited and deleted from the app, by issue, with Jira's ids. */
+let jiraComments = false;
+const posted = new Map<string, any[]>();
+let commentId = 9000;
+/** A comment op as Jira would apply it; a new comment's id, for `created[ref]`. */
+function postComment(key: string, op: any): string | undefined {
+  const list = posted.get(key) ?? [];
+  posted.set(key, list);
+  if (op.op === "comment") {
+    const id = String(commentId++);
+    list.push({
+      id,
+      author: { accountId: user.id, displayName: user.name },
+      created: new Date().toISOString(),
+      updated: new Date().toISOString(),
+      body: op.body,
+      ...(op.parentId && /^\d+$/.test(op.parentId) ? { parentId: Number(op.parentId) } : {}),
+    });
+    return id;
+  }
+  const at = list.findIndex((c) => c.id === op.id);
+  if (op.op === "comment.edit" && at >= 0) list[at] = { ...list[at], body: op.body, updated: new Date().toISOString() };
+  if (op.op === "comment.delete" && at >= 0) list.splice(at, 1);
+}
 /** A fields op as the mirror would read it back from Jira. */
 function mirrored(key: string, fields: Record<string, any>) {
   const before = listed().find((i) => i.key === key) as any,
@@ -376,6 +400,10 @@ function applyOps(key: string, ops: any[]) {
     if (description) descriptions.set(key, description);
   }
   for (const op of ops) {
+    if (jiraComments && op.op.startsWith("comment")) {
+      const id = postComment(key, op);
+      if (id) created[op.ref] = id;
+    }
     if (jiraEdits && op.op === "fields" && !createdIssues.has(key))
       edited.set(key, { ...edited.get(key), ...mirrored(key, op.fields) });
     if (jiraEdits && op.op === "status") edited.set(key, { ...edited.get(key), status: op.status });
@@ -762,7 +790,15 @@ const naturalLayoutNodes = [
     content: [{ type: "text", text: "Text beside a naturally sized image. ".repeat(20) }],
   },
 ];
+/** The issue's full record, with the comments `jiraComments` kept. */
 function full(key: string): any {
+  const record = jiraFull(key),
+    kept = posted.get(key);
+  if (!kept?.length) return record;
+  const { total, comments } = record.fields.comment;
+  return { ...record, fields: { ...record.fields, comment: { total: total + kept.length, comments: [...comments, ...kept] } } };
+}
+function jiraFull(key: string): any {
   const nestedContent = [
     { type: "paragraph", content: [{ type: "text", text: "Before nested media" }] },
     mediaNodes[1]!,
@@ -952,6 +988,8 @@ async function handle(req: Request) {
     crossLinks = settings.crossLinks ?? false;
     createSuccess = settings.createSuccess ?? false;
     jiraEdits = settings.jiraEdits ?? false;
+    jiraComments = settings.jiraComments ?? false;
+    posted.clear();
     refuse = settings.refuse ?? [];
     refuseText = settings.refuseText ?? "Jira refused the change.";
     edited.clear();
