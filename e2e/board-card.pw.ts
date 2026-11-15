@@ -289,6 +289,38 @@ test("the link, pull request, comment and creator badges behave like Linear's", 
   });
 });
 
+test("BJ-309: with a hover card open, the menu opened next closes on one Escape or one outside press", async ({ open }) => {
+  const page = await open("", { setup: badgeSetup });
+  const badge = `[data-key="TEST-1"] [aria-label="Links on TEST-1"]`;
+  const hover = `document.querySelector('[data-hover-card="Links"]')`;
+  const showCard = async () => {
+    await page.waitFor(`!!document.querySelector('${badge}')`);
+    const chip = await page.eval<DOMRect>(rect(`document.querySelector('${badge}')`));
+    await page.page.mouse.move(1, 1);
+    await page.page.mouse.move((chip.left + chip.right) / 2, (chip.top + chip.bottom) / 2);
+    await page.waitFor(`!!${hover}`);
+  };
+  const openDialogs = `document.querySelectorAll('[role=dialog]:not([data-hover-card])').length`;
+
+  await test.step("keyboard: S on the card behind it opens Change status; one Escape closes it", async () => {
+    await showCard();
+    await page.eval(`${card("TEST-1")}.focus()`);
+    await page.key("s");
+    await page.waitFor(`!!document.querySelector('[role=dialog][aria-label="Change status"]')`);
+    await page.key("Escape");
+    await page.waitFor(`${openDialogs}===0`);
+    expect(await page.eval(`document.activeElement===${card("TEST-1")}`)).toBe(true);
+  });
+
+  await test.step("pointer: a right-click on the badge opens Issue options; one outside press closes it", async () => {
+    await showCard();
+    await page.page.locator(badge).click({ button: "right" });
+    await page.waitFor(`!!document.querySelector('[role=dialog][aria-label="Issue options"]')`);
+    await page.page.mouse.click(700, 650);
+    await page.waitFor(`${openDialogs}===0`);
+  });
+});
+
 test("one pull request's badge opens Linear's pull request menu at the pointer; each row acts on that pull request", async ({ open }) => {
   const copied = `;window.__copied=[];Object.defineProperty(navigator,'clipboard',{value:{writeText:async t=>{window.__copied.push(t)}}})`;
   for (const layout of ["board", "list"] as const) {

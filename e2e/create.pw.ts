@@ -120,6 +120,28 @@ test("create composer: a draft written, closed, reopened, given properties and c
       ),
     ).toHaveLength(1);
   });
+  await test.step("BJ-310: a toast shown under the open Create issue dialog (Create more) is live: not inert, View issue takes the press", async () => {
+    await page.key("c");
+    await page.waitFor(`document.activeElement===${title}`);
+    await page.click("text=Create more");
+    await page.type("Toast under a dialog");
+    await page.key("Enter", "meta");
+    await page.waitFor(`/Toast under a dialog/.test(document.querySelector("[data-toast]")?.textContent??"")`);
+    expect(await page.eval(`!!${title}`)).toBe(true);
+    const view = `[...document.querySelectorAll("[data-toast] button")].find((b) => b.textContent === "View issue")`;
+    expect(
+      await page.eval(`(() => {
+        const b = ${view};
+        const r = b.getBoundingClientRect();
+        return !b.closest("[inert],[aria-hidden=true]") && b.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+      })()`),
+    ).toBe(true);
+    await page.eval(`${view}.click()`);
+    await page.waitFor(`/Toast under a dialog/.test(document.getElementById("summary")?.value??document.getElementById("summary")?.textContent??"")`);
+    await page.eval("document.activeElement?.blur()");
+    await page.key("Escape");
+    await page.waitFor(`!document.getElementById("summary")`);
+  });
   await test.step("B13: the Display menu uses pill menus instead of native selects; typing jumps to an option (React Aria's typeahead)", async () => {
     await page.click('[aria-label="Display options"]');
     await page.waitFor(`!!document.querySelector('[aria-label^="Ordering: "]')`);
