@@ -40,7 +40,6 @@ export type Property =
   | "created"
   | "updated"
   | "type"
-  | "comments"
   | "milestone"
   | "statusAge"
   | "pullRequests";
@@ -150,7 +149,6 @@ export const PROPERTIES: [Property, string][] = [
   ["created", "Created"],
   ["updated", "Updated"],
   ["type", "Issue type"],
-  ["comments", "Comments"],
 ];
 export const FIELDS: [Field, string][] = [
   ["status", "Status"],
@@ -321,7 +319,7 @@ export const defaultDisplay = (): Display => ({
   subIssues: true,
   emptyGroups: false,
   nested: "matching",
-  properties: ["id", "status", "assignee", "priority", "type", "labels", "comments", "updated"],
+  properties: ["id", "status", "assignee", "priority", "type", "labels", "updated"],
   openIn: "side",
 });
 export const defaultPreferences = (): Preferences => ({

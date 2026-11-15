@@ -86,7 +86,7 @@ test("revealHold follows late content while the composer has focus, and stops fo
   expect([...REVEAL_STOPS]).toEqual(["wheel", "touchstart", "pointerdown", "keydown"]);
 });
 
-test("the issue's focus-comment owner (the card's comment badge and ⌃M) focuses through focusComposer on both paths", async () => {
+test("the issue's focus-comment owner (⌃M, Comment on issue) focuses through focusComposer on both paths", async () => {
   const view = await Bun.file(`${import.meta.dir}/../../routes/issue-view.tsx`).text();
   const handler = view.slice(view.indexOf('useCommand("focus-comment"'), view.indexOf("const followedAnchor"));
   expect(handler.match(/focusComposer\(commentRef\.current\??\.querySelector<HTMLElement>\("#comment"\)\)/g)).toHaveLength(2);

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 
 // Linear leaves 60px between the issue's comment box and the end of the page (the issue content's `sx-efzj8c`,
 // padding-bottom: 60px). Ours is the comment frame's 12px margin (mb-3) plus the detail grid's bottom padding, so the
-// composer a comment badge or ⌃M scrolls to sits as high above the page's end as Linear's.
+// composer ⌃M (Comment on issue) scrolls to sits as high above the page's end as Linear's.
 const dir = new URL("./", import.meta.url);
 const css = await Bun.file(new URL("index.css", dir)).text();
 const frame = await Bun.file(new URL("features/editor/editor-frame.tsx", dir)).text();

@@ -11,9 +11,7 @@ import { ActionMenu, ContextMenu, type ActionEntry } from "@/client/components/a
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { showNotification } from "@/client/state/app-notifications";
 import { set, useStore } from "@/client/state/store";
-import { navigate } from "@/client/features/navigation/app-navigation";
-import { post, run, useCommand } from "@/client/features/navigation/commands";
-import { commentCount } from "@/client/features/media/media-edits";
+import { run, useCommand } from "@/client/features/navigation/commands";
 import { fullTime } from "./issue-dates";
 import { queryClient } from "@/client/state/server-data";
 import type { Issue, User } from "@/shared/issue-model";
@@ -398,30 +396,7 @@ export function SubIssueBadge({ issue, layout }: { issue: Issue; layout: "board"
   );
 }
 
-// ——— Comments and creator: no Linear card badge; each reuses Linear's nearest behaviour ———
-
-/** The comment count. A click is Linear's "Comment on issue" (⌃M): the issue opens with its comment box focused, below its
- *  comments. */
-export function CommentBadge({ issue }: { issue: Issue }) {
-  const count = commentCount(issue);
-  if (!count) return null;
-  const label = `${count} ${count === 1 ? "comment" : "comments"}`;
-  return (
-    <Badge.Button
-      aria-label={label}
-      title={label}
-      onClick={() => {
-        navigate({ selected: issue.key, panel: true });
-        post("focus-comment", issue.key);
-      }}
-    >
-      <Badge.Icon>
-        <Icon name="comment" />
-      </Badge.Icon>
-      <Badge.Text>{count}</Badge.Text>
-    </Badge.Button>
-  );
-}
+// ——— Creator: no Linear card badge; it reuses Linear's nearest behaviour ———
 
 /** Linear's user card (`ift` → `sft`): a large avatar beside the name, with the detail line under it. */
 function UserCard({ user, detail }: { user: User; detail?: string }) {

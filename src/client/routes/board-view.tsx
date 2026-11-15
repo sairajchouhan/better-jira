@@ -33,7 +33,7 @@ import {
 } from "react";
 import { Badge, IconMenuButton } from "@/client/components/badge";
 import { PropertyPicker, type IssueField } from "@/client/features/issue/personal-controls";
-import { CommentBadge, CreatorBadge, LinkBadges, PullRequestBadge, SubIssueBadge } from "@/client/features/issue/card-badges";
+import { CreatorBadge, LinkBadges, PullRequestBadge, SubIssueBadge } from "@/client/features/issue/card-badges";
 import { DueIcon, Icon, LabelDot, PriorityIcon, StatusIcon, TypeDot } from "@/client/components/icons";
 import { ME, get, set, timed, useStore, statusOf, issueBoardId } from "@/client/state/store";
 import { actions, beginCreateInView } from "@/client/state/issue-actions";
@@ -847,7 +847,6 @@ function IssueProperties({ issue, display: d, labels }: { issue: Issue; display:
       {show("links") && <LinkBadges issue={issue} />}
       {/* Linear's card ends its badges with the sub-issues one, after links (IssueList `wd`); a row has it after its title. */}
       {d.layout === "board" && <SubIssueBadge issue={issue} layout="board" />}
-      {show("comments") && <CommentBadge issue={issue} />}
       {show("creator") && <CreatorBadge issue={issue} />}
     </>
   );
