@@ -109,6 +109,7 @@ function Shell({ children }: { children: ReactNode }) {
   const current = useStore((s) => (target ? s.issues.get(target) : undefined));
   // The boards show unless an issue page, the inbox or the views list covers them.
   const covered = useStore((s) => (s.panel && !!s.selected && (s.view === "page" || !!s.document)) || s.inbox);
+  const sidebarHidden = useStore((s) => s.sidebarHidden);
   // Boards opened this session stay mounted (hidden) so switching back is instant; adjusted during render.
   const [visited, setVisited] = useState(() => new Set([boardId]));
   if (!visited.has(boardId)) setVisited(new Set(visited).add(boardId));
@@ -122,7 +123,8 @@ function Shell({ children }: { children: ReactNode }) {
         <TitleTooltips />
         <main
           tabIndex={-1}
-          className="relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border-[0.5px] border-frame bg-panel shadow-(--frame-shadow)"
+          // Linear's mainPageMargin (8px, startup-root) on every free side: with the sidebar hidden, the left too (BJ-276).
+          className={`relative my-2 mr-2 ${sidebarHidden ? "ml-2" : ""} flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border-[0.5px] border-frame bg-panel shadow-(--frame-shadow)`}
         >
           {!covered && <BoardHeader />}
           <div className="flex min-h-0 flex-1">

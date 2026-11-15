@@ -198,9 +198,9 @@ test("boot shell: Linear's splash paints before the app, lines up with its panel
     expect((await bootAndMeasure())[0]).toBe(244);
   });
 
-  await test.step("a hidden sidebar is read before first paint: no column, and still no jump", async () => {
+  await test.step("a hidden sidebar is read before first paint: no column, Linear's 8px margin (BJ-276), and still no jump", async () => {
     await app.eval(`localStorage.setItem('better-jira:sidebar','hidden')`);
-    expect((await bootAndMeasure())[0]).toBe(0);
+    expect((await bootAndMeasure())[0]).toBe(8);
     await app.eval(`localStorage.setItem('better-jira:sidebar','shown')`);
   });
   await page.unroute("**/api/boards");

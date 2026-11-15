@@ -288,9 +288,10 @@
     --boot-logo: #6b6f76;
   }
 }
-/* A hidden sidebar (the head script) and below 768px (the sidebar's max-md:hidden) leave the panel at the left edge. */
+/* A hidden sidebar (the head script) leaves Linear's 8px mainPageMargin left of the panel, as the app's <main> (BJ-276);
+   below 768px (the sidebar's max-md:hidden) the panel is at the left edge. */
 html.sidebar-hidden {
-  --boot-sidebar: 0px;
+  --boot-sidebar: 0.5rem;
 }
 @media (max-width: 767px) {
   :root {
