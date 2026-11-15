@@ -1,5 +1,4 @@
 import { useLayoutEffect, useRef } from "react";
-import { FOCUS_AT_EVENT, type FocusAt } from "@/client/features/editor/title-flow";
 
 /** The shortcut command channel: a shortcut sends an intent by name, and the module that owns the element registers the handler.
  *  Nothing outside the owner reaches into its DOM or its state. */
@@ -105,32 +104,10 @@ export function useCommand<C extends Name>(command: C, handler: Handler<C>) {
 
 /** Focuses an owner's element for a command; takes the command only when focus lands in it (a hidden, disabled or
  *  retiring element refuses focus, and the command must stay pending for the owner that can take it). */
-export function focusNode(node: HTMLElement | null | undefined, options?: FocusOptions) {
+export function focusNode(node: HTMLElement | null | undefined) {
   if (!node) return;
-  node.focus(options);
+  node.focus();
   const active = node.ownerDocument.activeElement;
   return active && node.contains(active) ? (true as const) : undefined;
 }
-/** Linear's delay before its composer answers `newComment` (`setTimeout(…, 100)`): the route has settled by then, so the
- *  router's scroll to the top of a newly opened issue (`scrollToTopSelectors`) doesn't undo the reveal. */
-export const COMPOSER_REVEAL_DELAY = 100;
-/** `focusNode` for the comment composer a command opens, as Linear's "Comment on issue" (⌃M, `newComment`) does: the
- *  composer's `focusAtEnd()`, then the editor's `scrollIntoView()`, which is `view.dom.scrollIntoView()` with no options, so
- *  block "start". Near the page's end that is the scroller's end: the whole composer and the space under it show. The
- *  browser's own focus scroll shows only the caret's line, which left the composer cut off at the bottom edge. Focus is
- *  taken now, so the command is answered; the reveal waits for `later`. */
-export function focusComposer(
-  node: HTMLElement | null | undefined,
-  later: (reveal: () => void) => void = (reveal) => void setTimeout(reveal, COMPOSER_REVEAL_DELAY),
-) {
-  if (!node) return;
-  // The editor takes the caret to its end and focuses without scrolling (ProseMirror's focus); anything else just focuses.
-  if (node.dispatchEvent(new CustomEvent<FocusAt>(FOCUS_AT_EVENT, { detail: "end", cancelable: true })))
-    node.focus({ preventScroll: true });
-  const active = node.ownerDocument.activeElement;
-  if (!active || !node.contains(active)) return;
-  later(() => {
-    if (node.isConnected) node.scrollIntoView();
-  });
-  return true as const;
-}
+

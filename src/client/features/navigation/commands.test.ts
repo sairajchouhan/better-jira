@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { Glob } from "bun";
-import { COMPOSER_REVEAL_DELAY, focusComposer, focusNode } from "./commands";
-import { FOCUS_AT_EVENT } from "@/client/features/editor/title-flow";
+import { focusNode } from "./commands";
 
 const source = async (pattern: string) => {
   const files: Record<string, string> = {};
@@ -103,62 +102,3 @@ test("focusNode takes a command only when focus lands in the element (R3 G10)", 
   expect(focusNode(node(true))).toBe(true);
 });
 
-/** A stand-in composer: `editor` answers the caret event as the rich editor does (caret placed, focus without scrolling). */
-const composer = ({ editor = true, takes = true } = {}) => {
-  const doc = { activeElement: null as object | null };
-  const calls: unknown[][] = [];
-  const el = {
-    ownerDocument: doc,
-    isConnected: true,
-    contains: (other: object) => other === el,
-    dispatchEvent: (event: CustomEvent) => {
-      calls.push(["event", event.type, event.detail]);
-      if (!editor) return true;
-      event.preventDefault();
-      if (takes) doc.activeElement = el;
-      return false;
-    },
-    focus: (options?: FocusOptions) => {
-      calls.push(["focus", options]);
-      if (takes) doc.activeElement = el;
-    },
-    scrollIntoView: (...args: unknown[]) => calls.push(["scrollIntoView", ...args]),
-  };
-  return { node: el as unknown as HTMLElement & { isConnected: boolean }, calls };
-};
-
-test("focusComposer is Linear's newComment: caret at the end, then the editor's own scrollIntoView() after 100ms", () => {
-  const reveals: (() => void)[] = [];
-  const { node, calls } = composer();
-  expect(focusComposer(node, (reveal) => reveals.push(reveal))).toBe(true);
-  // Focused now (the command is answered), not yet scrolled: the router's scroll to the top of a new issue comes first.
-  expect(calls).toEqual([["event", FOCUS_AT_EVENT, "end"]]);
-  expect(reveals).toHaveLength(1);
-  reveals[0]!();
-  // No options: block "start", which at the page's end is the scroller's end, so the whole composer shows (the browser's
-  // own focus scroll showed only the caret's line, the box cut off at the bottom edge).
-  expect(calls.at(-1)).toEqual(["scrollIntoView"]);
-  expect(COMPOSER_REVEAL_DELAY).toBe(100);
-});
-
-test("focusComposer: an element that isn't the editor focuses without the browser's scroll; a refused focus scrolls nothing", () => {
-  const plain = composer({ editor: false });
-  const reveals: (() => void)[] = [];
-  expect(focusComposer(plain.node, (reveal) => reveals.push(reveal))).toBe(true);
-  expect(plain.calls[1]).toEqual(["focus", { preventScroll: true }]);
-  // Gone by the time the reveal runs (the issue was left): nothing scrolls.
-  plain.node.isConnected = false;
-  reveals[0]!();
-  expect(plain.calls.some(([name]) => name === "scrollIntoView")).toBe(false);
-
-  const refused = composer({ takes: false });
-  expect(focusComposer(refused.node, () => { throw new Error("no reveal for a refused focus"); })).toBeUndefined();
-  expect(focusComposer(undefined)).toBeUndefined();
-});
-
-test("the issue's focus-comment owner (the card's comment badge and ⌃M) focuses through focusComposer on both paths", async () => {
-  const view = await Bun.file(`${import.meta.dir}/../../routes/issue-view.tsx`).text();
-  const handler = view.slice(view.indexOf('useCommand("focus-comment"'), view.indexOf("const followedAnchor"));
-  expect(handler.match(/focusComposer\(commentRef\.current\??\.querySelector<HTMLElement>\("#comment"\)\)/g)).toHaveLength(2);
-  expect(handler).not.toContain("focusNode(");
-});

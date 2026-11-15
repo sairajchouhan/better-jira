@@ -61,7 +61,8 @@ import {
 } from "@/client/features/editor/title-flow";
 import { hotkeyOf, runShortcut } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
-import { post, useCommand, focusComposer, focusNode } from "@/client/features/navigation/commands";
+import { post, useCommand, focusNode } from "@/client/features/navigation/commands";
+import { focusComposer } from "@/client/features/navigation/composer-reveal";
 import { InboxIssueActions, InboxIssueGroup, InboxSnooze } from "./inbox";
 import { useCommentsSeen, useIssueVisit } from "@/client/features/inbox/issue-visit";
 import { SplitPanel } from "@/client/features/issue/split-panel";
