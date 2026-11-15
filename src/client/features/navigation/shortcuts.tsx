@@ -25,7 +25,7 @@ import { currentKey } from "@/client/state/jira-sync";
 import { redoEdit, undoEdit } from "@/client/state/undo-history";
 import { navigate, openIssueByKey, ui, pageURL } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
-import { rankBetween } from "@/shared/view-model";
+import { dropPlan } from "@/client/routes/board-drop";
 import {
   clearFilters,
   setDisplay,
@@ -187,10 +187,11 @@ function reorder(direction: number, edge = false) {
       : Math.max(0, Math.min(rest.length, i + direction));
   if (at === i) return;
   const board = issueBoardId(issue);
-  const descending = viewSettings(board).display.descending;
-  const a = rest[at - 1]?.rank,
-    b = rest[at]?.rank;
-  actions.drop(issue.key, board, [], descending ? rankBetween(b, a) : rankBetween(a, b));
+  const { descending } = viewSettings(board).display;
+  // The same plan as a drag's drop (Linear's Move up/down/top/bottom run its drop, `moveModelsInNewPosition` → `kFn`): ranked
+  // beside the card it now sits by in the group as shown, never one a filter hides.
+  const [place] = dropPlan(list, [issue.key], rest[at]?.key, { manual: true, descending }, get().issues);
+  if (place) actions.drop(issue.key, board, [], place);
 }
 const manual = (s = get()) => viewSettings(s.board, s).display.ordering === "manual";
 /** Linear's Move… sub-actions (`Ivr`), in its order. */

@@ -119,6 +119,18 @@ test("corrupt records are isolated and unknown schema versions cannot overwrite 
   });
   expect(parseLocalState(undefined)).toEqual({ state, recovered: false, readOnly: false });
 });
+test("a drop's rank anchor survives a reload, so a replayed drop still names the card it was dropped beside", () => {
+  const dropped = {
+    key: issue.key,
+    issue: { ...issue, rank: "c", rankAnchor: { before: "TEST-2" } },
+    issueFields: ["rank", "rankAnchor"],
+    fullFields: [],
+    created: false,
+  };
+  expect(parseLocalState({ ...emptyLocalState(), changes: [dropped] }).state.changes).toEqual([dropped]);
+  const malformed = { ...dropped, issue: { ...dropped.issue, rankAnchor: { before: 2 } } };
+  expect(parseLocalState({ ...emptyLocalState(), changes: [malformed] }).state.changes).toEqual([]);
+});
 
 test("R1-D21/D22: two tabs keep saving; each keeps the other's changes to issues it didn't edit", async () => {
   const factory = new IDBFactory(),

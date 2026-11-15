@@ -64,6 +64,7 @@ const issueFields = new Set([
   "labels",
   "parent",
   "rank",
+  "rankAnchor",
   "comments",
   "updated",
   "resolved",
@@ -120,6 +121,10 @@ const isIssue = (v: unknown, key: string): v is Issue =>
   ["type", "priority", "parent", "rank", "description", "created", "statusSince", "started"].every(
     (k) => v[k] === undefined || typeof v[k] === "string",
   ) &&
+  (v.rankAnchor === undefined ||
+    (object(v.rankAnchor) &&
+      Object.keys(v.rankAnchor).length === 1 &&
+      (typeof v.rankAnchor.after === "string" || typeof v.rankAnchor.before === "string"))) &&
   (v.reminder === undefined ||
     v.reminder === null ||
     (object(v.reminder) &&

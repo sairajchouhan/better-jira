@@ -63,6 +63,8 @@ export type PropertyActivity = {
 };
 
 export type User = { id: string; name: string; avatar?: string };
+/** Where Jira ranks a card: right after or right before another card on its board (`rank after <key>` / `rank before <key>`). */
+export type RankAnchor = { after: string } | { before: string };
 export type Issue = {
   key: string;
   /** Every configured board that holds the issue, in the sidebar's order; none for an issue only linked from one. Ask
@@ -80,6 +82,9 @@ export type Issue = {
   /** Jira's hierarchy level of the parent's type, so an epic parent the mirror doesn't hold is still known (shared/epics.ts). */
   parentLevel?: number;
   rank?: string;
+  /** The card a drop ranked this one beside, as Jira's rank op names it, until Jira answers that write (jira-ops `opsFor`).
+   *  Set with the drop's `rank`; the rank alone can't tell which neighbour the card was dropped by (shared/board-rank.ts). */
+  rankAnchor?: RankAnchor;
   comments: number;
   updated: string;
   resolved: string | null;

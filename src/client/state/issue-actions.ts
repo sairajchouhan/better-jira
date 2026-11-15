@@ -1,4 +1,4 @@
-import { type CommentState, type ImageCrop, type MediaEdit, type User, type Issue, type Full, type IssueDraft } from "@/shared/issue-model";
+import { type CommentState, type ImageCrop, type MediaEdit, type User, type Issue, type Full, type IssueDraft, type RankAnchor } from "@/shared/issue-model";
 /**
  * The edits a person makes to issues. Each action records one undo step (undo-history.ts) whose before/after is sent
  * to Jira (jira-sync.ts) on a writable site, and is kept locally until Jira has it (local-edits.ts). Files are kept
@@ -409,8 +409,8 @@ export const actions = {
   ) {
     timed(`edit ${key}`, () => record(key, `edit ${key}`, () => patchIssue(key, patch)));
   },
-  /** `rank` places the card where it was dropped (manual ordering). */
-  drop(key: string, boardId: number, groups: { by: Grouping; id: string }[], rank?: string) {
+  /** `place` is where the card was dropped in manual order: its rank and the card Jira ranks it beside (routes/board-drop.ts). */
+  drop(key: string, boardId: number, groups: { by: Grouping; id: string }[], place?: { rank?: string; rankAnchor?: RankAnchor }) {
     const issue = get().issues.get(key),
       board = get().boards.find((b) => b.id === boardId);
     if (!issue || !board || !onBoard(issue, boardId)) return;
@@ -436,7 +436,7 @@ export const actions = {
     const skipSelfAssign = groups.some(({ by }) => by === "assignee");
     // One drag, including its column and row changes, is one undoable edit.
     record(key, `move ${key}`, () => {
-      if (rank !== undefined) patchIssue(key, { rank });
+      if (place?.rank !== undefined) patchIssue(key, { rank: place.rank, rankAnchor: place.rankAnchor });
       for (const { by, id } of groups) {
         const current = get().issues.get(key)!;
         if (by === "status") {

@@ -2,7 +2,7 @@ import { type Full, type Issue, type CommentState } from "@/shared/issue-model";
 import { descriptionBaseText, textToAdf, type AdfDocument } from "./document";
 import { inwardKind, outwardKind } from "./relations";
 import type { IssueComment } from "@/client/features/comments/comment-thread";
-import { sharesBoard } from "./board-membership";
+import { rankOp } from "./board-rank";
 
 /** `labels` sets the whole list (create); `labelEdits` adds and removes single labels so others' labels survive. */
 type Fields = {
@@ -72,6 +72,8 @@ export const JIRA_ISSUE_FIELDS = [
   "typeIcon",
   "project",
   "rank",
+  // Lives with `rank`: Jira's answer to the drop's write clears it, so a later rank change never reuses it.
+  "rankAnchor",
   "resolved",
   "watchers",
   "watchersComplete",
@@ -271,17 +273,8 @@ export function opsFor(before: Side, after: Side, issues: Map<string, Issue>): O
   if (Object.keys(fields).length) ops.push({ op: "fields", fields });
   if (a.status !== b.status) ops.push({ op: "status", status: b.status });
   if (b.rank !== undefined && a.rank !== b.rank) {
-    const peers = [...issues.values()].filter(
-      (i) => sharesBoard(i, b) && i.key !== b.key && i.rank !== undefined,
-    );
-    const prev = peers
-      .filter((i) => i.rank! < b.rank!)
-      .sort((x, y) => (x.rank! < y.rank! ? 1 : -1))[0];
-    const next = peers
-      .filter((i) => i.rank! > b.rank!)
-      .sort((x, y) => (x.rank! < y.rank! ? -1 : 1))[0];
-    if (prev) ops.push({ op: "rank", after: prev.key });
-    else if (next) ops.push({ op: "rank", before: next.key });
+    const anchor = rankOp(a, b, issues);
+    if (anchor) ops.push({ op: "rank", ...anchor });
   }
   for (const user of b.watchers ?? [])
     if (!a.watchers?.some((u) => u.id === user.id))

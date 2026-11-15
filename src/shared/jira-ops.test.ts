@@ -110,6 +110,24 @@ test("descriptions come from the full record and ranks name a neighbour", () => 
   ).toEqual([{ op: "rank", before: "A-2" }]);
 });
 
+test("a drop's rank names the card it was dropped beside; a rank restored without a drop names its board neighbour", () => {
+  const peers = new Map<string, Issue>([
+    ["A-2", { ...base, key: "A-2", rank: "a" }],
+    ["A-3", { ...base, key: "A-3", rank: "c" }],
+  ]);
+  // Dropped above A-3 in a cell where A-2 was hidden: Jira ranks it before A-3, though A-2 is its board neighbour.
+  const dropped = { ...base, rank: "bm", rankAnchor: { before: "A-3" } };
+  expect(opsFor({ issue: base }, { issue: dropped }, peers)).toEqual([{ op: "rank", before: "A-3" }]);
+  // ⌘Z puts the old rank back without the anchor: its place is after its neighbour again.
+  expect(opsFor({ issue: dropped }, { issue: { ...base, rank: "ab" } }, peers)).toEqual([{ op: "rank", after: "A-2" }]);
+  // An anchor this change didn't set (left from an earlier drop), or one naming a card no longer known, isn't reused.
+  const stale = { ...base, rankAnchor: { before: "A-3" } };
+  expect(opsFor({ issue: stale }, { issue: { ...stale, rank: "d" } }, peers)).toEqual([{ op: "rank", after: "A-3" }]);
+  expect(opsFor({ issue: base }, { issue: { ...base, rank: "d", rankAnchor: { after: "GONE" } } }, peers)).toEqual([
+    { op: "rank", after: "A-3" },
+  ]);
+});
+
 test("queued ops for one issue fold together with later values winning", () => {
   expect(
     mergeOps(

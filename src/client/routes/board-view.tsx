@@ -283,8 +283,8 @@ export const BoardView = memo(function BoardView({
                             ];
                             const order = { manual: d.ordering === "manual", descending: d.descending };
                             dropAll(
-                              dropPlan(layout.cells[ri]![ci]!, keys, before, order, (k) => issues.get(k)),
-                              ({ key, rank }) => actions.drop(key, personal ? issueBoardId(issues.get(key)) : board.id, groups, rank),
+                              dropPlan(layout.cells[ri]![ci]!, keys, before, order, issues),
+                              ({ key, ...place }) => actions.drop(key, personal ? issueBoardId(issues.get(key)) : board.id, groups, place),
                               record,
                             );
                           }}
