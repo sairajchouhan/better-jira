@@ -65,6 +65,7 @@ const context: RouteContext = {
   show: () => {},
   preload: async () => {},
   issue: (key) => data().issue(key),
+  keep: async () => false,
   currentKey: (key) => data().currentKey(key),
   view: (segment) => viewForRoute([view()], segment),
   hasBoard: (board) => board === 1 || board === 2,

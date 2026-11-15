@@ -17,8 +17,9 @@ import { ActionLabel, ActionMenu, type ActionEntry } from "@/client/components/a
 import { Icon, LabelDot, PriorityIcon, StatusIcon, TypeDot, type IconName } from "@/client/components/icons";
 import { get, set, timed, useStore, statusOf, ME, issueBoardId } from "@/client/state/store";
 import { Text } from "@/client/components/text";
+import { keepIssue } from "@/client/state/server-data";
 import { currentKey } from "@/client/state/jira-sync";
-import { navigate, openSavedView, preloadOnHover, ui } from "./app-navigation";
+import { navigate, openSavedView, placeURL, preloadOnHover, ui } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
 import { peopleOf } from "@/shared/people";
 import { equalOperators, filterCount, type Display } from "@/shared/view-model";
@@ -407,13 +408,18 @@ function IssueRow({ issue: i, onOpen }: { issue: Issue; onOpen?: () => void }) {
   );
 }
 
-/** An issue only Jira has (a pasted link or typed key off every board): the server's read-only status and title. It opens
- *  on Jira's page, as a smart link to it does. */
+/** Opens an issue no board holds here once the mirror keeps it (BJ-341), as Linear opens a pasted link to an issue in its
+ *  workspace in the app; ⌘ opens its page in a new tab, whose address keeps it too. Jira's page when the mirror can't. */
+const openJiraIssue = (key: string) =>
+  newTab
+    ? openNewTab(placeURL({ to: "issue", key }))
+    : void keepIssue(key).then((issue) => (issue ? openIssue(issue) : openNewTab(jiraIssueURL(key))));
+/** An issue only Jira has (a pasted link or typed key off every board): the server's read-only status and title. */
 function JiraIssueRow({ issueKey, details }: { issueKey: string; details: SmartLinkDetails }) {
   return (
     <Menu.Item
       value={`jira:${issueKey}`}
-      onSelect={() => openNewTab(jiraIssueURL(issueKey))}
+      onSelect={() => openJiraIssue(issueKey)}
       icon={details.status ? <StatusIcon status={details.status} /> : <Icon name="link" size={16} />}
     >
       <EntityIdentifier className="palette-issue-key">{issueKey}</EntityIdentifier>

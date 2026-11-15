@@ -9,6 +9,9 @@ const p = defaultPreferences();
 const triage = { id: "v1", name: "Triage", board: 1, filters: p.filters, display: p.display, scope: p.scope } as SavedView;
 const issues: Record<string, { key: string; boards: number[] }> = { "A-1": { key: "A-1", boards: [1] }, "B-1": { key: "B-1", boards: [2] } };
 
+/** Issues Jira has that the mirror lists only once something asks for them by key (on no board). */
+const inJira: Record<string, { key: string; boards: number[] }> = { "OFF-7": { key: "OFF-7", boards: [] } };
+
 /** Opens an address on a fresh router; returns where it landed, what it showed, and whether it was not found. */
 async function open(href: string, state?: Record<string, unknown>) {
   const shown: Place[] = [],
@@ -17,6 +20,11 @@ async function open(href: string, state?: Record<string, unknown>) {
     show: (place) => void shown.push(place),
     preload: async (key) => void preloaded.push(key),
     issue: (key) => issues[key],
+    keep: async (key) => {
+      if (!(key in inJira)) return false;
+      issues[key] = inJira[key]!;
+      return true;
+    },
     currentKey: (key) => (key === "OLD-1" ? "A-1" : key),
     view: (segment) => viewForRoute([triage], segment),
     hasBoard: (board) => board === 1 || board === 2,
@@ -122,4 +130,13 @@ test("R3-board-D4: once the issue screens are preloaded, the side panel renders 
   // Called as a function, it hands back the loaded panel at once; a component still loading would suspend (throw) here.
   const element = (SidePanel as unknown as (props: object) => { type: unknown })({ issue: issues["A-1"] });
   expect(element.type).toBe(IssueSidePanel);
+});
+
+test("BJ-341: an issue no board holds opens from its address once the mirror keeps it; one Jira lacks is not found", async () => {
+  delete issues["OFF-7"];
+  expect(await open("/issue/OFF-7")).toMatchObject({ notFound: false, shown: { to: "issue", key: "OFF-7" } });
+  delete issues["OFF-7"];
+  expect(await open("/board/1/all?issue=OFF-7")).toMatchObject({ notFound: false, shown: { to: "board", issue: "OFF-7" } });
+  delete issues["OFF-7"];
+  expect(await open("/issue/NONE-1")).toMatchObject({ notFound: true, shown: undefined });
 });

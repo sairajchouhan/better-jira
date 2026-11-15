@@ -15,7 +15,7 @@ import { createViewDraft, editViewDraft, updateSavedView, viewError } from "@/cl
 import { emptyOverlay, viewForRoute, type SavedView, type ViewDraft } from "@/shared/saved-view-model";
 import { defaultPreferences, type FilterGroup } from "@/shared/view-model";
 import { onSidebarHiddenChange, savedBoard, savedOpenIn, savedSidebarHidden } from "@/client/state/browser-preferences";
-import { loadFull } from "@/client/state/server-data";
+import { keepIssue, loadFull } from "@/client/state/server-data";
 import { createAppRouter, locationOf, preloadIssueScreens, routeURL } from "@/client/routes/tree";
 
 type UiKey = keyof UiContext;
@@ -50,6 +50,7 @@ export const router = createAppRouter(typeof document === "undefined" ? createMe
   show,
   preload: (key) => Promise.all([loadFull(key), preloadIssueScreens()]),
   issue: (key) => get().issues.get(currentKey(key)),
+  keep: async (key) => !!(await keepIssue(key)),
   // Wrapped: jira-sync can still be loading when this module runs (app-notifications imports both).
   currentKey: (key) => currentKey(key),
   view: findView,

@@ -49,6 +49,8 @@ export type RouteContext = {
   /** Loads an issue's details and the issue screens' code ahead of opening it; resolves when both are in. */
   preload: (key: string) => Promise<unknown>;
   issue: (key: string) => { key: string; boards: number[] } | undefined;
+  /** Asks the mirror for an issue it doesn't list (one no board holds): resolves whether it now has it (BJ-341). */
+  keep: (key: string) => Promise<boolean>;
   /** The key Jira renamed this one to, or the key itself. */
   currentKey: (key: string) => string;
   /** The saved view an address segment names: `<id>`, `<slug>-<id>` or a stale slug. */
@@ -86,13 +88,24 @@ const rootRoute = createRootRouteWithContext<RouteContext>()({
 });
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/" });
 
-/** The issue's beside-the-list check: a renamed key moves to the current one; an unknown key is not found. */
+/** An issue the mirror doesn't list yet (linked from a board issue, a parent in another project) is asked for by key, as
+ *  Linear hydrates a model its sync didn't bring (`hydrateModel`), and opens once the mirror keeps it; one Jira doesn't have
+ *  is not found (BJ-341). An issue already listed opens in the same pass. */
+function whenKept(key: string, asked: string, context: RouteContext): Promise<void> | void {
+  if (context.issue(key)) return;
+  return context.keep(key).then((found) => {
+    if (!found || !context.issue(key)) throw notFound({ data: { issue: asked } });
+  });
+}
+/** Then `next`, at once when nothing was waited for. */
+const then = (waiting: Promise<void> | void, next: () => void) => (waiting ? waiting.then(next) : next());
+/** The issue's beside-the-list check: a renamed key moves to the current one; an unknown key is kept or not found. */
 function openBeside(issue: string | undefined, context: RouteContext, location: ParsedLocation) {
   if (!issue) return;
   const key = context.currentKey(issue);
   if (key !== issue)
     throw redirect({ to: location.pathname, search: { ...(location.search as object), issue: key }, replace: true } as never);
-  if (!context.issue(key)) throw notFound({ data: { issue } });
+  return whenKept(key, issue, context);
 }
 // lazyRouteComponent, not React.lazy: once loaded it renders in the same pass. React.lazy suspends on its first render even
 // when the module is already here, so the first issue opened after a load waited a task for its panel (R3-board-D4).
@@ -125,10 +138,12 @@ const boardRoute = createRoute({
   path: "/board/$board/$scope",
   ...listRoute,
   beforeLoad: ({ params, search, context, location, preload }) => {
-    const board = Number(params.board);
-    if (!context.hasBoard(board) || !isScope(params.scope)) throw notFound();
-    openBeside(search.issue, context, location);
-    if (!preload) context.show({ to: "board", board, scope: params.scope, ...listSearch(search) }, location);
+    const board = Number(params.board),
+      { scope } = params;
+    if (!context.hasBoard(board) || !isScope(scope)) throw notFound();
+    return then(openBeside(search.issue, context, location), () => {
+      if (!preload) context.show({ to: "board", board, scope, ...listSearch(search) }, location);
+    });
   },
 });
 /** A board without its tab (`/board/<board>`): its Issues tab, as Linear sends a team URL to the team's default view. */
@@ -170,8 +185,9 @@ const viewRoute = createRoute({
   validateSearch: (search: Record<string, unknown>) => ({ ...listSearch(search), filter: text(search.filter) }),
   beforeLoad: ({ params, search, context, location, preload }) => {
     const view = savedView(params.view, context, location);
-    openBeside(search.issue, context, location);
-    if (!preload) context.show({ to: "view", id: view.id, ...listSearch(search), ...(search.filter ? { filter: search.filter } : {}) }, location);
+    return then(openBeside(search.issue, context, location), () => {
+      if (!preload) context.show({ to: "view", id: view.id, ...listSearch(search), ...(search.filter ? { filter: search.filter } : {}) }, location);
+    });
   },
 });
 const newViewRoute = createRoute({
@@ -179,8 +195,9 @@ const newViewRoute = createRoute({
   path: "/view/new",
   ...listRoute,
   beforeLoad: ({ search, context, location, preload }) => {
-    openBeside(search.issue, context, location);
-    if (!preload) context.show({ to: "editor", ...listSearch(search) }, location);
+    return then(openBeside(search.issue, context, location), () => {
+      if (!preload) context.show({ to: "editor", ...listSearch(search) }, location);
+    });
   },
 });
 const editViewRoute = createRoute({
@@ -189,8 +206,9 @@ const editViewRoute = createRoute({
   ...listRoute,
   beforeLoad: ({ params, search, context, location, preload }) => {
     const view = savedView(params.view, context, location, "/edit");
-    openBeside(search.issue, context, location);
-    if (!preload) context.show({ to: "editor", id: view.id, ...listSearch(search) }, location);
+    return then(openBeside(search.issue, context, location), () => {
+      if (!preload) context.show({ to: "editor", id: view.id, ...listSearch(search) }, location);
+    });
   },
 });
 /** `/my-issues[/tab]` and `/profiles/<user>[/tab]`: Assigned is the bare path. */
@@ -205,8 +223,9 @@ const myIssuesRoute = createRoute({
   ...listRoute,
   beforeLoad: ({ params, search, context, location, preload }) => {
     const tab = personTab(params.tab);
-    openBeside(search.issue, context, location);
-    if (!preload) context.show({ to: "person", person: null, tab, ...listSearch(search) }, location);
+    return then(openBeside(search.issue, context, location), () => {
+      if (!preload) context.show({ to: "person", person: null, tab, ...listSearch(search) }, location);
+    });
   },
 });
 const profileRoute = createRoute({
@@ -215,8 +234,9 @@ const profileRoute = createRoute({
   ...listRoute,
   beforeLoad: ({ params, search, context, location, preload }) => {
     const tab = personTab(params.tab);
-    openBeside(search.issue, context, location);
-    if (!preload) context.show({ to: "person", person: params.user, tab, ...listSearch(search) }, location);
+    return then(openBeside(search.issue, context, location), () => {
+      if (!preload) context.show({ to: "person", person: params.user, tab, ...listSearch(search) }, location);
+    });
   },
 });
 const inboxRoute = createRoute({
@@ -226,16 +246,17 @@ const inboxRoute = createRoute({
   // `notification`: the selected row when its issue isn't mirrored, kept over a reload (R2-inbox-D6).
   validateSearch: (search: Record<string, unknown>) => ({ ...listSearch(search), notification: text(search.notification) }),
   beforeLoad: ({ search, context, location, preload }) => {
-    openBeside(search.issue, context, location);
-    if (!preload) context.show({ to: "inbox", ...listSearch(search) }, location);
+    return then(openBeside(search.issue, context, location), () => {
+      if (!preload) context.show({ to: "inbox", ...listSearch(search) }, location);
+    });
   },
   component: lazyRouteComponent(() => import("./inbox"), "InboxScreen"),
 });
-/** An issue page: a renamed key redirects to the current one, an unknown key is not found. */
+/** An issue page: a renamed key redirects to the current one, an unknown key is kept or not found. */
 function issuePage(key: string, context: RouteContext, location: ParsedLocation) {
   const current = context.currentKey(key);
   if (current !== key) throw redirect({ href: location.href.replace(`/issue/${encodeURIComponent(key)}`, `/issue/${encodeURIComponent(current)}`), state: location.state, replace: true });
-  if (!context.issue(current)) throw notFound({ data: { issue: key } });
+  return whenKept(current, key, context);
 }
 const issueLoader = (context: RouteContext, key: string, preload: boolean) => {
   const loading = context.preload(key);
@@ -245,8 +266,9 @@ const issueRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/issue/$key/{-$slug}",
   beforeLoad: ({ params, context, location, preload }) => {
-    issuePage(params.key, context, location);
-    if (!preload) context.show({ to: "issue", key: params.key, ...(location.state.over ? { over: location.state.over } : {}) }, location);
+    return then(issuePage(params.key, context, location), () => {
+      if (!preload) context.show({ to: "issue", key: params.key, ...(location.state.over ? { over: location.state.over } : {}) }, location);
+    });
   },
   loader: ({ context, params, preload }) => issueLoader(context, params.key, preload),
   component: IssueScreen,
@@ -255,9 +277,10 @@ const documentRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/issue/$key/document/$id",
   beforeLoad: ({ params, context, location, preload }) => {
-    issuePage(params.key, context, location);
-    if (!preload)
-      context.show({ to: "issue", key: params.key, document: params.id, ...(location.state.over ? { over: location.state.over } : {}) }, location);
+    return then(issuePage(params.key, context, location), () => {
+      if (!preload)
+        context.show({ to: "issue", key: params.key, document: params.id, ...(location.state.over ? { over: location.state.over } : {}) }, location);
+    });
   },
   loader: ({ context, params, preload }) => issueLoader(context, params.key, preload),
   component: lazyRouteComponent(() => import("./issue-document"), "DocumentScreen"),
