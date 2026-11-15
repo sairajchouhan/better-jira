@@ -1,3 +1,4 @@
+import { loadable } from "@/client/lib/loadable";
 import { type Issue, type Board } from "@/shared/issue-model";
 import { showNotification } from "@/client/state/app-notifications";
 import { useActiveView, useOverlayFilters, saveOverlayToView } from "./saved-views";
@@ -8,7 +9,6 @@ import { createToolbarView } from "./view-toolbar-actions";
 import {
   lazy,
   Suspense,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -60,8 +60,10 @@ import {
 
 type FilterMenuModule = typeof import("@/client/features/filters/filter-menu");
 let filterMenu: FilterMenuModule | undefined;
-const loadFilterMenu = () => import("@/client/features/filters/filter-menu").then((m) => (filterMenu = m));
-// Preloaded after first paint; a loaded module resolves `lazy` synchronously, so the first F skips the Suspense round trip (R2-D6).
+// Fetched by the idle walk early, as Linear's filter panels are (`preloadOrder:30`); a loaded module resolves `lazy`
+// synchronously, so the first F skips the Suspense round trip (R2-D6).
+const filterMenuChunk = loadable("filter-menu", () => import("@/client/features/filters/filter-menu").then((m) => (filterMenu = m)), 30);
+const loadFilterMenu = filterMenuChunk.load;
 const FilterMenu = lazy(
   () =>
     (filterMenu
@@ -167,11 +169,6 @@ export function BoardControls({ board }: { board: Board }) {
   const displayRef = useRef<HTMLButtonElement>(null);
   const popup = useRef<HTMLDivElement>(null);
   const count = filterCount(preferences.filters);
-  useEffect(() => {
-    (window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 200)))(
-      () => void loadFilterMenu(),
-    );
-  }, []);
   return (
     <>
       <AddFilterButton

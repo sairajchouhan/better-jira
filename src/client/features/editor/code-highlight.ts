@@ -4,49 +4,10 @@
  * the lowlight path only. Cypher, ReScript and Terraform have no highlight.js grammar, so they stay plain.
  */
 import { createLowlight } from "lowlight";
-import type { LanguageFn } from "highlight.js";
 import type { Element, ElementContent, Root } from "hast";
 import { codeLanguage, type CodeToken, type Highlight } from "./code-languages";
+import { GRAMMARS } from "./code-grammars";
 
-type Grammar = () => Promise<{ default: LanguageFn }>;
-/** Linear's language id → its highlight.js grammar (`jLe` names hljs's own where they differ). */
-const GRAMMARS: Record<string, [string, Grammar]> = {
-  bash: ["bash", () => import("highlight.js/lib/languages/bash")],
-  cpp: ["cpp", () => import("highlight.js/lib/languages/cpp")],
-  csharp: ["csharp", () => import("highlight.js/lib/languages/csharp")],
-  clojure: ["clojure", () => import("highlight.js/lib/languages/clojure")],
-  dart: ["dart", () => import("highlight.js/lib/languages/dart")],
-  diff: ["diff", () => import("highlight.js/lib/languages/diff")],
-  elixir: ["elixir", () => import("highlight.js/lib/languages/elixir")],
-  excel: ["excel", () => import("highlight.js/lib/languages/excel")],
-  graphql: ["graphql", () => import("highlight.js/lib/languages/graphql")],
-  golang: ["go", () => import("highlight.js/lib/languages/go")],
-  haskell: ["haskell", () => import("highlight.js/lib/languages/haskell")],
-  html: ["xml", () => import("highlight.js/lib/languages/xml")],
-  java: ["java", () => import("highlight.js/lib/languages/java")],
-  javascript: ["javascript", () => import("highlight.js/lib/languages/javascript")],
-  json: ["json", () => import("highlight.js/lib/languages/json")],
-  kotlin: ["kotlin", () => import("highlight.js/lib/languages/kotlin")],
-  makefile: ["makefile", () => import("highlight.js/lib/languages/makefile")],
-  markdown: ["markdown", () => import("highlight.js/lib/languages/markdown")],
-  ocaml: ["ocaml", () => import("highlight.js/lib/languages/ocaml")],
-  perl: ["perl", () => import("highlight.js/lib/languages/perl")],
-  php: ["php", () => import("highlight.js/lib/languages/php")],
-  protobuf: ["protobuf", () => import("highlight.js/lib/languages/protobuf")],
-  python: ["python", () => import("highlight.js/lib/languages/python")],
-  r: ["r", () => import("highlight.js/lib/languages/r")],
-  reasonml: ["reasonml", () => import("highlight.js/lib/languages/reasonml")],
-  ruby: ["ruby", () => import("highlight.js/lib/languages/ruby")],
-  rust: ["rust", () => import("highlight.js/lib/languages/rust")],
-  scss: ["scss", () => import("highlight.js/lib/languages/scss")],
-  swift: ["swift", () => import("highlight.js/lib/languages/swift")],
-  sql: ["sql", () => import("highlight.js/lib/languages/sql")],
-  verilog: ["verilog", () => import("highlight.js/lib/languages/verilog")],
-  toml: ["ini", () => import("highlight.js/lib/languages/ini")],
-  typescript: ["typescript", () => import("highlight.js/lib/languages/typescript")],
-  xml: ["xml", () => import("highlight.js/lib/languages/xml")],
-  yaml: ["yaml", () => import("highlight.js/lib/languages/yaml")],
-};
 /** hljs scope → Linear's editor class (`E$r`); the innermost scope that has one wins (`T$r`). */
 const SCOPES: Record<string, string> = {
   "hljs-meta": "syntax-meta",
@@ -93,7 +54,7 @@ function ready(id: string, loaded: () => void): boolean {
   if (!pending.has(name))
     pending.set(
       name,
-      grammar().then(
+      grammar.load().then(
         (module) => {
           lowlight.register(name, module.default);
           loaded();

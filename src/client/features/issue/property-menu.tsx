@@ -19,13 +19,13 @@ import { LoadingState } from "@/client/components/empty-state";
 import { kept, useCommand } from "@/client/features/navigation/commands";
 import { DUE_DIALOG, duePresets, shortDate } from "@/client/lib/due-date";
 import { Dialog } from "@/client/components/dialog";
-const DueDateDialog = lazy(() => import("./date-input").then((m) => ({ default: m.DueDateDialog })));
-let dueParser: typeof import("@/client/lib/due-parse").parseDueDate | undefined;
-/** The due menu's parser (chrono, its one heavy import), kept once loaded so a later menu has it on its first render. */
-export const loadDueParser = () => import("@/client/lib/due-parse").then((m) => (dueParser = m.parseDueDate));
-// Fetched and evaluated once the page is idle, like media, so the first Shift+D doesn't pay for chrono (R3-issue-fields-D7).
-if (typeof window !== "undefined")
-  (window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 200)))(() => void loadDueParser());
+import { loadable } from "@/client/lib/loadable";
+const dueDialog = loadable("due-date-dialog", () => import("./date-input").then((m) => ({ default: m.DueDateDialog })), 100);
+const DueDateDialog = lazy(dueDialog.load);
+/** The due menu's parser (chrono, its one heavy import), fetched by the idle walk so the first Shift+D doesn't pay for
+ *  chrono (R3-issue-fields-D7), and kept once loaded so a later menu has it on its first render. */
+const dueParserChunk = loadable("due-parser", () => import("@/client/lib/due-parse").then((m) => m.parseDueDate), 100);
+export const loadDueParser = dueParserChunk.load;
 import type { ReactNode } from "react";
 import { Menu } from "@/client/components/menu";
 import { LIMIT_HEIGHT } from "@/client/components/menu-geometry";
@@ -588,11 +588,11 @@ export function DueRows({
   onPick: (due: string | null) => void;
   onCustom: () => void;
 }) {
-  const [parseDue, setParseDue] = useState(() => dueParser);
+  const [parseDue, setParseDue] = useState(dueParserChunk.loaded);
   useEffect(() => {
     if (parseDue) return;
     let active = true;
-    void loadDueParser().then((parse) => active && setParseDue(() => parse));
+    loadDueParser().then((parse) => active && setParseDue(() => parse), () => {});
     return () => {
       active = false;
     };

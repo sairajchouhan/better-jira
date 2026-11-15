@@ -1,3 +1,4 @@
+import { loadable } from "@/client/lib/loadable";
 import { newSubIssueDraft } from "@/client/features/issue/sub-issue-draft";
 import { canHaveSubIssues } from "@/shared/issue-properties";
 
@@ -27,6 +28,9 @@ import { readStored, writeStored } from "@/client/state/stored-state";
 import { trackDraftUploads } from "@/client/features/issue/draft-uploads";
 import { mentionDraft, visibleComments, type IssueComment } from "./comment-thread";
 import { copyText } from "@/client/lib/clipboard";
+
+/** Copying a comment into a new issue; fetched by the idle walk. */
+const commentCopy = loadable("comment-copy", () => import("./comment-copy"), 100);
 
 /**
  * Files a comment draft uploaded leave the issue again once the draft drops them, so a discarded upload is not left
@@ -353,7 +357,7 @@ function Thread({
     setPreparing(true);
     setCopyError("");
     try {
-      const { copyCommentDocument } = await import("./comment-copy");
+      const { copyCommentDocument } = await commentCopy.load();
       const copied = await copyCommentDocument(
         comment.body,
         issue.key,

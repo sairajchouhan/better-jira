@@ -1,3 +1,4 @@
+import { chunkReload, retryImport } from "@/client/lib/chunk-reload";
 import { type User, type Issue, type Full, type Board, type JiraOptions } from "@/shared/issue-model";
 /**
  * Loading the app: the account, boards, issues and saved views from the server, this account's saved local data over
@@ -142,15 +143,17 @@ async function loadApplication() {
     startNavigation();
     window.addEventListener("beforeunload", (event) => {
       // Jobs waiting on another tab's create are saved, and replayed by whichever tab sends that create.
-      if (unsavedLocalChanges() || unsentWrites()) {
+      if (!writesSettled()) {
         event.preventDefault();
         event.returnValue = "";
       }
     });
+    // A chunk gone after a rebuild reloads only once leaving would lose nothing (Linear's `reloadAfterPendingWrites`).
+    chunkReload.whenSettled(writesSettled);
   }
   startPoll();
   if (get().writable)
-    void import("@/client/features/issue/draft-uploads").then(({ keepDraftUploadsClean }) =>
+    void retryImport(() => import("@/client/features/issue/draft-uploads")).then(({ keepDraftUploadsClean }) =>
       keepDraftUploadsClean(namespace, () => JSON.stringify(savedChanges()), {
         full: async (key) => {
           const response = await fetch(`/api/issues/${encodeURIComponent(key)}`);
@@ -187,6 +190,8 @@ async function loadApplication() {
   clockTimer ??= setInterval(() => set({ clock: Date.now() }), 60000);
 }
 
+/** Leaving now would lose nothing: no local save running or failed, no Jira write this tab must still send. */
+const writesSettled = () => !unsavedLocalChanges() && !unsentWrites();
 let clockTimer: ReturnType<typeof setInterval> | undefined;
 export async function retryLocalStorage() {
   if (localDataBlocked()) {

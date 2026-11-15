@@ -3,6 +3,7 @@
  * The table is Linear's (`XMe.all` in startup-root.CnUSfl4j.js): id, aliases, picker name and comment syntax. The ADF
  * codeBlock `language` stores the id; any alias (Jira's "go", "js", "py"…) resolves to its entry.
  */
+import { highlighterChunk } from "./code-grammars";
 export type CodeLanguage = {
   id: string;
   aliases: string[];
@@ -77,8 +78,7 @@ export function lineStarts(text: string) {
 /** A highlighted span: offsets into the code and Linear's `syntax-*` class. */
 export type CodeToken = { from: number; to: number; className: string };
 export type Highlight = { tokens: CodeToken[]; language: string | null };
-type Highlighter = typeof import("./code-highlight");
-let highlighter: Highlighter | undefined, loading: Promise<unknown> | undefined;
+let waiting: Promise<unknown> | undefined;
 const listeners = new Set<() => void>();
 let version = 0;
 const changed = () => {
@@ -93,11 +93,10 @@ export const highlighterVersion = () => version;
  * auto-detected; `detect` false keeps the last guess instead of guessing again while the code is being typed.
  */
 export function highlightCode(text: string, language: string | null, detect = true): Highlight | undefined {
+  const highlighter = highlighterChunk.loaded();
   if (!highlighter) {
-    loading ??= import("./code-highlight").then((module) => {
-      highlighter = module;
-      changed();
-    });
+    // A failed fetch is forgotten, so the next block asks again.
+    waiting ??= highlighterChunk.load().then(changed, () => (waiting = undefined));
     return undefined;
   }
   return highlighter.highlight(text, language, detect, changed);

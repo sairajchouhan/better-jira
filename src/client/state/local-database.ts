@@ -1,3 +1,4 @@
+import { loadable } from "@/client/lib/loadable";
 import { type Issue } from "@/shared/issue-model";
 /**
  * This account's saved local data in IndexedDB: the edits Jira hasn't taken, the undo history, the files they hold and
@@ -174,10 +175,12 @@ export async function restoreLocalFiles(files: NonNullable<Issue["attachments"]>
     }),
   );
 }
+/** The backup's zip writer: rarely used, so last in the idle walk (Linear's `preloadOrder:"last"`). */
+const backupArchiveChunk = loadable("backup-archive", () => import("./backup-archive"), "last");
 /** Downloads everything saved here, files included, as one archive. */
 export async function downloadLocalBackup() {
   try {
-    const { backupArchive } = await import("./backup-archive");
+    const { backupArchive } = await backupArchiveChunk.load();
     const data = {
       version: 2,
       namespace: get().namespace,

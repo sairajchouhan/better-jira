@@ -5,7 +5,9 @@ import { router, ui } from "@/client/features/navigation/app-navigation";
 import { AppRouterProvider } from "@/client/features/navigation/app-link";
 import { ReminderPicker, ReminderDelivery } from "@/client/features/reminders/reminders";
 import { InboxPushDelivery } from "@/client/features/inbox/desktop-notifications";
-import { useStore } from "@/client/state/store";
+import { get, useStore } from "@/client/state/store";
+import { chunkReload } from "@/client/lib/chunk-reload";
+import { preloadAtIdle } from "@/client/lib/loadable";
 import { load } from "@/client/state/app-load";
 import {
   AddBoard,
@@ -66,12 +68,25 @@ export function App() {
           }),
       );
   }, [ready]);
+  useEffect(() => {
+    if (opened) startedUp();
+  }, [opened]);
   if (!ready || !opened) return <Booting />;
   return (
     <AppRouterProvider>
       <RouterProvider router={router} InnerWrap={Shell} />
     </AppRouterProvider>
   );
+}
+
+let walking = false;
+/** The app is on screen (Linear's `loadingDone` and LoadApplicationLayout's `Sr`): a minute on, a chunk reload's tries
+ *  renew; and every lazy chunk is fetched at idle, while no navigation is under way and no menu is open. */
+function startedUp() {
+  if (walking) return;
+  walking = true;
+  chunkReload.loadingDone();
+  void preloadAtIdle({ canPreload: () => router.state.status === "idle" && !get().overlay && !get().toolbar });
 }
 
 /** Before the app: the boot shell while nothing has gone wrong, else the boot screen. */

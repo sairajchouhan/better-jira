@@ -4,26 +4,29 @@ import { Adf, adfToText, withTaskToggled } from "./adf";
 import { EditorActions, EditorArea, EditorFrame } from "./editor-frame";
 import { editorShaped, type AdfNode } from "./editor-shape";
 import type { EditorEngineProps, RichEditorProps } from "./rich-editor";
+import { loadable } from "@/client/lib/loadable";
 
 // One signal for every editor on screen: when the chunk arrives they all take over in the same commit. (Each behind its own
 // Suspense boundary, React's 300ms reveal throttle held the description back after the composer, BJ-198.)
 let loaded: typeof import("./rich-editor").RichEditor | undefined;
-let loading: Promise<void> | undefined;
 const listeners = new Set<() => void>();
-/** Fetches the editor chunk once; every editor on screen takes over when it arrives. */
-export const loadEditor = () =>
-  (loading ??= import("./rich-editor").then(
-    (module) => {
+// Preloaded first at idle, as Linear's editors are (`preloadOrder:10`); a failed fetch is forgotten, so the next editor
+// shown asks again.
+const editorChunk = loadable(
+  "rich-editor",
+  () =>
+    import("./rich-editor").then((module) => {
       loaded = module.RichEditor;
       for (const listener of listeners) listener();
-    },
-    () => {
-      loading = undefined; // The next editor shown asks again.
-    },
-  ));
+    }),
+  10,
+);
+/** Fetches the editor chunk once; every editor on screen takes over when it arrives. */
+export const loadEditor = () => editorChunk.load().catch(() => {});
 const subscribe = (listener: () => void) => (listeners.add(listener), () => void listeners.delete(listener));
-// Kept out of the board's startup payload (BJ-110). A first screen with an issue (or the inbox's) needs it at once;
-// elsewhere the first pointer over an issue or the first key press fetches it, before any composer can open in practice.
+// Kept out of the board's startup payload (BJ-110). A first screen with an issue (or the inbox's) needs it at once
+// (Linear's `loadAtStartupForPath`); elsewhere the first pointer over an issue or the first key press fetches it, unless
+// the idle walk got there first.
 if (typeof window !== "undefined" && (/^\/(issue|inbox)\b/.test(location.pathname) || /[?&]issue=/.test(location.search))) void loadEditor();
 else if (typeof window !== "undefined") {
   const intents = ["pointerover", "keydown"] as const;

@@ -4,6 +4,7 @@
  * reverse, for links and `navigate`. Old addresses redirect here (`legacyPlace`). Screens are lazy chunks, except the
  * boards, which the shell keeps mounted (App.tsx).
  */
+import { inboxChunk, issueDocumentChunk, issueViewChunk } from "./route-chunks";
 import {
   createLink,
   createRootRouteWithContext,
@@ -110,9 +111,9 @@ function openBeside(issue: string | undefined, context: RouteContext, location: 
 }
 // lazyRouteComponent, not React.lazy: once loaded it renders in the same pass. React.lazy suspends on its first render even
 // when the module is already here, so the first issue opened after a load waited a task for its panel (R3-board-D4).
-export const SidePanel = lazyRouteComponent(() => import("./issue-view"), "IssueSidePanel");
-const IssueScreen = lazyRouteComponent(() => import("./issue-view"), "IssueScreen");
-/** Loads the issue screens ahead (idle after the board, or a hover), so the first issue opened renders at once. */
+export const SidePanel = lazyRouteComponent(issueViewChunk.load, "IssueSidePanel");
+const IssueScreen = lazyRouteComponent(issueViewChunk.load, "IssueScreen");
+/** Loads the issue screens ahead (the idle walk, or a hover), so the first issue opened renders at once. */
 export const preloadIssueScreens = () => Promise.all([SidePanel.preload?.(), IssueScreen.preload?.()]);
 /** A list route's own content: the open issue beside the boards the shell shows. */
 function ListScreen() {
@@ -251,7 +252,7 @@ const inboxRoute = createRoute({
       if (!preload) context.show({ to: "inbox", ...listSearch(search) }, location);
     });
   },
-  component: lazyRouteComponent(() => import("./inbox"), "InboxScreen"),
+  component: lazyRouteComponent(inboxChunk.load, "InboxScreen"),
 });
 /** An issue page: a renamed key redirects to the current one, an unknown key is kept or not found. */
 function issuePage(key: string, context: RouteContext, location: ParsedLocation) {
@@ -284,7 +285,7 @@ const documentRoute = createRoute({
     });
   },
   loader: ({ context, params, preload }) => issueLoader(context, params.key, preload),
-  component: lazyRouteComponent(() => import("./issue-document"), "DocumentScreen"),
+  component: lazyRouteComponent(issueDocumentChunk.load, "DocumentScreen"),
 });
 
 export const routeTree = rootRoute.addChildren([

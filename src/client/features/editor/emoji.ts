@@ -1,3 +1,4 @@
+import { loadable } from "@/client/lib/loadable";
 import { compareText } from "@/shared/compare";
 import { InputRule, inputRules } from "prosemirror-inputrules";
 import { caretTrigger, type CaretTrigger } from "./caret-trigger";
@@ -12,9 +13,11 @@ type EmojiData = { keywords: string[]; emojis: [string, string, number[], string
 let emojis: Emoji[] = [];
 let byName = new Map<string, Emoji>(),
   bySymbol = new Map<string, Emoji>();
-let loading: Promise<Emoji[]> | undefined;
-export const loadEmoji = () =>
-  (loading ??= import("./emoji-data.json").then(({ default: json }) => {
+// Fetched by the idle walk (Linear ships its emoji in their own chunk too, `emojis.*.js`); one promise for `use`.
+const emojiChunk = loadable(
+  "emoji-data",
+  () =>
+    import("./emoji-data.json").then(({ default: json }) => {
     const data = json as unknown as EmojiData;
     emojis = data.emojis.map(([name, char, k, emoticons = []]) => ({
       name,
@@ -25,7 +28,10 @@ export const loadEmoji = () =>
     byName = new Map(emojis.map((e) => [e.name, e]));
     bySymbol = new Map(emojis.map((e) => [e.char, e]));
     return emojis;
-  }));
+  }),
+  100,
+);
+export const loadEmoji = emojiChunk.load;
 
 // Linear's search (`Cv.score`, `Cv.getCandidates`): common emoji rank first, then a name, emoticon or keyword match.
 const COMMON = ["+1", "ok_hand", "pray", "joy", "heart", "eyes", "white_check_mark", "slightly_smiling_face", "smiley", "smile", "grinning", "thinking_face", "sweat_smile", "warning", "eyes", "confused", "x", "raised_hands", "tada", "wink", "blush", "shrug", "wave", "question"];

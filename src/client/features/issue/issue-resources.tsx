@@ -1,3 +1,4 @@
+import { issueDocumentChunk } from "@/client/routes/route-chunks";
 import { type Issue } from "@/shared/issue-model";
 import { showNotification } from "@/client/state/app-notifications";
 import { LoadingState } from "@/client/components/empty-state";
@@ -451,11 +452,7 @@ export function documentURL(issue: Issue, id: string) {
   return placeURL({ to: "issue", key: issue.key, document: id });
 }
 
-const Document = lazy(() =>
-  import("@/client/routes/issue-document").then((module) => ({
-    default: module.IssueDocument,
-  })),
-);
+const Document = lazy(() => issueDocumentChunk.load().then((module) => ({ default: module.IssueDocument })));
 export function IssueDocument(props: { issue: Issue; id: string }) {
   return (
     <Suspense fallback={<LoadingState>Loading document…</LoadingState>}>

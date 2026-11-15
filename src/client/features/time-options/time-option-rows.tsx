@@ -1,4 +1,5 @@
 /* oxlint-disable react/purity -- The menu's "now" is read once as it opens, as Linear computes its options when the menu opens. */
+import { loadable } from "@/client/lib/loadable";
 import { useEffect, useState } from "react";
 import { Icon } from "@/client/components/icons";
 import { Menu } from "@/client/components/menu";
@@ -7,17 +8,17 @@ import { defaultTimeOptions, menuTimeOptions, type TimeOption } from "@/shared/t
 /** Linear's search placeholder in every time menu (`fF.nlpSearchPlaceholder`). */
 export const TIME_PLACEHOLDER = "Try: 4 pm, 2 days, in 5 weeks…";
 
-type Parser = typeof import("./typed-time");
-let loaded: Parser | undefined;
-/** The typed-time parser (chrono) loads with the first time menu; until it has, the presets and Custom… still work. */
+/** The typed-time parser (chrono): fetched by the idle walk, or by the first time menu; until it has, the presets and
+ *  Custom… still work. */
+const typedTime = loadable("typed-time", () => import("./typed-time"), 100);
 function useParser() {
-  const [parser, setParser] = useState(loaded);
+  const [parser, setParser] = useState(typedTime.loaded);
   useEffect(() => {
     if (parser) return;
     let active = true;
-    import("./typed-time")
+    typedTime
+      .load()
       .then((module) => {
-        loaded = module;
         if (active) setParser(module);
       })
       .catch(() => {});
