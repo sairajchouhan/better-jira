@@ -1,6 +1,6 @@
 import { type Issue } from "@/shared/issue-model";
 import { afterEach, expect, test } from "bun:test";
-import { adfToMarkdown, copyIssue, copyKinds, copyShortcuts, copyToast, fillPrompt, ID_LINK_COPIED, issueCopy, PAGE_URL_COPIED } from "./issue-copy";
+import { adfToMarkdown, copyDocument, copyIssue, copyKinds, copyShortcuts, copyToast, fillPrompt, ID_LINK_COPIED, issueCopy, PAGE_URL_COPIED } from "./issue-copy";
 import { deferred, fakeClipboard } from "@/client/test/fake-clipboard";
 import { modifiers } from "@/client/lib/modifier-keys";
 import { toasts } from "@/client/components/toast-queue";
@@ -205,4 +205,15 @@ test("Copy everything as Markdown starts the clipboard write before the issue's 
   expect(clip.writes[0]?.["text/plain"]).toStartWith("# KAN-8 Fix");
   expect(lastToast()).toBe('Issue "KAN-8" content copied to clipboard');
   set({ issues });
+});
+
+test("a document's Copy title as link copies Linear's anchor and the Markdown link, with no identifier", async () => {
+  clip = fakeClipboard();
+  const doc = { title: "Plan <v2>", url: "https://example.test/doc", markdown: () => "# Plan" };
+  await copyDocument("link", doc);
+  await copyDocument("markdown", doc);
+  expect(clip.writes).toEqual([
+    { "text/html": '<a href="https://example.test/doc">Plan &lt;v2&gt;&#8203;</a>', "text/plain": "[Plan <v2>](https://example.test/doc)" },
+    { "text/plain": "# Plan" },
+  ]);
 });

@@ -258,6 +258,13 @@ export async function copyIssue(kind: CopyKind, issue: Issue, url = issueURL(iss
   }
 }
 
+/** Copies one projection of an issue's document. Title as link copies HTML and Markdown at once, as Linear's `uM` does for a
+ *  document (no identifier). */
+export function copyDocument(kind: "url" | "title" | "link" | "markdown", doc: { title: string; url: string; markdown: () => string }) {
+  if (kind === "link") return copyLinkedTexts([formatLinkedText(doc.title)], [doc.url]);
+  return copyText(kind === "url" ? doc.url : kind === "title" ? doc.title : doc.markdown());
+}
+
 const textOf = (kind: CopyKind, issue: Issue, url: string) =>
   issueCopy(kind, issue, get().full.get(issue.key), url, statusOf(issue)?.name ?? issue.status, ME.name);
 

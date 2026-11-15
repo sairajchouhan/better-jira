@@ -18,7 +18,7 @@ import { Text } from "@/client/components/text";
 import { DocumentBodyEditor } from "@/client/features/editor/rich-editor-loader";
 import { COMPOSER_TITLE, focusEditorAt, titleKeyDown } from "@/client/features/editor/title-flow";
 import { Adf } from "@/client/features/editor/adf";
-import { adfToMarkdown } from "@/client/features/issue/issue-copy";
+import { adfToMarkdown, copyDocument } from "@/client/features/issue/issue-copy";
 import { normalizeDocument, type AdfDocument } from "@/shared/document";
 import { get, ME, set, useStore, usePeople } from "@/client/state/store";
 import { firstKey } from "@/client/state/jira-sync";
@@ -33,7 +33,6 @@ import { useCommand } from "@/client/features/navigation/commands";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { emojiOptions } from "@/client/features/comments/reactions";
 import { ReminderMenu, reminderSubmenu } from "@/client/features/reminders/reminders";
-import { copyLinkedTexts, copyText, formatLinkedText } from "@/client/lib/clipboard";
 /** The icon-picker cells: no primitive yet (see the note at each). */
 const BUTTON = "rounded px-2 py-1.5 text-[13px] text-fg-2 hover:bg-(--control-tertiary-hover)";
 type Draft = { title: string; body: AdfDocument };
@@ -320,9 +319,7 @@ function DocumentHeader() {
   const markdown = () => `# ${draft.title || "New document"}\n\n${adfToMarkdown(draft.body)}`;
   const copy = async (kind: "url" | "title" | "link" | "markdown") => {
     try {
-      // Title as link copies HTML and Markdown at once, as Linear's `uM` does for a document (no identifier).
-      if (kind === "link") await copyLinkedTexts([formatLinkedText(title)], [url]);
-      else await copyText(kind === "url" ? url : kind === "title" ? title : markdown());
+      await copyDocument(kind, { title, url, markdown });
       set({
         perf: `Copied document ${kind === "markdown" ? "content as Markdown" : kind === "link" ? "title as link" : kind}`,
       });
