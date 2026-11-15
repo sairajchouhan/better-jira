@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { pointerStep } from "./menu";
 import { settle } from "./menu-geometry";
-import { keyboardModeAfter, movedPointer } from "./pointer-intent";
+import { ariaKeyboardAfter, keyboardModeAfter, modalityAfterMove, movedPointer } from "./pointer-intent";
 
 test("the pointer entering a menu's first row opens its submenu, though a key highlighted that row before the pointer came", () => {
   // A menu opened by a key highlights its first row, Status; the pointer then reaches Status.
@@ -81,6 +81,24 @@ describe("hover follows only a pointer the user moves (Linear's $4e, KLr and Yw,
     expect(keyboardModeAfter(true, { type: "pointermove", movementX: 3, movementY: 0, pointerType: "mouse" })).toBe(false);
     expect(keyboardModeAfter(true, { type: "mousemove", movementX: 0, movementY: 1 })).toBe(false);
     expect(keyboardModeAfter(true, { type: "pointerdown" })).toBe(true);
+  });
+
+  test("a still move in keyboard mode keeps React Aria's modality a key's, so its hover start doesn't take the highlight", async () => {
+    expect(modalityAfterMove(true, { movementX: 0, movementY: 0, pointerType: "mouse" })).toBe("keep");
+    expect(modalityAfterMove(true, { movementX: 2, movementY: 0, pointerType: "mouse" })).toBe("leave");
+    expect(modalityAfterMove(false, { movementX: 0, movementY: 0, pointerType: "mouse" })).toBe("leave");
+    expect(modalityAfterMove(true, { movementX: 0, movementY: 0, pointerType: "touch" })).toBe("leave");
+    // Only while React Aria had the input as a key's: an arrow, not ⌘ or a bare modifier (a ⌘-click's focus ring stays off).
+    const still = { type: "pointermove", movementX: 0, movementY: 0, pointerType: "mouse" };
+    expect(ariaKeyboardAfter(false, { type: "keydown", key: "ArrowDown" }, true)).toBe(true);
+    expect(ariaKeyboardAfter(false, { type: "keydown", key: "Meta", metaKey: true }, true)).toBe(false);
+    expect(ariaKeyboardAfter(false, { type: "keydown", key: "c", metaKey: true }, true)).toBe(false);
+    expect(ariaKeyboardAfter(true, still, true)).toBe(true);
+    expect(ariaKeyboardAfter(true, { ...still, movementX: 4 }, true)).toBe(false);
+    expect(ariaKeyboardAfter(true, { type: "pointerdown" }, true)).toBe(false);
+    const intent = await Bun.file(new URL("./pointer-intent.ts", import.meta.url)).text();
+    expect(intent).toContain('=== "keep") setInteractionModality("keyboard");');
+    expect(intent).toContain('document.addEventListener("pointermove", keep);');
   });
 
   test("an arrowed highlight stays put under a resting pointer: the menu drops a still move before it points at a row", async () => {

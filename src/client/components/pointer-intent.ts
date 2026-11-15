@@ -1,3 +1,6 @@
+import { setInteractionModality } from "react-aria-components";
+import { isMac } from "./keycap";
+
 // Hover follows the pointer only when the user moves it, as Linear's lists and menus do (startup-root.BhUCnb9L.js). Arrowing
 // through a list never snaps back to the row a still pointer rests on, whether the list scrolled under it or ⌘ went down.
 
@@ -23,7 +26,36 @@ export function keyboardModeAfter(on: boolean, event: { type: string } & Partial
   return on;
 }
 
-let keyboard = false;
+/**
+ * Whether React Aria takes the input as a key's (useFocusVisible's modality "keyboard"), mirrored here as it keeps no getter we can
+ * import: a keydown it counts (its `isValidKey`: no ⌘, Ctrl or Alt off a Mac, not a bare modifier) turns it on; a press, or a pointer
+ * that moved, turns it off.
+ */
+export function ariaKeyboardAfter(
+  on: boolean,
+  event: { type: string; key?: string; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean } & Partial<PointerMove>,
+  mac: boolean,
+): boolean {
+  if (event.type === "keydown")
+    return (
+      on ||
+      !(event.metaKey || (!mac && event.altKey) || event.ctrlKey || ["Control", "Shift", "Meta"].includes(event.key ?? ""))
+    );
+  if (/^(pointer|mouse)(down|up)$/.test(event.type)) return false;
+  return keyboardModeAfter(on, event);
+}
+
+/**
+ * React Aria turns its modality to "pointer" on any move, still or not (useFocusVisible), and a row then coming under the still
+ * pointer takes the highlight on hover start (useMenuItem's `onHoverStart` focuses a row unless `isFocusVisible()`). Linear's
+ * keyboard mode outlasts a still move, so a still move while React Aria had the input as a key's puts its modality back
+ * ("keep"); anything else leaves it ("leave").
+ */
+export const modalityAfterMove = (ariaKeyboard: boolean, event: PointerMove): "keep" | "leave" =>
+  ariaKeyboard && !movedPointer(event) ? "keep" : "leave";
+
+let keyboard = false,
+  ariaKeyboard = false;
 if (typeof window !== "undefined") {
   // Capture, as Linear listens, so a row's own handler already sees the mode this event leaves.
   const track = (event: Event) => {
@@ -32,6 +64,19 @@ if (typeof window !== "undefined") {
   addEventListener("keydown", track, true);
   addEventListener("mousemove", track, true);
   addEventListener("pointermove", track, true);
+  // Keys and presses in capture, as React Aria reads them (a row's handler may stop them); moves bubbling on the document, so the
+  // modality is put back after React Aria's capture listener there has set "pointer".
+  const mirror = (event: Event) => {
+    ariaKeyboard = ariaKeyboardAfter(ariaKeyboard, event as Event & PointerMove, isMac());
+  };
+  for (const type of ["keydown", "pointerdown", "pointerup", "mousedown", "mouseup"]) document.addEventListener(type, mirror, true);
+  const keep = (event: Event) => {
+    const was = ariaKeyboard;
+    mirror(event);
+    if (modalityAfterMove(was, event as Event & PointerMove) === "keep") setInteractionModality("keyboard");
+  };
+  document.addEventListener("pointermove", keep);
+  document.addEventListener("mousemove", keep);
 }
 /** Whether the last input was a key, not a pointer that moved since (Linear's `isKeyboardModeRef`). */
 export const keyboardMode = () => keyboard;
