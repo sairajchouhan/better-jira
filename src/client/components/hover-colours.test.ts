@@ -83,7 +83,7 @@ test("BJ-222: the create dialog's chips are Linear's secondary small button in t
   expect(tokens(controls, '[data-elevation="dialog-raised"]', "light")).toEqual({});
 
   const create = await source("../features/issue/personal-controls.tsx");
-  expect(create).toContain(`<div className="create-issue-properties" data-create-properties data-elevation="dialog-raised">`);
+  expect(create).toContain(`<div className="create-issue-properties ui-hide-scrollbars" data-create-properties data-elevation="dialog-raised">`);
   // Every chip in the row is the shared secondary small Button (Linear's AV → Lj → jv secondary small).
   expect(await source("./pill-select.tsx")).toContain(`<Button variant="secondary" size="small" icon={icon}`);
   expect(create).toMatch(/<Button\s+data-pending-relation\s+variant="secondary"\s+size="small"/);

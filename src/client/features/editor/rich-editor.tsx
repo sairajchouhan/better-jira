@@ -717,7 +717,7 @@ export function RichEditor(props: EditorEngineProps) {
       ref={toolbar}
       label={`${subject === "comment" ? "Comment" : "Description"} formatting`}
       style={floating}
-      className={`z-10 items-center gap-0.5 rounded-lg border border-line-2 bg-card p-1 shadow-[var(--menu-shadow)] ${selecting ? "fixed flex flex-nowrap overflow-x-auto" : "absolute right-0 bottom-full mb-1 hidden max-w-full flex-nowrap overflow-x-auto group-focus-within/editor:flex"}`}
+      className={`z-10 items-center gap-0.5 rounded-lg border border-line-2 bg-card p-1 shadow-[var(--menu-shadow)] ${selecting ? "ui-hide-scrollbars fixed flex flex-nowrap overflow-x-auto" : "absolute right-0 bottom-full mb-1 hidden max-w-full flex-nowrap overflow-x-auto group-focus-within/editor:flex"}`}
       onMouseDown={(e) => {
         if ((e.target as HTMLElement).closest("button")) e.preventDefault();
       }}

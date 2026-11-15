@@ -136,7 +136,7 @@ export function Sidebar({ boards }: { boards: Board[] }) {
           setBackgroundMenu({ x: e.clientX, y: e.clientY });
         }}
         data-sidebar-peek={peek || undefined}
-        className={`flex w-[244px] shrink-0 flex-col gap-px overflow-y-auto p-2 font-medium ${peek ? SIDEBAR_PEEK : open ? "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:bg-panel max-md:shadow-lg" : "max-md:hidden"}`}
+        className={`sidebar-scroller flex w-[244px] shrink-0 flex-col gap-px overflow-y-auto p-2 font-medium ${peek ? SIDEBAR_PEEK : open ? "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:bg-panel max-md:shadow-lg" : "max-md:hidden"}`}
       >
         <div className="mb-1 flex h-11 items-center gap-2 px-2 text-fg">
           <NotchMark />

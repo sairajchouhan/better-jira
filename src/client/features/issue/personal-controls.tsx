@@ -466,7 +466,7 @@ export function CreateIssue() {
         </div>
         {/* One row of chips, as Linear's: it scrolls sideways rather than wrapping. Its theme is the dialog's elevated once
             more, as Linear's chips paint (BJ-222, control-tokens.css). */}
-        <div className="create-issue-properties" data-create-properties data-elevation="dialog-raised">
+        <div className="create-issue-properties ui-hide-scrollbars" data-create-properties data-elevation="dialog-raised">
           {draft.related && (
             <PendingRelation related={draft.related} remove={() => setDraft(({ related: _related, ...rest }) => rest)} />
           )}

@@ -11,9 +11,12 @@ import { App } from "./App";
 import { Tooltip } from "./components/tooltip";
 import { ignoreBenignErrors } from "./lib/benign-errors";
 import { handOverBootShell } from "./boot-shell";
+import { installScrollbarProbe } from "./lib/scrollbar-probe";
 import { AppError, ErrorBoundary } from "./components/error-boundary";
 
 ignoreBenignErrors(window);
+// Before the first render, as Linear's boot probe runs before its app: the scrollbars are thin and themed from the first frame.
+installScrollbarProbe();
 
 const elem = document.getElementById("root")!;
 // Watching starts before the first render, so the shell goes as soon as the app paints its first screen.

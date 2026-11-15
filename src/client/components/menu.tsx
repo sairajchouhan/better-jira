@@ -1065,7 +1065,7 @@ function MenuList({ maxHeight, children }: { maxHeight?: string; children: React
           {...({ filter: level.filter } as object)}
           shouldCloseOnSelect={false}
           autoFocus={false}
-          className="menu-list"
+          className="menu-list ui-hide-scrollbars"
           data-limit={maxHeight === LIMIT_HEIGHT || undefined}
           style={
             {

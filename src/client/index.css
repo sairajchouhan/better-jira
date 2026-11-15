@@ -71,6 +71,11 @@
   --fg-2: lch(19.588% 1.25 282); /* --color-text-secondary */
   --fg-3: lch(39.176% 1.25 282); /* --color-text-tertiary */
   --fg-4: lch(64.64% 1.25 282); /* --color-text-quaternary */
+  /* --app-scrollbar-bg(-hover/-active): generateTheme's scrollbarBg `wm.adjust(ue,{l:.3})`, scrollbarBgHover `{l:.8}` light /
+     `{l:.4}` dark, scrollbarBgActive `ue` (startup-root.BhUCnb9L.js), where ue is labelFaint, our --fg-4, in both themes. */
+  --app-scrollbar-bg: lch(64.94% 1.25 282);
+  --app-scrollbar-bg-hover: lch(65.44% 1.25 282);
+  --app-scrollbar-bg-active: lch(64.64% 1.25 282);
   --app: lch(94.44% 0.5 282); /* --bg-sidebar-color */
   --panel: lch(97.94% 0.5 282); /* --color-bg-primary */
   --col: lch(92.44% 0.5 282); /* --color-bg-secondary */
@@ -169,6 +174,9 @@
     --fg-2: lch(90.451% 1.2 272);
     --fg-3: lch(61.803% 1.2 272);
     --fg-4: lch(36.975% 1.2 272);
+    --app-scrollbar-bg: lch(37.275% 1.2 272);
+    --app-scrollbar-bg-hover: lch(37.375% 1.2 272);
+    --app-scrollbar-bg-active: lch(36.975% 1.2 272);
     --app: lch(2.595% 0.4 272);
     --panel: lch(5.52% 0.4 272);
     --col: lch(7.32% 0.85 272);
@@ -2082,6 +2090,8 @@ li[data-done="true"] > .todo-content {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* IssueDetailsPaneSidebar `bh.contentBody`, and the issue view's container (`viewControlsGutter`): a stable gutter. */
+  scrollbar-gutter: stable;
 }
 .issue-copy-toolbar {
   position: sticky;
@@ -3044,6 +3054,17 @@ pre.code-block .cb-ex-col button {
 /* Linear's table controls (BJ-181): column resize handle, row/column handles, gutter menu button, edge add bars. */
 .rich-content .tableWrapper {
   overflow-x: auto;
+  /* `.editor .table-wrapper`: its scrollbar is transparent until the table is hovered. */
+  scrollbar-color: transparent transparent;
+}
+.rich-content .tableWrapper::-webkit-scrollbar-thumb {
+  background: 0 0;
+}
+.rich-content .tableWrapper:hover {
+  scrollbar-color: var(--scrollbar-color) transparent;
+}
+.rich-content .tableWrapper:hover::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-color);
 }
 .rich-content .column-resize-handle {
   position: absolute;
@@ -3114,4 +3135,187 @@ pre.code-block .cb-ex-col button {
   right: var(--placed-right, auto) !important;
   bottom: var(--placed-bottom, auto) !important;
   max-height: var(--placed-max-height, none) !important;
+}
+
+/* Scrollbars, as Linear's (style-kMXsq6uH.css). The probe (lib/scrollbar-probe.ts, Linear's wEe/TTe) adds
+   body.layoutScrollbarObtrusive where scrollbars take up space and sets --scrollbar-width to their measured room (0 for
+   overlay scrollbars). Overlay scrollbars are left alone; obtrusive ones turn thin, in the theme's scrollbarBg. */
+.scrollbar-probe {
+  /* Linear's probe (sx-qtp20y sx-1pju0fl sx-1rife3k); fixed here so it takes no room in our layout. */
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 0;
+  width: 50px;
+  overflow-y: scroll;
+}
+@layer base {
+  /* `:root,.sx-1eduqi0{--scrollbar-width:12px}`: the default until the probe has measured. */
+  :root {
+    --scrollbar-width: 12px;
+  }
+  /* Linear's `@layer app.base` rules, word for word: under every component's own scrollbar rule. */
+  body.layoutScrollbarObtrusive {
+    --scrollbar-min-size: 32px;
+    --scrollbar-color: var(--app-scrollbar-bg);
+  }
+  body.layoutScrollbarObtrusive,
+  body.layoutScrollbarObtrusive * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-color) transparent;
+  }
+  body.layoutScrollbarObtrusive svg,
+  body.layoutScrollbarObtrusive svg * {
+    scrollbar-width: auto;
+    scrollbar-color: initial;
+  }
+  /* Browsers without scrollbar-width (Safari before 18.2) draw the same thumb with ::-webkit-scrollbar: a pill inset 3px,
+     at least 32px long, scrollbarBgHover under the pointer and scrollbarBgActive while dragged. */
+  @supports not (scrollbar-width: thin) {
+    body.layoutScrollbarObtrusive::-webkit-scrollbar,
+    body.layoutScrollbarObtrusive ::-webkit-scrollbar {
+      width: var(--scrollbar-width);
+      height: var(--scrollbar-width);
+    }
+    body.layoutScrollbarObtrusive::-webkit-scrollbar-track,
+    body.layoutScrollbarObtrusive ::-webkit-scrollbar-track {
+      background: 0 0;
+    }
+    body.layoutScrollbarObtrusive::-webkit-scrollbar-thumb,
+    body.layoutScrollbarObtrusive ::-webkit-scrollbar-thumb {
+      background-color: var(--scrollbar-color);
+      opacity: 0.2;
+      border-radius: var(--scrollbar-width);
+      background-clip: content-box;
+      border: 3px solid #0000;
+    }
+    body.layoutScrollbarObtrusive::-webkit-scrollbar-thumb:vertical,
+    body.layoutScrollbarObtrusive ::-webkit-scrollbar-thumb:vertical {
+      min-height: var(--scrollbar-min-size);
+    }
+    body.layoutScrollbarObtrusive::-webkit-scrollbar-thumb:horizontal,
+    body.layoutScrollbarObtrusive ::-webkit-scrollbar-thumb:horizontal {
+      min-width: var(--scrollbar-min-size);
+    }
+    body.layoutScrollbarObtrusive::-webkit-scrollbar-thumb:hover,
+    body.layoutScrollbarObtrusive ::-webkit-scrollbar-thumb:hover {
+      --scrollbar-color: var(--app-scrollbar-bg-hover);
+    }
+    body.layoutScrollbarObtrusive::-webkit-scrollbar-thumb:active,
+    body.layoutScrollbarObtrusive ::-webkit-scrollbar-thumb:active {
+      --scrollbar-color: var(--app-scrollbar-bg-active);
+    }
+    body.layoutScrollbarObtrusive::-webkit-scrollbar-corner,
+    body.layoutScrollbarObtrusive ::-webkit-scrollbar-corner {
+      background: var(--panel); /* --color-bg-primary */
+    }
+  }
+}
+/* Linear's shared `hideScrollbars` (startup-entry: scrollbar-width none, ::-webkit-scrollbar display none): its action menus,
+   tab strips, editor toolbar, date list and facet rows scroll with no scrollbar at all, overlay or not. */
+@layer components {
+  .ui-hide-scrollbars {
+    scrollbar-width: none;
+  }
+  .ui-hide-scrollbars::-webkit-scrollbar {
+    display: none;
+  }
+}
+/* The action menu's scroll affordance (k6e/A6e, j6e, `_viewport_spg2h`): with its scrollbar hidden, a 24px fade of the menu's
+   bgBase sticks to the top edge once the list has scrolled and to the bottom edge until it reaches the end, both driven by the
+   list's scroll timeline (only where scroll timelines exist, as Linear's `display:none` fallback). Linear renders the two edges
+   only when the rows overflow; an inactive timeline (nothing to scroll) leaves both at their resting opacity 0 here instead.
+   The command menu's list (below) has a scrollbar and no fades. */
+@supports (animation-timeline: auto) {
+  .menu-list.ui-hide-scrollbars:not(.command-menu *) {
+    scroll-timeline: --scroll-affordance block;
+  }
+  .menu-list.ui-hide-scrollbars:not(.command-menu *)::before,
+  .menu-list.ui-hide-scrollbars:not(.command-menu *)::after {
+    content: "";
+    position: sticky;
+    left: 0;
+    right: 0;
+    z-index: 1;
+    display: block;
+    flex-shrink: 0;
+    height: 24px;
+    pointer-events: none;
+    opacity: 0;
+    animation-duration: 1s;
+    animation-fill-mode: both;
+    animation-timeline: --scroll-affordance;
+  }
+  .menu-list.ui-hide-scrollbars:not(.command-menu *)::before {
+    top: -1px;
+    margin-bottom: -24px;
+    border-radius: 14px 14px 0 0;
+    background-image: linear-gradient(to bottom, var(--menu), transparent);
+    animation-name: scroll-affordance-in;
+    animation-range: 0 24px;
+  }
+  .menu-list.ui-hide-scrollbars:not(.command-menu *)::after {
+    bottom: -1px;
+    margin-top: -24px;
+    border-radius: 0 0 14px 14px;
+    background-image: linear-gradient(to top, var(--menu), transparent);
+    animation-name: scroll-affordance-out;
+    animation-range: calc(100% - 24px) 100%;
+  }
+}
+@keyframes scroll-affordance-in {
+  0% {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes scroll-affordance-out {
+  0% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+/* The command menu's list (Ign/zgn, Vgn.outerWrapper) keeps a thin scrollbar in a stable gutter, and its end padding gives way
+   to it: Linear's list padding is LIST_PADDING 6 at the start and max(6 - scrollbar width, 0) at the end, where ours insets the
+   row and its highlight instead. */
+.command-menu .menu-list {
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+  overflow-x: clip;
+}
+.command-menu .menu-list .menu-item {
+  padding-right: calc(max(0px, 6px - var(--scrollbar-width)) + 14px);
+}
+.command-menu .menu-list .menu-item::before {
+  right: max(0px, calc(6px - var(--scrollbar-width)));
+}
+/* The sidebar (Ij with `gutter: isSafari ? auto : stable`): a stable gutter, its end padding less the scrollbar's room
+   (`contentPadding(isSafari ? sidebarPadding : max(0, sidebarPadding - scrollbarWidth))`). Safari keeps the auto gutter and the
+   full padding; `hanging-punctuation` is Safari's alone. */
+.sidebar-scroller {
+  scrollbar-gutter: stable;
+  padding-right: max(0px, calc(8px - var(--scrollbar-width)));
+}
+@supports (hanging-punctuation: first) {
+  .sidebar-scroller {
+    scrollbar-gutter: auto;
+    padding-right: 8px;
+  }
+}
+/* A board column's rows (IssueList `Bu.root`): a stable gutter, no scroll anchoring (the list places its rows itself), and no
+   end padding where the scrollbar takes the room (`.sx-mdzhlb:is(body.layoutScrollbarObtrusive *){padding-right:0}`). */
+.board-column-scroller {
+  scrollbar-gutter: stable;
+  overflow-anchor: none;
+}
+body.layoutScrollbarObtrusive .board-column-scroller {
+  padding-right: 0;
+}
+/* The list layout's scroller: Linear's grouped list (`a9.listWrapper`) turns scroll anchoring off. */
+.issue-list-scroller {
+  overflow-anchor: none;
 }
