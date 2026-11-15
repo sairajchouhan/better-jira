@@ -190,9 +190,11 @@ const thread = [
   },
 ];
 /** `syncErrors`: the mirror's reasons it can't read Jira (the footer's warning); `syncingReads`: how many /api/boards reads
- *  answer no boards while a first sync runs. */
+ *  answer no boards while a first sync runs; `streaming`: how many property polls say the board, shown after its first page,
+ *  is still on its first sync (BJ-338). */
 let syncErrors: string[] = [],
-  syncingReads = 0;
+  syncingReads = 0,
+  streaming = 0;
 let clientFailures = 0,
   detailFailures = 0,
   includeMedia = false,
@@ -981,6 +983,7 @@ async function handle(req: Request) {
     clientFailures = settings.clientFailures ?? 0;
     syncErrors = settings.syncErrors ?? [];
     syncingReads = settings.syncingReads ?? 0;
+    streaming = settings.streaming ?? 0;
     detailFailures = settings.detailFailures ?? 0;
     includeMedia = settings.includeMedia ?? false;
     mediaInComment = settings.mediaInComment ?? false;
@@ -1141,7 +1144,7 @@ async function handle(req: Request) {
     body = {
       entries: {},
       progress: { total: 0, pending: 0, completed: 0, errors: 0 },
-      sync: { errors: syncErrors, syncing: [] },
+      sync: { errors: syncErrors, syncing: streaming-- > 0 ? [{ board: board.id, loaded: 100, total: 900 }] : [] },
     };
   else if (path.match(/^\/api\/issues\/[^/]+\/media\/[^/]+$/)) {
     if (mediaDelay) await Bun.sleep(mediaDelay);

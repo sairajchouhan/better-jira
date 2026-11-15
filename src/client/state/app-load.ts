@@ -88,7 +88,7 @@ async function loadApplication() {
     opened && !listed.some((i) => i.key === opened) && (await preloadFound(opened))
       ? await fetchJson<Issue[]>("/api/issues")
       : listed;
-  // A board shows once its first sync has read every issue; until then say how far it has got, or why it can't.
+  // A board shows once its first sync has read its first page (BJ-338); until then say how far it has got, or why it can't.
   if (!boards.length) {
     const health = await fetchJson<SyncHealth>("/api/sync");
     if (health.errors.length) throw new Error(health.errors.join(" "));

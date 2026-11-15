@@ -32,3 +32,13 @@ test("the footer warns when the mirror can't read Jira", async ({ open }) => {
   const page = await open();
   await page.waitFor(`document.querySelector("[aria-label='Jira sync status']")?.textContent?.includes(${JSON.stringify(reason)})`, 15_000);
 });
+
+test("BJ-338: a board shown on its first page says in the footer that the rest is still syncing, then goes quiet", async ({ open }) => {
+  await fixture.reset({ streaming: 1 });
+  const page = await open();
+  await page.waitFor(`document.querySelector("[aria-label='First sync']")?.textContent?.startsWith("Still syncing Board ") === true`, 15_000);
+  expect(await page.eval(`document.querySelector("[aria-label='First sync']").textContent`)).toContain("100 of 900 issues");
+  // The next poll finds every page read.
+  await page.eval(`window.dispatchEvent(new Event("focus"))`);
+  await page.waitFor(`!document.querySelector("[aria-label='First sync']")`, 45_000);
+});

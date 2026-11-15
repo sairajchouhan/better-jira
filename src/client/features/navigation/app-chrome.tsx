@@ -334,6 +334,34 @@ function DeleteDialog({ issueKey: key }: { issueKey: string }) {
   );
 }
 
+const FOOTER_TONES = {
+  alert: "shrink text-red-500",
+  syncing: "shrink text-fg-3",
+  on: "text-emerald-500",
+  local: "text-amber-500",
+} as const;
+/** A footer status: a dot in its tone's colour, then its text, cut short when the footer is narrow. */
+function FooterStatus({
+  tone,
+  role,
+  label,
+  title,
+  children,
+}: {
+  tone: keyof typeof FOOTER_TONES;
+  role?: "alert" | "status";
+  label?: string;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <span role={role} aria-label={label} title={title} className={`flex min-w-0 items-center gap-1.5 ${FOOTER_TONES[tone]}`}>
+      <span className="size-1.5 shrink-0 rounded-full bg-current" />
+      <span className="truncate">{children}</span>
+    </span>
+  );
+}
+
 export function StatusBar() {
   const perf = useStore((s) => s.perf);
   const undo = useStore((s) => s.undoCount),
@@ -342,37 +370,30 @@ export function StatusBar() {
     writable = useStore((s) => s.writable),
     pending = useStore((s) => s.pendingWrites),
     writeError = useStore((s) => s.writeError);
-  const syncProblem = useStore((s) => s.syncProblem);
+  const syncProblem = useStore((s) => s.syncProblem),
+    firstSync = useStore((s) => s.firstSync);
   return (
     <footer className="flex h-7 shrink-0 items-center gap-4 px-4 pb-2 text-[11px] whitespace-nowrap">
       {/* The server or Jira can't be reached: what's on screen may be old (sync-problem.ts). */}
       {syncProblem && (
-        <span
-          role="alert"
-          aria-label="Jira sync status"
-          title={syncProblem}
-          className="flex min-w-0 shrink items-center gap-1.5 text-red-500"
-        >
-          <span className="size-1.5 shrink-0 rounded-full bg-red-500" />
-          <span className="truncate">{syncProblem}</span>
-        </span>
+        <FooterStatus tone="alert" role="alert" label="Jira sync status" title={syncProblem}>
+          {syncProblem}
+        </FooterStatus>
+      )}
+      {/* A board's first sync still streaming in after it showed (BJ-338), as Linear's "Still setting up your workspace". */}
+      {firstSync && (
+        <FooterStatus tone="syncing" role="status" label="First sync" title={firstSync}>
+          {firstSync}
+        </FooterStatus>
       )}
       {writable ? (
-        <span
-          title="Issue edits are written to Jira."
-          className="flex min-w-0 items-center gap-1.5 text-emerald-500"
-        >
-          <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
-          <span className="truncate">Edits write to Jira</span>
-        </span>
+        <FooterStatus tone="on" title="Issue edits are written to Jira.">
+          Edits write to Jira
+        </FooterStatus>
       ) : (
-        <span
-          title="Issue changes, files, and view preferences are saved in this browser."
-          className="flex min-w-0 items-center gap-1.5 text-amber-500"
-        >
-          <span className="size-1.5 shrink-0 rounded-full bg-amber-500" />
-          <span className="truncate">Local only: nothing is sent to Jira</span>
-        </span>
+        <FooterStatus tone="local" title="Issue changes, files, and view preferences are saved in this browser.">
+          Local only: nothing is sent to Jira
+        </FooterStatus>
       )}
       {writable && (
         <span

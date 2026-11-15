@@ -10,7 +10,7 @@ import { mergeFull, mergeProperties, needsFull } from "./local-edits";
 import { navigate } from "@/client/features/navigation/app-navigation";
 import { issuesDeletedInJira } from "./deleted-issues";
 import { get, set, subscribe } from "./store";
-import { syncProblem } from "./sync-problem";
+import { firstSyncNote, syncProblem } from "./sync-problem";
 import { rejoinBoards } from "@/shared/board-membership";
 
 /** Server data goes through TanStack Query: it dedupes loads in flight, schedules the poll and refetches on focus. Invalidate a key to refetch it. */
@@ -125,8 +125,10 @@ async function fetchProperties(): Promise<{ pending: number }> {
   const res = await fetch("/api/properties");
   if (!res.ok) throw new Error("Properties unavailable");
   const data = await res.json();
-  const problem = syncProblem(data.sync, false);
+  const problem = syncProblem(data.sync, false),
+    firstSync = firstSyncNote(data.sync);
   if (problem !== get().syncProblem) set({ syncProblem: problem });
+  if (firstSync !== get().firstSync) set({ firstSync });
   const { issues, deleted, stale } = mergeProperties(data.entries);
   issuesDeletedInJira(deleted);
   set({ propertySync: data.progress, ...(issues ? { issues } : {}) });

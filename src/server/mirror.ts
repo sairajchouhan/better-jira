@@ -30,6 +30,7 @@ import { avatarProxy, type AvatarCache } from "@/shared/avatar-proxy";
 import { faviconProxy } from "./favicon";
 import { smartLinkCache } from "./smart-link";
 import { droppedBoardMeta, issueStore } from "./issue-store";
+import { readWholeBoard, syncHealthOf } from "./board-sync";
 
 const configuration = serverConfiguration();
 // `bun --hot` re-runs this module on every edit; the loops and the open tabs live on globalThis so they survive it.
@@ -180,39 +181,10 @@ const page = (board: number, jql: string, startAt: number) =>
       }),
   );
 
-async function fullSync(board: number) {
-  const t0 = Date.now();
-  const jql = "ORDER BY key ASC"; // stable order so parallel startAt pages don't skip issues
-  const first = await page(board, jql, 0);
-  save(board, first.issues, t0);
-  const progress = { loaded: first.issues.length, total: first.total };
-  boardSync.set(board, { ...boardSync.get(board), progress });
-  const starts: number[] = [];
-  for (let s = PAGE; s < first.total; s += PAGE) starts.push(s);
-  await Promise.all(
-    Array.from({ length: PARALLEL }, async () => {
-      for (let s; (s = starts.shift()) !== undefined;) {
-        const { issues } = await page(board, jql, s);
-        save(board, issues, t0);
-        progress.loaded += issues.length;
-      }
-    }),
-  );
-  const gone = store.sweep(board, t0);
-  await syncConfig(board);
-  boardSync.set(board, { ...boardSync.get(board), progress: undefined });
-  setMeta(`full:${board}`, String(t0));
-  setMeta(`inc:${board}`, String(t0));
-  setMeta(`fields:${board}`, FIELDS);
-  console.log(
-    `[sync] board ${board}: full, ${first.total} issues, ${gone} removed, ${Date.now() - t0}ms`,
-  );
-}
-
-/** The board's name, columns and Jira project, from its configuration. The config lists status ids only; names and categories
- *  come from the status list. The project is the board's location (null for a board kept in a user's space): what an empty
- *  board creates in, and whose issue types the options list. */
-async function syncConfig(board: number) {
+/** A board's columns and Jira project: its configuration lists status ids only; names and categories come from the status list.
+ *  The project is the board's location (null for a board kept in a user's space): what an empty board creates in, and whose
+ *  issue types the options list. */
+async function boardColumns(board: number) {
   const [config, statuses] = await Promise.all([
     jira(`/rest/agile/1.0/board/${board}/configuration`),
     jira<any[]>("/rest/api/3/status"),
@@ -226,7 +198,49 @@ async function syncConfig(board: number) {
       (s: any) => byId.get(s.id) ?? { id: s.id, name: s.id, category: "indeterminate" },
     ),
   }));
-  setMeta(`config:${board}`, JSON.stringify({ id: board, name: config.name, columns, project: boardProject(config.location) }));
+  return { id: board, name: config.name, columns, project: boardProject(config.location) };
+}
+
+/** While a first sync streams in, open tabs re-read the mirror at most this often. */
+const STREAM_NOTIFY_MS = 2_000;
+/** Full syncs under way, by board: the loop never starts a second read of a board one is still reading. */
+const fullSyncs = new Map<number, Promise<void>>();
+/** Reads every issue on the board and sweeps out the ones it no longer holds. `shown` runs once the first page and the
+ *  board's columns are in: on the board's first sync it shows then, and the rest streams into open tabs (BJ-338). */
+function fullSync(board: number, shown?: () => void) {
+  const run = readFullBoard(board, shown).finally(() => fullSyncs.delete(board));
+  fullSyncs.set(board, run);
+  return run;
+}
+async function readFullBoard(board: number, shown?: () => void) {
+  const t0 = Date.now(),
+    first = !getMeta(`full:${board}`);
+  const jql = "ORDER BY key ASC"; // stable order so parallel startAt pages don't skip issues
+  let streamed = 0;
+  const { total } = await readWholeBoard({
+    page: (startAt) => page(board, jql, startAt),
+    columns: () => boardColumns(board),
+    save: (issues) => save(board, issues, t0),
+    shown: (columns, progress) => {
+      setMeta(`config:${board}`, JSON.stringify(columns));
+      boardSync.set(board, { ...boardSync.get(board), progress });
+      if (first) notify("boards");
+      shown?.();
+    },
+    landed: () => {
+      if (!first || Date.now() - streamed < STREAM_NOTIFY_MS) return;
+      streamed = Date.now();
+      notify();
+    },
+    pageSize: PAGE,
+    parallel: PARALLEL,
+  });
+  const gone = store.sweep(board, t0);
+  boardSync.set(board, { ...boardSync.get(board), progress: undefined });
+  setMeta(`full:${board}`, String(t0));
+  setMeta(`inc:${board}`, String(t0));
+  setMeta(`fields:${board}`, FIELDS);
+  console.log(`[sync] board ${board}: full, ${total} issues, ${gone} removed, ${Date.now() - t0}ms`);
 }
 
 /** Fetch issues updated since the last sync (with a minute of overlap). Returns the keys that actually changed. */
@@ -324,6 +338,8 @@ function syncGitHub() {
 const probed = new Map<number, number>();
 /** Returns whether the mirror changed. */
 async function syncBoard(board: number) {
+  // A board added in the app is still streaming in: its own read tells open tabs.
+  if (fullSyncs.has(board)) return false;
   const lastFull = Number(getMeta(`full:${board}`) ?? 0);
   if (getMeta(`fields:${board}`) !== FIELDS || Date.now() - lastFull > FULL_SYNC_EVERY_MS)
     return (await fullSync(board), true);
@@ -350,17 +366,12 @@ function recordSync(board: number, error?: unknown) {
   boardSync.set(board, { ...boardSync.get(board), error: after });
   if (before !== after) notify();
 }
-/** What the app shows about syncing: why Jira can't be read (one line per distinct reason), and the boards still on their
- *  first read with how far each has got. */
-export function syncHealth() {
-  const states = BOARDS.map((id) => ({ id, ...boardSync.get(id) }));
-  return {
-    errors: [...new Set(states.flatMap((b) => (b.error ? [b.error] : [])))],
-    syncing: states.flatMap((b) =>
-      b.progress && !getMeta(`config:${b.id}`) ? [{ board: b.id, ...b.progress }] : [],
-    ),
-  };
-}
+/** What the app shows about syncing (board-sync.ts `syncHealthOf`). */
+export const syncHealth = () =>
+  syncHealthOf(
+    BOARDS.map((id) => ({ id, ...boardSync.get(id) })),
+    (board) => !!getMeta(`full:${board}`),
+  );
 
 type Client = { issue?: string; send: (kind?: "changed" | "inbox" | "boards" | "views") => void };
 const live = (g.live ??= { clients: new Set(), wake: () => {} });
@@ -500,7 +511,19 @@ export async function addBoard(input: string) {
   }
   try {
     await jira(`/rest/agile/1.0/board/${id}`);
-    await fullSync(id);
+    // The board is added once its first page is in, and the rest streams in (BJ-338). A later page that fails is the
+    // board's sync error, and the loop reads the board in full again.
+    await new Promise<void>((added, failed) => {
+      let shown = false;
+      fullSync(id, () => ((shown = true), added())).then(
+        () => notify(),
+        (error) => {
+          if (!shown) return failed(error);
+          console.error(`[sync] board ${id}:`, String(error).slice(0, 300));
+          recordSync(id, error);
+        },
+      );
+    });
   } catch (error) {
     console.error(`[boards] add ${id}:`, String(error).slice(0, 300));
     if (error instanceof JiraError && [400, 401, 403, 404].includes(error.status))

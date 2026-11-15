@@ -83,7 +83,7 @@ function Booting() {
     return (
       <BootScreen role="status" title="Syncing your Jira boards">
         <Text color="muted">{loadError}</Text>
-        <Text color="muted">The first sync of a large board takes a minute or two. The app opens when it's done.</Text>
+        <Text color="muted">The app opens as soon as your first board's first issues are in; the rest keep arriving.</Text>
       </BootScreen>
     );
   const retry = () => {

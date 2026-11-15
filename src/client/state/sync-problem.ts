@@ -21,3 +21,8 @@ export function syncProgress(health: SyncHealth): string {
     .map((b) => `Board ${b.board}: ${n(b.loaded)} of ${n(b.total)} issues`)
     .join(". ");
 }
+
+/** The footer's note after boot, while a board that showed on its first page still streams in (BJ-338); "" once every board
+ *  is read. Linear shows the app while bootstrapping with "Still setting up your workspace" (startup-root). */
+export const firstSyncNote = (health: SyncHealth | undefined) =>
+  health?.syncing.length ? `Still syncing ${syncProgress(health)}` : "";

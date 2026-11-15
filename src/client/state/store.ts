@@ -140,6 +140,8 @@ export type State = {
   loadWaiting: boolean;
   /** The footer's warning when the server or Jira can't be reached (sync-problem.ts); "" when all is well. */
   syncProblem: string;
+  /** The footer's note while a board shown after its first page is still streaming in (sync-problem.ts `firstSyncNote`). */
+  firstSync: string;
   canEdit: boolean;
   storage: {
     status: "loading" | "saving" | "saved" | "error";
@@ -203,6 +205,7 @@ let state: State = {
   loadError: "",
   loadWaiting: false,
   syncProblem: "",
+  firstSync: "",
   canEdit: true,
   storage: { status: "loading" },
 };
