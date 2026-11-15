@@ -16,6 +16,7 @@ import {
 } from "@/client/features/views/view-settings";
 import { collapseClick, collapseTip } from "@/client/features/views/group-collapse";
 import { ViewDetails, ResultsFeedback } from "@/client/features/views/views-navigation";
+import { resultFeedback } from "@/client/features/views/views-navigation-model";
 import { useRegisterViewGroups } from "@/client/features/views/view-groups";
 import { GroupIcon } from "@/client/features/views/group-icon";
 import {
@@ -42,6 +43,7 @@ import {
   myIssuesBoard,
   boardColumns,
   draftForGroup,
+  drawnGroups,
   groupLayout,
   groupVisibility,
   layoutOrder,
@@ -118,9 +120,19 @@ export const BoardView = memo(function BoardView({
     () => ({ ...groups, ...groupLayout(groups.show, visible, board, d, universe) }),
     [groups, visible, board, d, universe],
   );
-  const { hidden, hiddenIds, show } = layout;
-  // The Group ordering panel lists the groups this view shows (Linear's ViewOptionsGroupsContext).
-  useRegisterViewGroups(board.id, useMemo(() => (active ? { columns, hidden, hiddenIds } : null), [active, columns, hidden, hiddenIds]));
+  // The Group ordering panel lists the groups this view shows (Linear's ViewOptionsGroupsContext), even while a filter
+  // leaves none to draw.
+  useRegisterViewGroups(
+    board.id,
+    useMemo(() => (active ? { columns, hidden: layout.hidden, hiddenIds: layout.hiddenIds } : null), [active, columns, layout]),
+  );
+  const feedback = useMemo(
+    () => resultsFeedback(all, board, prefs, activeView, { overlay, query, mine }, who, ME.id),
+    [all, board, prefs, activeView, overlay, query, mine, who],
+  );
+  // The zero state, when it shows, stands in for the groups (ResultsFeedback renders it from the same answer).
+  const zeroState = !visible.length && !!resultFeedback(0, feedback.baseline, !!activeView, feedback.temporary);
+  const { hidden, hiddenIds, show } = drawnGroups(layout, zeroState);
   // The prefetch order follows the cards and rows just laid out, so which groups show is decided once.
   const order = useMemo(() => layoutOrder(layout.show, layout, prefs, universe), [layout, prefs, universe]);
   useEffect(() => {
@@ -146,10 +158,6 @@ export const BoardView = memo(function BoardView({
       ...draftForGroup(d.columns, bucket.id, board, universe, prefs.scope),
       ...(row ? draftForGroup(d.rows, row.id, board, universe, prefs.scope) : {}),
     });
-  const feedback = useMemo(
-    () => resultsFeedback(all, board, prefs, activeView, { overlay, query, mine }, who, ME.id),
-    [all, board, prefs, activeView, overlay, query, mine, who],
-  );
   const clearAll = () => {
     clearFilters(board.id);
     ui.send({ type: "query.set", query: "" });

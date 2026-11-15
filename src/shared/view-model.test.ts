@@ -10,6 +10,7 @@ import {
   buckets,
   canOrderGroups,
   groupVisibility,
+  drawnGroups,
   moveGroup,
   orderGroups,
   storedGroupOrder,
@@ -618,6 +619,16 @@ describe("group ordering (BJ-205)", () => {
     prefs.display.emptyGroups = true;
     v = groupVisibility(columns, prefs);
     expect(v.show.map((c) => c.name)).toEqual(["Todo", "Done"]);
+  });
+  test("BJ-331: while the zero state shows, no group is drawn, shown or hidden; an empty unfiltered board keeps its groups", () => {
+    const prefs = defaultPreferences();
+    prefs.display.columns = "status";
+    prefs.display.emptyGroups = true;
+    prefs.hidden = { status: ["Doing"] };
+    const none = groupVisibility(buckets([], "status", board, all), prefs);
+    expect(none.hidden.map((c) => c.name)).toEqual(["Doing"]);
+    expect(drawnGroups(none, true)).toMatchObject({ show: [], hidden: [], hiddenIds: ["Doing"] });
+    expect(drawnGroups(none, false)).toBe(none);
   });
   test("a stored order round-trips through saved preferences and malformed orders are dropped", () => {
     const prefs = defaultPreferences();
