@@ -2738,6 +2738,42 @@ test("BJ-352: a refused write whose answer lacks Jira's copy leaves nothing to s
   }
 });
 
+test("BJ-352: an edit made after a refusal without Jira's copy is never rolled back as refused by the copy read meanwhile", async () => {
+  const { get, set } = await import("./store");
+  const { actions } = await import("./issue-actions");
+  let openRead!: () => void, openWrite!: () => void;
+  const readGate = new Promise<void>((resolve) => (openRead = resolve)),
+    writeGate = new Promise<void>((resolve) => (openWrite = resolve));
+  let writes = 0;
+  // Write 1 is refused without a copy; the tab's read again waits on `readGate`; write 2 (the new edit) waits on `writeGate`.
+  const jira = await fakeJiraWrites(async (key, body) => {
+    if (!body.ops.length) return readGate.then(() => ({ issue: writableIssue(key) }));
+    if (++writes === 1) return { error: "Priority is locked.", issue: undefined, unsettled: [key] };
+    await writeGate;
+    return { issue: writableIssue(key, { priority: "Medium" }) };
+  });
+  const until = async (done: () => boolean) => {
+    for (let i = 0; i < 200 && !done(); i++) await Bun.sleep(5);
+  };
+  try {
+    set({ writable: true, issues: new Map(get().issues).set("RB-9", writableIssue("RB-9")) });
+    actions.patch("RB-9", { priority: "High" });
+    await until(() => jira.sent.some((s) => s.key === "RB-9" && !s.ops.length));
+    actions.patch("RB-9", { priority: "Medium" });
+    await until(() => writes === 2);
+    // Jira's copy, read for the refused write, lands while the new edit's write is still out: the new edit stays.
+    openRead();
+    await Bun.sleep(30);
+    expect(get().issues.get("RB-9")?.priority).toBe("Medium");
+    openWrite();
+    await jira.settled();
+    expect(get().issues.get("RB-9")?.priority).toBe("Medium");
+  } finally {
+    set({ writable: false, writeError: null });
+    jira.restore();
+  }
+});
+
 test("BJ-354: an issue opened by key that no board holds opens here once the mirror keeps it; Jira's 404 is not found, a failed read is an error", async () => {
   const { get } = await import("./store");
   const { openIssueByKey, linkedIssueKey } = await import("@/client/features/navigation/app-navigation");

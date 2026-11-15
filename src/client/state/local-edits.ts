@@ -38,6 +38,7 @@ const lastProperties = new Map<string, string>();
 
 /** Edits issue fields; the edited fields stay local until Jira's answer to their write. */
 export function patchIssue(key: string, patch: Partial<Issue>) {
+  refusals.delete(key);
   const state = get(),
     i = state.issues.get(key);
   if (i) {
@@ -53,6 +54,7 @@ export function patchIssue(key: string, patch: Partial<Issue>) {
 }
 /** Edits fields of the issue's full record (description, comments). */
 export function patchFields(key: string, fn: (fields: any) => object) {
+  refusals.delete(key);
   const state = get(),
     f = state.full.get(key);
   if (f) {
@@ -103,6 +105,7 @@ export function restoreSnapshots(keys: string[], snapshots: Snapshot[]) {
     full = new Map(get().full);
   keys.forEach((key, index) => {
     const snapshot = snapshots[index]!;
+    refusals.delete(key);
     if (snapshot.issue) issues.set(key, snapshot.issue);
     else issues.delete(key);
     if (snapshot.full) full.set(key, snapshot.full);
@@ -302,7 +305,8 @@ export function releaseJiraFields(key: string) {
 export const releaseAttachments = (key: string) => void localFields.get(key)?.delete("attachments");
 
 /** Refusals whose answer came without Jira's copy (the server's read of it failed), with Jira's reason: the next copy read
- *  rolls the issue back as that answer would have (BJ-352). */
+ *  rolls the issue back as that answer would have (BJ-352). A new edit of the issue drops it: that edit's own write settles
+ *  the issue, and a copy read meanwhile must not roll the new edit back as refused. */
 const refusals = new Map<string, string>();
 /**
  * A refused write settles the same way whether or not its answer carries Jira's copy (BJ-352). Without one, the edit's fields
