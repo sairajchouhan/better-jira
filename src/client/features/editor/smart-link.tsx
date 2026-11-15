@@ -2,9 +2,9 @@ import { useSyncExternalStore, type MouseEvent, type ReactNode } from "react";
 import { IssueHoverCard } from "@/client/features/issue/issue-hover-card";
 import { Icon, StatusIcon } from "@/client/components/icons";
 import { LinkIcon } from "@/client/components/link-icon";
-import { navigate } from "@/client/features/navigation/app-navigation";
+import { openIssueByKey } from "@/client/features/navigation/app-navigation";
 import { useSmartLinkDetails } from "@/client/state/smart-link-details";
-import { get, statusOf, subscribe, issueBoardId } from "@/client/state/store";
+import { get, statusOf, subscribe } from "@/client/state/store";
 import { safeLink } from "@/shared/document";
 import { faviconSrc, smartLink, type SmartLink as Target } from "@/shared/smart-link";
 
@@ -44,8 +44,9 @@ export function MentionChip(props: { kind: "person"; id: string; label: string }
 }
 
 /** Linear's issue mention: status icon, key, title. From the mirror when the issue is on a board, else the server's read;
- *  until then the key alone, as Linear's fallback shows it. A plain click on a mirrored issue opens it here; ⌘-click, and
- *  any other issue, open Jira's page (as editor-links' followLink does). */
+ *  until then the key alone, as Linear's fallback shows it. A plain click on an issue of this Jira site opens it here, held
+ *  or not (BJ-354), as Linear's mention loads any issue by its identifier (`getIssueOrSuspend`); ⌘-click, and an issue on
+ *  another site, open Jira's page (as editor-links' followLink does). */
 function IssueLink({ link }: { link: Extract<Target, { kind: "issue" }> }) {
   const mirror = () => (link.site === get().site ? get().issues.get(link.key) : undefined);
   const mirrored = useSyncExternalStore(subscribe, mirror, mirror);
@@ -60,11 +61,11 @@ function IssueLink({ link }: { link: Extract<Target, { kind: "issue" }> }) {
       prefix={link.key}
       label={mirrored?.summary ?? details?.title}
       onClick={
-        mirrored
+        link.site === get().site
           ? (event) => {
               if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
               event.preventDefault();
-              navigate({ board: issueBoardId(mirrored), selected: mirrored.key, panel: true, view: get().view });
+              openIssueByKey(link.key);
             }
           : undefined
       }

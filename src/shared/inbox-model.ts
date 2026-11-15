@@ -352,11 +352,17 @@ export function shortAgo(iso: string, now = Date.now()): string {
   return "now";
 }
 
-/** The fallback pane's note. An issue the mirror lacks in a project it mirrors was deleted (or moved); otherwise it lives outside the boards. */
-export const missingIssueNote = (key: string, mirroredProjects: Set<string>) =>
-  mirroredProjects.has(key.split("-")[0]!)
-    ? "This issue is no longer in your boards. It may have been deleted."
-    : "This issue is outside your mirrored boards, so it opens in Jira.";
+/** How reading a notification's issue went when the mirror doesn't hold it (client server-data.ts `keptOutcome`). */
+export type KeptOutcome = "reading" | "missing" | "unreachable";
+/** The fallback pane's note, shown while the notification's issue isn't open. Any issue opens here once the mirror keeps it
+ *  (BJ-341, BJ-355), so the pane stays only while it is read, when Jira has none this account can see (Jira's 404 covers
+ *  both), or when Jira couldn't be reached. */
+export const missingIssueNote = (outcome: KeptOutcome) =>
+  ({
+    reading: "Opening this issue…",
+    missing: "Jira has no such issue, or you can't see it. It may have been deleted.",
+    unreachable: "Couldn't reach Jira to open this issue. Select the notification again to retry.",
+  })[outcome];
 
 /** Linear's unread count: Jira's unread rows (all of them from `unread`, plus the loaded ones), plus rows being marked unread
  *  here (an undone ⌥U reaches unloaded rows: R3-inbox-D5), less this browser's deletes, snoozes and read marks. */

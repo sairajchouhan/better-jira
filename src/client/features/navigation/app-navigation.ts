@@ -15,7 +15,8 @@ import { createViewDraft, editViewDraft, updateSavedView, viewError } from "@/cl
 import { emptyOverlay, viewForRoute, type SavedView, type ViewDraft } from "@/shared/saved-view-model";
 import { defaultPreferences, type FilterGroup } from "@/shared/view-model";
 import { onSidebarHiddenChange, savedBoard, savedOpenIn, savedSidebarHidden } from "@/client/state/browser-preferences";
-import { keepIssue, loadFull } from "@/client/state/server-data";
+import { keptIssue, loadFull } from "@/client/state/server-data";
+import { smartLink } from "@/shared/smart-link";
 import { createAppRouter, locationOf, preloadIssueScreens, routeURL } from "@/client/routes/tree";
 
 type UiKey = keyof UiContext;
@@ -50,7 +51,7 @@ export const router = createAppRouter(typeof document === "undefined" ? createMe
   show,
   preload: (key) => Promise.all([loadFull(key), preloadIssueScreens()]),
   issue: (key) => get().issues.get(currentKey(key)),
-  keep: async (key) => !!(await keepIssue(key)),
+  keep: async (key) => !!(await keptIssue(key)),
   // Wrapped: jira-sync can still be loading when this module runs (app-notifications imports both).
   currentKey: (key) => currentKey(key),
   view: findView,
@@ -84,9 +85,28 @@ const intent = new Debouncer(preload, { wait: 50 });
 /** Preloads where an issue under the pointer opens, after the pointer rests on it; `null` when it leaves. */
 export const preloadOnHover = (to: Destination | null) => (to ? intent.maybeExecute(to) : intent.cancel());
 
-/** Goes somewhere: see navigation.ts for leaving views, how issues open and what the address shows. */
+/** Goes somewhere: see navigation.ts for leaving views, how issues open and what the address shows. An issue the mirror doesn't
+ *  hold yet (a linked issue, a parent on no board, a link in Jira content) goes by its address: the route keeps it first and then
+ *  shows it, or says Jira has no such issue (tree.tsx `whenKept`), as Linear opens any issue's path in the app and loads what its
+ *  sync didn't bring (BJ-354). */
 export function navigate(to: Destination) {
+  if (to.selected && !get().issues.has(currentKey(to.selected))) return void router.navigate(linkTo(to) as never);
   go({ type: "go", to });
+}
+/** Where an issue opens from a link to it: beside the list or as a page, as the screen opens issues, on the board that holds it
+ *  (the one on screen for an issue no board holds). */
+export const issueAt = (key: string, s: State = get()): Destination => ({
+  board: issueBoardId(s.issues.get(currentKey(key)), s),
+  selected: key,
+  panel: true,
+  view: s.view,
+});
+/** Opens an issue by its key here, whether or not the mirror holds it yet (`navigate`). */
+export const openIssueByKey = (key: string) => navigate(issueAt(key));
+/** The issue a link names when it is an issue's page on this Jira site (`/browse/KEY`, a board's `selectedIssue`). */
+export function linkedIssueKey(href: string) {
+  const link = smartLink(href);
+  return link?.kind === "issue" && link.site === get().site ? link.key : undefined;
 }
 const screen = (s = get()): Screen => ({
   board: s.board,
@@ -228,19 +248,18 @@ export function startNavigation() {
   });
 }
 /**
- * A link to an issue this app has, in rendered Jira content (a description before the editor loads, a comment),
- * opens it here, like Linear's document-wide `handleDocumentClick`. The editor handles its own links first.
+ * A link to an issue on this Jira site, in rendered Jira content (a description before the editor loads, a comment), opens it
+ * here, held or not (BJ-354), like Linear's document-wide `handleDocumentClick` opening any app path in the app. The editor
+ * handles its own links first.
  */
 function openIssueLink(event: MouseEvent) {
   if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
     return;
-  const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>(".rich-doc a[href]") : null,
-    browse = `${get().site}/browse/`;
-  if (!link || link.hasAttribute("download") || !link.href.startsWith(browse)) return;
-  const issue = get().issues.get(currentKey(decodeURIComponent(link.href.slice(browse.length).split(/[?#/]/)[0]!)));
-  if (!issue) return;
+  const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>(".rich-doc a[href]") : null;
+  const key = link && !link.hasAttribute("download") ? linkedIssueKey(link.href) : undefined;
+  if (!key) return;
   event.preventDefault();
-  navigate({ board: issueBoardId(issue), selected: issue.key, panel: true, view: get().view });
+  openIssueByKey(key);
 }
 /**
  * A link to a spot on this page (a comment's timestamp) moves the hash through the router, so the entry keeps the

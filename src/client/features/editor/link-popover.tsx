@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import type { EditorView } from "prosemirror-view";
 import { IconButton } from "@/client/components/button";
 import { floatingPlacement, insertLink, linkHref, linkTarget, removeLink } from "./editor-commands";
-import { appIssue, followLink } from "./editor-links";
+import { followLink } from "./editor-links";
+import { linkedIssueKey } from "@/client/features/navigation/app-navigation";
 import { TextInput } from "@/client/components/field";
 import { Icon } from "@/client/components/icons";
 import { MENU_POPUP, useElevation, usePlacement } from "@/client/components/menu-surface";
@@ -108,7 +109,7 @@ export function LinkPopover({
       {href && (
         <IconButton
           size="small"
-          label={appIssue(href) ? "Open" : "Open in new window"}
+          label={linkedIssueKey(href) ? "Open" : "Open in new window"}
           onClick={() => followLink(href)}
         >
           <Icon name="external" />

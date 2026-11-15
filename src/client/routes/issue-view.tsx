@@ -35,10 +35,10 @@ import { useIssueHistory } from "@/client/features/issue/use-issue-history";
 import { normalizeDocument } from "@/shared/document";
 import { imageCommentIds } from "@/client/features/media/media-edits";
 import { DueIcon, Icon, PriorityIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
-import { ME, get, useStore, isWatching, statusOf, issueBoardId } from "@/client/state/store";
+import { ME, get, useStore, isWatching, statusOf } from "@/client/state/store";
 import { issueURL, jiraIssueURL } from "@/client/features/issue/issue-urls";
 import { LINEAR_RELATIONS, relationSections } from "@/shared/relations";
-import { AppLink } from "@/client/features/navigation/app-link";
+import { IssueKeyLink } from "@/client/features/navigation/app-link";
 import { actions, addIssueFiles } from "@/client/state/issue-actions";
 import { loadFull } from "@/client/state/server-data";
 import { currentKey, firstKey } from "@/client/state/jira-sync";
@@ -80,8 +80,6 @@ import { IssueDetailsSection } from "@/client/features/issue/issue-details-secti
 import { IssueDiffs } from "@/client/features/issue/issue-pull-requests";
 // Loaded with the page, as Linear's preview (PBe) is: a lazy viewer suspends, and React's Suspense throttle holds it ~300ms (BJ-233).
 import { ImageViewer } from "@/client/features/media/image-viewer";
-
-const related = (target: Issue) => ({ board: issueBoardId(target), selected: target.key, panel: true, view: get().view });
 
 // --- issue view: a full page, a side panel, or the inbox's pane; the route picks the frame ---
 
@@ -410,31 +408,17 @@ function RelationRow({ issueKey, relation }: { issueKey: string; relation: Relat
     </ContextMenu>
   );
 }
-/** A related issue's pill, like Linear's (IssueDetailsPaneSidebar: status icon, then title). A mirrored issue opens here;
- *  one outside the mirrored boards shows the status and title Jira sent with the link and opens in Jira, the only place
- *  this app can show it (BJ-15). Without either, its key. */
+/** A related issue's pill, like Linear's (IssueDetailsPaneSidebar: status icon, then title). It opens the issue here, held or
+ *  not: Linear's relation is a lazy reference it hydrates (`relatedIssue.value`), and one the mirror doesn't hold is kept when
+ *  opened (`navigate`, BJ-354). Its status and title are the mirror's, else what Jira sent with the link, else its key. */
 function RelatedIssue({ relation }: { relation: Relation }) {
   const target = useStore((s) => s.issues.get(relation.key));
-  if (target) {
-    const status = statusOf(target);
-    return (
-      <IssueHoverCard relation={relation} issue={target} placement="left"><AppLink to={related(target)} className="relation-pill">
-        <span>{status && <StatusIcon status={status} />}</span>
-        <span className="truncate">{target.summary}</span>
-      </AppLink></IssueHoverCard>
-    );
-  }
-  const linked = relation.issue;
+  const status = target ? statusOf(target) : relation.issue?.status;
   return (
-    <IssueHoverCard relation={relation} placement="left"><a
-      href={jiraIssueURL(relation.key)}
-      target="_blank"
-      rel="noreferrer"
-      className="relation-pill"
-    >
-      <span>{linked?.status && <StatusIcon status={linked.status} />}</span>
-      <span className="truncate">{linked?.summary ?? relation.key}</span>
-    </a></IssueHoverCard>
+    <IssueHoverCard relation={relation} issue={target} placement="left"><IssueKeyLink issueKey={relation.key} className="relation-pill">
+      <span>{status && <StatusIcon status={status} />}</span>
+      <span className="truncate">{target?.summary ?? relation.issue?.summary ?? relation.key}</span>
+    </IssueKeyLink></IssueHoverCard>
   );
 }
 type PropertyOverlay =

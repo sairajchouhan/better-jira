@@ -24,6 +24,7 @@ import type { Trail } from "@/client/features/navigation/issue-trail";
 import { isPersonTab, type PersonTab } from "@/shared/people";
 import { viewPath, type SavedView } from "@/shared/saved-view-model";
 import type { Scope } from "@/shared/view-model";
+import { missingIssueNote } from "@/shared/inbox-model";
 import { AppLoading, EmptyState, LoadingState } from "@/client/components/empty-state";
 import { Button, ButtonLink } from "@/client/components/button";
 import { useStore } from "@/client/state/store";
@@ -411,7 +412,8 @@ export const routeNotFound = (matches: readonly { status: string; error: unknown
 
 /** Linear's `fk` button look on a router link. */
 const RouteButton = createLink(ButtonLink);
-/** An address that names nothing, or an issue none of the boards has. Covers the boards the shell keeps mounted. */
+/** An address that names nothing, or an issue Jira doesn't have or hides from this account (the mirror asked it first,
+ *  `whenKept`). Covers the boards the shell keeps mounted. */
 function NotFound({ data }: NotFoundRouteProps) {
   const issue = (data as { issue?: string } | undefined)?.issue;
   return (
@@ -420,7 +422,7 @@ function NotFound({ data }: NotFoundRouteProps) {
       actions={<RouteButton to="/" variant="secondary" size="medium">Go to your board</RouteButton>}
       className="absolute inset-0 z-10 bg-panel"
     >
-      <p>{issue ? "It isn't on any of your boards. It may have been deleted or moved in Jira." : "This address doesn't name a board, view or issue."}</p>
+      <p>{issue ? missingIssueNote("missing") : "This address doesn't name a board, view or issue."}</p>
     </EmptyState>
   );
 }

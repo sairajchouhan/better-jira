@@ -2700,3 +2700,52 @@ test("BJ-348: an inline sub-issue shows the type Jira creates (a standard issue'
     set({ options, writable: false });
   }
 });
+
+test("BJ-354: an issue opened by key that no board holds opens here once the mirror keeps it; Jira's 404 is not found, a failed read is an error", async () => {
+  const { get } = await import("./store");
+  const { openIssueByKey, linkedIssueKey } = await import("@/client/features/navigation/app-navigation");
+  const { routeNotFound } = await import("@/client/routes/tree");
+  const realFetch = globalThis.fetch,
+    asked: string[] = [];
+  let kept = false;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    asked.push(url);
+    if (url === "/api/issues/OFF-9") {
+      kept = true;
+      return Response.json({ key: "OFF-9", fields: { comment: { comments: [], total: 0 } } });
+    }
+    if (url === "/api/issues/GONE-1") return Response.json({ error: "not found" }, { status: 404 });
+    if (url === "/api/issues/DOWN-1") return Response.json({ error: "Could not read" }, { status: 503 });
+    if (url === "/api/properties")
+      return Response.json({
+        entries: kept ? { "OFF-9": { ...writableIssue("OFF-9"), boards: [] } } : {},
+        progress: { total: 0, pending: 0, completed: 0, errors: 0 },
+      });
+    return Response.json({});
+  }) as typeof fetch;
+  try {
+    await visit(`/board/${get().boards[0]!.id}/all`);
+    expect(get().issues.has("OFF-9")).toBe(false);
+    // A relation pill, a crumb, a link in Jira content: each opens by key, and the route keeps the issue first.
+    expect(linkedIssueKey(`${get().site}/browse/OFF-9`)).toBe("OFF-9");
+    openIssueByKey("OFF-9");
+    // Kept first: the screen never selects an issue the tab doesn't have.
+    expect(get().selected).not.toBe("OFF-9");
+    await settle();
+    expect(asked).toContain("/api/issues/OFF-9");
+    expect([get().selected, get().panel]).toEqual(["OFF-9", true]);
+    expect(address()).toContain("OFF-9");
+    // Jira has no such issue, or hides it from this account: not found.
+    openIssueByKey("GONE-1");
+    await settle();
+    expect(routeNotFound(router.state.matches)).toBe(true);
+    // Jira couldn't be reached: the route's error (with Try again), never "not found".
+    openIssueByKey("DOWN-1");
+    await settle();
+    expect(routeNotFound(router.state.matches)).toBe(false);
+    expect(router.state.matches.some((m) => m.status === "error")).toBe(true);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});

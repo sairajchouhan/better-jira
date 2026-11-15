@@ -3,9 +3,8 @@ import type { ReactNode } from "react";
 import { Avatar } from "@/client/components/avatar";
 import { HoverCard } from "@/client/components/hover-card";
 import { PriorityIcon, StatusIcon } from "@/client/components/icons";
-import { AppLink } from "@/client/features/navigation/app-link";
-import { jiraIssueURL } from "./issue-urls";
-import { get, statusOf, issueBoardId } from "@/client/state/store";
+import { IssueKeyLink } from "@/client/features/navigation/app-link";
+import { get, statusOf } from "@/client/state/store";
 import type { Issue } from "@/shared/issue-model";
 import type { Relation } from "@/shared/relations";
 import { epicName, epicOf } from "@/shared/epics";
@@ -54,28 +53,10 @@ function IssueCard({ relation, issue }: { relation: Relation; issue?: Issue }) {
                 </span>
               ) : null}
             </div>
-            {issue ? (
-              <AppLink
-                to={{
-                  board: issueBoardId(issue),
-                  selected: issue.key,
-                  panel: true,
-                  view: get().view,
-                }}
-                className="line-clamp-2 font-medium hover:underline"
-              >
-                {issue.summary}
-              </AppLink>
-            ) : (
-              <a
-                href={jiraIssueURL(relation.key)}
-                target="_blank"
-                rel="noreferrer"
-                className="line-clamp-2 font-medium hover:underline"
-              >
-                {relation.issue?.summary ?? relation.key}
-              </a>
-            )}
+            {/* Held or not, the title opens the issue here (BJ-354). */}
+            <IssueKeyLink issueKey={relation.key} className="line-clamp-2 font-medium hover:underline">
+              {issue?.summary ?? relation.issue?.summary ?? relation.key}
+            </IssueKeyLink>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
               {status ? (
                 <span className="flex items-center gap-1.5">

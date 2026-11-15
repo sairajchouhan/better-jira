@@ -1,21 +1,16 @@
 import { Plugin, TextSelection, type EditorState } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
-import { navigate } from "@/client/features/navigation/app-navigation";
+import { linkedIssueKey, openIssueByKey } from "@/client/features/navigation/app-navigation";
 import { isMac } from "@/client/components/keycap";
 import { richSchema } from "./rich-document";
-import { get, issueBoardId } from "@/client/state/store";
 
 const link = richSchema.marks.link!;
 
-/** An issue this app has, when `href` is its Jira page: opening it stays in the app. */
-export function appIssue(href: string) {
-  const browse = `${get().site}/browse/`;
-  return href.startsWith(browse) ? get().issues.get(decodeURIComponent(href.slice(browse.length))) : undefined;
-}
-/** Opens a link from a document: an issue this app has opens here, unless `newTab` (Mod or middle click) asks for Jira's page. */
+/** Opens a link from a document: an issue on this Jira site opens here, held or not (`openIssueByKey`, BJ-354), unless
+ *  `newTab` (Mod or middle click) asks for Jira's page. */
 export function followLink(href: string, newTab = false) {
-  const issue = newTab ? undefined : appIssue(href);
-  if (issue) navigate({ board: issueBoardId(issue), selected: issue.key, panel: true, view: get().view });
+  const key = newTab ? undefined : linkedIssueKey(href);
+  if (key) openIssueByKey(key);
   else window.open(href, "_blank", "noopener,noreferrer");
 }
 

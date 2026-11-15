@@ -116,21 +116,20 @@ test("on a long trail the epic is its icon alone, named and titled as before", (
   expect(crumbType(linkBody(html, "Z-3"))).toBe("Sub-task");
 });
 
-test("an epic the mirror doesn't hold is plain text, its key with no icon, on a short trail and a long one", () => {
+test("BJ-354: an epic the mirror doesn't hold is its key with no icon, a link into the app, on a short trail and a long one", () => {
   const orphan = (patch: Partial<Issue>) => issue("Z-8", { parent: "Z-9", parentLevel: 1, ...patch });
-  const span = (html: string) => html.match(/<span aria-label="Z-9"[^>]*>[\s\S]*?<\/span><\/span>|<span title="Z-9"[^>]*>([\s\S]*?)<\/span><\/li>/)?.[0] ?? "";
   commit({ issues: new Map([...all, orphan({})].map((i) => [i.key, i])) });
   const short = open("Z-8", null, { issues: new Map([...all, orphan({})].map((i) => [i.key, i])) });
   expect(crumbs(short)).toEqual(["SSpace", "Z-9", "Z-8Z-8 title"]);
-  expect(short).not.toContain('href="/issue/Z-9"');
-  expect(span(short)).toContain(">Z-9<");
-  expect(span(short)).not.toMatch(/title="Epic"|<svg/);
+  // Its page in the app, whose route keeps it first (tree.tsx `whenKept`), never Jira's page.
+  expect(linkTo(short, "Z-9")).not.toBe("");
+  expect(short).not.toContain("/browse/Z-9");
+  expect(linkBody(short, "Z-9")).toBe('<span class="ui-entity-id ">Z-9</span>');
   // A long trail through it: the epic stays its key, since there is no type to show.
   const chain = [orphan({}), issue("Z-10", { parent: "Z-8" }), issue("Z-11", { type: "Sub-task", parent: "Z-10" })];
   const long = open("Z-11", { path: ["Z-8", "Z-10"] }, { issues: new Map([...all, ...chain].map((i) => [i.key, i])) });
   expect(crumbs(long)).toEqual(["SSpace", "Z-9", "Z-8", "Z-10", "Z-11Z-11 title"]);
-  expect(span(long)).toContain(">Z-9<");
-  expect(span(long)).not.toMatch(/title="Epic"|<svg/);
+  expect(linkBody(long, "Z-9")).toBe('<span class="ui-entity-id ">Z-9</span>');
 });
 
 test("a board's breadcrumb is the space alone, the current page that still links (it clears the board's search)", () => {

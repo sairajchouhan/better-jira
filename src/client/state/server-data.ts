@@ -1,4 +1,5 @@
 import { type Board, type Full, type Issue } from "@/shared/issue-model";
+import type { KeptOutcome } from "@/shared/inbox-model";
 /**
  * Reading the server's mirror of Jira. Reads go through TanStack Query, which dedupes loads in flight; the property poll
  * merges Jira's changes into the issues (keeping local edits on top, see local-edits.ts) and runs at once when the
@@ -161,17 +162,33 @@ export async function loadFull(key: string, force = false) {
   }
 }
 const fullPath = (key: string) => `/api/issues/${encodeURIComponent(key)}`;
-/** An issue the tab lacks, opened by key (an inbox row): reading it has the mirror keep it on no board (server mirror.ts
+/** An issue the tab lacks, opened by key (a link, an inbox row): reading it has the mirror keep it on no board (server mirror.ts
  *  `kept`, as Linear's `hydrateModel` loads a model its sync didn't bring), and the poll then brings it here (BJ-341).
- *  Undefined when Jira has no such issue or can't be reached. */
-export async function keepIssue(key: string): Promise<Issue | undefined> {
-  if (!get().issues.has(key)) {
-    const response = await fetch(fullPath(key)).catch(() => undefined);
-    if (!response?.ok) return undefined;
-    await poll.refetch();
-  }
+ *  Undefined when Jira has no such issue or hides it from this account: Jira answers both with a 404 ("does not exist or you
+ *  do not have permission to see it"), and so does the server. Rejects when it can't be read now (Jira or the server
+ *  unreachable), so a passing failure is never told as not found (BJ-355). Asks while one read is out share it. */
+export async function keptIssue(key: string): Promise<Issue | undefined> {
+  if (!get().issues.has(key) && !(await queryClient.fetchQuery({ queryKey: keptKey(key), queryFn: () => readKept(key) })))
+    return undefined;
   return get().issues.get(key);
 }
+const keptKey = (key: string) => ["kept", key] as const;
+async function readKept(key: string) {
+  const response = await fetch(fullPath(key));
+  if (response.status === 404) return false;
+  if (!response.ok) throw new Error(`Could not read ${key} from Jira. Try again in a moment.`);
+  await poll.refetch();
+  return true;
+}
+/** `keptIssue`, with a failed read as undefined too, for a caller with its own fallback (⌘K opens Jira's page). */
+export const keepIssue = (key: string) => keptIssue(key).catch(() => undefined);
+/** How the last read of an issue the tab lacks went: still reading, couldn't be read, or else Jira has none (`missing`; also
+ *  before any read, as for a notification reselected after a reload, which stayed only because its issue didn't open). */
+export function keptOutcome(key: string): KeptOutcome {
+  const read = queryClient.getQueryState(keptKey(key));
+  return read?.fetchStatus === "fetching" ? "reading" : read?.status === "error" ? "unreachable" : "missing";
+}
+export const subscribeKept = (listener: () => void) => queryClient.getQueryCache().subscribe(listener);
 /** Loads an issue's Jira record and keeps local field edits on top. The first read after a cold load takes the preloaded
  *  record when it is this issue's, and drops it otherwise, so a later read never gets an old answer. */
 async function fetchFull(key: string) {

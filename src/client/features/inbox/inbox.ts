@@ -4,7 +4,7 @@ import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { commentAnchor, unreadCount, type InboxItem } from "@/shared/inbox-model";
 import { clearedComments, visitClears } from "@/shared/inbox-visit";
 import { statusOf as issueStatusOf, get, set, useStore, issueBoardId } from "@/client/state/store";
-import { keepIssue, queryClient } from "@/client/state/server-data";
+import { keepIssue, keptOutcome, queryClient, subscribeKept } from "@/client/state/server-data";
 import { navigate, router, showAnchor, ui } from "@/client/features/navigation/app-navigation";
 import { createInboxStore, type Category, type DeleteConfirmation, type Feed } from "@/client/state/inbox-store";
 import type { InfiniteData } from "@tanstack/query-core";
@@ -55,6 +55,11 @@ const subscribeConfirmation = (l: () => void) => (
 export const useConfirmation = () =>
   useSyncExternalStore(subscribeConfirmation, () => confirmation);
 
+/** How reading the issue of a notification shown on its own went (`missingIssueNote` words it). */
+export function useKeptOutcome(key: string) {
+  const read = () => keptOutcome(key);
+  return useSyncExternalStore(subscribeKept, read, read);
+}
 /** Opens a row: its issue beside the list, or the notification itself while its issue is not in the mirror. */
 function openInboxRow(item: InboxItem, open: "side" | "page") {
   const issue = get().issues.get(item.key);

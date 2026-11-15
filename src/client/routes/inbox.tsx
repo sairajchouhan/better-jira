@@ -34,7 +34,7 @@ import { SidebarToggle } from "@/client/features/navigation/breadcrumbs";
 import { useSearch } from "@tanstack/react-router";
 import { toggleFavorite } from "@/client/features/navigation/favorites";
 
-import { usePush, changeView, toggleFilter, clearFilters, selectRow, toggleRead, markAllRead, deleteRow, deleteAll, openSnooze, snoozeMenu, snoozeRow, unsnoozeRow, showTab, inbox, statusOf, ROW_PARAM, useFeed, useSelected, useView, useShownView, useFind, openFind, setFind, closeFind, useLocal, useUnreadCount, orderOf, facets, itemsOf, clearUnseen, useConfirmation } from "@/client/features/inbox/inbox";
+import { usePush, changeView, toggleFilter, clearFilters, selectRow, toggleRead, markAllRead, deleteRow, deleteAll, openSnooze, snoozeMenu, snoozeRow, unsnoozeRow, showTab, inbox, statusOf, ROW_PARAM, useKeptOutcome, useFeed, useSelected, useView, useShownView, useFind, openFind, setFind, closeFind, useLocal, useUnreadCount, orderOf, facets, itemsOf, clearUnseen, useConfirmation } from "@/client/features/inbox/inbox";
 import { InboxIssuePane } from "./issue-view";
 import { firstKey } from "@/client/state/jira-sync";
 import { SelectRow, Toggle, ViewOptions } from "@/client/components/display-options";
@@ -1097,6 +1097,7 @@ export function InboxPane() {
 /** A notification whose issue is not in the mirror, in the pane: its issue, Jira's sentence, the comment (three lines, as the
  *  grouped cards), the group's earlier updates and why the issue isn't here. */
 export function InboxNotification({ row }: { row: InboxItem }) {
+  const outcome = useKeptOutcome(row.key);
   return (
     <div className="mx-auto w-full max-w-[680px] p-8">
       <Text as="h1" variant="title2">
@@ -1120,10 +1121,7 @@ export function InboxNotification({ row }: { row: InboxItem }) {
         <InboxGroupUpdates key={row.id} row={row} mirrored={false} />
       </div>
       <Text as="p" variant="mini" color="muted" className="mt-4">
-        {missingIssueNote(
-          row.key,
-          new Set([...get().issues.keys()].map((k) => k.split("-")[0]!)),
-        )}
+        {missingIssueNote(outcome)}
       </Text>
     </div>
   );

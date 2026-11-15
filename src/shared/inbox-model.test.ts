@@ -223,8 +223,13 @@ test("a description mention reads as Linear's (Jira says 'on a task'); a missing
   expect(
     describe(item({ kind: "mentioned", message: "Ana mentioned you in a comment", preview: "hi" })),
   ).toBe("Ana mentioned you in a comment: hi");
-  expect(missingIssueNote("KAN-9", new Set(["KAN"]))).toContain("may have been deleted");
-  expect(missingIssueNote("OUT-9", new Set(["KAN"]))).toContain("outside your mirrored boards");
+});
+
+test("BJ-355: the note of a notification whose issue didn't open never says it opens in Jira", () => {
+  expect(missingIssueNote("missing")).toBe("Jira has no such issue, or you can't see it. It may have been deleted.");
+  expect(missingIssueNote("unreachable")).toContain("Couldn't reach Jira");
+  expect(missingIssueNote("reading")).toBe("Opening this issue…");
+  for (const outcome of ["reading", "missing", "unreachable"] as const) expect(missingIssueNote(outcome)).not.toContain("opens in Jira");
 });
 
 test("unreadCount counts Jira's unread rows beyond the loaded pages, less local state", () => {

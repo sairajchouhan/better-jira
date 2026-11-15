@@ -178,23 +178,20 @@ function ViewCrumb({ view }: { view: SavedView }) {
 }
 /**
  * An ancestor's crumb in the trail, Linear's issue crumb (`n9` → `Upi`): the key, the title as its tooltip; it opens that issue's
- * page with the trail that led to it, and right-click gives its copy rows. Text alone when the mirror doesn't hold the issue (an
- * epic outside it). The variants below say what it draws.
+ * page with the trail that led to it, and right-click gives its copy rows. One the mirror doesn't hold (an epic in another
+ * project) opens here too, kept first (`navigate`, BJ-354); it has no copy rows until then. The variants below say what it draws.
  */
 function AncestorCrumb({ id, crumb, className = "", label, children }: { id: string; crumb: AncestorCrumbModel; className?: string; label?: string; children: ReactNode }) {
   const { issue } = crumb;
   const board = useStore((s) => issueBoardId(issue, s));
+  const link = (
+    <CrumbLink to={{ board, selected: crumb.key, panel: true, view: "page", trail: crumb.trail }} aria-label={label} title={crumb.title} className={CRUMB}>
+      {children}
+    </CrumbLink>
+  );
   return (
     <Crumb id={id} className={`shrink-0 ${className}`}>
-      {issue ? (
-        <ContextMenu label="Issue options" entries={() => copyEntries(issue)}>
-          <CrumbLink to={{ board, selected: crumb.key, panel: true, view: "page", trail: crumb.trail }} aria-label={label} title={crumb.title} className={CRUMB}>
-            {children}
-          </CrumbLink>
-        </ContextMenu>
-      ) : (
-        <span aria-label={label} title={crumb.title} className="flex h-6 min-w-0 items-center">{children}</span>
-      )}
+      {issue ? <ContextMenu label="Issue options" entries={() => copyEntries(issue)}>{link}</ContextMenu> : link}
     </Crumb>
   );
 }
