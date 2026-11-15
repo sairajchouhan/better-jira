@@ -5,7 +5,7 @@ import { dropAll, dropPlan } from "./board-drop";
 
 const card = (key: string, status: string, rank: string): Issue => ({
   key,
-  board: 1,
+  boards: [1],
   summary: key,
   status,
   assignee: null,
