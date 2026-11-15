@@ -10,7 +10,7 @@ This applies to every bug fix, every behaviour question, and whenever the user s
 2. **Build it the way the bundle does:** same values, behaviour and component boundaries. The same control in two places is one component rendered twice. Fix the shared component so every instance gets the fix.
 3. **Verify against Linear:** run the same case in ours and in Linear, compare, and report what matches and what still differs.
 4. **Cite Linear** (the bundle file and symbol, and what the live site showed) in the reply. In every delegate brief, steps 1–3 come first.
-5. **Differ only when the user says so.** Record each such choice in `.raj/done.md`, and never revert one in parity work.
+5. **Differ only when the user says so.** Record each such choice in `.raj/linear-differences.md`, and never revert one in parity work.
 
 # Components: React Aria first
 

@@ -220,7 +220,7 @@ test("nested lists nest sub-issues under their parent issue, never an epic's iss
   expect(rows).toContainEqual(["E-2", 0]);
 });
 
-// BJ-280: the user's deviation from Linear (.raj/done.md): an epic's page lists its issues in its Sub-issues section, as Jira's
+// BJ-280: the user's deviation from Linear (.raj/linear-differences.md): an epic's page lists its issues in its Sub-issues section, as Jira's
 // epic page lists its child work items. On the child the epic stays its Epic only (parentOf above), never its Parent.
 test("BJ-280: an epic's Sub-issues section lists its issues; a sub-task stays under its parent; an initiative lists none", () => {
   // The epic's own issue, in its space or another Jira project.
@@ -240,7 +240,7 @@ test("BJ-280: an epic's Sub-issues section lists its issues; a sub-task stays un
   expect([initiative, billing, inBilling, subTask].map(listsSubIssues)).toEqual([false, true, true, true]);
 });
 
-// BJ-289: the user's deviation from Linear (.raj/done.md): the line under the title names the parent Task ("Sub-issue of"), else
+// BJ-289: the user's deviation from Linear (.raj/linear-differences.md): the line under the title names the parent Task ("Sub-issue of"), else
 // the epic ("In epic": an issue in an epic is not a sub-issue), so an issue in an epic points back to the epic whose Sub-issues
 // section lists it (BJ-280). Parent itself stays epic-free.
 test("BJ-289: the title line names the parent Task first as a sub-issue, else the epic as an epic; an epic or an orphan names none", () => {

@@ -55,7 +55,7 @@ export const canNest = (parent: Leveled, child: Leveled) => nestable(parent) && 
 
 /**
  * The issue whose Sub-issues section lists this one: its parent issue (`parentOf`), or its epic when its Jira parent is one, as
- * Jira's epic page lists its child work items (BJ-280, the user's deviation from Linear's project page, .raj/done.md). Only the
+ * Jira's epic page lists its child work items (BJ-280, the user's deviation from Linear's project page, .raj/linear-differences.md). Only the
  * section and its counts read this (sub-issue lists, progress, the peek, Open sub-issue): on the child the epic stays its Epic,
  * never its Parent. An initiative lists nothing. A sub-task stays under its own parent, nested below the epic's issue.
  */
@@ -67,7 +67,7 @@ export function listedUnder(issue: Parented, lookup: IssueLookup): string | unde
  * The issue the line under an issue's title names, that Open parent issue (⌘⇧↑) opens, and whose issues its ring and ⌘⇧→ open,
  * with the line's variant: its parent issue (`parentOf`), "sub-issue" ("Sub-issue of"), when it has one; else its epic, "epic"
  * ("In epic"), so an issue in an epic points back to the epic that lists it (BJ-289, the user's deviation from Linear,
- * .raj/done.md; it completes BJ-280's epic Sub-issues section). That is the issue whose Sub-issues section lists it
+ * .raj/linear-differences.md; it completes BJ-280's epic Sub-issues section). That is the issue whose Sub-issues section lists it
  * (`listedUnder`). A sub-task names its parent, never the epic; an epic or an initiative names none. Only the title line, ⌘⇧↑
  * and ⌘⇧→ read this: the epic stays out of the Parent property, Remove › Parent and every other Parent surface (`parentOf`).
  */
