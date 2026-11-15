@@ -10,6 +10,7 @@ import {
 } from "react";
 import { Popover, PopoverContext } from "react-aria-components";
 import { Tooltip, useTooltip } from "./tooltip";
+import { OverlayBoundary } from "./overlay-boundary";
 import {
   CARD_FALLBACKS,
   choosePlacement,
@@ -121,7 +122,9 @@ function HoverCardSurface({ placement, label, children }: { placement: Placement
         aria-label={label}
         className="hover-card"
       >
-        {children}
+        <OverlayBoundary label={label ?? "Card"} close={actions.close}>
+          {children}
+        </OverlayBoundary>
       </Popover>
     </PopoverContext>
   );

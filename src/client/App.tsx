@@ -1,7 +1,7 @@
 import "./index.css";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { RouterProvider } from "@tanstack/react-router";
-import { router } from "@/client/features/navigation/app-navigation";
+import { router, ui } from "@/client/features/navigation/app-navigation";
 import { AppRouterProvider } from "@/client/features/navigation/app-link";
 import { ReminderPicker, ReminderDelivery } from "@/client/features/reminders/reminders";
 import { InboxPushDelivery } from "@/client/features/inbox/desktop-notifications";
@@ -22,6 +22,7 @@ import { Text } from "@/client/components/text";
 import { BootScreen } from "@/client/boot-screen";
 import { Button } from "@/client/components/button";
 import { ErrorBoundary, SurfaceError } from "@/client/components/error-boundary";
+import { OverlayBoundary } from "@/client/components/overlay-boundary";
 import { ShortcutHelp, useLinearHotkeys } from "@/client/features/navigation/shortcuts";
 import { useRecordVisits } from "@/client/features/navigation/recents";
 import { RouteTitle } from "@/client/features/navigation/route-title-updater";
@@ -106,6 +107,10 @@ function Booting() {
   );
 }
 
+const closeOverlay = () => ui.send({ type: "overlay.close" });
+/** An overlay's name in a failure toast: "add-board" is "Add board". */
+const overlayLabel = (overlay: string | null) => (overlay ? overlay[0]!.toUpperCase() + overlay.slice(1).replaceAll("-", " ") : "");
+
 /** The frame every route renders inside: sidebar, the board header, the boards kept mounted, overlays.
  *  `children` is the matched route: a side panel, an issue page, a document, the inbox or the views list. */
 function Shell({ children }: { children: ReactNode }) {
@@ -170,27 +175,30 @@ function Shell({ children }: { children: ReactNode }) {
       <Suspense>
         <Devtools position="bottom-right" />
       </Suspense>
-      {overlay === "palette" && <CommandPalette />}
-      {overlay === "search" && <IssueSearch />}
-      {overlay === "shortcuts" && <ShortcutHelp />}
-      {overlay === "add-board" && <AddBoard />}
-      {overlay === "preferences" && <Preferences />}
-      {overlay === "help" && <HelpMenu />}
-      {overlay !== "help" && isPalettePage(overlay) && <CommandPalette page={overlay} />}
-      {current && overlay === "assign" && <PropertyPicker issue={current} field="assignee" />}
-      {current && overlay === "status" && <PropertyPicker issue={current} field="status" />}
-      {overlay === "create" && <CreateIssue />}
-      {current &&
-        (overlay === "priority" ||
-          overlay === "type" ||
-          overlay === "labels" ||
-          overlay === "project" ||
-          overlay === "milestone" ||
-          overlay === "due") && <PropertyPicker issue={current} field={overlay} />}
-      {current && overlay === "options" && <IssueOptions issue={current} />}
-      {current && overlay === "reminder" && <ReminderPicker issue={current} />}
-      {current && overlay === "relations" && <Relations issue={current} />}
-      {current && overlay === "subscribers" && <Subscribers issue={current} />}
+      {/* The overlay open now; a render error in it, above its own surface's boundary too, closes it with a toast. */}
+      <OverlayBoundary key={overlay} label={overlayLabel(overlay)} close={closeOverlay}>
+        {overlay === "palette" && <CommandPalette />}
+        {overlay === "search" && <IssueSearch />}
+        {overlay === "shortcuts" && <ShortcutHelp />}
+        {overlay === "add-board" && <AddBoard />}
+        {overlay === "preferences" && <Preferences />}
+        {overlay === "help" && <HelpMenu />}
+        {overlay !== "help" && isPalettePage(overlay) && <CommandPalette page={overlay} />}
+        {current && overlay === "assign" && <PropertyPicker issue={current} field="assignee" />}
+        {current && overlay === "status" && <PropertyPicker issue={current} field="status" />}
+        {overlay === "create" && <CreateIssue />}
+        {current &&
+          (overlay === "priority" ||
+            overlay === "type" ||
+            overlay === "labels" ||
+            overlay === "project" ||
+            overlay === "milestone" ||
+            overlay === "due") && <PropertyPicker issue={current} field={overlay} />}
+        {current && overlay === "options" && <IssueOptions issue={current} />}
+        {current && overlay === "reminder" && <ReminderPicker issue={current} />}
+        {current && overlay === "relations" && <Relations issue={current} />}
+        {current && overlay === "subscribers" && <Subscribers issue={current} />}
+      </OverlayBoundary>
       <DeleteConfirm />
     </div>
   );

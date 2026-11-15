@@ -13,6 +13,7 @@ import {
 import { createPortal, flushSync } from "react-dom";
 import { Popover as AriaPopover } from "react-aria-components";
 import { anchoredPlacement, menuRoom } from "./menu-geometry";
+import { OverlayBoundary } from "./overlay-boundary";
 
 /** What a popup offers the menus inside it: closing it (every level at once), as a menu's Enter or a submenu's Escape does. */
 export const MenuSurfaceContext = createContext<{ close: () => void } | null>(null);
@@ -313,6 +314,8 @@ export function Popover({
 }) {
   const { keys } = usePopupFocus(popup, close, POPOVER_FOCUS, trigger);
   const [anchor] = useState(() => trigger.current);
+  // What a failure names: the trigger's name ("Display options").
+  const label = anchor?.getAttribute("aria-label") || anchor?.textContent?.trim() || "Menu";
   const style = usePlacement(
     popup,
     anchor,
@@ -349,7 +352,9 @@ export function Popover({
             keys(e);
           }}
         >
-          <ElevationScope level={elevation.level}>{children}</ElevationScope>
+          <OverlayBoundary label={label} close={close}>
+            <ElevationScope level={elevation.level}>{children}</ElevationScope>
+          </OverlayBoundary>
         </div>
       </AriaPopover>
     </MenuSurfaceContext>
@@ -522,7 +527,10 @@ export function MenuSurface({
           }}
         >
           <MenuSurfaceContext value={{ close }}>
-            <ElevationScope level={elevation.level}>{children}</ElevationScope>
+            {/* A render error closes this surface only, with a toast (OverlayBoundary); the page under it keeps working. */}
+            <OverlayBoundary label={label} close={close}>
+              <ElevationScope level={elevation.level}>{children}</ElevationScope>
+            </OverlayBoundary>
           </MenuSurfaceContext>
         </div>
       </AriaPopover>

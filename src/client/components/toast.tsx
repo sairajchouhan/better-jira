@@ -11,6 +11,7 @@ import {
 } from "react-aria-components";
 import { Icon } from "./icons";
 import { toasts, type QueuedToast, type ToastQueue } from "./toast-queue";
+import { ErrorBoundary } from "./error-boundary";
 import "./control-tokens.css";
 import "./toast.css";
 
@@ -36,7 +37,12 @@ export function ToastEntry({ queue, toast }: { queue: ToastQueue; toast: AriaQue
   }, [queue, context, duration, revision]);
   return (
     <AriaToast toast={toast} className="ui-toast-entry">
-      <ToastContext value={context}>{content}</ToastContext>
+      {/* A toast that fails to render dismisses itself; the others and the page stay (it raises no toast of its own). */}
+      <ToastContext value={context}>
+        <ErrorBoundary fallback={null} onError={context.dismiss}>
+          {content}
+        </ErrorBoundary>
+      </ToastContext>
     </AriaToast>
   );
 }

@@ -25,6 +25,7 @@ import {
   useReturnFocus,
 } from "./menu-surface";
 import { Text } from "./text";
+import { ErrorBoundary, SurfaceError } from "./error-boundary";
 import "./control-tokens.css";
 import "./dialog.css";
 
@@ -96,7 +97,7 @@ function DialogRoot({
   if (useServerRender())
     return (
       <div role="dialog" {...boxProps}>
-        <DialogScope close={close} level={elevation.level}>
+        <DialogScope label={label} close={close} level={elevation.level}>
           {children}
         </DialogScope>
       </div>
@@ -116,7 +117,7 @@ function DialogRoot({
       <Modal data-backdrop className="ui-modal">
         {third && <div data-backdrop className="ui-modal-spacer-above" />}
         <AriaDialog ref={box} {...boxProps}>
-          <DialogContent box={box} close={close} level={elevation.level}>
+          <DialogContent box={box} label={label} close={close} level={elevation.level}>
             {children}
           </DialogContent>
         </AriaDialog>
@@ -133,11 +134,13 @@ function DialogRoot({
  */
 function DialogContent({
   box,
+  label,
   close,
   level,
   children,
 }: {
   box: RefObject<HTMLElement | null>;
+  label: string;
   close: () => void;
   level: number;
   children: ReactNode;
@@ -158,7 +161,7 @@ function DialogContent({
   }, [box]);
   return (
     <div className="contents" onKeyDown={(event) => dialogKey(event, close)}>
-      <DialogScope close={close} level={level}>
+      <DialogScope label={label} close={close} level={level}>
         {children}
       </DialogScope>
     </div>
@@ -179,15 +182,32 @@ export function dialogKey(
   }
 }
 
-/** What the dialog's content reads: its close (as a menu surface's, for menus inside) and its elevation. */
-function DialogScope({ close, level, children }: { close: () => void; level: number; children: ReactNode }) {
+/** What the dialog's content reads: its close (as a menu surface's, for menus inside) and its elevation. A render error in the
+ *  content stays in the box (DialogError) and the page under it keeps working (ship bar blocker 3). */
+function DialogScope({ label, close, level, children }: { label: string; close: () => void; level: number; children: ReactNode }) {
   const context = useMemo(() => ({ close }), [close]);
   return (
     <MenuSurfaceContext value={context}>
       <DialogContext value={context}>
-        <ElevationScope level={level}>{children}</ElevationScope>
+        <ElevationScope level={level}>
+          <ErrorBoundary fallback={<DialogError label={label} />}>{children}</ErrorBoundary>
+        </ElevationScope>
       </DialogContext>
     </MenuSurfaceContext>
+  );
+}
+
+/** A dialog whose content failed to render: Linear's fast-create modal keeps its box and shows its ErrorBoundary's compact
+ *  fallback inside it (LinearLayout.B0VuJnVg.js `tt` with `defaultFallback`: "Exception detected loading this section" and
+ *  Reload). Ours is the board's SurfaceError (what failed, Try again, Reload) under a Close; Escape and the backdrop close too. */
+function DialogError({ label }: { label: string }) {
+  return (
+    <>
+      <div className="ui-dialog-header">
+        <Close />
+      </div>
+      <SurfaceError title={`Couldn't show ${label}`} />
+    </>
   );
 }
 
