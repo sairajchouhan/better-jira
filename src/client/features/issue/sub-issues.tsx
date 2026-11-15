@@ -395,7 +395,9 @@ export function SubIssues({ issue }: { issue: Issue }) {
               aria-label={`Sub-issues of ${issue.key}`}
               keyboardNavigationBehavior="tab"
               disallowTypeAhead
-              dragAndDropHooks={manual ? dragAndDropHooks : undefined}
+              // Always the hooks, off by `isDisabled` when not Manual: React Aria's GridList calls more hooks with them than
+              // without, so swapping them for undefined as the ordering changed crashed the page (React #311).
+              dragAndDropHooks={dragAndDropHooks}
             >
               {model.rows.map(({ issue: child, depth, contextOnly }, index) => (
                 <SubIssueRow

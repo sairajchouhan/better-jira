@@ -497,7 +497,10 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
           afterCreate = outbox.some(
             (job) => job.key !== key && job.ops[0]?.op === "create" && text.includes(`"${job.key}"`),
           );
-        const waiting = afterCreate
+        // A create never folds into an earlier job: one taken over from a closed tab finds this tab's edits of the issue
+        // already queued, and Jira must make the issue before they run.
+        const create = ops[0]?.op === "create";
+        const waiting = afterCreate || create
           ? undefined
           : outbox.findLast((job) => job.key === key && !job.started);
         const hold = ops.some((op) => op.op === "status") ? clock.now() + STATUS_HOLD : undefined;
@@ -508,13 +511,14 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
           if (!waiting.ops.length) outbox.splice(outbox.indexOf(waiting), 1);
         } else {
           const job = { key, board, ops, ...(hold ? { hold } : {}) };
-          // A create queued late (taken over from a closed tab) goes before the queued jobs naming it, so they get its Jira key (BJ-19).
-          const naming =
-            ops[0]?.op === "create"
-              ? outbox.findIndex(
-                  (other) => !other.started && JSON.stringify(other.ops).includes(`"${key}"`),
-                )
-              : -1;
+          // A create queued late (taken over from a closed tab) goes before the queued jobs for or naming it, so they get its
+          // Jira key (BJ-19).
+          const naming = create
+            ? outbox.findIndex(
+                (other) =>
+                  !other.started && (other.key === key || JSON.stringify(other.ops).includes(`"${key}"`)),
+              )
+            : -1;
           if (naming >= 0) outbox.splice(naming, 0, job);
           else outbox.push(job);
         }

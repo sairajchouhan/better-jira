@@ -39,12 +39,13 @@ export function FutureTimeStep({
         onPick(new Date(time).toISOString());
       }}
     >
-      <Field className="block p-2">
-        <Field.Label className="block text-[13px]">{label}</Field.Label>
+      {/* The input is named `inputLabel` alone: a Field.Label would name it by aria-labelledby, which outranks aria-label, so
+          "Custom reminder time" read as "Custom reminder". The visible title is plain text above it. */}
+      <Field aria-label={inputLabel} className="block p-2">
+        <span className="block text-[13px]">{label}</span>
         <TextInput
           autoFocus
           required
-          aria-label={inputLabel}
           type="datetime-local"
           min={min}
           value={value}

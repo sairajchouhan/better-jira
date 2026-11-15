@@ -78,11 +78,9 @@ export function TimeOptionRows({
       {matches.map((option) => (
         <OptionItem key={option.label} option={option} query={query} onPick={onPick} />
       ))}
-      {query && !extra && !matches.length && (
-        <div role="status">
-          <Menu.Empty always>Choose a future date and time</Menu.Empty>
-        </div>
-      )}
+      {/* Menu.Empty straight in the rows: it is a collection Header, and a plain element between collection rows breaks React
+          Aria's collection (no rows, then a render loop as the next keystroke lands). */}
+      {query && !extra && !matches.length && <Menu.Empty always>Choose a future date and time</Menu.Empty>}
       <Menu.Item value="Custom…" keywords={query ? [query] : undefined} icon={<Icon name="clock" />} onSelect={onCustom}>
         Custom…
       </Menu.Item>

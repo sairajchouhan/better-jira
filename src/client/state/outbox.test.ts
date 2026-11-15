@@ -535,6 +535,23 @@ test("BJ-19: a create queued after jobs that name it goes first, so they get its
   ]);
 });
 
+test("a create taken over from a closed tab goes before this tab's queued edits of that issue, never after them", async () => {
+  const made = issue("KAN-NEW12");
+  const h = harness({
+    reply: (key, body) => (body.ops[0]?.op === "create" ? { created: { [key]: "KAN-64" } } : {}),
+  });
+  // Another tab was creating it; this tab's edit of the issue itself waits. The tab closes and this one takes the create over.
+  h.outbox.own(made.key, "closed-tab", true);
+  h.send(edit(made, { priority: "High" }));
+  h.outbox.release(made.key);
+  h.send([made.key, {}, { issue: made }]);
+  await h.advance(0);
+  expect(h.sent.map((s) => [s.key, s.ops.map((op) => op.op)])).toEqual([
+    [made.key, ["create"]],
+    ["KAN-64", ["fields"]],
+  ]);
+});
+
 test("BJ-22: a takeover saves this tab's edits first, then builds the create from the saved copy every tab merged into", async () => {
   // The browser's saved data: the closed tab's new issue, with its summary edit.
   const saved: LocalChange = {

@@ -525,7 +525,9 @@ export function VirtualGridList<T>({
             disallowTypeAhead
             // No selectionMode: the app owns the selection and each row draws it (see the top of this file).
             escapeKeyBehavior="none"
-            dragAndDropHooks={drop ? dragAndDropHooks : undefined}
+            // Always the hooks, off by `isDisabled` with no `drop`: GridList calls more hooks with them than without, so
+            // swapping them for undefined when `drop` changed would crash the list (React #311).
+            dragAndDropHooks={dragAndDropHooks}
             className="ui-virtual-grid"
             style={GROW}
           >

@@ -603,8 +603,15 @@ function Menus({ base }: { base: InboxItem[] }) {
     return <FilterMenu entries={filterEntries(base, v)} close={close} />;
   if (overlay === "inbox-display") return <InboxDisplayOptions close={close} />;
   if (overlay === "inbox-push") return <DesktopNotificationOptions close={close} />;
-  if (overlay === "snooze") return <SnoozeMenu close={close} />;
   return null;
+}
+
+const closeOverlay = () => ui.send({ type: "overlay.close" });
+/** The snooze menu (H, and the header's Snooze notification), wherever the notification's actions show: beside the list, and on
+ *  the issue page opened from it (Linear's `HEn`), whose route has no list. */
+export function InboxSnooze() {
+  const open = useStore((s) => s.overlay === "snooze");
+  return open ? <SnoozeMenu close={closeOverlay} /> : null;
 }
 
 /** Linear's inbox filter panel (ContentViewSubheader `S`, modelType "notification"): the shared FilterBar, its blocks and "+",
@@ -964,6 +971,7 @@ export function InboxList() {
         <div ref={end} data-inbox-end aria-hidden className="h-px" />
       </div>
       <Menus base={base} />
+      <InboxSnooze />
       <DeleteAllConfirm />
       {menu && (
         <ActionMenu

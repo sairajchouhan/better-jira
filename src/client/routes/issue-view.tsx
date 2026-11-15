@@ -62,7 +62,7 @@ import {
 import { hotkeyOf, runShortcut } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
 import { post, useCommand, focusNode } from "@/client/features/navigation/commands";
-import { InboxIssueActions, InboxIssueGroup } from "./inbox";
+import { InboxIssueActions, InboxIssueGroup, InboxSnooze } from "./inbox";
 import { useCommentsSeen, useIssueVisit } from "@/client/features/inbox/issue-visit";
 import { SplitPanel } from "@/client/features/issue/split-panel";
 import { descriptionNotice, descriptionSession, type DescriptionPorts } from "@/client/features/issue/description-session";
@@ -91,7 +91,11 @@ export function IssueScreen() {
   const inbox = useStore((s) => s.inbox);
   if (!open) return null;
   return inbox ? (
-    <IssuePage key={firstKey(open.key)} issue={open} actions={<InboxIssueActions />} />
+    <>
+      <IssuePage key={firstKey(open.key)} issue={open} actions={<InboxIssueActions />} />
+      {/* The list's route hosts the snooze menu beside the list; this page has no list, so it hosts its own. */}
+      <InboxSnooze />
+    </>
   ) : (
     <IssuePage key={firstKey(open.key)} issue={open} navigation={<Stepper issueKey={open.key} />} />
   );
