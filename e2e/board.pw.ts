@@ -70,6 +70,18 @@ test("board layout: hidden columns, column titles, drag placement and My issues"
       await page.waitFor<string[]>(`(${keysIn("Doing")}).length===2&&${keysIn("Doing")}`),
     ).toEqual(["TEST-2", "TEST-3"]);
     expect(await page.eval(keysIn("Todo"))).toEqual(["TEST-6", "TEST-1", "TEST-4", "TEST-5"]);
+    // BJ-322: React Aria's keyboard drag reaches the same drop. Before the fix, any drop that added a card to a column
+    // left the app blank (React error #185), and the arrows that pick a drop target also moved the app's selection.
+    await page.page.locator('button[aria-label^="Drag TEST-5 "]').focus();
+    await page.key("Enter");
+    await page.key("Tab"); // Doing, the next column
+    await page.key("ArrowDown"); // before TEST-2
+    await page.key("Enter");
+    expect(
+      await page.waitFor<string[]>(`(${keysIn("Doing")}).length===3&&${keysIn("Doing")}`),
+    ).toEqual(["TEST-5", "TEST-2", "TEST-3"]);
+    expect(await page.eval(keysIn("Todo"))).toEqual(["TEST-6", "TEST-1", "TEST-4"]);
+    expect(await page.eval(`document.querySelectorAll("[data-key][data-selected]").length`)).toBe(0);
   });
   await test.step("R8: at 390px the bottom bar stays on one line", async () => {
     const page = await open("", { width: 390, height: 844 });

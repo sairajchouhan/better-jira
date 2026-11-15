@@ -45,7 +45,6 @@ import {
   groupLayout,
   groupVisibility,
   layoutOrder,
-  rankBetween,
   listRows,
   selectIssues,
   displayHiddenCount,
@@ -63,6 +62,7 @@ import { Button, IconButton } from "@/client/components/button";
 import { CountBadge } from "@/client/components/count-badge";
 import { Text } from "@/client/components/text";
 import { EntityIdentifier } from "@/client/components/entity-identifier";
+import { dropPlan } from "./board-drop";
 import "./board-column.css";
 // Memoised: an overlay opening (⌘K) re-renders App, and must not re-render every board.
 export const BoardView = memo(function BoardView({
@@ -259,23 +259,13 @@ export const BoardView = memo(function BoardView({
                           hide={() => hide(col.id)}
                           create={() => createIn(col, d.rows === "none" ? undefined : row)}
                           onDrop={(keys, before) => {
-                            // Several cards (a selection) land together before `before`, in their order: each one's rank
-                            // falls between the card placed before it and `before`.
-                            let list = layout.cells[ri]![ci]!.filter((i) => !keys.includes(i.key));
-                            for (const key of keys) {
-                              const rank = d.ordering === "manual" ? dropRank(list, before, d.descending) : undefined;
-                              actions.drop(
-                                key,
-                                personal ? (issues.get(key)?.board ?? board.id) : board.id,
-                                [
-                                  { by: d.columns, id: col.id },
-                                  ...(d.rows !== "none" ? [{ by: d.rows, id: row.id }] : []),
-                                ],
-                                rank,
-                              );
-                              const moved = issues.get(key);
-                              if (rank && moved) list = placeBefore(list, { ...moved, rank }, before);
-                            }
+                            const groups = [
+                              { by: d.columns, id: col.id },
+                              ...(d.rows !== "none" ? [{ by: d.rows, id: row.id }] : []),
+                            ];
+                            const order = { manual: d.ordering === "manual", descending: d.descending };
+                            for (const { key, rank } of dropPlan(layout.cells[ri]![ci]!, keys, before, order, (k) => issues.get(k)))
+                              actions.drop(key, personal ? (issues.get(key)?.board ?? board.id) : board.id, groups, rank);
                           }}
                         />
                       ))}
@@ -344,20 +334,6 @@ export const BoardView = memo(function BoardView({
     </div>
   );
 });
-
-/** The rank for a card dropped before `before` (or at the end) in a column shown in `list` order. */
-function dropRank(list: Issue[], before: string | undefined, descending: boolean) {
-  const i = list.findIndex((x) => x.key === before),
-    at = i < 0 ? list.length : i,
-    prev = list[at - 1]?.rank,
-    next = list[at]?.rank;
-  return descending ? rankBetween(next, prev) : rankBetween(prev, next);
-}
-
-function placeBefore(list: Issue[], issue: Issue, before: string | undefined) {
-  const at = list.findIndex((x) => x.key === before);
-  return at < 0 ? [...list, issue] : [...list.slice(0, at), issue, ...list.slice(at)];
-}
 
 /** Linear's "Hidden columns" list: pinned right, 338px, 50px header on the panel colour, 37px rows 10px apart. */
 function HiddenColumns({
