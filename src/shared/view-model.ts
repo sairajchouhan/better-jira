@@ -226,7 +226,7 @@ export function hasEstimates(issues: ReadonlyMap<string, Issue>, board?: number)
   let found = known.get(board);
   if (found === undefined) {
     found = false;
-    for (const i of issues.values()) if (i.estimate !== undefined && (board === undefined || i.board === board)) { found = true; break; }
+    for (const i of issues.values()) if (i.estimate !== undefined && (board === undefined || onBoard(i, board))) { found = true; break; }
     known.set(board, found);
   }
   return found;

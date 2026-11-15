@@ -634,7 +634,7 @@ describe("group ordering (BJ-205)", () => {
   test("BJ-334: a board has estimates only when one of its issues carries one; no board means every board", () => {
     const issues = new Map(all.map((i) => [i.key, { ...i, estimate: undefined } as Issue]));
     expect(hasEstimates(issues, board.id)).toBe(false);
-    const other = new Map([...issues, ["X-1", { ...all[0]!, key: "X-1", board: board.id + 1, estimate: 3 } as Issue]]);
+    const other = new Map([...issues, ["X-1", { ...all[0]!, key: "X-1", boards: [board.id + 1], estimate: 3 } as Issue]]);
     expect(hasEstimates(other, board.id)).toBe(false);
     expect(hasEstimates(other)).toBe(true);
     expect(hasEstimates(other, board.id + 1)).toBe(true);
