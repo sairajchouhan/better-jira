@@ -77,8 +77,9 @@ test("board layout: hidden columns, column titles, drag placement and My issues"
     await page.page.locator('[role=row][data-key="TEST-5"]').focus();
     await page.page.locator('button[aria-label^="Drag TEST-5 "]').focus();
     await page.key("Enter");
-    await page.key("Tab"); // Doing, the next column
-    await page.key("ArrowDown"); // before TEST-2
+    // Doing, the next column: its first gap, before TEST-2. The column itself is no stop while it holds cards (it dropped
+    // at the end), so no ↓ is needed past it.
+    await page.key("Tab");
     await page.key("Enter");
     expect(
       await page.waitFor<string[]>(`(${keysIn("Doing")}).length===3&&${keysIn("Doing")}`),
