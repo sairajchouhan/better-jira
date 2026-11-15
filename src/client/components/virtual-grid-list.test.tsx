@@ -5,6 +5,7 @@ import {
   chosenKeys,
   covers,
   dragOf,
+  dropOperation,
   dropSpotAt,
   flowOf,
   isShortcutKey,
@@ -203,4 +204,21 @@ test("keys on a keyboard drag's drop target stay React Aria's; keys on an item r
   expect(ownsKey(inside())).toBe(false);
   const field = 'input, textarea, [contenteditable="true"], [role=dialog], [role=menu], [role=listbox]';
   expect(ownsKey(inside("[role=row][data-key]", field))).toBe(false);
+});
+
+test("a keyboard drag stops only between rows: never on one, and on the list itself only when it has no row", () => {
+  expect(dropOperation({ type: "item", key: "A", dropPosition: "before" }, 3)).toBe("move");
+  expect(dropOperation({ type: "item", key: "C", dropPosition: "after" }, 3)).toBe("move");
+  expect(dropOperation({ type: "item", key: "B", dropPosition: "on" }, 3)).toBe("cancel");
+  // React Aria's ↑ from the first row and ↓ from the last pass through the root: a stop there dropped at the end.
+  expect(dropOperation({ type: "root" }, 3)).toBe("cancel");
+  expect(dropOperation({ type: "root" }, 0)).toBe("move");
+});
+
+test("the dragged row collapses in place, never hidden: React Aria's arrows read its top and Escape focuses it", async () => {
+  const css = (await Bun.file(new URL("./virtual-grid-list.css", import.meta.url)).text()).replace(/\/\*[\s\S]*?\*\//g, "");
+  const rule = css.match(/\.ui-virtual-row\[data-dragging\]\s*\{([^}]*)\}/)?.[1] ?? "";
+  expect(rule).toContain("height: 0");
+  expect(rule).toContain("padding: 0 !important");
+  expect(rule).not.toMatch(/display:\s*none|visibility:\s*hidden|content-visibility/);
 });

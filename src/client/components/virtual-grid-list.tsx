@@ -150,6 +150,16 @@ export function covers(offsets: readonly number[], range: readonly [number, numb
   return offsets[Math.min(range[0], end)]! <= top && offsets[end]! >= bottom;
 }
 
+/**
+ * Whether a drop at `target` is allowed in a list of `count` rows: between rows, never onto one; the list itself (its root)
+ * only when it has no row to land by. React Aria's keyboard drag steps through every allowed target, so an allowed root in a
+ * list with rows was a stop past its first and last rows that dropped at the end, which read as ↑ wrapping to the bottom.
+ */
+export function dropOperation(target: DropTarget, count: number): "move" | "cancel" {
+  if (target.type === "root") return count ? "cancel" : "move";
+  return target.dropPosition === "on" ? "cancel" : "move";
+}
+
 /** The key a drop at `target` lands before, among `keys` with the dragged ones left out; undefined is the end. */
 export function landsBefore(target: DropTarget, keys: readonly string[], dragged: ReadonlySet<string>): string | undefined {
   if (target.type === "root") return undefined;
@@ -444,7 +454,7 @@ export function VirtualGridList<T>({
     renderDropIndicator: (target) => <DropIndicator target={target} className="ui-drop-gap" />,
     dropTargetDelegate: delegate,
     acceptedDragTypes: drop ? [drop.type] : [],
-    getDropOperation: (target) => (target.type === "item" && target.dropPosition === "on" ? "cancel" : "move"),
+    getDropOperation: (target) => dropOperation(target, keys.length),
     onDragStart: (event) => {
       // React Aria knows no selection, so it names the picked row alone: the drag carries the app's selection with it.
       const plan = dragOf(keys, [...event.keys].map(String), selectedKeys ?? NO_KEYS);

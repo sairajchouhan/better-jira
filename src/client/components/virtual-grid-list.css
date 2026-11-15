@@ -14,8 +14,18 @@
   .ui-virtual-row {
     outline: none;
   }
+  /* Collapsed in place, never `display: none`: React Aria's keyboard drag reads each row's top to tell which way the list
+     runs (ListKeyboardDelegate `isReversed`), and a hidden row's top of 0 made ↓ step back up past it; and Escape gives
+     focus back to the dragged row (DragManager `cancel`), which a hidden row can't take, so it fell to the page. The row's
+     own padding (the card's gap) is a utility, so it is overridden here. */
   .ui-virtual-row[data-dragging] {
-    display: none;
+    height: 0;
+    min-height: 0;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0;
+    overflow: hidden;
+    opacity: 0;
   }
   .ui-drop-gap {
     position: relative;
