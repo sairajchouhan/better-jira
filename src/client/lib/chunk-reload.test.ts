@@ -9,7 +9,8 @@ function tab(options: { storage?: Map<string, string>; online?: boolean; drops?:
   const storage = options.storage ?? new Map<string, string>();
   const timers: { at: number; run: () => void }[] = [];
   let now = 1_000_000,
-    reloads = 0;
+    reloads = 0,
+    reloadedAt = 0;
   const ports: ChunkReloadPorts = {
     storage: () => {
       if (options.refuses) throw new Error("SecurityError");
@@ -25,7 +26,7 @@ function tab(options: { storage?: Map<string, string>; online?: boolean; drops?:
     sleep: (ms) => new Promise((resolve) => setTimeout(() => resolve(void (now += Math.max(ms, 1))), 0)),
     setTimer: (run, ms) => timers.push({ at: now + ms, run }),
     clearTimer: () => {},
-    reload: () => void reloads++,
+    reload: () => void (reloads++, (reloadedAt = now)),
     log: () => {},
   };
   const guard = createChunkReload(ports);
@@ -33,6 +34,8 @@ function tab(options: { storage?: Map<string, string>; online?: boolean; drops?:
     guard,
     storage,
     reloads: () => reloads,
+    reloadedAt: () => reloadedAt,
+    now: () => now,
     advance(ms: number) {
       now += ms;
       for (const timer of timers.splice(0)) if (timer.at <= now) timer.run();
@@ -88,13 +91,12 @@ test("a missing chunk rejects with an error TanStack's lazyRouteComponent won't 
 
 test("a reload waits a minute after beforeunload", async () => {
   const t = tab();
+  const start = t.now();
   t.guard.unloading();
-  let waited = false;
-  t.guard.whenSettled(() => ((waited = true), true));
   expect(t.guard.failed(MISSING)).toBe(true);
   await t.settle();
-  expect(waited).toBe(true);
-  expect(t.reloads()).toBe(1); // The fake sleep moved the clock past the grace minute.
+  expect(t.reloads()).toBe(1);
+  expect(t.reloadedAt()).toBeGreaterThanOrEqual(start + 60_000);
 });
 
 test("offline, nothing reloads", async () => {

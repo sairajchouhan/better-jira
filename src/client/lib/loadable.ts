@@ -32,6 +32,8 @@ const whenIdle = (run: () => void) =>
 
 export function createLoadables(load: typeof retryImport = retryImport) {
   const startup: Entry[] = [];
+  const preloadAtStartup = (name: string, order: number | "last", preload: () => Promise<unknown> | undefined) =>
+    void startup.push({ name, order: order === "last" ? LAST : Math.min(order, LAST), preload: async () => preload(), walked: false });
   return {
     loadable<T>(name: string, factory: () => Promise<T>, preloadOrder: PreloadOrder = ROUTE_ORDER): Loadable<T> {
       let pending: Promise<T> | undefined, value: T | undefined;
@@ -43,10 +45,13 @@ export function createLoadables(load: typeof retryImport = retryImport) {
             throw error;
           },
         ));
-      if (preloadOrder !== "skip")
-        startup.push({ name, order: preloadOrder === "last" ? LAST : Math.min(preloadOrder, LAST), preload: fetch, walked: false });
+      if (preloadOrder !== "skip") preloadAtStartup(name, preloadOrder, fetch);
       return { load: fetch, loaded: () => value };
     },
+
+    /** Files a preload of its own in the walk: a lazy route's `preload`, so its component renders without suspending
+     *  (Linear files each lazy route's `e.lazy` the same way). */
+    preloadAtStartup,
 
     /** Preloads every registered loadable by order, one per idle period. Resolves when the walk ends. */
     preloadAtIdle({
@@ -91,4 +96,5 @@ export function createLoadables(load: typeof retryImport = retryImport) {
 const app = createLoadables();
 export const loadable = app.loadable;
 export const preloadAtIdle = app.preloadAtIdle;
+export const preloadAtStartup = app.preloadAtStartup;
 export const startupLoadables = app.startupLoadables;

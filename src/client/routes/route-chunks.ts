@@ -1,8 +1,10 @@
-/** The lazy screens, as loadables: the idle walk fetches them, and a hover or the route fetches the same promise. */
-import { loadable, ROUTE_ORDER } from "@/client/lib/loadable";
+/**
+ * The lazy screens' chunks. They are not walked themselves: tree.tsx files each route component's own `preload` in the
+ * walk, which loads the chunk and also lets the component render without suspending.
+ */
+import { loadable } from "@/client/lib/loadable";
 
-/** The issue side panel and page. First in the walk with the editor, where they were fetched at the first idle before. */
-export const issueViewChunk = loadable("issue-view", () => import("./issue-view"), 10);
-export const inboxChunk = loadable("inbox", () => import("./inbox"), ROUTE_ORDER);
+export const issueViewChunk = loadable("issue-view", () => import("./issue-view"), "skip");
+export const inboxChunk = loadable("inbox", () => import("./inbox"), "skip");
 /** The document screen, and the document opened inside an issue. */
-export const issueDocumentChunk = loadable("issue-document", () => import("./issue-document"), ROUTE_ORDER);
+export const issueDocumentChunk = loadable("issue-document", () => import("./issue-document"), "skip");

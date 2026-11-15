@@ -5,6 +5,7 @@
  * boards, which the shell keeps mounted (App.tsx).
  */
 import { inboxChunk, issueDocumentChunk, issueViewChunk } from "./route-chunks";
+import { preloadAtStartup, ROUTE_ORDER } from "@/client/lib/loadable";
 import {
   createLink,
   createRootRouteWithContext,
@@ -115,6 +116,12 @@ export const SidePanel = lazyRouteComponent(issueViewChunk.load, "IssueSidePanel
 const IssueScreen = lazyRouteComponent(issueViewChunk.load, "IssueScreen");
 /** Loads the issue screens ahead (the idle walk, or a hover), so the first issue opened renders at once. */
 export const preloadIssueScreens = () => Promise.all([SidePanel.preload?.(), IssueScreen.preload?.()]);
+const InboxScreen = lazyRouteComponent(inboxChunk.load, "InboxScreen");
+const DocumentScreen = lazyRouteComponent(issueDocumentChunk.load, "DocumentScreen");
+preloadAtStartup("inbox", ROUTE_ORDER, () => InboxScreen.preload?.());
+preloadAtStartup("issue-document", ROUTE_ORDER, () => DocumentScreen.preload?.());
+// First in the walk with the editor, where startNavigation fetched them at the first idle before (R3-board-D4).
+preloadAtStartup("issue-screens", 10, preloadIssueScreens);
 /** A list route's own content: the open issue beside the boards the shell shows. */
 function ListScreen() {
   const open = useStore((s) => (s.panel && s.selected && s.view === "side" && !s.document ? s.issues.get(s.selected) : undefined));
@@ -252,7 +259,7 @@ const inboxRoute = createRoute({
       if (!preload) context.show({ to: "inbox", ...listSearch(search) }, location);
     });
   },
-  component: lazyRouteComponent(inboxChunk.load, "InboxScreen"),
+  component: InboxScreen,
 });
 /** An issue page: a renamed key redirects to the current one, an unknown key is kept or not found. */
 function issuePage(key: string, context: RouteContext, location: ParsedLocation) {
@@ -285,7 +292,7 @@ const documentRoute = createRoute({
     });
   },
   loader: ({ context, params, preload }) => issueLoader(context, params.key, preload),
-  component: lazyRouteComponent(issueDocumentChunk.load, "DocumentScreen"),
+  component: DocumentScreen,
 });
 
 export const routeTree = rootRoute.addChildren([

@@ -248,7 +248,7 @@ export function startNavigation() {
   navigationReady = true;
   window.addEventListener("click", openIssueLink);
   window.addEventListener("click", followHash);
-  // The issue screens are fetched by the idle walk (route-chunks.ts), so the first issue opens at once.
+  // The issue screens are preloaded by the idle walk (tree.tsx), so the first issue opens at once.
   // A rename (here or in another tab) moves the view's slug; the id suffix keeps the entry.
   let shown = get().savedViews;
   subscribe(() => {

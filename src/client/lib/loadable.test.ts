@@ -138,11 +138,10 @@ test("the highlighter is registered ahead of its grammars, all last in the walk"
 });
 
 // Every dynamic import is a loadable (so the idle walk fetches it and a gone chunk reloads safely) or goes through
-// retryImport. These three are the exceptions, and why.
+// retryImport. These two are the exceptions, and why.
 const ALLOWED = new Map([
   ["client/App.tsx", "router devtools: development only, dropped from production builds"],
-  ["client/components/error-boundary.tsx", "the backup must work when the module graph is broken; local-database is already loaded at start-up"],
-  ["client/state/jira-media.ts", "local-database is already loaded at start-up (app-load imports it), so nothing is fetched"],
+  ["client/components/error-boundary.tsx", "the crash screen's backup: it must never start a reload, and a failed import only hides the backup"],
 ]);
 test("every dynamic import in src goes through a loadable or retryImport", () => {
   const root = path.join(import.meta.dir, "..", "..");
@@ -169,4 +168,48 @@ test("every dynamic import in src goes through a loadable or retryImport", () =>
   };
   walk(root);
   expect(offenders).toEqual([]);
+});
+
+test("the app files every lazy chunk in the walk at Linear's tiers", async () => {
+  await Promise.all([
+    import("@/client/routes/tree"),
+    import("@/client/features/editor/rich-editor-loader"),
+    import("@/client/features/media/media-loader"),
+    import("@/client/features/issue/property-menu"),
+    import("@/client/features/views/view-controls"),
+    import("@/client/features/time-options/time-option-rows"),
+    import("@/client/features/comments/comment-threads"),
+    import("@/client/features/editor/emoji"),
+    import("@/client/state/jira-media"),
+    import("@/client/state/local-database"),
+    import("@/client/features/editor/code-grammars"),
+  ]);
+  const { startupLoadables } = await import("./loadable");
+  const orders = new Map(startupLoadables().map((entry) => [entry.name, entry.order]));
+  expect(Object.fromEntries([...orders].filter(([name]) => !name.startsWith("grammar:")))).toEqual({
+    "rich-editor": 10,
+    "issue-screens": 10,
+    "filter-menu": 30,
+    "media-renderer": 100,
+    "due-date-dialog": 100,
+    "due-parser": 100,
+    "typed-time": 100,
+    "comment-copy": 100,
+    "emoji-data": 100,
+    "local-database": 100,
+    inbox: ROUTE_ORDER,
+    "issue-document": ROUTE_ORDER,
+    "code-highlight": 9000,
+    "backup-archive": 9000,
+  });
+});
+
+test("the app starts the walk and the reload guard once it is on screen", () => {
+  const source = (file: string) => readFileSync(path.join(import.meta.dir, "..", file), "utf8");
+  const app = source("App.tsx");
+  expect(app).toContain("chunkReload.loadingDone()");
+  expect(app).toMatch(/preloadAtIdle\(\{ canPreload: \(\) => router\.state\.status === "idle" && !get\(\)\.overlay && !get\(\)\.toolbar \}\)/);
+  expect(app).toMatch(/if \(opened\) startedUp\(\)/);
+  expect(source("state/app-load.ts")).toContain("chunkReload.whenSettled(writesSettled)");
+  expect(source("state/app-load.ts")).toMatch(/const writesSettled = \(\) => !unsavedLocalChanges\(\) && !unsentWrites\(\)/);
 });
