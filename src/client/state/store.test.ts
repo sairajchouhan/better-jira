@@ -198,6 +198,35 @@ test("personal issue edits, comments, creation and deletion undo without losing 
   expect(get().issues.get(target)?.status).toBe(beforeDrop.status);
 });
 
+test("cards dropped together onto another column undo in one step (board drop, real undo history)", async () => {
+  const { get, set } = await import("./store");
+  const { actions } = await import("./issue-actions");
+  const { record, undoEdit } = await import("./undo-history");
+  const { dropAll } = await import("@/client/routes/board-drop");
+  const { navigate } = await import("@/client/features/navigation/app-navigation");
+  const board: Board = {
+    id: 1,
+    name: "Personal",
+    columns: [
+      { name: "Todo", statuses: [{ id: "todo", name: "Todo", category: "new" }] },
+      { name: "Done", statuses: [{ id: "done", name: "Done", category: "done" }] },
+    ],
+  };
+  set({ boards: [board], issues: new Map(), full: new Map() });
+  navigate({ board: 1 });
+  const keys = [actions.create("Drop one", { status: "todo" })!, actions.create("Drop two", { status: "todo" })!];
+  const steps = get().undoCount;
+  dropAll(
+    keys.map((key) => ({ key })),
+    ({ key }) => actions.drop(key, 1, [{ by: "status", id: "Done" }]),
+    record,
+  );
+  expect(keys.map((key) => get().issues.get(key)?.status)).toEqual(["done", "done"]);
+  expect(get().undoCount).toBe(steps + 1);
+  undoEdit();
+  expect(keys.map((key) => get().issues.get(key)?.status)).toEqual(["todo", "todo"]);
+});
+
 test("failed issue details expose an error and can be retried", async () => {
   const { get, set } = await import("./store");
   const { loadFull } = await import("./server-data");
