@@ -17,9 +17,8 @@ import { ActionLabel, ActionMenu, type ActionEntry } from "@/client/components/a
 import { Icon, LabelDot, PriorityIcon, StatusIcon, TypeDot, type IconName } from "@/client/components/icons";
 import { get, set, timed, useStore, statusOf, ME, issueBoardId } from "@/client/state/store";
 import { Text } from "@/client/components/text";
-import { keepIssue } from "@/client/state/server-data";
 import { currentKey } from "@/client/state/jira-sync";
-import { navigate, openSavedView, placeURL, preloadOnHover, ui } from "./app-navigation";
+import { navigate, openIssueByKey, openSavedView, placeURL, preloadOnHover, ui } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
 import { peopleOf } from "@/shared/people";
 import { equalOperators, filterCount, type Display } from "@/shared/view-model";
@@ -62,7 +61,7 @@ import { SelectRow } from "@/client/components/display-options";
 import { recentIssues, recentSearches, recordSearch, resolveRecents } from "./recents";
 import { hotkeyOf, runShortcut, shortcutApplies, shortcuts } from "./shortcuts";
 import { isMac, type Keys } from "@/client/components/keycap";
-import { appURL, jiraIssueURL } from "@/client/features/issue/issue-urls";
+import { appURL } from "@/client/features/issue/issue-urls";
 import { useSmartLinkDetails } from "@/client/state/smart-link-details";
 import { browseURL, opensNewTab, pastedIssue, pastedRow, type PastedIssue } from "./pasted-issue";
 import type { SmartLinkDetails } from "@/shared/smart-link";
@@ -431,12 +430,13 @@ function IssueRow({ issue: i, onOpen }: { issue: Issue; onOpen?: () => void }) {
   );
 }
 
-/** Opens an issue no board holds here once the mirror keeps it (BJ-341), as Linear opens a pasted link to an issue in its
- *  workspace in the app; ⌘ opens its page in a new tab, whose address keeps it too. Jira's page when the mirror can't. */
+/** Opens an issue no board holds here (BJ-341), as Linear opens a pasted link to an issue in its workspace in the app;
+ *  ⌘ opens its page in a new tab. Both go through the issue's address, whose route keeps the issue or says why it can't
+ *  (BJ-354): one path with every other link to an issue. */
 const openJiraIssue = (key: string) =>
   newTab
     ? openNewTab(placeURL({ to: "issue", key }))
-    : void keepIssue(key).then((issue) => (issue ? openIssue(issue) : openNewTab(jiraIssueURL(key))));
+    : (close(), openIssueByKey(key), ui.send({ type: "query.set", query: "" }));
 /** An issue only Jira has (a pasted link or typed key off every board): the server's read-only status and title. */
 function JiraIssueRow({ issueKey, details }: { issueKey: string; details: SmartLinkDetails }) {
   return (
