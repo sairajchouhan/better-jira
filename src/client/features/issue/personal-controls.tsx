@@ -185,7 +185,8 @@ export function CreateIssue() {
   const [attachments, setAttachments] = useState<Issue["attachments"]>(start.attachments);
   const [filesBusy, setFilesBusy] = useState(false);
   const [saved, setSaved] = useStoredState<SavedComposerDraft[]>(`better-jira:composer-drafts:v1:${account}`, parseComposerDrafts, [], "Could not save drafts locally");
-  const [savedId, setSavedId] = useState<string | null>(null);
+  // The saved draft being finished: kept with the local draft, so a reload still knows which one to take off the list.
+  const [savedId, setSavedId] = useState<string | null>(start.saved ?? null);
   const [draftsOpen, setDraftsOpen] = useState(false);
   const [linkInput, setLinkInput] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
@@ -246,6 +247,7 @@ export function CreateIssue() {
     labels: labelList,
     attachments: attachments ?? NO_FILES,
     more,
+    saved: savedId ?? undefined,
   });
   const closeNow = () => ui.send({ type: "overlay.close" });
   const hasContent = !!title.trim() || !!adfToText(description).trim() || !!attachments?.length || documentHasMedia(description) || !!draft.resources?.length || !!draft.subIssues?.some(t => t.trim());

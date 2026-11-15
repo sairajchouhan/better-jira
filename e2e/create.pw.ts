@@ -311,6 +311,24 @@ test("C5: the composer keeps its whole draft across a reload, a backdrop press m
     await page.key("c");
     expect(await page.waitFor<string>(`${title}?.value`)).toBe("");
   });
+  await test.step("BJ-274: a saved draft finished after a reload leaves the drafts list once its issue is created", async () => {
+    await page.type("Saved then finished");
+    await page.key("Escape");
+    await page.page.getByRole("dialog", { name: "Save to drafts?" }).getByRole("button", { name: "Save" }).click();
+    await page.waitFor(`!${dialog}`);
+    await page.key("c");
+    await page.click("text=Saved drafts (1)");
+    await page.click("text=Finish Saved then finished");
+    expect(await page.waitFor<string>(`${title}?.value`)).toBe("Saved then finished");
+    await page.reload();
+    await page.key("c");
+    expect(await page.waitFor<string>(`${title}?.value`)).toBe("Saved then finished");
+    await page.key("Enter", "meta");
+    await page.waitFor(`!${dialog}`);
+    await page.key("c");
+    await page.waitFor(`document.activeElement===${title}`);
+    expect(await page.eval(`[...document.querySelectorAll("button")].some((b) => b.textContent?.startsWith("Saved drafts"))`)).toBe(false);
+  });
 });
 
 /** Linear's "Automations and workflows" preferences, seeded for the fixture's account (browser-preferences `automationsKey`). */

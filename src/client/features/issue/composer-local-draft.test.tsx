@@ -132,3 +132,14 @@ test("C5 composer: opening it after a reload shows the kept title and properties
   expect(copy).not.toContain("Priority: High");
   ui.send({ type: "overlay.close" });
 });
+
+test("BJ-274: the saved draft being finished stays linked through a reload, so creating the issue takes it off the list", () => {
+  writeLocalDraft("a", draft({ saved: "d-1" }));
+  const back = readLocalDraft("a")!;
+  expect(back.saved).toBe("d-1");
+  expect(resumeDraft({ board: 1 }, back, [1]).saved).toBe("d-1");
+  // An opener with its own content isn't that saved draft.
+  expect(resumeDraft({ board: 1, title: "Other (copy)", copy: true }, back, [1]).saved).toBeUndefined();
+  writeLocalDraft("a", draft());
+  expect(readLocalDraft("a")!.saved).toBeUndefined();
+});

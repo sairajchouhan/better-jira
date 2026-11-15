@@ -22,6 +22,9 @@ export type ComposerLocalDraft = {
   attachments: NonNullable<Issue["attachments"]>;
   /** Linear's draft meta `createMore`. */
   more: boolean;
+  /** The saved draft (the drafts list) this one finishes, as Linear's local draft keeps the IssueDraft it edits: creating
+   *  the issue or discarding takes that saved draft off the list, after a reload too (BJ-274). */
+  saved?: string;
 };
 
 /** One per account, as Linear's `draftName` is `<name>_<userId>`. */
@@ -61,6 +64,7 @@ function parse(raw: unknown): ComposerLocalDraft | undefined {
     labels: Array.isArray(d.labels) ? d.labels.filter((l): l is string => typeof l === "string") : [],
     attachments: Array.isArray(d.attachments) ? d.attachments : [],
     more: d.more === true,
+    ...(typeof d.saved === "string" ? { saved: d.saved } : {}),
   };
 }
 
@@ -137,10 +141,10 @@ export function localDraftWriter(namespace: string) {
  */
 export function useComposerLocalDraft(namespace: string, enabled: boolean, draft: ComposerLocalDraft) {
   const [writer] = useState(() => localDraftWriter(namespace));
-  const { fields, title, description, labels, attachments, more } = draft;
+  const { fields, title, description, labels, attachments, more, saved } = draft;
   useEffect(() => {
-    if (enabled) writer.save({ fields, title, description, labels, attachments, more });
-  }, [writer, enabled, fields, title, description, labels, attachments, more]);
+    if (enabled) writer.save({ fields, title, description, labels, attachments, more, saved });
+  }, [writer, enabled, fields, title, description, labels, attachments, more, saved]);
   useEffect(() => {
     window.addEventListener("pagehide", writer.flush);
     return () => {
