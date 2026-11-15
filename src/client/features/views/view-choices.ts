@@ -11,6 +11,12 @@ import { GROUPINGS, ORDERINGS, type Display } from "@/shared/view-model";
 /** A board always groups its columns, so its grouping has no "No grouping". */
 export const groupingOptions = (layout: Display["layout"]) => GROUPINGS.filter(([value]) => layout !== "board" || value !== "none");
 
+/** A board's choices among `options` (orderings, filter fields): Estimate only where its issues have estimates (Linear's
+ *  `estimationEnabled`, BJ-334). A choice already set to it keeps it, so its select still names it. */
+export const estimateChoices = <T extends string>(options: readonly [T, string][], estimates: boolean, current: T) =>
+  options.filter(([value]) => value !== "estimate" || estimates || current === "estimate");
+export const orderingOptions = (d: Display, estimates: boolean) => estimateChoices(ORDERINGS, estimates, d.ordering);
+
 /** Linear's ⌥⇧G action (useGroupingMenu `d`: `Change ${label.toLowerCase()}`, keywords "grouping", hoisted from 2 characters). */
 export const GROUPING_ACTION = { name: "Change grouping", parent: "Change grouping", keywords: ["grouping"], hoistFrom: 2 } as const;
 /** Linear's ⌥⇧O action (useOrderingMenu `_`: "View ordering…", subActionsHoisting `minInputLength: 5`); a hoisted value's breadcrumb
@@ -28,8 +34,8 @@ export function groupingChoices(d: Display, apply: (patch: Partial<Display>) => 
 
 /** useOrderingMenu `_`: "Manual" for the manual ordering (`v`: sortOrder, manual), else "By <label lowercased>", keywords
  *  "order ordering", the current one selected. */
-export function orderingChoices(d: Display, apply: (patch: Partial<Display>) => void): ActionEntry[] {
-  return ORDERINGS.map(([value, label]) => ({
+export function orderingChoices(d: Display, estimates: boolean, apply: (patch: Partial<Display>) => void): ActionEntry[] {
+  return orderingOptions(d, estimates).map(([value, label]) => ({
     name: value === "manual" ? "Manual" : `By ${label.toLowerCase()}`,
     keywords: [...ORDERING_ACTION.keywords],
     selected: d.ordering === value,

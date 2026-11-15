@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { defaultDisplay, type Display } from "@/shared/view-model";
-import { GROUPING_ACTION, ORDERING_ACTION, groupingChoices, groupingOptions, hoistedViewChoices, orderingChoices } from "./view-choices";
+import { defaultDisplay, FIELDS, type Display } from "@/shared/view-model";
+import { GROUPING_ACTION, ORDERING_ACTION, groupingChoices, groupingOptions, estimateChoices, hoistedViewChoices, orderingChoices, orderingOptions } from "./view-choices";
 
 const list: Display = { ...defaultDisplay(), layout: "list", columns: "status", ordering: "priority" };
 
@@ -18,23 +18,32 @@ test("grouping choices are the Display select's options, named by label, the cur
 });
 
 test("ordering choices are Manual, then By <label lowercased>, with Linear's keywords", () => {
-  const choices = orderingChoices(list, () => {});
+  const choices = orderingChoices(list, true, () => {});
   expect(choices.slice(0, 3).map((c) => c.name)).toEqual(["Manual", "By title", "By status"]);
   expect(choices.find((c) => c.selected)?.name).toBe("By priority");
   expect(choices.every((c) => c.keywords?.join(" ") === "order ordering")).toBe(true);
 });
 
+test("BJ-334: a board without estimates offers no Estimate ordering, unless the view is already ordered by it", () => {
+  expect(orderingChoices(list, true, () => {}).map((c) => c.name)).toContain("By estimate");
+  expect(orderingChoices(list, false, () => {}).map((c) => c.name)).not.toContain("By estimate");
+  expect(orderingOptions(list, false).map(([value]) => value)).not.toContain("estimate");
+  expect(orderingOptions({ ...list, ordering: "estimate" }, false).map(([value]) => value)).toContain("estimate");
+  expect(estimateChoices(FIELDS, false, "status").map(([value]) => value)).not.toContain("estimate");
+  expect(estimateChoices(FIELDS, true, "status").map(([value]) => value)).toContain("estimate");
+});
+
 test("picking a choice writes the display the Display menu's select writes", () => {
   const patches: Partial<Display>[] = [];
   groupingChoices(list, (p) => patches.push(p)).find((c) => c.name === "Assignee")!.run!();
-  orderingChoices(list, (p) => patches.push(p)).find((c) => c.name === "Manual")!.run!();
+  orderingChoices(list, true, (p) => patches.push(p)).find((c) => c.name === "Manual")!.run!();
   expect(patches).toEqual([{ columns: "assignee" }, { ordering: "manual" }]);
 });
 
 test("⌘K hoists grouping values from 2 characters and ordering values from 5, breadcrumbed, only while the action applies", () => {
   const rows = {
     grouping: groupingChoices(list, () => {}).map((c) => ({ name: c.name })),
-    ordering: orderingChoices(list, () => {}).map((c) => ({ name: c.name, keywords: c.keywords })),
+    ordering: orderingChoices(list, true, () => {}).map((c) => ({ name: c.name, keywords: c.keywords })),
   };
   const all = () => true;
   const hit = (q: string, applies: (id: "grouping" | "ordering") => boolean = all) =>

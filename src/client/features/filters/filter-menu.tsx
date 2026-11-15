@@ -5,6 +5,7 @@ import { Icon, type IconName } from "@/client/components/icons";
 import { Menu } from "@/client/components/menu";
 import { ui } from "@/client/features/navigation/app-navigation";
 import { datePresets, FieldValues, Path, PresetRow, PropertyFilter, useFieldFilter } from "./property-filter";
+import { useBoardHasEstimates } from "@/client/features/views/view-settings";
 
 import { type Field } from "@/shared/view-model";
 
@@ -42,6 +43,11 @@ const CATEGORIES: Entry[] = [
   { name: "Pull requests", field: "pullRequests", icon: "branch" },
   { name: "Estimate", field: "estimate", glyph: "Priority" },
 ];
+/** A board without estimates keeps Estimate in place but disabled, as Linear's estimate filter (`qXt`: applicable only where
+ *  `estimationEnabled`, disabledReason "Estimation is disabled"). */
+const WITHOUT_ESTIMATES: Entry[] = CATEGORIES.map((e) =>
+  e.field === "estimate" ? { name: e.name, glyph: e.glyph, reason: "Estimation is disabled: this board's issues have no story points." } : e,
+);
 const DATE_ENTRIES: Entry[] = [
   ...(
     [
@@ -112,8 +118,9 @@ export default function FilterMenu({
   openedBy: "pointer" | "keyboard";
   onAdvanced: () => void;
 }) {
+  const estimates = useBoardHasEstimates(board.id);
   return (
-    <FilterLevel board={board} entries={CATEGORIES} footer={footer} side={side} openedBy={openedBy} onAdvanced={onAdvanced} />
+    <FilterLevel board={board} entries={estimates ? CATEGORIES : WITHOUT_ESTIMATES} footer={footer} side={side} openedBy={openedBy} onAdvanced={onAdvanced} />
   );
 }
 

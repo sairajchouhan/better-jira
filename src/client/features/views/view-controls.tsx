@@ -1,7 +1,7 @@
 import { type Issue, type Board } from "@/shared/issue-model";
 import { showNotification } from "@/client/state/app-notifications";
 import { useActiveView, useOverlayFilters, saveOverlayToView } from "./saved-views";
-import { clearFilters, resetDisplay, setDisplay, updateRule, useViewSettings } from "./view-settings";
+import { clearFilters, resetDisplay, setDisplay, updateRule, useBoardHasEstimates, useViewSettings } from "./view-settings";
 import { canMergeOverlay } from "@/shared/saved-view-model";
 import { viewShortcutId } from "./view-shortcut";
 import { createToolbarView } from "./view-toolbar-actions";
@@ -30,7 +30,7 @@ import { Text } from "@/client/components/text";
 import { LoadingState } from "@/client/components/empty-state";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle, type Keys } from "@/client/components/keycap";
-import { GROUPING_ACTION, ORDERING_ACTION, groupingOptions } from "./view-choices";
+import { GROUPING_ACTION, ORDERING_ACTION, estimateChoices, groupingOptions, orderingOptions } from "./view-choices";
 import { shortDate } from "@/client/lib/due-date";
 import { ME, timed, useStore } from "@/client/state/store";
 import { ui } from "@/client/features/navigation/app-navigation";
@@ -50,7 +50,6 @@ import {
   newId,
   operatorLabel,
   operatorsFor,
-  ORDERINGS,
   PROPERTIES,
   selectIssues,
   type Display,
@@ -282,6 +281,7 @@ function DisplayOptions({
   const [saving, setSaving] = useState(false);
   const patch = (p: Partial<Display>) => timed("display", () => setDisplay(board.id, p));
   const isBoard = d.layout === "board";
+  const estimates = useBoardHasEstimates(board.id);
   return (
     <>
       <ViewOptions.Content>
@@ -309,7 +309,7 @@ function DisplayOptions({
         <SelectRow
           label="Ordering"
           value={d.ordering}
-          options={ORDERINGS}
+          options={orderingOptions(d, estimates)}
           onChange={(v) => patch({ ordering: v as Display["ordering"] })}
           labelTip={shortcutTitle(ORDERING_ACTION.name, hotkeyOf("ordering"))}
         >
@@ -791,6 +791,7 @@ function RuleEditor({
   issues: Issue[];
   patch: (p: Partial<Rule> | null) => void;
 }) {
+  const estimates = useBoardHasEstimates(board.id);
   const choices = useChoicesAmong(r.field, board, issues);
   const free =
     isDate(r.field) || isNumeric(r.field) || r.field === "content" || r.field === "links";
@@ -810,7 +811,7 @@ function RuleEditor({
           });
         }}
       >
-        {FIELDS.map(([v, l]) => (
+        {estimateChoices(FIELDS, estimates, r.field).map(([v, l]) => (
           <Select.Option key={v} value={v}>
             {l}
           </Select.Option>

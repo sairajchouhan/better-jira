@@ -216,6 +216,21 @@ export const OPERATORS: [Operator, string][] = [
 export const isDate = (field: Field) =>
   ["created", "updated", "due", "resolved", "started"].includes(field);
 OPERATORS.push(["gt", "greater than"], ["lt", "less than"], ["isAll", "include all of"], ["notAll", "exclude if all"]);
+/** Whether any of a board's issues (every board's, with no `board`) carries an estimate. Linear offers its estimate options
+ * only where estimation is on (`team.estimationEnabled`); a Jira board says so only through its issues: a Kanban board has
+ * no story points. Kept per issue map, so a selector reading it on every store change scans each map once. */
+const estimated = new WeakMap<ReadonlyMap<string, Issue>, Map<number | undefined, boolean>>();
+export function hasEstimates(issues: ReadonlyMap<string, Issue>, board?: number): boolean {
+  let known = estimated.get(issues);
+  if (!known) estimated.set(issues, (known = new Map()));
+  let found = known.get(board);
+  if (found === undefined) {
+    found = false;
+    for (const i of issues.values()) if (i.estimate !== undefined && (board === undefined || i.board === board)) { found = true; break; }
+    known.set(board, found);
+  }
+  return found;
+}
 export const isNumeric = (field: Field) =>
   field === "statusAge" || field === "pullRequests" || field === "estimate";
 /** Linear's `collection` fields (FilterBlockHelper): an issue has several values, so a rule asks for any or all of them. */

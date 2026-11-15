@@ -22,7 +22,7 @@ import { navigate, openSavedView, preloadOnHover, ui } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
 import { peopleOf } from "@/shared/people";
 import { equalOperators, filterCount, type Display } from "@/shared/view-model";
-import { setDisplay, useViewSettings } from "@/client/features/views/view-settings";
+import { boardHasEstimates, setDisplay, useViewSettings } from "@/client/features/views/view-settings";
 import {
   GROUPING_ACTION,
   ORDERING_ACTION,
@@ -249,7 +249,7 @@ function openChoice({ destination: to, favorite }: NavigationChoice) {
 function viewChoiceRows(kind: "grouping" | "ordering", display: Display): Cmd[] {
   const board = get().board;
   const apply = (patch: Partial<Display>) => timed("display", () => setDisplay(board, patch));
-  return (kind === "grouping" ? groupingChoices(display, apply) : orderingChoices(display, apply)).map((choice) => ({
+  return (kind === "grouping" ? groupingChoices(display, apply) : orderingChoices(display, boardHasEstimates(board), apply)).map((choice) => ({
     id: `${kind}:${choice.name}`,
     name: choice.name,
     keywords: choice.keywords,

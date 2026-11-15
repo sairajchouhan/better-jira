@@ -16,6 +16,7 @@ import {
   defaultDisplay,
   defaultPreferences,
   collapseAllFrom,
+  hasEstimates,
   resetDisplayPreferences,
   storedGroupOrder,
   updateFilter,
@@ -39,6 +40,10 @@ export const useViewSettings = (board: number) => useStore((s) => edited(s, boar
 /** The settings the issues are selected with. Inside a saved view, `filters` is its base AND its overlay. */
 export const effectiveSettings = (board: number) => effective(get(), board);
 export const useEffectiveSettings = (board: number) => useStore((s) => effective(s, board));
+/** Whether the issues a board shows carry estimates: My issues shows every board's. */
+const estimates = (s: State, board: number) => hasEstimates(s.issues, board === s.board && isMyIssues(s) ? undefined : board);
+export const boardHasEstimates = (board: number) => estimates(get(), board);
+export const useBoardHasEstimates = (board: number) => useStore((s) => estimates(s, board));
 
 function write(board: number, patch: Partial<Preferences>) {
   const s = get();
