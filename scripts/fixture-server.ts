@@ -150,7 +150,7 @@ const priorities = ["Normal", "Low", "High", "Urgent", "Normal", "Low"];
 // FIXTURE_ISSUES pads the board for speed measurements; tests use the default six.
 const issues = Array.from({ length: Number(process.env.FIXTURE_ISSUES ?? 6) }, (_, i) => ({
   key: `TEST-${i + 1}`,
-  board: 1,
+  boards: [1],
   summary: i === 0 ? "Rich browser fixture" : `Browser fixture ${i + 1}`,
   status: i === 2 ? "doing" : "todo",
   rank: `0|i0000${i}:`,
@@ -213,6 +213,8 @@ let clientFailures = 0,
   bulkVariety = 0,
   /** Board 2 was added from the app. */
   added = false,
+  /** Blocker 5: board 2 ("Squad board") is configured and holds TEST-2, TEST-3 (also on board 1) and SQUAD-1 (only on it). */
+  sharedBoards = false,
   /** BJ-15: TEST-1's Jira links reach issues outside the board and use link types Linear has no kind for. */
   crossLinks = false,
   /** BJ-171: opt into successful, durable Jira creates. */
@@ -278,7 +280,7 @@ const bulkIssues = () =>
     Array.from({ length: bulk }, (_, i) => ({
       ...issues[1]!,
       key: `${boardId === 1 ? "BULK" : "TWO"}-${i + 1}`,
-      board: boardId,
+      boards: [boardId],
       summary: `Bulk fixture ${i + 1} with a longer title that wraps onto a second line`,
       status: statuses[i % 5]!,
       rank: `0|i1${String(i).padStart(4, "0")}:`,
@@ -305,12 +307,14 @@ const listed = () =>
     ...issues,
     ...createdIssues.values(),
     ...bulkIssues(),
-    ...(added ? [{ ...issues[1]!, key: "ADD-1", board: 2, summary: "Added board issue" }] : []),
+    ...(added ? [{ ...issues[1]!, key: "ADD-1", boards: [2], summary: "Added board issue" }] : []),
+    ...(sharedBoards ? [{ ...issues[3]!, key: "SQUAD-1", boards: [2], summary: "Squad only issue" }] : []),
     ...(epics ? epicIssues : []),
   ].map((issue: any) => ({
     ...issue,
     ...(distinctCreator && issue.key === "TEST-6" ? { creator: alex } : {}),
     ...(subtask && issue.key === "TEST-6" ? { type: "Subtask", parent: "TEST-5" } : {}),
+    ...(sharedBoards && (issue.key === "TEST-2" || issue.key === "TEST-3") ? { boards: [1, 2] } : {}),
     ...(crossLinks && issue.key === "TEST-1"
       ? { relations: crossRelations.filter((r) => !unlinked.has(pair("TEST-1", r.key))) }
       : {}),
@@ -916,6 +920,7 @@ async function handle(req: Request) {
     bulk = settings.bulk ?? 0;
     bulkVariety = settings.bulkVariety ?? 0;
     added = false;
+    sharedBoards = settings.sharedBoards ?? false;
     history = settings.history ?? {};
     historyDelay = settings.historyDelay ?? 0;
     smartLinks = settings.smartLinks ?? false;
@@ -980,7 +985,7 @@ async function handle(req: Request) {
   if (path === "/api/boards" && req.method === "POST") {
     try {
       const id = boardFromInput((await req.json()).board ?? "", "https://example.atlassian.net");
-      if (id === 1 || (id === 2 && (added || bulk)))
+      if (id === 1 || (id === 2 && (added || bulk || sharedBoards)))
         return Response.json({ id, message: `Board ${id} is already in your sidebar.` });
       if (id !== 2)
         throw new Error(
@@ -1014,9 +1019,11 @@ async function handle(req: Request) {
     body =
       syncingReads-- > 0
         ? []
-        : bulk || added
-        ? [board, { ...board, id: 2, name: "Second board", ...(added ? { removable: true } : {}) }]
-        : [board];
+        : sharedBoards
+          ? [board, { ...board, id: 2, name: "Squad board" }]
+          : bulk || added
+            ? [board, { ...board, id: 2, name: "Second board", ...(added ? { removable: true } : {}) }]
+            : [board];
   else if (path === "/api/issues") body = listed();
   else if (path === "/api/options")
     body = {
