@@ -78,3 +78,20 @@ test("R2-D5: a chip switched from is empty back to is and closed without a value
     await page.close();
   }
 });
+
+// BJ-336: an empty page draws its own empty state in place of the columns, as Linear's IssueList draws only its
+// placeholder (MyIssuesEmptyPage on My issues, ViewEmptyState on a board tab), never blank columns or Hidden columns.
+test("an empty My issues tab and an empty board tab show their empty state, no columns", async ({ open }) => {
+  const page = await open();
+  try {
+    await page.goto("/my-issues");
+    await page.waitFor(`document.body.textContent.includes("No issues assigned to you")`);
+    expect(await page.eval(`!!document.querySelector('aside[aria-label="Hidden columns"]')`)).toBe(false);
+    expect(await page.eval(`document.querySelectorAll('[aria-label^="Options for"]').length`)).toBe(0);
+    await page.goto("/board/1/backlog");
+    await page.waitFor(`document.body.textContent.includes("Backlog issues")`);
+    expect(await page.eval(`!!document.querySelector('aside[aria-label="Hidden columns"]')`)).toBe(false);
+  } finally {
+    await page.close();
+  }
+});

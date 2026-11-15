@@ -771,10 +771,11 @@ export function groupVisibility(columns: Bucket[], prefs: Preferences) {
   return { hiddenIds, show: columns.filter((c) => !isHidden(c)), hidden: columns.filter(isHidden) };
 }
 
-/** The groups a board or list draws. While the zero state shows ("No issues matching the filters", a saved view's "No
- * matching issues"), Linear's IssueList draws only its empty placeholder (IssueList `df`: no visible row and none hidden),
- * so no empty group, Hidden groups strip or Hidden columns list (BJ-331). An empty board with nothing filtered has no zero
- * state and keeps its columns to create into. The Group ordering panel still takes groupVisibility's split. */
+/** The groups a board or list draws. While the zero state shows (a page's own empty state, "No issues matching the
+ * filters", a saved view's "No matching issues"), Linear's IssueList draws only its empty placeholder (IssueList `df`: no
+ * visible row and none hidden), so no empty group, Hidden groups strip or Hidden columns list (BJ-331). A page with no
+ * issue at all draws its empty state in their place too, My issues included (BJ-336). The Group ordering panel still
+ * takes groupVisibility's split. */
 export function drawnGroups<T extends { show: Bucket[]; hidden: Bucket[] }>(groups: T, zeroState: boolean): T {
   return zeroState ? { ...groups, show: [], hidden: [] } : groups;
 }

@@ -32,3 +32,5 @@ export function peopleOf(issues: Iterable<Issue>): User[] {
     for (const u of [i.assignee, i.creator, ...(i.watchers ?? [])]) if (u?.id && !found.has(u.id)) found.set(u.id, u);
   return [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
+/** The name a person goes by in these issues, else their id. */
+export const personName = (issues: Iterable<Issue>, id: string) => peopleOf(issues).find((u) => u.id === id)?.name ?? id;

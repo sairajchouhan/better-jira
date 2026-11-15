@@ -1,7 +1,7 @@
 import { type Issue } from "@/shared/issue-model";
 import { SidebarLink, SidebarViewLink } from "@/client/features/navigation/sidebar-link";
 import { favoritePlace } from "@/client/features/navigation/sidebar-active";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Icon, type IconName } from "@/client/components/icons";
 import { Avatar } from "@/client/components/avatar";
 import { ME, useStore } from "@/client/state/store";
@@ -19,7 +19,7 @@ import { Tabs } from "@/client/components/tabs";
 import { Sortable } from "@/client/components/sortable";
 import { Text } from "@/client/components/text";
 import { CountBadge } from "@/client/components/count-badge";
-import { resultFeedback, viewSummaries } from "./views-navigation-model";
+import { viewSummaries, type ResultFeedback } from "./views-navigation-model";
 import { boardFor } from "@/shared/board-membership";
 
 export function SavedViewIcon({ view }: { view: Pick<SavedView, "icon" | "color"> }) {
@@ -100,17 +100,22 @@ function FilterIllustration() {
       </g>
     </svg>;
 }
-export function ResultsFeedback({ count, baseline, view, temporary, clear, layout = "list" }: { count: number; baseline: number; view: SavedView | null; temporary: boolean; clear: () => void; layout?: "list" | "board" }) {
-  const feedback = resultFeedback(count, baseline, !!view, temporary);
+/**
+ * A view's word on its results, `feedback` from views-navigation-model.ts `resultFeedback`: a page with no issue draws
+ * `empty` (Linear's `zeroStateFallback`, empty-states.tsx), a saved view matching nothing "No matching issues", a filter
+ * leaving nothing "No issues matching the filters" with its hidden count, and a partial result its hidden count.
+ */
+export function ResultsFeedback({ feedback, empty, clear, layout = "list" }: { feedback: ResultFeedback | null; empty: ReactNode; clear: () => void; layout?: "list" | "board" }) {
   if (!feedback) return null;
+  if (feedback.kind === "empty") return empty;
   // Linear's saved-empty state: a centred filter illustration and one line, nothing to act on.
-  if (feedback.saved) return <div role="status" className="pointer-events-none absolute inset-0 z-[1] flex flex-col items-center justify-center gap-6 text-[14px] font-medium text-fg-3">
+  if (feedback.kind === "saved") return <div role="status" className="pointer-events-none absolute inset-0 z-[1] flex flex-col items-center justify-center gap-6 text-[14px] font-medium text-fg-3">
     <FilterIllustration />
     {feedback.text}
   </div>;
   // Partial results: hiddenItemsContainer (full width, 12px top/bottom, wraps, centred, 20px gap) inside Linear's board
   // footer (45px bar on bgBase under the columns) or list footer (84px row after the last item, 34px sides).
-  if (count) {
+  if (feedback.kind === "partial") {
     const inner = <div role="status" className="flex w-full flex-wrap items-center justify-center gap-5 py-3"><HiddenRow hidden={feedback.hidden} clear={clear} /></div>;
     return layout === "board" ? <div className="flex h-[45px] shrink-0 items-center justify-center bg-panel">{inner}</div> : <div className="flex h-[84px] justify-center px-[34px]">{inner}</div>;
   }

@@ -8,7 +8,7 @@
 import { useMemo, type ComponentProps, type ReactNode, type Ref } from "react";
 import { Breadcrumb, Breadcrumbs, Link } from "react-aria-components";
 import { type Board, type Issue } from "@/shared/issue-model";
-import { peopleOf } from "@/shared/people";
+import { personName } from "@/shared/people";
 import { Icon, StatusIcon, TypeDot } from "@/client/components/icons";
 import { IconButton } from "@/client/components/button";
 import { ContextMenu } from "@/client/components/action-menu";
@@ -281,7 +281,7 @@ function useListCrumb(): ListCrumb {
   const issues = useStore((s) => s.issues);
   // Open user's page names its person, as Linear's profile does; mine is My issues.
   const personal = useMemo(
-    () => (person ? (peopleOf(issues.values()).find((u) => u.id === person)?.name ?? person) : "My issues"),
+    () => (person ? personName(issues.values(), person) : "My issues"),
     [person, issues],
   );
   const activeView = useActiveView();

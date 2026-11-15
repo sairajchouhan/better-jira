@@ -16,7 +16,8 @@ import {
 } from "@/client/features/views/view-settings";
 import { collapseClick, collapseTip } from "@/client/features/views/group-collapse";
 import { ViewDetails, ResultsFeedback } from "@/client/features/views/views-navigation";
-import { resultFeedback } from "@/client/features/views/views-navigation-model";
+import { resultFeedback, type ResultPage } from "@/client/features/views/views-navigation-model";
+import { PersonEmptyState, ScopeEmptyState } from "@/client/features/views/empty-states";
 import { useRegisterViewGroups } from "@/client/features/views/view-groups";
 import { GroupIcon } from "@/client/features/views/group-icon";
 import {
@@ -130,8 +131,10 @@ export const BoardView = memo(function BoardView({
     () => resultsFeedback(all, board, prefs, activeView, { overlay, query, mine }, who, ME.id),
     [all, board, prefs, activeView, overlay, query, mine, who],
   );
-  // The zero state, when it shows, stands in for the groups (ResultsFeedback renders it from the same answer).
-  const zeroState = !visible.length && !!resultFeedback(0, feedback.baseline, !!activeView, feedback.temporary);
+  // One answer for what the results say; any zero state (all but a partial result) stands in for the groups.
+  const page: ResultPage = activeView || draft ? "view" : personal ? "person" : "tab";
+  const result = resultFeedback(visible.length, feedback.baseline, page, feedback.temporary);
+  const zeroState = !!result && result.kind !== "partial";
   const { hidden, hiddenIds, show } = drawnGroups(layout, zeroState);
   // The prefetch order follows the cards and rows just laid out, so which groups show is decided once.
   const order = useMemo(() => layoutOrder(layout.show, layout, prefs, universe), [layout, prefs, universe]);
@@ -169,7 +172,10 @@ export const BoardView = memo(function BoardView({
     () => displayHiddenCount(all, board, prefs, mine, query, ME.id, Date.now(), personal),
     [all, board, prefs, mine, query, personal],
   );
-  const results = <ResultsFeedback count={visible.length} {...feedback} view={activeView} clear={clearAll} layout={d.layout} />;
+  const empty = personal
+    ? <PersonEmptyState tab={personTab} person={person} />
+    : <ScopeEmptyState scope={prefs.scope} />;
+  const results = <ResultsFeedback feedback={result} empty={empty} clear={clearAll} layout={d.layout} />;
   const boardScroller = useRef<HTMLDivElement>(null);
   useDragAutoScroll(boardScroller);
   return (
