@@ -98,17 +98,15 @@ test("the sidebar, board columns, list and issue body scroll as Linear's do", as
   expect(block(css, ".sidebar-scroller {")).toContain("scrollbar-gutter: stable");
   expect(block(css, ".sidebar-scroller {")).toContain("padding-right: max(0px, calc(8px - var(--scrollbar-width)))");
   expect(block(block(css, "@supports (hanging-punctuation: first)"), ".sidebar-scroller")).toContain("scrollbar-gutter: auto");
-  const column = block(css, ".board-column-scroller {");
-  expect(column).toContain("scrollbar-gutter: stable");
-  expect(column).toContain("overflow-anchor: none");
+  expect(block(css, ".board-column-scroller {")).toContain("scrollbar-gutter: stable");
   expect(block(css, "body.layoutScrollbarObtrusive .board-column-scroller")).toContain("padding-right: 0");
-  expect(block(css, ".issue-list-scroller")).toContain("overflow-anchor: none");
+  // VirtualGridList leaves scroll correction to the browser's anchoring when measured heights replace estimates: never off.
+  expect(css).not.toContain("overflow-anchor: none");
   expect(block(css, ".issue-detail-body {")).toContain("scrollbar-gutter: stable");
   expect(block(css, ".rich-content .tableWrapper {")).toContain("scrollbar-color: transparent transparent");
   expect(block(css, ".rich-content .tableWrapper:hover {")).toContain("scrollbar-color: var(--scrollbar-color) transparent");
   const board = await read("routes/board-view.tsx");
   expect(board).toContain('"board-column-scroller overflow-y-auto"');
-  expect(board).toContain('className="issue-list-scroller');
   expect(await read("features/navigation/app-chrome.tsx")).toContain("sidebar-scroller flex w-[244px]");
 });
 
