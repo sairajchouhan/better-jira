@@ -933,10 +933,10 @@ test("sync review 7: an undo made while Restore reads Jira's version is not disc
 test("sync review 2: a tab never mints a new-issue number another tab of the browser has", async () => {
   const { get } = await import("./store");
   const { actions } = await import("./issue-actions");
-  const { LocalDatabase } = await import("./local-data");
+  const { LocalDatabase, localDataName } = await import("./local-data");
   expect(get().namespace).toBeTruthy();
   // Another tab of this browser takes numbers from the same saved data while this one creates issues.
-  const other = await LocalDatabase.open(get().namespace);
+  const other = await LocalDatabase.open(localDataName(get().namespace, get().writable));
   const theirs = new Set<number>(),
     mine: number[] = [];
   try {

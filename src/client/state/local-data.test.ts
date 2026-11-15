@@ -4,6 +4,7 @@ import { IDBFactory } from "fake-indexeddb";
 import {
   emptyLocalState,
   LocalDatabase,
+  localDataName,
   mergeChanges,
   parseLocalState,
   type LocalState,
@@ -621,4 +622,18 @@ test("changes saved while an issue had one board load with its boards, nothing d
   expect(parsed.state.changes[0]!.issue).toEqual({ ...rest, boards: [1] });
   expect(parsed.state.changes[0]!.issueFields).toEqual(["boards", "summary"]);
   expect(parsed.state.undo[0]!.after[0]!.issue).toEqual({ ...rest, boards: [1] });
+});
+
+test("Blocker 2: changes saved while local only are not in a writable load's saved data, so nothing of them is sent to Jira", async () => {
+  const factory = new IDBFactory(),
+    account = "https://example.atlassian.net/me";
+  const played = { key: "TEST-5", issue: { ...issue, key: "TEST-5", status: "done" }, issueFields: ["status"], fullFields: [], created: false };
+  const local = await LocalDatabase.open(localDataName(account, false), factory);
+  await local.save({ ...emptyLocalState(), changes: [played] });
+  // The same browser, now writable: its saved changes, the outbox `resumeSync` sends again, hold none of that play.
+  expect((await (await LocalDatabase.open(localDataName(account, true), factory)).load()).state.changes).toEqual([]);
+  // Writes made while writable keep their database, so ones still unsent when this fix landed are kept.
+  expect(localDataName(account, true)).toBe(account);
+  // Local only again: the play is still there.
+  expect((await (await LocalDatabase.open(localDataName(account, false), factory)).load()).state.changes.map((c) => c.key)).toEqual(["TEST-5"]);
 });

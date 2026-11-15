@@ -1,4 +1,4 @@
-import { expect, test, sleep } from "./app";
+import { expect, fixture, test, sleep } from "./app";
 
 // A writable site faked in the page. TEST-2 has a Jira web link; every op the app sends is kept in sessionStorage, so it survives reloads.
 // A create is refused the way Jira refuses a Subtask with no parent.
@@ -64,5 +64,34 @@ test("local outbox: only real edits are saved and sent, and a refused create lea
     await sleep(600); // no ghost comes back and nothing is resent within the window
     expect(await p.eval(`!!document.querySelector('[data-key^="TEST-NEW"]')`)).toBe(false);
     expect((await p.eval<unknown[]>(sentOps)).length).toBe(1);
+  });
+});
+
+test("Blocker 2: edits made while the app is local only are never sent once it runs writable, and come back local only", async ({
+  open,
+}) => {
+  const title = `document.querySelector('textarea[aria-label="Issue title"]')`;
+  await fixture.reset({ writable: false });
+  const p = await open("?issue=TEST-5&view=side");
+  await test.step("local only: rename TEST-5; it is kept in this browser", async () => {
+    await p.waitFor(`!!${title}`);
+    await p.click('textarea[aria-label="Issue title"]');
+    await p.key("a", "meta");
+    await p.type("Just trying this out locally");
+    await p.key("Tab");
+    await sleep(600); // past the save debounce
+  });
+  await test.step("writable (bun start after bun run dev), reload: nothing reaches Jira and Jira's title shows", async () => {
+    await fixture.reset({ writable: true });
+    await p.reload();
+    await p.waitFor(`!!${title}`);
+    await sleep(800);
+    expect((await fixture.log()).writes).toEqual([]);
+    expect(await p.eval(`${title}.value`)).not.toBe("Just trying this out locally");
+  });
+  await test.step("local only again: the rename is still there", async () => {
+    await fixture.reset({ writable: false });
+    await p.reload();
+    expect(await p.waitFor<string>(`${title}?.value`)).toBe("Just trying this out locally");
   });
 });

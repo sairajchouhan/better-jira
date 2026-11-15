@@ -21,6 +21,7 @@ import {
   unsavedLocalChanges,
 } from "./local-database";
 import { loadHistory, savedHistory } from "./undo-history";
+import { localDataName } from "./local-data";
 import { resetLocalEdits, savedChanges } from "./local-edits";
 import { navigate, startNavigation, ui } from "@/client/features/navigation/app-navigation";
 import { liveFavorites } from "@/client/features/navigation/favorites";
@@ -88,7 +89,7 @@ async function loadApplication() {
     if (health.errors.length) throw new Error(health.errors.join(" "));
     throw new StillSyncing(syncProgress(health));
   }
-  const { local, start: startSaving } = await openLocalData(namespace, {
+  const { local, start: startSaving } = await openLocalData(localDataName(namespace, client.writable === true), {
     snapshot: () => ({ changes: savedChanges(), ...savedHistory(), keys: keyMoves() }),
     moved: learnKeys,
   });

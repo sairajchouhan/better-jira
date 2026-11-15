@@ -474,6 +474,16 @@ function completed(transaction: IDBTransaction): Promise<void> {
   });
 }
 
+/**
+ * The saved data a load opens, by account and by whether this run writes to Jira. A writable load sends again whatever its
+ * saved changes hold that Jira hasn't taken (jira-sync `resumeSync`), so changes made while nothing was sent to Jira ("Local
+ * only") are kept apart: they never reach Jira when the same browser later runs writable (`bun run dev`, then `bun start`),
+ * and they come back whenever it runs local only again. Writable keeps the original name, so writes still waiting to be sent
+ * stay where they were. Undo history and key moves go with their changes.
+ */
+export const localDataName = (namespace: string, writable: boolean) =>
+  writable ? namespace : `${namespace}#local-only`;
+
 /** Separate databases keep two Jira accounts from sharing local edits or files. */
 export class LocalDatabase {
   private urls = new Map<string, string>();
