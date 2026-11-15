@@ -548,11 +548,13 @@ export function visibleItems(
     return [row];
   });
   const rank = (r: InboxItem) => PRIORITY.indexOf(facets(r).priority);
+  // Linear's `movedToInboxAt` (`unsnoozedAt ?? createdAt`): a row back from snooze sorts as if it arrived when it came back (BJ-264).
+  const moved = (r: InboxItem) => local[r.head]?.unsnoozed ?? Date.parse(r.time);
   return rows.sort(
     (a, b) =>
       (view.unreadFirst ? Number(b.unread) - Number(a.unread) : 0) ||
       (view.ordering === "priority" ? rank(a) - rank(b) : 0) ||
-      (view.ordering === "oldest" ? a.time.localeCompare(b.time) : b.time.localeCompare(a.time)),
+      (view.ordering === "oldest" ? moved(a) - moved(b) : moved(b) - moved(a)),
   );
 }
 

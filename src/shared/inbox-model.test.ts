@@ -608,3 +608,16 @@ group("⌘F find (Linear's Notification.matchInlineFind)", () => {
     expect(ids(tabbed.base)).toEqual(["a", "c"]);
   });
 });
+
+test("BJ-264: a row back from snooze sorts by when it came back (Linear's movedToInboxAt = unsnoozedAt ?? createdAt)", () => {
+  const now = Date.parse("2026-11-08T12:00:00Z");
+  const old = item({ id: "old", head: "ho", time: "2026-11-01T09:00:00Z" }),
+    newer = item({ id: "newer", head: "hn", time: "2026-11-08T10:00:00Z" });
+  const local = { ho: { unsnoozed: Date.parse("2026-11-08T11:00:00Z") } };
+  const ids = (ordering: "newest" | "oldest") =>
+    visibleItems([newer, old], local, { ...DEFAULT_VIEW, ordering }, now).map((r) => r.id);
+  expect(ids("newest")).toEqual(["old", "newer"]);
+  expect(ids("oldest")).toEqual(["newer", "old"]);
+  // Without the unsnooze it stays where its own time puts it.
+  expect(visibleItems([newer, old], {}, DEFAULT_VIEW, now).map((r) => r.id)).toEqual(["newer", "old"]);
+});
