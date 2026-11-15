@@ -718,6 +718,12 @@ test("B3/B4: list group headers are 36px and stick while their rows scroll; rows
   await test.step("B4: every group header is 36px and every row 44px", async () => {
     expect(await page.eval<number[]>(`[...new Set([...document.querySelectorAll('[data-list-group]')].map(h=>Math.round(h.getBoundingClientRect().height)))]`)).toEqual([36]);
     expect(await page.eval<number[]>(`[...new Set([...document.querySelectorAll('[data-layout=list] [data-key]')].map(r=>Math.round(r.getBoundingClientRect().height)))]`)).toEqual([44]);
+    // BJ-241: each group starts where the one above ends, with no gap (Linear's list has only these two heights).
+    const gaps = await page.eval<number[]>(
+      `(()=>{const r=[...document.querySelectorAll('[data-layout=list] section')].map(s=>s.getBoundingClientRect());return r.slice(1).map((x,i)=>Math.round(x.top-r[i].bottom))})()`,
+    );
+    expect(gaps.length).toBeGreaterThan(0);
+    expect(gaps.every((gap) => gap === 0)).toBe(true);
   });
   await test.step("B3: scrolled into the first group, its header stays at the top of the list, over its rows", async () => {
     const first = await page.eval<string>(`document.querySelector('[data-list-group]').dataset.listGroup`);

@@ -168,8 +168,10 @@ export const BoardView = memo(function BoardView({
         {!visible.length && results}
         {d.layout === "list" ? (
           <div data-scroll-restoration-id={`board-${board.id}`} className="flex-1 overflow-auto py-1">
+            {/* Groups stack with nothing between them: Linear's list is header (36px) and row (44px) heights only
+                (IssueList `heightPerLevel`), BJ-241. */}
             {show.map((c, ci) => (
-              <section key={c.id} className="mb-2">
+              <section key={c.id}>
                 <GroupHeading
                   bucket={c}
                   display={d}
