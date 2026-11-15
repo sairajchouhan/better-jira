@@ -10,6 +10,7 @@ import { attachmentGateway } from "../src/shared/attachment-media";
 import { previewFrom } from "../src/server/link-preview";
 import { GROUP_FIRST, GROUP_PAGE, groupPage, mapFeed } from "../src/shared/inbox-model";
 import { markGroup } from "./fixture-inbox";
+import { boardOps } from "./fixture-ops";
 import { boardFromInput } from "../src/server/config";
 import { avatarProxy, memoryAvatarCache } from "../src/shared/avatar-proxy";
 
@@ -251,6 +252,9 @@ const writes: { key: string; ops: any[] }[] = [],
   descriptions = new Map<string, any>(),
   /** Links the app removed, from either end (see `pair`). */
   unlinked = new Set<string>(),
+  /** Statuses and ranks the app's status and rank ops set, so a drag's write reads back as Jira's would. */
+  moved = new Map<string, string>(),
+  ranked = new Map<string, string>(),
   /** `jiraEdits`: field edits Jira kept on existing issues, in the mirror's shape, as live Jira answers with them. */
   edited = new Map<string, Record<string, unknown>>();
 /** `jiraEdits` opts into Jira keeping field edits; `refuse` makes Jira refuse a write: every op of that kind ("fields",
@@ -370,6 +374,8 @@ const listed = () =>
       ? { relations: [{ key: "TEST-1", kind: "inward:Cloners", label: "is cloned by" }] }
       : {}),
     ...(types.has(issue.key) ? { type: types.get(issue.key) } : {}),
+    ...(moved.has(issue.key) ? { status: moved.get(issue.key) } : {}),
+    ...(ranked.has(issue.key) ? { rank: ranked.get(issue.key) } : {}),
     ...(epics && (issue.key === "TEST-2" || issue.key === "TEST-3") ? { parent: "TEST-7", parentLevel: 1 } : {}),
     ...(parents.has(issue.key)
       ? { parent: parents.get(issue.key) ?? undefined, parentLevel: parents.get(issue.key) ? 1 : undefined }
@@ -429,6 +435,9 @@ function applyOps(key: string, ops: any[]) {
     if (op.op === "fields" && "parent" in op.fields && !createdIssues.has(key)) parents.set(key, op.fields.parent);
   for (const op of ops)
     if (op.op === "link" && op.remove) unlinked.add(pair(key, op.target));
+  const board = boardOps(key, ops, new Map(listed().flatMap((i: any) => (i.rank ? [[i.key, i.rank] as const] : []))));
+  if (board.status !== undefined) moved.set(key, board.status);
+  if (board.rank !== undefined) ranked.set(key, board.rank);
   return Response.json({
     key,
     created,
@@ -1016,6 +1025,8 @@ async function handle(req: Request) {
     types.clear();
     parents.clear();
     unlinked.clear();
+    moved.clear();
+    ranked.clear();
     return Response.json({ ok: true });
   }
   // Turns Jira's refusals on or off mid-test, keeping everything else the fixture holds.
