@@ -43,8 +43,10 @@ import "./virtual-grid-list.css";
  *
  * Moving between rows is the app's, not React Aria's: its ↑/↓/←/→ (and j/k) shortcuts move the selection, which is Linear's
  * focused item, so the keys React Aria's grid would take for its own focus pass to them (`passRowKeysToShortcuts`). The selection
- * shows through React Aria's `data-selected`/`aria-selected` on the row, and a drag of a selected row carries every selected
- * row of its list, as Linear's board does.
+ * is the app's alone: React Aria's grid has no selection (`selectionMode` none), and each row draws the app's as
+ * `data-selected`/`aria-selected`. A grid whose selection React Aria may not change can't be handed to it: after a drop that
+ * adds rows to a list, React Aria selects them, and a controlled selection that ignores the change re-renders it forever
+ * (React error #185, the whole app gone). A drag of a selected row carries every selected row of its list, as Linear's board does.
  */
 
 /** Keys React Aria's grid moves its own focus with (and stops); the app's shortcuts answer them instead. */
@@ -56,10 +58,16 @@ const NAVIGATION = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "
  * in a field, menu or dialog inside the row stay theirs.
  */
 export function passRowKeysToShortcuts(event: KeyboardEvent) {
-  const target = event.target as HTMLElement;
-  if (!target.closest("[role=row]") || target.closest('input, textarea, [contenteditable="true"], [role=dialog], [role=menu], [role=listbox]'))
-    return;
-  if (isShortcutKey(event)) passToShortcuts(event);
+  if (ownsKey(event.target as HTMLElement) && isShortcutKey(event)) passToShortcuts(event);
+}
+
+/**
+ * Whether a key on `target` is the app's: on an item row (React Aria gives each its `data-key`) or a control in it, outside any
+ * field, menu or dialog there. A drop target of React Aria's keyboard drag is a row too, but has no key: its arrows pick
+ * where the drag lands and must never also move the app's selection.
+ */
+export function ownsKey(target: Pick<Element, "closest">) {
+  return !!target.closest("[role=row][data-key]") && !target.closest('input, textarea, [contenteditable="true"], [role=dialog], [role=menu], [role=listbox]');
 }
 
 /** A key React Aria's grid takes for its own focus or selection: the arrows, Home/End, Page Up/Down and ⌘A/Ctrl+A. */
@@ -427,7 +435,8 @@ export function VirtualGridList<T>({
     acceptedDragTypes: drop ? [drop.type] : [],
     getDropOperation: (target) => (target.type === "item" && target.dropPosition === "on" ? "cancel" : "move"),
     onDragStart: (event) => {
-      const moving = new Set([...event.keys].map(String));
+      // React Aria knows no selection, so it names the picked row alone: the drag carries the app's selection with it.
+      const moving = new Set(dragKeys(keys, [...event.keys].map(String), chosen));
       const row = list.current?.querySelector(`:scope > [data-key="${CSS.escape([...moving][0]!)}"]`);
       if (row) document.documentElement.style.setProperty(GAP_VAR, `${row.getBoundingClientRect().height}px`);
       // A frame later, as React Aria marks the rows dragging: Chrome ends a drag whose source changes during dragstart.
@@ -448,8 +457,19 @@ export function VirtualGridList<T>({
 
   // Every item is in the collection, each its own memoised element: a scroll, a measure or a selection never builds it again.
   const draggable = !!drop;
+  // A row re-renders only when its own selected or dragged state flips.
   const rows = items.map((item, i) => (
-    <Row key={keys[i]} id={keys[i]!} item={item} text={itemText} className={rowClassName} draggable={draggable} content={children} />
+    <Row
+      key={keys[i]}
+      id={keys[i]!}
+      item={item}
+      text={itemText}
+      className={rowClassName}
+      draggable={draggable}
+      chosen={chosen.has(keys[i]!)}
+      dragging={dragged.has(keys[i]!)}
+      content={children}
+    />
   ));
   return (
     <div
@@ -478,10 +498,7 @@ export function VirtualGridList<T>({
             aria-label={label}
             // A letter is one of Linear's issue shortcuts on the focused row, never a jump to a row starting with it.
             disallowTypeAhead
-            // The app owns the selection: React Aria only shows it, and its own changes (a click, Escape) are ignored.
-            selectionMode="multiple"
-            selectedKeys={chosen}
-            onSelectionChange={ignore}
+            // No selectionMode: the app owns the selection and each row draws it (see the top of this file).
             escapeKeyBehavior="none"
             dragAndDropHooks={drop ? dragAndDropHooks : undefined}
             className="ui-virtual-grid"
@@ -495,31 +512,43 @@ export function VirtualGridList<T>({
   );
 }
 
-const ignore = () => {};
 const GROW = { flexGrow: 1 };
 
-/** One item of the collection: React Aria's row, its `id` the item's key (its `data-key`), named by `text`. Memoised, so an
- *  unchanged item never tells React Aria's collection anything new. Draggable rows carry React Aria's drag button, visually
- *  hidden, for screen readers; the keyboard moves rows with the app's ⌥ arrow commands, as Linear's board does. */
-const Row = memo(function Row<T>({
-  id,
-  item,
-  text,
-  className,
-  draggable,
-  content,
-}: {
+type RowProps<T> = {
   id: string;
   item: T;
   text: (item: T) => string;
   className?: string;
   draggable: boolean;
+  /** In the app's selection: drawn as React Aria draws its own (`data-selected`, `aria-selected`). */
+  chosen: boolean;
+  /** Carried by the drag under way, though React Aria only drags the picked row: hidden as that one is (`data-dragging`). */
+  dragging: boolean;
   content: (item: T) => ReactNode;
-}) {
+};
+
+/** One item of the collection: React Aria's row, its `id` the item's key (its `data-key`), named by `text`. Memoised, so an
+ *  unchanged item never tells React Aria's collection anything new. Draggable rows carry React Aria's drag button, visually
+ *  hidden, for screen readers; the keyboard moves rows with the app's ⌥ arrow commands, as Linear's board does. React Aria
+ *  writes its own `data-selected` and `data-dragging` last, so the row's element (`render`) sets the app's over them. */
+const Row = memo(function Row<T>({ id, item, text, className, draggable, chosen, dragging, content }: RowProps<T>) {
   return (
-    <GridListItem id={id} data-key={id} textValue={text(item)} className={`ui-virtual-row ${className ?? ""}`}>
+    <GridListItem
+      id={id}
+      data-key={id}
+      textValue={text(item)}
+      className={`ui-virtual-row ${className ?? ""}`}
+      render={(props) => (
+        <div
+          {...props}
+          data-selected={chosen || undefined}
+          aria-selected={chosen}
+          data-dragging={dragging || (props as { "data-dragging"?: boolean })["data-dragging"] || undefined}
+        />
+      )}
+    >
       {draggable && <Button slot="drag" className="sr-only" />}
       {content(item)}
     </GridListItem>
   );
-}) as <T>(props: { id: string; item: T; text: (item: T) => string; className?: string; draggable: boolean; content: (item: T) => ReactNode }) => ReactNode;
+}) as <T>(props: RowProps<T>) => ReactNode;

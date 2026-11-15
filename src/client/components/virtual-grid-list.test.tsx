@@ -10,6 +10,7 @@ import {
   isShortcutKey,
   landsBefore,
   mountedIndices,
+  ownsKey,
   rangeFor,
   windowOf,
   type ListDrop,
@@ -180,4 +181,22 @@ test("a selected row outside the window renders after a spacer the height of the
   expect(html).toMatch(/<div aria-hidden="true" role="presentation" class="ui-virtual-spacer" style="height:200px"><\/div><div data-key="C"[^>]*role="row"/);
   expect(html.match(/role="row"/g)).toHaveLength(1);
   expect(render({ selected: "A" })).toMatch(/data-key="A"[\s\S]*class="ui-virtual-spacer" style="height:200px"/);
+});
+
+test("React Aria never holds the selection: the rows draw the app's, so a drop that adds rows can't loop on it (BJ-322)", () => {
+  // A controlled React Aria selection that ignores changes re-renders forever when a drop adds rows (React error #185).
+  const html = render({ selected: "B", selectedKeys: new Set(["B"]) });
+  expect(html).not.toContain("data-selection-mode");
+  expect(html).not.toContain("aria-multiselectable");
+  expect(html).toMatch(/data-key="B"[^>]*data-selected="true"[^>]*aria-selected="true"|data-key="B"[^>]*aria-selected="true"[^>]*data-selected="true"/);
+});
+
+test("keys on a keyboard drag's drop target stay React Aria's; keys on an item row go to the app (BJ-322)", () => {
+  // A stand-in element: `closest` answers from the selectors it sits inside.
+  const inside = (...matches: string[]) => ({ closest: (selector: string) => (matches.includes(selector) ? {} : null) }) as unknown as Element;
+  expect(ownsKey(inside("[role=row][data-key]"))).toBe(true);
+  // React Aria's drop indicator is a row without a key.
+  expect(ownsKey(inside())).toBe(false);
+  const field = 'input, textarea, [contenteditable="true"], [role=dialog], [role=menu], [role=listbox]';
+  expect(ownsKey(inside("[role=row][data-key]", field))).toBe(false);
 });
