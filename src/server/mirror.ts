@@ -330,7 +330,8 @@ async function syncBoard(board: number) {
   if (getMeta(`fields:${board}`) !== FIELDS || Date.now() - lastFull > FULL_SYNC_EVERY_MS)
     return (await fullSync(board), true);
   // A board mirrored before its project was kept reads its configuration again, once.
-  if (!("project" in (JSON.parse(getMeta(`config:${board}`) ?? "{}") as object))) await syncConfig(board);
+  if (!("project" in (JSON.parse(getMeta(`config:${board}`) ?? "{}") as object)))
+    setMeta(`config:${board}`, JSON.stringify(await boardColumns(board)));
   const keys = await incrementalSync(board);
   if (keys.length) console.log(`[sync] board ${board}: ${keys.join(" ")}`);
   if (Date.now() - (probed.get(board) ?? 0) < PROBE_MS) return keys.length > 0;

@@ -1,5 +1,5 @@
 /** A board's columns as the app shows them: Jira's board configuration with each status's name and category. */
-export type BoardColumns = { id: number; name: string; columns: { name: string; statuses: unknown[] }[] };
+export type BoardColumns = { id: number; name: string; columns: { name: string; statuses: unknown[] }[]; project?: unknown };
 export type Progress = { loaded: number; total: number };
 
 /**
