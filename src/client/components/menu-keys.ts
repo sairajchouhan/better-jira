@@ -10,8 +10,10 @@ export type KeyFacts = {
   ctrlKey: boolean;
   metaKey: boolean;
   shiftKey: boolean;
-  /** A held key (J4e's `h` reads it too). */
-  repeat: boolean;
+  /** J4e's `h`: a held key, or the same key pressed again within 200ms of its keyup (`heldKey`). */
+  held: boolean;
+  /** Linear's `lm.isMac`: Home/End move the highlight only on a Mac; elsewhere they move the search's caret. */
+  mac: boolean;
   /** The menu's own search field, or null when the key went down elsewhere in the menu. */
   search: { value: string; start: number | null; end: number | null } | null;
   /** The highlighted row: null with none; `checkbox` for a multi-select row, `submenu` for one that opens a submenu. */
@@ -64,9 +66,20 @@ const CTRL_STEPS: Record<string, number> = { n: 1, j: 1, p: -1, k: -1 };
 const plainOf = (e: Pick<KeyFacts, "altKey" | "ctrlKey" | "metaKey" | "shiftKey">) =>
   !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey;
 
-/** A plain ← or Backspace: the keys that step back out of a submenu. */
-export const backKey = (event: Pick<KeyFacts, "key" | "altKey" | "ctrlKey" | "metaKey" | "shiftKey">) =>
-  (event.key === "ArrowLeft" || event.key === "Backspace") && plainOf(event);
+/** J4e's last keyup (`k`): its key and when, with the time zeroed for an arrow's own keyup. */
+export type KeyUp = { key: string; time: number };
+export const NO_KEYUP: KeyUp = { key: "", time: 0 };
+const ARROWS = ["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"];
+
+/** J4e's onKeyUp: remembers the key, but an arrow's keyup clears the time, so ←/→ pressed again at once still act. */
+export const keyUpMark = (event: { key: string; repeat: boolean }, now: number): KeyUp => ({
+  key: event.key,
+  time: !event.repeat && ARROWS.includes(event.key) ? 0 : now,
+});
+
+/** J4e's `h`: a held key, or the same key again within 200ms of its keyup (a Backspace that just emptied the search). */
+export const heldKey = (event: { key: string; repeat: boolean }, last: KeyUp, now: number) =>
+  event.repeat || (event.key === last.key && now - last.time < 200);
 
 /** Whether the key moves the highlight the way that lets a resting highlight preview a submenu (canOpenSubmenuOnFocus). */
 export const navigates = (e: Pick<KeyFacts, "key" | "altKey" | "ctrlKey" | "metaKey">) =>
@@ -91,26 +104,27 @@ export function menuKey(e: KeyFacts): KeyAction {
       return { type: "move", step: e.shiftKey ? -1 : 1 };
     case "Home":
     case "End":
-      return { type: "end", last: e.key === "End" };
+      return e.mac ? { type: "end", last: e.key === "End" } : { type: "caret" };
     case "PageDown":
     case "PageUp":
       return { type: "move", step: e.key === "PageDown" ? e.page : -e.page, clamp: true };
     case "ArrowRight": {
       // Opens the highlighted submenu row with the caret at the end of the search; a held → doesn't.
       const atEnd = !e.search || e.search.start === text.length;
-      return !e.repeat && atEnd && e.row?.submenu ? { type: "open" } : { type: "caret" };
+      return !e.held && atEnd && e.row?.submenu ? { type: "open" } : { type: "caret" };
     }
     case "ArrowLeft": {
-      // With the caret at the start (or the search empty), a submenu closes itself and a menu closes its open submenu.
+      // With the caret at the start (or the search empty), a submenu closes itself and a menu closes its open submenu, with any
+      // modifier held (J4e checks none).
       const atStart = !text || (e.search?.start === 0 && e.search?.end === 0);
-      if (e.repeat || !atStart || !backKey(e)) return { type: "caret" };
+      if (e.held || !atStart) return { type: "caret" };
       if (e.inSubmenu) return { type: "back" };
       return e.childOpen ? { type: "closeChild" } : { type: "caret" };
     }
     case "Backspace":
-      // A submenu steps back on Backspace in its empty search, not on a held key that just emptied it (J4e's
-      // onEmptySearchBackspace); the search changing closes any submenu of its own.
-      return e.inSubmenu && backKey(e) && e.search && !text && !e.repeat ? { type: "back" } : { type: "none" };
+      // A submenu steps back on Backspace in its empty search, with any modifier, not on a held key that just emptied it nor
+      // one pressed again within 200ms (J4e's onEmptySearchBackspace); the search changing closes any submenu of its own.
+      return e.inSubmenu && e.search && !text && !e.held ? { type: "back" } : { type: "none" };
     case " ":
       // Mid-search Space types, unless it follows ↑/↓ on a checkbox row (J4e's `x`).
       if (text && !(e.afterArrow && plain && e.row?.checkbox)) return { type: "none" };

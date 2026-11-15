@@ -44,11 +44,11 @@ import { MenuSurfaceContext, watchPlacement } from "./menu-surface";
 import { MENU, menuRoom, settle, submenuPlacement } from "./menu-geometry";
 import { arrange, EMPTY_STATE, relink, rowKeys, stepIndex, type RankCollection, type RankNode } from "./menu-rank";
 import { openedByPointer } from "./menu-pristine";
-import { Shortcut, type Keys } from "./keycap";
+import { isMac, Shortcut, type Keys } from "./keycap";
 import { NO_AUTOFILL } from "@/client/components/field";
 import { menuFilter } from "@/client/lib/fuzzy-score";
 import { safeTriangle, TRIANGLE_EXPIRY, triangleStays } from "./safe-triangle";
-import { menuKey, navigates } from "./menu-keys";
+import { heldKey, keyUpMark, menuKey, navigates, NO_KEYUP } from "./menu-keys";
 
 // The geometry lives on its own so menu-surface.tsx can share it without importing this module back.
 export { MENU, menuRoom };
@@ -592,6 +592,7 @@ function MenuRoot({
   // and the pending preview.
   const input = useRef<"navigation" | "pointer" | "other">("other"),
     arrowed = useRef(false),
+    keyUp = useRef(NO_KEYUP),
     under = useRef<string | null>(null),
     preview = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(preview.current), []);
@@ -771,7 +772,8 @@ function MenuRoot({
       ctrlKey: event.ctrlKey,
       metaKey: event.metaKey,
       shiftKey: event.shiftKey,
-      repeat: event.repeat,
+      held: heldKey(event, keyUp.current, Date.now()),
+      mac: isMac(),
       search: search && { value: search.value, start: search.selectionStart, end: search.selectionEnd },
       row: row && { checkbox: row.hasAttribute("aria-checked"), submenu: key !== null && isSubmenuRow(state, key) },
       numbered: !!numbered,
@@ -857,6 +859,10 @@ function MenuRoot({
               onKeyDownCapture={(event) => {
                 props.onKeyDownCapture?.(event);
                 if (!event.isPropagationStopped()) keyDown(event);
+              }}
+              onKeyUpCapture={(event) => {
+                props.onKeyUpCapture?.(event);
+                if ((event.target as Element).closest(".menu") === root.current) keyUp.current = keyUpMark(event, Date.now());
               }}
               onPointerMove={pointerMove}
               onPointerLeave={(event) => {

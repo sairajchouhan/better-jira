@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { menuKey, navigates, type KeyFacts } from "./menu-keys";
+import { heldKey, keyUpMark, menuKey, navigates, NO_KEYUP, type KeyFacts } from "./menu-keys";
 
 const ROW = { checkbox: false, submenu: false };
 const CHECKBOX = { checkbox: true, submenu: false };
@@ -12,7 +12,8 @@ const facts = (key: string, more: Partial<KeyFacts> = {}): KeyFacts => ({
   ctrlKey: false,
   metaKey: false,
   shiftKey: false,
-  repeat: false,
+  held: false,
+  mac: true,
   search: { value: "", start: 0, end: 0 },
   row: ROW,
   numbered: false,
@@ -73,7 +74,7 @@ test("→ opens the highlighted submenu with the caret at the end, not on a held
   expect(menuKey(facts("ArrowRight", { row: SUBMENU }))).toEqual({ type: "open" });
   expect(menuKey(facts("ArrowRight", { row: SUBMENU, ...typed("st") }))).toEqual({ type: "open" });
   expect(menuKey(facts("ArrowRight", { row: SUBMENU, ...typed("st", 1) }))).toEqual({ type: "caret" });
-  expect(menuKey(facts("ArrowRight", { row: SUBMENU, repeat: true }))).toEqual({ type: "caret" });
+  expect(menuKey(facts("ArrowRight", { row: SUBMENU, held: true }))).toEqual({ type: "caret" });
   expect(menuKey(facts("ArrowRight"))).toEqual({ type: "caret" });
 });
 
@@ -81,16 +82,18 @@ test("← at the start of the search closes this submenu, or in a menu its open 
   expect(menuKey(facts("ArrowLeft", { inSubmenu: true }))).toEqual({ type: "back" });
   expect(menuKey(facts("ArrowLeft", { inSubmenu: true, ...typed("st", 0) }))).toEqual({ type: "back" });
   expect(menuKey(facts("ArrowLeft", { inSubmenu: true, ...typed("st", 1) }))).toEqual({ type: "caret" });
-  expect(menuKey(facts("ArrowLeft", { inSubmenu: true, repeat: true }))).toEqual({ type: "caret" });
-  expect(menuKey(facts("ArrowLeft", { inSubmenu: true, shiftKey: true }))).toEqual({ type: "caret" });
+  expect(menuKey(facts("ArrowLeft", { inSubmenu: true, held: true }))).toEqual({ type: "caret" });
+  // BJ-325: J4e checks no modifier on ←.
+  expect(menuKey(facts("ArrowLeft", { inSubmenu: true, shiftKey: true }))).toEqual({ type: "back" });
+  expect(menuKey(facts("ArrowLeft", { inSubmenu: true, metaKey: true }))).toEqual({ type: "back" });
   expect(menuKey(facts("ArrowLeft", { childOpen: true }))).toEqual({ type: "closeChild" });
-  expect(menuKey(facts("ArrowLeft", { childOpen: true, repeat: true }))).toEqual({ type: "caret" });
+  expect(menuKey(facts("ArrowLeft", { childOpen: true, held: true }))).toEqual({ type: "caret" });
   expect(menuKey(facts("ArrowLeft"))).toEqual({ type: "caret" });
 });
 
 test("Backspace in a submenu's empty search steps back; a held one that just emptied it doesn't", () => {
   expect(menuKey(facts("Backspace", { inSubmenu: true }))).toEqual({ type: "back" });
-  expect(menuKey(facts("Backspace", { inSubmenu: true, repeat: true }))).toEqual({ type: "none" });
+  expect(menuKey(facts("Backspace", { inSubmenu: true, held: true }))).toEqual({ type: "none" });
   expect(menuKey(facts("Backspace", { inSubmenu: true, ...typed("s") }))).toEqual({ type: "none" });
   expect(menuKey(facts("Backspace"))).toEqual({ type: "none" });
 });
@@ -119,4 +122,23 @@ test("the menu carries out each decision: Escape closes the surface, a release o
   expect(keyDown).toMatch(/case "close":[^]*?return surface\?\.close\(\);/);
   expect(keyDown).toContain('if (action.type === "release") return event.preventDefault();');
   expect(keyDown).toContain('if (action.type === "caret") return event.stopPropagation();');
+});
+
+test("BJ-325: Backspace steps back with any modifier, but not when pressed again within 200ms of its keyup (J4e's h)", () => {
+  expect(menuKey(facts("Backspace", { inSubmenu: true, altKey: true }))).toEqual({ type: "back" });
+  expect(menuKey(facts("Backspace", { inSubmenu: true, metaKey: true }))).toEqual({ type: "back" });
+  const up = keyUpMark({ key: "Backspace", repeat: false }, 1000);
+  expect(heldKey({ key: "Backspace", repeat: false }, up, 1150)).toBe(true);
+  expect(heldKey({ key: "Backspace", repeat: false }, up, 1200)).toBe(false);
+  expect(heldKey({ key: "Enter", repeat: false }, up, 1100)).toBe(false);
+  expect(heldKey({ key: "Backspace", repeat: true }, NO_KEYUP, 5000)).toBe(true);
+  // An arrow's own keyup clears the time, so ← pressed again at once still steps back.
+  const arrow = keyUpMark({ key: "ArrowLeft", repeat: false }, 1000);
+  expect(heldKey({ key: "ArrowLeft", repeat: false }, arrow, 1050)).toBe(false);
+});
+
+test("BJ-329: Home/End move the highlight only on a Mac (lm.isMac); elsewhere they move the search's caret", () => {
+  expect(menuKey(facts("Home", { mac: false }))).toEqual({ type: "caret" });
+  expect(menuKey(facts("End", { mac: false }))).toEqual({ type: "caret" });
+  expect(menuKey(facts("End"))).toEqual({ type: "end", last: true });
 });

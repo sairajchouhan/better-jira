@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import { openedFor, openedIn } from "./menu";
-import { backKey } from "./menu-keys";
 import { Row } from "./action-menu";
 import { FilterEntry } from "@/client/features/filters/filter-menu";
 import { LabelRow } from "@/client/features/issue/property-menu";
@@ -39,22 +38,6 @@ test("a menu level's context value is made once for the menu's life, so a highli
 
 test("menu rows that would all re-render on each hover or keystroke are memoised", () => {
   for (const row of [FilterEntry, Row, LabelRow]) expect((row as unknown as { $$typeof: symbol }).$$typeof).toBe(MEMO);
-});
-
-test("a submenu steps back on a plain ← or Backspace only", () => {
-  const key = (key: string, mods: Partial<Record<"altKey" | "ctrlKey" | "metaKey" | "shiftKey", boolean>> = {}) => ({
-    key,
-    altKey: false,
-    ctrlKey: false,
-    metaKey: false,
-    shiftKey: false,
-    ...mods,
-  });
-  expect(backKey(key("ArrowLeft"))).toBe(true);
-  expect(backKey(key("Backspace"))).toBe(true);
-  expect(backKey(key("ArrowLeft", { shiftKey: true }))).toBe(false);
-  expect(backKey(key("Backspace", { metaKey: true }))).toBe(false);
-  expect(backKey(key("ArrowRight"))).toBe(false);
 });
 
 test("Menu.Submenu registers no hotkeys per row: its back keys live on its open popup", async () => {
