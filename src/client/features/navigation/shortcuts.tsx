@@ -1,3 +1,4 @@
+import { newSubIssueDraft } from "@/client/features/issue/sub-issue-draft";
 import { type Issue } from "@/shared/issue-model";
 import { lastToastLink, showNotification } from "@/client/state/app-notifications";
 import { toasts } from "@/client/components/toast-queue";
@@ -14,7 +15,7 @@ import { boardView, filterCount, groupStep, groupVisibility, visibleOrder } from
 import { collapseTarget } from "@/client/features/views/group-collapse";
 import { forgetIssueIntents, post, run as command } from "./commands";
 import { canHaveSubIssues } from "@/shared/issue-properties";
-import { epicLocked, epicOf, listsSubIssues, nestable, subIssueParent, titleParentOf } from "@/shared/epics";
+import { epicLocked, epicOf, listsSubIssues, nestable, titleParentOf } from "@/shared/epics";
 import { childrenByParent } from "@/client/features/issue/sub-issue-model";
 import { getHotkeyManager, type Hotkey, type HotkeyChord } from "@tanstack/react-hotkeys";
 import { boardOf, get, isWatching, ME, set, useStore, type Overlay, issueBoardId } from "@/client/state/store";
@@ -690,7 +691,7 @@ export const shortcuts: Shortcut[] = [
         return;
       }
       // Under an epic, the new issue goes into it as the Epic picker puts it there (subIssueParent).
-      if (!command("create-sub-issue", i.key)) beginCreate({ ...subIssueParent(i), project: i.project });
+      if (!command("create-sub-issue", i.key)) beginCreate(newSubIssueDraft(i));
     }),
   },
   {

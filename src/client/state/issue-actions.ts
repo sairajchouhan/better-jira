@@ -45,6 +45,7 @@ import {
   type LinkPreview,
 } from "@/shared/issue-resource";
 import { recordRelation } from "@/client/features/issue/issue-activity";
+import { newSubIssueDraft } from "@/client/features/issue/sub-issue-draft";
 import { inverseKind, type Relation } from "@/shared/relations";
 import { uploadNow } from "./jira-media";
 import { get, set, timed, ME, boardOf, issueBoardId } from "./store";
@@ -763,10 +764,9 @@ export const actions = {
         }
         for (const [index, title] of (subIssues ?? []).entries()) {
           if (title.trim()) actions.create(title, {
+            ...newSubIssueDraft(issue),
             submission: draft.submission ? `${draft.submission}:child:${index}` : undefined,
             board: board.id,
-            parent: key,
-            project: issue.project,
             type: childTypes(get(), issue)?.[0] ?? "Task",
           }, true);
         }

@@ -2571,3 +2571,28 @@ test("C16: a drag into a started column assigns you, unless the same drop picks 
     t.done();
   }
 });
+
+test("BJ-232: every way of making a sub-issue starts from the parent's sub-issue defaults (status by the parent's state type, its priority)", async () => {
+  const { get, set } = await import("./store");
+  const { actions } = await import("./issue-actions");
+  const { navigate } = await import("@/client/features/navigation/app-navigation");
+  const { newSubIssueDraft } = await import("@/client/features/issue/sub-issue-draft");
+  const board: Board = {
+    id: 23,
+    name: "Sub-issue defaults",
+    columns: [
+      { name: "Backlog", statuses: [{ id: "bl", name: "Backlog", category: "new" }] },
+      { name: "Todo", statuses: [{ id: "td", name: "To Do", category: "new" }] },
+      { name: "Doing", statuses: [{ id: "dg", name: "In Progress", category: "indeterminate" }] },
+    ],
+  };
+  set({ boards: [...get().boards, board] });
+  navigate({ board: 23 });
+  // The composer's pending sub-issues: made with the new parent, under its status and priority.
+  const parent = actions.create("Parent in progress", { board: 23, status: "dg", priority: "High", subIssues: ["Pending child"] }, true)!;
+  const child = [...get().issues.values()].find((i) => i.summary === "Pending child")!;
+  expect(child).toMatchObject({ parent, status: "td", priority: "High" });
+  // ⌘⇧O's composer and New sub-issue from comment open with the same draft.
+  set({ issues: new Map(get().issues).set(parent, { ...get().issues.get(parent)!, status: "bl" }) });
+  expect(newSubIssueDraft(get().issues.get(parent)!)).toMatchObject({ parent, status: "bl", priority: "High" });
+});

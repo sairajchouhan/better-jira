@@ -1,5 +1,6 @@
+import { newSubIssueDraft } from "@/client/features/issue/sub-issue-draft";
 import { canHaveSubIssues } from "@/shared/issue-properties";
-import { subIssueParent } from "@/shared/epics";
+
 import { type Issue } from "@/shared/issue-model";
 import { pageURL } from "@/client/features/navigation/app-navigation";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
@@ -362,7 +363,7 @@ function Thread({
         beginCreate({
           descriptionDoc: copied.body,
           attachments: copied.attachments,
-          ...(parent ? { ...subIssueParent(issue), project: issue.project } : {}),
+          ...(parent ? newSubIssueDraft(issue) : {}),
         });
     } catch (error) {
       setCopyError(error instanceof Error ? error.message : "Could not prepare the comment");
