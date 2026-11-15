@@ -10,7 +10,8 @@ import { createToolbarView } from "@/client/features/views/view-toolbar-actions"
 import { GROUPING_ACTION, ORDERING_ACTION } from "@/client/features/views/view-choices";
 import { activeView, saveOverlayToView } from "@/client/features/views/saved-views";
 import { canMergeOverlay } from "@/shared/saved-view-model";
-import { boardView, filterCount, groupStep, visibleOrder } from "@/shared/view-model";
+import { boardView, filterCount, groupStep, groupVisibility, visibleOrder } from "@/shared/view-model";
+import { collapseTarget } from "@/client/features/views/group-collapse";
 import { forgetIssueIntents, post, run as command } from "./commands";
 import { canHaveSubIssues } from "@/shared/issue-properties";
 import { epicLocked, epicOf, listsSubIssues, nestable, subIssueParent, titleParentOf } from "@/shared/epics";
@@ -22,7 +23,7 @@ import { currentKey } from "@/client/state/jira-sync";
 import { redoEdit, undoEdit } from "@/client/state/undo-history";
 import { navigate, ui, pageURL } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
-import { buckets, rankBetween } from "@/shared/view-model";
+import { rankBetween } from "@/shared/view-model";
 import {
   clearFilters,
   setDisplay,
@@ -219,20 +220,13 @@ function relation(kind: string) {
   ui.send({ type: "overlay.open", overlay: "relations", kind, target: hoveredRow()?.key ?? null });
 }
 function collapse(all = false) {
+  // The groups the list shows, as boardView lays them out for J/K: never the board's unfiltered groups (BJ-278).
   const s = get(),
-    board = s.boards.find((b) => b.id === s.board);
-  if (!board) return;
-  const by = viewSettings(s.board, s).display.columns,
-    groups = buckets(
-      [...s.issues.values()].filter((i) => i.board === s.board),
-      by,
-      board,
-      [...s.issues.values()],
-    );
-  const own = groups.filter((g) => g.issues.some((i) => i.key === s.selected)).map((g) => g.id);
-  // ⌥T: every group takes the opposite of the selected issue's group (Linear's `toggleAllGroupsAction`, from the active item).
-  if (all && own[0]) return toggleAllCollapsed(s.board, groups.map((g) => g.id), own[0]);
-  toggleCollapsed(s.board, all ? groups.map((g) => g.id) : own);
+    view = boardView(s, ME.id),
+    target = view && collapseTarget(groupVisibility(view.columns, view.prefs).show, s.selected, all);
+  if (!view || !target) return;
+  if (target.from) toggleAllCollapsed(view.board.id, target.ids, target.from);
+  else toggleCollapsed(view.board.id, target.ids);
 }
 
 /** Live Linear Chrome reference, 6 Nov 2026. Only existing personal workflows are included. */
