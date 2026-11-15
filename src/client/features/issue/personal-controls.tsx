@@ -166,7 +166,7 @@ function PendingRelation({ related, remove }: { related: NonNullable<IssueDraft[
 /** The Jira projects board `id` creates in, read when the composer moves to it. */
 const boardProjects = (id: number) =>
   projectChoices(
-    [...get().issues.values()].filter((i) => i.board === id),
+    boardIssues(get().issues, id),
     get().boards.find((b) => b.id === id),
   );
 

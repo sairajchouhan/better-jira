@@ -1,6 +1,6 @@
 import { type Board, type Issue, type IssueDraft } from "@/shared/issue-model";
 import { subIssueParent } from "@/shared/epics";
-import { get, ME } from "@/client/state/store";
+import { get, ME, issueBoard } from "@/client/state/store";
 import { childrenByParent } from "./sub-issue-model";
 import { documentHasMedia, normalizeDocument, type AdfDocument } from "@/shared/document";
 import { adfToText } from "@/client/features/editor/adf";
@@ -52,8 +52,8 @@ export const subIssueDefaults = (
  * keeps only its link.
  */
 export function newSubIssueDraft(parent: Issue): IssueDraft {
-  const { boards, issues } = get(),
-    board = boards.find((b) => b.id === parent.board);
+  const { issues } = get(),
+    board = parent.boards.length ? issueBoard(parent) : undefined;
   return board
     ? subIssueDefaults(parent, board, childrenByParent(issues).get(parent.key) ?? [])
     : { ...subIssueParent(parent), project: parent.project };
