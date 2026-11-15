@@ -339,6 +339,7 @@ export function Popover({
         shouldCloseOnInteractOutside={outsideOf}
         ref={popup}
         data-popover
+        data-placed
         {...elevation.props}
         // The box focus starts on (POPOVER_FOCUS) shows no ring: Tab moves to the first control, which does.
         className="max-w-[calc(100vw-24px)] outline-none [&_[role=dialog]]:outline-none"
@@ -364,18 +365,21 @@ export function Popover({
 /** A press in another popup (a Select's list or a submenu opened from inside, portalled elsewhere) is not outside this one. */
 const outsideOf = (element: Element) => !element.closest("[data-surface], [data-popover], .menu-submenu");
 
+/** The edges and height our placement owns. React Aria's Popover writes its own straight onto the node as it measures (on open,
+ *  and again when the list resizes: useOverlayPosition), which React never rewrites, so they go through custom properties that
+ *  `[data-placed]` (index.css) applies with !important: our placement holds whatever React Aria computes. */
+const PLACED_EDGES = { top: "auto", left: "auto", right: "auto", bottom: "auto", maxHeight: "none" } as const;
+
 /** Our fixed placement over React Aria's own (absolute, with top/left or bottom/right of its choosing). */
-function placed(style: CSSProperties | undefined): CSSProperties {
-  if (!style) return { position: "fixed", top: 0, left: 0, visibility: "hidden" };
-  return {
-    position: "fixed",
-    top: "auto",
-    left: "auto",
-    right: "auto",
-    bottom: "auto",
-    maxHeight: "none",
-    ...style,
-  };
+export function placed(style: CSSProperties | undefined): CSSProperties {
+  const box: Record<string, unknown> = style ? { position: "fixed", ...style } : { position: "fixed", visibility: "hidden" };
+  const edges: Record<string, unknown> = style ? PLACED_EDGES : { ...PLACED_EDGES, top: 0, left: 0 };
+  for (const [edge, fallback] of Object.entries(edges)) {
+    const value = (style as Record<string, unknown> | undefined)?.[edge] ?? fallback;
+    delete box[edge];
+    box[`--placed-${edge === "maxHeight" ? "max-height" : edge}`] = typeof value === "number" ? `${value}px` : value;
+  }
+  return box as CSSProperties;
 }
 
 /** A modal menu, React Aria's Popover, with measured placement and a centered small-screen fallback (Dialog is the modal box). */
@@ -495,7 +499,10 @@ export function MenuSurface({
     },
     [anchorId, anchored, width, label, gap, rounding, side, align, command, point?.x, point?.y].join(),
   );
-  const [trigger] = useState(() => ({ current: anchor ?? fallback ?? null }));
+  // React Aria places a popover from its trigger and keeps it hidden (useEnterAnimation: opacity 0, clipped) until it has. With
+  // nothing to anchor to (⌘K or a right-click while <body> has focus, an unanchored menu) it would never show: the page is the
+  // trigger then, and our placement above overrides React Aria's anyway.
+  const [trigger] = useState(() => ({ current: anchor ?? fallback ?? document.body }));
   // A menu is React Aria's Popover: modal, over a clear underlay that takes the press outside it, with everything else inert while it
   // is open. Escape and Tab inside it stay ours (usePopupFocus). An unanchored menu (12vh from the top) dims the page behind it.
   return (
@@ -514,6 +521,7 @@ export function MenuSurface({
         aria-label={label}
         {...elevation.props}
         data-surface="menu"
+        data-placed
         className={`${MENU_POPUP} overflow-y-auto ${fit ? "w-max min-w-[175px] scroll-py-6 max-w-[min(500px,calc(100vw-24px))]" : command ? "flex flex-col overflow-hidden" : "p-3"}`}
         style={{ ...placed(style), zIndex: 50 }}
       >

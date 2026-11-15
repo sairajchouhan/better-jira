@@ -3101,3 +3101,12 @@ pre.code-block .cb-ex-col button {
 .rich-table-add:hover {
   background: color-mix(in srgb, var(--fg-4) 60%, transparent);
 }
+
+/* A menu or toolbar popover's own placement (menu-surface.tsx `placed`) over the edges React Aria writes onto the node. */
+[data-placed] {
+  top: var(--placed-top, auto) !important;
+  left: var(--placed-left, auto) !important;
+  right: var(--placed-right, auto) !important;
+  bottom: var(--placed-bottom, auto) !important;
+  max-height: var(--placed-max-height, none) !important;
+}
