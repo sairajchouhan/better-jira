@@ -3,7 +3,7 @@
  * Not in Atlassian's public docs: every GraphQL string lives in this file, so a field change is a one-file fix.
  * The gateway needs `collabContextRoutingAri` (the site's ARI) to find the feed; without it every feed reads empty.
  */
-import { canWrite } from "./jira";
+import { canWrite, jiraTimeouts } from "./jira";
 import { GROUP_FIRST, GROUP_PAGE, groupPage, mapFeed, type InboxFeed, type InboxGroupPage } from "@/shared/inbox-model";
 import { serverAuth } from "./server-config";
 
@@ -17,8 +17,10 @@ async function gateway<T = any>(
   const { site, email, token } = serverAuth();
   if (/^\s*mutation/.test(query) && !canWrite(site))
     throw new Error(`Jira writes are disabled for ${site}.`);
+  // A stalled gateway must fail like any Jira read, not leave the inbox loading forever.
   const res = await fetch(`${site}/gateway/api/graphql`, {
     method: "POST",
+    signal: AbortSignal.timeout(jiraTimeouts.request),
     headers: {
       Authorization: "Basic " + btoa(`${email}:${token}`),
       Accept: "application/json",
@@ -42,7 +44,11 @@ let ari: Promise<string> | undefined;
 /** `ari:cloud:platform::site/<cloudId>`, read once from the site's public tenant info. */
 function routingAri() {
   return (ari ??= (async () => {
-    const { cloudId } = await (await fetch(`${serverAuth().site}/_edge/tenant_info`)).json();
+    const { cloudId } = await (
+      await fetch(`${serverAuth().site}/_edge/tenant_info`, {
+        signal: AbortSignal.timeout(jiraTimeouts.request),
+      })
+    ).json();
     if (!cloudId) throw new Error("Jira did not return a cloud ID");
     return `ari:cloud:platform::site/${cloudId}`;
   })().catch((error) => {

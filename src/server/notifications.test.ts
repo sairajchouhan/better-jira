@@ -148,3 +148,39 @@ test("prod parity #14/#15, R3 G20: the feed reads every group's first page in on
       else process.env[name] = value;
   }
 });
+
+test("a stalled notifications gateway gives up after Jira's request timeout instead of hanging the inbox", async () => {
+  const originalFetch = globalThis.fetch;
+  const saved = { url: process.env.JIRA_URL, email: process.env.JIRA_EMAIL, token: process.env.JIRA_TOKEN };
+  const { jiraTimeouts } = await import("./jira");
+  const before = jiraTimeouts.request;
+  try {
+    process.env.JIRA_URL = "https://example.atlassian.net";
+    process.env.JIRA_EMAIL = "test@example.invalid";
+    process.env.JIRA_TOKEN = "test-only";
+    jiraTimeouts.request = 30;
+    globalThis.fetch = Object.assign(
+      async (url: string, init: RequestInit = {}) =>
+        String(url).endsWith("/_edge/tenant_info")
+          ? Response.json({ cloudId: "cloud" })
+          : new Promise<Response>((_, reject) =>
+              init.signal?.addEventListener("abort", () => reject(init.signal!.reason)),
+            ),
+      originalFetch,
+    );
+    const { feed } = await import("./notifications");
+    const started = Date.now();
+    await expect(feed()).rejects.toBeDefined();
+    expect(Date.now() - started).toBeLessThan(1000);
+  } finally {
+    jiraTimeouts.request = before;
+    globalThis.fetch = originalFetch;
+    for (const [name, value] of [
+      ["JIRA_URL", saved.url],
+      ["JIRA_EMAIL", saved.email],
+      ["JIRA_TOKEN", saved.token],
+    ] as const)
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+  }
+});
