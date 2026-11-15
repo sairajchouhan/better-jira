@@ -25,15 +25,18 @@ test("shared boards: an issue on two boards shows on both and opens in the board
   });
   await test.step("a shared issue opened from board 2 stays in board 2", async () => {
     await page.click('[data-key="TEST-2"]');
-    await page.waitFor(`${shownIssue}==='TEST-2'`);
-    expect(await page.waitFor<string>(`/TEST-2/.test(${breadcrumb}??'')&&${breadcrumb}`)).toMatch(/Squad board/);
-    expect(await page.eval(`${breadcrumb}`)).not.toMatch(/Browser audit/);
+    await page.waitFor(`!!document.getElementById('summary')&&${shownIssue}==='TEST-2'`);
+    expect(await page.eval(`location.pathname`)).toMatch(/^\/board\/2\//);
+    await page.click('[title="Open as full page"]');
+    expect(await page.waitFor<string>(`/TEST-2/.test(${breadcrumb}??'')&&${breadcrumb}`)).toMatch(/Squad board›TEST-2/);
   });
   await test.step("the same issue opened from board 1 stays in board 1", async () => {
     await page.goto("/board/1/all");
     await page.waitFor(`document.querySelectorAll("[data-key]").length===6`);
     await page.click('[data-key="TEST-2"]');
-    await page.waitFor(`${shownIssue}==='TEST-2'`);
-    expect(await page.waitFor<string>(`/TEST-2/.test(${breadcrumb}??'')&&${breadcrumb}`)).toMatch(/Browser audit/);
+    await page.waitFor(`!!document.getElementById('summary')&&${shownIssue}==='TEST-2'`);
+    expect(await page.eval(`location.pathname`)).toMatch(/^\/board\/1\//);
+    await page.click('[title="Open as full page"]');
+    expect(await page.waitFor<string>(`/TEST-2/.test(${breadcrumb}??'')&&${breadcrumb}`)).toMatch(/Browser audit›TEST-2/);
   });
 });
