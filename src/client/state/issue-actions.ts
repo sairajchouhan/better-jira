@@ -32,7 +32,7 @@ import { viewSettings } from "@/client/features/views/view-settings";
 import { navigate, ui } from "@/client/features/navigation/app-navigation";
 import { adfToText } from "@/client/features/editor/adf";
 import { type Grouping } from "@/shared/view-model";
-import { documentHasMedia, normalizeDocument, textToAdf, type AdfDocument } from "@/shared/document";
+import { documentHasMedia, normalizeDocument, sameDocument, textToAdf, type AdfDocument } from "@/shared/document";
 import { reminderTime } from "@/client/features/reminders/reminder-display";
 import { typeChoices, canHaveSubIssues, defaultIssueType } from "@/shared/issue-properties";
 import { canNest, epicLocked, epicOf, epicPatch, parentOf } from "@/shared/epics";
@@ -545,9 +545,7 @@ export const actions = {
       touch(key);
       queueSave();
     }
-    if (JSON.stringify(document) === JSON.stringify(previous)) {
-      return;
-    }
+    if (sameDocument(document, previous)) return;
     timed(`edit ${key} description`, () =>
       record(key, `description on ${key}`, () => {
         patchFields(key, () => ({ description: document }));

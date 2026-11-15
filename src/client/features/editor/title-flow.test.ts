@@ -12,7 +12,7 @@ import {
   type FocusAt,
   type TitleFlow,
 } from "./title-flow";
-import { dropOpenedLine, leavesForTitle, placeCaret } from "./editor-title-flow";
+import { dropOpenedLine, leavesForTitle, placeCaret, withoutOpenedLine } from "./editor-title-flow";
 import { richSchema as s } from "./rich-document";
 
 const ISSUE: TitleFlow = { enter: "new-line-at-end", arrows: "all", escape: "title" };
@@ -189,6 +189,29 @@ test("placeCaret: an empty description has its line already, so new-line adds no
   const after = empty.apply(placeCaret(empty, "new-line"));
   expect(after.doc.childCount).toBe(1);
   expect(after.selection.from).toBe(1);
+});
+
+test("placeCaret: a description that already starts with an empty line gets no second one (Linear's yOe)", () => {
+  const before = at(doc(p(), p("Hello")), 3);
+  const after = before.apply(placeCaret(before, "new-line"));
+  expect(after.doc.eq(before.doc)).toBe(true);
+  expect(after.selection.from).toBe(1);
+});
+
+test("withoutOpenedLine: the line Enter opened is no edit until something is typed in it", () => {
+  const before = at(doc(p("Hello")), 1);
+  const opened = before.apply(placeCaret(before, "new-line"));
+  // Enter at the title's end, then a pause: the description reports as it was, so autosave has nothing to send.
+  expect(withoutOpenedLine(opened.doc, true).eq(before.doc)).toBe(true);
+  // Typing below the opened line reports that typing alone, never a blank first paragraph.
+  const below = opened.apply(opened.tr.insertText("!", opened.doc.content.size - 1));
+  expect(withoutOpenedLine(below.doc, true).eq(doc(p("Hello!")))).toBe(true);
+  // Typed into: the line is content now.
+  const typed = opened.apply(opened.tr.insertText("Steps"));
+  expect(withoutOpenedLine(typed.doc, true).eq(typed.doc)).toBe(true);
+  // A blank first line the editor did not open is the description's own.
+  const own = doc(p(), p("Hello"));
+  expect(withoutOpenedLine(own, false).eq(own)).toBe(true);
 });
 
 test("dropOpenedLine removes the opened line left empty, and keeps one that was typed in", () => {

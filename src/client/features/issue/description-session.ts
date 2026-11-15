@@ -1,6 +1,6 @@
 import { adfToText } from "@/client/features/editor/document-text";
 import { createActor, type ActorOptions, type AnyActorLogic } from "xstate";
-import { normalizeDocument, type AdfDocument } from "@/shared/document";
+import { normalizeDocument, sameDocument, type AdfDocument } from "@/shared/document";
 import { autosaveMachine, inspector } from "@/client/state/machines";
 import { DESCRIPTION_CONFLICT } from "@/shared/jira-ops";
 
@@ -103,6 +103,12 @@ export function descriptionSession(
         },
         commit: (_, doc) => {
           if (!doc || held()) return;
+          // Typed and taken back: the editor shows what it opened with, so nothing is sent.
+          if (shown !== undefined && sameDocument(doc, JSON.parse(shown || "null"))) {
+            typed = null;
+            forget();
+            return;
+          }
           shown = stringify(doc);
           typed = null;
           ports.write(ports.currentKey(key), doc);

@@ -46,7 +46,8 @@ import {
   type Command,
   type Transaction,
 } from "prosemirror-state";
-import { dropOpenedLine, leavesForTitle, placeCaret } from "./editor-title-flow";
+import type { Node as ProseMirrorNode } from "prosemirror-model";
+import { dropOpenedLine, leavesForTitle, placeCaret, withoutOpenedLine } from "./editor-title-flow";
 import { FOCUS_AT_EVENT, focusTitleAtEnd, type FocusAt, type PreviousInput } from "./title-flow";
 import { mediaNodeView, type MediaNodeView } from "./media-node-view";
 import { expandNodeView } from "./expand-node-view";
@@ -252,7 +253,9 @@ export function RichEditor(props: EditorEngineProps) {
   // collapses to an empty host, and a scroll made meanwhile is never clamped (BJ-193).
   useLayoutEffect(() => {
     let mine: EditorView | null = null,
-      detached = false;
+      detached = false,
+      // The document onChange last reported; a change that reports the same one (the title opening its line) is none.
+      reported: ProseMirrorNode | null = null;
     const uploads = mediaUploads(
       () => mine,
       async (files) => {
@@ -416,7 +419,11 @@ export function RichEditor(props: EditorEngineProps) {
         const next = editor.state.apply(tr);
         editor.updateState(next);
         refresh((n) => n + 1);
-        if (tr.docChanged && !detached) latest.current.onChange?.(fromEditorDocument(next.doc));
+        if (!tr.docChanged || detached) return;
+        const doc = withoutOpenedLine(next.doc, openedLine.current);
+        if (doc.eq(reported ??= tr.before)) return;
+        reported = doc;
+        latest.current.onChange?.(fromEditorDocument(doc));
       },
     });
     view.current = mine = editor;
@@ -434,9 +441,10 @@ export function RichEditor(props: EditorEngineProps) {
     // The title above handing over the caret (title-flow.ts).
     const focusAt = (event: Event) => {
       event.preventDefault();
-      const before = editor.state.doc;
-      editor.dispatch(placeCaret(editor.state, (event as CustomEvent<FocusAt>).detail));
-      openedLine.current = editor.state.doc !== before;
+      const tr = placeCaret(editor.state, (event as CustomEvent<FocusAt>).detail);
+      // Set first, so the line's own transaction is reported as no change.
+      openedLine.current = tr.docChanged;
+      editor.dispatch(tr);
       editor.focus();
     };
     const late = (event: Event) => {

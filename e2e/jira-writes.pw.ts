@@ -206,3 +206,20 @@ test("media writes on a writable site: a crop uploads a replacing attachment tha
     expect(await p.eval(`window.__ops[1]`)).toEqual([{ op: "comment.delete", id: "700" }]);
   });
 });
+
+test("Enter at the end of a title, a pause, then leaving sends no description edit", async ({ open }) => {
+  await fixture.reset({ writable: true });
+  const p = await open("", { setup: accepting });
+  await p.click('[data-key="TEST-2"]');
+  await p.waitFor(`!!document.querySelector('#description[contenteditable=true]')`, 15000);
+  await p.click("#summary");
+  await p.key("End");
+  await p.key("Enter");
+  await p.waitFor(`document.activeElement?.id==='description'`);
+  // Past the 600ms autosave: the opened line alone is no edit.
+  await sleep(1200);
+  await p.key("Escape");
+  await p.eval(`document.activeElement?.blur()`);
+  await sleep(1000);
+  expect(await p.eval(`window.__ops.filter(ops=>JSON.stringify(ops).includes('"description"'))`)).toEqual([]);
+});

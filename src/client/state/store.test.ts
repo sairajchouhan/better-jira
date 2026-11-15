@@ -433,6 +433,25 @@ test("R4: autosaved description edits within a minute make one history entry", a
   expect(get().issues.get(key)!.descriptionHistory?.length).toBe(1);
 });
 
+test("a description saved as it already is, its keys in another order, is no edit and sends nothing", async () => {
+  const { get } = await import("./store");
+  const { actions } = await import("./issue-actions");
+  const key = actions.create("Unchanged description")!;
+  actions.description(key, {
+    type: "doc",
+    version: 1,
+    content: [{ type: "paragraph", content: [{ type: "text", text: "Steps", marks: [{ type: "strong" }] }] }],
+  });
+  const undo = get().undoCount;
+  // The editor writes keys in its own order; the document is the one Jira holds.
+  actions.description(key, {
+    content: [{ content: [{ marks: [{ type: "strong" }], text: "Steps", type: "text" }], type: "paragraph" }],
+    version: 1,
+    type: "doc",
+  });
+  expect(get().undoCount).toBe(undo);
+});
+
 test("restoring a description keeps the version it replaces, without duplicating the newest entry", async () => {
   const { get } = await import("./store");
   const { actions } = await import("./issue-actions");

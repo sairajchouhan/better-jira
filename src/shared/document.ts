@@ -57,6 +57,21 @@ export function normalizeDocument(value: unknown): AdfDocument {
   return plainDocument("");
 }
 
+/** One JSON text per document, whatever order its keys were written in, so Jira's copy and the editor's compare equal. */
+const canonical = (value: unknown): unknown =>
+  Array.isArray(value)
+    ? value.map(canonical)
+    : value && typeof value === "object"
+      ? Object.fromEntries(
+          Object.keys(value)
+            .sort()
+            .map((key) => [key, canonical((value as Record<string, unknown>)[key])]),
+        )
+      : value;
+/** Whether two descriptions are the same document: an edit that leaves it as it was is no change, and is never sent. */
+export const sameDocument = (a: unknown, b: unknown) =>
+  JSON.stringify(canonical(normalizeDocument(a))) === JSON.stringify(canonical(normalizeDocument(b)));
+
 export function documentHasMedia(node: unknown, depth = 0): boolean {
   if (!node || typeof node !== "object" || depth > 100) return false;
   const value = node as AdfNode;

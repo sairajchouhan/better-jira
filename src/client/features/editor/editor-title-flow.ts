@@ -1,4 +1,5 @@
 // The description's half of title-flow.ts: where the caret lands when the title hands over, and when ↑ hands back.
+import type { Node } from "prosemirror-model";
 import { Selection, TextSelection, type EditorState, type Transaction } from "prosemirror-state";
 import type { FocusAt, TitleArrows } from "./title-flow";
 
@@ -6,11 +7,12 @@ const isEmptyParagraph = (node: EditorState["doc"]["firstChild"]) =>
   !!node && node.type.name === "paragraph" && node.content.size === 0;
 
 /** Linear's `focusAtStart()` and `focusNewLineAtStart()`. A new line is an empty paragraph opened above the first
- *  block, the caret in it; an empty description has its line already, so nothing is added there. */
+ *  block, the caret in it. A description that already starts with an empty line (an empty one included) gets none:
+ *  Linear's `yOe` returns early when the first block is an empty paragraph. */
 export function placeCaret(state: EditorState, at: FocusAt): Transaction {
   const { doc } = state;
-  const empty = doc.childCount === 1 && isEmptyParagraph(doc.firstChild);
-  if (at === "start" || empty) return state.tr.setSelection(Selection.atStart(doc)).scrollIntoView();
+  if (at === "start" || isEmptyParagraph(doc.firstChild))
+    return state.tr.setSelection(Selection.atStart(doc)).scrollIntoView();
   const tr = state.tr.insert(0, state.schema.nodes.paragraph!.create());
   return tr.setSelection(TextSelection.create(tr.doc, 1)).scrollIntoView();
 }
@@ -21,6 +23,14 @@ export function dropOpenedLine(state: EditorState): Transaction | null {
   const { doc } = state;
   if (doc.childCount < 2 || !isEmptyParagraph(doc.firstChild)) return null;
   return state.tr.delete(0, doc.firstChild!.nodeSize).setMeta("addToHistory", false);
+}
+
+/** The document an editor reports while the line Enter opened is still empty: without that line. Opening it is where
+ *  the caret goes, not an edit, so it never starts an autosave; Linear drops it on blur (`AOe`). `opened` is whether
+ *  the editor opened that line and has not been left since. */
+export function withoutOpenedLine(doc: Node, opened: boolean): Node {
+  if (!opened || doc.childCount < 2 || !isEmptyParagraph(doc.firstChild)) return doc;
+  return doc.copy(doc.content.cut(doc.firstChild!.nodeSize));
 }
 
 /** Linear's `iJn` going back: ↑ (or ←, unless the title is up-down only) with the caret at the very start of the

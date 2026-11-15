@@ -147,6 +147,16 @@ test("flush saves at once, and a draft typed again before the write finished sta
   expect(h.writes.length).toBe(2);
 });
 
+test("typing taken back before the pause sends nothing, and the draft goes", () => {
+  const h = harness();
+  h.session.edit(doc("jira!"));
+  h.session.edit(doc("jira"));
+  h.advance(600);
+  h.session.flush();
+  expect(h.writes).toEqual([]);
+  expect(h.storage.has(DRAFT)).toBe(false);
+});
+
 test("a draft left by a reload is saved when the issue loads", () => {
   const storage = new Map<string, string>();
   harness({ storage }).session.edit(doc("typed"));
