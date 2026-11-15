@@ -110,3 +110,20 @@ test("active views hide base chips, keep base on Clear, scope Display, and handl
     expect(after.find(v => path.endsWith(v.id)).filters.children.length).toBe(1);
   } finally { await page.close(); }
 });
+
+test("Save → Create new view… focuses the empty name field, and a Current user filter suggests a name, not $me", async ({ open }) => {
+  const filters = { id: "root", join: "and", children: [{ id: "a", field: "assignee", op: "is", values: ["$me"] }] };
+  const page = await open("", {
+    setup: `if(!sessionStorage.seeded){sessionStorage.seeded=1;localStorage.setItem(${JSON.stringify(PREFS_KEY)},${JSON.stringify(JSON.stringify({ 1: { filters } }))})}`,
+  });
+  try {
+    await page.click("text=Save");
+    await page.waitFor(`!!document.querySelector('[aria-label="Save filters"]')`);
+    await page.key("ArrowDown");
+    await page.key("Enter");
+    await page.waitFor(`document.activeElement?.getAttribute('aria-label')==='View name'`);
+    expect(await page.eval(`document.activeElement.placeholder`)).toBe("Current user");
+  } finally {
+    await page.close();
+  }
+});

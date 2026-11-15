@@ -1,6 +1,8 @@
 import { showNotification } from "@/client/state/app-notifications";
 import {
   cloneElement,
+  useEffect,
+  useRef,
   useState,
   type ReactElement,
   type ReactNode,
@@ -28,9 +30,10 @@ import {
   type ViewDraft,
 } from "@/client/features/views/saved-views";
 import { defaultPreferences, selectIssues } from "@/shared/view-model";
-import { viewPlaceholder, issuesCSV } from "@/client/features/views/view-editor-model";
+import { filterValueName, viewPlaceholder, issuesCSV } from "@/client/features/views/view-editor-model";
 import "./view-editor.css";
 import { NO_AUTOFILL } from "@/client/components/field";
+import { useFilterCatalog } from "@/client/features/filters/property-filter";
 
 export function openViewEditor(draft: ViewDraft): void {
   beginViewEditor(draft);
@@ -70,10 +73,18 @@ function Editor({ draft }: { draft: ViewDraft }) {
     [error, setError] = useState("");
   const patch = (change: Partial<ViewDraft>) =>
     setViewDraft({ ...draft, ...change });
-  const placeholder = viewPlaceholder(
-    draft.filters,
-    get().boards.find((b) => b.id === draft.board),
-  );
+  const board = useStore((s) => s.boards.find((b) => b.id === draft.board)),
+    issues = useStore((s) => s.issues),
+    catalog = useFilterCatalog();
+  const placeholder = viewPlaceholder(draft.filters, filterValueName(board, issues, catalog));
+  // Linear's name field takes focus while it is empty (CustomViewForm: `autoFocus: !e.value`). After the commit rather than
+  // in it: opened from a menu (Save → Create new view…), the closing popover still holds the page modal when React applies
+  // `autoFocus`, and the field never got focus.
+  const nameField = useRef<HTMLInputElement>(null),
+    [focusName] = useState(() => !draft.name);
+  useEffect(() => {
+    if (focusName) nameField.current?.focus();
+  }, [focusName]);
   return (
     <form
       className="view-editor"
@@ -110,7 +121,7 @@ function Editor({ draft }: { draft: ViewDraft }) {
         {/* Linear edits the name and description as borderless inline text, not its framed input (`ry`), so TextInput doesn't fit. */}
         <input
           {...NO_AUTOFILL}
-          autoFocus
+          ref={nameField}
           aria-label="View name"
           className="view-name"
           placeholder={placeholder}

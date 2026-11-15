@@ -214,12 +214,13 @@ export function useChoicesAmong(field: Field, board: Board, issues: Issue[]) {
 /** A filter chip's value names: every issue's choices for its field, shared by every chip and recomputed only when the issues
  *  change, not on each chip's render. */
 export function useChoiceLabels(field: Field, board: Board) {
-  const issuesMap = useStore((s) => s.issues);
-  const catalog = useFilterCatalog();
-  return shared(issuesMap, `labels:${field}`, [board, catalog], () =>
+  return choiceLabels(field, board, useStore((s) => s.issues), useFilterCatalog());
+}
+/** `useChoiceLabels` outside a hook's fixed fields: one field's choices, cached per issues, board and catalog. */
+export const choiceLabels = (field: Field, board: Board, issuesMap: Map<string, Issue>, catalog: FilterCatalog) =>
+  shared(issuesMap, `labels:${field}`, [board, catalog], () =>
     filterChoices(field, board, [...issuesMap.values()], undefined, catalog),
   );
-}
 
 /**
  * The board's issues under every filter except this field's own, its rule and the edits Linear's menu makes.

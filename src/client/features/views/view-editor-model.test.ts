@@ -1,6 +1,6 @@
 import { type Board, type Issue } from "@/shared/issue-model";
 import { test, expect } from "bun:test";
-import { viewPlaceholder, issuesCSV } from "./view-editor-model";
+import { filterValueName, viewPlaceholder, issuesCSV } from "./view-editor-model";
 
 const board: Board = {
   id: 1,
@@ -30,6 +30,18 @@ test("draft placeholder uses filters and defaults to All issues", () => {
       children: [{ id: "s", field: "status", op: "is", values: ["Todo"] }],
     }),
   ).toBe("Todo");
+});
+test("the placeholder names values as the filter chips do: Current user for $me, a person by name, a status by name", () => {
+  const issues = new Map([["RAJ-1", issue({ assignee: { id: "acc-7", name: "Asha Rao" } })]]);
+  const filters = {
+    id: "root",
+    join: "and" as const,
+    children: [
+      { id: "a", field: "assignee" as const, op: "is" as const, values: ["$me", "acc-7"] },
+      { id: "s", field: "status" as const, op: "is" as const, values: ["10000"] },
+    ],
+  };
+  expect(viewPlaceholder(filters, filterValueName(board, issues, {}))).toBe("Current user, Asha Rao, To Do");
 });
 test("CSV quotes multiline fields and neutralizes spreadsheet formulas", () => {
   const csv = issuesCSV([issue({ summary: '=HYPERLINK("x")\nnext' })], board);
