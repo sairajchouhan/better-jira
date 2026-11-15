@@ -40,6 +40,7 @@ import { actions, beginCreateInView } from "@/client/state/issue-actions";
 import { loadFull } from "@/client/state/server-data";
 import { navigate, preloadOnHover, ui } from "@/client/features/navigation/app-navigation";
 import { followPeek, togglePeek } from "@/client/features/views/view-peek-state";
+import { movedPointer } from "@/client/components/pointer-intent";
 import {
   myIssuesBoard,
   boardColumns,
@@ -684,9 +685,9 @@ function IssueTarget({
     <div
       data-menu={menu || undefined}
       onPointerEnter={() => preloadOnHover({ selected: issue.key, panel: true })}
-      // Linear's focus follows the pointer as it moves (`onMouseMove`, not a card sliding under a still pointer), and an open
-      // peek shows the focused item.
-      onPointerMove={() => followPeek(issue.key)}
+      // Linear's focus follows the pointer as it moves (useListRowActivation's `onMouseMove`), and an open peek shows the focused
+      // item. A move of no distance is a card sliding under a still pointer, or ⌘ pressed over it: j/k's card keeps the peek.
+      onPointerMove={(e) => movedPointer(e) && followPeek(issue.key)}
       // Leaving a card never closes the peek: Linear skips its mouse-leave deactivate while a peek is mounted.
       onPointerLeave={() => preloadOnHover(null)}
       onClick={(e) =>

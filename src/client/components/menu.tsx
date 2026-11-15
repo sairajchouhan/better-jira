@@ -44,6 +44,7 @@ import { MenuSurfaceContext, placedProps, watchPlacement } from "./menu-surface"
 import { LIMIT_HEIGHT, LIMIT_ROWS, LIMIT_ROWS_HEIGHT, MENU, menuRoom, settle, submenuPlacement } from "./menu-geometry";
 import { arrange, EMPTY_STATE, relink, rowKeys, stepIndex, type RankCollection, type RankNode } from "./menu-rank";
 import { openedByPointer } from "./menu-pristine";
+import { keyboardMode, movedPointer } from "./pointer-intent";
 import { isMac, Shortcut, type Keys } from "./keycap";
 import { NO_AUTOFILL } from "@/client/components/field";
 import { menuFilter } from "@/client/lib/fuzzy-score";
@@ -778,6 +779,8 @@ function MenuRoot({
         if (!touch && isSubmenuRow(state, next)) level.actions.open(next, "pointer", at);
       },
       rest: ({ x, y }) => {
+        // Linear's row takes this mouseenter only out of keyboard mode (`$4e`): a key pressed since keeps its highlight.
+        if (keyboardMode()) return;
         const target = document.elementFromPoint(x, y);
         if (target && root.current?.contains(target)) level.actions.point(target, { x, y }, false);
       },
@@ -898,6 +901,8 @@ function MenuRoot({
   };
   const pointerMove = (event: PointerEvent<HTMLDivElement>) => {
     onPointerMove?.(event);
+    // Only a pointer the user moved highlights: not a list scrolling under a still one, nor ⌘ pressed over a row (movedPointer).
+    if (!movedPointer(event)) return;
     const target = event.target as Element;
     if (target.closest(".menu") !== root.current) return;
     level.actions.point(target, { x: event.clientX, y: event.clientY }, event.pointerType === "touch");
