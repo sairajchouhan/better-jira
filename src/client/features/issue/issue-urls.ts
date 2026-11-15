@@ -8,11 +8,13 @@ export function jiraIssueURL(key: string) {
   return `${get().site}/browse/${encodeURIComponent(key)}`;
 }
 /** The issue in this app, for links that open here (and in a new tab with ⌘-click). */
-export function appURL(issue: Issue) {
+export function appURL(issue: Pick<Issue, "key">) {
   return placeURL({ to: "issue", key: issue.key });
 }
-export function issueURL(issue: Issue) {
+export function issueURL(issue: Pick<Issue, "key">) {
   return isLocalIssue(issue.key) && typeof location !== "undefined"
     ? appURL(issue)
     : jiraIssueURL(issue.key);
 }
+/** The link an issue's row carries when dragged (Copy URL's link), from its key alone. */
+export const issueKeyURL = (key: string) => issueURL({ key });

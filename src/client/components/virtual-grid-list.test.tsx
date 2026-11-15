@@ -15,6 +15,7 @@ import {
   rangeFor,
   windowOf,
   type ListDrop,
+  listDragItems,
 } from "./virtual-grid-list";
 
 // Three 100px cards, 8px apart in their rows' boxes: A 0–100, B 100–200, C 200–300.
@@ -107,7 +108,7 @@ test("a column selection never pins its rows, and only draggable lists carry the
   const plain = render({ selected: null, selectedKeys: new Set(["C"]) });
   expect(plain).not.toContain('role="row"');
   expect(render({ selected: "A" })).not.toMatch(/<button[^>]*class="sr-only"/);
-  const drop: ListDrop = { type: "application/x-test", onDrop: () => {}, renderPreview: () => null, clearSelection: () => {} };
+  const drop: ListDrop = { type: "application/x-test", onDrop: () => {}, renderPreview: () => null, clearSelection: () => {}, link: (key) => `https://x.test/browse/${key}` };
   const draggable = render({ selected: "A", drop });
   expect(draggable).toMatch(/<button[^>]*class="sr-only"/);
 });
@@ -239,4 +240,16 @@ test("the footer (a column's \"+\") sits inside the list right after the last ro
   );
   expect(empty).toMatch(/role="grid"[\s\S]*Add new issue/);
   expect(render({ selected: "C" })).not.toContain("ui-virtual-footer");
+});
+
+test("a dragged row carries its link for drops outside the app and its key under the lists' own type", () => {
+  const drop = { type: "application/x-test", link: (key: string) => `https://x.test/browse/${key}` };
+  expect(listDragItems(drop, ["A-1", "A-2"])).toEqual(
+    ["A-1", "A-2"].map((key) => ({
+      "application/x-test": key,
+      "text/uri-list": `https://x.test/browse/${key}`,
+      "text/plain": `https://x.test/browse/${key}`,
+      "text/html": `<a href="https://x.test/browse/${key}">https://x.test/browse/${key}</a>`,
+    })),
+  );
 });

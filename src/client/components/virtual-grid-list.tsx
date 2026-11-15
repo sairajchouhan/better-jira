@@ -25,6 +25,7 @@ import {
   type DropTarget,
 } from "react-aria-components";
 import "./virtual-grid-list.css";
+import { dragItem } from "@/client/lib/clipboard";
 
 /**
  * A React Aria `GridList` windowed within the scroll container it sits in (BJ-111), with React Aria's drag and drop.
@@ -185,6 +186,9 @@ export function dragOf(
   return { moving: keys.filter((key) => selection.has(key) || set.has(key)), clearsSelection: false };
 }
 const NO_KEYS: ReadonlySet<string> = new Set();
+/** What a drag of `moving` carries: each row's key under the lists' own type, which an in-app drop reads, and its link. */
+export const listDragItems = (drop: Pick<ListDrop, "type" | "link">, moving: string[]) =>
+  moving.map((key) => dragItem(drop.type, key, drop.link(key)));
 
 /** Drag and drop between every list sharing `type`: rows move by a drop, never onto another row. */
 export type ListDrop = {
@@ -196,6 +200,8 @@ export type ListDrop = {
   renderPreview: (keys: string[]) => ReactNode;
   /** Empties the list's `selectedKeys`: a drag of a row outside them leaves them, as Linear's drag start does. */
   clearSelection: () => void;
+  /** The row's URL, which a drag carries as a link for drops outside the app (Linear's `dragData`). */
+  link: (key: string) => string;
 };
 
 /** The space to leave above each mounted item (`indices`, ascending) so it sits at its offset, then the space below the last. */
@@ -466,7 +472,7 @@ export function VirtualGridList<T>({
   const { dragAndDropHooks } = useDragAndDrop<T>({
     isDisabled: !drop,
     getItems: (picked) =>
-      dragOf(keys, [...picked].map(String), selectedKeys ?? NO_KEYS).moving.map((key) => ({ [drop!.type]: key, "text/plain": key })),
+      listDragItems(drop!, dragOf(keys, [...picked].map(String), selectedKeys ?? NO_KEYS).moving),
     renderDragPreview: (dragging) => <>{drop!.renderPreview(dragging.map((item) => item[drop!.type]!))}</>,
     renderDropIndicator: (target) => <DropIndicator target={target} className="ui-drop-gap" />,
     dropTargetDelegate: delegate,

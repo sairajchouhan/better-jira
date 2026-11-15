@@ -69,6 +69,7 @@ import { dropAll, dropPlan } from "./board-drop";
 import { record } from "@/client/state/undo-history";
 import "./board-column.css";
 import { onBoard } from "@/shared/board-membership";
+import { issueKeyURL } from "@/client/features/issue/issue-urls";
 // Memoised: an overlay opening (⌘K) re-renders App, and must not re-render every board.
 export const BoardView = memo(function BoardView({
   board,
@@ -598,6 +599,7 @@ function ColumnView({
     onDrop,
     renderPreview: (keys) => <CardPreview issues={keys.flatMap((key) => get().issues.get(key) ?? [])} display={display} />,
     clearSelection: clearColumnSelection,
+    link: issueKeyURL,
   };
   return (
     <section data-board-column={bucket.name} className="board-column flex w-[340px] shrink-0 flex-col rounded-t-[5px]">

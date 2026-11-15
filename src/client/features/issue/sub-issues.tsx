@@ -70,6 +70,8 @@ import {
   type SubIssueMove,
   withMoveEntry,
 } from "./sub-issue-model";
+import { dragItem } from "@/client/lib/clipboard";
+import { issueKeyURL } from "./issue-urls";
 
 const COMPLETED = [
   ["all", "All"],
@@ -240,7 +242,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
   const dragging = useRef<string | null>(null);
   const { dragAndDropHooks } = useDragAndDrop({
     isDisabled: !manual,
-    getItems: (keys) => [...keys].map((key) => ({ [SUB_ISSUE_DRAG]: String(key), "text/plain": String(key) })),
+    getItems: (keys) => [...keys].map((key) => subIssueDragItem(String(key))),
     acceptedDragTypes: [SUB_ISSUE_DRAG],
     onDragStart: (event) => {
       dragging.current = String([...event.keys][0]);
@@ -651,6 +653,8 @@ function RenameIssue({ issue, close }: { issue: Issue; close: () => void }) {
   );
 }
 const SUB_ISSUE_DRAG = "application/x-better-jira-sub-issue";
+/** A dragged sub-issue row: its link for drops outside the app, its key for a drop among its siblings. */
+export const subIssueDragItem = (key: string) => dragItem(SUB_ISSUE_DRAG, key, issueKeyURL(key));
 const continues = (rows: { depth: number }[], index: number, level: number) => {
   for (const row of rows.slice(index + 1))
     if (row.depth <= level) return row.depth === level;
