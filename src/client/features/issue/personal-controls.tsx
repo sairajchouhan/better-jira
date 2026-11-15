@@ -40,6 +40,7 @@ import {
   canHaveSubIssues,
   canParent,
   childTypes,
+  defaultChildType,
   defaultIssueType,
   matchRank,
   needsParent,
@@ -246,10 +247,9 @@ export function CreateIssue() {
           : issues.flatMap((i) => (i.type ? [i.type] : []))),
       ]),
     ].filter((type) => draft.parent || !needsParent(get(), { type, project }));
-  const type =
-    draft.type && types.includes(draft.type)
-      ? draft.type
-      : (types[0] ?? "Task");
+  // Under a parent, the type Jira creates there unless one is picked (BJ-348), as newSubIssueDraft gives.
+  const preferred = draft.type ?? (parentIssue && defaultChildType(get(), parentIssue));
+  const type = preferred && types.includes(preferred) ? preferred : (types[0] ?? "Task");
   const labelList = useMemo(() => labels.split(",").map((l) => l.trim()).filter(Boolean), [labels]);
   // What the draft holds: the board and type as shown, so it comes back on the same board with the same type.
   const fields = useMemo(() => ({ ...draft, board: board.id, type }), [draft, board.id, type]);

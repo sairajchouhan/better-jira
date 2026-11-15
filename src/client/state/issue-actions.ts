@@ -34,7 +34,7 @@ import { adfToText } from "@/client/features/editor/adf";
 import { type Grouping } from "@/shared/view-model";
 import { documentHasMedia, normalizeDocument, textToAdf, type AdfDocument } from "@/shared/document";
 import { reminderTime } from "@/client/features/reminders/reminder-display";
-import { typeChoices, childTypes, canHaveSubIssues, defaultIssueType } from "@/shared/issue-properties";
+import { typeChoices, canHaveSubIssues, defaultIssueType } from "@/shared/issue-properties";
 import { canNest, epicLocked, epicOf, epicPatch, parentOf } from "@/shared/epics";
 import { replyParent, visibleCommentTotal } from "@/client/features/comments/comment-thread";
 
@@ -769,7 +769,6 @@ export const actions = {
             ...newSubIssueDraft(issue),
             submission: draft.submission ? `${draft.submission}:child:${index}` : undefined,
             board: board.id,
-            type: childTypes(get(), issue)?.[0] ?? defaultIssueType(get().options.types?.[project?.key ?? ""]),
           }, true);
         }
         // "Create more" keeps the composer open; otherwise open the issue, or stay on the board with a toast.

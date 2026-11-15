@@ -2656,3 +2656,47 @@ test("Ship should-fix: an empty board creates in its own Jira project, with that
     set({ options });
   }
 });
+
+test("BJ-348: an inline sub-issue shows the type Jira creates (a standard issue's sub-task type, Task under an epic), not Task until Jira answers", async () => {
+  const { get, set } = await import("./store");
+  const { actions } = await import("./issue-actions");
+  const { navigate } = await import("@/client/features/navigation/app-navigation");
+  const { newSubIssueDraft } = await import("@/client/features/issue/sub-issue-draft");
+  const board: Board = {
+    id: 95,
+    name: "Typed",
+    columns: [{ name: "Todo", statuses: [{ id: "todo", name: "Todo", category: "new" }] }],
+    project: { key: "TYP", name: "Typed project" },
+  };
+  const options = get().options;
+  set({
+    boards: [...get().boards, board],
+    options: {
+      ...options,
+      types: {
+        ...options.types,
+        TYP: [
+          { name: "Story", hierarchyLevel: 0 },
+          { name: "Task", hierarchyLevel: 0 },
+          { name: "Epic", hierarchyLevel: 1 },
+          { name: "Sub-task", hierarchyLevel: -1 },
+        ],
+      },
+    },
+  });
+  try {
+    navigate({ board: 95 });
+    const story = actions.create("Standard parent", { type: "Story" })!,
+      epic = actions.create("Epic parent", { type: "Epic" })!;
+    // Jira's hierarchy binds only a writable site; the create itself stays local here.
+    set({ writable: true });
+    const draft = newSubIssueDraft(get().issues.get(story)!);
+    expect(newSubIssueDraft(get().issues.get(epic)!).type).toBe("Task");
+    set({ writable: false });
+    // The inline composer's create: newSubIssueDraft's properties, nothing else.
+    const child = actions.create("Inline child", draft, true)!;
+    expect(get().issues.get(child)).toMatchObject({ parent: story, type: "Sub-task" });
+  } finally {
+    set({ options, writable: false });
+  }
+});

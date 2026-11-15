@@ -136,6 +136,15 @@ export function childTypes(s: Hierarchy, parent: Typed) {
         .types![parent.project!.key]!.filter((t) => t.hierarchyLevel === level - 1)
         .map((t) => t.name);
 }
+/**
+ * The type a new child of `parent` gets when none is picked, the one the server's `typeFor` (server/jira-writes.ts) creates:
+ * a standard issue's sub-task type, or Task under an epic when its project has Task (else its first type one level down).
+ * Undefined when the project's types aren't known (local mode, options loading).
+ */
+export function defaultChildType(s: Hierarchy, parent: Typed) {
+  const types = childTypes(s, parent);
+  return types?.includes("Task") ? "Task" : types?.[0];
+}
 /** Whether Jira has a type one level below `issue`, so it can be any issue's Jira parent (an epic's are its project's issues). */
 export const canHaveChildren = (s: Hierarchy, issue: Typed) => childTypes(s, issue)?.length !== 0;
 /** Whether `issue`'s Sub-issues section can add to it: Jira takes children under it, and it isn't above an epic. An epic's

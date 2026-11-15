@@ -7,6 +7,7 @@ import { adfToText } from "@/client/features/editor/adf";
 import { statusType } from "@/shared/inbox-model";
 import { createAssignee, type AutoAssignPreferences } from "@/shared/auto-assign";
 import { savedAutomations } from "@/client/state/browser-preferences";
+import { defaultChildType, defaultIssueType } from "@/shared/issue-properties";
 
 
 /** Where one issue's inline sub-issue draft is kept across reloads. */
@@ -49,14 +50,20 @@ export const subIssueDefaults = (
  * What every new sub-issue of `parent` starts with, wherever it is made: the inline composer, Create sub-issue (⌘⇧O) when it
  * opens the composer, New sub-issue from comment, and the composer's pending sub-issues. One path, so none of them skips the
  * status, priority or assignee Linear's `w2.create` gives an issue with a parent (BJ-232). A parent on no board the app holds
- * keeps only its link.
+ * keeps only its link. Its type is the one Jira creates under `parent` (`defaultChildType`).
  */
 export function newSubIssueDraft(parent: Issue): IssueDraft {
-  const { issues } = get(),
+  const state = get(),
     board = parent.boards.length ? issueBoard(parent) : undefined;
-  return board
-    ? subIssueDefaults(parent, board, childrenByParent(issues).get(parent.key) ?? [])
-    : { ...subIssueParent(parent), project: parent.project };
+  // The type Jira will create, so a sub-issue never shows Task until Jira answers (BJ-348).
+  const type =
+    defaultChildType(state, parent) ?? defaultIssueType(state.options.types?.[parent.project?.key ?? ""]);
+  return {
+    ...(board
+      ? subIssueDefaults(parent, board, childrenByParent(state.issues).get(parent.key) ?? [])
+      : { ...subIssueParent(parent), project: parent.project }),
+    type,
+  };
 }
 /**
  * A new sub-issue's status from its parent's state type, as Linear's `w2.create` with a parent: started, unstarted or
