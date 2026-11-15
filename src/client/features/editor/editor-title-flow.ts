@@ -11,6 +11,8 @@ const isEmptyParagraph = (node: EditorState["doc"]["firstChild"]) =>
  *  Linear's `yOe` returns early when the first block is an empty paragraph. */
 export function placeCaret(state: EditorState, at: FocusAt): Transaction {
   const { doc } = state;
+  // Linear's `focusAtEnd()`: the caret after a kept draft. No scroll here: the command that asked reveals the whole editor.
+  if (at === "end") return state.tr.setSelection(Selection.atEnd(doc));
   if (at === "start" || isEmptyParagraph(doc.firstChild))
     return state.tr.setSelection(Selection.atStart(doc)).scrollIntoView();
   const tr = state.tr.insert(0, state.schema.nodes.paragraph!.create());

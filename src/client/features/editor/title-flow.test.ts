@@ -184,6 +184,15 @@ test("placeCaret: start puts the caret before the first character; new-line open
   expect(line.selection.$from.parent).toBe(line.doc.firstChild!);
 });
 
+test("placeCaret: end puts the caret after a kept draft's last character (focusAtEnd), leaving the scroll to the caller", () => {
+  const before = at(doc(p("Hello"), p("World")), 1);
+  const tr = placeCaret(before, "end");
+  const after = before.apply(tr);
+  expect(after.doc.eq(before.doc)).toBe(true);
+  expect(after.selection.from).toBe(13);
+  expect(tr.scrolledIntoView).toBe(false);
+});
+
 test("placeCaret: an empty description has its line already, so new-line adds none", () => {
   const empty = at(doc(p()), 1);
   const after = empty.apply(placeCaret(empty, "new-line"));

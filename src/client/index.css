@@ -2108,7 +2108,9 @@ li[data-done="true"] > .todo-content {
   grid-template-rows: auto 1fr;
   column-gap: clamp(16px, 8.696cqw - 55.304px, 56px);
   align-content: start;
-  padding-block: 59.5px 80px;
+  /* 48px under the composer's 12px margin: Linear's 60px from the comment box to the page's end (`sx-efzj8c`
+     padding-bottom: 60px), as in the narrow layout's 48px below. */
+  padding-block: 59.5px 48px;
   font-size: 16px;
 } /* title at y 112.5 like Linear (RAJ-52, 1272x846) */
 .issue-detail-title {

@@ -61,7 +61,7 @@ import {
 } from "@/client/features/editor/title-flow";
 import { hotkeyOf, runShortcut } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
-import { post, useCommand, focusNode } from "@/client/features/navigation/commands";
+import { post, useCommand, focusComposer, focusNode } from "@/client/features/navigation/commands";
 import { InboxIssueActions, InboxIssueGroup, InboxSnooze } from "./inbox";
 import { useCommentsSeen, useIssueVisit } from "@/client/features/inbox/issue-visit";
 import { SplitPanel } from "@/client/features/issue/split-panel";
@@ -842,10 +842,10 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
   useCommand("focus-comment", (key) => {
     if (key !== issue.key || !commentRef.current) return;
     commentFocus.current?.disconnect();
-    if (focusNode(commentRef.current.querySelector<HTMLElement>("#comment"))) return true;
+    if (focusComposer(commentRef.current.querySelector<HTMLElement>("#comment"))) return true;
     // The lazy editor owns its DOM after it loads; observe that mount rather than polling frames.
     const observer = new MutationObserver(() => {
-      if (focusNode(commentRef.current?.querySelector<HTMLElement>("#comment"))) observer.disconnect();
+      if (focusComposer(commentRef.current?.querySelector<HTMLElement>("#comment"))) observer.disconnect();
     });
     observer.observe(commentRef.current, { childList: true, subtree: true });
     commentFocus.current = observer;

@@ -21,8 +21,9 @@ export type TitleEscape = "title" | "surface";
 export type TitleFlow = { enter: TitleEnter; arrows: TitleArrows; escape: TitleEscape };
 /** Every title but the issue view's: the composers' (`fZn`'s `zQ`), which set neither flag. */
 export const COMPOSER_TITLE: TitleFlow = { enter: "start", arrows: "all", escape: "surface" };
-/** Where the caret lands in the description: Linear's `focusAtStart()` and `focusNewLineAtStart()`. */
-export type FocusAt = "start" | "new-line";
+/** Where the caret lands in an editor: Linear's `focusAtStart()` and `focusNewLineAtStart()` (the title handing over to the
+ *  description), and `focusAtEnd()` (a command opening the comment composer, focus-comment). */
+export type FocusAt = "start" | "new-line" | "end";
 
 type Key = Pick<KeyboardEvent, "key" | "shiftKey" | "altKey" | "metaKey" | "ctrlKey"> & { isComposing?: boolean };
 type Caret = { start: number; end: number; length: number };
