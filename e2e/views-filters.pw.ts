@@ -1,9 +1,11 @@
 /** QA round 2: views and filters. */
-import { expect, test, sleep, PREFS_KEY } from "./app";
+import { expect, test, sleep, PREFS_KEY, PAGE_FILTERS_KEY } from "./app";
 
 const root = `document.querySelector('[aria-label="Add Filter…"]')`;
 const chips = `[...document.querySelectorAll(".ui-filter-block")].map(b=>b.textContent)`;
 const stored = `JSON.parse(localStorage.getItem(${JSON.stringify(PREFS_KEY)})??"{}")[1]`;
+/** Board 1's All issues temporary filter, as stored (shared/page-filters.ts). */
+const storedFilter = `JSON.parse(localStorage.getItem(${JSON.stringify(PAGE_FILTERS_KEY)})??"{}")["board/1/all"]`;
 
 test("filter menu: the first F after load opens it without a loading step, and the Overdue preset saves a relative filter", async ({
   open,
@@ -29,7 +31,7 @@ test("filter menu: the first F after load opens it without a loading step, and t
     await page.waitFor(`!!document.querySelector('input[aria-label="Due date"]')`);
     await page.click("text=Overdue");
     await page.waitFor(`${chips}.includes("Due datebeforeOverdue")`);
-    await page.waitFor(`${stored}?.filters?.children?.[0]?.values?.[0]==="P0D"`);
+    await page.waitFor(`${storedFilter}?.children?.[0]?.values?.[0]==="P0D"`);
   });
 });
 
@@ -71,7 +73,7 @@ test("R2-D5: a chip switched from is empty back to is and closed without a value
     await page.waitFor(`${chips}.includes("Priorityis")`);
     await page.key("Escape");
     await page.waitFor(`!${chips}.some(c=>c.startsWith("Priority"))`);
-    expect(await page.eval(`${stored}?.filters?.children?.length ?? 0`)).toBe(0);
+    expect(await page.eval(`${storedFilter}?.children?.length ?? 0`)).toBe(0);
   } finally {
     await page.close();
   }

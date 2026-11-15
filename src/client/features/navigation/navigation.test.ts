@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { placeOf, restoredTrail, transition, type NavigationData, type NavigationEvent, type Place, type Screen } from "./navigation";
-import { emptyOverlay, viewForRoute, type SavedView, type ViewDraft } from "@/shared/saved-view-model";
+import { emptyOverlay, encodeOverlay, viewForRoute, type SavedView, type ViewDraft } from "@/shared/saved-view-model";
 import { defaultPreferences } from "@/shared/view-model";
 import { createAppRouter, legacyPlace, locationOf, type RouteContext } from "@/client/routes/tree";
 
@@ -56,11 +56,20 @@ const data = (patch: Partial<NavigationData> = {}): NavigationData => ({
   issue: (key) => ({ "A-1": { key: "A-1", boards: [1] }, "B-1": { key: "B-1", boards: [2] } })[key],
   currentKey: (key) => (key === "OLD-1" ? "A-1" : key),
   draftFor: (id) => ({ ...view(), id, name: id ? "Triage" : "" }),
+  pageFilters: {},
   ...patch,
 });
-/** Runs events in order, each from the screen the last one left. */
+/** Runs events in order, each from the screen the last one left; `walk` also from the preferences and page filters it left. */
 const run = (events: NavigationEvent[], d = data(), screen = start) =>
   events.reduce((t, e) => transition(t.screen, e, d), { screen, history: "none" } as ReturnType<typeof transition>);
+const walk = (events: NavigationEvent[], d = data(), screen = start) =>
+  events.reduce(
+    ({ screen, d }, e) => {
+      const t = transition(screen, e, d);
+      return { screen: t.screen, d: { ...d, preferences: t.preferences ?? d.preferences, pageFilters: t.pageFilters ?? d.pageFilters } };
+    },
+    { screen, d },
+  );
 const context: RouteContext = {
   show: () => {},
   preload: async () => {},
@@ -140,15 +149,75 @@ test("inside a saved view, a new openIn is saved to the view; opening or restori
   expect(toggled.preferences).toBeUndefined();
 });
 
-test("leaving or switching a view drops its filter overlay; going to a board picks how that board opens issues", () => {
-  const filters = { id: "o", join: "and" as const, children: [{ id: "r", field: "labels" as const, op: "is" as const, values: ["x"] }] };
-  const filtered = run([{ type: "open-view", view: view() }, { type: "filters", filters }]);
+const labelFilter = (value: string) => ({
+  id: `o-${value}`,
+  join: "and" as const,
+  children: [{ id: `r-${value}`, field: "labels" as const, op: "is" as const, values: [value] }],
+});
+
+test("another view or the board shows its own temporary filter, not the view's; going to a board picks how that board opens issues", () => {
+  const filtered = walk([{ type: "open-view", view: view() }, { type: "filters", filters: labelFilter("x") }]);
   expect(url(filtered.screen)).toStartWith("/view/triage-v1?filter=");
-  const other = transition(filtered.screen, { type: "open-view", view: view({ id: "v2", name: "Other" }) }, data());
+  const other = transition(filtered.screen, { type: "open-view", view: view({ id: "v2", name: "Other" }) }, filtered.d);
   expect(other.screen.overlayFilters.children).toHaveLength(0);
-  const left = transition(filtered.screen, { type: "go", to: { board: 1 } }, data());
+  const left = transition(filtered.screen, { type: "go", to: { board: 1 } }, filtered.d);
   expect(left.screen).toMatchObject({ activeViewId: null, view: "side", overlayFilters: { children: [] } });
   expect(url(left.screen)).toBe("/board/1/all");
+});
+
+// Linear keys each page's filter by its address (startup-root `E9`, `filter_2_${identifier ?? pathname}`).
+test("a temporary filter belongs to the board tab it was set on: Active's never shows on All issues, and comes back on Active", () => {
+  const active = labelFilter("active");
+  const set = walk([{ type: "go", to: { board: 1, scope: "active" } }, { type: "filters", filters: active }]);
+  expect(set.screen.overlayFilters).toEqual(active);
+  const all = walk([{ type: "go", to: { board: 1, scope: "all" } }], set.d, set.screen);
+  expect(url(all.screen)).toBe("/board/1/all");
+  expect(all.screen.overlayFilters.children).toHaveLength(0);
+  expect(walk([{ type: "go", to: { board: 1, scope: "active" } }], all.d, all.screen).screen.overlayFilters).toEqual(active);
+  // My issues and another person's profile are pages of their own too.
+  const mine = walk([{ type: "go", to: { mine: true } }], set.d, set.screen);
+  expect(mine.screen.overlayFilters.children).toHaveLength(0);
+  const mineFiltered = walk([{ type: "filters", filters: labelFilter("mine") }, { type: "go", to: { mine: true, person: "u2" } }], mine.d, mine.screen);
+  expect(mineFiltered.screen.overlayFilters.children).toHaveLength(0);
+});
+
+test("a saved view's temporary filter survives leaving it, coming back and a reload", () => {
+  const filters = labelFilter("x");
+  const t = walk([
+    { type: "open-view", view: view() },
+    { type: "filters", filters },
+    { type: "go", to: { board: 1 } },
+    { type: "open-view", view: view() },
+  ]);
+  expect(t.screen.overlayFilters).toEqual(filters);
+  expect(url(t.screen)).toStartWith("/view/triage-v1?filter=");
+  // A reload keeps the address, which names the filter; an address naming another sets that one, and Back to an entry
+  // naming none (before the filter was set) shows none, so the screen always agrees with its address.
+  expect(transition(start, { type: "restore", place: { to: "view", id: "v1", filter: encodeOverlay(filters) }, draft: null }, t.d).screen.overlayFilters.children).toEqual(filters.children);
+  const bare = transition(start, { type: "restore", place: { to: "view", id: "v1" }, draft: null }, t.d);
+  expect([bare.screen.overlayFilters.children, bare.pageFilters]).toEqual([[], {}]);
+  const named = labelFilter("y");
+  const linked = transition(start, { type: "restore", place: { to: "view", id: "v1", filter: encodeOverlay(named) }, draft: null }, t.d);
+  expect(linked.screen.overlayFilters.children).toEqual(named.children);
+  expect(linked.pageFilters?.["view/v1"]?.children).toEqual(named.children);
+  // Clearing it removes the page's entry, as Linear removes the stored key.
+  expect(transition(t.screen, { type: "filters", filters: emptyOverlay() }, t.d).pageFilters).toEqual({});
+});
+
+test("saving a filter as a view leaves the tab it came from with its filter, as Linear's Create view (SV) does", () => {
+  const filters = labelFilter("x");
+  const saved = view({ id: "v9", name: "Saved", filters });
+  const t = walk([
+    { type: "go", to: { board: 1 } },
+    { type: "filters", filters },
+    { type: "edit-view", draft: { ...saved, id: undefined } },
+  ]);
+  expect(t.screen.overlayFilters.children).toHaveLength(0);
+  const d = { ...t.d, savedViews: [view(), saved] };
+  // The new view holds the filter as its own, with no temporary filter on top.
+  const opened = walk([{ type: "open-view", view: saved }], d, t.screen);
+  expect(opened.screen.overlayFilters.children).toHaveLength(0);
+  expect(walk([{ type: "go", to: { board: 1 } }], opened.d, opened.screen).screen.overlayFilters).toEqual(filters);
 });
 
 test("the view editor takes display changes into its draft, keeps the board's preference, and returns on cancel", () => {

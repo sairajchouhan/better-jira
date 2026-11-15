@@ -3,7 +3,8 @@
  * never throw: a missing, unreadable or malformed value reads as the default. Issue data lives in IndexedDB instead
  * (local-database.ts); a preference failure never touches it.
  */
-import { parsePreferences, type Display, type Preferences } from "@/shared/view-model";
+import { defaultPreferences, parsePreferences, type Display, type Preferences } from "@/shared/view-model";
+import { migratePageFilters, parsePageFilters, type PageFilters } from "@/shared/page-filters";
 import { AUTO_ASSIGN_DEFAULTS, parseAutoAssign, type AutoAssignPreferences } from "@/shared/auto-assign";
 import type { View } from "./store";
 
@@ -16,6 +17,7 @@ const VIEWS = "better-jira:views:v1",
   SAVED_VIEWS = "better-jira:saved-views:v1",
   VIEW_DETAILS = "better-jira:view-details:v1",
   AUTOMATIONS = "better-jira:automations:v1",
+  FILTERS = "better-jira:page-filters:v1",
   OWNER = "better-jira:preferences-owner";
 let namespace = "";
 const scoped = (key: string) => (namespace ? `${key}:${namespace}` : key);
@@ -69,11 +71,25 @@ export function onSidebarHiddenChange(fn: (hidden: boolean) => void) {
       if (event.key === SIDEBAR) fn(event.newValue === "hidden");
     });
 }
-/** Each board's view preferences. */
-export const savedViewPreferences = (): Record<number, Preferences> =>
+const storedViewPreferences = (): Record<number, Preferences> =>
   readJson(VIEWS, {}, (saved) =>
     Object.fromEntries(Object.entries(saved).map(([id, p]) => [id, parsePreferences(p)])),
   );
+/** Each board's view preferences. A filter is never one of them: each page keeps its own (`savedPageFilters`). */
+export const savedViewPreferences = (): Record<number, Preferences> =>
+  Object.fromEntries(
+    Object.entries(storedViewPreferences()).map(([id, p]) => [id, { ...p, filters: defaultPreferences().filters }]),
+  );
+/** Each page's temporary filter; until any is stored, the filters board preferences used to hold (migratePageFilters). */
+export function savedPageFilters(): PageFilters {
+  const stored = read(FILTERS);
+  if (stored === null) return migratePageFilters(storedViewPreferences());
+  try {
+    return parsePageFilters(JSON.parse(stored));
+  } catch {
+    return {};
+  }
+}
 /** Each board's default display ("Save as default"). */
 export const savedDefaults = (): Record<number, Display> =>
   readJson(DEFAULTS, {}, (saved) =>
@@ -133,6 +149,7 @@ export function persistPreferences(patch: {
   view?: View;
   sidebarHidden?: boolean;
   preferences?: Record<number, Preferences>;
+  pageFilters?: PageFilters;
   favorites?: string[];
 }): string | undefined {
   let failed: string | undefined;
@@ -149,6 +166,12 @@ export function persistPreferences(patch: {
       localStorage.setItem(scoped(VIEWS), JSON.stringify(patch.preferences));
     } catch {
       failed = "Could not save view preferences in this browser";
+    }
+  if (patch.pageFilters)
+    try {
+      localStorage.setItem(scoped(FILTERS), JSON.stringify(patch.pageFilters));
+    } catch {
+      failed = "Could not save filters in this browser";
     }
   if (patch.favorites)
     try {

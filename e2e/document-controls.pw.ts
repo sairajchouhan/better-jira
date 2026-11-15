@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { Download } from "@playwright/test";
-import { expect, test, sleep, PREFS_KEY, type App as Page, savedAs, documentOfHref, shownDocument, shownIssue } from "./app";
+import { expect, test, sleep, PAGE_FILTERS_KEY, type App as Page, savedAs, documentOfHref, shownDocument, shownIssue } from "./app";
 
 const DOC_PAGE = "?issue=TEST-2&view=page";
 const SAVED = `document.querySelector('[aria-label="Local save status"]').textContent.includes('Saved')`;
@@ -666,20 +666,19 @@ test("document history, narrow and measured layouts, the hidden board and remind
   });
 
   await test.step("titles stay one line and board filter shortcuts cannot change the hidden board behind a full-page document", async () => {
-    const prefs = {
-      1: {
-        filters: {
-          id: "root",
-          join: "and",
-          children: [
-            { id: "r1", field: "labels", op: "is", values: ["test"] },
-            { id: "r2", field: "labels", op: "is", values: ["test"] },
-          ],
-        },
+    // Board 1's All issues tab carries a temporary filter of its own.
+    const pages = {
+      "board/1/all": {
+        id: "root",
+        join: "and",
+        children: [
+          { id: "r1", field: "labels", op: "is", values: ["test"] },
+          { id: "r2", field: "labels", op: "is", values: ["test"] },
+        ],
       },
     };
     const page = await open(DOC_PAGE, {
-      setup: `if(!sessionStorage.seeded){sessionStorage.seeded=1;localStorage.setItem(${JSON.stringify(PREFS_KEY)},${JSON.stringify(JSON.stringify(prefs))});}`,
+      setup: `if(!sessionStorage.seeded){sessionStorage.seeded=1;localStorage.setItem(${JSON.stringify(PAGE_FILTERS_KEY)},${JSON.stringify(JSON.stringify(pages))});}`,
     });
     await create(page, "Alpha", "One line title");
     await page.click('[aria-label="Document title"]');
@@ -689,7 +688,7 @@ test("document history, narrow and measured layouts, the hidden board and remind
       `document.querySelector('[aria-label="Document title"]').value==='Alpha Beta Gamma'`,
     );
     await page.key("Escape");
-    const filters = `JSON.parse(localStorage.getItem(${JSON.stringify(PREFS_KEY)}))['1'].filters.children.length`;
+    const filters = `JSON.parse(localStorage.getItem(${JSON.stringify(PAGE_FILTERS_KEY)}))['board/1/all'].children.length`;
     for (const [key, ...mods] of [["f", "shift"], ["f", "alt", "shift"], ["f"]] as const) {
       await page.key(key, ...mods);
       await sleep(150); // a filter change or menu would show within this window

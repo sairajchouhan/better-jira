@@ -2,11 +2,11 @@ import { isMyIssues } from "@/client/features/navigation/navigation";
 /** A board's view settings: filters, display, scope, hidden and collapsed groups.
  *
  * Callers say what they want ("remove this rule", "clear filters", "hide this group"); this module decides where
- * it goes. On a plain board it goes to the board's preferences. While a saved view is open, filters go to the view's
- * temporary overlay (its saved base filters are never edited here), and display, scope, hidden and collapsed groups and the group order are
- * saved to the view, as Linear keeps them in the view's preferences.
- * While the view editor is open, everything goes to the editor's draft. Any other board's settings are its own
- * preferences.
+ * it goes. Filters are the temporary filter of the page on screen (each board tab, saved view and personal page tab keeps
+ * its own, shared/page-filters.ts); a saved view's own filters are never edited here. Everything else goes to the board's
+ * preferences on a plain board, and to the view while a saved view is open, as Linear keeps them in the view's
+ * preferences. While the view editor is open, everything goes to the editor's draft. Any other board's settings are its
+ * own preferences, which hold no filter.
  */
 import { get, set, useStore } from "@/client/state/store";
 import { navigate, setOverlay, setViewDraft } from "@/client/features/navigation/app-navigation";
@@ -25,14 +25,13 @@ import {
   type Preferences,
   type Rule,
 } from "@/shared/view-model";
-import { emptyOverlay } from "@/shared/saved-view-model";
 
 type State = ReturnType<typeof get>;
 const fallback = defaultPreferences();
-const edited = (s: State, board: number) =>
-  (board === s.board ? s.viewPreferences : null) ?? s.preferences[board === s.board && isMyIssues(s) ? 0 : board] ?? fallback;
-const effective = (s: State, board: number) =>
-  (board === s.board ? s.effectiveViewPreferences : null) ?? s.preferences[board === s.board && isMyIssues(s) ? 0 : board] ?? fallback;
+/** The preferences a plain board (or My issues, key 0) stores: no filter. */
+const stored = (s: State, board: number) => s.preferences[board === s.board && isMyIssues(s) ? 0 : board] ?? fallback;
+const edited = (s: State, board: number) => (board === s.board ? s.viewPreferences : null) ?? stored(s, board);
+const effective = (s: State, board: number) => (board === s.board ? s.effectiveViewPreferences : null) ?? stored(s, board);
 
 /** The settings the view controls show and edit. Inside a saved view, `filters` is only its overlay. */
 export const viewSettings = (board: number, s = get()) => edited(s, board);
@@ -51,16 +50,17 @@ function write(board: number, patch: Partial<Preferences>) {
     setViewDraft({ ...s.editorDraft, ...patch });
     return;
   }
+  const { filters, ...rest } = patch;
+  // Only the page on screen has a temporary filter to set.
+  if (filters && board === s.board) setOverlay(filters);
+  if (!Object.keys(rest).length) return;
   if (s.activeViewId && board === s.board) {
-    const { filters: overlay, ...saved } = patch;
-    if (overlay) setOverlay(overlay);
-    if (Object.keys(saved).length)
-      void updateSavedView(s.activeViewId, saved).catch((e: unknown) =>
-        set({ perf: e instanceof Error ? e.message : "Could not save view" }),
-      );
+    void updateSavedView(s.activeViewId, rest).catch((e: unknown) =>
+      set({ perf: e instanceof Error ? e.message : "Could not save view" }),
+    );
     return;
   }
-  const prefs = { ...viewSettings(board), ...patch };
+  const prefs = { ...stored(s, board), ...rest };
   set({ preferences: { ...s.preferences, [board === s.board && isMyIssues(s) ? 0 : board]: prefs } });
   if (board === s.board) navigate({ view: prefs.display.openIn });
 }
@@ -85,11 +85,7 @@ export const setOnlyRule = (board: number, rule: Rule) =>
     children: [...f.children.filter((c) => !("field" in c && c.field === rule.field)), rule],
   }));
 /** Clears the filters being edited; a saved view keeps its base filters. */
-export function clearFilters(board: number) {
-  const s = get();
-  if (s.activeViewId && !s.editorDraft && board === s.board) setOverlay(emptyOverlay());
-  else write(board, { filters: defaultPreferences().filters });
-}
+export const clearFilters = (board: number) => write(board, { filters: defaultPreferences().filters });
 
 /** Board layout always has columns, and rows never repeat the column grouping. */
 export function setDisplay(board: number, patch: Partial<Display>) {

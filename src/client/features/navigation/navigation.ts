@@ -10,6 +10,7 @@ import type { PersonTab } from "@/shared/people";
 import { keptFavorite } from "./sidebar-active";
 import { nextTrail, type Trail, type TrailStep } from "./issue-trail";
 import { boardFor } from "@/shared/board-membership";
+import { boardPage, personPage, viewPage, withPageFilter, type PageFilters } from "@/shared/page-filters";
 
 export type Screen = {
   board: number;
@@ -25,7 +26,8 @@ export type Screen = {
   person: string | null;
   personTab: PersonTab;
   activeViewId: string | null;
-  /** Filters added on top of the open saved view, until it is left or saved into. */
+  /** The temporary filter of the page on screen (`pageKey`), on top of a saved view's own filters: always
+   *  `pageFilters[pageKey(screen)]`, which `transition` derives after every step. */
   overlayFilters: FilterGroup;
   editorDraft: ViewDraft | null;
   /** A link's or reload's `view` shows the open issue that way once: it reverts when the issue closes and never becomes a preference (R2-D4). */
@@ -68,6 +70,7 @@ export type NavigationEvent =
   /** Cancel in the editor: back to the view it edits or duplicates, else its board. */
   | { type: "discard-editor" }
   | { type: "draft"; draft: ViewDraft }
+  /** The page on screen's temporary filter changed. */
   | { type: "filters"; filters: FilterGroup }
   /** Show what an address names: a reload, a link, Back or Forward. `draft` is the editor draft saved for that address; `trail`
    *  the issue page's, kept only on Back and Forward (`restoredTrail`). */
@@ -85,6 +88,8 @@ export type Place = ListPlace | { to: "issue"; key: string; document?: string; o
 export type NavigationData = {
   savedViews: SavedView[];
   preferences: Record<number, Preferences>;
+  /** Each page's temporary filter, by `pageKey`. */
+  pageFilters: PageFilters;
   defaults: Record<number, Display>;
   boards: { id: number }[];
   /** The mirrored issue a key names, following Jira's renames. */
@@ -99,6 +104,8 @@ export type Transition = {
   history: "push" | "none";
   /** The board preferences, with how a board opens issues changed. */
   preferences?: Record<number, Preferences>;
+  /** Every page's temporary filter, with one changed (by a filter edit, or a view address that names its filter). */
+  pageFilters?: PageFilters;
   /** The open saved view's display, with how it opens issues changed; saved to the server. */
   viewDisplay?: { id: string; display: Display };
   /** Forget the editor draft saved for the address being left. */
@@ -182,7 +189,7 @@ function settle(prev: Screen, next: Screen, data: NavigationData, quiet: boolean
 function enter(screen: Screen, to: Destination, data: NavigationData, quiet: boolean, out: Transition) {
   let s = screen;
   if (!quiet && s.activeViewId && (to.board !== undefined || to.inbox === true || to.mine === true)) {
-    s = { ...s, activeViewId: null, overlayFilters: emptyOverlay() };
+    s = { ...s, activeViewId: null };
     to = { ...to, view: to.view ?? data.preferences[to.mine ? 0 : to.board ?? s.board]?.display.openIn ?? "side" };
   }
   if (!quiet && s.editorDraft && (to.board !== undefined || to.inbox || to.mine)) {
@@ -212,10 +219,32 @@ const go = (screen: Screen, to: Destination, data: NavigationData) => {
 
 export function transition(screen: Screen, event: NavigationEvent, data: NavigationData): Transition {
   const out = step(screen, event, data);
-  return {
-    ...out,
-    screen: { ...out.screen, favorite: favoriteAfter(screen, event, out.screen), trail: trailAfter(screen, event, out.screen) },
-  };
+  const next = { ...out.screen, favorite: favoriteAfter(screen, event, out.screen), trail: trailAfter(screen, event, out.screen) };
+  // The one place the screen's temporary filter is set: the stored filter of the page it now shows.
+  const preferences = out.preferences ?? data.preferences,
+    key = pageKey(next, (board) => preferences[board]?.scope ?? "all");
+  const overlayFilters = (key && (out.pageFilters ?? data.pageFilters)[key]) || NO_FILTER;
+  return { ...out, screen: { ...next, overlayFilters } };
+}
+
+/** One empty filter for every page without one, so a step that keeps the screen on such pages changes no reference. */
+const NO_FILTER = emptyOverlay();
+/**
+ * The page a temporary filter belongs to, keyed by the page's address as Linear keys it (shared/page-filters.ts). The view
+ * editor and the inbox keep no temporary filter.
+ */
+export function pageKey(s: Screen, scopeOf: (board: number) => Scope): string | null {
+  const list = listOf(s, scopeOf, undefined);
+  switch (list.to) {
+    case "board":
+      return boardPage(list.board, list.scope);
+    case "view":
+      return viewPage(list.id);
+    case "person":
+      return personPage(list.person, list.tab);
+    default:
+      return null;
+  }
 }
 /** The next issue page's trail (issue-trail.ts `nextTrail`): a restore brings its entry's, a sidebar favorite starts afresh (Linear's
  *  `favoriteId` resets the stack), any other step names one or leaves it to `nextTrail`. */
@@ -262,12 +291,15 @@ function step(screen: Screen, event: NavigationEvent, data: NavigationData): Tra
       return out;
     case "draft":
       return { screen: { ...screen, editorDraft: event.draft }, history: "push" };
-    case "filters":
-      return { screen: { ...screen, overlayFilters: event.filters }, history: "push" };
+    case "filters": {
+      const key = pageKey(screen, (board) => data.preferences[board]?.scope ?? "all");
+      // A saved view's address names its filter, so the change is a history entry there; a board's address doesn't change.
+      return key ? { screen, history: "push", pageFilters: withPageFilter(data.pageFilters, key, event.filters) } : { screen, history: "none" };
+    }
     // One history entry, with the view's identity installed first so its own `openIn` is never written back.
     case "open-view": {
       const v = event.view;
-      const s = { ...screen, editorDraft: null, activeViewId: v.id, overlayFilters: emptyOverlay() };
+      const s = { ...screen, editorDraft: null, activeViewId: v.id };
       // The view's own board and openIn, as given: no renamed-key or board-default lookups.
       settle(s, move(s, { board: v.board, selected: null, panel: false, inbox: false, view: v.display.openIn }), data, true, out);
       out.screen = { ...out.screen, mine: v.mine, inbox: false };
@@ -276,7 +308,7 @@ function step(screen: Screen, event: NavigationEvent, data: NavigationData): Tra
     }
     case "edit-view": {
       const draft = structuredClone(event.draft);
-      const s = { ...screen, editorDraft: draft, activeViewId: null, overlayFilters: emptyOverlay() };
+      const s = { ...screen, editorDraft: draft, activeViewId: null };
       enter(s, { board: draft.board, selected: null, panel: false, inbox: false }, data, true, out);
       out.screen = { ...out.screen, mine: draft.mine, inbox: false };
       return out;
@@ -307,12 +339,15 @@ function restore(screen: Screen, place: Place, saved: ViewDraft | null, data: Na
   // An issue on several boards opens on the one the address names, else the one on screen, when it holds the issue.
   const board =
     editorDraft?.board ?? active?.board ?? (issue && issue.boards.length ? boardFor(issue, listed ?? screen.board) : listed);
-  const s: Screen = {
-    ...screen,
-    editorDraft,
-    activeViewId: active?.id ?? null,
-    overlayFilters: active && list?.to === "view" ? decodeOverlay(list.filter ?? null) : emptyOverlay(),
-  };
+  const s: Screen = { ...screen, editorDraft, activeViewId: active?.id ?? null };
+  // A view's address names its temporary filter (`listOf` writes it there, each change a history entry), so the filter a
+  // reload, link, Back or Forward shows is the address's, stored as the view's (Linear's `TW`: a filter read from the
+  // address wins and is stored). Opening the view any other way shows its stored filter.
+  if (active && list?.to === "view") {
+    const key = viewPage(active.id),
+      named = decodeOverlay(list.filter ?? null);
+    if (named.children.length || data.pageFilters[key]) out.pageFilters = withPageFilter(data.pageFilters, key, named);
+  }
   const person = list?.to === "person" ? list : undefined,
     inbox = list?.to === "inbox";
   enter(

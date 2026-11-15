@@ -1980,7 +1980,7 @@ test("navigation: changing how issues open inside a saved view saves it to that 
   }
 });
 
-test("navigation: switching or leaving a view resets its filter overlay; closing a menu forgets its target", async () => {
+test("navigation: switching or leaving a view shows that page's own filter, and the view's comes back with it; closing a menu forgets its target", async () => {
   const { navigate, openSavedView, setOverlay, set, get, ui, trace } = await navigationFixture();
   const first = await savedView({ id: "first", name: "First" }),
     second = await savedView({ id: "second", name: "Second" });
@@ -1997,6 +1997,8 @@ test("navigation: switching or leaving a view resets its filter overlay; closing
   navigate({ board: 1 });
   steps.push(trace());
   openSavedView(first);
+  // The view's temporary filter is kept, as Linear keeps each page's (`filter_2_<path>`): setting it again changes nothing.
+  expect(get().overlayFilters).toEqual(filters);
   setOverlay(filters);
   navigate({ inbox: true });
   steps.push(trace());
@@ -2069,7 +2071,7 @@ test("navigation: switching or leaving a view resets its filter overlay; closing
         "boardOpenIn": "side/side",
         "document": null,
         "draft": null,
-        "entries": "7/7",
+        "entries": "6/6",
         "inbox": true,
         "mine": false,
         "overlayFilters": 0,

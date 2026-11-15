@@ -128,6 +128,7 @@ const screen = (s = get()): Screen => ({
 const data = () => ({
   savedViews: get().savedViews,
   preferences: get().preferences,
+  pageFilters: get().pageFilters,
   defaults: get().defaults,
   boards: get().boards,
   issue: (key: string) => get().issues.get(currentKey(key)),
@@ -138,7 +139,10 @@ const data = () => ({
 function go(event: NavigationEvent) {
   const t = transition(screen(), event, data());
   if (t.forgetDraft) drafts.forget(router.latestLocation.pathname);
-  const patch: Partial<State> = t.preferences ? { preferences: t.preferences } : {};
+  const patch: Partial<State> = {
+    ...(t.preferences ? { preferences: t.preferences } : {}),
+    ...(t.pageFilters ? { pageFilters: t.pageFilters } : {}),
+  };
   for (const key of Object.keys(t.screen) as (keyof Screen)[])
     if (t.screen[key] !== get()[key]) Object.assign(patch, { [key]: t.screen[key] });
   commit(patch);
@@ -290,6 +294,7 @@ export function openAllIssues(board: number) {
   ui.send({ type: "query.set", query: "" });
   set({ details: false, findInView: false });
 }
+/** Sets the temporary filter of the page on screen (navigation.ts `pageKey`). */
 export function setOverlay(filters: FilterGroup) {
   go({ type: "filters", filters });
 }

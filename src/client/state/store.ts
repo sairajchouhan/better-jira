@@ -16,9 +16,11 @@ import {
   savedFavorites,
   savedOpenIn,
   savedSidebarHidden,
+  savedPageFilters,
   savedViewPreferences,
   viewDetailsOpen,
 } from "./browser-preferences";
+import type { PageFilters } from "@/shared/page-filters";
 export type Overlay =
   | null
   | "palette"
@@ -122,7 +124,12 @@ export type State = {
   /** How the open issue page was reached (navigation/issue-trail.ts). */
   trail: Trail | null;
   overlayFilters: import("@/shared/view-model").FilterGroup;
+  /** Each page's temporary filter (shared/page-filters.ts); `overlayFilters` is the one on screen. */
+  pageFilters: PageFilters;
+  /** The page on screen's settings, its temporary filter included: the open view's or editor's, else its board's (or My
+   *  issues'). Derived in `commit`; view-settings.ts and view-model.ts `boardView` both read it. */
   viewPreferences: Preferences | null;
+  /** `viewPreferences` with a saved view's own filters added. */
   effectiveViewPreferences: Preferences | null;
   favorites: string[];
   site: string;
@@ -193,6 +200,7 @@ let state: State = {
   favorite: null,
   trail: null,
   overlayFilters: emptyOverlay(),
+  pageFilters: savedPageFilters(),
   viewPreferences: null,
   effectiveViewPreferences: null,
   favorites: savedFavorites(),
@@ -238,8 +246,19 @@ export function commit(patch: Partial<State>) {
     state.details = now ? viewDetailsOpen(now) : boardDetails;
   } else if (now && patch.details !== undefined && patch.details !== wasDetails)
     rememberViewDetails(now, patch.details);
-  if (patch.savedViews || patch.activeViewId !== undefined || patch.overlayFilters || patch.editorDraft !== undefined) {
+  if (
+    patch.savedViews ||
+    patch.activeViewId !== undefined ||
+    patch.overlayFilters ||
+    patch.editorDraft !== undefined ||
+    patch.preferences ||
+    patch.board !== undefined ||
+    patch.mine !== undefined ||
+    patch.inbox !== undefined
+  ) {
     const v = state.savedViews.find((v) => v.id === state.activeViewId);
+    // A plain board's or My issues' settings are its preferences with the page's temporary filter.
+    const board = state.preferences[state.mine && !state.inbox && !state.activeViewId && !state.editorDraft ? 0 : state.board];
     state.viewPreferences = state.editorDraft
       ? { ...defaultPreferences(), ...state.editorDraft }
       : v
@@ -252,14 +271,13 @@ export function commit(patch: Partial<State>) {
           order: v.order,
           filters: state.overlayFilters,
         }
+      : board
+      ? { ...board, filters: state.overlayFilters }
       : null;
     state.effectiveViewPreferences =
-      state.editorDraft ? state.viewPreferences : v && state.viewPreferences
-        ? {
-            ...state.viewPreferences,
-            filters: mergeFilters(v.filters, state.overlayFilters),
-          }
-        : null;
+      v && !state.editorDraft && state.viewPreferences
+        ? { ...state.viewPreferences, filters: mergeFilters(v.filters, state.overlayFilters) }
+        : state.viewPreferences;
   }
   const refused = persistPreferences(patch);
   if (refused) {

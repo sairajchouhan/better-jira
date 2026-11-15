@@ -26,6 +26,8 @@ export const expect = baseExpect.extend({
 
 /** The localStorage key the app uses for the fixture account's view preferences. */
 export const PREFS_KEY = "better-jira:views:v1:https://example.atlassian.net/audit-me";
+/** The localStorage key for the fixture account's per-page temporary filters (shared/page-filters.ts). */
+export const PAGE_FILTERS_KEY = "better-jira:page-filters:v1:https://example.atlassian.net/audit-me";
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

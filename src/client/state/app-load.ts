@@ -39,6 +39,7 @@ import {
   savedDefaults,
   savedOpenIn,
   savedViewPreferences,
+  savedPageFilters,
   scopePreferences,
 } from "./browser-preferences";
 import { commit, get, set, ME } from "./store";
@@ -99,7 +100,8 @@ async function loadApplication() {
     moved: learnKeys,
   });
   const defaults = savedDefaults();
-  const preferences = savedViewPreferences();
+  const preferences = savedViewPreferences(),
+    pageFilters = savedPageFilters();
   for (const b of boards)
     if (!preferences[b.id]) {
       const display = parsePreferences({ display: defaults[b.id] }).display;
@@ -123,6 +125,7 @@ async function loadApplication() {
     full,
     defaults,
     preferences,
+    pageFilters,
     savedViews,
     favorites: liveFavorites(savedViews),
     ...history,
