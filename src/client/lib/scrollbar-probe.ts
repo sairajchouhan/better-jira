@@ -1,7 +1,8 @@
 /**
- * Linear's scrollbar probe. Overlay scrollbars (the macOS trackpad default) take no room and are left alone; only where a
- * scrollbar eats layout width does body get `layoutScrollbarObtrusive`, which thins and themes every scrollbar (index.css,
- * "Scrollbars"), and `--scrollbar-width` on <html> carries the measured width for the paddings that make room for it.
+ * Linear's scrollbar probe. Overlay scrollbars (the macOS trackpad default) take no room; only where a scrollbar eats layout
+ * width does body get `layoutScrollbarObtrusive`, which thins and themes every scrollbar (index.css, "Scrollbars"; ours also
+ * thins overlay ones, without the class), and `--scrollbar-width` on <html> carries the measured width for the paddings that
+ * make room for it.
  *
  * Linear does this twice: a boot probe in its entry (`wEe`, startup-entry.Dt5YDWdY.js: a 30×30 `overflow:auto` box, the class
  * added when `30 - e.firstChild.clientWidth` is non-zero) and, once React mounts, a live one (`TTe`, startup-root.BhUCnb9L.js:

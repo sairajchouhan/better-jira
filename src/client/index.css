@@ -3141,7 +3141,7 @@ pre.code-block .cb-ex-col button {
 
 /* Scrollbars, as Linear's (style-kMXsq6uH.css). The probe (lib/scrollbar-probe.ts, Linear's wEe/TTe) adds
    body.layoutScrollbarObtrusive where scrollbars take up space and sets --scrollbar-width to their measured room (0 for
-   overlay scrollbars). Overlay scrollbars are left alone; obtrusive ones turn thin, in the theme's scrollbarBg. */
+   overlay scrollbars). Obtrusive ones turn thin, in the theme's scrollbarBg; overlay ones too, unlike Linear's (below). */
 .scrollbar-probe {
   /* Linear's probe (sx-qtp20y sx-1pju0fl sx-1rife3k), with its empty child; fixed here so it takes no room in our layout. As
      in Linear, a live macOS switch to "Always" takes a reload to reach it. */
@@ -3169,6 +3169,23 @@ pre.code-block .cb-ex-col button {
   }
   body.layoutScrollbarObtrusive svg,
   body.layoutScrollbarObtrusive svg * {
+    scrollbar-width: auto;
+    scrollbar-color: initial;
+  }
+  /* Ours, not Linear's (.raj/linear-differences.md): with overlay scrollbars (macOS "When scrolling") Linear leaves Chrome's
+     native bar, which widens onto a grey track under the pointer. Here the overlay bar is the obtrusive one's thin thumb in
+     scrollbarBg on a transparent track. Chrome keeps a scrollbar-width/scrollbar-color bar overlay (no room, shown while
+     scrolling, then faded); a ::-webkit-scrollbar rule would make it classic and space-taking, so those stay obtrusive-only. */
+  body {
+    --scrollbar-color: var(--app-scrollbar-bg);
+  }
+  body:not(.layoutScrollbarObtrusive),
+  body:not(.layoutScrollbarObtrusive) * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-color) transparent;
+  }
+  body:not(.layoutScrollbarObtrusive) svg,
+  body:not(.layoutScrollbarObtrusive) svg * {
     scrollbar-width: auto;
     scrollbar-color: initial;
   }

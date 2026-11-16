@@ -47,6 +47,20 @@ test("obtrusive scrollbars turn thin and themed in the base layer, under every c
   expect(block(base, "body.layoutScrollbarObtrusive svg *")).toContain("scrollbar-width: auto");
 });
 
+test("overlay scrollbars get the same thin thumb in scrollbarBg on a transparent track, never a ::-webkit-scrollbar", () => {
+  // Our difference from Linear (.raj/linear-differences.md): Chrome's native overlay bar widens onto a grey track on hover.
+  expect(block(base, "body {")).toContain("--scrollbar-color: var(--app-scrollbar-bg)");
+  const overlay = block(base, "body:not(.layoutScrollbarObtrusive) * {");
+  expect(overlay).toContain("scrollbar-width: thin");
+  expect(overlay).toContain("scrollbar-color: var(--scrollbar-color) transparent");
+  expect(base).toContain("body:not(.layoutScrollbarObtrusive),\n  body:not(.layoutScrollbarObtrusive) * {");
+  expect(block(base, "body:not(.layoutScrollbarObtrusive) svg *")).toContain("scrollbar-width: auto");
+  // A ::-webkit-scrollbar rule turns an overlay bar into a classic one that takes room: only obtrusive bodies get them.
+  const webkit = [...css.matchAll(/[^{};]*::-webkit-scrollbar[^{]*(?=\{)/g)].flatMap(([s]) => s.split(",")).map((s) => s.trim());
+  for (const selector of webkit.filter((s) => s.startsWith("body")))
+    expect(selector).toStartWith("body.layoutScrollbarObtrusive");
+});
+
 test("the ::-webkit-scrollbar thumb only applies where scrollbar-width is missing, with Linear's sizes and states", () => {
   const fallback = block(base, "@supports not (scrollbar-width: thin)");
   expect(block(fallback, "::-webkit-scrollbar-thumb")).toContain("border: 3px solid #0000");
