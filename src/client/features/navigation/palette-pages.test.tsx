@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { CommandMenu, CommandMenuPage } from "@/client/components/command-menu";
-import { isFieldCommand } from "./palette";
+import { HOISTED, isFieldCommand } from "./palette";
 import type { Issue } from "@/shared/issue-model";
 
 const issue = { key: "TEST-7", summary: "Fix the login flow" } as Issue;
@@ -24,4 +24,8 @@ test("BJ-343: every field command of the targeted issue opens as a ⌘K page; ot
   for (const id of ["assign", "status", "priority", "type", "labels", "due", "remind", "project", "milestone"])
     expect(isFieldCommand(id)).toBe(true);
   for (const id of ["assign-me", "rename", "remove-due", "delete"]) expect(isFieldCommand(id)).toBe(false);
+});
+
+test("BJ-250: ⌘K lists the targeted issue's epics (Linear's \"Move to project › X\") from the Epic command", () => {
+  expect(HOISTED).toContainEqual(["project", "project"]);
 });

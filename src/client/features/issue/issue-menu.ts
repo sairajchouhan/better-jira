@@ -157,6 +157,8 @@ export function issuePropertyEntries(issue: Issue, { close, menu }: { close: () 
       // The word Linear (and Jira people) search by still finds it.
       keywords: ["project"],
       hoistFrom: 3,
+      // Linear's zBn whenMatchKeywords: a root search lists the epics only once the query says "move", "add" or "project".
+      hoistWhen: ["move", "add", "project"],
       disabledReason: projectLocked,
       children: projectLocked
         ? undefined

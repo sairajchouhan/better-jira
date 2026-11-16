@@ -1,5 +1,5 @@
 import { memo, use, useState, type ComponentProps, type ReactNode } from "react";
-import { menuFilter } from "@/client/lib/fuzzy-score";
+import { actionScore, HOISTED_PER_PARENT, hoistedRow, menuFilter, MIN_APPLICABILITY } from "@/client/lib/fuzzy-score";
 import { Icon, type IconName } from "./icons";
 import type { Keys } from "./keycap";
 import { Menu } from "./menu";
@@ -24,6 +24,8 @@ export type ActionEntry = {
   /** How many typed characters list this entry's children in its menu's search (Linear's subActionsHoisting.minInputLength):
    *  2 by default, Infinity never. */
   hoistFrom?: number;
+  /** In a root search, the children are listed only when the query holds one of these words (Linear's whenMatchKeywords). */
+  hoistWhen?: readonly string[];
   /** The breadcrumb a listed child gets ("Set priority to › High"); the entry's name by default (Linear's nameAsParent). */
   nameAsParent?: string | ((child: ActionEntry) => string);
   /** A multi-select row (Linear's multiSelectSubActions) with its leading checkbox in this state: the checkbox runs `run` and
@@ -49,30 +51,47 @@ export type ActionEntry = {
 type Ranked = { entry: ActionEntry; score: number };
 
 const HOIST_FROM = 2;
-/** One scorer for every row (menuFilter, Linear's scoreAction); `parents`, a hoisted row's breadcrumb. */
-const score = (entry: ActionEntry, query: string, parents?: string[]) =>
+/** A menu's own row, scored as Linear's `Yn.scoreAction` (menuFilter); `exact` is Linear's keywordsExactMatch. */
+const score = (entry: ActionEntry, query: string) =>
   entry.exact?.includes(query.trim().toLowerCase())
     ? 1
-    : menuFilter(entry.name, query, entry.keywords && [entry.name, ...entry.keywords], { parents });
-/** Children listed under `parent` once the query is long enough, named by their breadcrumb and scored as Linear's hoisted action:
- *  by their name, and by the breadcrumb too ×0.85, 0.15 lower ("remove" → "Remove › Blocking issue …", secondaryString). */
-function hoisted(parent: ActionEntry, query: string, parents: string[] = []): Ranked[] {
-  if (!parent.children || query.length < (parent.hoistFrom ?? HOIST_FROM)) return [];
-  return parent.children.flatMap((child) => {
-    const { nameAsParent = parent.name } = parent;
+    : menuFilter(entry.name, query, entry.keywords && [entry.name, ...entry.keywords]);
+/** Linear's `shouldHoistSubActions`: a parent lists its children once the query has `hoistFrom` characters; in a root menu one with
+ *  `hoistWhen` (Linear's whenMatchKeywords) only when the query holds one of those words too. */
+const hoists = ({ hoistFrom = HOIST_FROM, hoistWhen }: ActionEntry, query: string, root: boolean) =>
+  !(root && hoistWhen && !hoistWhen.some((word) => query.toLowerCase().includes(word))) && query.length >= hoistFrom;
+/** A child hoisted under `path`, scored as Linear's hoisted action (actionScore with its breadcrumb, 0.15 lower; a status in
+ *  workflow order, a person by `mH`): the one scorer for every menu's root search and ⌘K's. 0 under 0.24. */
+const hoistedScore = (child: ActionEntry, query: string, path: string[]) => {
+  const score = actionScore({ name: child.name, ...hoistedRow(child.name, child.keywords), exact: child.exact, parents: path }, query);
+  return score >= MIN_APPLICABILITY ? score : 0;
+};
+/** One hoisted value: the child, the breadcrumb it is listed under ("Change priority to") and its score. */
+export type Hoisted = { child: ActionEntry; path: string[]; score: number };
+/**
+ * The values `parent` lists in a search, its children's children included ("Remove › Blocking issue …"), each named by its
+ * breadcrumb and scored as Linear's hoisted action, in the parent's order. In a root menu (a right-click menu's first level, ⌘K) at
+ * most `HOISTED_PER_PARENT` of them (Linear's limitSubActionsInRootMenu). Right-click menus and ⌘K both list their values from here.
+ */
+export function hoistedChildren(parent: ActionEntry, query: string, { root }: { root: boolean }, parents: string[] = []): Hoisted[] {
+  if (!parent.children || !hoists(parent, query, root)) return [];
+  const hits = parent.children.flatMap((child) => {
+    const { nameAsParent = parent.name.replaceAll("…", "") } = parent;
     const path = [...parents, typeof nameAsParent === "function" ? nameAsParent(child) : nameAsParent];
-    return [
-      { entry: { ...child, name: [...path, child.name].join(" › ") }, score: score(child, query, path) },
-      ...hoisted(child, query, path),
-    ];
-  });
+    return [{ child, path, score: hoistedScore(child, query, path) }, ...hoistedChildren(child, query, { root }, path)];
+  }).filter((hit) => hit.score > 0);
+  return root && !parents.length ? hits.slice(0, HOISTED_PER_PARENT) : hits;
 }
 /** Linear's root search: the menu's own rows (a submenu row included) and the children they hoist, ranked by score together; at
- *  equal scores a menu's own row comes first. */
-export function searchActions(entries: ActionEntry[], query: string): ActionEntry[] {
+ *  equal scores a menu's own row comes first. `root: false` in a submenu. */
+export function searchActions(entries: ActionEntry[], query: string, { root = true }: { root?: boolean } = {}): ActionEntry[] {
   return [
     ...entries.map((entry) => ({ entry, score: score(entry, query) })),
-    ...entries.flatMap((entry) => hoisted(entry, query)),
+    ...entries.flatMap((entry) =>
+      hoistedChildren(entry, query, { root }).map(
+        ({ child, path, score }): Ranked => ({ entry: { ...child, name: [...path, child.name].join(" › ") }, score }),
+      ),
+    ),
   ]
     .filter((r) => r.score > 0)
     .sort((a, b) => b.score - a.score)
@@ -174,7 +193,7 @@ function Level({
   const q = query.trim();
   // Revealed, the options with no matches follow a divider with the menu's name as its search placeholder (Linear's
   // subActionPlaceholder); a search looks through every option.
-  const choices = rows || !q ? own : searchActions(reveal ? available : own, q);
+  const choices = rows || !q ? own : searchActions(reveal ? available : own, q, { root: !nested });
   return (
     <Menu
       search={query}

@@ -14,7 +14,7 @@ import { canMergeOverlay } from "@/shared/saved-view-model";
 import { createToolbarView } from "@/client/features/views/view-toolbar-actions";
 import { useMemo, useState, type ReactNode } from "react";
 import { navigationChoices, type NavigationChoice } from "./quick-navigation";
-import { ActionLabel, ActionMenu, type ActionEntry } from "@/client/components/action-menu";
+import { ActionLabel, ActionMenu, hoistedChildren, type ActionEntry } from "@/client/components/action-menu";
 import { Icon, LabelDot, PriorityIcon, StatusIcon, TypeDot, type IconName } from "@/client/components/icons";
 import { get, set, timed, useStore, statusOf, ME, issueBoardId } from "@/client/state/store";
 import { Text } from "@/client/components/text";
@@ -37,7 +37,7 @@ import { COMMAND_MENU_WIDTH, CommandMenuPage, CommandMenuTitle, CommandTarget } 
 import { PropertyPicker, type IssueField } from "@/client/features/issue/personal-controls";
 import { ReminderPicker } from "@/client/features/reminders/reminders";
 import { Avatar } from "@/client/components/avatar";
-import { actionScore, hoistedRow, hoistValues, MIN_APPLICABILITY, type ScoredAction } from "@/client/lib/fuzzy-score";
+import { actionScore, MIN_APPLICABILITY, type ScoredAction } from "@/client/lib/fuzzy-score";
 import { issuePropertyEntries } from "@/client/features/issue/issue-menu";
 import { workOnIssueEntry } from "@/client/features/issue/coding-tools";
 import { COMMAND_KEYWORDS, VIEW_COMMAND_KEYWORDS } from "./command-keywords";
@@ -185,38 +185,39 @@ const ranked = (cmds: Cmd[], q: string): (readonly [number, Cmd])[] =>
         .sort(([a], [b]) => b - a)
     : cmds.map((c) => [0, c] as const);
 
-/** The targeted issue's commands whose values ⌘K lists once enough is typed (Linear's subActionsHoisting on RCn, Odn, Xun, eK
- *  and Work on issue's K5t), by the registry id that must apply: status, priority and the coding tools from 2 characters, assignee
- *  and labels from 3 (each entry's hoistFrom). */
-const HOISTED = [
+/** The targeted issue's commands whose values ⌘K lists once enough is typed (Linear's subActionsHoisting on RCn, Odn, Xun, eK,
+ *  zBn and Work on issue's K5t), by the registry id that must apply: status, priority and the coding tools from 2 characters,
+ *  assignee, labels and the epic (Linear's project) from 3 (each entry's hoistFrom), the epic only once the query says "move",
+ *  "add" or "project" (hoistWhen). */
+export const HOISTED = [
   ["status", "status"],
   ["priority", "priority"],
   ["assign", "assignee"],
   ["labels", "labels"],
+  ["project", "project"],
   ["copy-prompt", "work"],
 ] as const;
-/** The values of each applicable command above, scored with their breadcrumb, at most 10 per command (`hoistValues`). Picking one
- *  writes through the issue's actions, which undo, and closes the palette. */
+/** The values of each applicable command above, as every root search lists them (`hoistedChildren`: Linear's hoisted score, at
+ *  most 10 per command). Picking one writes through the issue's actions, which undo, and closes the palette. */
 function hoistedValues(issue: Issue, q: string, applies: (id: string) => boolean): (readonly [number, Cmd])[] {
   const entries = { ...issuePropertyEntries(issue, { close, menu: "command" }), work: workOnIssueEntry(issue, close) };
   return HOISTED.flatMap(([id, key]) => {
     const parent = entries[key];
-    if (!applies(id) || !parent.children) return [];
-    const { nameAsParent } = parent;
-    const values = parent.children.map(
-      (child): Cmd => ({
-        id: `${id}:${child.name}`,
-        name: child.name,
-        // Linear's getParentActionLabel: nameAsParent, else the parent's name without its "…".
-        parents: [typeof nameAsParent === "function" ? nameAsParent(child) : (nameAsParent ?? parent.name.replaceAll("…", ""))],
-        ...hoistedRow(child.name, child.keywords),
-        exact: child.exact,
-        icon: child.image ?? (child.icon && <Icon name={child.icon} size={16} />),
-        checked: child.selected,
-        run: () => child.run?.(),
-      }),
+    if (!applies(id)) return [];
+    return hoistedChildren(parent, q, { root: true }).map(
+      ({ child, path, score }) =>
+        [
+          score,
+          {
+            id: `${id}:${[...path, child.name].join(" › ")}`,
+            name: child.name,
+            parents: path,
+            icon: child.image ?? (child.icon && <Icon name={child.icon} size={16} />),
+            checked: child.selected,
+            run: () => child.run?.(),
+          },
+        ] as const,
     );
-    return hoistValues(values, q, parent.hoistFrom ?? 2);
   });
 }
 

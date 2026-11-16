@@ -45,9 +45,8 @@ test("a single pull request's badge without its number yet reads the list and ho
 });
 
 test("a pull request menu opened while the list loads takes the rows when it lands, instead of keeping 'Loading…'", async () => {
-  // The menu keeps the rows it opened with (action-menu.tsx `Level`); the badge's `version` remounts it once when the list lands.
-  const badge = await Bun.file(new URL("./card-badges.tsx", import.meta.url)).text();
+  // Every menu level takes rows that replace all it opened with (action-menu.tsx `keptRows`, BJ-393); no per-caller remount.
   const menu = await Bun.file(new URL("../../components/action-menu.tsx", import.meta.url)).text();
-  expect(badge).toContain('version={data ? "loaded" : "loading"}');
-  expect(menu).toMatch(/<ActionMenu key=\{version\}/);
+  expect(menu).toContain("const kept = keptRows(opened, entries);");
+  expect(menu).not.toContain("key={version}");
 });

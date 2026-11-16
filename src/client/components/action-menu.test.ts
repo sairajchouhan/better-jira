@@ -89,3 +89,35 @@ test("BJ-393: a menu opened on a placeholder takes the rows that replace it, but
   // No rows at all keeps the old ones rather than emptying the menu.
   expect(keptRows(swapped, [])).toBe(swapped);
 });
+
+import { hoistedChildren } from "./action-menu";
+import { personKeywords } from "@/client/lib/fuzzy-score";
+
+test("BJ-245: a right-click root lists at most 10 of one submenu's values, in the submenu's order (Linear's limitSubActionsInRootMenu)", () => {
+  const labels = { name: "Labels", hoistFrom: 3, children: Array.from({ length: 12 }, (_, i) => leaf(`label ${i + 1}`)) };
+  const hits = searchActions([labels], "label").filter((e) => e.name.startsWith("Labels › "));
+  expect(hits).toHaveLength(10);
+  expect(hits.map((e) => e.name)).not.toContain("Labels › label 11");
+  // Inside a submenu (not the root) nothing is capped.
+  expect(searchActions([labels], "label", { root: false }).filter((e) => e.name.startsWith("Labels › "))).toHaveLength(12);
+});
+
+test("BJ-245: a hoisted value scores as ⌘K scores it: your own row on \"me\" is a hoisted exact hit lifted by Linear's mH, not a flat 1", () => {
+  const assignee = {
+    name: "Assignee",
+    hoistFrom: 2,
+    children: [leaf("Ann Lee", { keywords: personKeywords("Ann Lee", { me: true }), exact: ["me"] })],
+  };
+  const [me] = hoistedChildren(assignee, "me", { root: true });
+  expect(me?.path).toEqual(["Assignee"]);
+  // 1 − 0.15, then mH's +20 for the current user.
+  expect(me!.score).toBeGreaterThan(20);
+});
+
+test("BJ-250: in a root search, Epic's values hoist only once the query names the action (Linear's whenMatchKeywords)", () => {
+  const epic = { name: "Epic", nameAsParent: "Move to epic", hoistFrom: 3, hoistWhen: ["move", "add", "project"], children: [leaf("Alpha launch"), leaf("Beta")] };
+  expect(hoistedChildren(epic, "alpha", { root: true })).toEqual([]);
+  expect(hoistedChildren(epic, "move alpha", { root: true }).map((h) => h.child.name)).toEqual(["Alpha launch"]);
+  // In a submenu the gate is off.
+  expect(hoistedChildren(epic, "alpha", { root: false }).map((h) => h.child.name)).toEqual(["Alpha launch"]);
+});
