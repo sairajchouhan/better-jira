@@ -680,7 +680,7 @@ export function inboxOrder(
   return { base, groups, rows: groups.flatMap((g) => g.rows) };
 }
 const sameRows = (a: InboxItem[], b: InboxItem[]) =>
-  a.length === b.length && a.every((r, i) => r.id === b[i]!.id && r.unread === b[i]!.unread);
+  a.length === b.length && a.every((r, i) => r.id === b[i]!.id && r.unread === b[i]!.unread && r.title === b[i]!.title);
 /** Whether two orders show the same rows in the same groups. */
 export const sameInboxOrder = (a: InboxOrder, b: InboxOrder) =>
   sameRows(a.base, b.base) &&

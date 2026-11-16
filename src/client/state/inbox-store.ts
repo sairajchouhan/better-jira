@@ -284,13 +284,20 @@ export function createInboxStore(ports: InboxPorts) {
 
   // --- actions (also the keyboard shortcuts) ---
 
+  /** Linear's row names the issue as it is now (`notification.issue.title`, live: a rename shows at once), so a mirrored
+   *  issue's title replaces the one Jira's notification carried; find, the row's name and Copy read the same (QA round 4, D6). */
+  const liveTitles = (items: InboxItem[], issues: Map<string, Issue>) =>
+    items.map((item) => {
+      const title = issues.get(item.key)?.summary;
+      return title && title !== item.title ? { ...item, title } : item;
+    });
   let lastOrder: { inputs: unknown[]; order: InboxOrder } | undefined;
   /** The list's order from the feed's loaded pages, this browser's read, delete and snooze state, and the view.
    *  Memoised; when only the mirror changed (a Jira poll) and no row did, it returns the same order, so the list needn't re-render. */
   function orderOf(
     data: InfiniteData<Feed, string> | undefined,
     own: Record<string, Local>,
-    v: InboxView,
+    v: ShownView,
     now: number,
     keep: string | null,
     issues = get().issues,
@@ -298,7 +305,7 @@ export function createInboxStore(ports: InboxPorts) {
     const inputs = [data, own, v, now, keep, issues],
       last = lastOrder;
     if (last?.inputs.every((x, i) => x === inputs[i])) return last.order;
-    let order = inboxOrder(itemsOf(data), own, v, now, keep, facets);
+    let order = inboxOrder(liveTitles(itemsOf(data), issues), own, v, now, keep, facets);
     const onlyMirror =
       !!last && inputs.slice(0, 5).every((x, i) => x === last.inputs[i]);
     if (onlyMirror && sameInboxOrder(last!.order, order)) order = last!.order;

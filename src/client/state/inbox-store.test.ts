@@ -600,3 +600,18 @@ test("D11: a snooze wakes at its own time, not at the next minute; a month-long 
   cancel!();
   expect(a.timers).toHaveLength(0);
 });
+
+test("D6: a row shows its mirrored issue's title as it is now, and a rename re-orders nothing but still renders", () => {
+  const a = setup(false);
+  const data = a.store.feed("all").getCurrentResult().data;
+  const own = a.store.localState(), view = a.store.viewState(), now = Date.now();
+  const before = a.store.orderOf(data, own, view, now, null, new Map());
+  expect(before.rows[0]!.title).toBe("1");
+  const renamed = a.store.orderOf(data, own, view, now, null, new Map([["TEST-1", { summary: "Renamed" } as never]]));
+  expect(renamed).not.toBe(before);
+  expect(renamed.rows[0]!.title).toBe("Renamed");
+  // Find reads the live title too.
+  const found = a.store.orderOf(data, own, { ...view, find: "renamed" }, now, null, new Map([["TEST-1", { summary: "Renamed" } as never]]));
+  expect(found.rows.map((r) => r.id)).toEqual(["1"]);
+  a.ports.queryClient.clear();
+});
