@@ -49,7 +49,7 @@ test("tooltips, hover cards and the edge tooltip take Linear's `Rwe` and `B_` ti
     warmMs: 100,
     offset: 8,
     containerPadding: 12,
-    cardPad: 4,
+    cardPad: 8,
     cardPressGraceMs: 500,
     safeAreaDelayMs: 10,
     safeAreaDepth: 10,

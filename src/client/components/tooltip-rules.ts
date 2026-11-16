@@ -22,8 +22,10 @@ export const TOOLTIP = {
   offset: 8,
   /** `Fwe = 12`: the shift and size padding that keeps every tooltip inside the window. */
   containerPadding: 12,
-  /** `Pwe = i_.defaultOffset`: a card's transparent pad on its main axis (`Gwe`), so it meets its trigger. */
-  cardPad: 4,
+  /** `Vwe`'s pad (`Gwe(placement, i?.current ?? Pwe)`, `i` the tooltip's offset ref, `zwe(offset)` = `Nwe` 8px when none is
+   *  given): a card's transparent pad on its main axis, so it meets its trigger. Live, a sidebar favorite's card sits 8px right of
+   *  its row and an issue row's project card 8px above it. */
+  cardPad: 8,
   /** `Vwe`: a pointer that leaves the card for nothing (`relatedTarget` null) within 500ms of a press inside it keeps it open. */
   cardPressGraceMs: 500,
   /** `rTe delay: 10`: the card's safe area (`Jwe`) appears 10ms after the card. */
