@@ -34,7 +34,7 @@ import { adfToText } from "@/client/features/editor/adf";
 import { type Grouping } from "@/shared/view-model";
 import { documentHasMedia, normalizeDocument, sameDocument, textToAdf, type AdfDocument } from "@/shared/document";
 import { reminderTime } from "@/client/features/reminders/reminder-display";
-import { typeChoices, canHaveSubIssues, defaultIssueType } from "@/shared/issue-properties";
+import { typeChoices, canHaveSubIssues, canParent, defaultIssueType } from "@/shared/issue-properties";
 import { canNest, epicLocked, epicOf, epicPatch, parentOf } from "@/shared/epics";
 import { replyParent, visibleCommentTotal } from "@/client/features/comments/comment-thread";
 
@@ -466,7 +466,8 @@ export const actions = {
         else if (
           by === "parent" &&
           id !== (parentOf(current, lookup) ?? "$none") &&
-          (id === "$none" || canNest(lookup(id) ?? {}, current))
+          // Jira takes a parent only one hierarchy level up (`canParent`): a Bug dropped on a Spike's group stays put.
+          (id === "$none" || (canNest(lookup(id) ?? {}, current) && canParent(get(), lookup(id) ?? {}, current)))
         ) {
           let ancestor = id;
           const seen = new Set([key]);

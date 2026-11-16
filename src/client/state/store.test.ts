@@ -2864,3 +2864,36 @@ test("BJ-354: an issue opened by key that no board holds opens here once the mir
     globalThis.fetch = realFetch;
   }
 });
+
+test("every issue is an issue: a drop into a Parent group follows Jira's hierarchy, not the parent's type name", async () => {
+  const { get, set } = await import("./store");
+  const { actions } = await import("./issue-actions");
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => Response.json({ created: {}, others: [], issue: null })) as unknown as typeof fetch;
+  const project = { key: "HIER", name: "Hier" };
+  const options = get().options;
+  set({
+    writable: true,
+    options: {
+      ...options,
+      types: { HIER: [{ name: "Spike", hierarchyLevel: 0 }, { name: "Bug", hierarchyLevel: 0 }, { name: "Sub-task", hierarchyLevel: -1 }] },
+    },
+    issues: new Map(
+      [
+        writableIssue("HIER-1", { type: "Spike", level: 0, project }),
+        writableIssue("HIER-2", { type: "Bug", level: 0, project }),
+        writableIssue("HIER-3", { type: "Sub-task", level: -1, project }),
+      ].map((i) => [i.key, i as any]),
+    ),
+  });
+  try {
+    actions.drop("HIER-2", 1, [{ by: "parent", id: "HIER-1" }]);
+    actions.drop("HIER-3", 1, [{ by: "parent", id: "HIER-1" }]);
+    expect(get().issues.get("HIER-2")?.parent).toBeUndefined();
+    expect(get().issues.get("HIER-3")?.parent).toBe("HIER-1");
+    for (let i = 0; i < 50 && get().pendingWrites; i++) await Bun.sleep(10);
+  } finally {
+    set({ writable: false, options });
+    globalThis.fetch = realFetch;
+  }
+});
