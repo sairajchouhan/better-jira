@@ -6,7 +6,7 @@ This applies to every bug fix, every behaviour question, and whenever the user s
 
 1. **Find Linear's way first**, before reading our code or proposing options:
    - **Bundle:** `/Users/sairaj.chouhan/cs/better-jira/.raj/linear-bundle/` (minified JS and style-*.css; a file with two hashes was saved in both versions). Find the component, its CSS rules, theme tokens, timings, wording and the conditions for when it shows. Every value comes from here, never from a screenshot.
-   - **Live site:** https://linear.app/ (workspace sairajchouhan, team RAJ), through the browse MCP, in a new tab of your own named session; never touch the user's tabs. Look only, change nothing. It confirms what the bundle says and settles values computed at runtime. Delegates check it themselves; list only what they couldn't see under "Inferred, not confirmed". If Linear won't load, tell the user at once with the symptom.
+   - **Live site:** https://linear.app/ (workspace sairajchouhan, team RAJ), through the browse MCP, in a new tab of your own named session; never touch the user's tabs. It is the user's personal workspace: open, click and edit anything you need. It confirms what the bundle says and settles values computed at runtime. Delegates check it themselves; list only what they couldn't see under "Inferred, not confirmed". If Linear won't load, tell the user at once with the symptom.
 2. **Build it the way the bundle does:** same values, behaviour and component boundaries. The same control in two places is one component rendered twice. Fix the shared component so every instance gets the fix.
 3. **Verify against Linear:** run the same case in ours and in Linear, compare, and report what matches and what still differs.
 4. **Cite Linear** (the bundle file and symbol, and what the live site showed) in the reply. In every delegate brief, steps 1–3 come first.
@@ -46,7 +46,8 @@ This applies to every bug fix, every behaviour question, and whenever the user s
 - Never read, print or commit `.env`, `.env.personal` or `.env.second`.
 - Work Jira is read-only for agents: no Atlassian MCP write or destructive tool (executeWrite, executeDestructive, createJiraIssue, editJiraIssue, addOrEditJiraIssueComment, transitionJiraIssue). Reads only.
 - Never commit real company data. Fixtures copy only the shape, with made-up keys, names and text.
-- Never touch ports 3000 or 3002, and never use port 6000. Only https://cloudsairaj.atlassian.net may be written, and only to `[QA] …` issues you create and delete again.
+- :3000 is the prod app on work Jira: open and read it, but never edit, drag, create or delete anything there. Don't stop or restart :3000 or :3002 (the lead restarts), and never use port 6000.
+- Everything else may be checked and edited: :3002, https://cloudsairaj.atlassian.net and live Linear are the user's personal sites.
 - Browse MCP: your own named session, deleted when done. Never `tabs_cleanup` with idle 0.
 - No `pkill` by pattern; stop only PIDs you started.
 
