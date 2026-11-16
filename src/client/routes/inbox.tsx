@@ -1087,17 +1087,19 @@ export function InboxPane() {
         <InboxNotification row={row} />
       </div>
     );
+  return <InboxEmptyPane unread={unread} />;
+}
+
+/** The pane with no notification selected: Linear's `Bt` (Inbox.Dwc57oAi.js). Not the shared EmptyState, which is Linear's
+ *  ViewEmptyState, whose icon wrapper is `justify-content: flex-start` (left-aligned): `Bt` is a centred flex column
+ *  (`G auto center column gap 24`) holding the tray (in a 105×100 Suspense box) and one smallPlus labelMuted line, so the
+ *  tray and the line share one centre. */
+export function InboxEmptyPane({ unread }: { unread: number }) {
   return (
-    <EmptyState
-      className="min-w-0 max-md:hidden"
-      title={
-        unread > 0
-          ? `${unread} unread notification${unread === 1 ? "" : "s"}`
-          : "No notification selected"
-      }
-      icon={
+    <div className="relative flex min-w-0 flex-1 flex-col items-center justify-center max-md:hidden">
+      <div data-inbox-empty className="flex flex-auto flex-col items-center justify-center gap-6">
         <svg
-          className="text-fg-3"
+          className="shrink-0 text-fg-3"
           width="105"
           height="100"
           viewBox="0 0 105 100"
@@ -1109,8 +1111,11 @@ export function InboxPane() {
           <path d="M12 58 24 12a8 8 0 0 1 8-6h41a8 8 0 0 1 8 6l12 46v28a8 8 0 0 1-8 8H20a8 8 0 0 1-8-8z" />
           <path d="M12 58h24l5 9h23l5-9h24" />
         </svg>
-      }
-    />
+        <Text as="h2" variant="smallPlus" color="muted">
+          {unread > 0 ? `${unread} unread notification${unread === 1 ? "" : "s"}` : "No notification selected"}
+        </Text>
+      </div>
+    </div>
   );
 }
 
