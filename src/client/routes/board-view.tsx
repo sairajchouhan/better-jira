@@ -230,129 +230,134 @@ export const BoardView = memo(function BoardView({
           <div className="flex min-h-0 flex-1">
             {/* Linear's boardRowsScroller (IssueList.CUOYX8Am.js): overscroll-behavior none and 90px scroll-padding top and bottom
                 (BJ-388). Linear's board columns are 348px apart (CustomerCountPopover `et`: qe=348) with a 340px background
-                (columnBackgroundWidth calc(100% - 8px)), so 8px between columns (BJ-386). */}
-            <div ref={boardScroller} data-scroll-restoration-id={`board-${board.id}`} className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-none scroll-py-[90px] px-2 pt-1">
-              {d.rows !== "none" && (
-                <div className="sticky top-0 z-10 flex w-max gap-2 bg-panel">
-                  {show.map((col) => (
-                    <div key={col.id} className="w-[340px] shrink-0 rounded-t-[5px] bg-(--col-top)">
-                      <ColumnHeading
-                        bucket={col}
-                        count={col.issues.length}
-                        display={d}
-                        hide={() => hide(col.id)}
-                        create={() => createIn(col)}
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
-              {layout.rows.map(
-                (row, ri) =>
-                  (d.rows === "none" || row.issues.length > 0) && (
-                  <div
-                    key={row.id}
-                    className={d.rows === "none" ? "flex h-full min-h-0 gap-2" : "mb-4 w-max"}
-                  >
-                    {/* The lane spans the board's full width, so its title can stay pinned left while the board scrolls. */}
-                    {d.rows !== "none" && (
-                      <div className="sticky left-0 mb-2 flex w-fit items-center gap-2 px-2 py-2 text-fg-3">
-                        <span>{row.name}</span>
-                        <span>{row.issues.length}</span>
-                        {show[0] && (
-                          <IconButton
-                            label={`New issue in ${row.name}`}
-                            variant="muted"
-                            size="small"
-                            onClick={() => createIn(show[0]!, row)}
-                          >
-                            <Icon name="plus" />
-                          </IconButton>
-                        )}
-                      </div>
-                    )}
-                    <div className={d.rows === "none" ? "contents" : "flex gap-2"}>
-                      {show.map((col, ci) => (
-                        <ColumnView
-                          key={col.id}
+                (columnBackgroundWidth calc(100% - 8px)), so 8px between columns (BJ-386). It is a flex row spaced between, so
+                Hidden columns, its last child, sits after the last column and scrolls sideways with them, at the right edge only
+                while the columns fit. */}
+            <div ref={boardScroller} data-scroll-restoration-id={`board-${board.id}`} className="flex min-h-0 min-w-0 flex-1 justify-between overflow-auto overscroll-none scroll-py-[90px] px-2 pt-1">
+              {/* Without swimlanes the columns fill the board's height; swimlanes grow past it, so the sticky header row keeps
+                  its containing block as tall as the lanes. */}
+              <div className={d.rows === "none" ? "h-full shrink-0" : "shrink-0 self-start"}>
+                {d.rows !== "none" && (
+                  <div className="sticky top-0 z-10 flex w-max gap-2 bg-panel">
+                    {show.map((col) => (
+                      <div key={col.id} className="w-[340px] shrink-0 rounded-t-[5px] bg-(--col-top)">
+                        <ColumnHeading
                           bucket={col}
-                          label={d.rows !== "none" ? `${col.name}, ${row.name}` : col.name}
-                          issues={layout.cells[ri]![ci]!}
-                          selected={selected}
+                          count={col.issues.length}
                           display={d}
-                          scroll={d.rows === "none" ? `board-${board.id}-column-${col.id}` : undefined}
-                          header={d.rows === "none"}
                           hide={() => hide(col.id)}
-                          create={() => createIn(col, d.rows === "none" ? undefined : row)}
-                          onDrop={(keys, before) => {
-                            const groups = [
-                              { by: d.columns, id: col.id },
-                              ...(d.rows !== "none" ? [{ by: d.rows, id: row.id }] : []),
-                            ];
-                            const order = { manual: d.ordering === "manual", descending: d.descending };
-                            dropAll(
-                              dropPlan(layout.cells[ri]![ci]!, keys, before, order, issues),
-                              ({ key, ...place }) => actions.drop(key, personal ? issueBoardId(issues.get(key)) : board.id, groups, place),
-                              record,
-                            );
-                          }}
+                          create={() => createIn(col)}
                         />
-                      ))}
-                    </div>
+                      </div>
+                    ))}
                   </div>
+                )}
+                {layout.rows.map(
+                  (row, ri) =>
+                    (d.rows === "none" || row.issues.length > 0) && (
+                    <div
+                      key={row.id}
+                      className={d.rows === "none" ? "flex h-full min-h-0 gap-2" : "mb-4 w-max"}
+                    >
+                      {/* The lane spans the board's full width, so its title can stay pinned left while the board scrolls. */}
+                      {d.rows !== "none" && (
+                        <div className="sticky left-0 mb-2 flex w-fit items-center gap-2 px-2 py-2 text-fg-3">
+                          <span>{row.name}</span>
+                          <span>{row.issues.length}</span>
+                          {show[0] && (
+                            <IconButton
+                              label={`New issue in ${row.name}`}
+                              variant="muted"
+                              size="small"
+                              onClick={() => createIn(show[0]!, row)}
+                            >
+                              <Icon name="plus" />
+                            </IconButton>
+                          )}
+                        </div>
+                      )}
+                      <div className={d.rows === "none" ? "contents" : "flex gap-2"}>
+                        {show.map((col, ci) => (
+                          <ColumnView
+                            key={col.id}
+                            bucket={col}
+                            label={d.rows !== "none" ? `${col.name}, ${row.name}` : col.name}
+                            issues={layout.cells[ri]![ci]!}
+                            selected={selected}
+                            display={d}
+                            scroll={d.rows === "none" ? `board-${board.id}-column-${col.id}` : undefined}
+                            header={d.rows === "none"}
+                            hide={() => hide(col.id)}
+                            create={() => createIn(col, d.rows === "none" ? undefined : row)}
+                            onDrop={(keys, before) => {
+                              const groups = [
+                                { by: d.columns, id: col.id },
+                                ...(d.rows !== "none" ? [{ by: d.rows, id: row.id }] : []),
+                              ];
+                              const order = { manual: d.ordering === "manual", descending: d.descending };
+                              dropAll(
+                                dropPlan(layout.cells[ri]![ci]!, keys, before, order, issues),
+                                ({ key, ...place }) => actions.drop(key, personal ? issueBoardId(issues.get(key)) : board.id, groups, place),
+                                record,
+                              );
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ),
+                )}
+              </div>
+              {hidden.length > 0 && (
+                <HiddenColumns
+                  columns={hidden}
+                  by={d.columns}
+                  swimlanes={d.rows !== "none"}
+                  hiddenIds={hiddenIds}
+                  open={hiddenOpen}
+                  toggle={() => setHiddenOpen((was) => !was)}
+                  reveal={reveal}
+                />
+              )}
+            </div>
+          </div>
+        )}
+        {/* Not HiddenColumns in another variant: Linear's board "Hidden columns" (data-board-hidden-columns), drawn with or
+            without swimlanes, and swimlane "Hidden rows" (data-board-hidden-rows) are separate components sharing only the
+            toggle, and its list counts hidden groups in the footer instead. This list strip is ours, so it stays its own element. */}
+        {d.layout === "list" && hidden.length > 0 && (
+          <details
+            open
+            className="shrink-0 border-t border-line px-4 py-2 text-[12px] text-fg-3"
+          >
+            <summary className="cursor-default">
+              Hidden groups
+            </summary>
+            <div className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-y-auto">
+              {hidden.map((c) =>
+                hiddenIds.includes(c.id) ? (
+                  <Button
+                    key={c.id}
+                    variant="secondary"
+                    aria-label={`Show ${c.name}`}
+                    data-hidden-group={c.name}
+                    icon={<GroupIcon bucket={c} by={d.columns} />}
+                    onClick={() => reveal(c.id)}
+                  >
+                    {c.name}
+                    <CountBadge>{c.issues.length}</CountBadge>
+                  </Button>
+                ) : (
+                  <span key={c.id} data-hidden-group={c.name} className="flex h-7 items-center gap-1.5 px-2 text-fg-2">
+                    <GroupIcon bucket={c} by={d.columns} />
+                    {c.name}
+                    <CountBadge>{c.issues.length}</CountBadge>
+                  </span>
                 ),
               )}
             </div>
-            {d.rows === "none" && hidden.length > 0 && (
-              <HiddenColumns
-                columns={hidden}
-                by={d.columns}
-                hiddenIds={hiddenIds}
-                open={hiddenOpen}
-                toggle={() => setHiddenOpen(!hiddenOpen)}
-                reveal={reveal}
-              />
-            )}
-          </div>
+          </details>
         )}
-        {/* Not HiddenColumns in another variant: Linear's board "Hidden columns" (data-board-hidden-columns) and swimlane
-            "Hidden rows" (data-board-hidden-rows) are separate components sharing only the toggle, and its list counts hidden
-            groups in the footer instead. This list/swimlane strip is ours, so it stays its own element. */}
-        {hidden.length > 0 && d.layout === "board" && d.rows === "none"
-          ? null
-          : hidden.length > 0 && (
-              <details
-                open
-                className="shrink-0 border-t border-line px-4 py-2 text-[12px] text-fg-3"
-              >
-                <summary className="cursor-default">
-                  Hidden {d.layout === "board" ? "columns" : "groups"}
-                </summary>
-                <div className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-y-auto">
-                  {hidden.map((c) =>
-                    hiddenIds.includes(c.id) ? (
-                      <Button
-                        key={c.id}
-                        variant="secondary"
-                        aria-label={`Show ${c.name}`}
-                        data-hidden-group={c.name}
-                        icon={<GroupIcon bucket={c} by={d.columns} />}
-                        onClick={() => reveal(c.id)}
-                      >
-                        {c.name}
-                        <CountBadge>{c.issues.length}</CountBadge>
-                      </Button>
-                    ) : (
-                      <span key={c.id} data-hidden-group={c.name} className="flex h-7 items-center gap-1.5 px-2 text-fg-2">
-                        <GroupIcon bucket={c} by={d.columns} />
-                        {c.name}
-                        <CountBadge>{c.issues.length}</CountBadge>
-                      </span>
-                    ),
-                  )}
-                </div>
-              </details>
-            )}
         {d.layout === "board" && visible.length > 0 && results}
         {displayHidden > 0 && <div role="status" className="flex shrink-0 items-center justify-center gap-2 py-3">
           <Text variant="mini" color="muted">{displayHidden} issue{displayHidden === 1 ? "" : "s"} hidden by display options</Text>
@@ -364,10 +369,14 @@ export const BoardView = memo(function BoardView({
   );
 });
 
-/** Linear's "Hidden columns" list: pinned right, 338px, 50px header on the panel colour, 37px rows 10px apart. */
-function HiddenColumns({
+/** Linear's "Hidden columns" list (IssueList `$l`, boardColumnWrapper): the board scroller's last child, 350px with 12px on
+ *  its right, sticky to the top only, so it keeps the board's height while lanes scroll and moves sideways with the
+ *  columns; 20px from them beside swimlanes. Its right edge meets the scroller's (live), so it reaches into the scroller's
+ *  8px padding. A 50px header sticks over its own scrolled rows; 37px rows 10px apart. */
+export function HiddenColumns({
   columns,
   by,
+  swimlanes,
   hiddenIds,
   open,
   toggle,
@@ -375,6 +384,7 @@ function HiddenColumns({
 }: {
   columns: Bucket[];
   by: Display["columns"];
+  swimlanes: boolean;
   hiddenIds: string[];
   open: boolean;
   toggle: () => void;
@@ -383,9 +393,10 @@ function HiddenColumns({
   return (
     <aside
       aria-label="Hidden columns"
-      className="mr-3 w-[338px] shrink-0 overflow-y-auto border-l border-line pl-3"
+      data-board-hidden-columns
+      className={`sticky top-0 -mr-2 flex h-full w-[350px] shrink-0 flex-col overflow-y-auto pr-3 ${swimlanes ? "ml-5" : ""}`}
     >
-      <div className="flex h-[50px] items-center">
+      <div className="sticky top-0 z-10 flex h-[50px] w-full shrink-0 items-center bg-panel">
         {/* Not Button: the disclosure draws an 18px triangle, which a small Button would shrink to its 14px icon. */}
         <button
           aria-expanded={open}
@@ -405,7 +416,7 @@ function HiddenColumns({
         </button>
       </div>
       {open && (
-        <div className="flex flex-col gap-2.5 pb-12">
+        <div className="mb-[50px] flex flex-col gap-2.5">
           {columns.map((c) => (
             <HiddenGroup
               key={c.id}
