@@ -64,3 +64,14 @@ test("R3-issue-fields-D6: the due icon is Linear's orange within a week and red 
   expect(dueQualifier("2026-11-10", now, "2026-11-10T18:00:00.000+0530")).toBe("none");
   expect(dueQualifier("2026-11-10", now, "2026-11-12T10:00:00.000")).toBe("overdue");
 });
+
+test("Linear's day date (`wu.format` → `fi`, \"MMM do\"): ordinal day, the year as 'yy only outside this year", async () => {
+  const { ordinalDate } = await import("./due-date");
+  const now = new Date(2026, 10, 16);
+  const days: Record<number, string> = { 1: "1st", 2: "2nd", 3: "3rd", 4: "4th", 11: "11th", 12: "12th", 13: "13th", 21: "21st", 22: "22nd", 23: "23rd", 30: "30th", 31: "31st" };
+  for (const [day, text] of Object.entries(days)) expect(ordinalDate(`2026-12-${String(day).padStart(2, "0")}`, now)).toBe(`Dec ${text}`);
+  expect(ordinalDate("2025-08-01", now)).toBe("Aug 1st, '25");
+  expect(ordinalDate("2027-01-03", now)).toBe("Jan 3rd, '27");
+  expect(ordinalDate("2009-06-23", now)).toBe("Jun 23rd, '09");
+  expect(ordinalDate("not a date", now)).toBe("not a date");
+});

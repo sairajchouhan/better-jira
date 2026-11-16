@@ -46,6 +46,20 @@ export function shortDate(value: string, now = new Date(), relative = false): st
   return (date.getFullYear() === now.getFullYear() ? SHORT : SHORT_YEAR).format(date);
 }
 
+/** English ordinal suffix of a day of the month: 1st, 2nd, 3rd, 4th, 11th–13th, 21st, 22nd, 23rd, 31st. */
+const ordinal = (day: number) =>
+  `${day}${day % 100 >= 11 && day % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[day % 10] ?? "th"}`;
+/** Linear's day-resolution date (startup-entry `wu.format` → `fi`, date-fns "MMM do"): "Aug 1st" in this year and, with
+ *  `shortYear` as the project card passes it (`kA`'s Target date), "Aug 1st, '25" otherwise. A date-only value stays on the local
+ *  calendar. */
+export function ordinalDate(value: string, now = new Date()): string {
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value);
+  if (Number.isNaN(date.getTime())) return value;
+  const day = `${SHORT_MONTH.format(date)} ${ordinal(date.getDate())}`;
+  return date.getFullYear() === now.getFullYear() ? day : `${day}, '${String(date.getFullYear() % 100).padStart(2, "0")}`;
+}
+const SHORT_MONTH = new Intl.DateTimeFormat("en-US", { month: "short" });
+
 export type DueQualifier = "none" | "due" | "dueSoon" | "dueToday" | "overdue";
 const midnight = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 /** Linear's `qualifierForDueDate` (startup-entry bundle): days from today (or from the day a done issue was resolved)
