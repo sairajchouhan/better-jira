@@ -129,6 +129,46 @@ export type Issue = {
   mediaEdits?: Record<string, MediaEdit>;
   descriptionHistory?: { text: string; document?: AdfDocument; at: string }[];
 };
+/**
+ * The issue fields the mirror projects onto every issue it sends: server issue-projection.ts `slim` (which must name each one,
+ * no more and no fewer) and the one pull request's number (mirror.ts `slimOf`). A row is the whole projection and JSON drops a
+ * field whose value is undefined, so one of these missing from a property poll's row is gone in Jira, not unsent (BJ-394).
+ * Enrichment's fields (status dates, watchers, web link titles) are left out: they are absent while enrichment reruns.
+ */
+export const MIRRORED_ISSUE_FIELDS = [
+  "key",
+  "summary",
+  "status",
+  "type",
+  "typeIcon",
+  "priority",
+  "assignee",
+  "labels",
+  "attachments",
+  "parent",
+  "level",
+  "parentLevel",
+  "rank",
+  "comments",
+  "updated",
+  "resolved",
+  "created",
+  "creator",
+  "due",
+  "watching",
+  "project",
+  "description",
+  "commentText",
+  "milestones",
+  "prCount",
+  "prStatus",
+  "prNumber",
+  "estimate",
+  "links",
+  "relations",
+] as const;
+/** The fields `slim` projects from Jira's record: every mirrored one but the pull request number mirror.ts adds. */
+export type SlimField = Exclude<(typeof MIRRORED_ISSUE_FIELDS)[number], "prNumber">;
 export type Status = { id: string; name: string; category: string };
 export type Column = { name: string; statuses: Status[] };
 export type Board = {

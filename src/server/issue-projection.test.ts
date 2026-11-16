@@ -311,3 +311,11 @@ test("properties: slim row, project lead and the enrichment for the current revi
   // The enrichment queue's own count wins while it is larger.
   expect(propertyEntries([], 40).progress).toEqual({ total: 0, pending: 40, completed: 0, errors: 0 });
 });
+
+test("BJ-394: slim names every mirrored field and no other, so a tab can clear one a row leaves out", async () => {
+  const { MIRRORED_ISSUE_FIELDS } = await import("@/shared/issue-model");
+  const expected = MIRRORED_ISSUE_FIELDS.filter((field) => field !== "prNumber").toSorted();
+  // Every key, even one whose value is undefined (JSON drops it on the way to the tab).
+  expect(Object.keys(issueProjection(siteFields).slim(story)).toSorted()).toEqual(expected);
+  expect(Object.keys(issueProjection(siteFields).slim({ key: "TEAM-9", fields: { summary: "S", status: { id: "1" } } })).toSorted()).toEqual(expected);
+});

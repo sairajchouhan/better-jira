@@ -3,6 +3,7 @@ import { pullRequestSummary } from "@/shared/issue-properties";
 import { linkRelation } from "@/shared/relations";
 import { smartLink } from "@/shared/smart-link";
 import { jiraUser } from "@/shared/person-name";
+import type { SlimField } from "@/shared/issue-model";
 
 /** Pure: raw Jira records in, the app's issue and property shapes out. No I/O. */
 
@@ -108,7 +109,8 @@ export function issueProjection(siteFields: any[] | null) {
         estimate: estimates.map((id) => f[id]).find((v) => typeof v === "number"),
         links: [...links],
         relations: (f.issuelinks ?? []).flatMap((link: any) => linkRelation(link) ?? []),
-      };
+        // Exactly the mirrored fields: a tab clears one a row leaves out (shared/issue-model.ts `MIRRORED_ISSUE_FIELDS`, BJ-394).
+      } satisfies Record<SlimField, unknown>;
     },
   };
 }
