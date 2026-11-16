@@ -743,7 +743,7 @@ function FieldBadge({ issue, field, label, title, className, children }: FieldCo
 }
 
 /** The card's Project badge: the issue's epic (shared/epics.ts), opening the project picker. Its icon is the epic's Jira type
- *  (the violet Epic TypeDot), not Linear's project glyph: the user's choice (.raj/linear-differences.md). */
+ *  (the violet Epic TypeDot), not Linear's project glyph: the user's choice. */
 export function ProjectBadge({ issue }: { issue: Issue }) {
   const epic = useStore((s) => epicOf(issue, (key) => s.issues.get(key)));
   const name = useStore((s) => (epic ? epicName(epic, (key) => s.issues.get(key)) : undefined));

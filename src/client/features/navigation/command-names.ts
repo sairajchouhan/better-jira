@@ -4,7 +4,7 @@ import { epicOf } from "@/shared/epics";
 /**
  * ⌘K's names for the registry's commands: Linear's action `name` outside a contextual menu (startup-root.CnUSfl4j.js), keyed by
  * our registry id. The registry `name` stays the shortcuts panel's wording (Linear's HelpCenter lists its own). Space, Epic and
- * Milestone stand for Linear's Team, Project and Milestone (.raj/linear-differences.md).
+ * Milestone stand for Linear's Team, Project and Milestone.
  */
 export const COMMAND_NAMES: Readonly<Record<string, string>> = {
   // `?` (mAt) and ⌘/ (`SHOW_KEYBOARD_SHORTCUTS_HELP_CENTER`).

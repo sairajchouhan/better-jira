@@ -55,7 +55,7 @@ export const favoriteCardAnchor = (kind: FavoriteCardKind) => (kind === "team" ?
  * A favorite row's icon (Linear's favorite mapping, `z1` and the team mapping in startup-root): a view's own icon (`rk`), a space's
  * icon (14px, `ik`) and a document's own icon (`ej`). An issue, an epic included, shows its Jira issue type, the TypeDot its rows
  * and crumbs show, centred in a 16px box like the view and document icons. Linear shows an issue's status (`WA`) and a project's
- * icon (`DD`); the user's choice: every issue is an issue with a type (.raj/linear-differences.md).
+ * icon (`DD`); the user's choice: every issue is an issue with a type.
  */
 export function FavoriteIcon({ view, issue, board, document }: FavoriteThing) {
   if (view) return <SavedViewIcon view={view} />;

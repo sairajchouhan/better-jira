@@ -447,7 +447,7 @@ export const shortcuts: Shortcut[] = [
       ["inbox-delete", "Delete notification", "E", () => deleteRow(), true],
       ["inbox-backspace", "Delete notification", "Backspace", () => deleteRow(), true],
       ["inbox-delete-read", "Delete all read notifications", "Shift+Backspace", () => deleteAll("read"), false],
-      // `YJ` and `qJ` have no key; reviews, the rest of `qJ`'s name, are out of scope (.raj/linear-differences.md).
+      // `YJ` and `qJ` have no key; reviews, the rest of `qJ`'s name, are out of scope.
       ["inbox-delete-all", "Delete all notifications", undefined, () => deleteAll("all"), false],
       ["inbox-delete-completed", "Delete read notifications for completed issues", undefined, () => deleteAll("completed"), false],
     ] as const
@@ -512,7 +512,7 @@ export const shortcuts: Shortcut[] = [
     id: "team-open",
     name: "Open space",
     group: "Navigation",
-    // Linear's Open team is O then T; ours is O then S, for space (.raj/linear-differences.md).
+    // Linear's Open team is O then T; ours is O then S, for space.
     hotkey: ["O", "S"],
     run: overlay("boards"),
   },

@@ -3,7 +3,7 @@
  * shares (`PageHeader`), so it sits at the same inset everywhere. A board reads `Space`, a view `Space › View`, an issue page
  * `Space › KEY Title` over a list, or Linear's issue form (startup-root `Hpi`) under the space, `Space › EPIC-KEY › Parent… › KEY
  * Title`, and a document `Space › KEY › Title`. No Issues crumb: it led to the same board as the space (the user's choice over
- * Linear, .raj/linear-differences.md 2026-11-14).
+ * Linear, 2026-11-14).
  */
 import { useMemo, type ComponentProps, type ReactNode, type Ref } from "react";
 import { Breadcrumb, Breadcrumbs, Link } from "react-aria-components";
@@ -36,7 +36,7 @@ const CRUMB_LAST =
 const CRUMB = `-mr-[5px] ${CRUMB_LAST}`; // the current (last) crumb keeps its right padding, like Linear's current item
 const CRUMB_ICON = "mr-1.5 grid w-4 shrink-0 place-items-center";
 /** An issue crumb's icon: the issue's own type, the TypeDot its rows show (the user's choice: every issue crumb, the epic and parents
- *  too, wears its type, .raj/linear-differences.md). Icon-only crumbs drop the gap before the text. */
+ *  too, wears its type). Icon-only crumbs drop the gap before the text. */
 function CrumbTypeIcon({ type, className = CRUMB_ICON }: { type?: string; className?: string }) {
   return <span aria-hidden="true" className={className}><TypeDot type={type} /></span>;
 }
@@ -206,7 +206,7 @@ function ParentCrumbItem({ parent, last }: { parent: AncestorCrumbModel; last: b
   );
 }
 /** The epic, in Linear's project slot: its type icon and key like a parent's, not Linear's project icon and name (the user's
- *  choices over Linear, .raj/linear-differences.md). An epic the mirror doesn't hold is its key alone. */
+ *  choices over Linear). An epic the mirror doesn't hold is its key alone. */
 function EpicCrumbItem({ epic }: { epic: AncestorCrumbModel }) {
   return (
     <AncestorCrumb id="epic" crumb={epic}>

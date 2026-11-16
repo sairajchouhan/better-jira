@@ -48,7 +48,7 @@ test("obtrusive scrollbars turn thin and themed in the base layer, under every c
 });
 
 test("overlay scrollbars get the same thin thumb in scrollbarBg on a transparent track, never a ::-webkit-scrollbar", () => {
-  // Our difference from Linear (.raj/linear-differences.md): Chrome's native overlay bar widens onto a grey track on hover.
+  // Our difference from Linear: Chrome's native overlay bar widens onto a grey track on hover.
   expect(block(base, "body {")).toContain("--scrollbar-color: var(--app-scrollbar-bg)");
   const overlay = block(base, "body:not(.layoutScrollbarObtrusive) * {");
   expect(overlay).toContain("scrollbar-width: thin");

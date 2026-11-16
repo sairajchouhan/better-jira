@@ -3237,7 +3237,7 @@ pre.code-block .cb-ex-col button {
     scrollbar-width: auto;
     scrollbar-color: initial;
   }
-  /* Ours, not Linear's (.raj/linear-differences.md): with overlay scrollbars (macOS "When scrolling") Linear leaves Chrome's
+  /* Ours, not Linear's: with overlay scrollbars (macOS "When scrolling") Linear leaves Chrome's
      native bar, which widens onto a grey track under the pointer. Here the overlay bar is the obtrusive one's thin thumb in
      scrollbarBg on a transparent track. Chrome keeps a scrollbar-width/scrollbar-color bar overlay (no room, shown while
      scrolling, then faded); a ::-webkit-scrollbar rule would make it classic and space-taking, so those stay obtrusive-only. */

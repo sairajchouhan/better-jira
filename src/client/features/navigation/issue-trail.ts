@@ -16,7 +16,7 @@ import { onBoard } from "@/shared/board-membership";
  * - none (null): a direct link, a reload, ⌘K, a toast or a link in content (Linear's `resetBreadcrumb`, `resetItems`):
  *   `Space › Epic › KEY` and no counter.
  * Every form leads with the issue's space: Linear starts at the project and has an Issues crumb; the user chose otherwise
- * (.raj/linear-differences.md, 2026-11-14).
+ * on 2026-11-14.
  */
 export type Trail = "list" | { readonly path: readonly string[] };
 /** What a step does to the trail: open from `parent`'s Sub-issues section, set it outright, or (null) start afresh. */
@@ -46,7 +46,7 @@ export function nextTrail(prev: PageScreen, next: Omit<PageScreen, "trail">, ste
 /**
  * An ancestor's crumb, a parent issue's or the epic's (Linear's `Upi`: its identifier, its title as the tooltip): the key and title,
  * the issue when the mirror holds it (then the crumb opens it; a parent's always is), and the trail its page opens with. The epic
- * shows its key too, not its name as Linear's project does (the user's choice, .raj/linear-differences.md), and opens afresh.
+ * shows its key too, not its name as Linear's project does (the user's choice), and opens afresh.
  */
 export type AncestorCrumb = { key: string; title: string; issue?: Issue; trail: Trail | null };
 export type IssueCrumbs =
