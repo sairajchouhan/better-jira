@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
 import { QueryClient } from "@tanstack/query-core";
 import type { ReactElement } from "react";
 import { toasts } from "@/client/components/toast-queue";
@@ -6,6 +6,9 @@ import { INBOX_NOTIFICATION_ID } from "./app-notifications";
 import { createInboxStore, deleteQuestion, READ_DELAY, type InboxPorts, type Feed, type DeleteConfirmation } from "./inbox-store";
 import { unreadCount } from "@/shared/inbox-model";
 import { DEFAULT_VIEW, type InboxItem } from "@/shared/inbox-model";
+
+// A bulk delete's undo toast must not reach the next test file's toast queue.
+afterEach(() => toasts.dismissAll());
 
 const row = (id: string, unread = true): InboxItem => ({
   id,
@@ -614,4 +617,39 @@ test("D6: a row shows its mirrored issue's title as it is now, and a rename re-o
   const found = a.store.orderOf(data, own, { ...view, find: "renamed" }, now, null, new Map([["TEST-1", { summary: "Renamed" } as never]]));
   expect(found.rows.map((r) => r.id)).toEqual(["1"]);
   a.ports.queryClient.clear();
+});
+
+test("D13: Delete all takes the whole inbox whatever the filters, find or unread-only show, but not snoozed rows (Linear zEn)", async () => {
+  const a = recording(false);
+  a.items[1]!.unread = false;
+  a.store.snoozeRow(Date.now() + 60_000, a.items[2]);
+  a.store.changeView({ unreadOnly: true, filters: { from: ["Nobody"] } });
+  a.store.setFind("1");
+  const asked: DeleteConfirmation[] = [];
+  a.ports.confirm = async (q) => (asked.push(q), true);
+  await a.store.deleteAll("all");
+  expect(asked[0]!.description).toBe("This will delete all notifications in your inbox.");
+  expect(a.store.localState()["head-1"]?.deleted).toBe(true);
+  expect(a.store.localState()["head-2"]?.deleted).toBe(true);
+  expect(a.store.localState()["head-3"]?.deleted).toBeUndefined();
+  a.store.undoInbox();
+  // With Show snoozed on, the snoozed row goes too.
+  a.store.changeView({ showSnoozed: true });
+  await a.store.deleteAll("all");
+  expect(a.store.localState()["head-3"]?.deleted).toBe(true);
+});
+
+test("D13: in the priority inbox, Delete all read takes the open tab's read rows only", async () => {
+  const a = recording(false);
+  a.items[0]!.unread = false;
+  a.items[1]!.unread = false;
+  a.items[1]!.category = "watching";
+  const page = { items: a.items, more: false, writable: false, unseen: 0 };
+  a.ports.queryClient.setQueryData(["inbox", "direct"], { pages: [{ ...page, items: a.items.filter((i) => i.category === "direct") }], pageParams: [""] });
+  a.store.changeView({ priorityInbox: true, tab: "direct" });
+  const asked: DeleteConfirmation[] = [];
+  a.ports.confirm = async (q) => (asked.push(q), true);
+  await a.store.deleteAll("read");
+  expect(asked[0]!.description).toBe("This will delete all read notifications in the Priority inbox.");
+  expect(Object.keys(a.store.localState())).toEqual(["head-1"]);
 });

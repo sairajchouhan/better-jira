@@ -581,43 +581,42 @@ export function createInboxStore(ports: InboxPorts) {
   }
   const closed = (item: InboxItem) =>
     ["Completed", "Canceled", "Duplicate"].includes(facets(item).statusType);
-  /** Linear's Delete all, Delete all read and Delete all completed (`zEn`, `LEn`, `FEn`): the whole feed, not just the loaded rows.
-   *  The loaded ones go at once; older pages load and join the same undo (R2-inbox-D2). "Completed" takes only read rows of
-   *  done or canceled issues that aren't snoozed (Linear's `eEn`, R3-inbox-D4). A bulk delete is not a visit: when it removes
-   *  the selected row, the next one is selected without being marked read (R3-inbox-D1). */
+  /** Loads the feed's older pages, as Linear holds every notification in memory. Ponytail: 20 pages (about 1,000
+   *  notifications) at most; anything older stays unloaded. */
+  async function loadAll(category: Category) {
+    const observer = feed(category);
+    let result = observer.getCurrentResult();
+    for (let i = 0; i < 20 && result.hasNextPage && !result.isError; i++)
+      result = await observer.fetchNextPage({ cancelRefetch: false });
+    return result;
+  }
+  /** Linear's Delete all, Delete all read and Delete all completed (`zEn`, `LEn`, `FEn`): every notification in the inbox, or
+   *  in the priority inbox's open tab (`XJ`), whatever the filters, find or unread-only show, as Linear's dialog says ("all
+   *  notifications in your inbox", QA round 4, D13). Snoozed rows stay unless Show snoozed is on (`KJ`); "completed" never
+   *  takes them and takes only read rows of done or canceled issues (Linear's `eEn`, R3-inbox-D4). The whole feed, not just
+   *  the loaded rows: the loaded ones go at once; older pages load and join the same undo (R2-inbox-D2). A bulk delete is not
+   *  a visit: when it removes the selected row, the next one is selected without being marked read (R3-inbox-D1). */
   async function deleteAll(which: "all" | "read" | "completed") {
     const v = shownView(),
-      now = get().clock;
-    const snoozed = (r: InboxItem) => (localState()[r.head]?.snoozed ?? 0) > now;
-    const matches = (r: InboxItem) =>
-      which === "read"
-        ? !r.unread
-        : which === "completed"
-          ? !r.unread && !snoozed(r) && closed(r)
-          : true;
+      tab = v.priorityInbox ? v.tab : undefined,
+      category: Category = tab ?? "all";
+    const inScope = (items: InboxItem[], now: number) =>
+      visibleItems(items, localState(), { ...DEFAULT_VIEW, showSnoozed: true, priorityInbox: !!tab, tab: tab ?? "direct" }, now, null, facets).filter((r) => {
+        const snoozed = (localState()[r.head]?.snoozed ?? 0) > now;
+        if (snoozed && (which === "completed" || !v.showSnoozed)) return false;
+        return which === "read" ? !r.unread : which === "completed" ? !r.unread && closed(r) : true;
+      });
+    const loaded = () => itemsOf(queryClient.getQueryData<InfiniteData<Feed, string>>(["inbox", category]));
     if (
-      !shownRows().length ||
-      // While find looks through both tabs, the question names the whole inbox.
-      !(await ports.confirm(deleteQuestion(which, { ...v, priorityInbox: feedCategory(v) !== "all" })))
+      (!inScope(loaded(), get().clock).length && !feed(category).getCurrentResult().hasNextPage) ||
+      !(await ports.confirm(deleteQuestion(which, { priorityInbox: !!tab, tab: v.tab })))
     )
       return;
-    const items = shownRows().filter(matches),
+    const items = inScope(loaded(), get().clock),
       toast =
         items.length === 1 ? "Notification deleted" : "Notifications deleted";
     const before = hide(items, { deleted: true }, "delete notifications", { toast, activate: showRow });
-    const observer = feed(feedCategory(v));
-    let result = observer.getCurrentResult();
-    // ponytail: 20 pages (about 1,000 notifications) at most; anything older still shows.
-    for (let i = 0; i < 20 && result.hasNextPage && !result.isError; i++)
-      result = await observer.fetchNextPage({ cancelRefetch: false });
-    const rest = visibleItems(
-      itemsOf(result.data),
-      localState(),
-      v,
-      Date.now(),
-      selectedId,
-      facets,
-    ).filter(matches);
+    const rest = inScope(itemsOf((await loadAll(category)).data), Date.now());
     if (!rest.length) return;
     if (!before)
       return void hide(rest, { deleted: true }, "delete notifications", { toast, activate: showRow });
