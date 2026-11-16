@@ -12,7 +12,7 @@ import { ContextMenu } from "@/client/components/action-menu";
 import { SectionDisclosure } from "@/client/components/section-disclosure";
 import { findIssueDocument } from "@/shared/issue-resource";
 import { useSavedViews, type SavedView } from "./saved-views";
-import { FavoriteButton } from "@/client/features/navigation/favorite-button";
+import { FavoriteButton, RemoveFavoriteButton } from "@/client/features/navigation/favorite-button";
 import { ViewMenu } from "@/client/features/views/view-editor";
 import { Button, IconButton } from "@/client/components/button";
 import { Tabs } from "@/client/components/tabs";
@@ -36,11 +36,12 @@ export function ViewFavorites({ expanded, onToggle }: { expanded: boolean; onTog
     const issue = issues.get(id), board = id.startsWith("board:") ? boards.find(b => b.id === Number(id.split(":")[1])) : undefined;
     if (!view && !document && !issue && !board) return [];
 
-    const content = <>{view ? <SavedViewIcon view={view} /> : document ? <Icon name="file" /> : <span className="text-fg-3">☆</span>}<span className="truncate">{view?.name ?? (document ? document.resource.title || "New document" : issue ? `${issue.key} ${issue.summary}` : board?.name)}</span></>;
+    const content = <>{view ? <SavedViewIcon view={view} /> : document ? <Icon name="file" /> : <span className="text-fg-3">☆</span>}<span className="min-w-0 flex-1 truncate">{view?.name ?? (document ? document.resource.title || "New document" : issue ? `${issue.key} ${issue.summary}` : board?.name)}</span><RemoveFavoriteButton id={id} /></>;
     // Each row is the sidebar's one link, marked by the shared rule: active only when the screen came from this favorite.
     const row = { place: favoritePlace(id), favorite: id };
     // The row drags by its surface (BJ-75), so the link itself is never the browser's own drag of its URL.
-    const props = { draggable: false, "data-favorite": id, className: "w-full" };
+    // `group/favorite` is the row its × shows on (Linear's `d0.wrapper` hover).
+    const props = { draggable: false, "data-favorite": id, className: "group/favorite w-full" };
     const link = view
       ? <SidebarViewLink row={row} view={view} {...props}>{content}</SidebarViewLink>
       : <SidebarLink row={row} to={document ? { board: boardFor(document.issue, current), selected: document.issue.key, panel: true, document: document.resource.id } : issue ? { board: boardFor(issue, current), selected: issue.key, panel: true } : { board: board!.id, panel: false, selected: null }} {...props}>{content}</SidebarLink>;
