@@ -11,7 +11,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Adf } from "@/client/features/editor/adf";
 import { normalizeDocument, type AdfDocument } from "@/shared/document";
 import { resourceMediaIds } from "@/shared/issue-resource";
-import { adfToMarkdown } from "@/client/features/issue/issue-copy";
+import { adfToMarkdown, COPY_FAILED } from "@/client/features/issue/issue-copy";
+import { showNotification } from "@/client/state/app-notifications";
 import { Icon } from "@/client/components/icons";
 import { IconButton, SendButton } from "@/client/components/button";
 import { ConfirmDialog } from "@/client/components/dialog";
@@ -347,7 +348,7 @@ function Thread({
       await copyText(text);
       set({ perf: kind === "link" ? "Copied comment link" : "Copied comment as Markdown" });
     } catch {
-      set({ perf: "Could not copy comment" });
+      showNotification(COPY_FAILED);
     }
   };
   const [copyError, setCopyError] = useState(""),

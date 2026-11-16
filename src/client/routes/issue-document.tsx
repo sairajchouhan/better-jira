@@ -18,7 +18,8 @@ import { Text } from "@/client/components/text";
 import { DocumentBodyEditor } from "@/client/features/editor/rich-editor-loader";
 import { COMPOSER_TITLE, focusEditorAt, titleKeyDown } from "@/client/features/editor/title-flow";
 import { Adf } from "@/client/features/editor/adf";
-import { adfToMarkdown, copyDocument } from "@/client/features/issue/issue-copy";
+import { adfToMarkdown, COPY_FAILED, copyDocument } from "@/client/features/issue/issue-copy";
+import { showNotification } from "@/client/state/app-notifications";
 import { normalizeDocument, type AdfDocument } from "@/shared/document";
 import { get, ME, set, useStore, usePeople } from "@/client/state/store";
 import { firstKey } from "@/client/state/jira-sync";
@@ -317,7 +318,7 @@ function DocumentHeader() {
         perf: `Copied document ${kind === "markdown" ? "content as Markdown" : kind === "link" ? "title as link" : kind}`,
       });
     } catch {
-      set({ perf: "Could not access the clipboard" });
+      showNotification(COPY_FAILED);
     }
   };
   const latestCopy = useRef(copy);

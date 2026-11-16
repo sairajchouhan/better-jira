@@ -1,6 +1,6 @@
 import { type Issue } from "@/shared/issue-model";
 import { afterEach, expect, test } from "bun:test";
-import { adfToMarkdown, copyDocument, copyIssue, copyKinds, copyShortcuts, copyToast, fillPrompt, ID_LINK_COPIED, issueCopy, PAGE_URL_COPIED } from "./issue-copy";
+import { adfToMarkdown, copyDocument, copyIssue, copyKinds, copyShortcuts, copyToast, COPY_FAILED, fillPrompt, ID_LINK_COPIED, issueCopy, PAGE_URL_COPIED, PROMPT_FAILED } from "./issue-copy";
 import { deferred, fakeClipboard } from "@/client/test/fake-clipboard";
 import { modifiers } from "@/client/lib/modifier-keys";
 import { toasts } from "@/client/components/toast-queue";
@@ -204,6 +204,29 @@ test("Copy everything as Markdown starts the clipboard write before the issue's 
   await done;
   expect(clip.writes[0]?.["text/plain"]).toStartWith("# KAN-8 Fix");
   expect(lastToast()).toBe('Issue "KAN-8" content copied to clipboard');
+  set({ issues });
+});
+
+test("BJ-381: a refused clipboard shows Linear's error toast \"Couldn’t copy to clipboard\"", async () => {
+  clip = fakeClipboard({ refuse: true });
+  await copyIssue("ID", copied, KAN_7);
+  expect(lastToast()).toBe("Couldn’t copy to clipboard");
+  toasts.dismissAll();
+  await copyIssue("URL", copied, KAN_7);
+  expect(lastToast()).toBe(COPY_FAILED.text);
+});
+
+test("BJ-246: Copy as prompt that can't load the issue says \"Couldn’t generate prompt\"; Markdown copy says it couldn't copy", async () => {
+  clip = fakeClipboard();
+  globalThis.fetch = (async () => new Response("down", { status: 500 })) as unknown as typeof fetch;
+  const issue = { ...copied, key: "KAN-9" }, issues = get().issues;
+  set({ issues: new Map(issues).set(issue.key, issue) });
+  await copyIssue("as prompt", issue, KAN_7);
+  expect(lastToast()).toBe(PROMPT_FAILED.text);
+  expect(PROMPT_FAILED.text).toBe("Couldn’t generate prompt");
+  toasts.dismissAll();
+  await copyIssue("everything as Markdown", issue, KAN_7);
+  expect(lastToast()).toBe(COPY_FAILED.text);
   set({ issues });
 });
 

@@ -10,7 +10,8 @@ import { LinkIcon } from "@/client/components/link-icon";
 import { ActionMenu, ContextMenu, type ActionEntry } from "@/client/components/action-menu";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { showNotification } from "@/client/state/app-notifications";
-import { set, useStore } from "@/client/state/store";
+import { COPY_FAILED } from "./issue-copy";
+import { useStore } from "@/client/state/store";
 import { run, useCommand } from "@/client/features/navigation/commands";
 import { queryClient } from "@/client/state/server-data";
 import type { Issue } from "@/shared/issue-model";
@@ -243,7 +244,7 @@ async function copyText(text: string, title: string, icon?: "copy") {
     await writeText(text);
     showNotification({ text: title, detail: text, icon });
   } catch {
-    set({ perf: "Could not access the clipboard" });
+    showNotification(COPY_FAILED);
   }
 }
 

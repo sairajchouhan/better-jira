@@ -34,7 +34,7 @@ import {
   updateRule,
   viewSettings,
 } from "@/client/features/views/view-settings";
-import { copyIssue, PAGE_URL_COPIED, type CopyKind } from "@/client/features/issue/issue-copy";
+import { COPY_FAILED, copyIssue, PAGE_URL_COPIED, type CopyKind } from "@/client/features/issue/issue-copy";
 import { codeBlockBindings, editorBindings } from "@/client/features/editor/editor-bindings";
 import { Dialog } from "@/client/components/dialog";
 import { actionMenuOpen } from "@/client/components/open-action-menus";
@@ -843,7 +843,7 @@ export const shortcuts: Shortcut[] = [
       void copyText(pageURL())
         // Linear's Copy page URL toast (startup-root `Current URL copied to clipboard`).
         .then(() => showNotification(PAGE_URL_COPIED))
-        .catch(() => set({ perf: "Could not access the clipboard" }));
+        .catch(() => showNotification(COPY_FAILED));
     },
   },
   ...(

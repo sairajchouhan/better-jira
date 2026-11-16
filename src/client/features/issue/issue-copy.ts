@@ -1,5 +1,5 @@
 import { type Full, type Issue } from "@/shared/issue-model";
-import { ME, get, set, statusOf } from "@/client/state/store";
+import { ME, get, statusOf } from "@/client/state/store";
 import { issueURL } from "./issue-urls";
 import { loadFull } from "@/client/state/server-data";
 import { isLocalIssue } from "@/client/state/local-edits";
@@ -227,6 +227,10 @@ export function copyToast(kind: CopyKind, issue: Pick<Issue, "key">, copied: str
 export const PAGE_URL_COPIED: Notification = { text: "Current URL copied to clipboard" };
 /** Kinds whose text needs the full issue (its comments), loaded first. */
 const needsFull = (kind: CopyKind) => kind === "everything as Markdown" || kind === "as prompt";
+/** Linear's error toast when a copy fails (`lM`, `wX`, `thn`: `new U(L.error, "Couldn’t copy to clipboard")`). */
+export const COPY_FAILED: Notification = { text: "Couldn’t copy to clipboard" };
+/** Linear's Copy as prompt when the prompt itself couldn't be made (`wX`: `ll(e, "Couldn’t generate prompt")`). */
+export const PROMPT_FAILED: Notification = { text: "Couldn’t generate prompt" };
 /** Linear's ⌥ Copy ID toast (`Rmt`): `${Model} ${pluralize("ID")} copied to clipboard`. */
 export const ID_LINK_COPIED: Notification = { text: "Issue ID copied to clipboard" };
 /**
@@ -236,6 +240,8 @@ export const ID_LINK_COPIED: Notification = { text: "Issue ID copied to clipboar
  */
 export async function copyIssue(kind: CopyKind, issue: Issue, url = issueURL(issue)) {
   if (kind === "URL") return copyIssueLink(url);
+  // Whether the text failed to load, not the write: Copy as prompt names that "Couldn’t generate prompt".
+  let unavailable = false;
   try {
     if (kind === "ID" && modifiers.altKey && canCopyRich()) {
       await copyLinkedTexts([issue.key], [url]);
@@ -247,14 +253,19 @@ export async function copyIssue(kind: CopyKind, issue: Issue, url = issueURL(iss
     }
     if (needsFull(kind)) {
       // Linear toasts once the write settles, whether or not a newer copy superseded it.
-      await copyTextAsync(issueText(kind, issue, url));
+      await copyTextAsync(
+        issueText(kind, issue, url).catch((error: unknown) => {
+          unavailable = true;
+          throw error;
+        }),
+      );
       return showNotification(copyToast(kind, issue, ""));
     }
     const text = textOf(kind, issue, url);
     await copyText(text);
     showNotification(copyToast(kind, issue, text));
   } catch {
-    set({ perf: "Could not access the clipboard" });
+    showNotification(unavailable && kind === "as prompt" ? PROMPT_FAILED : COPY_FAILED);
   }
 }
 
@@ -284,6 +295,6 @@ export async function copyIssueLink(url: string) {
     // Linear's Copy URL action: an info toast with the copy icon (`Copied ${model} link to clipboard`).
     showNotification(copyToast("URL", { key: "" }, url));
   } catch {
-    set({ perf: "Could not access the clipboard" });
+    showNotification(COPY_FAILED);
   }
 }
