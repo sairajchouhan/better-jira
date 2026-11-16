@@ -26,6 +26,21 @@ export function keyboardModeAfter(on: boolean, event: { type: string } & Partial
   return on;
 }
 
+/** What last moved a list's single active item (Linear's focused row): the pointer moving over a row, or a key stepping. */
+export type ActiveSource = "pointer" | "keys";
+
+/**
+ * Linear's list keeps one active item: j/k (and the arrows) step it, and a row takes it only when the pointer moves over it
+ * (`$4e`'s onMouseEnter/onMouseMove, skipped in keyboard mode). So after a step, a still pointer's row is no longer what an issue
+ * shortcut acts on, until the pointer really moves (`movedPointer`) and hands the item back to the row under it. Live Linear,
+ * 16 Nov 2026: pointer resting on RAJ-67, j j, S opens the status menu for RAJ-69; a pointer move over RAJ-67, S is RAJ-67's.
+ */
+export function activeSourceAfter(source: ActiveSource, event: { type: string } & Partial<PointerMove>): ActiveSource {
+  if (event.type === "step") return "keys";
+  if ((event.type === "pointermove" || event.type === "mousemove") && movedPointer(event as PointerMove)) return "pointer";
+  return source;
+}
+
 /**
  * Whether React Aria takes the input as a key's (useFocusVisible's modality "keyboard"), mirrored here as it keeps no getter we can
  * import: a keydown it counts (its `isValidKey`: no ⌘, Ctrl or Alt off a Mac, not a bare modifier) turns it on; a press, or a pointer
@@ -55,11 +70,13 @@ export const modalityAfterMove = (ariaKeyboard: boolean, event: PointerMove): "k
   ariaKeyboard && !movedPointer(event) ? "keep" : "leave";
 
 let keyboard = false,
-  ariaKeyboard = false;
+  ariaKeyboard = false,
+  active: ActiveSource = "pointer";
 if (typeof window !== "undefined") {
   // Capture, as Linear listens, so a row's own handler already sees the mode this event leaves.
   const track = (event: Event) => {
     keyboard = keyboardModeAfter(keyboard, event as Event & PointerMove);
+    active = activeSourceAfter(active, event as Event & PointerMove);
   };
   addEventListener("keydown", track, true);
   addEventListener("mousemove", track, true);
@@ -80,3 +97,7 @@ if (typeof window !== "undefined") {
 }
 /** Whether the last input was a key, not a pointer that moved since (Linear's `isKeyboardModeRef`). */
 export const keyboardMode = () => keyboard;
+/** A key stepped the list's active item (j/k, the arrows): the row under a still pointer stops being it (`activeSourceAfter`). */
+export const keyStepped = () => void (active = activeSourceAfter(active, { type: "step" }));
+/** Whether the row under the pointer is the list's active item: the pointer moved over it since the last key step. */
+export const pointerLeads = () => active === "pointer";

@@ -59,6 +59,7 @@ import {
   undoInbox,
 } from "@/client/features/inbox/inbox";
 import { copyText } from "@/client/lib/clipboard";
+import { keyStepped, pointerLeads } from "@/client/components/pointer-intent";
 
 type State = ReturnType<typeof get>;
 type Shortcut = {
@@ -87,11 +88,15 @@ const selected = (s = get()) => {
  *  (shared/epics.ts titleParentOf, BJ-289). */
 const titleParentIn = (s: State, issue: Issue | undefined) => issue && titleParentOf(issue, (key) => s.issues.get(key))?.key;
 /** Linear: an issue shortcut acts on the row under the pointer or keyboard focus, as its row menu's hints promise: a sub-issue row
- *  (its section answers the command), else a board card or list row (its React Aria row's `data-key`, ISSUE-10). */
+ *  (its section answers the command), else a board card or list row (its React Aria row's `data-key`, ISSUE-10). The row under
+ *  the pointer counts only while the pointer moved over it since the last j/k step (`pointerLeads`, BJ-382): Linear acts on its
+ *  one active item, which a still pointer never takes back. */
 const hoveredRow = () => {
   const key =
     command("hovered-sub-issue") ??
-    globalThis.document?.querySelector<HTMLElement>("[data-key][role=row]:hover")?.dataset.key;
+    (pointerLeads()
+      ? globalThis.document?.querySelector<HTMLElement>("[data-key][role=row]:hover")?.dataset.key
+      : undefined);
   return key ? get().issues.get(key) : undefined;
 };
 const lastViewed = (s: State) =>
@@ -119,6 +124,7 @@ const focus = (name: "focus-title" | "focus-comment" | "edit-description" | "cha
   });
 const order = () => visibleOrder(get(), ME.id);
 function move(direction: number, horizontal = false) {
+  keyStepped();
   if (get().inbox && !horizontal) return moveRow(direction);
   const s = get(),
     cols = order(),

@@ -74,6 +74,7 @@ import {
 } from "./sub-issue-model";
 import { dragItem } from "@/client/lib/clipboard";
 import { issueKeyURL } from "./issue-urls";
+import { pointerLeads } from "@/client/components/pointer-intent";
 
 const COMPLETED = [
   ["all", "All"],
@@ -311,11 +312,13 @@ export function SubIssues({ issue }: { issue: Issue }) {
     button.click();
     return true;
   });
+  // The row with focus in it, or the one the pointer moved over since the last j/k step (`pointerLeads`, BJ-382): a still
+  // pointer's row never takes Linear's active item back from the keys.
   useCommand(
     "hovered-sub-issue",
     () =>
       section.current?.querySelector<HTMLElement>(
-        "[data-sub-issue]:hover, [data-sub-issue]:focus-within",
+        pointerLeads() ? "[data-sub-issue]:hover, [data-sub-issue]:focus-within" : "[data-sub-issue]:focus-within",
       )?.dataset.subIssue,
   );
   const rowEntries = (child: Issue, _anchor: HTMLElement): ActionEntry[] => {

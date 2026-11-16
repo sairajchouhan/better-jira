@@ -153,3 +153,50 @@ test("C12: ⌥⇧G Change grouping and ⌥⇧O View ordering… open their comma
   const { ui } = await import("./app-navigation");
   ui.send({ type: "overlay.close" });
 });
+
+test("BJ-382: after j/k an issue shortcut acts on the stepped issue, not the card under the resting pointer, until it moves", async () => {
+  const { activeSourceAfter } = await import("@/client/components/pointer-intent");
+  const still = { type: "pointermove", movementX: 0, movementY: 0, pointerType: "mouse" };
+  // A key step takes the active item; a still move (a card scrolling under the pointer) leaves it; a real move hands it back.
+  expect(activeSourceAfter("pointer", { type: "step" })).toBe("keys");
+  expect(activeSourceAfter("keys", still)).toBe("keys");
+  expect(activeSourceAfter("keys", { type: "keydown" })).toBe("keys");
+  expect(activeSourceAfter("keys", { ...still, movementY: 3 })).toBe("pointer");
+  // Any other key (S, A, Space) leaves the hovered row the active one.
+  expect(activeSourceAfter("pointer", { type: "keydown" })).toBe("pointer");
+
+  const { get, set } = await import("@/client/state/store");
+  const { navigate, ui } = await import("./app-navigation");
+  const { runShortcut } = await import("./shortcuts");
+  const peeked = await import("@/client/features/views/view-peek-state");
+  const card = (key: string) => ({ key, boards: [1], summary: key, status: "todo", assignee: null, labels: [], updated: "", resolved: null, comments: 0 });
+  set({ issues: new Map(["PK-1", "PK-2"].map((key) => [key, card(key)])) });
+  ui.send({ type: "overlay.close" });
+  navigate({ selected: "PK-1", panel: false, document: null, inbox: false, mine: false });
+  // The pointer rests on PK-2's card.
+  const was = globalThis.document;
+  globalThis.document = {
+    querySelector: (selector: string) => (selector.includes(":hover") ? { dataset: { key: "PK-2" } } : null),
+  } as never;
+  try {
+    runShortcut("peek");
+    expect(peeked.peekKeyOf()).toBe("PK-2");
+    peeked.closePeek();
+    // j steps (here past the end of the list, so the selection stays PK-1): the resting pointer's card no longer answers.
+    const { keyStepped } = await import("@/client/components/pointer-intent");
+    keyStepped();
+    runShortcut("peek");
+    expect([get().selected, peeked.peekKeyOf()]).toEqual(["PK-1", "PK-1"]);
+  } finally {
+    globalThis.document = was;
+    peeked.closePeek();
+  }
+});
+
+test("BJ-382: j/k steps mark the keys as leading, and the sub-issue section's hovered row honours it", async () => {
+  const source = await Bun.file(new URL("./shortcuts.tsx", import.meta.url)).text();
+  expect(source).toMatch(/function move\(direction: number, horizontal = false\) \{\s*keyStepped\(\);/);
+  expect(source).toMatch(/pointerLeads\(\)\s*\?\s*globalThis\.document\?\.querySelector<HTMLElement>\("\[data-key\]\[role=row\]:hover"\)/);
+  const subIssues = await Bun.file(new URL("../issue/sub-issues.tsx", import.meta.url)).text();
+  expect(subIssues).toContain('pointerLeads() ? "[data-sub-issue]:hover, [data-sub-issue]:focus-within" : "[data-sub-issue]:focus-within"');
+});
