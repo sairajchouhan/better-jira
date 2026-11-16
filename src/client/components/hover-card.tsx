@@ -53,8 +53,9 @@ export function HoverCard({
   /** `right` is the sidebar's (`h$` passes `position: "right"` to its `wZ`): beside the row, centred on it. */
   placement?: Extract<Placement, "top" | "top-start" | "left" | "right">;
   label?: string;
-  /** `block` is a full-width row's trigger (the sidebar's `_$.tooltipBlock`): the row keeps its whole width. */
-  display?: "inline-flex" | "inline" | "block";
+  /** `block` is a full-width row's trigger (the sidebar's `_$.tooltipBlock`): the row keeps its whole width. `fill` takes the
+   *  room left in its flex row and lays its children out with the row's own gap (a team favorite's toggle button, `m5n`). */
+  display?: "inline-flex" | "inline" | "block" | "fill";
   /** Linear's `transitionDelay`: how long the pointer rests before the card opens (550ms unless the trigger says otherwise; an issue
    *  sidebar's pull request row says 150). */
   delay?: number;
@@ -151,7 +152,12 @@ const CARD_TABBABLE = 'a[href], button:not(:disabled), input:not(:disabled), [ta
  *  whose card sits at the end of the page). Focus handed back, as the card or a menu the trigger opened closes, doesn't open it
  *  again. Only what happens in the trigger's own DOM counts: a menu it opened is portalled out, and its events still bubble here
  *  through React (its focus reopened the card). */
-const TRIGGER_DISPLAY = { "inline-flex": "inline-flex min-w-0 max-w-full", inline: "inline", block: "flex w-full min-w-0" } as const;
+const TRIGGER_DISPLAY = {
+  "inline-flex": "inline-flex min-w-0 max-w-full",
+  inline: "inline",
+  block: "flex w-full min-w-0",
+  fill: "flex min-w-0 flex-1 items-center gap-[inherit]",
+} as const;
 
 type TriggerEvent = { currentTarget: Pick<Element, "contains">; target: EventTarget | null };
 /** Whether a pointer or focus event on the trigger is its own (not from a portal'd child), so it opens or closes the card. None
