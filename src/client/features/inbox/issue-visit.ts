@@ -4,6 +4,7 @@
 import { useEffect, useSyncExternalStore, type RefObject } from "react";
 import { createSeenTracker } from "@/shared/inbox-visit";
 import { useStore } from "@/client/state/store";
+import { inboxShown } from "@/client/features/navigation/navigation";
 import { commentSeen, useFeed, visitIssue } from "./inbox";
 
 /** Linear's `C`: whether this window has focus, from its focus and blur events. */
@@ -21,7 +22,7 @@ export const useWindowFocus = () => useSyncExternalStore(subscribeFocus, hasFocu
 /** Linear's `z`: when the issue shows in a focused window, and again when its comment count changes, its notifications
  *  without a comment are read. The feed's first fetch stands in for Linear's `waitForSync`. */
 export function useIssueVisit(key: string, comments: number) {
-  const fromInbox = useStore((s) => s.inbox);
+  const fromInbox = useStore(inboxShown);
   const focused = useWindowFocus();
   const fetched = useFeed("all").dataUpdatedAt > 0;
   useEffect(() => {
@@ -37,7 +38,7 @@ const later = (fn: () => void, ms: number) => {
 /** Linear's `j`/`M` for every comment under `root` (`[data-comment]`, its thread's lead in `data-comment-parent`): one
  *  IntersectionObserver for the issue, and a MutationObserver for comments that mount or leave as threads fold. */
 export function useCommentsSeen(key: string, root: RefObject<HTMLElement | null>) {
-  const fromInbox = useStore((s) => s.inbox);
+  const fromInbox = useStore(inboxShown);
   useEffect(() => {
     const scope = root.current;
     if (fromInbox || !scope || typeof IntersectionObserver === "undefined") return;

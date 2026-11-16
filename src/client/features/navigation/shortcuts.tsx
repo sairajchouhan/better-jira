@@ -4,7 +4,7 @@ import { type Issue } from "@/shared/issue-model";
 import { COPY_FAILED, lastToastLink, showNotification } from "@/client/state/app-notifications";
 import { toasts } from "@/client/components/toast-queue";
 import { recentIssues } from "./recents";
-import { isMyIssues } from "./navigation";
+import { inboxShown, isMyIssues } from "./navigation";
 import { issueCrumbs, pageIssue, stepIssues } from "./issue-trail";
 import { useEffect, useState } from "react";
 import { VIEW_SHORTCUT_IDS, viewShortcutId } from "@/client/features/views/view-shortcut";
@@ -23,7 +23,7 @@ import { boardOf, get, isWatching, ME, set, useStore, type Overlay, issueBoardId
 import { actions, beginCreate, beginCreateInView } from "@/client/state/issue-actions";
 import { currentKey } from "@/client/state/jira-sync";
 import { redoEdit, undoEdit } from "@/client/state/undo-history";
-import { navigate, openIssueByKey, ui, pageURL } from "./app-navigation";
+import { backToInbox, navigate, openIssueByKey, ui, pageURL } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
 import { dropPlan } from "@/client/routes/board-drop";
 import {
@@ -50,6 +50,7 @@ import {
   deleteRow,
   bulkApplies,
   hasSelectedRow,
+  leaveRow,
   markAllRead,
   moveRow,
   openRow,
@@ -259,6 +260,23 @@ function collapse(all = false) {
 }
 
 /** Live Linear Chrome reference, 6 Nov 2026. Only existing personal workflows are included. */
+/** What Escape does on this screen. */
+export function escapeStep(
+  s: Pick<State, "columnSelection" | "sidebarOpen" | "document" | "direct" | "inbox" | "selected" | "panel" | "view">,
+  rowSelected: boolean,
+): "columns" | "sidebar" | "stay" | "inbox" | "inbox-root" | "escape" {
+  if (s.columnSelection.size) return "columns";
+  if (s.sidebarOpen) return "sidebar";
+  const page = !s.document && pageIssue(s);
+  // An issue page opened by its address alone stays, as Linear's does: Escape goes back only from a list or with `backOnEsc`.
+  if (page && s.direct) return "stay";
+  // The page opened from the inbox's pane goes back to it (Linear's `backOnEsc` → `co`).
+  if (page && s.inbox) return "inbox";
+  // The inbox's pane, or a notification shown on its own, closes to the inbox's root with nothing selected (Linear: "No
+  // notification selected"; the next J starts from the top).
+  if (inboxShown(s) && (s.panel || rowSelected)) return "inbox-root";
+  return "escape";
+}
 export const shortcuts: Shortcut[] = [
   ...(
     [
@@ -315,14 +333,14 @@ export const shortcuts: Shortcut[] = [
     name: "Back / clear selection",
     group: "General",
     hotkey: "Escape",
-    run: () =>
-      get().columnSelection.size
-        ? set({ columnSelection: new Set() })
-        : get().sidebarOpen
-          ? set({ sidebarOpen: false })
-          : get().inbox && get().panel && get().view === "page" && !get().document
-            ? navigate({ view: "side" })
-            : ui.send({ type: "escape" }),
+    run: () => {
+      const step = escapeStep(get(), hasSelectedRow());
+      if (step === "columns") set({ columnSelection: new Set() });
+      else if (step === "sidebar") set({ sidebarOpen: false });
+      else if (step === "inbox") backToInbox();
+      else if (step === "inbox-root") leaveRow();
+      else if (step === "escape") ui.send({ type: "escape" });
+    },
   },
   {
     id: "undo",
@@ -360,7 +378,8 @@ export const shortcuts: Shortcut[] = [
     label: () => ((get().panel ? !get().issuePropertiesHidden : get().details) ? "Close details" : "Open details"),
     group: "Navigation",
     hotkey: "]",
-    when: (s) => !s.document,
+    // The inbox's pane has no properties toggle: its sidebar shows by width alone, and `]` does nothing there (Linear, live).
+    when: (s) => !s.document && !inboxShown(s),
     run: () =>
       get().panel
         ? set({ issuePropertiesHidden: !get().issuePropertiesHidden })
@@ -440,7 +459,8 @@ export const shortcuts: Shortcut[] = [
     run,
     notification,
     hideInCommandMenu: id === "inbox-delete",
-    when: (s) => s.inbox && (notification ? hasSelectedRow() : bulkApplies(INBOX_BULK[id] ?? "all")),
+    // Gone on the issue's page, as Linear's IssuePage mounts no notification controls.
+    when: (s) => inboxShown(s) && (notification ? hasSelectedRow() : bulkApplies(INBOX_BULK[id] ?? "all")),
     label: id === "inbox-read" ? () => markReadName(selectedRow()) : undefined,
   })),
   {
@@ -449,7 +469,15 @@ export const shortcuts: Shortcut[] = [
     group: "Inbox",
     hotkey: "Z",
     run: undoInbox,
-    when: (s) => s.inbox,
+    when: inboxShown,
+  },
+  {
+    id: "inbox-open-page",
+    name: "Open full issue view",
+    group: "Inbox",
+    // ⌘K only, from the inbox's pane, as Linear's (`lfn`, live): Enter never leaves the inbox.
+    run: () => navigate({ view: "page" }),
+    when: (s) => inboxShown(s) && s.panel && !!s.selected,
   },
   ...(
     [
@@ -464,7 +492,7 @@ export const shortcuts: Shortcut[] = [
     run: () => showTab(tab),
     // The tabs exist only in the priority inbox; the Inbox's own display option, outside the store, read per key and ⌘K open
     // (R3-palette-shortcuts-D6).
-    when: (s) => s.inbox && priorityInbox(),
+    when: (s) => inboxShown(s) && priorityInbox(),
   })),
   {
     id: "mine",

@@ -20,7 +20,7 @@ import {
   type RouterHistory,
 } from "@tanstack/react-router";
 import { Suspense } from "react";
-import type { ListPlace, Place } from "@/client/features/navigation/navigation";
+import { inboxShown, type ListPlace, type Place } from "@/client/features/navigation/navigation";
 import type { Trail } from "@/client/features/navigation/issue-trail";
 import { isPersonTab, type PersonTab } from "@/shared/people";
 import { viewPath, type SavedView } from "@/shared/saved-view-model";
@@ -41,6 +41,9 @@ declare module "@tanstack/history" {
     favorite?: string;
     /** On an issue page: how it was reached (issue-trail.ts), so Back and Forward keep its breadcrumb; a reload drops it. */
     trail?: Trail;
+    /** On an issue's address: it is open in the inbox's pane, as Linear's `issueOrigin: {type: "inbox"}`. A reload keeps the pane;
+     *  the same address pasted or typed carries no state and opens the issue's page. */
+    issueOrigin?: "inbox";
   }
 }
 
@@ -125,6 +128,20 @@ const IssueScreen = lazyRouteComponent(issueViewChunk.load, "IssueScreen");
 /** Loads the issue screens ahead (the idle walk, or a hover), so the first issue opened renders at once. */
 export const preloadIssueScreens = () => Promise.all([SidePanel.preload?.(), IssueScreen.preload?.()]);
 const InboxScreen = lazyRouteComponent(inboxChunk.load, "InboxScreen");
+/**
+ * The inbox, over both its addresses: `/inbox`, and `/issue/KEY` open in its pane (`issueOrigin`). The Shell hosts it, as it keeps
+ * the boards, so opening a notification, J/K and Escape move between routes without remounting the list: it keeps its scroll and
+ * its find. Hidden while its issue is open as a page.
+ */
+export function InboxHost() {
+  const shown = useStore(inboxShown);
+  return shown ? (
+    <Suspense>
+      <InboxScreen />
+    </Suspense>
+  ) : null;
+}
+const NoScreen = () => null;
 const DocumentScreen = lazyRouteComponent(issueDocumentChunk.load, "DocumentScreen");
 preloadAtStartup("inbox", ROUTE_ORDER, () => InboxScreen.preload?.());
 preloadAtStartup("issue-document", ROUTE_ORDER, () => DocumentScreen.preload?.());
@@ -265,12 +282,18 @@ const inboxRoute = createRoute({
   ...listRoute,
   // `notification`: the selected row when its issue isn't mirrored, kept over a reload (R2-inbox-D6).
   validateSearch: (search: Record<string, unknown>) => ({ ...listSearch(search), notification: text(search.notification) }),
+  // `?issue=KEY` is the pane's address before it moved to the issue's own (`locationOf`): shown, then moved there.
   beforeLoad: ({ search, context, location, preload }) => {
     return then(openBeside(search.issue, context, location), () => {
       if (!preload) context.show({ to: "inbox", ...listSearch(search) }, location);
     });
   },
-  component: InboxScreen,
+  loader: async ({ context, deps, preload }) => {
+    const loading = Promise.all([InboxScreen.preload?.(), deps.issue ? context.preload(deps.issue) : undefined]);
+    // Opening it waits only for the inbox's code (InboxHost then renders it at once); a hover waits for both.
+    return preload ? loading : InboxScreen.preload?.();
+  },
+  component: NoScreen,
 });
 /** An issue page: a renamed key redirects to the current one, an unknown key is kept or not found. */
 function issuePage(key: string, context: RouteContext, location: ParsedLocation) {
@@ -287,10 +310,16 @@ const issueRoute = createRoute({
   path: "/issue/$key/{-$slug}",
   beforeLoad: ({ params, context, location, preload }) => {
     return then(issuePage(params.key, context, location), () => {
-      if (!preload) context.show({ to: "issue", key: params.key, ...(location.state.over ? { over: location.state.over } : {}) }, location);
+      if (preload) return;
+      // Opened in the inbox's pane: the inbox shows it, as Linear's route resolver renders the Inbox for that origin (`fCi`).
+      if (location.state.issueOrigin === "inbox") context.show({ to: "inbox", issue: params.key }, location);
+      else context.show({ to: "issue", key: params.key, ...(location.state.over ? { over: location.state.over } : {}) }, location);
     });
   },
-  loader: ({ context, params, preload }) => issueLoader(context, params.key, preload),
+  loader: ({ context, params, preload, location }) =>
+    location.state.issueOrigin === "inbox"
+      ? Promise.all([issueLoader(context, params.key, preload), preload ? InboxScreen.preload?.() : undefined])
+      : issueLoader(context, params.key, preload),
   component: IssueScreen,
 });
 const documentRoute = createRoute({
@@ -379,7 +408,10 @@ export function locationOf(place: Place, context: Pick<RouteContext, "view">) {
         : ({ to: "/my-issues/{-$tab}", params: { tab }, search: issue } as const);
     }
     case "inbox":
-      return { to: "/inbox", search: issue } as const;
+      // An open notification's address is its issue's own, marked as the inbox's pane (Linear's `Notification.inboxPath()`).
+      return place.issue
+        ? ({ to: "/issue/$key/{-$slug}", params: { key: place.issue, slug: undefined }, state: { issueOrigin: "inbox" } } as const)
+        : ({ to: "/inbox", search: {} } as const);
     case "issue": {
       const state = { ...(place.over ? { over: place.over } : {}), ...(place.trail ? { trail: place.trail } : {}) };
       return place.document

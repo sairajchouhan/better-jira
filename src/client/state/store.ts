@@ -123,6 +123,8 @@ export type State = {
   favorite: string | null;
   /** How the open issue page was reached (navigation/issue-trail.ts). */
   trail: Trail | null;
+  /** The open issue page was opened by its address alone; see navigation.ts. */
+  direct: boolean;
   overlayFilters: import("@/shared/view-model").FilterGroup;
   /** Each page's temporary filter (shared/page-filters.ts); `overlayFilters` is the one on screen. */
   pageFilters: PageFilters;
@@ -199,6 +201,7 @@ let state: State = {
   linkView: false,
   favorite: null,
   trail: null,
+  direct: false,
   overlayFilters: emptyOverlay(),
   pageFilters: savedPageFilters(),
   viewPreferences: null,

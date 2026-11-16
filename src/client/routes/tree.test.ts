@@ -50,7 +50,7 @@ test("D7: old addresses redirect to the paths that replaced them, replacing the 
     ["/?board=1&issue=OLD-1", "/board/1/all?issue=A-1"],
     ["/?board=1&issue=A-1&view=page", "/issue/A-1"],
     ["/?board=1&issue=A-1&document=d1", "/issue/A-1/document/d1"],
-    ["/?board=1&inbox=1&issue=A-1", "/inbox?issue=A-1"],
+    ["/?board=1&inbox=1&issue=A-1", "/issue/A-1"],
     ["/?board=1&mine=1", "/my-issues"],
     ["/user/alex/activity", "/profiles/alex/activity"],
     ["/views?board=1", "/board/1/all"],
@@ -77,6 +77,26 @@ test("an issue page keeps the list it opened over in history state; a renamed ke
   expect(renamed.shown).toEqual({ to: "issue", key: "A-1", over });
   expect((await open("/view/old-name-v1?issue=A-1")).at).toBe("/view/triage-v1?issue=A-1");
   expect((await open("/issue/A-1/document/d1")).shown).toEqual({ to: "issue", key: "A-1", document: "d1" });
+});
+
+test("item 5: the inbox's pane lives at its issue's own address, marked in history state; without the mark it is the issue's page", async () => {
+  // Opening a notification: the issue's path, with Linear's `issueOrigin: {type: "inbox"}` in its entry, which a reload keeps.
+  expect(locationOf({ to: "inbox", issue: "A-1" }, { view: () => undefined })).toMatchObject({
+    to: "/issue/$key/{-$slug}",
+    params: { key: "A-1" },
+    state: { issueOrigin: "inbox" },
+  });
+  expect(locationOf({ to: "inbox" }, { view: () => undefined })).toMatchObject({ to: "/inbox" });
+  expect((await open("/issue/A-1", { issueOrigin: "inbox" })).shown).toEqual({ to: "inbox", issue: "A-1" });
+  // A renamed key keeps the mark as it moves to the current one.
+  const renamed = await open("/issue/OLD-1", { issueOrigin: "inbox" });
+  expect([renamed.at, renamed.shown]).toEqual(["/issue/A-1", { to: "inbox", issue: "A-1" }]);
+  // The same address pasted or typed carries no state: the issue's page, over no list.
+  expect((await open("/issue/A-1")).shown).toEqual({ to: "issue", key: "A-1" });
+  // The pane's old address still opens the pane (navigation then moves it to the issue's address).
+  expect((await open("/inbox?issue=A-1")).shown).toEqual({ to: "inbox", issue: "A-1" });
+  // The old `?inbox=1` address lands on the pane too.
+  expect((await open("/?board=1&inbox=1&issue=A-1")).shown).toEqual({ to: "inbox", issue: "A-1" });
 });
 
 test("each path shows its place; unknown issues, boards, tabs and views are not found", async () => {
@@ -112,7 +132,8 @@ test("BJ-187: copied route and timestamp URLs use the router base path, target a
   const context = { view: (id: string) => id === triage.id ? triage : undefined };
   const cases: [Place, string][] = [
     [{ to: "board", board: 2, scope: "active", issue: "B-1" }, "/board/2/active?issue=B-1"],
-    [{ to: "inbox", issue: "A-1" }, "/inbox?issue=A-1"],
+    // The inbox's pane copies its issue's own address (Linear's `Notification.inboxPath()`).
+    [{ to: "inbox", issue: "A-1" }, "/issue/A-1"],
     [{ to: "person", person: "alex", tab: "created" }, "/profiles/alex/created"],
     [{ to: "view", id: triage.id }, "/view/triage-v1"],
     [{ to: "issue", key: "A-1", document: "doc 1" }, "/issue/A-1/document/doc%201"],

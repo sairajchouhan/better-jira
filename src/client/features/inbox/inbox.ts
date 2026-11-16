@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { commentAnchor, unreadCount, type InboxItem } from "@/shared/inbox-model";
 import { clearedComments, visitClears } from "@/shared/inbox-visit";
-import { statusOf as issueStatusOf, get, set, useStore, issueBoardId } from "@/client/state/store";
+import { statusOf as issueStatusOf, get, set, useStore, issueBoardId, subscribe as onStore, type State } from "@/client/state/store";
 import { keepIssue, keptOutcome, queryClient, subscribeKept } from "@/client/state/server-data";
-import { navigate, router, showAnchor, ui } from "@/client/features/navigation/app-navigation";
+import { navigate, router, showAnchorSoon, ui } from "@/client/features/navigation/app-navigation";
 import { createInboxStore, type Category, type DeleteConfirmation, type Feed } from "@/client/state/inbox-store";
 import type { InfiniteData } from "@tanstack/query-core";
 import { readStored, writeStored } from "@/client/state/stored-state";
@@ -75,7 +75,7 @@ function openInboxRow(item: InboxItem, open: "side" | "page") {
     });
     // A comment notification opens the issue at its comment, as Jira's link does (`focusedCommentId`).
     const anchor = commentAnchor(item);
-    if (anchor) requestAnimationFrame(() => showAnchor(anchor));
+    if (anchor) showAnchorSoon(anchor);
   } else {
     navigate({ selected: null, panel: false, inbox: true });
     keepRowInUrl(item.id);
@@ -145,6 +145,22 @@ export const inbox = createInboxStore({
       confirmListeners.forEach((l) => l());
     }),
 });
+/** The issue open in the inbox's pane, if any. */
+const paneIssue = (s: State) => (s.inbox && s.panel ? s.selected : null);
+/** The pane's issue closed some other way than Escape (Back to the inbox's root), or the inbox was left: its row is no longer
+ *  selected either, so the inbox shows its root ("N unread notifications"), not the row as a notification on its own (D1). */
+export function followPane(before: State, after: State, store: { selectedRow: () => InboxItem | undefined; forgetSelection: () => void }) {
+  if (!before.inbox) return;
+  const was = paneIssue(before);
+  const closed = !!was && !paneIssue(after) && !after.selected && store.selectedRow()?.key === was;
+  if (!after.inbox || closed) store.forgetSelection();
+}
+let seen = get();
+onStore(() => {
+  const before = seen;
+  seen = get();
+  followPane(before, seen, inbox);
+});
 globalThis.addEventListener?.("storage", (event) => {
   const key = (event as StorageEvent).key;
   for (const name of ["local", "view", "push"])
@@ -170,6 +186,7 @@ export const {
   hasSelectedRow,
   bulkApplies,
   selectedRow,
+  leaveRow,
   showTab,
   priorityInbox,
 } = inbox;

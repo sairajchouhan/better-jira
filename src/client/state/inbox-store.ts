@@ -510,7 +510,9 @@ export function createInboxStore(ports: InboxPorts) {
       at = rows.findIndex((r) => r.id === selectedId);
     selectRow(rows[at < 0 ? 0 : at + direction]);
   }
-  const openRow = () => selectRow(selectedRow(), "page");
+  /** Enter: the focused row opens in the pane, never the page; Linear's list gets no opener in split view (`ListCell` `Gt`) and goes
+   *  to the row's `linkForItem`, its `inboxPath()`. */
+  const openRow = () => selectRow(selectedRow());
   /** Linear's U. */
   function toggleRead(row = selectedRow()) {
     // An explicit U wins over the pending read of the row it acts on.
@@ -584,11 +586,16 @@ export function createInboxStore(ports: InboxPorts) {
     }
     return before;
   }
-  /** Nothing selected: the inbox's root, with no notification open. */
-  function leaveRow() {
+  /** Nothing selected, here only: the open issue already closed (Back to the inbox's root). */
+  function forgetSelection() {
     cancelRead();
+    if (selectedId === null) return;
     selectedId = null;
     emit();
+  }
+  /** Nothing selected: the inbox's root, with no notification open. */
+  function leaveRow() {
+    forgetSelection();
     ports.clearSelection();
   }
   /** Linear's E and ⌫. Jira notifications cannot be deleted, so this hides the row in this browser until the issue has new activity. */
@@ -788,6 +795,8 @@ export function createInboxStore(ports: InboxPorts) {
     loadAll,
     hasSelectedRow,
     bulkApplies,
+    leaveRow,
+    forgetSelection,
     showTab,
     priorityInbox,
     undoInbox,

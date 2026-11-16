@@ -8,7 +8,7 @@ import { decodeOverlay, emptyOverlay, encodeOverlay, type SavedView, type ViewDr
 import type { View } from "@/client/state/store";
 import type { PersonTab } from "@/shared/people";
 import { keptFavorite } from "./sidebar-active";
-import { nextTrail, type Trail, type TrailStep } from "./issue-trail";
+import { nextTrail, pageIssue, type Trail, type TrailStep } from "./issue-trail";
 import { boardFor } from "@/shared/board-membership";
 import { boardPage, personPage, viewPage, withPageFilter, type PageFilters } from "@/shared/page-filters";
 
@@ -37,6 +37,9 @@ export type Screen = {
   favorite: string | null;
   /** How the open issue page was reached, for its breadcrumb and counter (issue-trail.ts); null off a page or when reached directly. */
   trail: Trail | null;
+  /** The open issue page was opened by its address alone (pasted, typed, a new tab): no list under it, so Escape stays and its
+   *  history entry names no list. Linear's page goes back on Escape only with `backOnEsc` (`co`) or from a list (`viewItemKey`). */
+  direct: boolean;
 };
 /** The fields the ui machine also holds, for Escape and the toolbar. */
 export const MACHINE_FIELDS = ["board", "view", "selected", "panel", "document", "inbox", "mine"] as const;
@@ -228,7 +231,12 @@ const go = (screen: Screen, to: Destination, data: NavigationData) => {
 
 export function transition(screen: Screen, event: NavigationEvent, data: NavigationData): Transition {
   const out = step(screen, event, data);
-  const next = { ...out.screen, favorite: favoriteAfter(screen, event, out.screen), trail: trailAfter(screen, event, out.screen) };
+  const next = {
+    ...out.screen,
+    favorite: favoriteAfter(screen, event, out.screen),
+    trail: trailAfter(screen, event, out.screen),
+    direct: directAfter(screen, event, out.screen),
+  };
   // The one place the screen's temporary filter is set: the stored filter of the page it now shows.
   const preferences = out.preferences ?? data.preferences,
     key = pageKey(next, (board) => preferences[board]?.scope ?? "all");
@@ -273,6 +281,14 @@ function trailAfter(prev: Screen, event: NavigationEvent, next: Screen): Trail |
  * `resetItems`), its own on Back and Forward (`handleGoBackAndForward` reads the entry's saved items).
  */
 export const restoredTrail = (state: { trail?: Trail }, fresh: boolean): Trail | undefined => (fresh ? undefined : state.trail);
+/** Whether the next screen's issue page was opened by its address alone: an issue address restored with no list under it; any
+ *  other step keeps it only while the same issue page shows (its document opening or closing). */
+function directAfter(prev: Screen, event: NavigationEvent, next: Screen): boolean {
+  const page = pageIssue(next);
+  if (!page) return false;
+  if (event.type === "restore") return event.place.to === "issue" && !event.place.over;
+  return prev.direct && pageIssue(prev) === page;
+}
 /** The favorite the next screen comes from: the one a step names, else the one it still keeps (sidebar-active.ts). */
 function favoriteAfter(prev: Screen, event: NavigationEvent, next: Screen): string | null {
   switch (event.type) {
@@ -399,7 +415,13 @@ export function placeOf(s: Screen, scopeOf: (board: number) => Scope): Place {
     page = !!open && (s.view === "page" || !!s.document);
   const list = listOf(s, scopeOf, page ? undefined : open);
   return page
-    ? { to: "issue", key: open!, ...(s.document ? { document: s.document } : {}), over: list, ...(s.trail ? { trail: s.trail } : {}) }
+    ? {
+        to: "issue",
+        key: open!,
+        ...(s.document ? { document: s.document } : {}),
+        ...(s.direct ? {} : { over: list }),
+        ...(s.trail ? { trail: s.trail } : {}),
+      }
     : list;
 }
 function listOf(s: Screen, scopeOf: (board: number) => Scope, open: string | undefined): ListPlace {
@@ -416,6 +438,10 @@ function listOf(s: Screen, scopeOf: (board: number) => Scope, open: string | und
   if (s.mine) return { to: "person", person: s.person, tab: s.personTab, ...issue };
   return { to: "board", board: s.board, scope: scopeOf(s.board), ...issue };
 }
+
+/** The inbox's list shows (with its pane): the inbox, unless its issue is open as a page. On that page, as on Linear's IssuePage
+ *  reached from the inbox, the notification's controls and keys are gone. */
+export const inboxShown = (s: Pick<Screen, "inbox" | "selected" | "panel" | "view" | "document">) => s.inbox && !pageIssue(s);
 
 /** Saved views may also filter by assignee; only this screen is the sidebar destination. */
 export const isMyIssues = (s: Pick<Screen, "mine" | "inbox" | "activeViewId" | "editorDraft">) =>

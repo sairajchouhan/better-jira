@@ -5,7 +5,7 @@ import { commentAnchor, type InboxItem } from "@/shared/inbox-model";
 import { newPushes, noteIds, pushContent, type Push } from "@/shared/inbox-push";
 import { ME, get, issueBoardId } from "@/client/state/store";
 import { showNotification } from "@/client/state/app-notifications";
-import { navigate, showAnchor } from "@/client/features/navigation/app-navigation";
+import { navigate, showAnchorSoon } from "@/client/features/navigation/app-navigation";
 import { inbox, itemsOf, selectRow, useFeed } from "./inbox";
 
 export type PushPermission = NotificationPermission | "unsupported";
@@ -33,7 +33,7 @@ function openPush(item: InboxItem) {
   if (!issue) return selectRow(item);
   navigate({ board: issueBoardId(issue), selected: issue.key, panel: true, view: get().view });
   const anchor = commentAnchor(item);
-  if (anchor) requestAnimationFrame(() => showAnchor(anchor));
+  if (anchor) showAnchorSoon(anchor);
 }
 
 function show(push: Push) {

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createMemoryHistory } from "@tanstack/react-router";
-import { placeOf, restoredTrail, transition, type NavigationData, type NavigationEvent, type Place, type Screen } from "./navigation";
+import { inboxShown, placeOf, restoredTrail, transition, type NavigationData, type NavigationEvent, type Place, type Screen } from "./navigation";
 import { emptyOverlay, encodeOverlay, viewForRoute, type SavedView, type ViewDraft } from "@/shared/saved-view-model";
 import { defaultPreferences } from "@/shared/view-model";
 import { createAppRouter, legacyPlace, locationOf, type RouteContext } from "@/client/routes/tree";
@@ -47,6 +47,7 @@ const start: Screen = {
   linkView: false,
   favorite: null,
   trail: null,
+  direct: false,
 };
 const data = (patch: Partial<NavigationData> = {}): NavigationData => ({
   savedViews: [view()],
@@ -430,4 +431,41 @@ test("an issue on two boards opens on the board its address names; one only on a
   expect(at(1, "B-1")).toMatchObject({ board: 2, selected: "B-1" });
   // Linked from a board issue, on no board: it opens over the board the address names.
   expect(at(2, "L-1")).toMatchObject({ board: 2, selected: "L-1" });
+});
+
+test("item 5: the inbox's pane shows at its issue's address; its title opens the page over the inbox; neither saves Open issues in", () => {
+  const d = data({ preferences: { 1: prefs("page"), 2: prefs("side") } });
+  const scopeOf = () => "all" as const;
+  // A reload or Back to the pane's entry (`issueOrigin: inbox`) restores the pane, not the page.
+  const pane = walk([restore({ to: "inbox", issue: "A-1" })], d);
+  expect(pane.screen).toMatchObject({ inbox: true, selected: "A-1", panel: true, view: "side", direct: false });
+  expect(placeOf(pane.screen, scopeOf)).toEqual({ to: "inbox", issue: "A-1" });
+  expect(inboxShown(pane.screen)).toBe(true);
+  // J/K: the next notification's issue is the address.
+  const next = walk([inboxOpen("B-1", 2)], pane.d, pane.screen);
+  expect(placeOf(next.screen, scopeOf)).toEqual({ to: "inbox", issue: "B-1" });
+  // The header's "KEY Title": the page, over the inbox, so Escape and a reload come back to it; the notification's controls go.
+  const page = walk([{ type: "go", to: { view: "page" } }], next.d, next.screen);
+  expect(placeOf(page.screen, scopeOf)).toEqual({ to: "issue", key: "B-1", over: { to: "inbox" }, trail: "list" });
+  expect(inboxShown(page.screen)).toBe(false);
+  expect(page.d.preferences).toEqual(d.preferences);
+  const back = walk([{ type: "go", to: { view: "side" } }], page.d, page.screen);
+  expect(placeOf(back.screen, scopeOf)).toEqual({ to: "inbox", issue: "B-1" });
+  expect(back.d.preferences).toEqual(d.preferences);
+  // Restoring the page's own entry (a reload) keeps it over the inbox.
+  expect(walk([restore({ to: "issue", key: "B-1", over: { to: "inbox" } })], d).screen).toMatchObject({ inbox: true, view: "page", direct: false });
+});
+
+test("item 9: an issue page opened by its address alone is direct: its entry names no list, and only that page stays direct", () => {
+  const scopeOf = () => "all" as const;
+  const direct = walk([restore({ to: "issue", key: "A-1" })]);
+  expect(direct.screen).toMatchObject({ selected: "A-1", panel: true, view: "page", direct: true });
+  // No `over` in its entry, so a reload is still direct (show() would otherwise write the board under it).
+  expect(placeOf(direct.screen, scopeOf)).toEqual({ to: "issue", key: "A-1" });
+  // Its document opening and closing keep it; another issue, a list or a page over a list don't.
+  const doc = walk([{ type: "go", to: { document: "d1" } }, { type: "go", to: { document: null } }], direct.d, direct.screen);
+  expect(doc.screen.direct).toBe(true);
+  expect(walk([{ type: "go", to: { selected: "B-1", panel: true, view: "page" } }], direct.d, direct.screen).screen.direct).toBe(false);
+  expect(walk([{ type: "go", to: { board: 1, selected: null, panel: false } }], direct.d, direct.screen).screen.direct).toBe(false);
+  expect(walk([restore({ to: "issue", key: "A-1", over: board1 })]).screen.direct).toBe(false);
 });

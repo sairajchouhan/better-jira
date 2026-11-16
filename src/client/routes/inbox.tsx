@@ -32,7 +32,7 @@ import { shortcutTitle } from "@/client/components/keycap";
 import { get, isWatching, useStore, issueBoardId } from "@/client/state/store";
 import { preloadOnHover, ui } from "@/client/features/navigation/app-navigation";
 import { SidebarToggle } from "@/client/features/navigation/breadcrumbs";
-import { useSearch } from "@tanstack/react-router";
+import { useRouterState } from "@tanstack/react-router";
 import { toggleFavorite } from "@/client/features/navigation/favorites";
 
 import { usePush, changeView, toggleFilter, clearFilters, selectRow, toggleRead, markAllRead, deleteRow, deleteAll, openSnooze, snoozeMenu, snoozeRow, unsnoozeRow, showTab, inbox, statusOf, ROW_PARAM, useKeptOutcome, useFeed, useSelected, useView, useShownView, useFind, openFind, setFind, closeFind, useLocal, useUnreadCount, orderOf, facets, itemsOf, clearUnseen, useConfirmation } from "@/client/features/inbox/inbox";
@@ -124,7 +124,8 @@ export function Row({
       onPointerEnter={() => issue && preloadOnHover({ board: issueBoardId(issue), selected: issue.key, panel: true, inbox: true })}
       onPointerLeave={() => preloadOnHover(null)}
       onKeyDown={(e) => {
-        // A clicked row keeps focus, and Enter on a link would click it again: open the full page, as Enter does elsewhere.
+        // A clicked row keeps focus, and Enter on a link would click it again: open it in the pane, as the Enter shortcut does
+        // (Linear's list gets no opener in split view, `ListCell` `Gt`; Enter never leaves the inbox).
         if (
           e.key !== "Enter" ||
           e.metaKey ||
@@ -135,7 +136,7 @@ export function Row({
           return;
         e.preventDefault();
         e.stopPropagation();
-        selectRow(item, "page");
+        selectRow(item);
       }}
       onContextMenu={(e) => {
         e.preventDefault();
@@ -785,7 +786,8 @@ export function InboxList() {
     // A Retry after a failed page brings back no new page: the drain starts again once the error clears.
   }, [whole, category, pages, error]);
   // A reload keeps the open issue, or a row outside the mirror, in the URL: select its row again, so U, E and H act on it.
-  const rowParam = useSearch({ strict: false, select: (search) => (search as Record<string, string | undefined>)[ROW_PARAM] });
+  // Read from the location: the Shell hosts the inbox (tree.tsx `InboxHost`), outside any route match `useSearch` needs.
+  const rowParam = useRouterState({ select: (s) => (s.location.search as Record<string, string | undefined>)[ROW_PARAM] });
   const issueKey = useStore((s) => (s.inbox ? s.selected : null)),
     rowId = issueKey
       ? null
@@ -1054,7 +1056,8 @@ export function InboxIssueActions() {
   );
 }
 
-/** The `/inbox` route: the notification list, and the open issue (or the selected notification) beside it. */
+/** The inbox: the notification list, and the open issue (or the selected notification) beside it, at `/inbox` and at an issue's
+ *  address opened in its pane (tree.tsx `InboxHost`). */
 export function InboxScreen() {
   const open = useStore((s) => (s.panel && s.selected ? s.issues.get(s.selected) : undefined));
   return (
@@ -1064,11 +1067,13 @@ export function InboxScreen() {
     </>
   );
 }
-/** The right pane when no issue is open: Linear's empty state, or the notification itself when its issue is not in the mirror. */
+/** The right pane when no issue is open: Linear's empty state, or the notification itself when its issue is not in the mirror. A
+ *  mirrored row's issue that isn't open (Escape, Back) leaves the empty state (D1). */
 export function InboxPane() {
   const row = useSelectedRow();
+  const mirrored = useStore((s) => !!row && s.issues.has(row.key));
   const unread = useUnreadCount().count;
-  if (row)
+  if (row && !mirrored)
     return (
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-3">

@@ -100,6 +100,12 @@ export const issueAt = (key: string, s: State = get()): Destination => ({
   selected: key,
   panel: true,
 });
+/** Escape on an issue page opened from the inbox's pane: back to that pane, as Linear's page with `backOnEsc` goes back (`co`). The
+ *  entry before it is the pane it opened from; with none before it, the pane opens in its place. */
+export function backToInbox() {
+  if (router.history.canGoBack()) router.history.back();
+  else navigate({ view: "side" });
+}
 /** The user's switch of the open issue between the side panel and the full page, remembered as the list's "Open issues in". */
 export const openIssuesIn = (view: View) => go({ type: "open-in", view });
 /** Opens an issue by its key here, whether or not the mirror holds it yet (`navigate`). */
@@ -125,6 +131,7 @@ const screen = (s = get()): Screen => ({
   linkView: s.linkView,
   favorite: s.favorite,
   trail: s.trail,
+  direct: s.direct,
 });
 const data = () => ({
   savedViews: get().savedViews,
@@ -191,10 +198,12 @@ function current() {
   const location = router.buildLocation(target as never);
   return { place, target, location };
 }
-/** Same address, opened from the same favorite and, on an issue page, the same list under it, reached the same way. */
-const sameAddress = (a: ParsedLocation, b: ParsedLocation) =>
+/** Same address, opened from the same favorite and, on an issue's address, the same frame (the inbox's pane or the page) over the
+ *  same list, reached the same way. */
+export const sameAddress = (a: Pick<ParsedLocation, "pathname" | "searchStr" | "state">, b: Pick<ParsedLocation, "pathname" | "searchStr" | "state">) =>
   a.pathname === b.pathname &&
   a.searchStr === b.searchStr &&
+  a.state.issueOrigin === b.state.issueOrigin &&
   a.state.favorite === b.state.favorite &&
   JSON.stringify(a.state.over) === JSON.stringify(b.state.over) &&
   JSON.stringify(a.state.trail) === JSON.stringify(b.state.trail);
@@ -289,10 +298,19 @@ function followHash(event: MouseEvent) {
 /** Points the shown page's address at a spot on it (an issue's comment) in place, and lets the page follow it, as a
  *  click on a link to it does (`followHash`). */
 export function showAnchor(anchor: string) {
-  const shown = router.latestLocation;
-  if (shown.hash === anchor) return;
-  router.history.replace(`${shown.pathname}${shown.searchStr}#${anchor}`, shown.state);
-  window.dispatchEvent(new HashChangeEvent("hashchange"));
+  const shown = router.history.location;
+  if (shown.hash === `#${anchor}`) return;
+  router.history.replace(`${shown.pathname}${shown.search}#${anchor}`, shown.state);
+  if (typeof HashChangeEvent !== "undefined") window.dispatchEvent(new HashChangeEvent("hashchange"));
+}
+/** `showAnchor` on the next frame, for the page just opened, and only while its history entry is still the one shown: a
+ *  frame that comes late (a background tab) must not rewrite the entry of a page opened since, or the pane's entry that Back
+ *  or Escape returned to, with another entry's state. */
+export function showAnchorSoon(anchor: string, later: (run: () => void) => unknown = requestAnimationFrame) {
+  const entry = router.history.location.state.__TSR_key;
+  later(() => {
+    if (router.history.location.state.__TSR_key === entry) showAnchor(anchor);
+  });
 }
 /** The board's Issues › All. Leaves any view first, so its scope and details stay untouched. */
 export function openAllIssues(board: number) {

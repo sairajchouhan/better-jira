@@ -30,6 +30,7 @@ import { useRecordVisits } from "@/client/features/navigation/recents";
 import { RouteTitle } from "@/client/features/navigation/route-title-updater";
 import { Preferences } from "@/client/features/navigation/preferences";
 import { BoardView } from "@/client/routes/board-view";
+import { InboxHost } from "@/client/routes/tree";
 import { ViewPeek } from "@/client/features/views/view-peek";
 import {
   Sidebar,
@@ -126,8 +127,8 @@ const closeOverlay = () => ui.send({ type: "overlay.close" });
 /** An overlay's name in a failure toast: "add-board" is "Add board". */
 const overlayLabel = (overlay: string | null) => (overlay ? overlay[0]!.toUpperCase() + overlay.slice(1).replaceAll("-", " ") : "");
 
-/** The frame every route renders inside: sidebar, the board header, the boards kept mounted, overlays.
- *  `children` is the matched route: a side panel, an issue page, a document, the inbox or the views list. */
+/** The frame every route renders inside: sidebar, the board header, the boards and the inbox kept mounted, overlays.
+ *  `children` is the matched route: a side panel, an issue page or a document. */
 function Shell({ children }: { children: ReactNode }) {
   const boards = useStore((s) => s.boards);
   const boardId = useStore((s) => s.board);
@@ -177,6 +178,7 @@ function Shell({ children }: { children: ReactNode }) {
                   </ErrorBoundary>
                 );
               })}
+            <InboxHost />
             {children}
           </div>
         </main>
