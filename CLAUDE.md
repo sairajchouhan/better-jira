@@ -10,7 +10,7 @@ This applies to every bug fix, every behaviour question, and whenever the user s
 2. **Build it the way the bundle does:** same values, behaviour and component boundaries. The same control in two places is one component rendered twice. Fix the shared component so every instance gets the fix.
 3. **Verify against Linear:** run the same case in ours and in Linear, compare, and report what matches and what still differs.
 4. **Cite Linear** (the bundle file and symbol, and what the live site showed) in the reply. In every delegate brief, steps 1–3 come first.
-5. **Differ only when the user says so.** Record each such choice in `.raj/linear-differences.md`, and never revert one in parity work.
+5. **Differ only when the user says so.** Note each such choice in a code comment where the code differs, and never revert one in parity work.
 
 # Components: React Aria first
 
@@ -73,8 +73,5 @@ This applies to every bug fix, every behaviour question, and whenever the user s
 - Write a file only when the user asks for it, or when a delegate needs it to start.
 - Temporary docs (briefs, reports, scratch notes) go in `.raj/tmp/`, for the lead and delegates alike.
 - Delete a temporary doc as soon as its work is merged.
-- `.raj` keeps only: next.md, park.md, prompts.md, linear-differences.md, restart-3000.sh, linear-bundle/, features/bundle-audit/ranked.md, qa/ (app.md, stories.md, jira.ts), tmp/. Add nothing else unless the user asks.
-- next.md: only what the user asks to build, in their words. Never status or logs.
-- park.md: only what the user says to park.
-- ranked.md: open work found by the lead or delegates.
-- linear-differences.md: one line per difference from Linear, nothing else.
+- `.raj` keeps only: prompts.md, restart-3000.sh, linear-bundle/, qa/ (app.md, jira.ts), tmp/. Add nothing else unless the user asks.
+- No file tracks status, open bugs or what is built. Report new issues to the user in the reply.
