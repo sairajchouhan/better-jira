@@ -750,26 +750,44 @@ export function IssueSearch() {
 }
 
 /** ⌘K: commands for the selected issue (Backspace drops it), the open view and the app, then matching issues; or one of
- *  its nested pages. */
-export function CommandPalette({ page: initialPage }: { page?: PalettePage }) {
-  const [page, setPage] = useState(initialPage ?? null);
-  const [q, setQ] = useState("");
-  if (page)
-    return (
-      <PaletteFrame
-        label={PAGES[page].label}
-        q={q}
-        setQ={setQ}
-        chip={PAGES[page].parent}
-        placeholder="Search…"
-        onBackspace={() => setPage(null)}
-      >
-        <PageRows page={page} q={q} setQ={setQ} />
-      </PaletteFrame>
-    );
-  return <RootPalette openPage={(p) => (setQ(""), setPage(p))} />;
+ *  its nested pages, opened by its chord. */
+export function CommandPalette({ page }: { page?: PalettePage }) {
+  return <RootPalette initialPage={page} />;
 }
-function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
+
+/** A page of ⌘K's own frame: an "Open …" page or a field command's picker. */
+type Page = { kind: "open"; page: PalettePage } | { kind: "field"; command: FieldCommand };
+/** ⌘K's root search, the page open over it and the row Backspace returns the highlight to. */
+type Nav = { q: string; page: Page | null; returnTo?: string };
+/** Linear's openSubActions: the root's search and highlighted row wait on its stack while the page is open. A page entered by its
+ *  keyword ("t ") keeps no search to return to, as Linear stacks "" when the search was the keyword (`from` is then absent). */
+export const openPage = (nav: Nav, page: Page, from?: string): Nav =>
+  from ? { q: nav.q, page, returnTo: from } : { q: "", page, returnTo: undefined };
+/** Linear's closeSubActions: back to the root with its stacked search and highlight. */
+export const leavePage = (nav: Nav): Nav => ({ ...nav, page: null });
+/** The commands that open one of ⌘K's "Open …" pages (their chord opens the palette on it): in ⌘K they open it in place. */
+export const PAGE_COMMANDS: Record<string, PalettePage> = {
+  "open-issue": "issues",
+  "open-document": "documents",
+  "open-user": "users",
+  "favorite-open": "favorites",
+  "team-open": "boards",
+  "view-open": "views",
+  help: "help",
+  grouping: "grouping",
+  ordering: "ordering",
+};
+
+/** One "Open …" page in ⌘K's frame, with its own search; Backspace in the empty search runs `back`. */
+function OpenPage({ page, back }: { page: PalettePage; back: () => void }) {
+  const [q, setQ] = useState("");
+  return (
+    <PaletteBody label={PAGES[page].label} q={q} setQ={setQ} chip={PAGES[page].parent} placeholder="Search…" onBackspace={back}>
+      <PageRows page={page} q={q} setQ={setQ} />
+    </PaletteBody>
+  );
+}
+function RootPalette({ initialPage }: { initialPage?: PalettePage }) {
   const issues = useStore((s) => s.issues);
   const boards = useStore((s) => s.boards);
   const boardId = useStore((s) => s.board);
@@ -780,16 +798,17 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
   const applyingIds = new Set(applicable.split(" "));
   const applies = (entry: (typeof shortcuts)[number]) => applyingIds.has(entry.id);
   const [scope, setScopeKey] = useState(get().document ? null : get().selected);
-  const [q, setQ] = useState("");
+  // A page (an "Open …" page or the targeted issue's field command) opens over the root, which keeps its search and highlight.
+  const [nav, setNav] = useState<Nav>(() => ({ q: "", page: initialPage ? { kind: "open", page: initialPage } : null }));
+  const { q, page, returnTo } = nav;
+  const setQ = (next: string) => setNav((current) => ({ ...current, q: next }));
+  const back = () => setNav(leavePage);
   const scoped = scope ? issues.get(scope) : undefined;
   const activeView = useActiveView();
   const overlay = useOverlayFilters();
   const favorites = useStore(s => s.favorites);
   const [deletingView, setDeletingView] = useState(false);
   const [savingTo, setSavingTo] = useState(false);
-  // The targeted issue's field command open as a nested page, and the row Backspace returns the highlight to.
-  const [fieldPage, setFieldPage] = useState<FieldCommand | null>(null);
-  const [returnTo, setReturnTo] = useState<string>();
   const viewAction = (run: () => void) => () => { ui.send({ type: "overlay.close" }); run(); };
   const viewCommands: Cmd[] = (activeView ? [
     { name: "Edit view…", run: viewAction(() => openViewEditor(editViewDraft(activeView.id))) },
@@ -818,13 +837,12 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
         runShortcut(entry.id);
       },
     };
-    // A field command on the targeted issue opens its picker as a page of this menu (Linear's openSubActions), not on its own.
+    // A field command on the targeted issue opens its picker as a page of this menu (Linear's openSubActions), not on its own;
+    // so does an "Open …" command its page.
     const field = isFieldCommand(entry.id) && scoped ? entry.id : null;
-    if (field)
-      cmd.run = () => {
-        setReturnTo(rowValue(cmd));
-        setFieldPage(field);
-      };
+    const opens = PAGE_COMMANDS[entry.id];
+    const page: Page | null = field ? { kind: "field", command: field } : opens ? { kind: "open", page: opens } : null;
+    if (page) cmd.run = () => setNav((current) => openPage(current, page, rowValue(cmd)));
     return cmd;
   };
   // Only commands that would do something now, as Linear lists them.
@@ -898,18 +916,21 @@ function RootPalette({ openPage }: { openPage: (page: PalettePage) => void }) {
   if (deletingView && activeView) return <ViewDeleteDialog view={activeView} close={() => { setDeletingView(false); ui.send({ type: "overlay.close" }); }} />;
   const label = "Search issues and commands";
   return (
-    <CommandFrame label={label}>
-      {fieldPage && scoped ? (
-        // Backspace in the page's empty search comes back here with the search, the issue and the highlight as they were
-        // (Linear's closeSubActions restores the stacked searchInput and focusedIndex).
-        <FieldPage command={fieldPage} issue={scoped} back={() => setFieldPage(null)} />
+    <CommandFrame label={page?.kind === "open" ? PAGES[page.page].label : label}>
+      {/* Backspace in a page's empty search comes back here with the search, the issue and the highlight as they were (Linear's
+          closeSubActions restores the stacked searchInput and focusedIndex). Each body is keyed, so the root's menu starts afresh. */}
+      {page?.kind === "field" && scoped ? (
+        <FieldPage command={page.command} issue={scoped} back={back} />
+      ) : page?.kind === "open" ? (
+        <OpenPage key={page.page} page={page.page} back={back} />
       ) : (
         <PaletteBody
+          key="root"
           label={label}
           q={q}
           setQ={(next) => {
-            const page = keywordPage(next);
-            if (page) openPage(page);
+            const keyword = keywordPage(next);
+            if (keyword) setNav((current) => openPage(current, { kind: "open", page: keyword }));
             else setQ(next);
           }}
           title={scoped}

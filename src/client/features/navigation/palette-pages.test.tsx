@@ -29,3 +29,27 @@ test("BJ-343: every field command of the targeted issue opens as a ⌘K page; ot
 test("BJ-250: ⌘K lists the targeted issue's epics (Linear's \"Move to project › X\") from the Epic command", () => {
   expect(HOISTED).toContainEqual(["project", "project"]);
 });
+
+import { leavePage, openPage, PAGE_COMMANDS } from "./palette";
+
+test("BJ-360: ⌘K's Open … rows open their page inside ⌘K, and Backspace returns to the root with its search and row", () => {
+  expect(PAGE_COMMANDS).toMatchObject({
+    "open-issue": "issues",
+    "open-document": "documents",
+    "open-user": "users",
+    "favorite-open": "favorites",
+    "team-open": "boards",
+    "view-open": "views",
+    grouping: "grouping",
+    ordering: "ordering",
+  });
+  const root = { q: "open sp", page: null };
+  const opened = openPage(root, { kind: "open", page: "boards" }, "cmd:Open space");
+  expect(opened).toEqual({ q: "open sp", page: { kind: "open", page: "boards" }, returnTo: "cmd:Open space" });
+  expect(leavePage(opened)).toEqual({ q: "open sp", page: null, returnTo: "cmd:Open space" });
+});
+
+test("BJ-360: a page entered by its keyword (\"t \") comes back to an empty root search, as Linear's stack keeps none", () => {
+  const opened = openPage({ q: "t ", page: null }, { kind: "open", page: "boards" });
+  expect(leavePage(opened)).toEqual({ q: "", page: null, returnTo: undefined });
+});
