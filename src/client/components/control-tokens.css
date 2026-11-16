@@ -252,3 +252,23 @@
     --menu-check: lch(56.145% 2.38 272);
   }
 }
+
+/*
+ * GitHub's pull request state colours, not Linear's: the user's choice (2026-11-17) for PullRequestStatusIcon (icons.tsx).
+ * Primer Primitives 11.10.0, dist/css/functional/themes/light.css and dark.css: fgColor-open (= fgColor-success),
+ * fgColor-draft (= fgColor-neutral), fgColor-done, fgColor-closed (= fgColor-danger).
+ */
+:root {
+  --github-pr-open: #1a7f37;
+  --github-pr-draft: #59636e;
+  --github-pr-merged: #8250df;
+  --github-pr-closed: #d1242f;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --github-pr-open: #3fb950;
+    --github-pr-draft: #9198a1;
+    --github-pr-merged: #ab7df8;
+    --github-pr-closed: #f85149;
+  }
+}

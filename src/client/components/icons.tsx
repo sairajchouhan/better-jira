@@ -1,5 +1,6 @@
 import type { PullRequest } from "@/shared/pull-requests";
 import { dueQualifier } from "@/client/lib/due-date";
+import "./control-tokens.css";
 /** Linear's workflow-state icon, copied from its DOM (linear.app board, 2026-11-06).
  *  Ring r=6; progress pie r=2 stroke 4, dash 12.19 shifted by (1 - progress); done fills r=3 and cuts a check. */
 type Look = { color: string; progress?: number; dashed?: true; done?: "check" | "x" };
@@ -361,63 +362,52 @@ export function RelationIcon({ kind }: { kind: string }) {
   );
 }
 
-/** Linear's pull request status icons (startup-root.CnUSfl4j.js: open/in review/approved `jg`, draft `bE`, merged `xE`, closed `SE`;
- *  chosen by `Zpt`), 16-unit filled paths. Jira's DECLINED is Linear's closed. */
-const PULL_REQUEST_SHAPES = {
-  open: [
-    "M12.5 10C13.8807 10 15 11.1193 15 12.5C15 13.8807 13.8807 15 12.5 15C11.1193 15 10 13.8807 10 12.5C10 11.1193 11.1193 10 12.5 10ZM12.5 11.5C11.9477 11.5 11.5 11.9477 11.5 12.5C11.5 13.0523 11.9477 13.5 12.5 13.5C13.0523 13.5 13.5 13.0523 13.5 12.5C13.5 11.9477 13.0523 11.5 12.5 11.5Z",
-    "M3.5 4.5C3.91414 4.50009 4.25 4.83584 4.25 5.25V14.249C4.24982 14.663 3.91403 14.9989 3.5 14.999C3.0859 14.999 2.75018 14.6631 2.75 14.249V5.25C2.75 4.83579 3.08579 4.5 3.5 4.5Z",
-    "M10 2.75C11.7949 2.75 13.25 4.20507 13.25 6V10.75C13.25 11.1642 12.9142 11.5 12.5 11.5C12.0858 11.5 11.75 11.1642 11.75 10.75V6C11.75 5.0335 10.9665 4.25 10 4.25H8C7.58579 4.25 7.25 3.91421 7.25 3.5C7.25 3.08579 7.58579 2.75 8 2.75H10Z",
-    "M3.5 1C4.88071 1 6 2.11929 6 3.5C6 4.88071 4.88071 6 3.5 6C2.11929 6 1 4.88071 1 3.5C1 2.11929 2.11929 1 3.5 1ZM3.5 2.5C2.94772 2.5 2.5 2.94772 2.5 3.5C2.5 4.05228 2.94772 4.5 3.5 4.5C4.05228 4.5 4.5 4.05228 4.5 3.5C4.5 2.94772 4.05228 2.5 3.5 2.5Z",
-  ],
-  draft: [
-    "M3.5 4.5C3.08579 4.5 2.75 4.83579 2.75 5.25V14.249C2.75018 14.6631 3.0859 14.999 3.5 14.999C3.91403 14.9989 4.24982 14.663 4.25 14.249V5.25C4.25 4.83584 3.91414 4.50009 3.5 4.5Z",
-    "M8.68066 10.2617C8.95025 9.94737 9.42384 9.91115 9.73828 10.1807C10.0526 10.4503 10.0889 10.9238 9.81934 11.2383L8.73828 12.5L9.81934 13.7617C10.0889 14.0762 10.0526 14.5497 9.73828 14.8193C9.42384 15.0888 8.95024 15.0526 8.68066 14.7383L7.18066 12.9883C6.93993 12.7074 6.93995 12.2926 7.18066 12.0117L8.68066 10.2617Z",
-    "M12.2617 10.1807C12.5762 9.91115 13.0497 9.94737 13.3193 10.2617L14.8193 12.0117C15.06 12.2926 15.0601 12.7074 14.8193 12.9883L13.3193 14.7383C13.0498 15.0526 12.5762 15.0888 12.2617 14.8193C11.9474 14.5497 11.9111 14.0762 12.1807 13.7617L13.2617 12.5L12.1807 11.2383C11.9111 10.9238 11.9474 10.4503 12.2617 10.1807Z",
-    "M10 2.75C11.7949 2.75 13.25 4.20507 13.25 6V7.75C13.25 8.16421 12.9142 8.5 12.5 8.5C12.0858 8.5 11.75 8.16421 11.75 7.75V6C11.75 5.0335 10.9665 4.25 10 4.25H8C7.58579 4.25 7.25 3.91421 7.25 3.5C7.25 3.08579 7.58579 2.75 8 2.75H10Z",
-    "M3.5 1C4.88071 1 6 2.11929 6 3.5C6 4.88071 4.88071 6 3.5 6C2.11929 6 1 4.88071 1 3.5C1 2.11929 2.11929 1 3.5 1ZM3.5 2.5C2.94772 2.5 2.5 2.94772 2.5 3.5C2.5 4.05228 2.94772 4.5 3.5 4.5C4.05228 4.5 4.5 4.05228 4.5 3.5C4.5 2.94772 4.05228 2.5 3.5 2.5Z",
-  ],
-  merged: [
-    "M9.98535 2.75C11.78 2.75037 13.2354 4.2053 13.2354 6V10.1094C14.2573 10.4233 15 11.3752 15 12.5C15 13.8807 13.8807 15 12.5 15C12.4974 15 12.4948 14.999 12.4922 14.999C12.4899 14.999 12.4876 15 12.4854 15C11.1047 15 9.98543 13.8806 9.98535 12.5C9.98535 11.3804 10.7208 10.4327 11.7354 10.1143V6C11.7354 5.03373 10.9515 4.25037 9.98535 4.25H7.98535C7.57119 4.25 7.23543 3.91414 7.23535 3.5C7.23535 3.08579 7.57114 2.75 7.98535 2.75H9.98535Z",
-    "M3.5 1C4.88071 1 6 2.11929 6 3.5C6 4.62475 5.25712 5.5756 4.23535 5.88965V14.249C4.23513 14.6628 3.89904 14.9986 3.48535 14.999C3.07128 14.999 2.73558 14.663 2.73535 14.249V5.87891C1.72895 5.55568 1 4.6138 1 3.5C1 2.11929 2.11929 1 3.5 1Z",
-  ],
-  declined: [
-    "M12.4999 9.99994C13.8806 10 14.9999 11.1193 14.9999 12.4999C14.9999 13.8805 13.8805 14.9999 12.4999 14.9999C11.1193 14.9999 10 13.8806 9.99994 12.4999C9.99994 11.1192 11.1192 9.99994 12.4999 9.99994ZM12.4999 11.4999C11.9477 11.4999 11.4999 11.9477 11.4999 12.4999C11.5 13.0522 11.9477 13.4999 12.4999 13.4999C13.0521 13.4999 13.4999 13.0521 13.4999 12.4999C13.4999 11.9477 13.0522 11.5 12.4999 11.4999Z",
-    "M3.49994 7.49994C3.91406 7.50006 4.24994 7.8358 4.24994 8.24994V14.249C4.24977 14.663 3.91395 14.9989 3.49994 14.999C3.08584 14.999 2.75012 14.663 2.74994 14.249V8.24994C2.74994 7.83573 3.08573 7.49994 3.49994 7.49994Z",
-    "M9.99994 2.74994C11.7948 2.75004 13.2499 4.20507 13.2499 5.99994V10.7499C13.2499 11.164 12.914 11.4999 12.4999 11.4999C12.0858 11.4999 11.75 11.1641 11.7499 10.7499V5.99994C11.7499 5.0335 10.9664 4.25004 9.99994 4.24994H7.99994C7.58579 4.24994 7.25004 3.91408 7.24994 3.49994C7.24994 3.08573 7.58573 2.74994 7.99994 2.74994H9.99994Z",
-    "M4.71967 1.21967C5.01256 0.926777 5.48732 0.926777 5.78022 1.21967C6.07294 1.51258 6.07305 1.98738 5.78022 2.28022L4.56049 3.49994L5.78022 4.71967C6.07288 5.01258 6.07303 5.4874 5.78022 5.78022C5.4874 6.07303 5.01258 6.07288 4.71967 5.78022L3.49994 4.56049L2.28022 5.78022C1.98738 6.073 1.51256 6.07292 1.21967 5.78022C0.926796 5.48734 0.926834 5.01257 1.21967 4.71967L2.4394 3.49994L1.21967 2.28022C0.926777 1.98732 0.926777 1.51256 1.21967 1.21967C1.51256 0.926777 1.98732 0.926777 2.28022 1.21967L3.49994 2.4394L4.71967 1.21967Z",
-  ],
+/**
+ * Pull request state icons are GitHub's, not Linear's: the user's choice (2026-11-17), "exactly what GitHub shows", so a PR reads the
+ * same here as on github.com. Shapes are Primer Octicons 19.42.0 at 16px (`@primer/octicons` build/data.json: `git-pull-request`,
+ * `git-pull-request-draft`, `git-merge`, `git-pull-request-closed`), one path each with the default fill rule, as Octicons ship.
+ * GitHub has no in-review or approved state: those are open PRs. Jira's DECLINED is GitHub's closed.
+ */
+const OCTICON = {
+  "git-pull-request":
+    "M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z",
+  "git-pull-request-draft":
+    "M3.25 1A2.25 2.25 0 0 1 4 5.372v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.251 2.251 0 0 1 3.25 1Zm9.5 14a2.25 2.25 0 1 1 0-4.5 2.25 2.25 0 0 1 0 4.5ZM2.5 3.25a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0ZM3.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm9.5 0a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM14 7.5a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0Zm0-4.25a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0Z",
+  "git-merge":
+    "M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218ZM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm8.5-4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM5 3.25a.75.75 0 1 0 0 .005V3.25Z",
+  "git-pull-request-closed":
+    "M3.25 1A2.25 2.25 0 0 1 4 5.372v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.251 2.251 0 0 1 3.25 1Zm9.5 5.5a.75.75 0 0 1 .75.75v3.378a2.251 2.251 0 1 1-1.5 0V7.25a.75.75 0 0 1 .75-.75Zm-2.03-5.273a.75.75 0 0 1 1.06 0l.97.97.97-.97a.748.748 0 0 1 1.265.332.75.75 0 0 1-.205.729l-.97.97.97.97a.751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018l-.97-.97-.97.97a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734l.97-.97-.97-.97a.75.75 0 0 1 0-1.06ZM2.5 3.25a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0ZM3.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm9.5 0a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z",
+} as const;
+/** Each state's Octicon and GitHub's colour for it: Primer's `fgColor-open`, `-draft`, `-done` and `-closed`, light and dark, as
+ *  `--github-pr-*` in control-tokens.css. */
+export const PULL_REQUEST_ICON: Record<PullRequest["status"], { octicon: keyof typeof OCTICON; color: string }> = {
+  open: { octicon: "git-pull-request", color: "var(--github-pr-open)" },
+  inReview: { octicon: "git-pull-request", color: "var(--github-pr-open)" },
+  approved: { octicon: "git-pull-request", color: "var(--github-pr-open)" },
+  draft: { octicon: "git-pull-request-draft", color: "var(--github-pr-draft)" },
+  merged: { octicon: "git-merge", color: "var(--github-pr-merged)" },
+  declined: { octicon: "git-pull-request-closed", color: "var(--github-pr-closed)" },
 };
-/** In review and approved share the open icon (`Zpt`: open, inReview and approved draw `jg`). */
-const PULL_REQUEST_PATHS: Record<PullRequest["status"], string[]> = {
-  ...PULL_REQUEST_SHAPES,
-  inReview: PULL_REQUEST_SHAPES.open,
-  approved: PULL_REQUEST_SHAPES.open,
+/** The one pull request state icon every surface draws (card and row badge, its hover card and list, the "Go to linked pull
+ *  request…" menu, the issue's Diffs rows): GitHub's Octicon for the state in GitHub's colour. With no state yet, the open icon in
+ *  labelBase, as before: GitHub has no such state. */
+export const PullRequestStatusIcon = ({ status, size = 14 }: { status?: PullRequest["status"]; size?: number }) => {
+  const icon = PULL_REQUEST_ICON[status ?? "open"];
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill={status ? icon.color : "var(--fg-2)"}
+      className="shrink-0"
+      aria-hidden="true"
+      data-pr-status={status ?? "unknown"}
+      data-octicon={icon.octicon}
+    >
+      <path d={OCTICON[icon.octicon]} />
+    </svg>
+  );
 };
-/** Linear's `bj.statusColor`: open, in review and approved greenBase, draft labelMuted, merged purpleBase, closed redBase. */
-const PULL_REQUEST_COLOR: Record<PullRequest["status"], string> = {
-  open: "var(--green-base)",
-  inReview: "var(--green-base)",
-  approved: "var(--green-base)",
-  draft: "var(--fg-3)",
-  merged: "var(--purple-base)",
-  declined: "var(--red-base)",
-};
-/** Linear's pull request status icon (`xj` → `Zpt`) in its status colour; with no status yet, the open icon in labelBase. */
-export const PullRequestStatusIcon = ({ status, size = 14 }: { status?: PullRequest["status"]; size?: number }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 16 16"
-    fill={status ? PULL_REQUEST_COLOR[status] : "var(--fg-2)"}
-    className="shrink-0"
-    data-pr-status={status ?? "unknown"}
-  >
-    {PULL_REQUEST_PATHS[status ?? "open"].map((d) => (
-      <path key={d} fillRule="evenodd" clipRule="evenodd" d={d} />
-    ))}
-  </svg>
-);
 
 /** Linear's review status icon (startup-root `IH`, the row's `Pa`): the mark in a 4px-rounded tinted box, 2px around it; approved a
  *  greenBase check on greenTint, changes requested a redBase X on redTint. Small draws the mark at 10px, default at 12. */
