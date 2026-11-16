@@ -121,7 +121,8 @@ export function Row({
         e.preventDefault();
         selectRow(item);
       }}
-      onPointerEnter={() => issue && preloadOnHover({ board: issueBoardId(issue), selected: issue.key, panel: true, inbox: true })}
+      onPointerEnter={(e) => issue && preloadOnHover({ board: issueBoardId(issue), selected: issue.key, panel: true, inbox: true }, { x: e.clientX, y: e.clientY })}
+      onPointerMove={(e) => issue && preloadOnHover({ board: issueBoardId(issue), selected: issue.key, panel: true, inbox: true }, { x: e.clientX, y: e.clientY })}
       onPointerLeave={() => preloadOnHover(null)}
       onKeyDown={(e) => {
         // A clicked row keeps focus, and Enter on a link would click it again: open it in the pane, as the Enter shortcut does

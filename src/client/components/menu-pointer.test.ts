@@ -116,6 +116,6 @@ describe("hover follows only a pointer the user moves (Linear's $4e, KLr and Yw,
 
   test("a board card or list row under a still pointer doesn't take the open peek from the card j/k moved to", async () => {
     const board = await Bun.file(new URL("../routes/board-view.tsx", import.meta.url)).text();
-    expect(board).toContain("onPointerMove={(e) => movedPointer(e) && followPeek(issue.key)}");
+    expect(board).toContain("if (movedPointer(e)) followPeek(issue.key);");
   });
 });

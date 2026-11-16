@@ -703,10 +703,14 @@ function IssueTarget({
   return (
     <div
       data-menu={menu || undefined}
-      onPointerEnter={() => preloadOnHover({ selected: issue.key, panel: true })}
+      // The preload waits for the pointer to rest on the card (Linear's hover intent), so it hears every move too.
+      onPointerEnter={(e) => preloadOnHover({ selected: issue.key, panel: true }, { x: e.clientX, y: e.clientY })}
       // Linear's focus follows the pointer as it moves (useListRowActivation's `onMouseMove`), and an open peek shows the focused
       // item. A move of no distance is a card sliding under a still pointer, or ⌘ pressed over it: j/k's card keeps the peek.
-      onPointerMove={(e) => movedPointer(e) && followPeek(issue.key)}
+      onPointerMove={(e) => {
+        preloadOnHover({ selected: issue.key, panel: true }, { x: e.clientX, y: e.clientY });
+        if (movedPointer(e)) followPeek(issue.key);
+      }}
       // Leaving a card never closes the peek: Linear skips its mouse-leave deactivate while a peek is mounted.
       onPointerLeave={() => preloadOnHover(null)}
       // Middle-click opens the issue's page in a new tab, as Linear's row links do; ⌘-click stays the list's.

@@ -362,6 +362,8 @@ export function createAppRouter(history: RouterHistory, context: RouteContext) {
     stringifySearch,
     // Hovering a link loads its issue and screen; Query owns freshness, so the router never caches a preload.
     defaultPreload: "intent",
+    // Linear's hover intent waits 100ms (`tst.interval`, hover-intent.ts) before a link prefetches.
+    defaultPreloadDelay: 100,
     defaultPreloadStaleTime: 0,
     // Back and Forward land where each entry was scrolled; a new navigation opens the issue at its top.
     scrollRestoration: typeof document !== "undefined",

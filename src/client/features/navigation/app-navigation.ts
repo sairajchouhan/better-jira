@@ -5,7 +5,6 @@
  * a reload) comes back through `show`, which restores the screen it names.
  */
 import { createActor } from "xstate";
-import { Debouncer } from "@tanstack/pacer";
 import { createBrowserHistory, createMemoryHistory, redirect, type ParsedLocation } from "@tanstack/react-router";
 import { uiMachine, inspector, type UiContext } from "@/client/state/machines";
 import { MACHINE_FIELDS, placeOf, restoredTrail, transition, type Destination, type NavigationEvent, type Place, type Screen } from "./navigation";
@@ -18,6 +17,7 @@ import { onSidebarHiddenChange, savedBoard, savedOpenIn, savedSidebarHidden } fr
 import { keptIssue, loadFull } from "@/client/state/server-data";
 import { smartLink } from "@/shared/smart-link";
 import { createAppRouter, locationOf, preloadIssueScreens, routeURL } from "@/client/routes/tree";
+import { createHoverIntent, type Point } from "./hover-intent";
 
 type UiKey = keyof UiContext;
 
@@ -80,10 +80,11 @@ export function withFavorite<T extends object>(target: T, favorite: string | nul
 export function preload(to: Destination) {
   void router.preloadRoute(linkTo(to) as never).catch(() => {});
 }
-// Linear's intent delay: a pointer resting on an issue for a moment loads it; one passing over doesn't.
-const intent = new Debouncer(preload, { wait: 50 });
-/** Preloads where an issue under the pointer opens, after the pointer rests on it; `null` when it leaves. */
-export const preloadOnHover = (to: Destination | null) => (to ? intent.maybeExecute(to) : intent.cancel());
+// Linear's hover intent (hover-intent.ts): a pointer resting on an issue loads it; one passing over doesn't.
+const intent = createHoverIntent(preload, { keyOf: (to: Destination) => JSON.stringify(to) });
+/** Preloads where an issue under the pointer opens, after the pointer rests on it (pass its position on enter and move, so a
+ *  pointer still moving across it waits); `null` when it leaves. */
+export const preloadOnHover = (to: Destination | null, at?: Point) => (to ? intent.over(to, at) : intent.out());
 
 /** Goes somewhere: see navigation.ts for leaving views, how issues open and what the address shows. An issue the mirror doesn't
  *  hold yet (a linked issue, a parent on no board, a link in Jira content) goes by its address: the route keeps it first and then
