@@ -39,6 +39,7 @@ import { issueMenuEntries, moveMenu } from "./issue-menu";
 import { InlineEditor } from "@/client/features/editor/rich-editor-loader";
 import { useCommand } from "@/client/features/navigation/commands";
 import { get, useStore, issueBoardId, issueBoard } from "@/client/state/store";
+import { useBoardHasEstimates } from "@/client/features/views/view-settings";
 import { actions } from "@/client/state/issue-actions";
 import { ui } from "@/client/features/navigation/app-navigation";
 import { AppLink, IssueKeyLink } from "@/client/features/navigation/app-link";
@@ -62,6 +63,7 @@ import {
   statusOf,
   subIssueCount,
   SUB_ISSUE_ORDERINGS as orderings,
+  subIssueOrderings,
   SUB_ISSUE_PROPERTIES as properties,
   movedOrder,
   canDropSubIssue,
@@ -216,6 +218,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
     } | null>(null);
 
   const board = useStore((s) => issueBoard(issue, s))!;
+  const estimates = useBoardHasEstimates(board.id);
   const {
     state: { title, description, files, draft, editor, creating, confirming },
     actions: { update, setProperties, addFiles, onLateMedia, start, toggleSection, discard, cancel, submit, setConfirming },
@@ -597,7 +600,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
             <SelectRow
               label="Ordering"
               value={display.ordering}
-              options={orderings}
+              options={subIssueOrderings(estimates, display.ordering)}
               onChange={(ordering) => change({ ordering: ordering as SubIssueDisplay["ordering"] })}
             />
             <SelectRow

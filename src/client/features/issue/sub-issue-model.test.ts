@@ -16,6 +16,7 @@ import {
   subIssueCount,
   PARENT_LINE,
   childrenVariant,
+  subIssueOrderings,
 } from "./sub-issue-model";
 const issue = (key: string, parent?: string, status = "todo", rank = ""): Issue => ({
   key,
@@ -262,4 +263,18 @@ test("a sub-issue dropped before or after a sibling takes that slot among the ot
   expect(movedOrder(siblings, "D", { to: subIssueDropSlot(siblings, "D", "A", false) })).toEqual(["D", "A", "B", "C"]);
   // Back beside its own slot: no change.
   expect(movedOrder(siblings, "B", { to: subIssueDropSlot(siblings, "B", "C", false) })).toBeNull();
+});
+
+test("BJ-350: the sub-issue ordering offers Estimate only where the board has estimates, and keeps a stored Estimate", () => {
+  const ids = (estimates: boolean, current: Parameters<typeof subIssueOrderings>[1]) =>
+    subIssueOrderings(estimates, current).map(([id]) => id);
+  expect(ids(false, "manual")).not.toContain("estimate");
+  expect(ids(false, "manual")).toEqual(SUB_ISSUE_ORDERINGS.map(([id]) => id).filter((id) => id !== "estimate"));
+  expect(ids(true, "manual")).toContain("estimate");
+  expect(ids(false, "estimate")).toContain("estimate");
+});
+test("BJ-350: the sub-issue display options draw their ordering select from subIssueOrderings", async () => {
+  const view = await Bun.file(new URL("./sub-issues.tsx", import.meta.url)).text();
+  expect(view).toContain("options={subIssueOrderings(estimates, display.ordering)}");
+  expect(view).not.toContain("options={orderings}");
 });

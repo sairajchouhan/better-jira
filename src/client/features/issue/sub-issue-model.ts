@@ -11,6 +11,7 @@ import {
   type Property,
 } from "@/shared/view-model";
 import { onBoard } from "@/shared/board-membership";
+import { estimateChoices } from "@/client/features/views/view-choices";
 /** The words of the line under an issue's title, per variant (shared/epics.ts titleParentOf), and of the menu its ring opens.
  *  A parent Task: Linear's "Sub-issue of" and Open sub-issue…. An epic: "In epic", and Linear's word for a project's issues
  *  ("Open project issues", startup-root `Xxn`) in Epic words, as an issue in an epic is not a sub-issue (user's call, BJ-289). */
@@ -41,6 +42,10 @@ export const SUB_ISSUE_ORDERINGS = pickLabels(ORDERINGS, [
   "due",
   "links",
 ] as const satisfies readonly SubIssueDisplay["ordering"][]);
+/** The ordering select's choices: Estimate only where the parent's board has estimates, as the board's ordering menu
+ *  (`estimateChoices`, BJ-334); a list already ordered by it keeps the choice (BJ-350). */
+export const subIssueOrderings = (estimates: boolean, current: SubIssueDisplay["ordering"]) =>
+  estimateChoices(SUB_ISSUE_ORDERINGS, estimates, current);
 export const SUB_ISSUE_PROPERTIES = pickLabels(PROPERTIES, [
   "priority",
   "id",
