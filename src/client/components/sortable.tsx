@@ -29,6 +29,10 @@ const useSortable = () => {
   return context;
 };
 
+/** Whether a row of the surrounding list is being dragged (false outside a Sortable): Linear's `zN() != null`, under which a
+ *  favorite row opens no card. */
+export const useSortableDragging = () => use(SortableContext)?.drag != null;
+
 /** Where the dragged row would land: `from` moved by whole rows, inside the list. */
 export const dropIndex = (from: number, dy: number, height: number, count: number) =>
   Math.max(0, Math.min(count - 1, from + Math.round(dy / height)));

@@ -2,7 +2,7 @@ import { type Issue } from "@/shared/issue-model";
 import { SidebarLink, SidebarViewLink } from "@/client/features/navigation/sidebar-link";
 import { favoritePlace } from "@/client/features/navigation/sidebar-active";
 import { useState, type ReactNode } from "react";
-import { Icon, type IconName } from "@/client/components/icons";
+import { Icon } from "@/client/components/icons";
 import { Avatar } from "@/client/components/avatar";
 import { ME, useStore } from "@/client/state/store";
 import { moveFavorite } from "@/client/features/navigation/favorites";
@@ -22,11 +22,9 @@ import { CountBadge } from "@/client/components/count-badge";
 import { viewSummaries, type ResultFeedback } from "./views-navigation-model";
 import { boardFor } from "@/shared/board-membership";
 
-export function SavedViewIcon({ view }: { view: Pick<SavedView, "icon" | "color"> }) {
-  return <span aria-hidden="true" className="inline-flex shrink-0" style={{ color: view.color === "gray" ? "var(--view-gray)" : view.color }}>
-    {/[^\x00-\x7F]/.test(view.icon) ? view.icon : <Icon name={view.icon as IconName} size={16} />}
-  </span>;
-}
+import { FavoriteHoverCard } from "@/client/features/navigation/favorite-hover-card";
+import { SavedViewIcon } from "./saved-view-icon";
+export { SavedViewIcon };
 export function ViewFavorites({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
   const favorites = useStore(s => s.favorites), views = useSavedViews();
   const boards = useStore(s => s.boards), issues = useStore(s => s.issues), current = useStore(s => s.board);
@@ -47,7 +45,10 @@ export function ViewFavorites({ expanded, onToggle }: { expanded: boolean; onTog
       : <SidebarLink row={row} to={document ? { board: boardFor(document.issue, current), selected: document.issue.key, panel: true, document: document.resource.id } : issue ? { board: boardFor(issue, current), selected: issue.key, panel: true } : { board: board!.id, panel: false, selected: null }} {...props}>{content}</SidebarLink>;
     // Linear's favorite row (`d5n`) has one menu for every kind of favorite: Copy URL, Open in new tab, ┄ Remove favorite.
     const url = () => board ? boardURL(board) : placeURL(view ? { to: "view", id: view.id } : document ? { to: "issue", key: document.issue.key, document: document.resource.id } : { to: "issue", key: issue!.key });
-    return [{ id, row: <ContextMenu label="Favorite options" entries={() => favoriteEntries(id, url)}>{link}</ContextMenu> }];
+    // Resting on the row opens its card (Linear's `h$` around `d5n`): one wrapper for every kind, so all share the delay, the
+    // placement and the dismissal.
+    const label = view?.name ?? (issue ? issue.key : board?.name ?? "");
+    return [{ id, row: <ContextMenu label="Favorite options" entries={() => favoriteEntries(id, url)}><FavoriteHoverCard thing={{ view, issue, board, document }} label={label}>{link}</FavoriteHoverCard></ContextMenu> }];
   });
   // Linear's favourites reorder as a dnd-kit sortable dragged by the whole row (startup-root `LN`): a drop takes the slot of
   // the row it lands on.
