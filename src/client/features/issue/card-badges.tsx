@@ -331,8 +331,7 @@ export function PullRequestBadge({ issue, layout }: { issue: Issue; layout: "boa
       {count === 1 ? (
         <ContextMenu
           label="Pull request options"
-          // Opened before the list arrives, the menu shows "Loading…" and takes the rows when it lands.
-          version={data ? "loaded" : "loading"}
+          // Opened before the list arrives, the menu shows "Loading…" and takes the rows when it lands (keptRows).
           entries={() => (data?.[0] ? pullRequestActions(data[0]) : [{ name: data ? "No linked pull requests" : "Loading pull requests…" }])}
         >
           {badge}

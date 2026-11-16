@@ -74,3 +74,18 @@ test("C3: hoisted into the right-click root, statuses keep workflow order under 
   const hits = searchActions(root, "do").map((e) => e.name);
   expect(hits.indexOf("Status › Doing")).toBeLessThan(hits.indexOf("Status › Done"));
 });
+
+import { keptRows } from "./action-menu";
+
+test("BJ-393: a menu opened on a placeholder takes the rows that replace it, but keeps out a row added beside the ones it opened with", () => {
+  const loading = [leaf("Loading pull requests…")];
+  const opened = keptRows(new Set(), loading);
+  expect([...opened]).toEqual(["Loading pull requests…"]);
+  const loaded = [leaf("Open pull request"), leaf("Copy URL")];
+  const swapped = keptRows(opened, loaded);
+  expect([...swapped]).toEqual(["Open pull request", "Copy URL"]);
+  // A row appearing while some opened rows remain stays out (it would shift the menu under the pointer), and nothing changes.
+  expect(keptRows(swapped, [...loaded, leaf("Restore mirrored Jira version")])).toBe(swapped);
+  // No rows at all keeps the old ones rather than emptying the menu.
+  expect(keptRows(swapped, [])).toBe(swapped);
+});

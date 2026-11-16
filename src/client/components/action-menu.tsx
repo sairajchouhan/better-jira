@@ -79,6 +79,14 @@ export function searchActions(entries: ActionEntry[], query: string): ActionEntr
     .map((r) => r.entry);
 }
 
+/** The names of the rows a menu level lists, given the ones it listed so far (`opened`): the same set while any of them is still
+ *  among `entries`, so a row added beside them stays out; the new rows' names once none is left, so a menu opened on "Loading…"
+ *  takes the rows that land (BJ-393). No rows keeps the old set. */
+export function keptRows(opened: ReadonlySet<string>, entries: readonly ActionEntry[]): ReadonlySet<string> {
+  if (!entries.length || entries.some((e) => opened.has(e.name))) return opened;
+  return new Set(entries.map((e) => e.name));
+}
+
 /** Linear's `Yn.joinActionGroupsWithDividers`: each non-empty group after the first starts with a divider. */
 export function joinGroups(...groups: ActionEntry[][]): ActionEntry[] {
   return groups
@@ -152,9 +160,12 @@ function Level({
   const [reveal, setReveal] = useState(false);
   const [query, setQuery] = useState("");
   // Linear lists a menu's actions as it opens. A row that appears while it is open (an edit adding "Restore mirrored Jira version")
-  // would widen the menu under the pointer and hand the hover to another row, so it keeps the rows it opened with, each still live.
-  const [opened] = useState(() => new Set(entries.map((e) => e.name)));
-  const available = entries.filter((e) => opened.has(e.name));
+  // would widen the menu under the pointer and hand the hover to another row, so it keeps the rows it opened with, each still live;
+  // rows that replace every one it opened with (a list that was loading has landed) are taken (keptRows).
+  const [opened, setOpened] = useState(() => keptRows(new Set(), entries));
+  const kept = keptRows(opened, entries);
+  if (kept !== opened) setOpened(kept);
+  const available = entries.filter((e) => kept.has(e.name));
   const { matched: own, unmatched: hidden } = splitByMatches(
     available,
     (e) => e.matchCount,
@@ -304,14 +315,11 @@ export function CheckRow({
 export function ContextMenu({
   label,
   entries,
-  version,
   children,
 }: {
   label: string;
+  /** Read on every render while open: rows that replace a placeholder ("Loading…") are taken (keptRows). */
   entries: () => ActionEntry[];
-  /** Changes when `entries` are replaced wholesale (a list that was loading has landed): the open menu takes the new rows, where
-   *  otherwise it keeps the rows it opened with. */
-  version?: string;
   children: ReactNode;
 }) {
   const [point, setPoint] = useState<{ x: number; y: number } | null>(null);
@@ -326,7 +334,7 @@ export function ContextMenu({
       }}
     >
       {children}
-      {point && <ActionMenu key={version} label={label} point={point} entries={entries()} close={() => setPoint(null)} />}
+      {point && <ActionMenu label={label} point={point} entries={entries()} close={() => setPoint(null)} />}
     </div>
   );
 }
