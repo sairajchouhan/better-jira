@@ -166,8 +166,9 @@ const listKey = (s: Screen) =>
 /**
  * After the machine moved. Only the user's own switch (`explicit`, the `open-in` event) is remembered, by the open view, the editor
  * draft or the board. Any other view (a link, a restore, the Inbox, Enter's page) shows the open issue that way once, and reverts to
- * how the list opens issues when it closes, as Linear's "Open in split view" and "Open in full view" open once and leave the view's
- * `openInSplitView` preference alone (startup-root `openSubmenu`, `openInPanel`/`openPage`).
+ * how the list opens issues when it closes. Linear keeps "open in split view" as the view's `openInSplitView` preference (startup-root
+ * `opensInSplitView`), and its "Open in split view" / "Open in full view" (startup-root `openSubmenu`) open once: ListCell's
+ * `openInPanel` only opens the panel and `openPage` only navigates.
  */
 function settle(prev: Screen, next: Screen, data: NavigationData, explicit: boolean, out: Transition) {
   let screen = next;

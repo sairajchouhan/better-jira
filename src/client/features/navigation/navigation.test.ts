@@ -149,7 +149,8 @@ test("inside a saved view, a new openIn is saved to the view; opening or restori
 });
 
 // The user's bug: a board set to open issues as a page went back to the side panel after the Inbox or a link opened an issue.
-// Linear's "Open in split view" / "Open in full view" open once and never write the view's `openInSplitView` (startup-root `openSubmenu`).
+// Linear's "Open in split view" / "Open in full view" open once (ListCell `openInPanel`/`openPage`) and never write the view's
+// `openInSplitView` preference (startup-root `opensInSplitView`).
 const inboxOpen = (selected: string, board: number, view: "side" | "page" = "side") =>
   ({ type: "go", to: { board, selected, panel: true, view, inbox: true } }) as const;
 const toInbox = { type: "go", to: { inbox: true, selected: null, panel: false } } as const;
