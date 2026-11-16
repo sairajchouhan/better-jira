@@ -116,7 +116,8 @@ const setMeta = (k: string, v: string) =>
   db.query("INSERT OR REPLACE INTO meta VALUES (?, ?)").run(k, v);
 /** Which issues have pull requests, by Jira's development index; the Development field each issue carries lags it. */
 const linkedPrs = linkedPullRequests({ get: getMeta, set: setMeta });
-/** The pull requests GitHub links to Jira keys (branch, title or body), for organisations Jira's GitHub app doesn't cover. */
+/** The pull requests GitHub links to Jira keys (branch name, title, or description after a magic word), for organisations Jira's
+ *  GitHub app doesn't cover. */
 const github = gitHubPullRequests(db, {
   client: gitHubClient(() => gitHubToken()),
   ...gitHubConfiguration(),

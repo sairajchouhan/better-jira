@@ -63,7 +63,7 @@ Click the download icon in the footer for a backup of everything kept in this br
 
 ## GitHub pull requests
 
-Cards and the issue sidebar show pull requests linked in Jira, plus GitHub pull requests that name the issue key in their branch, title or body. It uses your GitHub CLI login (`gh auth token`) or `GITHUB_TOKEN`, and only reads. `GITHUB_PR_SOURCES` lists organisations or repositories to read (default: those of your own recent pull requests); `GITHUB_PR_SOURCES=off` turns it off.
+Cards and the issue sidebar show pull requests linked in Jira, plus GitHub pull requests that name the issue key in their branch or title, or in their description after a magic word such as "Fixes" or "Part of", as Linear links them. It uses your GitHub CLI login (`gh auth token`) or `GITHUB_TOKEN`, and only reads. `GITHUB_PR_SOURCES` lists organisations or repositories to read (default: those of your own recent pull requests); `GITHUB_PR_SOURCES=off` turns it off.
 
 ## Keyboard
 

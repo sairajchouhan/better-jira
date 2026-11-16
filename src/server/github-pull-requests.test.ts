@@ -9,14 +9,16 @@ import {
   gitHubSources,
   gitHubStatus,
   issueKeysIn,
+  MAGIC_WORDS,
   ownersOf,
+  pullRequestKeys,
   type GitHubNode,
 } from "./github-pull-requests";
 import { withGitHubPullRequests, type PullRequest } from "@/shared/pull-requests";
 
 // Synthetic fixtures only: made-up organisations, repositories, keys and titles.
 
-test("issue keys come from branch names, titles and bodies, in any case, once each", () => {
+test("issue keys come from text in any case, once each", () => {
   expect(issueKeysIn("feat/ACME-970-tidy-the-cache")).toEqual(["ACME-970"]);
   expect(issueKeysIn("fix/acme-971-queued-save")).toEqual(["ACME-971"]);
   expect(issueKeysIn("fix(cache): keep the queue (ACME-12)\nRefs ACME-12 and OPS-3")).toEqual(["ACME-12", "OPS-3"]);
@@ -291,4 +293,82 @@ test("the client asks once more when GitHub answers 502", async () => {
   const client = gitHubClient(async () => "test-token", async () => replies.shift()!, Date.now, 0);
   expect(await client.graphql("query { ok }", {})).toEqual({ ok: true });
   expect(client.requests()).toBe(2);
+});
+
+// ——— Linking: Linear's rule (linear.app/docs/github): any key in the branch name or title, in the description only after a magic word.
+
+const linked = (body: string, over: { headRefName?: string; title?: string } = {}) =>
+  pullRequestKeys({ headRefName: "chore/tidy", title: "Tidy the cache", body, ...over });
+
+test("regression: a key the description only mentions links nothing; the branch's and title's keys still link", () => {
+  const body = "Follow-ups:\n- Flow metrics: ACME-7.\n- [ACME-8](https://acme.atlassian.net/browse/ACME-8)\n- see ACME-9";
+  expect(linked(body)).toEqual([]);
+  expect(linked(body, { headRefName: "feat/ACME-1-tidy", title: "Tidy the cache (ACME-1)" })).toEqual(["ACME-1"]);
+  expect(linked("", { headRefName: "fix/acme-2-queued-save" })).toEqual(["ACME-2"]);
+  expect(linked("", { title: "OPS-3: tidy the cache" })).toEqual(["OPS-3"]);
+});
+
+test("each of Linear's magic words links the key after it, in any case", () => {
+  // Linear's docs' lists, written out here so a word dropped from the code fails.
+  const words = [
+    "close, closes, closed, closing, fix, fixes, fixed, fixing, resolve, resolves, resolved, resolving",
+    "complete, completes, completed, completing, implement, implements, implemented, implementing, linear issue",
+    "ref, refs, references, part of, contributes to, toward, towards, relates to, related to",
+  ]
+    .join(", ")
+    .split(", ");
+  expect([...MAGIC_WORDS].toSorted()).toEqual(words.toSorted());
+  for (const word of words) {
+    expect(linked(`Some context.\n${word} ACME-4`)).toEqual(["ACME-4"]);
+    expect(linked(`${word[0]!.toUpperCase()}${word.slice(1)} acme-4.`)).toEqual(["ACME-4"]);
+    expect(linked(`${word.toUpperCase()} ACME-4`)).toEqual(["ACME-4"]);
+  }
+  expect(linked("Part  of ACME-4")).toEqual(["ACME-4"]);
+});
+
+test("one magic word links several keys: commas, and, &", () => {
+  expect(linked("Fixes ACME-1, OPS-5, and ACME-9")).toEqual(["ACME-1", "OPS-5", "ACME-9"]);
+  expect(linked("Closes ACME-1 and ACME-2 & ACME-3")).toEqual(["ACME-1", "ACME-2", "ACME-3"]);
+  expect(linked("Refs: ACME-1,ACME-2")).toEqual(["ACME-1", "ACME-2"]);
+  // The list ends at the first thing that isn't a key.
+  expect(linked("Fixes ACME-1, then ACME-2")).toEqual(["ACME-1"]);
+});
+
+test("a magic word links a markdown link, an issue URL or an emphasised key", () => {
+  expect(linked("Fixes [ACME-4](https://acme.atlassian.net/browse/ACME-4)")).toEqual(["ACME-4"]);
+  expect(linked("Resolves [the ticket](https://acme.atlassian.net/browse/ACME-6)")).toEqual(["ACME-6"]);
+  expect(linked("Fixes https://acme.atlassian.net/browse/ACME-7.")).toEqual(["ACME-7"]);
+  expect(linked("Fixes https://acme.atlassian.net/browse/ACME-7, ACME-8")).toEqual(["ACME-7", "ACME-8"]);
+  expect(linked("Part of <https://acme.atlassian.net/jira/software/c/projects/ACME/boards/1?selectedIssue=ACME-8>")).toEqual([
+    "ACME-8",
+  ]);
+  expect(linked("Fixes **ACME-9** and `ACME-10`")).toEqual(["ACME-9", "ACME-10"]);
+  // A link elsewhere names no issue.
+  expect(linked("Fixes https://github.com/acme-org/widgets-2/pull/3")).toEqual([]);
+  expect(linked("Fixes [widgets-2](https://github.com/acme-org/widgets-2)")).toEqual(["WIDGETS-2"]);
+});
+
+test("a magic word links only the key right after it, and only as a whole word", () => {
+  expect(linked("Fixes the cache in ACME-1")).toEqual([]);
+  expect(linked("prefix ACME-2, hotfixes ACME-3, unresolved ACME-4, refsx ACME-5")).toEqual([]);
+  expect(linked("Fixes\nACME-6")).toEqual([]);
+});
+
+test("skip or ignore before a key keeps it from linking", () => {
+  expect(linked("Ignore ACME-1", { headRefName: "feat/ACME-1-tidy" })).toEqual([]);
+  expect(linked("Fixes ACME-2. Skip ACME-3", { title: "Tidy ACME-3" })).toEqual(["ACME-2"]);
+});
+
+test("linked keys can be kept to the board's projects", () => {
+  expect(pullRequestKeys({ headRefName: "feat/ACME-1", title: "UTF-8 names", body: "Fixes OPS-2, ACME-3" }, new Set(["ACME"]))).toEqual(
+    ["ACME-1", "ACME-3"],
+  );
+});
+
+test("a poll links a description's key only after a magic word", async () => {
+  const db = new Database(":memory:");
+  const gh = fakeGitHub(() => ({ nodes: [node({ body: "Follow-ups:\n- Flow metrics: ACME-7.\n\nPart of ACME-8" })] }));
+  const prs = gitHubPullRequests(db, { client: gh.client, sources: ["org:acme-org"], backfillDays: 30, now: () => NOW });
+  expect((await prs.refresh()).toSorted()).toEqual(["ACME-1", "ACME-8"]);
+  expect(prs.forKey("ACME-7")).toEqual([]);
 });

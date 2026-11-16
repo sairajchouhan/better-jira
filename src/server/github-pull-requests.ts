@@ -1,7 +1,7 @@
 /** Pull requests read straight from GitHub, read-only, for the organisations Jira's GitHub app doesn't cover. Linear links a pull
- *  request to an issue when its branch name, title or body names the issue's identifier; this does the same with Jira keys. One
- *  GraphQL search per poll covers every configured organisation and repository: the first poll reads the backfill window, each
- *  later one only what changed since the poll before. */
+ *  request to an issue when its branch name or title names the issue's identifier, or its description names it after a magic word;
+ *  this does the same with Jira keys. One GraphQL search per poll covers every configured organisation and repository: the first
+ *  poll reads the backfill window, each later one only what changed since the poll before. */
 import { $ } from "bun";
 import type { Database } from "bun:sqlite";
 import { sortPullRequests, type PullRequest } from "@/shared/pull-requests";
@@ -10,17 +10,100 @@ type Environment = Record<string, string | undefined>;
 
 // ——— Keys ———
 
-/** A Jira issue key anywhere in the text, case-insensitive, as Linear links lowercase identifiers in branch names (its branch format
- *  "Issue identifier: Required for issue linking · eng-123"): not glued to a letter or digit before it, nor to a digit after it. */
-const KEY = /(?<![A-Za-z0-9])([A-Za-z][A-Za-z0-9_]*)-([1-9]\d*)(?!\d)/g;
-/** The issue keys a pull request's branch, title or body names, upper-cased and once each. `projects` keeps only those projects'. */
+/** A Jira issue key, case-insensitive, as Linear links lowercase identifiers in branch names (its branch format "Issue identifier:
+ *  Required for issue linking · eng-123"): not glued to a letter or digit before it, nor to a digit after it. */
+const KEY_SOURCE = String.raw`(?<![A-Za-z0-9])[A-Za-z][A-Za-z0-9_]*-[1-9]\d*(?!\d)`;
+const KEY = new RegExp(KEY_SOURCE, "g");
+const upper = (key: string) => key.toUpperCase();
+/** The issue keys the text names anywhere, upper-cased and once each. `projects` keeps only those projects'. */
 export function issueKeysIn(text: string, projects?: ReadonlySet<string>): string[] {
-  const keys = new Set<string>();
-  for (const [, project, number] of text.matchAll(KEY)) {
-    const upper = project!.toUpperCase();
-    if (!projects || projects.has(upper)) keys.add(`${upper}-${number}`);
+  return kept(
+    [...text.matchAll(KEY)].map(([key]) => upper(key)),
+    projects,
+  );
+}
+function kept(keys: string[], projects?: ReadonlySet<string>): string[] {
+  return [...new Set(keys.filter((key) => !projects || projects.has(key.slice(0, key.lastIndexOf("-")))))];
+}
+
+/** Linear's magic words (linear.app/docs/github, "Magic words"), any of which before an issue ID in a pull request's description
+ *  links it. Closing: close … implementing, linear issue. Non-closing: ref … towards. Relation: relates to, related to. All three
+ *  link; they differ only in the status Linear then sets, which Jira's workflow owns here. */
+export const MAGIC_WORDS = [
+  "close, closes, closed, closing, fix, fixes, fixed, fixing, resolve, resolves, resolved, resolving",
+  "complete, completes, completed, completing, implement, implements, implemented, implementing, linear issue",
+  "ref, refs, references, part of, contributes to, toward, towards",
+  "relates to, related to",
+]
+  .join(", ")
+  .split(", ");
+/** Linear's words that keep an issue from being linked: "Ignore ENG-123". */
+export const SKIP_WORDS = ["skip", "ignore"] as const;
+
+const wordsPattern = (words: readonly string[]) =>
+  new RegExp(String.raw`(?<![A-Za-z0-9_])(?:${words.map((w) => w.replace(/ /g, String.raw`\s+`)).join("|")})(?![A-Za-z0-9_-])`, "gi");
+const MAGIC = wordsPattern(MAGIC_WORDS);
+const SKIP = wordsPattern(SKIP_WORDS);
+/** One issue reference after a magic word, emphasis marks around it allowed: a markdown link (`[ACME-1](…)`), an `<…>` or bare URL
+ *  (`https://acme.atlassian.net/browse/ACME-1`, as Linear's own "Fixes https://linear.app/…/issue/ENG-123/title"), or the key. */
+const REFERENCE = new RegExp(
+  String.raw`[*_\`]*(?:\[([^\]\n]*)\]\(([^)\s]*)\)|<(https?:\/\/[^\s>]+)>|(https?:\/\/[^\s<>()\[\],]*[^\s<>()\[\],.;:!?'"])|(${KEY_SOURCE}))[*_\`]*`,
+  "iy",
+);
+/** Between a magic word and its first reference: spaces, or a colon ("Fixes: ACME-1"). */
+const LEAD = /[^\S\n]*:?[^\S\n]*/y;
+/** Between two references of one magic word: "ACME-1, ACME-2, and ACME-3", "ACME-1 and ACME-2", "ACME-1 & ACME-2". */
+const BETWEEN = /[^\S\n]*(?:,[^\S\n]*(?:(?:and|&)[^\S\n]+)?|[^\S\n]+(?:and|&)[^\S\n]+)/iy;
+const WHOLE_KEY = new RegExp(String.raw`^[*_\`]*(${KEY_SOURCE})[*_\`]*$`);
+/** The key a link to an issue names: Jira's `/browse/ACME-1` or `selectedIssue=ACME-1`, or Linear's `/issue/ACME-1`. */
+const URL_KEY = new RegExp(String.raw`(?:\/(?:browse|issue)\/|[?&]selectedIssue=)(${KEY_SOURCE})(?![A-Za-z0-9])`);
+
+/** The key one reference names, or undefined when it names none (a link elsewhere). */
+function referenceKey(match: RegExpExecArray): string | undefined {
+  const [, text, href, angled, bare, key] = match;
+  const found =
+    key ?? (text !== undefined ? (WHOLE_KEY.exec(text.trim())?.[1] ?? URL_KEY.exec(href!)?.[1]) : URL_KEY.exec(angled ?? bare!)?.[1]);
+  return found && upper(found);
+}
+/** The keys named right after any of `words`: one reference, then more joined by commas or "and". Prose between the word and the
+ *  key ("Fixes the cache in ACME-1") ends it. */
+function keysAfter(words: RegExp, text: string): string[] {
+  const keys: string[] = [];
+  for (const word of text.matchAll(words)) {
+    let at = word.index + word[0].length;
+    LEAD.lastIndex = at;
+    at += LEAD.exec(text)![0].length;
+    for (;;) {
+      REFERENCE.lastIndex = at;
+      const reference = REFERENCE.exec(text);
+      const key = reference && referenceKey(reference);
+      if (!key) break;
+      keys.push(key);
+      at = REFERENCE.lastIndex;
+      BETWEEN.lastIndex = at;
+      const between = BETWEEN.exec(text);
+      if (!between) break;
+      at += between[0].length;
+    }
   }
-  return [...keys];
+  return keys;
+}
+/** The keys a pull request's description links: only those after a magic word, as Linear's "Use a magic word + issue ID in the PR
+ *  description". A key the description merely mentions ("Follow-up: ACME-9") links nothing. */
+export const magicKeysIn = (text: string, projects?: ReadonlySet<string>) => kept(keysAfter(MAGIC, text), projects);
+
+/** The issue keys a pull request links, upper-cased and once each: any its branch name or title names, those its description
+ *  names after a magic word, less those the description skips ("Ignore ACME-1"). `projects` keeps only those projects'. */
+export function pullRequestKeys(
+  pr: { headRefName?: string; title?: string; body?: string | null },
+  projects?: ReadonlySet<string>,
+): string[] {
+  const body = pr.body ?? "";
+  const skipped = new Set(keysAfter(SKIP, body));
+  return kept(
+    [...issueKeysIn(pr.headRefName ?? ""), ...issueKeysIn(pr.title ?? ""), ...magicKeysIn(body)].filter((key) => !skipped.has(key)),
+    projects,
+  );
 }
 
 // ——— GitHub's answer as ours ———
@@ -204,7 +287,9 @@ const SEARCH = `query($q: String!, $after: String) {
 const MINE = `query { search(query: "is:pr author:@me sort:updated-desc", type: ISSUE, first: 100) {
   nodes { ... on PullRequest { repository { owner { login __typename } } } }
 } }`;
-type SearchPage = { search: { issueCount: number; pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: GitHubNode[] } };
+type SearchPage = {
+  search: { issueCount: number; pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: GitHubNode[] };
+};
 /** GitHub's search answers at most this many results per query; past it, the next query starts at the newest one read. */
 const SEARCH_CAP = 1000;
 /** Each poll re-reads this much before the last one began: GitHub's search index lags its pull requests a little. */
@@ -248,7 +333,7 @@ export function gitHubPullRequests(db: Database, options: GitHubOptions) {
   /** Saves one pull request GitHub returned; returns the keys whose list it changed. */
   const take = (node: GitHubNode): string[] => {
     if (!node.url) return [];
-    const keys = issueKeysIn([node.headRefName, node.title, node.body].filter(Boolean).join("\n"));
+    const keys = pullRequestKeys(node);
     const before = stored.get(node.url);
     const old: string[] = before ? JSON.parse(before.keys) : [];
     if (!keys.length) {
@@ -272,52 +357,57 @@ export function gitHubPullRequests(db: Database, options: GitHubOptions) {
     return owners;
   }
 
+  /** Reads every pull request updated since the last poll into the store, adding the keys whose list changed to `changed`. */
+  async function poll(changed: Set<string>) {
+    const scope = (await sources()).join(" ");
+    if (!scope) return;
+    const started = now();
+    if (getMeta("scope") !== scope) {
+      // Other sources: what the old ones linked no longer counts.
+      for (const key of byKey().keys()) changed.add(key);
+      db.run("DELETE FROM github_pull_requests");
+      db.run("DELETE FROM github_meta WHERE k = 'since'");
+      setMeta("scope", scope);
+    }
+    const since = Number(getMeta("since") ?? 0);
+    let from = since ? since - OVERLAP_MS : started - options.backfillDays * DAY_MS,
+      after: string | undefined,
+      read = 0;
+    // Oldest first, so each page moves the mark on: a poll cut off (by GitHub's limit, or an error) resumes where it stopped.
+    for (;;) {
+      const { search } = await options.client.graphql<SearchPage>(SEARCH, {
+        q: `is:pr ${scope} updated:>=${iso(from)} sort:updated-asc`,
+        after: after ?? null,
+      });
+      for (const node of search.nodes) for (const key of take(node)) changed.add(key);
+      read += search.nodes.length;
+      const last = Date.parse(search.nodes.at(-1)?.updatedAt ?? "");
+      if (last) setMeta("since", String(Math.max(last, since)));
+      if (search.pageInfo.hasNextPage && search.pageInfo.endCursor) {
+        after = search.pageInfo.endCursor;
+        continue;
+      }
+      // Past the search's cap: the next query starts at the newest pull request this one reached.
+      if (read < SEARCH_CAP || search.issueCount <= read || !last || last <= from) break;
+      from = last;
+      after = undefined;
+      read = 0;
+    }
+    setMeta("since", String(started));
+  }
+
   return {
     forKey: (key: string): PullRequest[] => byKey().get(key) ?? [],
     keys: () => [...byKey().keys()],
     /** Reads every pull request updated since the last poll (the backfill window on the first) and returns the keys it changed. */
     async refresh(): Promise<string[]> {
-      const scope = (await sources()).join(" ");
-      if (!scope) return [];
-      const started = now();
       const changed = new Set<string>();
-      if (getMeta("scope") !== scope) {
-        // Other sources: what the old ones linked no longer counts.
-        for (const key of byKey().keys()) changed.add(key);
-        db.run("DELETE FROM github_pull_requests");
-        db.run("DELETE FROM github_meta WHERE k = 'since'");
-        setMeta("scope", scope);
-      }
-      const since = Number(getMeta("since") ?? 0);
-      let from = since ? since - OVERLAP_MS : started - options.backfillDays * DAY_MS,
-        after: string | undefined,
-        read = 0;
       try {
-        // Oldest first, so each page moves the mark on: a poll cut off (by GitHub's limit, or an error) resumes where it stopped.
-        for (;;) {
-          const { search } = await options.client.graphql<SearchPage>(SEARCH, {
-            q: `is:pr ${scope} updated:>=${iso(from)} sort:updated-asc`,
-            after: after ?? null,
-          });
-          for (const node of search.nodes) for (const key of take(node)) changed.add(key);
-          read += search.nodes.length;
-          const last = Date.parse(search.nodes.at(-1)?.updatedAt ?? "");
-          if (last) setMeta("since", String(Math.max(last, since)));
-          if (search.pageInfo.hasNextPage && search.pageInfo.endCursor) {
-            after = search.pageInfo.endCursor;
-            continue;
-          }
-          // Past the search's cap: the next query starts at the newest pull request this one reached.
-          if (read < SEARCH_CAP || search.issueCount <= read || !last || last <= from) break;
-          from = last;
-          after = undefined;
-          read = 0;
-        }
-        setMeta("since", String(started));
+        await poll(changed);
+        return [...changed];
       } finally {
         if (changed.size) index = undefined;
       }
-      return [...changed];
     },
   };
 }
