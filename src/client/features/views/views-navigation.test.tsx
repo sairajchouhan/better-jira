@@ -16,11 +16,11 @@ const issue: Issue = {
 };
 
 // Linear's favorite row for an issue is its title alone (`z1`: `title: e.title`, no detail), not "KEY title" (BJ-428).
-test("an issue's favorite row shows its title without its key, keeping its status icon and ×", () => {
+test("an issue's favorite row shows its title without its key, and that title on its label (`v5n`), keeping its ×", () => {
   commit({ boards: [board], board: 7, issues: new Map([[issue.key, issue]]), favorites: [issue.key] });
   const html = renderToStaticMarkup(<RouterContextProvider router={router}><ViewFavorites expanded onToggle={() => {}} /></RouterContextProvider>);
-  const row = html.match(/<span class="min-w-0 flex-1 truncate">([^<]*)<\/span>/)?.[1];
-  expect(row).toBe("Spike: a made-up title");
+  const row = html.match(/<span class="min-w-0 flex-1 truncate" title="([^"]*)">([^<]*)<\/span>/);
+  expect(row?.slice(1)).toEqual(["Spike: a made-up title", "Spike: a made-up title"]);
   expect(html).not.toContain("Z-42 Spike");
   expect(html).toContain('data-favorite="Z-42"');
   expect(html).toContain('aria-label="Remove favorite"');

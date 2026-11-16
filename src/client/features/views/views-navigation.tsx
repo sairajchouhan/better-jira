@@ -39,7 +39,9 @@ export function ViewFavorites({ expanded, onToggle }: { expanded: boolean; onTog
     // Resting on the row opens its card (Linear's `h$` around `d5n`; a team's on its toggle button, `m5n`): one wrapper for every
     // kind, so all share the delay, the placement and the dismissal.
     const label = view?.name ?? (issue ? issue.key : board?.name ?? (document ? document.resource.title || "New document" : ""));
-    const content = <><FavoriteHoverCard.Label thing={thing} label={label}><FavoriteIcon {...thing} /><span className="min-w-0 flex-1 truncate">{favoriteName(thing)}</span></FavoriteHoverCard.Label><RemoveFavoriteButton id={id} /></>;
+    // Linear's row label (`l0` → `v5n`) is the mapping's title with that title on it: an issue's title alone, never its key.
+    const name = favoriteName(thing);
+    const content = <><FavoriteHoverCard.Label thing={thing} label={label}><FavoriteIcon {...thing} /><span className="min-w-0 flex-1 truncate" title={name}>{name}</span></FavoriteHoverCard.Label><RemoveFavoriteButton id={id} /></>;
     // Each row is the sidebar's one link, marked by the shared rule: active only when the screen came from this favorite.
     const row = { place: favoritePlace(id), favorite: id };
     // The row drags by its surface (BJ-75), so the link itself is never the browser's own drag of its URL.
