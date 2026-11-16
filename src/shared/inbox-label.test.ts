@@ -12,6 +12,8 @@ test("each Jira kind takes Linear's short label", () => {
   expect(notificationLabel(note("reaction", "Ana reacted to your comment"))).toBe("Reacted to comment");
   expect(notificationLabel(note("created", "Ana created a task"))).toBe("New issue");
   expect(notificationLabel(note("updated", "You have 1 item due today"))).toBe("Due");
+  expect(notificationLabel(note("updated", "You have 3 items due tomorrow"))).toBe("Due");
+  expect(notificationLabel(note("updated", "Ana changed the due date of a task"))).toBe("Updated");
   expect(notificationLabel(note("updated", "Ana updated a task"))).toBe("Updated");
 });
 

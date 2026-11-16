@@ -30,8 +30,8 @@ export function notificationLabel(
     case "status":
       return ["Completed", "Canceled", "Duplicate"].includes(statusType) ? statusType : "Status updated";
     default:
-      // Jira's due-date reminder ("You have 1 item due today") is Linear's issueDue.
-      return /\bdue\b/i.test(note.message) ? "Due" : "Updated";
+      // Jira's due-date reminder ("You have 1 item due today") is Linear's issueDue; a changed due date is not.
+      return /\bitems? due\b/i.test(note.message) ? "Due" : "Updated";
   }
 }
 
